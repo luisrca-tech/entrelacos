@@ -1,0 +1,229 @@
+---
+import WeddingLayout from "@entrelacos/template-root/layout";
+import TemplateSection from "@entrelacos/template-root/section";
+import { FeatureAvailability } from "@entrelacos/wedding-features";
+import "../styles/tailwind.css";
+
+const navigation = [
+  { label: "Story", href: "#story" },
+  { label: "Details", href: "#details" },
+  { label: "Capabilities", href: "#capabilities" },
+];
+---
+
+<WeddingLayout
+  title="EntreLaços | public wedding scaffold"
+  description="A minimal public wedding-site scaffold for EntreLaços."
+  brand="EntreLaços"
+  eventDate="18 September 2027"
+  navigation={navigation}
+>
+  <section class="demo-hero" aria-labelledby="demo-title">
+    <div class="demo-hero__placeholder" aria-hidden="true"></div>
+    <div class="demo-hero__content">
+      <p class="demo-eyebrow">Public template scaffold</p>
+      <h1 id="demo-title">Marina <span>&amp;</span> Caio</h1>
+      <p class="demo-hero__lede">
+        A quiet starting point for a wedding site. Content, media, RSVP, and
+        operator workflows are added in their own implementation blocks.
+      </p>
+      <p class="demo-hero__meta">18 September 2027 · Goiânia, GO</p>
+    </div>
+  </section>
+
+  <TemplateSection
+    id="story"
+    eyebrow="01 / Story"
+    title="A reusable layout with room for a couple's story."
+    description="The template owns page rhythm and accessible structure. Each wedding app supplies its own copy and media later."
+  >
+    <p>
+      This sample section proves the public shell can be composed without
+      introducing a CMS, a login, or an RSVP simulation.
+    </p>
+  </TemplateSection>
+
+  <TemplateSection
+    id="details"
+    eyebrow="02 / Details"
+    title="Practical information stays easy to find."
+    description="The first template will make schedule, location, and RSVP entry points prominent on small screens."
+    tone="olive"
+  >
+    <div class="demo-detail-grid">
+      <article>
+        <p class="demo-detail-grid__label">Ceremony</p>
+        <p>17:00 · Casablanca Eventos</p>
+      </article>
+      <article>
+        <p class="demo-detail-grid__label">Reception</p>
+        <p>19:00 · Same venue</p>
+      </article>
+      <article>
+        <p class="demo-detail-grid__label">Location</p>
+        <p>Jardim Atlântico, Goiânia</p>
+      </article>
+    </div>
+  </TemplateSection>
+
+  <section id="capabilities" class="demo-capabilities" aria-labelledby="capabilities-title">
+    <div>
+      <p class="demo-eyebrow">03 / Capability map</p>
+      <h2 id="capabilities-title">What this scaffold proves</h2>
+      <p>
+        Shared presentation boundaries are ready for the next agents. Planned
+        product behavior remains visibly planned.
+      </p>
+    </div>
+    <FeatureAvailability client:visible />
+  </section>
+</WeddingLayout>
+
+<style>
+  :global(:root) {
+    --demo-ink: #25352b;
+    --demo-muted: #637066;
+    --demo-paper: #f4f0e8;
+    --demo-line: rgba(37, 53, 43, 0.18);
+  }
+
+  .demo-hero {
+    position: relative;
+    display: grid;
+    min-height: min(78vh, 760px);
+    overflow: hidden;
+    background: var(--demo-ink);
+    color: var(--demo-paper);
+  }
+
+  .demo-hero__placeholder {
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(circle at 75% 20%, rgba(215, 190, 150, 0.34), transparent 28%),
+      linear-gradient(135deg, #687d68 0%, #34483d 52%, #18261f 100%);
+    opacity: 0.92;
+  }
+
+  .demo-hero__placeholder::after {
+    position: absolute;
+    inset: 12% 10%;
+    border: 1px solid rgba(244, 240, 232, 0.42);
+    content: "";
+  }
+
+  .demo-hero__content {
+    position: relative;
+    align-self: end;
+    width: min(100% - 3rem, 78rem);
+    margin: 0 auto;
+    padding: clamp(8rem, 22vh, 15rem) 0 4rem;
+  }
+
+  .demo-eyebrow,
+  .demo-detail-grid__label {
+    margin: 0 0 1rem;
+    color: inherit;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+  }
+
+  .demo-hero h1 {
+    max-width: 10ch;
+    margin: 0;
+    font-size: clamp(4rem, 12vw, 10rem);
+    font-weight: 400;
+    letter-spacing: -0.08em;
+    line-height: 0.88;
+  }
+
+  .demo-hero h1 span {
+    font-style: italic;
+    font-weight: 300;
+  }
+
+  .demo-hero__lede {
+    max-width: 34rem;
+    margin: 2rem 0 0;
+    color: rgba(244, 240, 232, 0.78);
+    font-size: 1.05rem;
+    line-height: 1.6;
+  }
+
+  .demo-hero__meta {
+    margin: 2rem 0 0;
+    font-size: 0.9rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .demo-detail-grid {
+    display: grid;
+    gap: 1px;
+    margin-top: 2rem;
+    background: var(--demo-line);
+  }
+
+  .demo-detail-grid article {
+    padding: 1.5rem;
+    background: var(--demo-ink);
+  }
+
+  .demo-detail-grid__label {
+    margin-bottom: 0.5rem;
+    color: rgba(244, 240, 232, 0.64);
+  }
+
+  .demo-detail-grid p:last-child {
+    margin: 0;
+    font-size: 1.1rem;
+  }
+
+  .demo-capabilities {
+    display: grid;
+    grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+    gap: clamp(2rem, 8vw, 8rem);
+    width: min(100% - 3rem, 78rem);
+    margin: 0 auto;
+    padding: clamp(5rem, 12vw, 10rem) 0;
+  }
+
+  .demo-capabilities h2 {
+    max-width: 10ch;
+    margin: 0;
+    font-size: clamp(2.5rem, 6vw, 5rem);
+    font-weight: 400;
+    letter-spacing: -0.06em;
+    line-height: 0.96;
+  }
+
+  .demo-capabilities > div > p:last-child {
+    max-width: 28rem;
+    margin-top: 1.5rem;
+    color: var(--demo-muted);
+    line-height: 1.6;
+  }
+
+  @media (max-width: 720px) {
+    .demo-hero__content,
+    .demo-capabilities {
+      width: min(100% - 2rem, 78rem);
+    }
+
+    .demo-capabilities {
+      display: block;
+    }
+
+    .demo-capabilities > div {
+      margin-bottom: 3rem;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .demo-hero__placeholder {
+      background: #34483d;
+    }
+  }
+</style>

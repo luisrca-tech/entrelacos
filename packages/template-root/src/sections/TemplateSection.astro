@@ -1,0 +1,30 @@
+---
+interface Props {
+  id?: string;
+  eyebrow?: string;
+  title: string;
+  description?: string;
+  tone?: "ivory" | "olive";
+  className?: string;
+}
+
+const {
+  id,
+  eyebrow,
+  title,
+  description,
+  tone = "ivory",
+  className,
+} = Astro.props;
+---
+
+<section id={id} class:list={["template-section", `template-section--${tone}`, className]}>
+  <div class="template-section__header">
+    {eyebrow && <p class="template-section__eyebrow">{eyebrow}</p>}
+    <h2>{title}</h2>
+    {description && <p class="template-section__description">{description}</p>}
+  </div>
+  <div class="template-section__content">
+    <slot />
+  </div>
+</section>

@@ -1,0 +1,61 @@
+---
+import "../styles.css";
+import type { NavigationLink } from "../index";
+
+interface Props {
+  title: string;
+  description?: string;
+  brand?: string;
+  brandHref?: string;
+  eventDate?: string;
+  navigation?: readonly NavigationLink[];
+  noindex?: boolean;
+}
+
+const {
+  title,
+  description = "A public wedding site by EntreLaços.",
+  brand = "EntreLaços",
+  brandHref = "/",
+  eventDate,
+  navigation = [],
+  noindex = false,
+} = Astro.props;
+const year = new Date().getFullYear();
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width" />
+    <meta name="description" content={description} />
+    <meta name="robots" content={noindex ? "noindex" : "index,follow"} />
+    <link rel="icon" href="data:," />
+    <title>{title}</title>
+    <slot name="head" />
+  </head>
+  <body>
+    <div class="template-shell">
+      <header class="template-header">
+        <a class="template-brand" href={brandHref}>{brand}</a>
+        <div class="template-header__event">
+          {eventDate && <span>{eventDate}</span>}
+          {navigation.length > 0 && (
+            <nav aria-label="Page navigation">
+              {navigation.map((link) => <a href={link.href}>{link.label}</a>)}
+            </nav>
+          )}
+        </div>
+      </header>
+      <main class="template-main">
+        <slot />
+      </main>
+      <footer class="template-footer">
+        <span>{brand}</span>
+        <span>{eventDate ?? "Public wedding template"}</span>
+        <span>© {year}</span>
+      </footer>
+    </div>
+  </body>
+</html>

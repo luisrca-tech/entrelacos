@@ -1,0 +1,40 @@
+:root {
+  --background: #f4f0e8;
+  --foreground: #25352b;
+  --primary: #34483d;
+  --primary-foreground: #f4f0e8;
+  --secondary: #e6e1d7;
+  --secondary-foreground: #25352b;
+  --muted: #e6e1d7;
+  --muted-foreground: #637066;
+  --accent: #e6e1d7;
+  --accent-foreground: #25352b;
+  --destructive: #8a2f25;
+  --destructive-foreground: #fff8f0;
+  --border: rgba(37, 53, 43, 0.22);
+  --input: rgba(37, 53, 43, 0.22);
+  --ring: #a1713f;
+  --radius: 0.5rem;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}

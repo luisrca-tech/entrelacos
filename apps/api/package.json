@@ -1,0 +1,26 @@
+{
+  "name": "@entrelacos/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch --env-file-if-exists=.env src/index.ts",
+    "build": "tsup",
+    "start": "node --env-file-if-exists=.env dist/index.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@entrelacos/contracts": "workspace:*",
+    "@entrelacos/database": "workspace:*",
+    "@hono/node-server": "2.1.1",
+    "better-auth": "1.7.3",
+    "@better-auth/drizzle-adapter": "1.7.3",
+    "hono": "4.13.7"
+  },
+  "devDependencies": {
+    "@types/node": "24.13.4",
+    "tsup": "8.5.1",
+    "tsx": "4.23.13",
+    "typescript": "5.9.3"
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "name": "@entrelacos/template-root",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./layout": "./src/layouts/WeddingLayout.astro",
+    "./section": "./src/sections/TemplateSection.astro",
+    "./styles.css": "./src/styles.css"
+  },
+  "peerDependencies": {
+    "astro": "7.3.2"
+  }
+}
