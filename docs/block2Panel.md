@@ -16,8 +16,9 @@ to later implementation blocks.
 The static wedding app uses `PUBLIC_SITE_ID`, `PUBLIC_API_URL`, and
 `PUBLIC_ADMIN_ORIGIN` at build time. Register its exact origin through the owner
 API before testing administrative recognition. Ordinary visitors see the site
-without an authentication redirect. The Panel button starts a challenge-bound
-round trip through the panel; the return carries a one-use code in a fragment.
+without an authentication redirect. The Panel link opens the central panel
+directly. Opening the public site from the panel starts a challenge-bound round
+trip; the return carries a one-use code in a fragment.
 The public app stores only a narrow recognition token in session storage and
 sends API requests without cookies. Polling every five seconds rechecks the
 parent session and does not extend its idle deadline. The token cannot read

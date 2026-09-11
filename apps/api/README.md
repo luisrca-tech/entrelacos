@@ -16,7 +16,7 @@ The dev/start scripts load the private `packages/database/.env` first and `apps/
 
 `GET /v1/health` reports liveness only, not provider or business readiness. Its isolated handler tests require no credentials. Starting the complete server requires valid runtime settings and a verified database. The default port is 8080.
 
-The browser can reach login, logout, and the current-user endpoint through the panel's `/api/v1/` BFF. Only explicitly mounted auth routes are available; the unrestricted native Better Auth handler is not exposed. Block 2 implementation and remaining acceptance checks are recorded in `docs/block2Validation.md`.
+The browser can reach login, logout, and the current-user endpoint through the panel's `/api/v1/` BFF. Only explicitly mounted auth routes are available; the unrestricted native Better Auth handler is not exposed. Block 2 implementation and completed acceptance evidence are recorded in `docs/block2Validation.md`.
 
 Railway setup and production migrations remain separate operator actions. Use the repository root as the eventual build context; deploying this subdirectory without workspace dependencies is unsupported.
 
