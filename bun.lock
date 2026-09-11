@@ -16,6 +16,7 @@
       "name": "@entrelacos/admin",
       "version": "0.0.0",
       "dependencies": {
+        "@entrelacos/contracts": "workspace:*",
         "@entrelacos/ui": "workspace:*",
         "@tanstack/react-router": "1.170.34",
         "@tanstack/react-start": "1.168.51",
@@ -44,7 +45,9 @@
         "@entrelacos/database": "workspace:*",
         "@hono/node-server": "2.1.1",
         "better-auth": "1.7.3",
+        "drizzle-orm": "0.45.2",
         "hono": "4.13.7",
+        "pg": "8.23.0",
       },
       "devDependencies": {
         "@types/node": "24.13.4",

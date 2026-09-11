@@ -1,2 +1,373 @@
-// Add reviewed tables with their implementation slice; no production schema exists yet.
-export {};
+import { relations, sql } from "drizzle-orm";
+import {
+  boolean,
+  check,
+  date,
+  foreignKey,
+  index,
+  pgEnum,
+  pgTable,
+  text,
+  timestamp,
+  uniqueIndex,
+} from "drizzle-orm/pg-core";
+
+export const adminRole = pgEnum("admin_role", ["OWNER", "SITE_ADMIN"]);
+export const accountState = pgEnum("account_state", [
+  "PENDING",
+  "ACTIVE",
+  "DISABLED",
+]);
+export const siteLifecycle = pgEnum("site_lifecycle", [
+  "DRAFT",
+  "IN_REVIEW",
+  "ACTIVE",
+  "INACTIVE",
+]);
+export const sitePublicationState = pgEnum("site_publication_state", [
+  "UNPUBLISHED",
+  "PUBLISHED",
+  "PLACEHOLDER",
+]);
+export const siteDomainState = pgEnum("site_domain_state", [
+  "NONE",
+  "PENDING",
+  "ACTIVE",
+  "INACTIVE",
+]);
+export const adminAccessPurpose = pgEnum("admin_access_purpose", [
+  "ACTIVATION",
+  "RECOVERY",
+]);
+
+export const user = pgTable("user", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  email: text("email").notNull().unique(),
+  emailVerified: boolean("email_verified").notNull().default(false),
+  image: text("image"),
+  role: adminRole("role").notNull().default("SITE_ADMIN"),
+  state: accountState("state").notNull().default("PENDING"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export const session = pgTable("session", {
+  id: text("id").primaryKey(),
+  userId: text("user_id")
+    .notNull()
+    .references(() => user.id, { onDelete: "cascade" }),
+  token: text("token").notNull().unique(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  lastActiveAt: timestamp("last_active_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export const account = pgTable(
+  "account",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    accountId: text("account_id").notNull(),
+    providerId: text("provider_id").notNull(),
+    accessToken: text("access_token"),
+    refreshToken: text("refresh_token"),
+    accessTokenExpiresAt: timestamp("access_token_expires_at", {
+      withTimezone: true,
+    }),
+    refreshTokenExpiresAt: timestamp("refresh_token_expires_at", {
+      withTimezone: true,
+    }),
+    scope: text("scope"),
+    idToken: text("id_token"),
+    password: text("password"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("account_provider_account_id_idx").on(
+      table.providerId,
+      table.accountId,
+    ),
+  ],
+);
+
+export const verification = pgTable("verification", {
+  id: text("id").primaryKey(),
+  identifier: text("identifier").notNull(),
+  value: text("value").notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export const site = pgTable(
+  "site",
+  {
+    id: text("id").primaryKey(),
+    repositorySlug: text("repository_slug").notNull(),
+    provisioningKey: text("provisioning_key").notNull(),
+    displayName: text("display_name").notNull(),
+    partnerOneName: text("partner_one_name").notNull(),
+    partnerTwoName: text("partner_two_name").notNull(),
+    eventDate: date("event_date").notNull(),
+    lifecycle: siteLifecycle("lifecycle").notNull().default("DRAFT"),
+    previousLifecycle: siteLifecycle("previous_lifecycle"),
+    publicationState: sitePublicationState("publication_state")
+      .notNull()
+      .default("UNPUBLISHED"),
+    publicUrl: text("public_url"),
+    reviewApprovedAt: timestamp("review_approved_at", {
+      withTimezone: true,
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("site_repository_slug_idx").on(table.repositorySlug),
+    uniqueIndex("site_provisioning_key_idx").on(table.provisioningKey),
+    uniqueIndex("site_public_url_idx").on(table.publicUrl),
+    check(
+      "site_previous_lifecycle_not_inactive_check",
+      sql`${table.previousLifecycle} IS NULL OR ${table.previousLifecycle} <> 'INACTIVE'`,
+    ),
+    check(
+      "site_inactive_requires_previous_lifecycle_check",
+      sql`${table.lifecycle} <> 'INACTIVE' OR ${table.previousLifecycle} IS NOT NULL`,
+    ),
+  ],
+);
+
+export const siteTerm = pgTable(
+  "site_term",
+  {
+    id: text("id").primaryKey(),
+    siteId: text("site_id")
+      .notNull()
+      .references(() => site.id, { onDelete: "cascade" }),
+    startsOn: date("starts_on").notNull(),
+    endsOn: date("ends_on").notNull(),
+    approvedAt: timestamp("approved_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("site_term_site_id_idx").on(table.siteId),
+    check(
+      "site_term_date_order_check",
+      sql`${table.endsOn} >= ${table.startsOn}`,
+    ),
+  ],
+);
+
+export const siteDomain = pgTable(
+  "site_domain",
+  {
+    id: text("id").primaryKey(),
+    siteId: text("site_id")
+      .notNull()
+      .references(() => site.id, { onDelete: "cascade" }),
+    hostname: text("hostname").notNull(),
+    state: siteDomainState("state").notNull().default("NONE"),
+    isPrimary: boolean("is_primary").notNull().default(false),
+    verifiedAt: timestamp("verified_at", { withTimezone: true }),
+    expiresOn: date("expires_on"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("site_domain_hostname_idx").on(table.hostname),
+    uniqueIndex("site_domain_primary_site_id_idx")
+      .on(table.siteId)
+      .where(sql`${table.isPrimary} = true`),
+    index("site_domain_site_id_idx").on(table.siteId),
+  ],
+);
+
+export const siteOrigin = pgTable(
+  "site_origin",
+  {
+    id: text("id").primaryKey(),
+    siteId: text("site_id")
+      .notNull()
+      .references(() => site.id, { onDelete: "cascade" }),
+    origin: text("origin").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("site_origin_origin_idx").on(table.origin),
+    uniqueIndex("site_origin_site_id_origin_idx").on(
+      table.siteId,
+      table.origin,
+    ),
+  ],
+);
+
+export const siteMembership = pgTable(
+  "site_membership",
+  {
+    id: text("id").primaryKey(),
+    siteId: text("site_id")
+      .notNull()
+      .references(() => site.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("site_membership_user_id_idx").on(table.userId),
+    uniqueIndex("site_membership_site_id_user_id_idx").on(
+      table.siteId,
+      table.userId,
+    ),
+  ],
+);
+
+export const adminAccessToken = pgTable(
+  "admin_access_token",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    siteId: text("site_id").notNull(),
+    purpose: adminAccessPurpose("purpose").notNull(),
+    tokenHash: text("token_hash").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    consumedAt: timestamp("consumed_at", { withTimezone: true }),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("admin_access_token_hash_idx").on(table.tokenHash),
+    index("admin_access_token_user_id_idx").on(table.userId),
+    index("admin_access_token_site_id_idx").on(table.siteId),
+    foreignKey({
+      columns: [table.siteId, table.userId],
+      foreignColumns: [siteMembership.siteId, siteMembership.userId],
+      name: "admin_access_token_site_membership_fk",
+    }).onDelete("cascade"),
+    uniqueIndex("admin_access_token_active_issue_idx")
+      .on(table.userId, table.purpose)
+      .where(sql`${table.consumedAt} IS NULL AND ${table.revokedAt} IS NULL`),
+    check(
+      "admin_access_token_expiry_check",
+      sql`${table.expiresAt} > ${table.createdAt}`,
+    ),
+    check(
+      "admin_access_token_hash_format_check",
+      sql`${table.tokenHash} ~ '^[a-f0-9]{64}$'`,
+    ),
+  ],
+);
+
+export const userRelations = relations(user, ({ many, one }) => ({
+  sessions: many(session),
+  accounts: many(account),
+  siteMembership: one(siteMembership),
+  accessTokens: many(adminAccessToken),
+}));
+
+export const sessionRelations = relations(session, ({ one }) => ({
+  user: one(user, {
+    fields: [session.userId],
+    references: [user.id],
+  }),
+}));
+
+export const accountRelations = relations(account, ({ one }) => ({
+  user: one(user, {
+    fields: [account.userId],
+    references: [user.id],
+  }),
+}));
+
+export const siteRelations = relations(site, ({ many, one }) => ({
+  domains: many(siteDomain),
+  origins: many(siteOrigin),
+  memberships: many(siteMembership),
+  accessTokens: many(adminAccessToken),
+  term: one(siteTerm),
+}));
+
+export const siteTermRelations = relations(siteTerm, ({ one }) => ({
+  site: one(site, { fields: [siteTerm.siteId], references: [site.id] }),
+}));
+
+export const siteDomainRelations = relations(siteDomain, ({ one }) => ({
+  site: one(site, { fields: [siteDomain.siteId], references: [site.id] }),
+}));
+
+export const siteOriginRelations = relations(siteOrigin, ({ one }) => ({
+  site: one(site, { fields: [siteOrigin.siteId], references: [site.id] }),
+}));
+
+export const siteMembershipRelations = relations(siteMembership, ({ one }) => ({
+  site: one(site, {
+    fields: [siteMembership.siteId],
+    references: [site.id],
+  }),
+  user: one(user, {
+    fields: [siteMembership.userId],
+    references: [user.id],
+  }),
+}));
+
+export const adminAccessTokenRelations = relations(
+  adminAccessToken,
+  ({ one }) => ({
+    site: one(site, {
+      fields: [adminAccessToken.siteId],
+      references: [site.id],
+    }),
+    user: one(user, {
+      fields: [adminAccessToken.userId],
+      references: [user.id],
+    }),
+  }),
+);

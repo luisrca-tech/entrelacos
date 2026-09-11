@@ -51,6 +51,7 @@ const year = new Date().getFullYear();
       <main class="template-main">
         <slot />
       </main>
+      <slot name="admin-access" />
       <footer class="template-footer">
         <span>{brand}</span>
         <span>{eventDate ?? "Modelo público de casamento"}</span>
