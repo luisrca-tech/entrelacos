@@ -48,6 +48,7 @@ export function createAuth(options: AuthFactoryOptions) {
       enabled: true,
       disableSignUp: true,
       autoSignIn: false,
+      maxPasswordLength: 200,
     },
     user: {
       additionalFields: {

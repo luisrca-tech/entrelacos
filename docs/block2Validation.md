@@ -1,6 +1,6 @@
 # Block 2 implementation and validation
 
-Status: in progress. This record is not acceptance of Block 2.
+Status: complete on 2026-09-11. Chrome acceptance is closed; Safari is additional and non-blocking.
 
 ## Accepted contract
 
@@ -23,49 +23,106 @@ Status: in progress. This record is not acceptance of Block 2.
 - The existing database environment file was preserved, with expected identity fields appended. The ignored API environment file was created with the approved local URL and a privately generated secret.
 - Detailed private destination evidence is in ignored `work/block-2/preflight.json`.
 
-## Outstanding gates
+## Delivered implementation
 
-The initial database/authentication foundation passed its bounded checks below. The cross-site browser experiment, activation/recovery, complete session/tenancy enforcement, lifecycle, panel integration, public integration, and final QA remain outstanding. The normal application entry points still expose scaffold behavior until the integration waves are accepted.
+- T3: strict shared contracts, one-site membership and access-token constraints,
+  reviewed `0001_block2_contracts.sql`, and real constraint tests.
+- T4: controlled activation/recovery, explicit login, account disabling, restricted
+  OWNER recovery, and complete session/recognition revocation.
+- T5/T6: lifecycle/domain/date services and administrative login/access screens.
+- T7: OWNER wedding chooser and operational forms; SITE_ADMIN scoped read view.
+- T8: first-party Workers BFF and static-site challenge-bound recognition.
+- T9: independent Chrome QA and real PostgreSQL regression checks, detailed below.
+- T10: development migrations applied twice; initial OWNER bootstrap created the
+  account, then preserved it on repetition. Block 3 contracts are documented in
+  `block2Handoff.md`.
 
-## Foundation evidence
+## Browser evidence
 
-- Nine focused database-guard tests pass, including missing test URL, shared branch, unsupported target, and malformed-URL redaction cases. The last three were observed failing before their guards were added.
-- The dedicated database identity test passed against the actual testing branch, without a mock or conditional skip.
-- `0000_admin_auth_foundation.sql` was reviewed and applied only to testing. A second migration run completed without reapplying the SQL.
-- Eight Better Auth/bootstrap unit tests and four real PostgreSQL tests passed. They cover disabled signup, active login, refusal of pending/disabled accounts, library password hashing, and preservation of an existing OWNER password.
-- API and database typechecks passed at the foundation boundary. This does not imply final integration acceptance.
+The final application uses the built Node API, native HTTPS Workers/Vite panel,
+Astro static output, and the actual test database. Its distinct HTTPS origins
+are `panel-entrelacos.test:3000`, `api-entrelacos.test:18443`, and
+`demo-entrelacos.test:18443`. Certificate trust was limited to the generated
+certificate fingerprint; browser same-origin protections remained enabled.
+A first-party cookie probe succeeded while the equivalent cross-site request
+omitted the cookie even with credentials included.
 
-## Browser experiment preparation
+The user reported successful Chrome login, site recognition, panel return,
+logout, invalid-session denial, and direct visitor access. The user explicitly
+accepted Chrome for final Block 2 acceptance and made Safari an additional test
+that does not block Block 3. Responsive Chrome is not evidence of Safari or a
+physical mobile browser. The earlier iPhone LAN attempt did not establish a
+usable Safari test connection.
 
-The isolated local HTTPS topology uses `panel-entrelacos.test`, `api-entrelacos.test`, and `demo-entrelacos.test` on port 18443, forwarding to dedicated test processes on 13000, 18080, and 14321. The existing development processes on the approved standard ports are preserved. The browser trusts only the generated local certificate's public-key fingerprint for this experiment; no browser same-origin or cookie protections are disabled.
+Independent black-box QA covers the actual OWNER chooser, lifecycle and date
+forms, domain persistence/conflicts, manual admin access issuance, public visitor
+navigation, handoff, refresh, panel return, and cross-tab logout. Desktop and
+390-by-844 views have no horizontal overflow. Parent-controlled private fixtures
+cover password entry; credentials and manual access tokens are excluded from
+screenshots and reports. Local evidence is kept outside the repository under
+`/tmp/entrelacos-block2-qa/evidence` and in ignored `work/block-2/`.
 
-A cookie control passed in Chrome for Testing 149: a Secure/HttpOnly/SameSite=None cookie was sent on the API's first-party visit, but was absent from the demo's cross-site request even with credentials included. Both pages reported a secure context. Evidence is retained under ignored `work/block-2/`.
+The earlier isolated future-guest transport proof remained independent of admin
+logout. It is an experiment only: guest groups, OTP, guest sessions, and RSVP are
+not implemented by Block 2.
 
-The isolated browser integration passed in Chrome for Testing 149 using the real testing database and the implemented auth router, BFF proxy, and handoff service:
+## Defects corrected before acceptance
 
-- Credential login returned the sanitized success response; refreshing the panel preserved the first-party session.
-- Opening the site completed the challenge-bound handoff across three distinct HTTPS sites. The return fragment was removed and site storage contained only the short-lived recognition credential.
-- Panel logout caused the site to discard its recognition credential and hide the Panel link. This also passed with the panel in a separate tab.
-- The independent guest transport proof continued to work after administrative logout. It is a transport experiment only, not implemented guest authentication.
-- A 390-by-844 viewport repeated recognition and revocation. This is desktop Chromium viewport emulation, not a mobile-browser result.
-- Visual inspection found a prototype CSS rule overriding the hidden attribute. The prototype was corrected and the final browser check verified that the revoked Panel link had no rendered rectangle.
+- Fixed migration ordering so the composite membership unique index exists before
+  its dependent foreign key.
+- Fixed nested site response envelopes, HTTP service-error conversion, and
+  PostgreSQL unique-conflict handling.
+- Fixed concurrent idempotent creation when a second request misses the key but
+  finds the same key through the slug lookup; a deterministic regression and real
+  concurrent PostgreSQL test cover the interleaving.
+- Serialized login and password reset with a transaction-scoped PostgreSQL
+  advisory lock. Better Auth runs inside that same transaction, preventing an
+  in-flight old-password login from leaving a valid session after recovery.
+  The regression exercises the real HTTP login route and PostgreSQL barrier.
+- Declared `pg` as an API runtime dependency so the built Node ESM application
+  starts without a bundled CommonJS dynamic-require failure.
+- Moved the public administrative strip into the template layout slot so it does
+  not overlap the wedding header on narrow viewports.
 
-Screenshots are retained locally in ignored `work/block-2/desktop-recognition.png`, `work/block-2/mobile-viewport-recognition.png`, and `work/block-2/mobile-viewport-revoked.png`. The dedicated browser and test servers were stopped after the experiment. Cleanup removed only the experiment's identified user and two site-bound transport records; the existing development servers were preserved.
+## Validation status
 
-The experiment used minimal HTML surfaces and a Node-hosted BFF harness. It does not prove the final TanStack/Workers integration, which remains required. The harness is ignored local material and is not imported by application entry points or builds.
+`bun run check` passed: lint, all seven typecheck tasks, 99 unit tests across
+19 files, and all three builds (fresh build executions). `bun run test:db`
+passed 25 real PostgreSQL tests across eight files, with serialized writes.
+Expected Better Auth rejection logs occurred for pending/disabled users and an
+old password; these are asserted negative cases, not unexplained failures.
 
-## Current combined checks
+Independent tenant-isolation checks returned 404 and an unavailable-access UI
+for the other wedding, twice. The initially reported isolation failure was a
+fixture-ID mix-up and was corrected by retesting the actual second wedding.
+Creation replay returned the same ID and a single card; conflicting references
+returned 409 twice. The parent completed the independent runner's remaining
+manual-revocation item by targeting the new administrator's row explicitly;
+the revoke endpoint and subsequent reloads returned 200.
 
-On 2026-09-11, `bun run check` passed: lint, seven typecheck tasks, 49 unit tests across six files, and three builds. Unchanged package tasks reused the verified baseline cache. `bun run test:db` separately passed ten real PostgreSQL integration tests across four files, with serialized database access. The tests cover session boundaries, concurrent one-use handoff consumption, invalid bindings before valid consumption, token expiry, and parent-session revocation. These results validate the current foundation and experiment, not the remaining product scope.
+The real recovery screen set the password, removed the token fragment, required
+explicit login, and left `/v1/me` returning 401 until login. Direct browser
+checks against owned fixtures returned 401 at both idle and absolute session
+expiry. The public Painel link was corrected to open the central panel directly
+when a session already exists; challenge handoff remains on panel-to-site
+navigation. Neutral static output was also opened in Chrome, with no couple
+content or horizontal overflow.
 
-## Blocking evidence and resume point
+Development OWNER login, role resolution, and logout passed after bootstrap.
+Cleanup removed only identified QA users/sites, their dependent records, owned
+recognition records, and one fixture left by the previously failing concurrency
+test. Test helpers, certificates, credentials, and screenshots are unversioned.
 
-T2 remains pending actual mobile-browser evidence. The accepted playbook states that viewport emulation does not substitute for mobile cookie-policy evidence, and T3 depends on acceptance of T2. No actual mobile browser is connected; the device-availability question remains unanswered. Do not silently mark this gate green or transfer it to Block 3.
-
-Resume by identifying the available Android/Chrome or iPhone/Safari device and establishing three reachable HTTPS sites trusted by that device. The current desktop-only hostname mapping and certificate fingerprint exception do not automatically configure a phone. Repeat the first-party versus blocked third-party cookie control, login/refresh, handoff/return, and logout revocation on that browser, recording browser/OS versions and sanitized results. Production is outside this experiment.
-
-After T2 acceptance, continue T3 contracts/schema, T4 activation and recovery, T5/T6 lifecycle API and auth UI, T7 operational panel, T8 static-site integration, T9 full QA, and T10 development migration/bootstrap and Block 3 handoff. None of those remaining tasks is claimed complete.
+Static inactive output was built independently and contains the neutral message
+without the wedding content. Deactivation itself does not deploy hosting changes:
+`block2Lifecycle.md` requires the neutral build on every custom hostname and
+`workers.dev`. Publication, lifecycle, domain state, and term remain independent.
 
 ## Listening
 
-The implementation follows the accepted orchestration playbook. Database identity checks use the server-reported Neon branch identity rather than treating different hostnames or a resource called testing as proof of isolation. Production remains outside the authorized scope. Product acceptance will be recorded only after the corresponding integration and browser gates pass.
+The accepted design keeps administrative credentials first-party in the panel and
+uses only revocable cosmetic recognition on public sites. The final Workers
+integration was tested separately from the earlier transport prototype. The user
+explicitly selected Chrome acceptance; Safari remains additional rather than an
+unfulfilled prerequisite. No deployment or production database mutation is part
+of this delivery. Block 3 must preserve the boundaries in `block2Handoff.md`.

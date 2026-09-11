@@ -16,6 +16,7 @@ function createAuthFixture() {
 }
 
 function createDatabaseFixture(result: unknown[] = []) {
+  let selectCalls = 0;
   const normalizedResult = result.map((entry) => {
     if (
       !entry ||
@@ -40,6 +41,7 @@ function createDatabaseFixture(result: unknown[] = []) {
         role: "OWNER" | "SITE_ADMIN";
         state: "PENDING" | "ACTIVE" | "DISABLED";
       };
+      membership?: { siteId: string };
     };
     return {
       sessionId: nested.session.id,
@@ -51,21 +53,45 @@ function createDatabaseFixture(result: unknown[] = []) {
       userEmail: nested.user.email,
       userRole: nested.user.role,
       userState: nested.user.state,
+      siteId: nested.membership?.siteId,
     };
   });
   const db = {
-    select: vi.fn(() => ({
-      from: vi.fn(() => ({
-        innerJoin: vi.fn(() => ({
+    transaction: vi.fn(async (callback: (tx: unknown) => Promise<unknown>) =>
+      callback({ execute: vi.fn().mockResolvedValue({ rows: [] }) }),
+    ),
+    $client: {
+      connect: vi.fn(async () => ({
+        query: vi.fn().mockResolvedValue({ rows: [] }),
+        release: vi.fn(),
+      })),
+    },
+    select: vi.fn(() => {
+      selectCalls += 1;
+      const selected =
+        selectCalls === 1
+          ? normalizedResult
+          : normalizedResult.filter((entry) =>
+              Boolean(
+                entry &&
+                  typeof entry === "object" &&
+                  "siteId" in entry &&
+                  entry.siteId,
+              ),
+            );
+      return {
+        from: vi.fn(() => ({
+          innerJoin: vi.fn(() => ({
+            where: vi.fn(() => ({
+              limit: vi.fn().mockResolvedValue(selected),
+            })),
+          })),
           where: vi.fn(() => ({
-            limit: vi.fn().mockResolvedValue(normalizedResult),
+            limit: vi.fn().mockResolvedValue(selected),
           })),
         })),
-        where: vi.fn(() => ({
-          limit: vi.fn().mockResolvedValue(normalizedResult),
-        })),
-      })),
-    })),
+      };
+    }),
     update: vi.fn(() => ({
       set: vi.fn(() => ({
         where: vi.fn().mockResolvedValue(undefined),
@@ -77,7 +103,7 @@ function createDatabaseFixture(result: unknown[] = []) {
 
 function request(
   path: string,
-  body: unknown,
+  body: unknown = undefined,
   headers: Record<string, string> = {},
 ) {
   return new Request(`https://api.example.test${path}`, {
@@ -108,6 +134,7 @@ describe("admin authentication HTTP boundary", () => {
     );
     const router = createAuthHttpRouter({
       auth: fixture.auth,
+      authForDatabase: () => fixture.auth,
       db: createDatabaseFixture().db,
       adminOrigin,
     });
@@ -132,10 +159,29 @@ describe("admin authentication HTTP boundary", () => {
     });
   });
 
+  it("fails closed when no transaction-bound Better Auth factory is configured", async () => {
+    const fixture = createAuthFixture();
+    const router = createAuthHttpRouter({
+      auth: fixture.auth,
+      db: createDatabaseFixture().db,
+      adminOrigin,
+    });
+
+    const response = await router.request(
+      request("/v1/auth/sign-in/email", {
+        email: "owner@example.test",
+        password: "secret",
+      }),
+    );
+    expect(response.status).toBe(503);
+    expect(fixture.handler).not.toHaveBeenCalled();
+  });
+
   it("requires exact admin origin and rejects extra login fields", async () => {
     const fixture = createAuthFixture();
     const router = createAuthHttpRouter({
       auth: fixture.auth,
+      authForDatabase: () => fixture.auth,
       db: createDatabaseFixture().db,
       adminOrigin,
     });
@@ -171,6 +217,7 @@ describe("admin authentication HTTP boundary", () => {
     else fixture.handler.mockRejectedValue(failure);
     const router = createAuthHttpRouter({
       auth: fixture.auth,
+      authForDatabase: () => fixture.auth,
       db: createDatabaseFixture().db,
       adminOrigin,
     });
@@ -197,6 +244,7 @@ describe("admin authentication HTTP boundary", () => {
     const fixture = createAuthFixture();
     const router = createAuthHttpRouter({
       auth: fixture.auth,
+      authForDatabase: () => fixture.auth,
       db: createDatabaseFixture().db,
       adminOrigin,
     });
@@ -269,6 +317,7 @@ describe("admin authentication HTTP boundary", () => {
         id: "session-id",
         expiresAt: new Date("2026-09-18T00:00:00.000Z"),
       },
+      siteId: null,
     });
     expect(fixtureDb.update).toHaveBeenCalledOnce();
     expect(JSON.stringify(result)).not.toContain("secret-token");
@@ -279,6 +328,7 @@ describe("admin authentication HTTP boundary", () => {
     fixture.getSession.mockRejectedValue(new Error("database password"));
     const router = createAuthHttpRouter({
       auth: fixture.auth,
+      authForDatabase: () => fixture.auth,
       db: createDatabaseFixture().db,
       adminOrigin,
     });
@@ -301,6 +351,81 @@ describe("admin authentication HTTP boundary", () => {
     });
   });
 
+  it("resolves one site membership for site administrators and rejects dangling membership", async () => {
+    const fixture = createAuthFixture();
+    fixture.getSession.mockResolvedValue({
+      session: {
+        id: "session-id",
+        userId: "site-admin-id",
+        createdAt: new Date("2026-09-11T00:00:00.000Z"),
+        expiresAt: new Date("2026-09-18T00:00:00.000Z"),
+      },
+      user: {
+        id: "site-admin-id",
+        name: "Site Admin",
+        email: "admin@example.test",
+        role: "SITE_ADMIN",
+        state: "ACTIVE",
+      },
+    });
+    const fixtureDb = createDatabaseFixture([
+      {
+        session: {
+          id: "session-id",
+          userId: "site-admin-id",
+          createdAt: new Date("2026-09-11T00:00:00.000Z"),
+          expiresAt: new Date("2026-09-18T00:00:00.000Z"),
+          lastActiveAt: new Date("2026-09-11T01:00:00.000Z"),
+        },
+        user: {
+          id: "site-admin-id",
+          name: "Site Admin",
+          email: "admin@example.test",
+          role: "SITE_ADMIN",
+          state: "ACTIVE",
+        },
+        membership: { siteId: "site-1" },
+      },
+    ]);
+
+    await expect(
+      getAdministrativeSession(request("/v1/me"), {
+        auth: fixture.auth,
+        db: fixtureDb.db,
+        now: () => new Date("2026-09-11T02:00:00.000Z"),
+      }),
+    ).resolves.toMatchObject({
+      user: { role: "SITE_ADMIN" },
+      siteId: "site-1",
+    });
+
+    const dangling = createDatabaseFixture([
+      {
+        session: {
+          id: "session-id",
+          userId: "site-admin-id",
+          createdAt: new Date("2026-09-11T00:00:00.000Z"),
+          expiresAt: new Date("2026-09-18T00:00:00.000Z"),
+          lastActiveAt: new Date("2026-09-11T01:00:00.000Z"),
+        },
+        user: {
+          id: "site-admin-id",
+          name: "Site Admin",
+          email: "admin@example.test",
+          role: "SITE_ADMIN",
+          state: "ACTIVE",
+        },
+      },
+    ]);
+    await expect(
+      getAdministrativeSession(request("/v1/me"), {
+        auth: fixture.auth,
+        db: dangling.db,
+        now: () => new Date("2026-09-11T02:00:00.000Z"),
+      }),
+    ).resolves.toBeNull();
+  });
+
   it("sanitizes unexpected database query failures as service unavailable", async () => {
     const fixture = createAuthFixture();
     fixture.getSession.mockResolvedValue({
@@ -313,6 +438,7 @@ describe("admin authentication HTTP boundary", () => {
     });
     const router = createAuthHttpRouter({
       auth: fixture.auth,
+      authForDatabase: () => fixture.auth,
       db: fixtureDb.db,
       adminOrigin,
     });

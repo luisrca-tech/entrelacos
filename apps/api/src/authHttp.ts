@@ -1,15 +1,17 @@
-import { session, user } from "@entrelacos/database/schema";
+import { session, siteMembership, user } from "@entrelacos/database/schema";
 import { eq } from "drizzle-orm";
 import { Hono } from "hono";
 import type { AuthDatabase, createAuth } from "./auth";
+import { withCredentialAdvisoryLock } from "./credentialLock";
 
 export const ADMIN_IDLE_TIMEOUT_MS = 24 * 60 * 60 * 1000;
 export const ADMIN_ABSOLUTE_TIMEOUT_MS = 7 * 24 * 60 * 60 * 1000;
 
-type AuthInstance = ReturnType<typeof createAuth>;
+export type AuthInstance = ReturnType<typeof createAuth>;
 
 export interface AuthHttpOptions {
   auth: AuthInstance;
+  authForDatabase?: (db: AuthDatabase) => AuthInstance;
   db: AuthDatabase;
   adminOrigin: string;
   now?: () => Date;
@@ -26,6 +28,7 @@ export interface AdministrativeActor {
     id: string;
     expiresAt: Date;
   };
+  siteId: string | null;
 }
 
 export class AdminSessionRequiredError extends Error {
@@ -48,6 +51,7 @@ type SessionLookup = {
   userEmail: string;
   userRole: "OWNER" | "SITE_ADMIN";
   userState: "PENDING" | "ACTIVE" | "DISABLED";
+  siteId: string | null;
 };
 
 function problem(status: number, code: string, title: string): Response {
@@ -175,7 +179,7 @@ async function lookupSession(
   });
   if (!current) return null;
 
-  const [record] = await options.db
+  const [sessionRecord] = await options.db
     .select({
       sessionId: session.id,
       userId: session.userId,
@@ -192,7 +196,18 @@ async function lookupSession(
     .where(eq(session.id, current.session.id))
     .limit(1);
 
-  return record ?? null;
+  if (!sessionRecord) return null;
+  const record: SessionLookup = { ...sessionRecord, siteId: null };
+  if (record.userRole === "OWNER") return record;
+
+  const [membership] = await options.db
+    .select({ siteId: siteMembership.siteId })
+    .from(siteMembership)
+    .where(eq(siteMembership.userId, record.userId))
+    .limit(1);
+  if (!membership) return null;
+  record.siteId = membership.siteId;
+  return record;
 }
 
 export async function getAdministrativeSession(
@@ -229,6 +244,7 @@ export async function getAdministrativeSession(
       id: record.sessionId,
       expiresAt: record.sessionExpiresAt,
     },
+    siteId: record.siteId,
   };
 }
 
@@ -261,10 +277,16 @@ export function createAuthHttpRouter(options: AuthHttpOptions): Hono {
     ) {
       return problem(400, "VALIDATION_ERROR", "Invalid authentication payload");
     }
-    return handleNativeAuth(context.req.raw, options.auth, {
-      email: body.email,
-      password: body.password,
-    });
+    const authForDatabase = options.authForDatabase;
+    if (!authForDatabase) {
+      throw new Error("authForDatabase is required for credential sign-in");
+    }
+    return withCredentialAdvisoryLock(options.db, body.email, (tx) =>
+      handleNativeAuth(context.req.raw, authForDatabase(tx as AuthDatabase), {
+        email: body.email,
+        password: body.password,
+      }),
+    );
   });
 
   router.post("/v1/auth/sign-out", async (context) => {

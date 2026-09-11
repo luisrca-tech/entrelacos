@@ -1,9 +1,11 @@
 ---
 import WeddingLayout from "@entrelacos/template-root/layout";
 import TemplateSection from "@entrelacos/template-root/section";
-import { FeatureAvailability } from "@entrelacos/wedding-features";
+import { AdminRecognition, FeatureAvailability } from "@entrelacos/wedding-features";
 import "../styles/tailwind.css";
 
+const inactive = import.meta.env.PUBLIC_SITE_INACTIVE === "true";
+const access = { siteId: import.meta.env.PUBLIC_SITE_ID, apiOrigin: import.meta.env.PUBLIC_API_URL, panelOrigin: import.meta.env.PUBLIC_ADMIN_ORIGIN };
 const navigation = [
   { label: "História", href: "#story" },
   { label: "Detalhes", href: "#details" },
@@ -15,9 +17,11 @@ const navigation = [
   title="EntreLaços | modelo público de casamento"
   description="Um modelo mínimo de site público de casamento para EntreLaços."
   brand="EntreLaços"
-  eventDate="18 de setembro de 2027"
-  navigation={navigation}
+  eventDate={inactive ? undefined : "18 de setembro de 2027"}
+  navigation={inactive ? [] : navigation}
 >
+  <Fragment slot="admin-access">{access.siteId && access.apiOrigin && access.panelOrigin && <AdminRecognition {...access} client:load />}</Fragment>
+  {inactive ? <section style="padding: 6rem 2rem; text-align: center; min-height: 70vh; background: #34483d; color: #f4f0e8;"><h1>Site indisponível</h1><p>Este site de casamento está temporariamente indisponível.</p></section> : (<>
   <section class="demo-hero" aria-labelledby="demo-title">
     <div class="demo-hero__placeholder" aria-hidden="true"></div>
     <div class="demo-hero__content">
@@ -80,6 +84,7 @@ const navigation = [
     </div>
     <FeatureAvailability client:visible />
   </section>
+</>)}
 </WeddingLayout>
 
 <style>

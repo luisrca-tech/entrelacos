@@ -1,39 +1,79 @@
-import { Button } from "@entrelacos/ui";
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { type FormEvent, useState } from "react";
+import { apiRequest, safePanelReturn } from "../lib/apiClient";
 
 export const Route = createFileRoute("/login")({
-  component: LoginPlaceholderPage,
+  validateSearch: (search: Record<string, unknown>) => ({
+    email: typeof search.email === "string" ? search.email : "",
+    next: safePanelReturn(search.next),
+  }),
+  component: LoginPage,
 });
 
-function LoginPlaceholderPage() {
+function LoginPage() {
+  const search = Route.useSearch();
+  const [error, setError] = useState("");
+  const [pending, setPending] = useState(false);
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    setPending(true);
+    setError("");
+    try {
+      await apiRequest("/v1/auth/sign-in/email", {
+        method: "POST",
+        body: { email: form.get("email"), password: form.get("password") },
+      });
+      window.location.assign(search.next);
+    } catch {
+      setError(
+        "Não foi possível entrar. Confira o e-mail e a senha ou solicite um novo acesso ao responsável.",
+      );
+      setPending(false);
+    }
+  }
   return (
     <main className="auth-shell">
       <section className="auth-card" aria-labelledby="login-title">
-        <Link className="back-link" to="/">
-          ← Voltar para o scaffold
+        <Link className="brand" to="/">
+          EntreLaços
         </Link>
         <p className="eyebrow">Acesso ao painel</p>
-        <h1 id="login-title">Login em preparação.</h1>
+        <h1 id="login-title">Bem-vindo de volta.</h1>
         <p className="lede">
-          A autenticação Better Auth será conectada ao serviço de API em uma
-          etapa posterior. Este formulário é somente uma referência visual e não
-          processa credenciais.
+          Entre com o acesso recebido do responsável pelo seu casamento.
         </p>
-
-        <fieldset className="form-placeholder">
-          <legend>Credenciais (indisponíveis no scaffold)</legend>
+        <form className="data-form" onSubmit={submit}>
           <label>
             E-mail
-            <input type="email" placeholder="nome@exemplo.com" disabled />
+            <input
+              name="email"
+              type="email"
+              autoComplete="username"
+              defaultValue={search.email}
+              required
+              maxLength={320}
+            />
           </label>
           <label>
             Senha
-            <input type="password" placeholder="••••••••" disabled />
+            <input
+              name="password"
+              type="password"
+              autoComplete="current-password"
+              required
+              maxLength={200}
+            />
           </label>
-          <Button type="button" disabled>
-            Entrar (indisponível no scaffold)
-          </Button>
-        </fieldset>
+          {error && <p role="alert">{error}</p>}
+          <button type="submit" disabled={pending}>
+            {pending ? "Entrando…" : "Entrar"}
+          </button>
+        </form>
+        <p className="help-text">
+          Esqueceu a senha? Solicite ao responsável um link de recuperação. Não
+          há cadastro público.
+        </p>
       </section>
     </main>
   );

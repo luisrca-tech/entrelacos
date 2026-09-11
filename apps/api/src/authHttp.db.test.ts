@@ -81,6 +81,13 @@ describe("admin authentication HTTP PostgreSQL integration", () => {
     });
     router = createAuthHttpRouter({
       auth,
+      authForDatabase: (db) =>
+        createAuth({
+          db,
+          secret: "test-only-auth-http-secret-that-is-long-enough",
+          baseURL: "https://api.example.test",
+          adminOrigin,
+        }),
       db: connection.db,
       adminOrigin,
     });

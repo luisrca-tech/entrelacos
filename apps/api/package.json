@@ -4,10 +4,12 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx watch --env-file-if-exists=.env src/index.ts",
+    "dev": "tsx watch --env-file-if-exists=../../packages/database/.env --env-file-if-exists=.env src/index.ts",
     "build": "tsup",
-    "start": "node --env-file-if-exists=.env dist/index.js",
-    "typecheck": "tsc --noEmit"
+    "start": "node --env-file-if-exists=../../packages/database/.env --env-file-if-exists=.env dist/index.js",
+    "typecheck": "tsc --noEmit",
+    "owner:bootstrap": "tsx --env-file-if-exists=../../packages/database/.env --env-file-if-exists=.env scripts/bootstrapOwner.ts",
+    "owner:reset": "tsx --env-file-if-exists=../../packages/database/.env --env-file-if-exists=.env scripts/resetOwner.ts"
   },
   "dependencies": {
     "@entrelacos/contracts": "workspace:*",
@@ -16,7 +18,8 @@
     "better-auth": "1.7.3",
     "@better-auth/drizzle-adapter": "1.7.3",
     "hono": "4.13.7",
-    "drizzle-orm": "0.45.2"
+    "drizzle-orm": "0.45.2",
+    "pg": "8.23.0"
   },
   "devDependencies": {
     "@types/node": "24.13.4",

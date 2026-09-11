@@ -58,6 +58,7 @@ describe("Better Auth foundation", () => {
       enabled: true,
       disableSignUp: true,
       autoSignIn: false,
+      maxPasswordLength: 200,
     });
     expect(auth.options.session).toMatchObject({
       expiresIn: 60 * 60 * 24 * 7,

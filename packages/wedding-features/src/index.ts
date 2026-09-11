@@ -1,3 +1,4 @@
+export { AdminRecognition } from "./AdminRecognition";
 export type {
   FeatureAvailabilityItem,
   FeatureAvailabilityProps,
