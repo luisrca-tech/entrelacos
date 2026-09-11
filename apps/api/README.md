@@ -10,6 +10,6 @@ bun run --filter @entrelacos/api build
 bun run --filter @entrelacos/api start
 ```
 
-Default port: 3001. `.env` is optional for liveness. Copy `.env.example` only when preparing the corresponding integration task. Do not supply real secrets to frontend environment files. No CORS policy or business routes exist yet: these arrive with authenticated tenant boundaries, not an open wildcard.
+Default port: 8080. `.env` is optional for liveness. Copy `.env.example` only when preparing the corresponding integration task. Do not supply real secrets to frontend environment files. No CORS policy or business routes exist yet: these arrive with authenticated tenant boundaries, not an open wildcard.
 
 Railway setup is manual: use the repository root as build context, a workspace-filtered build/start, and this health endpoint. Root lockfile and workspace packages are required; deploying only this subdirectory without dependencies is unsupported. Bind the service port through Railway's `PORT`. Production database migrations are a separate operator action, never part of server startup.

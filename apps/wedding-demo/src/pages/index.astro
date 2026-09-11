@@ -5,62 +5,64 @@ import { FeatureAvailability } from "@entrelacos/wedding-features";
 import "../styles/tailwind.css";
 
 const navigation = [
-  { label: "Story", href: "#story" },
-  { label: "Details", href: "#details" },
-  { label: "Capabilities", href: "#capabilities" },
+  { label: "História", href: "#story" },
+  { label: "Detalhes", href: "#details" },
+  { label: "Recursos", href: "#capabilities" },
 ];
 ---
 
 <WeddingLayout
-  title="EntreLaços | public wedding scaffold"
-  description="A minimal public wedding-site scaffold for EntreLaços."
+  title="EntreLaços | modelo público de casamento"
+  description="Um modelo mínimo de site público de casamento para EntreLaços."
   brand="EntreLaços"
-  eventDate="18 September 2027"
+  eventDate="18 de setembro de 2027"
   navigation={navigation}
 >
   <section class="demo-hero" aria-labelledby="demo-title">
     <div class="demo-hero__placeholder" aria-hidden="true"></div>
     <div class="demo-hero__content">
-      <p class="demo-eyebrow">Public template scaffold</p>
+      <p class="demo-eyebrow">Modelo público</p>
       <h1 id="demo-title">Marina <span>&amp;</span> Caio</h1>
       <p class="demo-hero__lede">
-        A quiet starting point for a wedding site. Content, media, RSVP, and
-        operator workflows are added in their own implementation blocks.
+        Um ponto de partida sereno para um site de casamento. Conteúdo, mídia,
+        confirmação de presença e fluxos de operação serão adicionados em seus
+        próprios blocos de implementação.
       </p>
-      <p class="demo-hero__meta">18 September 2027 · Goiânia, GO</p>
+      <p class="demo-hero__meta">18 de setembro de 2027 · Goiânia, GO</p>
     </div>
   </section>
 
   <TemplateSection
     id="story"
-    eyebrow="01 / Story"
-    title="A reusable layout with room for a couple's story."
-    description="The template owns page rhythm and accessible structure. Each wedding app supplies its own copy and media later."
+    eyebrow="01 / História"
+    title="Um layout reutilizável com espaço para a história do casal."
+    description="O modelo define o ritmo da página e uma estrutura acessível. Cada app de casamento fornecerá seu próprio conteúdo e mídia depois."
   >
     <p>
-      This sample section proves the public shell can be composed without
-      introducing a CMS, a login, or an RSVP simulation.
+      Esta seção de exemplo mostra que a estrutura pública pode ser composta
+      sem introduzir um CMS, um login ou uma simulação de confirmação de
+      presença.
     </p>
   </TemplateSection>
 
   <TemplateSection
     id="details"
-    eyebrow="02 / Details"
-    title="Practical information stays easy to find."
-    description="The first template will make schedule, location, and RSVP entry points prominent on small screens."
+    eyebrow="02 / Detalhes"
+    title="Informações práticas continuam fáceis de encontrar."
+    description="O primeiro modelo dará destaque à programação, ao local e aos pontos de entrada para confirmação de presença em telas pequenas."
     tone="olive"
   >
     <div class="demo-detail-grid">
       <article>
-        <p class="demo-detail-grid__label">Ceremony</p>
+        <p class="demo-detail-grid__label">Cerimônia</p>
         <p>17:00 · Casablanca Eventos</p>
       </article>
       <article>
-        <p class="demo-detail-grid__label">Reception</p>
-        <p>19:00 · Same venue</p>
+        <p class="demo-detail-grid__label">Recepção</p>
+        <p>19:00 · Mesmo local</p>
       </article>
       <article>
-        <p class="demo-detail-grid__label">Location</p>
+        <p class="demo-detail-grid__label">Local</p>
         <p>Jardim Atlântico, Goiânia</p>
       </article>
     </div>
@@ -68,11 +70,12 @@ const navigation = [
 
   <section id="capabilities" class="demo-capabilities" aria-labelledby="capabilities-title">
     <div>
-      <p class="demo-eyebrow">03 / Capability map</p>
-      <h2 id="capabilities-title">What this scaffold proves</h2>
+      <p class="demo-eyebrow">03 / Mapa de recursos</p>
+      <h2 id="capabilities-title">O que este modelo demonstra</h2>
       <p>
-        Shared presentation boundaries are ready for the next agents. Planned
-        product behavior remains visibly planned.
+        As fronteiras de apresentação compartilhadas estão prontas para os
+        próximos agentes. O comportamento planejado do produto continua
+        claramente identificado como planejado.
       </p>
     </div>
     <FeatureAvailability client:visible />

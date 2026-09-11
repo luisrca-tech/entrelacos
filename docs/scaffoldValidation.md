@@ -1,40 +1,40 @@
 # Scaffold validation
 
-Validated locally on 2026-09-09. This report covers the repository foundation, not product acceptance. Installation, lint, types, tests and builds were rerun after the Bun migration using Bun 1.3.14 and Node.js 24.20.0. Runtime HTTP and browser rows below are retained evidence from the earlier scaffold validation; they were not rerun for this package-manager change.
+Validated locally on 2026-09-10 for completion of the approved Block 1 scaffold boundary. This report covers runnable repository boundaries, not product acceptance. The validation used Bun 1.3.14 and Node.js 24.20.0. Logs, JSON assertions and screenshots are retained under ignored `work/block-1/`.
 
 | Check | Result |
 | --- | --- |
-| Frozen Bun installation | Passed; root plus eight workspaces; `bun install --frozen-lockfile` made no changes to `bun.lock` |
-| `bun run check` | Passed, exit code 0 |
-| Biome | 52 supported files checked without changes |
-| Type checking | Seven workspace tasks passed; Astro reported zero errors, warnings or hints |
-| API tests | Three deterministic tests passed: health response, missing administrative route and unsupported health method |
-| Application builds | API Node ESM, admin Workers client/server and static Astro demo passed |
-| Runtime HTTP | Health returned 200; unimplemented administrative endpoint returned 404 |
-| Admin browser smoke | Home-to-login navigation worked; placeholder fields and submit remain disabled; mobile view fits without horizontal overflow |
-| Demo browser smoke | Navigation and section anchors available at mobile and desktop widths; mobile view fits without horizontal overflow; browser reported no page errors |
+| Frozen Bun installation | Passed; `bun install --frozen-lockfile` reported no changes. The pre-run SHA-256 for `bun.lock` is recorded in `work/block-1/lock-before.txt` (`7be0aa9ca80d1e1cd029a0cc256a6dde7c69cfd7e49ef93b2a7fa2a71c4c4f05`). |
+| `bun run lint` | Passed; Biome checked 52 files and applied no fixes. |
+| `bun run typecheck --force` | Passed; seven tasks successful, zero cached, and Astro reported zero errors, warnings or hints. |
+| `bun run test` | Passed; one Vitest file with four deterministic API tests. |
+| `bun run build --force` | Passed; three tasks successful and zero cached for the API, admin panel and static wedding demo. |
+| Compiled API HTTP smoke | Passed in a clean environment with only the required `PATH`; default port `8080` and `PORT=18080` override both returned the expected liveness behavior. |
+| Admin browser smoke | Passed at `localhost:3000` from home to login and back at `1440x900` and `390x844`; login controls remain disabled, there is no horizontal overflow, and page-error logs are empty. |
+| Demo browser smoke | Passed at `localhost:4321` at `1440x900` and `390x844`; `pt-BR`, all three navigation anchors, mobile reduced-motion behavior, no horizontal overflow and zero page errors were asserted. |
 
-The API tests were first executed against the absent application module and failed, then passed after the minimal implementation. Local test/build logs and browser screenshots are kept under ignored `work/`; they are not production or CI evidence.
+## Runtime and browser evidence
+
+The compiled API smoke used `node work/block-1/httpSmoke.mjs`. `GET /v1/health` returned HTTP 200 with the expected raw `status` and `service` fields. The unimplemented owner route returned a structured 404 problem JSON response, and `POST /v1/health` returned 404. No database or provider credentials were supplied.
+
+The admin smoke exercised home-to-login navigation and return navigation. Desktop and mobile JSON assertions cover viewport width, `scrollWidth`, route, disabled email/password/submit controls and page-error output. The demo smoke asserted the Brazilian Portuguese document, desktop and mobile anchor navigation for `#story`, `#details` and `#capabilities`, mobile `prefers-reduced-motion`, viewport width and page-error output. The corresponding screenshots were retained for review.
+
+The completion pass aligned the API default with the documented `8080` port, aligned environment names without adding provider bindings, kept public copy in `pt-BR`, corrected a stale database-boundary comment, and made API tests assert raw JSON responses rather than schema-stripped values.
 
 ## Scope and limitations
 
-No database connection, schema migration, account activation, admin authentication, tenant authorization, SMS, RSVP, message moderation, export, provisioning or deployment was exercised. Those integrations are not implemented. No provider keys were needed or written. The public demo is a composition scaffold, not the approved finished template: final art direction, intro choreography, typography animation, original media and complete accessibility/performance acceptance belong to their planned blocks.
+No live database connection, schema migration, account activation, admin authentication, tenant authorization, SMS/provider call, RSVP, message moderation, export, provisioning, deployment, cross-origin authentication, recovery flow or finished visual/media acceptance was exercised. Those capabilities remain deferred. The admin login controls are intentionally unavailable, and the public demo remains a composition scaffold rather than the approved finished template. Final art direction, intro choreography, typography animation, original media, accessibility/performance acceptance and provider gates belong to later blocks.
 
-The Git repository has no commit or remote publication from this delivery. CI configuration exists, but remote CI has not run. Recovery objectives and cross-domain credential handling still require the explicit validation gates in the PRD.
+This run made no commit, push or deployment. The repository has existing Git history and `origin/main`; CI is configured but remote CI did not run. No database, provider or external configuration was mutated.
 
 ## Local navigation index
 
-Graphify generated an ignored local navigation index and installed local hooks. The initial index reported external-import endpoint and duplicate-edge warnings; it is a navigation aid, not correctness evidence. The scaffold index had partial AST extraction for three Astro files and pending semantic document updates. The package-manager migration refreshes the local index, including changed documentation; source files remain authoritative. Its state is excluded from version control alongside the machine-local hook configuration.
+Graphify code update completed and reported no topology changes. It warned that three Astro files had partial AST extraction; the passing Astro typecheck and build remain the direct evidence for those files. Semantic document refresh completed successfully and the ignored graph now includes the current documentation semantics. The ignored graph and machine-local hook configuration are navigation state, not product evidence and are excluded from version control.
+
+## Historical package-manager context
+
+The earlier package-manager migration moved all workspaces to Bun 1.3.14 and generated `bun.lock`. This completion report treats the current frozen install and validation logs above as evidence; migration cleanup details are historical context, not product acceptance.
 
 ## Listening
 
-Checks target executable scaffold boundaries without inventing successful authentication or database behavior. Real integration acceptance will require explicitly disposable Neon resources and the credentials listed in each task preflight. Placeholder screens remain visibly unavailable until their product slices are implemented.
-
-## Package-manager migration
-
-- Removed all nine pre-existing top-level/workspace `node_modules` trees before reinstalling. Nested dependency directories were removed with their parent trees.
-- Removed the old lockfile, workspace YAML and package-manager RC configuration; no `package-lock.json` was present outside those dependency trees. Bun recreated the dependency trees and generated `bun.lock`.
-- Kept direct dependency versions unchanged. The clean resolution may select newer transitive versions within existing dependency ranges.
-- `bun run check` passed with no Turbo cache hits: lint checked 52 files, all seven typecheck tasks passed, three API tests passed, and all three application builds passed.
-- CI uses `oven-sh/setup-bun@v2` with the root manifest version and runs frozen installation followed by the same check command. Remote CI was not executed.
-- No commit, push, deployment, database operation or external configuration change was performed.
+The minimal completion conclusion is selected because installation, static checks, compiled liveness and browser smoke all pass at the approved scaffold boundary. Rebuilding the skeleton would add no evidence and could obscure the deferred product gates. No new branching implementation was added in this completion pass, so this report makes no invented red-first test claim. Database, authentication, tenant isolation, SMS, recovery, cross-origin and finished visual capabilities remain deferred until their planned blocks provide real evidence.

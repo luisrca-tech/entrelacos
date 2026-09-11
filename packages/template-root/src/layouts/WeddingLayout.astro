@@ -14,7 +14,7 @@ interface Props {
 
 const {
   title,
-  description = "A public wedding site by EntreLaços.",
+  description = "Um site público de casamento por EntreLaços.",
   brand = "EntreLaços",
   brandHref = "/",
   eventDate,
@@ -25,7 +25,7 @@ const year = new Date().getFullYear();
 ---
 
 <!doctype html>
-<html lang="en">
+<html lang="pt-BR">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width" />
@@ -42,7 +42,7 @@ const year = new Date().getFullYear();
         <div class="template-header__event">
           {eventDate && <span>{eventDate}</span>}
           {navigation.length > 0 && (
-            <nav aria-label="Page navigation">
+            <nav aria-label="Navegação da página">
               {navigation.map((link) => <a href={link.href}>{link.label}</a>)}
             </nav>
           )}
@@ -53,7 +53,7 @@ const year = new Date().getFullYear();
       </main>
       <footer class="template-footer">
         <span>{brand}</span>
-        <span>{eventDate ?? "Public wedding template"}</span>
+        <span>{eventDate ?? "Modelo público de casamento"}</span>
         <span>© {year}</span>
       </footer>
     </div>

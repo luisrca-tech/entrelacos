@@ -25,7 +25,11 @@ No real provider resource was created, configured or mutated by the scaffold. Do
 
 ## Environment variables
 
-Names below are the initial register. Only `PORT` is consumed by the API liveness scaffold. Integrations validate their inputs when introduced; empty examples are not functioning connections.
+Names below are the initial register. Only `PORT` is consumed by the API liveness scaffold. URL and site identity values are reserved for future integrations and are not consumed by the current scaffold. Integrations validate their inputs when introduced; empty examples are not functioning connections.
+
+API URL examples use the origin `http://localhost:8080`; `/v1` belongs to the HTTP route path. The panel remains on `http://localhost:3000`, and the public demo remains on `http://localhost:4321`. The example `PUBLIC_SITE_ID=demo-wedding` is fictitious and does not identify a provisioned tenant.
+
+Future database integration tests require an explicit `TEST_DATABASE_URL` and verification that it names a disposable Neon resource distinct from development and main. Never fall back to `DATABASE_URL`. No database suite or test connection is implemented by this scaffold.
 
 | Variable | Consumer | Classification |
 | --- | --- | --- |
@@ -40,8 +44,8 @@ Names below are the initial register. Only `PORT` is consumed by the API livenes
 | `TWILIO_AUTH_TOKEN` | API | Secret |
 | `TWILIO_VERIFY_SERVICE_SID` | API | Server Verify service identifier |
 | `TWILIO_TEST_PHONE_ALLOWLIST` | API | Private operator test phone list |
-| `PUBLIC_API_URL` / `PUBLIC_SITE_ID` | Astro build | Public wedding configuration, never authorization |
-| `VITE_API_URL` or server `API_BASE_URL` | Admin integration design | Endpoint address only; final BFF routing chosen by auth spike |
+| `PUBLIC_API_URL` / `PUBLIC_SITE_ID` | Astro build (future) | Reserved public wedding configuration; not consumed by the scaffold and never authorization |
+| `VITE_API_URL` / `API_BASE_URL` | Admin integration design (future) | Reserved endpoint address only; not consumed by the scaffold; final BFF routing chosen by auth spike |
 
 Do not copy development secrets or database rows to main. A stable repository wedding key maps to separate environment-local IDs. Public URLs and environment IDs may be versioned when appropriate; tokens, passwords and PII are not fixture configuration.
 
