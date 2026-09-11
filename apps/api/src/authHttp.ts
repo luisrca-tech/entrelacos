@@ -3,6 +3,12 @@ import { eq } from "drizzle-orm";
 import { Hono } from "hono";
 import type { AuthDatabase, createAuth } from "./auth";
 import { withCredentialAdvisoryLock } from "./credentialLock";
+import type {
+  GuestChallengeIdGenerator,
+  GuestCodeGenerator,
+  GuestSessionTokenGenerator,
+  GuestVerificationProvider,
+} from "./guestVerification";
 
 export const ADMIN_IDLE_TIMEOUT_MS = 24 * 60 * 60 * 1000;
 export const ADMIN_ABSOLUTE_TIMEOUT_MS = 7 * 24 * 60 * 60 * 1000;
@@ -15,6 +21,17 @@ export interface AuthHttpOptions {
   db: AuthDatabase;
   adminOrigin: string;
   now?: () => Date;
+  guestFingerprintSecret?: string;
+  guestDemoGrantSecret?: string;
+  guestDemoPhoneAllowlist?: readonly string[];
+  guestSmsMode?: "simulated" | "real";
+  guestVerificationProvider?: GuestVerificationProvider;
+  guestCodeGenerator?: GuestCodeGenerator;
+  guestChallengeIdGenerator?: GuestChallengeIdGenerator;
+  guestSessionTokenGenerator?: GuestSessionTokenGenerator;
+  guestExposeSimulationCode?: boolean;
+  guestResolveClientIp?: (request: Request) => string;
+  guestTrustProxyHeaders?: boolean;
 }
 
 export interface AdministrativeActor {

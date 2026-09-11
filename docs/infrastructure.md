@@ -25,7 +25,7 @@ No real provider resource was created, configured or mutated by the scaffold. Do
 
 ## Environment variables
 
-Names below are the initial register. Only `PORT` is consumed by the API liveness scaffold. URL and site identity values are reserved for future integrations and are not consumed by the current scaffold. Integrations validate their inputs when introduced; empty examples are not functioning connections.
+Names below reflect the runtime through Block 3. Empty examples are not functioning connections, and every secret remains server-only.
 
 API URL examples use the origin `http://localhost:8080`; `/v1` belongs to the HTTP route path. The panel remains on `http://localhost:3000`, and the public demo remains on `http://localhost:4321`. The example `PUBLIC_SITE_ID=demo-wedding` is fictitious and does not identify a provisioned tenant.
 
@@ -36,16 +36,25 @@ Database integration tests use `DATABASE_URL_TEST` exclusively and verify the ac
 | `PORT` | Node API | Server runtime port |
 | `APP_ENV` | Planned API configuration | Environment selector; does not grant permission to main |
 | `DATABASE_URL` | API / manually selected migration process | Secret; never frontend |
+| `DATABASE_URL_TEST` | Test API / integration tests / test migrations | Secret; isolated disposable database only, with no development fallback |
 | `BETTER_AUTH_SECRET` | API | Secret; separate per environment |
 | `BETTER_AUTH_URL` | API | Auth endpoint base URL; align configured route prefix |
 | `ADMIN_ORIGIN` | API | Explicit trusted admin origin |
 | `SMS_MODE` | API | Simulation/real test choice; main real weddings cannot use global simulation |
+| `GUEST_FINGERPRINT_SECRET` | API | Secret HMAC key for phone and IP abuse-control fingerprints |
+| `EXPOSE_SIMULATION_CODE` | API | Development-only opt-in; disclosure still requires a valid demo grant |
+| `TRUST_PROXY_HEADERS` | API | Explicit opt-in for trusted deployment proxies before accepting forwarded client IP headers |
+| `GUEST_DEMO_GRANT_SECRET` | API | Secret HMAC key for five-minute owner-issued demo grants |
+| `DEMO_PHONE_ALLOWLIST` | API | Private normalized Brazilian phone allowlist for demo grant issuance |
 | `TWILIO_ACCOUNT_SID` | API | Server provider identifier |
 | `TWILIO_AUTH_TOKEN` | API | Secret |
 | `TWILIO_VERIFY_SERVICE_SID` | API | Server Verify service identifier |
 | `TWILIO_TEST_PHONE_ALLOWLIST` | API | Private operator test phone list |
-| `PUBLIC_API_URL` / `PUBLIC_SITE_ID` | Astro build (future) | Reserved public wedding configuration; not consumed by the scaffold and never authorization |
-| `VITE_API_URL` / `API_BASE_URL` | Admin integration design (future) | Reserved endpoint address only; not consumed by the scaffold; final BFF routing chosen by auth spike |
+| `SMS_REAL_AUTHORIZED` | API | Explicit operator authorization gate for real SMS mode |
+| `TWILIO_BRAZIL_CONFIRMED` | API | Explicit confirmation that Brazilian Verify destinations are enabled |
+| `TWILIO_TRIAL_USAGE_CONFIRMED` | API | Explicit confirmation that account/trial destination and usage constraints were reviewed |
+| `PUBLIC_API_URL` / `PUBLIC_SITE_ID` | Astro build | Public API origin and environment-local wedding identifier; never authorization |
+| `VITE_API_URL` / `API_BASE_URL` | Admin BFF/runtime | Endpoint address only; never a credential |
 
 Do not copy development secrets or database rows to main. A stable repository wedding key maps to separate environment-local IDs. Public URLs and environment IDs may be versioned when appropriate; tokens, passwords and PII are not fixture configuration.
 
@@ -61,4 +70,8 @@ Do not copy development secrets or database rows to main. A stable repository we
 
 ## Open engineering inputs
 
-Set the initial SMS ceiling/IP policy and retention time zone during the corresponding task. Select the video tool during media preflight. Verify provider plan/limits and recovery costs then, not from an old pricing snapshot. Decide the browser credential transport based on the cross-origin experiment. None of these prerequisites blocks the credential-free scaffold.
+The Block 3 IP policy is implemented as 10 sends/15 minutes, 30 sends/24 hours, 10 verification attempts/15 minutes, and 10 exact lookups/15 minutes. The monthly per-site SMS ceiling remains a Block 5 decision. Select the video tool during media preflight. Verify provider plan/limits and recovery costs then, not from an old pricing snapshot. The guest browser transport is an `Authorization` bearer held only in site-namespaced `sessionStorage`; the separate admin-to-public handoff remains a later cross-origin decision.
+
+## Listening
+
+Block 3 keeps `DATABASE_URL` as the development connection and `DATABASE_URL_TEST` as the only integration-test connection. Real Twilio mode uses multiple independent acknowledgement gates so merely adding credentials cannot send an SMS. Forwarded IP headers are ignored unless the deployment explicitly declares a trusted proxy boundary.

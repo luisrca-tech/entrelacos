@@ -148,6 +148,8 @@ These decisions apply across the blocks and remain subject to the explicit gates
 
 ## Block 3: Guest groups, OTP verification, sessions, and abuse controls
 
+**Implementation status (2026-09-11):** B3-T1 through B3-T5 are implemented and locally validated. The B3-T6 Twilio Verify adapter and fail-closed runtime gates are implemented, but live delivery remains pending credentials, Brazilian geo/trial/usage confirmation, an allowlisted destination, and separate authorization to send. See `docs/block3Contracts.md`, `docs/block3Validation.md`, and `docs/block3Handoff.md`.
+
 **Track:** Product. This block establishes the family-scoped guest identity used by RSVP and messages.
 
 **User stories:** US-041–US-065, US-102–US-103.

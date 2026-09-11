@@ -12,6 +12,8 @@
 | Guests | Groups are the unit of authorization. Group name is required, each group has at least one named member, one representative, and one wedding-scoped normalized Brazilian phone. | Accepted |
 | Foreign numbers | Foreign-number groups may omit phone and use administrative RSVP only; no guest authentication, messages, or automatic SMS fallback. | Accepted |
 | Guest verification | Full name plus registered phone locates the group; SMS OTP proves phone possession. Matching ignores case, accents, and extra spaces but rejects approximate or abbreviated names. | Accepted |
+| OTP protection | Codes contain exactly six digits. Challenges last 10 minutes, resend waits 60 seconds without extending expiry, five declined codes cause a 15-minute cooldown, and lookup/send/verification limits use the numeric scopes recorded in the Block 3 contract. | Accepted |
+| Family session | A successful OTP creates a site-and-group-bound opaque bearer with seven-day absolute expiry. The browser keeps it only in site-namespaced `sessionStorage`; explicit leave and representative/phone changes revoke it server-side. | Accepted |
 | RSVP | Member states are `PENDING`, `CONFIRMED`, and `DECLINED`. Representative answers for the group; partial pending is valid; deadline has explicit timezone; admins may correct after deadline. | Accepted |
 | Messages | One text message per group, at most 1,000 characters, emojis/newlines allowed, no HTML/attachments. Representative may edit; admins may delete but never edit. | Accepted |
 | Mural | Per-site toggle and per-group message block affect message writes only and retain data. Public output omits phone, member list, and RSVP. | Accepted |
@@ -43,7 +45,7 @@
 1. Commercial buyer, price, revision policy, cancellation, renewal, tolerance period, and support service levels. These are external business-policy decisions, not technical MVP blockers, but must be addressed for commercial operations.
 2. Numeric monthly SMS ceiling default and owner alert/override policy.
 3. Cloudflare, Railway, Neon, CI, Twilio, and media-provider account ownership, credentials, permissions, region/country access, and costs.
-4. Authenticated cross-origin session/handoff design between public sites, panel, and API, with clean-browser proof.
+4. The guest-to-API cross-origin transport is resolved as an exact-origin bearer flow using site-namespaced `sessionStorage`. The separate authenticated admin panel-to-public-site handoff design and its clean-browser proof remain open.
 5. Privacy notice, retention schedule, data rights, deletion exceptions, client media permissions, and legal review.
 6. Neon tier, retention/cost, backup strategy, and real restoration evidence for RPO at most one hour and RTO at most eight hours.
 7. Final visual direction, logo/favicon, fictional-couple image approval, video provider/cost/rights, and image-to-video poster workflow.
@@ -54,3 +56,5 @@ Open items must be marked pending or blocked in implementation evidence. A mock 
 ## Listening
 
 The package-manager migration authorized on 2026-09-09 replaces the earlier package-manager choice with Bun 1.3.14 for all workspaces and CI. Node.js 24, Turborepo, Vitest, dependency version pins, and application boundaries remain unchanged. Isolated installs retain explicit workspace dependency boundaries and package-local CLI paths; a runtime or test-framework migration is outside this change.
+
+Block 3 selected a six-digit OTP and browser-tab-scoped guest persistence. `localStorage`, cross-site cookies, URL tokens, and a custom refresh-token system were rejected because the seven-day server record already supplies the absolute lifetime while `sessionStorage` reduces browser persistence and cross-site credential coupling.

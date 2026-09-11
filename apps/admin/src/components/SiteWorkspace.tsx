@@ -5,6 +5,7 @@ import type {
 } from "@entrelacos/contracts";
 import { type FormEvent, useCallback, useEffect, useState } from "react";
 import { ApiError, apiRequest } from "../lib/apiClient";
+import { GuestGroupsSection } from "./GuestGroupsSection";
 
 const labels: Record<string, string> = {
   DRAFT: "Rascunho",
@@ -202,6 +203,12 @@ export function SiteWorkspace({
           </div>
         )}
       </section>
+      <GuestGroupsSection
+        siteId={site.id}
+        lifecycle={site.lifecycle}
+        owner={owner}
+        isDemo={site.isDemo}
+      />
       {!owner && (
         <section className="panel-section">
           <h2>Visão do casamento</h2>

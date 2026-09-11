@@ -22,6 +22,7 @@ const site = {
   lifecycle: "DRAFT",
   previousLifecycle: null,
   publicationState: "UNPUBLISHED",
+  isDemo: false,
   publicUrl: "https://ana-e-joao.example.test",
   trustedOrigins: ["https://ana-e-joao.example.test"],
   reviewApprovedAt: null,

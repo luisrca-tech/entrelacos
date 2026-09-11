@@ -18,6 +18,10 @@ The dev/start scripts load the private `packages/database/.env` first and `apps/
 
 The browser can reach login, logout, and the current-user endpoint through the panel's `/api/v1/` BFF. Only explicitly mounted auth routes are available; the unrestricted native Better Auth handler is not exposed. Block 2 implementation and completed acceptance evidence are recorded in `docs/block2Validation.md`.
 
+Block 3 adds tenant-scoped guest-group administration, exact guest lookup, OTP challenges, seven-day family bearer sessions, owner-issued demo grants, and a Twilio Verify adapter. Development defaults to simulated delivery. Real delivery remains disabled unless every explicit runtime gate in `.env.example` is satisfied, including destination allowlists and operator confirmation. Family tokens are sent in `Authorization`, never cookies, and public CORS uses each site's registered exact origins.
+
+Use `DATABASE_URL_TEST` only for integration tests and test migrations. Use `DATABASE_URL` only for development runtime and explicitly targeted development migrations. No command falls back from the test connection to development.
+
 Railway setup and production migrations remain separate operator actions. Use the repository root as the eventual build context; deploying this subdirectory without workspace dependencies is unsupported.
 
 ## Listening
