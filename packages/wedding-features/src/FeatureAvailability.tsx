@@ -20,29 +20,29 @@ export type FeatureAvailabilityProps = Omit<
 
 export const featureAvailabilityItems: readonly FeatureAvailabilityItem[] = [
   {
-    name: "Public Astro site shell",
+    name: "Estrutura pública do site Astro",
     status: "scaffold",
-    note: "Shared layout and section composition are available.",
+    note: "Layout compartilhado e composição de seções estão disponíveis.",
   },
   {
-    name: "Motion and reduced-motion foundation",
+    name: "Base de animação e movimento reduzido",
     status: "scaffold",
-    note: "A small functional island is ready for later choreography.",
+    note: "Uma pequena ilha funcional está pronta para a coreografia posterior.",
   },
   {
-    name: "RSVP behavior",
+    name: "Comportamento de confirmação de presença",
     status: "planned",
-    note: "Domain flow and API contracts arrive in a later block.",
+    note: "Fluxo de domínio e contratos da API chegarão em um bloco posterior.",
   },
   {
-    name: "Admin and guest authentication",
+    name: "Autenticação de administradores e convidados",
     status: "planned",
-    note: "No login, session, or success simulation is included here.",
+    note: "Nenhum login, sessão ou simulação de sucesso está incluído aqui.",
   },
   {
-    name: "Approved media pipeline",
+    name: "Fluxo de mídia aprovada",
     status: "planned",
-    note: "No generated or client media is bundled in this scaffold.",
+    note: "Nenhuma mídia gerada ou do cliente está incluída neste modelo.",
   },
 ];
 
@@ -63,9 +63,9 @@ function FeatureAvailability({
     >
       <div className="entrelacos-feature-availability__heading">
         <p className="entrelacos-feature-availability__eyebrow">
-          Shared surface
+          Área compartilhada
         </p>
-        <h3 id="feature-availability-title">Scaffold status</h3>
+        <h3 id="feature-availability-title">Status do modelo</h3>
       </div>
       <ul className="entrelacos-feature-availability__list">
         {items.map((item, index) => (
@@ -81,7 +81,7 @@ function FeatureAvailability({
               <p>{item.note}</p>
             </div>
             <span data-status={item.status}>
-              {item.status === "scaffold" ? "Scaffolded" : "Planned"}
+              {item.status === "scaffold" ? "Estruturado" : "Planejado"}
             </span>
           </motion.li>
         ))}

@@ -29,7 +29,7 @@ Install the pinned Bun version using the [official installation instructions](ht
 | Surface | Local URL | Purpose |
 | --- | --- | --- |
 | Central panel | `http://localhost:3000` | Navigable TanStack Start scaffold; login unavailable |
-| API | `http://localhost:3001/v1/health` | Hono liveness without database access |
+| API | `http://localhost:8080/v1/health` | Hono liveness without database access |
 | Wedding demo | `http://localhost:4321` | Astro consuming the reusable template foundation |
 
 Run individual apps with `bun run --filter @entrelacos/admin dev`, `bun run --filter @entrelacos/api dev` or `bun run --filter @entrelacos/wedding-demo dev`.

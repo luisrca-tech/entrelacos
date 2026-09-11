@@ -2,13 +2,13 @@
 
 > **Status: DRAFT — pending user granularity review.** This plan is derived from [the EntreLaços PRD](./entrelacos-prd.md), the accepted interview dated 2026-09-09, and [the decision register](../docs/decisionRegister.md).
 
-These eight larger blocks require a granularity review before implementation scheduling. A block may be split or merged after that review. The plan is an implementation map, not implementation approval.
+These eight larger blocks define the intended implementation map. Block 1 is complete at the approved scaffold boundary; Blocks 2–8 remain draft product and operations work and require granularity review before scheduling. A block may be split or merged after that review. The plan is an implementation map, not implementation approval for the remaining blocks.
 
 ## Delivery status
 
 - **Documentation:** PRD and this draft plan are the documentation deliverables.
-- **Scaffold:** The agreed applications and packages have executable boilerplates. Local lint, type checking, three API scaffold tests and all three application builds pass. Block 1 provides runnable boundaries; it does not implement product behavior. See `docs/scaffoldValidation.md` for evidence and limits.
-- **Product:** Blocks 2–8 are unimplemented product work. No provider, secret, deployment, media, or production claim is implied by a mock, placeholder, or passing local health check.
+- **Scaffold:** Block 1 is complete at the approved runnable-boundary scope. Bun 1.3.14 and Node.js 24.20.0 passed frozen installation, lint on 52 files, seven forced typecheck tasks, four deterministic API tests and three forced application builds; raw HTTP and clean-browser evidence also passed. See `docs/scaffoldValidation.md` for evidence and limits.
+- **Product:** Blocks 2–8 are neither approved nor implemented. No provider, secret, deployment, media, or production claim is implied by a mock, placeholder, or passing local health check.
 
 ## Durable architectural decisions
 
@@ -23,13 +23,14 @@ These decisions apply across the blocks and remain subject to the explicit gates
 - **Authentication:** Better Auth with Drizzle persistence for admins; independent family-scoped guest sessions after provider-backed OTP. The selected cross-origin session/handoff design remains a required spike.
 - **Data access and migrations:** Drizzle with node-postgres and reviewed/manual SQL migrations. Main-environment migrations are explicit manual operations.
 - **UI and motion:** shadcn with Base UI, Sonner for shared feedback, and Motion for the approved intro, text, and story choreography. CSS/Intersection Observer remain appropriate for simple interactions and entrances.
-- **Template model:** composition over inheritance. A reusable template supplies sections, layout, and defaults; each wedding composes its own pages and approved content. Shared changes affect newly built sites only.
+- **Template model:** composition over inheritance. A reusable template supplies sections, layout, and defaults; each wedding composes its own pages and approved content. Shared changes affect newly built sites only. Template and public-site copy is always Brazilian Portuguese (`pt-BR`), never `en-US`.
 - **External services:** Twilio Verify is the opt-in real SMS boundary; tests default to deterministic mocks. Cloudflare, Railway, Neon, CI resources, and any media provider require real account access and explicit credentials. No provider guarantee is assumed.
 - **Operational control:** production deployment, domains, DNS, lifecycle status, main migrations, and provider setup are manual and recorded as owner-entered status. No silent mass publication or automatic expiry deletion exists.
 
 ## Cross-cutting rules for every block
 
-- Use English for persisted documentation and implementation artifacts; use deterministic fixtures for tests.
+- Use English for persisted documentation, code, comments, and implementation artifacts; use deterministic fixtures for tests.
+- Templates and public wedding sites are always Brazilian Portuguese (`pt-BR`). Do not author template defaults, site copy, or guest-facing site UI in `en-US`. Site and template fixtures follow the same locale.
 - Apply TDD to logic-bearing behavior: write the focused failing test first, then implement the smallest complete vertical slice.
 - Keep mock integrations visibly distinct from real provider results. A mocked Twilio flow proves application behavior only.
 - Verify authorization in the API and prove cross-tenant isolation with a second wedding and sentinel data.
@@ -42,6 +43,8 @@ These decisions apply across the blocks and remain subject to the explicit gates
 ## Block 1: Approved scaffold and environment health
 
 **Track:** Scaffold foundation. Completing this block establishes runnable boundaries; it does not implement guest, RSVP, message, lifecycle, or visual product behavior.
+
+**Completion status:** Complete for the approved local scaffold boundary on 2026-09-10. The evidence covers the frozen Bun install, static checks, compiled API liveness, admin navigation and the static demo. Product behavior remains deferred to later blocks.
 
 **User stories:** US-001–US-003, US-020–US-022, US-117–US-118.
 
@@ -82,11 +85,11 @@ These decisions apply across the blocks and remain subject to the explicit gates
 
 ### Tests and acceptance evidence
 
-- Workspace type check, lint, focused scaffold tests, and builds pass without real provider credentials.
+- `bun run lint`, `bun run typecheck --force`, `bun run test` and `bun run build --force` pass with the pinned Bun and Node versions; the forced Turbo runs report zero cached tasks.
 - Liveness responses identify the running surface and do not report database, SMS, or media readiness.
 - Provider readiness and required-secret validation are recorded as later integration gates; no current scaffold test is presented as proof of them.
-- The disposable Neon integration gate is documented as pending and is not replaced by an in-memory imitation.
-- Evidence names the exact scaffold commands and confirms no production mutation or external provider setup occurred.
+- The disposable Neon integration gate is documented as pending and is not replaced by an in-memory imitation. No live database, authentication, SMS, cross-origin, recovery or finished visual acceptance was exercised.
+- Evidence names the exact scaffold commands and confirms no production mutation, external provider setup, commit, push or deployment occurred during this completion run.
 
 ---
 
@@ -299,7 +302,7 @@ These decisions apply across the blocks and remain subject to the explicit gates
 
 ## Block 6: Public wedding experience, template composition, media, and responsive access
 
-**Track:** Product and client-facing visual work. The public template is developed independently from operational authorization but must expose the real RSVP/message boundaries from Blocks 3–5.
+**Track:** Product and client-facing visual work. The public template is developed independently from operational authorization but must expose the real RSVP/message boundaries from Blocks 3–5. All template and public-site copy is `pt-BR`, not `en-US`.
 
 **User stories:** US-004–US-019, US-038–US-039, US-121–US-122.
 
@@ -466,3 +469,7 @@ The eight blocks are intentionally larger than individual tickets but each conta
 3. Should provisioning/deployment remain one final operations block, or should provisioning be separated from first production launch?
 
 Until that review is answered, this plan remains **DRAFT**.
+
+## Listening
+
+The plan records Block 1 as complete because its approved scaffold boundary has executable and browser evidence. It keeps the minimal scaffold conclusion instead of rebuilding the skeleton or treating placeholders as product behavior. Blocks 2–8 remain deferred and require their own approval, implementation and integration evidence.

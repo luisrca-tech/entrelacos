@@ -273,7 +273,7 @@ The owner configures a per-wedding monthly SMS send ceiling. The default ceiling
 
 ### Visual and media experience
 
-The first template follows a provisional ivory, dark olive, serif-led cinematic editorial direction. The reference family supports an image-led hero, transparent-to-solid navigation, alternating sections, one desktop sticky story sequence, compact gallery, and direct practical sections. The visual direction and logo are not final approval.
+The first template follows a provisional ivory, dark olive, serif-led cinematic editorial direction. The reference family supports an image-led hero, transparent-to-solid navigation, alternating sections, one desktop sticky story sequence, compact gallery, and direct practical sections. The visual direction and logo are not final approval. Template and public-site language is always Brazilian Portuguese (`pt-BR`); sites and templates are never authored in `en-US`.
 
 The hero accepts an approved image or short muted loop video with poster. Any image-to-video transition, fictional-couple image set, and video provider selection require a later media gate covering client approval, consistency, cost, rights, credentials, and performance. Image generation may be available for approved fictional demo material; no media generation is part of this documentation task.
 
@@ -294,7 +294,7 @@ These are product-facing boundaries accepted for subsequent architecture work. T
 - Better Auth with database persistence is the selected administrative authentication direction. Guest sessions remain independently scoped.
 - `/v1` HTTP JSON API contracts use standardized error shapes and shared contract definitions separate from database models.
 - The UI uses shadcn with Base UI and Sonner. Motion is selected for the approved intro, text, and story choreography; CSS/Intersection Observer remain appropriate for simple interactions and entrances.
-- Composition over inheritance governs template design: reusable sections and layout provide defaults; each site composes its pages and custom content.
+- Composition over inheritance governs template design: reusable sections and layout provide defaults; each site composes its pages and custom content. Template defaults and every public wedding site are written in Brazilian Portuguese (`pt-BR`) only; `en-US` is not a template or site locale.
 - Shared changes apply only to newly built sites. Every wedding receives independent review and deployment; no silent mass publish exists.
 - The first production infrastructure is manual. Cloudflare account/app setup, Railway deployment configuration, Neon environments, Twilio setup, domains, DNS, and provider permissions are recorded and verified separately.
 - Allowed browser origins/CORS are explicit per wedding. Wildcard CORS or authorization is not permitted.
