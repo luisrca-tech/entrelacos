@@ -23,13 +23,14 @@ These decisions apply across the blocks and remain subject to the explicit gates
 - **Authentication:** Better Auth with Drizzle persistence for admins; independent family-scoped guest sessions after provider-backed OTP. The selected cross-origin session/handoff design remains a required spike.
 - **Data access and migrations:** Drizzle with node-postgres and reviewed/manual SQL migrations. Main-environment migrations are explicit manual operations.
 - **UI and motion:** shadcn with Base UI, Sonner for shared feedback, and Motion for the approved intro, text, and story choreography. CSS/Intersection Observer remain appropriate for simple interactions and entrances.
-- **Template model:** composition over inheritance. A reusable template supplies sections, layout, and defaults; each wedding composes its own pages and approved content. Shared changes affect newly built sites only.
+- **Template model:** composition over inheritance. A reusable template supplies sections, layout, and defaults; each wedding composes its own pages and approved content. Shared changes affect newly built sites only. Template and public-site copy is always Brazilian Portuguese (`pt-BR`), never `en-US`.
 - **External services:** Twilio Verify is the opt-in real SMS boundary; tests default to deterministic mocks. Cloudflare, Railway, Neon, CI resources, and any media provider require real account access and explicit credentials. No provider guarantee is assumed.
 - **Operational control:** production deployment, domains, DNS, lifecycle status, main migrations, and provider setup are manual and recorded as owner-entered status. No silent mass publication or automatic expiry deletion exists.
 
 ## Cross-cutting rules for every block
 
-- Use English for persisted documentation and implementation artifacts; use deterministic fixtures for tests.
+- Use English for persisted documentation, code, comments, and implementation artifacts; use deterministic fixtures for tests.
+- Templates and public wedding sites are always Brazilian Portuguese (`pt-BR`). Do not author template defaults, site copy, or guest-facing site UI in `en-US`. Site and template fixtures follow the same locale.
 - Apply TDD to logic-bearing behavior: write the focused failing test first, then implement the smallest complete vertical slice.
 - Keep mock integrations visibly distinct from real provider results. A mocked Twilio flow proves application behavior only.
 - Verify authorization in the API and prove cross-tenant isolation with a second wedding and sentinel data.
@@ -299,7 +300,7 @@ These decisions apply across the blocks and remain subject to the explicit gates
 
 ## Block 6: Public wedding experience, template composition, media, and responsive access
 
-**Track:** Product and client-facing visual work. The public template is developed independently from operational authorization but must expose the real RSVP/message boundaries from Blocks 3–5.
+**Track:** Product and client-facing visual work. The public template is developed independently from operational authorization but must expose the real RSVP/message boundaries from Blocks 3–5. All template and public-site copy is `pt-BR`, not `en-US`.
 
 **User stories:** US-004–US-019, US-038–US-039, US-121–US-122.
 
