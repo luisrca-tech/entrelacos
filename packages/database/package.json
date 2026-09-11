@@ -4,12 +4,13 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./schema": "./src/schema.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "db:generate": "node --env-file-if-exists=.env ./node_modules/drizzle-kit/bin.cjs generate",
-    "db:migrate": "node --env-file-if-exists=.env ./node_modules/drizzle-kit/bin.cjs migrate"
+    "db:generate": "node ./node_modules/drizzle-kit/bin.cjs generate",
+    "db:migrate": "node --env-file-if-exists=.env scripts/migrate.ts"
   },
   "dependencies": {
     "drizzle-orm": "0.45.2",
