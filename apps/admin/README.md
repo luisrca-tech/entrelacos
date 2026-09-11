@@ -1,25 +1,23 @@
 # `@entrelacos/admin`
 
-Central admin panel scaffold for EntreLaços, built with TanStack Start, React, Vite, and Cloudflare Workers.
+Central TanStack Start/React panel on Cloudflare Workers. Block 2 provides
+controlled login, activation/recovery, an OWNER wedding chooser, a scoped
+SITE_ADMIN view, lifecycle and access controls, and administrative site handoff.
 
-This package is intentionally a working shell. It has no authentication, authorization, API calls, persistence, or product data. The login page is a visual placeholder and does not accept credentials.
+Copy `.dev.vars.example` to the ignored `.dev.vars` for local Vite execution.
+`API_BASE_URL` selects the fixed backend; `ADMIN_ORIGIN` must exactly match the
+browser origin. Both values are server-only. The API must be running with the
+same admin origin and a verified database target. No database code runs here.
 
-## Routes
+## Routes and commands
 
-- `/` — scaffold overview with the planned OWNER and site operational boundaries.
-- `/login` — non-functional login placeholder.
+Routes: `/`, `/login`, `/activate`, `/recover`, `/sites/:siteId`, `/handoff`,
+and the server-only `/api/$` BFF. Activation/recovery links carry their manual
+one-use token in the fragment; successful consumption still requires login.
 
-## Commands
+Use `bun run dev`, `bun run build`, `bun run typecheck`, or `bun run preview`.
+`bun run deploy` builds and invokes Wrangler only when publication is explicitly
+authorized; provider accounts, domains, and secrets remain external settings.
 
-```sh
-bun run dev
-bun run build
-bun run typecheck
-bun run preview
-bun run cf-typegen
-bun run deploy
-```
-
-`bun run deploy` builds and invokes Wrangler. Cloudflare account, domain, and secrets remain external deployment configuration; none are stored in this package.
-
-TanStack Router writes `src/routeTree.gen.ts` during development or build. It is generated source and may be replaced when routes change.
+TanStack Router generates `src/routeTree.gen.ts`. See `docs/block2Panel.md` and
+`docs/block2Validation.md` from the repository root for transport and evidence.

@@ -1,6 +1,6 @@
 # `@entrelacos/wedding-demo`
 
-Minimal public Astro site that consumes the shared template layout and section package. It demonstrates static composition, one hydrated React feature-status island, Motion's reduced-motion-aware boundary, and no product workflow simulation.
+Minimal public Astro site that consumes the shared template layout and section package. It demonstrates static composition, hydrated React feature-status and administrative recognition islands, Motion's reduced-motion-aware boundary, and no product workflow simulation.
 
 ## Commands
 
@@ -13,13 +13,15 @@ Minimal public Astro site that consumes the shared template layout and section p
 
 ## Local configuration
 
-The future public API integration uses the following browser-safe values:
+The administrative recognition integration consumes these public build-time values:
 
 ```sh
 PUBLIC_API_URL=http://localhost:8080
+PUBLIC_ADMIN_ORIGIN=http://localhost:3000
 PUBLIC_SITE_ID=demo-wedding
+PUBLIC_SITE_INACTIVE=false
 ```
 
-These variables are reserved configuration examples and are not consumed by the current liveness scaffold. `PUBLIC_SITE_ID` identifies the demo site; it does not grant authorization.
+Provision the wedding through the owner API and register its exact origin before using recognition. `PUBLIC_SITE_ID` identifies the wedding; it grants no authorization. Set `PUBLIC_SITE_INACTIVE=true` and rebuild to generate the neutral static page; deploy that artifact to every served hostname as described in `docs/block2Lifecycle.md`.
 
 The Astro config enables Tailwind CSS through the Vite plugin. `src/styles/tailwind.css` is the single entry point for Tailwind, shared UI tokens, and the local workspace source scan.

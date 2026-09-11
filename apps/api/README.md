@@ -1,15 +1,25 @@
-# API scaffold
+# API
 
-Hono on Node.js 24, intended for Railway. `GET /v1/health` is liveness only. Unknown/unimplemented routes return a structured 404. No database, authentication, SMS or administrative operation is wired yet. Better Auth and its Drizzle adapter are installed dependencies for the authentication block; their presence is not an implemented login.
+Hono on Node.js 24. Better Auth and database access stay in this application; the panel forwards requests through its server-side BFF.
 
 From the repository root:
 
 ```sh
-bun run --filter @entrelacos/api dev
-bun run --filter @entrelacos/api build
-bun run --filter @entrelacos/api start
+bun run --cwd apps/api dev
+bun run --cwd apps/api build
+bun run --cwd apps/api start
 ```
 
-Default port: 8080. `.env` is optional for liveness. Copy `.env.example` only when preparing the corresponding integration task. Do not supply real secrets to frontend environment files. No CORS policy or business routes exist yet: these arrive with authenticated tenant boundaries, not an open wildcard.
+The dev/start scripts load the private `packages/database/.env` first and `apps/api/.env` second. Keep database URLs and expected Neon identities in the database environment file. Configure the API environment using `.env.example`; never put server secrets in frontend variables.
 
-Railway setup is manual: use the repository root as build context, a workspace-filtered build/start, and this health endpoint. Root lockfile and workspace packages are required; deploying only this subdirectory without dependencies is unsupported. Bind the service port through Railway's `PORT`. Production database migrations are a separate operator action, never part of server startup.
+`APP_ENV` must explicitly be `development` or `test`. The latter selects only `DATABASE_URL_TEST`, with no development fallback. Startup verifies the actual database identity before opening the HTTP listener. It does not run migrations. Production is intentionally not a selectable destination in this implementation phase.
+
+`GET /v1/health` reports liveness only, not provider or business readiness. Its isolated handler tests require no credentials. Starting the complete server requires valid runtime settings and a verified database. The default port is 8080.
+
+The browser can reach login, logout, and the current-user endpoint through the panel's `/api/v1/` BFF. Only explicitly mounted auth routes are available; the unrestricted native Better Auth handler is not exposed. Block 2 implementation and completed acceptance evidence are recorded in `docs/block2Validation.md`.
+
+Railway setup and production migrations remain separate operator actions. Use the repository root as the eventual build context; deploying this subdirectory without workspace dependencies is unsupported.
+
+## Listening
+
+The runtime now selects and verifies a database explicitly, while the liveness handler remains independently testable. Database URLs are loaded from the existing central private file to avoid duplicating credentials across applications. Production configuration is reserved for the deployment block rather than guessed from development defaults.

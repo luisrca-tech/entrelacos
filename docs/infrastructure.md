@@ -29,7 +29,7 @@ Names below are the initial register. Only `PORT` is consumed by the API livenes
 
 API URL examples use the origin `http://localhost:8080`; `/v1` belongs to the HTTP route path. The panel remains on `http://localhost:3000`, and the public demo remains on `http://localhost:4321`. The example `PUBLIC_SITE_ID=demo-wedding` is fictitious and does not identify a provisioned tenant.
 
-Future database integration tests require an explicit `TEST_DATABASE_URL` and verification that it names a disposable Neon resource distinct from development and main. Never fall back to `DATABASE_URL`. No database suite or test connection is implemented by this scaffold.
+Database integration tests use `DATABASE_URL_TEST` exclusively and verify the actual Neon project, branch, endpoint, database, and role before proceeding. Never fall back to `DATABASE_URL`. Store the expected identities in private `DATABASE_PROJECT_ID`, `DATABASE_DEVELOPMENT_BRANCH_ID`, `DATABASE_TEST_BRANCH_ID`, and `DATABASE_NAME` configuration. Different hostnames alone do not prove branch isolation. Block 2 validation status is recorded in `docs/block2Validation.md`.
 
 | Variable | Consumer | Classification |
 | --- | --- | --- |
