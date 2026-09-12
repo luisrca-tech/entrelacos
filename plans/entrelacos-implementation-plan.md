@@ -2,17 +2,17 @@
 
 > **Status: DRAFT — pending user granularity review.** This plan is derived from [the EntreLaços PRD](./entrelacos-prd.md), the accepted interview dated 2026-09-09, and [the decision register](../docs/decisionRegister.md).
 
-These eight larger blocks define the intended implementation map. Block 1 is complete at the approved scaffold boundary and Block 2 has recorded acceptance. Block 3 has recorded local acceptance through the manual group PIN redesign; Blocks 4–8 remain planned work and require scoped approval before implementation. A block may be split or merged after that review. The plan is an implementation map, not implementation approval for the remaining blocks.
+These eight larger blocks define the intended implementation map. Block 1 is complete at the approved scaffold boundary and Block 2 has recorded acceptance. Block 3 has recorded local acceptance through the manual group PIN redesign. Block 4 has recorded local acceptance on `block-4/member-rsvp`. Blocks 5–8 remain planned work and require scoped approval before implementation. A block may be split or merged after that review. The plan is an implementation map, not implementation approval for unstarted blocks.
 
 ## Delivery status
 
 - **Documentation:** PRD and this draft plan are the documentation deliverables.
 - **Scaffold:** Block 1 is complete at the approved runnable-boundary scope. Bun 1.3.14 and Node.js 24.20.0 passed frozen installation, lint on 52 files, seven forced typecheck tasks, four deterministic API tests and three forced application builds; raw HTTP and clean-browser evidence also passed. See `docs/scaffoldValidation.md` for evidence and limits.
-- **Product:** Block 2 completion is recorded in [its validation report](../docs/block2Validation.md). Block 3 is merged into `main`, with local acceptance recorded in [its validation report](../docs/block3Validation.md); live Twilio delivery remains pending. This documentation revision does not rerun that acceptance. Blocks 4–8 remain planned. No provider, secret, deployment, media, or production claim is implied by a mock, placeholder, or passing local health check.
+- **Product:** Block 2 completion is recorded in [its validation report](../docs/block2Validation.md). Block 3 is merged into `main`, with local acceptance recorded in [its validation report](../docs/block3Validation.md); live Twilio delivery remains pending. Block 4 passed its isolated migration, database, browser, artifact, and final-gate evidence on `block-4/member-rsvp`, as recorded in [the Block 4 validation record](../docs/block4Validation.md). This documentation revision does not rerun Block 3 acceptance. Blocks 5–8 remain planned. No provider, secret, deployment, media, or production claim is implied by a mock, placeholder, or passing local health check.
 
 ## Template/site study revision — 2026-09-12
 
-The [template/site study](./entrelacos-template-site-study.md) compares both architecture-websites templates with their demos and defines the next-block ownership, customization and validation requirements. Keep eight blocks and existing task IDs. Add B6-T0 before visual implementation; strengthen Blocks 4–5 feature ownership, Block 7 consumer/CI proof and Block 8 thin-host provisioning and release records. This revision updates planning on local `main`; it does not approve or implement the remaining product work.
+The [template/site study](./entrelacos-template-site-study.md) compares both architecture-websites templates with their demos and defines the next-block ownership, customization and validation requirements. Keep eight blocks and existing task IDs. Add B6-T0 before visual implementation; strengthen Blocks 4–5 feature ownership, Block 7 consumer/CI proof and Block 8 thin-host provisioning and release records. This revision updates planning and documents the current Block 4 worktree; it does not approve or implement unstarted product work.
 
 ## Durable architectural decisions
 
@@ -205,6 +205,8 @@ These decisions apply across the blocks and remain subject to the explicit gates
 
 ## Block 4: RSVP, deadlines, concurrency, and operational history
 
+**Implementation status (2026-09-12):** The `block-4/member-rsvp` working tree contains the accepted local Block 4 contracts, migrations, API service/router, admin operations, and shared `wedding-features` RSVP presentation. Test/development migrations, real PostgreSQL evidence, independent browser QA, static artifact privacy, and final gates passed; see `docs/block4Validation.md` and `docs/block4QaChecklist.md`.
+
 **Track:** Product. This block turns verified family access into reliable member-level attendance operations.
 
 **User stories:** US-066–US-082.
@@ -216,31 +218,31 @@ These decisions apply across the blocks and remain subject to the explicit gates
 - **Infrastructure:** Disposable Neon integration database with repeatable fixtures. No new production infrastructure is required.
 - **Tools:** Browser test runner, timezone-aware test clock, deterministic fixtures, and database transaction/concurrency test support.
 - **Secrets and access:** None beyond Block 2/3 development credentials. No SMS send is needed to test saved RSVP after a guest session fixture exists.
-- **Decisions:** Three states (`PENDING`, `CONFIRMED`, `DECLINED`), explicit save, confirm-all draft shortcut, partial pending, deadline datetime plus timezone, post-deadline admin correction, no automatic pending decline, member-level versioning, all-or-nothing conflict handling, and separate history view are fixed.
+- **Decisions:** Three states (`PENDING`, `CONFIRMED`, `DECLINED`), explicit save, confirm-all draft shortcut, partial pending, and no automatic pending decline are fixed. A deadline is either absent as paired null instant/timezone, which permits public RSVP subject to session/lifecycle rules, or configured with a UTC instant and explicit IANA timezone; the server allows public writes before the instant and blocks them at or after it. Authorized admins may correct an active wedding after the deadline. Member-level versioning, all-or-nothing conflict handling, idempotent replay after a lost response including after the deadline, changed-payload rejection, and a separate history view are fixed.
 
 ### Concrete vertical-slice tasks
 
-1. **B4-T1 — Answer family RSVP.** Deliver a guest RSVP view listing every family member, with pending/confirmed/declined state, confirm-all draft, partial responses, explicit save, and clear feedback.
-2. **B4-T2 — Adapt RSVP presentation.** Deliver desktop modal and mobile full-screen RSVP presentations with the same API behavior and immediate error/success response.
-3. **B4-T3 — Enforce deadline.** Add deadline configuration and enforcement with explicit timezone. Guests can read after the deadline but cannot save changes; admins can correct externally received responses.
-4. **B4-T4 — Protect concurrent updates.** Add member-level optimistic concurrency. A stale all-or-nothing submission reports a conflict while retaining selections; unrelated members remain independently editable.
-5. **B4-T5 — Record operational history.** Deliver a separate operational history view with before/after values, actor, timestamp, group, and member filters. Keep daily current-state operations readable.
-6. **B4-T6 — Preserve pending state.** Preserve pending states through deadline and export preparation; never infer decline from silence.
+1. **B4-T1 — Answer family RSVP.** Deliver a guest RSVP view listing every family member, with pending/confirmed/declined state, confirm-all draft, partial responses, explicit save, runtime loading/unavailable/error feedback, and no mutation on read.
+2. **B4-T2 — Adapt RSVP presentation.** Deliver the shared `wedding-features` form as a desktop modal and mobile full-screen presentation with identical API, draft, save, and conflict behavior. Keep the final visual template work in Block 6.
+3. **B4-T3 — Enforce deadline.** Add admin UX for setting/removing a local wall-clock deadline with explicit IANA timezone, persist the UTC instant/timezone pair, and enforce it from the server clock. Guests can read after the deadline but cannot save new changes; authorized admins can correct an active wedding after it.
+4. **B4-T4 — Protect concurrent updates.** Add member-level optimistic concurrency, serialized request receipts, and all-or-nothing writes. A stale submitted member returns `RSVP_CONFLICT` with current state/revision details, retains local selections, and leaves unrelated members independently editable.
+5. **B4-T5 — Record operational history.** Deliver a separate history view and API with actor type/ID/display snapshot, before/after state, timestamp, group/member filters, time filters, and stable cursor pagination. Keep daily current-state operations readable and tenant bound.
+6. **B4-T6 — Preserve pending state.** Preserve pending states through deadline and export preparation; never infer decline from silence. Keep RSVP usable after stale SMS/provider state and independent from Block 5 quotas.
 
 ### Task-level preflight
 
 | Task | Must have before start | Depends on |
 | --- | --- | --- |
-| B4-T1 | **Infrastructure:** Neon disposable base. **Tools:** guest browser flow and deterministic member fixtures. **Secrets/access:** valid family session fixture. **Decisions:** three states, representative authority, explicit save, partial pending. | B3-T4 |
-| B4-T2 | **Infrastructure:** none beyond public/admin test surfaces. **Tools:** clean-browser viewport checks. **Secrets/access:** guest session fixture. **Decisions:** desktop modal/mobile full-screen behavior. | B4-T1 |
-| B4-T3 | **Infrastructure:** Neon disposable base. **Tools:** timezone-aware test clock. **Secrets/access:** site-admin fixture. **Decisions:** deadline timezone, guest read-only state, admin correction. | B4-T1 |
-| B4-T4 | **Infrastructure:** Neon transaction/concurrency support. **Tools:** concurrent request test harness. **Secrets/access:** two valid family/session fixtures. **Decisions:** member-level versioning and all-or-nothing conflict response. | B4-T1 |
-| B4-T5 | **Infrastructure:** Neon disposable base. **Tools:** history/filter tests. **Secrets/access:** owner/site-admin actor fixtures. **Decisions:** audit fields and separate operational view. | B4-T3, B4-T4 |
-| B4-T6 | **Infrastructure:** none beyond RSVP persistence. **Tools:** regression tests. **Secrets/access:** none. **Decisions:** no automatic pending decline. | B4-T1, B4-T3 |
+| B4-T1 | **Infrastructure:** Neon disposable base. **Tools:** guest browser flow and deterministic member fixtures. **Secrets/access:** valid family session fixture. **Decisions:** three states, representative authority, explicit save, partial pending, no mutation on read. | B3-T4 |
+| B4-T2 | **Infrastructure:** none beyond public/admin test surfaces. **Tools:** clean-browser viewport checks. **Secrets/access:** guest session fixture. **Decisions:** one shared implementation in desktop modal/mobile full-screen forms. | B4-T1 |
+| B4-T3 | **Infrastructure:** Neon disposable base. **Tools:** timezone-aware server test clock and admin form. **Secrets/access:** site-admin fixture. **Decisions:** paired nullable deadline, exact blocked boundary, guest read-only state, active-site admin correction. | B4-T1 |
+| B4-T4 | **Infrastructure:** Neon transaction/concurrency support. **Tools:** concurrent request test harness and deterministic request IDs. **Secrets/access:** two valid family/session fixtures plus admin actor. **Decisions:** member-level versioning, conflict details, all-or-nothing rollback, replay after lost response. | B4-T1 |
+| B4-T5 | **Infrastructure:** Neon disposable base. **Tools:** history/filter/cursor tests and admin history view. **Secrets/access:** owner/site-admin actor fixtures. **Decisions:** actor representation, snapshot fields, filter set, cursor order, separate operational view. | B4-T3, B4-T4 |
+| B4-T6 | **Infrastructure:** none beyond RSVP persistence. **Tools:** regression tests. **Secrets/access:** none. **Decisions:** no automatic pending decline and no SMS/quota dependency. | B4-T1, B4-T3 |
 
 ### Template integration boundary
 
-Shared RSVP presentation and API/session handling belong in `packages/wedding-features`, consuming reviewed block contracts. Wedding apps select placement and theme; `template-root` must not implement tenant rules, session storage, deadlines or moderation. Test reusable behavior before final Block 6 styling. See the [template/site study](./entrelacos-template-site-study.md).
+Shared RSVP presentation, draft state, and API/session handling belong in `packages/wedding-features`, consuming reviewed block contracts and the existing family bearer. Wedding apps select placement and theme; `template-root` must not implement tenant rules, session storage, deadlines, persistence, concurrency, or history. `apps/admin` consumes shared contracts but keeps administrative views separate. `apps/wedding-demo` composes the feature and supplies public configuration for QA; it must not duplicate RSVP logic or put family data in static artifacts. Test reusable behavior before final Block 6 styling. See the [template/site study](./entrelacos-template-site-study.md) and [Block 4 contract](../docs/block4Contracts.md).
 
 ### What to deliver
 
@@ -248,6 +250,8 @@ Shared RSVP presentation and API/session handling belong in `packages/wedding-fe
 - Deadline lock and admin correction behavior with timezone clarity.
 - Concurrency conflict handling that avoids stale overwrites.
 - Operational history distinct from current RSVP data.
+- Public and administrative routes, payloads, actor representation, history cursor/filter contract, no-deadline representation, and idempotency replay behavior documented in `docs/block4Contracts.md`.
+- Static builds remain independent of API, database, and SMS availability and contain no family data, sessions, responses, credentials, or operational fixtures.
 
 ### Tests and acceptance evidence
 
@@ -255,6 +259,15 @@ Shared RSVP presentation and API/session handling belong in `packages/wedding-fe
 - Browser evidence covers mobile full-screen, desktop modal, draft shortcut, explicit save, deadline read-only state, and conflict recovery.
 - A two-wedding fixture proves RSVP reads and writes remain family and tenant bound.
 - History evidence names actor, time, before/after, group, and member while excluding unrelated tenant data.
+- Final validation passed after the isolated migration, `DATABASE_URL_TEST` identity check, independent `$qa-and-fix` browser run and fix rerun, artifact privacy scan, full local gates, `git diff --check`, and Graphify update were recorded in `docs/block4Validation.md`.
+
+### Block 4 documentation handoff
+
+`docs/block4Contracts.md` freezes routes, payloads, actor identity, history pagination/filters, deadline and retry semantics. `docs/block4Validation.md` records executed evidence and remaining external limits. `docs/block4QaChecklist.md` is the independent browser checklist. `docs/block4Handoff.md` gives Block 5 and Block 6 the public exports, props, runtime boundary, and static privacy rules.
+
+### Listening
+
+Block 4 uses a paired nullable deadline because “no deadline” must not acquire an implicit timezone. Public deadline rejection is checked after stored-request replay so a lost successful response can be recovered safely after the cutoff, while new requests at or after the exact instant remain blocked. Member-scoped revisions avoid false conflicts when another member changes, and a single transaction keeps state, history, and receipts aligned. A template-owned controller, per-member login, client-clock enforcement, or separate retry endpoint would duplicate authority and was rejected.
 
 ---
 

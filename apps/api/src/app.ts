@@ -6,6 +6,7 @@ import { createDemoGuestGrantHttpRouter } from "./demoGuestGrant";
 import { createGuestGroupsHttpRouter } from "./guestGroupsHttp";
 import { createHandoffHttpRouter } from "./handoffHttp";
 import { createPublicGuestHttpRouter } from "./publicGuestHttp";
+import { createRsvpHttpRouter } from "./rsvpHttp";
 import { createSitesHttpRouter } from "./sitesHttp";
 
 export function createApp(options?: AuthHttpOptions) {
@@ -25,6 +26,7 @@ export function createApp(options?: AuthHttpOptions) {
     app.route("/", createGuestGroupsHttpRouter(options));
     app.route("/", createDemoGuestGrantHttpRouter(options));
     app.route("/", createPublicGuestHttpRouter(options));
+    app.route("/", createRsvpHttpRouter(options));
     app.route("/", createHandoffHttpRouter(options));
   }
 
