@@ -31,6 +31,16 @@ Use composition over inheritance: a client app explicitly composes sections and 
 
 Internal workspace packages export source for bundler consumption; deployable applications own their build. The Node API bundles any consumed TypeScript workspace source into its deployment output. Pin dependency versions in manifests and retain the Bun lockfile (`bun.lock`). Framework-mandated names are preserved; custom utilities use camelCase and components PascalCase.
 
+## Planned template/host refinement (2026-09-12)
+
+The [template/site study](../plans/entrelacos-template-site-study.md) refines the composition boundary for Blocks 4–8. These exports and contracts are planned, not current implementation claims.
+
+- Keep `template-root` and `apps/wedding-demo`; add a public presentation `/v1` entrypoint in B6-T0 with a reusable layout, a standard page preset and individually usable editorial sections. Preserve or migrate existing imports explicitly.
+- Each host owns serializable public content, media, per-page SEO, routes, environment configuration and custom sections. The shared layout renders metadata from host inputs. Extra pages reuse it without requiring every preset section's data.
+- Hosts compose `wedding-features` into template slots or local pages. The template has no API/environment dependency. API contracts, sessions, RSVP deadlines and mural authority remain in their operational blocks; mural data is runtime data, not static content.
+- Verify two independently built compositions, one with an extra page and local/reordered section, before treating the template as reusable. Use native Astro composition and narrow documented theme variables rather than inheritance or a page-builder registry.
+- Versioned exports express compatibility, while Git/lockfile/build inputs and retained artifacts provide release reproducibility. Publication and rollback remain per site and manual. Nested wedding apps require explicit workspace/CI discovery checks.
+
 ## Environments
 
 There are two permanent environments: `development` and `main`. Each has a separate Neon database/connection and its own IDs, administrative accounts, sessions and credentials. Applications run locally during development; no local PostgreSQL installation is required. Real customer content/media may be used in development. Never transfer test guests, RSVP, messages, passwords, tokens or sessions into production.
@@ -125,3 +135,5 @@ Setting inactive in the API blocks public operations. It does not remove Cloudfl
 ## Listening
 
 The design retains static independently deployed sites and a central API instead of introducing a CMS or per-client backend. Demo isolation uses existing tenant boundaries instead of a third permanent database. Family sessions use explicit bearer transport rather than cross-site cookies, while the administrative handoff remains a separate unresolved boundary. Infrastructure remains manually operated. Recovery capacity, live Twilio delivery, later operational routes, deterministic demo reset, provisioning mutations, and final artwork remain planned or gated rather than inferred from local mock success.
+
+The 2026-09-12 refinement exposes reusable sections alongside a page preset, keeping host-owned extensions possible without copying shared markup. It preserves the existing package structure and operational contracts; a second design system or generic page engine remains deferred.

@@ -2,13 +2,17 @@
 
 > **Status: DRAFT — pending user granularity review.** This plan is derived from [the EntreLaços PRD](./entrelacos-prd.md), the accepted interview dated 2026-09-09, and [the decision register](../docs/decisionRegister.md).
 
-These eight larger blocks define the intended implementation map. Block 1 is complete at the approved scaffold boundary; Blocks 2–8 remain draft product and operations work and require granularity review before scheduling. A block may be split or merged after that review. The plan is an implementation map, not implementation approval for the remaining blocks.
+These eight larger blocks define the intended implementation map. Block 1 is complete at the approved scaffold boundary and Block 2 has recorded acceptance. Block 3 has recorded local acceptance through the manual group PIN redesign; Blocks 4–8 remain planned work and require scoped approval before implementation. A block may be split or merged after that review. The plan is an implementation map, not implementation approval for the remaining blocks.
 
 ## Delivery status
 
 - **Documentation:** PRD and this draft plan are the documentation deliverables.
 - **Scaffold:** Block 1 is complete at the approved runnable-boundary scope. Bun 1.3.14 and Node.js 24.20.0 passed frozen installation, lint on 52 files, seven forced typecheck tasks, four deterministic API tests and three forced application builds; raw HTTP and clean-browser evidence also passed. See `docs/scaffoldValidation.md` for evidence and limits.
-- **Product:** Blocks 2–8 are neither approved nor implemented. No provider, secret, deployment, media, or production claim is implied by a mock, placeholder, or passing local health check.
+- **Product:** Block 2 completion is recorded in [its validation report](../docs/block2Validation.md). Block 3 is merged into `main`, with local acceptance recorded in [its validation report](../docs/block3Validation.md); live Twilio delivery remains pending. This documentation revision does not rerun that acceptance. Blocks 4–8 remain planned. No provider, secret, deployment, media, or production claim is implied by a mock, placeholder, or passing local health check.
+
+## Template/site study revision — 2026-09-12
+
+The [template/site study](./entrelacos-template-site-study.md) compares both architecture-websites templates with their demos and defines the next-block ownership, customization and validation requirements. Keep eight blocks and existing task IDs. Add B6-T0 before visual implementation; strengthen Blocks 4–5 feature ownership, Block 7 consumer/CI proof and Block 8 thin-host provisioning and release records. This revision updates planning on local `main`; it does not approve or implement the remaining product work.
 
 ## Durable architectural decisions
 
@@ -23,7 +27,7 @@ These decisions apply across the blocks and remain subject to the explicit gates
 - **Authentication:** Better Auth with Drizzle persistence for admins; independent family-scoped guest sessions after a manually shared group PIN for the MVP, with Twilio Verify retained as an optional future channel. The selected cross-origin session/handoff design remains a required spike.
 - **Data access and migrations:** Drizzle with node-postgres and reviewed/manual SQL migrations. Main-environment migrations are explicit manual operations.
 - **UI and motion:** shadcn with Base UI, Sonner for shared feedback, and Motion for the approved intro, text, and story choreography. CSS/Intersection Observer remain appropriate for simple interactions and entrances.
-- **Template model:** composition over inheritance. A reusable template supplies sections, layout, and defaults; each wedding composes its own pages and approved content. Shared changes affect newly built sites only. Template and public-site copy is always Brazilian Portuguese (`pt-BR`), never `en-US`.
+- **Template model:** composition over inheritance with a public `@entrelacos/template-root/v1` presentation boundary planned in B6-T0. The host owns routes, serializable editorial content, SEO inputs, media and local extensions; the template owns reusable rendering and the standard page preset. `wedding-features` owns shared guest UI/API integration; the API retains operational authority. See the template/site study for the two-consumer proof and versioning limits. A reusable template supplies sections, layout, and defaults; each wedding composes its own pages and approved content. Shared changes affect newly built sites only. Template and public-site copy is always Brazilian Portuguese (`pt-BR`), never `en-US`.
 - **External services:** Manual group PIN delivery is the provider-free MVP path. Twilio Verify remains the opt-in real SMS boundary; tests use the manual path or deterministic mocks. Cloudflare, Railway, Neon, CI resources, and any media provider require real account access and explicit credentials. No provider guarantee is assumed.
 - **Operational control:** production deployment, domains, DNS, lifecycle status, main migrations, and provider setup are manual and recorded as owner-entered status. No silent mass publication or automatic expiry deletion exists.
 
@@ -234,6 +238,10 @@ These decisions apply across the blocks and remain subject to the explicit gates
 | B4-T5 | **Infrastructure:** Neon disposable base. **Tools:** history/filter tests. **Secrets/access:** owner/site-admin actor fixtures. **Decisions:** audit fields and separate operational view. | B4-T3, B4-T4 |
 | B4-T6 | **Infrastructure:** none beyond RSVP persistence. **Tools:** regression tests. **Secrets/access:** none. **Decisions:** no automatic pending decline. | B4-T1, B4-T3 |
 
+### Template integration boundary
+
+Shared RSVP presentation and API/session handling belong in `packages/wedding-features`, consuming reviewed block contracts. Wedding apps select placement and theme; `template-root` must not implement tenant rules, session storage, deadlines or moderation. Test reusable behavior before final Block 6 styling. See the [template/site study](./entrelacos-template-site-study.md).
+
 ### What to deliver
 
 - Guest family RSVP from lookup through saved member responses.
@@ -285,6 +293,10 @@ These decisions apply across the blocks and remain subject to the explicit gates
 | B5-T5 | **Infrastructure:** Neon disposable base. **Tools:** CSV/PDF generation and print/browser evidence. **Secrets/access:** authorized admin fixture. **Decisions:** report fields, filters, pagination, messages excluded. | B4-T5, B5-T4 |
 | B5-T6 | **Infrastructure:** usage store and optional Twilio account data. **Tools:** counter/alert test clock. **Secrets/access:** owner fixture; live usage access only if provider-approved. **Decisions:** numeric default and blocked-send policy. | B3-T3, B5-T1 |
 
+### Template integration boundary
+
+Shared message presentation and API/session handling belong in `packages/wedding-features`, consuming reviewed block contracts. Wedding apps select placement and theme; `template-root` must not implement tenant rules, session storage, deadlines or moderation. Test reusable behavior before final Block 6 styling. Public mural data is read at runtime, with defined refresh/cache behavior for edits and deletions; do not snapshot operational messages into static editorial content. See the [template/site study](./entrelacos-template-site-study.md).
+
 ### What to deliver
 
 - Verified representative message lifecycle and public mural controls.
@@ -319,10 +331,11 @@ These decisions apply across the blocks and remain subject to the explicit gates
 
 ### Concrete vertical-slice tasks
 
+0. **B6-T0 — Prove the template/host boundary.** Define minimal serializable content, section and SEO contracts and a public `/v1` layout/preset/section API. Preserve or migrate existing imports explicitly. Build the normal demo composition and a second deterministic local host fixture with different content/media/SEO, an extra page and an inserted/reordered local section. Prove reuse without app-to-app or deep imports. Use existing Astro composition, not a page-builder registry. Freeze exact props/slots with these examples before B6-T1.
 1. **B6-T1 — Compose the hero.** Compose an image-led hero with names, date, location, approved photo or muted loop video, poster, responsive crop, immediate fallback, and restrained entrance motion.
 2. **B6-T2 — Compose the story.** Compose alternating editorial story sections and one desktop sticky narrative sequence that becomes normal vertical flow on mobile and reduced motion.
 3. **B6-T3 — Add practical sections.** Add compact gallery, schedule, ceremony/reception, guidance, map/embed or direction link, copy-address fallback, RSVP entry, mural entry, and responsive footer.
-4. **B6-T4 — Add navigation and extensibility.** Add transparent-to-solid navigation, public page extensibility, and authorized “Panel” entry without turning public pages into a login bypass.
+4. **B6-T4 — Add navigation and extensibility.** Add transparent-to-solid navigation, host-owned validated page/anchor links, per-page SEO and an extra accommodation page using the public layout. Demonstrate a custom section without copying the template. Compose shared RSVP/message UI and authorized “Panel” entry without duplicating guest authority. Require consistent canonical/robots/social tags on default and extra pages.
 5. **B6-T5 — Apply interaction accessibility.** Ensure practical UI remains direct, readable, keyboard/focus accessible, and immediately responsive. Keep one expressive character-text statement at most; use simpler reveals elsewhere.
 6. **B6-T6 — Approve media treatment.** Run visual content and media acceptance with an approved fictional couple set where needed. If image generation or image-to-video tooling is unavailable, use an approved image fallback and record the media gate as pending.
 
@@ -330,7 +343,8 @@ These decisions apply across the blocks and remain subject to the explicit gates
 
 | Task | Must have before start | Depends on |
 | --- | --- | --- |
-| B6-T1 | **Infrastructure:** local public-site runtime. **Tools:** Astro, responsive browser checks, Motion for approved intro/text choreography. **Secrets/access:** approved fixture assets only. **Decisions:** hero media, crop, poster, fallback, visual direction. | B1-T2 |
+| B6-T0 | **Infrastructure:** local builds only. **Tools:** Astro, deterministic contract and import-boundary checks. **Secrets/access:** fictional public fixtures. **Decisions:** minimal public exports, serializable data, host-owned SEO/media, two-consumer proof; preserve current imports during migration. | B1-T1, B1-T4 |
+| B6-T1 | **Infrastructure:** local public-site runtime. **Tools:** Astro, responsive browser checks, Motion for approved intro/text choreography. **Secrets/access:** approved fixture assets only. **Decisions:** hero media, crop, poster, fallback, visual direction. | B6-T0 |
 | B6-T2 | **Infrastructure:** local public-site runtime. **Tools:** Motion for approved story/text sequence; reduced-motion browser setting. **Secrets/access:** approved story fixtures. **Decisions:** one sticky desktop sequence and mobile/reduced-motion fallback. | B6-T1 |
 | B6-T3 | **Infrastructure:** map/link test fixtures. **Tools:** responsive/accessibility/browser checks. **Secrets/access:** approved venue data; no map secret required for link fallback. **Decisions:** practical section order and venue representation. | B6-T1 |
 | B6-T4 | **Infrastructure:** public and panel test origins. **Tools:** navigation/browser checks. **Secrets/access:** authorized admin fixture only for panel entry. **Decisions:** page extensibility and no public login bypass. | B2-T4, B6-T3 |
@@ -339,6 +353,8 @@ These decisions apply across the blocks and remain subject to the explicit gates
 
 ### What to deliver
 
+- A versioned reusable layout, default page preset and public editorial sections, with host-owned content, SEO, media and extensions.
+- Two local consumer builds proving a default page and an independently customized page/section composition.
 - A complete public wedding story with practical information and guest action entry points.
 - Responsive, reduced-motion, accessible variants of the approved template direction.
 - Media fallback and poster behavior that do not depend on autoplay or sound.
@@ -350,6 +366,9 @@ These decisions apply across the blocks and remain subject to the explicit gates
 - Accessibility evidence covers reading order, keyboard focus, reduced motion, no forced scroll, no content loss, and no layout shift from late media.
 - Media evidence names approved assets and permissions. A mocked or placeholder video is never reported as an approved provider workflow.
 - Public-site tests prove no static bundle contains Neon, Railway, Better Auth, Twilio, or other server credentials.
+- Contract checks reject malformed selected-section content, duplicate IDs, invalid links/media/canonical values and missing required preset data. Optional sections can be absent or reordered.
+- Both consumer builds verify independent names, media, metadata and navigation; an extra route and local section need no template fork. Repeated sections have isolated IDs/behavior. Builds require no live API/database.
+- Validate host-owned controls as well as shared markup. Review/noindex behavior, one canonical/robots directive per page and social image URLs are checked in emitted HTML; no private guest data is statically embedded.
 
 ---
 
@@ -370,10 +389,10 @@ These decisions apply across the blocks and remain subject to the explicit gates
 
 ### Concrete vertical-slice tasks
 
-1. **B7-T1 — Seed and reset the demo.** Build deterministic demo data covering pending, partial, confirmed, declined, messages, disabled mural, rate-limit states, inactive site, and representative changes. Add an owner-only manual reset limited to the demo site and prove sentinel preservation.
+1. **B7-T1 — Seed and reset the demo.** Keep fictional copy, media, banner and demonstration entry in the demo app; API authority controls simulation. The second composition is a local test fixture, not a permanent demo environment.  Build deterministic demo data covering pending, partial, confirmed, declined, messages, disabled mural, rate-limit states, inactive site, and representative changes. Add an owner-only manual reset limited to the demo site and prove sentinel preservation.
 2. **B7-T2 — Run end-to-end browser QA.** Exercise end-to-end owner, site-admin, representative, RSVP, message, export, deadline, inactive-site, and public navigation flows in a clean browser.
 3. **B7-T3 — Measure target load.** Run burst/load tests against the target planning scale and record latency, failures, rate limits, and tenant isolation. Treat results as evidence for observed capacity, not a guarantee beyond the tested shape.
-4. **B7-T4 — Gate CI.** Add CI gates for types, lint, tests, builds, and disposable-database integration when credentials/resources exist. Keep main migration and production deploy manual.
+4. **B7-T4 — Gate CI.** Add public-import ownership checks, both template consumer builds, emitted SEO/media assertions and nested-workspace discovery verification.  Add CI gates for types, lint, tests, builds, and disposable-database integration when credentials/resources exist. Keep main migration and production deploy manual.
 5. **B7-T5 — Add safe observability.** Add structured operational logging, usage/error signals, and alerts without logging passwords, OTPs, phones beyond policy, or secret values. Make simulated provider outcomes distinguishable from live outcomes.
 6. **B7-T6 — Prove recovery.** Perform a real backup/restore exercise and calculate observed RPO/RTO. If Neon tier, retention, cost, legal retention, or restoration proof is incomplete, keep the corresponding launch gate open.
 7. **B7-T7 — Review legal and rights gates.** Review privacy, data rights, retention, deletion, client media permission, and support procedures with the responsible human/legal owner. Record unresolved items instead of inferring compliance.
@@ -425,9 +444,9 @@ These decisions apply across the blocks and remain subject to the explicit gates
 
 ### Concrete vertical-slice tasks
 
-1. **B8-T1 — Plan and implement provisioning script plus repository skill.** The task must prepare a local wedding app, request API draft site/first account through an authenticated internal operation, default to development, support explicit configuration reuse, resume safely, and avoid duplicates/overwrites. This task is planned here and is not implemented as part of writing this plan.
-2. **B8-T2 — Prove provisioning safety.** Verify provisioning dry-run, retry, interruption, resume, and idempotence against a disposable environment. Prove it does not write passwords, secrets, or direct database records.
-3. **B8-T3 — Deploy one reviewed wedding.** Deploy one reviewed wedding independently to Cloudflare Workers Static Assets and the API to Railway through manual operator steps. Record public URL, origin, status, dates, and deployment evidence without claiming automatic monitoring.
+1. **B8-T1 — Plan and implement provisioning script plus repository skill.** Generate a thin host consuming the B6 public contract, with explicit editorial content, media, SEO, environment configuration and app-owned route files. Never clone the demo as customer defaults.  The task must prepare a local wedding app, request API draft site/first account through an authenticated internal operation, default to development, support explicit configuration reuse, resume safely, and avoid duplicates/overwrites. This task is planned here and is not implemented as part of writing this plan.
+2. **B8-T2 — Prove provisioning safety.** Prove resume preserves custom pages/sections and media, rejects template contract incompatibility, resolves environment-local IDs and never copies demo operational data.  Verify provisioning dry-run, retry, interruption, resume, and idempotence against a disposable environment. Prove it does not write passwords, secrets, or direct database records.
+3. **B8-T3 — Deploy one reviewed wedding.** Record the template contract major, Git revision, lockfile/build inputs, canonical origin, artifact checksum and deployment ID; retain the preceding artifact for rollback. A workspace `/v1` import alone does not freeze template source.  Deploy one reviewed wedding independently to Cloudflare Workers Static Assets and the API to Railway through manual operator steps. Record public URL, origin, status, dates, and deployment evidence without claiming automatic monitoring.
 4. **B8-T4 — Protect first production data.** Exercise the first production path with clean operational data, allow real guest entry during review, and prove launch does not wipe guests, RSVP, sessions, or passwords. Preserve a verified rollback backup before mutation.
 5. **B8-T5 — Configure origins and domains.** Configure and smoke-test explicit per-wedding browser origins/CORS, domain/DNS records, panel/site navigation, and the selected cross-origin auth behavior. Keep custom-domain registration and renewal as separate manual responsibilities.
 6. **B8-T6 — Operate deactivation and reactivation.** Deliver manual deactivation, neutral placeholder, read-only consultation/export, reactivation, and data-preservation operations. Keep expiration deletion and renewal automation out of scope.
@@ -467,11 +486,11 @@ These decisions apply across the blocks and remain subject to the explicit gates
 The eight blocks are intentionally larger than individual tickets but each contains complete vertical-slice tasks and its own preflight, deliverables, and evidence. Granularity review should address:
 
 1. Does this eight-block granularity fit the intended implementation cadence, or should any block be split or merged?
-2. Should the public visual/media block run in parallel with RSVP/messages after the scaffold, or remain sequenced behind the operational slices?
+2. B6-T0 and fixture-based visual work may run independently once scoped approval and inputs exist; integrated B6/B7 acceptance still depends on Blocks 3–5. Review whether the remaining visual tasks need further splitting.
 3. Should provisioning/deployment remain one final operations block, or should provisioning be separated from first production launch?
 
 Until that review is answered, this plan remains **DRAFT**.
 
 ## Listening
 
-The plan records Block 1 as complete because its approved scaffold boundary has executable and browser evidence. It keeps the minimal scaffold conclusion instead of rebuilding the skeleton or treating placeholders as product behavior. Blocks 2–8 remain deferred and require their own approval, implementation and integration evidence.
+The plan records Block 1 as complete because its approved scaffold boundary has executable and browser evidence. It keeps the minimal scaffold conclusion instead of rebuilding the skeleton or treating placeholders as product behavior. Block 2 now has separate recorded acceptance, Block 3 has recorded local acceptance, and Blocks 4–8 retain their own approval and evidence boundaries. The 2026-09-12 study adds a minimal two-consumer proof before visual expansion, preserves task IDs and rejects template copies or a speculative CMS/page-builder layer.
