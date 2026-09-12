@@ -1,8 +1,9 @@
 import {
+  type FamilyRsvpResponse,
   type FamilySessionResponse,
   guestLookupInputSchema,
 } from "@entrelacos/contracts";
-import { type FormEvent, useEffect, useMemo, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
   clearGuestSession,
   GuestAccessApi,
@@ -19,6 +20,15 @@ import {
   shouldDiscardGuestChallenge,
   writeGuestSession,
 } from "./guestAccess";
+import { RsvpForm } from "./RsvpForm";
+import {
+  confirmAllDraft,
+  createRsvpDraft,
+  pendingRsvpUpdates,
+  type RsvpDraft,
+  reconcileRsvpDraft,
+  setDraftStatus,
+} from "./rsvpDraft";
 
 type GuestAccessProps = {
   siteId: string;
@@ -109,6 +119,12 @@ export function GuestAccess({
     null,
   );
   const [session, setSession] = useState<GuestSessionReadResponse | null>(null);
+  const [rsvp, setRsvp] = useState<FamilyRsvpResponse | null>(null);
+  const [rsvpDraft, setRsvpDraft] = useState<RsvpDraft>({});
+  const [rsvpOpen, setRsvpOpen] = useState(false);
+  const [rsvpError, setRsvpError] = useState("");
+  const [rsvpNotice, setRsvpNotice] = useState("");
+  const retryRequest = useRef<{ key: string; requestId: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState("");
@@ -143,16 +159,34 @@ export function GuestAccess({
     }
     void apiResult.api
       .getSession(token)
-      .then((restored) => {
+      .then(async (restored) => {
         if (!active) return;
         setSession(restored);
         setPhase("authenticated");
+        const restoredRsvp = await apiResult.api?.getRsvp(token);
+        if (!active || !restoredRsvp) return;
+        setRsvp(restoredRsvp);
+        setRsvpDraft(
+          createRsvpDraft(
+            restoredRsvp.members.map((member) => ({
+              memberId: member.id,
+              status: member.state,
+              revision: member.revision,
+            })),
+          ),
+        );
       })
       .catch((cause: unknown) => {
         if (!active) return;
-        if ((cause as Partial<GuestAccessApiError>).status === 401)
+        if ((cause as Partial<GuestAccessApiError>).status === 401) {
           clearGuestSession(storage, siteId);
-        else setError(errorWithRetry(cause));
+          setSession(null);
+          setRsvp(null);
+          setRsvpDraft({});
+          setPhase("lookup");
+          setNotice("");
+          setError(errorWithRetry(cause));
+        } else setError(errorWithRetry(cause));
       })
       .finally(() => {
         if (active) setReady(true);
@@ -271,6 +305,17 @@ export function GuestAccess({
       setChallenge(null);
       setPhase("authenticated");
       setNotice("Acesso confirmado.");
+      const verifiedRsvp = await apiResult.api.getRsvp(result.sessionToken);
+      setRsvp(verifiedRsvp);
+      setRsvpDraft(
+        createRsvpDraft(
+          verifiedRsvp.members.map((member) => ({
+            memberId: member.id,
+            status: member.state,
+            revision: member.revision,
+          })),
+        ),
+      );
     } catch (cause) {
       const apiError = cause as Partial<GuestAccessApiError>;
       setError(
@@ -299,6 +344,9 @@ export function GuestAccess({
     } finally {
       if (storage) clearGuestSession(storage, siteId);
       setSession(null);
+      setRsvp(null);
+      setRsvpDraft({});
+      setRsvpOpen(false);
       setChallenge(null);
       setCode("");
       setPhase("lookup");
@@ -310,6 +358,115 @@ export function GuestAccess({
   const resendSeconds = challenge
     ? getResendCountdownSeconds(challenge.resendAvailableAt, nowMs)
     : 0;
+
+  async function reloadRsvp(preserveDraft: boolean) {
+    const token = storage ? readGuestSession(storage, siteId) : null;
+    if (!token || !apiResult.api) return;
+    setBusy(true);
+    setRsvpError("");
+    try {
+      const current = await apiResult.api.getRsvp(token);
+      setRsvp(current);
+      const snapshots = current.members.map((member) => ({
+        memberId: member.id,
+        status: member.state,
+        revision: member.revision,
+      }));
+      setRsvpDraft((draft) =>
+        preserveDraft
+          ? reconcileRsvpDraft(draft, snapshots)
+          : createRsvpDraft(snapshots),
+      );
+      if (!preserveDraft) retryRequest.current = null;
+    } catch (cause) {
+      const apiError = cause as Partial<GuestAccessApiError>;
+      if (apiError.status === 401) {
+        if (storage) clearGuestSession(storage, siteId);
+        setSession(null);
+        setRsvp(null);
+        setRsvpDraft({});
+        setRsvpOpen(false);
+        setPhase("lookup");
+        setNotice("");
+        setRsvpNotice("");
+        setRsvpError("");
+        setError(errorWithRetry(cause));
+      } else {
+        setRsvpError(errorWithRetry(cause));
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function saveRsvp() {
+    const token = storage ? readGuestSession(storage, siteId) : null;
+    if (!token || !apiResult.api || !rsvp?.canEdit || busy) return;
+    const updates = pendingRsvpUpdates(rsvpDraft).map((member) => ({
+      memberId: member.memberId,
+      state: member.status,
+      expectedRevision: member.expectedRevision,
+    }));
+    if (updates.length === 0) return;
+    const key = JSON.stringify(updates);
+    const requestId =
+      retryRequest.current?.key === key
+        ? retryRequest.current.requestId
+        : globalThis.crypto.randomUUID();
+    retryRequest.current = { key, requestId };
+    setBusy(true);
+    setRsvpError("");
+    setRsvpNotice("");
+    try {
+      const saved = await apiResult.api.saveRsvp(token, {
+        requestId,
+        members: updates,
+      });
+      const byId = new Map(saved.members.map((member) => [member.id, member]));
+      const members = rsvp.members.map(
+        (member) => byId.get(member.id) ?? member,
+      );
+      setRsvp({ ...rsvp, members });
+      setRsvpDraft(
+        createRsvpDraft(
+          members.map((member) => ({
+            memberId: member.id,
+            status: member.state,
+            revision: member.revision,
+          })),
+        ),
+      );
+      retryRequest.current = null;
+      setRsvpNotice(
+        saved.result === "NO_CHANGE"
+          ? "As respostas já estavam atualizadas."
+          : "Respostas salvas.",
+      );
+    } catch (cause) {
+      const apiError = cause as Partial<GuestAccessApiError>;
+      const message = errorWithRetry(cause);
+      setRsvpError(message);
+      if (apiError.code === "RSVP_CONFLICT") {
+        await reloadRsvp(true);
+        setRsvpError(message);
+      }
+      if (apiError.status === 401) {
+        if (storage) clearGuestSession(storage, siteId);
+        setSession(null);
+        setRsvp(null);
+        setRsvpDraft({});
+        setRsvpOpen(false);
+        retryRequest.current = null;
+        setPhase("lookup");
+        setNotice("");
+        setRsvpNotice("");
+        setRsvpError("");
+        setError(message);
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
 
   return (
     <section
@@ -470,6 +627,15 @@ export function GuestAccess({
               </li>
             ))}
           </ul>
+          {rsvp ? (
+            <button type="button" onClick={() => setRsvpOpen(true)}>
+              {rsvp.canEdit ? "Responder presença" : "Consultar respostas"}
+            </button>
+          ) : (
+            <p role="status">
+              As respostas de presença não estão disponíveis agora.
+            </p>
+          )}
           <button
             type="button"
             className="entrelacos-guest-access__secondary"
@@ -479,6 +645,39 @@ export function GuestAccess({
             {busy ? "Saindo…" : "Sair"}
           </button>
         </div>
+      )}
+      {rsvp && (
+        <RsvpForm
+          open={rsvpOpen}
+          members={rsvp.members.map((member) => ({
+            memberId: member.id,
+            fullName: member.fullName,
+            isRepresentative: member.isRepresentative,
+          }))}
+          draft={rsvpDraft}
+          canEdit={rsvp.canEdit}
+          readOnlyMessage={
+            rsvp.readOnlyReason === "DEADLINE_PASSED"
+              ? "O prazo de confirmação terminou. Você ainda pode consultar as respostas."
+              : undefined
+          }
+          busy={busy}
+          error={rsvpError}
+          notice={rsvpNotice}
+          onChange={(memberId, status) => {
+            setRsvpDraft((draft) => setDraftStatus(draft, memberId, status));
+            setRsvpError("");
+            setRsvpNotice("");
+          }}
+          onConfirmAll={() => {
+            setRsvpDraft(confirmAllDraft);
+            setRsvpError("");
+            setRsvpNotice("");
+          }}
+          onSave={() => void saveRsvp()}
+          onReload={() => void reloadRsvp(false)}
+          onClose={() => setRsvpOpen(false)}
+        />
       )}
     </section>
   );

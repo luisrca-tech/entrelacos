@@ -6,6 +6,7 @@ import type {
 import { type FormEvent, useCallback, useEffect, useState } from "react";
 import { ApiError, apiRequest } from "../lib/apiClient";
 import { GuestGroupsSection } from "./GuestGroupsSection";
+import { RsvpSection } from "./RsvpSection";
 
 const labels: Record<string, string> = {
   DRAFT: "Rascunho",
@@ -209,6 +210,7 @@ export function SiteWorkspace({
         owner={owner}
         isDemo={site.isDemo}
       />
+      <RsvpSection siteId={site.id} lifecycle={site.lifecycle} />
       {!owner && (
         <section className="panel-section">
           <h2>Visão do casamento</h2>

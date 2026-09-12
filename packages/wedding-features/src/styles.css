@@ -248,6 +248,105 @@
   line-height: 1.5;
 }
 
+.entrelacos-rsvp {
+  width: min(44rem, calc(100vw - 2rem));
+  max-height: calc(100dvh - 2rem);
+  border: 0;
+  border-radius: 1rem;
+  padding: clamp(1.25rem, 4vw, 2.5rem);
+  background: var(--template-paper, #f4f0e8);
+  color: var(--template-ink, #25352b);
+}
+
+.entrelacos-rsvp::backdrop {
+  background: rgba(18, 28, 23, 0.72);
+}
+
+.entrelacos-rsvp__header,
+.entrelacos-rsvp__member,
+.entrelacos-rsvp__actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.entrelacos-rsvp__header h3 {
+  margin: 0;
+  font-size: clamp(1.8rem, 5vw, 3rem);
+}
+
+.entrelacos-rsvp__readonly {
+  border-left: 3px solid #9c713f;
+  padding: 0.75rem 1rem;
+  background: rgba(156, 113, 63, 0.12);
+}
+
+.entrelacos-rsvp__members {
+  display: grid;
+  gap: 0.75rem;
+  margin: 1.5rem 0;
+}
+
+.entrelacos-rsvp__member {
+  border-bottom: 1px solid var(--template-line, rgba(37, 53, 43, 0.18));
+  padding: 0.75rem 0;
+}
+
+.entrelacos-rsvp__member span {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.entrelacos-rsvp .entrelacos-rsvp__member small {
+  color: var(--template-muted, #637066);
+}
+
+.entrelacos-rsvp select {
+  min-height: 2.75rem;
+  border: 1px solid var(--template-line, rgba(37, 53, 43, 0.28));
+  border-radius: 0.4rem;
+  padding: 0.55rem 0.7rem;
+  background: white;
+  color: inherit;
+}
+
+.entrelacos-rsvp__actions {
+  justify-content: flex-start;
+  flex-wrap: wrap;
+}
+
+.entrelacos-rsvp button {
+  min-height: 2.75rem;
+  border: 1px solid var(--template-ink, #25352b);
+  border-radius: 999px;
+  padding: 0.7rem 1rem;
+  background: var(--template-ink, #25352b);
+  color: var(--template-paper, #f4f0e8);
+  font: inherit;
+  font-weight: 700;
+}
+
+.entrelacos-rsvp .entrelacos-guest-access__link {
+  width: fit-content;
+  border: 0;
+  padding: 0.35rem 0;
+  background: transparent;
+  color: var(--template-muted, #637066);
+  text-decoration: underline;
+  text-underline-offset: 0.2rem;
+}
+
+.entrelacos-rsvp .entrelacos-guest-access__secondary {
+  background: transparent;
+  color: var(--template-ink, #25352b);
+}
+
+.entrelacos-rsvp button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
 @media (max-width: 560px) {
   .entrelacos-guest-access {
     padding: 2rem 1rem;
@@ -257,5 +356,24 @@
     align-items: flex-start;
     flex-direction: column;
     gap: 0.15rem;
+  }
+
+  .entrelacos-rsvp {
+    width: 100vw;
+    max-width: none;
+    height: 100dvh;
+    max-height: none;
+    margin: 0;
+    border-radius: 0;
+  }
+
+  .entrelacos-rsvp__member {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .entrelacos-rsvp__actions {
+    align-items: stretch;
+    flex-direction: column;
   }
 }

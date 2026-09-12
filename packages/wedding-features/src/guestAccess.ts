@@ -1,6 +1,10 @@
 import {
   demoGuestGrantSchema,
+  type FamilyRsvpResponse,
+  type FamilyRsvpWriteInput,
   type FamilySessionResponse,
+  familyRsvpResponseSchema,
+  familyRsvpWriteInputSchema,
   familySessionLeaveResponseSchema,
   familySessionReadResponseSchema,
   familySessionResponseSchema,
@@ -13,6 +17,8 @@ import {
   guestVerificationCodeSchema,
   opaqueTokenSchema,
   originSchema,
+  type RsvpWriteResponse,
+  rsvpWriteResponseSchema,
   siteIdSchema,
 } from "@entrelacos/contracts";
 
@@ -224,6 +230,32 @@ export class GuestAccessApi {
     );
   }
 
+  async getRsvp(sessionToken: string): Promise<FamilyRsvpResponse> {
+    const token = opaqueTokenSchema.parse(sessionToken);
+    return this.request(
+      "/v1/public/family/rsvp",
+      { headers: { Authorization: `Bearer ${token}` } },
+      (value) => familyRsvpResponseSchema.parse(value),
+    );
+  }
+
+  async saveRsvp(
+    sessionToken: string,
+    input: FamilyRsvpWriteInput,
+  ): Promise<RsvpWriteResponse> {
+    const token = opaqueTokenSchema.parse(sessionToken);
+    const body = familyRsvpWriteInputSchema.parse(input);
+    return this.request(
+      "/v1/public/family/rsvp",
+      {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body,
+      },
+      (value) => rsvpWriteResponseSchema.parse(value),
+    );
+  }
+
   async leave(sessionToken: string): Promise<void> {
     const token = opaqueTokenSchema.parse(sessionToken);
     await this.request(
@@ -327,6 +359,10 @@ export function guestAccessErrorMessage(error: unknown): string {
     return "Muitas tentativas. Aguarde um pouco e tente novamente.";
   if (error.code === "SITE_INACTIVE")
     return "Este site está temporariamente indisponível.";
+  if (error.code === "RSVP_CONFLICT")
+    return "Os dados foram alterados em outro acesso. Revise as respostas antes de salvar novamente.";
+  if (error.code === "RSVP_DEADLINE_PASSED")
+    return "O prazo de confirmação terminou. As respostas continuam disponíveis para consulta.";
   if (error.status === 401) return "Esta sessão expirou. Comece novamente.";
   return "Não foi possível concluir agora. Tente novamente.";
 }
