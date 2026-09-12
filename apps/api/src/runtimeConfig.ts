@@ -49,11 +49,15 @@ export function readRuntimeConfig(env: Record<string, string | undefined>) {
   const secret = env.BETTER_AUTH_SECRET ?? "";
   if (secret.trim().length < 32)
     throw new Error("BETTER_AUTH_SECRET must contain at least 32 characters");
-  const smsModeValue = (env.SMS_MODE ?? "simulated").trim().toLowerCase();
-  if (smsModeValue !== "simulated" && smsModeValue !== "real") {
-    throw new Error("SMS_MODE must be simulated or real");
+  const smsModeValue = (env.SMS_MODE ?? "manual").trim().toLowerCase();
+  if (
+    smsModeValue !== "manual" &&
+    smsModeValue !== "simulated" &&
+    smsModeValue !== "real"
+  ) {
+    throw new Error("SMS_MODE must be manual, simulated, or real");
   }
-  const smsMode: "simulated" | "real" = smsModeValue;
+  const smsMode: "manual" | "simulated" | "real" = smsModeValue;
   const fingerprintSecret = (env.GUEST_FINGERPRINT_SECRET ?? secret).trim();
   if (fingerprintSecret.length < 32) {
     throw new Error(

@@ -24,6 +24,7 @@ import {
   createFamilySessionInTransaction,
   type FamilySessionDatabase,
 } from "./familySession";
+import { deriveGuestGroupAccessPin } from "./guestGroups";
 import { lookupGuestGroup } from "./guestLookup";
 
 export type GuestVerificationDatabase = NodePgDatabase<Record<string, never>>;
@@ -46,7 +47,7 @@ export const GUEST_PHONE_SEND_SHORT_WINDOW_MS = 15 * 60 * 1000;
 export const GUEST_PHONE_SEND_LONG_LIMIT = 10;
 export const GUEST_PHONE_SEND_LONG_WINDOW_MS = 24 * 60 * 60 * 1000;
 
-export type GuestDeliveryMode = "SIMULATED" | "REAL_SMS";
+export type GuestDeliveryMode = "MANUAL_PIN" | "SIMULATED" | "REAL_SMS";
 
 export type GuestProviderResult =
   | { status: "PROVIDER_ACCEPTED"; providerReference?: string }
@@ -79,7 +80,7 @@ export type GuestSessionTokenGenerator = () => string;
 export interface GuestVerificationOptions {
   ipAddress: string;
   fingerprintSecret: string;
-  smsMode?: "simulated" | "real";
+  smsMode?: "manual" | "simulated" | "real";
   now?: Date;
   provider?: GuestVerificationProvider;
   codeGenerator?: GuestCodeGenerator;
@@ -208,7 +209,12 @@ function output(
     id: string;
     expiresAt: Date;
     resendAvailableAt: Date;
-    sendStatus: "RESERVED" | "PROVIDER_ACCEPTED" | "FAILED_FINAL" | "UNKNOWN";
+    sendStatus:
+      | "MANUAL"
+      | "RESERVED"
+      | "PROVIDER_ACCEPTED"
+      | "FAILED_FINAL"
+      | "UNKNOWN";
   },
   provider: GuestVerificationProvider,
   code: string,
@@ -294,9 +300,11 @@ async function lockGroup(
   phoneE164: string | null;
   isForeign: boolean;
   representativeMemberId: string;
+  manualPinSeed: string;
 }> {
   const result = await tx.execute(sql`
-    SELECT id, site_id, phone_e164, is_foreign, representative_member_id
+    SELECT id, site_id, phone_e164, is_foreign, representative_member_id,
+      manual_pin_seed
     FROM guest_group
     WHERE site_id = ${siteId} AND id = ${groupId}
     FOR UPDATE
@@ -308,6 +316,7 @@ async function lockGroup(
         phone_e164: string | null;
         is_foreign: boolean;
         representative_member_id: string;
+        manual_pin_seed: string;
       }
     | undefined;
   if (!row) reject(404, "GUEST_NOT_FOUND", "Guest not found");
@@ -317,6 +326,7 @@ async function lockGroup(
     phoneE164: row.phone_e164,
     isForeign: row.is_foreign,
     representativeMemberId: row.representative_member_id,
+    manualPinSeed: row.manual_pin_seed,
   };
 }
 
@@ -328,23 +338,30 @@ async function lockChallenge(
   siteId: string;
   groupId: string;
   phoneE164: string;
-  mode: "MOCK" | "TWILIO";
+  mode: "MANUAL" | "MOCK" | "TWILIO";
   status: "PENDING" | "VERIFIED" | "EXPIRED" | "LOCKED" | "REVOKED";
   codeHash: string | null;
   expiresAt: Date;
   resendAvailableAt: Date;
   wrongAttempts: number;
   cooldownUntil: Date | null;
-  sendStatus: "RESERVED" | "PROVIDER_ACCEPTED" | "FAILED_FINAL" | "UNKNOWN";
+  sendStatus:
+    | "MANUAL"
+    | "RESERVED"
+    | "PROVIDER_ACCEPTED"
+    | "FAILED_FINAL"
+    | "UNKNOWN";
   createdAt: Date;
 }> {
   const result = await tx.execute(sql`
     SELECT id, site_id, group_id, phone_e164, mode, status, code_hash,
       expires_at, resend_available_at, wrong_attempts, cooldown_until,
-      (SELECT status FROM guest_verification_send
+      COALESCE((SELECT status FROM guest_verification_send
        WHERE site_id = guest_verification_challenge.site_id
          AND challenge_id = guest_verification_challenge.id
-       ORDER BY created_at DESC LIMIT 1) AS send_status,
+       ORDER BY created_at DESC LIMIT 1),
+       CASE WHEN mode = 'MANUAL' THEN 'MANUAL'::guest_verification_send_status END
+      ) AS send_status,
       created_at
     FROM guest_verification_challenge
     WHERE id = ${challengeId}
@@ -356,7 +373,7 @@ async function lockChallenge(
         site_id: string;
         group_id: string;
         phone_e164: string;
-        mode: "MOCK" | "TWILIO";
+        mode: "MANUAL" | "MOCK" | "TWILIO";
         status: "PENDING" | "VERIFIED" | "EXPIRED" | "LOCKED" | "REVOKED";
         code_hash: string | null;
         expires_at: Date | string;
@@ -364,6 +381,7 @@ async function lockChallenge(
         wrong_attempts: number;
         cooldown_until: Date | string | null;
         send_status:
+          | "MANUAL"
           | "RESERVED"
           | "PROVIDER_ACCEPTED"
           | "FAILED_FINAL"
@@ -947,6 +965,108 @@ async function dispatchChallenge(
   );
 }
 
+async function startManualChallenge(
+  db: GuestVerificationDatabase,
+  siteId: string,
+  input: GuestLookupInput,
+  options: GuestVerificationOptions,
+): Promise<GuestVerificationResult> {
+  const now = currentTime(options.now);
+  const challengeId = validateGeneratedValue(
+    options.challengeIdGenerator?.() ?? opaqueToken(),
+    "challenge",
+  );
+  const lookup = await lookupGuestGroup(db, siteId, input, {
+    ipAddress: options.ipAddress,
+    fingerprintSecret: options.fingerprintSecret,
+    now,
+  });
+  if (lookup.kind === "FOREIGN_ADMIN_ONLY") {
+    reject(
+      422,
+      "FOREIGN_GUEST_CONTACT_ADMIN",
+      "Please contact the wedding administrator",
+    );
+  }
+  if (lookup.kind !== "MATCH") {
+    reject(404, "GUEST_NOT_FOUND", "Guest not found");
+  }
+  return db.transaction(async (tx) => {
+    await lockSite(tx, siteId);
+    const group = await lockGroup(tx, siteId, lookup.groupId);
+    if (group.isForeign || group.phoneE164 !== lookup.phoneE164) {
+      reject(404, "GUEST_NOT_FOUND", "Guest not found");
+    }
+    const cooldown = await tx.execute(sql`
+      SELECT cooldown_until
+      FROM guest_verification_challenge
+      WHERE site_id = ${siteId} AND group_id = ${group.id}
+        AND phone_e164 = ${lookup.phoneE164}
+        AND cooldown_until IS NOT NULL AND cooldown_until > ${now}
+      ORDER BY cooldown_until DESC
+      LIMIT 1
+    `);
+    const cooldownUntilRaw = (
+      cooldown.rows[0] as { cooldown_until: Date | string } | undefined
+    )?.cooldown_until;
+    if (cooldownUntilRaw) {
+      const cooldownUntil = asDate(cooldownUntilRaw);
+      reject(
+        429,
+        "CHALLENGE_COOLDOWN",
+        "Verification temporarily locked",
+        secondsUntil(cooldownUntil, now),
+      );
+    }
+    const active = await tx.execute(sql`
+      SELECT id
+      FROM guest_verification_challenge
+      WHERE site_id = ${siteId} AND group_id = ${group.id}
+        AND status = 'PENDING' AND expires_at > ${now}
+      FOR UPDATE
+    `);
+    if (active.rows.length > 0) {
+      await tx
+        .update(guestVerificationChallenge)
+        .set({
+          status: "REVOKED",
+          revokedAt: now,
+          revocationReason: "SUPERSEDED",
+          updatedAt: now,
+        })
+        .where(
+          and(
+            eq(guestVerificationChallenge.siteId, siteId),
+            eq(guestVerificationChallenge.groupId, group.id),
+            eq(guestVerificationChallenge.status, "PENDING"),
+          ),
+        );
+    }
+    const expiresAt = new Date(now.getTime() + GUEST_CHALLENGE_TTL_MS);
+    await tx.insert(guestVerificationChallenge).values({
+      id: challengeId,
+      siteId,
+      groupId: group.id,
+      mode: "MANUAL",
+      status: "PENDING",
+      phoneE164: lookup.phoneE164,
+      codeHash: null,
+      expiresAt,
+      resendAvailableAt: expiresAt,
+      wrongAttempts: 0,
+      createdAt: now,
+      updatedAt: now,
+    });
+    return guestChallengeStartResponseSchema.parse({
+      challengeId,
+      expiresAt: expiresAt.toISOString(),
+      resendAvailableAt: expiresAt.toISOString(),
+      sendStatus: "MANUAL",
+      deliveryMode: "MANUAL_PIN",
+    });
+  });
+}
+
 export async function startGuestChallenge(
   db: GuestVerificationDatabase,
   siteId: string,
@@ -954,6 +1074,9 @@ export async function startGuestChallenge(
   options: GuestVerificationOptions,
 ): Promise<GuestVerificationResult> {
   const value = guestLookupInputSchema.parse(input);
+  if (options.smsMode === "manual") {
+    return startManualChallenge(db, siteId, value, options);
+  }
   const reservation = await reserveChallenge(
     db,
     value,
@@ -977,11 +1100,21 @@ export async function resendGuestChallenge(
     reject(400, "VALIDATION_ERROR", "Invalid verification request");
   }
   const challenge = await db
-    .select({ siteId: guestVerificationChallenge.siteId })
+    .select({
+      siteId: guestVerificationChallenge.siteId,
+      mode: guestVerificationChallenge.mode,
+    })
     .from(guestVerificationChallenge)
     .where(eq(guestVerificationChallenge.id, challengeId))
     .limit(1);
   if (!challenge[0]) reject(404, "CHALLENGE_NOT_FOUND", "Challenge not found");
+  if (challenge[0].mode === "MANUAL") {
+    reject(
+      409,
+      "MANUAL_PIN_NO_RESEND",
+      "Manual PIN challenges cannot be resent",
+    );
+  }
   const reservation = await reserveChallenge(
     db,
     { fullName: "placeholder", phone: "+5511999999999" },
@@ -1195,6 +1328,76 @@ async function verifyWithTwilio(
   return result.session;
 }
 
+async function verifyWithManualPin(
+  db: GuestVerificationDatabase,
+  challengeId: string,
+  code: string,
+  options: GuestVerificationOptions,
+  now: Date,
+): Promise<Awaited<ReturnType<typeof createFamilySessionInTransaction>>> {
+  const [identity] = await db
+    .select({
+      siteId: guestVerificationChallenge.siteId,
+      groupId: guestVerificationChallenge.groupId,
+      mode: guestVerificationChallenge.mode,
+    })
+    .from(guestVerificationChallenge)
+    .where(eq(guestVerificationChallenge.id, challengeId))
+    .limit(1);
+  if (!identity) reject(404, "CHALLENGE_NOT_FOUND", "Challenge not found");
+  if (identity.mode !== "MANUAL") {
+    reject(
+      503,
+      "VERIFICATION_CONFIGURATION_ERROR",
+      "Guest verification provider does not match challenge",
+    );
+  }
+  const sessionTokenGenerator = options.sessionTokenGenerator ?? opaqueToken;
+  const result = await db.transaction(async (tx) => {
+    await reserveOtpVerify(tx, {
+      ipAddress: options.ipAddress,
+      fingerprintSecret: options.fingerprintSecret,
+      now,
+    });
+    await lockSite(tx, identity.siteId);
+    const group = await lockGroup(tx, identity.siteId, identity.groupId);
+    const challenge = await lockChallenge(tx, challengeId);
+    if (
+      challenge.siteId !== identity.siteId ||
+      challenge.groupId !== group.id ||
+      challenge.mode !== "MANUAL"
+    ) {
+      return verificationError(
+        409,
+        "CHALLENGE_NOT_ACTIVE",
+        "Challenge is not active",
+      );
+    }
+    const expected = Buffer.from(
+      deriveGuestGroupAccessPin(
+        identity.siteId,
+        group.id,
+        group.manualPinSeed,
+        options.fingerprintSecret,
+      ),
+    );
+    const actual = Buffer.from(code);
+    const correct =
+      expected.length === actual.length && timingSafeEqual(expected, actual);
+    return finishProviderVerification(
+      tx,
+      challengeId,
+      now,
+      correct ? "APPROVED" : "DECLINED",
+      sessionTokenGenerator,
+    );
+  });
+  if (result.kind === "ERROR") {
+    reject(result.status, result.code, result.title, result.retryAfterSeconds);
+  }
+  return result.session;
+}
+
 export async function verifyGuestChallenge(
   db: GuestVerificationDatabase,
   challengeId: string,
@@ -1206,6 +1409,14 @@ export async function verifyGuestChallenge(
     reject(400, "VALIDATION_ERROR", "Invalid verification request");
   }
   const now = currentTime(options.now);
+  const [challengeIdentity] = await db
+    .select({ mode: guestVerificationChallenge.mode })
+    .from(guestVerificationChallenge)
+    .where(eq(guestVerificationChallenge.id, challengeId))
+    .limit(1);
+  if (challengeIdentity?.mode === "MANUAL") {
+    return verifyWithManualPin(db, challengeId, value.code, options, now);
+  }
   const provider = configuredProvider(options);
   if (provider.mode === "TWILIO") {
     return verifyWithTwilio(

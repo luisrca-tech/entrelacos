@@ -15,6 +15,8 @@ import { createSite } from "./sites";
 const adminOrigin = "https://admin.example.test";
 const fixturePrefix = `t3-groups-http-${process.pid}-${randomUUID().slice(0, 8)}`;
 const password = "guest-groups-http-password";
+const guestFingerprintSecret =
+  "guest-groups-http-pin-secret-with-at-least-32-characters";
 let connection: DatabaseConnection;
 let app: ReturnType<typeof createApp>;
 let siteId: string;
@@ -81,6 +83,7 @@ describe("guest groups HTTP routes", () => {
         }),
       db: connection.db,
       adminOrigin,
+      guestFingerprintSecret,
     });
     const login = await app.request(
       request("/v1/auth/sign-in/email", {
@@ -138,6 +141,25 @@ describe("guest groups HTTP routes", () => {
     const body = await created.json();
     expect(body.group).toMatchObject({ siteId, phone: "+5511999999999" });
     const groupId = body.group.id as string;
+
+    const revealed = await app.request(
+      request(`/v1/sites/${siteId}/groups/${groupId}/access-pin`, {
+        headers: { Cookie: cookie },
+      }),
+    );
+    expect(revealed.status).toBe(200);
+    expect(revealed.headers.get("cache-control")).toBe("no-store");
+    const firstPin = (await revealed.json()).accessPin as string;
+    expect(firstPin).toMatch(/^\d{6}$/);
+
+    const rotated = await jsonRequest(
+      `/v1/sites/${siteId}/groups/${groupId}/access-pin/rotate`,
+      {},
+    );
+    expect(rotated.status).toBe(200);
+    const rotatedPin = (await rotated.json()).accessPin as string;
+    expect(rotatedPin).toMatch(/^\d{6}$/);
+    expect(rotatedPin).not.toBe(firstPin);
 
     const updated = await jsonRequest(
       `/v1/sites/${siteId}/groups/${groupId}`,

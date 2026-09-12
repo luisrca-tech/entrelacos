@@ -643,11 +643,22 @@ export type DemoGuestGrantResponse = z.infer<
 >;
 
 export const guestChallengeIdSchema = opaqueTokenSchema;
-export const guestVerificationCodeSchema = z
+export const guestAccessPinSchema = z
   .string()
   .regex(/^\d{6}$/, "Expected a six-digit verification code");
-export const guestVerificationModeSchema = z.enum(["MOCK", "TWILIO"]);
-export const guestDeliveryModeSchema = z.enum(["SIMULATED", "REAL_SMS"]);
+export const guestVerificationCodeSchema = guestAccessPinSchema;
+export const guestAccessPinResponseSchema = strictObject({
+  accessPin: guestAccessPinSchema,
+});
+export type GuestAccessPinResponse = z.infer<
+  typeof guestAccessPinResponseSchema
+>;
+export const guestVerificationModeSchema = z.enum(["MANUAL", "MOCK", "TWILIO"]);
+export const guestDeliveryModeSchema = z.enum([
+  "MANUAL_PIN",
+  "SIMULATED",
+  "REAL_SMS",
+]);
 export const guestVerificationChallengeStatusSchema = z.enum([
   "PENDING",
   "VERIFIED",
@@ -656,6 +667,7 @@ export const guestVerificationChallengeStatusSchema = z.enum([
   "REVOKED",
 ]);
 export const guestVerificationSendStatusSchema = z.enum([
+  "MANUAL",
   "RESERVED",
   "PROVIDER_ACCEPTED",
   "FAILED_FINAL",
@@ -724,6 +736,9 @@ export const block3EndpointPaths = {
   siteGroupsCreate: "POST /v1/sites/:siteId/groups",
   siteGroupUpdate: "PATCH /v1/sites/:siteId/groups/:groupId",
   siteGroupDelete: "DELETE /v1/sites/:siteId/groups/:groupId",
+  siteGroupAccessPin: "GET /v1/sites/:siteId/groups/:groupId/access-pin",
+  siteGroupAccessPinRotate:
+    "POST /v1/sites/:siteId/groups/:groupId/access-pin/rotate",
   publicGuestChallengeStart: "POST /v1/public/sites/:siteId/guest/challenge",
   demoGuestGrant: "POST /v1/owner/sites/:siteId/demo/guest-grant",
   publicGuestChallengeResend:

@@ -24,7 +24,7 @@ export interface AuthHttpOptions {
   guestFingerprintSecret?: string;
   guestDemoGrantSecret?: string;
   guestDemoPhoneAllowlist?: readonly string[];
-  guestSmsMode?: "simulated" | "real";
+  guestSmsMode?: "manual" | "simulated" | "real";
   guestVerificationProvider?: GuestVerificationProvider;
   guestCodeGenerator?: GuestCodeGenerator;
   guestChallengeIdGenerator?: GuestChallengeIdGenerator;

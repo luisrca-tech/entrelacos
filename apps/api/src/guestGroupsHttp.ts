@@ -1,4 +1,5 @@
 import {
+  guestAccessPinResponseSchema,
   guestGroupCreateInputSchema,
   guestGroupDeleteResponseSchema,
   guestGroupListResponseSchema,
@@ -12,7 +13,9 @@ import {
   deleteGuestGroup,
   type GuestGroupActor,
   GuestGroupServiceError,
+  getGuestGroupAccessPin,
   listGuestGroups,
+  rotateGuestGroupAccessPin,
   updateGuestGroup,
 } from "./guestGroups";
 
@@ -151,6 +154,51 @@ export function createGuestGroupsHttpRouter(options: AuthHttpOptions): Hono {
       return responseOrThrow(error);
     }
   });
+
+  router.get(
+    "/v1/sites/:siteId/groups/:groupId/access-pin",
+    async (context) => {
+      const actor = await requireActor(context.req.raw, options);
+      if (isResponse(actor)) return actor;
+      try {
+        const result = await getGuestGroupAccessPin(
+          options.db,
+          actor,
+          context.req.param("siteId"),
+          context.req.param("groupId"),
+          options.guestFingerprintSecret ?? "",
+        );
+        return context.json(guestAccessPinResponseSchema.parse(result), 200, {
+          "Cache-Control": "no-store",
+        });
+      } catch (error) {
+        return responseOrThrow(error);
+      }
+    },
+  );
+
+  router.post(
+    "/v1/sites/:siteId/groups/:groupId/access-pin/rotate",
+    async (context) => {
+      const actor = await requireActor(context.req.raw, options);
+      if (isResponse(actor)) return actor;
+      try {
+        const result = await rotateGuestGroupAccessPin(
+          options.db,
+          actor,
+          context.req.param("siteId"),
+          context.req.param("groupId"),
+          options.guestFingerprintSecret ?? "",
+          options.now?.(),
+        );
+        return context.json(guestAccessPinResponseSchema.parse(result), 200, {
+          "Cache-Control": "no-store",
+        });
+      } catch (error) {
+        return responseOrThrow(error);
+      }
+    },
+  );
 
   router.delete("/v1/sites/:siteId/groups/:groupId", async (context) => {
     const actor = await requireActor(context.req.raw, options);

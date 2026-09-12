@@ -5,6 +5,7 @@ import {
   verifyDatabaseConnection,
 } from "@entrelacos/database";
 import {
+  guestGroup,
   guestRateLimitEvent,
   site,
   siteOrigin,
@@ -14,7 +15,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { createApp } from "./app";
 import type { AuthHttpOptions } from "./authHttp";
 import { DEMO_GUEST_GRANT_HEADER, issueDemoGuestGrant } from "./demoGuestGrant";
-import { createGuestGroup } from "./guestGroups";
+import { createGuestGroup, getGuestGroupAccessPin } from "./guestGroups";
 import { approveReview, createSite, startReview } from "./sites";
 
 const fixturePrefix = `t3-public-http-${process.pid}-${randomUUID().slice(0, 8)}`;
@@ -292,5 +293,58 @@ describe("public guest HTTP PostgreSQL integration", () => {
     );
     expect(spoofed.status).toBe(503);
     expect((await spoofed.json()).code).toBe("CLIENT_IP_UNAVAILABLE");
+  });
+
+  it("authenticates with the manually shared group PIN without an SMS send", async () => {
+    const [group] = await connection.db
+      .select({ id: guestGroup.id })
+      .from(guestGroup)
+      .where(eq(guestGroup.siteId, siteId));
+    const { accessPin } = await getGuestGroupAccessPin(
+      connection.db,
+      { userId: "owner", role: "OWNER" },
+      siteId,
+      group?.id as string,
+      guestSecret,
+    );
+    const manualChallengeId = "m".repeat(43);
+    const manualApp = createApp({
+      auth: {} as never,
+      db: connection.db,
+      adminOrigin: "https://admin.example.test",
+      guestFingerprintSecret: guestSecret,
+      guestSmsMode: "manual",
+      guestChallengeIdGenerator: () => manualChallengeId,
+      guestSessionTokenGenerator: () => "p".repeat(43),
+      guestResolveClientIp: () => "203.0.113.61",
+      now: () => fixedNow,
+    } as AuthHttpOptions);
+    const started = await manualApp.request(
+      `/v1/public/sites/${siteId}/guest/challenge`,
+      {
+        method: "POST",
+        headers: { Origin: origin, "Content-Type": "application/json" },
+        body: JSON.stringify({ fullName: "Ana Silva", phone: guestPhone }),
+      },
+    );
+    expect(started.status).toBe(201);
+    expect(await started.json()).toMatchObject({
+      challengeId: manualChallengeId,
+      deliveryMode: "MANUAL_PIN",
+      sendStatus: "MANUAL",
+    });
+    const verified = await manualApp.request(
+      `/v1/public/guest/challenge/${manualChallengeId}/verify`,
+      {
+        method: "POST",
+        headers: { Origin: origin, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          challengeId: manualChallengeId,
+          code: accessPin,
+        }),
+      },
+    );
+    expect(verified.status).toBe(200);
+    expect(await verified.json()).toMatchObject({ siteId, groupId: group?.id });
   });
 });

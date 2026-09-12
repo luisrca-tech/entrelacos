@@ -20,11 +20,11 @@ These decisions apply across the blocks and remain subject to the explicit gates
 - **API routes:** versioned HTTP JSON contract under `/v1`, with standardized errors and shared contracts separate from database models. Exact endpoint names are an architecture-specification decision.
 - **Database:** shared PostgreSQL on Neon, with every business operation scoped by stable wedding/site identity. Development, main, and disposable integration resources are separate. The public frontend never accesses Neon.
 - **Core data model:** wedding/site lifecycle and configuration; `OWNER`; wedding-bound `SITE_ADMIN`; family/group; member; representative and normalized phone; guest challenges and sessions; member RSVP and history; one group message and moderation state; domain/origin and publication status; SMS usage and limits.
-- **Authentication:** Better Auth with Drizzle persistence for admins; independent family-scoped guest sessions after provider-backed OTP. The selected cross-origin session/handoff design remains a required spike.
+- **Authentication:** Better Auth with Drizzle persistence for admins; independent family-scoped guest sessions after a manually shared group PIN for the MVP, with Twilio Verify retained as an optional future channel. The selected cross-origin session/handoff design remains a required spike.
 - **Data access and migrations:** Drizzle with node-postgres and reviewed/manual SQL migrations. Main-environment migrations are explicit manual operations.
 - **UI and motion:** shadcn with Base UI, Sonner for shared feedback, and Motion for the approved intro, text, and story choreography. CSS/Intersection Observer remain appropriate for simple interactions and entrances.
 - **Template model:** composition over inheritance. A reusable template supplies sections, layout, and defaults; each wedding composes its own pages and approved content. Shared changes affect newly built sites only. Template and public-site copy is always Brazilian Portuguese (`pt-BR`), never `en-US`.
-- **External services:** Twilio Verify is the opt-in real SMS boundary; tests default to deterministic mocks. Cloudflare, Railway, Neon, CI resources, and any media provider require real account access and explicit credentials. No provider guarantee is assumed.
+- **External services:** Manual group PIN delivery is the provider-free MVP path. Twilio Verify remains the opt-in real SMS boundary; tests use the manual path or deterministic mocks. Cloudflare, Railway, Neon, CI resources, and any media provider require real account access and explicit credentials. No provider guarantee is assumed.
 - **Operational control:** production deployment, domains, DNS, lifecycle status, main migrations, and provider setup are manual and recorded as owner-entered status. No silent mass publication or automatic expiry deletion exists.
 
 ## Cross-cutting rules for every block
@@ -146,9 +146,9 @@ These decisions apply across the blocks and remain subject to the explicit gates
 
 ---
 
-## Block 3: Guest groups, OTP verification, sessions, and abuse controls
+## Block 3: Guest groups, access PINs, optional SMS, sessions, and abuse controls
 
-**Implementation status (2026-09-11):** B3-T1 through B3-T5 are implemented and locally validated. The B3-T6 Twilio Verify adapter and fail-closed runtime gates are implemented, but live delivery remains pending credentials, Brazilian geo/trial/usage confirmation, an allowlisted destination, and separate authorization to send. See `docs/block3Contracts.md`, `docs/block3Validation.md`, and `docs/block3Handoff.md`.
+**Implementation status (2026-09-12):** B3-T1 through B3-T5 now use a persistent manually shared group PIN as the provider-free MVP path. The PIN is generated at group creation, transiently revealed or rotated by an authorized administrator, and verified through the existing protected challenge/session flow. The B3-T6 Twilio Verify adapter and fail-closed runtime gates remain implemented, but live delivery stays disabled pending a paid/provider-ready account and explicit authorization to send. See `docs/block3Contracts.md`, `docs/block3Validation.md`, and `docs/block3Handoff.md`.
 
 **Track:** Product. This block establishes the family-scoped guest identity used by RSVP and messages.
 
@@ -158,19 +158,19 @@ These decisions apply across the blocks and remain subject to the explicit gates
 
 ### BEFORE START
 
-- **Infrastructure:** Disposable Neon integration resources are required. Real Twilio Verify is optional for application development and is only eligible after account/country/usage checks.
-- **Tools:** Deterministic SMS mock, rate-limit test utilities, clean-browser tooling, and the selected Twilio Verify adapter boundary are required. A mock is not a provider guarantee.
-- **Secrets and access:** Mock mode needs no live secrets. A real test requires Twilio Account SID, Auth Token, Verify Service SID, permitted destination phone(s), country/geo permissions, trial/usage confirmation, and explicit owner authorization. Never expose these in frontend configuration.
-- **Decisions:** Required group name, minimum one member, one representative, normalized Brazilian phone uniqueness per wedding, foreign-number behavior, name normalization/rejection rules, session lifetime, resend/attempt/cooldown limits, and demo authorization are fixed by the PRD.
+- **Infrastructure:** Disposable Neon integration resources are required. The manual PIN path needs no messaging provider. Real Twilio Verify is optional and is only eligible after account/country/usage checks.
+- **Tools:** PIN derivation and rotation tests, rate-limit test utilities, clean-browser tooling, deterministic SMS mocks, and the selected Twilio Verify adapter boundary are required.
+- **Secrets and access:** Manual PIN derivation uses the existing server-only guest HMAC secret. A real SMS test additionally requires Twilio Account SID, Auth Token, Verify Service SID, permitted destination phone(s), country/geo permissions, account usage confirmation, and explicit owner authorization. Never expose server secrets in frontend configuration.
+- **Decisions:** Required group name, minimum one member, one representative, normalized Brazilian phone uniqueness per wedding, foreign-number behavior, exact lookup, persistent PIN lifetime, rotation revocation, session lifetime, attempt/cooldown limits, and demo authorization are fixed.
 
 ### Concrete vertical-slice tasks
 
-1. **B3-T1 — Manage groups and members.** Deliver admin creation, editing, representative selection, deletion, and validation for named groups, one or more members, individual invitations, and one wedding-scoped phone.
+1. **B3-T1 — Manage groups, members, and access PINs.** Deliver admin creation, editing, representative selection, deletion, and validation for named groups, one or more members, individual invitations, and one wedding-scoped phone. Generate a server-derived six-digit PIN per Brazilian group; allow authorized transient reveal, copy, and explicit rotation without storing plaintext.
 2. **B3-T2 — Locate a group safely.** Implement deterministic lookup normalization for case, accents, and extra spaces while rejecting approximate, abbreviated, or incomplete names. Add the foreign-number path and its persistent explanation.
-3. **B3-T3 — Enforce OTP protection.** Implement the OTP challenge contract with mocked delivery by default. Enforce a 60-second resend wait, three total sends (including the initial send) per 15 minutes, ten total sends per 24 hours, wedding/group and phone scopes, IP throttles, five failed attempts, and 15-minute cooldown without resetting counters on resend.
-4. **B3-T4 — Create and revoke guest sessions.** Create family-bound guest sessions with seven-day absolute expiry and an explicit leave action. Revoke sessions and pending challenges after representative/phone changes; preserve them for spelling-only corrections.
+3. **B3-T3 — Enforce verification protection.** Make the manually shared group PIN the default MVP channel. Reuse an expiring challenge, exact lookup, IP verification throttles, five failed attempts, and a 15-minute cooldown. Keep the SMS-only resend and send ceilings for simulated/live SMS; manual challenges never create provider-send records and cannot be resent.
+4. **B3-T4 — Create and revoke guest sessions.** Create family-bound guest sessions with seven-day absolute expiry and an explicit leave action. Revoke sessions and pending challenges after representative/phone changes or PIN rotation; preserve them for spelling-only corrections.
 5. **B3-T5 — Isolate demo simulation.** Add owner-authorized, demo-marked simulation behavior that cannot become a general bypass. Label simulated outcomes separately from provider responses.
-6. **B3-T6 — Verify opt-in live SMS.** Run the live Twilio path only as an explicit gated verification after permissions are confirmed; preserve mock-default tests if live delivery is unavailable.
+6. **B3-T6 — Preserve opt-in live SMS.** Keep the Twilio path behind explicit fail-closed gates. Activate and verify it only after the paid/provider-ready account, permissions, destination allowlist, and separate send authorization are confirmed; manual PIN remains the operational MVP path meanwhile.
 
 ### Task-level preflight
 
@@ -178,7 +178,7 @@ These decisions apply across the blocks and remain subject to the explicit gates
 | --- | --- | --- |
 | B3-T1 | **Infrastructure:** Neon disposable base. **Tools:** contract/migration tests. **Secrets/access:** site-admin fixture and development DB URL. **Decisions:** required group name, representative, phone scope, individual invitation model. | B2-T1, B2-T4 |
 | B3-T2 | **Infrastructure:** none beyond B3-T1 data. **Tools:** normalization and browser tests. **Secrets/access:** guest fixture data. **Decisions:** exact normalization and strict rejection rules; foreign-number behavior. | B3-T1 |
-| B3-T3 | **Infrastructure:** none for mock mode. **Tools:** deterministic SMS mock and rate-limit clock. **Secrets/access:** no live secrets. **Decisions:** 60-second resend wait, three total sends per 15 minutes, ten total sends per 24 hours, attempt, cooldown, wedding/group/phone/IP scopes. | B3-T2 |
+| B3-T3 | **Infrastructure:** none beyond the database for manual mode. **Tools:** deterministic PIN/challenge and rate-limit clock. **Secrets/access:** server guest HMAC secret; no messaging credentials. **Decisions:** persistent PIN plus expiring challenge, five attempts, cooldown, lookup/IP scopes, and no manual resend. | B3-T2 |
 | B3-T4 | **Infrastructure:** Neon disposable base. **Tools:** session/expiry test clock. **Secrets/access:** guest session secret. **Decisions:** seven-day absolute lifetime and revocation triggers. | B3-T3 |
 | B3-T5 | **Infrastructure:** isolated demo-marked tenant and sentinel tenant. **Tools:** deterministic simulation fixture. **Secrets/access:** owner-authorized demo browser/phone allowlist. **Decisions:** simulation label and no general bypass. | B3-T4 |
 | B3-T6 | **Infrastructure:** Twilio Verify account/trial or paid usage access. **Tools:** live provider adapter and clean-browser test. **Secrets/access:** SID, Auth Token, Verify Service SID, permitted phone, country/geo access. **Decisions:** explicit owner opt-in and evidence standard; otherwise remain mock/pending. | B3-T3, B3-T4 |
@@ -186,15 +186,15 @@ These decisions apply across the blocks and remain subject to the explicit gates
 ### What to deliver
 
 - A wedding-scoped guest group and member management path.
-- Safe lookup, foreign-number handling, OTP challenge, family session, revocation, and abuse controls.
-- Mock-default provider boundary plus an honest opt-in Twilio verification path.
+- Safe lookup, foreign-number handling, persistent group PIN, expiring verification challenge, family session, revocation, and abuse controls.
+- Provider-free manual delivery as the MVP default, plus an honest opt-in Twilio verification path.
 - Owner-authorized demo simulation isolated from real tenants.
 
 ### Tests and acceptance evidence
 
 - TDD covers validation, uniqueness, lookup normalization, foreign-number rules, session boundaries, revocation, and every rate-limit counter edge.
 - Disposable Neon tests prove no cross-tenant group lookup, member mutation, session use, or phone uniqueness leakage.
-- Clean-browser mobile/desktop evidence shows the lookup, code entry, resend timer, error/cooldown states, session leave, and persistent foreign-number explanation.
+- Clean-browser mobile/desktop evidence shows PIN reveal/copy/rotation, lookup, manual PIN entry without resend, SMS-only resend behavior, error/cooldown states, session leave, and persistent foreign-number explanation.
 - A real Twilio test is reported only if the account, destination, country, trial, and usage permissions are confirmed. Otherwise evidence states that provider validation remains pending; mock success is never presented as live delivery.
 
 ---

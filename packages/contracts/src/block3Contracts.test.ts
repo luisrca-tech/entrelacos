@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   demoGuestGrantResponseSchema,
   familySessionResponseSchema,
+  guestAccessPinResponseSchema,
   guestChallengeStartResponseSchema,
   guestChallengeVerifyInputSchema,
   guestGroupCreateInputSchema,
@@ -91,6 +92,7 @@ describe("Block 3 public contracts", () => {
   });
 
   it("keeps public lookup and challenge payloads opaque and strict", () => {
+    const challengeId = "a".repeat(43);
     expect(
       guestLookupInputSchema.parse({
         fullName: " Ana   Silva ",
@@ -107,8 +109,16 @@ describe("Block 3 public contracts", () => {
         groupId: "group-secret",
       }),
     ).toThrow();
+    expect(
+      guestChallengeStartResponseSchema.parse({
+        challengeId,
+        expiresAt: "2026-09-11T12:10:00.000Z",
+        resendAvailableAt: "2026-09-11T12:10:00.000Z",
+        sendStatus: "MANUAL",
+        deliveryMode: "MANUAL_PIN",
+      }),
+    ).toMatchObject({ sendStatus: "MANUAL", deliveryMode: "MANUAL_PIN" });
 
-    const challengeId = "a".repeat(43);
     expect(
       guestChallengeStartResponseSchema.parse({
         challengeId,
@@ -143,6 +153,17 @@ describe("Block 3 public contracts", () => {
         code: "12345",
         token: "secret",
       }),
+    ).toThrow();
+  });
+
+  it("keeps manually shared group PINs six-digit and explicit", () => {
+    expect(guestAccessPinResponseSchema.parse({ accessPin: "004218" })).toEqual(
+      {
+        accessPin: "004218",
+      },
+    );
+    expect(() =>
+      guestAccessPinResponseSchema.parse({ accessPin: "4218" }),
     ).toThrow();
   });
 

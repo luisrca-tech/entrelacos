@@ -6,6 +6,7 @@ import {
 } from "@entrelacos/database";
 import {
   familySession,
+  guestGroup,
   guestRateLimitEvent,
   guestVerificationChallenge,
   guestVerificationSend,
@@ -20,7 +21,7 @@ import {
   leaveFamilySession,
   readFamilySession,
 } from "./familySession";
-import { createGuestGroup } from "./guestGroups";
+import { createGuestGroup, getGuestGroupAccessPin } from "./guestGroups";
 import {
   hashGuestVerificationValue,
   resendGuestChallenge,
@@ -31,7 +32,8 @@ import { approveReview, createSite, startReview } from "./sites";
 
 const fixturePrefix = `t3-verification-${process.pid}-${randomUUID().slice(0, 8)}`;
 const fixedNow = new Date("2028-02-29T12:00:00.000Z");
-const fingerprintSecret = "block3-test-fingerprint-secret";
+const fingerprintSecret =
+  "block3-test-fingerprint-secret-with-at-least-32-characters";
 const testIpSeed = randomUUID().replaceAll("-", "").slice(0, 12);
 const fixturePhoneSeed = String(
   Number.parseInt(randomUUID().slice(0, 8), 16) % 10_000,
@@ -277,6 +279,62 @@ describe("guest verification and family sessions PostgreSQL integration", () => 
     ).rejects.toMatchObject({
       code: "SESSION_INVALID",
     });
+  });
+
+  it("uses the persistent group PIN without calling an SMS provider", async () => {
+    const wedding = await createFixture("manual-pin");
+    const [createdGroup] = await connection.db
+      .select({ id: guestGroup.id })
+      .from(guestGroup)
+      .where(eq(guestGroup.siteId, wedding.id));
+    const groupId = createdGroup?.id as string;
+    const { accessPin } = await getGuestGroupAccessPin(
+      connection.db,
+      { userId: "owner", role: "OWNER" },
+      wedding.id,
+      groupId,
+      fingerprintSecret,
+    );
+    const manualOptions = {
+      ipAddress: testIp("manual"),
+      fingerprintSecret,
+      now: fixedNow,
+      smsMode: "manual" as const,
+      sessionTokenGenerator: () => testSessionToken("manual"),
+    };
+    const challenge = await startGuestChallenge(
+      connection.db,
+      wedding.id,
+      { fullName: "Ana Silva", phone: phoneInputForSite(wedding.id) },
+      manualOptions,
+    );
+    expect(challenge).toMatchObject({
+      deliveryMode: "MANUAL_PIN",
+      sendStatus: "MANUAL",
+    });
+    expect(challenge).not.toHaveProperty("simulationCode");
+    expect(
+      await connection.db
+        .select()
+        .from(guestVerificationSend)
+        .where(eq(guestVerificationSend.challengeId, challenge.challengeId)),
+    ).toHaveLength(0);
+    await expect(
+      verifyGuestChallenge(
+        connection.db,
+        challenge.challengeId,
+        { challengeId: challenge.challengeId, code: "999999" },
+        manualOptions,
+      ),
+    ).rejects.toMatchObject({ code: "INVALID_CODE", status: 401 });
+    await expect(
+      verifyGuestChallenge(
+        connection.db,
+        challenge.challengeId,
+        { challengeId: challenge.challengeId, code: accessPin },
+        manualOptions,
+      ),
+    ).resolves.toMatchObject({ siteId: wedding.id, groupId });
   });
 
   it("allows an existing session to leave after the site becomes inactive", async () => {

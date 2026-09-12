@@ -1,6 +1,7 @@
 import {
   brazilianPhoneInputSchema,
   type DemoGuestGrantResponse,
+  type GuestAccessPinResponse,
   type GuestGroupRecord,
 } from "@entrelacos/contracts";
 import { type FormEvent, useCallback, useEffect, useState } from "react";
@@ -65,6 +66,9 @@ export function GuestGroupsSection({
   const [pending, setPending] = useState(false);
   const [demoGrant, setDemoGrant] = useState<
     (DemoGuestGrantResponse & { groupName: string }) | null
+  >(null);
+  const [accessPin, setAccessPin] = useState<
+    (GuestAccessPinResponse & { groupId: string; groupName: string }) | null
   >(null);
   const inactive = lifecycle === "INACTIVE";
 
@@ -201,6 +205,7 @@ export function GuestGroupsSection({
         `/v1/sites/${encodeURIComponent(siteId)}/groups/${encodeURIComponent(group.id)}`,
         { method: "DELETE", body: {} },
       );
+      if (accessPin?.groupId === group.id) setAccessPin(null);
       setNotice("Grupo excluído.");
       if (editingId === group.id) closeForm();
       await load();
@@ -236,6 +241,64 @@ export function GuestGroupsSection({
     }
   }
 
+  async function revealAccessPin(group: GuestGroupRecord) {
+    if (pending || group.isForeign) return;
+    setPending(true);
+    setError("");
+    setNotice("");
+    try {
+      const result = await apiRequest<GuestAccessPinResponse>(
+        `/v1/sites/${encodeURIComponent(siteId)}/groups/${encodeURIComponent(group.id)}/access-pin`,
+      );
+      setAccessPin({ ...result, groupId: group.id, groupName: group.name });
+      setNotice("PIN exibido somente nesta sessão administrativa.");
+    } catch (cause) {
+      setError(apiMessage(cause));
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function copyAccessPin() {
+    if (!accessPin) return;
+    try {
+      await navigator.clipboard.writeText(accessPin.accessPin);
+      setNotice(`PIN de ${accessPin.groupName} copiado.`);
+      setError("");
+    } catch {
+      setError(
+        "Não foi possível copiar automaticamente. Selecione o PIN e copie manualmente.",
+      );
+    }
+  }
+
+  async function rotateAccessPin(group: GuestGroupRecord) {
+    if (pending || inactive || group.isForeign) return;
+    if (
+      !window.confirm(
+        `Gerar um novo PIN para “${group.name}”? O PIN anterior e os acessos ativos deixarão de funcionar.`,
+      )
+    )
+      return;
+    setPending(true);
+    setError("");
+    setNotice("");
+    try {
+      const result = await apiRequest<GuestAccessPinResponse>(
+        `/v1/sites/${encodeURIComponent(siteId)}/groups/${encodeURIComponent(group.id)}/access-pin/rotate`,
+        { method: "POST", body: {} },
+      );
+      setAccessPin({ ...result, groupId: group.id, groupName: group.name });
+      setNotice(
+        "Novo PIN gerado. O PIN anterior e os acessos ativos foram revogados.",
+      );
+    } catch (cause) {
+      setError(apiMessage(cause));
+    } finally {
+      setPending(false);
+    }
+  }
+
   const phoneInvalid =
     form !== null &&
     !form.isForeign &&
@@ -249,7 +312,8 @@ export function GuestGroupsSection({
           <h2 id="guest-groups-title">Grupos de convidados</h2>
           <p>
             Cadastre cada convite com seu nome de localização, convidados e um
-            único representante para receber o código por SMS.
+            único representante. Compartilhe o PIN do grupo junto com o link de
+            confirmação; o SMS poderá ser ativado depois.
           </p>
         </div>
         {!inactive && (
@@ -293,6 +357,30 @@ export function GuestGroupsSection({
             spellCheck={false}
             value={demoGrant.grant}
           />
+        </div>
+      )}
+      {accessPin && (
+        <div className="demo-guest-grant" role="status">
+          <strong>PIN de acesso · {accessPin.groupName}</strong>
+          <p>
+            Envie este PIN junto com o link por WhatsApp ou pelo canal
+            escolhido. Ele não é enviado automaticamente e permanece válido até
+            ser rotacionado.
+          </p>
+          <input
+            aria-label={`PIN de acesso de ${accessPin.groupName}`}
+            inputMode="numeric"
+            readOnly
+            value={accessPin.accessPin}
+          />
+          <div className="inline-actions">
+            <button type="button" onClick={() => void copyAccessPin()}>
+              Copiar PIN
+            </button>
+            <button type="button" onClick={() => setAccessPin(null)}>
+              Ocultar PIN
+            </button>
+          </div>
         </div>
       )}
       {form && !inactive && (
@@ -362,8 +450,8 @@ export function GuestGroupsSection({
           <fieldset className="guest-members-fieldset">
             <legend>Convidados</legend>
             <p className="help-text">
-              Escolha exatamente um representante. Ele será o contato que recebe
-              o código de verificação.
+              Escolha exatamente um representante. Ele será o contato
+              responsável pela confirmação deste convite.
             </p>
             {form.members.map((member, index) => (
               <div className="guest-member-editor" key={member.id ?? index}>
@@ -454,6 +542,24 @@ export function GuestGroupsSection({
               </ul>
               {!inactive && (
                 <div className="inline-actions">
+                  {!group.isForeign && (
+                    <>
+                      <button
+                        disabled={pending}
+                        type="button"
+                        onClick={() => void revealAccessPin(group)}
+                      >
+                        Exibir PIN
+                      </button>
+                      <button
+                        disabled={pending}
+                        type="button"
+                        onClick={() => void rotateAccessPin(group)}
+                      >
+                        Rotacionar PIN
+                      </button>
+                    </>
+                  )}
                   {canIssueDemoGuestGrant(owner, isDemo, inactive, group) && (
                     <button
                       disabled={pending}

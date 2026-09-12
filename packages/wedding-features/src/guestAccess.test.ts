@@ -217,7 +217,7 @@ describe("guest access client", () => {
     ).toContain("atendimento administrativo");
     expect(
       guestAccessErrorMessage(new GuestAccessApiError(401, "INVALID_CODE")),
-    ).toContain("código não confere");
+    ).toContain("código ou PIN não confere");
     expect(
       guestAccessErrorMessage(
         new GuestAccessApiError(429, "CHALLENGE_COOLDOWN", 15),
@@ -226,6 +226,9 @@ describe("guest access client", () => {
   });
 
   it("does not claim that an unconfirmed real delivery was sent", () => {
+    expect(getGuestDeliveryMessage("MANUAL_PIN", "MANUAL")).toContain(
+      "PIN compartilhado",
+    );
     expect(getGuestDeliveryMessage("REAL_SMS", "PROVIDER_ACCEPTED")).toContain(
       "Enviamos",
     );

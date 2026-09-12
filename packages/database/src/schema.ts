@@ -41,6 +41,7 @@ export const adminAccessPurpose = pgEnum("admin_access_purpose", [
   "RECOVERY",
 ]);
 export const guestVerificationMode = pgEnum("guest_verification_mode", [
+  "MANUAL",
   "MOCK",
   "TWILIO",
 ]);
@@ -50,7 +51,7 @@ export const guestVerificationChallengeStatus = pgEnum(
 );
 export const guestVerificationSendStatus = pgEnum(
   "guest_verification_send_status",
-  ["RESERVED", "PROVIDER_ACCEPTED", "FAILED_FINAL", "UNKNOWN"],
+  ["MANUAL", "RESERVED", "PROVIDER_ACCEPTED", "FAILED_FINAL", "UNKNOWN"],
 );
 export const guestRateLimitAction = pgEnum("guest_rate_limit_action", [
   "LOOKUP",
@@ -196,6 +197,9 @@ export const guestGroup = pgTable(
     isForeign: boolean("is_foreign").notNull().default(false),
     phoneE164: text("phone_e164"),
     representativeMemberId: text("representative_member_id").notNull(),
+    manualPinSeed: text("manual_pin_seed")
+      .notNull()
+      .default(sql`encode(gen_random_bytes(32), 'hex')`),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -224,6 +228,10 @@ export const guestGroup = pgTable(
     check(
       "guest_group_foreign_phone_check",
       sql`${table.isForeign} = (${table.phoneE164} IS NULL)`,
+    ),
+    check(
+      "guest_group_manual_pin_seed_check",
+      sql`${table.manualPinSeed} ~ '^[a-f0-9]{64}$'`,
     ),
   ],
 );

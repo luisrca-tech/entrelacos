@@ -4,11 +4,11 @@ Block 4 may build RSVP on the verified family identity delivered here. It must d
 
 ## Available boundaries
 
-- `packages/contracts/src/index.ts` defines strict group, lookup, challenge, demo grant, and family-session payloads.
-- `packages/database/src/schema.ts` owns site-scoped groups/members, challenge/send reservations, rate-limit events, and hashed family sessions.
-- `apps/api/src/guestGroups.ts` owns administrative group mutations and revocation triggers.
+- `packages/contracts/src/index.ts` defines strict group, access-PIN, lookup, challenge, demo grant, and family-session payloads.
+- `packages/database/src/schema.ts` owns site-scoped groups/members, random group PIN seeds, challenge/send reservations, rate-limit events, and hashed family sessions.
+- `apps/api/src/guestGroups.ts` owns administrative group mutations, PIN derivation/reveal/rotation, and revocation triggers.
 - `apps/api/src/guestLookup.ts` owns exact normalized location and lookup throttling.
-- `apps/api/src/guestVerification.ts` owns send/verify throttling, provider outcomes, challenge state, and session creation.
+- `apps/api/src/guestVerification.ts` owns manual-PIN verification, SMS send/verify throttling, provider outcomes, challenge state, and session creation.
 - `apps/api/src/familySession.ts` resolves and revokes family sessions.
 - `apps/api/src/publicGuestHttp.ts` enforces registered origins and bearer transport for the static public site.
 - `packages/wedding-features/src/GuestAccessPanel.tsx` restores only a site-namespaced browser-tab session and exposes the verified member list.
@@ -17,7 +17,7 @@ Block 4 may build RSVP on the verified family identity delivered here. It must d
 
 RSVP mutations must verify that every submitted member belongs to the family session's exact site/group. The representative is the group authority; other members do not receive independent accounts or tokens. A route ID, public site ID, administrative recognition, or demo grant never substitutes for a family session.
 
-Keep the seven-day absolute session expiry and immediate server-side revocation. Phone/representative changes already revoke sessions and pending challenges; spelling-only edits preserve them. Inactive sites reject public operations while retaining data. Explicit leave must remain usable even if the site becomes inactive so the server-side token can still be revoked.
+Keep the seven-day absolute session expiry and immediate server-side revocation. Phone/representative changes and PIN rotation already revoke sessions and pending challenges; spelling-only edits preserve them. Inactive sites reject public operations while retaining data. Explicit leave must remain usable even if the site becomes inactive so the server-side token can still be revoked.
 
 The demo grant authorizes only disclosure of the local simulation code for a marked demo phone and site. It grants no RSVP permission. Block 4 must require the resulting family bearer like any other guest flow.
 
@@ -27,8 +27,8 @@ Use `DATABASE_URL_TEST` exclusively for integration tests and preserve the guard
 
 - RSVP state, deadlines, revisions, conflict handling, and history belong to Block 4.
 - Messages, monthly SMS quotas, alerts, reports, exports, demo reset, and observability belong to later blocks.
-- Live Twilio delivery remains pending explicit credentials, permission checks, country/trial/usage confirmation, allowlisted destination, and a separate authorization to send.
+- Manual PIN is the operational MVP path. Live Twilio delivery remains pending explicit credentials, paid/provider readiness, permission checks, allowlisted destination, and a separate authorization to send.
 
 ## Listening
 
-Block 3 deliberately returns verified member identity without RSVP fields. This keeps the authentication slice stable and prevents Block 4 state or conflict semantics from leaking into the security boundary.
+Block 3 deliberately returns verified member identity without RSVP fields. Manual PIN reuses the same expiring challenge, attempt limits, and family session as SMS; it does not create a second authorization model. This keeps the authentication slice stable and prevents Block 4 state or conflict semantics from leaking into the security boundary.

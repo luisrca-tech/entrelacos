@@ -246,11 +246,15 @@ export function GuestAccess({
     event.preventDefault();
     if (!apiResult.api || !challenge || busy) return;
     if (!isValidVerificationCode(code)) {
-      setError("Informe o código de 6 dígitos recebido.");
+      setError(
+        challenge.deliveryMode === "MANUAL_PIN"
+          ? "Informe o PIN de 6 dígitos compartilhado com você."
+          : "Informe o código de 6 dígitos recebido.",
+      );
       return;
     }
     if (challengeExpired(challenge, nowMs)) {
-      setError("Este código expirou. Solicite um novo código.");
+      setError("Este acesso expirou. Confirme seus dados novamente.");
       return;
     }
     setBusy(true);
@@ -268,7 +272,13 @@ export function GuestAccess({
       setPhase("authenticated");
       setNotice("Acesso confirmado.");
     } catch (cause) {
-      setError(errorWithRetry(cause));
+      const apiError = cause as Partial<GuestAccessApiError>;
+      setError(
+        challenge.deliveryMode === "MANUAL_PIN" &&
+          apiError.code === "INVALID_CODE"
+          ? "O PIN não confere. Confira o valor compartilhado e tente novamente."
+          : errorWithRetry(cause),
+      );
     } finally {
       setBusy(false);
     }
@@ -396,7 +406,9 @@ export function GuestAccess({
               </p>
             )}
           <label>
-            Código de 6 dígitos
+            {challenge.deliveryMode === "MANUAL_PIN"
+              ? "PIN de 6 dígitos"
+              : "Código de 6 dígitos"}
             <input
               autoComplete="one-time-code"
               inputMode="numeric"
@@ -410,18 +422,24 @@ export function GuestAccess({
             />
           </label>
           <button type="submit" disabled={busy}>
-            {busy ? "Confirmando…" : "Confirmar código"}
+            {busy
+              ? "Confirmando…"
+              : challenge.deliveryMode === "MANUAL_PIN"
+                ? "Confirmar PIN"
+                : "Confirmar código"}
           </button>
-          <button
-            type="button"
-            className="entrelacos-guest-access__secondary"
-            disabled={busy || resendSeconds > 0}
-            onClick={() => void resendCode()}
-          >
-            {resendSeconds > 0
-              ? `Reenviar código em ${resendSeconds}s`
-              : "Reenviar código"}
-          </button>
+          {challenge.deliveryMode !== "MANUAL_PIN" && (
+            <button
+              type="button"
+              className="entrelacos-guest-access__secondary"
+              disabled={busy || resendSeconds > 0}
+              onClick={() => void resendCode()}
+            >
+              {resendSeconds > 0
+                ? `Reenviar código em ${resendSeconds}s`
+                : "Reenviar código"}
+            </button>
+          )}
           <button
             type="button"
             className="entrelacos-guest-access__link"

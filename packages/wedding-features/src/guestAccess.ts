@@ -16,7 +16,7 @@ import {
   siteIdSchema,
 } from "@entrelacos/contracts";
 
-export type GuestDeliveryMode = "SIMULATED" | "REAL_SMS";
+export type GuestDeliveryMode = "MANUAL_PIN" | "SIMULATED" | "REAL_SMS";
 
 export type GuestChallengeStartResult = GuestChallengeStartResponse & {
   deliveryMode: GuestDeliveryMode;
@@ -76,6 +76,9 @@ export function getGuestDeliveryMessage(
   mode: GuestDeliveryMode,
   status: GuestChallengeStartResponse["sendStatus"],
 ): string {
+  if (mode === "MANUAL_PIN") {
+    return "Digite o PIN compartilhado pelos noivos ou pela cerimonial.";
+  }
   if (mode === "SIMULATED") {
     return "Simulação local: este fluxo não envia SMS real.";
   }
@@ -309,11 +312,11 @@ export function guestAccessErrorMessage(error: unknown): string {
       ? `Aguarde ${error.retryAfterSeconds} segundos para reenviar o código.`
       : "Aguarde um pouco para reenviar o código.";
   if (error.code === "OTP_WRONG_CODE" || error.code === "INVALID_CODE")
-    return "O código não confere. Confira a mensagem e tente novamente.";
+    return "O código ou PIN não confere. Confira o valor e tente novamente.";
   if (error.code === "OTP_LOCKED")
-    return "Muitas tentativas de código. Aguarde o desbloqueio e tente novamente.";
+    return "Muitas tentativas. Aguarde o desbloqueio e tente novamente.";
   if (error.code === "OTP_EXPIRED" || error.code === "CHALLENGE_EXPIRED")
-    return "Este código expirou. Solicite um novo código.";
+    return "Este acesso expirou. Confirme seus dados novamente.";
   if (
     error.code === "CHALLENGE_NOT_FOUND" ||
     error.code === "CHALLENGE_NOT_ACTIVE" ||

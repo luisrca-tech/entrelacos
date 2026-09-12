@@ -17,7 +17,9 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   createGuestGroup,
   deleteGuestGroup,
+  getGuestGroupAccessPin,
   listGuestGroups,
+  rotateGuestGroupAccessPin,
   updateGuestGroup,
 } from "./guestGroups";
 import {
@@ -29,6 +31,7 @@ import {
 
 const fixturePrefix = `t3-groups-${process.pid}-${randomUUID().slice(0, 8)}`;
 const fixedNow = new Date("2028-02-29T12:00:00.000Z");
+const fingerprintSecret = "guest-groups-pin-secret-with-at-least-32-characters";
 let connection: DatabaseConnection;
 const siteIds: string[] = [];
 const userIds: string[] = [];
@@ -377,6 +380,66 @@ describe("guest groups PostgreSQL integration", () => {
       .where(eq(guestVerificationChallenge.groupId, preservedGroup.id));
     expect(preservedSession?.revokedAt).toBeNull();
     expect(preservedChallenge?.status).toBe("PENDING");
+  });
+
+  it("reveals a stable PIN and revokes active access when rotating it", async () => {
+    const wedding = await createFixture("manual-pin");
+    const actor = { userId: "owner", role: "OWNER" as const };
+    const group = await createGuestGroup(
+      connection.db,
+      actor,
+      wedding.id,
+      groupInput(),
+      fixedNow,
+    );
+    const identity = await addIdentityFixtures(wedding.id, group.id);
+    const first = await getGuestGroupAccessPin(
+      connection.db,
+      actor,
+      wedding.id,
+      group.id,
+      fingerprintSecret,
+    );
+    expect(first.accessPin).toMatch(/^\d{6}$/);
+    await expect(
+      getGuestGroupAccessPin(
+        connection.db,
+        actor,
+        wedding.id,
+        group.id,
+        fingerprintSecret,
+      ),
+    ).resolves.toEqual(first);
+
+    const rotated = await rotateGuestGroupAccessPin(
+      connection.db,
+      actor,
+      wedding.id,
+      group.id,
+      fingerprintSecret,
+      new Date("2028-03-03T12:00:00.000Z"),
+    );
+    expect(rotated.accessPin).toMatch(/^\d{6}$/);
+    expect(rotated).not.toEqual(first);
+    const [storedGroup] = await connection.db
+      .select({ manualPinSeed: guestGroup.manualPinSeed })
+      .from(guestGroup)
+      .where(eq(guestGroup.id, group.id));
+    expect(storedGroup?.manualPinSeed).toMatch(/^[a-f0-9]{64}$/);
+    expect(storedGroup?.manualPinSeed).not.toContain(rotated.accessPin);
+    const [revokedSession] = await connection.db
+      .select()
+      .from(familySession)
+      .where(eq(familySession.groupId, group.id));
+    const [revokedChallenge] = await connection.db
+      .select()
+      .from(guestVerificationChallenge)
+      .where(eq(guestVerificationChallenge.id, identity.challengeId));
+    expect(revokedSession?.revocationReason).toBe("MANUAL_PIN_ROTATED");
+    expect(revokedChallenge).toMatchObject({
+      status: "REVOKED",
+      revocationReason: "MANUAL_PIN_ROTATED",
+    });
   });
 
   it("deletes group-owned members, sessions, and challenges", async () => {

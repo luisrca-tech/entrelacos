@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHmac, randomBytes, randomUUID } from "node:crypto";
 import {
   type GuestGroupCreateInput,
   type GuestGroupRecord,
@@ -247,10 +247,11 @@ async function revokeIdentity(
   siteId: string,
   groupId: string,
   now: Date,
+  reason = "GROUP_IDENTITY_CHANGED",
 ): Promise<void> {
   await db
     .update(familySession)
-    .set({ revokedAt: now, revocationReason: "GROUP_IDENTITY_CHANGED" })
+    .set({ revokedAt: now, revocationReason: reason })
     .where(
       and(
         eq(familySession.siteId, siteId),
@@ -263,7 +264,7 @@ async function revokeIdentity(
     .set({
       status: "REVOKED",
       revokedAt: now,
-      revocationReason: "GROUP_IDENTITY_CHANGED",
+      revocationReason: reason,
       updatedAt: now,
     })
     .where(
@@ -273,6 +274,126 @@ async function revokeIdentity(
         eq(guestVerificationChallenge.status, "PENDING"),
       ),
     );
+}
+
+function manualPinSeed(): string {
+  return randomBytes(32).toString("hex");
+}
+
+export function deriveGuestGroupAccessPin(
+  siteId: string,
+  groupId: string,
+  seed: string,
+  secret: string,
+): string {
+  if (secret.trim().length < 32 || !/^[a-f0-9]{64}$/.test(seed)) {
+    reject(
+      503,
+      "VERIFICATION_CONFIGURATION_ERROR",
+      "Guest verification is not configured",
+    );
+  }
+  const digest = createHmac("sha256", secret)
+    .update(`entrelacos:guest-access-pin:v1:${siteId}:${groupId}:${seed}`)
+    .digest();
+  return String(Number(digest.readBigUInt64BE(0) % 1_000_000n)).padStart(
+    6,
+    "0",
+  );
+}
+
+async function accessPinGroup(
+  db: GuestGroupDatabase,
+  actor: GuestGroupActor,
+  siteId: string,
+  groupId: string,
+): Promise<{ id: string; manualPinSeed: string; isForeign: boolean }> {
+  await siteForActor(db, actor, siteId);
+  const [group] = await db
+    .select({
+      id: guestGroup.id,
+      manualPinSeed: guestGroup.manualPinSeed,
+      isForeign: guestGroup.isForeign,
+    })
+    .from(guestGroup)
+    .where(and(eq(guestGroup.siteId, siteId), eq(guestGroup.id, groupId)))
+    .limit(1);
+  if (!group) notFound("GROUP_NOT_FOUND");
+  if (group.isForeign) {
+    reject(
+      422,
+      "FOREIGN_GUEST_CONTACT_ADMIN",
+      "Foreign groups use administrative access",
+    );
+  }
+  return group;
+}
+
+export async function getGuestGroupAccessPin(
+  db: GuestGroupDatabase,
+  actor: GuestGroupActor,
+  siteId: string,
+  groupId: string,
+  secret: string,
+): Promise<{ accessPin: string }> {
+  const group = await accessPinGroup(db, actor, siteId, groupId);
+  return {
+    accessPin: deriveGuestGroupAccessPin(
+      siteId,
+      group.id,
+      group.manualPinSeed,
+      secret,
+    ),
+  };
+}
+
+export async function rotateGuestGroupAccessPin(
+  db: GuestGroupDatabase,
+  actor: GuestGroupActor,
+  siteId: string,
+  groupId: string,
+  secret: string,
+  now?: Date,
+): Promise<{ accessPin: string }> {
+  const rotatedAt = currentTime(now);
+  return db.transaction(async (tx) => {
+    await lockSiteForActor(tx, actor, siteId, true);
+    const result = await tx.execute(sql`
+      SELECT id, is_foreign, manual_pin_seed
+      FROM guest_group
+      WHERE site_id = ${siteId} AND id = ${groupId}
+      FOR UPDATE
+    `);
+    const group = result.rows[0] as
+      | { id: string; is_foreign: boolean; manual_pin_seed: string }
+      | undefined;
+    if (!group) notFound("GROUP_NOT_FOUND");
+    if (group.is_foreign) {
+      reject(
+        422,
+        "FOREIGN_GUEST_CONTACT_ADMIN",
+        "Foreign groups use administrative access",
+      );
+    }
+    const previousPin = deriveGuestGroupAccessPin(
+      siteId,
+      groupId,
+      group.manual_pin_seed,
+      secret,
+    );
+    let seed = manualPinSeed();
+    let accessPin = deriveGuestGroupAccessPin(siteId, groupId, seed, secret);
+    while (accessPin === previousPin) {
+      seed = manualPinSeed();
+      accessPin = deriveGuestGroupAccessPin(siteId, groupId, seed, secret);
+    }
+    await tx
+      .update(guestGroup)
+      .set({ manualPinSeed: seed, updatedAt: rotatedAt })
+      .where(and(eq(guestGroup.siteId, siteId), eq(guestGroup.id, groupId)));
+    await revokeIdentity(tx, siteId, groupId, rotatedAt, "MANUAL_PIN_ROTATED");
+    return { accessPin };
+  });
 }
 
 export async function listGuestGroups(
@@ -327,6 +448,7 @@ export async function createGuestGroup(
         isForeign: value.isForeign,
         phoneE164: value.phone,
         representativeMemberId: representative.id,
+        manualPinSeed: manualPinSeed(),
         createdAt,
         updatedAt: createdAt,
       });

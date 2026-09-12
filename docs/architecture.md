@@ -89,8 +89,8 @@ Current and planned route groups:
 
 - `/v1/auth/*`: administrative library endpoints with a configured matching base path.
 - `/v1/owner/sites`, site details and site users: owner-only management/provisioning.
-- `/v1/sites/:siteId/groups`: implemented OWNER/SITE_ADMIN group and member administration. RSVP, history, reports, and mural controls remain planned.
-- `/v1/public/sites/:siteId/guest/challenge` and challenge resend/verify routes: implemented exact-origin lookup and OTP flow.
+- `/v1/sites/:siteId/groups`: implemented OWNER/SITE_ADMIN group and member administration, including transient access-PIN reveal and rotation. RSVP, history, reports, and mural controls remain planned.
+- `/v1/public/sites/:siteId/guest/challenge` and challenge resend/verify routes: implemented exact-origin lookup with manual group PIN as the MVP default; simulated and real SMS remain explicit server modes.
 - `/v1/public/family/session`: implemented bearer-bound family read and explicit leave.
 - `/v1/owner/sites/:siteId/demo/guest-grant`: implemented five-minute OWNER grant for active, demo-marked, allowlisted simulations. Scoped reset remains planned.
 
@@ -98,9 +98,11 @@ Exact routes/verbs/payloads are frozen with their task, with schema validation, 
 
 ## SMS and demo safeguards
 
-Production real weddings use Twilio Verify and permit Brazilian SMS. Development defaults to simulation; real development tests require an explicit mode and allowlisted operator phone. A trial is finite and restricted, not a free indefinite sandbox. Credentials and Verify Service configuration must be checked before the first real call.
+The MVP defaults to a manually shared group PIN and makes no provider call. The bride or planner copies the PIN from authenticated administration and shares it with the public link using an external communication channel. The PIN is derived from a random group seed and a server HMAC secret, never stored in plaintext, and remains valid until rotation. Rotation revokes existing group sessions and pending challenges.
 
-Enforce 60-second resend spacing; three sends/15 minutes and ten/24 hours per group and phone; 10 IP sends/15 minutes, 30 IP sends/24 hours, 10 IP verification attempts/15 minutes, and 10 exact site/IP lookups/15 minutes; five wrong codes then 15-minute cooldown. Resends do not reset counters or extend the 10-minute challenge. Reservations are atomic and external provider calls occur outside database transactions. Provider `UNKNOWN` outcomes are not retried automatically and do not consume wrong-code attempts. Monthly per-site ceiling remains a Block 5 decision, with 80%/100% dashboard alerts and no external notification integration.
+Twilio Verify remains available for later Brazilian SMS activation. Simulation is an explicit development/demo mode; real development tests require an explicit mode and allowlisted operator phone. Credentials, paid/provider readiness, and Verify Service configuration must be checked before the first real call.
+
+Manual verification enforces 10 IP attempts/15 minutes, 10 exact site/IP lookups/15 minutes, and five wrong PINs followed by a 15-minute cooldown. Manual challenges last 10 minutes, have no resend, and create no provider-send record. SMS mode additionally enforces 60-second resend spacing; three sends/15 minutes and ten/24 hours per group and phone; and 10 IP sends/15 minutes plus 30 IP sends/24 hours. Resends do not reset counters or extend the challenge. Reservations are atomic and external provider calls occur outside database transactions. Provider `UNKNOWN` outcomes are not retried automatically and do not consume wrong-code attempts. Monthly per-site ceiling remains a Block 5 decision before live SMS activation.
 
 Demo simulation in main is allowed only for the marked demo and an OWNER-authorized demonstration flow/browser. Never enable simulated verification globally in main. Demo seed is explicitly scoped by site ID, refuses non-demo weddings and preserves global OWNER/unrelated accounts. Test reset against another sentinel wedding and reject attempts to reset it.
 

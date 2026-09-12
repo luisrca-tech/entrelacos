@@ -85,10 +85,15 @@ describe("Block 3 database foundation", () => {
       .select({
         siteId: guestGroup.siteId,
         representativeMemberId: guestGroup.representativeMemberId,
+        manualPinSeed: guestGroup.manualPinSeed,
       })
       .from(guestGroup)
       .where(eq(guestGroup.id, groupId));
-    expect(storedGroup).toEqual({ siteId, representativeMemberId: memberId });
+    expect(storedGroup).toMatchObject({
+      siteId,
+      representativeMemberId: memberId,
+    });
+    expect(storedGroup?.manualPinSeed).toMatch(/^[a-f0-9]{64}$/);
 
     const [storedSite] = await connection.db
       .select({ isDemo: site.isDemo })

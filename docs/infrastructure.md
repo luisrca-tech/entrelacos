@@ -40,8 +40,8 @@ Database integration tests use `DATABASE_URL_TEST` exclusively and verify the ac
 | `BETTER_AUTH_SECRET` | API | Secret; separate per environment |
 | `BETTER_AUTH_URL` | API | Auth endpoint base URL; align configured route prefix |
 | `ADMIN_ORIGIN` | API | Explicit trusted admin origin |
-| `SMS_MODE` | API | Simulation/real test choice; main real weddings cannot use global simulation |
-| `GUEST_FINGERPRINT_SECRET` | API | Secret HMAC key for phone and IP abuse-control fingerprints |
+| `SMS_MODE` | API | `manual` MVP default; `simulated` for explicit demo/testing; `real` only behind Twilio gates |
+| `GUEST_FINGERPRINT_SECRET` | API | Secret HMAC key for phone/IP fingerprints and domain-separated group PIN derivation |
 | `EXPOSE_SIMULATION_CODE` | API | Development-only opt-in; disclosure still requires a valid demo grant |
 | `TRUST_PROXY_HEADERS` | API | Explicit opt-in for trusted deployment proxies before accepting forwarded client IP headers |
 | `GUEST_DEMO_GRANT_SECRET` | API | Secret HMAC key for five-minute owner-issued demo grants |

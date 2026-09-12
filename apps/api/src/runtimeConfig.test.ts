@@ -13,7 +13,7 @@ describe("API runtime configuration", () => {
     expect(readRuntimeConfig(settings)).toMatchObject({
       target: "development",
       port: 8080,
-      smsMode: "simulated",
+      smsMode: "manual",
       exposeSimulationCode: false,
       trustProxyHeaders: false,
     });
@@ -49,6 +49,12 @@ describe("API runtime configuration", () => {
     expect(() =>
       readRuntimeConfig({ ...settings, SMS_MODE: "unknown" }),
     ).toThrow();
+    expect(
+      readRuntimeConfig({ ...settings, SMS_MODE: "simulated" }),
+    ).toMatchObject({
+      smsMode: "simulated",
+      twilio: undefined,
+    });
   });
   it("fails closed until every real Twilio safeguard is configured", () => {
     const real = {
