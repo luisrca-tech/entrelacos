@@ -1,6 +1,6 @@
 # EntreLaços architecture and engineering contracts
 
-Status: accepted product boundaries translated into an initial engineering specification. The repository is a scaffold, not an implemented wedding service. Detailed endpoint schemas and migrations are delivered with their implementation tasks. No external service has been provisioned by this work.
+Status: accepted product boundaries translated into an incremental engineering specification. Blocks 1–3 now implement the workspace foundation, administrative authentication/lifecycle, and guest identity slice. RSVP, messages, exports, complete demo reset, production infrastructure, and live-provider acceptance remain later work. No production resource has been provisioned by Block 3.
 
 ## Authority and document order
 
@@ -39,7 +39,7 @@ The demo is a marked wedding in each environment, not a third environment. It ha
 
 ## Conceptual data model
 
-Schema names below describe planned records, not tables already created by the scaffold.
+Schema names below describe the full planned model. Site, administrative identity, site membership, guest group/member, family session, verification challenge, and SMS abuse-control records are implemented through Block 3; RSVP history, messages, and monthly quota behavior remain planned.
 
 | Record | Essential contract |
 | --- | --- |
@@ -79,27 +79,30 @@ Administrative sessions expire after 24 hours idle and at most seven days from i
 
 The panel resolves SITE_ADMIN to its wedding and OWNER to a chooser or authorized originating wedding. `Open site` uses the selected registered URL. The public site receives only limited administrative recognition through a short-lived, one-use handoff, never a global admin token. Return targets are validated against registered origins and fixed allowed paths; no arbitrary open redirect. Handoff must be bound to the initiating flow/destination and resistant to replay/login confusion; strip transient secrets from navigation and logs.
 
-**Before implementing this bridge, validate on actual independent origins and mobile browsers.** The static site, Workers panel and Railway API do not share a cookie domain. Do not assume third-party cookies or a `SameSite=None` flag will work everywhere. The initial technical spike must demonstrate panel first-party cookie/BFF behavior, public family session storage, redirect binding, refresh, expiry and immediate server-side revocation. If a proxy/Worker is necessary, record the smallest change and its deployment implications before adopting it; do not silently convert every static site to SSR. Keep credential transport/storage decisions marked pending until this experiment passes. The scaffold exposes no permissive authentication bypass.
+The static site, Workers panel and Railway API do not share a cookie domain. Block 3 therefore uses exact-origin CORS plus a family bearer held only in site-namespaced `sessionStorage`; refresh within the same browser tab restores the session, while leave and server-side revocation invalidate it. Public guest requests do not use credentialed cross-site cookies. The separate panel-to-public administrative handoff still requires independent-origin and mobile validation. If a proxy/Worker is necessary for that later bridge, record the smallest change and its deployment implications before adopting it; do not silently convert every static site to SSR.
 
 ## HTTP contract
 
-Business API prefix: `/v1`. Only `GET /v1/health` and standardized missing-route responses are implemented now. Health is liveness, not database readiness or proof of authentication configuration.
+Business API prefix: `/v1`. Health, administrative authentication/lifecycle, guest-group administration, demo-grant issuance, public challenge/resend/verification, and family-session read/leave routes are implemented through Block 3. Health remains liveness, not database readiness or provider readiness.
 
-Planned route groups:
+Current and planned route groups:
 
 - `/v1/auth/*`: administrative library endpoints with a configured matching base path.
 - `/v1/owner/sites`, site details and site users: owner-only management/provisioning.
-- `/v1/sites/:siteId/groups`, members, RSVP, RSVP history, reports and mural controls: authorized operational access.
-- `/v1/public/sites/:siteId`: public capabilities and messages; family challenge/session, RSVP and message operations have endpoint-specific authorization.
-- `/v1/owner/sites/:siteId/demo/*`: scoped reset and demonstration entry; demo flag plus OWNER required.
+- `/v1/sites/:siteId/groups`: implemented OWNER/SITE_ADMIN group and member administration, including transient access-PIN reveal and rotation. RSVP, history, reports, and mural controls remain planned.
+- `/v1/public/sites/:siteId/guest/challenge` and challenge resend/verify routes: implemented exact-origin lookup with manual group PIN as the MVP default; simulated and real SMS remain explicit server modes.
+- `/v1/public/family/session`: implemented bearer-bound family read and explicit leave.
+- `/v1/owner/sites/:siteId/demo/guest-grant`: implemented five-minute OWNER grant for active, demo-marked, allowlisted simulations. Scoped reset remains planned.
 
 Exact routes/verbs/payloads are frozen with their task, with schema validation, examples and negative tests. Use structured errors with HTTP status and stable machine code (`VALIDATION_ERROR`, `UNAUTHORIZED`, `FORBIDDEN`, `RSVP_DEADLINE_PASSED`, `RSVP_CONFLICT`, `SMS_RATE_LIMITED`, `SMS_QUOTA_EXCEEDED`, `SITE_INACTIVE`). Error text must not disclose secrets, SQL internals or another tenant's data. UI maps codes to Portuguese messages. Export endpoints validate tenant access, filter scope, CSV formula injection and safe PDF escaping. Do not equate a successful HTTP response with a successful business mutation when a conflict occurred.
 
 ## SMS and demo safeguards
 
-Production real weddings use Twilio Verify and permit Brazilian SMS. Development defaults to simulation; real development tests require an explicit mode and allowlisted operator phone. A trial is finite and restricted, not a free indefinite sandbox. Credentials and Verify Service configuration must be checked before the first real call.
+The MVP defaults to a manually shared group PIN and makes no provider call. The bride or planner copies the PIN from authenticated administration and shares it with the public link using an external communication channel. The PIN is derived from a random group seed and a server HMAC secret, never stored in plaintext, and remains valid until rotation. Rotation revokes existing group sessions and pending challenges.
 
-Enforce 60-second resend spacing; three sends/15 minutes and ten/24 hours per group and phone; additional IP protection; five wrong codes then 15-minute cooldown. Resends must not reset counters. Define the distinction between local validation attempts, provider attempts and transient failures with deterministic tests. Monthly per-site ceiling is OWNER-configured, with 80%/100% dashboard alerts and no external notification integration. The initial ceiling and numeric IP policy must be chosen at the SMS task gate. Reserve capacity atomically before external dispatch to prevent concurrent overspending. Reconcile failures/unknown provider outcomes without promising exact billing from local counters.
+Twilio Verify remains available for later Brazilian SMS activation. Simulation is an explicit development/demo mode; real development tests require an explicit mode and allowlisted operator phone. Credentials, paid/provider readiness, and Verify Service configuration must be checked before the first real call.
+
+Manual verification enforces 10 IP attempts/15 minutes, 10 exact site/IP lookups/15 minutes, and five wrong PINs followed by a 15-minute cooldown. Manual challenges last 10 minutes, have no resend, and create no provider-send record. SMS mode additionally enforces 60-second resend spacing; three sends/15 minutes and ten/24 hours per group and phone; and 10 IP sends/15 minutes plus 30 IP sends/24 hours. Resends do not reset counters or extend the challenge. Reservations are atomic and external provider calls occur outside database transactions. Provider `UNKNOWN` outcomes are not retried automatically and do not consume wrong-code attempts. Monthly per-site ceiling remains a Block 5 decision before live SMS activation.
 
 Demo simulation in main is allowed only for the marked demo and an OWNER-authorized demonstration flow/browser. Never enable simulated verification globally in main. Demo seed is explicitly scoped by site ID, refuses non-demo weddings and preserves global OWNER/unrelated accounts. Test reset against another sentinel wedding and reject attempts to reset it.
 
@@ -121,4 +124,4 @@ Setting inactive in the API blocks public operations. It does not remove Cloudfl
 
 ## Listening
 
-The design retains static independently deployed sites and a central API instead of introducing a CMS or per-client backend. Demo isolation uses existing tenant boundaries instead of a third permanent database. Infrastructure remains manually operated. Security-sensitive cross-origin session mechanics and recovery capacity are validation gates rather than invented guarantees. This scaffold intentionally postpones operational routes, schema migrations, seeds, provisioning mutations and final artwork to the planned blocks.
+The design retains static independently deployed sites and a central API instead of introducing a CMS or per-client backend. Demo isolation uses existing tenant boundaries instead of a third permanent database. Family sessions use explicit bearer transport rather than cross-site cookies, while the administrative handoff remains a separate unresolved boundary. Infrastructure remains manually operated. Recovery capacity, live Twilio delivery, later operational routes, deterministic demo reset, provisioning mutations, and final artwork remain planned or gated rather than inferred from local mock success.

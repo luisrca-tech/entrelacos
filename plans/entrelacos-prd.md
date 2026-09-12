@@ -18,7 +18,7 @@ EntreLaços provides one independently published, custom wedding website per wed
 
 The operator creates the wedding site, composes its pages and sections, manages visual content in code and versioned assets, reviews the site with the client, and performs publication and maintenance. A `OWNER` can manage every wedding and every administrative access. A `SITE_ADMIN` can operate only the assigned wedding and can manage operational data without changing visual design, users, domains, or the service term.
 
-Guests visit the public wedding URL. A representative of a family or group identifies the group with full name and registered Brazilian phone number and proves possession of that phone through a time-limited SMS code. The representative receives a family-scoped session and can answer RSVP for each member and publish one group message when those features are enabled. The API remains responsible for authorization, tenant isolation, business rules, rate limits, and session invalidation.
+Guests visit the public wedding URL. A representative of a family or group identifies the group with full name and registered Brazilian phone number and enters the persistent group PIN that the bride or planner shared with the invitation link. The representative receives a family-scoped session and can answer RSVP for each member and publish one group message when those features are enabled. Twilio Verify remains an optional future SMS channel, not an MVP dependency. The API remains responsible for authorization, tenant isolation, business rules, rate limits, and session invalidation.
 
 The initial public experience is an editorial, cinematic wedding story with direct access to practical information. It can include a hero photo or a short muted hero video, couple story sections, a gallery, schedule, ceremony and reception information, directions, RSVP, a message mural, and responsive navigation. Motion supports the story but never delays authentication, forms, errors, confirmation, reading order, or reduced-motion access.
 
@@ -29,7 +29,7 @@ The initial public experience is an editorial, cinematic wedding story with dire
 - The buyer is the couple or a designated ceremony team, with the exact commercial decision still external to this product document.
 - The primary operational users are the bride, couple, and ceremony team represented by one or more `SITE_ADMIN` identities.
 - The service operator is represented by `OWNER` and remains responsible for creation, visual customization, publishing, maintenance, and global administration.
-- Guests are public visitors. A family or group representative may access protected guest actions after SMS verification; other group members do not need accounts.
+- Guests are public visitors. A family or group representative may access protected guest actions after group-PIN verification, or optional future SMS verification; other group members do not need accounts.
 
 ### Managed service boundaries
 
@@ -59,7 +59,7 @@ The `SITE_ADMIN` is assigned to one wedding. The first access is created by the 
 
 ### Guest representative
 
-The representative is the one contact for a group or individual invitation. The representative uses full name and registered phone to request an SMS code, verifies the code, answers members' RSVP, and publishes or edits the group's one message while the mural is enabled. The representative cannot add or remove members, change group composition, edit another group, or access any other wedding.
+The representative is the one contact for a group or individual invitation. The representative uses full name and registered phone to create a short-lived verification challenge, enters the group PIN shared by the bride or planner, answers members' RSVP, and publishes or edits the group's one message while the mural is enabled. The representative cannot add or remove members, change group composition, edit another group, or access any other wedding.
 
 ### Guest group member
 
@@ -132,15 +132,15 @@ A public visitor can read enabled public pages and practical details without an 
 51. **US-051 — As a guest, I want to locate my group with full name and registered phone, so that I can request access without a secret link.**
 52. **US-052 — As a guest, I want matching to ignore case, accents, and extra spaces, so that ordinary spelling differences do not prevent access.**
 53. **US-053 — As an operator, I want matching to reject approximate, abbreviated, or incomplete names, so that name lookup cannot authorize the wrong group.**
-54. **US-054 — As a verified representative, I want to receive a time-limited SMS code, so that possession of the registered phone completes identity verification.**
+54. **US-054 — As a representative, I want to enter the six-digit group PIN shared with my invitation, so that I can verify access without requiring a paid messaging provider.**
 55. **US-055 — As a verified representative, I want a family-scoped guest session, so that I can act only for my wedding and group.**
-56. **US-056 — As a guest, I want a 60-second resend wait, so that accidental repeated requests do not overwhelm the verification channel.**
+56. **US-056 — As a guest using the optional SMS channel, I want a 60-second resend wait, so that accidental repeated requests do not overwhelm the provider. Manual PIN challenges have no resend.**
 57. **US-057 — As an operator, I want send and failed-code limits by wedding/group and phone, with additional IP throttling, so that abuse is constrained without changing RSVP data.**
 58. **US-058 — As a guest, I want five incorrect code attempts to interrupt the challenge and apply a 15-minute cooldown, so that an attacker cannot keep guessing indefinitely.**
 59. **US-059 — As a guest, I want resend actions not to reset abuse counters, so that rate limits reflect actual activity.**
 60. **US-060 — As an authenticated guest, I want a seven-day absolute session lifetime, so that a device does not keep indefinite access.**
 61. **US-061 — As an authenticated guest, I want a clear way to leave the RSVP flow, so that I can end the family session from the guest interface.**
-62. **US-062 — As an operator, I want a representative or phone change to revoke family sessions and pending challenges, so that old identity proof cannot survive a contact change.**
+62. **US-062 — As an operator, I want a representative/phone change or PIN rotation to revoke family sessions and pending challenges, so that old identity proof cannot survive an access change.**
 63. **US-063 — As an operator, I want spelling correction to preserve existing guest data and sessions, so that a harmless name fix does not disrupt the family.**
 64. **US-064 — As a system operator, I want every guest request authorized by the API, so that a browser cannot choose a different wedding or group by changing a site identifier.**
 65. **US-065 — As an operator, I want a demo verification path to require owner authorization and a demo-marked site, so that simulations never become a general guest bypass.**
@@ -245,9 +245,11 @@ The group is the unit of organization and authorization. A group has a required 
 
 Foreign-number groups make the phone optional and are administrative RSVP only. They do not receive guest SMS authentication, guest messages, or a substitute guest account. The interface keeps the explanation visible and provides a Sonner toast when the foreign-number path affects an action.
 
-The guest lookup uses full name and registered phone. Matching ignores case, accents, and extra spaces but rejects approximate or abbreviated names. The API validates the match, sends the SMS challenge through the explicitly configured provider path, and creates a family-bound session after the correct code. The browser cannot select a tenant or group by changing an identifier.
+The guest lookup uses full name and registered phone. Matching ignores case, accents, and extra spaces but rejects approximate or abbreviated names. By default, the API validates the match and creates a 10-minute manual challenge without contacting a provider. The guest enters the group PIN that an authorized administrator copied and shared externally. The API creates a family-bound session after the correct PIN. The browser cannot select a tenant or group by changing an identifier.
 
-SMS protection includes a 60-second resend wait, maximum three total sends (including the initial send) per 15 minutes and ten total sends per 24 hours by wedding/group and phone, additional IP throttles, and five incorrect code attempts before a 15-minute cooldown. Resend does not reset counters. Limits do not delete RSVP or interrupt existing valid sessions. Guest sessions expire absolutely after seven days. Representative or phone changes revoke family sessions and pending challenges; spelling-only corrections do not.
+Each Brazilian group receives a random server-side seed at creation. A domain-separated HMAC with the existing guest server secret derives the persistent six-digit PIN; plaintext PINs are not stored. Authorized administrators may transiently reveal or rotate it. Rotation invalidates the old PIN and revokes active family sessions and pending challenges. Sending the PIN through WhatsApp or another channel is a human operation outside the product integration.
+
+Manual verification applies exact-lookup and IP attempt throttles, five incorrect PIN attempts before a 15-minute cooldown, and no resend. Optional SMS protection additionally includes a 60-second resend wait, maximum three total sends (including the initial send) per 15 minutes and ten total sends per 24 hours by wedding/group and phone, plus send IP throttles. Resend does not reset counters. Limits do not delete RSVP or interrupt existing valid sessions. Guest sessions expire absolutely after seven days. Representative/phone changes and PIN rotation revoke family sessions and pending challenges; spelling-only corrections do not.
 
 ### RSVP
 
@@ -318,7 +320,7 @@ The initial success measure is an operator completing a wedding's path from appr
 
 - a fresh wedding can be prepared idempotently and independently;
 - an owner can create and recover a controlled administrative access and keep the site admin within one wedding;
-- a representative can complete SMS verification through a real, permission-checked provider path or receive an honest blocked state;
+- a representative can complete provider-free manual PIN verification; an optional real SMS path either passes every permission/provider gate or returns an honest blocked state;
 - a group can save full, partial, and changed RSVP while deadline and concurrency rules hold;
 - message publishing, editing, deletion, moderation, mural disablement, and privacy boundaries hold;
 - PDF and CSV exports remain wedding-scoped, paginated where applicable, and free of messages;
@@ -332,7 +334,7 @@ The initial success measure is an operator completing a wedding's path from appr
 - Self-service customer signup, CMS editing, or customer-managed visual design.
 - Customer or guest uploads, object storage, shared media libraries, or runtime media editing.
 - Gifts, gift lists, checkout, Pix handling inside the product, payment processing, split payments, financial webhooks, KYC, conciliation, refunds, chargebacks, or a mandated external gift provider.
-- WhatsApp authentication, WhatsApp fallback, international SMS, and non-Twilio fallback in the MVP.
+- WhatsApp API integration or authentication, automated WhatsApp fallback, international SMS, and non-Twilio SMS providers in the MVP. Administrators may manually paste the copied group PIN into their own communication channel.
 - Individual guest accounts, guest-created accounts, secret invitation links, guest addition/removal of members, or guest changes to group composition.
 - Automatic email delivery for activation or recovery.
 - Automatic provider monitoring, automatic domain/DNS changes, automatic expiry deletion, automatic renewal, automatic main migrations, and automatic production deployment.

@@ -1,7 +1,7 @@
 ---
 import WeddingLayout from "@entrelacos/template-root/layout";
 import TemplateSection from "@entrelacos/template-root/section";
-import { AdminRecognition, FeatureAvailability } from "@entrelacos/wedding-features";
+import { AdminRecognition, FeatureAvailability, GuestAccess } from "@entrelacos/wedding-features";
 import "../styles/tailwind.css";
 
 const inactive = import.meta.env.PUBLIC_SITE_INACTIVE === "true";
@@ -9,8 +9,10 @@ const access = { siteId: import.meta.env.PUBLIC_SITE_ID, apiOrigin: import.meta.
 const navigation = [
   { label: "História", href: "#story" },
   { label: "Detalhes", href: "#details" },
+  { label: "Confirmar presença", href: "#guest-access" },
   { label: "Recursos", href: "#capabilities" },
 ];
+const guestAccess = { siteId: import.meta.env.PUBLIC_SITE_ID ?? "", apiOrigin: import.meta.env.PUBLIC_API_URL ?? "" };
 ---
 
 <WeddingLayout
@@ -29,8 +31,8 @@ const navigation = [
       <h1 id="demo-title">Marina <span>&amp;</span> Caio</h1>
       <p class="demo-hero__lede">
         Um ponto de partida sereno para um site de casamento. Conteúdo, mídia,
-        confirmação de presença e fluxos de operação serão adicionados em seus
-        próprios blocos de implementação.
+        confirmação de presença e fluxos de operação se encontram no mesmo
+        espaço, com acesso protegido para cada família.
       </p>
       <p class="demo-hero__meta">18 de setembro de 2027 · Goiânia, GO</p>
     </div>
@@ -44,8 +46,8 @@ const navigation = [
   >
     <p>
       Esta seção de exemplo mostra que a estrutura pública pode ser composta
-      sem introduzir um CMS, um login ou uma simulação de confirmação de
-      presença.
+      com conteúdo editorial e confirmação de presença sem expor dados dos
+      convidados.
     </p>
   </TemplateSection>
 
@@ -72,9 +74,21 @@ const navigation = [
     </div>
   </TemplateSection>
 
+  <section id="guest-access" class="demo-guest-access" aria-labelledby="guest-access-section-title">
+    <div class="demo-guest-access__heading">
+      <p class="demo-eyebrow">03 / Confirmação</p>
+      <h2 id="guest-access-section-title">Seu convite, no seu tempo.</h2>
+      <p>
+        Encontre sua família pelo nome e celular brasileiro. Depois da
+        confirmação, os nomes do convite ficam disponíveis somente nesta aba.
+      </p>
+    </div>
+    <GuestAccess {...guestAccess} demoMode client:load />
+  </section>
+
   <section id="capabilities" class="demo-capabilities" aria-labelledby="capabilities-title">
     <div>
-      <p class="demo-eyebrow">03 / Mapa de recursos</p>
+      <p class="demo-eyebrow">04 / Mapa de recursos</p>
       <h2 id="capabilities-title">O que este modelo demonstra</h2>
       <p>
         As fronteiras de apresentação compartilhadas estão prontas para os
@@ -198,6 +212,35 @@ const navigation = [
     padding: clamp(5rem, 12vw, 10rem) 0;
   }
 
+  .demo-guest-access {
+    display: grid;
+    grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+    gap: clamp(2rem, 8vw, 8rem);
+    padding: clamp(5rem, 12vw, 10rem) max(1rem, calc((100vw - 78rem) / 2));
+    background: var(--demo-paper);
+  }
+
+  .demo-guest-access__heading {
+    align-self: start;
+    padding-top: clamp(2rem, 5vw, 4rem);
+  }
+
+  .demo-guest-access h2 {
+    max-width: 10ch;
+    margin: 0;
+    font-size: clamp(2.5rem, 6vw, 5rem);
+    font-weight: 400;
+    letter-spacing: -0.06em;
+    line-height: 0.96;
+  }
+
+  .demo-guest-access__heading > p:last-child {
+    max-width: 28rem;
+    margin-top: 1.5rem;
+    color: var(--demo-muted);
+    line-height: 1.6;
+  }
+
   .demo-capabilities h2 {
     max-width: 10ch;
     margin: 0;
@@ -220,11 +263,13 @@ const navigation = [
       width: min(100% - 2rem, 78rem);
     }
 
-    .demo-capabilities {
+    .demo-capabilities,
+    .demo-guest-access {
       display: block;
     }
 
-    .demo-capabilities > div {
+    .demo-capabilities > div,
+    .demo-guest-access__heading {
       margin-bottom: 3rem;
     }
   }

@@ -15,6 +15,27 @@
       "when": 1789132324845,
       "tag": "0001_block2_contracts",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1789145090084,
+      "tag": "0002_block3_guest_identity",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1789145772281,
+      "tag": "0003_block3_foundation_corrections",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1789228029950,
+      "tag": "0004_left_gideon",
+      "breakpoints": true
     }
   ]
 }

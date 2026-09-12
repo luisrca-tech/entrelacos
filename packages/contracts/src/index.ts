@@ -161,6 +161,7 @@ export const siteRecordSchema = strictObject({
   eventDate: calendarDateSchema,
   ...lifecycleFields,
   publicationState: sitePublicationStateSchema,
+  isDemo: z.boolean().default(false),
   publicUrl: publicUrlSchema.nullable(),
   trustedOrigins: z.array(originSchema).max(20),
   reviewApprovedAt: instantSchema.nullable(),
@@ -289,6 +290,7 @@ export const siteScopedRecordSchema = strictObject({
   eventDate: calendarDateSchema,
   ...lifecycleFields,
   publicationState: sitePublicationStateSchema,
+  isDemo: z.boolean().default(false),
   publicUrl: publicUrlSchema.nullable(),
   termStartsOn: calendarDateSchema.nullable(),
   termEndsOn: calendarDateSchema.nullable(),
@@ -494,3 +496,258 @@ export const block2EndpointPaths = {
 
 export type Block2EndpointPath =
   (typeof block2EndpointPaths)[keyof typeof block2EndpointPaths];
+
+export const brazilianPhoneE164Schema = z
+  .string()
+  .regex(/^\+55[1-9]{2}9\d{8}$/, "Expected a Brazilian mobile E.164 phone");
+
+export const brazilianPhoneInputSchema = z
+  .string()
+  .min(1)
+  .max(40)
+  .transform((value) => {
+    const digits = value.replace(/\D/g, "");
+    if (digits.length === 11) return `+55${digits}`;
+    if (digits.length === 13 && digits.startsWith("55")) return `+${digits}`;
+    return value;
+  })
+  .pipe(brazilianPhoneE164Schema);
+
+export const guestMemberInputSchema = strictObject({
+  id: identifierSchema.optional(),
+  fullName: nonEmptyText(160),
+  isRepresentative: z.boolean(),
+});
+
+const guestMembersWithRepresentativeSchema = z
+  .array(guestMemberInputSchema)
+  .min(1, "At least one group member is required")
+  .superRefine((members, context) => {
+    const representatives = members.filter((member) => member.isRepresentative);
+    if (representatives.length !== 1) {
+      context.addIssue({
+        code: "custom",
+        message: "Exactly one group representative is required",
+      });
+    }
+  });
+
+export const guestGroupCreateInputSchema = strictObject({
+  name: nonEmptyText(160),
+  isForeign: z.boolean(),
+  phone: brazilianPhoneInputSchema.nullable(),
+  members: guestMembersWithRepresentativeSchema,
+}).superRefine((value, context) => {
+  if (value.isForeign !== (value.phone === null)) {
+    context.addIssue({
+      code: "custom",
+      path: ["phone"],
+      message: "Foreign groups omit phone; Brazilian groups require one",
+    });
+  }
+});
+export type GuestGroupCreateInput = z.infer<typeof guestGroupCreateInputSchema>;
+
+export const guestGroupUpdateInputSchema = strictObject({
+  name: nonEmptyText(160).optional(),
+  isForeign: z.boolean().optional(),
+  phone: brazilianPhoneInputSchema.nullable().optional(),
+  members: guestMembersWithRepresentativeSchema.optional(),
+}).superRefine((value, context) => {
+  if (Object.keys(value).length === 0) {
+    context.addIssue({
+      code: "custom",
+      message: "At least one group field is required",
+    });
+  }
+  if (
+    value.isForeign === true &&
+    value.phone !== undefined &&
+    value.phone !== null
+  ) {
+    context.addIssue({
+      code: "custom",
+      path: ["phone"],
+      message: "Foreign groups omit phone",
+    });
+  }
+  if (value.isForeign === false && value.phone === null) {
+    context.addIssue({
+      code: "custom",
+      path: ["phone"],
+      message: "Brazilian groups require phone",
+    });
+  }
+});
+export type GuestGroupUpdateInput = z.infer<typeof guestGroupUpdateInputSchema>;
+
+export const guestMemberRecordSchema = strictObject({
+  id: identifierSchema,
+  fullName: nonEmptyText(160),
+  isRepresentative: z.boolean(),
+});
+
+const guestMemberRecordsWithRepresentativeSchema = z
+  .array(guestMemberRecordSchema)
+  .min(1, "At least one group member is required")
+  .superRefine((members, context) => {
+    if (members.filter((member) => member.isRepresentative).length !== 1) {
+      context.addIssue({
+        code: "custom",
+        message: "Exactly one group representative is required",
+      });
+    }
+  });
+
+export const guestGroupRecordSchema = strictObject({
+  id: identifierSchema,
+  siteId: siteIdSchema,
+  name: nonEmptyText(160),
+  isForeign: z.boolean(),
+  phone: brazilianPhoneE164Schema.nullable(),
+  members: guestMemberRecordsWithRepresentativeSchema,
+  createdAt: instantSchema,
+  updatedAt: instantSchema,
+});
+export type GuestGroupRecord = z.infer<typeof guestGroupRecordSchema>;
+
+export const guestGroupResponseSchema = strictObject({
+  group: guestGroupRecordSchema,
+});
+
+export const guestGroupListResponseSchema = strictObject({
+  groups: z.array(guestGroupRecordSchema),
+});
+
+export const guestGroupDeleteResponseSchema = adminMutationResponseSchema;
+
+export const guestLookupInputSchema = strictObject({
+  fullName: nonEmptyText(160),
+  phone: brazilianPhoneInputSchema,
+});
+export type GuestLookupInput = z.infer<typeof guestLookupInputSchema>;
+
+export const demoGuestGrantSchema = z
+  .string()
+  .regex(/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]{43}$/)
+  .max(512);
+export const demoGuestGrantIssueInputSchema = strictObject({
+  phone: brazilianPhoneInputSchema,
+});
+export const demoGuestGrantResponseSchema = strictObject({
+  grant: demoGuestGrantSchema,
+  expiresAt: instantSchema,
+});
+export type DemoGuestGrantResponse = z.infer<
+  typeof demoGuestGrantResponseSchema
+>;
+
+export const guestChallengeIdSchema = opaqueTokenSchema;
+export const guestAccessPinSchema = z
+  .string()
+  .regex(/^\d{6}$/, "Expected a six-digit verification code");
+export const guestVerificationCodeSchema = guestAccessPinSchema;
+export const guestAccessPinResponseSchema = strictObject({
+  accessPin: guestAccessPinSchema,
+});
+export type GuestAccessPinResponse = z.infer<
+  typeof guestAccessPinResponseSchema
+>;
+export const guestVerificationModeSchema = z.enum(["MANUAL", "MOCK", "TWILIO"]);
+export const guestDeliveryModeSchema = z.enum([
+  "MANUAL_PIN",
+  "SIMULATED",
+  "REAL_SMS",
+]);
+export const guestVerificationChallengeStatusSchema = z.enum([
+  "PENDING",
+  "VERIFIED",
+  "EXPIRED",
+  "LOCKED",
+  "REVOKED",
+]);
+export const guestVerificationSendStatusSchema = z.enum([
+  "MANUAL",
+  "RESERVED",
+  "PROVIDER_ACCEPTED",
+  "FAILED_FINAL",
+  "UNKNOWN",
+]);
+
+export const guestChallengeStartResponseSchema = strictObject({
+  challengeId: guestChallengeIdSchema,
+  expiresAt: instantSchema,
+  resendAvailableAt: instantSchema,
+  sendStatus: guestVerificationSendStatusSchema,
+  deliveryMode: guestDeliveryModeSchema,
+  simulationCode: guestVerificationCodeSchema.optional(),
+}).superRefine((value, context) => {
+  if (value.deliveryMode === "REAL_SMS" && value.simulationCode !== undefined) {
+    context.addIssue({
+      code: "custom",
+      path: ["simulationCode"],
+      message: "Simulation code is not available for real SMS",
+    });
+  }
+});
+export type GuestChallengeStartResponse = z.infer<
+  typeof guestChallengeStartResponseSchema
+>;
+
+export const guestChallengeResendInputSchema = strictObject({
+  challengeId: guestChallengeIdSchema,
+});
+
+export const guestChallengeResendResponseSchema =
+  guestChallengeStartResponseSchema;
+
+export const guestChallengeVerifyInputSchema = strictObject({
+  challengeId: guestChallengeIdSchema,
+  code: guestVerificationCodeSchema,
+});
+export type GuestChallengeVerifyInput = z.infer<
+  typeof guestChallengeVerifyInputSchema
+>;
+
+export const familyMemberRecordSchema = guestMemberRecordSchema;
+export const familySessionResponseSchema = strictObject({
+  sessionToken: opaqueTokenSchema,
+  siteId: siteIdSchema,
+  groupId: identifierSchema,
+  members: z.array(familyMemberRecordSchema).min(1),
+  expiresAt: instantSchema,
+});
+export type FamilySessionResponse = z.infer<typeof familySessionResponseSchema>;
+
+export const familySessionReadResponseSchema = strictObject({
+  siteId: siteIdSchema,
+  groupId: identifierSchema,
+  members: z.array(familyMemberRecordSchema).min(1),
+  expiresAt: instantSchema,
+});
+export type FamilySessionReadResponse = z.infer<
+  typeof familySessionReadResponseSchema
+>;
+
+export const familySessionLeaveResponseSchema = adminMutationResponseSchema;
+
+export const block3EndpointPaths = {
+  siteGroupsList: "GET /v1/sites/:siteId/groups",
+  siteGroupsCreate: "POST /v1/sites/:siteId/groups",
+  siteGroupUpdate: "PATCH /v1/sites/:siteId/groups/:groupId",
+  siteGroupDelete: "DELETE /v1/sites/:siteId/groups/:groupId",
+  siteGroupAccessPin: "GET /v1/sites/:siteId/groups/:groupId/access-pin",
+  siteGroupAccessPinRotate:
+    "POST /v1/sites/:siteId/groups/:groupId/access-pin/rotate",
+  publicGuestChallengeStart: "POST /v1/public/sites/:siteId/guest/challenge",
+  demoGuestGrant: "POST /v1/owner/sites/:siteId/demo/guest-grant",
+  publicGuestChallengeResend:
+    "POST /v1/public/guest/challenge/:challengeId/resend",
+  publicGuestChallengeVerify:
+    "POST /v1/public/guest/challenge/:challengeId/verify",
+  publicFamilySession: "GET /v1/public/family/session",
+  publicFamilySessionLeave: "POST /v1/public/family/session/leave",
+} as const;
+
+export type Block3EndpointPath =
+  (typeof block3EndpointPaths)[keyof typeof block3EndpointPaths];

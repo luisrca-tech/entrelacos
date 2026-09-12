@@ -133,6 +133,7 @@
       "name": "@entrelacos/wedding-features",
       "version": "0.0.0",
       "dependencies": {
+        "@entrelacos/contracts": "workspace:*",
         "motion": "13.2.0",
       },
       "devDependencies": {
