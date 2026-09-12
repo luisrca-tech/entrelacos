@@ -1,6 +1,6 @@
 # EntreLaços architecture and engineering contracts
 
-Status: accepted product boundaries translated into an incremental engineering specification. Blocks 1–3 now implement the workspace foundation, administrative authentication/lifecycle, and guest identity slice. RSVP, messages, exports, complete demo reset, production infrastructure, and live-provider acceptance remain later work. No production resource has been provisioned by Block 3.
+Status: accepted product boundaries translated into an incremental engineering specification. Blocks 1–3 implement the workspace foundation, administrative authentication/lifecycle, and guest identity slice. Block 4 is implemented and passed its authorized local database, browser, artifact, and repository validation on `block-4/member-rsvp`. Messages, exports, complete demo reset, production infrastructure, and live-provider acceptance remain later work. No production resource has been provisioned.
 
 ## Authority and document order
 
@@ -22,7 +22,7 @@ The admin application must not connect to Neon, import the database package or d
 | Package | Owns | Must not own |
 | --- | --- | --- |
 | `template-root` | Astro layouts, reusable editorial sections, default theme, motion conventions | Customer identity, credentials, business authorization |
-| `wedding-features` | Shared guest-facing feature presentation and API integration | Direct SQL, administrative authority, provider secrets |
+| `wedding-features` | Shared guest-facing feature presentation, family-session transport, RSVP form, and draft/reconciliation helpers | Direct SQL, administrative authority, deadline enforcement, provider secrets |
 | `ui` | shadcn/Base UI primitives, Sonner, reusable derived controls | Wedding-specific layout or domain rules |
 | `contracts` | Public request/response validation and stable types | Drizzle tables, private authentication records |
 | `database` | Server-only schema, connections and reviewed migrations | Browser imports or customer-specific seeds without an explicit scope |
@@ -49,7 +49,7 @@ The demo is a marked wedding in each environment, not a third environment. It ha
 
 ## Conceptual data model
 
-Schema names below describe the full planned model. Site, administrative identity, site membership, guest group/member, family session, verification challenge, and SMS abuse-control records are implemented through Block 3; RSVP history, messages, and monthly quota behavior remain planned.
+Schema names below describe the full planned model. Site, administrative identity, site membership, guest group/member, family session, verification challenge, and SMS abuse-control records are implemented through Block 3. Block 4 adds validated member RSVP state/revision, paired site deadline, history snapshots, and site-scoped request receipts. Messages and monthly quota behavior remain planned.
 
 | Record | Essential contract |
 | --- | --- |
@@ -58,7 +58,8 @@ Schema names below describe the full planned model. Site, administrative identit
 | Site membership | Account-to-wedding authorization; initial SITE_ADMIN limited to one wedding; OWNER global scope |
 | Guest group | Site ID, required group name, representative member, normalized nullable phone only for foreign-number mode, message block flag |
 | Guest member | Site ID, group ID, full name, RSVP state, RSVP revision |
-| RSVP history | Site/group/member, old/new state, authenticated actor, timestamp; dedicated panel page |
+| RSVP history | Site/group/member, old/new state, actor type/ID/display snapshot, timestamp; dedicated panel view with filters and cursor pagination |
+| RSVP request receipt | Site/group/actor scope, request ID and hash, response body/status; unique idempotency key for replay-safe writes |
 | Family session | Site/group, expiry, revocation, session identity independent of admin |
 | Verification challenge | Scope, provider reference or restricted demo mode, expiry and attempt controls; no plaintext real OTP |
 | Family message | Site/group, representative author, text, created/edited timestamps; one current message per group |
@@ -69,13 +70,13 @@ All tenant-owned relations include the site scope. Use composite constraints whe
 
 ### Authorization
 
-Derive administrative tenant access from the authenticated account, never merely a submitted site ID. Derive family access from the validated family session. A public site ID identifies a wedding and grants no privilege. Origin allowlists/CORS are additional browser controls, not identity checks. Recheck lifecycle, deadline, mural status and block state when performing writes.
+Derive administrative tenant access from the authenticated account, never merely a submitted site ID. Derive family access from the validated family session, including its site and group. A public site ID, route ID, member ID, administrative recognition, or demo grant identifies context at most and grants no privilege. Origin allowlists/CORS are additional browser controls, not identity checks. Recheck lifecycle and deadline when performing RSVP writes.
 
 OWNER can manage every wedding, accounts and lifecycle. SITE_ADMIN can operate only its wedding and cannot call OWNER endpoints. Admins may delete messages but never edit guest text. Message blocks do not block RSVP. Inactive weddings reject public writes; SITE_ADMIN retains read/export, while OWNER retains administrative authority.
 
 ### RSVP transactions
 
-Update only submitted members using expected revisions. Verify every target belongs to the family and tenant before mutation. Apply all changes and history entries in one transaction. A stale conflicting answer returns a conflict without partial writes. Distinct members can change independently. Retry behavior must not duplicate history; requests that do not change state should not invent transitions. UI retains choices and refreshes conflicts. Deadline is enforced by the server with an explicit stored time zone/instant, never the browser clock. Unanswered guests stay pending.
+Update only submitted members using expected revisions. Verify every target belongs to the exact family group and tenant before mutation. Apply all state changes, revision increments, transition history, and the idempotency receipt in one transaction. A stale submitted member returns `RSVP_CONFLICT` without partial writes; details include current state/revision for conflicting members. Distinct members can change independently. Identical retries return the stored response, including after a lost response and after the public deadline; a changed payload under the same request ID returns `IDEMPOTENCY_KEY_REUSED`. No-op writes return `NO_CHANGE` and do not create history. The UI retains choices and refreshes conflicts. Deadline is enforced by the server at `serverNow >= deadlineAt`, with an explicit UTC instant and IANA timezone; it is never delegated to the browser clock. Unanswered guests stay pending.
 
 ### Group changes and deletion
 
@@ -93,16 +94,20 @@ The static site, Workers panel and Railway API do not share a cookie domain. Blo
 
 ## HTTP contract
 
-Business API prefix: `/v1`. Health, administrative authentication/lifecycle, guest-group administration, demo-grant issuance, public challenge/resend/verification, and family-session read/leave routes are implemented through Block 3. Health remains liveness, not database readiness or provider readiness.
+Business API prefix: `/v1`. Health, administrative authentication/lifecycle, guest-group administration, demo-grant issuance, public challenge/resend/verification, and family-session read/leave routes are implemented through Block 3; Block 4 adds the RSVP routes below. Health remains liveness, not database readiness or provider readiness.
 
 Current and planned route groups:
 
 - `/v1/auth/*`: administrative library endpoints with a configured matching base path.
 - `/v1/owner/sites`, site details and site users: owner-only management/provisioning.
-- `/v1/sites/:siteId/groups`: implemented OWNER/SITE_ADMIN group and member administration, including transient access-PIN reveal and rotation. RSVP, history, reports, and mural controls remain planned.
+- `/v1/sites/:siteId/groups`: implemented OWNER/SITE_ADMIN group and member administration, including transient access-PIN reveal and rotation. Reports and mural controls remain planned.
 - `/v1/public/sites/:siteId/guest/challenge` and challenge resend/verify routes: implemented exact-origin lookup with manual group PIN as the MVP default; simulated and real SMS remain explicit server modes.
 - `/v1/public/family/session`: implemented bearer-bound family read and explicit leave.
 - `/v1/owner/sites/:siteId/demo/guest-grant`: implemented five-minute OWNER grant for active, demo-marked, allowlisted simulations. Scoped reset remains planned.
+- `/v1/public/family/rsvp`: Block 4 family read/write using the existing bearer and exact registered origin; read remains available after the deadline while new writes are rejected at the server boundary.
+- `/v1/sites/:siteId/rsvp`: Block 4 admin current read/write with group/status filters, active-site post-deadline correction, and exact admin-session/site scope.
+- `/v1/sites/:siteId/rsvp/deadline`: Block 4 admin read/PATCH for the paired nullable deadline instant/timezone.
+- `/v1/sites/:siteId/rsvp/history`: Block 4 admin filtered cursor-paginated operational history, separate from current RSVP data.
 
 Exact routes/verbs/payloads are frozen with their task, with schema validation, examples and negative tests. Use structured errors with HTTP status and stable machine code (`VALIDATION_ERROR`, `UNAUTHORIZED`, `FORBIDDEN`, `RSVP_DEADLINE_PASSED`, `RSVP_CONFLICT`, `SMS_RATE_LIMITED`, `SMS_QUOTA_EXCEEDED`, `SITE_INACTIVE`). Error text must not disclose secrets, SQL internals or another tenant's data. UI maps codes to Portuguese messages. Export endpoints validate tenant access, filter scope, CSV formula injection and safe PDF escaping. Do not equate a successful HTTP response with a successful business mutation when a conflict occurred.
 
@@ -131,9 +136,12 @@ Setting inactive in the API blocks public operations. It does not remove Cloudfl
 - Recovery target: RPO <= 1 hour, RTO <= 8 hours. Verify the selected Neon plan, history window, retention, cost and a measured restore drill before claiming compliance.
 - Privacy text, retention after expiration, client media permissions, administrative recovery and provider-account access are explicit pre-launch inputs.
 - Logs must omit passwords, OTPs, activation/handoff links, cookies and raw guest contact data; correlate operations with non-secret request IDs and minimize sensitive metadata.
+- Block 4 passed the isolated migration, real PostgreSQL transaction/concurrency, cross-wedding fixture, independent desktop/mobile browser QA, static artifact privacy scan, and full local gates recorded in `docs/block4Validation.md`.
 
 ## Listening
 
 The design retains static independently deployed sites and a central API instead of introducing a CMS or per-client backend. Demo isolation uses existing tenant boundaries instead of a third permanent database. Family sessions use explicit bearer transport rather than cross-site cookies, while the administrative handoff remains a separate unresolved boundary. Infrastructure remains manually operated. Recovery capacity, live Twilio delivery, later operational routes, deterministic demo reset, provisioning mutations, and final artwork remain planned or gated rather than inferred from local mock success.
 
 The 2026-09-12 refinement exposes reusable sections alongside a page preset, keeping host-owned extensions possible without copying shared markup. It preserves the existing package structure and operational contracts; a second design system or generic page engine remains deferred.
+
+Block 4 extends the existing family-session boundary rather than creating RSVP identity. The API evaluates the deadline and owns transactional revisions/history; the shared feature package owns draft and presentation behavior. A single request receipt is checked before the public deadline so a lost successful response can be replayed safely, while a new post-deadline write is blocked. This ordering and the member-scoped conflict check preserve both retry safety and independent edits.

@@ -60,6 +60,8 @@ const fixedSite = {
   publicUrl: null,
   trustedOrigins: [],
   reviewApprovedAt: null,
+  rsvpDeadlineAt: null,
+  rsvpDeadlineTimezone: null,
   termStartsOn: null,
   termEndsOn: null,
   createdAt: "2028-02-29T12:00:00.000Z",
@@ -75,6 +77,8 @@ const fixedScopedSite = {
   publicationState: fixedSite.publicationState,
   isDemo: fixedSite.isDemo,
   publicUrl: fixedSite.publicUrl,
+  rsvpDeadlineAt: fixedSite.rsvpDeadlineAt,
+  rsvpDeadlineTimezone: fixedSite.rsvpDeadlineTimezone,
   termStartsOn: fixedSite.termStartsOn,
   termEndsOn: fixedSite.termEndsOn,
 };

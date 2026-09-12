@@ -26,6 +26,8 @@ const site = {
   publicUrl: "https://ana-e-joao.example.test",
   trustedOrigins: ["https://ana-e-joao.example.test"],
   reviewApprovedAt: null,
+  rsvpDeadlineAt: null,
+  rsvpDeadlineTimezone: null,
   termStartsOn: null,
   termEndsOn: null,
   createdAt: "2026-09-11T12:00:00.000Z",

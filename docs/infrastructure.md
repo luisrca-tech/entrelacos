@@ -25,11 +25,11 @@ No real provider resource was created, configured or mutated by the scaffold. Do
 
 ## Environment variables
 
-Names below reflect the runtime through Block 3. Empty examples are not functioning connections, and every secret remains server-only.
+Names below reflect the runtime through Block 4. Block 4 adds no secret or provider dependency; it uses the existing API, admin, family-session, and database configuration. Empty examples are not functioning connections, and every secret remains server-only.
 
 API URL examples use the origin `http://localhost:8080`; `/v1` belongs to the HTTP route path. The panel remains on `http://localhost:3000`, and the public demo remains on `http://localhost:4321`. The example `PUBLIC_SITE_ID=demo-wedding` is fictitious and does not identify a provisioned tenant.
 
-Database integration tests use `DATABASE_URL_TEST` exclusively and verify the actual Neon project, branch, endpoint, database, and role before proceeding. Never fall back to `DATABASE_URL`. Store the expected identities in private `DATABASE_PROJECT_ID`, `DATABASE_DEVELOPMENT_BRANCH_ID`, `DATABASE_TEST_BRANCH_ID`, and `DATABASE_NAME` configuration. Different hostnames alone do not prove branch isolation. Block 2 validation status is recorded in `docs/block2Validation.md`.
+Database integration tests use `DATABASE_URL_TEST` exclusively and verify the actual Neon project, branch, endpoint, database, and role before proceeding. Never fall back to `DATABASE_URL`. Store the expected identities in private `DATABASE_PROJECT_ID`, `DATABASE_DEVELOPMENT_BRANCH_ID`, `DATABASE_TEST_BRANCH_ID`, and `DATABASE_NAME` configuration. Different hostnames alone do not prove branch isolation. Block 2 validation status is recorded in `docs/block2Validation.md`; Block 4 migration and execution status is recorded in `docs/block4Validation.md`.
 
 | Variable | Consumer | Classification |
 | --- | --- | --- |
@@ -70,8 +70,10 @@ Do not copy development secrets or database rows to main. A stable repository we
 
 ## Open engineering inputs
 
-The Block 3 IP policy is implemented as 10 sends/15 minutes, 30 sends/24 hours, 10 verification attempts/15 minutes, and 10 exact lookups/15 minutes. The monthly per-site SMS ceiling remains a Block 5 decision. Select the video tool during media preflight. Verify provider plan/limits and recovery costs then, not from an old pricing snapshot. The guest browser transport is an `Authorization` bearer held only in site-namespaced `sessionStorage`; the separate admin-to-public handoff remains a later cross-origin decision.
+The Block 3 IP policy is implemented as 10 sends/15 minutes, 30 sends/24 hours, 10 verification attempts/15 minutes, and 10 exact lookups/15 minutes. The monthly per-site SMS ceiling remains a Block 5 decision. Block 4 uses no new environment variable: it requires only verified `DATABASE_URL_TEST` for isolated migration/tests and existing API/admin/family-session configuration. Apply the generated Block 4 migration to the test database first; apply to development only after separate review; never connect to production. Select the video tool during media preflight. Verify provider plan/limits and recovery costs then, not from an old pricing snapshot. The guest browser transport is an `Authorization` bearer held only in site-namespaced `sessionStorage`; the separate admin-to-public handoff remains a later cross-origin decision.
 
 ## Listening
 
 Block 3 keeps `DATABASE_URL` as the development connection and `DATABASE_URL_TEST` as the only integration-test connection. Real Twilio mode uses multiple independent acknowledgement gates so merely adding credentials cannot send an SMS. Forwarded IP headers are ignored unless the deployment explicitly declares a trusted proxy boundary.
+
+Block 4 keeps persistence in the existing Neon topology. RSVP writes, revision checks, history entries, and idempotency receipts are one transactional unit; concurrency and tenant isolation require real PostgreSQL evidence against the disposable test resource. The admin deadline input stores an explicit UTC instant plus IANA timezone. No SMS, personal phone, or provider credential is needed to validate an authenticated RSVP.

@@ -6,6 +6,7 @@ import {
   foreignKey,
   index,
   integer,
+  jsonb,
   pgEnum,
   pgTable,
   text,
@@ -57,6 +58,16 @@ export const guestRateLimitAction = pgEnum("guest_rate_limit_action", [
   "LOOKUP",
   "OTP_SEND",
   "OTP_VERIFY",
+]);
+export const rsvpState = pgEnum("rsvp_state", [
+  "PENDING",
+  "CONFIRMED",
+  "DECLINED",
+]);
+export const rsvpActorType = pgEnum("rsvp_actor_type", ["ADMIN", "FAMILY"]);
+export const rsvpRequestScope = pgEnum("rsvp_request_scope", [
+  "PUBLIC",
+  "ADMIN",
 ]);
 
 export const user = pgTable("user", {
@@ -163,6 +174,8 @@ export const site = pgTable(
     reviewApprovedAt: timestamp("review_approved_at", {
       withTimezone: true,
     }),
+    rsvpDeadlineAt: timestamp("rsvp_deadline_at", { withTimezone: true }),
+    rsvpDeadlineTimezone: text("rsvp_deadline_timezone"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -181,6 +194,10 @@ export const site = pgTable(
     check(
       "site_inactive_requires_previous_lifecycle_check",
       sql`${table.lifecycle} <> 'INACTIVE' OR ${table.previousLifecycle} IS NOT NULL`,
+    ),
+    check(
+      "site_rsvp_deadline_pair_check",
+      sql`(${table.rsvpDeadlineAt} IS NULL) = (${table.rsvpDeadlineTimezone} IS NULL)`,
     ),
   ],
 );
@@ -244,6 +261,8 @@ export const guestMember = pgTable(
     groupId: text("group_id").notNull(),
     fullName: text("full_name").notNull(),
     normalizedName: text("normalized_name").notNull(),
+    rsvpState: rsvpState("rsvp_state").notNull().default("PENDING"),
+    rsvpRevision: integer("rsvp_revision").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -268,6 +287,7 @@ export const guestMember = pgTable(
       "guest_member_normalized_name_not_blank_check",
       sql`length(trim(${table.normalizedName})) > 0`,
     ),
+    check("guest_member_rsvp_revision_check", sql`${table.rsvpRevision} >= 0`),
   ],
 );
 
@@ -467,6 +487,96 @@ export const familySession = pgTable(
   ],
 );
 
+export const rsvpHistory = pgTable(
+  "rsvp_history",
+  {
+    id: text("id").primaryKey(),
+    siteId: text("site_id").notNull(),
+    groupId: text("group_id").notNull(),
+    memberId: text("member_id").notNull(),
+    groupName: text("group_name").notNull(),
+    memberDisplayName: text("member_display_name").notNull(),
+    beforeState: rsvpState("before_state").notNull(),
+    afterState: rsvpState("after_state").notNull(),
+    actorType: rsvpActorType("actor_type").notNull(),
+    actorId: text("actor_id").notNull(),
+    actorDisplayName: text("actor_display_name").notNull(),
+    occurredAt: timestamp("occurred_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("rsvp_history_site_occurred_idx").on(
+      table.siteId,
+      table.occurredAt,
+      table.id,
+    ),
+    index("rsvp_history_site_group_idx").on(table.siteId, table.groupId),
+    index("rsvp_history_site_member_idx").on(table.siteId, table.memberId),
+    foreignKey({
+      columns: [table.siteId, table.groupId],
+      foreignColumns: [guestGroup.siteId, guestGroup.id],
+      name: "rsvp_history_site_group_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.siteId, table.groupId, table.memberId],
+      foreignColumns: [guestMember.siteId, guestMember.groupId, guestMember.id],
+      name: "rsvp_history_site_group_member_fk",
+    }).onDelete("cascade"),
+    check(
+      "rsvp_history_transition_check",
+      sql`${table.beforeState} <> ${table.afterState}`,
+    ),
+  ],
+);
+
+export const rsvpRequestReceipt = pgTable(
+  "rsvp_request_receipt",
+  {
+    id: text("id").primaryKey(),
+    siteId: text("site_id")
+      .notNull()
+      .references(() => site.id, { onDelete: "cascade" }),
+    groupId: text("group_id"),
+    scope: rsvpRequestScope("scope").notNull(),
+    actorType: rsvpActorType("actor_type").notNull(),
+    actorId: text("actor_id").notNull(),
+    requestId: text("request_id").notNull(),
+    requestHash: text("request_hash").notNull(),
+    responseStatus: text("response_status").notNull(),
+    responseBody: jsonb("response_body").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("rsvp_request_receipt_site_scope_actor_request_idx").on(
+      table.siteId,
+      table.scope,
+      table.actorType,
+      table.actorId,
+      table.requestId,
+    ),
+    index("rsvp_request_receipt_site_created_idx").on(
+      table.siteId,
+      table.createdAt,
+    ),
+    foreignKey({
+      columns: [table.siteId, table.groupId],
+      foreignColumns: [guestGroup.siteId, guestGroup.id],
+      name: "rsvp_request_receipt_site_group_fk",
+    }).onDelete("cascade"),
+    check(
+      "rsvp_request_receipt_request_hash_check",
+      sql`${table.requestHash} ~ '^[a-f0-9]{64}$'`,
+    ),
+    check(
+      "rsvp_request_receipt_group_scope_check",
+      sql`(${table.scope} = 'PUBLIC' AND ${table.groupId} IS NOT NULL) OR (${table.scope} = 'ADMIN')`,
+    ),
+  ],
+);
+
 export const siteTerm = pgTable(
   "site_term",
   {
@@ -639,6 +749,8 @@ export const siteRelations = relations(site, ({ many, one }) => ({
   guestVerificationSends: many(guestVerificationSend),
   guestRateLimitEvents: many(guestRateLimitEvent),
   familySessions: many(familySession),
+  rsvpHistory: many(rsvpHistory),
+  rsvpRequestReceipts: many(rsvpRequestReceipt),
   term: one(siteTerm),
 }));
 
@@ -652,9 +764,11 @@ export const guestGroupRelations = relations(guestGroup, ({ one, many }) => ({
   verificationSends: many(guestVerificationSend),
   rateLimitEvents: many(guestRateLimitEvent),
   familySessions: many(familySession),
+  rsvpHistory: many(rsvpHistory),
+  rsvpRequestReceipts: many(rsvpRequestReceipt),
 }));
 
-export const guestMemberRelations = relations(guestMember, ({ one }) => ({
+export const guestMemberRelations = relations(guestMember, ({ one, many }) => ({
   site: one(site, {
     fields: [guestMember.siteId],
     references: [site.id],
@@ -663,6 +777,7 @@ export const guestMemberRelations = relations(guestMember, ({ one }) => ({
     fields: [guestMember.siteId, guestMember.groupId],
     references: [guestGroup.siteId, guestGroup.id],
   }),
+  rsvpHistory: many(rsvpHistory),
 }));
 
 export const guestVerificationChallengeRelations = relations(
@@ -728,6 +843,35 @@ export const familySessionRelations = relations(familySession, ({ one }) => ({
     references: [guestGroup.siteId, guestGroup.id],
   }),
 }));
+
+export const rsvpHistoryRelations = relations(rsvpHistory, ({ one }) => ({
+  site: one(site, {
+    fields: [rsvpHistory.siteId],
+    references: [site.id],
+  }),
+  group: one(guestGroup, {
+    fields: [rsvpHistory.siteId, rsvpHistory.groupId],
+    references: [guestGroup.siteId, guestGroup.id],
+  }),
+  member: one(guestMember, {
+    fields: [rsvpHistory.siteId, rsvpHistory.groupId, rsvpHistory.memberId],
+    references: [guestMember.siteId, guestMember.groupId, guestMember.id],
+  }),
+}));
+
+export const rsvpRequestReceiptRelations = relations(
+  rsvpRequestReceipt,
+  ({ one }) => ({
+    site: one(site, {
+      fields: [rsvpRequestReceipt.siteId],
+      references: [site.id],
+    }),
+    group: one(guestGroup, {
+      fields: [rsvpRequestReceipt.siteId, rsvpRequestReceipt.groupId],
+      references: [guestGroup.siteId, guestGroup.id],
+    }),
+  }),
+);
 
 export const siteTermRelations = relations(siteTerm, ({ one }) => ({
   site: one(site, { fields: [siteTerm.siteId], references: [site.id] }),

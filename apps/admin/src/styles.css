@@ -22,8 +22,46 @@ a {
 }
 
 button,
-input {
+input,
+select {
   font: inherit;
+}
+.rsvp-admin [role="tab"][aria-selected="true"] {
+  outline: 2px solid currentColor;
+}
+.rsvp-group-list {
+  display: grid;
+  gap: 16px;
+  margin: 24px 0;
+}
+.rsvp-group {
+  padding: 20px;
+  border: 1px solid #65735d;
+  border-radius: 6px;
+}
+.rsvp-member-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(180px, 260px);
+  align-items: center;
+  gap: 16px;
+  padding: 12px 0;
+  border-top: 1px solid #65735d;
+}
+.rsvp-member-row select,
+.rsvp-filters select {
+  min-height: 44px;
+  width: 100%;
+  padding: 10px 12px;
+  color: #1e281e;
+  background: #fffaf1;
+  border: 1px solid #a8a18f;
+  border-radius: 4px;
+}
+.rsvp-history {
+  display: grid;
+  gap: 12px;
+  padding-left: 24px;
+  line-height: 1.6;
 }
 
 .page-shell,
@@ -485,6 +523,9 @@ select:focus-visible {
     display: grid;
   }
   .guest-member-editor {
+    grid-template-columns: 1fr;
+  }
+  .rsvp-member-row {
     grid-template-columns: 1fr;
   }
 }

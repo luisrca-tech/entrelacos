@@ -76,6 +76,21 @@ export const instantSchema = z
   )
   .refine((value) => Number.isFinite(Date.parse(value)), "Invalid instant");
 
+function validIanaTimezone(value: string): boolean {
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: value }).format();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export const ianaTimezoneSchema = z
+  .string()
+  .min(1)
+  .max(64)
+  .refine(validIanaTimezone, "Expected a valid IANA timezone");
+
 function parseSafeHttpsUrl(value: string): URL | undefined {
   try {
     const parsed = new URL(value);
@@ -167,6 +182,8 @@ export const siteRecordSchema = strictObject({
   reviewApprovedAt: instantSchema.nullable(),
   termStartsOn: calendarDateSchema.nullable(),
   termEndsOn: calendarDateSchema.nullable(),
+  rsvpDeadlineAt: instantSchema.nullable(),
+  rsvpDeadlineTimezone: ianaTimezoneSchema.nullable(),
   createdAt: instantSchema,
   updatedAt: instantSchema,
 }).superRefine((value, context) => {
@@ -193,6 +210,20 @@ export const siteRecordSchema = strictObject({
       code: "custom",
       path: ["termEndsOn"],
       message: "Term end must be on or after term start",
+    });
+  }
+  if (
+    (value.rsvpDeadlineAt === null) !==
+    (value.rsvpDeadlineTimezone === null)
+  ) {
+    context.addIssue({
+      code: "custom",
+      path: [
+        value.rsvpDeadlineAt === null
+          ? "rsvpDeadlineTimezone"
+          : "rsvpDeadlineAt",
+      ],
+      message: "RSVP deadline instant and timezone must be set together",
     });
   }
 });
@@ -294,6 +325,8 @@ export const siteScopedRecordSchema = strictObject({
   publicUrl: publicUrlSchema.nullable(),
   termStartsOn: calendarDateSchema.nullable(),
   termEndsOn: calendarDateSchema.nullable(),
+  rsvpDeadlineAt: instantSchema.nullable(),
+  rsvpDeadlineTimezone: ianaTimezoneSchema.nullable(),
 });
 
 export const siteScopedReadResponseSchema = strictObject({
@@ -730,6 +763,167 @@ export type FamilySessionReadResponse = z.infer<
 >;
 
 export const familySessionLeaveResponseSchema = adminMutationResponseSchema;
+
+export const rsvpStateSchema = z.enum(["PENDING", "CONFIRMED", "DECLINED"]);
+export type RsvpState = z.infer<typeof rsvpStateSchema>;
+
+export const rsvpActorTypeSchema = z.enum(["ADMIN", "FAMILY"]);
+export type RsvpActorType = z.infer<typeof rsvpActorTypeSchema>;
+
+export const rsvpDeadlineSchema = strictObject({
+  deadlineAt: instantSchema.nullable(),
+  deadlineTimezone: ianaTimezoneSchema.nullable(),
+}).superRefine((value, context) => {
+  if ((value.deadlineAt === null) !== (value.deadlineTimezone === null)) {
+    context.addIssue({
+      code: "custom",
+      path: [value.deadlineAt === null ? "deadlineTimezone" : "deadlineAt"],
+      message: "RSVP deadline instant and timezone must be set together",
+    });
+  }
+});
+export type RsvpDeadline = z.infer<typeof rsvpDeadlineSchema>;
+
+export const rsvpMemberRecordSchema = strictObject({
+  id: identifierSchema,
+  fullName: nonEmptyText(160),
+  isRepresentative: z.boolean(),
+  state: rsvpStateSchema,
+  revision: z.number().int().nonnegative(),
+});
+export type RsvpMemberRecord = z.infer<typeof rsvpMemberRecordSchema>;
+
+const rsvpMemberUpdateSchema = strictObject({
+  memberId: identifierSchema,
+  state: rsvpStateSchema,
+  expectedRevision: z.number().int().nonnegative(),
+});
+export type RsvpMemberUpdate = z.infer<typeof rsvpMemberUpdateSchema>;
+
+function uniqueMemberUpdates<T extends z.ZodTypeAny>(schema: T) {
+  return strictObject({
+    requestId: z.string().uuid(),
+    members: z.array(schema).min(1).max(500),
+  }).superRefine((value, context) => {
+    const ids = new Set<string>();
+    for (const member of value.members as Array<{ memberId: string }>) {
+      if (ids.has(member.memberId)) {
+        context.addIssue({
+          code: "custom",
+          path: ["members"],
+          message: "RSVP member updates must be unique",
+        });
+      }
+      ids.add(member.memberId);
+    }
+  });
+}
+
+export const familyRsvpWriteInputSchema = uniqueMemberUpdates(
+  rsvpMemberUpdateSchema,
+);
+export const adminRsvpWriteInputSchema = familyRsvpWriteInputSchema;
+export type FamilyRsvpWriteInput = z.infer<typeof familyRsvpWriteInputSchema>;
+export type AdminRsvpWriteInput = z.infer<typeof adminRsvpWriteInputSchema>;
+
+export const familyRsvpResponseSchema = strictObject({
+  siteId: siteIdSchema,
+  groupId: identifierSchema,
+  deadlineAt: instantSchema.nullable(),
+  deadlineTimezone: ianaTimezoneSchema.nullable(),
+  serverNow: instantSchema,
+  canEdit: z.boolean(),
+  readOnlyReason: z.enum(["DEADLINE_PASSED"]).nullable(),
+  members: z.array(rsvpMemberRecordSchema).min(1),
+});
+export type FamilyRsvpResponse = z.infer<typeof familyRsvpResponseSchema>;
+
+export const rsvpWriteResponseSchema = strictObject({
+  requestId: z.string().uuid(),
+  acceptedAt: instantSchema,
+  result: z.enum(["APPLIED", "NO_CHANGE"]),
+  replayed: z.boolean(),
+  members: z.array(rsvpMemberRecordSchema).min(1),
+});
+export type RsvpWriteResponse = z.infer<typeof rsvpWriteResponseSchema>;
+
+export const rsvpTotalsSchema = strictObject({
+  pending: z.number().int().nonnegative(),
+  confirmed: z.number().int().nonnegative(),
+  declined: z.number().int().nonnegative(),
+});
+
+export const rsvpGroupRecordSchema = strictObject({
+  id: identifierSchema,
+  name: nonEmptyText(160),
+  members: z.array(rsvpMemberRecordSchema),
+  totals: rsvpTotalsSchema,
+});
+
+export const siteRsvpQuerySchema = strictObject({
+  groupId: identifierSchema.optional(),
+  state: rsvpStateSchema.optional(),
+});
+
+export const siteRsvpResponseSchema = strictObject({
+  siteId: siteIdSchema,
+  lifecycle: z.enum(["DRAFT", "IN_REVIEW", "ACTIVE", "INACTIVE"]),
+  deadlineAt: instantSchema.nullable(),
+  deadlineTimezone: ianaTimezoneSchema.nullable(),
+  totals: rsvpTotalsSchema,
+  groups: z.array(rsvpGroupRecordSchema),
+});
+export type SiteRsvpResponse = z.infer<typeof siteRsvpResponseSchema>;
+
+export const rsvpHistoryQuerySchema = strictObject({
+  cursor: z.string().min(1).max(500).optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+  groupId: identifierSchema.optional(),
+  memberId: identifierSchema.optional(),
+  actorType: rsvpActorTypeSchema.optional(),
+  beforeState: rsvpStateSchema.optional(),
+  afterState: rsvpStateSchema.optional(),
+  from: instantSchema.optional(),
+  to: instantSchema.optional(),
+});
+export type RsvpHistoryQuery = z.infer<typeof rsvpHistoryQuerySchema>;
+
+export const rsvpHistoryEntrySchema = strictObject({
+  id: identifierSchema,
+  siteId: siteIdSchema,
+  groupId: identifierSchema,
+  groupName: nonEmptyText(160),
+  memberId: identifierSchema,
+  memberDisplayName: nonEmptyText(160),
+  beforeState: rsvpStateSchema,
+  afterState: rsvpStateSchema,
+  actorType: rsvpActorTypeSchema,
+  actorId: identifierSchema,
+  actorDisplayName: nonEmptyText(160),
+  occurredAt: instantSchema,
+});
+
+export const rsvpHistoryResponseSchema = strictObject({
+  entries: z.array(rsvpHistoryEntrySchema),
+  nextCursor: z.string().min(1).max(500).nullable(),
+});
+export type RsvpHistoryResponse = z.infer<typeof rsvpHistoryResponseSchema>;
+
+export const rsvpErrorCodeSchema = z.enum([
+  "RSVP_CONFLICT",
+  "RSVP_DEADLINE_PASSED",
+  "IDEMPOTENCY_KEY_REUSED",
+]);
+
+export const block4EndpointPaths = {
+  publicFamilyRsvpRead: "GET /v1/public/family/rsvp",
+  publicFamilyRsvpWrite: "POST /v1/public/family/rsvp",
+  siteRsvpRead: "GET /v1/sites/:siteId/rsvp",
+  siteRsvpWrite: "POST /v1/sites/:siteId/rsvp",
+  siteRsvpDeadlineRead: "GET /v1/sites/:siteId/rsvp/deadline",
+  siteRsvpDeadlineUpdate: "PATCH /v1/sites/:siteId/rsvp/deadline",
+  siteRsvpHistoryRead: "GET /v1/sites/:siteId/rsvp/history",
+} as const;
 
 export const block3EndpointPaths = {
   siteGroupsList: "GET /v1/sites/:siteId/groups",

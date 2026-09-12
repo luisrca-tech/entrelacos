@@ -1,0 +1,2 @@
+DROP INDEX "rsvp_request_receipt_scope_actor_request_idx";--> statement-breakpoint
+CREATE UNIQUE INDEX "rsvp_request_receipt_site_scope_actor_request_idx" ON "rsvp_request_receipt" USING btree ("site_id","scope","actor_type","actor_id","request_id");

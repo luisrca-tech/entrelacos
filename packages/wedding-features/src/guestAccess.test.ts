@@ -118,6 +118,92 @@ describe("guest access client", () => {
     expect(calls[1]?.[1].credentials).toBe("omit");
   });
 
+  it("reads and explicitly saves RSVP with the family bearer", async () => {
+    const calls: Array<[string, RequestInit]> = [];
+    const fetcher = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        calls.push([String(input), init ?? {}]);
+        if ((init?.method ?? "GET") === "GET")
+          return response({
+            siteId: "casamento-a",
+            groupId: "grupo-a",
+            deadlineAt: null,
+            deadlineTimezone: null,
+            serverNow: "2028-04-01T12:00:00.000Z",
+            canEdit: true,
+            readOnlyReason: null,
+            members: [
+              {
+                id: "membro-a",
+                fullName: "Ana",
+                isRepresentative: true,
+                state: "PENDING",
+                revision: 0,
+              },
+            ],
+          });
+        return response({
+          requestId: "f4217d1d-bcae-4ac1-a67b-fabc195b7b86",
+          acceptedAt: "2028-04-01T12:00:00.000Z",
+          result: "APPLIED",
+          replayed: false,
+          members: [
+            {
+              id: "membro-a",
+              fullName: "Ana",
+              isRepresentative: true,
+              state: "CONFIRMED",
+              revision: 1,
+            },
+          ],
+        });
+      },
+    );
+    const api = new GuestAccessApi({
+      apiOrigin: "https://api.example.test",
+      siteId: "casamento-a",
+      fetcher,
+    });
+    const token = "b".repeat(43);
+
+    await api.getRsvp(token);
+    await api.saveRsvp(token, {
+      requestId: "f4217d1d-bcae-4ac1-a67b-fabc195b7b86",
+      members: [
+        { memberId: "membro-a", state: "CONFIRMED", expectedRevision: 0 },
+      ],
+    });
+
+    expect(calls.map(([url]) => url)).toEqual([
+      "https://api.example.test/v1/public/family/rsvp",
+      "https://api.example.test/v1/public/family/rsvp",
+    ]);
+    expect(calls[0]?.[1].headers).toMatchObject({
+      Authorization: `Bearer ${token}`,
+    });
+    expect(calls[1]?.[1]).toMatchObject({ method: "POST" });
+    expect(calls[1]?.[1].body).toContain('"state":"CONFIRMED"');
+  });
+
+  it("rejects an unconfirmed RSVP write when the API is unavailable", async () => {
+    const api = new GuestAccessApi({
+      apiOrigin: "https://api.example.test",
+      siteId: "casamento-a",
+      fetcher: vi.fn(async () => {
+        throw new Error("offline");
+      }),
+    });
+
+    await expect(
+      api.saveRsvp("b".repeat(43), {
+        requestId: "f4217d1d-bcae-4ac1-a67b-fabc195b7b86",
+        members: [
+          { memberId: "membro-a", state: "CONFIRMED", expectedRevision: 0 },
+        ],
+      }),
+    ).rejects.toMatchObject({ status: 0, code: "NETWORK_ERROR" });
+  });
+
   it("sends an owner-issued demo grant only in the dedicated header", async () => {
     const grant = `${"g".repeat(24)}.${"s".repeat(43)}`;
     const fetcher = vi.fn(
@@ -223,6 +309,14 @@ describe("guest access client", () => {
         new GuestAccessApiError(429, "CHALLENGE_COOLDOWN", 15),
       ),
     ).toContain("15 segundos");
+    expect(
+      guestAccessErrorMessage(new GuestAccessApiError(409, "RSVP_CONFLICT")),
+    ).toContain("dados foram alterados");
+    expect(
+      guestAccessErrorMessage(
+        new GuestAccessApiError(409, "RSVP_DEADLINE_PASSED"),
+      ),
+    ).toContain("prazo");
   });
 
   it("does not claim that an unconfirmed real delivery was sent", () => {

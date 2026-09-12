@@ -186,6 +186,8 @@ function ownerRecord(bundle: SiteBundle): SiteRecord {
     reviewApprovedAt: row.reviewApprovedAt?.toISOString() ?? null,
     termStartsOn: term?.startsOn ?? null,
     termEndsOn: term?.endsOn ?? null,
+    rsvpDeadlineAt: row.rsvpDeadlineAt?.toISOString() ?? null,
+    rsvpDeadlineTimezone: row.rsvpDeadlineTimezone,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
@@ -205,6 +207,8 @@ function scopedRecord(bundle: SiteBundle) {
     publicUrl: record.publicUrl,
     termStartsOn: record.termStartsOn,
     termEndsOn: record.termEndsOn,
+    rsvpDeadlineAt: record.rsvpDeadlineAt,
+    rsvpDeadlineTimezone: record.rsvpDeadlineTimezone,
   };
 }
 
