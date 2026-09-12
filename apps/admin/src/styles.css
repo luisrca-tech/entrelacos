@@ -369,6 +369,105 @@ select:focus-visible {
   width: 22px;
   min-height: 22px;
 }
+.guest-groups-heading,
+.guest-group-form-heading,
+.guest-group-card {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+}
+.guest-groups-heading {
+  align-items: start;
+}
+.guest-groups-heading h2 {
+  margin-bottom: 12px;
+}
+.guest-group-form {
+  margin-top: 24px;
+  padding: 20px;
+  border: 1px solid #65735d;
+  border-radius: 6px;
+}
+.demo-guest-grant {
+  display: grid;
+  gap: 10px;
+  margin-top: 20px;
+  padding: 16px;
+  border: 1px solid #65735d;
+  background: #fffaf1;
+}
+.demo-guest-grant p {
+  margin: 0;
+}
+.demo-guest-grant input {
+  width: 100%;
+  min-width: 0;
+}
+.guest-group-form-heading {
+  align-items: center;
+}
+.guest-group-form-heading h3 {
+  margin: 0;
+}
+.guest-group-form fieldset {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 16px;
+  border: 1px solid #a8a18f;
+  border-radius: 4px;
+}
+.guest-group-form legend {
+  padding: 0 6px;
+  font-weight: 600;
+}
+.data-form .radio-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.radio-label input {
+  width: 20px;
+  min-height: 20px;
+}
+.guest-group-form .guest-members-fieldset {
+  gap: 16px;
+}
+.guest-member-editor {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: end;
+  gap: 12px;
+  padding: 16px 0;
+  border-bottom: 1px solid #65735d;
+}
+.guest-group-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 24px;
+}
+.guest-group-card {
+  align-items: start;
+  padding: 20px 0;
+  border-top: 1px solid #65735d;
+}
+.guest-group-card h3 {
+  margin-bottom: 8px;
+}
+.guest-group-meta {
+  margin: 0;
+  color: #c9b997;
+  font-size: 0.9rem;
+}
+.guest-group-members {
+  flex: 1 1 220px;
+  margin: 0;
+  padding-left: 20px;
+  line-height: 1.6;
+}
+.guest-group-card .inline-actions {
+  flex: 0 0 auto;
+}
 @media (max-width: 600px) {
   .panel-section {
     padding: 18px;
@@ -379,5 +478,13 @@ select:focus-visible {
   }
   .inline-actions {
     align-items: stretch;
+  }
+  .guest-groups-heading,
+  .guest-group-card,
+  .guest-member-editor {
+    display: grid;
+  }
+  .guest-member-editor {
+    grid-template-columns: 1fr;
   }
 }

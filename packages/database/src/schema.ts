@@ -5,6 +5,7 @@ import {
   date,
   foreignKey,
   index,
+  integer,
   pgEnum,
   pgTable,
   text,
@@ -38,6 +39,24 @@ export const siteDomainState = pgEnum("site_domain_state", [
 export const adminAccessPurpose = pgEnum("admin_access_purpose", [
   "ACTIVATION",
   "RECOVERY",
+]);
+export const guestVerificationMode = pgEnum("guest_verification_mode", [
+  "MANUAL",
+  "MOCK",
+  "TWILIO",
+]);
+export const guestVerificationChallengeStatus = pgEnum(
+  "guest_verification_challenge_status",
+  ["PENDING", "VERIFIED", "EXPIRED", "LOCKED", "REVOKED"],
+);
+export const guestVerificationSendStatus = pgEnum(
+  "guest_verification_send_status",
+  ["MANUAL", "RESERVED", "PROVIDER_ACCEPTED", "FAILED_FINAL", "UNKNOWN"],
+);
+export const guestRateLimitAction = pgEnum("guest_rate_limit_action", [
+  "LOOKUP",
+  "OTP_SEND",
+  "OTP_VERIFY",
 ]);
 
 export const user = pgTable("user", {
@@ -139,6 +158,7 @@ export const site = pgTable(
     publicationState: sitePublicationState("publication_state")
       .notNull()
       .default("UNPUBLISHED"),
+    isDemo: boolean("is_demo").notNull().default(false),
     publicUrl: text("public_url"),
     reviewApprovedAt: timestamp("review_approved_at", {
       withTimezone: true,
@@ -161,6 +181,288 @@ export const site = pgTable(
     check(
       "site_inactive_requires_previous_lifecycle_check",
       sql`${table.lifecycle} <> 'INACTIVE' OR ${table.previousLifecycle} IS NOT NULL`,
+    ),
+  ],
+);
+
+export const guestGroup = pgTable(
+  "guest_group",
+  {
+    id: text("id").primaryKey(),
+    siteId: text("site_id")
+      .notNull()
+      .references(() => site.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    normalizedName: text("normalized_name").notNull(),
+    isForeign: boolean("is_foreign").notNull().default(false),
+    phoneE164: text("phone_e164"),
+    representativeMemberId: text("representative_member_id").notNull(),
+    manualPinSeed: text("manual_pin_seed")
+      .notNull()
+      .default(sql`encode(gen_random_bytes(32), 'hex')`),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("guest_group_site_id_id_idx").on(table.siteId, table.id),
+    uniqueIndex("guest_group_site_id_phone_e164_idx")
+      .on(table.siteId, table.phoneE164)
+      .where(sql`${table.phoneE164} IS NOT NULL`),
+    index("guest_group_site_id_idx").on(table.siteId),
+    check(
+      "guest_group_name_not_blank_check",
+      sql`length(trim(${table.name})) > 0`,
+    ),
+    check(
+      "guest_group_normalized_name_not_blank_check",
+      sql`length(trim(${table.normalizedName})) > 0`,
+    ),
+    check(
+      "guest_group_phone_e164_check",
+      sql`${table.phoneE164} IS NULL OR ${table.phoneE164} ~ '^[+]55[1-9]{2}9[0-9]{8}$'`,
+    ),
+    check(
+      "guest_group_foreign_phone_check",
+      sql`${table.isForeign} = (${table.phoneE164} IS NULL)`,
+    ),
+    check(
+      "guest_group_manual_pin_seed_check",
+      sql`${table.manualPinSeed} ~ '^[a-f0-9]{64}$'`,
+    ),
+  ],
+);
+
+export const guestMember = pgTable(
+  "guest_member",
+  {
+    id: text("id").primaryKey(),
+    siteId: text("site_id").notNull(),
+    groupId: text("group_id").notNull(),
+    fullName: text("full_name").notNull(),
+    normalizedName: text("normalized_name").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("guest_member_site_id_group_id_id_idx").on(
+      table.siteId,
+      table.groupId,
+      table.id,
+    ),
+    index("guest_member_site_id_idx").on(table.siteId),
+    index("guest_member_group_id_idx").on(table.groupId),
+    foreignKey({
+      columns: [table.siteId, table.groupId],
+      foreignColumns: [guestGroup.siteId, guestGroup.id],
+      name: "guest_member_site_group_fk",
+    }).onDelete("cascade"),
+    check(
+      "guest_member_normalized_name_not_blank_check",
+      sql`length(trim(${table.normalizedName})) > 0`,
+    ),
+  ],
+);
+
+export const guestVerificationChallenge = pgTable(
+  "guest_verification_challenge",
+  {
+    id: text("id").primaryKey(),
+    siteId: text("site_id").notNull(),
+    groupId: text("group_id").notNull(),
+    mode: guestVerificationMode("mode").notNull().default("MOCK"),
+    status: guestVerificationChallengeStatus("status")
+      .notNull()
+      .default("PENDING"),
+    phoneE164: text("phone_e164").notNull(),
+    codeHash: text("code_hash"),
+    providerReference: text("provider_reference"),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    resendAvailableAt: timestamp("resend_available_at", {
+      withTimezone: true,
+    }).notNull(),
+    wrongAttempts: integer("wrong_attempts").notNull().default(0),
+    cooldownUntil: timestamp("cooldown_until", { withTimezone: true }),
+    verifiedAt: timestamp("verified_at", { withTimezone: true }),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    revocationReason: text("revocation_reason"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("guest_verification_challenge_site_id_id_idx").on(
+      table.siteId,
+      table.id,
+    ),
+    index("guest_verification_challenge_group_status_idx").on(
+      table.groupId,
+      table.status,
+    ),
+    index("guest_verification_challenge_phone_idx").on(table.phoneE164),
+    foreignKey({
+      columns: [table.siteId, table.groupId],
+      foreignColumns: [guestGroup.siteId, guestGroup.id],
+      name: "guest_verification_challenge_site_group_fk",
+    }).onDelete("cascade"),
+    check(
+      "guest_verification_challenge_phone_e164_check",
+      sql`${table.phoneE164} ~ '^[+]55[1-9]{2}9[0-9]{8}$'`,
+    ),
+    check(
+      "guest_verification_challenge_wrong_attempts_check",
+      sql`${table.wrongAttempts} BETWEEN 0 AND 5`,
+    ),
+    check(
+      "guest_verification_challenge_expiry_check",
+      sql`${table.expiresAt} > ${table.createdAt} AND ${table.expiresAt} <= ${table.createdAt} + interval '10 minutes'`,
+    ),
+    check(
+      "guest_verification_challenge_resend_check",
+      sql`${table.resendAvailableAt} >= ${table.createdAt}`,
+    ),
+    check(
+      "guest_verification_challenge_code_hash_check",
+      sql`${table.codeHash} IS NULL OR ${table.codeHash} ~ '^[a-f0-9]{64}$'`,
+    ),
+  ],
+);
+
+export const guestVerificationSend = pgTable(
+  "guest_verification_send",
+  {
+    id: text("id").primaryKey(),
+    siteId: text("site_id").notNull(),
+    groupId: text("group_id").notNull(),
+    challengeId: text("challenge_id").notNull(),
+    phoneE164: text("phone_e164").notNull(),
+    status: guestVerificationSendStatus("status").notNull().default("RESERVED"),
+    providerReference: text("provider_reference"),
+    failureCode: text("failure_code"),
+    reservedAt: timestamp("reserved_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("guest_verification_send_site_id_id_idx").on(
+      table.siteId,
+      table.id,
+    ),
+    index("guest_verification_send_challenge_status_idx").on(
+      table.challengeId,
+      table.status,
+    ),
+    index("guest_verification_send_site_group_idx").on(
+      table.siteId,
+      table.groupId,
+    ),
+    foreignKey({
+      columns: [table.siteId, table.groupId],
+      foreignColumns: [guestGroup.siteId, guestGroup.id],
+      name: "guest_verification_send_site_group_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.siteId, table.challengeId],
+      foreignColumns: [
+        guestVerificationChallenge.siteId,
+        guestVerificationChallenge.id,
+      ],
+      name: "guest_verification_send_challenge_fk",
+    }).onDelete("cascade"),
+    check(
+      "guest_verification_send_phone_e164_check",
+      sql`${table.phoneE164} ~ '^[+]55[1-9]{2}9[0-9]{8}$'`,
+    ),
+  ],
+);
+
+export const guestRateLimitEvent = pgTable(
+  "guest_rate_limit_event",
+  {
+    id: text("id").primaryKey(),
+    siteId: text("site_id"),
+    groupId: text("group_id"),
+    action: guestRateLimitAction("action").notNull(),
+    scopeKey: text("scope_key").notNull(),
+    ipFingerprint: text("ip_fingerprint").notNull(),
+    phoneFingerprint: text("phone_fingerprint"),
+    occurredAt: timestamp("occurred_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("guest_rate_limit_event_action_scope_time_idx").on(
+      table.action,
+      table.scopeKey,
+      table.occurredAt,
+    ),
+    index("guest_rate_limit_event_site_group_time_idx").on(
+      table.siteId,
+      table.groupId,
+      table.occurredAt,
+    ),
+    foreignKey({
+      columns: [table.siteId, table.groupId],
+      foreignColumns: [guestGroup.siteId, guestGroup.id],
+      name: "guest_rate_limit_event_site_group_fk",
+    }).onDelete("cascade"),
+    check(
+      "guest_rate_limit_event_scope_pair_check",
+      sql`${table.groupId} IS NULL OR ${table.siteId} IS NOT NULL`,
+    ),
+  ],
+);
+
+export const familySession = pgTable(
+  "family_session",
+  {
+    id: text("id").primaryKey(),
+    siteId: text("site_id").notNull(),
+    groupId: text("group_id").notNull(),
+    tokenHash: text("token_hash").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    revocationReason: text("revocation_reason"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("family_session_token_hash_idx").on(table.tokenHash),
+    index("family_session_site_group_idx").on(table.siteId, table.groupId),
+    index("family_session_active_expiry_idx").on(
+      table.groupId,
+      table.expiresAt,
+    ),
+    foreignKey({
+      columns: [table.siteId, table.groupId],
+      foreignColumns: [guestGroup.siteId, guestGroup.id],
+      name: "family_session_site_group_fk",
+    }).onDelete("cascade"),
+    check(
+      "family_session_expiry_check",
+      sql`${table.expiresAt} > ${table.createdAt} AND ${table.expiresAt} <= ${table.createdAt} + interval '7 days'`,
+    ),
+    check(
+      "family_session_token_hash_format_check",
+      sql`${table.tokenHash} ~ '^[a-f0-9]{64}$'`,
     ),
   ],
 );
@@ -332,7 +634,99 @@ export const siteRelations = relations(site, ({ many, one }) => ({
   origins: many(siteOrigin),
   memberships: many(siteMembership),
   accessTokens: many(adminAccessToken),
+  guestGroups: many(guestGroup),
+  guestVerificationChallenges: many(guestVerificationChallenge),
+  guestVerificationSends: many(guestVerificationSend),
+  guestRateLimitEvents: many(guestRateLimitEvent),
+  familySessions: many(familySession),
   term: one(siteTerm),
+}));
+
+export const guestGroupRelations = relations(guestGroup, ({ one, many }) => ({
+  site: one(site, {
+    fields: [guestGroup.siteId],
+    references: [site.id],
+  }),
+  members: many(guestMember),
+  verificationChallenges: many(guestVerificationChallenge),
+  verificationSends: many(guestVerificationSend),
+  rateLimitEvents: many(guestRateLimitEvent),
+  familySessions: many(familySession),
+}));
+
+export const guestMemberRelations = relations(guestMember, ({ one }) => ({
+  site: one(site, {
+    fields: [guestMember.siteId],
+    references: [site.id],
+  }),
+  group: one(guestGroup, {
+    fields: [guestMember.siteId, guestMember.groupId],
+    references: [guestGroup.siteId, guestGroup.id],
+  }),
+}));
+
+export const guestVerificationChallengeRelations = relations(
+  guestVerificationChallenge,
+  ({ one, many }) => ({
+    site: one(site, {
+      fields: [guestVerificationChallenge.siteId],
+      references: [site.id],
+    }),
+    group: one(guestGroup, {
+      fields: [
+        guestVerificationChallenge.siteId,
+        guestVerificationChallenge.groupId,
+      ],
+      references: [guestGroup.siteId, guestGroup.id],
+    }),
+    sends: many(guestVerificationSend),
+  }),
+);
+
+export const guestVerificationSendRelations = relations(
+  guestVerificationSend,
+  ({ one }) => ({
+    site: one(site, {
+      fields: [guestVerificationSend.siteId],
+      references: [site.id],
+    }),
+    group: one(guestGroup, {
+      fields: [guestVerificationSend.siteId, guestVerificationSend.groupId],
+      references: [guestGroup.siteId, guestGroup.id],
+    }),
+    challenge: one(guestVerificationChallenge, {
+      fields: [guestVerificationSend.siteId, guestVerificationSend.challengeId],
+      references: [
+        guestVerificationChallenge.siteId,
+        guestVerificationChallenge.id,
+      ],
+    }),
+  }),
+);
+
+export const guestRateLimitEventRelations = relations(
+  guestRateLimitEvent,
+  ({ one }) => ({
+    site: one(site, {
+      fields: [guestRateLimitEvent.siteId],
+      references: [site.id],
+    }),
+    group: one(guestGroup, {
+      fields: [guestRateLimitEvent.siteId, guestRateLimitEvent.groupId],
+      references: [guestGroup.siteId, guestGroup.id],
+    }),
+  }),
+);
+
+export const familySessionRelations = relations(familySession, ({ one }) => ({
+  site: one(site, {
+    fields: [familySession.siteId],
+    references: [site.id],
+  }),
+  group: one(guestGroup, {
+    fields: [familySession.siteId, familySession.groupId],
+    references: [guestGroup.siteId, guestGroup.id],
+  }),
 }));
 
 export const siteTermRelations = relations(siteTerm, ({ one }) => ({

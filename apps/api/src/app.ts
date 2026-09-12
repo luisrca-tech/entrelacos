@@ -2,7 +2,10 @@ import type { ApiProblem, HealthResponse } from "@entrelacos/contracts";
 import { Hono } from "hono";
 import { createAdminAccessHttpRouter } from "./adminAccessHttp";
 import { type AuthHttpOptions, createAuthHttpRouter } from "./authHttp";
+import { createDemoGuestGrantHttpRouter } from "./demoGuestGrant";
+import { createGuestGroupsHttpRouter } from "./guestGroupsHttp";
 import { createHandoffHttpRouter } from "./handoffHttp";
+import { createPublicGuestHttpRouter } from "./publicGuestHttp";
 import { createSitesHttpRouter } from "./sitesHttp";
 
 export function createApp(options?: AuthHttpOptions) {
@@ -19,6 +22,9 @@ export function createApp(options?: AuthHttpOptions) {
     app.route("/", createAuthHttpRouter(options));
     app.route("/", createAdminAccessHttpRouter(options));
     app.route("/", createSitesHttpRouter(options));
+    app.route("/", createGuestGroupsHttpRouter(options));
+    app.route("/", createDemoGuestGrantHttpRouter(options));
+    app.route("/", createPublicGuestHttpRouter(options));
     app.route("/", createHandoffHttpRouter(options));
   }
 
