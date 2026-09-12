@@ -34,6 +34,19 @@
 - All authorization is server-side. Public frontends never access Neon. Allowed browser origins/CORS are explicit per wedding; wildcard CORS or authorization is forbidden.
 - Production deployment, domain/DNS work, main migrations, provider setup, and lifecycle status are manual operations recorded by the operator.
 
+## Template/site planning refinement — 2026-09-12
+
+The operator requested this [comparative study](../plans/entrelacos-template-site-study.md) and planning update. Existing managed-service and composition decisions remain accepted; the following implementation directions are scheduled for Blocks 6–8, not delivered by this documentation change:
+
+- The template owns reusable layouts, sections, theme and preset composition; each wedding owns routes, public content, SEO inputs, media and local extensions.
+- Keep `template-root` and `wedding-demo`. Establish a reviewed presentation `/v1` API in B6-T0 and migrate existing imports explicitly; no new design package is needed yet.
+- Prove reuse with a normal demo and a second local composition with distinct identity/media/SEO, an extra page and a custom section. No permanent third environment is introduced.
+- Keep guest behavior in `wedding-features` and operational authority in the API. Site customization cannot override authentication, deadlines, moderation or tenant isolation.
+- Use operator-authored Astro composition; defer page builders, inheritance, plugin registries and CMS persistence.
+- Track Git/build inputs and artifacts for independent releases; a workspace export suffix alone does not pin deployed source.
+
+Exact section contracts/slots and client indexing intent remain B6 inputs. Demo/review noindex is the study's recommended default, not access control or an already implemented behavior. Existing visual/media/provider gates remain open.
+
 ## Superseded historical details
 
 - Historical notes that made the group name optional are superseded. Current rule: group name required.
@@ -58,3 +71,5 @@ Open items must be marked pending or blocked in implementation evidence. A mock 
 The package-manager migration authorized on 2026-09-09 replaces the earlier package-manager choice with Bun 1.3.14 for all workspaces and CI. Node.js 24, Turborepo, Vitest, dependency version pins, and application boundaries remain unchanged. Isolated installs retain explicit workspace dependency boundaries and package-local CLI paths; a runtime or test-framework migration is outside this change.
 
 Block 3 now selects a persistent six-digit group PIN for provider-free MVP delivery and keeps browser-tab-scoped guest persistence. A random database seed plus a domain-separated server HMAC derives the PIN; plaintext PIN storage and an offline-brute-forceable plain hash were rejected. `localStorage`, cross-site cookies, URL tokens, and a custom refresh-token system remain rejected because the seven-day server record already supplies the absolute lifetime while `sessionStorage` reduces browser persistence and cross-site credential coupling.
+
+The template/site study preserves the reference repository's host/package ownership but expands the planned public section surface for local customization. Fixed-page-only reuse and a generic page builder were rejected; the follow-up is a two-consumer build proof before final visual work.
