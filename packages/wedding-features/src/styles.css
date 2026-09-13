@@ -241,6 +241,151 @@
   font-size: 0.75rem;
 }
 
+.entrelacos-family-message {
+  display: grid;
+  gap: 1rem;
+  border-top: 1px solid var(--template-line, rgba(37, 53, 43, 0.18));
+  padding-top: 1.5rem;
+}
+
+.entrelacos-family-message label {
+  display: grid;
+  gap: 0.45rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.entrelacos-family-message textarea {
+  width: 100%;
+  min-height: 8rem;
+  resize: vertical;
+  border: 1px solid var(--template-line, rgba(37, 53, 43, 0.32));
+  border-radius: 0;
+  padding: 0.75rem;
+  background: #fffdf8;
+  color: var(--template-ink, #25352b);
+  font: inherit;
+  line-height: 1.55;
+}
+
+.entrelacos-family-message__readonly {
+  margin: 0;
+  border-left: 3px solid #9c713f;
+  padding: 0.75rem 1rem;
+  background: rgba(156, 113, 63, 0.1);
+  line-height: 1.5;
+}
+
+.entrelacos-family-message__meta,
+.entrelacos-family-message__actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.entrelacos-family-message__meta {
+  color: var(--template-muted, #637066);
+  font-size: 0.75rem;
+}
+
+.entrelacos-family-message__meta [data-invalid="true"] {
+  color: #8e2e24;
+  font-weight: 700;
+}
+
+.entrelacos-message-mural {
+  display: grid;
+  gap: 1.5rem;
+  min-width: 0;
+  padding: clamp(2rem, 5vw, 4rem);
+  background: var(--template-paper, #fffdf8);
+  color: var(--template-ink, #25352b);
+}
+
+.entrelacos-message-mural > header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1.5rem;
+}
+
+.entrelacos-message-mural h2 {
+  margin: 0;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(2.3rem, 6vw, 4.8rem);
+  font-weight: 400;
+  letter-spacing: -0.05em;
+  line-height: 0.96;
+}
+
+.entrelacos-message-mural__list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr));
+  gap: 1rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.entrelacos-message-mural__list li {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 14rem;
+  border: 1px solid var(--template-line, rgba(37, 53, 43, 0.18));
+  padding: 1.35rem;
+  background: var(--template-ivory, #f4f0e8);
+}
+
+.entrelacos-message-mural blockquote {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 1.2rem;
+  line-height: 1.5;
+}
+
+.entrelacos-message-mural__list li > p {
+  display: grid;
+  gap: 0.2rem;
+  margin: 2rem 0 0;
+  color: var(--template-muted, #637066);
+  font-size: 0.78rem;
+}
+
+.entrelacos-message-mural__list strong {
+  color: var(--template-ink, #25352b);
+}
+
+.entrelacos-message-mural__status {
+  margin: 0;
+  border: 1px solid var(--template-line, rgba(37, 53, 43, 0.18));
+  padding: 1rem;
+}
+
+.entrelacos-message-mural__refresh,
+.entrelacos-message-mural__more {
+  min-height: 2.75rem;
+  border: 1px solid var(--template-ink, #25352b);
+  padding: 0.65rem 1rem;
+  background: transparent;
+  color: var(--template-ink, #25352b);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+}
+
+.entrelacos-message-mural__more {
+  justify-self: center;
+}
+
+.entrelacos-message-mural button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
 .entrelacos-guest-access__form label small {
   color: var(--template-muted, #637066);
   font-size: 0.75rem;
@@ -356,6 +501,16 @@
     align-items: flex-start;
     flex-direction: column;
     gap: 0.15rem;
+  }
+
+  .entrelacos-family-message__actions,
+  .entrelacos-message-mural > header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .entrelacos-message-mural {
+    padding: 2rem 1rem;
   }
 
   .entrelacos-rsvp {

@@ -945,3 +945,242 @@ export const block3EndpointPaths = {
 
 export type Block3EndpointPath =
   (typeof block3EndpointPaths)[keyof typeof block3EndpointPaths];
+
+function validMessageText(value: string): boolean {
+  if (!/\S/u.test(value) || value.includes("<") || value.includes(">")) {
+    return false;
+  }
+  if (Array.from(value).length > 1_000) return false;
+  return Array.from(value).every((character) => {
+    const codePoint = character.codePointAt(0) ?? 0;
+    return (
+      codePoint === 10 ||
+      (codePoint > 31 && !(codePoint >= 127 && codePoint <= 159))
+    );
+  });
+}
+
+export const messageTextSchema = z
+  .string()
+  .transform((value) => value.replace(/\r\n?/g, "\n"))
+  .refine(validMessageText, "Expected 1-1000 plain-text Unicode code points");
+
+export const familyMessageReadOnlyReasonSchema = z.enum([
+  "MURAL_DISABLED",
+  "MESSAGE_BLOCKED",
+]);
+
+export const familyMessageRecordSchema = strictObject({
+  id: identifierSchema,
+  authorName: nonEmptyText(160),
+  groupName: nonEmptyText(160),
+  text: messageTextSchema,
+  revision: z.number().int().positive(),
+  createdAt: instantSchema,
+  updatedAt: instantSchema,
+});
+export type FamilyMessageRecord = z.infer<typeof familyMessageRecordSchema>;
+
+export const messageMutationInputSchema = strictObject({
+  requestId: z.string().uuid(),
+  expectedRevision: z.number().int().nonnegative(),
+  text: messageTextSchema,
+});
+export type MessageMutationInput = z.infer<typeof messageMutationInputSchema>;
+
+export const messageMutationResponseSchema = strictObject({
+  requestId: z.string().uuid(),
+  acceptedAt: instantSchema,
+  result: z.enum(["APPLIED", "NO_CHANGE"]),
+  replayed: z.boolean(),
+  message: familyMessageRecordSchema,
+});
+export type MessageMutationResponse = z.infer<
+  typeof messageMutationResponseSchema
+>;
+
+export const familyMessageResponseSchema = strictObject({
+  siteId: siteIdSchema,
+  groupId: identifierSchema,
+  currentRevision: z.number().int().nonnegative(),
+  canEdit: z.boolean(),
+  readOnlyReason: familyMessageReadOnlyReasonSchema.nullable(),
+  message: familyMessageRecordSchema.nullable(),
+});
+export type FamilyMessageResponse = z.infer<typeof familyMessageResponseSchema>;
+
+export const publicMuralQuerySchema = strictObject({
+  cursor: z.string().min(1).max(500).optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+});
+export type PublicMuralQuery = z.infer<typeof publicMuralQuerySchema>;
+
+export const publicMuralResponseSchema = strictObject({
+  enabled: z.boolean(),
+  messages: z.array(
+    strictObject({
+      id: identifierSchema,
+      authorName: nonEmptyText(160),
+      groupName: nonEmptyText(160),
+      text: messageTextSchema,
+      createdAt: instantSchema,
+      updatedAt: instantSchema,
+    }),
+  ),
+  nextCursor: z.string().min(1).max(500).nullable(),
+}).superRefine((value, context) => {
+  if (
+    !value.enabled &&
+    (value.messages.length > 0 || value.nextCursor !== null)
+  ) {
+    context.addIssue({
+      code: "custom",
+      message: "A disabled mural cannot expose stored messages",
+    });
+  }
+});
+export type PublicMuralResponse = z.infer<typeof publicMuralResponseSchema>;
+
+export const siteMessagesQuerySchema = strictObject({
+  cursor: z.string().min(1).max(500).optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+  groupId: identifierSchema.optional(),
+});
+
+export const siteMessageRecordSchema = strictObject({
+  groupId: identifierSchema,
+  groupName: nonEmptyText(160),
+  blocked: z.boolean(),
+  currentRevision: z.number().int().nonnegative(),
+  message: familyMessageRecordSchema.nullable(),
+});
+export type SiteMessageRecord = z.infer<typeof siteMessageRecordSchema>;
+
+export const siteMessagesResponseSchema = strictObject({
+  groups: z.array(siteMessageRecordSchema),
+  nextCursor: z.string().min(1).max(500).nullable(),
+});
+
+export const muralConfigurationSchema = strictObject({ enabled: z.boolean() });
+export type MuralConfiguration = z.infer<typeof muralConfigurationSchema>;
+
+export const muralConfigurationResponseSchema = strictObject({
+  siteId: siteIdSchema,
+  enabled: z.boolean(),
+});
+
+export const siteMessageBlockInputSchema = strictObject({
+  blocked: z.boolean(),
+});
+export const siteMessageBlockResponseSchema = strictObject({
+  groupId: identifierSchema,
+  blocked: z.boolean(),
+});
+
+export const messageDeletionInputSchema = strictObject({
+  expectedRevision: z.number().int().positive(),
+});
+export const messageDeletionResponseSchema = strictObject({
+  ok: z.literal(true),
+  currentRevision: z.number().int().nonnegative(),
+});
+
+export const groupDeleteConfirmationSchema = strictObject({
+  confirmGroupId: identifierSchema,
+  confirmGroupName: nonEmptyText(160),
+});
+export type GroupDeleteConfirmation = z.infer<
+  typeof groupDeleteConfirmationSchema
+>;
+
+const explicitBooleanQuerySchema = z
+  .enum(["true", "false"])
+  .transform((value) => value === "true");
+
+export const rsvpExportQuerySchema = strictObject({
+  requestId: z.string().uuid(),
+  includePhone: explicitBooleanQuerySchema,
+  groupId: identifierSchema.optional(),
+  state: rsvpStateSchema.optional(),
+});
+export type RsvpExportQuery = z.infer<typeof rsvpExportQuerySchema>;
+
+export const smsQuotaInputSchema = strictObject({
+  monthlyLimit: z.number().int().min(0).max(1_000_000),
+});
+export type SmsQuotaInput = z.infer<typeof smsQuotaInputSchema>;
+
+export const smsQuotaResponseSchema = strictObject({
+  siteId: siteIdSchema,
+  monthlyLimit: z.number().int().min(0).max(1_000_000),
+});
+
+export const smsUsageAlertSchema = z.enum([
+  "NOT_CONFIGURED",
+  "BELOW_80",
+  "AT_OR_ABOVE_80",
+  "AT_OR_ABOVE_100",
+]);
+
+export const smsUsageCountersSchema = strictObject({
+  reserved: z.number().int().nonnegative(),
+  providerAccepted: z.number().int().nonnegative(),
+  failedFinal: z.number().int().nonnegative(),
+  unknown: z.number().int().nonnegative(),
+  consumed: z.number().int().nonnegative(),
+}).superRefine((value, context) => {
+  if (
+    value.consumed !==
+    value.reserved + value.providerAccepted + value.failedFinal + value.unknown
+  ) {
+    context.addIssue({
+      code: "custom",
+      path: ["consumed"],
+      message: "Consumed SMS usage must equal all reserved outcomes",
+    });
+  }
+});
+
+export const smsUsageResponseSchema = strictObject({
+  siteId: siteIdSchema,
+  timezone: z.literal("America/Sao_Paulo"),
+  periodStart: instantSchema,
+  periodEnd: instantSchema,
+  monthlyLimit: z.number().int().min(0).max(1_000_000).nullable(),
+  alert: smsUsageAlertSchema,
+  realSms: smsUsageCountersSchema,
+  simulated: smsUsageCountersSchema,
+});
+export type SmsUsageResponse = z.infer<typeof smsUsageResponseSchema>;
+
+export const block5ErrorCodeSchema = z.enum([
+  "MURAL_DISABLED",
+  "MESSAGE_BLOCKED",
+  "MESSAGE_CONFLICT",
+  "MESSAGE_REMOVED",
+  "MESSAGE_NOT_FOUND",
+  "GROUP_CONFIRMATION_MISMATCH",
+  "RSVP_RESULT_REMOVED",
+  "SMS_QUOTA_NOT_CONFIGURED",
+  "SMS_QUOTA_EXCEEDED",
+]);
+
+export const block5EndpointPaths = {
+  publicFamilyMessageRead: "GET /v1/public/family/message",
+  publicFamilyMessageWrite: "PUT /v1/public/family/message",
+  publicMuralRead: "GET /v1/public/sites/:siteId/mural",
+  siteMessagesRead: "GET /v1/sites/:siteId/messages",
+  siteMuralRead: "GET /v1/sites/:siteId/mural",
+  siteMuralUpdate: "PATCH /v1/sites/:siteId/mural",
+  siteMessageDelete: "DELETE /v1/sites/:siteId/groups/:groupId/message",
+  siteMessageBlockUpdate:
+    "PATCH /v1/sites/:siteId/groups/:groupId/message-block",
+  siteGroupDelete: "DELETE /v1/sites/:siteId/groups/:groupId",
+  siteRsvpCsvExport: "GET /v1/sites/:siteId/reports/rsvp.csv",
+  siteRsvpPdfExport: "GET /v1/sites/:siteId/reports/rsvp.pdf",
+  siteSmsUsageRead: "GET /v1/sites/:siteId/sms-usage",
+  ownerSiteSmsQuotaUpdate: "PATCH /v1/owner/sites/:siteId/sms-quota",
+} as const;
+
+export type Block5EndpointPath =
+  (typeof block5EndpointPaths)[keyof typeof block5EndpointPaths];

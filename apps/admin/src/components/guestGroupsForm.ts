@@ -1,5 +1,6 @@
 import {
   brazilianPhoneInputSchema,
+  type GroupDeleteConfirmation,
   type GuestGroupCreateInput,
 } from "@entrelacos/contracts";
 
@@ -25,6 +26,15 @@ export function canIssueDemoGuestGrant(
   return (
     owner && isDemo && !inactive && !group.isForeign && group.phone !== null
   );
+}
+
+export function groupDeletionConfirmation(
+  groupId: string,
+  groupName: string,
+  confirmation: string,
+): GroupDeleteConfirmation | null {
+  if (confirmation !== groupName) return null;
+  return { confirmGroupId: groupId, confirmGroupName: groupName };
 }
 
 export function createGuestGroupDraft(_individual = false): GuestGroupDraft {

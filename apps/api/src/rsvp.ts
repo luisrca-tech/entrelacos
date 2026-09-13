@@ -23,6 +23,7 @@ import {
   guestMember,
   rsvpHistory,
   rsvpRequestReceipt,
+  rsvpRequestReceiptGroup,
   site,
 } from "@entrelacos/database/schema";
 import { and, asc, desc, eq, gte, inArray, lt, or, sql } from "drizzle-orm";
@@ -244,6 +245,8 @@ async function writeRsvp(
           "IDEMPOTENCY_KEY_REUSED",
           "RSVP request ID was already used",
         );
+      if (receipt.responseStatus === "REMOVED" || receipt.responseBody === null)
+        reject(410, "RSVP_RESULT_REMOVED", "RSVP result was removed");
       return rsvpWriteResponseSchema.parse({
         ...(receipt.responseBody as Record<string, unknown>),
         replayed: true,
@@ -371,8 +374,9 @@ async function writeRsvp(
       replayed: false,
       members: resultMembers,
     });
+    const receiptId = randomUUID();
     await tx.insert(rsvpRequestReceipt).values({
-      id: randomUUID(),
+      id: receiptId,
       siteId: context.siteId,
       groupId: context.groupId,
       scope: context.scope,
@@ -384,6 +388,16 @@ async function writeRsvp(
       responseBody: response,
       createdAt: now,
     });
+    if (context.scope === "ADMIN") {
+      const groupIds = [...new Set(current.map((member) => member.groupId))];
+      await tx.insert(rsvpRequestReceiptGroup).values(
+        groupIds.map((groupId) => ({
+          siteId: context.siteId,
+          receiptId,
+          groupId,
+        })),
+      );
+    }
     return response;
   });
 }

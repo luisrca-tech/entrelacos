@@ -350,6 +350,11 @@ export function guestAccessErrorMessage(error: unknown): string {
   if (error.code === "OTP_EXPIRED" || error.code === "CHALLENGE_EXPIRED")
     return "Este acesso expirou. Confirme seus dados novamente.";
   if (
+    error.code === "SMS_QUOTA_NOT_CONFIGURED" ||
+    error.code === "SMS_QUOTA_EXCEEDED"
+  )
+    return "O envio de SMS está indisponível. Entre em contato com a organização do casamento para receber seu PIN de acesso.";
+  if (
     error.code === "CHALLENGE_NOT_FOUND" ||
     error.code === "CHALLENGE_NOT_ACTIVE" ||
     error.code === "UNAUTHORIZED"

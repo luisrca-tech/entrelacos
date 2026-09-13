@@ -3,6 +3,7 @@ import {
   type GuestGroupCreateInput,
   type GuestGroupRecord,
   type GuestGroupUpdateInput,
+  groupDeleteConfirmationSchema,
   guestGroupCreateInputSchema,
   guestGroupRecordSchema,
   guestGroupUpdateInputSchema,
@@ -12,6 +13,9 @@ import {
   guestGroup,
   guestMember,
   guestVerificationChallenge,
+  messageRequestReceipt,
+  rsvpRequestReceipt,
+  rsvpRequestReceiptGroup,
   site,
   siteMembership,
 } from "@entrelacos/database/schema";
@@ -580,10 +584,75 @@ export async function deleteGuestGroup(
   actor: GuestGroupActor,
   siteId: string,
   groupId: string,
+  inputValue: unknown,
+  nowValue?: Date,
 ): Promise<{ ok: true }> {
+  const confirmation = groupDeleteConfirmationSchema.parse(inputValue);
+  const deletedAt = currentTime(nowValue);
   try {
     return await db.transaction(async (tx) => {
       await lockSiteForActor(tx, actor, siteId, true);
+      const groupResult = await tx.execute(sql`
+        SELECT id, name
+        FROM guest_group
+        WHERE site_id = ${siteId} AND id = ${groupId}
+        FOR UPDATE
+      `);
+      const group = groupResult.rows[0] as
+        | { id: string; name: string }
+        | undefined;
+      if (!group) notFound("GROUP_NOT_FOUND");
+      if (
+        confirmation.confirmGroupId !== group.id ||
+        confirmation.confirmGroupName !== group.name
+      ) {
+        conflict(
+          "GROUP_CONFIRMATION_MISMATCH",
+          "Group confirmation does not match",
+        );
+      }
+
+      const affectedReceipts = await tx
+        .select({ receiptId: rsvpRequestReceiptGroup.receiptId })
+        .from(rsvpRequestReceiptGroup)
+        .innerJoin(
+          rsvpRequestReceipt,
+          and(
+            eq(rsvpRequestReceipt.siteId, rsvpRequestReceiptGroup.siteId),
+            eq(rsvpRequestReceipt.id, rsvpRequestReceiptGroup.receiptId),
+            eq(rsvpRequestReceipt.scope, "ADMIN"),
+          ),
+        )
+        .where(
+          and(
+            eq(rsvpRequestReceiptGroup.siteId, siteId),
+            eq(rsvpRequestReceiptGroup.groupId, groupId),
+          ),
+        );
+      const receiptIds = affectedReceipts.map((receipt) => receipt.receiptId);
+      if (receiptIds.length > 0) {
+        await tx
+          .update(rsvpRequestReceipt)
+          .set({
+            responseStatus: "REMOVED",
+            responseBody: null,
+            removedAt: deletedAt,
+          })
+          .where(
+            and(
+              eq(rsvpRequestReceipt.siteId, siteId),
+              inArray(rsvpRequestReceipt.id, receiptIds),
+            ),
+          );
+      }
+      await tx
+        .delete(messageRequestReceipt)
+        .where(
+          and(
+            eq(messageRequestReceipt.siteId, siteId),
+            eq(messageRequestReceipt.groupId, groupId),
+          ),
+        );
       const result = await tx
         .delete(guestGroup)
         .where(and(eq(guestGroup.siteId, siteId), eq(guestGroup.id, groupId)))

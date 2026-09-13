@@ -1,4 +1,6 @@
 export { AdminRecognition } from "./AdminRecognition";
+export type { FamilyMessageFormProps } from "./FamilyMessageForm";
+export { FamilyMessageForm } from "./FamilyMessageForm";
 export type {
   FeatureAvailabilityItem,
   FeatureAvailabilityProps,
@@ -26,6 +28,16 @@ export {
   readGuestSession,
   writeGuestSession,
 } from "./guestAccess";
+export type { MessageMuralProps } from "./MessageMural";
+export { MessageMural, mergeMuralMessages } from "./MessageMural";
+export type { WeddingMessagesApiOptions } from "./messages";
+export {
+  countMessageCodePoints,
+  getMessageErrorMessage,
+  muralRefreshEventName,
+  WeddingMessagesApi,
+  WeddingMessagesApiError,
+} from "./messages";
 export type { RsvpFormMember, RsvpFormProps } from "./RsvpForm";
 export { RsvpForm } from "./RsvpForm";
 export type { RsvpDraft, RsvpMemberSnapshot, RsvpStatus } from "./rsvpDraft";
