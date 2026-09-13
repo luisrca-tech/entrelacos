@@ -44,7 +44,7 @@ const footer = {
   ],
   rsvp: { label: "Confirmar presença", href: "#guest-access" },
   year: "2027",
-  copyright: "© 2027 Marina & Caio",
+  copyright: "© Marina & Caio",
   attribution: "By EntreLaços",
 };
 const hero = {
@@ -67,13 +67,14 @@ const story = {
   id: "story",
   eyebrow: "01 / A nossa história",
   title: "Dois caminhos que escolheram caminhar juntos.",
-  description: "Uma sequência editorial para apresentar o casal com ritmo, respiro e espaço para cada lembrança.",
+  description: "Uma sequência editorial para contar os encontros, mudanças e escolhas que trouxeram o casal até este dia.",
+  body: "Cada capítulo pode crescer conforme a história de cada cliente, mantendo a fotografia em destaque e a leitura no ritmo do scroll.",
   entries: [
     {
       id: "story-encontro",
       eyebrow: "O encontro",
       title: "Tudo começou com uma conversa sem pressa.",
-      body: "Entre planos diferentes e pequenas coincidências, nasceu uma vontade simples: continuar perto.",
+      body: "Entre planos diferentes e pequenas coincidências, nasceu uma vontade simples: continuar perto. O café se estendeu, a conversa virou rotina e os próximos encontros deixaram de precisar de convite.",
       media: {
         kind: "image" as const,
         src: "/marina-caio-story-encounter-placeholder.svg",
@@ -83,10 +84,36 @@ const story = {
       },
     },
     {
+      id: "story-viagem",
+      eyebrow: "A primeira viagem",
+      title: "Longe de casa, descobrimos o mesmo lugar.",
+      body: "Foram poucos dias, uma estrada comprida e uma coleção de planos feitos sem perceber. Voltamos com a certeza de que qualquer destino seria melhor quando escolhido em conjunto.",
+      media: {
+        kind: "image" as const,
+        src: "/marina-caio-story-first-trip-placeholder.svg",
+        alt: "Composição abstrata que representa uma viagem compartilhada",
+        width: 1200,
+        height: 900,
+      },
+    },
+    {
+      id: "story-casa",
+      eyebrow: "A nossa casa",
+      title: "O cotidiano ganhou rituais que são só nossos.",
+      body: "Vieram a primeira mudança, os almoços demorados de domingo e a alegria de receber quem amamos. Entre caixas e recomeços, construímos um jeito próprio de chamar um lugar de casa.",
+      media: {
+        kind: "image" as const,
+        src: "/marina-caio-story-home-placeholder.svg",
+        alt: "Composição abstrata que representa a construção de uma casa",
+        width: 1200,
+        height: 900,
+      },
+    },
+    {
       id: "story-escolha",
       eyebrow: "A escolha",
-      title: "O cotidiano virou a nossa forma favorita de celebrar.",
-      body: "É nos detalhes compartilhados que a história continua: uma mesa, uma viagem e muitos recomeços.",
+      title: "Então escolhemos celebrar tudo o que ainda vem.",
+      body: "O pedido não mudou o que já sabíamos; deu nome ao futuro que vínhamos desenhando. Agora reunimos família e amigos para transformar essa escolha em uma memória compartilhada.",
       media: {
         kind: "image" as const,
         src: "/marina-caio-story-celebration-placeholder.svg",
@@ -100,18 +127,19 @@ const story = {
 const gallery = {
   id: "gallery",
   eyebrow: "02 / Fragmentos",
-  title: "Pequenas cenas, grandes memórias.",
-  description: "Placeholders abstratos do host para testar ritmo, proporção e navegação da galeria antes da geração de mídias.",
+  title: "Antes do sim, um dia só nosso.",
+  description: "A galeria reúne as fotografias do pré-wedding em uma sequência inteira por vez. As imagens atuais são placeholders do host e serão substituídas pelo ensaio aprovado.",
   controls: {
     ariaLabel: "Navegação da galeria",
     previousLabel: "Anterior",
     nextLabel: "Próxima",
-    openLabel: "Abrir imagem",
+    expandLabel: "Expandir galeria",
+    closeLabel: "Fechar galeria",
   },
   items: [
     {
       id: "gallery-encontro",
-      caption: "Um começo",
+      caption: "O começo do ensaio",
       media: {
         kind: "image" as const,
         src: "/marina-caio-gallery-one-placeholder.svg",
@@ -122,7 +150,7 @@ const gallery = {
     },
     {
       id: "gallery-caminho",
-      caption: "Um caminho",
+      caption: "Entre caminhos",
       media: {
         kind: "image" as const,
         src: "/marina-caio-gallery-two-placeholder.svg",
@@ -133,7 +161,7 @@ const gallery = {
     },
     {
       id: "gallery-celebracao",
-      caption: "Uma celebração",
+      caption: "Um instante antes do sim",
       media: {
         kind: "image" as const,
         src: "/marina-caio-gallery-three-placeholder.svg",
@@ -291,7 +319,8 @@ const guestAccess = {
     display: grid;
     grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
     gap: clamp(2rem, 8vw, 8rem);
-    padding: clamp(5rem, 12vw, 10rem) max(1rem, calc((100vw - 78rem) / 2));
+    padding: clamp(2rem, 3vw, 3rem) max(1rem, calc((100vw - 78rem) / 2))
+      clamp(1.5rem, 3vw, 2.5rem);
     background: var(--demo-paper);
   }
 
@@ -327,7 +356,8 @@ const guestAccess = {
   }
 
   .demo-mural {
-    padding: clamp(4rem, 10vw, 8rem) max(1rem, calc((100vw - 78rem) / 2));
+    padding: clamp(1rem, 2vw, 2rem) max(1rem, calc((100vw - 78rem) / 2))
+      clamp(4rem, 8vw, 6rem);
     background: var(--demo-paper);
   }
 

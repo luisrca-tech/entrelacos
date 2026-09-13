@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 900" role="img" aria-labelledby="title description">
+  <title id="title">Placeholder abstrato de uma viagem</title>
+  <desc id="description">Formas orgânicas em verde, areia e terracota representam uma estrada compartilhada.</desc>
+  <rect width="1200" height="900" fill="#d7c8ad"/>
+  <path d="M0 650C210 470 350 760 560 560S920 390 1200 520V900H0Z" fill="#34483d"/>
+  <path d="M450 900C500 690 610 610 720 520S920 300 1200 220" fill="none" stroke="#f4f0e8" stroke-width="90"/>
+  <circle cx="250" cy="240" r="120" fill="#b56545"/>
+</svg>

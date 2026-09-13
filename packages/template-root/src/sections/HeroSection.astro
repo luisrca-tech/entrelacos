@@ -11,7 +11,12 @@ validateHeroContent(content);
 const id = content.id;
 ---
 
-<section id={id} class="template-hero" aria-labelledby={`${id}-title`}>
+<section
+  id={id}
+  class="template-hero"
+  aria-labelledby={`${id}-title`}
+  data-template-hero-intro
+>
   <div class="template-hero__media">
     {content.media.kind === "image" ? (
       <img
@@ -43,7 +48,7 @@ const id = content.id;
       </video>
     )}
   </div>
-  <div class="template-hero__content" data-template-reveal>
+  <div class="template-hero__content">
     {content.eyebrow && <p class="template-hero__eyebrow">{content.eyebrow}</p>}
     <h1 id={`${id}-title`}>{content.title}</h1>
     {content.description && <p class="template-hero__description">{content.description}</p>}

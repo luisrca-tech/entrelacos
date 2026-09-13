@@ -62,9 +62,10 @@ The first independent run reported six failing checklist areas. Five public defe
 - [ ] Navigate all links, buttons, gallery controls, map actions, copy-address action, guest access, mural controls, and RSVP controls using the keyboard only.
 - [ ] Confirm visible focus and at least 44px target height for shared navigation and public actions.
 - [ ] Open/close the native mobile menu with keyboard, close it with Escape and link activation, and confirm focus returns to its summary.
+- [ ] Navigate the gallery one full item at a time, open the selected item through the hover/focus expand action, operate the full-screen dialog controls, close with its button and Escape, and confirm focus returns to the visible opener without changing the page URL.
 - [ ] Open the RSVP dialog from its trigger, confirm initial focus enters the dialog, close with its button and Escape, and confirm focus returns to the opener.
 - [ ] Confirm the dialog remains independently scrollable and is marked `data-lenis-prevent`.
-- [ ] Disable JavaScript and verify anchors, navigation, hero/story/gallery/schedule/venue content, visible address/fallback links, footer, and direct media links remain available. Runtime guest operations may show their honest unavailable boundary rather than static data.
+- [ ] Disable JavaScript and verify anchors, navigation, hero/story/gallery/schedule/venue content, visible address/fallback links, footer, and the gallery's horizontal-scroll media fallback remain available without turning media into direct file links. Runtime guest operations may show their honest unavailable boundary rather than static data.
 
 ## Smooth scroll and reduced motion
 
@@ -72,7 +73,7 @@ The first independent run reported six failing checklist areas. Five public defe
 - [ ] Confirm wheel anchors scroll smoothly, touch remains native, nested dialog scrolling is not captured, and no forced nested page scroll is introduced.
 - [ ] Load with `prefers-reduced-motion: reduce` and confirm Lenis is not instantiated, entrances are immediately visible, transitions are removed, and the sticky story stage is replaced by normal vertical content.
 - [ ] Change reduced-motion preference at runtime and confirm the active Lenis instance is destroyed and recreated only when motion is enabled again.
-- [ ] Confirm generic reveals run once with restrained opacity/small vertical movement, never hide content before enhancement, and introduce no parallax or keyboard trap.
+- [ ] Confirm the initial CSS hero entrance and generic reveals run once with restrained opacity/small vertical movement, never depend on final media, never hide content before enhancement, and introduce no blocking preloader, parallax, or keyboard trap.
 
 ## Venue and external fallback
 

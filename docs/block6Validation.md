@@ -73,6 +73,21 @@ The final local worktree passed:
 
 The independent final diff review found four P2 issues: duplicate fallback IDs, incomplete H1 styling in `TemplateSection`, missing collision validation for generated section IDs, and premature handoff wording. All four were corrected. Four focused test files with 31 tests passed before the consolidated repository gates above, and the reviewer then found only three documentation-status inconsistencies; those statements were aligned with the completed QA and artifact evidence. The reviewer's final read-only follow-up returned PASS with no remaining actionable finding.
 
+## Post-review presentation feedback validation
+
+The subsequent client-style presentation review expanded the demo story from two to four host-owned chapters, replaced the gallery's direct media links and anchor controls with one full media item per Embla carousel index, added a hover/focus expand action and full-screen Base UI dialog, increased hero viewport height, added a media-independent page-load entrance, reduced the venue/confirmation/mural spacing, removed the repeated footer year, and applied pointer cursors to enabled buttons.
+
+The focused contract run passed 4 files and 33 tests. The current repository gates then passed:
+
+- `bun install --frozen-lockfile`: 582 installs across 842 packages checked, no changes;
+- `bun run lint`: 234 files checked, no fixes;
+- `bun run typecheck --force`: 8 tasks passed without cache, with 0 Astro errors, warnings, or hints in both consumers;
+- `bun run test`: 65 files and 277 tests passed;
+- `bun run build --force`: API, admin, wedding demo, and template fixture builds passed without cache;
+- `git diff --check`: passed.
+
+The focused browser run used `1440x900` and `390x844`. It confirmed a 793.67px desktop hero, an 844px mobile hero matching the full viewport, no horizontal overflow, one gallery item per index, 44px square previous/next controls, no direct gallery-media links, unchanged page URL during navigation, selected-item dialog opening, full-viewport dialog sizing, Escape closure with focus restoration, and pointer cursors on the gallery, address-copy, guest-access, and mural buttons. Under reduced motion, the hero had no active animations and Lenis was absent; normal mode exposed the six intended CSS hero entrance animations. The browser reported no page errors.
+
 The temporary authenticated fixture was removed from the verified test database. Its local state, credential, login-response, and environment files were deleted; the original admin `.env` was restored; B6 browser sessions and local servers were closed. The pre-existing `b4-qa-auth` browser session was left untouched.
 
 ## Contract and static-build evidence
@@ -89,7 +104,7 @@ Current source tests cover:
 
 Both consumer builds were executed without a live API, database, SMS service, or media provider. The demo and fixture source use `noindex, nofollow`. The final post-fix generated artifacts passed the privacy and duplicate-ID scans recorded above.
 
-The documentation pass reran the content, public-boundary, and interaction contract files with `bunx vitest run packages/template-root/src/content.test.ts packages/template-root/boundary.test.ts packages/template-root/src/interactions.test.ts`: three files and 29 tests passed. It cross-checked the five documented theme-variable names against `packages/template-root/src/styles.css`, reconciled every registered SVG path against both host `public` directories, verified the referenced local documents exist, and passed `git diff --check`. The repository Biome configuration ignores Markdown; a targeted invocation reported zero processed files, so no Markdown lint/format pass is claimed.
+The documentation pass reran the content, public-boundary, and interaction contract files with `bunx vitest run packages/template-root/src/content.test.ts packages/template-root/boundary.test.ts packages/template-root/src/interactions.test.ts`: three files and 29 tests passed. It cross-checked the five documented theme-variable names against `packages/template-root/src/styles.css`, reconciled every registered SVG path against both host `public` directories, verified the referenced local documents exist, and passed `git diff --check`. The later presentation-feedback run added two registered story SVGs and revalidated the complete build. The repository Biome configuration ignores Markdown; no Markdown lint/format pass is claimed.
 
 ## Known evidence limits
 
@@ -112,4 +127,4 @@ This implementation and documentation run did not generate final media, call a m
 
 ## Listening
 
-The record keeps pre-final evidence because it is valuable for regression diagnosis, but labels it by execution stage. The repository-wide 259-test run predates B6-T5, so the later 78-test focused run is recorded separately instead of implying one consolidated result. Final media remains an approval gate even though the code already supports image/video rendering and poster fallback.
+The record keeps pre-final evidence because it is valuable for regression diagnosis, but labels it by execution stage. The repository-wide 259-test run predates B6-T5, and the later presentation-feedback run supersedes the earlier 272-test consolidated count with 277 passing tests. The hero entrance was implemented before final media because it depends only on layout and motion; final media, rights, provider, cost, and performance acceptance remain separate gates.

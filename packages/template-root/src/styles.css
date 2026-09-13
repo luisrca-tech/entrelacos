@@ -27,6 +27,11 @@ a {
   color: inherit;
 }
 
+button:not(:disabled),
+[role="button"]:not([aria-disabled="true"]) {
+  cursor: pointer;
+}
+
 [data-template-reveal] {
   opacity: 1;
   transform: none;
@@ -160,7 +165,7 @@ a {
 .template-hero {
   position: relative;
   display: grid;
-  min-height: min(78vh, 760px);
+  min-height: min(88vh, 900px);
   overflow: hidden;
   background: var(--template-ink);
   color: var(--template-ivory);
@@ -189,6 +194,65 @@ a {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+body[data-template-has-hero="true"] .template-header {
+  animation: template-hero-copy-intro 700ms 500ms both;
+}
+
+:where(.template-hero[data-template-hero-intro]) .template-hero__media {
+  animation: template-hero-media-intro 1.2s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+:where(.template-hero[data-template-hero-intro])
+  :where(
+    .template-hero__eyebrow,
+    h1,
+    .template-hero__description,
+    .template-hero__meta,
+    .template-hero__action
+  ) {
+  animation: template-hero-copy-intro 700ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+:where(.template-hero[data-template-hero-intro]) h1 {
+  animation-delay: 120ms;
+}
+
+:where(.template-hero[data-template-hero-intro]) .template-hero__description {
+  animation-delay: 220ms;
+}
+
+:where(.template-hero[data-template-hero-intro]) .template-hero__meta {
+  animation-delay: 320ms;
+}
+
+:where(.template-hero[data-template-hero-intro]) .template-hero__action {
+  animation-delay: 420ms;
+}
+
+@keyframes template-hero-media-intro {
+  from {
+    clip-path: inset(3%);
+    transform: scale(1.04);
+  }
+
+  to {
+    clip-path: inset(0);
+    transform: scale(1);
+  }
+}
+
+@keyframes template-hero-copy-intro {
+  from {
+    opacity: 0;
+    transform: translateY(1rem);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .template-hero__content {
@@ -490,6 +554,10 @@ a {
   padding: clamp(5rem, 12vw, 10rem) max(1rem, calc((100vw - 78rem) / 2));
 }
 
+.template-venue {
+  padding-bottom: clamp(2rem, 3vw, 3rem);
+}
+
 .template-gallery--ivory,
 .template-venue--ivory {
   background: var(--template-ivory);
@@ -547,32 +615,50 @@ a {
   min-width: 0;
 }
 
-.template-gallery__grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 1rem;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.template-gallery__item {
+.template-gallery-carousel {
   min-width: 0;
 }
 
-.template-gallery__item figure {
+:where(.template-gallery-carousel) [data-slot="carousel-content"] {
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+}
+
+:where(.template-gallery-carousel[data-carousel-ready="true"])
+  [data-slot="carousel-content"] {
+  overflow: hidden;
+  scroll-snap-type: none;
+}
+
+:where(.template-gallery-carousel)
+  [data-slot="carousel-content"]::-webkit-scrollbar {
+  display: none;
+}
+
+.template-gallery-carousel__track {
+  display: flex;
+}
+
+.template-gallery-carousel__slide {
+  min-width: 0;
+  flex: 0 0 100%;
+  scroll-snap-align: start;
+}
+
+.template-gallery-carousel__slide figure {
   margin: 0;
 }
 
-.template-gallery__item figure > a {
-  display: block;
+.template-gallery-carousel__frame {
+  position: relative;
   overflow: hidden;
   background: var(--template-olive);
   aspect-ratio: 4 / 3;
 }
 
-.template-gallery__item img,
-.template-gallery__item video {
+.template-gallery-carousel__frame img,
+.template-gallery-carousel__frame video {
   display: block;
   width: 100%;
   height: 100%;
@@ -580,34 +666,200 @@ a {
   transition: transform 400ms ease;
 }
 
-.template-gallery__item a:hover img,
-.template-gallery__item a:focus-visible img,
-.template-gallery__item a:hover video,
-.template-gallery__item a:focus-visible video {
+.template-gallery-carousel__frame:hover img,
+.template-gallery-carousel__frame:focus-within img,
+.template-gallery-carousel__frame:hover video,
+.template-gallery-carousel__frame:focus-within video {
   transform: scale(1.03);
 }
 
-.template-gallery__item figcaption {
+.template-gallery-carousel__slide figcaption {
   margin-top: 0.75rem;
   font-size: 0.9rem;
   line-height: 1.4;
 }
 
-.template-gallery__controls {
+.template-gallery-carousel__expand {
+  position: absolute;
+  right: 1rem;
+  bottom: 1rem;
+  display: inline-flex;
+  min-height: 2.75rem;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.65rem 0.9rem;
+  border: 1px solid rgba(244, 240, 232, 0.72);
+  background: rgba(37, 53, 43, 0.86);
+  color: var(--template-ivory);
+  font: inherit;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  opacity: 0;
+  text-transform: uppercase;
+  transform: translateY(0.5rem);
+  transition:
+    opacity 180ms ease,
+    transform 180ms ease,
+    background-color 180ms ease;
+}
+
+.template-gallery-carousel__frame:hover .template-gallery-carousel__expand,
+.template-gallery-carousel__expand:focus-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.template-gallery-carousel__expand:hover,
+.template-gallery-carousel__expand:focus-visible {
+  background: var(--template-ink);
+}
+
+.template-gallery-carousel__controls {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
   gap: 0.5rem 0.75rem;
-  margin-top: 0.75rem;
+  margin-top: 1rem;
   font-size: 0.72rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
-.template-gallery .template-gallery__controls a {
+.template-gallery-carousel__counter {
+  margin-right: auto;
+  font: inherit;
+}
+
+.template-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  border: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+
+.template-gallery-carousel__controls button {
+  display: inline-flex;
+  width: 2.75rem;
+  min-height: 2.75rem;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid currentColor;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.template-gallery-dialog__close {
   display: inline-flex;
   min-height: 2.75rem;
   align-items: center;
-  text-underline-offset: 0.25rem;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.65rem 0.8rem;
+  border: 1px solid currentColor;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.template-gallery-carousel__controls button:hover,
+.template-gallery-carousel__controls button:focus-visible,
+.template-gallery-dialog__close:hover,
+.template-gallery-dialog__close:focus-visible {
+  background: var(--template-ink);
+  color: var(--template-ivory);
+}
+
+.template-gallery-carousel__controls button:disabled {
+  cursor: not-allowed;
+  opacity: 0.35;
+}
+
+.template-gallery-dialog__overlay {
+  position: fixed;
+  z-index: 50;
+  inset: 0;
+  background: rgba(10, 16, 13, 0.82);
+  backdrop-filter: blur(0.5rem);
+}
+
+.template-gallery-dialog {
+  position: fixed;
+  z-index: 51;
+  inset: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 1rem;
+  overflow: hidden;
+  padding: clamp(1rem, 3vw, 2rem);
+  background: var(--template-ink);
+  color: var(--template-ivory);
+  outline: none;
+}
+
+.template-gallery-dialog__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.template-gallery-dialog [data-slot="dialog-title"] {
+  display: block;
+  margin: 0;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(1.5rem, 3vw, 2.5rem);
+  font-weight: 400;
+}
+
+.template-gallery-dialog [data-slot="dialog-description"] {
+  display: block;
+  max-width: 42rem;
+  margin-top: 0.35rem;
+  color: rgba(244, 240, 232, 0.72);
+}
+
+.template-gallery-dialog__close {
+  min-width: auto;
+}
+
+.template-gallery-carousel--dialog {
+  display: grid;
+  min-height: 0;
+  grid-template-rows: minmax(0, 1fr) auto;
+}
+
+.template-gallery-carousel--dialog .template-gallery-carousel__frame {
+  height: 100%;
+  max-height: calc(100svh - 12rem);
+  background: #111b16;
+  aspect-ratio: auto;
+}
+
+.template-gallery-carousel--dialog [data-slot="carousel-content"],
+.template-gallery-carousel--dialog .template-gallery-carousel__track,
+.template-gallery-carousel--dialog .template-gallery-carousel__slide,
+.template-gallery-carousel--dialog figure {
+  min-height: 0;
+  height: 100%;
+}
+
+.template-gallery-carousel--dialog .template-gallery-carousel__frame img,
+.template-gallery-carousel--dialog .template-gallery-carousel__frame video {
+  object-fit: contain;
 }
 
 .template-schedule__entries,
@@ -831,10 +1083,6 @@ a {
     margin-bottom: 3rem;
   }
 
-  .template-gallery__grid {
-    grid-template-columns: 1fr;
-  }
-
   .template-story__intro {
     margin-bottom: 3rem;
   }
@@ -875,12 +1123,72 @@ a {
   }
 }
 
+@media (max-width: 720px) {
+  .template-hero {
+    min-height: 100svh;
+  }
+
+  .template-gallery-carousel__controls {
+    align-items: stretch;
+  }
+
+  .template-gallery-carousel__counter {
+    width: 100%;
+  }
+
+  .template-gallery-carousel__controls button {
+    flex: 0 0 2.75rem;
+  }
+
+  .template-gallery-dialog {
+    padding: 1rem;
+  }
+
+  .template-gallery-dialog__header {
+    align-items: center;
+  }
+
+  .template-gallery-dialog [data-slot="dialog-description"] {
+    display: none;
+  }
+
+  .template-gallery-carousel--dialog .template-gallery-carousel__frame {
+    max-height: calc(100svh - 10rem);
+  }
+}
+
+@media (hover: none) {
+  .template-gallery-carousel__expand {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;
   }
 
   .template-header {
+    animation: none;
+    transition: none;
+  }
+
+  :where(.template-hero[data-template-hero-intro]) .template-hero__media,
+  :where(.template-hero[data-template-hero-intro])
+    :where(
+      .template-hero__eyebrow,
+      h1,
+      .template-hero__description,
+      .template-hero__meta,
+      .template-hero__action
+    ) {
+    animation: none;
+  }
+
+  .template-gallery-carousel__frame img,
+  .template-gallery-carousel__frame video,
+  .template-gallery-carousel__expand {
     transition: none;
   }
 

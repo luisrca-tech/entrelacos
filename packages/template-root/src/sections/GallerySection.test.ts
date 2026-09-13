@@ -11,26 +11,26 @@ const styles = readFileSync(
   "utf8",
 );
 
-describe("GallerySection progressive fallback", () => {
-  it("renders every host media item with stable dimensions and a no-script link fallback", () => {
-    expect(source).toContain("content.items.map");
-    expect(source).toContain("item.media.width");
-    expect(source).toContain("item.media.height");
-    expect(source).toContain("item.media.src");
-    expect(source).toContain("item.media.alt");
-    expect(source).toContain("content.controls.openLabel");
-    expect(source).toContain("<img");
-    expect(source).toContain("href={");
-    expect(source).toContain("previous.id");
-    expect(source).toContain("next.id");
+describe("GallerySection carousel composition", () => {
+  it("renders the host media through one hydrated carousel without direct media links", () => {
+    expect(source).toContain(
+      'import GalleryCarousel from "../components/GalleryCarousel"',
+    );
+    expect(source).toContain("<GalleryCarousel");
+    expect(source).toContain("client:load");
+    expect(source).not.toContain("href={item.media.src}");
+    expect(source).not.toContain("previous.id");
+    expect(source).not.toContain("next.id");
     expect(styles).toContain("aspect-ratio: 4 / 3;");
     expect(styles).toContain("object-fit: cover;");
   });
 
-  it("keeps controls and aria labels host-owned", () => {
-    expect(source).toContain("content.controls.ariaLabel");
-    expect(source).toContain("content.controls.previousLabel");
-    expect(source).toContain("content.controls.nextLabel");
+  it("keeps the split layout and host-owned carousel controls", () => {
+    expect(source).toContain("content={content}");
+    expect(styles).toContain("grid-template-columns");
+    expect(styles).toContain("template-gallery-carousel__controls");
+    expect(styles).toContain("template-gallery-carousel__expand");
+    expect(styles).toContain("template-gallery-dialog");
     expect(source).not.toContain("site-specific wedding content");
   });
 });

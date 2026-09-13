@@ -70,7 +70,7 @@ Hosts may override those variables. No other variable, internal class, DOM selec
 
 - `HeroContent` requires title content, date label, location label, and media. Its action is optional and host-owned. Images render eagerly with explicit dimensions. Video requires a poster and renders muted, looped, inline, and without autoplay; the poster/image child is the fallback.
 - `StoryContent` requires at least two host-owned entries. Canonical text and media remain paired in document order. The single desktop sticky visual stage is `aria-hidden` progressive enhancement; mobile, reduced-motion, no-JavaScript, and unsupported-observer paths keep the canonical vertical content visible.
-- `GalleryContent` requires at least one item and host-owned navigation/open labels. Every item remains in document order with explicit dimensions, a direct media link, and anchor-based previous/next controls; no JavaScript lightbox is part of `/v1`.
+- `GalleryContent` requires at least one item and host-owned previous, next, expand, and close labels. Every item remains in document order with explicit dimensions and occupies one full Embla carousel index. Media is not a direct file link. Hover or keyboard focus reveals the expand action, and activation opens the synchronized collection in a full-screen Base UI dialog. Before hydration, the canonical media remains available as a horizontal-scroll fallback.
 - `ScheduleContent` requires at least two entries and may include host-owned practical guidance. Times are display strings supplied by the host; the template does not interpret timezone or event semantics.
 - `VenueContent` requires a visible address, safe Google Maps embed, Google Maps directions URL, host fallback link, and all accessible/copy-feedback labels. The address remains selectable and copyable even if the external map does not render.
 - `FooterContent` requires host-owned names, date, links, RSVP label/target, year, copyright, and attribution.
@@ -96,7 +96,7 @@ new Lenis({
 
 The package imports `lenis/dist/lenis.css`. It does not instantiate Lenis while `prefers-reduced-motion: reduce` matches. A runtime change to reduced motion destroys the instance; disabling reduced motion recreates it. Touch scrolling remains native because `syncTouch` is false. RSVP dialog scrolling is excluded with `data-lenis-prevent`.
 
-Generic entrances are progressive: content is visible before JavaScript, then enhanced with one-time opacity and small vertical-translate reveals when `IntersectionObserver` is available. Reduced motion removes those transitions and the sticky story stage. No parallax, forced nested page scrolling, or content dependency on animation belongs to the contract.
+Generic entrances are progressive: content is visible before JavaScript, then enhanced with one-time opacity and small vertical-translate reveals when `IntersectionObserver` is available. The initial hero uses a CSS-only media reveal and staggered content/header entrance that does not depend on the final image or video. Desktop gives the hero a taller editorial viewport; mobile uses the full small viewport height. Reduced motion removes all entrances and the sticky story stage. No blocking preloader, parallax, forced nested page scrolling, or content dependency on animation belongs to the contract.
 
 The RSVP dialog opens as a native modal, moves focus to its first control, closes through its button or Escape, and restores focus to the opener. Its scrollable content stays independent from Lenis.
 

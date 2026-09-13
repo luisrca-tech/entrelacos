@@ -6,6 +6,10 @@ const source = readFileSync(
   resolve(import.meta.dirname, "HeroSection.astro"),
   "utf8",
 );
+const styles = readFileSync(
+  resolve(import.meta.dirname, "../styles.css"),
+  "utf8",
+);
 
 describe("HeroSection media contract", () => {
   it("keeps media dimensions and eager image fallback in the rendered source", () => {
@@ -28,5 +32,13 @@ describe("HeroSection media contract", () => {
     expect(source).toContain('class="template-hero__action"');
     expect(source).toContain("content.action.href");
     expect(source).toContain("content.action.label");
+  });
+
+  it("provides a non-blocking page entrance and full-height mobile hero", () => {
+    expect(source).toContain("data-template-hero-intro");
+    expect(styles).toContain("@keyframes template-hero-media-intro");
+    expect(styles).toContain("@keyframes template-hero-copy-intro");
+    expect(styles).toContain("min-height: 100svh;");
+    expect(styles).toContain("@media (prefers-reduced-motion: reduce)");
   });
 });

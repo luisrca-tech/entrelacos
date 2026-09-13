@@ -10,14 +10,16 @@ All listed files are owned by their host app, not `packages/template-root`. They
 | --- | --- | --- | --- | --- |
 | `apps/wedding-demo/public/marina-caio-hero-placeholder.svg` | `wedding-demo` | Hero image and current social-image target | `1800x1200` | Provisional abstract placeholder; replace or explicitly approve |
 | `apps/wedding-demo/public/marina-caio-story-encounter-placeholder.svg` | `wedding-demo` | First story entry | `1200x900` | Provisional abstract placeholder; replace or explicitly approve |
-| `apps/wedding-demo/public/marina-caio-story-celebration-placeholder.svg` | `wedding-demo` | Second story entry | `1200x900` | Provisional abstract placeholder; replace or explicitly approve |
+| `apps/wedding-demo/public/marina-caio-story-first-trip-placeholder.svg` | `wedding-demo` | Second story entry | `1200x900` | Provisional abstract placeholder; replace or explicitly approve |
+| `apps/wedding-demo/public/marina-caio-story-home-placeholder.svg` | `wedding-demo` | Third story entry | `1200x900` | Provisional abstract placeholder; replace or explicitly approve |
+| `apps/wedding-demo/public/marina-caio-story-celebration-placeholder.svg` | `wedding-demo` | Fourth story entry | `1200x900` | Provisional abstract placeholder; replace or explicitly approve |
 | `apps/wedding-demo/public/marina-caio-gallery-one-placeholder.svg` | `wedding-demo` | First gallery item | `1200x900` | Provisional abstract placeholder; replace or explicitly approve |
 | `apps/wedding-demo/public/marina-caio-gallery-two-placeholder.svg` | `wedding-demo` | Second gallery item | `1200x900` | Provisional abstract placeholder; replace or explicitly approve |
 | `apps/wedding-demo/public/marina-caio-gallery-three-placeholder.svg` | `wedding-demo` | Third gallery item | `1200x900` | Provisional abstract placeholder; replace or explicitly approve |
 | `apps/wedding-demo/public/marina-caio-monogram.svg` | `wedding-demo` | Current demo favicon/identity mark | `64x64` | Provisional monogram; not final logo or brand approval |
 | `apps/template-fixture/public/fixture-hero.svg` | `template-fixture` | Technical fixture hero | `1600x1000` | Permanent test fixture is acceptable; not client/product media |
 
-The demo passes explicit rendered dimensions matching these viewBox proportions. The fixture does the same for its hero. The current demo has no bitmap photo, fictional human depiction, audio, or video file.
+The demo passes explicit rendered dimensions matching these viewBox proportions. The fixture does the same for its hero. The hero is reserved for the principal ensaio media; the gallery is reserved for the pre-wedding collection. The current demo has no bitmap photo, fictional human depiction, audio, or video file.
 
 ## External visual dependency
 

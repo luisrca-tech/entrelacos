@@ -1,6 +1,6 @@
 # Block 6 handoff
 
-Status: the local public-template implementation, provisional demo presentation, independent black-box QA, post-fix revalidation, consolidated final gates, and independent diff review are complete for the exercised scope. All accepted review findings were corrected and revalidated. Final media acceptance remains pending. No commit, push, merge, deployment, provider call, or production action is included.
+Status: the local public-template implementation, provisional demo presentation, independent black-box QA, post-fix revalidation, consolidated final gates, independent diff review, and presentation-feedback pass are complete for the exercised scope. All accepted review findings were corrected and revalidated. Final media acceptance remains pending. This record does not claim merge, deployment, provider use, or production acceptance.
 
 ## Delivered local boundary
 
@@ -29,7 +29,7 @@ Do not copy the Marina & Caio or Casa Aurora content into the package or provisi
 
 ## Current demo and fixture
 
-The demo owns Marina & Caio, the September 2027 date, Casablanca Eventos address, Google Maps embed/directions URL, fallback venue link, navigation/SEO/footer copy, guest/mural placement, and seven provisional SVG assets. Demo SEO is `noindex, nofollow`.
+The demo owns Marina & Caio, the September 2027 date, Casablanca Eventos address, Google Maps embed/directions URL, fallback venue link, navigation/SEO/footer copy, guest/mural placement, and nine provisional SVG assets. Demo SEO is `noindex, nofollow`.
 
 The technical fixture owns Casa Aurora, its April 2028 event data, terracotta SVG, noindex metadata, story-before-hero order, local extension, and `/hospedagem` route. It intentionally contains no guest API, database, SMS, admin recognition, or product-polish requirement.
 
@@ -43,7 +43,7 @@ The RSVP dialog uses native modal behavior, restores opener focus, and opts out 
 
 ## Media and map status
 
-The current demo uses abstract SVG placeholders and image media only. The template supports a later muted inline loop video with required poster and no autoplay dependency, but no video has been generated or approved. `docs/block6MediaRegister.md` is the source of truth for provisional assets and pending provider/rights/cost decisions.
+The current demo uses abstract SVG placeholders and image media only. The hero entrance is already implemented as a media-independent CSS layer, so a later approved image or muted inline loop video can replace the placeholder without rebuilding the page structure. Video still requires a poster and does not depend on autoplay; no video has been generated or approved. `docs/block6MediaRegister.md` is the source of truth for provisional assets and pending provider/rights/cost decisions.
 
 The map is a host-supplied Google Maps iframe with no key, plus a visible address, directions link, venue-site fallback, and copy feedback. External rendering is not guaranteed by the static build and has no provider/legal approval claim.
 

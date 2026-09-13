@@ -93,7 +93,8 @@ export type GalleryControls = {
   ariaLabel: string;
   previousLabel: string;
   nextLabel: string;
-  openLabel: string;
+  expandLabel: string;
+  closeLabel: string;
 };
 
 export type GalleryItem = {
@@ -511,7 +512,8 @@ function validateGalleryControls(
   assertNonEmptyString(value.ariaLabel, "gallery.controls.ariaLabel");
   assertNonEmptyString(value.previousLabel, "gallery.controls.previousLabel");
   assertNonEmptyString(value.nextLabel, "gallery.controls.nextLabel");
-  assertNonEmptyString(value.openLabel, "gallery.controls.openLabel");
+  assertNonEmptyString(value.expandLabel, "gallery.controls.expandLabel");
+  assertNonEmptyString(value.closeLabel, "gallery.controls.closeLabel");
 }
 
 function validateGalleryItem(
