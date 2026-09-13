@@ -1,3 +1,26 @@
+const activeHandoffs = new Map<string, Promise<void>>();
+
+function handoffKey(siteId: string, origin: string): string {
+  return `${siteId}\u0000${origin}`;
+}
+
+export function runAdminHandoffOnce(
+  siteId: string,
+  origin: string,
+  operation: () => Promise<void>,
+): Promise<void> {
+  const key = handoffKey(siteId, origin);
+  const active = activeHandoffs.get(key);
+  if (active) return active;
+  const task = operation();
+  activeHandoffs.set(key, task);
+  const release = () => {
+    if (activeHandoffs.get(key) === task) activeHandoffs.delete(key);
+  };
+  void task.then(release, release);
+  return task;
+}
+
 export async function createRecognitionChallenge() {
   const bytes = crypto.getRandomValues(new Uint8Array(32));
   const verifier = btoa(String.fromCharCode(...bytes))
@@ -33,4 +56,12 @@ export function panelHandoffUrl(
   url.pathname = "/handoff";
   url.search = new URLSearchParams({ siteId, origin, challenge }).toString();
   return url.href;
+}
+
+export function getAdminRecognitionView(
+  recognized: boolean,
+  error: string,
+): "hidden" | "recognized" | "error" {
+  if (recognized) return "recognized";
+  return error ? "error" : "hidden";
 }

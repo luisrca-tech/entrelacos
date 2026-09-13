@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { captureFocus, type FocusTarget, restoreFocus } from "./dialogFocus";
 import type { RsvpDraft, RsvpStatus } from "./rsvpDraft";
 
 export type RsvpFormMember = {
@@ -45,6 +46,7 @@ export function RsvpForm({
   onClose,
 }: RsvpFormProps) {
   const dialog = useRef<HTMLDialogElement>(null);
+  const opener = useRef<FocusTarget | null>(null);
   const changed = Object.values(draft).some(
     (member) => member.status !== member.persistedStatus,
   );
@@ -52,20 +54,42 @@ export function RsvpForm({
   useEffect(() => {
     const node = dialog.current;
     if (!node) return;
-    if (open && !node.open) node.showModal();
+    if (open && !node.open) {
+      opener.current = captureFocus(document.activeElement);
+      node.showModal();
+      const focusInitialControl = () => {
+        if (node.open)
+          node.querySelector<HTMLElement>("[data-rsvp-initial]")?.focus();
+      };
+      if (typeof window.requestAnimationFrame === "function")
+        window.requestAnimationFrame(focusInitialControl);
+      else focusInitialControl();
+    }
     if (!open && node.open) node.close();
   }, [open]);
+
+  const handleDialogClose = () => {
+    onClose();
+    restoreFocus(opener.current);
+    opener.current = null;
+  };
+
+  const requestClose = () => {
+    if (dialog.current?.open) dialog.current.close();
+    else handleDialogClose();
+  };
 
   return (
     <dialog
       ref={dialog}
       className="entrelacos-rsvp"
+      data-lenis-prevent
       aria-labelledby="entrelacos-rsvp-title"
       onCancel={(event) => {
         event.preventDefault();
-        onClose();
+        requestClose();
       }}
-      onClose={onClose}
+      onClose={handleDialogClose}
     >
       <div className="entrelacos-rsvp__header">
         <div>
@@ -77,7 +101,8 @@ export function RsvpForm({
         <button
           type="button"
           className="entrelacos-guest-access__link"
-          onClick={onClose}
+          data-rsvp-initial
+          onClick={requestClose}
         >
           Fechar
         </button>

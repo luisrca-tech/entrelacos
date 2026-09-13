@@ -1,0 +1,32 @@
+---
+import { TemplateSection, WeddingLayout } from "@entrelacos/template-root/v1";
+import { accommodationNavigation, accommodationSeo, site } from "../data/site";
+---
+
+<WeddingLayout
+  locale="pt-BR"
+  site={site}
+  seo={accommodationSeo}
+  navigation={accommodationNavigation}
+  footer={{
+    names: "Casa Aurora",
+    dateLabel: "12 de abril de 2028",
+    links: [{ label: "Início", href: "/" }],
+    rsvp: { label: "Falar com a organização", href: "/" },
+    year: "2028",
+    copyright: "© Casa Aurora",
+    attribution: "By EntreLaços",
+  }}
+>
+  <TemplateSection
+    headingLevel={1}
+    content={{
+      id: "orientacoes",
+      eyebrow: "Hospedagem",
+      title: "Orientações para chegar com calma.",
+      description: "Página de hospedagem criada pelo host, usando o layout público e uma composição própria.",
+    }}
+  >
+    <p>Hospedagem, horários e caminhos serão adicionados pelo site consumidor.</p>
+  </TemplateSection>
+</WeddingLayout>

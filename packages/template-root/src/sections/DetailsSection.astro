@@ -1,0 +1,15 @@
+---
+import type { SectionContent } from "../content";
+import TemplateSection from "./TemplateSection.astro";
+
+interface Props {
+  content: SectionContent;
+  tone?: "ivory" | "olive";
+}
+
+const { content, tone = "olive" } = Astro.props;
+---
+
+<TemplateSection content={content} tone={tone}>
+  <slot />
+</TemplateSection>

@@ -1,62 +1,116 @@
 ---
 import "../styles.css";
-import type { NavigationLink } from "../index";
+import { validateWeddingLayoutProps } from "../content";
+import type { WeddingLayoutProps } from "../content";
 
-interface Props {
-  title: string;
-  description?: string;
-  brand?: string;
-  brandHref?: string;
-  eventDate?: string;
-  navigation?: readonly NavigationLink[];
-  noindex?: boolean;
-}
+interface Props extends WeddingLayoutProps {}
 
-const {
-  title,
-  description = "Um site público de casamento por EntreLaços.",
-  brand = "EntreLaços",
-  brandHref = "/",
-  eventDate,
-  navigation = [],
-  noindex = false,
-} = Astro.props;
-const year = new Date().getFullYear();
+const { locale, site, seo, navigation, footer, hasHero = false } = Astro.props;
+validateWeddingLayoutProps(Astro.props);
 ---
 
 <!doctype html>
-<html lang="pt-BR">
+<html lang={locale}>
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width" />
-    <meta name="description" content={description} />
-    <meta name="robots" content={noindex ? "noindex" : "index,follow"} />
-    <link rel="icon" href="data:," />
-    <title>{title}</title>
+    <meta name="description" content={seo.description} />
+    <meta name="robots" content={seo.robots} />
+    <link rel="canonical" href={seo.canonical} />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content={seo.title} />
+    <meta property="og:description" content={seo.description} />
+    <meta property="og:url" content={seo.canonical} />
+    <meta property="og:image" content={seo.socialImage.url} />
+    <meta property="og:image:alt" content={seo.socialImage.alt} />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={seo.title} />
+    <meta name="twitter:description" content={seo.description} />
+    <meta name="twitter:image" content={seo.socialImage.url} />
+    <meta name="twitter:image:alt" content={seo.socialImage.alt} />
+    <title>{seo.title}</title>
     <slot name="head" />
   </head>
-  <body>
+  <body data-template-has-hero={hasHero ? "true" : "false"}>
     <div class="template-shell">
-      <header class="template-header">
-        <a class="template-brand" href={brandHref}>{brand}</a>
+      <header
+        class="template-header"
+        data-template-navigation
+        data-navigation-state={hasHero ? "hero" : "solid"}
+      >
+        <a class="template-brand" href={site.href}>{site.name}</a>
         <div class="template-header__event">
-          {eventDate && <span>{eventDate}</span>}
-          {navigation.length > 0 && (
-            <nav aria-label="Navegação da página">
-              {navigation.map((link) => <a href={link.href}>{link.label}</a>)}
-            </nav>
+          {navigation && navigation.links.length > 0 && (
+            <>
+              <nav class="template-navigation template-navigation--desktop" aria-label={navigation.ariaLabel}>
+                {navigation.links.map((link) => <a href={link.href}>{link.label}</a>)}
+              </nav>
+              <details
+                class="template-navigation-mobile"
+                data-template-navigation-mobile
+              >
+                <summary aria-label={navigation.menuLabel}>{navigation.menuLabel}</summary>
+                <nav aria-label={navigation.ariaLabel}>
+                  {navigation.links.map((link) => <a href={link.href}>{link.label}</a>)}
+                </nav>
+              </details>
+            </>
           )}
+          <slot name="header-addon" />
+          <slot name="admin-access" />
         </div>
       </header>
       <main class="template-main">
+        <slot name="before-main" />
         <slot />
+        <slot name="after-main" />
       </main>
-      <slot name="admin-access" />
-      <footer class="template-footer">
-        <span>{brand}</span>
-        <span>{eventDate ?? "Modelo público de casamento"}</span>
-        <span>© {year}</span>
-      </footer>
+      {footer && (
+        <footer class="template-footer">
+          <div class="template-footer__identity">
+            <strong>{footer.names}</strong>
+            <span>{footer.dateLabel}</span>
+          </div>
+          <nav class="template-footer__links" aria-label={site.name}>
+            {footer.links.map((link) => <a href={link.href}>{link.label}</a>)}
+            <a href={footer.rsvp.href}>{footer.rsvp.label}</a>
+          </nav>
+          <div class="template-footer__legal">
+            <span>{footer.year}</span>
+            <span>{footer.copyright}</span>
+            <span>{footer.attribution}</span>
+          </div>
+          <slot name="footer-addon" />
+        </footer>
+      )}
     </div>
   </body>
 </html>
+
+<script>
+  import {
+    navigationStateForHero,
+    setupTemplateInteractions,
+  } from "../interactions";
+
+  const header = document.querySelector("[data-template-navigation]");
+  const hero = document.querySelector(".template-hero");
+
+  if (header instanceof HTMLElement) {
+    if (!(hero instanceof HTMLElement)) {
+      header.dataset.navigationState = "solid";
+    } else {
+      const updateNavigationState = () => {
+        header.dataset.navigationState = navigationStateForHero(
+          hero.getBoundingClientRect(),
+          header.offsetHeight,
+        );
+      };
+      updateNavigationState();
+      window.addEventListener("scroll", updateNavigationState, { passive: true });
+      window.addEventListener("resize", updateNavigationState);
+    }
+  }
+
+  setupTemplateInteractions();
+</script>

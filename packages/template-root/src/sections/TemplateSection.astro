@@ -1,30 +1,27 @@
 ---
+import type { SectionContent } from "../content";
+import { validateSectionContent } from "../content";
+
 interface Props {
-  id?: string;
-  eyebrow?: string;
-  title: string;
-  description?: string;
+  content: SectionContent;
   tone?: "ivory" | "olive";
   className?: string;
+  headingLevel?: 1 | 2;
 }
 
-const {
-  id,
-  eyebrow,
-  title,
-  description,
-  tone = "ivory",
-  className,
-} = Astro.props;
+const { content, tone = "ivory", className, headingLevel = 2 } = Astro.props;
+validateSectionContent(content);
+const Heading = headingLevel === 1 ? "h1" : "h2";
 ---
 
-<section id={id} class:list={["template-section", `template-section--${tone}`, className]}>
-  <div class="template-section__header">
-    {eyebrow && <p class="template-section__eyebrow">{eyebrow}</p>}
-    <h2>{title}</h2>
-    {description && <p class="template-section__description">{description}</p>}
+<section id={content.id} class:list={["template-section", `template-section--${tone}`, className]}>
+  <div class="template-section__header" data-template-reveal>
+    {content.eyebrow && <p class="template-section__eyebrow">{content.eyebrow}</p>}
+    <Heading>{content.title}</Heading>
+    {content.description && <p class="template-section__description">{content.description}</p>}
   </div>
-  <div class="template-section__content">
+  <div class="template-section__content" data-template-reveal>
+    {content.body && <p>{content.body}</p>}
     <slot />
   </div>
 </section>

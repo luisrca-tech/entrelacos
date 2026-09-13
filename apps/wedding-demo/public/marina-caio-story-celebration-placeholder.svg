@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 900" role="img">
+  <title>Composição abstrata de uma celebração</title>
+  <defs>
+    <radialGradient id="celebration-light" cx="50%" cy="35%" r="72%">
+      <stop offset="0" stop-color="#d7be96" />
+      <stop offset="0.48" stop-color="#738271" />
+      <stop offset="1" stop-color="#18261f" />
+    </radialGradient>
+  </defs>
+  <rect width="1200" height="900" fill="url(#celebration-light)" />
+  <path d="M0 710c190-150 330-150 520-40s380 160 680-40v270H0Z" fill="#25352b" fill-opacity="0.56" />
+  <path d="M160 200c180 80 300 80 450 0s280-80 430 0" fill="none" stroke="#f4f0e8" stroke-opacity="0.54" stroke-width="4" />
+  <circle cx="600" cy="360" r="165" fill="#f4f0e8" fill-opacity="0.12" />
+  <path d="M180 160h840v580H180z" fill="none" stroke="#f4f0e8" stroke-opacity="0.62" stroke-width="3" />
+</svg>

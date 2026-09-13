@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   createSite: vi.fn(),
   getSiteForActor: vi.fn(),
   createDomain: vi.fn(),
+  listSites: vi.fn(),
   SiteServiceError: class SiteServiceError extends Error {
     constructor(
       readonly status: number,
@@ -34,7 +35,7 @@ vi.mock("./sites", () => ({
   getSite: vi.fn(),
   getSiteForActor: mocks.getSiteForActor,
   listDomains: vi.fn(),
-  listSites: vi.fn(),
+  listSites: mocks.listSites,
   reactivateSite: vi.fn(),
   resumeSite: vi.fn(),
   startReview: vi.fn(),
@@ -139,6 +140,21 @@ describe("site HTTP boundary", () => {
     const body = await response.json();
     expect(ownerSiteResponseSchema.parse(body)).toEqual({ site: fixedSite });
     expect(body.site.site).toBeUndefined();
+  });
+
+  it("lists owner sites when no pagination query is provided", async () => {
+    mocks.listSites.mockResolvedValue({ sites: [fixedSite], nextCursor: null });
+
+    const response = await router().request(
+      request("/v1/owner/sites", { method: "GET" }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      sites: [fixedSite],
+      nextCursor: null,
+    });
+    expect(mocks.listSites).toHaveBeenCalledWith(expect.anything(), {});
   });
 
   it("returns exact tenant-scoped envelope without internal fields", async () => {

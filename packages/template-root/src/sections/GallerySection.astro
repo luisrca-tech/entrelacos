@@ -1,0 +1,76 @@
+---
+import { validateGalleryContent } from "../content";
+import type { GalleryContent } from "../content";
+
+interface Props {
+  content: GalleryContent;
+  tone?: "ivory" | "olive";
+}
+
+const { content, tone = "ivory" } = Astro.props;
+validateGalleryContent(content);
+const id = content.id;
+---
+
+<section
+  id={id}
+  class:list={["template-gallery", `template-gallery--${tone}`]}
+  aria-labelledby={`${id}-title`}
+>
+  <header class="template-gallery__header" data-template-reveal>
+    {content.eyebrow && <p class="template-gallery__eyebrow">{content.eyebrow}</p>}
+    <h2 id={`${id}-title`}>{content.title}</h2>
+    {content.description && <p class="template-gallery__description">{content.description}</p>}
+  </header>
+
+  <div class="template-gallery__content" data-template-reveal>
+    <ol class="template-gallery__grid">
+      {content.items.map((item, index) => {
+        const previous = content.items[(index - 1 + content.items.length) % content.items.length];
+        const next = content.items[(index + 1) % content.items.length];
+        return (
+          <li id={item.id} class="template-gallery__item">
+            <figure>
+              <a href={item.media.src} aria-label={`${content.controls.openLabel}: ${item.media.alt}`}>
+                {item.media.kind === "image" ? (
+                  <img
+                    src={item.media.src}
+                    alt={item.media.alt}
+                    width={item.media.width}
+                    height={item.media.height}
+                    loading="lazy"
+                  />
+                ) : (
+                  <video
+                    src={item.media.src}
+                    poster={item.media.poster}
+                    width={item.media.width}
+                    height={item.media.height}
+                    muted
+                    loop
+                    playsinline
+                    preload="metadata"
+                    aria-label={item.media.alt}
+                  >
+                    <img
+                      src={item.media.poster}
+                      alt={item.media.alt}
+                      width={item.media.width}
+                      height={item.media.height}
+                      loading="lazy"
+                    />
+                  </video>
+                )}
+              </a>
+              {item.caption && <figcaption>{item.caption}</figcaption>}
+            </figure>
+            <nav aria-label={content.controls.ariaLabel} class="template-gallery__controls">
+              <a href={`#${previous.id}`}>{content.controls.previousLabel}</a>
+              <a href={`#${next.id}`}>{content.controls.nextLabel}</a>
+            </nav>
+          </li>
+        );
+      })}
+    </ol>
+  </div>
+</section>

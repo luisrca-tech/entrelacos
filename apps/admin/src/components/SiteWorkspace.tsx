@@ -9,6 +9,7 @@ import { GuestGroupsSection } from "./GuestGroupsSection";
 import { MessagesSection } from "./MessagesSection";
 import { RsvpSection } from "./RsvpSection";
 import { SmsUsageSection } from "./SmsUsageSection";
+import { publicSiteHandoffUrl } from "./sitePublicUrl";
 
 const labels: Record<string, string> = {
   DRAFT: "Rascunho",
@@ -200,7 +201,10 @@ export function SiteWorkspace({
         </div>
         {site.publicUrl && (
           <div>
-            <a className="primary-action" href={`${site.publicUrl}#panel`}>
+            <a
+              className="primary-action"
+              href={publicSiteHandoffUrl(site.publicUrl)}
+            >
               Ir para o site
             </a>
           </div>

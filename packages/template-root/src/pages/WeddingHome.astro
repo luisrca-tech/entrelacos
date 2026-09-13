@@ -1,0 +1,49 @@
+---
+import {
+  validateSectionIds,
+  validateWeddingHomeProps,
+} from "../content";
+import type { HomeSectionKey, WeddingHomeProps } from "../content";
+import DetailsSection from "../sections/DetailsSection.astro";
+import GallerySection from "../sections/GallerySection.astro";
+import HeroSection from "../sections/HeroSection.astro";
+import ScheduleSection from "../sections/ScheduleSection.astro";
+import StorySection from "../sections/StorySection.astro";
+import VenueSection from "../sections/VenueSection.astro";
+import WeddingLayout from "../layouts/WeddingLayout.astro";
+
+interface Props extends WeddingHomeProps {}
+
+const props = Astro.props;
+const order = validateWeddingHomeProps(props);
+const sectionIds = order.map((key: HomeSectionKey) => {
+  if (key === "hero") return props.hero.id;
+  return props[key]?.id ?? key;
+});
+validateSectionIds(sectionIds);
+---
+
+<WeddingLayout
+  locale={props.locale}
+  site={props.site}
+  seo={props.seo}
+  navigation={props.navigation}
+  footer={props.footer}
+  hasHero={order[0] === "hero"}
+>
+  <slot name="head" slot="head" />
+  <slot name="header-addon" slot="header-addon" />
+  <slot name="before-main" slot="before-main" />
+  {order.map((key: HomeSectionKey) => {
+    if (key === "hero") return <HeroSection content={props.hero} />;
+    if (key === "story" && props.story) return <StorySection content={props.story} />;
+    if (key === "details" && props.details) return <DetailsSection content={props.details} />;
+    if (key === "gallery" && props.gallery) return <GallerySection content={props.gallery} />;
+    if (key === "schedule" && props.schedule) return <ScheduleSection content={props.schedule} />;
+    if (key === "venue" && props.venue) return <VenueSection content={props.venue} />;
+    return null;
+  })}
+  <slot name="after-main" slot="after-main" />
+  <slot name="admin-access" slot="admin-access" />
+  <slot name="footer-addon" slot="footer-addon" />
+</WeddingLayout>

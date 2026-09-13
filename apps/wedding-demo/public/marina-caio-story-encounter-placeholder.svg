@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 900" role="img">
+  <title>Composição abstrata de um encontro</title>
+  <defs>
+    <linearGradient id="encounter-ground" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#d7be96" />
+      <stop offset="0.5" stop-color="#8f9a83" />
+      <stop offset="1" stop-color="#34483d" />
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="900" fill="url(#encounter-ground)" />
+  <circle cx="330" cy="420" r="250" fill="#f4f0e8" fill-opacity="0.22" />
+  <circle cx="830" cy="430" r="290" fill="#25352b" fill-opacity="0.2" />
+  <path d="M120 650c160-110 310-120 470-10s300 120 490-20v280H120Z" fill="#25352b" fill-opacity="0.35" />
+  <path d="M180 160h840v580H180z" fill="none" stroke="#f4f0e8" stroke-opacity="0.62" stroke-width="3" />
+</svg>

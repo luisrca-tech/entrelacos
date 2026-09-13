@@ -56,10 +56,29 @@ Block 6 may style and place `FamilyMessageForm` and `MessageMural` through the p
 
 Presentation may change labels, layout, theme, and placement. It cannot add a typed author, expose group members, edit guest text administratively, change the 1,000-code-point rule, or turn mural content into build-time data.
 
+## Post-delivery reconciliation — 2026-09-13
+
+The two browser limitations in the original handoff were accurate at the time
+of the Block 5 delivery. PRE0 later added a no-query owner site-list
+regression, confirmed the current endpoint behavior, reproduced the valid
+activation-fragment rendering failure, and fixed it by preserving the fragment
+token through hydration. A fresh browser load now renders the activation form
+and removes the token from the address bar after capture.
+
+The development target was verified read-only with the guarded database
+identity check. Its expected branch, project, endpoint, database, and role
+matched, the latest journal entry is `0007_windy_sage`, and the Block 5 tables
+are present. This verification did not run a migration, mutate data, or access
+production.
+
 ## Remaining release gates
 
-- Apply migration `0007_windy_sage.sql` to development only after a separate migration review and authorization; production remains a later explicit operation.
-- Resolve the pre-existing OWNER site-list and SITE_ADMIN activation browser limitations before broad release acceptance.
+- Keep the already verified development application of migration
+  `0007_windy_sage.sql` documented as a separate authorized operation;
+  production remains a later explicit migration operation.
+- Retain the OWNER site-list and SITE_ADMIN activation regressions in broad
+  release acceptance; both pre-existing browser limitations were reconciled in
+  the post-delivery check above.
 - Complete privacy, retention, deletion-exception, backup/restore, infrastructure, domain, monitoring, and final design approvals.
 - Keep real SMS disabled unless the OWNER limit and every provider/account authorization gate are explicitly satisfied and separately tested.
 
