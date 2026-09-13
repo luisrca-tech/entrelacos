@@ -76,6 +76,16 @@ function addState(totals: RsvpTotals, state: RsvpState): void {
   if (state === "DECLINED") totals.declined += 1;
 }
 
+const RSVP_STATE_LABELS = {
+  PENDING: "Pendente",
+  CONFIRMED: "Confirmado",
+  DECLINED: "Não comparecerá",
+} satisfies Record<RsvpState, string>;
+
+export function formatRsvpState(state: RsvpState): string {
+  return RSVP_STATE_LABELS[state];
+}
+
 type ReportDatabaseRow = {
   group_id: string;
   group_name: string;
@@ -229,7 +239,7 @@ export function createRsvpCsv(
     report.generatedAt,
     report.timezone,
     report.groupFilter ?? "",
-    report.stateFilter ?? "",
+    report.stateFilter ? formatRsvpState(report.stateFilter) : "",
     report.totals.pending,
     report.totals.confirmed,
     report.totals.declined,
@@ -256,7 +266,7 @@ export function createRsvpCsv(
     "",
     row.groupName,
     row.memberName,
-    row.rsvpState,
+    formatRsvpState(row.rsvpState),
     ...(includePhone ? [row.representativePhone ?? ""] : []),
   ]);
   const csv = [csvRow(columns), csvRow(summary), ...members.map(csvRow)].join(
@@ -277,6 +287,10 @@ const FOOTER_Y = 785;
 
 function formatFilter(value: string | null): string {
   return value ?? "Todos";
+}
+
+function formatStateFilter(value: RsvpState | null): string {
+  return value ? formatRsvpState(value) : "Todos";
 }
 
 function createPdfDocument() {
@@ -328,7 +342,7 @@ export function createRsvpPdf(
         .text(`Gerado em ${report.generatedAt} (UTC)`);
       document.text(`Fuso de exibição: ${report.timezone}`);
       document.text(
-        `Grupo: ${formatFilter(report.groupFilter)} | Estado: ${formatFilter(report.stateFilter)}`,
+        `Grupo: ${formatFilter(report.groupFilter)} | Estado: ${formatStateFilter(report.stateFilter)}`,
       );
       document.moveDown(0.5);
       document.fontSize(11).font("DejaVu-Bold").text("Totais do site");
@@ -336,11 +350,11 @@ export function createRsvpPdf(
         .fontSize(9)
         .font("DejaVu")
         .text(
-          `Pendente: ${report.totals.pending} | Confirmado: ${report.totals.confirmed} | Recusado: ${report.totals.declined}`,
+          `Pendente: ${report.totals.pending} | Confirmado: ${report.totals.confirmed} | Não comparecerá: ${report.totals.declined}`,
         );
       document.text("Totais selecionados");
       document.text(
-        `Pendente: ${report.selectedTotals.pending} | Confirmado: ${report.selectedTotals.confirmed} | Recusado: ${report.selectedTotals.declined}`,
+        `Pendente: ${report.selectedTotals.pending} | Confirmado: ${report.selectedTotals.confirmed} | Não comparecerá: ${report.selectedTotals.declined}`,
       );
       document.moveDown(0.65);
 
@@ -379,10 +393,10 @@ export function createRsvpPdf(
           ? [
               row.groupName,
               row.memberName,
-              row.rsvpState,
+              formatRsvpState(row.rsvpState),
               row.representativePhone ?? "",
             ]
-          : [row.groupName, row.memberName, row.rsvpState];
+          : [row.groupName, row.memberName, formatRsvpState(row.rsvpState)];
         const heights = values.map((value, index) =>
           document.heightOfString(pdfText(String(value)), {
             width: columns[index]?.[1] ?? 0,

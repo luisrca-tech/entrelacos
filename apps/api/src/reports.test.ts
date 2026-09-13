@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { createRsvpCsv, createRsvpPdf, type RsvpReport } from "./reports";
+import {
+  createRsvpCsv,
+  createRsvpPdf,
+  formatRsvpState,
+  type RsvpReport,
+} from "./reports";
 
 const report: RsvpReport = {
   siteId: "site-demo",
@@ -8,8 +13,8 @@ const report: RsvpReport = {
   timezone: "America/Sao_Paulo",
   groupFilter: null,
   stateFilter: null,
-  totals: { pending: 1, confirmed: 1, declined: 0 },
-  selectedTotals: { pending: 1, confirmed: 1, declined: 0 },
+  totals: { pending: 1, confirmed: 1, declined: 1 },
+  selectedTotals: { pending: 1, confirmed: 1, declined: 1 },
   rows: [
     {
       groupName: "=SILVA",
@@ -23,10 +28,22 @@ const report: RsvpReport = {
       rsvpState: "PENDING",
       representativePhone: "",
     },
+    {
+      groupName: "Família Souza",
+      memberName: "Marina Souza",
+      rsvpState: "DECLINED",
+      representativePhone: "",
+    },
   ],
 };
 
 describe("RSVP report formats", () => {
+  it("presents every RSVP state in Brazilian Portuguese", () => {
+    expect(formatRsvpState("PENDING")).toBe("Pendente");
+    expect(formatRsvpState("CONFIRMED")).toBe("Confirmado");
+    expect(formatRsvpState("DECLINED")).toBe("Não comparecerá");
+  });
+
   it("creates rectangular RFC 4180 CSV with BOM, CRLF, and formula protection", () => {
     const bytes = createRsvpCsv(report, true);
     expect([...bytes.slice(0, 3)]).toEqual([0xef, 0xbb, 0xbf]);
@@ -34,7 +51,7 @@ describe("RSVP report formats", () => {
     expect(csv).toContain("\r\n");
     expect(csv).not.toContain("\n\n");
     const records = csv.split("\r\n").filter(Boolean);
-    expect(records).toHaveLength(4);
+    expect(records).toHaveLength(5);
     expect(
       records.every((row) => {
         let quoted = false;
@@ -50,6 +67,10 @@ describe("RSVP report formats", () => {
     expect(csv).toContain('"\'+5511999999999"');
     expect(csv).toContain('"Pessoa\nLonga"');
     expect(csv).toContain("\"João, 'Lívia'\"");
+    expect(csv).toContain('"Pendente"');
+    expect(csv).toContain('"Confirmado"');
+    expect(csv).toContain('"Não comparecerá"');
+    expect(csv).not.toMatch(/"(?:PENDING|CONFIRMED|DECLINED)"/u);
   });
 
   it("omits representativePhone column when phone is excluded", () => {
@@ -57,6 +78,14 @@ describe("RSVP report formats", () => {
     expect(csv.split("\r\n")[0].split(",")).toHaveLength(15);
     expect(csv).not.toContain("representativePhone");
     expect(csv).not.toContain("+5511999999999");
+  });
+
+  it("presents an RSVP state filter in Brazilian Portuguese", () => {
+    const csv = new TextDecoder().decode(
+      createRsvpCsv({ ...report, stateFilter: "DECLINED" }),
+    );
+    expect(csv).toContain('"Não comparecerá"');
+    expect(csv).not.toContain('"DECLINED"');
   });
 
   it("embeds DejaVu Unicode fonts and paginates long reports", async () => {
