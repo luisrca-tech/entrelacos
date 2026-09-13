@@ -1,4 +1,5 @@
 import {
+  groupDeleteConfirmationSchema,
   guestAccessPinResponseSchema,
   guestGroupCreateInputSchema,
   guestGroupDeleteResponseSchema,
@@ -209,6 +210,8 @@ export function createGuestGroupsHttpRouter(options: AuthHttpOptions): Hono {
         actor,
         context.req.param("siteId"),
         context.req.param("groupId"),
+        groupDeleteConfirmationSchema.parse(await readObject(context.req.raw)),
+        options.now?.(),
       );
       return context.json(guestGroupDeleteResponseSchema.parse(result), 200, {
         "Cache-Control": "no-store",

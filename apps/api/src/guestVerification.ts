@@ -26,6 +26,7 @@ import {
 } from "./familySession";
 import { deriveGuestGroupAccessPin } from "./guestGroups";
 import { lookupGuestGroup } from "./guestLookup";
+import { completeSmsReservation, reserveSmsUnit } from "./smsUsage";
 
 export type GuestVerificationDatabase = NodePgDatabase<Record<string, never>>;
 
@@ -195,6 +196,13 @@ function configuredProvider(
       503,
       "VERIFICATION_CONFIGURATION_ERROR",
       "Real SMS provider is not configured",
+    );
+  }
+  if (options.smsMode === "simulated" && provider.mode !== "MOCK") {
+    reject(
+      503,
+      "VERIFICATION_CONFIGURATION_ERROR",
+      "Simulated SMS requires the mock provider",
     );
   }
   return provider;
@@ -595,6 +603,7 @@ async function sendReserved(
   db: GuestVerificationDatabase,
   reservation: {
     sendId: string;
+    smsReservationId: string;
     challengeId: string;
     siteId: string;
     phoneE164: string;
@@ -616,6 +625,21 @@ async function sendReserved(
     result = { status: "UNKNOWN" };
   }
   const completedAt = new Date(reservation.now.getTime());
+  await completeSmsReservation(
+    db,
+    reservation.siteId,
+    reservation.smsReservationId,
+    result.status,
+    {
+      ...(result.status === "PROVIDER_ACCEPTED" && result.providerReference
+        ? { providerReference: result.providerReference }
+        : {}),
+      ...(result.status !== "PROVIDER_ACCEPTED" && result.failureCode
+        ? { failureCode: result.failureCode }
+        : {}),
+    },
+    completedAt,
+  );
   await db
     .update(guestVerificationSend)
     .set({
@@ -701,6 +725,7 @@ async function reserveChallenge(
   challengeId: string;
   siteId: string;
   sendId: string;
+  smsReservationId: string;
   phoneE164: string;
   code: string;
   provider: GuestVerificationProvider;
@@ -807,6 +832,14 @@ async function reserveChallenge(
         now,
       });
       const sendId = randomUUID();
+      const smsReservationId = randomUUID();
+      await reserveSmsUnit(
+        tx,
+        siteId,
+        provider.mode === "MOCK" ? "SIMULATED" : "REAL_SMS",
+        smsReservationId,
+        now,
+      );
       await tx
         .update(guestVerificationChallenge)
         .set({
@@ -820,6 +853,7 @@ async function reserveChallenge(
         siteId,
         groupId,
         challengeId,
+        smsReservationId,
         phoneE164,
         status: "RESERVED",
         reservedAt: now,
@@ -830,6 +864,7 @@ async function reserveChallenge(
         challengeId,
         siteId,
         sendId,
+        smsReservationId,
         phoneE164,
         code,
         provider,
@@ -906,6 +941,14 @@ async function reserveChallenge(
     expiresAt = new Date(now.getTime() + GUEST_CHALLENGE_TTL_MS);
     resendAvailableAt = new Date(now.getTime() + GUEST_RESEND_WAIT_MS);
     const sendId = randomUUID();
+    const smsReservationId = randomUUID();
+    await reserveSmsUnit(
+      tx,
+      siteId,
+      provider.mode === "MOCK" ? "SIMULATED" : "REAL_SMS",
+      smsReservationId,
+      now,
+    );
     await tx.insert(guestVerificationChallenge).values({
       id: challengeId,
       siteId,
@@ -925,6 +968,7 @@ async function reserveChallenge(
       siteId,
       groupId,
       challengeId,
+      smsReservationId,
       phoneE164,
       status: "RESERVED",
       reservedAt: now,
@@ -935,6 +979,7 @@ async function reserveChallenge(
       challengeId,
       siteId,
       sendId,
+      smsReservationId,
       phoneE164,
       code,
       provider,

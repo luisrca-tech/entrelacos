@@ -12,17 +12,20 @@
     "owner:reset": "tsx --env-file-if-exists=../../packages/database/.env --env-file-if-exists=.env scripts/resetOwner.ts"
   },
   "dependencies": {
+    "@better-auth/drizzle-adapter": "1.7.3",
     "@entrelacos/contracts": "workspace:*",
     "@entrelacos/database": "workspace:*",
     "@hono/node-server": "2.1.1",
     "better-auth": "1.7.3",
-    "@better-auth/drizzle-adapter": "1.7.3",
-    "hono": "4.13.7",
+    "dejavu-fonts-ttf": "2.37.3",
     "drizzle-orm": "0.45.2",
+    "hono": "4.13.7",
+    "pdfkit": "0.19.1",
     "pg": "8.23.0"
   },
   "devDependencies": {
     "@types/node": "24.13.4",
+    "@types/pdfkit": "0.17.6",
     "tsup": "8.5.1",
     "tsx": "4.23.13",
     "typescript": "5.9.3"

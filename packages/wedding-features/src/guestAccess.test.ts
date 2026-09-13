@@ -317,6 +317,16 @@ describe("guest access client", () => {
         new GuestAccessApiError(409, "RSVP_DEADLINE_PASSED"),
       ),
     ).toContain("prazo");
+    expect(
+      guestAccessErrorMessage(
+        new GuestAccessApiError(503, "SMS_QUOTA_NOT_CONFIGURED"),
+      ),
+    ).toContain("organização do casamento");
+    expect(
+      guestAccessErrorMessage(
+        new GuestAccessApiError(429, "SMS_QUOTA_EXCEEDED"),
+      ),
+    ).toContain("organização do casamento");
   });
 
   it("does not claim that an unconfirmed real delivery was sent", () => {

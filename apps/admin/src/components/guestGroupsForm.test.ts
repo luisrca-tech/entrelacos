@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   canIssueDemoGuestGrant,
   createGuestGroupDraft,
+  groupDeletionConfirmation,
   guestGroupDraftErrors,
   guestGroupDraftPayload,
 } from "./guestGroupsForm";
@@ -77,5 +78,19 @@ describe("guest group admin form", () => {
       phone: "+5562999999999",
       members: [{ id: "member-1", fullName: "Ana", isRepresentative: true }],
     });
+  });
+});
+
+describe("group deletion confirmation", () => {
+  it("requires the exact group name and binds the target ID", () => {
+    expect(
+      groupDeletionConfirmation("group-a", "Família Silva", "Família Silva"),
+    ).toEqual({
+      confirmGroupId: "group-a",
+      confirmGroupName: "Família Silva",
+    });
+    expect(
+      groupDeletionConfirmation("group-a", "Família Silva", "familia silva"),
+    ).toBeNull();
   });
 });

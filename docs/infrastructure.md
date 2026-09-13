@@ -15,7 +15,7 @@ No real provider resource was created, configured or mutated by the scaffold. Do
 | Cloudflare | Manual publication | Account ownership, approved worker names, deploy capability, admin compatibility settings, static assets config | Manual deploy, public URL, HTTPS, fallback/static routing; no fabricated account ID |
 | Railway | API publication | Project/service access, root build context, PORT, server environment variables | API liveness; later authenticated readiness/integration evidence separately |
 | Twilio Verify | First real SMS | Account SID, Auth Token or supported server credential, Verify Service SID, enabled Brazilian destinations, trial restrictions/balance, allowlisted test phone | Controlled real delivery and verification; never treat trial as unlimited/free sandbox |
-| SMS policies | Abuse/usage task | Initial monthly per-site ceiling, additional IP limits, accounting periods/time zone, provider failure accounting | Concurrent requests cannot exceed reservations; alerts and block behavior verified |
+| SMS policies | Abuse/usage task | Owner-selected monthly per-site ceiling, existing IP limits, `America/Sao_Paulo` accounting periods, provider failure accounting | Concurrent requests cannot exceed reservations; alerts and block behavior verified; no default budget inferred |
 | Domain / DNS | Optional custom domain task | Client domain ownership/access, domain provider account, DNS control, renewal responsibility | Verify correct deployment target and TLS; domain renewal remains external |
 | Repository CI | CI publication | GitHub repository if selected later, runner access, read-only default workflow permissions | Frozen install/check; no main migration/deploy jobs; add test-only secrets with database suite |
 | AI imagery | Media production task | Approved fictional couple reference, prompts, approved generation tool and usage terms | Consistent characters, approved crop/poster, no claim that generated photos depict the real venue |
@@ -25,11 +25,11 @@ No real provider resource was created, configured or mutated by the scaffold. Do
 
 ## Environment variables
 
-Names below reflect the runtime through Block 4. Block 4 adds no secret or provider dependency; it uses the existing API, admin, family-session, and database configuration. Empty examples are not functioning connections, and every secret remains server-only.
+Names below reflect the runtime through Block 5. Messages, reports, and quota accounting add no secret or provider dependency. PDF generation uses the pinned local PDFKit and DejaVu font packages and contacts no rendering service. Empty examples are not functioning connections, and every secret remains server-only.
 
 API URL examples use the origin `http://localhost:8080`; `/v1` belongs to the HTTP route path. The panel remains on `http://localhost:3000`, and the public demo remains on `http://localhost:4321`. The example `PUBLIC_SITE_ID=demo-wedding` is fictitious and does not identify a provisioned tenant.
 
-Database integration tests use `DATABASE_URL_TEST` exclusively and verify the actual Neon project, branch, endpoint, database, and role before proceeding. Never fall back to `DATABASE_URL`. Store the expected identities in private `DATABASE_PROJECT_ID`, `DATABASE_DEVELOPMENT_BRANCH_ID`, `DATABASE_TEST_BRANCH_ID`, and `DATABASE_NAME` configuration. Different hostnames alone do not prove branch isolation. Block 2 validation status is recorded in `docs/block2Validation.md`; Block 4 migration and execution status is recorded in `docs/block4Validation.md`.
+Database integration tests use `DATABASE_URL_TEST` exclusively and verify the actual Neon project, branch, endpoint, database, and role before proceeding. Never fall back to `DATABASE_URL`. Store the expected identities in private `DATABASE_PROJECT_ID`, `DATABASE_DEVELOPMENT_BRANCH_ID`, `DATABASE_TEST_BRANCH_ID`, and `DATABASE_NAME` configuration. Different hostnames alone do not prove branch isolation. Block 2 validation status is recorded in `docs/block2Validation.md`; Block 4 and Block 5 execution status is recorded in their respective validation documents.
 
 | Variable | Consumer | Classification |
 | --- | --- | --- |
@@ -70,7 +70,7 @@ Do not copy development secrets or database rows to main. A stable repository we
 
 ## Open engineering inputs
 
-The Block 3 IP policy is implemented as 10 sends/15 minutes, 30 sends/24 hours, 10 verification attempts/15 minutes, and 10 exact lookups/15 minutes. The monthly per-site SMS ceiling remains a Block 5 decision. Block 4 uses no new environment variable: it requires only verified `DATABASE_URL_TEST` for isolated migration/tests and existing API/admin/family-session configuration. Apply the generated Block 4 migration to the test database first; apply to development only after separate review; never connect to production. Select the video tool during media preflight. Verify provider plan/limits and recovery costs then, not from an old pricing snapshot. The guest browser transport is an `Authorization` bearer held only in site-namespaced `sessionStorage`; the separate admin-to-public handoff remains a later cross-origin decision.
+The Block 3 IP policy is implemented as 10 sends/15 minutes, 30 sends/24 hours, 10 verification attempts/15 minutes, and 10 exact lookups/15 minutes. Block 5 has no numeric monthly SMS ceiling by default: new real SMS sends remain blocked until an `OWNER` explicitly configures a limit and the provider gates pass. Manual PIN is the expected MVP verification path; deterministic simulation may validate quota accounting without proving provider delivery or account usage. Block 4 uses no new environment variable: it requires only verified `DATABASE_URL_TEST` for isolated migration/tests and existing API/admin/family-session configuration. Apply generated migrations to the test database first; apply to development only after separate review; never connect to production. Select the video tool during media preflight. Verify provider plan/limits and recovery costs then, not from an old pricing snapshot. The guest browser transport is an `Authorization` bearer held only in site-namespaced `sessionStorage`; the separate admin-to-public handoff remains a later cross-origin decision.
 
 ## Listening
 

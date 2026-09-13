@@ -1,9 +1,11 @@
 import {
+  type FamilyMessageResponse,
   type FamilyRsvpResponse,
   type FamilySessionResponse,
   guestLookupInputSchema,
 } from "@entrelacos/contracts";
 import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { FamilyMessageForm } from "./FamilyMessageForm";
 import {
   clearGuestSession,
   GuestAccessApi,
@@ -20,6 +22,12 @@ import {
   shouldDiscardGuestChallenge,
   writeGuestSession,
 } from "./guestAccess";
+import {
+  getMessageErrorMessage,
+  muralRefreshEventName,
+  WeddingMessagesApi,
+  type WeddingMessagesApiError,
+} from "./messages";
 import { RsvpForm } from "./RsvpForm";
 import {
   confirmAllDraft,
@@ -109,6 +117,22 @@ export function GuestAccess({
       };
     }
   }, [apiOrigin, fetcher, siteId]);
+  const messagesApiResult = useMemo(() => {
+    try {
+      return {
+        api: new WeddingMessagesApi({ apiOrigin, siteId, fetcher }),
+        error: "",
+      };
+    } catch (error) {
+      return {
+        api: null,
+        error:
+          error instanceof Error
+            ? error.message
+            : "A configuração pública deste site está inválida.",
+      };
+    }
+  }, [apiOrigin, fetcher, siteId]);
 
   const [phase, setPhase] = useState<GuestAccessPhase>("lookup");
   const [fullName, setFullName] = useState("");
@@ -125,6 +149,17 @@ export function GuestAccess({
   const [rsvpError, setRsvpError] = useState("");
   const [rsvpNotice, setRsvpNotice] = useState("");
   const retryRequest = useRef<{ key: string; requestId: string } | null>(null);
+  const [familyMessage, setFamilyMessage] =
+    useState<FamilyMessageResponse | null>(null);
+  const [messageDraft, setMessageDraft] = useState("");
+  const [messageReady, setMessageReady] = useState(false);
+  const [messageBusy, setMessageBusy] = useState(false);
+  const [messageError, setMessageError] = useState("");
+  const [messageNotice, setMessageNotice] = useState("");
+  const messageRetryRequest = useRef<{
+    key: string;
+    requestId: string;
+  } | null>(null);
   const [busy, setBusy] = useState(false);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState("");
@@ -163,18 +198,34 @@ export function GuestAccess({
         if (!active) return;
         setSession(restored);
         setPhase("authenticated");
-        const restoredRsvp = await apiResult.api?.getRsvp(token);
-        if (!active || !restoredRsvp) return;
-        setRsvp(restoredRsvp);
-        setRsvpDraft(
-          createRsvpDraft(
-            restoredRsvp.members.map((member) => ({
-              memberId: member.id,
-              status: member.state,
-              revision: member.revision,
-            })),
-          ),
-        );
+        const [restoredRsvp, restoredMessage] = await Promise.allSettled([
+          apiResult.api?.getRsvp(token),
+          messagesApiResult.api?.getFamilyMessage(token),
+        ]);
+        if (!active) return;
+        if (restoredRsvp.status === "fulfilled" && restoredRsvp.value) {
+          setRsvp(restoredRsvp.value);
+          setRsvpDraft(
+            createRsvpDraft(
+              restoredRsvp.value.members.map((member) => ({
+                memberId: member.id,
+                status: member.state,
+                revision: member.revision,
+              })),
+            ),
+          );
+        } else if (restoredRsvp.status === "rejected") {
+          setRsvpError(errorWithRetry(restoredRsvp.reason));
+        }
+        if (restoredMessage.status === "fulfilled" && restoredMessage.value) {
+          setFamilyMessage(restoredMessage.value);
+          setMessageDraft(restoredMessage.value.message?.text ?? "");
+        } else if (restoredMessage.status === "rejected") {
+          setMessageError(getMessageErrorMessage(restoredMessage.reason));
+        } else if (!messagesApiResult.api) {
+          setMessageError(messagesApiResult.error);
+        }
+        setMessageReady(true);
       })
       .catch((cause: unknown) => {
         if (!active) return;
@@ -183,6 +234,9 @@ export function GuestAccess({
           setSession(null);
           setRsvp(null);
           setRsvpDraft({});
+          setFamilyMessage(null);
+          setMessageDraft("");
+          setMessageReady(false);
           setPhase("lookup");
           setNotice("");
           setError(errorWithRetry(cause));
@@ -194,7 +248,7 @@ export function GuestAccess({
     return () => {
       active = false;
     };
-  }, [apiResult, now, siteId, storage]);
+  }, [apiResult, messagesApiResult, now, siteId, storage]);
 
   useEffect(() => {
     if (phase !== "code" || !challenge) return;
@@ -305,17 +359,33 @@ export function GuestAccess({
       setChallenge(null);
       setPhase("authenticated");
       setNotice("Acesso confirmado.");
-      const verifiedRsvp = await apiResult.api.getRsvp(result.sessionToken);
-      setRsvp(verifiedRsvp);
-      setRsvpDraft(
-        createRsvpDraft(
-          verifiedRsvp.members.map((member) => ({
-            memberId: member.id,
-            status: member.state,
-            revision: member.revision,
-          })),
-        ),
-      );
+      const [verifiedRsvp, verifiedMessage] = await Promise.allSettled([
+        apiResult.api.getRsvp(result.sessionToken),
+        messagesApiResult.api?.getFamilyMessage(result.sessionToken),
+      ]);
+      if (verifiedRsvp.status === "fulfilled") {
+        setRsvp(verifiedRsvp.value);
+        setRsvpDraft(
+          createRsvpDraft(
+            verifiedRsvp.value.members.map((member) => ({
+              memberId: member.id,
+              status: member.state,
+              revision: member.revision,
+            })),
+          ),
+        );
+      } else {
+        setRsvpError(errorWithRetry(verifiedRsvp.reason));
+      }
+      if (verifiedMessage.status === "fulfilled" && verifiedMessage.value) {
+        setFamilyMessage(verifiedMessage.value);
+        setMessageDraft(verifiedMessage.value.message?.text ?? "");
+      } else if (verifiedMessage.status === "rejected") {
+        setMessageError(getMessageErrorMessage(verifiedMessage.reason));
+      } else if (!messagesApiResult.api) {
+        setMessageError(messagesApiResult.error);
+      }
+      setMessageReady(true);
     } catch (cause) {
       const apiError = cause as Partial<GuestAccessApiError>;
       setError(
@@ -346,6 +416,12 @@ export function GuestAccess({
       setSession(null);
       setRsvp(null);
       setRsvpDraft({});
+      setFamilyMessage(null);
+      setMessageDraft("");
+      setMessageReady(false);
+      setMessageError("");
+      setMessageNotice("");
+      messageRetryRequest.current = null;
       setRsvpOpen(false);
       setChallenge(null);
       setCode("");
@@ -465,6 +541,113 @@ export function GuestAccess({
       }
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function reloadFamilyMessage(preserveDraft: boolean) {
+    const token = storage ? readGuestSession(storage, siteId) : null;
+    if (!token || !messagesApiResult.api) {
+      setMessageError(
+        messagesApiResult.error || "A sessão da família não está disponível.",
+      );
+      setMessageReady(true);
+      return;
+    }
+    setMessageBusy(true);
+    setMessageError("");
+    try {
+      const current = await messagesApiResult.api.getFamilyMessage(token);
+      setFamilyMessage(current);
+      if (!preserveDraft) setMessageDraft(current.message?.text ?? "");
+      messageRetryRequest.current = null;
+    } catch (cause) {
+      const apiError = cause as Partial<WeddingMessagesApiError>;
+      const message = getMessageErrorMessage(cause);
+      setMessageError(message);
+      if (apiError.status === 401) {
+        if (storage) clearGuestSession(storage, siteId);
+        setSession(null);
+        setRsvp(null);
+        setRsvpDraft({});
+        setFamilyMessage(null);
+        setMessageDraft("");
+        setPhase("lookup");
+        setNotice("");
+        setError(message);
+      }
+    } finally {
+      setMessageReady(true);
+      setMessageBusy(false);
+    }
+  }
+
+  async function saveFamilyMessage() {
+    const token = storage ? readGuestSession(storage, siteId) : null;
+    if (
+      !token ||
+      !messagesApiResult.api ||
+      !familyMessage?.canEdit ||
+      messageBusy
+    ) {
+      return;
+    }
+    const input = {
+      expectedRevision: familyMessage.currentRevision,
+      text: messageDraft,
+    };
+    const key = JSON.stringify(input);
+    const requestId =
+      messageRetryRequest.current?.key === key
+        ? messageRetryRequest.current.requestId
+        : globalThis.crypto.randomUUID();
+    messageRetryRequest.current = { key, requestId };
+    setMessageBusy(true);
+    setMessageError("");
+    setMessageNotice("");
+    try {
+      const saved = await messagesApiResult.api.saveFamilyMessage(token, {
+        requestId,
+        ...input,
+      });
+      setFamilyMessage({
+        ...familyMessage,
+        currentRevision: saved.message.revision,
+        message: saved.message,
+      });
+      setMessageDraft(saved.message.text);
+      messageRetryRequest.current = null;
+      setMessageNotice(
+        saved.result === "NO_CHANGE"
+          ? "A mensagem já estava atualizada."
+          : "Mensagem publicada no mural.",
+      );
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new Event(muralRefreshEventName(siteId)));
+      }
+    } catch (cause) {
+      const apiError = cause as Partial<WeddingMessagesApiError>;
+      const message = getMessageErrorMessage(cause);
+      setMessageError(message);
+      if (
+        apiError.code === "MESSAGE_CONFLICT" ||
+        apiError.code === "MESSAGE_REMOVED"
+      ) {
+        await reloadFamilyMessage(true);
+        setMessageError(message);
+      }
+      if (apiError.status === 401) {
+        if (storage) clearGuestSession(storage, siteId);
+        setSession(null);
+        setRsvp(null);
+        setRsvpDraft({});
+        setFamilyMessage(null);
+        setMessageDraft("");
+        setPhase("lookup");
+        setNotice("");
+        setError(message);
+      }
+    } finally {
+      setMessageBusy(false);
     }
   }
 
@@ -635,6 +818,42 @@ export function GuestAccess({
             <p role="status">
               As respostas de presença não estão disponíveis agora.
             </p>
+          )}
+          {!messageReady ? (
+            <p role="status">Carregando a mensagem deste convite…</p>
+          ) : familyMessage ? (
+            <FamilyMessageForm
+              message={familyMessage.message}
+              currentRevision={familyMessage.currentRevision}
+              canEdit={familyMessage.canEdit}
+              readOnlyReason={familyMessage.readOnlyReason}
+              value={messageDraft}
+              busy={messageBusy}
+              error={messageError}
+              notice={messageNotice}
+              onChange={(value) => {
+                setMessageDraft(value);
+                setMessageError("");
+                setMessageNotice("");
+              }}
+              onSave={() => void saveFamilyMessage()}
+              onReload={() => void reloadFamilyMessage(false)}
+            />
+          ) : (
+            <div className="entrelacos-family-message">
+              <p className="entrelacos-guest-access__message" role="alert">
+                {messageError ||
+                  "A mensagem deste convite não está disponível agora."}
+              </p>
+              <button
+                type="button"
+                className="entrelacos-guest-access__link"
+                disabled={messageBusy}
+                onClick={() => void reloadFamilyMessage(false)}
+              >
+                Recarregar mensagem
+              </button>
+            </div>
           )}
           <button
             type="button"

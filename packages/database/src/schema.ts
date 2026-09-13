@@ -9,8 +9,10 @@ import {
   jsonb,
   pgEnum,
   pgTable,
+  primaryKey,
   text,
   timestamp,
+  unique,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
 
@@ -68,6 +70,18 @@ export const rsvpActorType = pgEnum("rsvp_actor_type", ["ADMIN", "FAMILY"]);
 export const rsvpRequestScope = pgEnum("rsvp_request_scope", [
   "PUBLIC",
   "ADMIN",
+]);
+export const messageRequestResult = pgEnum("message_request_result", [
+  "APPLIED",
+  "NO_CHANGE",
+  "REMOVED",
+]);
+export const smsUsageMode = pgEnum("sms_usage_mode", ["SIMULATED", "REAL_SMS"]);
+export const smsReservationStatus = pgEnum("sms_reservation_status", [
+  "RESERVED",
+  "PROVIDER_ACCEPTED",
+  "FAILED_FINAL",
+  "UNKNOWN",
 ]);
 
 export const user = pgTable("user", {
@@ -176,6 +190,8 @@ export const site = pgTable(
     }),
     rsvpDeadlineAt: timestamp("rsvp_deadline_at", { withTimezone: true }),
     rsvpDeadlineTimezone: text("rsvp_deadline_timezone"),
+    muralEnabled: boolean("mural_enabled").notNull().default(false),
+    smsMonthlyLimit: integer("sms_monthly_limit"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -199,6 +215,10 @@ export const site = pgTable(
       "site_rsvp_deadline_pair_check",
       sql`(${table.rsvpDeadlineAt} IS NULL) = (${table.rsvpDeadlineTimezone} IS NULL)`,
     ),
+    check(
+      "site_sms_monthly_limit_check",
+      sql`${table.smsMonthlyLimit} IS NULL OR ${table.smsMonthlyLimit} BETWEEN 0 AND 1000000`,
+    ),
   ],
 );
 
@@ -214,6 +234,8 @@ export const guestGroup = pgTable(
     isForeign: boolean("is_foreign").notNull().default(false),
     phoneE164: text("phone_e164"),
     representativeMemberId: text("representative_member_id").notNull(),
+    messageBlocked: boolean("message_blocked").notNull().default(false),
+    messageRevision: integer("message_revision").notNull().default(0),
     manualPinSeed: text("manual_pin_seed")
       .notNull()
       .default(sql`encode(gen_random_bytes(32), 'hex')`),
@@ -249,6 +271,10 @@ export const guestGroup = pgTable(
     check(
       "guest_group_manual_pin_seed_check",
       sql`${table.manualPinSeed} ~ '^[a-f0-9]{64}$'`,
+    ),
+    check(
+      "guest_group_message_revision_check",
+      sql`${table.messageRevision} >= 0`,
     ),
   ],
 );
@@ -358,6 +384,96 @@ export const guestVerificationChallenge = pgTable(
   ],
 );
 
+export const smsUsage = pgTable(
+  "sms_usage",
+  {
+    id: text("id").primaryKey(),
+    siteId: text("site_id")
+      .notNull()
+      .references(() => site.id, { onDelete: "cascade" }),
+    periodStart: timestamp("period_start", { withTimezone: true }).notNull(),
+    periodEnd: timestamp("period_end", { withTimezone: true }).notNull(),
+    mode: smsUsageMode("mode").notNull(),
+    reserved: integer("reserved").notNull().default(0),
+    providerAccepted: integer("provider_accepted").notNull().default(0),
+    failedFinal: integer("failed_final").notNull().default(0),
+    unknown: integer("unknown").notNull().default(0),
+    consumed: integer("consumed").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("sms_usage_site_period_mode_idx").on(
+      table.siteId,
+      table.periodStart,
+      table.mode,
+    ),
+    unique("sms_usage_site_id_mode_key").on(table.siteId, table.id, table.mode),
+    index("sms_usage_site_period_idx").on(table.siteId, table.periodStart),
+    check(
+      "sms_usage_period_check",
+      sql`${table.periodEnd} > ${table.periodStart}`,
+    ),
+    check("sms_usage_reserved_check", sql`${table.reserved} >= 0`),
+    check(
+      "sms_usage_provider_accepted_check",
+      sql`${table.providerAccepted} >= 0`,
+    ),
+    check("sms_usage_failed_final_check", sql`${table.failedFinal} >= 0`),
+    check("sms_usage_unknown_check", sql`${table.unknown} >= 0`),
+    check("sms_usage_consumed_check", sql`${table.consumed} >= 0`),
+    check(
+      "sms_usage_consumed_total_check",
+      sql`${table.consumed} = ${table.reserved} + ${table.providerAccepted} + ${table.failedFinal} + ${table.unknown}`,
+    ),
+  ],
+);
+
+export const smsSendReservation = pgTable(
+  "sms_send_reservation",
+  {
+    id: text("id").primaryKey(),
+    siteId: text("site_id")
+      .notNull()
+      .references(() => site.id, { onDelete: "cascade" }),
+    usageId: text("usage_id").notNull(),
+    mode: smsUsageMode("mode").notNull(),
+    status: smsReservationStatus("status").notNull().default("RESERVED"),
+    providerReference: text("provider_reference"),
+    failureCode: text("failure_code"),
+    reservedAt: timestamp("reserved_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    unique("sms_send_reservation_site_id_key").on(table.siteId, table.id),
+    index("sms_send_reservation_site_usage_idx").on(
+      table.siteId,
+      table.usageId,
+    ),
+    index("sms_send_reservation_site_status_idx").on(
+      table.siteId,
+      table.status,
+    ),
+    foreignKey({
+      columns: [table.siteId, table.usageId, table.mode],
+      foreignColumns: [smsUsage.siteId, smsUsage.id, smsUsage.mode],
+      name: "sms_send_reservation_site_usage_mode_fk",
+    }).onDelete("cascade"),
+  ],
+);
+
 export const guestVerificationSend = pgTable(
   "guest_verification_send",
   {
@@ -365,6 +481,7 @@ export const guestVerificationSend = pgTable(
     siteId: text("site_id").notNull(),
     groupId: text("group_id").notNull(),
     challengeId: text("challenge_id").notNull(),
+    smsReservationId: text("sms_reservation_id"),
     phoneE164: text("phone_e164").notNull(),
     status: guestVerificationSendStatus("status").notNull().default("RESERVED"),
     providerReference: text("provider_reference"),
@@ -393,6 +510,10 @@ export const guestVerificationSend = pgTable(
       table.siteId,
       table.groupId,
     ),
+    index("guest_verification_send_site_reservation_idx").on(
+      table.siteId,
+      table.smsReservationId,
+    ),
     foreignKey({
       columns: [table.siteId, table.groupId],
       foreignColumns: [guestGroup.siteId, guestGroup.id],
@@ -405,6 +526,11 @@ export const guestVerificationSend = pgTable(
         guestVerificationChallenge.id,
       ],
       name: "guest_verification_send_challenge_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.siteId, table.smsReservationId],
+      foreignColumns: [smsSendReservation.siteId, smsSendReservation.id],
+      name: "guest_verification_send_sms_reservation_fk",
     }).onDelete("cascade"),
     check(
       "guest_verification_send_phone_e164_check",
@@ -487,6 +613,113 @@ export const familySession = pgTable(
   ],
 );
 
+export const familyMessage = pgTable(
+  "family_message",
+  {
+    id: text("id").primaryKey(),
+    siteId: text("site_id").notNull(),
+    groupId: text("group_id").notNull(),
+    authorMemberId: text("author_member_id").notNull(),
+    authorName: text("author_name").notNull(),
+    groupName: text("group_name").notNull(),
+    text: text("text").notNull(),
+    revision: integer("revision").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("family_message_site_group_idx").on(
+      table.siteId,
+      table.groupId,
+    ),
+    index("family_message_mural_order_idx").on(
+      table.siteId,
+      table.createdAt,
+      table.id,
+    ),
+    foreignKey({
+      columns: [table.siteId, table.groupId],
+      foreignColumns: [guestGroup.siteId, guestGroup.id],
+      name: "family_message_site_group_fk",
+    }).onDelete("cascade"),
+    check("family_message_revision_check", sql`${table.revision} > 0`),
+    check(
+      "family_message_author_name_not_blank_check",
+      sql`length(trim(${table.authorName})) > 0`,
+    ),
+    check(
+      "family_message_group_name_not_blank_check",
+      sql`length(trim(${table.groupName})) > 0`,
+    ),
+    check(
+      "family_message_text_not_blank_check",
+      sql`length(regexp_replace(${table.text}, '[[:space:]]', '', 'g')) > 0`,
+    ),
+    check(
+      "family_message_text_length_check",
+      sql`char_length(${table.text}) BETWEEN 1 AND 1000`,
+    ),
+    check(
+      "family_message_text_no_angle_brackets_check",
+      sql`position('<' in ${table.text}) = 0 AND position('>' in ${table.text}) = 0`,
+    ),
+    check(
+      "family_message_text_control_chars_check",
+      sql`regexp_replace(${table.text}, E'\\n', '', 'g') !~ '[[:cntrl:]]' AND ${table.text} !~ (E'[' || chr(127) || '-' || chr(159) || ']')`,
+    ),
+  ],
+);
+
+export const messageRequestReceipt = pgTable(
+  "message_request_receipt",
+  {
+    id: text("id").primaryKey(),
+    siteId: text("site_id")
+      .notNull()
+      .references(() => site.id, { onDelete: "cascade" }),
+    groupId: text("group_id").notNull(),
+    sessionId: text("session_id").notNull(),
+    requestId: text("request_id").notNull(),
+    requestHash: text("request_hash").notNull(),
+    revision: integer("revision").notNull(),
+    result: messageRequestResult("result").notNull(),
+    responseBody: jsonb("response_body"),
+    removedAt: timestamp("removed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("message_request_receipt_site_group_session_request_idx").on(
+      table.siteId,
+      table.groupId,
+      table.sessionId,
+      table.requestId,
+    ),
+    index("message_request_receipt_site_group_created_idx").on(
+      table.siteId,
+      table.groupId,
+      table.createdAt,
+    ),
+    check(
+      "message_request_receipt_request_hash_check",
+      sql`${table.requestHash} ~ '^[a-f0-9]{64}$'`,
+    ),
+    check(
+      "message_request_receipt_revision_check",
+      sql`${table.revision} >= 0`,
+    ),
+    check(
+      "message_request_receipt_removal_check",
+      sql`(${table.result} = 'REMOVED' AND ${table.removedAt} IS NOT NULL AND ${table.responseBody} IS NULL) OR (${table.result} <> 'REMOVED' AND ${table.removedAt} IS NULL AND ${table.responseBody} IS NOT NULL)`,
+    ),
+  ],
+);
+
 export const rsvpHistory = pgTable(
   "rsvp_history",
   {
@@ -544,12 +777,14 @@ export const rsvpRequestReceipt = pgTable(
     requestId: text("request_id").notNull(),
     requestHash: text("request_hash").notNull(),
     responseStatus: text("response_status").notNull(),
-    responseBody: jsonb("response_body").notNull(),
+    responseBody: jsonb("response_body"),
+    removedAt: timestamp("removed_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
   },
   (table) => [
+    unique("rsvp_request_receipt_site_id_key").on(table.siteId, table.id),
     uniqueIndex("rsvp_request_receipt_site_scope_actor_request_idx").on(
       table.siteId,
       table.scope,
@@ -574,6 +809,40 @@ export const rsvpRequestReceipt = pgTable(
       "rsvp_request_receipt_group_scope_check",
       sql`(${table.scope} = 'PUBLIC' AND ${table.groupId} IS NOT NULL) OR (${table.scope} = 'ADMIN')`,
     ),
+    check(
+      "rsvp_request_receipt_removal_check",
+      sql`(${table.responseStatus} = 'REMOVED' AND ${table.removedAt} IS NOT NULL AND ${table.responseBody} IS NULL) OR (${table.responseStatus} <> 'REMOVED' AND ${table.removedAt} IS NULL AND ${table.responseBody} IS NOT NULL)`,
+    ),
+  ],
+);
+
+export const rsvpRequestReceiptGroup = pgTable(
+  "rsvp_request_receipt_group",
+  {
+    siteId: text("site_id").notNull(),
+    receiptId: text("receipt_id").notNull(),
+    groupId: text("group_id").notNull(),
+  },
+  (table) => [
+    primaryKey({
+      columns: [table.siteId, table.receiptId, table.groupId],
+      name: "rsvp_request_receipt_group_pk",
+    }),
+    index("rsvp_request_receipt_group_lookup_idx").on(
+      table.siteId,
+      table.groupId,
+      table.receiptId,
+    ),
+    foreignKey({
+      columns: [table.siteId, table.receiptId],
+      foreignColumns: [rsvpRequestReceipt.siteId, rsvpRequestReceipt.id],
+      name: "rsvp_request_receipt_group_receipt_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.siteId, table.groupId],
+      foreignColumns: [guestGroup.siteId, guestGroup.id],
+      name: "rsvp_request_receipt_group_site_group_fk",
+    }).onDelete("cascade"),
   ],
 );
 
@@ -749,8 +1018,13 @@ export const siteRelations = relations(site, ({ many, one }) => ({
   guestVerificationSends: many(guestVerificationSend),
   guestRateLimitEvents: many(guestRateLimitEvent),
   familySessions: many(familySession),
+  familyMessages: many(familyMessage),
+  messageRequestReceipts: many(messageRequestReceipt),
   rsvpHistory: many(rsvpHistory),
   rsvpRequestReceipts: many(rsvpRequestReceipt),
+  rsvpRequestReceiptGroups: many(rsvpRequestReceiptGroup),
+  smsUsage: many(smsUsage),
+  smsSendReservations: many(smsSendReservation),
   term: one(siteTerm),
 }));
 
@@ -764,8 +1038,10 @@ export const guestGroupRelations = relations(guestGroup, ({ one, many }) => ({
   verificationSends: many(guestVerificationSend),
   rateLimitEvents: many(guestRateLimitEvent),
   familySessions: many(familySession),
+  familyMessages: many(familyMessage),
   rsvpHistory: many(rsvpHistory),
   rsvpRequestReceipts: many(rsvpRequestReceipt),
+  rsvpRequestReceiptGroups: many(rsvpRequestReceiptGroup),
 }));
 
 export const guestMemberRelations = relations(guestMember, ({ one, many }) => ({
@@ -816,6 +1092,13 @@ export const guestVerificationSendRelations = relations(
         guestVerificationChallenge.id,
       ],
     }),
+    smsReservation: one(smsSendReservation, {
+      fields: [
+        guestVerificationSend.siteId,
+        guestVerificationSend.smsReservationId,
+      ],
+      references: [smsSendReservation.siteId, smsSendReservation.id],
+    }),
   }),
 );
 
@@ -844,6 +1127,27 @@ export const familySessionRelations = relations(familySession, ({ one }) => ({
   }),
 }));
 
+export const familyMessageRelations = relations(familyMessage, ({ one }) => ({
+  site: one(site, {
+    fields: [familyMessage.siteId],
+    references: [site.id],
+  }),
+  group: one(guestGroup, {
+    fields: [familyMessage.siteId, familyMessage.groupId],
+    references: [guestGroup.siteId, guestGroup.id],
+  }),
+}));
+
+export const messageRequestReceiptRelations = relations(
+  messageRequestReceipt,
+  ({ one }) => ({
+    site: one(site, {
+      fields: [messageRequestReceipt.siteId],
+      references: [site.id],
+    }),
+  }),
+);
+
 export const rsvpHistoryRelations = relations(rsvpHistory, ({ one }) => ({
   site: one(site, {
     fields: [rsvpHistory.siteId],
@@ -861,7 +1165,7 @@ export const rsvpHistoryRelations = relations(rsvpHistory, ({ one }) => ({
 
 export const rsvpRequestReceiptRelations = relations(
   rsvpRequestReceipt,
-  ({ one }) => ({
+  ({ one, many }) => ({
     site: one(site, {
       fields: [rsvpRequestReceipt.siteId],
       references: [site.id],
@@ -870,6 +1174,55 @@ export const rsvpRequestReceiptRelations = relations(
       fields: [rsvpRequestReceipt.siteId, rsvpRequestReceipt.groupId],
       references: [guestGroup.siteId, guestGroup.id],
     }),
+    groups: many(rsvpRequestReceiptGroup),
+  }),
+);
+
+export const rsvpRequestReceiptGroupRelations = relations(
+  rsvpRequestReceiptGroup,
+  ({ one }) => ({
+    site: one(site, {
+      fields: [rsvpRequestReceiptGroup.siteId],
+      references: [site.id],
+    }),
+    receipt: one(rsvpRequestReceipt, {
+      fields: [
+        rsvpRequestReceiptGroup.siteId,
+        rsvpRequestReceiptGroup.receiptId,
+      ],
+      references: [rsvpRequestReceipt.siteId, rsvpRequestReceipt.id],
+    }),
+    group: one(guestGroup, {
+      fields: [rsvpRequestReceiptGroup.siteId, rsvpRequestReceiptGroup.groupId],
+      references: [guestGroup.siteId, guestGroup.id],
+    }),
+  }),
+);
+
+export const smsUsageRelations = relations(smsUsage, ({ one, many }) => ({
+  site: one(site, {
+    fields: [smsUsage.siteId],
+    references: [site.id],
+  }),
+  reservations: many(smsSendReservation),
+}));
+
+export const smsSendReservationRelations = relations(
+  smsSendReservation,
+  ({ one, many }) => ({
+    site: one(site, {
+      fields: [smsSendReservation.siteId],
+      references: [site.id],
+    }),
+    usage: one(smsUsage, {
+      fields: [
+        smsSendReservation.siteId,
+        smsSendReservation.usageId,
+        smsSendReservation.mode,
+      ],
+      references: [smsUsage.siteId, smsUsage.id, smsUsage.mode],
+    }),
+    verificationSends: many(guestVerificationSend),
   }),
 );
 

@@ -277,14 +277,14 @@ Block 4 uses a paired nullable deadline because “no deadline” must not acqui
 
 **User stories:** US-083–US-103.
 
-**Dependencies:** Blocks 1–4; guest session and representative identity; admin roles; disposable Neon integration; PDF/CSV generation approach; numeric SMS ceiling decision before final acceptance.
+**Dependencies:** Blocks 1–4; guest session and representative identity; admin roles; disposable Neon integration; reviewed PDF/CSV generation; explicit owner configuration before real SMS.
 
 ### BEFORE START
 
 - **Infrastructure:** Disposable Neon integration resources. No message or report provider is needed. A Twilio usage account is needed only if live usage accounting is verified.
 - **Tools:** Deterministic message fixtures, CSV/PDF generation and pagination tools, browser print/PDF evidence, and usage-counter test support.
 - **Secrets and access:** None for mocked message/export tests. A live SMS ceiling test requires Twilio usage access and the owner-approved service configuration; do not invent provider usage data.
-- **Decisions:** One message per group, 1,000-character limit with emojis/newlines, no HTML/attachments, representative-only edit, admin-only delete, group block independent from RSVP, per-site mural toggle retaining data, public author privacy, deletion cascade, report fields/filters, and numeric monthly send ceiling remain required.
+- **Decisions:** One message per group, 1,000-character limit with emojis/newlines, no HTML/attachments, representative-only edit, admin-only delete, group block independent from RSVP, per-site mural toggle retaining data, public author privacy, deletion cascade, report fields/filters, and an owner-configured nullable monthly send ceiling are frozen in `docs/block5Contracts.md`. No default numeric ceiling is inferred.
 
 ### Concrete vertical-slice tasks
 
@@ -293,7 +293,7 @@ Block 4 uses a paired nullable deadline because “no deadline” must not acqui
 3. **B5-T3 — Moderate messages.** Deliver admin delete and group message block/unblock. Verify deletion permits later publication and blocking never prevents RSVP.
 4. **B5-T4 — Delete a group safely.** Deliver confirmed group deletion with explicit confirmation and cascade of members, RSVP, messages, sessions, and pending challenges. Preserve unrelated tenant and sentinel data.
 5. **B5-T5 — Export wedding reports.** Deliver wedding-scoped CSV and paginated printable PDF reports with heading, generated date/time, totals, groups, member names/statuses, representative phone inclusion/omission, and RSVP filters. Exclude messages.
-6. **B5-T6 — Enforce SMS usage ceiling.** Deliver owner-configured monthly SMS ceiling, usage display, 80%/100% alerts, and blocked-new-send guidance while keeping saved RSVP, existing sessions, and admin RSVP available. Keep the default numeric value pending until decided.
+6. **B5-T6 — Enforce SMS usage ceiling.** Deliver owner-configured monthly SMS ceiling, usage display, 80%/100% alerts, and blocked-new-send guidance while keeping saved RSVP, existing sessions, admin RSVP, and manual PIN available. With no configured value, real SMS remains blocked; there is no numeric default.
 
 ### Task-level preflight
 
@@ -304,7 +304,7 @@ Block 4 uses a paired nullable deadline because “no deadline” must not acqui
 | B5-T3 | **Infrastructure:** Neon disposable base. **Tools:** admin/browser moderation tests. **Secrets/access:** site-admin and owner fixtures. **Decisions:** admin delete only; group block independent from RSVP. | B5-T1, B5-T2 |
 | B5-T4 | **Infrastructure:** Neon disposable base with sentinel tenant. **Tools:** transaction/cascade tests. **Secrets/access:** site-admin/owner fixture. **Decisions:** explicit confirmation and deletion cascade; retention policy gate remains open. | B4-T5, B5-T3 |
 | B5-T5 | **Infrastructure:** Neon disposable base. **Tools:** CSV/PDF generation and print/browser evidence. **Secrets/access:** authorized admin fixture. **Decisions:** report fields, filters, pagination, messages excluded. | B4-T5, B5-T4 |
-| B5-T6 | **Infrastructure:** usage store and optional Twilio account data. **Tools:** counter/alert test clock. **Secrets/access:** owner fixture; live usage access only if provider-approved. **Decisions:** numeric default and blocked-send policy. | B3-T3, B5-T1 |
+| B5-T6 | **Infrastructure:** site-level usage store; no provider is required for deterministic simulation. **Tools:** counter/alert test clock. **Secrets/access:** owner fixture; live usage access only if separately provider-approved. **Decisions:** nullable explicit limit, fail-closed real SMS, civil month in `America/Sao_Paulo`, and manual PIN outside quota. | B3-T3, B5-T1 |
 
 ### Template integration boundary
 
@@ -324,6 +324,8 @@ Shared message presentation and API/session handling belong in `packages/wedding
 - Database isolation tests prove deletion and exports cannot touch or include a second wedding; a sentinel tenant remains unchanged.
 - PDF/CSV fixtures prove messages are omitted and selected phone/RSVP fields are included exactly as requested.
 - Usage evidence distinguishes mocked counters from real Twilio account usage and makes no delivery or budget guarantee without provider verification.
+
+**Implementation status — 2026-09-12:** Complete for the authorized local boundary. All six slices passed contract, full isolated PostgreSQL, independent browser, static artifact, and repository validation. See `docs/block5Validation.md` for executed evidence and remaining external gates, and `docs/block5Handoff.md` for Block 6 integration constraints. No development/production migration, deployment, provider call, commit, or push is included in this status.
 
 ---
 

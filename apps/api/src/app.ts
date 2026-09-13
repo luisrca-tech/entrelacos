@@ -5,9 +5,12 @@ import { type AuthHttpOptions, createAuthHttpRouter } from "./authHttp";
 import { createDemoGuestGrantHttpRouter } from "./demoGuestGrant";
 import { createGuestGroupsHttpRouter } from "./guestGroupsHttp";
 import { createHandoffHttpRouter } from "./handoffHttp";
+import { createMessagesHttpRouter } from "./messagesHttp";
 import { createPublicGuestHttpRouter } from "./publicGuestHttp";
+import { createReportsHttpRouter } from "./reportsHttp";
 import { createRsvpHttpRouter } from "./rsvpHttp";
 import { createSitesHttpRouter } from "./sitesHttp";
+import { createSmsUsageHttpRouter } from "./smsUsageHttp";
 
 export function createApp(options?: AuthHttpOptions) {
   const app = new Hono();
@@ -27,6 +30,9 @@ export function createApp(options?: AuthHttpOptions) {
     app.route("/", createDemoGuestGrantHttpRouter(options));
     app.route("/", createPublicGuestHttpRouter(options));
     app.route("/", createRsvpHttpRouter(options));
+    app.route("/", createReportsHttpRouter(options));
+    app.route("/", createMessagesHttpRouter(options));
+    app.route("/", createSmsUsageHttpRouter(options));
     app.route("/", createHandoffHttpRouter(options));
   }
 

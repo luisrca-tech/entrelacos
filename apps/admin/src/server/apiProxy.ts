@@ -23,7 +23,13 @@ function problem(status: number, code: string, title: string): Response {
 
 function copyResponseHeaders(source: Headers): Headers {
   const headers = new Headers();
-  for (const name of ["cache-control", "content-type", "pragma", "vary"]) {
+  for (const name of [
+    "cache-control",
+    "content-disposition",
+    "content-type",
+    "pragma",
+    "vary",
+  ]) {
     const value = source.get(name);
     if (value) headers.set(name, value);
   }

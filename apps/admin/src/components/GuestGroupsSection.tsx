@@ -10,9 +10,11 @@ import {
   canIssueDemoGuestGrant,
   createGuestGroupDraft,
   type GuestGroupDraft,
+  groupDeletionConfirmation,
   guestGroupDraftErrors,
   guestGroupDraftPayload,
 } from "./guestGroupsForm";
+import { emitGuestGroupsChanged } from "./guestGroupsRefresh";
 
 type GuestGroupsSectionProps = {
   siteId: string;
@@ -44,6 +46,8 @@ function apiMessage(cause: unknown): string {
       return "Confira o nome, os convidados, o representante e o celular informado.";
     if (cause.code === "GROUP_NOT_FOUND")
       return "Este grupo não existe mais. Atualize a lista e tente novamente.";
+    if (cause.code === "GROUP_CONFIRMATION_MISMATCH")
+      return "A confirmação não corresponde ao grupo atual. Recarregue os dados e tente novamente.";
     return cause.message;
   }
   return cause instanceof Error
@@ -70,6 +74,10 @@ export function GuestGroupsSection({
   const [accessPin, setAccessPin] = useState<
     (GuestAccessPinResponse & { groupId: string; groupName: string }) | null
   >(null);
+  const [deleteTarget, setDeleteTarget] = useState<GuestGroupRecord | null>(
+    null,
+  );
+  const [deleteConfirmation, setDeleteConfirmation] = useState("");
   const inactive = lifecycle === "INACTIVE";
 
   const load = useCallback(async () => {
@@ -187,6 +195,7 @@ export function GuestGroupsSection({
       }
       closeForm();
       await load();
+      emitGuestGroupsChanged(window, siteId);
     } catch (cause) {
       setError(apiMessage(cause));
     } finally {
@@ -196,19 +205,30 @@ export function GuestGroupsSection({
 
   async function remove(group: GuestGroupRecord) {
     if (inactive || pending) return;
-    if (!window.confirm(`Excluir o grupo “${group.name}”?`)) return;
+    const confirmation = groupDeletionConfirmation(
+      group.id,
+      group.name,
+      deleteConfirmation,
+    );
+    if (!confirmation) {
+      setError("Digite o nome exato do grupo para confirmar a exclusão.");
+      return;
+    }
     setPending(true);
     setError("");
     setNotice("");
     try {
       await apiRequest(
         `/v1/sites/${encodeURIComponent(siteId)}/groups/${encodeURIComponent(group.id)}`,
-        { method: "DELETE", body: {} },
+        { method: "DELETE", body: confirmation },
       );
       if (accessPin?.groupId === group.id) setAccessPin(null);
       setNotice("Grupo excluído.");
+      setDeleteTarget(null);
+      setDeleteConfirmation("");
       if (editingId === group.id) closeForm();
       await load();
+      emitGuestGroupsChanged(window, siteId);
     } catch (cause) {
       setError(apiMessage(cause));
     } finally {
@@ -343,6 +363,53 @@ export function GuestGroupsSection({
       )}
       {error && <p role="alert">{error}</p>}
       {notice && <p role="status">{notice}</p>}
+      {deleteTarget && (
+        <div
+          className="group-delete-confirmation"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="group-delete-title"
+        >
+          <h3 id="group-delete-title">Excluir {deleteTarget.name}?</h3>
+          <p>
+            Esta ação remove o grupo, convidados, respostas, histórico, sessão,
+            mensagem e dados de acesso associados. Digite o nome exato do grupo
+            para continuar: <strong>{deleteTarget.name}</strong>
+          </p>
+          <label>
+            Nome exato do grupo
+            <input
+              autoComplete="off"
+              value={deleteConfirmation}
+              onChange={(event) => {
+                setDeleteConfirmation(event.target.value);
+                setError("");
+              }}
+            />
+          </label>
+          <div className="inline-actions">
+            <button
+              type="button"
+              className="danger-action"
+              disabled={pending || deleteConfirmation !== deleteTarget.name}
+              onClick={() => void remove(deleteTarget)}
+            >
+              {pending ? "Excluindo…" : "Excluir grupo definitivamente"}
+            </button>
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() => {
+                setDeleteTarget(null);
+                setDeleteConfirmation("");
+                setError("");
+              }}
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
       {demoGrant && (
         <div className="demo-guest-grant" role="status">
           <strong>Autorização temporária · {demoGrant.groupName}</strong>
@@ -579,7 +646,12 @@ export function GuestGroupsSection({
                   <button
                     disabled={pending}
                     type="button"
-                    onClick={() => void remove(group)}
+                    onClick={() => {
+                      setDeleteTarget(group);
+                      setDeleteConfirmation("");
+                      setError("");
+                      setNotice("");
+                    }}
                   >
                     Excluir
                   </button>
