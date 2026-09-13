@@ -1,6 +1,6 @@
 # EntreLaços Decision Register
 
-**Status:** Durable product decisions from the accepted interview dated 2026-09-09, including the Block 4 contract decisions recorded on 2026-09-12. This register is a concise companion to the PRD; it does not replace the interview record, architecture specification, validation record, or launch approvals.
+**Status:** Durable product decisions from the accepted interview dated 2026-09-09, including the Block 4 and Block 5 implementation decisions recorded on 2026-09-12. This register is a concise companion to the PRD; it does not replace the interview record, architecture specification, validation record, or launch approvals.
 
 ## Confirmed product decisions
 
@@ -54,6 +54,18 @@ The `block-4/member-rsvp` working tree contains the RSVP schemas, migrations, se
 
 The operational choices checked before this record are: no deadline is allowed through a paired null value; a configured deadline rejects public writes at `serverNow >= deadlineAt`; a replay of an identical successful request is accepted even after the deadline; a changed payload with the same request ID is rejected; a stale submitted member rolls back the whole submission; omitted members do not conflict; history stores actor and display snapshots; and foreign groups remain administrative-only. The admin UI exposes deadline configuration, current totals/filters, and a separate history view. Any behavior that differs in executed validation must update this record and the contract before acceptance.
 
+## Block 5 contract record — 2026-09-12
+
+The operator approved the Block 5 orchestration playbook and the detailed contract in [the Block 5 contract](./block5Contracts.md). The implementation must keep one revision-protected message per group, runtime-only mural reads, administrator deletion without text editing, message-only group blocking, confirmed transactional group deletion, wedding-scoped CSV/PDF reports, and site-level monthly SMS accounting.
+
+No numeric SMS ceiling is configured by default. New real SMS sends remain blocked until an `OWNER` explicitly configures a limit and every existing provider gate is satisfied. The manually shared group PIN is the expected MVP verification path because real SMS may remain outside the MVP due to infrastructure operating cost. Deterministic simulation may prove quota behavior but is not evidence of Twilio usage, delivery, or cost.
+
+## Block 5 implementation record — 2026-09-12
+
+The `block-5/messages-exports-sms` working tree implements the frozen Block 5 contract across the database, API, admin panel, public feature package, and demo host. The authorized local acceptance passed contract tests, the full isolated PostgreSQL suite, independent desktop/mobile browser QA, downloads and PDF inspection, static artifact privacy scanning, and repository gates. The detailed evidence and limits are recorded in [the Block 5 validation record](./block5Validation.md); the next-block integration boundary is recorded in [the Block 5 handoff](./block5Handoff.md).
+
+The implementation keeps display snapshots stable across later group/member renames, orders the mural by creation rather than edit time, redacts replayable RSVP responses when their group is deleted, and retains site-period SMS accounting after group deletion. CSV formula protection and local Unicode PDF generation are part of the report boundary. No default SMS ceiling, provider delivery, development/production migration, deploy, or legal-retention approval is implied by local acceptance.
+
 ## Superseded historical details
 
 - Historical notes that made the group name optional are superseded. Current rule: group name required.
@@ -63,13 +75,12 @@ The operational choices checked before this record are: no deadline is allowed t
 ## Open decisions and release gates
 
 1. Commercial buyer, price, revision policy, cancellation, renewal, tolerance period, and support service levels. These are external business-policy decisions, not technical MVP blockers, but must be addressed for commercial operations.
-2. Numeric monthly SMS ceiling default and owner alert/override policy before live SMS activation.
-3. Cloudflare, Railway, Neon, CI, Twilio, and media-provider account ownership, credentials, permissions, region/country access, and costs.
-4. The guest-to-API cross-origin transport is resolved as an exact-origin bearer flow using site-namespaced `sessionStorage`. The separate authenticated admin panel-to-public-site handoff design and its clean-browser proof remain open.
-5. Privacy notice, retention schedule, data rights, deletion exceptions, client media permissions, and legal review.
-6. Neon tier, retention/cost, backup strategy, and real restoration evidence for RPO at most one hour and RTO at most eight hours.
-7. Final visual direction, logo/favicon, fictional-couple image approval, video provider/cost/rights, and image-to-video poster workflow.
-8. Production domain/DNS responsibilities, custom-domain ownership and renewal, and worker-per-wedding scale response.
+2. Cloudflare, Railway, Neon, CI, Twilio, and media-provider account ownership, credentials, permissions, region/country access, and costs.
+3. The guest-to-API cross-origin transport is resolved as an exact-origin bearer flow using site-namespaced `sessionStorage`. The separate authenticated admin panel-to-public-site handoff design and its clean-browser proof remain open.
+4. Privacy notice, retention schedule, data rights, deletion exceptions, client media permissions, and legal review.
+5. Neon tier, retention/cost, backup strategy, and real restoration evidence for RPO at most one hour and RTO at most eight hours.
+6. Final visual direction, logo/favicon, fictional-couple image approval, video provider/cost/rights, and image-to-video poster workflow.
+7. Production domain/DNS responsibilities, custom-domain ownership and renewal, and worker-per-wedding scale response.
 
 Open items must be marked pending or blocked in implementation evidence. A mock provider, placeholder media, owner-entered status, or local health response cannot be reported as proof that the corresponding external capability is live.
 
@@ -82,3 +93,5 @@ Block 3 now selects a persistent six-digit group PIN for provider-free MVP deliv
 The template/site study preserves the reference repository's host/package ownership but expands the planned public section surface for local customization. Fixed-page-only reuse and a generic page builder were rejected; the follow-up is a two-consumer build proof before final visual work.
 
 Block 4 keeps RSVP presentation in `packages/wedding-features` while leaving deadline, authorization, concurrency, persistence, and history in the API. A template or site may choose location and styling through the public feature seam, but static output cannot contain family data, sessions, responses, credentials, or operational fixtures. This preserves the Block 6 design boundary and keeps Block 5 reporting/messages from creating a second RSVP authority.
+
+Block 5 keeps manual PIN as the operational MVP path and uses a nullable site SMS limit as an explicit closed gate. This avoids inferring provider budget while still requiring quota concurrency and alert behavior to be proven with deterministic simulation before any later real-SMS approval.

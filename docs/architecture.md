@@ -1,6 +1,6 @@
 # EntreLaços architecture and engineering contracts
 
-Status: accepted product boundaries translated into an incremental engineering specification. Blocks 1–3 implement the workspace foundation, administrative authentication/lifecycle, and guest identity slice. Block 4 is implemented and passed its authorized local database, browser, artifact, and repository validation on `block-4/member-rsvp`. Messages, exports, complete demo reset, production infrastructure, and live-provider acceptance remain later work. No production resource has been provisioned.
+Status: accepted product boundaries translated into an incremental engineering specification. Blocks 1–3 implement the workspace foundation, administrative authentication/lifecycle, and guest identity slice. Blocks 4 and 5 passed their authorized local database, browser, artifact, and repository validation. Block 5 implements messages, runtime mural controls, safe group deletion, RSVP exports, and monthly SMS accounting. Complete demo reset, production infrastructure, and live-provider acceptance remain later work. No production resource has been provisioned.
 
 ## Authority and document order
 
@@ -22,7 +22,7 @@ The admin application must not connect to Neon, import the database package or d
 | Package | Owns | Must not own |
 | --- | --- | --- |
 | `template-root` | Astro layouts, reusable editorial sections, default theme, motion conventions | Customer identity, credentials, business authorization |
-| `wedding-features` | Shared guest-facing feature presentation, family-session transport, RSVP form, and draft/reconciliation helpers | Direct SQL, administrative authority, deadline enforcement, provider secrets |
+| `wedding-features` | Shared guest-facing feature presentation, family-session transport, RSVP form, family message editor, runtime mural, and draft/reconciliation helpers | Direct SQL, administrative authority, deadline or moderation enforcement, provider secrets |
 | `ui` | shadcn/Base UI primitives, Sonner, reusable derived controls | Wedding-specific layout or domain rules |
 | `contracts` | Public request/response validation and stable types | Drizzle tables, private authentication records |
 | `database` | Server-only schema, connections and reviewed migrations | Browser imports or customer-specific seeds without an explicit scope |
@@ -49,7 +49,7 @@ The demo is a marked wedding in each environment, not a third environment. It ha
 
 ## Conceptual data model
 
-Schema names below describe the full planned model. Site, administrative identity, site membership, guest group/member, family session, verification challenge, and SMS abuse-control records are implemented through Block 3. Block 4 adds validated member RSVP state/revision, paired site deadline, history snapshots, and site-scoped request receipts. Messages and monthly quota behavior remain planned.
+Schema names below describe the implemented model through Block 5 plus later planned records. Site, administrative identity, site membership, guest group/member, family session, verification challenge, and SMS abuse-control records are implemented through Block 3. Block 4 adds validated member RSVP state/revision, paired site deadline, history snapshots, and site-scoped request receipts. Block 5 adds durable message revisions and request receipts, deletion-safe RSVP receipt links, and site-level SMS periods and reservations.
 
 | Record | Essential contract |
 | --- | --- |
@@ -62,9 +62,9 @@ Schema names below describe the full planned model. Site, administrative identit
 | RSVP request receipt | Site/group/actor scope, request ID and hash, response body/status; unique idempotency key for replay-safe writes |
 | Family session | Site/group, expiry, revocation, session identity independent of admin |
 | Verification challenge | Scope, provider reference or restricted demo mode, expiry and attempt controls; no plaintext real OTP |
-| Family message | Site/group, representative author, text, created/edited timestamps; one current message per group |
+| Family message | Site/group, representative and group display snapshots, normalized plain text, created/edited timestamps; one current message per group plus durable revision and idempotency receipt |
 | Activation/recovery/handoff | Hashed one-use token, purpose, scope, expiry and redemption/revocation state |
-| SMS usage | Site period, reserved/attempted/sent outcomes as defined during integration; concurrency-safe quota enforcement |
+| SMS usage | Site and São Paulo civil-month period, separate simulated/real modes, durable reservation outcomes, and concurrency-safe quota enforcement |
 
 All tenant-owned relations include the site scope. Use composite constraints where necessary to prevent referencing a group/member from another site. Enforce normalized phone uniqueness within a wedding for non-null numbers. Representative must be a member of the same group. Keep individual guests internally consistent with the group model. Do not add gifts/payments tables.
 
@@ -94,13 +94,13 @@ The static site, Workers panel and Railway API do not share a cookie domain. Blo
 
 ## HTTP contract
 
-Business API prefix: `/v1`. Health, administrative authentication/lifecycle, guest-group administration, demo-grant issuance, public challenge/resend/verification, and family-session read/leave routes are implemented through Block 3; Block 4 adds the RSVP routes below. Health remains liveness, not database readiness or provider readiness.
+Business API prefix: `/v1`. Health, administrative authentication/lifecycle, guest-group administration, demo-grant issuance, public challenge/resend/verification, and family-session read/leave routes are implemented through Block 3; Block 4 adds RSVP and Block 5 adds messages, mural administration, reports, safe deletion, and SMS usage routes. Health remains liveness, not database readiness or provider readiness.
 
 Current and planned route groups:
 
 - `/v1/auth/*`: administrative library endpoints with a configured matching base path.
 - `/v1/owner/sites`, site details and site users: owner-only management/provisioning.
-- `/v1/sites/:siteId/groups`: implemented OWNER/SITE_ADMIN group and member administration, including transient access-PIN reveal and rotation. Reports and mural controls remain planned.
+- `/v1/sites/:siteId/groups`: OWNER/SITE_ADMIN group and member administration, including transient access-PIN reveal, rotation, message blocking, and confirmed transactional deletion.
 - `/v1/public/sites/:siteId/guest/challenge` and challenge resend/verify routes: implemented exact-origin lookup with manual group PIN as the MVP default; simulated and real SMS remain explicit server modes.
 - `/v1/public/family/session`: implemented bearer-bound family read and explicit leave.
 - `/v1/owner/sites/:siteId/demo/guest-grant`: implemented five-minute OWNER grant for active, demo-marked, allowlisted simulations. Scoped reset remains planned.
@@ -108,6 +108,10 @@ Current and planned route groups:
 - `/v1/sites/:siteId/rsvp`: Block 4 admin current read/write with group/status filters, active-site post-deadline correction, and exact admin-session/site scope.
 - `/v1/sites/:siteId/rsvp/deadline`: Block 4 admin read/PATCH for the paired nullable deadline instant/timezone.
 - `/v1/sites/:siteId/rsvp/history`: Block 4 admin filtered cursor-paginated operational history, separate from current RSVP data.
+- `/v1/public/family/message` and `/v1/public/sites/:siteId/mural`: Block 5 family message lifecycle and privacy-limited runtime mural read.
+- `/v1/sites/:siteId/messages`, `/v1/sites/:siteId/mural`, and group message-block routes: Block 5 site-scoped moderation without administrator text editing.
+- `/v1/sites/:siteId/reports/rsvp.csv` and `.pdf`: Block 5 consistent-snapshot downloads with explicit phone and optional group/state filters.
+- `/v1/sites/:siteId/sms-usage` and `/v1/owner/sites/:siteId/sms-quota`: Block 5 period usage read and owner-only explicit limit configuration.
 
 Exact routes/verbs/payloads are frozen with their task, with schema validation, examples and negative tests. Use structured errors with HTTP status and stable machine code (`VALIDATION_ERROR`, `UNAUTHORIZED`, `FORBIDDEN`, `RSVP_DEADLINE_PASSED`, `RSVP_CONFLICT`, `SMS_RATE_LIMITED`, `SMS_QUOTA_EXCEEDED`, `SITE_INACTIVE`). Error text must not disclose secrets, SQL internals or another tenant's data. UI maps codes to Portuguese messages. Export endpoints validate tenant access, filter scope, CSV formula injection and safe PDF escaping. Do not equate a successful HTTP response with a successful business mutation when a conflict occurred.
 
@@ -117,7 +121,7 @@ The MVP defaults to a manually shared group PIN and makes no provider call. The 
 
 Twilio Verify remains available for later Brazilian SMS activation. Simulation is an explicit development/demo mode; real development tests require an explicit mode and allowlisted operator phone. Credentials, paid/provider readiness, and Verify Service configuration must be checked before the first real call.
 
-Manual verification enforces 10 IP attempts/15 minutes, 10 exact site/IP lookups/15 minutes, and five wrong PINs followed by a 15-minute cooldown. Manual challenges last 10 minutes, have no resend, and create no provider-send record. SMS mode additionally enforces 60-second resend spacing; three sends/15 minutes and ten/24 hours per group and phone; and 10 IP sends/15 minutes plus 30 IP sends/24 hours. Resends do not reset counters or extend the challenge. Reservations are atomic and external provider calls occur outside database transactions. Provider `UNKNOWN` outcomes are not retried automatically and do not consume wrong-code attempts. Monthly per-site ceiling remains a Block 5 decision before live SMS activation.
+Manual verification enforces 10 IP attempts/15 minutes, 10 exact site/IP lookups/15 minutes, and five wrong PINs followed by a 15-minute cooldown. Manual challenges last 10 minutes, have no resend, and create no provider-send or monthly-usage record. SMS mode additionally enforces 60-second resend spacing; three sends/15 minutes and ten/24 hours per group and phone; and 10 IP sends/15 minutes plus 30 IP sends/24 hours. Resends do not reset counters or extend the challenge. Monthly reservations are atomic before provider dispatch, remain consumed for every terminal or unknown outcome, and are separated between simulated and real modes. Provider `UNKNOWN` outcomes are not retried automatically. Real SMS has no inferred numeric limit and remains blocked until an OWNER configures one and all provider gates pass.
 
 Demo simulation in main is allowed only for the marked demo and an OWNER-authorized demonstration flow/browser. Never enable simulated verification globally in main. Demo seed is explicitly scoped by site ID, refuses non-demo weddings and preserves global OWNER/unrelated accounts. Test reset against another sentinel wedding and reject attempts to reset it.
 

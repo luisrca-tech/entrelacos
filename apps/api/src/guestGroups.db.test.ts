@@ -263,6 +263,7 @@ describe("guest groups PostgreSQL integration", () => {
         { userId: "owner", role: "OWNER" },
         wedding.id,
         group.id,
+        { confirmGroupId: group.id, confirmGroupName: group.name },
       ),
     ).rejects.toMatchObject({ code: "SITE_INACTIVE" });
   });
@@ -299,7 +300,10 @@ describe("guest groups PostgreSQL integration", () => {
       ),
     ).rejects.toMatchObject({ status: 404 });
     await expect(
-      deleteGuestGroup(connection.db, firstAdmin, first.id, secondGroup.id),
+      deleteGuestGroup(connection.db, firstAdmin, first.id, secondGroup.id, {
+        confirmGroupId: secondGroup.id,
+        confirmGroupName: secondGroup.name,
+      }),
     ).rejects.toMatchObject({ status: 404 });
     await expect(
       listGuestGroups(connection.db, firstAdmin, first.id),
@@ -458,6 +462,7 @@ describe("guest groups PostgreSQL integration", () => {
         { userId: "owner", role: "OWNER" },
         wedding.id,
         group.id,
+        { confirmGroupId: group.id, confirmGroupName: group.name },
       ),
     ).resolves.toEqual({ ok: true });
     await expect(

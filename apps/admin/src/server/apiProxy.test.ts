@@ -81,6 +81,34 @@ describe("admin API proxy", () => {
     );
   });
 
+  it("preserves attachment metadata and binary report bytes", async () => {
+    const bytes = new Uint8Array([0xef, 0xbb, 0xbf, 0x61, 0x2c, 0x62]);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(bytes, {
+          status: 200,
+          headers: {
+            "Cache-Control": "no-store",
+            "Content-Type": "text/csv; charset=utf-8",
+            "Content-Disposition":
+              'attachment; filename="entrelacos-rsvp-casamento.csv"',
+          },
+        }),
+      ),
+    );
+
+    const response = await proxyApiRequest(
+      proxyRequest("/api/v1/sites/casamento-a/reports/rsvp.csv"),
+      config,
+    );
+
+    expect(response.headers.get("content-disposition")).toBe(
+      'attachment; filename="entrelacos-rsvp-casamento.csv"',
+    );
+    expect(new Uint8Array(await response.arrayBuffer())).toEqual(bytes);
+  });
+
   it("rejects foreign Origin and cross-site fetch metadata for safe reads", async () => {
     const upstream = vi.fn();
     vi.stubGlobal("fetch", upstream);

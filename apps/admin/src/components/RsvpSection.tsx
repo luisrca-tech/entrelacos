@@ -12,10 +12,16 @@ import {
   useState,
 } from "react";
 import { ApiError, apiRequest } from "../lib/apiClient";
+import { listenForGuestGroupsChanged } from "./guestGroupsRefresh";
 import {
   deadlineInstantFromLocal,
   deadlineLocalFromInstant,
 } from "./rsvpDeadline";
+import {
+  exportFilename,
+  type RsvpExportFormat,
+  rsvpExportPath,
+} from "./rsvpExport";
 
 type Props = {
   siteId: string;
@@ -34,6 +40,8 @@ function errorMessage(cause: unknown) {
       return "Outra pessoa alterou uma confirmação. A lista foi atualizada; revise antes de salvar novamente.";
     if (cause.code === "SITE_INACTIVE")
       return "O casamento está inativo. As confirmações permanecem disponíveis somente para consulta.";
+    if (cause.code === "RSVP_RESULT_REMOVED")
+      return "O resultado anterior foi removido após a exclusão de um grupo. Recarregue os dados antes de salvar novamente.";
     if (cause.code === "VALIDATION_ERROR")
       return "Confira a data, o fuso horário e as confirmações informadas.";
   }
@@ -72,8 +80,12 @@ export function RsvpSection({ siteId, lifecycle }: Props) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [includePhone, setIncludePhone] = useState(false);
+  const [downloading, setDownloading] = useState<RsvpExportFormat | null>(null);
+  const [groupsVersion, setGroupsVersion] = useState(0);
 
   const loadCurrent = useCallback(async () => {
+    void groupsVersion;
     setLoading(true);
     try {
       const result = await apiRequest<SiteRsvpResponse>(
@@ -98,7 +110,7 @@ export function RsvpSection({ siteId, lifecycle }: Props) {
     } finally {
       setLoading(false);
     }
-  }, [base, groupId, state]);
+  }, [base, groupId, groupsVersion, state]);
 
   const loadHistory = useCallback(
     async (cursor = "", append = false) => {
@@ -131,6 +143,16 @@ export function RsvpSection({ siteId, lifecycle }: Props) {
   useEffect(() => {
     void loadCurrent();
   }, [loadCurrent]);
+
+  useEffect(
+    () =>
+      listenForGuestGroupsChanged(window, siteId, () => {
+        setGroupId("");
+        setState("");
+        setGroupsVersion((current) => current + 1);
+      }),
+    [siteId],
+  );
 
   useEffect(() => {
     if (tab === "history") void loadHistory();
@@ -220,6 +242,51 @@ export function RsvpSection({ siteId, lifecycle }: Props) {
       }
     } finally {
       setPending(false);
+    }
+  }
+
+  async function downloadExport(format: RsvpExportFormat) {
+    if (downloading) return;
+    setDownloading(format);
+    setError("");
+    setNotice("");
+    try {
+      const requestId = crypto.randomUUID();
+      const path = rsvpExportPath(siteId, format, {
+        requestId,
+        includePhone,
+        ...(groupId ? { groupId } : {}),
+        ...(state ? { state: state as RsvpState } : {}),
+      });
+      const response = await fetch(`/api${path}`, {
+        credentials: "same-origin",
+        cache: "no-store",
+      });
+      if (!response.ok) {
+        const problem = (await response.json().catch(() => ({}))) as {
+          code?: string;
+        };
+        throw new ApiError(response.status, problem.code ?? "REQUEST_FAILED");
+      }
+      const blobUrl = URL.createObjectURL(await response.blob());
+      const anchor = document.createElement("a");
+      anchor.href = blobUrl;
+      anchor.download = exportFilename(
+        response.headers.get("Content-Disposition"),
+        `entrelacos-rsvp-${siteId}.${format}`,
+      );
+      anchor.hidden = true;
+      document.body.append(anchor);
+      anchor.click();
+      anchor.remove();
+      window.setTimeout(() => URL.revokeObjectURL(blobUrl), 0);
+      setNotice(
+        `Relatório ${format.toUpperCase()} gerado com os filtros selecionados.`,
+      );
+    } catch (cause) {
+      setError(errorMessage(cause));
+    } finally {
+      setDownloading(null);
     }
   }
 
@@ -340,6 +407,40 @@ export function RsvpSection({ siteId, lifecycle }: Props) {
               </select>
             </label>
           </div>
+          <section className="rsvp-export" aria-labelledby="rsvp-export-title">
+            <div>
+              <h3 id="rsvp-export-title">Exportar relatório</h3>
+              <p>
+                O arquivo usa os filtros de grupo e status selecionados acima.
+                Telefones ficam de fora até você incluí-los explicitamente.
+              </p>
+            </div>
+            <label className="checkbox-label">
+              <input
+                type="checkbox"
+                checked={includePhone}
+                disabled={Boolean(downloading)}
+                onChange={(event) => setIncludePhone(event.target.checked)}
+              />
+              Incluir celular do representante
+            </label>
+            <div className="inline-actions">
+              <button
+                type="button"
+                disabled={Boolean(downloading)}
+                onClick={() => void downloadExport("csv")}
+              >
+                {downloading === "csv" ? "Gerando CSV…" : "Baixar CSV"}
+              </button>
+              <button
+                type="button"
+                disabled={Boolean(downloading)}
+                onClick={() => void downloadExport("pdf")}
+              >
+                {downloading === "pdf" ? "Gerando PDF…" : "Baixar PDF"}
+              </button>
+            </div>
+          </section>
           {loading ? (
             <p role="status">Carregando confirmações…</p>
           ) : view?.groups.length === 0 ? (

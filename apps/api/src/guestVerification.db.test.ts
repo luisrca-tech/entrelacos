@@ -12,6 +12,8 @@ import {
   guestVerificationSend,
   site,
   siteOrigin,
+  smsSendReservation,
+  smsUsage,
 } from "@entrelacos/database/schema";
 import { eq, inArray, like } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
@@ -122,6 +124,10 @@ async function createFixture(suffix: string) {
     siteId: created.id,
     origin: `https://${created.id}.example.test`,
   });
+  await connection.db
+    .update(site)
+    .set({ smsMonthlyLimit: 1_000 })
+    .where(eq(site.id, created.id));
   return created;
 }
 
@@ -209,10 +215,40 @@ describe("guest verification and family sessions PostgreSQL integration", () => 
     );
     expect(storedChallenge?.codeHash).not.toContain("111111");
     const sends = await connection.db
-      .select({ status: guestVerificationSend.status })
+      .select({
+        status: guestVerificationSend.status,
+        smsReservationId: guestVerificationSend.smsReservationId,
+      })
       .from(guestVerificationSend)
       .where(eq(guestVerificationSend.challengeId, challenge.challengeId));
-    expect(sends).toEqual([{ status: "PROVIDER_ACCEPTED" }]);
+    expect(sends).toEqual([
+      {
+        status: "PROVIDER_ACCEPTED",
+        smsReservationId: expect.any(String),
+      },
+    ]);
+    const reservations = await connection.db
+      .select({ status: smsSendReservation.status })
+      .from(smsSendReservation)
+      .where(eq(smsSendReservation.id, sends[0]?.smsReservationId as string));
+    expect(reservations).toEqual([{ status: "PROVIDER_ACCEPTED" }]);
+    const usage = await connection.db
+      .select({
+        mode: smsUsage.mode,
+        reserved: smsUsage.reserved,
+        providerAccepted: smsUsage.providerAccepted,
+        consumed: smsUsage.consumed,
+      })
+      .from(smsUsage)
+      .where(eq(smsUsage.siteId, wedding.id));
+    expect(usage).toEqual([
+      {
+        mode: "SIMULATED",
+        reserved: 0,
+        providerAccepted: 1,
+        consumed: 1,
+      },
+    ]);
 
     await expect(
       verifyGuestChallenge(
@@ -283,6 +319,10 @@ describe("guest verification and family sessions PostgreSQL integration", () => 
 
   it("uses the persistent group PIN without calling an SMS provider", async () => {
     const wedding = await createFixture("manual-pin");
+    await connection.db
+      .update(site)
+      .set({ smsMonthlyLimit: null })
+      .where(eq(site.id, wedding.id));
     const [createdGroup] = await connection.db
       .select({ id: guestGroup.id })
       .from(guestGroup)
@@ -319,6 +359,12 @@ describe("guest verification and family sessions PostgreSQL integration", () => 
         .from(guestVerificationSend)
         .where(eq(guestVerificationSend.challengeId, challenge.challengeId)),
     ).toHaveLength(0);
+    expect(
+      await connection.db
+        .select()
+        .from(smsUsage)
+        .where(eq(smsUsage.siteId, wedding.id)),
+    ).toHaveLength(0);
     await expect(
       verifyGuestChallenge(
         connection.db,
@@ -335,6 +381,65 @@ describe("guest verification and family sessions PostgreSQL integration", () => 
         manualOptions,
       ),
     ).resolves.toMatchObject({ siteId: wedding.id, groupId });
+  });
+
+  it("blocks unconfigured and exhausted SMS before provider calls", async () => {
+    const wedding = await createFixture("quota-block");
+    const sms = provider({ status: "PROVIDER_ACCEPTED" });
+    await connection.db
+      .update(site)
+      .set({ smsMonthlyLimit: null })
+      .where(eq(site.id, wedding.id));
+    await expect(
+      startGuestChallenge(
+        connection.db,
+        wedding.id,
+        { fullName: "Ana Silva", phone: phoneForSite(wedding.id) },
+        options(testIp("quota-null"), () => "123456", sms),
+      ),
+    ).rejects.toMatchObject({
+      status: 503,
+      code: "SMS_QUOTA_NOT_CONFIGURED",
+    });
+    expect(sms.send).not.toHaveBeenCalled();
+
+    await connection.db
+      .update(site)
+      .set({ smsMonthlyLimit: 0 })
+      .where(eq(site.id, wedding.id));
+    await expect(
+      startGuestChallenge(
+        connection.db,
+        wedding.id,
+        { fullName: "Ana Silva", phone: phoneForSite(wedding.id) },
+        options(testIp("quota-zero"), () => "123456", sms),
+      ),
+    ).rejects.toMatchObject({ status: 429, code: "SMS_QUOTA_EXCEEDED" });
+    expect(sms.send).not.toHaveBeenCalled();
+
+    await connection.db
+      .update(site)
+      .set({ smsMonthlyLimit: 1 })
+      .where(eq(site.id, wedding.id));
+    const challenge = await startGuestChallenge(
+      connection.db,
+      wedding.id,
+      { fullName: "Ana Silva", phone: phoneForSite(wedding.id) },
+      options(testIp("quota-resend"), () => "123456", sms),
+    );
+    expect(sms.send).toHaveBeenCalledOnce();
+    await expect(
+      resendGuestChallenge(
+        connection.db,
+        challenge.challengeId,
+        { challengeId: challenge.challengeId },
+        {
+          ...options(testIp("quota-resend"), () => "234567", sms),
+          now: time(1),
+        },
+      ),
+    ).rejects.toMatchObject({ status: 429, code: "SMS_QUOTA_EXCEEDED" });
+    expect(sms.send).toHaveBeenCalledOnce();
   });
 
   it("allows an existing session to leave after the site becomes inactive", async () => {
@@ -417,6 +522,19 @@ describe("guest verification and family sessions PostgreSQL integration", () => 
         { ...options(testIp("11"), () => "333333", sms), now: time(2) },
       ),
     ).resolves.toMatchObject({ sendStatus: "UNKNOWN" });
+    const [resendUsage] = await connection.db
+      .select({
+        mode: smsUsage.mode,
+        unknown: smsUsage.unknown,
+        consumed: smsUsage.consumed,
+      })
+      .from(smsUsage)
+      .where(eq(smsUsage.siteId, wedding.id));
+    expect(resendUsage).toEqual({
+      mode: "SIMULATED",
+      unknown: 3,
+      consumed: 3,
+    });
     await expect(
       resendGuestChallenge(
         connection.db,
@@ -526,6 +644,86 @@ describe("guest verification and family sessions PostgreSQL integration", () => 
         options(testIp("late-send"), () => "333333", accepted),
       ),
     ).resolves.toMatchObject({ groupId: expect.any(String) });
+  });
+
+  it("finalizes only site accounting when group deletion wins a provider race", async () => {
+    const wedding = await createFixture("deleted-during-send");
+    let startedSend: (() => void) | undefined;
+    const started = new Promise<void>((resolve) => {
+      startedSend = resolve;
+    });
+    let finishSend:
+      | ((result: {
+          status: "PROVIDER_ACCEPTED";
+          providerReference: string;
+        }) => void)
+      | undefined;
+    const delayed = {
+      mode: "MOCK" as const,
+      send: vi.fn(
+        () =>
+          new Promise<{
+            status: "PROVIDER_ACCEPTED";
+            providerReference: string;
+          }>((resolve) => {
+            finishSend = resolve;
+            startedSend?.();
+          }),
+      ),
+    };
+    const pending = startGuestChallenge(
+      connection.db,
+      wedding.id,
+      { fullName: "Ana Silva", phone: phoneForSite(wedding.id) },
+      options(testIp("deleted-send"), () => "112233", delayed),
+    );
+    await started;
+    const [send] = await connection.db
+      .select({
+        id: guestVerificationSend.id,
+        groupId: guestVerificationSend.groupId,
+        challengeId: guestVerificationSend.challengeId,
+        smsReservationId: guestVerificationSend.smsReservationId,
+      })
+      .from(guestVerificationSend)
+      .where(eq(guestVerificationSend.siteId, wedding.id));
+    await connection.db
+      .delete(guestGroup)
+      .where(eq(guestGroup.id, send?.groupId as string));
+    finishSend?.({
+      status: "PROVIDER_ACCEPTED",
+      providerReference: "accepted-after-delete",
+    });
+    await expect(pending).rejects.toMatchObject({
+      status: 503,
+      code: "SERVICE_UNAVAILABLE",
+    });
+    await expect(
+      connection.db
+        .select()
+        .from(guestVerificationChallenge)
+        .where(eq(guestVerificationChallenge.id, send?.challengeId as string)),
+    ).resolves.toHaveLength(0);
+    await expect(
+      connection.db
+        .select()
+        .from(guestVerificationSend)
+        .where(eq(guestVerificationSend.id, send?.id as string)),
+    ).resolves.toHaveLength(0);
+    await expect(
+      connection.db
+        .select({
+          status: smsSendReservation.status,
+          providerReference: smsSendReservation.providerReference,
+        })
+        .from(smsSendReservation)
+        .where(eq(smsSendReservation.id, send?.smsReservationId as string)),
+    ).resolves.toEqual([
+      {
+        status: "PROVIDER_ACCEPTED",
+        providerReference: "accepted-after-delete",
+      },
+    ]);
   });
 
   it("supersedes an active challenge when the guest starts again", async () => {

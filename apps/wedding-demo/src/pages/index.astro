@@ -1,7 +1,7 @@
 ---
 import WeddingLayout from "@entrelacos/template-root/layout";
 import TemplateSection from "@entrelacos/template-root/section";
-import { AdminRecognition, FeatureAvailability, GuestAccess } from "@entrelacos/wedding-features";
+import { AdminRecognition, FeatureAvailability, GuestAccess, MessageMural } from "@entrelacos/wedding-features";
 import "../styles/tailwind.css";
 
 const inactive = import.meta.env.PUBLIC_SITE_INACTIVE === "true";
@@ -10,6 +10,7 @@ const navigation = [
   { label: "História", href: "#story" },
   { label: "Detalhes", href: "#details" },
   { label: "Confirmar presença", href: "#guest-access" },
+  { label: "Mural", href: "#mural" },
   { label: "Recursos", href: "#capabilities" },
 ];
 const guestAccess = { siteId: import.meta.env.PUBLIC_SITE_ID ?? "", apiOrigin: import.meta.env.PUBLIC_API_URL ?? "" };
@@ -86,9 +87,13 @@ const guestAccess = { siteId: import.meta.env.PUBLIC_SITE_ID ?? "", apiOrigin: i
     <GuestAccess {...guestAccess} demoMode client:load />
   </section>
 
+  <div id="mural">
+    <MessageMural {...guestAccess} client:load />
+  </div>
+
   <section id="capabilities" class="demo-capabilities" aria-labelledby="capabilities-title">
     <div>
-      <p class="demo-eyebrow">04 / Mapa de recursos</p>
+      <p class="demo-eyebrow">05 / Mapa de recursos</p>
       <h2 id="capabilities-title">O que este modelo demonstra</h2>
       <p>
         As fronteiras de apresentação compartilhadas estão prontas para os

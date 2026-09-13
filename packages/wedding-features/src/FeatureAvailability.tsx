@@ -31,13 +31,18 @@ export const featureAvailabilityItems: readonly FeatureAvailabilityItem[] = [
   },
   {
     name: "Comportamento de confirmação de presença",
-    status: "planned",
-    note: "Fluxo de domínio e contratos da API chegarão em um bloco posterior.",
+    status: "scaffold",
+    note: "Consulta e atualização explícita por família estão disponíveis.",
   },
   {
     name: "Autenticação de administradores e convidados",
-    status: "planned",
-    note: "Nenhum login, sessão ou simulação de sucesso está incluído aqui.",
+    status: "scaffold",
+    note: "Sessões reais e o PIN manual do convite protegem os fluxos operacionais.",
+  },
+  {
+    name: "Mensagens por convite e mural público",
+    status: "scaffold",
+    note: "Cada convite pode publicar um recado, exibido no mural em tempo de execução.",
   },
   {
     name: "Fluxo de mídia aprovada",

@@ -10,7 +10,7 @@ import {
   site,
   siteOrigin,
 } from "@entrelacos/database/schema";
-import { eq, like } from "drizzle-orm";
+import { eq, inArray, like } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { createApp } from "./app";
 import type { AuthHttpOptions } from "./authHttp";
@@ -26,6 +26,8 @@ const challengeId = randomUUID().replaceAll("-", "").padEnd(43, "h");
 const sessionToken = randomUUID().replaceAll("-", "").padEnd(43, "t");
 const guestPhone = "+5511999999999";
 const guestIp = "203.0.113.60";
+const manualIpSeed = randomUUID().replaceAll("-", "").slice(0, 12);
+const manualGuestIp = `2001:db8:${manualIpSeed.slice(0, 4)}:${manualIpSeed.slice(4, 8)}:${manualIpSeed.slice(8, 12)}::61`;
 let connection: DatabaseConnection;
 let siteId: string;
 let app: ReturnType<typeof createApp>;
@@ -61,7 +63,7 @@ describe("public guest HTTP PostgreSQL integration", () => {
     siteId = created.id;
     await connection.db
       .update(site)
-      .set({ isDemo: true })
+      .set({ isDemo: true, smsMonthlyLimit: 1_000 })
       .where(eq(site.id, siteId));
     await createGuestGroup(
       connection.db,
@@ -113,15 +115,18 @@ describe("public guest HTTP PostgreSQL integration", () => {
     const phoneFingerprint = createHmac("sha256", guestSecret)
       .update(`guest-phone:${guestPhone}`)
       .digest("hex");
-    const ipFingerprint = createHmac("sha256", guestSecret)
-      .update(`guest-ip:${guestIp}`)
-      .digest("hex");
+    const ipFingerprints = [guestIp, manualGuestIp, "203.0.113.61"].map(
+      (ipAddress) =>
+        createHmac("sha256", guestSecret)
+          .update(`guest-ip:${ipAddress}`)
+          .digest("hex"),
+    );
     await connection.db
       .delete(guestRateLimitEvent)
       .where(eq(guestRateLimitEvent.phoneFingerprint, phoneFingerprint));
     await connection.db
       .delete(guestRateLimitEvent)
-      .where(eq(guestRateLimitEvent.ipFingerprint, ipFingerprint));
+      .where(inArray(guestRateLimitEvent.ipFingerprint, ipFingerprints));
     if (siteId) await connection.db.delete(site).where(eq(site.id, siteId));
     await connection.close();
   });
@@ -316,7 +321,7 @@ describe("public guest HTTP PostgreSQL integration", () => {
       guestSmsMode: "manual",
       guestChallengeIdGenerator: () => manualChallengeId,
       guestSessionTokenGenerator: () => "p".repeat(43),
-      guestResolveClientIp: () => "203.0.113.61",
+      guestResolveClientIp: () => manualGuestIp,
       now: () => fixedNow,
     } as AuthHttpOptions);
     const started = await manualApp.request(

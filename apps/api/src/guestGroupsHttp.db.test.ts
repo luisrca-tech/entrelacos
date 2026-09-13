@@ -171,7 +171,7 @@ describe("guest groups HTTP routes", () => {
 
     const deleted = await jsonRequest(
       `/v1/sites/${siteId}/groups/${groupId}`,
-      {},
+      { confirmGroupId: groupId, confirmGroupName: "Família HTTP Corrigida" },
       "DELETE",
     );
     expect(deleted.status).toBe(200);
