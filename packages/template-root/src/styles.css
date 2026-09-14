@@ -522,7 +522,12 @@ html[data-template-js="true"] .template-home-intro {
   .template-home-intro__label--top {
   transform: translate(
     -50%,
-    calc(-100% - var(--template-intro-stage-height) / 2 - var(--template-intro-label-gap))
+    calc(
+      -100% -
+      var(--template-intro-stage-height) /
+      2 -
+      var(--template-intro-label-gap)
+    )
   );
 }
 
@@ -530,7 +535,11 @@ html[data-template-js="true"] .template-home-intro {
   .template-home-intro__label--bottom {
   transform: translate(
     -50%,
-    calc(var(--template-intro-stage-height) / 2 + var(--template-intro-label-gap))
+    calc(
+      var(--template-intro-stage-height) /
+      2 +
+      var(--template-intro-label-gap)
+    )
   );
 }
 

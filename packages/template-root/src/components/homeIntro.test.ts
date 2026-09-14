@@ -65,7 +65,9 @@ describe("home intro sequencing", () => {
       /\.template-home-intro__stage \{(?<body>[\s\S]*?)\n\}/,
     )?.groups?.body;
 
-    expect(labelRules.some((rule) => rule.includes("position: fixed"))).toBe(true);
+    expect(labelRules.some((rule) => rule.includes("position: fixed"))).toBe(
+      true,
+    );
     expect(labelRules.some((rule) => rule.includes("z-index: 1"))).toBe(true);
     expect(stageRule).toContain("z-index: 0");
     expect(stylesSource).toContain("--template-intro-stage-height");
