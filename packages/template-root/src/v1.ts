@@ -5,6 +5,7 @@ export type {
   GalleryItem,
   HeroAction,
   HeroContent,
+  HeroIntroContent,
   HomeSectionKey,
   ImageMedia,
   Media,

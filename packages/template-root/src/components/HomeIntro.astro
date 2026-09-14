@@ -1,0 +1,156 @@
+---
+import type { HeroIntroContent, Media } from "../content";
+import { buildIntroTimeline, introSourceForMedia } from "./homeIntro";
+
+interface Props {
+  content: HeroIntroContent;
+  media: readonly Media[];
+  heroMedia: Media;
+}
+
+const { content, media, heroMedia } = Astro.props;
+const frames = [...media, heroMedia];
+const timeline = buildIntroTimeline(frames.length);
+---
+
+<div
+  class="template-home-intro"
+  data-template-home-intro
+  data-split-at={timeline.splitAt}
+  data-reveal-at={timeline.revealAt.join(",")}
+  data-fullscreen-at={timeline.fullscreenAt}
+  data-fade-at={timeline.fadeAt}
+  data-complete-at={timeline.completeAt}
+  aria-hidden="true"
+>
+  <p class="template-home-intro__brand">{content.brandLabel}</p>
+  <div class="template-home-intro__sequence">
+    <p class="template-home-intro__label template-home-intro__label--top">
+      {content.topLabel}
+    </p>
+    <div class="template-home-intro__stage">
+      {frames.map((frame, index) => (
+        <img
+          class="template-home-intro__frame"
+          src={introSourceForMedia(frame)}
+          alt=""
+          width={frame.width}
+          height={frame.height}
+          loading="eager"
+          decoding="async"
+          data-template-intro-frame={index}
+          data-template-intro-visible={index === 0 ? "true" : undefined}
+          style={`--template-intro-index: ${index};`}
+        />
+      ))}
+    </div>
+    <p class="template-home-intro__label template-home-intro__label--bottom">
+      {content.bottomLabel}
+    </p>
+  </div>
+</div>
+
+<script>
+  const reduceMotion = window.matchMedia?.(
+    "(prefers-reduced-motion: reduce)",
+  ).matches;
+
+  document.querySelectorAll<HTMLElement>("[data-template-home-intro]").forEach((intro) => {
+    if (intro.dataset.templateIntroReady === "true") return;
+    intro.dataset.templateIntroReady = "true";
+
+    const hero = intro.parentElement?.querySelector<HTMLElement>(
+      '.template-hero[data-template-has-intro="true"]',
+    );
+    const header = document.querySelector<HTMLElement>("[data-template-navigation]");
+    const frames = Array.from(
+      intro.querySelectorAll<HTMLImageElement>("[data-template-intro-frame]"),
+    );
+    const previousHtmlOverflow = document.documentElement.style.overflow;
+    const previousBodyOverflow = document.body.style.overflow;
+    const timers: number[] = [];
+
+    const prepareHeroMedia = () => {
+      if (hero instanceof HTMLElement)
+        hero.setAttribute("data-template-intro-media-ready", "true");
+    };
+
+    const complete = () => {
+      timers.forEach((timer) => window.clearTimeout(timer));
+      prepareHeroMedia();
+      document.documentElement.style.overflow = previousHtmlOverflow;
+      document.body.style.overflow = previousBodyOverflow;
+      document.documentElement.dataset.templateIntroComplete = "true";
+      if (hero instanceof HTMLElement)
+        hero.dataset.templateIntroComplete = "true";
+      if (header) header.dataset.templateIntroComplete = "true";
+      intro.remove();
+    };
+
+    if (reduceMotion || frames.length === 0) {
+      complete();
+      return;
+    }
+
+    document.documentElement.style.overflow = "hidden";
+    document.body.style.overflow = "hidden";
+
+    const schedule = (callback: () => void, delay: number) => {
+      timers.push(window.setTimeout(callback, delay));
+    };
+    const numberFromData = (value: string | undefined, fallback: number) => {
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed : fallback;
+    };
+    const revealAt = (intro.dataset.revealAt ?? "")
+      .split(",")
+      .map(Number)
+      .filter(Number.isFinite);
+    const preload = Promise.all(
+      frames.map(
+        (frame) =>
+          new Promise<void>((resolve) => {
+            if (frame.complete) {
+              resolve();
+              return;
+            }
+            frame.addEventListener("load", () => resolve(), { once: true });
+            frame.addEventListener("error", () => resolve(), { once: true });
+          }),
+      ),
+    );
+    const preloadTimeout = new Promise<void>((resolve) => {
+      window.setTimeout(resolve, 4500);
+    });
+
+    void Promise.race([preload, preloadTimeout]).then(() => {
+      intro.dataset.templateIntroPhase = "brand";
+      schedule(
+        () => { intro.dataset.templateIntroPhase = "split"; },
+        numberFromData(intro.dataset.splitAt, 900),
+      );
+      revealAt.forEach((delay, index) => {
+        schedule(() => {
+          frames[index]?.setAttribute("data-template-intro-visible", "true");
+        }, delay);
+      });
+      schedule(
+        () => { intro.dataset.templateIntroPhase = "fullscreen"; },
+        numberFromData(intro.dataset.fullscreenAt, 5000),
+      );
+      schedule(
+        () => {
+          prepareHeroMedia();
+          intro.dataset.templateIntroPhase = "fade";
+        },
+        numberFromData(intro.dataset.fadeAt, 6200),
+      );
+      schedule(
+        complete,
+        numberFromData(intro.dataset.completeAt, 6650),
+      );
+    });
+
+    schedule(complete, numberFromData(intro.dataset.completeAt, 6650) + 5000);
+  });
+</script>

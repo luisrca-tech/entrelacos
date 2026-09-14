@@ -16,6 +16,7 @@ interface Props extends WeddingHomeProps {}
 
 const props = Astro.props;
 const order = validateWeddingHomeProps(props);
+const introMedia = props.gallery?.items.map((item) => item.media) ?? [];
 const sectionIds = order.map((key: HomeSectionKey) => {
   if (key === "hero") return props.hero.id;
   return props[key]?.id ?? key;
@@ -35,7 +36,7 @@ validateSectionIds(sectionIds);
   <slot name="header-addon" slot="header-addon" />
   <slot name="before-main" slot="before-main" />
   {order.map((key: HomeSectionKey) => {
-    if (key === "hero") return <HeroSection content={props.hero} />;
+    if (key === "hero") return <HeroSection content={props.hero} introMedia={introMedia} />;
     if (key === "story" && props.story) return <StorySection content={props.story} />;
     if (key === "details" && props.details) return <DetailsSection content={props.details} />;
     if (key === "gallery" && props.gallery) return <GallerySection content={props.gallery} />;

@@ -245,6 +245,46 @@ describe("template-root v1 content contracts", () => {
     ).toThrow(/poster/i);
   });
 
+  it("accepts a host-owned hero intro and rejects incomplete labels", () => {
+    expect(() =>
+      validateHeroContent({
+        ...heroOnlyHome.hero,
+        intro: {
+          brandLabel: "Alex & Sam",
+          topLabel: "Alex &",
+          bottomLabel: "Sam",
+        },
+      }),
+    ).not.toThrow();
+
+    expect(() =>
+      validateHeroContent({
+        ...heroOnlyHome.hero,
+        intro: {
+          brandLabel: "Alex & Sam",
+          topLabel: "",
+          bottomLabel: "Sam",
+        },
+      }),
+    ).toThrow(/hero\.intro\.topLabel/i);
+  });
+
+  it("requires gallery media when the home preset enables the hero intro", () => {
+    expect(() =>
+      validateWeddingHomeProps({
+        ...heroOnlyHome,
+        hero: {
+          ...heroOnlyHome.hero,
+          intro: {
+            brandLabel: "Alex & Sam",
+            topLabel: "Alex &",
+            bottomLabel: "Sam",
+          },
+        },
+      }),
+    ).toThrow(/intro.*gallery/i);
+  });
+
   it("rejects executable content values and canonical fragments", () => {
     expect(() =>
       validateSerializableContent({ render: () => "markup" }),

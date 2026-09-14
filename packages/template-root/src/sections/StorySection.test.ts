@@ -57,4 +57,13 @@ describe("StorySection editorial sequence", () => {
     expect(stylesSource).toContain("position: static;");
     expect(stylesSource).toContain("transition: none;");
   });
+
+  it("crossfades desktop story media instead of swapping it instantly", () => {
+    expect(stylesSource).toMatch(
+      /\.template-story__stage\[data-story-stage-ready\]\s+\.template-story__stage-media\s*\{[^}]*opacity:\s*0;[^}]*transition:/s,
+    );
+    expect(stylesSource).toMatch(
+      /\.template-story__stage\[data-story-stage-ready\][\s\S]*?\.template-story__stage-media\[data-active\]\s*\{[^}]*opacity:\s*1;/,
+    );
+  });
 });

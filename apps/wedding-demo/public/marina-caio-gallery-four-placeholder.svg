@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 900" role="img" aria-labelledby="title description">
+  <title id="title">Placeholder de retrato</title>
+  <desc id="description">Composição abstrata em verde profundo, areia e terracota.</desc>
+  <rect width="1200" height="900" fill="#26382f"/>
+  <rect x="86" y="76" width="1028" height="748" rx="360" fill="#d8c6a6"/>
+  <ellipse cx="600" cy="460" rx="250" ry="330" fill="#9b5f46"/>
+  <circle cx="600" cy="380" r="148" fill="#f0e8d8"/>
+  <path d="M450 760C478 610 522 540 600 540s122 70 150 220" fill="#596b58"/>
+</svg>

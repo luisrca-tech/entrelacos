@@ -62,6 +62,11 @@ const hero = {
     height: 1200,
   },
   action: { label: "Confirmar presença", href: "#guest-access" },
+  intro: {
+    brandLabel: "Marina & Caio",
+    topLabel: "Marina &",
+    bottomLabel: "Caio",
+  },
 };
 const story = {
   id: "story",
@@ -166,6 +171,39 @@ const gallery = {
         kind: "image" as const,
         src: "/marina-caio-gallery-three-placeholder.svg",
         alt: "Composição abstrata sobre uma celebração",
+        width: 1200,
+        height: 900,
+      },
+    },
+    {
+      id: "gallery-retrato",
+      caption: "Um retrato sem pressa",
+      media: {
+        kind: "image" as const,
+        src: "/marina-caio-gallery-four-placeholder.svg",
+        alt: "Composição abstrata inspirada em um retrato",
+        width: 1200,
+        height: 900,
+      },
+    },
+    {
+      id: "gallery-luz",
+      caption: "A luz do fim da tarde",
+      media: {
+        kind: "image" as const,
+        src: "/marina-caio-gallery-five-placeholder.svg",
+        alt: "Composição abstrata inspirada na luz do fim da tarde",
+        width: 1200,
+        height: 900,
+      },
+    },
+    {
+      id: "gallery-abraco",
+      caption: "O abraço que fica",
+      media: {
+        kind: "image" as const,
+        src: "/marina-caio-gallery-six-placeholder.svg",
+        alt: "Composição abstrata inspirada em um abraço",
         width: 1200,
         height: 900,
       },
@@ -278,6 +316,10 @@ const guestAccess = {
     --demo-muted: #637066;
     --demo-paper: #f4f0e8;
     --demo-line: rgba(37, 53, 43, 0.18);
+    --demo-page-inset: max(
+      clamp(1rem, 2.7778vw, 2.5rem),
+      calc((100vw - 120rem) / 2 + 2.5rem)
+    );
   }
 
   .demo-inactive {
@@ -319,7 +361,7 @@ const guestAccess = {
     display: grid;
     grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
     gap: clamp(2rem, 8vw, 8rem);
-    padding: clamp(2rem, 3vw, 3rem) max(1rem, calc((100vw - 78rem) / 2))
+    padding: clamp(2rem, 3vw, 3rem) var(--demo-page-inset)
       clamp(1.5rem, 3vw, 2.5rem);
     background: var(--demo-paper);
   }
@@ -356,7 +398,7 @@ const guestAccess = {
   }
 
   .demo-mural {
-    padding: clamp(1rem, 2vw, 2rem) max(1rem, calc((100vw - 78rem) / 2))
+    padding: clamp(1rem, 2vw, 2rem) var(--demo-page-inset)
       clamp(4rem, 8vw, 6rem);
     background: var(--demo-paper);
   }

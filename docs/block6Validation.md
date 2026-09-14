@@ -90,6 +90,35 @@ The focused browser run used `1440x900` and `390x844`. It confirmed a 793.67px d
 
 The temporary authenticated fixture was removed from the verified test database. Its local state, credential, login-response, and environment files were deleted; the original admin `.env` was restored; B6 browser sessions and local servers were closed. The pre-existing `b4-qa-auth` browser session was left untouched.
 
+## Full-width and gallery-derived introduction validation
+
+The next visual feedback pass used the public One Hudson page and its local implementation only as interaction and spatial references. No One Hudson branding, copy, content, or host asset entered the template. The reusable implementation added optional host-owned intro labels; `WeddingHome` derives the visual sequence from host-owned gallery media and finishes with the host-owned hero media. The demo expanded from three to six gallery items, all still provisional host SVGs.
+
+The focused TDD run first demonstrated four expected failures plus one missing helper module. After implementation, 5 focused files and 37 tests passed. The repository gates then passed with 239 linted files, 8 successful typecheck tasks and zero Astro diagnostics, 66 test files and 283 tests, both static consumer builds, and `git diff --check`.
+
+Browser validation exercised normal motion at `1440x900`, `1920x1080`, `2560x1440`, and `390x844`. It confirmed:
+
+- the gallery-derived sequence, hero-frame viewport expansion, subsequent header/content reveal, restored document scrolling, and no page error;
+- exact `100svh` hero heights of 900, 1080, 1440, and 844 pixels at the corresponding viewports;
+- no horizontal overflow at any exercised width;
+- a 1440px story stage of 878.8px and gallery frame of 904.3px, materially wider than the prior centered composition;
+- proportional 1920px growth to a 1192.3px story stage and 1226.9px gallery frame;
+- the same 1192.3px and 1226.9px media widths at 2560px, confirming that the centered 1920px stage cap prevents indefinite 2K/4K stretching;
+- a single-column 390px layout with a 358px gallery frame and the sticky story stage disabled;
+- initial reduced motion skips/removes the intro, leaves header and hero content fully visible with no animation, and preserves native scrolling.
+
+The introduction was visually captured during the centered first frame and after the final hero reveal on desktop, plus the centered first frame on mobile. Placeholder art remains intentionally provisional; this evidence validates structure, timing, reuse, and responsive geometry rather than final-media quality.
+
+## Introduction handoff, story transition, and gallery-height refinement
+
+The follow-up TDD pass first produced three expected failures covering hero-media preparation, story-stage opacity transitions, and the shorter gallery ratio. After implementation, the same 3 focused files and 9 tests passed.
+
+Browser validation at `1440x900` confirmed that the matching canonical hero media is visible beneath the final 450ms intro fade, with no white interval, while the header and masked hero copy wait until the overlay has been removed and then enter smoothly together. The viewport remained at scroll position zero, the final hero filled the viewport, and the browser reported no page errors.
+
+The desktop story-stage transition was sampled 80ms after an active-entry change: the outgoing and incoming media had opacities `0.615233` and `0.384767`; after 800ms they had settled at `0` and `1`. The main desktop gallery frame changed from the previous 4:3 height of approximately 678.2px to 565.2px at a 904.3px width (`16 / 10`). At `390x844`, it remains 358px by 268.5px (`4 / 3`), the story stage remains disabled, and there is no horizontal overflow.
+
+The final repository run passed `bun install --frozen-lockfile` without changes, linted 239 files, completed all 8 typecheck tasks with zero Astro diagnostics, passed 66 test files and 285 tests, built the API, admin, wedding demo, and template fixture, and passed `git diff --check`.
+
 ## Contract and static-build evidence
 
 Current source tests cover:
@@ -112,7 +141,7 @@ The documentation pass reran the content, public-boundary, and interaction contr
 - Authorized clean-browser admin recognition, RSVP persistence, mural availability, and site lifecycle were accepted. Message creation/editing and the deadline/foreign/primary-group matrix remain blocked as described above.
 - Google Maps iframe rendering depends on an external service. No provider availability, account, cost, privacy, or legal approval was verified.
 - Current SVG artwork and monogram are provisional local placeholders. No final fictional-couple set, final logo, media provider, AI video, cost ceiling, source rights, usage permission, optimized output, or approval record exists.
-- No layout-shift metric, performance budget, accessibility conformance claim, deployment, public URL, remote CI run, commit, push, merge, or production operation is evidenced here.
+- No layout-shift metric, performance budget, accessibility conformance claim, deployment, public demo URL, remote CI run, new commit, push, merge, or production operation is evidenced for the latest visual-feedback pass.
 
 ## Remaining acceptance gates
 
@@ -127,4 +156,4 @@ This implementation and documentation run did not generate final media, call a m
 
 ## Listening
 
-The record keeps pre-final evidence because it is valuable for regression diagnosis, but labels it by execution stage. The repository-wide 259-test run predates B6-T5, and the later presentation-feedback run supersedes the earlier 272-test consolidated count with 277 passing tests. The hero entrance was implemented before final media because it depends only on layout and motion; final media, rights, provider, cost, and performance acceptance remain separate gates.
+The record keeps pre-final evidence because it is valuable for regression diagnosis, but labels it by execution stage. The repository-wide 259-test run predates B6-T5, the first presentation-feedback run superseded the earlier 272-test count with 277 passing tests, and the full-width/intro pass supersedes it with 283. The introduction was implemented before final media because it derives from the media contract and can use placeholders or video posters; final media, rights, provider, cost, and performance acceptance remain separate gates.

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 900" role="img" aria-labelledby="title description">
+  <title id="title">Placeholder de abraço</title>
+  <desc id="description">Duas formas orgânicas sobrepostas em tons naturais.</desc>
+  <rect width="1200" height="900" fill="#b97457"/>
+  <path d="M160 770C144 530 228 246 474 180c164-44 290 66 288 228-2 212-174 388-412 424z" fill="#e8dbc4"/>
+  <path d="M1040 768C1056 528 972 244 726 178c-164-44-290 66-288 228 2 212 174 388 412 424z" fill="#43594a" fill-opacity=".92"/>
+  <circle cx="600" cy="400" r="98" fill="#f3eee4" fill-opacity=".82"/>
+</svg>

@@ -22,6 +22,9 @@ describe("GallerySection carousel composition", () => {
     expect(source).not.toContain("previous.id");
     expect(source).not.toContain("next.id");
     expect(styles).toContain("aspect-ratio: 4 / 3;");
+    expect(styles).toMatch(
+      /\.template-gallery-carousel__frame\s*\{[^}]*aspect-ratio:\s*16\s*\/\s*10;/s,
+    );
     expect(styles).toContain("object-fit: cover;");
   });
 

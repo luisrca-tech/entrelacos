@@ -41,4 +41,14 @@ describe("HeroSection media contract", () => {
     expect(styles).toContain("min-height: 100svh;");
     expect(styles).toContain("@media (prefers-reduced-motion: reduce)");
   });
+
+  it("uses the optional host intro and keeps the desktop hero at viewport height", () => {
+    expect(source).toContain(
+      'import HomeIntro from "../components/HomeIntro.astro"',
+    );
+    expect(source).toContain("introMedia");
+    expect(source).toContain("content.intro");
+    expect(source).toContain("<HomeIntro");
+    expect(styles).toMatch(/\.template-hero\s*\{[^}]*min-height:\s*100svh;/s);
+  });
 });

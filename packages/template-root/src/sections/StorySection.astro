@@ -26,10 +26,14 @@ for (let index = 0; index < content.entries.length; index += 1) {
   aria-labelledby={`${id}-title`}
 >
   <header class="template-story__intro" data-template-reveal>
-    {content.eyebrow && <p class="template-story__eyebrow">{content.eyebrow}</p>}
-    <h2 id={`${id}-title`}>{content.title}</h2>
-    {content.description && <p class="template-story__description">{content.description}</p>}
-    {content.body && <p class="template-story__body">{content.body}</p>}
+    <div class="template-story__heading">
+      {content.eyebrow && <p class="template-story__eyebrow">{content.eyebrow}</p>}
+      <h2 id={`${id}-title`}>{content.title}</h2>
+    </div>
+    <div class="template-story__summary">
+      {content.description && <p class="template-story__description">{content.description}</p>}
+      {content.body && <p class="template-story__body">{content.body}</p>}
+    </div>
   </header>
 
   <div class="template-story__sequence">

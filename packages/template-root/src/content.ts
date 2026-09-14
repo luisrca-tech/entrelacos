@@ -82,11 +82,18 @@ export type StoryContent = SectionContent & {
   entries: readonly StoryEntry[];
 };
 
+export type HeroIntroContent = {
+  brandLabel: string;
+  topLabel: string;
+  bottomLabel: string;
+};
+
 export type HeroContent = SectionContent & {
   dateLabel: string;
   locationLabel: string;
   media: Media;
   action?: HeroAction;
+  intro?: HeroIntroContent;
 };
 
 export type GalleryControls = {
@@ -502,6 +509,13 @@ export function validateHeroContent(
   validateMedia(value.media, "hero.media");
   if (value.action !== undefined)
     validateNavigationLink(value.action, "hero.action");
+  if (value.intro !== undefined) {
+    assertObject(value.intro, "hero.intro");
+    validateSerializableContent(value.intro, "hero.intro");
+    assertNonEmptyString(value.intro.brandLabel, "hero.intro.brandLabel");
+    assertNonEmptyString(value.intro.topLabel, "hero.intro.topLabel");
+    assertNonEmptyString(value.intro.bottomLabel, "hero.intro.bottomLabel");
+  }
 }
 
 function validateGalleryControls(
@@ -679,6 +693,8 @@ export function validateWeddingHomeProps(
   if (value.details !== undefined)
     validateSectionContent(value.details, "details");
   if (value.gallery !== undefined) validateGalleryContent(value.gallery);
+  if (value.hero.intro !== undefined && value.gallery === undefined)
+    throw new TypeError("hero intro requires gallery media");
   if (value.schedule !== undefined) validateScheduleContent(value.schedule);
   if (value.venue !== undefined) validateVenueContent(value.venue);
   let order: HomeSectionKey[];

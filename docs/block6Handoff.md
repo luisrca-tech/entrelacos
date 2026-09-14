@@ -7,7 +7,7 @@ Status: the local public-template implementation, provisional demo presentation,
 - `@entrelacos/template-root/v1` is the only public template entrypoint.
 - `WeddingLayout` provides host-driven metadata, navigation/footer shells, named extension slots, the five-variable theme contract, and internal progressive interactions.
 - `WeddingHome` provides the standard composition from the same public sections available for direct use.
-- Hero, story, details, gallery, schedule/guidance, venue/map, footer, responsive navigation, reduced-motion fallbacks, and image/video poster behavior are available through serializable host data.
+- Hero, optional gallery-derived introduction, story, details, gallery, schedule/guidance, venue/map, footer, responsive navigation, reduced-motion fallbacks, and image/video poster behavior are available through serializable host data.
 - `apps/wedding-demo` is the full default-preset consumer and composes the real `GuestAccess`, `MessageMural`, RSVP path, and recognized-admin return link through `wedding-features`.
 - `apps/template-fixture` proves a distinct minimal host, reordered preset, local section, and extra `/hospedagem` page without copying template code.
 
@@ -29,7 +29,7 @@ Do not copy the Marina & Caio or Casa Aurora content into the package or provisi
 
 ## Current demo and fixture
 
-The demo owns Marina & Caio, the September 2027 date, Casablanca Eventos address, Google Maps embed/directions URL, fallback venue link, navigation/SEO/footer copy, guest/mural placement, and nine provisional SVG assets. Demo SEO is `noindex, nofollow`.
+The demo owns Marina & Caio, the September 2027 date, Casablanca Eventos address, Google Maps embed/directions URL, fallback venue link, navigation/SEO/footer/intro copy, guest/mural placement, and twelve provisional SVG assets. Demo SEO is `noindex, nofollow`.
 
 The technical fixture owns Casa Aurora, its April 2028 event data, terracotta SVG, noindex metadata, story-before-hero order, local extension, and `/hospedagem` route. It intentionally contains no guest API, database, SMS, admin recognition, or product-polish requirement.
 
@@ -43,7 +43,7 @@ The RSVP dialog uses native modal behavior, restores opener focus, and opts out 
 
 ## Media and map status
 
-The current demo uses abstract SVG placeholders and image media only. The hero entrance is already implemented as a media-independent CSS layer, so a later approved image or muted inline loop video can replace the placeholder without rebuilding the page structure. Video still requires a poster and does not depend on autoplay; no video has been generated or approved. `docs/block6MediaRegister.md` is the source of truth for provisional assets and pending provider/rights/cost decisions.
+The current demo uses abstract SVG placeholders and image media only. Its bounded introduction reuses the six gallery items, then expands the hero frame to `100svh`. The canonical hero media is prepared beneath the fading intro so there is no blank frame; after the overlay is gone, the header and masked hero copy enter together. The desktop story stage crossfades between media, and the main gallery uses a shorter `16 / 10` desktop frame while preserving `4 / 3` on mobile. A later approved image or muted inline loop video can replace the hero placeholder without rebuilding the page structure; the intro uses the required video poster. Video still does not depend on autoplay, and no video has been generated or approved. `docs/block6MediaRegister.md` is the source of truth for provisional assets and pending provider/rights/cost decisions.
 
 The map is a host-supplied Google Maps iframe with no key, plus a visible address, directions link, venue-site fallback, and copy feedback. External rendering is not guaranteed by the static build and has no provider/legal approval claim.
 

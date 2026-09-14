@@ -1,21 +1,28 @@
 ---
 import { validateHeroContent } from "../content";
-import type { HeroContent } from "../content";
+import type { HeroContent, Media } from "../content";
+import HomeIntro from "../components/HomeIntro.astro";
 
 interface Props {
   content: HeroContent;
+  introMedia?: readonly Media[];
 }
 
-const { content } = Astro.props;
+const { content, introMedia = [] } = Astro.props;
 validateHeroContent(content);
 const id = content.id;
+const hasIntro = content.intro !== undefined && introMedia.length > 0;
 ---
 
+{hasIntro && content.intro && (
+  <HomeIntro content={content.intro} media={introMedia} heroMedia={content.media} />
+)}
 <section
   id={id}
   class="template-hero"
   aria-labelledby={`${id}-title`}
   data-template-hero-intro
+  data-template-has-intro={hasIntro ? "true" : undefined}
 >
   <div class="template-hero__media">
     {content.media.kind === "image" ? (
