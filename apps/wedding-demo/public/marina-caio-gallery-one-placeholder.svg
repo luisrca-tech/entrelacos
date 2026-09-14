@@ -1,7 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 900" role="img" aria-labelledby="title">
-  <title>Composição abstrata em verde e terracota</title>
-  <rect width="1200" height="900" fill="#d7c6ae"/>
-  <circle cx="320" cy="270" r="250" fill="#34483d"/>
-  <path d="M0 700c190-170 340-210 540-110s330 120 660-90v400H0Z" fill="#a96143"/>
-  <path d="M650 0h550v280c-210-30-350-120-550-280Z" fill="#f4f0e8" opacity=".7"/>
-</svg>

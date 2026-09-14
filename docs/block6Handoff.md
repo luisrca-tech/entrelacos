@@ -1,6 +1,6 @@
 # Block 6 handoff
 
-Status: the local public-template implementation, provisional demo presentation, independent black-box QA, post-fix revalidation, consolidated final gates, independent diff review, and presentation-feedback pass are complete for the exercised scope. All accepted review findings were corrected and revalidated. Final media acceptance remains pending. This record does not claim merge, deployment, provider use, or production acceptance.
+Status: the local public-template implementation, approved fictional-demo media integration, independent black-box QA, post-fix revalidation, consolidated final gates, independent diff review, and presentation-feedback pass are complete for the exercised scope. All accepted review findings were corrected and revalidated. This record does not claim merge, deployment, real-client media approval, or production acceptance.
 
 ## Delivered local boundary
 
@@ -29,7 +29,7 @@ Do not copy the Marina & Caio or Casa Aurora content into the package or provisi
 
 ## Current demo and fixture
 
-The demo owns Marina & Caio, the September 2027 date, Casablanca Eventos address, Google Maps embed/directions URL, fallback venue link, navigation/SEO/footer/intro copy, guest/mural placement, and twelve provisional SVG assets. Demo SEO is `noindex, nofollow`.
+The demo owns Marina & Caio, the September 2027 date, Casablanca Eventos address, Google Maps embed/directions URL, fallback venue link, navigation/SEO/footer/intro copy, guest/mural placement, twelve approved WebP delivery images, one approved silent MP4, and a provisional monogram. Demo SEO is `noindex, nofollow`.
 
 The technical fixture owns Casa Aurora, its April 2028 event data, terracotta SVG, noindex metadata, story-before-hero order, local extension, and `/hospedagem` route. It intentionally contains no guest API, database, SMS, admin recognition, or product-polish requirement.
 
@@ -43,7 +43,7 @@ The RSVP dialog uses native modal behavior, restores opener focus, and opts out 
 
 ## Media and map status
 
-The current demo uses abstract SVG placeholders and image media only. Its bounded introduction reuses the six gallery items, then expands the hero frame to `100svh`. The canonical hero media is prepared beneath the fading intro so there is no blank frame; after the overlay is gone, the header and masked hero copy enter together. The desktop story stage crossfades between media, and the main gallery uses a shorter `16 / 10` desktop frame while preserving `4 / 3` on mobile. A later approved image or muted inline loop video can replace the hero placeholder without rebuilding the page structure; the intro uses the required video poster. Video still does not depend on autoplay, and no video has been generated or approved. `docs/block6MediaRegister.md` is the source of truth for provisional assets and pending provider/rights/cost decisions.
+The current demo uses the approved fictional-couple WebP set and an eight-second `1920x1080` H.264 hero video. Its bounded introduction reuses the six gallery items, then expands the exact first video frame to `100svh`. The video is prepared while the still sequence runs, begins its muted inline autoplay loop beneath the overlay fade, and receives a paint before the independent header/copy entrances start; the repository MP4 contains no audio stream. Reduced motion skips the introduction and pauses the video at frame zero. The desktop story stage crossfades between media, and the main gallery uses a shorter `16 / 10` desktop frame while preserving `4 / 3` on mobile. `docs/block6MediaRegister.md` records source, approval, delivery, and remaining production limits.
 
 The map is a host-supplied Google Maps iframe with no key, plus a visible address, directions link, venue-site fallback, and copy feedback. External rendering is not guaranteed by the static build and has no provider/legal approval claim.
 
@@ -61,4 +61,4 @@ Provisioning must create host-owned content/configuration rather than cloning de
 
 ## Listening
 
-The handoff treats the polished demo and technical fixture as different evidence surfaces: one demonstrates the default experience, while the other proves composition flexibility. Final media production stays outside this implementation because choosing a provider without rights, cost, and approval inputs would create a false launch claim. Independent black-box QA passed for the exercised scope; the three explicitly blocked subscopes remain future evidence work under the fixture-safety conditions recorded above.
+The handoff treats the polished demo and technical fixture as different evidence surfaces: one demonstrates the default experience with approved fictional media, while the other proves composition flexibility. Approval is limited to this demo and does not become a real-client or production-media claim. Independent black-box QA passed for the exercised scope; the three explicitly blocked subscopes remain future evidence work under the fixture-safety conditions recorded above.

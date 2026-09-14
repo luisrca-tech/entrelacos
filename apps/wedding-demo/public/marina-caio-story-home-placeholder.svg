@@ -1,8 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 900" role="img" aria-labelledby="title description">
-  <title id="title">Placeholder abstrato de uma casa</title>
-  <desc id="description">Uma composição geométrica em marfim, verde e terracota representa um lar compartilhado.</desc>
-  <rect width="1200" height="900" fill="#34483d"/>
-  <path d="M210 440 600 130l390 310v360H210Z" fill="#f4f0e8"/>
-  <rect x="510" y="500" width="180" height="300" fill="#b56545"/>
-  <circle cx="870" cy="210" r="95" fill="#d7c8ad"/>
-</svg>

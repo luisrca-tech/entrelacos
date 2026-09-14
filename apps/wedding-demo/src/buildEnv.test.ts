@@ -5,6 +5,10 @@ import { describe, expect, it } from "vitest";
 const turbo = JSON.parse(
   readFileSync(resolve(import.meta.dirname, "../../../turbo.json"), "utf8"),
 ) as { tasks: { build: { env: string[] } } };
+const astroConfig = readFileSync(
+  resolve(import.meta.dirname, "../astro.config.mjs"),
+  "utf8",
+);
 
 describe("wedding demo build inputs", () => {
   it("invalidates cached builds when handoff or publication state changes", () => {
@@ -15,6 +19,10 @@ describe("wedding demo build inputs", () => {
 });
 
 describe("progressive enhancement", () => {
+  it("transforms the workspace UI package during SSR development", () => {
+    expect(astroConfig).toContain('noExternal: ["@entrelacos/ui"]');
+  });
+
   it("provides an honest host-owned fallback for interactive guest areas", () => {
     const source = readFileSync(
       resolve(import.meta.dirname, "pages/index.astro"),

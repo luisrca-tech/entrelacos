@@ -207,7 +207,13 @@ body[data-template-has-hero="true"] .template-header {
   animation: template-hero-copy-intro 700ms 500ms both;
 }
 
-html[data-template-js="true"] body:has(.template-home-intro) .template-header {
+html[data-template-js="true"]
+  body:has(
+    .template-hero[data-template-has-intro="true"]:not(
+        [data-template-intro-complete="true"]
+      )
+  )
+  .template-header {
   opacity: 0;
   animation: none;
 }
@@ -1465,7 +1471,11 @@ html[data-template-js="true"] .template-home-intro {
   body[data-template-has-hero="true"] .template-header,
   .template-header[data-template-intro-complete="true"],
   html[data-template-js="true"]
-    body:has(.template-home-intro)
+    body:has(
+      .template-hero[data-template-has-intro="true"]:not(
+          [data-template-intro-complete="true"]
+        )
+    )
     .template-header {
     opacity: 1;
     animation: none;

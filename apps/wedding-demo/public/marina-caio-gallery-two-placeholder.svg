@@ -1,7 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 900" role="img" aria-labelledby="title">
-  <title>Composição abstrata em azul e verde</title>
-  <rect width="1200" height="900" fill="#b6c7c4"/>
-  <path d="M0 0h610c100 230 90 390-80 570S210 780 0 810Z" fill="#25352b"/>
-  <circle cx="870" cy="390" r="280" fill="#d28a61"/>
-  <path d="M650 730c130-100 280-100 550-10v180H650Z" fill="#f4f0e8"/>
-</svg>

@@ -39,11 +39,13 @@ const hasIntro = content.intro !== undefined && introMedia.length > 0;
         poster={content.media.poster}
         width={content.media.width}
         height={content.media.height}
+        autoplay
         muted
         loop
         playsinline
         preload="metadata"
         aria-label={content.media.alt}
+        data-template-hero-video
       >
         <img
           src={content.media.poster}
@@ -71,3 +73,34 @@ const hasIntro = content.intro !== undefined && introMedia.length > 0;
     )}
   </div>
 </section>
+
+<script>
+  const motionPreference = window.matchMedia("(prefers-reduced-motion: reduce)");
+
+  const syncHeroVideoPlayback = () => {
+    document
+      .querySelectorAll<HTMLVideoElement>("[data-template-hero-video]")
+      .forEach((video) => {
+        if (motionPreference.matches) {
+          video.pause();
+          video.currentTime = 0;
+          return;
+        }
+
+        const hero = video.closest<HTMLElement>(".template-hero");
+        const introPending =
+          hero?.dataset.templateHasIntro === "true" &&
+          hero.dataset.templateIntroMediaReady !== "true";
+        if (introPending) {
+          video.pause();
+          video.currentTime = 0;
+          return;
+        }
+
+        void video.play().catch(() => undefined);
+      });
+  };
+
+  syncHeroVideoPlayback();
+  motionPreference.addEventListener("change", syncHeroVideoPlayback);
+</script>

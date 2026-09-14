@@ -1,68 +1,63 @@
 # Block 6 media register
 
-Status: provisional fallback inventory only. No asset in this register is approved as final client media. No AI image/video provider, external media account, cost ceiling, final logo, fictional-couple set, rights package, or production delivery has been approved or used.
+Status: the final fictional-couple image set, hero poster, and hero video were approved by the project owner for the local `wedding-demo` on 2026-09-14. This approval does not cover a real client, production launch, final logo/monogram, Google Maps privacy review, or broader commercial reuse.
+
+## Source and approval record
+
+- The still-image set was generated through an OpenAI image-generation workflow for this fictional demo. The exact image model identifier was not retained.
+- The hero video was generated and refined in Google Flow from the approved fictional-couple visual reference. The exact Flow video-model identifier was not retained.
+- Retained operator source files are the eleven `*-source.png` images, `marina-caio-couple-reference.png`, `marina-caio-video-start-frame-source.png`, and `Couple_walking_in_natural_landscape_20260914013913.mp4`. Source files remain outside the repository; only delivery assets are versioned.
+- The project owner approved the resulting fictional identities, stills, and completed video for use in the Marina & Caio demo in this conversation on 2026-09-14.
+- No real couple or real client likeness is claimed. Provider output terms still govern the generated media. Exact per-asset cost and a separate production cost ceiling were not supplied because generation used the owner's existing accounts; future client or commercial reuse must record them independently.
+- No provider credential, account token, prompt history, or private reference path is stored in the repository or static build.
 
 ## Repository assets
 
-All listed files are owned by their host app, not `packages/template-root`. They are local abstract SVG implementation fixtures with no third-party source or provider call recorded in this task. Their continued use as final public media, trademark/logo approval, and client-facing usage permission remain pending.
+All files are owned by their host app, not `packages/template-root`.
 
-| File | Host | Current use | Intrinsic viewBox | Status |
+| File | Current use | Intrinsic size | Delivery size | Status |
 | --- | --- | --- | --- | --- |
-| `apps/wedding-demo/public/marina-caio-hero-placeholder.svg` | `wedding-demo` | Hero image and current social-image target | `1800x1200` | Provisional abstract placeholder; replace or explicitly approve |
-| `apps/wedding-demo/public/marina-caio-story-encounter-placeholder.svg` | `wedding-demo` | First story entry | `1200x900` | Provisional abstract placeholder; replace or explicitly approve |
-| `apps/wedding-demo/public/marina-caio-story-first-trip-placeholder.svg` | `wedding-demo` | Second story entry | `1200x900` | Provisional abstract placeholder; replace or explicitly approve |
-| `apps/wedding-demo/public/marina-caio-story-home-placeholder.svg` | `wedding-demo` | Third story entry | `1200x900` | Provisional abstract placeholder; replace or explicitly approve |
-| `apps/wedding-demo/public/marina-caio-story-celebration-placeholder.svg` | `wedding-demo` | Fourth story entry | `1200x900` | Provisional abstract placeholder; replace or explicitly approve |
-| `apps/wedding-demo/public/marina-caio-gallery-one-placeholder.svg` | `wedding-demo` | First gallery item | `1200x900` | Provisional abstract placeholder; replace or explicitly approve |
-| `apps/wedding-demo/public/marina-caio-gallery-two-placeholder.svg` | `wedding-demo` | Second gallery item | `1200x900` | Provisional abstract placeholder; replace or explicitly approve |
-| `apps/wedding-demo/public/marina-caio-gallery-three-placeholder.svg` | `wedding-demo` | Third gallery item | `1200x900` | Provisional abstract placeholder; replace or explicitly approve |
-| `apps/wedding-demo/public/marina-caio-gallery-four-placeholder.svg` | `wedding-demo` | Fourth gallery item | `1200x900` | Provisional abstract placeholder; replace or explicitly approve |
-| `apps/wedding-demo/public/marina-caio-gallery-five-placeholder.svg` | `wedding-demo` | Fifth gallery item | `1200x900` | Provisional abstract placeholder; replace or explicitly approve |
-| `apps/wedding-demo/public/marina-caio-gallery-six-placeholder.svg` | `wedding-demo` | Sixth gallery item | `1200x900` | Provisional abstract placeholder; replace or explicitly approve |
-| `apps/wedding-demo/public/marina-caio-monogram.svg` | `wedding-demo` | Current demo favicon/identity mark | `64x64` | Provisional monogram; not final logo or brand approval |
-| `apps/template-fixture/public/fixture-hero.svg` | `template-fixture` | Technical fixture hero | `1600x1000` | Permanent test fixture is acceptable; not client/product media |
+| `apps/wedding-demo/public/marina-caio-hero.mp4` | Hero background loop | `1920x1080`, 8 seconds, H.264 | 6.8 MiB | Approved fictional-demo video; audio stream removed |
+| `apps/wedding-demo/public/marina-caio-hero-poster.webp` | Hero poster, fallback, and intro ending | `1920x1080` | 182 KiB | Exact first decoded frame of the approved hero video |
+| `apps/wedding-demo/public/marina-caio-hero.webp` | Social image | `1536x1024` | 348 KiB | Approved fictional-demo image |
+| `apps/wedding-demo/public/marina-caio-story-encounter.webp` | First story entry | `1448x1086` | 196 KiB | Approved fictional-demo image |
+| `apps/wedding-demo/public/marina-caio-story-first-trip.webp` | Second story entry | `1448x1086` | 294 KiB | Approved fictional-demo image |
+| `apps/wedding-demo/public/marina-caio-story-home.webp` | Third story entry | `1448x1086` | 197 KiB | Approved fictional-demo image |
+| `apps/wedding-demo/public/marina-caio-story-celebration.webp` | Fourth story entry | `1448x1086` | 162 KiB | Approved fictional-demo image |
+| `apps/wedding-demo/public/marina-caio-gallery-one.webp` | First gallery item | `1448x1086` | 312 KiB | Approved fictional-demo image |
+| `apps/wedding-demo/public/marina-caio-gallery-two.webp` | Second gallery item | `1448x1086` | 353 KiB | Approved fictional-demo image |
+| `apps/wedding-demo/public/marina-caio-gallery-three.webp` | Third gallery item | `1448x1086` | 192 KiB | Approved fictional-demo image |
+| `apps/wedding-demo/public/marina-caio-gallery-four.webp` | Fourth gallery item | `1448x1086` | 190 KiB | Approved fictional-demo image |
+| `apps/wedding-demo/public/marina-caio-gallery-five.webp` | Fifth gallery item | `1448x1086` | 277 KiB | Approved fictional-demo image |
+| `apps/wedding-demo/public/marina-caio-gallery-six.webp` | Sixth gallery item | `1448x1086` | 168 KiB | Approved fictional-demo image |
+| `apps/wedding-demo/public/marina-caio-monogram.svg` | Demo favicon/identity mark | `64x64` | Lightweight SVG | Provisional monogram; not final logo or brand approval |
+| `apps/template-fixture/public/fixture-hero.svg` | Technical fixture hero | `1600x1000` | Lightweight SVG | Permanent test fixture; not client/product media |
 
-The demo passes explicit rendered dimensions matching these viewBox proportions. The fixture does the same for its hero. The hero is reserved for the principal ensaio media; the six-item gallery is reserved for the pre-wedding collection. The optional demo introduction reuses these six gallery assets and ends with the hero asset; it creates no additional media ownership surface. The current demo has no bitmap photo, fictional human depiction, audio, or video file.
+The optimized WebP delivery set totals approximately 2.7 MiB. The original PNG files are intentionally not duplicated in the repository. The demo supplies exact intrinsic dimensions and meaningful Portuguese alt text from host-owned content.
+
+## Hero video behavior
+
+The hero uses the approved MP4 as a muted, autoplaying, inline, continuous loop with a WebP poster extracted from its exact first decoded frame. The repository copy physically contains no audio stream, so sound cannot be exposed by changing browser volume. The introduction reuses the six gallery images and finishes on that matching poster. While those stills run, the video is loaded to its first decoded frame but remains paused. Playback starts beneath the overlay fade; only after that fade is removed and the browser paints the moving hero do the header and hero copy begin their independent entrances. This preserves the approved continuous fullscreen transition without making video decoding compete with the chrome animations.
+
+At initial `prefers-reduced-motion: reduce`, the introduction is skipped and video playback is paused at the first frame. Preference changes are observed by the hero playback controller. The poster and nested image fallback keep the hero useful if video playback is unavailable.
+
+Local browser validation covered desktop and `390x844` mobile rendering. The video reported `readyState: 4`, played muted and inline, and crossed its 8-second boundary while remaining in the same loop. Handoff instrumentation measured video playback before overlay removal and header/copy animation startup on a later paint, with no long task during that interval. Reduced-motion reload reported `paused: true` and `currentTime: 0`. This is local delivery evidence, not a production Web Vitals, bandwidth, CDN, or device-matrix claim.
 
 ## External visual dependency
 
 The demo host supplies a Google Maps iframe URL for Casablanca Eventos, a Google Maps directions URL, and the venue contact page as fallback. The iframe needs no repository API key, but its rendering, terms, privacy behavior, network availability, and venue accuracy remain external review items. The visible address and fallback links remain available without iframe rendering.
 
-The map is not a repository media asset, and a successful local iframe render is not evidence of provider availability, account status, usage rights, legal/privacy approval, or production readiness.
+## Remaining gates
 
-## Final image gate
-
-Before any provisional demo asset becomes an approved final asset, record:
-
-- final file and retained source identity;
-- creator/source/provider and generation method;
-- input/reference rights and output usage permission;
-- restrictions, attribution, territory, duration, and client approval owner/date;
-- provider account owner, access status, and actual cost or approved ceiling;
-- intended section, crop/focal point, intrinsic dimensions, responsive outputs, format, and file size;
-- meaningful alt text or explicit decorative treatment;
-- visual review at all agreed viewports and measured layout/performance evidence;
-- confirmation that generated people do not imply a real couple or real venue unless explicitly authorized.
-
-No item currently satisfies this final gate.
-
-## Future AI video gate
-
-AI video is a later optional replacement, not part of the current demo build. Before generation or integration, approve and record:
-
-1. provider/tool, account owner, credentials boundary, region/access, terms, and cost ceiling;
-2. reference-image rights, fictional-couple consistency requirements, prompt/seed provenance where retainable, and output usage permission;
-3. duration, crop, resolution, codec/container, bitrate/file-size budget, and mobile delivery plan;
-4. a separately approved poster derived from an authorized source;
-5. muted inline loop behavior, no autoplay dependency, native static fallback, reduced-motion behavior, failure behavior, and performance measurements;
-6. final human approval of content, identity consistency, artifacts, accessibility text, and venue claims.
-
-The template's `VideoMedia` contract already requires `src`, `poster`, `alt`, `width`, and `height` and renders muted, looped, inline, and without autoplay. That code capability is not evidence that any video, provider workflow, rights, cost, or final poster has been approved.
+- Final logo/favicon/monogram and brand approval remain pending.
+- Any replacement by real client media requires client authorization, likeness rights, source records, usage restrictions, cost, approved crops, and a new human review.
+- Production launch still requires measured loading behavior on representative mobile networks and the normal deployment, privacy, provider, and legal gates.
+- Exact generation model identifiers and costs were not retained. They must be recorded before claiming a repeatable commercial media workflow.
 
 ## Prohibited promotion into shared code
 
-Do not move any host asset, couple identity, venue, alt text, media URL, poster, or approval record into `packages/template-root`. The shared package may retain rendering behavior and validators only. A new host must provide its own media register and content values.
+Do not move any host asset, couple identity, venue, alt text, media URL, poster, or approval record into `packages/template-root`. The shared package owns reusable rendering, validation, autoplay-loop coordination, and reduced-motion behavior only. A new host must provide its own media register and content values.
 
 ## Listening
 
-The register keeps lightweight SVGs so layout, crops, fallbacks, metadata, and reuse can be tested before media production. It separates technical readiness from content approval: working image/video markup does not settle likeness rights, provider terms, costs, client approval, or launch performance. The later AI-video option therefore remains reversible and cannot silently replace the current image-led fallback.
+The approved fictional set replaces the abstract demo placeholders without weakening the template/host boundary. Original PNGs remain operator-controlled sources; optimized WebP and silent MP4 files are the smallest complete delivery surface. A real client's media cannot inherit this demo approval.

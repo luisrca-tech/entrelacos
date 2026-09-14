@@ -16,8 +16,8 @@ const seo = {
   canonical: "https://demo.example.test/",
   robots: "noindex, nofollow" as const,
   socialImage: {
-    url: "https://demo.example.test/marina-caio-hero-placeholder.svg",
-    alt: "Composição abstrata do site de Marina e Caio",
+    url: "https://demo.example.test/marina-caio-hero.webp",
+    alt: "Marina e Caio se beijam sob uma árvore ao pôr do sol",
   },
 };
 const navigation = {
@@ -55,11 +55,12 @@ const hero = {
   dateLabel: "18 de setembro de 2027",
   locationLabel: "Goiânia, GO",
   media: {
-    kind: "image" as const,
-    src: "/marina-caio-hero-placeholder.svg",
-    alt: "Composição abstrata em verde-oliva e tons quentes",
-    width: 1800,
-    height: 1200,
+    kind: "video" as const,
+    src: "/marina-caio-hero.mp4",
+    poster: "/marina-caio-hero-poster.webp",
+    alt: "Marina e Caio caminham de mãos dadas por um campo ao pôr do sol",
+    width: 1920,
+    height: 1080,
   },
   action: { label: "Confirmar presença", href: "#guest-access" },
   intro: {
@@ -82,10 +83,10 @@ const story = {
       body: "Entre planos diferentes e pequenas coincidências, nasceu uma vontade simples: continuar perto. O café se estendeu, a conversa virou rotina e os próximos encontros deixaram de precisar de convite.",
       media: {
         kind: "image" as const,
-        src: "/marina-caio-story-encounter-placeholder.svg",
-        alt: "Composição abstrata que representa um encontro",
-        width: 1200,
-        height: 900,
+        src: "/marina-caio-story-encounter.webp",
+        alt: "Marina e Caio caminham sorrindo por um caminho arborizado",
+        width: 1448,
+        height: 1086,
       },
     },
     {
@@ -95,10 +96,10 @@ const story = {
       body: "Foram poucos dias, uma estrada comprida e uma coleção de planos feitos sem perceber. Voltamos com a certeza de que qualquer destino seria melhor quando escolhido em conjunto.",
       media: {
         kind: "image" as const,
-        src: "/marina-caio-story-first-trip-placeholder.svg",
-        alt: "Composição abstrata que representa uma viagem compartilhada",
-        width: 1200,
-        height: 900,
+        src: "/marina-caio-story-first-trip.webp",
+        alt: "Marina e Caio caminham de mãos dadas à beira de um lago",
+        width: 1448,
+        height: 1086,
       },
     },
     {
@@ -108,10 +109,10 @@ const story = {
       body: "Vieram a primeira mudança, os almoços demorados de domingo e a alegria de receber quem amamos. Entre caixas e recomeços, construímos um jeito próprio de chamar um lugar de casa.",
       media: {
         kind: "image" as const,
-        src: "/marina-caio-story-home-placeholder.svg",
-        alt: "Composição abstrata que representa a construção de uma casa",
-        width: 1200,
-        height: 900,
+        src: "/marina-caio-story-home.webp",
+        alt: "Marina e Caio compartilham café em um piquenique sob uma árvore",
+        width: 1448,
+        height: 1086,
       },
     },
     {
@@ -121,10 +122,10 @@ const story = {
       body: "O pedido não mudou o que já sabíamos; deu nome ao futuro que vínhamos desenhando. Agora reunimos família e amigos para transformar essa escolha em uma memória compartilhada.",
       media: {
         kind: "image" as const,
-        src: "/marina-caio-story-celebration-placeholder.svg",
-        alt: "Composição abstrata que representa uma celebração",
-        width: 1200,
-        height: 900,
+        src: "/marina-caio-story-celebration.webp",
+        alt: "Marina e Caio abraçados diante do pôr do sol",
+        width: 1448,
+        height: 1086,
       },
     },
   ],
@@ -133,7 +134,7 @@ const gallery = {
   id: "gallery",
   eyebrow: "02 / Fragmentos",
   title: "Antes do sim, um dia só nosso.",
-  description: "A galeria reúne as fotografias do pré-wedding em uma sequência inteira por vez. As imagens atuais são placeholders do host e serão substituídas pelo ensaio aprovado.",
+  description: "A galeria reúne as fotografias do pré-wedding em uma sequência inteira por vez, preservando cada instante do ensaio.",
   controls: {
     ariaLabel: "Navegação da galeria",
     previousLabel: "Anterior",
@@ -147,10 +148,10 @@ const gallery = {
       caption: "O começo do ensaio",
       media: {
         kind: "image" as const,
-        src: "/marina-caio-gallery-one-placeholder.svg",
-        alt: "Composição abstrata sobre um começo",
-        width: 1200,
-        height: 900,
+        src: "/marina-caio-gallery-one.webp",
+        alt: "Marina e Caio caminham de mãos dadas por um campo iluminado",
+        width: 1448,
+        height: 1086,
       },
     },
     {
@@ -158,10 +159,10 @@ const gallery = {
       caption: "Entre caminhos",
       media: {
         kind: "image" as const,
-        src: "/marina-caio-gallery-two-placeholder.svg",
-        alt: "Composição abstrata sobre um caminho",
-        width: 1200,
-        height: 900,
+        src: "/marina-caio-gallery-two.webp",
+        alt: "Marina e Caio caminham de costas por um caminho entre árvores",
+        width: 1448,
+        height: 1086,
       },
     },
     {
@@ -169,10 +170,10 @@ const gallery = {
       caption: "Um instante antes do sim",
       media: {
         kind: "image" as const,
-        src: "/marina-caio-gallery-three-placeholder.svg",
-        alt: "Composição abstrata sobre uma celebração",
-        width: 1200,
-        height: 900,
+        src: "/marina-caio-gallery-three.webp",
+        alt: "Marina e Caio trocam olhares em um retrato próximo",
+        width: 1448,
+        height: 1086,
       },
     },
     {
@@ -180,10 +181,10 @@ const gallery = {
       caption: "Um retrato sem pressa",
       media: {
         kind: "image" as const,
-        src: "/marina-caio-gallery-four-placeholder.svg",
-        alt: "Composição abstrata inspirada em um retrato",
-        width: 1200,
-        height: 900,
+        src: "/marina-caio-gallery-four.webp",
+        alt: "Marina e Caio posam juntos em um jardim ao entardecer",
+        width: 1448,
+        height: 1086,
       },
     },
     {
@@ -191,10 +192,10 @@ const gallery = {
       caption: "A luz do fim da tarde",
       media: {
         kind: "image" as const,
-        src: "/marina-caio-gallery-five-placeholder.svg",
-        alt: "Composição abstrata inspirada na luz do fim da tarde",
-        width: 1200,
-        height: 900,
+        src: "/marina-caio-gallery-five.webp",
+        alt: "Marina dança de mãos dadas com Caio em um campo ao pôr do sol",
+        width: 1448,
+        height: 1086,
       },
     },
     {
@@ -202,10 +203,10 @@ const gallery = {
       caption: "O abraço que fica",
       media: {
         kind: "image" as const,
-        src: "/marina-caio-gallery-six-placeholder.svg",
-        alt: "Composição abstrata inspirada em um abraço",
-        width: 1200,
-        height: 900,
+        src: "/marina-caio-gallery-six.webp",
+        alt: "Marina e Caio se abraçam à beira de um lago",
+        width: 1448,
+        height: 1086,
       },
     },
   ],

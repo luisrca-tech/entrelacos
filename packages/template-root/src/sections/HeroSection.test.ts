@@ -20,11 +20,14 @@ describe("HeroSection media contract", () => {
     expect(source).toContain("<img");
   });
 
-  it("keeps optional video playback muted, inline and looped without autoplay", () => {
+  it("keeps optional video playback muted, inline and looped as a background", () => {
+    expect(source).toContain("autoplay");
     expect(source).toContain("muted");
     expect(source).toContain("loop");
     expect(source).toContain("playsinline");
-    expect(source).not.toContain("autoplay");
+    expect(source).toContain("data-template-hero-video");
+    expect(source).toContain("prefers-reduced-motion: reduce");
+    expect(source).toContain("video.pause()");
   });
 
   it("renders the host-owned action as a validated link", () => {

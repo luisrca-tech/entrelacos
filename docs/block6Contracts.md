@@ -113,7 +113,7 @@ Both consumers must build statically without a live API, database, SMS, map, or 
 
 ## Demonstrated reuse
 
-`apps/wedding-demo` is the polished default-preset consumer and owns the Marina & Caio copy, venue, SEO, navigation, feature placement, monogram, and abstract placeholders. It is not a source of template defaults.
+`apps/wedding-demo` is the polished default-preset consumer and owns the Marina & Caio copy, venue, SEO, navigation, feature placement, monogram, and final fictional-demo media. It is not a source of template defaults.
 
 The demo renders the guest-access and mural islands with host-owned static fallback copy until their React clients are available. If scripts fail or are disabled, neither region claims to be loading indefinitely and no runtime data is serialized into the page.
 
@@ -123,4 +123,4 @@ Both consumers import only `/v1`, build independently, and own their routes and 
 
 ## Listening
 
-The contract freezes a small data-and-composition surface instead of a page-builder registry. The five theme variables permit controlled visual adaptation while keeping private classes replaceable. Host ownership of all copy, introduction labels, and assets prevents one couple's content from leaking into another site. The introduction derives its images from gallery and hero contracts instead of creating a second media registry. Lenis remains an internal enhancement because smooth scrolling is presentation behavior, while native anchors, native touch, and reduced-motion fallbacks preserve direct access. Final photos/video, provider, costs, rights, logo approval, and media performance evidence remain separate approval gates.
+The contract freezes a small data-and-composition surface instead of a page-builder registry. The five theme variables permit controlled visual adaptation while keeping private classes replaceable. Host ownership of all copy, introduction labels, and assets prevents one couple's content from leaking into another site. The introduction derives its images from gallery and hero contracts instead of creating a second media registry. Lenis remains an internal enhancement because smooth scrolling is presentation behavior, while native anchors, native touch, and reduced-motion fallbacks preserve direct access. The fictional-demo photos/video are approved locally; provider/model/cost traceability, real-client rights, logo approval, production media performance, and launch approval remain separate gates.

@@ -78,7 +78,7 @@ describe("template-root public boundary", () => {
     ).toBe(true);
   });
 
-  it("keeps the demo hero composition and placeholder assets host-owned", () => {
+  it("keeps the demo composition and final media assets host-owned", () => {
     const demoPage = readFileSync(
       resolve(repoRoot, "apps/wedding-demo/src/pages/index.astro"),
       "utf8",
@@ -89,12 +89,19 @@ describe("template-root public boundary", () => {
     expect(demoPage).toContain("venue");
     expect(demoPage).toContain("story-encontro");
     expect(demoPage).toContain("Marina & Caio");
+    expect(demoPage).not.toContain("placeholder");
     expect(demoPage).not.toContain("demo-hero");
+    expect(demoPage).toContain('poster: "/marina-caio-hero-poster.webp"');
+    expect(
+      existsSync(
+        resolve(repoRoot, "apps/wedding-demo/public/marina-caio-hero.mp4"),
+      ),
+    ).toBe(true);
     expect(
       existsSync(
         resolve(
           repoRoot,
-          "apps/wedding-demo/public/marina-caio-hero-placeholder.svg",
+          "apps/wedding-demo/public/marina-caio-hero-poster.webp",
         ),
       ),
     ).toBe(true);
@@ -107,7 +114,7 @@ describe("template-root public boundary", () => {
       existsSync(
         resolve(
           repoRoot,
-          "apps/wedding-demo/public/marina-caio-story-encounter-placeholder.svg",
+          "apps/wedding-demo/public/marina-caio-story-encounter.webp",
         ),
       ),
     ).toBe(true);
@@ -115,7 +122,15 @@ describe("template-root public boundary", () => {
       existsSync(
         resolve(
           repoRoot,
-          "apps/wedding-demo/public/marina-caio-story-celebration-placeholder.svg",
+          "apps/wedding-demo/public/marina-caio-story-celebration.webp",
+        ),
+      ),
+    ).toBe(true);
+    expect(
+      existsSync(
+        resolve(
+          repoRoot,
+          "apps/wedding-demo/public/marina-caio-gallery-six.webp",
         ),
       ),
     ).toBe(true);

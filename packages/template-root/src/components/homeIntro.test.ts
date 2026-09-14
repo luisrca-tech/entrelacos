@@ -46,11 +46,32 @@ describe("home intro sequencing", () => {
     expect(introSourceForMedia(video)).toBe("/hero-poster.jpg");
   });
 
-  it("prepares the matching hero media before removing the intro overlay", () => {
+  it("prepares and starts the matching hero media in separate stages", () => {
     expect(componentSource).toContain("prepareHeroMedia");
+    expect(componentSource).toContain("startHeroMedia");
     expect(componentSource).toContain("data-template-intro-media-ready");
+    expect(componentSource).toContain('heroVideo.preload = "auto"');
+    expect(componentSource).toContain("heroVideo.load()");
+    expect(componentSource).toContain("heroVideo.currentTime = 0");
+    expect(componentSource).toContain("heroVideo.play()");
     expect(componentSource.indexOf("prepareHeroMedia();")).toBeLessThan(
+      componentSource.indexOf("void Promise.race"),
+    );
+    expect(componentSource.indexOf("startHeroMedia();")).toBeLessThan(
       componentSource.indexOf('intro.dataset.templateIntroPhase = "fade"'),
+    );
+  });
+
+  it("paints the revealed media before starting header and hero copy motion", () => {
+    expect(componentSource).toContain("revealHeroChrome");
+    expect(componentSource.indexOf("intro.remove();")).toBeLessThan(
+      componentSource.indexOf("window.requestAnimationFrame(() =>"),
+    );
+    expect(componentSource).toMatch(
+      /window\.requestAnimationFrame\(\(\) => \{\s*window\.requestAnimationFrame\(revealHeroChrome\);\s*\}\);/s,
+    );
+    expect(stylesSource).toMatch(
+      /\.template-hero\[data-template-has-intro="true"\]:not\(\s*\[data-template-intro-complete="true"\]\s*\)/s,
     );
   });
 
@@ -71,11 +92,11 @@ describe("home intro sequencing", () => {
     expect(labelRules.some((rule) => rule.includes("z-index: 1"))).toBe(true);
     expect(stageRule).toContain("z-index: 0");
     expect(stylesSource).toContain("--template-intro-stage-height");
-    expect(stylesSource).toContain(
-      "calc(-100% - var(--template-intro-stage-height) / 2 - var(--template-intro-label-gap))",
+    expect(stylesSource).toMatch(
+      /calc\(\s*-100%\s*-\s*var\(--template-intro-stage-height\)\s*\/\s*2\s*-\s*var\(--template-intro-label-gap\)\s*\)/s,
     );
-    expect(stylesSource).toContain(
-      "calc(var(--template-intro-stage-height) / 2 + var(--template-intro-label-gap))",
+    expect(stylesSource).toMatch(
+      /calc\(\s*var\(--template-intro-stage-height\)\s*\/\s*2\s*\+\s*var\(--template-intro-label-gap\)\s*\)/s,
     );
   });
 });

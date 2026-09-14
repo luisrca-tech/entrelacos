@@ -1,8 +1,8 @@
 # Block 6 validation record
 
-Status: implementation and independent post-fix black-box QA passed for the exercised Block 6 scope. The consolidated post-QA repository run and independent diff review are recorded below. Final media approval remains pending. This record must not be read as production, deployment, provider, or launch acceptance.
+Status: implementation, independent post-fix black-box QA, and fictional-demo media integration passed for the exercised Block 6 scope. The consolidated post-QA repository run and independent diff review are recorded below. This record must not be read as real-client, production, deployment, provider-workflow, or launch acceptance.
 
-Date: 2026-09-13
+Date: 2026-09-14
 Branch: `block-6/public-wedding-experience`
 Baseline: `origin/development`
 Scope: local reusable template, demo host, technical fixture, public feature placement, responsive interaction, and documentation only.
@@ -10,7 +10,7 @@ Scope: local reusable template, demo host, technical fixture, public feature pla
 ## Implemented surface inspected
 
 - `@entrelacos/template-root/v1` is the only package export and contains the reusable layout, home preset, seven public section components, serializable contracts, and validators.
-- `apps/wedding-demo` owns the complete Marina & Caio preset data, public feature placement, noindex SEO, venue/map configuration, monogram, and provisional abstract assets.
+- `apps/wedding-demo` owns the complete Marina & Caio preset data, public feature placement, noindex SEO, venue/map configuration, provisional monogram, approved fictional-couple WebP set, and silent hero MP4.
 - `apps/template-fixture` owns the distinct Casa Aurora data and asset, noindex SEO, reordered preset, local section, and `/hospedagem` route.
 - `packages/wedding-features` supplies runtime guest access, mural, RSVP dialog behavior, and admin recognition; operational authority remains in the API.
 - Lenis, generic reveals, navigation focus behavior, story fallback, and RSVP dialog focus/scroll exclusion are implemented without adding a public interaction API.
@@ -92,7 +92,7 @@ The temporary authenticated fixture was removed from the verified test database.
 
 ## Full-width and gallery-derived introduction validation
 
-The next visual feedback pass used the public One Hudson page and its local implementation only as interaction and spatial references. No One Hudson branding, copy, content, or host asset entered the template. The reusable implementation added optional host-owned intro labels; `WeddingHome` derives the visual sequence from host-owned gallery media and finishes with the host-owned hero media. The demo expanded from three to six gallery items, all still provisional host SVGs.
+The next visual feedback pass used the public One Hudson page and its local implementation only as interaction and spatial references. No One Hudson branding, copy, content, or host asset entered the template. The reusable implementation added optional host-owned intro labels; `WeddingHome` derives the visual sequence from host-owned gallery media and finishes with the host-owned hero media. The demo expanded from three to six gallery items. Those items were provisional host SVGs at this historical validation stage and were replaced by the final fictional-demo WebP set in the later media-integration pass below.
 
 The focused TDD run first demonstrated four expected failures plus one missing helper module. After implementation, 5 focused files and 37 tests passed. The repository gates then passed with 239 linted files, 8 successful typecheck tasks and zero Astro diagnostics, 66 test files and 283 tests, both static consumer builds, and `git diff --check`.
 
@@ -107,7 +107,7 @@ Browser validation exercised normal motion at `1440x900`, `1920x1080`, `2560x144
 - a single-column 390px layout with a 358px gallery frame and the sticky story stage disabled;
 - initial reduced motion skips/removes the intro, leaves header and hero content fully visible with no animation, and preserves native scrolling.
 
-The introduction was visually captured during the centered first frame and after the final hero reveal on desktop, plus the centered first frame on mobile. Placeholder art remains intentionally provisional; this evidence validates structure, timing, reuse, and responsive geometry rather than final-media quality.
+The introduction was visually captured during the centered first frame and after the final hero reveal on desktop, plus the centered first frame on mobile. This historical pass validated structure, timing, reuse, and responsive geometry before the final fictional-demo media existed.
 
 ## Introduction handoff, story transition, and gallery-height refinement
 
@@ -117,7 +117,17 @@ Browser validation at `1440x900` confirmed that the matching canonical hero medi
 
 The desktop story-stage transition was sampled 80ms after an active-entry change: the outgoing and incoming media had opacities `0.615233` and `0.384767`; after 800ms they had settled at `0` and `1`. The main desktop gallery frame changed from the previous 4:3 height of approximately 678.2px to 565.2px at a 904.3px width (`16 / 10`). At `390x844`, it remains 358px by 268.5px (`4 / 3`), the story stage remains disabled, and there is no horizontal overflow.
 
-The final repository run passed `bun install --frozen-lockfile` without changes, linted 239 files, completed all 8 typecheck tasks with zero Astro diagnostics, passed 66 test files and 285 tests, built the API, admin, wedding demo, and template fixture, and passed `git diff --check`.
+The final repository run for that refinement passed `bun install --frozen-lockfile` without changes, linted 239 files, completed all 8 typecheck tasks with zero Astro diagnostics, passed 66 test files and 285 tests, built the API, admin, wedding demo, and template fixture, and passed `git diff --check`.
+
+## Final fictional-demo media and development-server validation
+
+The approved host media replaced all eleven demo placeholder SVGs with optimized WebP files and added the 1920x1080, eight-second H.264 hero loop. The repository MP4 has no audio stream. The hero uses muted inline autoplay, loops continuously, pauses at frame zero for initial reduced motion, and keeps a nested image fallback. The introduction still derives its first six frames from the gallery. Its final frame is now a WebP extracted from the exact first decoded video frame, so the fullscreen expansion and fade remain visually continuous when playback begins beneath the overlay.
+
+The focused TDD cycles first failed because the demo still referenced the prior poster and because video preparation, playback, overlay removal, and chrome entry were not separate stages. After the corrections, the boundary, intro, and hero suites passed 3 files and 14 tests. Browser sampling at `1440x900` captured the final intro frame, the crossfade while the hero video was already playing, and the completed hero. It confirmed the same poster path in intro and hero, playback beginning during the fade, no intermediate blank or unrelated still, and no page errors. Instrumentation recorded playback at approximately 6.43 seconds, overlay completion at 6.88 seconds, and header/copy animation startup on a later paint at 6.91 seconds; no long task occurred during that handoff, and the 900–1000ms chrome animations completed normally.
+
+The development page initially failed while the static build passed because Astro dev externalized the source-only `@entrelacos/ui` workspace package and Node could not resolve its extensionless TypeScript component exports. A regression test reproduced the missing SSR bundling configuration. Adding `vite.ssr.noExternal: ["@entrelacos/ui"]` to the demo Astro configuration fixed the real development server without changing package exports. The prior explicit-extension experiment was rejected because Node then reported an unknown `.tsx` extension. The corrected development site responded and rendered at `http://127.0.0.1:4321/`.
+
+The final repository gate used Bun 1.3.14, confirmed 582 frozen installs across 842 packages without changes, linted 228 files, completed 8 typecheck tasks with zero Astro errors/warnings/hints, passed 66 test files and 288 tests, and built the API, admin, wedding demo, and two-page template fixture successfully. The final `git diff --check` also passed after the documentation update.
 
 ## Contract and static-build evidence
 
@@ -125,7 +135,7 @@ Current source tests cover:
 
 - serializability, metadata, safe URL schemes, canonical rules, media dimensions/poster, section IDs, home order, optional-section handling, extension anchors, Google Maps embed/directions forms, and footer labels;
 - one `/v1` package export, no deep/app-to-app consumer imports, absence of known demo identity/venue values from template source, the extra fixture route, local extension, and host-owned assets;
-- hero image/video fallback, no autoplay, canonical story reading order and desktop/mobile/reduced-motion behavior, gallery fallback, schedule/venue rendering, metadata completeness, and named-slot landmarks;
+- hero image/video fallback, muted inline autoplay loop, canonical story reading order and desktop/mobile/reduced-motion behavior, gallery fallback, schedule/venue rendering, metadata completeness, and named-slot landmarks;
 - Lenis option equality and create/destroy/recreate behavior through a controlled `MediaQueryList` test;
 - mobile-menu Escape/link closure and focus restoration;
 - RSVP dialog focus capture/restore helpers and `data-lenis-prevent` integration;
@@ -133,27 +143,27 @@ Current source tests cover:
 
 Both consumer builds were executed without a live API, database, SMS service, or media provider. The demo and fixture source use `noindex, nofollow`. The final post-fix generated artifacts passed the privacy and duplicate-ID scans recorded above.
 
-The documentation pass reran the content, public-boundary, and interaction contract files with `bunx vitest run packages/template-root/src/content.test.ts packages/template-root/boundary.test.ts packages/template-root/src/interactions.test.ts`: three files and 29 tests passed. It cross-checked the five documented theme-variable names against `packages/template-root/src/styles.css`, reconciled every registered SVG path against both host `public` directories, verified the referenced local documents exist, and passed `git diff --check`. The later presentation-feedback run added two registered story SVGs and revalidated the complete build. The repository Biome configuration ignores Markdown; no Markdown lint/format pass is claimed.
+The documentation pass reran the content, public-boundary, and interaction contract files with `bunx vitest run packages/template-root/src/content.test.ts packages/template-root/boundary.test.ts packages/template-root/src/interactions.test.ts`: three files and 29 tests passed. It cross-checked the five documented theme-variable names against `packages/template-root/src/styles.css`, reconciled the then-current host asset register against both `public` directories, verified the referenced local documents exist, and passed `git diff --check`. Later presentation and final-media passes superseded that asset inventory and revalidated the changed contracts. The repository Biome configuration ignores Markdown; no Markdown lint/format pass is claimed.
 
 ## Known evidence limits
 
 - The B6-T5 implementation browser could not dispatch a live preference-change event, but the independent browser run later exercised initial and runtime reduced-motion transitions successfully; the lifecycle also remains covered by its controlled `MediaQueryList` test.
 - Authorized clean-browser admin recognition, RSVP persistence, mural availability, and site lifecycle were accepted. Message creation/editing and the deadline/foreign/primary-group matrix remain blocked as described above.
 - Google Maps iframe rendering depends on an external service. No provider availability, account, cost, privacy, or legal approval was verified.
-- Current SVG artwork and monogram are provisional local placeholders. No final fictional-couple set, final logo, media provider, AI video, cost ceiling, source rights, usage permission, optimized output, or approval record exists.
+- The fictional-couple stills and video are approved only for this demo. Final logo/monogram, exact model identifiers and generation costs, real-client rights, production network/device performance, and launch approval remain unverified.
 - No layout-shift metric, performance budget, accessibility conformance claim, deployment, public demo URL, remote CI run, new commit, push, merge, or production operation is evidenced for the latest visual-feedback pass.
 
 ## Remaining acceptance gates
 
-- approve or replace the provisional media set, including any later AI-generated hero video and its rights/performance evidence;
+- approve real-client media and production performance separately before any launch using assets beyond this fictional demo;
 - resolve or isolate the unrelated invalid shared-test row before using the root OWNER list as future QA evidence;
 - run the currently blocked message and deadline/group scenarios only with a documented reversible fixture path;
 - obtain explicit authorization before commit, push, merge, deployment, provider use, or production access.
 
 ## Operational boundary
 
-This implementation and documentation run did not generate final media, call a media provider, send SMS, change external maps, mutate development/production data, deploy, create a permanent environment, commit, push, or merge. Database-backed final QA, if needed, must use only the verified disposable `DATABASE_URL_TEST` target.
+This implementation integrated owner-generated final fictional-demo media but did not call a media provider, send SMS, change external maps, mutate development/production data, deploy, create a permanent environment, commit, push, or merge. Database-backed final QA, if needed, must use only the verified disposable `DATABASE_URL_TEST` target.
 
 ## Listening
 
-The record keeps pre-final evidence because it is valuable for regression diagnosis, but labels it by execution stage. The repository-wide 259-test run predates B6-T5, the first presentation-feedback run superseded the earlier 272-test count with 277 passing tests, and the full-width/intro pass supersedes it with 283. The introduction was implemented before final media because it derives from the media contract and can use placeholders or video posters; final media, rights, provider, cost, and performance acceptance remain separate gates.
+The record keeps pre-final evidence because it is valuable for regression diagnosis, but labels it by execution stage. The repository-wide 259-test run predates B6-T5, the first presentation-feedback run superseded the earlier 272-test count with 277 passing tests, and the full-width/intro pass superseded it with 283. The introduction was implemented before final media because it derives from the reusable media contract. The final fictional-demo assets are now approved locally; real-client rights, exact provider/model/cost records, production performance, and launch acceptance remain separate gates.

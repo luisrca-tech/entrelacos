@@ -18,7 +18,7 @@ Status: independent black-box execution and focused post-fix revalidation comple
 | Root OWNER site listing | BLOCKED | An unrelated legacy row in the shared test database violates the current slug contract and invalidates the list response; the fixture workspace itself passed |
 | Message publish/edit | BLOCKED | No reversible supported delete/reset path was established for the empty fixture message |
 | Deadline and foreign/primary-group matrix | BLOCKED | The bounded rerun ended before safe reversible identities and targets were selected |
-| Final media and AI video | PENDING | Provisional SVGs remain intentionally unapproved |
+| Final fictional-demo media and AI video | PASS | Approved WebP set and silent 1080p hero loop integrated on 2026-09-14; production and real-client gates remain separate |
 
 The first independent run reported six failing checklist areas. Five public defects were corrected and passed independent revalidation. The apparent RSVP failure was disproved by a controlled real select/save/reload cycle and then independently revalidated. No product defect remains in the retested scope; the three blocked subscopes above are not passing claims.
 
@@ -95,10 +95,10 @@ The first independent run reported six failing checklist areas. Five public defe
 ## Media gate
 
 - [ ] Reconcile every file and external embed against `docs/block6MediaRegister.md`.
-- [ ] Confirm current abstract SVGs and monogram are visibly recorded as provisional host-owned placeholders, not approved client or fictional-couple media.
-- [ ] Confirm the current demo uses image media and no video/provider workflow is reported as complete.
-- [ ] Before final media acceptance, record the approved fictional-couple set, source/provider, usage rights, restrictions, cost, approval owner/date, crop, dimensions, alt text, optimized formats, and retained source.
-- [ ] If a hero video is later approved, verify muted inline loop treatment, required poster, no autoplay dependency, reduced-motion/static fallback, mobile performance, file size, and origin rights.
+- [x] Confirm the former abstract demo SVGs were removed while the monogram remains visibly recorded as provisional.
+- [x] Confirm the current demo uses the approved fictional-couple WebP set and silent H.264 hero video without moving host media into the reusable package.
+- [x] Record the approved fictional-couple set, source/provider, usage scope, limitations, approval owner/date, dimensions, alt text, optimized formats, delivery sizes, and retained source identity.
+- [x] Verify muted inline autoplay loop treatment, required poster, intro-to-video reset, physically absent audio stream, reduced-motion pause/static fallback, mobile rendering, and file size.
 - [ ] Treat final logo/favicon/monogram approval, Google embed privacy review, and every third-party media permission as explicit pending gates until evidenced.
 
 ## Final repository gates and closure

@@ -69,22 +69,72 @@ const timeline = buildIntroTimeline(frames.length);
     const previousHtmlOverflow = document.documentElement.style.overflow;
     const previousBodyOverflow = document.body.style.overflow;
     const timers: number[] = [];
+    const heroVideo = hero?.querySelector<HTMLVideoElement>(
+      "[data-template-hero-video]",
+    );
+    let heroMediaPreparation: Promise<void> | undefined;
+    let heroMediaStarted = false;
+    let introCompleted = false;
 
     const prepareHeroMedia = () => {
-      if (hero instanceof HTMLElement)
-        hero.setAttribute("data-template-intro-media-ready", "true");
+      if (!(heroVideo instanceof HTMLVideoElement)) return Promise.resolve();
+      if (heroMediaPreparation) return heroMediaPreparation;
+
+      heroVideo.pause();
+      heroVideo.preload = "auto";
+      heroMediaPreparation = new Promise<void>((resolve) => {
+        if (heroVideo.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+          resolve();
+          return;
+        }
+
+        const finish = () => resolve();
+        heroVideo.addEventListener("loadeddata", finish, { once: true });
+        heroVideo.addEventListener("error", finish, { once: true });
+        heroVideo.load();
+      });
+
+      return heroMediaPreparation;
     };
 
-    const complete = () => {
-      timers.forEach((timer) => window.clearTimeout(timer));
-      prepareHeroMedia();
-      document.documentElement.style.overflow = previousHtmlOverflow;
-      document.body.style.overflow = previousBodyOverflow;
-      document.documentElement.dataset.templateIntroComplete = "true";
+    const startHeroMedia = () => {
+      if (!(hero instanceof HTMLElement) || heroMediaStarted) return;
+      heroMediaStarted = true;
+      hero.setAttribute("data-template-intro-media-ready", "true");
+      if (!(heroVideo instanceof HTMLVideoElement)) return;
+
+      heroVideo.currentTime = 0;
+      if (reduceMotion) {
+        heroVideo.pause();
+        return;
+      }
+      void heroVideo.play().catch(() => undefined);
+    };
+
+    const revealHeroChrome = () => {
       if (hero instanceof HTMLElement)
         hero.dataset.templateIntroComplete = "true";
       if (header) header.dataset.templateIntroComplete = "true";
+    };
+
+    const complete = () => {
+      if (introCompleted) return;
+      introCompleted = true;
+      timers.forEach((timer) => window.clearTimeout(timer));
+      startHeroMedia();
+      document.documentElement.style.overflow = previousHtmlOverflow;
+      document.body.style.overflow = previousBodyOverflow;
+      document.documentElement.dataset.templateIntroComplete = "true";
       intro.remove();
+
+      if (reduceMotion) {
+        revealHeroChrome();
+        return;
+      }
+
+      window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(revealHeroChrome);
+      });
     };
 
     if (reduceMotion || frames.length === 0) {
@@ -94,6 +144,7 @@ const timeline = buildIntroTimeline(frames.length);
 
     document.documentElement.style.overflow = "hidden";
     document.body.style.overflow = "hidden";
+    const heroMediaReady = prepareHeroMedia();
 
     const schedule = (callback: () => void, delay: number) => {
       timers.push(window.setTimeout(callback, delay));
@@ -106,8 +157,9 @@ const timeline = buildIntroTimeline(frames.length);
       .split(",")
       .map(Number)
       .filter(Number.isFinite);
-    const preload = Promise.all(
-      frames.map(
+    const preload = Promise.all([
+      heroMediaReady,
+      ...frames.map(
         (frame) =>
           new Promise<void>((resolve) => {
             if (frame.complete) {
@@ -118,7 +170,7 @@ const timeline = buildIntroTimeline(frames.length);
             frame.addEventListener("error", () => resolve(), { once: true });
           }),
       ),
-    );
+    ]);
     const preloadTimeout = new Promise<void>((resolve) => {
       window.setTimeout(resolve, 4500);
     });
@@ -140,7 +192,7 @@ const timeline = buildIntroTimeline(frames.length);
       );
       schedule(
         () => {
-          prepareHeroMedia();
+          startHeroMedia();
           intro.dataset.templateIntroPhase = "fade";
         },
         numberFromData(intro.dataset.fadeAt, 6200),

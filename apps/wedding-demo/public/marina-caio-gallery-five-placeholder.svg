@@ -1,9 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 900" role="img" aria-labelledby="title description">
-  <title id="title">Placeholder de luz do fim da tarde</title>
-  <desc id="description">Composição abstrata com horizonte quente e formas suaves.</desc>
-  <rect width="1200" height="900" fill="#e9d8ba"/>
-  <circle cx="895" cy="226" r="152" fill="#d97852"/>
-  <path d="M0 508C190 430 344 478 514 548s348 108 686-20v372H0z" fill="#63745f"/>
-  <path d="M0 650c238-94 394-42 570 24s360 94 630-32v258H0z" fill="#33483d"/>
-  <path d="M440 598c50-116 104-174 162-174 62 0 116 64 164 192" fill="none" stroke="#f4f0e8" stroke-width="34" stroke-linecap="round"/>
-</svg>
