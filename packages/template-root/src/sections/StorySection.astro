@@ -163,15 +163,7 @@ for (let index = 0; index < content.entries.length; index += 1) {
         const next = story.querySelector<HTMLElement>(
           `[data-story-media-index="${index}"]`,
         );
-        // #region agent log
-        fetch('http://127.0.0.1:7638/ingest/309c9a99-9d85-43d4-8f27-99b88384286d',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'8b3f1f'},body:JSON.stringify({sessionId:'8b3f1f',runId:'pre-fix',hypothesisId:'H3,H5',location:'StorySection.astro:transitionMedia',message:'Story media transition started',data:{storyId:story.id,fromIndex:Number(current?.getAttribute('data-story-media-index') ?? -1),toIndex:index,nextExists:Boolean(next)},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
         if (!next || current === next) return;
-        const currentStyle = current ? window.getComputedStyle(current) : undefined;
-        const nextStyle = window.getComputedStyle(next);
-        // #region agent log
-        fetch('http://127.0.0.1:7638/ingest/309c9a99-9d85-43d4-8f27-99b88384286d',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'8b3f1f'},body:JSON.stringify({sessionId:'8b3f1f',runId:'iteration-2',hypothesisId:'H6,H7',location:'StorySection.astro:transitionMedia:computedStyle',message:'Story visual state before switch',data:{storyId:story.id,fromIndex:Number(current?.getAttribute('data-story-media-index') ?? -1),toIndex:index,currentClipPath:currentStyle?.clipPath,currentOpacity:currentStyle?.opacity,currentAnimationName:currentStyle?.animationName,nextClipPath:nextStyle.clipPath,nextOpacity:nextStyle.opacity},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
 
         clearExitingMedia();
         if (current) {
@@ -184,19 +176,11 @@ for (let index = 0; index < content.entries.length; index += 1) {
       const firstMedia = media.item(0);
       const firstMediaIndex = Number(firstMedia?.getAttribute("data-story-media-index") ?? 0);
       firstMedia?.setAttribute("data-active", "");
-      // #region agent log
-      fetch('http://127.0.0.1:7638/ingest/309c9a99-9d85-43d4-8f27-99b88384286d',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'8b3f1f'},body:JSON.stringify({sessionId:'8b3f1f',runId:'pre-fix',hypothesisId:'H1,H5',location:'StorySection.astro:init',message:'Story motion initialized',data:{storyId:story.id,entryCount:entries.length,mediaCount:media.length,mediaIndices:Array.from(media,item=>Number(item.getAttribute('data-story-media-index'))),firstMediaIndex,viewportHeight:window.innerHeight,storyHeight:story.getBoundingClientRect().height},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       const transitionController = createStoryTransitionController({
         initialIndex: firstMediaIndex,
         duration: 420,
         onTransition: (_from, to) => transitionMedia(to),
-        onSettled: () => {
-          // #region agent log
-          fetch('http://127.0.0.1:7638/ingest/309c9a99-9d85-43d4-8f27-99b88384286d',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'8b3f1f'},body:JSON.stringify({sessionId:'8b3f1f',runId:'pre-fix',hypothesisId:'H3',location:'StorySection.astro:onSettled',message:'Story media transition settled',data:{storyId:story.id,activeIndex:Number(story.querySelector('[data-story-media-index][data-active]')?.getAttribute('data-story-media-index') ?? -1)},timestamp:Date.now()})}).catch(()=>{});
-          // #endregion
-          clearExitingMedia();
-        },
+        onSettled: clearExitingMedia,
       });
       const revealObserver = new IntersectionObserver(
         (observations) => {
@@ -220,7 +204,6 @@ for (let index = 0; index < content.entries.length; index += 1) {
               ? -1
               : 0;
         lastScrollY = currentScrollY;
-        const previousFocusedIndex = focusedIndex;
         const entryTops = Array.from(
           entries,
           (entry) => entry.getBoundingClientRect().top,
@@ -231,13 +214,7 @@ for (let index = 0; index < content.entries.length; index += 1) {
           direction,
           window.innerHeight,
         );
-        const focusedMediaExists = Boolean(
-          story.querySelector(`[data-story-media-index="${focusedIndex}"]`),
-        );
-        // #region agent log
-        fetch('http://127.0.0.1:7638/ingest/309c9a99-9d85-43d4-8f27-99b88384286d',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'8b3f1f'},body:JSON.stringify({sessionId:'8b3f1f',runId:'pre-fix',hypothesisId:'H1,H2,H3,H4',location:'StorySection.astro:updateMediaFromScroll',message:'Story scroll resolved focus',data:{storyId:story.id,scrollY:currentScrollY,direction,previousFocusedIndex,focusedIndex,entryTops:entryTops.map(top=>Math.round(top)),forwardLine:Math.round(window.innerHeight*0.42),reverseLine:Math.round(window.innerHeight*0.58),focusedMediaExists},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
-        if (focusedMediaExists) {
+        if (story.querySelector(`[data-story-media-index="${focusedIndex}"]`)) {
           transitionController.request(focusedIndex);
         }
       };
@@ -249,17 +226,6 @@ for (let index = 0; index < content.entries.length; index += 1) {
       if (stage) {
         story.setAttribute("data-story-stage-ready", "");
         stage.setAttribute("data-story-stage-ready", "");
-        const logStoryAnimationEvent = (event: AnimationEvent) => {
-          const target = event.target;
-          if (!(target instanceof HTMLElement)) return;
-          const style = window.getComputedStyle(target);
-          // #region agent log
-          fetch('http://127.0.0.1:7638/ingest/309c9a99-9d85-43d4-8f27-99b88384286d',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'8b3f1f'},body:JSON.stringify({sessionId:'8b3f1f',runId:'iteration-2',hypothesisId:'H6,H7,H8',location:'StorySection.astro:storyAnimationEvent',message:'Story animation lifecycle event',data:{storyId:story.id,eventType:event.type,mediaIndex:Number(target.getAttribute('data-story-media-index') ?? -1),elapsedTime:event.elapsedTime,clipPath:style.clipPath,opacity:style.opacity,isActive:target.hasAttribute('data-active'),isExiting:target.hasAttribute('data-story-exiting')},timestamp:Date.now()})}).catch(()=>{});
-          // #endregion
-        };
-        stage.addEventListener("animationstart", logStoryAnimationEvent);
-        stage.addEventListener("animationcancel", logStoryAnimationEvent);
-        stage.addEventListener("animationend", logStoryAnimationEvent);
       }
       entries.forEach((entry) => {
         revealObserver.observe(entry);
