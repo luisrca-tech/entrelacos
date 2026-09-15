@@ -72,15 +72,15 @@ describe("StorySection editorial sequence", () => {
 
   it("reveals desktop story media with a smooth curtain transition", () => {
     expect(sectionSource).toContain('"data-story-exiting"');
-    expect(sectionSource).toContain("duration: 1100");
+    expect(sectionSource).toContain("duration: 420");
     expect(stylesSource).toMatch(
-      /\.template-story__stage\[data-story-stage-ready\]\s+\.template-story__stage-media\s*\{[^}]*width:\s*100%;[^}]*transition:/s,
+      /\.template-story__stage\[data-story-stage-ready\]\s+\.template-story__stage-media\s*\{[^}]*width:\s*100%;[^}]*transition:\s*transform 420ms/s,
     );
     expect(stylesSource).toMatch(
       /\.template-story__stage\[data-story-stage-ready\]\s+\.template-story__stage-media\[data-story-exiting\]\s*\{[^}]*opacity:\s*1;[^}]*transition:\s*none;/s,
     );
     expect(stylesSource).toMatch(
-      /\.template-story__stage\[data-story-stage-ready\][\s\S]*?\.template-story__stage-media\[data-active\]\s*\{[^}]*animation:\s*template-story-media-reveal\s+1100ms/s,
+      /\.template-story__stage\[data-story-stage-ready\][\s\S]*?\.template-story__stage-media\[data-active\]\s*\{[^}]*animation:\s*template-story-media-reveal\s+360ms/s,
     );
     expect(stylesSource).toMatch(
       /@keyframes template-story-media-reveal\s*\{[\s\S]*?clip-path:\s*inset\(0 0 100% 0\);[\s\S]*?clip-path:\s*inset\(0\);/,

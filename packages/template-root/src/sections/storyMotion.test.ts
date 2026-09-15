@@ -9,7 +9,7 @@ afterEach(() => {
 });
 
 describe("story motion", () => {
-  it("keeps the latest requested image queued until the current transition settles", () => {
+  it("applies the latest requested image immediately without replaying a queue", () => {
     vi.useFakeTimers();
     const transitions: Array<[number, number]> = [];
     let settlements = 0;
@@ -26,18 +26,18 @@ describe("story motion", () => {
     controller.request(2);
     controller.request(3);
 
-    expect(transitions).toEqual([[0, 1]]);
-    vi.advanceTimersByTime(1099);
-    expect(transitions).toEqual([[0, 1]]);
-    vi.advanceTimersByTime(1);
     expect(transitions).toEqual([
       [0, 1],
-      [1, 3],
+      [1, 2],
+      [2, 3],
     ]);
+    vi.advanceTimersByTime(1099);
+    expect(settlements).toBe(0);
+    vi.advanceTimersByTime(1);
     expect(settlements).toBe(1);
   });
 
-  it("cancels a queued change when scroll settles back on the active entry", () => {
+  it("does not restart the current transition for a duplicate request", () => {
     vi.useFakeTimers();
     const transitions: Array<[number, number]> = [];
     const controller = createStoryTransitionController({
@@ -48,7 +48,6 @@ describe("story motion", () => {
     });
 
     controller.request(1);
-    controller.request(2);
     controller.request(1);
     vi.advanceTimersByTime(1100);
 

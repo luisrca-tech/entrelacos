@@ -14,18 +14,17 @@ export function createStoryTransitionController({
   onSettled,
 }: StoryTransitionControllerOptions) {
   let activeIndex = initialIndex;
-  let pendingIndex: number | undefined;
   let transitionTimer: ReturnType<typeof setTimeout> | undefined;
 
   function settle() {
     transitionTimer = undefined;
     onSettled();
-    const nextIndex = pendingIndex;
-    pendingIndex = undefined;
-    if (nextIndex !== undefined && nextIndex !== activeIndex) start(nextIndex);
   }
 
   function start(nextIndex: number) {
+    if (transitionTimer !== undefined) {
+      globalThis.clearTimeout(transitionTimer);
+    }
     const previousIndex = activeIndex;
     activeIndex = nextIndex;
     onTransition(previousIndex, nextIndex);
@@ -34,14 +33,7 @@ export function createStoryTransitionController({
 
   return {
     request(nextIndex: number) {
-      if (nextIndex === activeIndex) {
-        pendingIndex = undefined;
-        return;
-      }
-      if (transitionTimer !== undefined) {
-        pendingIndex = nextIndex;
-        return;
-      }
+      if (nextIndex === activeIndex) return;
       start(nextIndex);
     },
   };
