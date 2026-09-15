@@ -41,4 +41,17 @@ describe("progressive enhancement", () => {
     expect(source).toContain('aria-labelledby="guest-access-section-title"');
     expect(source).toContain('id="guest-access-section-title"');
   });
+
+  it("keeps the header monogram ring visible after leaving the hero", () => {
+    const source = readFileSync(
+      resolve(import.meta.dirname, "pages/index.astro"),
+      "utf8",
+    );
+    const start = source.indexOf(".demo-monogram {");
+    expect(start).toBeGreaterThanOrEqual(0);
+    const block = source.slice(start, source.indexOf("}", start));
+    expect(block).toContain("border:");
+    expect(block).toContain("currentColor");
+    expect(block).not.toContain("rgba(244, 240, 232");
+  });
 });

@@ -77,12 +77,10 @@ function GalleryMedia({ media }: { media: Media }) {
 }
 
 type ControlsProps = {
-  current: number;
   labels: GalleryContent["controls"];
-  total: number;
 };
 
-function GalleryControls({ current, labels, total }: ControlsProps) {
+function GalleryControls({ labels }: ControlsProps) {
   const { canScrollNext, canScrollPrevious, scrollNext, scrollPrevious } =
     useCarousel();
   return (
@@ -91,10 +89,6 @@ function GalleryControls({ current, labels, total }: ControlsProps) {
       data-gallery-controls
       aria-label={labels.ariaLabel}
     >
-      <output className="template-gallery-carousel__counter" aria-live="polite">
-        {String(current + 1).padStart(2, "0")} /{" "}
-        {String(total).padStart(2, "0")}
-      </output>
       <button
         type="button"
         onClick={scrollPrevious}
@@ -114,6 +108,20 @@ function GalleryControls({ current, labels, total }: ControlsProps) {
         <span aria-hidden="true">→</span>
       </button>
     </nav>
+  );
+}
+
+function GalleryCounter({
+  current,
+  total,
+}: {
+  current: number;
+  total: number;
+}) {
+  return (
+    <output className="template-gallery-carousel__counter" aria-live="polite">
+      {String(current + 1).padStart(2, "0")} / {String(total).padStart(2, "0")}
+    </output>
   );
 }
 
@@ -155,38 +163,40 @@ export default function GalleryCarousel({ content }: Props) {
         className="template-gallery-carousel"
         aria-label={content.controls.ariaLabel}
       >
-        <CarouselContent className="template-gallery-carousel__track">
-          {content.items.map((item, index) => (
-            <CarouselItem
-              id={item.id}
-              key={item.id}
-              data-gallery-slide={index}
-              aria-label={item.media.alt}
-              className="template-gallery-carousel__slide"
-            >
-              <figure>
-                <div className="template-gallery-carousel__frame">
-                  <GalleryMedia media={item.media} />
-                  <button
-                    type="button"
-                    className="template-gallery-carousel__expand"
-                    onClick={() => openDialog(index)}
-                    aria-label={`${content.controls.expandLabel}: ${item.media.alt}`}
-                  >
-                    <span aria-hidden="true">↗</span>
-                    <span>{content.controls.expandLabel}</span>
-                  </button>
-                </div>
-                {item.caption && <figcaption>{item.caption}</figcaption>}
-              </figure>
-            </CarouselItem>
-          ))}
-        </CarouselContent>
-        <GalleryControls
-          current={inlineSelected}
-          labels={content.controls}
-          total={content.items.length}
-        />
+        <div
+          className="template-gallery-carousel__viewport"
+          data-gallery-viewport
+        >
+          <CarouselContent className="template-gallery-carousel__track">
+            {content.items.map((item, index) => (
+              <CarouselItem
+                id={item.id}
+                key={item.id}
+                data-gallery-slide={index}
+                aria-label={item.media.alt}
+                className="template-gallery-carousel__slide"
+              >
+                <figure>
+                  <div className="template-gallery-carousel__frame">
+                    <GalleryMedia media={item.media} />
+                    <button
+                      type="button"
+                      className="template-gallery-carousel__expand"
+                      onClick={() => openDialog(index)}
+                      aria-label={`${content.controls.expandLabel}: ${item.media.alt}`}
+                    >
+                      <span aria-hidden="true">↗</span>
+                      <span>{content.controls.expandLabel}</span>
+                    </button>
+                  </div>
+                  {item.caption && <figcaption>{item.caption}</figcaption>}
+                </figure>
+              </CarouselItem>
+            ))}
+          </CarouselContent>
+          <GalleryControls labels={content.controls} />
+        </div>
+        <GalleryCounter current={inlineSelected} total={content.items.length} />
       </Carousel>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -215,26 +225,31 @@ export default function GalleryCarousel({ content }: Props) {
             className="template-gallery-carousel template-gallery-carousel--dialog"
             aria-label={content.controls.ariaLabel}
           >
-            <CarouselContent className="template-gallery-carousel__track">
-              {content.items.map((item, index) => (
-                <CarouselItem
-                  key={item.id}
-                  data-gallery-dialog-slide={index}
-                  aria-label={item.media.alt}
-                  className="template-gallery-carousel__slide"
-                >
-                  <figure>
-                    <div className="template-gallery-carousel__frame">
-                      <GalleryMedia media={item.media} />
-                    </div>
-                    {item.caption && <figcaption>{item.caption}</figcaption>}
-                  </figure>
-                </CarouselItem>
-              ))}
-            </CarouselContent>
-            <GalleryControls
+            <div
+              className="template-gallery-carousel__viewport"
+              data-gallery-viewport
+            >
+              <CarouselContent className="template-gallery-carousel__track">
+                {content.items.map((item, index) => (
+                  <CarouselItem
+                    key={item.id}
+                    data-gallery-dialog-slide={index}
+                    aria-label={item.media.alt}
+                    className="template-gallery-carousel__slide"
+                  >
+                    <figure>
+                      <div className="template-gallery-carousel__frame">
+                        <GalleryMedia media={item.media} />
+                      </div>
+                      {item.caption && <figcaption>{item.caption}</figcaption>}
+                    </figure>
+                  </CarouselItem>
+                ))}
+              </CarouselContent>
+              <GalleryControls labels={content.controls} />
+            </div>
+            <GalleryCounter
               current={dialogSelected}
-              labels={content.controls}
               total={content.items.length}
             />
           </Carousel>

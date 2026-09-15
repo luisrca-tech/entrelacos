@@ -39,4 +39,10 @@ describe("WeddingLayout landmarks", () => {
     expect(source).toContain("setupTemplateInteractions();");
     expect(source).toContain("navigationStateForHero");
   });
+
+  it("publishes the measured header height for sticky sections", () => {
+    expect(source).toContain("--template-header-height");
+    expect(source).toContain("ResizeObserver");
+    expect(source).toContain("header.getBoundingClientRect().height");
+  });
 });

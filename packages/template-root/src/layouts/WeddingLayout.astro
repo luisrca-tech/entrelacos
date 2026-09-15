@@ -98,6 +98,18 @@ validateWeddingLayoutProps(Astro.props);
   const hero = document.querySelector(".template-hero");
 
   if (header instanceof HTMLElement) {
+    const syncHeaderHeight = () => {
+      document.documentElement.style.setProperty(
+        "--template-header-height",
+        `${header.getBoundingClientRect().height}px`,
+      );
+    };
+    syncHeaderHeight();
+    if ("ResizeObserver" in window) {
+      new ResizeObserver(syncHeaderHeight).observe(header);
+    }
+    window.addEventListener("resize", syncHeaderHeight);
+
     if (!(hero instanceof HTMLElement)) {
       header.dataset.navigationState = "solid";
     } else {

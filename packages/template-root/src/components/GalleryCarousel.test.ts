@@ -86,6 +86,10 @@ describe("GalleryCarousel", () => {
 
     expect(html.match(/data-gallery-slide=/g)).toHaveLength(2);
     expect(html.match(/data-gallery-controls=/g)).toHaveLength(1);
+    expect(html.match(/data-gallery-viewport=/g)).toHaveLength(1);
+    expect(html).toMatch(
+      /data-gallery-viewport[^>]*>[\s\S]*data-gallery-controls[^>]*>[\s\S]*<\/nav>[\s\S]*<\/div><output/,
+    );
     expect(html).toContain("Primeira composição");
     expect(html).toContain("Segunda composição");
     expect(html).toContain("Expandir galeria");

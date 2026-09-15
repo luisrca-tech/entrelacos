@@ -36,7 +36,19 @@ describe("StorySection editorial sequence", () => {
     expect(stylesSource).toContain(
       ".template-story__stage[data-story-stage-ready]",
     );
-    expect(stylesSource).toContain("height: min(70svh, 42rem);");
+    const stickyStageRule = stylesSource.match(
+      /\.template-story__stage\[data-story-stage-ready\]\s*\{[^}]*\}/s,
+    )?.[0];
+    expect(stickyStageRule).toContain("width: min(");
+    expect(stickyStageRule).toContain(
+      "(100svh - var(--template-header-height, 5.75rem) - 1.5rem) * 4 / 3",
+    );
+    expect(stickyStageRule).toContain("height: auto;");
+    expect(stickyStageRule).toContain("aspect-ratio: 4 / 3;");
+    expect(stickyStageRule).toContain("justify-self: end;");
+    expect(stylesSource).toContain(
+      "top: var(--template-header-height, 5.75rem);",
+    );
     expect(stylesSource).toContain("position: sticky;");
     expect(stylesSource).not.toContain("overflow-y");
     expect(stylesSource).not.toContain("tabindex");
@@ -58,12 +70,42 @@ describe("StorySection editorial sequence", () => {
     expect(stylesSource).toContain("transition: none;");
   });
 
-  it("crossfades desktop story media instead of swapping it instantly", () => {
+  it("reveals desktop story media with a smooth curtain transition", () => {
+    expect(sectionSource).toContain('"data-story-exiting"');
+    expect(sectionSource).toContain("duration: 1100");
     expect(stylesSource).toMatch(
-      /\.template-story__stage\[data-story-stage-ready\]\s+\.template-story__stage-media\s*\{[^}]*opacity:\s*0;[^}]*transition:/s,
+      /\.template-story__stage\[data-story-stage-ready\]\s+\.template-story__stage-media\s*\{[^}]*width:\s*100%;[^}]*transition:/s,
     );
     expect(stylesSource).toMatch(
-      /\.template-story__stage\[data-story-stage-ready\][\s\S]*?\.template-story__stage-media\[data-active\]\s*\{[^}]*opacity:\s*1;/,
+      /\.template-story__stage\[data-story-stage-ready\]\s+\.template-story__stage-media\[data-story-exiting\]\s*\{[^}]*opacity:\s*1;[^}]*transition:\s*none;/s,
+    );
+    expect(stylesSource).toMatch(
+      /\.template-story__stage\[data-story-stage-ready\][\s\S]*?\.template-story__stage-media\[data-active\]\s*\{[^}]*animation:\s*template-story-media-reveal\s+1100ms/s,
+    );
+    expect(stylesSource).toMatch(
+      /@keyframes template-story-media-reveal\s*\{[\s\S]*?clip-path:\s*inset\(0 0 100% 0\);[\s\S]*?clip-path:\s*inset\(0\);/,
+    );
+  });
+
+  it("delays media changes until each entry reaches the story focus band", () => {
+    expect(sectionSource.match(/new IntersectionObserver/g)).toHaveLength(1);
+    expect(sectionSource).toContain("{ threshold: 0.14 }");
+    expect(sectionSource).toContain("createStoryTransitionController");
+    expect(sectionSource).toContain("resolveStoryEntryIndex");
+    expect(sectionSource).toContain('window.addEventListener("scroll"');
+  });
+
+  it("adds desktop-only scroll runway between story entries", () => {
+    const entryRule = stylesSource.match(
+      /\.template-story__entry\s*\{[^}]*\}/s,
+    )?.[0];
+
+    expect(entryRule).toContain("min-height: clamp(28rem, 62svh, 42rem);");
+    expect(stylesSource).toMatch(
+      /@media \(max-width: 960px\)[\s\S]*?\.template-story__entry\s*\{[^}]*min-height:\s*0;/,
+    );
+    expect(stylesSource).toMatch(
+      /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.template-story__entry\s*\{[^}]*min-height:\s*0;/,
     );
   });
 });

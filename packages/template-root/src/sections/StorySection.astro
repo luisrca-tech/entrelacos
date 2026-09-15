@@ -137,6 +137,12 @@ for (let index = 0; index < content.entries.length; index += 1) {
 </section>
 
 <script>
+  import {
+    createStoryTransitionController,
+    resolveStoryEntryIndex,
+    type StoryScrollDirection,
+  } from "./storyMotion";
+
   const reducedMotion = window.matchMedia?.(
     "(prefers-reduced-motion: reduce)",
   ).matches;
@@ -147,34 +153,82 @@ for (let index = 0; index < content.entries.length; index += 1) {
       const entries = story.querySelectorAll<HTMLElement>("[data-story-entry]");
       const stage = story.querySelector<HTMLElement>("[data-story-stage]");
       const media = story.querySelectorAll<HTMLElement>("[data-story-media-index]");
-      const setActiveMedia = (index: string) => {
-        media.forEach((item) => {
-          item.toggleAttribute(
-            "data-active",
-            item.getAttribute("data-story-media-index") === index,
-          );
-        });
+      const clearExitingMedia = () => {
+        media.forEach((item) => item.removeAttribute("data-story-exiting"));
+      };
+      const transitionMedia = (index: number) => {
+        const current = story.querySelector<HTMLElement>(
+          "[data-story-media-index][data-active]",
+        );
+        const next = story.querySelector<HTMLElement>(
+          `[data-story-media-index="${index}"]`,
+        );
+        if (!next || current === next) return;
+
+        clearExitingMedia();
+        if (current) {
+          current.setAttribute("data-story-exiting", "");
+          current.removeAttribute("data-active");
+        }
+        next.removeAttribute("data-story-exiting");
+        next.setAttribute("data-active", "");
       };
       const firstMedia = media.item(0);
-      if (firstMedia) setActiveMedia(firstMedia.getAttribute("data-story-media-index") ?? "");
-      const observer = new IntersectionObserver(
+      const firstMediaIndex = Number(firstMedia?.getAttribute("data-story-media-index") ?? 0);
+      firstMedia?.setAttribute("data-active", "");
+      const transitionController = createStoryTransitionController({
+        initialIndex: firstMediaIndex,
+        duration: 1100,
+        onTransition: (_from, to) => transitionMedia(to),
+        onSettled: clearExitingMedia,
+      });
+      const revealObserver = new IntersectionObserver(
         (observations) => {
           observations.forEach((observation) => {
             if (!observation.isIntersecting) return;
             observation.target.classList.add("is-visible");
-            const index = observation.target.getAttribute("data-story-entry-index");
-            if (index && story.querySelector(`[data-story-media-index="${index}"]`))
-              setActiveMedia(index);
           });
         },
         { threshold: 0.14 },
       );
+      let focusedIndex = firstMediaIndex;
+      let lastScrollY = window.scrollY;
+      let scrollFrame: number | undefined;
+      const updateMediaFromScroll = () => {
+        scrollFrame = undefined;
+        const currentScrollY = window.scrollY;
+        const direction: StoryScrollDirection =
+          currentScrollY > lastScrollY
+            ? 1
+            : currentScrollY < lastScrollY
+              ? -1
+              : 0;
+        lastScrollY = currentScrollY;
+        focusedIndex = resolveStoryEntryIndex(
+          Array.from(entries, (entry) => entry.getBoundingClientRect().top),
+          focusedIndex,
+          direction,
+          window.innerHeight,
+        );
+        if (story.querySelector(`[data-story-media-index="${focusedIndex}"]`)) {
+          transitionController.request(focusedIndex);
+        }
+      };
+      const scheduleMediaUpdate = () => {
+        if (scrollFrame !== undefined) return;
+        scrollFrame = window.requestAnimationFrame(updateMediaFromScroll);
+      };
       story.setAttribute("data-story-motion", "ready");
       if (stage) {
         story.setAttribute("data-story-stage-ready", "");
         stage.setAttribute("data-story-stage-ready", "");
       }
-      entries.forEach((entry) => observer.observe(entry));
+      entries.forEach((entry) => {
+        revealObserver.observe(entry);
+      });
+      window.addEventListener("scroll", scheduleMediaUpdate, { passive: true });
+      window.addEventListener("resize", scheduleMediaUpdate, { passive: true });
+      scheduleMediaUpdate();
     });
   }
 </script>
