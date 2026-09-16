@@ -1,0 +1,89 @@
+---
+import { validateStoryContent } from "../content";
+import type { StoryContent } from "../content";
+
+interface Props {
+  content: StoryContent;
+  tone?: "ivory" | "olive";
+}
+
+const { content, tone = "ivory" } = Astro.props;
+validateStoryContent(content);
+const id = content.id;
+---
+
+<section
+  id={id}
+  class:list={["template-story", `template-story--${tone}`]}
+  data-template-story
+  aria-labelledby={`${id}-title`}
+  style={`--story-media-ratio: ${content.media.width} / ${content.media.height};`}
+>
+  <figure class="template-story__media">
+    {content.media.kind === "image" ? (
+      <img
+        src={content.media.src}
+        alt={content.media.alt}
+        width={content.media.width}
+        height={content.media.height}
+        loading="lazy"
+      />
+    ) : (
+      <video
+        src={content.media.src}
+        poster={content.media.poster}
+        width={content.media.width}
+        height={content.media.height}
+        autoplay
+        muted
+        loop
+        playsinline
+        preload="metadata"
+        aria-label={content.media.alt}
+      >
+        <img
+          src={content.media.poster}
+          alt={content.media.alt}
+          width={content.media.width}
+          height={content.media.height}
+          loading="lazy"
+        />
+      </video>
+    )}
+  </figure>
+  <div class="template-story__veil" aria-hidden="true"></div>
+  <div class="template-story__copy" data-story-copy>
+    {content.eyebrow && <p class="template-story__eyebrow">{content.eyebrow}</p>}
+    <h2 id={`${id}-title`}>{content.title}</h2>
+    {content.description && <p class="template-story__description">{content.description}</p>}
+    <p class="template-story__body">{content.body}</p>
+  </div>
+</section>
+
+<script>
+  const reducedMotion = window.matchMedia?.(
+    "(prefers-reduced-motion: reduce)",
+  ).matches;
+
+  if (!reducedMotion && "IntersectionObserver" in window) {
+    document.querySelectorAll<HTMLElement>("[data-template-story]").forEach((story) => {
+      if (story.getAttribute("data-story-motion") === "ready") return;
+
+      const copy = story.querySelector<HTMLElement>("[data-story-copy]");
+      if (!copy) return;
+      const observer = new IntersectionObserver(
+        (observations) => {
+          observations.forEach((observation) => {
+            if (!observation.isIntersecting) return;
+            observation.target.classList.add("is-visible");
+            observer.unobserve(observation.target);
+          });
+        },
+        { threshold: 0.18 },
+      );
+
+      story.setAttribute("data-story-motion", "ready");
+      observer.observe(copy);
+    });
+  }
+</script>

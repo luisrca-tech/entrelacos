@@ -1,0 +1,30 @@
+---
+import { validateGalleryContent } from "../content";
+import type { GalleryContent } from "../content";
+import GalleryCarousel from "../components/GalleryCarousel";
+
+interface Props {
+  content: GalleryContent;
+  tone?: "ivory" | "olive";
+}
+
+const { content, tone = "ivory" } = Astro.props;
+validateGalleryContent(content);
+const id = content.id;
+---
+
+<section
+  id={id}
+  class:list={["template-gallery", `template-gallery--${tone}`]}
+  aria-labelledby={`${id}-title`}
+>
+  <header class="template-gallery__header" data-template-reveal>
+    {content.eyebrow && <p class="template-gallery__eyebrow">{content.eyebrow}</p>}
+    <h2 id={`${id}-title`}>{content.title}</h2>
+    {content.description && <p class="template-gallery__description">{content.description}</p>}
+  </header>
+
+  <div class="template-gallery__content" data-template-reveal>
+    <GalleryCarousel content={content} client:load />
+  </div>
+</section>

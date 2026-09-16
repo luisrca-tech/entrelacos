@@ -1,0 +1,106 @@
+---
+import { validateHeroContent } from "../content";
+import type { HeroContent, Media } from "../content";
+import HomeIntro from "../components/HomeIntro.astro";
+
+interface Props {
+  content: HeroContent;
+  introMedia?: readonly Media[];
+}
+
+const { content, introMedia = [] } = Astro.props;
+validateHeroContent(content);
+const id = content.id;
+const hasIntro = content.intro !== undefined && introMedia.length > 0;
+---
+
+{hasIntro && content.intro && (
+  <HomeIntro content={content.intro} media={introMedia} heroMedia={content.media} />
+)}
+<section
+  id={id}
+  class="template-hero"
+  aria-labelledby={`${id}-title`}
+  data-template-hero-intro
+  data-template-has-intro={hasIntro ? "true" : undefined}
+>
+  <div class="template-hero__media">
+    {content.media.kind === "image" ? (
+      <img
+        src={content.media.src}
+        alt={content.media.alt}
+        width={content.media.width}
+        height={content.media.height}
+        loading="eager"
+      />
+    ) : (
+      <video
+        src={content.media.src}
+        poster={content.media.poster}
+        width={content.media.width}
+        height={content.media.height}
+        autoplay
+        muted
+        loop
+        playsinline
+        preload="metadata"
+        aria-label={content.media.alt}
+        data-template-hero-video
+      >
+        <img
+          src={content.media.poster}
+          alt={content.media.alt}
+          width={content.media.width}
+          height={content.media.height}
+          loading="eager"
+        />
+      </video>
+    )}
+  </div>
+  <div class="template-hero__content">
+    {content.eyebrow && <p class="template-hero__eyebrow">{content.eyebrow}</p>}
+    <h1 id={`${id}-title`}>{content.title}</h1>
+    {content.description && <p class="template-hero__description">{content.description}</p>}
+    <p class="template-hero__meta">
+      <span>{content.dateLabel}</span>
+      <span>{content.locationLabel}</span>
+    </p>
+    {content.action && (
+      <a class="template-hero__action" href={content.action.href}>
+        {content.action.label}
+        <span aria-hidden="true">↗</span>
+      </a>
+    )}
+  </div>
+</section>
+
+<script>
+  const motionPreference = window.matchMedia("(prefers-reduced-motion: reduce)");
+
+  const syncHeroVideoPlayback = () => {
+    document
+      .querySelectorAll<HTMLVideoElement>("[data-template-hero-video]")
+      .forEach((video) => {
+        if (motionPreference.matches) {
+          video.pause();
+          video.currentTime = 0;
+          return;
+        }
+
+        const hero = video.closest<HTMLElement>(".template-hero");
+        const introPending =
+          hero?.dataset.templateHasIntro === "true" &&
+          hero.dataset.templateIntroMediaReady !== "true";
+        if (introPending) {
+          video.pause();
+          video.currentTime = 0;
+          return;
+        }
+
+        void video.play().catch(() => undefined);
+      });
+  };
+
+  syncHeroVideoPlayback();
+  motionPreference.addEventListener("change", syncHeroVideoPlayback);
+</script>

@@ -1,4 +1,5 @@
 export { AdminRecognition } from "./AdminRecognition";
+export { getAdminRecognitionView } from "./adminRecognition";
 export type { FamilyMessageFormProps } from "./FamilyMessageForm";
 export { FamilyMessageForm } from "./FamilyMessageForm";
 export type {

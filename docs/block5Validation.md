@@ -56,6 +56,26 @@ Two pre-existing Block 2 browser limitations were observed outside this implemen
 
 No commit, push, deployment, provider call, or production mutation was made.
 
+## Post-delivery reconciliation — 2026-09-13
+
+The limitations recorded above were accurate for the Block 5 validation run on
+2026-09-12. A later PRE0 check reconciled both browser findings without
+rewriting that historical result. The current owner site-list boundary was not
+reproduced as a failure: a focused regression now proves that
+`GET /v1/owner/sites` without query parameters returns the default page, and
+the existing implementation passes it. The SITE_ADMIN activation limitation
+was reproduced in the browser with a valid 43-character fragment token. The
+admin form now captures the initial fragment before client navigation can
+clear it, and a fresh browser load displays the password form and then removes
+the token from the address bar.
+
+The development database was also verified read-only through the guarded
+connection utility. The expected Neon branch, project, endpoint, database
+(`neondb`), and role (`neondb_owner`) matched; the migration journal's latest
+entry corresponds to `0007_windy_sage`, and all Block 5 tables are present.
+No migration command, data mutation, production connection, or production
+migration was performed during this reconciliation.
+
 ## Listening
 
 The validation separates deterministic quota accounting from provider evidence: simulated reservations prove concurrency and alert rules but never count as Twilio delivery, account usage, or cost. The RSVP receipt migration redacts a whole legacy response when any referenced member is already absent because the deleted member's group can no longer be recovered safely; retaining the rest would leave replayable private data with incomplete ownership.

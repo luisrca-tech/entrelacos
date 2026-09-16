@@ -1,110 +1,268 @@
 ---
-import WeddingLayout from "@entrelacos/template-root/layout";
-import TemplateSection from "@entrelacos/template-root/section";
-import { AdminRecognition, FeatureAvailability, GuestAccess, MessageMural } from "@entrelacos/wedding-features";
+import { WeddingHome, WeddingLayout } from "@entrelacos/template-root/v1";
+import { AdminRecognition, GuestAccess, MessageMural } from "@entrelacos/wedding-features";
 import "../styles/tailwind.css";
 
 const inactive = import.meta.env.PUBLIC_SITE_INACTIVE === "true";
-const access = { siteId: import.meta.env.PUBLIC_SITE_ID, apiOrigin: import.meta.env.PUBLIC_API_URL, panelOrigin: import.meta.env.PUBLIC_ADMIN_ORIGIN };
-const navigation = [
-  { label: "História", href: "#story" },
-  { label: "Detalhes", href: "#details" },
-  { label: "Confirmar presença", href: "#guest-access" },
-  { label: "Mural", href: "#mural" },
-  { label: "Recursos", href: "#capabilities" },
-];
-const guestAccess = { siteId: import.meta.env.PUBLIC_SITE_ID ?? "", apiOrigin: import.meta.env.PUBLIC_API_URL ?? "" };
+const access = {
+  siteId: import.meta.env.PUBLIC_SITE_ID,
+  apiOrigin: import.meta.env.PUBLIC_API_URL,
+  panelOrigin: import.meta.env.PUBLIC_ADMIN_ORIGIN,
+};
+const site = { name: "Marina & Caio", href: "/" };
+const seo = {
+  title: "Marina & Caio | 18 de setembro de 2027",
+  description: "Informações sobre a celebração de Marina & Caio em Goiânia.",
+  canonical: "https://demo.example.test/",
+  robots: "noindex, nofollow" as const,
+  socialImage: {
+    url: "https://demo.example.test/marina-caio-hero.webp",
+    alt: "Marina e Caio se beijam sob uma árvore ao pôr do sol",
+  },
+};
+const navigation = {
+  ariaLabel: "Navegação principal",
+  menuLabel: "Abrir menu",
+  extensionAnchorIds: ["guest-access", "mural"],
+  links: [
+    { label: "História", href: "#story" },
+    { label: "Galeria", href: "#gallery" },
+    { label: "Programação", href: "#schedule" },
+    { label: "Local", href: "#venue" },
+    { label: "Confirmar presença", href: "#guest-access" },
+    { label: "Mural", href: "#mural" },
+  ],
+};
+const footer = {
+  names: "Marina & Caio",
+  dateLabel: "18 de setembro de 2027",
+  links: [
+    { label: "História", href: "#story" },
+    { label: "Galeria", href: "#gallery" },
+    { label: "Programação", href: "#schedule" },
+    { label: "Local", href: "#venue" },
+  ],
+  rsvp: { label: "Confirmar presença", href: "#guest-access" },
+  year: "2027",
+  copyright: "© Marina & Caio",
+  attribution: "By EntreLaços",
+};
+const hero = {
+  id: "hero",
+  eyebrow: "Nosso casamento",
+  title: "Marina & Caio",
+  description: "Um dia para celebrar o encontro, a família e tudo o que nos trouxe até aqui.",
+  dateLabel: "18 de setembro de 2027",
+  locationLabel: "Goiânia, GO",
+  media: {
+    kind: "video" as const,
+    src: "/marina-caio-hero.mp4",
+    poster: "/marina-caio-hero-poster.webp",
+    alt: "Marina e Caio caminham de mãos dadas por um campo ao pôr do sol",
+    width: 1920,
+    height: 1080,
+  },
+  action: { label: "Confirmar presença", href: "#guest-access" },
+  intro: {
+    brandLabel: "Marina & Caio",
+    topLabel: "Marina &",
+    bottomLabel: "Caio",
+  },
+};
+const story = {
+  id: "story",
+  eyebrow: "A nossa história",
+  title: "O acaso apresentou. A vida fez o resto.",
+  description: "Uma história que começou sem roteiro e encontrou seu lugar.",
+  body: "Foi num encontro sem grandes planos que a gente se encontrou. Depois vieram as conversas que demoravam mais do que o café, os caminhos escolhidos juntos e a vontade de transformar os dias simples em casa. O que começou por acaso virou escolha, parceria e agora ganha um novo capítulo ao lado de vocês.",
+  media: {
+    kind: "image" as const,
+    src: "/marina-caio-story-encounter.webp",
+    alt: "Marina e Caio caminham sorrindo por um caminho arborizado",
+    width: 1448,
+    height: 1086,
+  },
+};
+const gallery = {
+  id: "gallery",
+  eyebrow: "Fragmentos",
+  title: "Antes do sim, um dia só nosso.",
+  description: "A galeria reúne as fotografias do pré-wedding em uma sequência inteira por vez, preservando cada instante do ensaio.",
+  controls: {
+    ariaLabel: "Navegação da galeria",
+    previousLabel: "Anterior",
+    nextLabel: "Próxima",
+    expandLabel: "Expandir galeria",
+    closeLabel: "Fechar galeria",
+  },
+  items: [
+    {
+      id: "gallery-encontro",
+      caption: "O começo do ensaio",
+      media: {
+        kind: "image" as const,
+        src: "/marina-caio-gallery-one.webp",
+        alt: "Marina e Caio caminham de mãos dadas por um campo iluminado",
+        width: 1448,
+        height: 1086,
+      },
+    },
+    {
+      id: "gallery-caminho",
+      caption: "Entre caminhos",
+      media: {
+        kind: "image" as const,
+        src: "/marina-caio-gallery-two.webp",
+        alt: "Marina e Caio caminham de costas por um caminho entre árvores",
+        width: 1448,
+        height: 1086,
+      },
+    },
+    {
+      id: "gallery-celebracao",
+      caption: "Um instante antes do sim",
+      media: {
+        kind: "image" as const,
+        src: "/marina-caio-gallery-three.webp",
+        alt: "Marina e Caio trocam olhares em um retrato próximo",
+        width: 1448,
+        height: 1086,
+      },
+    },
+    {
+      id: "gallery-retrato",
+      caption: "Um retrato sem pressa",
+      media: {
+        kind: "image" as const,
+        src: "/marina-caio-gallery-four.webp",
+        alt: "Marina e Caio posam juntos em um jardim ao entardecer",
+        width: 1448,
+        height: 1086,
+      },
+    },
+    {
+      id: "gallery-luz",
+      caption: "A luz do fim da tarde",
+      media: {
+        kind: "image" as const,
+        src: "/marina-caio-gallery-five.webp",
+        alt: "Marina dança de mãos dadas com Caio em um campo ao pôr do sol",
+        width: 1448,
+        height: 1086,
+      },
+    },
+    {
+      id: "gallery-abraco",
+      caption: "O abraço que fica",
+      media: {
+        kind: "image" as const,
+        src: "/marina-caio-gallery-six.webp",
+        alt: "Marina e Caio se abraçam à beira de um lago",
+        width: 1448,
+        height: 1086,
+      },
+    },
+  ],
+};
+const schedule = {
+  id: "schedule",
+  eyebrow: "O dia",
+  title: "Uma programação para viver sem pressa.",
+  description: "Horários e orientações práticas ficam próximos para facilitar a chegada e a celebração.",
+  guidanceLabel: "Orientações práticas",
+  entries: [
+    {
+      id: "ceremony",
+      time: "17:00",
+      title: "Cerimônia",
+      body: "A celebração começa no mesmo local da recepção.",
+      location: "Casablanca Eventos",
+    },
+    {
+      id: "reception",
+      time: "19:00",
+      title: "Recepção",
+      body: "Jantar, brindes e pista para continuar a noite juntos.",
+      location: "Casablanca Eventos",
+    },
+  ],
+  guidance: [
+    { id: "arrival", title: "Chegada", body: "Reserve alguns minutos para estacionar e encontrar seu lugar com calma." },
+    { id: "attire", title: "Traje", body: "Venha com o que fizer você se sentir confortável para celebrar." },
+  ],
+};
+const venue = {
+  id: "venue",
+  eyebrow: "O local",
+  title: "Nos encontramos em Goiânia.",
+  description: "O endereço completo permanece visível mesmo quando o mapa não estiver disponível.",
+  name: "Casablanca Eventos",
+  address: "Av Ipanema 747, Jardim Atlântico, Goiânia, GO, 74343-010",
+  mapEmbedUrl: "https://maps.google.com/maps?q=Casablanca%20Eventos%2C%20Av%20Ipanema%20747%2C%20Jardim%20Atl%C3%A2ntico%2C%20Goi%C3%A2nia%2C%20GO%2074343-010&output=embed",
+  directions: {
+    label: "Como chegar",
+    href: "https://www.google.com/maps/dir/?api=1&destination=Casablanca%20Eventos%2C%20Av%20Ipanema%20747%2C%20Jardim%20Atl%C3%A2ntico%2C%20Goi%C3%A2nia%2C%20GO%2074343-010",
+  },
+  fallback: {
+    label: "Abrir endereço",
+    href: "https://casablancaeventosgoiania.com.br/contato",
+  },
+  labels: {
+    mapTitle: "Mapa do Casablanca Eventos",
+    addressLabel: "Endereço completo",
+    copyLabel: "Copiar endereço",
+    copiedLabel: "Endereço copiado",
+    copyErrorLabel: "Não foi possível copiar o endereço",
+  },
+};
+const guestAccess = {
+  siteId: import.meta.env.PUBLIC_SITE_ID ?? "",
+  apiOrigin: import.meta.env.PUBLIC_API_URL ?? "",
+};
 ---
 
-<WeddingLayout
-  title="EntreLaços | modelo público de casamento"
-  description="Um modelo mínimo de site público de casamento para EntreLaços."
-  brand="EntreLaços"
-  eventDate={inactive ? undefined : "18 de setembro de 2027"}
-  navigation={inactive ? [] : navigation}
->
-  <Fragment slot="admin-access">{access.siteId && access.apiOrigin && access.panelOrigin && <AdminRecognition {...access} client:load />}</Fragment>
-  {inactive ? <section style="padding: 6rem 2rem; text-align: center; min-height: 70vh; background: #34483d; color: #f4f0e8;"><h1>Site indisponível</h1><p>Este site de casamento está temporariamente indisponível.</p></section> : (<>
-  <section class="demo-hero" aria-labelledby="demo-title">
-    <div class="demo-hero__placeholder" aria-hidden="true"></div>
-    <div class="demo-hero__content">
-      <p class="demo-eyebrow">Modelo público</p>
-      <h1 id="demo-title">Marina <span>&amp;</span> Caio</h1>
-      <p class="demo-hero__lede">
-        Um ponto de partida sereno para um site de casamento. Conteúdo, mídia,
-        confirmação de presença e fluxos de operação se encontram no mesmo
-        espaço, com acesso protegido para cada família.
-      </p>
-      <p class="demo-hero__meta">18 de setembro de 2027 · Goiânia, GO</p>
-    </div>
-  </section>
-
-  <TemplateSection
-    id="story"
-    eyebrow="01 / História"
-    title="Um layout reutilizável com espaço para a história do casal."
-    description="O modelo define o ritmo da página e uma estrutura acessível. Cada app de casamento fornecerá seu próprio conteúdo e mídia depois."
+{inactive ? (
+  <WeddingLayout locale="pt-BR" site={site} seo={seo}>
+    <section class="demo-inactive" aria-labelledby="demo-inactive-title">
+      <h1 id="demo-inactive-title">Site indisponível</h1>
+      <p>Este site de casamento está temporariamente indisponível.</p>
+    </section>
+  </WeddingLayout>
+) : (
+  <WeddingHome
+    locale="pt-BR"
+    site={site}
+    seo={seo}
+    navigation={navigation}
+    footer={footer}
+    hero={hero}
+    story={story}
+    gallery={gallery}
+    schedule={schedule}
+    venue={venue}
   >
-    <p>
-      Esta seção de exemplo mostra que a estrutura pública pode ser composta
-      com conteúdo editorial e confirmação de presença sem expor dados dos
-      convidados.
-    </p>
-  </TemplateSection>
-
-  <TemplateSection
-    id="details"
-    eyebrow="02 / Detalhes"
-    title="Informações práticas continuam fáceis de encontrar."
-    description="O primeiro modelo dará destaque à programação, ao local e aos pontos de entrada para confirmação de presença em telas pequenas."
-    tone="olive"
-  >
-    <div class="demo-detail-grid">
-      <article>
-        <p class="demo-detail-grid__label">Cerimônia</p>
-        <p>17:00 · Casablanca Eventos</p>
-      </article>
-      <article>
-        <p class="demo-detail-grid__label">Recepção</p>
-        <p>19:00 · Mesmo local</p>
-      </article>
-      <article>
-        <p class="demo-detail-grid__label">Local</p>
-        <p>Jardim Atlântico, Goiânia</p>
-      </article>
-    </div>
-  </TemplateSection>
-
-  <section id="guest-access" class="demo-guest-access" aria-labelledby="guest-access-section-title">
-    <div class="demo-guest-access__heading">
-      <p class="demo-eyebrow">03 / Confirmação</p>
-      <h2 id="guest-access-section-title">Seu convite, no seu tempo.</h2>
-      <p>
-        Encontre sua família pelo nome e celular brasileiro. Depois da
-        confirmação, os nomes do convite ficam disponíveis somente nesta aba.
-      </p>
-    </div>
-    <GuestAccess {...guestAccess} demoMode client:load />
-  </section>
-
-  <div id="mural">
-    <MessageMural {...guestAccess} client:load />
-  </div>
-
-  <section id="capabilities" class="demo-capabilities" aria-labelledby="capabilities-title">
-    <div>
-      <p class="demo-eyebrow">05 / Mapa de recursos</p>
-      <h2 id="capabilities-title">O que este modelo demonstra</h2>
-      <p>
-        As fronteiras de apresentação compartilhadas estão prontas para os
-        próximos agentes. O comportamento planejado do produto continua
-        claramente identificado como planejado.
-      </p>
-    </div>
-    <FeatureAvailability client:visible />
-  </section>
-</>)}
-</WeddingLayout>
+    <Fragment slot="head"><link rel="icon" href="/marina-caio-monogram.svg" type="image/svg+xml" /></Fragment>
+    <Fragment slot="header-addon"><span class="demo-monogram" aria-label="Monograma M e C">M&amp;C</span></Fragment>
+    <Fragment slot="admin-access">{access.siteId && access.apiOrigin && access.panelOrigin && <AdminRecognition {...access} client:load />}</Fragment>
+    <Fragment slot="after-main">
+      <section id="guest-access" class="demo-guest-access" aria-labelledby="guest-access-section-title">
+        <div class="demo-guest-access__heading">
+          <p class="demo-eyebrow">Confirmação</p>
+          <h2 id="guest-access-section-title">Seu convite, no seu tempo.</h2>
+          <p>Encontre sua família pelo nome e celular brasileiro. Depois da confirmação, os nomes do convite ficam disponíveis somente nesta aba.</p>
+        </div>
+        <GuestAccess {...guestAccess} demoMode client:only="react">
+          <p slot="fallback" class="demo-client-fallback">Esta área interativa precisa de JavaScript. Ative-o para encontrar seu convite e responder à confirmação.</p>
+        </GuestAccess>
+      </section>
+      <div id="mural" class="demo-mural">
+        <MessageMural {...guestAccess} client:only="react">
+          <p slot="fallback" class="demo-client-fallback">Esta área interativa precisa de JavaScript. Ative-o para consultar o mural.</p>
+        </MessageMural>
+      </div>
+    </Fragment>
+  </WeddingHome>
+)}
 
 <style>
   :global(:root) {
@@ -112,116 +270,53 @@ const guestAccess = { siteId: import.meta.env.PUBLIC_SITE_ID ?? "", apiOrigin: i
     --demo-muted: #637066;
     --demo-paper: #f4f0e8;
     --demo-line: rgba(37, 53, 43, 0.18);
+    --demo-page-inset: max(
+      clamp(1rem, 2.7778vw, 2.5rem),
+      calc((100vw - 120rem) / 2 + 2.5rem)
+    );
   }
 
-  .demo-hero {
-    position: relative;
+  .demo-inactive {
     display: grid;
-    min-height: min(78vh, 760px);
-    overflow: hidden;
-    background: var(--demo-ink);
-    color: var(--demo-paper);
+    min-height: 70vh;
+    place-content: center;
+    padding: 6rem 2rem;
+    background: #34483d;
+    color: #f4f0e8;
+    text-align: center;
   }
 
-  .demo-hero__placeholder {
-    position: absolute;
-    inset: 0;
-    background:
-      radial-gradient(circle at 75% 20%, rgba(215, 190, 150, 0.34), transparent 28%),
-      linear-gradient(135deg, #687d68 0%, #34483d 52%, #18261f 100%);
-    opacity: 0.92;
-  }
-
-  .demo-hero__placeholder::after {
-    position: absolute;
-    inset: 12% 10%;
-    border: 1px solid rgba(244, 240, 232, 0.42);
-    content: "";
-  }
-
-  .demo-hero__content {
-    position: relative;
-    align-self: end;
-    width: min(100% - 3rem, 78rem);
-    margin: 0 auto;
-    padding: clamp(8rem, 22vh, 15rem) 0 4rem;
-  }
-
-  .demo-eyebrow,
-  .demo-detail-grid__label {
-    margin: 0 0 1rem;
-    color: inherit;
-    font-size: 0.75rem;
-    font-weight: 700;
-    letter-spacing: 0.16em;
-    text-transform: uppercase;
-  }
-
-  .demo-hero h1 {
-    max-width: 10ch;
+  .demo-inactive h1 {
     margin: 0;
-    font-size: clamp(4rem, 12vw, 10rem);
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: clamp(2.5rem, 7vw, 6rem);
     font-weight: 400;
-    letter-spacing: -0.08em;
-    line-height: 0.88;
   }
 
-  .demo-hero h1 span {
-    font-style: italic;
-    font-weight: 300;
+  .demo-inactive p {
+    margin: 1rem 0 0;
   }
 
-  .demo-hero__lede {
-    max-width: 34rem;
-    margin: 2rem 0 0;
-    color: rgba(244, 240, 232, 0.78);
-    font-size: 1.05rem;
-    line-height: 1.6;
-  }
-
-  .demo-hero__meta {
-    margin: 2rem 0 0;
-    font-size: 0.9rem;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-  }
-
-  .demo-detail-grid {
-    display: grid;
-    gap: 1px;
-    margin-top: 2rem;
-    background: var(--demo-line);
-  }
-
-  .demo-detail-grid article {
-    padding: 1.5rem;
-    background: var(--demo-ink);
-  }
-
-  .demo-detail-grid__label {
-    margin-bottom: 0.5rem;
-    color: rgba(244, 240, 232, 0.64);
-  }
-
-  .demo-detail-grid p:last-child {
-    margin: 0;
-    font-size: 1.1rem;
-  }
-
-  .demo-capabilities {
-    display: grid;
-    grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
-    gap: clamp(2rem, 8vw, 8rem);
-    width: min(100% - 3rem, 78rem);
-    margin: 0 auto;
-    padding: clamp(5rem, 12vw, 10rem) 0;
+  .demo-monogram {
+    display: inline-flex;
+    min-width: 2.25rem;
+    height: 2.25rem;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid color-mix(in srgb, currentColor 56%, transparent);
+    border-radius: 50%;
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 0.72rem;
+    letter-spacing: 0;
+    text-transform: none;
   }
 
   .demo-guest-access {
     display: grid;
     grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
     gap: clamp(2rem, 8vw, 8rem);
-    padding: clamp(5rem, 12vw, 10rem) max(1rem, calc((100vw - 78rem) / 2));
+    padding: clamp(2rem, 3vw, 3rem) var(--demo-page-inset)
+      clamp(1.5rem, 3vw, 2.5rem);
     background: var(--demo-paper);
   }
 
@@ -230,9 +325,19 @@ const guestAccess = { siteId: import.meta.env.PUBLIC_SITE_ID ?? "", apiOrigin: i
     padding-top: clamp(2rem, 5vw, 4rem);
   }
 
+  .demo-eyebrow {
+    margin: 0 0 1rem;
+    color: inherit;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+  }
+
   .demo-guest-access h2 {
     max-width: 10ch;
     margin: 0;
+    font-family: Georgia, "Times New Roman", serif;
     font-size: clamp(2.5rem, 6vw, 5rem);
     font-weight: 400;
     letter-spacing: -0.06em;
@@ -246,42 +351,28 @@ const guestAccess = { siteId: import.meta.env.PUBLIC_SITE_ID ?? "", apiOrigin: i
     line-height: 1.6;
   }
 
-  .demo-capabilities h2 {
-    max-width: 10ch;
-    margin: 0;
-    font-size: clamp(2.5rem, 6vw, 5rem);
-    font-weight: 400;
-    letter-spacing: -0.06em;
-    line-height: 0.96;
+  .demo-mural {
+    padding: clamp(1rem, 2vw, 2rem) var(--demo-page-inset)
+      clamp(4rem, 8vw, 6rem);
+    background: var(--demo-paper);
   }
 
-  .demo-capabilities > div > p:last-child {
-    max-width: 28rem;
-    margin-top: 1.5rem;
+  .demo-client-fallback {
+    max-width: 38rem;
+    margin: 0;
+    padding: 1.25rem;
+    border: 1px solid var(--demo-line);
     color: var(--demo-muted);
     line-height: 1.6;
   }
 
   @media (max-width: 720px) {
-    .demo-hero__content,
-    .demo-capabilities {
-      width: min(100% - 2rem, 78rem);
-    }
-
-    .demo-capabilities,
     .demo-guest-access {
       display: block;
     }
 
-    .demo-capabilities > div,
     .demo-guest-access__heading {
       margin-bottom: 3rem;
-    }
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .demo-hero__placeholder {
-      background: #34483d;
     }
   }
 </style>

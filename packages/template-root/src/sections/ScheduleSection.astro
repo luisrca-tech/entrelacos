@@ -1,0 +1,52 @@
+---
+import { validateScheduleContent } from "../content";
+import type { ScheduleContent } from "../content";
+
+interface Props {
+  content: ScheduleContent;
+  tone?: "ivory" | "olive";
+}
+
+const { content, tone = "olive" } = Astro.props;
+validateScheduleContent(content);
+const id = content.id;
+---
+
+<section
+  id={id}
+  class:list={["template-schedule", `template-schedule--${tone}`]}
+  aria-labelledby={`${id}-title`}
+>
+  <header class="template-schedule__header" data-template-reveal>
+    {content.eyebrow && <p class="template-schedule__eyebrow">{content.eyebrow}</p>}
+    <h2 id={`${id}-title`}>{content.title}</h2>
+    {content.description && <p class="template-schedule__description">{content.description}</p>}
+  </header>
+  <div class="template-schedule__content" data-template-reveal>
+    <ol class="template-schedule__entries" aria-label={content.title}>
+      {content.entries.map((entry) => (
+        <li id={entry.id} class="template-schedule__entry">
+          <time>{entry.time}</time>
+          <div>
+            <h3>{entry.title}</h3>
+            <p>{entry.body}</p>
+            {entry.location && <p class="template-schedule__location">{entry.location}</p>}
+          </div>
+        </li>
+      ))}
+    </ol>
+    {content.guidance && content.guidance.length > 0 && (
+      <aside class="template-schedule__guidance" aria-labelledby={`${id}-guidance-title`}>
+        <h3 id={`${id}-guidance-title`}>{content.guidanceLabel}</h3>
+        <ul>
+          {content.guidance.map((item) => (
+            <li id={item.id}>
+              <strong>{item.title}</strong>
+              <p>{item.body}</p>
+            </li>
+          ))}
+        </ul>
+      </aside>
+    )}
+  </div>
+</section>

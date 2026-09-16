@@ -1,0 +1,70 @@
+---
+import { validateVenueContent } from "../content";
+import type { VenueContent } from "../content";
+
+interface Props {
+  content: VenueContent;
+  tone?: "ivory" | "olive";
+}
+
+const { content, tone = "ivory" } = Astro.props;
+validateVenueContent(content);
+const id = content.id;
+---
+
+<section
+  id={id}
+  class:list={["template-venue", `template-venue--${tone}`]}
+  aria-labelledby={`${id}-title`}
+>
+  <header class="template-venue__header" data-template-reveal>
+    {content.eyebrow && <p class="template-venue__eyebrow">{content.eyebrow}</p>}
+    <h2 id={`${id}-title`}>{content.title}</h2>
+    {content.description && <p class="template-venue__description">{content.description}</p>}
+  </header>
+  <div class="template-venue__content" data-template-reveal>
+    <div class="template-venue__details">
+      <h3>{content.name}</h3>
+      <p class="template-venue__address-label">{content.labels.addressLabel}</p>
+      <address id={`${id}-address`}>{content.address}</address>
+      <div class="template-venue__actions">
+        <a href={content.directions.href} target="_blank" rel="noreferrer">{content.directions.label}</a>
+        <a href={content.fallback.href} target="_blank" rel="noreferrer">{content.fallback.label}</a>
+        <button
+          type="button"
+          data-copy-address
+          data-address={content.address}
+          data-copy-success={content.labels.copiedLabel}
+          data-copy-error={content.labels.copyErrorLabel}
+        >{content.labels.copyLabel}</button>
+      </div>
+      <p class="template-venue__copy-status" data-copy-status role="status" aria-live="polite"></p>
+    </div>
+    <figure class="template-venue__map">
+      <iframe
+        src={content.mapEmbedUrl}
+        title={content.labels.mapTitle}
+        loading="lazy"
+        referrerpolicy="no-referrer-when-downgrade"
+        allowfullscreen
+      ></iframe>
+    </figure>
+  </div>
+</section>
+
+<script>
+  import { copyAddress } from "../venue";
+
+  document.querySelectorAll<HTMLButtonElement>("[data-copy-address]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const address = button.dataset.address ?? "";
+      const status = button.parentElement?.parentElement?.querySelector<HTMLElement>("[data-copy-status]");
+      const copied = await copyAddress(address, navigator.clipboard);
+      if (copied) {
+        if (status) status.textContent = button.dataset.copySuccess ?? "";
+      } else {
+        if (status) status.textContent = button.dataset.copyError ?? "";
+      }
+    });
+  });
+</script>

@@ -1,21 +1,26 @@
 import { Link } from "@tanstack/react-router";
 import { type FormEvent, useEffect, useState } from "react";
 import { apiRequest } from "../lib/apiClient";
+import { hasValidAccessToken, readAccessTokenFromHash } from "./accessToken";
 
 export function AccessForm({
   purpose,
 }: {
   purpose: "activation" | "recovery";
 }) {
-  const [token, setToken] = useState("");
+  const [token, setToken] = useState(() =>
+    typeof window === "undefined"
+      ? ""
+      : readAccessTokenFromHash(window.location.hash),
+  );
   const [ready, setReady] = useState(false);
   const [email, setEmail] = useState("");
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
   useEffect(() => {
-    const value =
-      new URLSearchParams(window.location.hash.slice(1)).get("token") ?? "";
-    setToken(value);
+    setToken(
+      (current) => current || readAccessTokenFromHash(window.location.hash),
+    );
     setReady(true);
     window.history.replaceState(null, "", window.location.pathname);
   }, []);
@@ -68,7 +73,7 @@ export function AccessForm({
           </>
         ) : !ready ? (
           <p role="status">Carregando…</p>
-        ) : !/^[A-Za-z0-9_-]{43}$/.test(token) ? (
+        ) : !hasValidAccessToken(token) ? (
           <p role="alert">
             Link inválido. Solicite um novo link ao responsável.
           </p>

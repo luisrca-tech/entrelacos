@@ -1,7 +1,9 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   createRecognitionChallenge,
+  getAdminRecognitionView,
   panelHandoffUrl,
+  runAdminHandoffOnce,
 } from "./adminRecognition";
 
 export function AdminRecognition({
@@ -15,6 +17,10 @@ export function AdminRecognition({
 }) {
   const [recognized, setRecognized] = useState(false);
   const [error, setError] = useState("");
+  const initialFragment = useRef("");
+  if (typeof window !== "undefined" && !initialFragment.current) {
+    initialFragment.current = window.location.hash;
+  }
   const verifierKey = `entrelacos:admin-verifier:${siteId}`;
   const tokenKey = `entrelacos:recognition:${siteId}`;
   const enterPanel = useCallback(async () => {
@@ -30,16 +36,16 @@ export function AdminRecognition({
       window.location.assign(url);
     } catch {
       setError(
-        "Não foi possível abrir o painel neste navegador. Tente novamente.",
+        "Não foi possível iniciar o acesso administrativo neste navegador. Tente novamente.",
       );
     }
   }, [panelOrigin, siteId, verifierKey]);
   useEffect(() => {
     let active = true;
     let running = false;
-    const fragment = new URLSearchParams(window.location.hash.slice(1));
+    const fragment = new URLSearchParams(initialFragment.current.slice(1));
     const code = fragment.get("handoff");
-    const fromPanel = window.location.hash === "#panel";
+    const fromPanel = initialFragment.current === "#panel";
     if (code || fromPanel)
       window.history.replaceState(
         null,
@@ -81,23 +87,25 @@ export function AdminRecognition({
     }
     async function start() {
       if (fromPanel) {
-        await enterPanel();
+        await runAdminHandoffOnce(siteId, window.location.origin, enterPanel);
         return;
       }
       if (code) {
-        try {
-          const verifier = sessionStorage.getItem(verifierKey);
-          sessionStorage.removeItem(verifierKey);
-          if (!verifier) throw new Error("Missing verifier");
-          const result = await request("redeem", { code, verifier });
-          sessionStorage.setItem(tokenKey, result.recognitionToken);
-        } catch {
-          sessionStorage.removeItem(tokenKey);
-          if (active)
-            setError(
-              "Acesso administrativo não reconhecido. Use Painel para entrar novamente.",
-            );
-        }
+        await runAdminHandoffOnce(siteId, window.location.origin, async () => {
+          try {
+            const verifier = sessionStorage.getItem(verifierKey);
+            sessionStorage.removeItem(verifierKey);
+            if (!verifier) throw new Error("Missing verifier");
+            const result = await request("redeem", { code, verifier });
+            sessionStorage.setItem(tokenKey, result.recognitionToken);
+          } catch {
+            sessionStorage.removeItem(tokenKey);
+            if (active)
+              setError(
+                "Acesso administrativo não reconhecido. Tente novamente a partir do ambiente administrativo.",
+              );
+          }
+        });
       }
       await check();
     }
@@ -115,30 +123,17 @@ export function AdminRecognition({
       document.removeEventListener("visibilitychange", visible);
     };
   }, [siteId, apiOrigin, enterPanel, verifierKey, tokenKey]);
+  const view = getAdminRecognitionView(recognized, error);
+  if (view === "hidden") return null;
   return (
-    <aside
-      aria-label="Acesso administrativo"
-      style={{
-        padding: "16px 24px",
-        background: "#e8e3d8",
-        color: "#25352b",
-        display: "flex",
-        flexWrap: "wrap",
-        gap: "16px",
-        alignItems: "center",
-      }}
-    >
-      {recognized && <span role="status">Modo administrador</span>}
-      {recognized ? (
-        <a href={`${panelOrigin}/sites/${encodeURIComponent(siteId)}`}>
-          Voltar ao painel
-        </a>
-      ) : (
+    <aside className="admin-recognition" aria-label="Acesso administrativo">
+      {view === "recognized" && <span role="status">Modo administrador</span>}
+      {view === "recognized" && (
         <a
+          className="admin-recognition__link"
           href={`${panelOrigin}/sites/${encodeURIComponent(siteId)}`}
-          style={{ padding: "10px 16px", minHeight: "44px", cursor: "pointer" }}
         >
-          Painel
+          Voltar ao painel
         </a>
       )}
       {error && <p role="alert">{error}</p>}
