@@ -22,6 +22,12 @@ export const repositorySlugSchema = z
   .string()
   .regex(/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/);
 
+const persistedRepositorySlugSchema = z
+  .string()
+  .min(1)
+  .max(160)
+  .regex(/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/);
+
 export const provisioningKeySchema = z
   .string()
   .min(1)
@@ -169,7 +175,7 @@ const lifecycleFields = {
 
 export const siteRecordSchema = strictObject({
   id: siteIdSchema,
-  repositorySlug: repositorySlugSchema,
+  repositorySlug: persistedRepositorySlugSchema,
   provisioningKey: provisioningKeySchema,
   displayName: nonEmptyText(160),
   coupleNames: coupleNamesSchema,
@@ -1184,3 +1190,29 @@ export const block5EndpointPaths = {
 
 export type Block5EndpointPath =
   (typeof block5EndpointPaths)[keyof typeof block5EndpointPaths];
+
+export const demoResetDatasetVersionSchema = z.literal("block7-demo-v1");
+export const demoResetInputSchema = strictObject({
+  datasetVersion: demoResetDatasetVersionSchema,
+});
+export type DemoResetInput = z.infer<typeof demoResetInputSchema>;
+
+export const demoResetResponseSchema = strictObject({
+  siteId: siteIdSchema,
+  datasetVersion: demoResetDatasetVersionSchema,
+  result: z.literal("RESET"),
+  resetAt: instantSchema,
+  counts: strictObject({
+    groups: z.number().int().nonnegative(),
+    members: z.number().int().nonnegative(),
+    messages: z.number().int().nonnegative(),
+  }),
+});
+export type DemoResetResponse = z.infer<typeof demoResetResponseSchema>;
+
+export const block7EndpointPaths = {
+  ownerSiteDemoReset: "POST /v1/owner/sites/:siteId/demo/reset",
+} as const;
+
+export type Block7EndpointPath =
+  (typeof block7EndpointPaths)[keyof typeof block7EndpointPaths];

@@ -21,10 +21,9 @@ const timeline = buildIntroTimeline(frames.length);
   data-fullscreen-at={timeline.fullscreenAt}
   data-fade-at={timeline.fadeAt}
   data-complete-at={timeline.completeAt}
-  aria-hidden="true"
 >
-  <p class="template-home-intro__brand">{content.brandLabel}</p>
-  <div class="template-home-intro__sequence">
+  <p class="template-home-intro__brand" aria-hidden="true">{content.brandLabel}</p>
+  <div class="template-home-intro__sequence" aria-hidden="true">
     <p class="template-home-intro__label template-home-intro__label--top">
       {content.topLabel}
     </p>
@@ -48,6 +47,9 @@ const timeline = buildIntroTimeline(frames.length);
       {content.bottomLabel}
     </p>
   </div>
+  <button class="template-home-intro__skip" type="button" data-template-intro-skip>
+    Pular introdução
+  </button>
 </div>
 
 <script>
@@ -65,6 +67,9 @@ const timeline = buildIntroTimeline(frames.length);
     const header = document.querySelector<HTMLElement>("[data-template-navigation]");
     const frames = Array.from(
       intro.querySelectorAll<HTMLImageElement>("[data-template-intro-frame]"),
+    );
+    const skip = intro.querySelector<HTMLButtonElement>(
+      "[data-template-intro-skip]",
     );
     const previousHtmlOverflow = document.documentElement.style.overflow;
     const previousBodyOverflow = document.body.style.overflow;
@@ -136,6 +141,8 @@ const timeline = buildIntroTimeline(frames.length);
         window.requestAnimationFrame(revealHeroChrome);
       });
     };
+
+    skip?.addEventListener("click", complete);
 
     if (reduceMotion || frames.length === 0) {
       complete();

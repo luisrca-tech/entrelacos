@@ -28,6 +28,7 @@ import {
   leaveFamilySession,
   readFamilySession,
 } from "./familySession";
+import { GuestLookupServiceError } from "./guestLookup";
 import {
   GuestVerificationServiceError,
   resendGuestChallenge,
@@ -206,6 +207,7 @@ function preflight(context: Context, origin: string): Response {
 function serviceError(error: unknown): Response | undefined {
   if (
     error instanceof GuestVerificationServiceError ||
+    error instanceof GuestLookupServiceError ||
     error instanceof FamilySessionServiceError ||
     error instanceof DemoGuestGrantError
   ) {

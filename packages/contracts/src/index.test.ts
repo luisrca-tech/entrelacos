@@ -96,6 +96,23 @@ describe("Block 2 public contracts", () => {
     expect(siteReviewApproveInputSchema.parse({})).toEqual({});
   });
 
+  it("reads legacy repository slugs without allowing new oversized slugs", () => {
+    const legacySlug = `legacy-${"a".repeat(61)}`;
+
+    expect(
+      siteRecordSchema.parse({ ...site, repositorySlug: legacySlug }),
+    ).toMatchObject({ repositorySlug: legacySlug });
+    expect(() =>
+      ownerSiteCreateInputSchema.parse({
+        repositorySlug: legacySlug,
+        provisioningKey: "repo:legacy",
+        displayName: "Legacy site",
+        coupleNames: ["Legacy", "Record"],
+        eventDate: "2027-05-22",
+      }),
+    ).toThrow();
+  });
+
   it("requires one site-bound admin and one-use token outputs", () => {
     expect(
       adminCreateInputSchema.parse({

@@ -75,6 +75,20 @@ describe("home intro sequencing", () => {
     );
   });
 
+  it("keeps the timed introduction dismissible without hiding the control", () => {
+    expect(componentSource).toContain("data-template-intro-skip");
+    expect(componentSource).toContain(
+      'skip?.addEventListener("click", complete)',
+    );
+    const introOpeningTag = componentSource.match(
+      /<div\s+[\s\S]*?data-template-home-intro[\s\S]*?>/,
+    )?.[0];
+    expect(introOpeningTag).not.toContain('aria-hidden="true"');
+    expect(stylesSource).toMatch(
+      /\.template-home-intro__skip \{[\s\S]*?position: absolute;[\s\S]*?z-index: 3;/,
+    );
+  });
+
   it("keeps both split labels above and outside the intro media", () => {
     const labelRules = Array.from(
       stylesSource.matchAll(

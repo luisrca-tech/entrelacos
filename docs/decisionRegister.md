@@ -98,6 +98,14 @@ Public visitors receive no panel option. The host-composed `AdminRecognition` fe
 
 Implementation-stage package, focused interaction, typecheck, build, browser, independent black-box QA, consolidated repository, independent diff-review, presentation-feedback, and fictional-demo media gates passed as recorded in [the current validation record](./block6Validation.md). The final logo/favicon/monogram, exact generation-model and cost evidence, real-client rights, deployment, merge, and production approval remain pending. See [the media register](./block6MediaRegister.md).
 
+## Block 7 implementation record — 2026-09-16
+
+The `block-7/quality-demo-recovery` worktree adds the versioned `block7-demo-v1` reset, strict OWNER/exact-origin/demo-marker authorization, transaction-scoped serialization, deterministic operational data, sentinel preservation, safe request/reset observability, local CI helper gates, and a disposable-test load runner. The reset preserves site identity/configuration and administrative/authentication rows; it replaces only the demo site's operational rows and never calls a provider. The frozen boundary and evidence limits are recorded in [the Block 7 contract](./block7Contracts.md) and [validation record](./block7Validation.md).
+
+The default observability sink is allowlisted structured JSON on local stdout. Server-generated request IDs are correlation values only. HTTP rate limits are explicitly labeled, and raw request/response/error objects, credentials, visitor identity, phones, PINs/OTPs, messages, cookies, and secrets remain outside the event surface. External sink selection, access, shipping, and retention remain open decisions.
+
+The 20-wedding by 500-guest run is evidence only for its recorded local endpoint mix, concurrency, fixture distribution, and resources; it is not a capacity guarantee. Browser acceptance is partial because no secret-safe SITE_ADMIN or representative/family one-time identity was established. Remote CI, real restoration, RPO/RTO, legal/privacy/retention/media-rights decisions, provider approval, and final go/no-go remain unproven or open. These limits prevent marking B7-T6, B7-T7, or Block 7 complete.
+
 ## Superseded historical details
 
 - Historical notes that made the group name optional are superseded. Current rule: group name required.
