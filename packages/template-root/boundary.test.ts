@@ -87,11 +87,17 @@ describe("template-root public boundary", () => {
     expect(demoPage).toContain("gallery");
     expect(demoPage).toContain("schedule");
     expect(demoPage).toContain("venue");
-    expect(demoPage).toContain("story-encontro");
+    expect(demoPage).toContain("O acaso apresentou. A vida fez o resto.");
     expect(demoPage).toContain("Marina & Caio");
+    expect(demoPage).not.toContain('eyebrow: "01 /');
+    expect(demoPage).not.toContain('eyebrow: "02 /');
+    expect(demoPage).not.toContain('eyebrow: "03 /');
+    expect(demoPage).not.toContain('eyebrow: "04 /');
+    expect(demoPage).not.toContain('class="demo-eyebrow">05 /');
     expect(demoPage).not.toContain("placeholder");
     expect(demoPage).not.toContain("demo-hero");
     expect(demoPage).toContain('poster: "/marina-caio-hero-poster.webp"');
+    expect(demoPage).toContain('src: "/marina-caio-story-encounter.webp"');
     expect(
       existsSync(
         resolve(repoRoot, "apps/wedding-demo/public/marina-caio-hero.mp4"),

@@ -70,23 +70,10 @@ export const hero: HeroContent = {
 
 export const welcome: StoryContent = {
   id: "boas-vindas",
-  eyebrow: "01 / Boas-vindas",
+  eyebrow: "Boas-vindas",
   title: "Um encontro pensado para estar presente.",
   description:
     "A fixture pode omitir, reordenar e complementar seções sem alterar o pacote compartilhado.",
   body: "O conteúdo desta seção pertence ao host e é serializado como dados simples.",
-  entries: [
-    {
-      id: "primeira-chegada",
-      eyebrow: "Primeiro momento",
-      title: "Chegar com calma também faz parte.",
-      body: "A configuração mínima mantém cada entrada completa e legível sem depender de scripts.",
-    },
-    {
-      id: "tempo-compartilhado",
-      eyebrow: "Segundo momento",
-      title: "O tempo ganha espaço para acontecer.",
-      body: "A mesma estrutura pode receber uma sequência diferente e continuar pertencendo ao host.",
-    },
-  ],
+  media: hero.media,
 };

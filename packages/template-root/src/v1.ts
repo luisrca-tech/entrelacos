@@ -20,7 +20,6 @@ export type {
   SiteIdentity,
   SocialImage,
   StoryContent,
-  StoryEntry,
   VenueContent,
   VenueLabels,
   VideoMedia,

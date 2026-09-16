@@ -20,10 +20,10 @@ All files are owned by their host app, not `packages/template-root`.
 | `apps/wedding-demo/public/marina-caio-hero.mp4` | Hero background loop | `1920x1080`, 8 seconds, H.264 | 6.8 MiB | Approved fictional-demo video; audio stream removed |
 | `apps/wedding-demo/public/marina-caio-hero-poster.webp` | Hero poster, fallback, and intro ending | `1920x1080` | 182 KiB | Exact first decoded frame of the approved hero video |
 | `apps/wedding-demo/public/marina-caio-hero.webp` | Social image | `1536x1024` | 348 KiB | Approved fictional-demo image |
-| `apps/wedding-demo/public/marina-caio-story-encounter.webp` | First story entry | `1448x1086` | 196 KiB | Approved fictional-demo image |
-| `apps/wedding-demo/public/marina-caio-story-first-trip.webp` | Second story entry | `1448x1086` | 294 KiB | Approved fictional-demo image |
-| `apps/wedding-demo/public/marina-caio-story-home.webp` | Third story entry | `1448x1086` | 197 KiB | Approved fictional-demo image |
-| `apps/wedding-demo/public/marina-caio-story-celebration.webp` | Fourth story entry | `1448x1086` | 162 KiB | Approved fictional-demo image |
+| `apps/wedding-demo/public/marina-caio-story-encounter.webp` | Compact História background | `1448x1086` | 196 KiB | Approved fictional-demo image |
+| `apps/wedding-demo/public/marina-caio-story-first-trip.webp` | Retained story alternate | `1448x1086` | 294 KiB | Approved fictional-demo image; not rendered by the compact default |
+| `apps/wedding-demo/public/marina-caio-story-home.webp` | Retained story alternate | `1448x1086` | 197 KiB | Approved fictional-demo image; not rendered by the compact default |
+| `apps/wedding-demo/public/marina-caio-story-celebration.webp` | Retained story alternate | `1448x1086` | 162 KiB | Approved fictional-demo image; not rendered by the compact default |
 | `apps/wedding-demo/public/marina-caio-gallery-one.webp` | First gallery item | `1448x1086` | 312 KiB | Approved fictional-demo image |
 | `apps/wedding-demo/public/marina-caio-gallery-two.webp` | Second gallery item | `1448x1086` | 353 KiB | Approved fictional-demo image |
 | `apps/wedding-demo/public/marina-caio-gallery-three.webp` | Third gallery item | `1448x1086` | 192 KiB | Approved fictional-demo image |

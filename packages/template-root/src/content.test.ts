@@ -49,6 +49,14 @@ const heroOnlyHome = {
   },
 };
 
+const storyFixture = {
+  id: "story",
+  eyebrow: "Nossa história",
+  title: "Um encontro sem pressa.",
+  body: "Uma história curta sobre duas pessoas que escolheram caminhar juntas.",
+  media: heroOnlyHome.hero.media,
+};
+
 describe("template-root v1 content contracts", () => {
   it("accepts complete host-owned page SEO", () => {
     expect(
@@ -120,14 +128,7 @@ describe("template-root v1 content contracts", () => {
     expect(() =>
       validateWeddingHomeProps({
         ...heroOnlyHome,
-        story: {
-          id: "story",
-          title: "História",
-          entries: [
-            { id: "story-one", title: "Primeiro", body: "Texto primeiro." },
-            { id: "story-two", title: "Segundo", body: "Texto segundo." },
-          ],
-        },
+        story: storyFixture,
         sectionOrder: ["story"],
       }),
     ).toThrow(/hero exactly once/i);
@@ -326,76 +327,27 @@ describe("template-root v1 content contracts", () => {
     );
   });
 
-  it("requires a host-owned narrative sequence with unique entry anchors", () => {
-    expect(() =>
-      validateStoryContent({
-        id: "story",
-        title: "Uma história",
-        entries: [
-          { id: "story-one", title: "Primeiro", body: "Texto primeiro." },
-          { id: "story-two", title: "Segundo", body: "Texto segundo." },
-        ],
-      }),
-    ).not.toThrow();
-
-    expect(() =>
-      validateStoryContent({
-        id: "story",
-        title: "Uma história",
-        entries: [{ id: "story-one", title: "Primeiro", body: "Texto." }],
-      }),
-    ).toThrow(/at least two/i);
-
-    expect(() =>
-      validateStoryContent({
-        id: "story",
-        title: "Uma história",
-        entries: [
-          { id: "story-one", title: "Primeiro", body: "Texto primeiro." },
-          { id: "story-one", title: "Segundo", body: "Texto segundo." },
-        ],
-      }),
-    ).toThrow(/unique/i);
+  it("requires one host-owned short story with a background media asset", () => {
+    expect(() => validateStoryContent(storyFixture)).not.toThrow();
   });
 
-  it("validates optional narrative media as host-owned serializable media", () => {
+  it("rejects an empty story body", () => {
+    expect(() => validateStoryContent({ ...storyFixture, body: " " })).toThrow(
+      /story\.body/i,
+    );
+  });
+
+  it("validates the required story media as serializable media", () => {
     expect(() =>
-      validateStoryContent({
-        id: "story",
-        title: "Uma história",
-        entries: [
-          {
-            id: "story-one",
-            title: "Primeiro",
-            body: "Texto primeiro.",
-            media: {
-              kind: "image",
-              src: "/story-one.svg",
-              alt: "Imagem abstrata",
-              width: 1200,
-              height: 900,
-            },
-          },
-          { id: "story-two", title: "Segundo", body: "Texto segundo." },
-        ],
-      }),
-    ).not.toThrow();
+      validateStoryContent({ ...storyFixture, media: null as never }),
+    ).toThrow(/media/i);
 
     expect(() =>
       validateStoryContent({
-        id: "story",
-        title: "Uma história",
-        entries: [
-          { id: "story-one", title: "Primeiro", body: "Texto primeiro." },
-          {
-            id: "story-two",
-            title: "Segundo",
-            body: "Texto segundo.",
-            media: null as never,
-          },
-        ],
+        ...storyFixture,
+        media: { ...storyFixture.media, width: Number.NaN },
       }),
-    ).toThrow(/media/i);
+    ).toThrow(/width/i);
   });
 
   it("validates a compact host-owned gallery and its required labels", () => {
@@ -560,14 +512,7 @@ describe("template-root v1 content contracts", () => {
   it("derives the complete default order from available practical sections", () => {
     const home = {
       ...heroOnlyHome,
-      story: {
-        id: "story",
-        title: "História",
-        entries: [
-          { id: "story-one", title: "Primeiro", body: "Texto primeiro." },
-          { id: "story-two", title: "Segundo", body: "Texto segundo." },
-        ],
-      },
+      story: storyFixture,
       gallery: {
         id: "gallery",
         title: "Imagens",
@@ -656,14 +601,7 @@ describe("template-root v1 content contracts", () => {
     expect(() =>
       validateWeddingHomeProps({
         ...heroOnlyHome,
-        story: {
-          id: "story",
-          title: "História",
-          entries: [
-            { id: "hero-title", title: "Primeiro", body: "Texto primeiro." },
-            { id: "story-two", title: "Segundo", body: "Texto segundo." },
-          ],
-        },
+        story: { ...storyFixture, id: "hero-title" },
       }),
     ).toThrow(/unique/i);
   });

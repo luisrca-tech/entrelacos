@@ -148,7 +148,7 @@ The references support the following candidate vocabulary. Exact timings and imp
 
 ### Scroll narrative
 
-- At most one major sticky storytelling sequence in the first template.
+- The base História stays image-led and compact; a future optional story extension may use at most one major sticky storytelling sequence.
 - Scroll progress may reveal photographs, story milestones, or venue moments.
 - Practical sections such as RSVP, schedules, maps, and contact information remain direct and stable.
 
@@ -183,10 +183,22 @@ The references support the following candidate vocabulary. Exact timings and imp
 - Will the first public experience be one long landing page or a small set of pages?
 - Which sections deserve cinematic treatment, and which must remain purely practical?
 - Will the default hero use a photograph, muted video, or support both?
-- Should the main story use a sticky scroll sequence, a timeline, or an editorial alternating layout?
+- Should an optional future story extension use a timeline or remain a compact image-led block?
 - How much typography may change between client designs while the motion system stays consistent?
 - Which motion tokens should be shared across templates?
 - What are the mobile and reduced-motion equivalents for every signature interaction?
+
+## Wedding-specific short-story references
+
+The wedding references point to a smaller, more reusable História section than the long editorial sequence used in the first Block 6 pass:
+
+- [Michelle & Tonye](https://www.michelleandtonye.com/) uses a compact “Our Story” sequence of short, specific sentences alongside the rest of the wedding information.
+- [Veley / Ross Wedding](https://onepagelove.com/veley-ross-wedding) keeps the one-page experience focused on a small number of essentials, with full-width visual atmosphere and restrained copy.
+- [The Private Wedding App](https://www.theprivateweddingapp.com/blog/our-story-wedding-website-examples) recommends a few specific moments and short captions because guests scan this section rather than read an essay.
+
+### Direction for EntreLaços
+
+The default template should use one full-bleed host image or video, a short title, and one concise paragraph. The gallery remains the place for additional couple photos. This lowers the content burden for couples, keeps the section emotionally strong, and preserves a clear path to a future optional timeline without making it part of the base contract.
 
 ## Current conclusion
 
@@ -194,9 +206,8 @@ The first EntreLaços template should feel editorial, cinematic, calm, and conte
 
 1. an image-led hero with a restrained entrance sequence;
 2. a transparent-to-solid header transition;
-3. alternating editorial image and text sections;
-4. one signature sticky storytelling moment;
-5. a compact photo gallery with subtle controls;
-6. direct, low-motion practical sections for schedule, location, RSVP, and messages.
+3. one compact full-bleed story image with short overlay copy;
+4. a compact photo gallery with subtle controls;
+5. direct, low-motion practical sections for schedule, location, RSVP, and messages.
 
 This is a reference direction, not final design approval.

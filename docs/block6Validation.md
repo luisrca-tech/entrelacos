@@ -143,6 +143,12 @@ Current source tests cover:
 
 Both consumer builds were executed without a live API, database, SMS service, or media provider. The demo and fixture source use `noindex, nofollow`. The final post-fix generated artifacts passed the privacy and duplicate-ID scans recorded above.
 
+## Story presentation refinement
+
+The latest História pass replaces the multi-entry editorial sequence with one host-owned short story over a full-bleed image or video. The section keeps the title, optional description, and body together at the bottom of the frame, while the gallery owns any additional couple photos. `IntersectionObserver` adds one local copy reveal and a subtle media scale; no global Lenis or scroll listener is involved. Reduced motion and no-JavaScript paths keep the complete compact composition visible.
+
+Focused contract coverage validates one required story body, one required media asset, safe media dimensions, the full-bleed overlay structure, mobile sizing, semantic section labels without numeric prefixes, and the absence of the removed chapter/sticky-stage markup. The final repository run passed Biome, all 8 typecheck tasks with zero Astro diagnostics, 66 test files and 291 tests, both consumer builds, and `git diff --check`. Browser checks at `1440x900` measured a `576px` story frame with a `57.6px` ivory gap after the hero; at `390x844`, the compact frame measured approximately `574px` with a `24px` gap and `358px` of copy width, `scrollWidth` equaled `clientWidth`, and the image/copy remained readable above the gradient.
+
 The documentation pass reran the content, public-boundary, and interaction contract files with `bunx vitest run packages/template-root/src/content.test.ts packages/template-root/boundary.test.ts packages/template-root/src/interactions.test.ts`: three files and 29 tests passed. It cross-checked the five documented theme-variable names against `packages/template-root/src/styles.css`, reconciled the then-current host asset register against both `public` directories, verified the referenced local documents exist, and passed `git diff --check`. Later presentation and final-media passes superseded that asset inventory and revalidated the changed contracts. The repository Biome configuration ignores Markdown; no Markdown lint/format pass is claimed.
 
 ## Known evidence limits

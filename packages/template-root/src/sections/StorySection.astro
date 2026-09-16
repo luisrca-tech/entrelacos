@@ -1,6 +1,6 @@
 ---
 import { validateStoryContent } from "../content";
-import type { StoryContent, StoryEntry } from "../content";
+import type { StoryContent } from "../content";
 
 interface Props {
   content: StoryContent;
@@ -10,13 +10,6 @@ interface Props {
 const { content, tone = "ivory" } = Astro.props;
 validateStoryContent(content);
 const id = content.id;
-const entries: StoryEntry[] = [];
-let hasMedia = false;
-for (let index = 0; index < content.entries.length; index += 1) {
-  const entry = content.entries[index];
-  entries.push(entry);
-  if (entry.media) hasMedia = true;
-}
 ---
 
 <section
@@ -24,125 +17,50 @@ for (let index = 0; index < content.entries.length; index += 1) {
   class:list={["template-story", `template-story--${tone}`]}
   data-template-story
   aria-labelledby={`${id}-title`}
+  style={`--story-media-ratio: ${content.media.width} / ${content.media.height};`}
 >
-  <header class="template-story__intro" data-template-reveal>
-    <div class="template-story__heading">
-      {content.eyebrow && <p class="template-story__eyebrow">{content.eyebrow}</p>}
-      <h2 id={`${id}-title`}>{content.title}</h2>
-    </div>
-    <div class="template-story__summary">
-      {content.description && <p class="template-story__description">{content.description}</p>}
-      {content.body && <p class="template-story__body">{content.body}</p>}
-    </div>
-  </header>
-
-  <div class="template-story__sequence">
-    <div class="template-story__entries">
-      {entries.map((entry, index) => (
-        <article
-          id={entry.id}
-          class="template-story__entry"
-          data-story-entry
-          data-story-entry-index={index}
-          style={`--story-entry-index: ${index};`}
-          aria-labelledby={`${entry.id}-title`}
-        >
-          <div class="template-story__entry-copy">
-            {entry.eyebrow && <p class="template-story__entry-eyebrow">{entry.eyebrow}</p>}
-            <h3 id={`${entry.id}-title`}>{entry.title}</h3>
-            <p>{entry.body}</p>
-          </div>
-          {entry.media && (
-            <figure class="template-story__entry-media">
-              {entry.media.kind === "image" ? (
-                <img
-                  src={entry.media.src}
-                  alt={entry.media.alt}
-                  width={entry.media.width}
-                  height={entry.media.height}
-                  loading="lazy"
-                />
-              ) : (
-                <video
-                  src={entry.media.src}
-                  poster={entry.media.poster}
-                  width={entry.media.width}
-                  height={entry.media.height}
-                  muted
-                  loop
-                  playsinline
-                  preload="metadata"
-                  aria-label={entry.media.alt}
-                >
-                  <img
-                    src={entry.media.poster}
-                    alt={entry.media.alt}
-                    width={entry.media.width}
-                    height={entry.media.height}
-                    loading="lazy"
-                  />
-                </video>
-              )}
-            </figure>
-          )}
-        </article>
-      ))}
-    </div>
-
-    {hasMedia && (
-      <aside
-        class="template-story__stage"
-        data-story-stage
-        aria-hidden="true"
+  <figure class="template-story__media">
+    {content.media.kind === "image" ? (
+      <img
+        src={content.media.src}
+        alt={content.media.alt}
+        width={content.media.width}
+        height={content.media.height}
+        loading="lazy"
+      />
+    ) : (
+      <video
+        src={content.media.src}
+        poster={content.media.poster}
+        width={content.media.width}
+        height={content.media.height}
+        autoplay
+        muted
+        loop
+        playsinline
+        preload="metadata"
+        aria-label={content.media.alt}
       >
-        {entries.map((entry, index) => entry.media && (
-          <figure
-            class="template-story__stage-media"
-            data-story-media-index={index}
-          >
-            {entry.media.kind === "image" ? (
-              <img
-                src={entry.media.src}
-                alt={entry.media.alt}
-                width={entry.media.width}
-                height={entry.media.height}
-                loading="lazy"
-              />
-            ) : (
-              <video
-                src={entry.media.src}
-                poster={entry.media.poster}
-                width={entry.media.width}
-                height={entry.media.height}
-                muted
-                loop
-                playsinline
-                preload="metadata"
-                aria-label={entry.media.alt}
-              >
-                <img
-                  src={entry.media.poster}
-                  alt={entry.media.alt}
-                  width={entry.media.width}
-                  height={entry.media.height}
-                  loading="lazy"
-                />
-              </video>
-            )}
-          </figure>
-        ))}
-      </aside>
+        <img
+          src={content.media.poster}
+          alt={content.media.alt}
+          width={content.media.width}
+          height={content.media.height}
+          loading="lazy"
+        />
+      </video>
     )}
+  </figure>
+  <div class="template-story__veil" aria-hidden="true"></div>
+  <div class="template-story__copy" data-story-copy>
+    {content.eyebrow && <p class="template-story__eyebrow">{content.eyebrow}</p>}
+    <h2 id={`${id}-title`}>{content.title}</h2>
+    {content.description && <p class="template-story__description">{content.description}</p>}
+    <p class="template-story__body">{content.body}</p>
   </div>
 </section>
 
 <script>
-  import {
-    createStoryTransitionController,
-    resolveStoryEntryIndex,
-    type StoryScrollDirection,
-  } from "./storyMotion";
-
   const reducedMotion = window.matchMedia?.(
     "(prefers-reduced-motion: reduce)",
   ).matches;
@@ -150,89 +68,22 @@ for (let index = 0; index < content.entries.length; index += 1) {
   if (!reducedMotion && "IntersectionObserver" in window) {
     document.querySelectorAll<HTMLElement>("[data-template-story]").forEach((story) => {
       if (story.getAttribute("data-story-motion") === "ready") return;
-      const entries = story.querySelectorAll<HTMLElement>("[data-story-entry]");
-      const stage = story.querySelector<HTMLElement>("[data-story-stage]");
-      const media = story.querySelectorAll<HTMLElement>("[data-story-media-index]");
-      const clearExitingMedia = () => {
-        media.forEach((item) => item.removeAttribute("data-story-exiting"));
-      };
-      const transitionMedia = (index: number) => {
-        const current = story.querySelector<HTMLElement>(
-          "[data-story-media-index][data-active]",
-        );
-        const next = story.querySelector<HTMLElement>(
-          `[data-story-media-index="${index}"]`,
-        );
-        if (!next || current === next) return;
 
-        clearExitingMedia();
-        if (current) {
-          current.setAttribute("data-story-exiting", "");
-          current.removeAttribute("data-active");
-        }
-        next.removeAttribute("data-story-exiting");
-        next.setAttribute("data-active", "");
-      };
-      const firstMedia = media.item(0);
-      const firstMediaIndex = Number(firstMedia?.getAttribute("data-story-media-index") ?? 0);
-      firstMedia?.setAttribute("data-active", "");
-      const transitionController = createStoryTransitionController({
-        initialIndex: firstMediaIndex,
-        duration: 420,
-        onTransition: (_from, to) => transitionMedia(to),
-        onSettled: clearExitingMedia,
-      });
-      const revealObserver = new IntersectionObserver(
+      const copy = story.querySelector<HTMLElement>("[data-story-copy]");
+      if (!copy) return;
+      const observer = new IntersectionObserver(
         (observations) => {
           observations.forEach((observation) => {
             if (!observation.isIntersecting) return;
             observation.target.classList.add("is-visible");
+            observer.unobserve(observation.target);
           });
         },
-        { threshold: 0.14 },
+        { threshold: 0.18 },
       );
-      let focusedIndex = firstMediaIndex;
-      let lastScrollY = window.scrollY;
-      let scrollFrame: number | undefined;
-      const updateMediaFromScroll = () => {
-        scrollFrame = undefined;
-        const currentScrollY = window.scrollY;
-        const direction: StoryScrollDirection =
-          currentScrollY > lastScrollY
-            ? 1
-            : currentScrollY < lastScrollY
-              ? -1
-              : 0;
-        lastScrollY = currentScrollY;
-        const entryTops = Array.from(
-          entries,
-          (entry) => entry.getBoundingClientRect().top,
-        );
-        focusedIndex = resolveStoryEntryIndex(
-          entryTops,
-          focusedIndex,
-          direction,
-          window.innerHeight,
-        );
-        if (story.querySelector(`[data-story-media-index="${focusedIndex}"]`)) {
-          transitionController.request(focusedIndex);
-        }
-      };
-      const scheduleMediaUpdate = () => {
-        if (scrollFrame !== undefined) return;
-        scrollFrame = window.requestAnimationFrame(updateMediaFromScroll);
-      };
+
       story.setAttribute("data-story-motion", "ready");
-      if (stage) {
-        story.setAttribute("data-story-stage-ready", "");
-        stage.setAttribute("data-story-stage-ready", "");
-      }
-      entries.forEach((entry) => {
-        revealObserver.observe(entry);
-      });
-      window.addEventListener("scroll", scheduleMediaUpdate, { passive: true });
-      window.addEventListener("resize", scheduleMediaUpdate, { passive: true });
-      scheduleMediaUpdate();
+      observer.observe(copy);
     });
   }
 </script>

@@ -52,9 +52,9 @@ The first independent run reported six failing checklist areas. Five public defe
 
 - [ ] Test at `390x844`, `768x1024`, `1440x900`, and `1920x1080` with screenshots and DOM/overflow checks.
 - [ ] Verify no horizontal overflow, clipped controls, overlapping header, unreadable line length, or unstable section ordering.
-- [ ] Verify hero crop, immediate image/poster fallback, supplied dimensions, navigation contrast, story media, gallery crop/controls, schedule, guidance, venue, map fallback, RSVP entry, mural entry, and footer.
+- [ ] Verify hero crop, immediate image/poster fallback, supplied dimensions, navigation contrast, the deliberate gap before the full-bleed story image, its short overlay copy, semantic section labels without numeric prefixes, gallery crop/controls, schedule, guidance, venue, map fallback, RSVP entry, mural entry, and footer.
 - [ ] Confirm the header is transparent over the hero, becomes solid after it, and starts solid on `/hospedagem` and other no-hero pages.
-- [ ] Confirm desktop/mobile breakpoints preserve content and the mobile story uses normal vertical flow with its canonical media.
+- [ ] Confirm desktop/mobile breakpoints preserve content, the story keeps one compact background composition, and no horizontal overflow appears.
 - [ ] Confirm all visible interface text is `pt-BR` in the wedding experience; technical fixture copy may remain intentionally distinct but must be host-owned.
 
 ## Keyboard, focus, and no-JavaScript access
@@ -71,7 +71,7 @@ The first independent run reported six failing checklist areas. Five public defe
 
 - [ ] In normal motion mode, confirm one Lenis instance uses `autoRaf: true`, `lerp: 0.095`, `smoothWheel: true`, `syncTouch: false`, `wheelMultiplier: 0.9`, and `anchors: true`.
 - [ ] Confirm wheel anchors scroll smoothly, touch remains native, nested dialog scrolling is not captured, and no forced nested page scroll is introduced.
-- [ ] Load with `prefers-reduced-motion: reduce` and confirm Lenis is not instantiated, entrances are immediately visible, transitions are removed, and the sticky story stage is replaced by normal vertical content.
+- [ ] Load with `prefers-reduced-motion: reduce` and confirm Lenis is not instantiated, the story overlay is immediately visible, transitions are removed, and the section remains complete in normal document flow.
 - [ ] Change reduced-motion preference at runtime and confirm the active Lenis instance is destroyed and recreated only when motion is enabled again.
 - [ ] Confirm the initial CSS hero entrance and generic reveals run once with restrained opacity/small vertical movement, never depend on final media, never hide content before enhancement, and introduce no blocking preloader, parallax, or keyboard trap.
 

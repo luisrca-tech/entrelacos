@@ -70,16 +70,9 @@ export type SectionContent = {
   body?: string;
 };
 
-export type StoryEntry = {
-  id: string;
-  eyebrow?: string;
-  title: string;
+export type StoryContent = Omit<SectionContent, "body"> & {
   body: string;
-  media?: Media;
-};
-
-export type StoryContent = SectionContent & {
-  entries: readonly StoryEntry[];
+  media: Media;
 };
 
 export type HeroIntroContent = {
@@ -468,36 +461,13 @@ export function validateSectionContent(
     assertNonEmptyString(value.body, `${name}.body`);
 }
 
-function validateStoryEntry(
-  value: unknown,
-  name: string,
-): asserts value is StoryEntry {
-  assertObject(value, name);
-  validateSerializableContent(value, name);
-  assertNonEmptyString(value.id, `${name}.id`);
-  validateSectionIds([value.id]);
-  assertNonEmptyString(value.title, `${name}.title`);
-  assertNonEmptyString(value.body, `${name}.body`);
-  if (value.eyebrow !== undefined)
-    assertNonEmptyString(value.eyebrow, `${name}.eyebrow`);
-  if (value.media !== undefined) validateMedia(value.media, `${name}.media`);
-}
-
 export function validateStoryContent(
   value: unknown,
 ): asserts value is StoryContent {
   validateSectionContent(value, "story");
   assertObject(value, "story");
-  if (!Array.isArray(value.entries) || value.entries.length < 2)
-    throw new TypeError("story.entries must contain at least two entries");
-
-  const ids = [value.id];
-  for (let index = 0; index < value.entries.length; index += 1) {
-    const entry = value.entries[index];
-    validateStoryEntry(entry, `story.entries[${index}]`);
-    ids.push(entry.id);
-  }
-  validateSectionIds(ids);
+  assertNonEmptyString(value.body, "story.body");
+  validateMedia(value.media, "story.media");
 }
 
 export function validateHeroContent(
@@ -757,10 +727,6 @@ export function validateWeddingHomeProps(
   validateSectionIds(sectionIds);
   const renderedIds = [...sectionIds];
   for (const key of order) {
-    if (key === "story" && value.story !== undefined) {
-      for (let index = 0; index < value.story.entries.length; index += 1)
-        renderedIds.push(value.story.entries[index].id);
-    }
     if (key === "gallery" && value.gallery !== undefined) {
       for (let index = 0; index < value.gallery.items.length; index += 1)
         renderedIds.push(value.gallery.items[index].id);
@@ -782,8 +748,6 @@ export function validateWeddingHomeProps(
     if (key === "hero") generatedIds.push(`${value.hero.id}-title`);
     if (key === "story" && value.story !== undefined) {
       generatedIds.push(`${value.story.id}-title`);
-      for (const entry of value.story.entries)
-        generatedIds.push(`${entry.id}-title`);
     }
     if (key === "gallery" && value.gallery !== undefined)
       generatedIds.push(`${value.gallery.id}-title`);
