@@ -29,21 +29,21 @@ Names below reflect the runtime through Block 5. Messages, reports, and quota ac
 
 API URL examples use the origin `http://localhost:8080`; `/v1` belongs to the HTTP route path. The panel remains on `http://localhost:3000`, and the public demo remains on `http://localhost:4321`. The example `PUBLIC_SITE_ID=demo-wedding` is fictitious and does not identify a provisioned tenant.
 
-Database integration tests use `DATABASE_URL_TEST` exclusively and verify the actual Neon project, branch, endpoint, database, and role before proceeding. Never fall back to `DATABASE_URL`. Store the expected identities in private `DATABASE_PROJECT_ID`, `DATABASE_DEVELOPMENT_BRANCH_ID`, `DATABASE_TEST_BRANCH_ID`, and `DATABASE_NAME` configuration. Different hostnames alone do not prove branch isolation. Block 2 validation status is recorded in `docs/block2Validation.md`; Block 4 and Block 5 execution status is recorded in their respective validation documents.
+Database integration tests use `DATABASE_URL_TEST` exclusively and verify the actual Neon project, branch, endpoint, database, and role before proceeding. Never fall back to `DATABASE_URL`. Store development/test expected identities in private `DATABASE_PROJECT_ID`, `DATABASE_DEVELOPMENT_BRANCH_ID`, `DATABASE_TEST_BRANCH_ID`, and `DATABASE_NAME` configuration. Production uses only `DATABASE_URL` and derives its endpoint, database, and role checks from that URL. Block 2 validation status is recorded in `docs/block2Validation.md`; Block 4 and Block 5 execution status is recorded in their respective validation documents.
 
 | Variable | Consumer | Classification |
 | --- | --- | --- |
 | `PORT` | Node API | Server runtime port |
-| `APP_ENV` | Planned API configuration | Environment selector; does not grant permission to main |
+| `APP_ENV` | API configuration outside Railway production | Explicit environment selector; Railway production derives it from `RAILWAY_ENVIRONMENT_NAME` |
 | `DATABASE_URL` | API / manually selected migration process | Secret; never frontend |
 | `DATABASE_URL_TEST` | Test API / integration tests / test migrations | Secret; isolated disposable database only, with no development fallback |
 | `BETTER_AUTH_SECRET` | API | Secret; separate per environment |
-| `BETTER_AUTH_URL` | API | Auth endpoint base URL; align configured route prefix |
+| `BETTER_AUTH_URL` | API outside Railway | Auth endpoint base URL; Railway derives it from `RAILWAY_PUBLIC_DOMAIN` |
 | `ADMIN_ORIGIN` | API | Explicit trusted admin origin |
 | `SMS_MODE` | API | `manual` MVP default; `simulated` for explicit demo/testing; `real` only behind Twilio gates |
 | `GUEST_FINGERPRINT_SECRET` | API | Secret HMAC key for phone/IP fingerprints and domain-separated group PIN derivation |
 | `EXPOSE_SIMULATION_CODE` | API | Development-only opt-in; disclosure still requires a valid demo grant |
-| `TRUST_PROXY_HEADERS` | API | Explicit opt-in for trusted deployment proxies before accepting forwarded client IP headers |
+| `TRUST_PROXY_HEADERS` | API outside Railway | Explicit opt-in for trusted proxies; Railway automatically trusts its documented `X-Real-IP` header |
 | `GUEST_DEMO_GRANT_SECRET` | API | Secret HMAC key for five-minute owner-issued demo grants |
 | `DEMO_PHONE_ALLOWLIST` | API | Private normalized Brazilian phone allowlist for demo grant issuance |
 | `TWILIO_ACCOUNT_SID` | API | Server provider identifier |

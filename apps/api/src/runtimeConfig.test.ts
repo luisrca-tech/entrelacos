@@ -23,9 +23,25 @@ describe("API runtime configuration", () => {
     expect(() =>
       readRuntimeConfig({ ...settings, APP_ENV: undefined }),
     ).toThrow();
-    expect(() =>
+    expect(
       readRuntimeConfig({ ...settings, APP_ENV: "production" }),
-    ).toThrow();
+    ).toMatchObject({ target: "production" });
+  });
+
+  it("derives production defaults from Railway", () => {
+    expect(
+      readRuntimeConfig({
+        ...settings,
+        APP_ENV: undefined,
+        BETTER_AUTH_URL: undefined,
+        RAILWAY_ENVIRONMENT_NAME: "production",
+        RAILWAY_PUBLIC_DOMAIN: "entrelacosapi-production.up.railway.app",
+      }),
+    ).toMatchObject({
+      target: "production",
+      baseURL: "https://entrelacosapi-production.up.railway.app",
+      trustProxyHeaders: true,
+    });
   });
   it.each(["", "0", "65536", "abc", "8080.5"])(
     "rejects invalid port %s",

@@ -251,6 +251,14 @@ function guestOptions(
   };
 }
 
+export function forwardedClientIp(headers: Headers): string | undefined {
+  const forwarded =
+    headers.get("x-real-ip")?.trim() ||
+    headers.get("cf-connecting-ip")?.trim() ||
+    headers.get("x-forwarded-for")?.split(",")[0]?.trim();
+  return forwarded || undefined;
+}
+
 function resolveClientIp(
   options: AuthHttpOptions,
   request: Request,
@@ -259,10 +267,8 @@ function resolveClientIp(
   const resolved = options.guestResolveClientIp?.(request);
   if (resolved?.trim()) return resolved.trim();
   if (options.guestTrustProxyHeaders) {
-    const forwarded =
-      request.headers.get("cf-connecting-ip") ??
-      request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
-    if (forwarded?.trim()) return forwarded.trim();
+    const forwarded = forwardedClientIp(request.headers);
+    if (forwarded) return forwarded;
   }
   try {
     const info = getConnInfo(context);
