@@ -4,18 +4,16 @@ Server-only Drizzle/node-postgres connection and migration boundary. Importing t
 
 The operator will supply separate Neon connections for development and main. Integration tests require a distinct disposable resource, not either of those databases. Do not copy production PII into test branches.
 
-Set development and test connections and verified expected resource identities in the ignored `.env` in this package. Generate SQL offline, review it, then select an authorized destination explicitly:
+Set `DATABASE_URL` (and, for integration tests, `DATABASE_URL_TEST` plus verified identities) in the ignored `.env` in this package. Generate SQL offline, review it, then apply it to whatever database `DATABASE_URL` currently points at:
 
 ```sh
 bun run --cwd packages/database db:generate
-bun run --cwd packages/database db:migrate --target=test
-# Only after the test migration and its integration checks pass:
-bun run --cwd packages/database db:migrate --target=development
+bun run --cwd packages/database db:migrate
 bun run test:db
 ```
 
-The migration runner accepts only `test` and `development` and verifies the server-reported identity before applying SQL. Test selection requires `DATABASE_URL_TEST`; it never falls back to development. The dedicated integration suite fails when the destination cannot be verified. It does not run migrations automatically. Cleanup is limited to identified fixtures, never an unscoped table reset. Production migrations are outside this runner and require a separate authorized procedure. See `docs/block2Validation.md` for actual completion evidence.
+`db:migrate` reads only `DATABASE_URL`. It does not take a target flag and does not verify Neon branch or project identity before applying SQL. The dedicated integration suite uses `DATABASE_URL_TEST` and still verifies destination identity. It does not run migrations automatically. Cleanup is limited to identified fixtures, never an unscoped table reset. See `docs/block2Validation.md` for actual completion evidence.
 
 ## Listening
 
-Expected Neon identities supplement URL checks because pooled and direct endpoints can refer to the same branch. SQL logging is disabled to avoid logging credential-bearing parameters or literals. Explicit migration targets replace the scaffold's ambient connection selection.
+Expected Neon identities still guard runtime and test connections because pooled and direct endpoints can refer to the same branch. SQL logging is disabled to avoid logging credential-bearing parameters or literals. The migration runner follows the configured `DATABASE_URL` instead of an environment target, so the same command works against whichever database that URL names.

@@ -288,18 +288,25 @@ export async function verifyDatabaseConnection(
   return identity;
 }
 
+export function resolveMigrationConnectionUrl(
+  env: DatabaseEnvironment = process.env,
+): string {
+  return normalizeDatabaseUrl(requiredEnvironmentValue(env, "DATABASE_URL"));
+}
+
 export async function runDatabaseMigrations(options: {
-  target: DatabaseTarget;
   migrationsFolder: string;
   env?: DatabaseEnvironment;
 }): Promise<void> {
-  const connection = createDatabaseConnection(options);
+  const pool = new Pool({
+    connectionString: resolveMigrationConnectionUrl(options.env),
+  });
+  const db = drizzle(pool, { logger: false });
   try {
-    await verifyDatabaseConnection(connection);
-    await migrate(connection.db, {
+    await migrate(db, {
       migrationsFolder: options.migrationsFolder,
     });
   } finally {
-    await connection.close();
+    await pool.end();
   }
 }
