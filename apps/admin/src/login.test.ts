@@ -16,4 +16,8 @@ describe("login form fallback safety", () => {
     );
     expect(source).toContain("disabled={!hydrated || pending}");
   });
+
+  it("keeps the login page heading as a document-level h1", () => {
+    expect(source.match(/<h1\b/g)).toHaveLength(1);
+  });
 });
