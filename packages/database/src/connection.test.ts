@@ -6,6 +6,7 @@ import {
   normalizeNeonEndpoint,
   readDatabaseIdentity,
   resolveDatabaseConfig,
+  resolveMigrationConnectionUrl,
 } from "./connection";
 
 const developmentUrl =
@@ -204,5 +205,28 @@ describe("database connection guards", () => {
     await connection.close();
 
     expect(end).toHaveBeenCalledOnce();
+  });
+});
+
+describe("migration connection url", () => {
+  it("uses DATABASE_URL without environment identity variables", () => {
+    expect(
+      resolveMigrationConnectionUrl({
+        DATABASE_URL: developmentUrl,
+      }),
+    ).toBe(normalizeDatabaseUrl(developmentUrl));
+  });
+
+  it("ignores DATABASE_URL_TEST", () => {
+    expect(
+      resolveMigrationConnectionUrl({
+        DATABASE_URL: developmentUrl,
+        DATABASE_URL_TEST: testUrl,
+      }),
+    ).toBe(normalizeDatabaseUrl(developmentUrl));
+  });
+
+  it("requires DATABASE_URL", () => {
+    expect(() => resolveMigrationConnectionUrl({})).toThrow("DATABASE_URL");
   });
 });

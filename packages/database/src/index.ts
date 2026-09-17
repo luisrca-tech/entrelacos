@@ -18,6 +18,7 @@ export {
   normalizeNeonEndpoint,
   readDatabaseIdentity,
   resolveDatabaseConfig,
+  resolveMigrationConnectionUrl,
   runDatabaseMigrations,
   verifyDatabaseConnection,
 } from "./connection";
