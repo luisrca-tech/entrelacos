@@ -98,6 +98,8 @@ describe("template-root public boundary", () => {
     expect(demoPage).not.toContain("demo-hero");
     expect(demoPage).toContain('poster: "/marina-caio-hero-poster.webp"');
     expect(demoPage).toContain('src: "/marina-caio-story-encounter.webp"');
+    expect(demoPage).toContain('src: "/marina-caio-story-home.webp"');
+    expect(demoPage).toContain('src: "/marina-caio-story-celebration.webp"');
     expect(
       existsSync(
         resolve(repoRoot, "apps/wedding-demo/public/marina-caio-hero.mp4"),
