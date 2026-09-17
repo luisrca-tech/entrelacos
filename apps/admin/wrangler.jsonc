@@ -6,5 +6,10 @@
   "main": "@tanstack/react-start/server-entry",
   "observability": {
     "enabled": true
+  },
+  "env": {
+    "dev": {
+      "name": "admin-dev"
+    }
   }
 }
