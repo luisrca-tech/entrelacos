@@ -28,7 +28,7 @@ describe("StorySection compact full-bleed composition", () => {
   });
 
   it("keeps the image immersive while preserving readable copy", () => {
-    expect(stylesSource).toContain("min-height: clamp(28rem, 60svh, 42rem);");
+    expect(stylesSource).toContain("min-height: clamp(42rem, 86svh, 62rem);");
     expect(stylesSource).toContain("margin-top: clamp(3rem, 5vw, 5rem);");
     expect(stylesSource).toContain(".template-story__media");
     expect(stylesSource).toContain(
@@ -51,5 +51,15 @@ describe("StorySection compact full-bleed composition", () => {
     expect(stylesSource).toContain(".template-story__copy.is-visible");
     expect(stylesSource).not.toContain('window.addEventListener("scroll"');
     expect(sectionSource).not.toContain("createStoryTransitionController");
+  });
+
+  it("cycles optional host-owned stills with a crossfade, not a sticky sequence", () => {
+    expect(sectionSource).toContain("content.sequence");
+    expect(sectionSource).toContain("data-story-frame");
+    expect(sectionSource).toContain("setupStoryMediaCycle");
+    expect(stylesSource).toContain(".template-story__media > img.is-active");
+    expect(stylesSource).toContain(
+      "opacity 650ms cubic-bezier(0.2, 0.7, 0.2, 1)",
+    );
   });
 });

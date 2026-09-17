@@ -350,6 +350,60 @@ describe("template-root v1 content contracts", () => {
     ).toThrow(/width/i);
   });
 
+  it("accepts an optional short image sequence after the primary still", () => {
+    expect(() =>
+      validateStoryContent({
+        ...storyFixture,
+        sequence: [
+          {
+            kind: "image",
+            src: "/story-two.png",
+            alt: "Segundo instante",
+            width: 1200,
+            height: 800,
+          },
+        ],
+      }),
+    ).not.toThrow();
+  });
+
+  it("rejects an empty or non-image story sequence", () => {
+    expect(() =>
+      validateStoryContent({ ...storyFixture, sequence: [] }),
+    ).toThrow(/story\.sequence/i);
+
+    expect(() =>
+      validateStoryContent({
+        ...storyFixture,
+        media: {
+          kind: "video",
+          src: "/story.mp4",
+          poster: "/story-poster.png",
+          alt: "Filme",
+          width: 1200,
+          height: 800,
+        },
+        sequence: [storyFixture.media],
+      }),
+    ).toThrow(/story\.sequence/i);
+
+    expect(() =>
+      validateStoryContent({
+        ...storyFixture,
+        sequence: [
+          {
+            kind: "video",
+            src: "/story.mp4",
+            poster: "/story-poster.png",
+            alt: "Filme",
+            width: 1200,
+            height: 800,
+          },
+        ],
+      }),
+    ).toThrow(/story\.sequence\[0\]/i);
+  });
+
   it("validates a compact host-owned gallery and its required labels", () => {
     expect(() =>
       validateGalleryContent({

@@ -73,6 +73,7 @@ export type SectionContent = {
 export type StoryContent = Omit<SectionContent, "body"> & {
   body: string;
   media: Media;
+  sequence?: readonly ImageMedia[];
 };
 
 export type HeroIntroContent = {
@@ -468,6 +469,17 @@ export function validateStoryContent(
   assertObject(value, "story");
   assertNonEmptyString(value.body, "story.body");
   validateMedia(value.media, "story.media");
+  if (value.sequence === undefined) return;
+  if (value.media.kind !== "image")
+    throw new TypeError("story.sequence requires image media");
+  if (!Array.isArray(value.sequence) || value.sequence.length === 0)
+    throw new TypeError("story.sequence must contain at least one item");
+  for (let index = 0; index < value.sequence.length; index += 1) {
+    const item = value.sequence[index];
+    validateMedia(item, `story.sequence[${index}]`);
+    if (item.kind !== "image")
+      throw new TypeError(`story.sequence[${index}] must be an image`);
+  }
 }
 
 export function validateHeroContent(

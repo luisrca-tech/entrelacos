@@ -1,6 +1,7 @@
 ---
 import { validateStoryContent } from "../content";
 import type { StoryContent } from "../content";
+import { storyBackgroundFrames } from "./storyMediaCycle";
 
 interface Props {
   content: StoryContent;
@@ -10,6 +11,11 @@ interface Props {
 const { content, tone = "ivory" } = Astro.props;
 validateStoryContent(content);
 const id = content.id;
+const frames = storyBackgroundFrames({
+  media: content.media,
+  sequence: content.sequence,
+});
+const primary = frames[0] ?? content.media;
 ---
 
 <section
@@ -17,17 +23,25 @@ const id = content.id;
   class:list={["template-story", `template-story--${tone}`]}
   data-template-story
   aria-labelledby={`${id}-title`}
-  style={`--story-media-ratio: ${content.media.width} / ${content.media.height};`}
+  style={`--story-media-ratio: ${primary.width} / ${primary.height};`}
 >
   <figure class="template-story__media">
     {content.media.kind === "image" ? (
-      <img
-        src={content.media.src}
-        alt={content.media.alt}
-        width={content.media.width}
-        height={content.media.height}
-        loading="lazy"
-      />
+      frames.map((frame, index) =>
+        frame.kind === "image" ? (
+          <img
+            src={frame.src}
+            alt={index === 0 ? frame.alt : ""}
+            width={frame.width}
+            height={frame.height}
+            loading="lazy"
+            decoding="async"
+            data-story-frame
+            class:list={{ "is-active": index === 0 }}
+            aria-hidden={index === 0 ? undefined : "true"}
+          />
+        ) : null,
+      )
     ) : (
       <video
         src={content.media.src}
@@ -61,16 +75,23 @@ const id = content.id;
 </section>
 
 <script>
+  import { setupStoryMediaCycle } from "./storyMediaCycle";
+
   const reducedMotion = window.matchMedia?.(
     "(prefers-reduced-motion: reduce)",
   ).matches;
 
-  if (!reducedMotion && "IntersectionObserver" in window) {
-    document.querySelectorAll<HTMLElement>("[data-template-story]").forEach((story) => {
-      if (story.getAttribute("data-story-motion") === "ready") return;
+  document.querySelectorAll<HTMLElement>("[data-template-story]").forEach((story) => {
+    if (story.dataset.storyCycle === "ready") return;
+    story.dataset.storyCycle = "ready";
 
-      const copy = story.querySelector<HTMLElement>("[data-story-copy]");
-      if (!copy) return;
+    const copy = story.querySelector<HTMLElement>("[data-story-copy]");
+    if (
+      !reducedMotion &&
+      "IntersectionObserver" in window &&
+      copy &&
+      story.getAttribute("data-story-motion") !== "ready"
+    ) {
       const observer = new IntersectionObserver(
         (observations) => {
           observations.forEach((observation) => {
@@ -84,6 +105,11 @@ const id = content.id;
 
       story.setAttribute("data-story-motion", "ready");
       observer.observe(copy);
+    }
+
+    setupStoryMediaCycle(story, {
+      reducedMotion,
+      Observer: window.IntersectionObserver,
     });
-  }
+  });
 </script>
