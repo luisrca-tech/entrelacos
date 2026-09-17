@@ -4,6 +4,29 @@ import {
   type GuestAccessPinResponse,
   type GuestGroupRecord,
 } from "@entrelacos/contracts";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  Badge,
+  Button,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  Checkbox,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+  Input,
+} from "@entrelacos/ui";
 import { type FormEvent, useCallback, useEffect, useState } from "react";
 import { ApiError, apiRequest } from "../lib/apiClient";
 import {
@@ -78,6 +101,9 @@ export function GuestGroupsSection({
     null,
   );
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
+  const [rotationTarget, setRotationTarget] = useState<GuestGroupRecord | null>(
+    null,
+  );
   const inactive = lifecycle === "INACTIVE";
 
   const load = useCallback(async () => {
@@ -138,6 +164,20 @@ export function GuestGroupsSection({
         ),
       };
     });
+  }
+
+  function setRepresentative(index: number) {
+    setForm((current) =>
+      current
+        ? {
+            ...current,
+            members: current.members.map((member, memberIndex) => ({
+              ...member,
+              isRepresentative: memberIndex === index,
+            })),
+          }
+        : current,
+    );
   }
 
   function addMember() {
@@ -294,12 +334,6 @@ export function GuestGroupsSection({
 
   async function rotateAccessPin(group: GuestGroupRecord) {
     if (pending || inactive || group.isForeign) return;
-    if (
-      !window.confirm(
-        `Gerar um novo PIN para “${group.name}”? O PIN anterior e os acessos ativos deixarão de funcionar.`,
-      )
-    )
-      return;
     setPending(true);
     setError("");
     setNotice("");
@@ -338,20 +372,21 @@ export function GuestGroupsSection({
         </div>
         {!inactive && (
           <div className="inline-actions">
-            <button
+            <Button
               disabled={pending}
               type="button"
               onClick={() => startCreate(false)}
             >
               Novo grupo
-            </button>
-            <button
+            </Button>
+            <Button
               disabled={pending}
               type="button"
+              variant="outline"
               onClick={() => startCreate(true)}
             >
               Convite individual
-            </button>
+            </Button>
           </div>
         )}
       </div>
@@ -361,24 +396,225 @@ export function GuestGroupsSection({
           criação, edição e exclusão ficam indisponíveis.
         </p>
       )}
-      {error && <p role="alert">{error}</p>}
+      {error && !form && !deleteTarget && <p role="alert">{error}</p>}
       {notice && <p role="status">{notice}</p>}
-      {deleteTarget && (
-        <div
-          className="group-delete-confirmation"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="group-delete-title"
-        >
-          <h3 id="group-delete-title">Excluir {deleteTarget.name}?</h3>
-          <p>
-            Esta ação remove o grupo, convidados, respostas, histórico, sessão,
-            mensagem e dados de acesso associados. Digite o nome exato do grupo
-            para continuar: <strong>{deleteTarget.name}</strong>
-          </p>
-          <label>
+
+      <Dialog
+        open={form !== null}
+        onOpenChange={(open) => !open && closeForm()}
+      >
+        <DialogContent className="max-w-3xl max-h-[min(90vh,720px)] overflow-y-auto guest-group-dialog">
+          <DialogTitle>{editingId ? "Editar grupo" : "Novo grupo"}</DialogTitle>
+          <DialogDescription>
+            Escolha o representante e revise os dados antes de salvar.
+          </DialogDescription>
+          {form && (
+            <form className="guest-group-form data-form" onSubmit={save}>
+              {error && <p role="alert">{error}</p>}
+              <label htmlFor="guest-group-name">
+                Nome do grupo
+                <Input
+                  id="guest-group-name"
+                  maxLength={160}
+                  required
+                  value={form.name}
+                  onChange={(event) => updateForm({ name: event.target.value })}
+                  placeholder="Família Silva"
+                />
+              </label>
+              <fieldset>
+                <legend>Tipo de convite</legend>
+                <label className="checkbox-label" htmlFor="guest-group-foreign">
+                  <Checkbox
+                    id="guest-group-foreign"
+                    checked={form.isForeign}
+                    onCheckedChange={(checked) =>
+                      updateForm({ isForeign: checked === true })
+                    }
+                  />
+                  Grupo estrangeiro
+                </label>
+              </fieldset>
+              {form.isForeign ? (
+                <p className="help-text" role="note">
+                  Grupo estrangeiro não usa telefone nem SMS. Este convite exige
+                  atendimento administrativo; não há autenticação alternativa.
+                </p>
+              ) : (
+                <label htmlFor="guest-group-phone">
+                  Celular do representante
+                  <Input
+                    id="guest-group-phone"
+                    aria-describedby="guest-group-phone-help"
+                    aria-invalid={phoneInvalid}
+                    inputMode="tel"
+                    maxLength={40}
+                    placeholder="(62) 99999-9999"
+                    required
+                    type="tel"
+                    value={form.phone}
+                    onChange={(event) =>
+                      updateForm({ phone: event.target.value })
+                    }
+                  />
+                  <span className="help-text" id="guest-group-phone-help">
+                    Use um celular brasileiro com DDD. Exemplo: (62) 99999-9999.
+                    {phoneInvalid && " Confira o número informado."}
+                  </span>
+                </label>
+              )}
+              <fieldset className="guest-members-fieldset">
+                <legend>Convidados</legend>
+                <p className="help-text">
+                  Escolha exatamente um representante. Ele será o contato
+                  responsável pela confirmação deste convite.
+                </p>
+                {form.members.map((member, index) => (
+                  <div className="guest-member-editor" key={member.id ?? index}>
+                    <label htmlFor={`guest-member-${index}`}>
+                      Nome completo
+                      <Input
+                        id={`guest-member-${index}`}
+                        maxLength={160}
+                        required
+                        value={member.fullName}
+                        onChange={(event) =>
+                          updateMember(index, { fullName: event.target.value })
+                        }
+                      />
+                    </label>
+                    <label
+                      className="checkbox-label"
+                      htmlFor={`guest-representative-${index}`}
+                    >
+                      <Checkbox
+                        id={`guest-representative-${index}`}
+                        checked={member.isRepresentative}
+                        onCheckedChange={(checked) =>
+                          checked && setRepresentative(index)
+                        }
+                      />
+                      Representante
+                    </label>
+                    <Button
+                      variant="outline"
+                      disabled={pending || form.members.length <= 1}
+                      type="button"
+                      onClick={() => removeMember(index)}
+                    >
+                      Remover
+                    </Button>
+                  </div>
+                ))}
+                <Button
+                  disabled={pending}
+                  type="button"
+                  variant="outline"
+                  onClick={addMember}
+                >
+                  Adicionar convidado
+                </Button>
+              </fieldset>
+              <div className="inline-actions">
+                <Button disabled={pending} type="submit">
+                  {pending
+                    ? "Salvando…"
+                    : editingId
+                      ? "Salvar grupo"
+                      : "Criar grupo"}
+                </Button>
+                <Button
+                  disabled={pending}
+                  type="button"
+                  variant="outline"
+                  onClick={closeForm}
+                >
+                  Cancelar
+                </Button>
+              </div>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {demoGrant && (
+        <Card className="demo-guest-grant" role="status">
+          <CardHeader>
+            <CardTitle>
+              Autorização temporária · {demoGrant.groupName}
+            </CardTitle>
+            <CardDescription>
+              Cole este valor somente no campo de demonstração do site público.
+              Ele expira às {new Date(demoGrant.expiresAt).toLocaleTimeString()}{" "}
+              e não deve ser colocado em URL, cookie ou armazenamento local.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Input
+              aria-label="Autorização temporária da demonstração"
+              readOnly
+              spellCheck={false}
+              value={demoGrant.grant}
+            />
+          </CardContent>
+        </Card>
+      )}
+      {accessPin && (
+        <Card className="demo-guest-grant" role="status">
+          <CardHeader>
+            <CardTitle>PIN de acesso · {accessPin.groupName}</CardTitle>
+            <CardDescription>
+              Envie este PIN junto com o link por WhatsApp ou pelo canal
+              escolhido. Ele não é enviado automaticamente e permanece válido
+              até ser rotacionado.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Input
+              aria-label={`PIN de acesso de ${accessPin.groupName}`}
+              inputMode="numeric"
+              readOnly
+              value={accessPin.accessPin}
+            />
+            <div className="inline-actions">
+              <Button type="button" onClick={() => void copyAccessPin()}>
+                Copiar PIN
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setAccessPin(null)}
+              >
+                Ocultar PIN
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      <AlertDialog
+        open={deleteTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDeleteTarget(null);
+            setDeleteConfirmation("");
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir {deleteTarget?.name}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta ação remove o grupo, convidados, respostas, histórico,
+              sessão, mensagem e dados de acesso associados. Digite o nome exato
+              do grupo para continuar: <strong>{deleteTarget?.name}</strong>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {error && <p role="alert">{error}</p>}
+          <label htmlFor="delete-group-confirmation">
             Nome exato do grupo
-            <input
+            <Input
+              id="delete-group-confirmation"
               autoComplete="off"
               value={deleteConfirmation}
               onChange={(event) => {
@@ -387,202 +623,47 @@ export function GuestGroupsSection({
               }}
             />
           </label>
-          <div className="inline-actions">
-            <button
-              type="button"
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={pending}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
               className="danger-action"
-              disabled={pending || deleteConfirmation !== deleteTarget.name}
-              onClick={() => void remove(deleteTarget)}
+              disabled={pending || deleteConfirmation !== deleteTarget?.name}
+              onClick={() => deleteTarget && void remove(deleteTarget)}
             >
               {pending ? "Excluindo…" : "Excluir grupo definitivamente"}
-            </button>
-            <button
-              type="button"
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={rotationTarget !== null}
+        onOpenChange={(open) => !open && setRotationTarget(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Rotacionar PIN?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {rotationTarget
+                ? `Gerar um novo PIN para “${rotationTarget.name}”? O PIN anterior e os acessos ativos deixarão de funcionar.`
+                : ""}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={pending}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
               disabled={pending}
               onClick={() => {
-                setDeleteTarget(null);
-                setDeleteConfirmation("");
-                setError("");
+                if (rotationTarget) void rotateAccessPin(rotationTarget);
+                setRotationTarget(null);
               }}
             >
-              Cancelar
-            </button>
-          </div>
-        </div>
-      )}
-      {demoGrant && (
-        <div className="demo-guest-grant" role="status">
-          <strong>Autorização temporária · {demoGrant.groupName}</strong>
-          <p>
-            Cole este valor somente no campo de demonstração do site público.
-            Ele expira às {new Date(demoGrant.expiresAt).toLocaleTimeString()} e
-            não deve ser colocado em URL, cookie ou armazenamento local.
-          </p>
-          <input
-            aria-label="Autorização temporária da demonstração"
-            readOnly
-            spellCheck={false}
-            value={demoGrant.grant}
-          />
-        </div>
-      )}
-      {accessPin && (
-        <div className="demo-guest-grant" role="status">
-          <strong>PIN de acesso · {accessPin.groupName}</strong>
-          <p>
-            Envie este PIN junto com o link por WhatsApp ou pelo canal
-            escolhido. Ele não é enviado automaticamente e permanece válido até
-            ser rotacionado.
-          </p>
-          <input
-            aria-label={`PIN de acesso de ${accessPin.groupName}`}
-            inputMode="numeric"
-            readOnly
-            value={accessPin.accessPin}
-          />
-          <div className="inline-actions">
-            <button type="button" onClick={() => void copyAccessPin()}>
-              Copiar PIN
-            </button>
-            <button type="button" onClick={() => setAccessPin(null)}>
-              Ocultar PIN
-            </button>
-          </div>
-        </div>
-      )}
-      {form && !inactive && (
-        <form className="guest-group-form data-form" onSubmit={save}>
-          <div className="guest-group-form-heading">
-            <h3>{editingId ? "Editar grupo" : "Novo grupo"}</h3>
-            <button type="button" onClick={closeForm} disabled={pending}>
-              Cancelar
-            </button>
-          </div>
-          <label>
-            Nome do grupo
-            <input
-              maxLength={160}
-              required
-              value={form.name}
-              onChange={(event) => updateForm({ name: event.target.value })}
-              placeholder="Família Silva"
-            />
-          </label>
-          <fieldset>
-            <legend>Tipo de convite</legend>
-            <label className="radio-label">
-              <input
-                checked={!form.isForeign}
-                name="guest-group-kind"
-                type="radio"
-                onChange={() => updateForm({ isForeign: false })}
-              />
-              Grupo brasileiro
-            </label>
-            <label className="radio-label">
-              <input
-                checked={form.isForeign}
-                name="guest-group-kind"
-                type="radio"
-                onChange={() => updateForm({ isForeign: true })}
-              />
-              Grupo estrangeiro
-            </label>
-          </fieldset>
-          {form.isForeign ? (
-            <p className="help-text" role="note">
-              Grupo estrangeiro não usa telefone nem SMS. Este convite exige
-              atendimento administrativo; não há autenticação alternativa.
-            </p>
-          ) : (
-            <label>
-              Celular do representante
-              <input
-                aria-describedby="guest-group-phone-help"
-                aria-invalid={phoneInvalid}
-                inputMode="tel"
-                maxLength={40}
-                placeholder="(62) 99999-9999"
-                required
-                type="tel"
-                value={form.phone}
-                onChange={(event) => updateForm({ phone: event.target.value })}
-              />
-              <span className="help-text" id="guest-group-phone-help">
-                Use um celular brasileiro com DDD. Exemplo: (62) 99999-9999.
-                {phoneInvalid && " Confira o número informado."}
-              </span>
-            </label>
-          )}
-          <fieldset className="guest-members-fieldset">
-            <legend>Convidados</legend>
-            <p className="help-text">
-              Escolha exatamente um representante. Ele será o contato
-              responsável pela confirmação deste convite.
-            </p>
-            {form.members.map((member, index) => (
-              <div className="guest-member-editor" key={member.id ?? index}>
-                <label>
-                  Nome completo
-                  <input
-                    maxLength={160}
-                    required
-                    value={member.fullName}
-                    onChange={(event) =>
-                      updateMember(index, { fullName: event.target.value })
-                    }
-                  />
-                </label>
-                <label className="radio-label">
-                  <input
-                    checked={member.isRepresentative}
-                    name="guest-group-representative"
-                    type="radio"
-                    onChange={() =>
-                      setForm((current) =>
-                        current
-                          ? {
-                              ...current,
-                              members: current.members.map(
-                                (candidate, candidateIndex) => ({
-                                  ...candidate,
-                                  isRepresentative: candidateIndex === index,
-                                }),
-                              ),
-                            }
-                          : current,
-                      )
-                    }
-                  />
-                  Representante
-                </label>
-                <button
-                  disabled={pending || form.members.length <= 1}
-                  type="button"
-                  onClick={() => removeMember(index)}
-                >
-                  Remover
-                </button>
-              </div>
-            ))}
-            <button disabled={pending} type="button" onClick={addMember}>
-              Adicionar convidado
-            </button>
-          </fieldset>
-          <div className="inline-actions">
-            <button disabled={pending} type="submit">
-              {pending
-                ? "Salvando…"
-                : editingId
-                  ? "Salvar grupo"
-                  : "Criar grupo"}
-            </button>
-            <button disabled={pending} type="button" onClick={closeForm}>
-              Cancelar
-            </button>
-          </div>
-        </form>
-      )}
+              Rotacionar PIN
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {loading ? (
         <p role="status">Carregando grupos…</p>
       ) : groups.length === 0 ? (
@@ -590,74 +671,83 @@ export function GuestGroupsSection({
       ) : (
         <div className="guest-group-list">
           {groups.map((group) => (
-            <article className="guest-group-card" key={group.id}>
-              <div>
-                <h3>{group.name}</h3>
-                <p className="guest-group-meta">
+            <Card className="guest-group-card" key={group.id}>
+              <CardHeader>
+                <CardTitle>{group.name}</CardTitle>
+                <CardDescription>
                   {group.isForeign
                     ? "Grupo estrangeiro · sem SMS"
                     : `Representante: ${group.members.find((member) => member.isRepresentative)?.fullName ?? "Não informado"} · ${group.phone}`}
-                </p>
-              </div>
-              <ul className="guest-group-members">
-                {group.members.map((member) => (
-                  <li key={member.id}>
-                    {member.fullName}
-                    {member.isRepresentative && " · representante"}
-                  </li>
-                ))}
-              </ul>
-              {!inactive && (
-                <div className="inline-actions">
-                  {!group.isForeign && (
-                    <>
-                      <button
+                </CardDescription>
+                <Badge variant="outline">
+                  {group.members.length} convidados
+                </Badge>
+              </CardHeader>
+              <CardContent>
+                <ul className="guest-group-members">
+                  {group.members.map((member) => (
+                    <li key={member.id}>
+                      {member.fullName}
+                      {member.isRepresentative && " · representante"}
+                    </li>
+                  ))}
+                </ul>
+                {!inactive && (
+                  <div className="inline-actions">
+                    {!group.isForeign && (
+                      <>
+                        <Button
+                          disabled={pending}
+                          type="button"
+                          onClick={() => void revealAccessPin(group)}
+                        >
+                          Exibir PIN
+                        </Button>
+                        <Button
+                          disabled={pending}
+                          type="button"
+                          variant="outline"
+                          onClick={() => setRotationTarget(group)}
+                        >
+                          Rotacionar PIN
+                        </Button>
+                      </>
+                    )}
+                    {canIssueDemoGuestGrant(owner, isDemo, inactive, group) && (
+                      <Button
                         disabled={pending}
                         type="button"
-                        onClick={() => void revealAccessPin(group)}
+                        variant="outline"
+                        onClick={() => void issueDemoAccess(group)}
                       >
-                        Exibir PIN
-                      </button>
-                      <button
-                        disabled={pending}
-                        type="button"
-                        onClick={() => void rotateAccessPin(group)}
-                      >
-                        Rotacionar PIN
-                      </button>
-                    </>
-                  )}
-                  {canIssueDemoGuestGrant(owner, isDemo, inactive, group) && (
-                    <button
+                        Gerar acesso demo
+                      </Button>
+                    )}
+                    <Button
                       disabled={pending}
                       type="button"
-                      onClick={() => void issueDemoAccess(group)}
+                      variant="outline"
+                      onClick={() => startEdit(group)}
                     >
-                      Gerar acesso demo
-                    </button>
-                  )}
-                  <button
-                    disabled={pending}
-                    type="button"
-                    onClick={() => startEdit(group)}
-                  >
-                    Editar
-                  </button>
-                  <button
-                    disabled={pending}
-                    type="button"
-                    onClick={() => {
-                      setDeleteTarget(group);
-                      setDeleteConfirmation("");
-                      setError("");
-                      setNotice("");
-                    }}
-                  >
-                    Excluir
-                  </button>
-                </div>
-              )}
-            </article>
+                      Editar
+                    </Button>
+                    <Button
+                      disabled={pending}
+                      type="button"
+                      variant="destructive"
+                      onClick={() => {
+                        setDeleteTarget(group);
+                        setDeleteConfirmation("");
+                        setError("");
+                        setNotice("");
+                      }}
+                    >
+                      Excluir
+                    </Button>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           ))}
         </div>
       )}

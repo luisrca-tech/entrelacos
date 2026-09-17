@@ -16,6 +16,11 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as RecoverRouteImport } from './routes/recover'
 import { Route as ApiSplatRouteImport } from './routes/api.$'
 import { Route as SitesSiteIdRouteImport } from './routes/sites.$siteId'
+import { Route as SitesSiteIdGuestsRouteImport } from './routes/sites.$siteId.guests'
+import { Route as SitesSiteIdMessagesRouteImport } from './routes/sites.$siteId.messages'
+import { Route as SitesSiteIdOverviewRouteImport } from './routes/sites.$siteId.overview'
+import { Route as SitesSiteIdRsvpRouteImport } from './routes/sites.$siteId.rsvp'
+import { Route as SitesSiteIdSettingsRouteImport } from './routes/sites.$siteId.settings'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -52,6 +57,31 @@ const SitesSiteIdRoute = SitesSiteIdRouteImport.update({
   path: '/sites/$siteId',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SitesSiteIdGuestsRoute = SitesSiteIdGuestsRouteImport.update({
+  id: '/guests',
+  path: '/guests',
+  getParentRoute: () => SitesSiteIdRoute,
+} as any)
+const SitesSiteIdMessagesRoute = SitesSiteIdMessagesRouteImport.update({
+  id: '/messages',
+  path: '/messages',
+  getParentRoute: () => SitesSiteIdRoute,
+} as any)
+const SitesSiteIdOverviewRoute = SitesSiteIdOverviewRouteImport.update({
+  id: '/overview',
+  path: '/overview',
+  getParentRoute: () => SitesSiteIdRoute,
+} as any)
+const SitesSiteIdRsvpRoute = SitesSiteIdRsvpRouteImport.update({
+  id: '/rsvp',
+  path: '/rsvp',
+  getParentRoute: () => SitesSiteIdRoute,
+} as any)
+const SitesSiteIdSettingsRoute = SitesSiteIdSettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => SitesSiteIdRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -60,7 +90,12 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/recover': typeof RecoverRoute
   '/api/$': typeof ApiSplatRoute
-  '/sites/$siteId': typeof SitesSiteIdRoute
+  '/sites/$siteId': typeof SitesSiteIdRouteWithChildren
+  '/sites/$siteId/guests': typeof SitesSiteIdGuestsRoute
+  '/sites/$siteId/messages': typeof SitesSiteIdMessagesRoute
+  '/sites/$siteId/overview': typeof SitesSiteIdOverviewRoute
+  '/sites/$siteId/rsvp': typeof SitesSiteIdRsvpRoute
+  '/sites/$siteId/settings': typeof SitesSiteIdSettingsRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -69,7 +104,12 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/recover': typeof RecoverRoute
   '/api/$': typeof ApiSplatRoute
-  '/sites/$siteId': typeof SitesSiteIdRoute
+  '/sites/$siteId': typeof SitesSiteIdRouteWithChildren
+  '/sites/$siteId/guests': typeof SitesSiteIdGuestsRoute
+  '/sites/$siteId/messages': typeof SitesSiteIdMessagesRoute
+  '/sites/$siteId/overview': typeof SitesSiteIdOverviewRoute
+  '/sites/$siteId/rsvp': typeof SitesSiteIdRsvpRoute
+  '/sites/$siteId/settings': typeof SitesSiteIdSettingsRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -79,7 +119,12 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/recover': typeof RecoverRoute
   '/api/$': typeof ApiSplatRoute
-  '/sites/$siteId': typeof SitesSiteIdRoute
+  '/sites/$siteId': typeof SitesSiteIdRouteWithChildren
+  '/sites/$siteId/guests': typeof SitesSiteIdGuestsRoute
+  '/sites/$siteId/messages': typeof SitesSiteIdMessagesRoute
+  '/sites/$siteId/overview': typeof SitesSiteIdOverviewRoute
+  '/sites/$siteId/rsvp': typeof SitesSiteIdRsvpRoute
+  '/sites/$siteId/settings': typeof SitesSiteIdSettingsRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -91,6 +136,11 @@ export interface FileRouteTypes {
     | '/recover'
     | '/api/$'
     | '/sites/$siteId'
+    | '/sites/$siteId/guests'
+    | '/sites/$siteId/messages'
+    | '/sites/$siteId/overview'
+    | '/sites/$siteId/rsvp'
+    | '/sites/$siteId/settings'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -100,6 +150,11 @@ export interface FileRouteTypes {
     | '/recover'
     | '/api/$'
     | '/sites/$siteId'
+    | '/sites/$siteId/guests'
+    | '/sites/$siteId/messages'
+    | '/sites/$siteId/overview'
+    | '/sites/$siteId/rsvp'
+    | '/sites/$siteId/settings'
   id:
     | '__root__'
     | '/'
@@ -109,6 +164,11 @@ export interface FileRouteTypes {
     | '/recover'
     | '/api/$'
     | '/sites/$siteId'
+    | '/sites/$siteId/guests'
+    | '/sites/$siteId/messages'
+    | '/sites/$siteId/overview'
+    | '/sites/$siteId/rsvp'
+    | '/sites/$siteId/settings'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -118,7 +178,7 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   RecoverRoute: typeof RecoverRoute
   ApiSplatRoute: typeof ApiSplatRoute
-  SitesSiteIdRoute: typeof SitesSiteIdRoute
+  SitesSiteIdRoute: typeof SitesSiteIdRouteWithChildren
 }
 
 declare module '@tanstack/react-router' {
@@ -172,8 +232,63 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SitesSiteIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/sites/$siteId/guests': {
+      id: '/sites/$siteId/guests'
+      path: '/guests'
+      fullPath: '/sites/$siteId/guests'
+      preLoaderRoute: typeof SitesSiteIdGuestsRouteImport
+      parentRoute: typeof SitesSiteIdRoute
+    }
+    '/sites/$siteId/messages': {
+      id: '/sites/$siteId/messages'
+      path: '/messages'
+      fullPath: '/sites/$siteId/messages'
+      preLoaderRoute: typeof SitesSiteIdMessagesRouteImport
+      parentRoute: typeof SitesSiteIdRoute
+    }
+    '/sites/$siteId/overview': {
+      id: '/sites/$siteId/overview'
+      path: '/overview'
+      fullPath: '/sites/$siteId/overview'
+      preLoaderRoute: typeof SitesSiteIdOverviewRouteImport
+      parentRoute: typeof SitesSiteIdRoute
+    }
+    '/sites/$siteId/rsvp': {
+      id: '/sites/$siteId/rsvp'
+      path: '/rsvp'
+      fullPath: '/sites/$siteId/rsvp'
+      preLoaderRoute: typeof SitesSiteIdRsvpRouteImport
+      parentRoute: typeof SitesSiteIdRoute
+    }
+    '/sites/$siteId/settings': {
+      id: '/sites/$siteId/settings'
+      path: '/settings'
+      fullPath: '/sites/$siteId/settings'
+      preLoaderRoute: typeof SitesSiteIdSettingsRouteImport
+      parentRoute: typeof SitesSiteIdRoute
+    }
   }
 }
+
+interface SitesSiteIdRouteChildren {
+  SitesSiteIdGuestsRoute: typeof SitesSiteIdGuestsRoute
+  SitesSiteIdMessagesRoute: typeof SitesSiteIdMessagesRoute
+  SitesSiteIdOverviewRoute: typeof SitesSiteIdOverviewRoute
+  SitesSiteIdRsvpRoute: typeof SitesSiteIdRsvpRoute
+  SitesSiteIdSettingsRoute: typeof SitesSiteIdSettingsRoute
+}
+
+const SitesSiteIdRouteChildren: SitesSiteIdRouteChildren = {
+  SitesSiteIdGuestsRoute: SitesSiteIdGuestsRoute,
+  SitesSiteIdMessagesRoute: SitesSiteIdMessagesRoute,
+  SitesSiteIdOverviewRoute: SitesSiteIdOverviewRoute,
+  SitesSiteIdRsvpRoute: SitesSiteIdRsvpRoute,
+  SitesSiteIdSettingsRoute: SitesSiteIdSettingsRoute,
+}
+
+const SitesSiteIdRouteWithChildren = SitesSiteIdRoute._addFileChildren(
+  SitesSiteIdRouteChildren,
+)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
@@ -182,7 +297,7 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   RecoverRoute: RecoverRoute,
   ApiSplatRoute: ApiSplatRoute,
-  SitesSiteIdRoute: SitesSiteIdRoute,
+  SitesSiteIdRoute: SitesSiteIdRouteWithChildren,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

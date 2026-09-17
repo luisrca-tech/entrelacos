@@ -1,12 +1,42 @@
 import type { MeResponse, SiteRecord } from "@entrelacos/contracts";
-import { Link } from "@tanstack/react-router";
-import { type FormEvent, useCallback, useEffect, useState } from "react";
+import {
+  Badge,
+  Button,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  DatePicker,
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+  Input,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@entrelacos/ui";
+import {
+  type FormEvent,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { ApiError, apiRequest } from "../lib/apiClient";
+import { AdminShell, ShellLoading } from "./AdminShell";
+import { resolveSiteArea, type SiteArea } from "./adminNavigation";
 import { SiteWorkspace } from "./SiteWorkspace";
 
-export function Panel({ siteId }: { siteId?: string }) {
+export function Panel({ siteId, area }: { siteId?: string; area?: SiteArea }) {
   const [actor, setActor] = useState<MeResponse | null>(null);
   const [error, setError] = useState("");
+
   useEffect(() => {
     let active = true;
     apiRequest<MeResponse>("/v1/me")
@@ -15,19 +45,22 @@ export function Panel({ siteId }: { siteId?: string }) {
       })
       .catch((cause) => {
         if (!active) return;
-        if (cause instanceof ApiError && cause.status === 401)
-          window.location.replace("/login");
-        else
+        if (cause instanceof ApiError && cause.status === 401) {
+          const next = window.location.pathname + window.location.search;
+          window.location.replace(`/login?next=${encodeURIComponent(next)}`);
+        } else {
           setError(
             cause instanceof Error
               ? cause.message
               : "Não foi possível abrir o painel.",
           );
+        }
       });
     return () => {
       active = false;
     };
   }, []);
+
   async function logout() {
     try {
       await apiRequest("/v1/auth/sign-out", { method: "POST", body: {} });
@@ -36,38 +69,68 @@ export function Panel({ siteId }: { siteId?: string }) {
       setError("Não foi possível sair. Tente novamente.");
     }
   }
-  return (
-    <main className="page-shell panel-shell">
-      <header className="topbar">
-        <Link className="brand" to="/">
-          EntreLaços
-        </Link>
-        {actor && (
-          <div className="inline-actions">
-            <span>{actor.user.name}</span>
-            <button type="button" onClick={logout}>
-              Sair
-            </button>
-          </div>
-        )}
-      </header>
-      {error ? (
+
+  if (error) {
+    return (
+      <ShellLoading>
         <p role="alert">{error}</p>
-      ) : !actor ? (
-        <p role="status">Carregando painel…</p>
-      ) : siteId || actor.user.role === "SITE_ADMIN" ? (
+      </ShellLoading>
+    );
+  }
+  if (!actor) return <ShellLoading>Carregando painel…</ShellLoading>;
+
+  if (!siteId && actor.user.role === "SITE_ADMIN") {
+    if (actor.siteId) return <SiteAdminRedirect siteId={actor.siteId} />;
+    return (
+      <ShellLoading>
+        <p role="alert">Nenhum casamento foi associado a esta conta.</p>
+      </ShellLoading>
+    );
+  }
+
+  const resolvedArea = resolveSiteArea(actor.user.role, area);
+  if (siteId && area && resolvedArea !== area) {
+    return <SiteAreaRedirect siteId={siteId} area={resolvedArea} />;
+  }
+
+  return (
+    <AdminShell
+      actor={actor}
+      siteId={siteId}
+      area={siteId ? resolvedArea : undefined}
+      onLogout={() => void logout()}
+    >
+      {siteId ? (
         <SiteWorkspace
-          siteId={siteId ?? actor.siteId ?? ""}
+          siteId={siteId}
           owner={actor.user.role === "OWNER"}
+          area={resolvedArea}
         />
       ) : (
         <OwnerSites />
       )}
-      <footer className="page-footer">
-        EntreLaços · Painel administrativo
-      </footer>
-    </main>
+    </AdminShell>
   );
+}
+
+function SiteAdminRedirect({ siteId }: { siteId: string }) {
+  useEffect(() => {
+    window.location.replace(`/sites/${encodeURIComponent(siteId)}/overview`);
+  }, [siteId]);
+  return <ShellLoading>Abrindo seu casamento…</ShellLoading>;
+}
+
+function SiteAreaRedirect({
+  siteId,
+  area,
+}: {
+  siteId: string;
+  area: SiteArea;
+}) {
+  useEffect(() => {
+    window.location.replace(`/sites/${encodeURIComponent(siteId)}/${area}`);
+  }, [area, siteId]);
+  return <ShellLoading>Redirecionando…</ShellLoading>;
 }
 
 function OwnerSites() {
@@ -75,6 +138,11 @@ function OwnerSites() {
   const [cursor, setCursor] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const loadingMoreRef = useRef(false);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [createError, setCreateError] = useState("");
+
   const load = useCallback(async (next?: string) => {
     const result = await apiRequest<{
       sites: SiteRecord[];
@@ -85,14 +153,41 @@ function OwnerSites() {
     );
     setCursor(result.nextCursor);
   }, []);
+
+  async function loadMore() {
+    if (!cursor || pending || loadingMoreRef.current) return;
+    loadingMoreRef.current = true;
+    setLoadingMore(true);
+    try {
+      await load(cursor);
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Não foi possível carregar mais casamentos.",
+      );
+    } finally {
+      loadingMoreRef.current = false;
+      setLoadingMore(false);
+    }
+  }
+
   useEffect(() => {
-    load().catch((cause) => setError(cause.message));
+    load().catch((cause) =>
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Não foi possível carregar os casamentos.",
+      ),
+    );
   }, [load]);
+
   async function create(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     setPending(true);
     setError("");
+    setCreateError("");
     try {
       const result = await apiRequest<{ site: SiteRecord }>("/v1/owner/sites", {
         method: "POST",
@@ -104,9 +199,12 @@ function OwnerSites() {
           eventDate: form.get("date"),
         },
       });
-      window.location.assign(`/sites/${encodeURIComponent(result.site.id)}`);
+      setDialogOpen(false);
+      window.location.assign(
+        `/sites/${encodeURIComponent(result.site.id)}/overview`,
+      );
     } catch (cause) {
-      setError(
+      setCreateError(
         cause instanceof Error
           ? cause.message
           : "Não foi possível criar o casamento.",
@@ -115,86 +213,203 @@ function OwnerSites() {
       setPending(false);
     }
   }
+
   return (
-    <>
-      <section className="panel-heading">
-        <p className="eyebrow">Gestão global</p>
-        <h1>Casamentos</h1>
-        <p>
-          Escolha um casamento para acompanhar seu status e gerenciar os
-          acessos.
-        </p>
+    <div className="owner-dashboard">
+      <section className="panel-heading owner-heading">
+        <div>
+          <p className="eyebrow">Gestão global</p>
+          <h1>Seus casamentos</h1>
+          <p className="lede">
+            Acompanhe cada celebração e mantenha tudo pronto para o grande dia.
+          </p>
+        </div>
+        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+          <Button
+            type="button"
+            onClick={() => {
+              setCreateError("");
+              setDialogOpen(true);
+            }}
+          >
+            Novo casamento
+          </Button>
+          <DialogContent className="create-site-dialog">
+            <DialogTitle>Novo casamento</DialogTitle>
+            <DialogDescription>
+              Cadastre os dados iniciais. A mesma referência mantém novas
+              tentativas idempotentes e preserva os dados já salvos.
+            </DialogDescription>
+            {createError && <p role="alert">{createError}</p>}
+            <form className="data-form form-grid" onSubmit={create}>
+              <label htmlFor="site-name">
+                Nome do casamento
+                <Input id="site-name" name="name" required maxLength={160} />
+              </label>
+              <label htmlFor="site-slug">
+                Identificador do site
+                <Input
+                  id="site-slug"
+                  name="slug"
+                  required
+                  pattern="[a-z0-9]+(-[a-z0-9]+)*"
+                  maxLength={64}
+                  placeholder="ana-e-joao"
+                />
+              </label>
+              <label htmlFor="site-key">
+                Referência do cadastro
+                <Input
+                  id="site-key"
+                  name="key"
+                  required
+                  maxLength={160}
+                  placeholder="casamento-ana-joao-2027"
+                />
+              </label>
+              <label htmlFor="site-date">
+                Data do casamento
+                <DatePicker id="site-date" name="date" required />
+              </label>
+              <label htmlFor="site-first-name">
+                Primeiro nome do casal
+                <Input
+                  id="site-first-name"
+                  name="first"
+                  required
+                  maxLength={120}
+                />
+              </label>
+              <label htmlFor="site-second-name">
+                Segundo nome do casal
+                <Input
+                  id="site-second-name"
+                  name="second"
+                  required
+                  maxLength={120}
+                />
+              </label>
+              <div className="dialog-actions">
+                <DialogClose
+                  render={
+                    <Button type="button" variant="ghost">
+                      Cancelar
+                    </Button>
+                  }
+                />
+                <Button type="submit" disabled={pending}>
+                  {pending ? "Salvando…" : "Criar casamento"}
+                </Button>
+              </div>
+            </form>
+          </DialogContent>
+        </Dialog>
       </section>
+
       {error && <p role="alert">{error}</p>}
-      <section className="site-grid" aria-label="Casamentos cadastrados">
-        {sites.map((site) => (
-          <a className="site-card" href={`/sites/${site.id}`} key={site.id}>
-            <h2>{site.displayName}</h2>
-            <p>{site.coupleNames.join(" & ")}</p>
-            <p>
-              {site.eventDate} · {lifecycleLabel(site.lifecycle)}
-            </p>
-          </a>
-        ))}
-        {sites.length === 0 && <p>Nenhum casamento cadastrado.</p>}
-      </section>
+
+      <Card className="sites-table-card">
+        <CardHeader>
+          <CardTitle>Casamentos cadastrados</CardTitle>
+          <CardDescription>
+            Selecione um casamento para acompanhar status e acessos.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="desktop-table-wrap">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Casamento</TableHead>
+                  <TableHead>Data</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead aria-label="Ação" />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {sites.map((site) => (
+                  <TableRow key={site.id}>
+                    <TableCell>
+                      <a
+                        className="site-table-link"
+                        href={`/sites/${site.id}/overview`}
+                      >
+                        <strong>{site.displayName}</strong>
+                        <span>{site.coupleNames.join(" & ")}</span>
+                      </a>
+                    </TableCell>
+                    <TableCell>{formatDate(site.eventDate)}</TableCell>
+                    <TableCell>
+                      <Badge
+                        variant={
+                          site.lifecycle === "ACTIVE" ? "default" : "secondary"
+                        }
+                      >
+                        {lifecycleLabel(site.lifecycle)}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <a
+                        className="table-action"
+                        href={`/sites/${site.id}/overview`}
+                      >
+                        Abrir
+                      </a>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+          <div className="mobile-site-cards">
+            {sites.map((site) => (
+              <a
+                className="site-mobile-card"
+                href={`/sites/${site.id}/overview`}
+                key={site.id}
+              >
+                <div className="site-mobile-card-top">
+                  <span className="card-label">Casamento</span>
+                  <Badge
+                    variant={
+                      site.lifecycle === "ACTIVE" ? "default" : "secondary"
+                    }
+                  >
+                    {lifecycleLabel(site.lifecycle)}
+                  </Badge>
+                </div>
+                <strong>{site.displayName}</strong>
+                <span>{site.coupleNames.join(" & ")}</span>
+                <small>{formatDate(site.eventDate)}</small>
+              </a>
+            ))}
+          </div>
+          {sites.length === 0 && (
+            <p className="empty-state">Nenhum casamento cadastrado.</p>
+          )}
+        </CardContent>
+      </Card>
+
       {cursor && (
-        <button
+        <Button
+          className="load-more"
           type="button"
-          onClick={() => load(cursor).catch((cause) => setError(cause.message))}
+          variant="outline"
+          disabled={pending || loadingMore}
+          onClick={() => void loadMore()}
         >
-          Carregar mais
-        </button>
+          {loadingMore ? "Carregando…" : "Carregar mais"}
+        </Button>
       )}
-      <details className="panel-section">
-        <summary>Criar ou retomar cadastro de casamento</summary>
-        <p>
-          Use a mesma referência e o mesmo identificador nas tentativas de um
-          cadastro. Os dados já salvos serão preservados.
-        </p>
-        <form className="data-form form-grid" onSubmit={create}>
-          <label>
-            Nome do casamento
-            <input name="name" required maxLength={160} />
-          </label>
-          <label>
-            Identificador do site
-            <input
-              name="slug"
-              required
-              pattern="[a-z0-9]+(-[a-z0-9]+)*"
-              maxLength={64}
-              placeholder="ana-e-joao"
-            />
-          </label>
-          <label>
-            Referência do cadastro
-            <input
-              name="key"
-              required
-              maxLength={160}
-              placeholder="casamento-ana-joao-2027"
-            />
-          </label>
-          <label>
-            Data do casamento
-            <input name="date" type="date" required />
-          </label>
-          <label>
-            Primeiro nome do casal
-            <input name="first" required maxLength={120} />
-          </label>
-          <label>
-            Segundo nome do casal
-            <input name="second" required maxLength={120} />
-          </label>
-          <button type="submit" disabled={pending}>
-            {pending ? "Salvando…" : "Abrir cadastro"}
-          </button>
-        </form>
-      </details>
-    </>
+    </div>
   );
+}
+
+function formatDate(value: string) {
+  const date = new Date(`${value}T12:00:00Z`);
+  return Number.isNaN(date.valueOf())
+    ? value
+    : new Intl.DateTimeFormat("pt-BR", { dateStyle: "medium" }).format(date);
 }
 
 export function lifecycleLabel(value: string) {

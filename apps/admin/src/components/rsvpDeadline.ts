@@ -6,7 +6,34 @@ type DateTimeParts = {
   minute: number;
 };
 
+export type RsvpDeadlineDraft = {
+  deadlineLocal: string;
+  deadlineTimezone: string;
+};
+
 const localDateTimePattern = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/;
+
+export function splitDeadlineLocal(value: string) {
+  if (!localDateTimePattern.test(value)) return { date: "", time: "" };
+  return { date: value.slice(0, 10), time: value.slice(11, 16) };
+}
+
+export function joinDeadlineLocal(date: string, time: string) {
+  if (!date && !time) return "";
+  if (!date || !time) throw new Error("Informe a data e o horário do prazo.");
+  const value = `${date}T${time}`;
+  parseLocalDateTime(value);
+  return value;
+}
+
+export function resetDeadlineDraft(
+  saved: RsvpDeadlineDraft,
+): RsvpDeadlineDraft {
+  return {
+    deadlineLocal: saved.deadlineLocal,
+    deadlineTimezone: saved.deadlineTimezone,
+  };
+}
 
 function formatter(timeZone: string) {
   try {

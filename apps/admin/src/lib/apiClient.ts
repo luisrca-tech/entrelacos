@@ -47,6 +47,14 @@ export async function apiRequest<T>(
 export function safePanelReturn(value: unknown): string {
   if (typeof value !== "string") return "/";
   if (
+    /^\/sites\/[^/?#]+\/(overview|guests|rsvp|messages|settings)(?:\?[^#]*)?$/.test(
+      value,
+    ) &&
+    !value.includes("\\") &&
+    !value.includes("..")
+  )
+    return value;
+  if (
     value.startsWith("/handoff?") &&
     !value.includes("#") &&
     !value.includes("\\")

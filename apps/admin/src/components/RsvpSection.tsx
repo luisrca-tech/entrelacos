@@ -5,6 +5,33 @@ import type {
   SiteRsvpResponse,
 } from "@entrelacos/contracts";
 import {
+  Button,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  Checkbox,
+  DatePicker,
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+  Input,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@entrelacos/ui";
+import {
   type FormEvent,
   useCallback,
   useEffect,
@@ -16,6 +43,9 @@ import { listenForGuestGroupsChanged } from "./guestGroupsRefresh";
 import {
   deadlineInstantFromLocal,
   deadlineLocalFromInstant,
+  joinDeadlineLocal,
+  resetDeadlineDraft,
+  splitDeadlineLocal,
 } from "./rsvpDeadline";
 import {
   exportFilename,
@@ -67,7 +97,13 @@ export function RsvpSection({ siteId, lifecycle }: Props) {
   const [groupId, setGroupId] = useState("");
   const [state, setState] = useState("");
   const [drafts, setDrafts] = useState<Record<string, RsvpState>>({});
-  const [deadlineLocal, setDeadlineLocal] = useState("");
+  const [savedDeadline, setSavedDeadline] = useState({
+    deadlineLocal: "",
+    deadlineTimezone:
+      Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Sao_Paulo",
+  });
+  const [deadlineDate, setDeadlineDate] = useState("");
+  const [deadlineTime, setDeadlineTime] = useState("");
   const [deadlineTimezone, setDeadlineTimezone] = useState(
     Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Sao_Paulo",
   );
@@ -83,6 +119,7 @@ export function RsvpSection({ siteId, lifecycle }: Props) {
   const [includePhone, setIncludePhone] = useState(false);
   const [downloading, setDownloading] = useState<RsvpExportFormat | null>(null);
   const [groupsVersion, setGroupsVersion] = useState(0);
+  const [deadlineOpen, setDeadlineOpen] = useState(false);
 
   const loadCurrent = useCallback(async () => {
     void groupsVersion;
@@ -94,16 +131,23 @@ export function RsvpSection({ siteId, lifecycle }: Props) {
       setView(result);
       if (!groupId && !state) setKnownGroups(result.groups);
       setDrafts({});
-      setDeadlineTimezone(
+      const nextDeadlineTimezone =
         result.deadlineTimezone ||
-          Intl.DateTimeFormat().resolvedOptions().timeZone ||
-          "America/Sao_Paulo",
-      );
-      setDeadlineLocal(
+        Intl.DateTimeFormat().resolvedOptions().timeZone ||
+        "America/Sao_Paulo";
+      const nextDeadlineLocal =
         result.deadlineAt && result.deadlineTimezone
           ? deadlineLocalFromInstant(result.deadlineAt, result.deadlineTimezone)
-          : "",
-      );
+          : "";
+      const nextSavedDeadline = resetDeadlineDraft({
+        deadlineLocal: nextDeadlineLocal,
+        deadlineTimezone: nextDeadlineTimezone,
+      });
+      setSavedDeadline(nextSavedDeadline);
+      setDeadlineTimezone(nextSavedDeadline.deadlineTimezone);
+      const deadlineParts = splitDeadlineLocal(nextSavedDeadline.deadlineLocal);
+      setDeadlineDate(deadlineParts.date);
+      setDeadlineTime(deadlineParts.time);
       setError("");
     } catch (cause) {
       setError(errorMessage(cause));
@@ -187,6 +231,26 @@ export function RsvpSection({ siteId, lifecycle }: Props) {
     [knownGroups],
   );
 
+  function beginDeadlineEdit(clear = false) {
+    const draft = resetDeadlineDraft(savedDeadline);
+    const deadlineParts = splitDeadlineLocal(clear ? "" : draft.deadlineLocal);
+    setDeadlineDate(deadlineParts.date);
+    setDeadlineTime(deadlineParts.time);
+    setDeadlineTimezone(draft.deadlineTimezone);
+    setError("");
+    setDeadlineOpen(true);
+  }
+
+  function cancelDeadlineEdit() {
+    const draft = resetDeadlineDraft(savedDeadline);
+    const deadlineParts = splitDeadlineLocal(draft.deadlineLocal);
+    setDeadlineDate(deadlineParts.date);
+    setDeadlineTime(deadlineParts.time);
+    setDeadlineTimezone(draft.deadlineTimezone);
+    setError("");
+    setDeadlineOpen(false);
+  }
+
   async function saveDeadline(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (inactive) return;
@@ -194,6 +258,7 @@ export function RsvpSection({ siteId, lifecycle }: Props) {
     setError("");
     setNotice("");
     try {
+      const deadlineLocal = joinDeadlineLocal(deadlineDate, deadlineTime);
       const body: RsvpDeadline = deadlineLocal
         ? {
             deadlineAt: deadlineInstantFromLocal(
@@ -207,9 +272,17 @@ export function RsvpSection({ siteId, lifecycle }: Props) {
         method: "PATCH",
         body,
       });
+      const nextSavedDeadline = resetDeadlineDraft({
+        deadlineLocal,
+        deadlineTimezone: deadlineLocal
+          ? deadlineTimezone
+          : savedDeadline.deadlineTimezone,
+      });
+      setSavedDeadline(nextSavedDeadline);
       setNotice(
         deadlineLocal ? "Prazo de confirmação salvo." : "Prazo removido.",
       );
+      setDeadlineOpen(false);
       await loadCurrent();
     } catch (cause) {
       setError(errorMessage(cause));
@@ -302,145 +375,235 @@ export function RsvpSection({ siteId, lifecycle }: Props) {
           role="tablist"
           aria-label="Visões de confirmação"
         >
-          <button
+          <Button
             type="button"
+            variant={tab === "current" ? "default" : "outline"}
             role="tab"
             aria-selected={tab === "current"}
             onClick={() => setTab("current")}
           >
             Atual
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
+            variant={tab === "history" ? "default" : "outline"}
             role="tab"
             aria-selected={tab === "history"}
             onClick={() => setTab("history")}
           >
             Histórico
-          </button>
+          </Button>
         </div>
       </div>
-      {error && <p role="alert">{error}</p>}
+      {error && !deadlineOpen && <p role="alert">{error}</p>}
       {notice && <p role="status">{notice}</p>}
 
       {tab === "current" ? (
         <>
-          <form
-            className="data-form form-grid rsvp-deadline-form"
-            onSubmit={saveDeadline}
-          >
-            <label>
-              Prazo local
-              <input
-                type="datetime-local"
-                value={deadlineLocal}
-                disabled={inactive || pending}
-                onChange={(event) => setDeadlineLocal(event.target.value)}
-              />
-            </label>
-            <label>
-              Fuso horário
-              <input
-                value={deadlineTimezone}
-                disabled={inactive || pending || !deadlineLocal}
-                onChange={(event) => setDeadlineTimezone(event.target.value)}
-                placeholder="America/Sao_Paulo"
-              />
-            </label>
-            <button type="submit" disabled={inactive || pending}>
-              Salvar prazo
-            </button>
-            {deadlineLocal && (
-              <button
+          <Card className="rsvp-deadline-summary">
+            <CardHeader>
+              <CardTitle>Prazo de confirmação</CardTitle>
+              <CardDescription>
+                {savedDeadline.deadlineLocal
+                  ? `${savedDeadline.deadlineLocal} · ${savedDeadline.deadlineTimezone}`
+                  : "Nenhum prazo configurado."}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="inline-actions">
+              <Button
                 type="button"
                 disabled={inactive || pending}
-                onClick={() => setDeadlineLocal("")}
+                onClick={() => beginDeadlineEdit()}
               >
-                Remover prazo
-              </button>
-            )}
-          </form>
+                Editar prazo
+              </Button>
+              {savedDeadline.deadlineLocal && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={inactive || pending}
+                  onClick={() => beginDeadlineEdit(true)}
+                >
+                  Remover prazo
+                </Button>
+              )}
+            </CardContent>
+          </Card>
+          <Dialog
+            open={deadlineOpen}
+            onOpenChange={(open) => {
+              if (open) beginDeadlineEdit();
+              else cancelDeadlineEdit();
+            }}
+          >
+            <DialogContent>
+              <DialogTitle>Editar prazo de confirmação</DialogTitle>
+              <DialogDescription>
+                Use a data e hora local junto do fuso IANA correspondente.
+              </DialogDescription>
+              {error && <p role="alert">{error}</p>}
+              <form
+                className="data-form form-grid rsvp-deadline-form"
+                onSubmit={saveDeadline}
+              >
+                <label htmlFor="rsvp-deadline-date">
+                  Data do prazo
+                  <DatePicker
+                    id="rsvp-deadline-date"
+                    value={deadlineDate || undefined}
+                    disabled={inactive || pending}
+                    onValueChange={(value) => {
+                      setDeadlineDate(value ?? "");
+                      if (!value) setDeadlineTime("");
+                    }}
+                  />
+                </label>
+                <label htmlFor="rsvp-deadline-time">
+                  Horário do prazo
+                  <Input
+                    id="rsvp-deadline-time"
+                    type="time"
+                    value={deadlineTime}
+                    disabled={inactive || pending || !deadlineDate}
+                    onChange={(event) => setDeadlineTime(event.target.value)}
+                  />
+                </label>
+                <label htmlFor="rsvp-deadline-timezone">
+                  Fuso horário
+                  <Input
+                    id="rsvp-deadline-timezone"
+                    value={deadlineTimezone}
+                    disabled={
+                      inactive || pending || !deadlineDate || !deadlineTime
+                    }
+                    onChange={(event) =>
+                      setDeadlineTimezone(event.target.value)
+                    }
+                    placeholder="America/Sao_Paulo"
+                  />
+                </label>
+                <div className="inline-actions">
+                  <Button type="submit" disabled={inactive || pending}>
+                    {pending ? "Salvando…" : "Salvar prazo"}
+                  </Button>
+                  <DialogClose
+                    render={
+                      <Button
+                        type="button"
+                        variant="outline"
+                        disabled={pending}
+                      />
+                    }
+                    onClick={cancelDeadlineEdit}
+                  >
+                    Cancelar
+                  </DialogClose>
+                </div>
+              </form>
+            </DialogContent>
+          </Dialog>
 
           {view && (
-            <section className="facts" aria-label="Totais de confirmação">
-              <div>
-                <strong>Pendentes</strong>
-                <p>{view.totals.pending}</p>
-              </div>
-              <div>
-                <strong>Confirmados</strong>
-                <p>{view.totals.confirmed}</p>
-              </div>
-              <div>
-                <strong>Não comparecerão</strong>
-                <p>{view.totals.declined}</p>
-              </div>
-            </section>
+            <Card className="facts" aria-label="Totais de confirmação">
+              <CardContent>
+                <div>
+                  <strong>Pendentes</strong>
+                  <p>{view.totals.pending}</p>
+                </div>
+                <div>
+                  <strong>Confirmados</strong>
+                  <p>{view.totals.confirmed}</p>
+                </div>
+                <div>
+                  <strong>Não comparecerão</strong>
+                  <p>{view.totals.declined}</p>
+                </div>
+              </CardContent>
+            </Card>
           )}
           <div className="data-form form-grid rsvp-filters">
-            <label>
+            <label htmlFor="rsvp-group-filter">
               Grupo
-              <select
-                value={groupId}
-                onChange={(event) => setGroupId(event.target.value)}
+              <Select
+                value={groupId || "all"}
+                onValueChange={(value) =>
+                  setGroupId(value === "all" || !value ? "" : value)
+                }
               >
-                <option value="">Todos</option>
-                {knownGroups.map((group) => (
-                  <option key={group.id} value={group.id}>
-                    {group.name}
-                  </option>
-                ))}
-              </select>
+                <SelectTrigger id="rsvp-group-filter">
+                  <SelectValue placeholder="Todos" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos</SelectItem>
+                  {knownGroups.map((group) => (
+                    <SelectItem key={group.id} value={group.id}>
+                      {group.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </label>
-            <label>
+            <label htmlFor="rsvp-state-filter">
               Status
-              <select
-                value={state}
-                onChange={(event) => setState(event.target.value)}
+              <Select
+                value={state || "all"}
+                onValueChange={(value) =>
+                  setState(value === "all" || !value ? "" : value)
+                }
               >
-                <option value="">Todos</option>
-                {Object.entries(stateLabels).map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
-              </select>
+                <SelectTrigger id="rsvp-state-filter">
+                  <SelectValue placeholder="Todos" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos</SelectItem>
+                  {Object.entries(stateLabels).map(([value, label]) => (
+                    <SelectItem key={value} value={value}>
+                      {label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </label>
           </div>
-          <section className="rsvp-export" aria-labelledby="rsvp-export-title">
-            <div>
-              <h3 id="rsvp-export-title">Exportar relatório</h3>
-              <p>
+          <Card className="rsvp-export" aria-labelledby="rsvp-export-title">
+            <CardHeader>
+              <CardTitle id="rsvp-export-title">Exportar relatório</CardTitle>
+              <CardDescription>
                 O arquivo usa os filtros de grupo e status selecionados acima.
                 Telefones ficam de fora até você incluí-los explicitamente.
-              </p>
-            </div>
-            <label className="checkbox-label">
-              <input
-                type="checkbox"
-                checked={includePhone}
-                disabled={Boolean(downloading)}
-                onChange={(event) => setIncludePhone(event.target.checked)}
-              />
-              Incluir celular do representante
-            </label>
-            <div className="inline-actions">
-              <button
-                type="button"
-                disabled={Boolean(downloading)}
-                onClick={() => void downloadExport("csv")}
-              >
-                {downloading === "csv" ? "Gerando CSV…" : "Baixar CSV"}
-              </button>
-              <button
-                type="button"
-                disabled={Boolean(downloading)}
-                onClick={() => void downloadExport("pdf")}
-              >
-                {downloading === "pdf" ? "Gerando PDF…" : "Baixar PDF"}
-              </button>
-            </div>
-          </section>
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <label className="checkbox-label" htmlFor="rsvp-include-phone">
+                <Checkbox
+                  id="rsvp-include-phone"
+                  checked={includePhone}
+                  disabled={Boolean(downloading)}
+                  onCheckedChange={(checked) =>
+                    setIncludePhone(checked === true)
+                  }
+                />
+                Incluir celular do representante
+              </label>
+              <div className="inline-actions">
+                <Button
+                  type="button"
+                  disabled={Boolean(downloading)}
+                  onClick={() => void downloadExport("csv")}
+                >
+                  {downloading === "csv" ? "Gerando CSV…" : "Baixar CSV"}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={Boolean(downloading)}
+                  onClick={() => void downloadExport("pdf")}
+                >
+                  {downloading === "pdf" ? "Gerando PDF…" : "Baixar PDF"}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
           {loading ? (
             <p role="status">Carregando confirmações…</p>
           ) : view?.groups.length === 0 ? (
@@ -455,36 +618,56 @@ export function RsvpSection({ siteId, lifecycle }: Props) {
                     {group.totals.declined} ausentes · {group.totals.pending}{" "}
                     pendentes
                   </p>
-                  {group.members.map((member) => (
-                    <label className="rsvp-member-row" key={member.id}>
-                      <span>
-                        {member.fullName}
-                        {member.isRepresentative ? " (representante)" : ""}
-                      </span>
-                      <select
-                        aria-label={`Confirmação de ${member.fullName}`}
-                        value={drafts[member.id] ?? member.state}
-                        disabled={inactive || pending}
-                        onChange={(event) =>
-                          setDrafts((current) => ({
-                            ...current,
-                            [member.id]: event.target.value as RsvpState,
-                          }))
-                        }
-                      >
-                        {Object.entries(stateLabels).map(([value, label]) => (
-                          <option key={value} value={value}>
-                            {label}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  ))}
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Convidado</TableHead>
+                        <TableHead>Confirmação</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {group.members.map((member) => (
+                        <TableRow key={member.id}>
+                          <TableCell>
+                            {member.fullName}
+                            {member.isRepresentative ? " (representante)" : ""}
+                          </TableCell>
+                          <TableCell>
+                            <Select
+                              value={drafts[member.id] ?? member.state}
+                              disabled={inactive || pending}
+                              onValueChange={(value) =>
+                                setDrafts((current) => ({
+                                  ...current,
+                                  [member.id]: value as RsvpState,
+                                }))
+                              }
+                            >
+                              <SelectTrigger
+                                aria-label={`Confirmação de ${member.fullName}`}
+                              >
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {Object.entries(stateLabels).map(
+                                  ([value, label]) => (
+                                    <SelectItem key={value} value={value}>
+                                      {label}
+                                    </SelectItem>
+                                  ),
+                                )}
+                              </SelectContent>
+                            </Select>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
                 </section>
               ))}
             </div>
           )}
-          <button
+          <Button
             type="button"
             disabled={inactive || pending || changedMembers.length === 0}
             onClick={() => void saveRsvp()}
@@ -492,62 +675,81 @@ export function RsvpSection({ siteId, lifecycle }: Props) {
             {changedMembers.length === 0
               ? "Salvar alterações"
               : `Salvar ${changedMembers.length} ${changedMembers.length === 1 ? "alteração" : "alterações"}`}
-          </button>
+          </Button>
         </>
       ) : (
         <>
           <div className="data-form form-grid rsvp-filters">
-            <label>
+            <label htmlFor="rsvp-history-group">
               Grupo
-              <select
-                value={historyGroupId}
-                onChange={(event) => {
-                  setHistoryGroupId(event.target.value);
+              <Select
+                value={historyGroupId || "all"}
+                onValueChange={(value) => {
+                  setHistoryGroupId(value === "all" || !value ? "" : value);
                   setHistoryMemberId("");
                 }}
               >
-                <option value="">Todos</option>
-                {knownGroups.map((group) => (
-                  <option key={group.id} value={group.id}>
-                    {group.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Integrante
-              <select
-                value={historyMemberId}
-                onChange={(event) => setHistoryMemberId(event.target.value)}
-              >
-                <option value="">Todos</option>
-                {historyMembers
-                  .filter(
-                    (member) =>
-                      !historyGroupId ||
-                      knownGroups
-                        .find((group) => group.id === historyGroupId)
-                        ?.members.some(
-                          (candidate) => candidate.id === member.id,
-                        ),
-                  )
-                  .map((member) => (
-                    <option key={member.id} value={member.id}>
-                      {member.label}
-                    </option>
+                <SelectTrigger id="rsvp-history-group">
+                  <SelectValue placeholder="Todos" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos</SelectItem>
+                  {knownGroups.map((group) => (
+                    <SelectItem key={group.id} value={group.id}>
+                      {group.name}
+                    </SelectItem>
                   ))}
-              </select>
+                </SelectContent>
+              </Select>
             </label>
-            <label>
-              Origem
-              <select
-                value={historyActor}
-                onChange={(event) => setHistoryActor(event.target.value)}
+            <label htmlFor="rsvp-history-member">
+              Integrante
+              <Select
+                value={historyMemberId || "all"}
+                onValueChange={(value) =>
+                  setHistoryMemberId(value === "all" || !value ? "" : value)
+                }
               >
-                <option value="">Todas</option>
-                <option value="FAMILY">Família</option>
-                <option value="ADMIN">Administração</option>
-              </select>
+                <SelectTrigger id="rsvp-history-member">
+                  <SelectValue placeholder="Todos" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos</SelectItem>
+                  {historyMembers
+                    .filter(
+                      (member) =>
+                        !historyGroupId ||
+                        knownGroups
+                          .find((group) => group.id === historyGroupId)
+                          ?.members.some(
+                            (candidate) => candidate.id === member.id,
+                          ),
+                    )
+                    .map((member) => (
+                      <SelectItem key={member.id} value={member.id}>
+                        {member.label}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </label>
+            <label htmlFor="rsvp-history-actor">
+              Origem
+              <Select
+                value={historyActor || "all"}
+                onValueChange={(value) =>
+                  setHistoryActor(value === "all" || !value ? "" : value)
+                }
+              >
+                <SelectTrigger id="rsvp-history-actor">
+                  <SelectValue placeholder="Todas" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todas</SelectItem>
+                  <SelectItem value="FAMILY">Família</SelectItem>
+                  <SelectItem value="ADMIN">Administração</SelectItem>
+                </SelectContent>
+              </Select>
             </label>
           </div>
           {loading ? (
@@ -574,13 +776,14 @@ export function RsvpSection({ siteId, lifecycle }: Props) {
             </ol>
           )}
           {history?.nextCursor && (
-            <button
+            <Button
               type="button"
+              variant="outline"
               disabled={loading}
               onClick={() => void loadHistory(history.nextCursor ?? "", true)}
             >
               Carregar mais
-            </button>
+            </Button>
           )}
         </>
       )}
