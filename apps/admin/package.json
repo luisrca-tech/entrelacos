@@ -16,7 +16,8 @@
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "@entrelacos/ui": "workspace:*",
-    "@entrelacos/contracts": "workspace:*"
+    "@entrelacos/contracts": "workspace:*",
+    "lucide-react": "0.511.0"
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "1.54.6",

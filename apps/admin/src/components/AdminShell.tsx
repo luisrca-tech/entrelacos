@@ -12,6 +12,7 @@ import {
 type AdminShellProps = {
   actor: MeResponse;
   siteId?: string;
+  siteName?: string;
   area?: SiteArea;
   onLogout: () => void;
   children: ReactNode;
@@ -20,6 +21,7 @@ type AdminShellProps = {
 export function AdminShell({
   actor,
   siteId,
+  siteName,
   area,
   onLogout,
   children,
@@ -40,7 +42,7 @@ export function AdminShell({
         {siteId && (
           <div className="sidebar-site">
             <span className="sidebar-kicker">Casamento atual</span>
-            <strong>{siteId}</strong>
+            {siteName && <strong>{siteName}</strong>}
           </div>
         )}
         {siteId ? (
@@ -75,7 +77,6 @@ export function AdminShell({
             <span className="topbar-kicker">
               {role === "OWNER" ? "Conta proprietária" : "Acesso de equipe"}
             </span>
-            {siteId && <span className="topbar-site">/ {siteId}</span>}
           </div>
           <AccountMenu actor={actor} initials={initials} onLogout={onLogout} />
         </header>

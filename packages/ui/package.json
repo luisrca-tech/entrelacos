@@ -19,6 +19,7 @@
     "./dialog": "./src/components/dialog.tsx",
     "./calendar": "./src/components/calendar.tsx",
     "./date-picker": "./src/components/date-picker.tsx",
+    "./dropdown-menu": "./src/components/dropdown-menu.tsx",
     "./date": "./src/lib/date.ts",
     "./toaster": "./src/components/toaster.tsx",
     "./utils": "./src/lib/utils.ts",

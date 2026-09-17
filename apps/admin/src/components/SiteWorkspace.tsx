@@ -48,6 +48,7 @@ import { MessagesSection } from "./MessagesSection";
 import { RsvpSection } from "./RsvpSection";
 import { SmsUsageSection } from "./SmsUsageSection";
 import { publicSiteHandoffUrl } from "./sitePublicUrl";
+import { getWorkspaceHeading } from "./siteWorkspaceHeading";
 
 export type { SiteArea } from "./adminNavigation";
 
@@ -85,10 +86,12 @@ export function SiteWorkspace({
   siteId,
   owner,
   area = "overview",
+  onSiteName,
 }: {
   siteId: string;
   owner: boolean;
   area?: SiteArea;
+  onSiteName?: (name: string) => void;
 }) {
   const [site, setSite] = useState<SiteView | null>(null);
   const [admins, setAdmins] = useState<Admin[]>([]);
@@ -123,6 +126,7 @@ export function SiteWorkspace({
       owner ? base : `/v1/sites/${encodeURIComponent(siteId)}`,
     );
     setSite(result.site);
+    onSiteName?.(result.site.displayName);
     // Settings data is owner-scoped and never requested for SITE_ADMIN.
     if (owner && area === "settings") {
       const [users, names] = await Promise.all([
@@ -132,7 +136,7 @@ export function SiteWorkspace({
       setAdmins(users.admins);
       setDomains(names.domains);
     }
-  }, [area, base, owner, siteId]);
+  }, [area, base, onSiteName, owner, siteId]);
 
   useEffect(() => {
     setFatal(false);
@@ -274,6 +278,11 @@ export function SiteWorkspace({
   if (!site) return <p role="status">Carregando casamento…</p>;
 
   const inactive = site.lifecycle === "INACTIVE";
+  const heading = getWorkspaceHeading({
+    area,
+    owner,
+    lifecycle: site.lifecycle,
+  });
   const lifecycleLabel = lifecycleAction
     ? {
         "review/start": "Enviar este casamento para revisão?",
@@ -285,14 +294,36 @@ export function SiteWorkspace({
 
   return (
     <>
-      <section className="panel-heading">
-        {owner && <a href="/">← Todos os casamentos</a>}
-        <p className="eyebrow">
-          {owner ? "Gestão do casamento" : "Seu casamento"}
-        </p>
-        <h1>{site.displayName}</h1>
-        <p>{site.coupleNames.join(" & ")}</p>
-        <Badge>{labels[site.lifecycle]}</Badge>
+      <section className="panel-heading workspace-heading">
+        {heading.showBackLink && (
+          <a className="workspace-back" href="/">
+            ← Todos os casamentos
+          </a>
+        )}
+        <div className="workspace-heading-row">
+          <div>
+            <h1>{heading.title}</h1>
+            <p className="workspace-identity">{site.displayName}</p>
+            <p className="lede">{heading.lede}</p>
+          </div>
+          <div className="workspace-heading-actions">
+            {heading.showLifecycleBadge && (
+              <Badge
+                variant={site.lifecycle === "ACTIVE" ? "default" : "secondary"}
+              >
+                {labels[site.lifecycle]}
+              </Badge>
+            )}
+            {site.publicUrl && (
+              <a
+                className="primary-action"
+                href={publicSiteHandoffUrl(site.publicUrl)}
+              >
+                Ir para o site
+              </a>
+            )}
+          </div>
+        </div>
       </section>
       {error && !settingsDialog && (
         <p role="alert">
@@ -356,16 +387,6 @@ export function SiteWorkspace({
                 <strong>Publicação</strong>
                 <p>{labels[site.publicationState]}</p>
               </div>
-              {site.publicUrl && (
-                <div>
-                  <a
-                    className="primary-action"
-                    href={publicSiteHandoffUrl(site.publicUrl)}
-                  >
-                    Ir para o site
-                  </a>
-                </div>
-              )}
             </CardContent>
           </Card>
           <SmsUsageSection
@@ -672,7 +693,7 @@ export function SiteWorkspace({
                     />
                   </label>
                   <label htmlFor="site-couple-first">
-                    Primeiro nome
+                    Nome do noivo
                     <Input
                       id="site-couple-first"
                       name="first"
@@ -682,7 +703,7 @@ export function SiteWorkspace({
                     />
                   </label>
                   <label htmlFor="site-couple-second">
-                    Segundo nome
+                    Nome da noiva
                     <Input
                       id="site-couple-second"
                       name="second"

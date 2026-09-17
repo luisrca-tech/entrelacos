@@ -85,8 +85,9 @@ function DatePicker({
               type="button"
               variant={variant}
               data-empty={!formattedValue}
+              data-date-picker-trigger=""
               className={cnState<ButtonPrimitive.State>(
-                "w-full justify-start text-left font-normal data-[empty=true]:text-muted-foreground",
+                "min-w-0 max-w-full w-full justify-start overflow-hidden text-left font-normal data-[empty=true]:text-muted-foreground",
                 className,
               )}
               {...buttonProps}
@@ -96,7 +97,7 @@ function DatePicker({
           <CalendarDays aria-hidden="true" className="size-4" />
           {formattedValue ?? placeholder}
         </PopoverTrigger>
-        <PopoverContent className="w-auto p-0">
+        <PopoverContent align="start" className="w-auto p-0">
           <PopoverTitle className="sr-only">Selecionar data</PopoverTitle>
           <Calendar
             {...calendarProps}

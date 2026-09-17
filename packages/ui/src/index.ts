@@ -48,6 +48,13 @@ export {
   DialogViewport,
 } from "./components/dialog";
 export {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "./components/dropdown-menu";
+export {
   Field,
   FieldContent,
   FieldDescription,

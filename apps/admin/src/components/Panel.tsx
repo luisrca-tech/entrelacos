@@ -35,6 +35,7 @@ import { SiteWorkspace } from "./SiteWorkspace";
 
 export function Panel({ siteId, area }: { siteId?: string; area?: SiteArea }) {
   const [actor, setActor] = useState<MeResponse | null>(null);
+  const [siteName, setSiteName] = useState<string>();
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -97,6 +98,7 @@ export function Panel({ siteId, area }: { siteId?: string; area?: SiteArea }) {
     <AdminShell
       actor={actor}
       siteId={siteId}
+      siteName={siteName}
       area={siteId ? resolvedArea : undefined}
       onLogout={() => void logout()}
     >
@@ -105,6 +107,7 @@ export function Panel({ siteId, area }: { siteId?: string; area?: SiteArea }) {
           siteId={siteId}
           owner={actor.user.role === "OWNER"}
           area={resolvedArea}
+          onSiteName={setSiteName}
         />
       ) : (
         <OwnerSites />
@@ -272,7 +275,7 @@ function OwnerSites() {
                 <DatePicker id="site-date" name="date" required />
               </label>
               <label htmlFor="site-first-name">
-                Primeiro nome do casal
+                Nome do noivo
                 <Input
                   id="site-first-name"
                   name="first"
@@ -281,7 +284,7 @@ function OwnerSites() {
                 />
               </label>
               <label htmlFor="site-second-name">
-                Segundo nome do casal
+                Nome da noiva
                 <Input
                   id="site-second-name"
                   name="second"

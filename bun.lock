@@ -20,6 +20,7 @@
         "@entrelacos/ui": "workspace:*",
         "@tanstack/react-router": "1.170.34",
         "@tanstack/react-start": "1.168.51",
+        "lucide-react": "0.511.0",
         "react": "19.3.0",
         "react-dom": "19.3.0",
       },

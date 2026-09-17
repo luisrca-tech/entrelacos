@@ -16,6 +16,7 @@ import {
   Badge,
   Button,
   Card,
+  CardAction,
   CardContent,
   CardDescription,
   CardHeader,
@@ -25,17 +26,26 @@ import {
   DialogContent,
   DialogDescription,
   DialogTitle,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
   Input,
 } from "@entrelacos/ui";
+import { MoreHorizontal } from "lucide-react";
 import { type FormEvent, useCallback, useEffect, useState } from "react";
 import { ApiError, apiRequest } from "../lib/apiClient";
 import {
   canIssueDemoGuestGrant,
   createGuestGroupDraft,
   type GuestGroupDraft,
+  type GuestGroupMenuAction,
   groupDeletionConfirmation,
   guestGroupDraftErrors,
   guestGroupDraftPayload,
+  guestGroupMenuActionLabels,
+  guestGroupMenuActions,
 } from "./guestGroupsForm";
 import { emitGuestGroupsChanged } from "./guestGroupsRefresh";
 
@@ -137,6 +147,32 @@ export function GuestGroupsSection({
     if (inactive) return;
     setEditingId(group.id);
     setForm(draftFromGroup(group));
+    setError("");
+    setNotice("");
+  }
+
+  function handleGroupMenuAction(
+    action: GuestGroupMenuAction,
+    group: GuestGroupRecord,
+  ) {
+    if (action === "reveal-pin") {
+      void revealAccessPin(group);
+      return;
+    }
+    if (action === "rotate-pin") {
+      setRotationTarget(group);
+      return;
+    }
+    if (action === "demo-grant") {
+      void issueDemoAccess(group);
+      return;
+    }
+    if (action === "edit") {
+      startEdit(group);
+      return;
+    }
+    setDeleteTarget(group);
+    setDeleteConfirmation("");
     setError("");
     setNotice("");
   }
@@ -670,85 +706,91 @@ export function GuestGroupsSection({
         <p>Nenhum grupo cadastrado.</p>
       ) : (
         <div className="guest-group-list">
-          {groups.map((group) => (
-            <Card className="guest-group-card" key={group.id}>
-              <CardHeader>
-                <CardTitle>{group.name}</CardTitle>
-                <CardDescription>
-                  {group.isForeign
-                    ? "Grupo estrangeiro · sem SMS"
-                    : `Representante: ${group.members.find((member) => member.isRepresentative)?.fullName ?? "Não informado"} · ${group.phone}`}
-                </CardDescription>
-                <Badge variant="outline">
-                  {group.members.length} convidados
-                </Badge>
-              </CardHeader>
-              <CardContent>
-                <ul className="guest-group-members">
-                  {group.members.map((member) => (
-                    <li key={member.id}>
-                      {member.fullName}
-                      {member.isRepresentative && " · representante"}
-                    </li>
-                  ))}
-                </ul>
-                {!inactive && (
-                  <div className="inline-actions">
-                    {!group.isForeign && (
-                      <>
-                        <Button
-                          disabled={pending}
-                          type="button"
-                          onClick={() => void revealAccessPin(group)}
-                        >
-                          Exibir PIN
-                        </Button>
-                        <Button
-                          disabled={pending}
-                          type="button"
-                          variant="outline"
-                          onClick={() => setRotationTarget(group)}
-                        >
-                          Rotacionar PIN
-                        </Button>
-                      </>
-                    )}
-                    {canIssueDemoGuestGrant(owner, isDemo, inactive, group) && (
-                      <Button
-                        disabled={pending}
-                        type="button"
-                        variant="outline"
-                        onClick={() => void issueDemoAccess(group)}
-                      >
-                        Gerar acesso demo
-                      </Button>
-                    )}
-                    <Button
-                      disabled={pending}
-                      type="button"
-                      variant="outline"
-                      onClick={() => startEdit(group)}
-                    >
-                      Editar
-                    </Button>
-                    <Button
-                      disabled={pending}
-                      type="button"
-                      variant="destructive"
-                      onClick={() => {
-                        setDeleteTarget(group);
-                        setDeleteConfirmation("");
-                        setError("");
-                        setNotice("");
-                      }}
-                    >
-                      Excluir
-                    </Button>
+          {groups.map((group) => {
+            const actions = guestGroupMenuActions({
+              owner,
+              isDemo,
+              inactive,
+              isForeign: group.isForeign,
+              phone: group.phone,
+            });
+            return (
+              <Card className="guest-group-card" key={group.id}>
+                <CardHeader className="flex w-full flex-row items-start justify-between">
+                  <div>
+                    <CardTitle>{group.name}</CardTitle>
+                    <CardDescription>
+                      {group.isForeign
+                        ? "Grupo estrangeiro · sem SMS"
+                        : `Representante: ${group.members.find((member) => member.isRepresentative)?.fullName ?? "Não informado"} · ${group.phone}`}
+                    </CardDescription>
+                    <Badge variant="outline">
+                      {group.members.length} convidados
+                    </Badge>
                   </div>
-                )}
-              </CardContent>
-            </Card>
-          ))}
+                  {actions.length > 0 && (
+                    <CardAction>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger
+                          disabled={pending}
+                          render={
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon-sm"
+                              className="size-8"
+                              aria-label={`Ações de ${group.name}`}
+                            />
+                          }
+                        >
+                          <MoreHorizontal aria-hidden="true" />
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          {actions
+                            .filter((action) => action !== "delete")
+                            .map((action) => (
+                              <DropdownMenuItem
+                                key={action}
+                                disabled={pending}
+                                onClick={() =>
+                                  handleGroupMenuAction(action, group)
+                                }
+                              >
+                                {guestGroupMenuActionLabels[action]}
+                              </DropdownMenuItem>
+                            ))}
+                          {actions.includes("delete") && (
+                            <>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                variant="destructive"
+                                disabled={pending}
+                                onClick={() =>
+                                  handleGroupMenuAction("delete", group)
+                                }
+                              >
+                                {guestGroupMenuActionLabels.delete}
+                              </DropdownMenuItem>
+                            </>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </CardAction>
+                  )}
+                </CardHeader>
+                <CardContent>
+                  <ul className="guest-group-members">
+                    {group.members.map((member) => (
+                      <li key={member.id}>
+                        {member.fullName}
+                        {member.isRepresentative && " · representante"}
+                      </li>
+                    ))}
+                  </ul>
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       )}
     </section>

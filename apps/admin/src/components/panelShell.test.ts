@@ -6,6 +6,18 @@ const panelSource = readFileSync(
   resolve(import.meta.dirname, "Panel.tsx"),
   "utf8",
 );
+const shellSource = readFileSync(
+  resolve(import.meta.dirname, "AdminShell.tsx"),
+  "utf8",
+);
+const workspaceSource = readFileSync(
+  resolve(import.meta.dirname, "SiteWorkspace.tsx"),
+  "utf8",
+);
+const stylesSource = readFileSync(
+  resolve(import.meta.dirname, "../styles.css"),
+  "utf8",
+);
 const routeSource = readFileSync(
   resolve(import.meta.dirname, "../routes/sites.$siteId.tsx"),
   "utf8",
@@ -20,5 +32,25 @@ describe("admin shell safety regressions", () => {
   it("redirects only the compatibility parent path", () => {
     expect(routeSource).toContain("location.pathname");
     expect(routeSource).toContain("if (pathname === parentPath)");
+  });
+
+  it("keeps the create-site dialog from growing a horizontal scrollbar", () => {
+    expect(stylesSource).toMatch(
+      /\.create-site-dialog\s*\{[^}]*overflow-x:\s*hidden;[^}]*overflow-y:\s*auto;/s,
+    );
+    expect(stylesSource).toMatch(
+      /\.form-grid\s*>\s*\*\s*\{[^}]*min-width:\s*0;/s,
+    );
+  });
+
+  it("shows the wedding name in the shell instead of the site id", () => {
+    expect(shellSource).toContain("siteName");
+    expect(shellSource).not.toContain(
+      '{siteId && <span className="topbar-site">/ {siteId}</span>}',
+    );
+    expect(shellSource).not.toContain("<strong>{siteId}</strong>");
+    expect(shellSource).toContain("{siteName && <strong>{siteName}</strong>}");
+    expect(panelSource).toContain("siteName={siteName}");
+    expect(workspaceSource).toContain("onSiteName");
   });
 });

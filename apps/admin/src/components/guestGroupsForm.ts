@@ -28,6 +28,41 @@ export function canIssueDemoGuestGrant(
   );
 }
 
+export const guestGroupMenuActionLabels = {
+  "reveal-pin": "Exibir PIN",
+  "rotate-pin": "Rotacionar PIN",
+  "demo-grant": "Gerar acesso demo",
+  edit: "Editar",
+  delete: "Excluir",
+} as const;
+
+export type GuestGroupMenuAction = keyof typeof guestGroupMenuActionLabels;
+
+export function guestGroupMenuActions({
+  owner,
+  isDemo,
+  inactive,
+  isForeign,
+  phone,
+}: {
+  owner: boolean;
+  isDemo: boolean;
+  inactive: boolean;
+  isForeign: boolean;
+  phone: string | null;
+}): GuestGroupMenuAction[] {
+  if (inactive) return [];
+  const actions: GuestGroupMenuAction[] = [];
+  if (!isForeign) {
+    actions.push("reveal-pin", "rotate-pin");
+  }
+  if (canIssueDemoGuestGrant(owner, isDemo, inactive, { isForeign, phone })) {
+    actions.push("demo-grant");
+  }
+  actions.push("edit", "delete");
+  return actions;
+}
+
 export function groupDeletionConfirmation(
   groupId: string,
   groupName: string,
