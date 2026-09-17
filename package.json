@@ -15,6 +15,8 @@
     "format": "biome format --write .",
     "test": "vitest run",
     "test:db": "vitest run --config vitest.database.config.ts",
+    "check:workspaces": "bun scripts/workspaceGate.ts",
+    "check:public-builds": "bun scripts/publicBuildGate.ts",
     "check": "bun run lint && bun run typecheck && bun run test && bun run build"
   },
   "devDependencies": {

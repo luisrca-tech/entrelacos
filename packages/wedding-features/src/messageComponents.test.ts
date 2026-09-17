@@ -1,9 +1,16 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import type { PublicMuralResponse } from "@entrelacos/contracts";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { FamilyMessageForm } from "./FamilyMessageForm";
 import { mergeMuralMessages } from "./MessageMural";
+
+const guestAccessSource = readFileSync(
+  resolve(import.meta.dirname, "GuestAccessPanel.tsx"),
+  "utf8",
+);
 
 const message = {
   id: "message-a",
@@ -70,6 +77,17 @@ describe("family message form", () => {
 
     expect(html).toContain("Use somente texto simples");
     expect(html).toContain('disabled=""');
+  });
+});
+
+describe("guest lookup form", () => {
+  it("uses the localized application validation path", () => {
+    expect(guestAccessSource).toMatch(
+      /<form\s+className="entrelacos-guest-access__form"\s+noValidate\s+onSubmit=\{startLookup\}/,
+    );
+    expect(guestAccessSource).toContain(
+      "Informe o nome completo e um celular brasileiro válido.",
+    );
   });
 });
 

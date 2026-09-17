@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 import { apiRequest, safePanelReturn } from "../lib/apiClient";
 
 export const Route = createFileRoute("/login")({
@@ -13,7 +13,9 @@ export const Route = createFileRoute("/login")({
 function LoginPage() {
   const search = Route.useSearch();
   const [error, setError] = useState("");
+  const [hydrated, setHydrated] = useState(false);
   const [pending, setPending] = useState(false);
+  useEffect(() => setHydrated(true), []);
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
@@ -43,7 +45,7 @@ function LoginPage() {
         <p className="lede">
           Entre com o acesso recebido do responsável pelo seu casamento.
         </p>
-        <form className="data-form" onSubmit={submit}>
+        <form className="data-form" method="post" onSubmit={submit}>
           <label>
             E-mail
             <input
@@ -66,7 +68,11 @@ function LoginPage() {
             />
           </label>
           {error && <p role="alert">{error}</p>}
-          <button type="submit" disabled={pending}>
+          <button
+            type="submit"
+            data-login-ready={hydrated ? "true" : undefined}
+            disabled={!hydrated || pending}
+          >
             {pending ? "Entrando…" : "Entrar"}
           </button>
         </form>
