@@ -40,13 +40,16 @@ import {
   TableRow,
   Textarea,
 } from "@entrelacos/ui";
+import { Link } from "@tanstack/react-router";
 import { type FormEvent, useCallback, useEffect, useState } from "react";
 import { ApiError, apiRequest } from "../lib/apiClient";
 import type { SiteArea } from "./adminNavigation";
 import { GuestGroupsSection } from "./GuestGroupsSection";
 import { MessagesSection } from "./MessagesSection";
+import { OverflowMenu } from "./OverflowMenu";
 import { RsvpSection } from "./RsvpSection";
 import { SmsUsageSection } from "./SmsUsageSection";
+import { siteAdminMenuActions } from "./siteAdminMenu";
 import { publicSiteHandoffUrl } from "./sitePublicUrl";
 import { getWorkspaceHeading } from "./siteWorkspaceHeading";
 
@@ -211,6 +214,22 @@ export function SiteWorkspace({
     }
   }
 
+  function handleAdminMenuAction(action: string, admin: Admin) {
+    if (action === "issue-access") {
+      void issue(admin, admin.state === "PENDING" ? "ACTIVATION" : "RECOVERY");
+      return;
+    }
+    if (action === "revoke-access") {
+      setAccessLink("");
+      void mutate(`/v1/owner/admins/${admin.userId}/access/revoke`, {
+        userId: admin.userId,
+        purpose: admin.state === "PENDING" ? "ACTIVATION" : "RECOVERY",
+      });
+      return;
+    }
+    setAdminToDisable(admin);
+  }
+
   function openDomainEdit(domain: Domain) {
     setDomainToEdit(domain);
     setDomainState(domain.state);
@@ -296,9 +315,9 @@ export function SiteWorkspace({
     <>
       <section className="panel-heading workspace-heading">
         {heading.showBackLink && (
-          <a className="workspace-back" href="/">
+          <Link className="workspace-back" to="/">
             ← Todos os casamentos
-          </a>
+          </Link>
         )}
         <div className="workspace-heading-row">
           <div>
@@ -525,57 +544,14 @@ export function SiteWorkspace({
                           <Badge variant="outline">{labels[admin.state]}</Badge>
                         </TableCell>
                         <TableCell>
-                          {admin.state !== "DISABLED" && (
-                            <div className="inline-actions">
-                              <Button
-                                size="sm"
-                                disabled={pending}
-                                type="button"
-                                onClick={() =>
-                                  void issue(
-                                    admin,
-                                    admin.state === "PENDING"
-                                      ? "ACTIVATION"
-                                      : "RECOVERY",
-                                  )
-                                }
-                              >
-                                {admin.state === "PENDING"
-                                  ? "Gerar link de ativação"
-                                  : "Gerar link de recuperação"}
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                disabled={pending}
-                                type="button"
-                                onClick={() => {
-                                  setAccessLink("");
-                                  void mutate(
-                                    `/v1/owner/admins/${admin.userId}/access/revoke`,
-                                    {
-                                      userId: admin.userId,
-                                      purpose:
-                                        admin.state === "PENDING"
-                                          ? "ACTIVATION"
-                                          : "RECOVERY",
-                                    },
-                                  );
-                                }}
-                              >
-                                Revogar link
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="destructive"
-                                disabled={pending}
-                                type="button"
-                                onClick={() => setAdminToDisable(admin)}
-                              >
-                                Desativar acesso
-                              </Button>
-                            </div>
-                          )}
+                          <OverflowMenu
+                            label={`Ações de ${admin.name}`}
+                            disabled={pending}
+                            items={siteAdminMenuActions(admin.state)}
+                            onSelect={(action) =>
+                              handleAdminMenuAction(action, admin)
+                            }
+                          />
                         </TableCell>
                       </TableRow>
                     ))}

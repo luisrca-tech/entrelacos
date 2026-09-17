@@ -871,6 +871,10 @@ a:focus-visible {
   outline: 2px solid currentColor;
 }
 
+.rsvp-deadline-summary {
+  margin-bottom: 24px;
+}
+
 .rsvp-group-list,
 .message-group-list,
 .sms-usage-grid {
@@ -1039,6 +1043,31 @@ a:focus-visible {
 
 .guest-group-card h3 {
   margin-bottom: 8px;
+}
+
+.guest-member-editor {
+  display: grid;
+  gap: 10px;
+}
+
+.guest-member-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: 12px;
+}
+
+.guest-member-heading label {
+  margin: 0;
+}
+
+.guest-member-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: 12px;
 }
 
 .guest-group-meta {

@@ -53,4 +53,35 @@ describe("admin shell safety regressions", () => {
     expect(panelSource).toContain("siteName={siteName}");
     expect(workspaceSource).toContain("onSiteName");
   });
+
+  it("uses router links for global and responsive site navigation", () => {
+    expect(shellSource).toContain(
+      'import { Link } from "@tanstack/react-router";',
+    );
+    expect(shellSource).toContain('className="admin-nav-link is-active"');
+    expect(shellSource).toContain('to="/"');
+    expect(shellSource).toContain("to={item.href}");
+    expect(shellSource).toContain(
+      'aria-current={item.area === area ? "page" : undefined}',
+    );
+    expect(shellSource).not.toContain("href={item.href}");
+  });
+
+  it("keeps internal panel links inside the router", () => {
+    expect(panelSource).toContain(
+      'import { Link } from "@tanstack/react-router";',
+    );
+    expect(panelSource).toContain('to="/sites/$siteId/overview"');
+    expect(panelSource).toContain("params={{ siteId: site.id }}");
+    expect(panelSource).not.toContain("href=");
+    expect(workspaceSource).toContain(
+      'import { Link } from "@tanstack/react-router";',
+    );
+    expect(workspaceSource).toContain(
+      '<Link className="workspace-back" to="/">',
+    );
+    expect(workspaceSource).not.toContain(
+      '<a className="workspace-back" href="/">',
+    );
+  });
 });

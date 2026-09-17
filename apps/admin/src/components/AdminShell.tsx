@@ -54,16 +54,16 @@ export function AdminShell({
           </nav>
         ) : (
           <nav className="admin-navigation" aria-label="Navegação global">
-            <a
+            <Link
               className="admin-nav-link is-active"
-              href="/"
+              to="/"
               aria-current="page"
             >
               <span className="admin-nav-icon" aria-hidden="true">
                 ⌂
               </span>
               <span>Casamentos</span>
-            </a>
+            </Link>
           </nav>
         )}
       </aside>
@@ -106,9 +106,9 @@ function AdminNavigation({
   return (
     <div className="admin-navigation">
       {items.map((item) => (
-        <a
+        <Link
           className={`admin-nav-link${item.area === area ? " is-active" : ""}`}
-          href={item.href}
+          to={item.href}
           aria-current={item.area === area ? "page" : undefined}
           key={item.area}
         >
@@ -116,7 +116,7 @@ function AdminNavigation({
             {navigationIcon(item.area)}
           </span>
           <span>{item.label}</span>
-        </a>
+        </Link>
       ))}
     </div>
   );

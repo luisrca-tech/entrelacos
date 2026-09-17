@@ -21,6 +21,7 @@ import {
   TableHeader,
   TableRow,
 } from "@entrelacos/ui";
+import { Link } from "@tanstack/react-router";
 import {
   type FormEvent,
   useCallback,
@@ -31,16 +32,21 @@ import {
 import { ApiError, apiRequest } from "../lib/apiClient";
 import { AdminShell, ShellLoading } from "./AdminShell";
 import { resolveSiteArea, type SiteArea } from "./adminNavigation";
+import {
+  getCachedPanelActor,
+  loadPanelActor,
+  resetPanelActorCache,
+} from "./panelActor";
 import { SiteWorkspace } from "./SiteWorkspace";
 
 export function Panel({ siteId, area }: { siteId?: string; area?: SiteArea }) {
-  const [actor, setActor] = useState<MeResponse | null>(null);
+  const [actor, setActor] = useState<MeResponse | null>(getCachedPanelActor);
   const [siteName, setSiteName] = useState<string>();
   const [error, setError] = useState("");
 
   useEffect(() => {
     let active = true;
-    apiRequest<MeResponse>("/v1/me")
+    loadPanelActor()
       .then((value) => {
         if (active) setActor(value);
       })
@@ -65,6 +71,7 @@ export function Panel({ siteId, area }: { siteId?: string; area?: SiteArea }) {
   async function logout() {
     try {
       await apiRequest("/v1/auth/sign-out", { method: "POST", body: {} });
+      resetPanelActorCache();
       window.location.replace("/login");
     } catch {
       setError("Não foi possível sair. Tente novamente.");
@@ -333,13 +340,14 @@ function OwnerSites() {
                 {sites.map((site) => (
                   <TableRow key={site.id}>
                     <TableCell>
-                      <a
+                      <Link
                         className="site-table-link"
-                        href={`/sites/${site.id}/overview`}
+                        to="/sites/$siteId/overview"
+                        params={{ siteId: site.id }}
                       >
                         <strong>{site.displayName}</strong>
                         <span>{site.coupleNames.join(" & ")}</span>
-                      </a>
+                      </Link>
                     </TableCell>
                     <TableCell>{formatDate(site.eventDate)}</TableCell>
                     <TableCell>
@@ -352,12 +360,13 @@ function OwnerSites() {
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      <a
+                      <Link
                         className="table-action"
-                        href={`/sites/${site.id}/overview`}
+                        to="/sites/$siteId/overview"
+                        params={{ siteId: site.id }}
                       >
                         Abrir
-                      </a>
+                      </Link>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -366,9 +375,10 @@ function OwnerSites() {
           </div>
           <div className="mobile-site-cards">
             {sites.map((site) => (
-              <a
+              <Link
                 className="site-mobile-card"
-                href={`/sites/${site.id}/overview`}
+                to="/sites/$siteId/overview"
+                params={{ siteId: site.id }}
                 key={site.id}
               >
                 <div className="site-mobile-card-top">
@@ -384,7 +394,7 @@ function OwnerSites() {
                 <strong>{site.displayName}</strong>
                 <span>{site.coupleNames.join(" & ")}</span>
                 <small>{formatDate(site.eventDate)}</small>
-              </a>
+              </Link>
             ))}
           </div>
           {sites.length === 0 && (

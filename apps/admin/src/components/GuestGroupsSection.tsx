@@ -26,14 +26,9 @@ import {
   DialogContent,
   DialogDescription,
   DialogTitle,
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
   Input,
 } from "@entrelacos/ui";
-import { MoreHorizontal } from "lucide-react";
+import { Trash2 } from "lucide-react";
 import { type FormEvent, useCallback, useEffect, useState } from "react";
 import { ApiError, apiRequest } from "../lib/apiClient";
 import {
@@ -48,6 +43,7 @@ import {
   guestGroupMenuActions,
 } from "./guestGroupsForm";
 import { emitGuestGroupsChanged } from "./guestGroupsRefresh";
+import { OverflowMenu } from "./OverflowMenu";
 
 type GuestGroupsSectionProps = {
   siteId: string;
@@ -507,49 +503,58 @@ export function GuestGroupsSection({
                 </p>
                 {form.members.map((member, index) => (
                   <div className="guest-member-editor" key={member.id ?? index}>
-                    <label htmlFor={`guest-member-${index}`}>
-                      Nome completo
-                      <Input
-                        id={`guest-member-${index}`}
-                        maxLength={160}
-                        required
-                        value={member.fullName}
-                        onChange={(event) =>
-                          updateMember(index, { fullName: event.target.value })
-                        }
-                      />
-                    </label>
-                    <label
-                      className="checkbox-label"
-                      htmlFor={`guest-representative-${index}`}
-                    >
-                      <Checkbox
-                        id={`guest-representative-${index}`}
-                        checked={member.isRepresentative}
-                        onCheckedChange={(checked) =>
-                          checked && setRepresentative(index)
-                        }
-                      />
-                      Representante
-                    </label>
-                    <Button
-                      variant="outline"
-                      disabled={pending || form.members.length <= 1}
-                      type="button"
-                      onClick={() => removeMember(index)}
-                    >
-                      Remover
-                    </Button>
+                    <div className="guest-member-heading">
+                      <label htmlFor={`guest-member-${index}`}>
+                        Nome completo
+                      </label>
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        className="size-8"
+                        disabled={pending || form.members.length <= 1}
+                        type="button"
+                        aria-label="Remover convidado"
+                        onClick={() => removeMember(index)}
+                      >
+                        <Trash2 aria-hidden="true" />
+                      </Button>
+                    </div>
+                    <Input
+                      id={`guest-member-${index}`}
+                      maxLength={160}
+                      required
+                      value={member.fullName}
+                      onChange={(event) =>
+                        updateMember(index, { fullName: event.target.value })
+                      }
+                    />
+                    <div className="guest-member-footer">
+                      <label
+                        className="checkbox-label"
+                        htmlFor={`guest-representative-${index}`}
+                      >
+                        <Checkbox
+                          id={`guest-representative-${index}`}
+                          checked={member.isRepresentative}
+                          onCheckedChange={(checked) =>
+                            checked && setRepresentative(index)
+                          }
+                        />
+                        Representante
+                      </label>
+                      {index === form.members.length - 1 && (
+                        <Button
+                          disabled={pending}
+                          type="button"
+                          variant="outline"
+                          onClick={addMember}
+                        >
+                          Adicionar convidado
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 ))}
-                <Button
-                  disabled={pending}
-                  type="button"
-                  variant="outline"
-                  onClick={addMember}
-                >
-                  Adicionar convidado
-                </Button>
               </fieldset>
               <div className="inline-actions">
                 <Button disabled={pending} type="submit">
@@ -730,51 +735,22 @@ export function GuestGroupsSection({
                   </div>
                   {actions.length > 0 && (
                     <CardAction>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger
-                          disabled={pending}
-                          render={
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon-sm"
-                              className="size-8"
-                              aria-label={`Ações de ${group.name}`}
-                            />
-                          }
-                        >
-                          <MoreHorizontal aria-hidden="true" />
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          {actions
-                            .filter((action) => action !== "delete")
-                            .map((action) => (
-                              <DropdownMenuItem
-                                key={action}
-                                disabled={pending}
-                                onClick={() =>
-                                  handleGroupMenuAction(action, group)
-                                }
-                              >
-                                {guestGroupMenuActionLabels[action]}
-                              </DropdownMenuItem>
-                            ))}
-                          {actions.includes("delete") && (
-                            <>
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem
-                                variant="destructive"
-                                disabled={pending}
-                                onClick={() =>
-                                  handleGroupMenuAction("delete", group)
-                                }
-                              >
-                                {guestGroupMenuActionLabels.delete}
-                              </DropdownMenuItem>
-                            </>
-                          )}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                      <OverflowMenu
+                        label={`Ações de ${group.name}`}
+                        disabled={pending}
+                        items={actions.map((action) => ({
+                          id: action,
+                          label: guestGroupMenuActionLabels[action],
+                          variant:
+                            action === "delete" ? "destructive" : "default",
+                        }))}
+                        onSelect={(action) =>
+                          handleGroupMenuAction(
+                            action as GuestGroupMenuAction,
+                            group,
+                          )
+                        }
+                      />
                     </CardAction>
                   )}
                 </CardHeader>
