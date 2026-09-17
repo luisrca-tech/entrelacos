@@ -1,4 +1,22 @@
 import type { SiteMessageRecord } from "@entrelacos/contracts";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  Badge,
+  Button,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  Checkbox,
+} from "@entrelacos/ui";
 import { useCallback, useEffect, useState } from "react";
 import { apiRequest } from "../lib/apiClient";
 import { listenForGuestGroupsChanged } from "./guestGroupsRefresh";
@@ -23,6 +41,9 @@ export function MessagesSection({ siteId, lifecycle }: Props) {
   const [pending, setPending] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [removeTarget, setRemoveTarget] = useState<SiteMessageRecord | null>(
+    null,
+  );
   const mutable = lifecycle !== "INACTIVE";
 
   const load = useCallback(
@@ -98,13 +119,13 @@ export function MessagesSection({ siteId, lifecycle }: Props) {
             convite. O texto dos convidados não pode ser editado no painel.
           </p>
         </div>
-        <label className="mural-toggle">
-          <input
-            type="checkbox"
+        <label className="mural-toggle" htmlFor="mural-enabled">
+          <Checkbox
+            id="mural-enabled"
             checked={muralEnabled}
             disabled={!mutable || Boolean(pending)}
-            onChange={(event) => {
-              const enabled = event.target.checked;
+            onCheckedChange={(checked) => {
+              const enabled = checked === true;
               void mutate(
                 "mural",
                 `${base}/mural`,
@@ -127,6 +148,44 @@ export function MessagesSection({ siteId, lifecycle }: Props) {
       {error && <p role="alert">{error}</p>}
       {notice && <p role="status">{notice}</p>}
 
+      <AlertDialog
+        open={removeTarget !== null}
+        onOpenChange={(open) => !open && setRemoveTarget(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remover mensagem?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {removeTarget
+                ? `Remover a mensagem de ${removeTarget.groupName}? O texto não poderá ser recuperado.`
+                : ""}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={Boolean(pending)}>
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="danger-action"
+              disabled={Boolean(pending)}
+              onClick={() => {
+                if (removeTarget)
+                  void mutate(
+                    `delete:${removeTarget.groupId}`,
+                    `${base}/groups/${encodeURIComponent(removeTarget.groupId)}/message`,
+                    "DELETE",
+                    { expectedRevision: removeTarget.currentRevision },
+                    "Mensagem removida do mural.",
+                  );
+                setRemoveTarget(null);
+              }}
+            >
+              Remover mensagem
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {loading ? (
         <p role="status">Carregando mensagens…</p>
       ) : groups.length === 0 ? (
@@ -134,17 +193,20 @@ export function MessagesSection({ siteId, lifecycle }: Props) {
       ) : (
         <div className="message-group-list">
           {groups.map((group) => (
-            <article className="message-group-card" key={group.groupId}>
-              <header>
+            <Card className="message-group-card" key={group.groupId}>
+              <CardHeader>
                 <div>
-                  <h3>{group.groupName}</h3>
-                  <p>
+                  <CardTitle>{group.groupName}</CardTitle>
+                  <CardDescription>
                     {group.blocked ? "Envios bloqueados" : "Envios permitidos"}
-                  </p>
+                  </CardDescription>
                 </div>
-                <button
+                <Badge variant={group.blocked ? "destructive" : "outline"}>
+                  {group.blocked ? "Bloqueado" : "Permitido"}
+                </Badge>
+                <Button
                   type="button"
-                  className="secondary-action"
+                  variant="outline"
                   disabled={!mutable || Boolean(pending)}
                   onClick={() =>
                     void mutate(
@@ -163,63 +225,51 @@ export function MessagesSection({ siteId, lifecycle }: Props) {
                     : group.blocked
                       ? "Desbloquear envios"
                       : "Bloquear envios"}
-                </button>
-              </header>
-              {group.message ? (
-                <div className="message-admin-copy">
-                  <blockquote>{group.message.text}</blockquote>
-                  <p>
-                    <strong>{group.message.authorName}</strong> · Publicada em{" "}
-                    <time dateTime={group.message.createdAt}>
-                      {new Intl.DateTimeFormat("pt-BR", {
-                        dateStyle: "medium",
-                        timeStyle: "short",
-                        timeZone: "America/Sao_Paulo",
-                      }).format(new Date(group.message.createdAt))}
-                    </time>
-                  </p>
-                  <button
-                    type="button"
-                    className="danger-action"
-                    disabled={!mutable || Boolean(pending)}
-                    onClick={() => {
-                      if (
-                        window.confirm(
-                          `Remover a mensagem de ${group.groupName}? O texto não poderá ser recuperado.`,
-                        )
-                      ) {
-                        void mutate(
-                          `delete:${group.groupId}`,
-                          `${base}/groups/${encodeURIComponent(group.groupId)}/message`,
-                          "DELETE",
-                          { expectedRevision: group.currentRevision },
-                          "Mensagem removida do mural.",
-                        );
-                      }
-                    }}
-                  >
-                    {pending === `delete:${group.groupId}`
-                      ? "Removendo…"
-                      : "Remover mensagem"}
-                  </button>
-                </div>
-              ) : (
-                <p>Este convite ainda não publicou uma mensagem.</p>
-              )}
-            </article>
+                </Button>
+              </CardHeader>
+              <CardContent>
+                {group.message ? (
+                  <div className="message-admin-copy">
+                    <blockquote>{group.message.text}</blockquote>
+                    <p>
+                      <strong>{group.message.authorName}</strong> · Publicada em{" "}
+                      <time dateTime={group.message.createdAt}>
+                        {new Intl.DateTimeFormat("pt-BR", {
+                          dateStyle: "medium",
+                          timeStyle: "short",
+                          timeZone: "America/Sao_Paulo",
+                        }).format(new Date(group.message.createdAt))}
+                      </time>
+                    </p>
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      disabled={!mutable || Boolean(pending)}
+                      onClick={() => setRemoveTarget(group)}
+                    >
+                      {pending === `delete:${group.groupId}`
+                        ? "Removendo…"
+                        : "Remover mensagem"}
+                    </Button>
+                  </div>
+                ) : (
+                  <p>Este convite ainda não publicou uma mensagem.</p>
+                )}
+              </CardContent>
+            </Card>
           ))}
         </div>
       )}
 
       {nextCursor && (
-        <button
+        <Button
           type="button"
-          className="secondary-action"
+          variant="outline"
           disabled={loading || Boolean(pending)}
           onClick={() => void load(nextCursor)}
         >
           Ver mais convites
-        </button>
+        </Button>
       )}
     </section>
   );

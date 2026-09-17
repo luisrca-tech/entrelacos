@@ -5,9 +5,58 @@ import {
   groupDeletionConfirmation,
   guestGroupDraftErrors,
   guestGroupDraftPayload,
+  guestGroupMenuActions,
 } from "./guestGroupsForm";
 
 describe("guest group admin form", () => {
+  it("lists overflow actions for an active Brazilian group", () => {
+    expect(
+      guestGroupMenuActions({
+        owner: false,
+        isDemo: false,
+        inactive: false,
+        isForeign: false,
+        phone: "+5562999999999",
+      }),
+    ).toEqual(["reveal-pin", "rotate-pin", "edit", "delete"]);
+  });
+
+  it("hides PIN and demo actions for foreign groups", () => {
+    expect(
+      guestGroupMenuActions({
+        owner: true,
+        isDemo: true,
+        inactive: false,
+        isForeign: true,
+        phone: null,
+      }),
+    ).toEqual(["edit", "delete"]);
+  });
+
+  it("adds demo grant only for the owner of a Brazilian demo group", () => {
+    expect(
+      guestGroupMenuActions({
+        owner: true,
+        isDemo: true,
+        inactive: false,
+        isForeign: false,
+        phone: "+5562999999999",
+      }),
+    ).toEqual(["reveal-pin", "rotate-pin", "demo-grant", "edit", "delete"]);
+  });
+
+  it("hides the overflow menu when the wedding is inactive", () => {
+    expect(
+      guestGroupMenuActions({
+        owner: true,
+        isDemo: true,
+        inactive: true,
+        isForeign: false,
+        phone: "+5562999999999",
+      }),
+    ).toEqual([]);
+  });
+
   it("offers demo authorization only to the owner for a Brazilian demo group", () => {
     const group = { isForeign: false, phone: "+5562999999999" };
 

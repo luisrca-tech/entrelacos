@@ -1,4 +1,14 @@
 import type { SmsUsageResponse } from "@entrelacos/contracts";
+import {
+  Badge,
+  Button,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  Input,
+} from "@entrelacos/ui";
 import { useCallback, useEffect, useState } from "react";
 import { ApiError, apiRequest } from "../lib/apiClient";
 import { smsUsageProgress } from "./smsUsage";
@@ -102,9 +112,7 @@ export function SmsUsageSection({ siteId, lifecycle, owner }: Props) {
             representa custo do provedor.
           </p>
         </div>
-        {usage && (
-          <span className="status-pill">{alertLabels[usage.alert]}</span>
-        )}
+        {usage && <Badge variant="outline">{alertLabels[usage.alert]}</Badge>}
       </div>
       {error && <p role="alert">{error}</p>}
       {notice && <p role="status">{notice}</p>}
@@ -130,32 +138,45 @@ export function SmsUsageSection({ siteId, lifecycle, owner }: Props) {
             </label>
           )}
           <div className="sms-usage-grid">
-            <article>
-              <h3>SMS real</h3>
-              <p>{usage.realSms.consumed} reservas consumidas</p>
-              <small>
-                {usage.realSms.providerAccepted} aceitas pelo provedor ·{" "}
-                {usage.realSms.failedFinal} falhas finais ·{" "}
-                {usage.realSms.unknown} desconhecidas · {usage.realSms.reserved}{" "}
-                reservadas
-              </small>
-            </article>
-            <article>
-              <h3>Simulação</h3>
-              <p>{usage.simulated.consumed} reservas de teste</p>
-              <small>
-                Não são envios Twilio, não indicam entrega e não representam
-                custo real.
-              </small>
-            </article>
+            <Card>
+              <CardHeader>
+                <CardTitle>SMS real</CardTitle>
+                <CardDescription>
+                  {usage.realSms.consumed} reservas consumidas
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <small>
+                  {usage.realSms.providerAccepted} aceitas pelo provedor ·{" "}
+                  {usage.realSms.failedFinal} falhas finais ·{" "}
+                  {usage.realSms.unknown} desconhecidas ·{" "}
+                  {usage.realSms.reserved} reservadas
+                </small>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle>Simulação</CardTitle>
+                <CardDescription>
+                  {usage.simulated.consumed} reservas de teste
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <small>
+                  Não são envios Twilio, não indicam entrega e não representam
+                  custo real.
+                </small>
+              </CardContent>
+            </Card>
           </div>
         </>
       )}
       {owner && (
         <div className="sms-quota-form">
-          <label>
+          <label htmlFor="sms-monthly-limit">
             Cota mensal de SMS real
-            <input
+            <Input
+              id="sms-monthly-limit"
               type="number"
               min={0}
               max={1_000_000}
@@ -166,13 +187,13 @@ export function SmsUsageSection({ siteId, lifecycle, owner }: Props) {
               onChange={(event) => setLimit(event.target.value)}
             />
           </label>
-          <button
+          <Button
             type="button"
             disabled={inactive || pending || limit === ""}
             onClick={() => void saveLimit()}
           >
             {pending ? "Salvando…" : "Salvar cota"}
-          </button>
+          </Button>
         </div>
       )}
     </section>

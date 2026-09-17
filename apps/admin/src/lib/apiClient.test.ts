@@ -49,10 +49,19 @@ describe("panel API boundary", () => {
     expect(safePanelReturn("/handoff?siteId=one&challenge=abc")).toBe(
       "/handoff?siteId=one&challenge=abc",
     );
+    expect(safePanelReturn("/sites/demo/overview")).toBe(
+      "/sites/demo/overview",
+    );
+    expect(safePanelReturn("/sites/demo/settings?tab=domain")).toBe(
+      "/sites/demo/settings?tab=domain",
+    );
     for (const value of [
       "//evil.test",
       "https://evil.test",
       "/login",
+      "/sites",
+      "/sites/demo/unknown",
+      "/sites/demo/overview#evil",
       "/handoff/../evil",
       "/handoff#evil",
       undefined,

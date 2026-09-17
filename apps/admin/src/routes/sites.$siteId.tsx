@@ -1,7 +1,14 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { Panel } from "../components/Panel";
-export const Route = createFileRoute("/sites/$siteId")({ component: SitePage });
-function SitePage() {
-  const { siteId } = Route.useParams();
-  return <Panel key={siteId} siteId={siteId} />;
-}
+import { createFileRoute, redirect } from "@tanstack/react-router";
+
+export const Route = createFileRoute("/sites/$siteId")({
+  beforeLoad: ({ location, params }) => {
+    const pathname = location.pathname.replace(/\/+$/, "");
+    const parentPath = `/sites/${encodeURIComponent(params.siteId)}`;
+    if (pathname === parentPath) {
+      throw redirect({
+        to: "/sites/$siteId/overview",
+        params: { siteId: params.siteId },
+      });
+    }
+  },
+});
