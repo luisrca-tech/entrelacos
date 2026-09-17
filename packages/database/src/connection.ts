@@ -2,7 +2,7 @@ import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { Pool, type PoolConfig } from "pg";
 
-export type DatabaseTarget = "development" | "test";
+export type DatabaseTarget = "development" | "test" | "production";
 
 export interface DatabaseIdentity {
   branchId: string | null;
@@ -13,8 +13,8 @@ export interface DatabaseIdentity {
 }
 
 export interface ExpectedDatabaseIdentity {
-  branchId: string;
-  projectId: string;
+  branchId?: string;
+  projectId?: string;
   endpointId?: string;
   databaseName: string;
   userName?: string;
@@ -93,6 +93,15 @@ function userNameFromUrl(value: string): string | undefined {
   return userName ? decodeURIComponent(userName) : undefined;
 }
 
+function databaseNameFromUrl(value: string): string {
+  const databaseName = decodeURIComponent(
+    parseDatabaseUrl(value).pathname.slice(1),
+  );
+  if (!databaseName)
+    throw new Error("Database connection URL must name a database");
+  return databaseName;
+}
+
 export function normalizeDatabaseUrl(value: string): string {
   const url = parseDatabaseUrl(value);
   url.searchParams.set("sslmode", "verify-full");
@@ -110,15 +119,19 @@ export function resolveDatabaseConfig(
   target: DatabaseTarget,
   env: DatabaseEnvironment = process.env,
 ): DatabaseConfig {
-  if (target !== "development" && target !== "test") {
+  if (
+    target !== "development" &&
+    target !== "test" &&
+    target !== "production"
+  ) {
     throw new Error("Unsupported database target");
   }
-  const developmentUrl = requiredEnvironmentValue(env, "DATABASE_URL");
   const urlVariable = target === "test" ? "DATABASE_URL_TEST" : "DATABASE_URL";
   const rawUrl = requiredEnvironmentValue(env, urlVariable);
   const endpoint = normalizeNeonEndpoint(rawUrl);
 
   if (target === "test") {
+    const developmentUrl = requiredEnvironmentValue(env, "DATABASE_URL");
     const developmentEndpoint = normalizeNeonEndpoint(developmentUrl);
     if (endpoint === developmentEndpoint) {
       throw new Error(
@@ -132,6 +145,19 @@ export function resolveDatabaseConfig(
         "Test database endpoint must be distinct from production",
       );
     }
+  }
+
+  if (target === "production") {
+    return {
+      target,
+      url: normalizeDatabaseUrl(rawUrl),
+      endpoint,
+      expectedIdentity: {
+        endpointId: endpointIdFromUrl(rawUrl),
+        databaseName: databaseNameFromUrl(rawUrl),
+        userName: userNameFromUrl(rawUrl),
+      },
+    };
   }
 
   const branchVariable =
@@ -167,10 +193,16 @@ export function assertDatabaseIdentity(
   actual: DatabaseIdentity,
   expected: ExpectedDatabaseIdentity,
 ): void {
-  if (!actual.branchId || actual.branchId !== expected.branchId) {
+  if (
+    expected.branchId &&
+    (!actual.branchId || actual.branchId !== expected.branchId)
+  ) {
     throw new Error(`Database ${target} identity mismatch: Neon branch`);
   }
-  if (!actual.projectId || actual.projectId !== expected.projectId) {
+  if (
+    expected.projectId &&
+    (!actual.projectId || actual.projectId !== expected.projectId)
+  ) {
     throw new Error(`Database ${target} identity mismatch: Neon project`);
   }
   if (

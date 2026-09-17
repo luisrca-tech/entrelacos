@@ -70,6 +70,22 @@ describe("database connection guards", () => {
     ).toThrow("DATABASE_URL_TEST");
   });
 
+  it("derives production identity checks from DATABASE_URL only", () => {
+    expect(
+      resolveDatabaseConfig("production", {
+        DATABASE_URL: productionUrl,
+      }),
+    ).toMatchObject({
+      target: "production",
+      endpoint: "ep-production.example.neon.tech",
+      expectedIdentity: {
+        endpointId: "ep-production",
+        databaseName: "neondb",
+        userName: "user",
+      },
+    });
+  });
+
   it("rejects a test URL that points to development or production", () => {
     expect(() =>
       resolveDatabaseConfig("test", {
@@ -122,6 +138,24 @@ describe("database connection guards", () => {
         },
       ),
     ).toThrow(/branch/i);
+
+    expect(() =>
+      assertDatabaseIdentity(
+        "production",
+        {
+          branchId: null,
+          projectId: null,
+          endpointId: "ep-production",
+          databaseName: "neondb",
+          userName: "user",
+        },
+        {
+          endpointId: "ep-production",
+          databaseName: "neondb",
+          userName: "user",
+        },
+      ),
+    ).not.toThrow();
   });
 
   it("reads all required identity values with one query", async () => {

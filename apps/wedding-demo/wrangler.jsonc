@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "entrelacos-wedding-demo",
+  "name": "demo",
   "compatibility_date": "2026-09-09",
   "assets": {
     "directory": "./dist"

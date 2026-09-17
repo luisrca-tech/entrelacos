@@ -35,13 +35,36 @@ function phoneAllowlist(value: string | undefined): string[] {
   return [...new Set(phones)];
 }
 
-export function readRuntimeConfig(env: Record<string, string | undefined>) {
-  if (env.APP_ENV !== "development" && env.APP_ENV !== "test") {
-    throw new Error(
-      "APP_ENV must explicitly select development or test; production is not configured",
-    );
+function databaseTarget(
+  env: Record<string, string | undefined>,
+): DatabaseTarget {
+  const explicit = env.APP_ENV?.trim();
+  if (
+    explicit === "development" ||
+    explicit === "test" ||
+    explicit === "production"
+  ) {
+    return explicit;
   }
-  const target: DatabaseTarget = env.APP_ENV;
+  if (!explicit && env.RAILWAY_ENVIRONMENT_NAME?.trim() === "production") {
+    return "production";
+  }
+  throw new Error(
+    "APP_ENV must select development, test, or production outside Railway production",
+  );
+}
+
+function betterAuthOrigin(env: Record<string, string | undefined>): string {
+  const configured = env.BETTER_AUTH_URL?.trim();
+  const railwayDomain = env.RAILWAY_PUBLIC_DOMAIN?.trim();
+  return origin(
+    configured || (railwayDomain ? `https://${railwayDomain}` : undefined),
+    "BETTER_AUTH_URL",
+  );
+}
+
+export function readRuntimeConfig(env: Record<string, string | undefined>) {
+  const target = databaseTarget(env);
   const port = Number(env.PORT ?? "8080");
   if (!Number.isInteger(port) || port < 1 || port > 65535) {
     throw new Error("PORT must be an integer between 1 and 65535");
@@ -67,7 +90,12 @@ export function readRuntimeConfig(env: Record<string, string | undefined>) {
   const exposeSimulationCode =
     (env.EXPOSE_SIMULATION_CODE ?? "false").trim().toLowerCase() === "true";
   const trustProxyHeaders =
-    (env.TRUST_PROXY_HEADERS ?? "false").trim().toLowerCase() === "true";
+    (
+      env.TRUST_PROXY_HEADERS ??
+      (env.RAILWAY_ENVIRONMENT_NAME?.trim() ? "true" : "false")
+    )
+      .trim()
+      .toLowerCase() === "true";
   const demoGrantSecret = (
     env.GUEST_DEMO_GRANT_SECRET ?? fingerprintSecret
   ).trim();
@@ -101,7 +129,7 @@ export function readRuntimeConfig(env: Record<string, string | undefined>) {
     target,
     port,
     secret,
-    baseURL: origin(env.BETTER_AUTH_URL, "BETTER_AUTH_URL"),
+    baseURL: betterAuthOrigin(env),
     adminOrigin: origin(env.ADMIN_ORIGIN, "ADMIN_ORIGIN"),
     smsMode,
     fingerprintSecret,
