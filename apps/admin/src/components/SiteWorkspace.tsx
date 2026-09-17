@@ -15,6 +15,7 @@ import {
   Badge,
   Button,
   Card,
+  CardAction,
   CardContent,
   CardDescription,
   CardHeader,
@@ -519,11 +520,21 @@ export function SiteWorkspace({
             </Card>
 
             <Card className="panel-section">
-              <CardHeader>
-                <CardTitle>Administradores</CardTitle>
-                <CardDescription>
-                  Gerencie acessos e sessões do casamento.
-                </CardDescription>
+              <CardHeader className="flex w-full flex-row items-start justify-between">
+                <div>
+                  <CardTitle>Administradores</CardTitle>
+                  <CardDescription>
+                    Gerencie acessos e sessões do casamento.
+                  </CardDescription>
+                </div>
+                <CardAction>
+                  <Button
+                    type="button"
+                    onClick={() => setSettingsDialog("admin")}
+                  >
+                    Adicionar administrador
+                  </Button>
+                </CardAction>
               </CardHeader>
               <CardContent>
                 <Table className="record-table">
@@ -557,21 +568,26 @@ export function SiteWorkspace({
                     ))}
                   </TableBody>
                 </Table>
-                <Button
-                  type="button"
-                  onClick={() => setSettingsDialog("admin")}
-                >
-                  Adicionar administrador
-                </Button>
               </CardContent>
             </Card>
 
             <Card className="panel-section">
-              <CardHeader>
-                <CardTitle>Domínios</CardTitle>
-                <CardDescription>
-                  DNS, hospedagem e renovação continuam sendo operações manuais.
-                </CardDescription>
+              <CardHeader className="flex w-full flex-row items-start justify-between">
+                <div>
+                  <CardTitle>Domínios</CardTitle>
+                  <CardDescription>
+                    DNS, hospedagem e renovação continuam sendo operações
+                    manuais.
+                  </CardDescription>
+                </div>
+                <CardAction>
+                  <Button
+                    type="button"
+                    onClick={() => setSettingsDialog("domain")}
+                  >
+                    Registrar domínio
+                  </Button>
+                </CardAction>
               </CardHeader>
               <CardContent>
                 <Table className="record-table">
@@ -614,12 +630,6 @@ export function SiteWorkspace({
                     ))}
                   </TableBody>
                 </Table>
-                <Button
-                  type="button"
-                  onClick={() => setSettingsDialog("domain")}
-                >
-                  Registrar domínio
-                </Button>
               </CardContent>
             </Card>
 
