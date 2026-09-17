@@ -26,6 +26,7 @@ describe("admin API proxy", () => {
         headers: {
           "Content-Type": "application/json",
           "Set-Cookie": "better-auth.session_token=opaque; Path=/; HttpOnly",
+          "X-Request-Id": "request-id",
         },
       }),
     );
@@ -51,6 +52,7 @@ describe("admin API proxy", () => {
     expect(response.headers.get("set-cookie")).toContain(
       "better-auth.session_token=opaque",
     );
+    expect(response.headers.get("x-request-id")).toBe("request-id");
     expect(await response.json()).toEqual({ ok: true });
     const [target, init] = upstream.mock.calls[0] as [string, RequestInit];
     expect(target).toBe("https://api.example.test/v1/auth/sign-in/email");

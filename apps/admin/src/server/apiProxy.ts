@@ -29,6 +29,7 @@ function copyResponseHeaders(source: Headers): Headers {
     "content-type",
     "pragma",
     "vary",
+    "x-request-id",
   ]) {
     const value = source.get(name);
     if (value) headers.set(name, value);

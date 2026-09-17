@@ -26,6 +26,8 @@ const challengeId = randomUUID().replaceAll("-", "").padEnd(43, "h");
 const sessionToken = randomUUID().replaceAll("-", "").padEnd(43, "t");
 const guestPhone = "+5511999999999";
 const guestIp = "203.0.113.60";
+const lookupRateLimitIp = "203.0.113.62";
+const missingGuestPhone = ["11", "9", "99999998"].join("");
 const manualIpSeed = randomUUID().replaceAll("-", "").slice(0, 12);
 const manualGuestIp = `2001:db8:${manualIpSeed.slice(0, 4)}:${manualIpSeed.slice(4, 8)}:${manualIpSeed.slice(8, 12)}::61`;
 let connection: DatabaseConnection;
@@ -115,11 +117,15 @@ describe("public guest HTTP PostgreSQL integration", () => {
     const phoneFingerprint = createHmac("sha256", guestSecret)
       .update(`guest-phone:${guestPhone}`)
       .digest("hex");
-    const ipFingerprints = [guestIp, manualGuestIp, "203.0.113.61"].map(
-      (ipAddress) =>
-        createHmac("sha256", guestSecret)
-          .update(`guest-ip:${ipAddress}`)
-          .digest("hex"),
+    const ipFingerprints = [
+      guestIp,
+      lookupRateLimitIp,
+      manualGuestIp,
+      "203.0.113.61",
+    ].map((ipAddress) =>
+      createHmac("sha256", guestSecret)
+        .update(`guest-ip:${ipAddress}`)
+        .digest("hex"),
     );
     await connection.db
       .delete(guestRateLimitEvent)
@@ -351,5 +357,70 @@ describe("public guest HTTP PostgreSQL integration", () => {
     );
     expect(verified.status).toBe(200);
     expect(await verified.json()).toMatchObject({ siteId, groupId: group?.id });
+  });
+
+  it("returns lookup rate limits from public challenge requests", async () => {
+    const lookupRateLimitApp = createApp({
+      auth: {} as never,
+      db: connection.db,
+      adminOrigin: "https://admin.example.test",
+      guestFingerprintSecret: guestSecret,
+      guestDemoGrantSecret: guestSecret,
+      guestDemoPhoneAllowlist: [],
+      guestResolveClientIp: () => lookupRateLimitIp,
+      now: () => fixedNow,
+    } as AuthHttpOptions);
+    const statuses: number[] = [];
+    const codes: string[] = [];
+    for (let attempt = 0; attempt < 11; attempt += 1) {
+      const response = await lookupRateLimitApp.request(
+        `/v1/public/sites/${siteId}/guest/challenge`,
+        {
+          headers: { Origin: origin, "Content-Type": "application/json" },
+          method: "POST",
+          body: JSON.stringify({
+            fullName: "Missing Guest",
+            phone: missingGuestPhone,
+          }),
+        },
+      );
+      statuses.push(response.status);
+      codes.push((await response.json()).code);
+    }
+    expect({ statuses, codes }).toEqual({
+      statuses: [404, 404, 404, 404, 404, 404, 404, 404, 404, 404, 429],
+      codes: [
+        "GUEST_NOT_FOUND",
+        "GUEST_NOT_FOUND",
+        "GUEST_NOT_FOUND",
+        "GUEST_NOT_FOUND",
+        "GUEST_NOT_FOUND",
+        "GUEST_NOT_FOUND",
+        "GUEST_NOT_FOUND",
+        "GUEST_NOT_FOUND",
+        "GUEST_NOT_FOUND",
+        "GUEST_NOT_FOUND",
+        "LOOKUP_RATE_LIMITED",
+      ],
+    });
+    expect(statuses.at(-1)).toBe(429);
+    expect(codes.slice(0, -1).every((code) => code === "GUEST_NOT_FOUND")).toBe(
+      true,
+    );
+    expect(codes.at(-1)).toBe("LOOKUP_RATE_LIMITED");
+    const repeated = await lookupRateLimitApp.request(
+      `/v1/public/sites/${siteId}/guest/challenge`,
+      {
+        headers: { Origin: origin, "Content-Type": "application/json" },
+        method: "POST",
+        body: JSON.stringify({
+          fullName: "Missing Guest",
+          phone: missingGuestPhone,
+        }),
+      },
+    );
+    expect(await repeated.json()).toMatchObject({
+      code: "LOOKUP_RATE_LIMITED",
+    });
   });
 });

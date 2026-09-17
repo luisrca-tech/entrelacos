@@ -440,6 +440,12 @@ Shared message presentation and API/session handling belong in `packages/wedding
 - Restore evidence includes measured timestamps and cost/tier assumptions. RPO/RTO remain “unproven” until real restoration passes.
 - Legal/retention/media review outputs include owner and decision date; unresolved items block the relevant release claim.
 
+### Implementation status — 2026-09-16
+
+B7-T1, B7-T4, and the local structured-output portion of B7-T5 are implemented on `block-7/quality-demo-recovery`; their automated evidence and boundaries are recorded in `docs/block7Validation.md`. B7-T2 has passing public and controlled OWNER browser evidence, including deterministic reset cleanup, the inherited OWNER-list gap, and the OWNER-side message/deadline matrix, but SITE_ADMIN and representative/family browser identities remain blocked. B7-T3 has a completed 20 × 500 synthetic read/challenge load slice with observed percentiles, only expected `200`/`429` responses, zero timeouts, stable tenant snapshots, and verified cleanup; the broader write/admin/cross-tenant mix remains partial.
+
+B7-T6 remains `UNPROVEN`: no authorized real backup/restore source and separate destination, tier, retention window, or accepted cost were available. B7-T7 remains open for named human/legal decisions. The active `Validate` workflow has local syntax and command evidence but no remote run, so the block as a whole is not complete and no production, provider, recovery, legal, remote-CI, or launch claim is approved.
+
 ---
 
 ## Block 8: Provisioning, independent deployment, domains, and manual lifecycle operations

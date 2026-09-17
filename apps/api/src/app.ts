@@ -3,17 +3,27 @@ import { Hono } from "hono";
 import { createAdminAccessHttpRouter } from "./adminAccessHttp";
 import { type AuthHttpOptions, createAuthHttpRouter } from "./authHttp";
 import { createDemoGuestGrantHttpRouter } from "./demoGuestGrant";
+import { createDemoResetHttpRouter } from "./demoResetHttp";
 import { createGuestGroupsHttpRouter } from "./guestGroupsHttp";
 import { createHandoffHttpRouter } from "./handoffHttp";
 import { createMessagesHttpRouter } from "./messagesHttp";
+import {
+  createObservabilityMiddleware,
+  type ObservabilityOptions,
+  type ObservabilityVariables,
+} from "./observability";
 import { createPublicGuestHttpRouter } from "./publicGuestHttp";
 import { createReportsHttpRouter } from "./reportsHttp";
 import { createRsvpHttpRouter } from "./rsvpHttp";
 import { createSitesHttpRouter } from "./sitesHttp";
 import { createSmsUsageHttpRouter } from "./smsUsageHttp";
 
-export function createApp(options?: AuthHttpOptions) {
-  const app = new Hono();
+export function createApp(
+  options?: AuthHttpOptions,
+  observability?: ObservabilityOptions,
+) {
+  const app = new Hono<{ Variables: ObservabilityVariables }>();
+  app.use("*", createObservabilityMiddleware(observability));
 
   app.get("/v1/health", (context) => {
     return context.json({
@@ -28,6 +38,7 @@ export function createApp(options?: AuthHttpOptions) {
     app.route("/", createSitesHttpRouter(options));
     app.route("/", createGuestGroupsHttpRouter(options));
     app.route("/", createDemoGuestGrantHttpRouter(options));
+    app.route("/", createDemoResetHttpRouter(options));
     app.route("/", createPublicGuestHttpRouter(options));
     app.route("/", createRsvpHttpRouter(options));
     app.route("/", createReportsHttpRouter(options));

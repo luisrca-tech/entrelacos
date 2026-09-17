@@ -422,6 +422,26 @@ html[data-template-js="true"] .template-home-intro {
   opacity: 1;
 }
 
+.template-home-intro__skip {
+  position: absolute;
+  z-index: 3;
+  right: max(1rem, env(safe-area-inset-right));
+  bottom: max(1rem, env(safe-area-inset-bottom));
+  min-height: 44px;
+  padding: 0.65rem 1rem;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--template-ivory) 86%, transparent);
+  color: var(--template-ink);
+  cursor: pointer;
+  font: inherit;
+}
+
+.template-home-intro__skip:hover,
+.template-home-intro__skip:focus-visible {
+  background: var(--template-ivory);
+}
+
 .template-home-intro__brand,
 .template-home-intro__label {
   margin: 0;

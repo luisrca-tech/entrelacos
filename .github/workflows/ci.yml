@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 jobs:
-  scaffold:
+  quality:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -20,7 +20,65 @@ jobs:
         with:
           bun-version-file: package.json
       - run: bun install --frozen-lockfile
-      - run: bun run check
+      - run: bun run check:workspaces
+      - run: bun run lint
+      - run: bun run typecheck
+      - run: bun run test
+      - run: bun run build
+      - run: bun run check:public-builds
+      - run: git diff --check
 
-# Real PostgreSQL/browser suites are added with their vertical slice.
-# No deployment, provider mutation or production migration belongs in this workflow.
+  database-integration:
+    needs: quality
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      DATABASE_URL_TEST: ${{ secrets.DATABASE_URL_TEST }}
+      DATABASE_PROJECT_ID: ${{ secrets.DATABASE_PROJECT_ID }}
+      DATABASE_DEVELOPMENT_BRANCH_ID: ${{ secrets.DATABASE_DEVELOPMENT_BRANCH_ID }}
+      DATABASE_TEST_BRANCH_ID: ${{ secrets.DATABASE_TEST_BRANCH_ID }}
+      DATABASE_NAME: ${{ secrets.DATABASE_NAME }}
+      DATABASE_ROLE: ${{ secrets.DATABASE_ROLE }}
+    steps:
+      - name: Classify disposable database configuration
+        id: database
+        shell: bash
+        run: |
+          required=(
+            DATABASE_URL
+            DATABASE_URL_TEST
+            DATABASE_PROJECT_ID
+            DATABASE_DEVELOPMENT_BRANCH_ID
+            DATABASE_TEST_BRANCH_ID
+            DATABASE_NAME
+          )
+          missing=0
+          for name in "${required[@]}"; do
+            if [[ -z "${!name}" ]]; then
+              missing=1
+            fi
+          done
+          if [[ "$missing" -eq 1 ]]; then
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "Database integration: SKIPPED because explicit disposable test configuration is incomplete." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+            echo "Database integration: configured; runtime identity checks remain mandatory." >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - if: steps.database.outputs.enabled == 'true'
+        uses: actions/checkout@v4
+      - if: steps.database.outputs.enabled == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+      - if: steps.database.outputs.enabled == 'true'
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+      - if: steps.database.outputs.enabled == 'true'
+        run: bun install --frozen-lockfile
+      - if: steps.database.outputs.enabled == 'true'
+        run: bun run test:db
+
+# Browser evidence remains a supervised local gate. No deployment, provider mutation,
+# main migration, production database, or live SMS belongs in this workflow.

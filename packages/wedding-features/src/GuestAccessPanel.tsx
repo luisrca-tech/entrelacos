@@ -687,7 +687,11 @@ export function GuestAccess({
       )}
 
       {phase === "lookup" && (
-        <form className="entrelacos-guest-access__form" onSubmit={startLookup}>
+        <form
+          className="entrelacos-guest-access__form"
+          noValidate
+          onSubmit={startLookup}
+        >
           <label>
             Nome completo
             <input
@@ -732,7 +736,11 @@ export function GuestAccess({
       )}
 
       {phase === "code" && challenge && (
-        <form className="entrelacos-guest-access__form" onSubmit={verifyCode}>
+        <form
+          className="entrelacos-guest-access__form"
+          noValidate
+          onSubmit={verifyCode}
+        >
           <p>
             {getGuestDeliveryMessage(
               challenge.deliveryMode,
