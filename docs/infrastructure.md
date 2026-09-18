@@ -27,7 +27,7 @@ No real provider resource was created, configured or mutated by the scaffold. Do
 
 Names below reflect the runtime through Block 5. Messages, reports, and quota accounting add no secret or provider dependency. PDF generation uses the pinned local PDFKit and DejaVu font packages and contacts no rendering service. Empty examples are not functioning connections, and every secret remains server-only.
 
-API URL examples use the origin `http://localhost:8080`; `/v1` belongs to the HTTP route path. The panel remains on `http://localhost:3000`, and the public demo remains on `http://localhost:4321`. The example `PUBLIC_SITE_ID=demo-wedding` is fictitious and does not identify a provisioned tenant.
+API URL examples use the origin `http://localhost:8080`; `/v1` belongs to the HTTP route path. The panel remains on `http://localhost:3000`, and the public demo remains on `http://localhost:4321`. `PUBLIC_SITE_ID=demo-wedding` is the deterministic environment-local demo identifier created by the provisioning command; it is not an authorization value.
 
 Database integration tests use `DATABASE_URL_TEST` exclusively and verify the actual Neon project, branch, endpoint, database, and role before proceeding. Never fall back to `DATABASE_URL`. Store development/test expected identities in private `DATABASE_PROJECT_ID`, `DATABASE_DEVELOPMENT_BRANCH_ID`, `DATABASE_TEST_BRANCH_ID`, and `DATABASE_NAME` configuration. Production uses only `DATABASE_URL` and derives its endpoint, database, and role checks from that URL. Block 2 validation status is recorded in `docs/block2Validation.md`; Block 4 and Block 5 execution status is recorded in their respective validation documents.
 
@@ -55,6 +55,62 @@ Database integration tests use `DATABASE_URL_TEST` exclusively and verify the ac
 | `TWILIO_TRIAL_USAGE_CONFIRMED` | API | Explicit confirmation that account/trial destination and usage constraints were reviewed |
 | `PUBLIC_API_URL` / `PUBLIC_SITE_ID` | Astro build | Public API origin and environment-local wedding identifier; never authorization |
 | `VITE_API_URL` / `API_BASE_URL` | Admin BFF/runtime | Endpoint address only; never a credential |
+
+## Demo environment provisioning
+
+The API includes an internal `environment:provision` command for the isolated `development` and `production` Railway environments. Run it from the repository root through a Railway shell or `railway run`, so Railway supplies the selected environment's `DATABASE_URL` and `RAILWAY_ENVIRONMENT_NAME`. Never paste a database URL into this document or into a command history.
+
+The command requires these values:
+
+| Variable | Required value or rule |
+| --- | --- |
+| `ENTRELACOS_DATABASE_TARGET` | `development` or `production`; must equal `RAILWAY_ENVIRONMENT_NAME` |
+| `RAILWAY_ENVIRONMENT_NAME` | Supplied by Railway; must equal `ENTRELACOS_DATABASE_TARGET` |
+| `ENTRELACOS_PROVISION_CONFIRM` | Exact `PROVISION <target> demo-wedding` |
+| `ENTRELACOS_PRODUCTION_PROVISION_AUTHORIZED` | Production only: exact `PROVISION production environment` |
+| `ENTRELACOS_DEMO_PUBLIC_URL` | The public demo URL for the selected environment; it must match the deployed Worker origin |
+| `ENTRELACOS_OWNER_EMAIL` | Authorized owner email |
+| `ENTRELACOS_OWNER_NAME` | Authorized owner display name |
+| `ENTRELACOS_OWNER_PASSWORD` | Owner bootstrap input; keep it out of command arguments and logs |
+| `ENTRELACOS_DEMO_RESET_CONFIRM` | Optional exact `RESET <target> demo-wedding`; required only for explicit recovery/reset |
+
+Use a Bash-compatible shell and enter private values interactively. The password is held in a process variable for the child command, not written in shell history or printed:
+
+```bash
+read -r -p "Owner email: " ENTRELACOS_OWNER_EMAIL
+read -r -p "Owner name: " ENTRELACOS_OWNER_NAME
+read -r -p "Demo public URL: " ENTRELACOS_DEMO_PUBLIC_URL
+read -r -s -p "Owner password: " ENTRELACOS_OWNER_PASSWORD
+printf '\n'
+export ENTRELACOS_OWNER_EMAIL ENTRELACOS_OWNER_NAME ENTRELACOS_DEMO_PUBLIC_URL ENTRELACOS_OWNER_PASSWORD
+```
+
+Provision development:
+
+```bash
+export ENTRELACOS_DATABASE_TARGET=development
+export ENTRELACOS_PROVISION_CONFIRM='PROVISION development demo-wedding'
+[ "${RAILWAY_ENVIRONMENT_NAME:-}" = development ] || { echo "Wrong Railway environment" >&2; exit 1; }
+# Optional explicit recovery: export ENTRELACOS_DEMO_RESET_CONFIRM='RESET development demo-wedding'
+bun run --filter=@entrelacos/api environment:provision
+unset ENTRELACOS_DATABASE_TARGET ENTRELACOS_PROVISION_CONFIRM ENTRELACOS_OWNER_EMAIL ENTRELACOS_OWNER_NAME ENTRELACOS_OWNER_PASSWORD ENTRELACOS_DEMO_PUBLIC_URL ENTRELACOS_DEMO_RESET_CONFIRM
+```
+
+Provision production requires the additional explicit authorization gate:
+
+```bash
+export ENTRELACOS_DATABASE_TARGET=production
+export ENTRELACOS_PROVISION_CONFIRM='PROVISION production demo-wedding'
+export ENTRELACOS_PRODUCTION_PROVISION_AUTHORIZED='PROVISION production environment'
+[ "${RAILWAY_ENVIRONMENT_NAME:-}" = production ] || { echo "Wrong Railway environment" >&2; exit 1; }
+# Optional explicit recovery: export ENTRELACOS_DEMO_RESET_CONFIRM='RESET production demo-wedding'
+bun run --filter=@entrelacos/api environment:provision
+unset ENTRELACOS_DATABASE_TARGET ENTRELACOS_PROVISION_CONFIRM ENTRELACOS_PRODUCTION_PROVISION_AUTHORIZED ENTRELACOS_OWNER_EMAIL ENTRELACOS_OWNER_NAME ENTRELACOS_OWNER_PASSWORD ENTRELACOS_DEMO_PUBLIC_URL ENTRELACOS_DEMO_RESET_CONFIRM
+```
+
+A normal rerun preserves an existing valid demo site and its operational rows. A partial site, owner, or dataset fails closed; it does not automatically reset data. Recovery requires adding the exact target-specific confirmation to the corresponding command before rerunning: `RESET development demo-wedding` for development or `RESET production demo-wedding` for production.
+
+The reset is transactional for the demo dataset and re-enables the mural afterward. Do not add reset confirmation to routine deploy or rerun commands. A successful provision reports whether the site was created or preserved and whether the deterministic dataset was reset or preserved.
 
 Do not copy development secrets or database rows to main. A stable repository wedding key maps to separate environment-local IDs. Public URLs and environment IDs may be versioned when appropriate; tokens, passwords and PII are not fixture configuration.
 
