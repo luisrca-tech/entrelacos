@@ -62,4 +62,34 @@ describe("GallerySection carousel composition", () => {
       /\.template-gallery-carousel__controls button\s*\{[^}]*pointer-events:\s*auto;/s,
     );
   });
+
+  it("bleeds gallery media on tablet and mobile while keeping copy inset", () => {
+    expect(styles).toMatch(
+      /@media \(max-width:\s*1024px\)[\s\S]*?\.template-gallery\s*\{[\s\S]*?padding-inline:\s*0;/,
+    );
+    expect(styles).toMatch(
+      /@media \(max-width:\s*1024px\)[\s\S]*?\.template-gallery__header\s*\{[\s\S]*?padding-inline:\s*var\(--template-page-inset\);/,
+    );
+    expect(styles).toMatch(
+      /@media \(max-width:\s*1024px\)[\s\S]*?\.template-gallery-carousel__slide figcaption[\s\S]*?padding-inline:\s*var\(--template-page-inset\);/,
+    );
+  });
+
+  it("shrinks gallery overlay controls on compact viewports", () => {
+    expect(styles).toMatch(
+      /@media \(max-width:\s*1024px\)[\s\S]*?\.template-gallery-carousel__controls button\s*\{[\s\S]*?width:\s*1\.75rem;[\s\S]*?min-height:\s*1\.75rem;/,
+    );
+    expect(styles).toMatch(
+      /@media \(max-width:\s*1024px\)[\s\S]*?\.template-gallery-carousel__expand\s*\{[\s\S]*?width:\s*1\.75rem;[\s\S]*?min-height:\s*1\.75rem;/,
+    );
+    expect(styles).toMatch(
+      /@media \(max-width:\s*1024px\)[\s\S]*?\.template-gallery-carousel__expand span:not\(\[aria-hidden\]\)\s*\{[\s\S]*?display:\s*none;/,
+    );
+  });
+
+  it("shows only the close icon in the gallery dialog on tablet and mobile", () => {
+    expect(styles).toMatch(
+      /@media \(max-width:\s*1024px\)[\s\S]*?\.template-gallery-dialog__close span:not\(\[aria-hidden\]\)\s*\{[\s\S]*?display:\s*none;/,
+    );
+  });
 });

@@ -1,5 +1,7 @@
 @import "tailwindcss";
 @import "@entrelacos/ui/styles.css";
 @import "@entrelacos/wedding-features/styles.css";
+@import "../../../../packages/template-root/src/styles.css";
+
 
 @source "../../../packages/ui/src";

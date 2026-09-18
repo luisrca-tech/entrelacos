@@ -72,7 +72,7 @@ const hero = {
 const story = {
   id: "story",
   eyebrow: "A nossa história",
-  title: "O que o tempo uniu, a festa consagra.",
+  title: "O que o tempo uniu, a cerimônia consagra.",
   description: "Uma história feita de escolhas, agora pronta para ser celebrada.",
   body: "Não foi um único instante que os fez casal. Foi o acumular de escolhas: ficar, cuidar, construir um nós. Os dias simples, as decisões a dois, a casa que se fez no outro. O que começou em silêncio agora se faz festa, e vocês estão aqui para testemunhar o voto que o tempo já ensaiou.",
   media: {
@@ -260,12 +260,7 @@ const guestAccess = {
     <Fragment slot="header-addon"><span class="demo-monogram" aria-label="Monograma M e C">M&amp;C</span></Fragment>
     <Fragment slot="admin-access">{access.siteId && access.apiOrigin && access.panelOrigin && <AdminRecognition {...access} client:load />}</Fragment>
     <Fragment slot="after-main">
-      <section id="guest-access" class="demo-guest-access" aria-labelledby="guest-access-section-title">
-        <div class="demo-guest-access__heading">
-          <p class="demo-eyebrow">Confirmação</p>
-          <h2 id="guest-access-section-title">Seu convite, no seu tempo.</h2>
-          <p>Encontre sua família pelo nome e pelo PIN do convite. Depois da confirmação, os nomes ficam disponíveis somente nesta aba.</p>
-        </div>
+      <section id="guest-access" class="demo-guest-access" aria-label="Confirmação de presença">
         <GuestAccess {...guestAccess} client:only="react">
           <p slot="fallback" class="demo-client-fallback">Esta área interativa precisa de JavaScript. Ative-o para encontrar seu convite e responder à confirmação.</p>
         </GuestAccess>
@@ -333,43 +328,14 @@ const guestAccess = {
   }
 
   .demo-guest-access {
-    display: grid;
-    grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
-    gap: clamp(2rem, 8vw, 8rem);
-    padding: clamp(2rem, 3vw, 3rem) var(--demo-page-inset)
+    padding: clamp(2.5rem, 6vw, 5rem) var(--demo-page-inset)
       clamp(1.5rem, 3vw, 2.5rem);
     background: var(--demo-paper);
   }
 
-  .demo-guest-access__heading {
-    align-self: start;
-    padding-top: clamp(2rem, 5vw, 4rem);
-  }
-
-  .demo-eyebrow {
-    margin: 0 0 1rem;
-    color: inherit;
-    font-size: 0.75rem;
-    font-weight: 700;
-    letter-spacing: 0.16em;
-    text-transform: uppercase;
-  }
-
-  .demo-guest-access h2 {
-    max-width: 10ch;
-    margin: 0;
-    font-family: Georgia, "Times New Roman", serif;
-    font-size: clamp(2.5rem, 6vw, 5rem);
-    font-weight: 400;
-    letter-spacing: -0.06em;
-    line-height: 0.96;
-  }
-
-  .demo-guest-access__heading > p:last-child {
-    max-width: 28rem;
-    margin-top: 1.5rem;
-    color: var(--demo-muted);
-    line-height: 1.6;
+  .demo-guest-access :global(.entrelacos-guest-access) {
+    padding: 0;
+    background: transparent;
   }
 
   .demo-mural {
@@ -385,15 +351,5 @@ const guestAccess = {
     border: 1px solid var(--demo-line);
     color: var(--demo-muted);
     line-height: 1.6;
-  }
-
-  @media (max-width: 720px) {
-    .demo-guest-access {
-      display: block;
-    }
-
-    .demo-guest-access__heading {
-      margin-bottom: 3rem;
-    }
   }
 </style>

@@ -503,6 +503,29 @@
   opacity: 0.5;
 }
 
+@media (min-width: 961px) {
+  .entrelacos-guest-access {
+    justify-items: center;
+  }
+
+  .entrelacos-guest-access__intro,
+  .entrelacos-guest-access__form,
+  .entrelacos-guest-access__family,
+  .entrelacos-guest-access__message {
+    width: 100%;
+    max-width: 52rem;
+  }
+
+  .entrelacos-guest-access h2 {
+    white-space: nowrap;
+    font-size: clamp(2.75rem, 4.4vw, 4.25rem);
+  }
+
+  .entrelacos-guest-access__intro > p:last-child {
+    max-width: 38rem;
+  }
+}
+
 @media (max-width: 560px) {
   .entrelacos-guest-access {
     padding: 2rem 1rem;

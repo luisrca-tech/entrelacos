@@ -3,9 +3,9 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { Media } from "../content";
 import {
-  OVERLAY_FADE_MS,
   buildIntroTimeline,
   introSourceForMedia,
+  OVERLAY_FADE_MS,
   shouldExpandIntroIntoHero,
 } from "./homeIntro";
 
@@ -82,7 +82,9 @@ describe("home intro sequencing", () => {
 
   it("skips the hero handoff when the restored viewport is not the hero", () => {
     expect(shouldExpandIntroIntoHero({ top: 0, bottom: 728 }, 728)).toBe(true);
-    expect(shouldExpandIntroIntoHero({ top: -80, bottom: 648 }, 728)).toBe(true);
+    expect(shouldExpandIntroIntoHero({ top: -80, bottom: 648 }, 728)).toBe(
+      true,
+    );
     expect(shouldExpandIntroIntoHero({ top: -1980, bottom: -1252 }, 728)).toBe(
       false,
     );

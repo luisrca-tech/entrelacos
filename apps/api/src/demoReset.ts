@@ -132,6 +132,12 @@ const groups = [
   },
 ] as const;
 
+export const DEMO_RESET_DATASET_IDS = {
+  groupIds: groups.map((group) => group.id),
+  memberIds: groups.flatMap((group) => group.memberIds),
+  messageId: "b7-message",
+} as const;
+
 const pinSeeds = ["1", "2", "3", "4", "5"].map((value) => value.repeat(64));
 
 async function deleteOperationalRows(

@@ -144,8 +144,18 @@ function isAnchorTarget(value: unknown): boolean {
   return typeof closest === "function" && closest.call(value, "a") !== null;
 }
 
+type NavigationRoot = ParentNode &
+  Partial<Pick<EventTarget, "addEventListener" | "removeEventListener">>;
+
+function isInsideMenu(
+  menu: NavigationDetails & { contains?: (node: unknown) => boolean },
+  target: unknown,
+): boolean {
+  return typeof menu.contains === "function" && menu.contains(target);
+}
+
 export function setupMobileNavigation(
-  root: ParentNode,
+  root: NavigationRoot,
   scheduleFocus: FocusScheduler = scheduleAfterDefaultAction,
 ): () => void {
   const details = Array.from(
@@ -175,11 +185,17 @@ export function setupMobileNavigation(
       close(false);
       scheduleFocus(() => summary.focus());
     };
+    const onPointerDown = (event: Event) => {
+      if (!menu.open || isInsideMenu(menu, event.target)) return;
+      close(false);
+    };
     menu.addEventListener("keydown", onKeyDown);
     menu.addEventListener("click", onClick);
+    root.addEventListener?.("pointerdown", onPointerDown);
     cleanups.push(() => {
       menu.removeEventListener("keydown", onKeyDown);
       menu.removeEventListener("click", onClick);
+      root.removeEventListener?.("pointerdown", onPointerDown);
     });
   });
 

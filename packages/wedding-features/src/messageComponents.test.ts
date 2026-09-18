@@ -11,6 +11,10 @@ const guestAccessSource = readFileSync(
   resolve(import.meta.dirname, "GuestAccessPanel.tsx"),
   "utf8",
 );
+const guestAccessStyles = readFileSync(
+  resolve(import.meta.dirname, "styles.css"),
+  "utf8",
+);
 
 const message = {
   id: "message-a",
@@ -97,6 +101,21 @@ describe("guest lookup form", () => {
     expect(guestAccessSource).toContain("do seu grupo");
     expect(guestAccessSource).not.toContain(
       "entrelacos-guest-access__foreign-note",
+    );
+  });
+
+  it("centers a wider confirmation column on desktop without wrapping the title", () => {
+    expect(guestAccessStyles).toMatch(
+      /@media \(min-width:\s*961px\)[\s\S]*?\.entrelacos-guest-access\s*\{[\s\S]*?justify-items:\s*center;/,
+    );
+    expect(guestAccessStyles).toMatch(
+      /@media \(min-width:\s*961px\)[\s\S]*?\.entrelacos-guest-access__intro[\s\S]*?max-width:\s*52rem;/,
+    );
+    expect(guestAccessStyles).toMatch(
+      /@media \(min-width:\s*961px\)[\s\S]*?\.entrelacos-guest-access h2\s*\{[\s\S]*?white-space:\s*nowrap;/,
+    );
+    expect(guestAccessStyles).toMatch(
+      /@media \(min-width:\s*961px\)[\s\S]*?\.entrelacos-guest-access__intro > p:last-child[\s\S]*?max-width:\s*38rem;/,
     );
   });
 });
