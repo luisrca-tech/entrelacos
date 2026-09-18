@@ -42,6 +42,15 @@ describe("RSVP cards follow guest group card chrome", () => {
     expect(rsvpSource).toContain('size="sm"');
   });
 
+  it("opens RSVP filters only from the select trigger", () => {
+    expect(rsvpSource).not.toContain('htmlFor="rsvp-group-filter"');
+    expect(rsvpSource).not.toContain('htmlFor="rsvp-state-filter"');
+    expect(rsvpSource).not.toContain('htmlFor="rsvp-history-group"');
+    expect(rsvpSource).not.toContain('htmlFor="rsvp-history-member"');
+    expect(rsvpSource).not.toContain('htmlFor="rsvp-history-actor"');
+    expect(rsvpSource).toContain('aria-labelledby="rsvp-group-filter-label"');
+  });
+
   it("pins the save action as a centered fixed footer", () => {
     expect(rsvpSource).toContain('className="rsvp-save-bar"');
     expect(stylesSource).toMatch(/\.rsvp-save-bar\s*\{[^}]*position:\s*fixed/s);

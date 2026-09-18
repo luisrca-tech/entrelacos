@@ -531,6 +531,7 @@ body .create-site-dialog {
 }
 
 .data-form label,
+.data-form .field,
 .group-delete-confirmation label,
 .sms-quota-form label {
   display: grid;
