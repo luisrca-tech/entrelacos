@@ -33,13 +33,16 @@ describe("progressive enhancement", () => {
     expect(source).toContain("Esta área interativa precisa de JavaScript");
   });
 
-  it("keeps the host section label distinct from the guest feature label", () => {
+  it("uses the guest confirmation feature as the only section heading", () => {
     const source = readFileSync(
       resolve(import.meta.dirname, "pages/index.astro"),
       "utf8",
     );
-    expect(source).toContain('aria-labelledby="guest-access-section-title"');
-    expect(source).toContain('id="guest-access-section-title"');
+    expect(source).toContain('id="guest-access"');
+    expect(source).toContain("<GuestAccess");
+    expect(source).not.toContain("guest-access-section-title");
+    expect(source).not.toContain("demo-guest-access__heading");
+    expect(source).not.toContain("Seu convite, no seu tempo.");
   });
 
   it("lists gallery before story to match the default home order", () => {

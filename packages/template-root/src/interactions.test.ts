@@ -132,6 +132,41 @@ describe("mobile navigation focus", () => {
     expect(summary.focusCalls).toBe(2);
     cleanup();
   });
+
+  it("closes when a pointer lands outside the open menu", () => {
+    const rootListeners = new Map<string, Listener>();
+    const menuListeners = new Map<string, Listener>();
+    const summary = {
+      focusCalls: 0,
+      focus() {
+        this.focusCalls += 1;
+      },
+    };
+    const details = {
+      open: true,
+      contains: (node: unknown) => node === "inside",
+      querySelector: () => summary,
+      addEventListener: (type: string, listener: Listener) =>
+        menuListeners.set(type, listener),
+      removeEventListener: () => undefined,
+    };
+    const root = {
+      querySelectorAll: () => [details],
+      addEventListener: (type: string, listener: Listener) =>
+        rootListeners.set(type, listener),
+      removeEventListener: () => undefined,
+    } as unknown as ParentNode;
+
+    const cleanup = setupMobileNavigation(root);
+    rootListeners.get("pointerdown")?.({ target: "outside" });
+    expect(details.open).toBe(false);
+    expect(summary.focusCalls).toBe(0);
+
+    details.open = true;
+    rootListeners.get("pointerdown")?.({ target: "inside" });
+    expect(details.open).toBe(true);
+    cleanup();
+  });
 });
 
 describe("hero navigation state", () => {
