@@ -5,8 +5,10 @@ import type {
   SiteRsvpResponse,
 } from "@entrelacos/contracts";
 import {
+  Badge,
   Button,
   Card,
+  CardAction,
   CardContent,
   CardDescription,
   CardHeader,
@@ -24,12 +26,6 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
 } from "@entrelacos/ui";
 import {
   type FormEvent,
@@ -566,12 +562,35 @@ export function RsvpSection({ siteId, lifecycle }: Props) {
             </label>
           </div>
           <Card className="rsvp-export" aria-labelledby="rsvp-export-title">
-            <CardHeader>
-              <CardTitle id="rsvp-export-title">Exportar relatório</CardTitle>
-              <CardDescription>
-                O arquivo usa os filtros de grupo e status selecionados acima.
-                Telefones ficam de fora até você incluí-los explicitamente.
-              </CardDescription>
+            <CardHeader className="flex w-full flex-row items-start justify-between">
+              <div>
+                <CardTitle id="rsvp-export-title">Exportar relatório</CardTitle>
+                <CardDescription>
+                  O arquivo usa os filtros de grupo e status selecionados acima.
+                  Telefones ficam de fora até você incluí-los explicitamente.
+                </CardDescription>
+              </div>
+              <CardAction>
+                <div className="inline-actions">
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled={Boolean(downloading)}
+                    onClick={() => void downloadExport("csv")}
+                  >
+                    {downloading === "csv" ? "Gerando CSV…" : "Baixar CSV"}
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={Boolean(downloading)}
+                    onClick={() => void downloadExport("pdf")}
+                  >
+                    {downloading === "pdf" ? "Gerando PDF…" : "Baixar PDF"}
+                  </Button>
+                </div>
+              </CardAction>
             </CardHeader>
             <CardContent>
               <label className="checkbox-label" htmlFor="rsvp-include-phone">
@@ -585,23 +604,6 @@ export function RsvpSection({ siteId, lifecycle }: Props) {
                 />
                 Incluir celular do representante
               </label>
-              <div className="inline-actions">
-                <Button
-                  type="button"
-                  disabled={Boolean(downloading)}
-                  onClick={() => void downloadExport("csv")}
-                >
-                  {downloading === "csv" ? "Gerando CSV…" : "Baixar CSV"}
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={Boolean(downloading)}
-                  onClick={() => void downloadExport("pdf")}
-                >
-                  {downloading === "pdf" ? "Gerando PDF…" : "Baixar PDF"}
-                </Button>
-              </div>
             </CardContent>
           </Card>
           {loading ? (
@@ -611,71 +613,74 @@ export function RsvpSection({ siteId, lifecycle }: Props) {
           ) : (
             <div className="rsvp-group-list">
               {view?.groups.map((group) => (
-                <section className="rsvp-group" key={group.id}>
-                  <h3>{group.name}</h3>
-                  <p>
-                    {group.totals.confirmed} confirmados ·{" "}
-                    {group.totals.declined} ausentes · {group.totals.pending}{" "}
-                    pendentes
-                  </p>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Convidado</TableHead>
-                        <TableHead>Confirmação</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
+                <Card className="rsvp-group-card" key={group.id}>
+                  <CardHeader className="flex w-full flex-row items-start justify-between">
+                    <div>
+                      <CardTitle>{group.name}</CardTitle>
+                      <CardDescription>
+                        {group.totals.confirmed} confirmados ·{" "}
+                        {group.totals.declined} ausentes ·{" "}
+                        {group.totals.pending} pendentes
+                      </CardDescription>
+                      <Badge variant="outline">
+                        {group.members.length} convidados
+                      </Badge>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <ul className="rsvp-group-members">
                       {group.members.map((member) => (
-                        <TableRow key={member.id}>
-                          <TableCell>
+                        <li className="rsvp-member-row" key={member.id}>
+                          <span>
                             {member.fullName}
-                            {member.isRepresentative ? " (representante)" : ""}
-                          </TableCell>
-                          <TableCell>
-                            <Select
-                              value={drafts[member.id] ?? member.state}
-                              disabled={inactive || pending}
-                              onValueChange={(value) =>
-                                setDrafts((current) => ({
-                                  ...current,
-                                  [member.id]: value as RsvpState,
-                                }))
-                              }
+                            {member.isRepresentative ? " · representante" : ""}
+                          </span>
+                          <Select
+                            value={drafts[member.id] ?? member.state}
+                            disabled={inactive || pending}
+                            onValueChange={(value) =>
+                              setDrafts((current) => ({
+                                ...current,
+                                [member.id]: value as RsvpState,
+                              }))
+                            }
+                          >
+                            <SelectTrigger
+                              aria-label={`Confirmação de ${member.fullName}`}
                             >
-                              <SelectTrigger
-                                aria-label={`Confirmação de ${member.fullName}`}
-                              >
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {Object.entries(stateLabels).map(
-                                  ([value, label]) => (
-                                    <SelectItem key={value} value={value}>
-                                      {label}
-                                    </SelectItem>
-                                  ),
-                                )}
-                              </SelectContent>
-                            </Select>
-                          </TableCell>
-                        </TableRow>
+                              <SelectValue>
+                                {stateLabels[drafts[member.id] ?? member.state]}
+                              </SelectValue>
+                            </SelectTrigger>
+                            <SelectContent>
+                              {Object.entries(stateLabels).map(
+                                ([value, label]) => (
+                                  <SelectItem key={value} value={value}>
+                                    {label}
+                                  </SelectItem>
+                                ),
+                              )}
+                            </SelectContent>
+                          </Select>
+                        </li>
                       ))}
-                    </TableBody>
-                  </Table>
-                </section>
+                    </ul>
+                  </CardContent>
+                </Card>
               ))}
             </div>
           )}
-          <Button
-            type="button"
-            disabled={inactive || pending || changedMembers.length === 0}
-            onClick={() => void saveRsvp()}
-          >
-            {changedMembers.length === 0
-              ? "Salvar alterações"
-              : `Salvar ${changedMembers.length} ${changedMembers.length === 1 ? "alteração" : "alterações"}`}
-          </Button>
+          <footer className="rsvp-save-bar">
+            <Button
+              type="button"
+              disabled={inactive || pending || changedMembers.length === 0}
+              onClick={() => void saveRsvp()}
+            >
+              {changedMembers.length === 0
+                ? "Salvar alterações"
+                : `Salvar ${changedMembers.length} ${changedMembers.length === 1 ? "alteração" : "alterações"}`}
+            </Button>
+          </footer>
         </>
       ) : (
         <>

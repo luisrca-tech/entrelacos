@@ -42,42 +42,14 @@ describe("site workspace heading", () => {
     ).toBe("Configurações");
   });
 
-  it("uses area ledes instead of role framing", () => {
+  it("does not carry area ledes", () => {
     expect(
       getWorkspaceHeading({
         area: "overview",
         owner: true,
         lifecycle: "ACTIVE",
-      }).lede,
-    ).toBe("Status e datas deste casamento.");
-    expect(
-      getWorkspaceHeading({
-        area: "guests",
-        owner: false,
-        lifecycle: "ACTIVE",
-      }).lede,
-    ).toBe("Grupos, convites e listas.");
-    expect(
-      getWorkspaceHeading({
-        area: "rsvp",
-        owner: true,
-        lifecycle: "ACTIVE",
-      }).lede,
-    ).toBe("Respostas dos convidados.");
-    expect(
-      getWorkspaceHeading({
-        area: "messages",
-        owner: false,
-        lifecycle: "ACTIVE",
-      }).lede,
-    ).toBe("Recados deixados no site.");
-    expect(
-      getWorkspaceHeading({
-        area: "settings",
-        owner: true,
-        lifecycle: "DRAFT",
-      }).lede,
-    ).toBe("Ciclo de vida, acessos e domínios.");
+      }),
+    ).not.toHaveProperty("lede");
   });
 
   it("shows the back link only to owners", () => {
@@ -156,11 +128,19 @@ describe("site workspace heading markup", () => {
     "utf8",
   );
 
-  it("renders the heading from shared rules instead of couple identity", () => {
+  it("renders the heading title from shared rules", () => {
     expect(workspaceSource).toContain("getWorkspaceHeading");
     expect(workspaceSource).toContain("workspace-heading");
     expect(workspaceSource).not.toContain('owner ? "Gestão do casamento"');
-    expect(workspaceSource).not.toContain('site.coupleNames.join(" & ")');
+  });
+
+  it("uses couple identity as the heading subtitle", () => {
+    expect(workspaceSource).toContain('className="workspace-identity"');
+    expect(workspaceSource).toContain("{site.displayName}");
+    expect(workspaceSource).not.toContain("heading.lede");
+    expect(workspaceSource).not.toMatch(
+      /className="panel-heading workspace-heading"[\s\S]*className="lede"/,
+    );
   });
 
   it("keeps the public site CTA in the heading, not the overview facts", () => {
