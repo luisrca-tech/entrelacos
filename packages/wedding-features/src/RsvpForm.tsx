@@ -30,6 +30,32 @@ const labels: Record<RsvpStatus, string> = {
   DECLINED: "Não comparecerá",
 };
 
+const rsvpDialogClass =
+  "w-[min(44rem,calc(100vw-2rem))] max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-2xl border-0 bg-[var(--template-paper,#f4f0e8)] p-[clamp(1.25rem,4vw,2.5rem)] text-template-ink [&::backdrop]:bg-[rgba(18,28,23,0.72)] max-[560px]:m-0 max-[560px]:h-dvh max-[560px]:max-h-none max-[560px]:w-screen max-[560px]:rounded-none";
+const rsvpHeaderClass = "flex items-center justify-between gap-4";
+const rsvpEyebrowClass =
+  "m-0 mb-[0.8rem] text-template-muted text-[0.72rem] font-bold tracking-[0.16em] uppercase";
+const rsvpHeadingClass = "m-0 text-[clamp(1.8rem,5vw,3rem)] font-normal";
+const rsvpLinkClass =
+  "w-fit cursor-pointer border-0 bg-transparent px-0 py-[0.35rem] text-template-muted underline underline-offset-[0.2rem] disabled:cursor-not-allowed disabled:opacity-50";
+const rsvpMessageClass =
+  "m-0 max-w-[42rem] border border-template-line px-4 py-[0.8rem] text-template-ink";
+const rsvpReadonlyClass =
+  "border-l-[3px] border-l-[#9c713f] bg-[rgba(156,113,63,0.12)] px-4 py-3";
+const rsvpMembersClass = "my-6 grid gap-3";
+const rsvpMemberClass =
+  "flex items-center justify-between gap-4 border-b border-template-line py-3 max-[560px]:items-stretch max-[560px]:flex-col";
+const rsvpMemberDetailsClass = "grid gap-[0.2rem]";
+const rsvpMemberNoteClass = "text-template-muted";
+const rsvpSelectClass =
+  "min-h-11 rounded-[0.4rem] border border-[rgba(37,53,43,0.28)] bg-white px-[0.7rem] py-[0.55rem] text-inherit";
+const rsvpActionsClass =
+  "flex items-center justify-start gap-4 flex-wrap max-[560px]:items-stretch max-[560px]:flex-col";
+const rsvpButtonClass =
+  "min-h-11 cursor-pointer rounded-full border border-template-ink bg-template-ink px-4 py-[0.7rem] text-[var(--template-paper,#f4f0e8)] font-[inherit] font-bold disabled:cursor-not-allowed disabled:opacity-50";
+const rsvpSecondaryClass =
+  "min-h-11 cursor-pointer rounded-full border border-template-ink bg-transparent px-4 py-[0.7rem] text-template-ink font-[inherit] font-bold disabled:cursor-not-allowed disabled:opacity-50";
+
 export function RsvpForm({
   open,
   members,
@@ -82,7 +108,7 @@ export function RsvpForm({
   return (
     <dialog
       ref={dialog}
-      className="entrelacos-rsvp"
+      className={rsvpDialogClass}
       data-lenis-prevent
       aria-labelledby="entrelacos-rsvp-title"
       onCancel={(event) => {
@@ -91,16 +117,16 @@ export function RsvpForm({
       }}
       onClose={handleDialogClose}
     >
-      <div className="entrelacos-rsvp__header">
+      <div className={rsvpHeaderClass}>
         <div>
-          <p className="entrelacos-guest-access__eyebrow">
-            Confirmação de presença
-          </p>
-          <h3 id="entrelacos-rsvp-title">Quem estará presente?</h3>
+          <p className={rsvpEyebrowClass}>Confirmação de presença</p>
+          <h3 className={rsvpHeadingClass} id="entrelacos-rsvp-title">
+            Quem estará presente?
+          </h3>
         </div>
         <button
           type="button"
-          className="entrelacos-guest-access__link"
+          className={rsvpLinkClass}
           data-rsvp-initial
           onClick={requestClose}
         >
@@ -109,32 +135,35 @@ export function RsvpForm({
       </div>
 
       {!canEdit && (
-        <p className="entrelacos-rsvp__readonly" role="status">
+        <p className={rsvpReadonlyClass} role="status">
           {readOnlyMessage ??
             "As respostas podem ser consultadas, mas não alteradas agora."}
         </p>
       )}
       {error && (
-        <p className="entrelacos-guest-access__message" role="alert">
+        <p className={rsvpMessageClass} role="alert">
           {error}
         </p>
       )}
       {notice && (
-        <p className="entrelacos-guest-access__message" role="status">
+        <p className={rsvpMessageClass} role="status">
           {notice}
         </p>
       )}
 
-      <div className="entrelacos-rsvp__members">
+      <div className={rsvpMembersClass}>
         {members.map((member) => (
-          <label key={member.memberId} className="entrelacos-rsvp__member">
-            <span>
+          <label key={member.memberId} className={rsvpMemberClass}>
+            <span className={rsvpMemberDetailsClass}>
               <strong>{member.fullName}</strong>
               {member.isRepresentative && (
-                <small>Responsável pelo convite</small>
+                <small className={rsvpMemberNoteClass}>
+                  Responsável pelo convite
+                </small>
               )}
             </span>
             <select
+              className={rsvpSelectClass}
               disabled={!canEdit || busy}
               value={draft[member.memberId]?.status ?? "PENDING"}
               onChange={(event) =>
@@ -151,11 +180,11 @@ export function RsvpForm({
         ))}
       </div>
 
-      <div className="entrelacos-rsvp__actions">
+      <div className={rsvpActionsClass}>
         {canEdit && (
           <button
             type="button"
-            className="entrelacos-guest-access__secondary"
+            className={rsvpSecondaryClass}
             disabled={busy}
             onClick={onConfirmAll}
           >
@@ -164,6 +193,7 @@ export function RsvpForm({
         )}
         <button
           type="button"
+          className={rsvpButtonClass}
           disabled={!canEdit || busy || !changed}
           onClick={onSave}
         >
@@ -172,7 +202,7 @@ export function RsvpForm({
         {error && (
           <button
             type="button"
-            className="entrelacos-guest-access__link"
+            className={rsvpLinkClass}
             disabled={busy}
             onClick={onReload}
           >

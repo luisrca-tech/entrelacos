@@ -48,6 +48,34 @@ type GuestAccessProps = {
 
 type GuestAccessPhase = "lookup" | "code" | "authenticated";
 
+const guestAccessSectionClass =
+  "grid min-w-0 gap-6 bg-template-ivory px-[clamp(2rem,5vw,4rem)] py-[clamp(2rem,5vw,4rem)] text-template-ink max-[560px]:px-4 max-[560px]:py-8 min-[961px]:justify-items-center";
+const guestAccessIntroClass =
+  "max-w-[38rem] min-[961px]:w-full min-[961px]:max-w-[52rem]";
+const guestAccessEyebrowClass =
+  "m-0 mb-[0.8rem] text-template-muted text-[0.72rem] font-bold tracking-[0.16em] uppercase";
+const guestAccessHeadingClass =
+  "m-0 font-template-serif text-[clamp(2.5rem,6vw,5rem)] font-normal leading-[0.96] tracking-[-0.05em] min-[961px]:whitespace-nowrap min-[961px]:text-[clamp(2.75rem,4.4vw,4.25rem)]";
+const guestAccessSubheadingClass =
+  "m-0 font-template-serif text-[clamp(1.8rem,4vw,3rem)] font-normal tracking-[-0.05em]";
+const guestAccessDescriptionClass =
+  "text-template-muted leading-[1.6] min-[961px]:max-w-[38rem]";
+const guestAccessMessageClass =
+  "m-0 max-w-[42rem] border border-template-line px-4 py-[0.8rem] text-template-ink min-[961px]:w-full min-[961px]:max-w-[52rem]";
+const guestAccessFormClass =
+  "grid max-w-[34rem] gap-4 min-[961px]:w-full min-[961px]:max-w-[52rem]";
+const guestAccessLabelClass = "grid gap-[0.4rem] text-[0.85rem] font-bold";
+const guestAccessInputClass =
+  "min-h-11 w-full rounded-none border border-[rgba(37,53,43,0.32)] bg-[#fffdf8] px-3 py-[0.65rem] text-template-ink font-[inherit]";
+const guestAccessButtonClass =
+  "min-h-11 cursor-pointer rounded-none border border-template-ink bg-template-ink px-4 py-[0.65rem] text-template-ivory font-[inherit] font-bold disabled:cursor-not-allowed disabled:opacity-50";
+const guestAccessSecondaryClass =
+  "min-h-11 cursor-pointer rounded-none border border-template-ink bg-transparent px-4 py-[0.65rem] text-template-ink font-[inherit] font-bold disabled:cursor-not-allowed disabled:opacity-50";
+const guestAccessLinkClass =
+  "w-fit cursor-pointer border-0 bg-transparent px-0 py-[0.35rem] text-template-muted underline underline-offset-[0.2rem] disabled:cursor-not-allowed disabled:opacity-50";
+const guestAccessFamilyClass =
+  "grid max-w-[42rem] gap-4 min-[961px]:w-full min-[961px]:max-w-[52rem]";
+
 function browserSessionStorage(): GuestSessionStorage | null {
   if (typeof window === "undefined") return null;
   try {
@@ -255,10 +283,8 @@ export function GuestAccess({
 
   if (!ready)
     return (
-      <section className="entrelacos-guest-access" aria-busy="true">
-        <p className="entrelacos-guest-access__eyebrow">
-          Confirmação de presença
-        </p>
+      <section className={guestAccessSectionClass} aria-busy="true">
+        <p className={guestAccessEyebrowClass}>Confirmação de presença</p>
         <p>Carregando seu acesso…</p>
       </section>
     );
@@ -644,40 +670,41 @@ export function GuestAccess({
 
   return (
     <section
-      className="entrelacos-guest-access"
+      className={guestAccessSectionClass}
       aria-labelledby="guest-access-title"
     >
-      <div className="entrelacos-guest-access__intro">
-        <p className="entrelacos-guest-access__eyebrow">
-          Confirmação de presença
-        </p>
-        <h2 id="guest-access-title">Encontre seu convite</h2>
-        <p>
+      <div className={guestAccessIntroClass}>
+        <p className={guestAccessEyebrowClass}>Confirmação de presença</p>
+        <h2 className={guestAccessHeadingClass} id="guest-access-title">
+          Encontre seu convite
+        </h2>
+        <p className={guestAccessDescriptionClass}>
           Informe o nome completo e o celular do convite. Em seguida, use o PIN
           do seu grupo para acessar os detalhes da família.
         </p>
       </div>
 
       {error && (
-        <p className="entrelacos-guest-access__message" role="alert">
+        <p className={guestAccessMessageClass} role="alert">
           {error}
         </p>
       )}
       {notice && (
-        <p className="entrelacos-guest-access__message" role="status">
+        <p className={guestAccessMessageClass} role="status">
           {notice}
         </p>
       )}
 
       {phase === "lookup" && (
         <form
-          className="entrelacos-guest-access__form"
+          className={guestAccessFormClass}
           noValidate
           onSubmit={startLookup}
         >
-          <label>
+          <label className={guestAccessLabelClass}>
             Nome completo
             <input
+              className={guestAccessInputClass}
               autoComplete="name"
               value={fullName}
               onChange={(event) => setFullName(event.target.value)}
@@ -685,9 +712,10 @@ export function GuestAccess({
               required
             />
           </label>
-          <label>
+          <label className={guestAccessLabelClass}>
             Celular
             <input
+              className={guestAccessInputClass}
               autoComplete="tel"
               inputMode="tel"
               value={phone}
@@ -696,19 +724,19 @@ export function GuestAccess({
               required
             />
           </label>
-          <button type="submit" disabled={busy}>
+          <button
+            className={guestAccessButtonClass}
+            type="submit"
+            disabled={busy}
+          >
             {busy ? "Verificando…" : "Continuar"}
           </button>
         </form>
       )}
 
       {phase === "code" && challenge && (
-        <form
-          className="entrelacos-guest-access__form"
-          noValidate
-          onSubmit={verifyCode}
-        >
-          <p>
+        <form className={guestAccessFormClass} noValidate onSubmit={verifyCode}>
+          <p className={guestAccessDescriptionClass}>
             {getGuestDeliveryMessage(
               challenge.deliveryMode,
               challenge.sendStatus,
@@ -716,15 +744,19 @@ export function GuestAccess({
           </p>
           {challenge.deliveryMode === "SIMULATED" &&
             challenge.simulationCode && (
-              <p className="entrelacos-guest-access__simulation" role="status">
+              <p
+                className="m-0 border-l-[3px] border-l-[#718c72] bg-[rgba(113,140,114,0.12)] px-4 py-3"
+                role="status"
+              >
                 Código da simulação: <strong>{challenge.simulationCode}</strong>
               </p>
             )}
-          <label>
+          <label className={guestAccessLabelClass}>
             {challenge.deliveryMode === "MANUAL_PIN"
               ? "PIN de 6 dígitos"
               : "Código de 6 dígitos"}
             <input
+              className={guestAccessInputClass}
               autoComplete="one-time-code"
               inputMode="numeric"
               pattern="[0-9]{6}"
@@ -736,7 +768,11 @@ export function GuestAccess({
               required
             />
           </label>
-          <button type="submit" disabled={busy}>
+          <button
+            className={guestAccessButtonClass}
+            type="submit"
+            disabled={busy}
+          >
             {busy
               ? "Confirmando…"
               : challenge.deliveryMode === "MANUAL_PIN"
@@ -746,7 +782,7 @@ export function GuestAccess({
           {challenge.deliveryMode !== "MANUAL_PIN" && (
             <button
               type="button"
-              className="entrelacos-guest-access__secondary"
+              className={guestAccessSecondaryClass}
               disabled={busy || resendSeconds > 0}
               onClick={() => void resendCode()}
             >
@@ -757,7 +793,7 @@ export function GuestAccess({
           )}
           <button
             type="button"
-            className="entrelacos-guest-access__link"
+            className={guestAccessLinkClass}
             disabled={busy}
             onClick={() => {
               setChallenge(null);
@@ -773,20 +809,31 @@ export function GuestAccess({
       )}
 
       {phase === "authenticated" && session && (
-        <div className="entrelacos-guest-access__family">
-          <h3>Convidados deste convite</h3>
-          <ul>
+        <div className={guestAccessFamilyClass}>
+          <h3 className={guestAccessSubheadingClass}>
+            Convidados deste convite
+          </h3>
+          <ul className="m-0 grid list-none gap-2 p-0">
             {session.members.map((member) => (
-              <li key={member.id}>
+              <li
+                className="flex items-baseline justify-between gap-4 border-b border-template-line py-3 max-[560px]:flex-col max-[560px]:items-start max-[560px]:gap-[0.15rem]"
+                key={member.id}
+              >
                 <span>{member.fullName}</span>
                 {member.isRepresentative && (
-                  <small>Responsável pelo convite</small>
+                  <small className="text-template-muted text-xs">
+                    Responsável pelo convite
+                  </small>
                 )}
               </li>
             ))}
           </ul>
           {rsvp ? (
-            <button type="button" onClick={() => setRsvpOpen(true)}>
+            <button
+              className={guestAccessButtonClass}
+              type="button"
+              onClick={() => setRsvpOpen(true)}
+            >
               {rsvp.canEdit ? "Responder presença" : "Consultar respostas"}
             </button>
           ) : (
@@ -815,14 +862,14 @@ export function GuestAccess({
               onReload={() => void reloadFamilyMessage(false)}
             />
           ) : (
-            <div className="entrelacos-family-message">
-              <p className="entrelacos-guest-access__message" role="alert">
+            <div className="grid gap-4 border-t border-template-line pt-6">
+              <p className={guestAccessMessageClass} role="alert">
                 {messageError ||
                   "A mensagem deste convite não está disponível agora."}
               </p>
               <button
                 type="button"
-                className="entrelacos-guest-access__link"
+                className={guestAccessLinkClass}
                 disabled={messageBusy}
                 onClick={() => void reloadFamilyMessage(false)}
               >
@@ -832,7 +879,7 @@ export function GuestAccess({
           )}
           <button
             type="button"
-            className="entrelacos-guest-access__secondary"
+            className={guestAccessSecondaryClass}
             disabled={busy}
             onClick={() => void leave()}
           >
