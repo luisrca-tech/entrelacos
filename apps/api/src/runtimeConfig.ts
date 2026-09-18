@@ -46,11 +46,16 @@ function databaseTarget(
   ) {
     return explicit;
   }
-  if (!explicit && env.RAILWAY_ENVIRONMENT_NAME?.trim() === "production") {
-    return "production";
+  const railwayEnvironment = env.RAILWAY_ENVIRONMENT_NAME?.trim();
+  if (
+    !explicit &&
+    (railwayEnvironment === "development" ||
+      railwayEnvironment === "production")
+  ) {
+    return railwayEnvironment;
   }
   throw new Error(
-    "APP_ENV must select development, test, or production outside Railway production",
+    "APP_ENV must select development, test, or production outside recognized Railway environments",
   );
 }
 

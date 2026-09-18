@@ -43,6 +43,18 @@ describe("API runtime configuration", () => {
       trustProxyHeaders: true,
     });
   });
+  it("derives development defaults from Railway", () => {
+    expect(
+      readRuntimeConfig({
+        ...settings,
+        APP_ENV: undefined,
+        RAILWAY_ENVIRONMENT_NAME: "development",
+      }),
+    ).toMatchObject({
+      target: "development",
+      trustProxyHeaders: true,
+    });
+  });
   it.each(["", "0", "65536", "abc", "8080.5"])(
     "rejects invalid port %s",
     (PORT) => {
