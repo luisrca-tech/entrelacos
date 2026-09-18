@@ -142,24 +142,9 @@
 }
 
 .entrelacos-guest-access__intro > p:last-child,
-.entrelacos-guest-access__foreign-note p,
 .entrelacos-guest-access__form > p {
   color: var(--template-muted, #637066);
   line-height: 1.6;
-}
-
-.entrelacos-guest-access__foreign-note {
-  max-width: 42rem;
-  border-left: 3px solid #718c72;
-  padding: 0.1rem 0 0.1rem 1rem;
-}
-
-.entrelacos-guest-access__foreign-note strong {
-  display: block;
-}
-
-.entrelacos-guest-access__foreign-note p {
-  margin: 0.35rem 0 0;
 }
 
 .entrelacos-guest-access__message {

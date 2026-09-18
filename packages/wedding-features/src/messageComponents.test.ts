@@ -88,6 +88,9 @@ describe("guest lookup form", () => {
     expect(guestAccessSource).toContain(
       "Informe o nome completo e um celular brasileiro válido.",
     );
+    expect(guestAccessSource).not.toContain(
+      "entrelacos-guest-access__foreign-note",
+    );
   });
 });
 

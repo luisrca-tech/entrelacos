@@ -667,14 +667,6 @@ export function GuestAccess({
         </p>
       </div>
 
-      <aside className="entrelacos-guest-access__foreign-note">
-        <strong>Convidados com número estrangeiro</strong>
-        <p>
-          Números estrangeiros precisam de atendimento administrativo. Esse
-          convite não oferece SMS nem outra alternativa de autenticação.
-        </p>
-      </aside>
-
       {error && (
         <p className="entrelacos-guest-access__message" role="alert">
           {error}
