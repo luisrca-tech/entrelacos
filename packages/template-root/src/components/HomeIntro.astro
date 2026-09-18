@@ -14,7 +14,7 @@ const timeline = buildIntroTimeline(frames.length);
 ---
 
 <div
-  class="template-home-intro"
+  class="hidden [[data-template-js=true]_&]:fixed [[data-template-js=true]_&]:inset-0 [[data-template-js=true]_&]:z-30 [[data-template-js=true]_&]:grid [[data-template-js=true]_&]:place-items-center [[data-template-js=true]_&]:overflow-hidden [[data-template-js=true]_&]:bg-template-ivory [[data-template-js=true]_&]:text-template-ink [[data-template-js=true]_&]:opacity-100 data-[template-intro-phase=fade]:opacity-0 data-[template-intro-phase=fade]:transition-opacity data-[template-intro-phase=fade]:duration-[450ms] data-[template-intro-phase=dismiss]:pointer-events-none data-[template-intro-phase=dismiss]:opacity-0 data-[template-intro-phase=dismiss]:transition-opacity data-[template-intro-phase=dismiss]:duration-[450ms] motion-reduce:hidden"
   data-template-home-intro
   data-split-at={timeline.splitAt}
   data-reveal-at={timeline.revealAt.join(",")}
@@ -22,15 +22,25 @@ const timeline = buildIntroTimeline(frames.length);
   data-fade-at={timeline.fadeAt}
   data-complete-at={timeline.completeAt}
 >
-  <p class="template-home-intro__brand" aria-hidden="true">{content.brandLabel}</p>
-  <div class="template-home-intro__sequence" aria-hidden="true">
-    <p class="template-home-intro__label template-home-intro__label--top">
+  <p
+    class="absolute m-0 font-template-serif text-[clamp(2.25rem,5vw,calc(5rem*var(--template-width-scale)))] font-normal tracking-[-0.06em] leading-[0.88] transition-[opacity,transform] duration-500 ease-linear [transition-timing-function:cubic-bezier(0.22,1,0.36,1)] data-[template-intro-phase=split]:scale-[0.96] data-[template-intro-phase=split]:opacity-0 data-[template-intro-phase=dismiss]:scale-[0.96] data-[template-intro-phase=dismiss]:opacity-0 data-[template-intro-phase=fullscreen]:scale-[0.96] data-[template-intro-phase=fullscreen]:opacity-0 data-[template-intro-phase=fade]:scale-[0.96] data-[template-intro-phase=fade]:opacity-0 max-[720px]:text-[clamp(2rem,12vw,3.5rem)]"
+    aria-hidden="true"
+  >{content.brandLabel}</p>
+  <div
+    class="absolute inset-0 pointer-events-none opacity-0 data-[template-intro-phase=split]:opacity-100 data-[template-intro-phase=dismiss]:opacity-100 data-[template-intro-phase=fullscreen]:opacity-100 data-[template-intro-phase=fade]:opacity-100 [--template-intro-stage-height:0px] [--template-intro-label-gap:clamp(1rem,2.5vh,2rem)] max-[720px]:data-[template-intro-phase=split]:[--template-intro-stage-height:min(44svh,21rem)] max-[720px]:data-[template-intro-phase=dismiss]:[--template-intro-stage-height:min(44svh,21rem)]"
+    aria-hidden="true"
+  >
+    <p
+      class="fixed left-1/2 top-1/2 z-[1] m-0 -translate-x-1/2 -translate-y-1/2 whitespace-nowrap font-template-serif text-[clamp(2.25rem,5vw,calc(5rem*var(--template-width-scale)))] font-normal tracking-[-0.06em] leading-[0.88] opacity-0 transition-[opacity,transform] duration-500 ease-linear [transition-timing-function:cubic-bezier(0.22,1,0.36,1)] data-[template-intro-phase=split]:opacity-100 data-[template-intro-phase=dismiss]:opacity-100 data-[template-intro-phase=split]:[transform:translate(-50%,calc(-100%-var(--template-intro-stage-height)/2-var(--template-intro-label-gap)))] data-[template-intro-phase=dismiss]:[transform:translate(-50%,calc(-100%-var(--template-intro-stage-height)/2-var(--template-intro-label-gap)))] max-[720px]:text-[clamp(2rem,12vw,3.5rem)]"
+    >
       {content.topLabel}
     </p>
-    <div class="template-home-intro__stage">
+    <div
+      class="fixed left-1/2 top-1/2 z-0 h-[var(--template-intro-stage-height)] w-0 -translate-x-1/2 -translate-y-1/2 overflow-hidden bg-template-olive transition-[width,height] duration-[1.4s] ease-linear [transition-timing-function:cubic-bezier(0.22,1,0.36,1)] data-[template-intro-phase=split]:w-[min(84vw,calc(27.5rem*var(--template-width-scale)))] data-[template-intro-phase=dismiss]:w-[min(84vw,calc(27.5rem*var(--template-width-scale)))] data-[template-intro-phase=fullscreen]:z-[2] data-[template-intro-phase=fullscreen]:h-svh data-[template-intro-phase=fullscreen]:w-screen data-[template-intro-phase=fade]:z-[2] data-[template-intro-phase=fade]:h-svh data-[template-intro-phase=fade]:w-screen max-[720px]:data-[template-intro-phase=split]:w-[78vw] max-[720px]:data-[template-intro-phase=dismiss]:w-[78vw]"
+    >
       {frames.map((frame, index) => (
         <img
-          class="template-home-intro__frame"
+          class="absolute inset-0 z-[var(--template-intro-index)] block h-full w-full object-cover [clip-path:inset(100%_0_0)] transition-[clip-path] duration-[1.2s] ease-linear [transition-timing-function:cubic-bezier(0.22,1,0.36,1)] data-[template-intro-visible=true]:[clip-path:inset(0)]"
           src={introSourceForMedia(frame)}
           alt=""
           width={frame.width}
@@ -43,11 +53,17 @@ const timeline = buildIntroTimeline(frames.length);
         />
       ))}
     </div>
-    <p class="template-home-intro__label template-home-intro__label--bottom">
+    <p
+      class="fixed left-1/2 top-1/2 z-[1] m-0 -translate-x-1/2 -translate-y-1/2 whitespace-nowrap font-template-serif text-[clamp(2.25rem,5vw,calc(5rem*var(--template-width-scale)))] font-normal tracking-[-0.06em] leading-[0.88] opacity-0 transition-[opacity,transform] duration-500 ease-linear [transition-timing-function:cubic-bezier(0.22,1,0.36,1)] data-[template-intro-phase=split]:opacity-100 data-[template-intro-phase=dismiss]:opacity-100 data-[template-intro-phase=split]:[transform:translate(-50%,calc(var(--template-intro-stage-height)/2+var(--template-intro-label-gap)))] data-[template-intro-phase=dismiss]:[transform:translate(-50%,calc(var(--template-intro-stage-height)/2+var(--template-intro-label-gap)))] data-[template-intro-phase=fullscreen]:opacity-0 data-[template-intro-phase=fade]:opacity-0 max-[720px]:text-[clamp(2rem,12vw,3.5rem)]"
+    >
       {content.bottomLabel}
     </p>
   </div>
-  <button class="template-home-intro__skip" type="button" data-template-intro-skip>
+  <button
+    class="absolute bottom-[max(1rem,env(safe-area-inset-bottom))] right-[max(1rem,env(safe-area-inset-right))] z-[3] min-h-11 cursor-pointer rounded-full border border-current bg-[color-mix(in_srgb,var(--template-ivory)_86%,transparent)] px-4 py-[0.65rem] font-sans text-template-ink hover:bg-template-ivory focus-visible:bg-template-ivory"
+    type="button"
+    data-template-intro-skip
+  >
     Pular introdução
   </button>
 </div>
@@ -64,9 +80,10 @@ const timeline = buildIntroTimeline(frames.length);
     intro.dataset.templateIntroReady = "true";
 
     const hero = intro.parentElement?.querySelector<HTMLElement>(
-      '.template-hero[data-template-has-intro="true"]',
+      '[data-template-hero-intro][data-template-has-intro="true"]',
     );
     const header = document.querySelector<HTMLElement>("[data-template-navigation]");
+    header?.setAttribute("data-template-intro-pending", "true");
     const frames = Array.from(
       intro.querySelectorAll<HTMLImageElement>("[data-template-intro-frame]"),
     );
@@ -108,6 +125,9 @@ const timeline = buildIntroTimeline(frames.length);
       if (!(hero instanceof HTMLElement) || heroMediaStarted) return;
       heroMediaStarted = true;
       hero.setAttribute("data-template-intro-media-ready", "true");
+      hero
+        .querySelector<HTMLElement>("[data-template-hero-media]")
+        ?.setAttribute("data-template-intro-media-ready", "true");
       if (!(heroVideo instanceof HTMLVideoElement)) return;
 
       heroVideo.currentTime = 0;
@@ -121,7 +141,11 @@ const timeline = buildIntroTimeline(frames.length);
     const revealHeroChrome = () => {
       if (hero instanceof HTMLElement)
         hero.dataset.templateIntroComplete = "true";
+      hero
+        ?.querySelectorAll<HTMLElement>("[data-template-hero-media], [data-template-hero-copy]")
+        .forEach((element) => element.setAttribute("data-template-intro-complete", "true"));
       if (header) header.dataset.templateIntroComplete = "true";
+      header?.removeAttribute("data-template-intro-pending");
     };
 
     const complete = () => {

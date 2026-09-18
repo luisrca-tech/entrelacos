@@ -10,39 +10,42 @@ interface Props {
 const { content, tone = "olive" } = Astro.props;
 validateScheduleContent(content);
 const id = content.id;
+const toneClasses = tone === "olive" ? "bg-template-olive text-template-ivory" : "bg-template-ivory text-template-ink";
+const descriptionClass = tone === "olive" ? "text-[rgba(244,240,232,0.7)]" : "text-template-muted";
+const revealClasses = "opacity-100 translate-y-0 data-[template-motion-ready=true]:transition-[opacity,transform] data-[template-motion-ready=true]:duration-700 data-[template-motion-ready=true]:ease-out data-[template-motion-ready=true]:data-[template-reveal-state=hidden]:opacity-0 data-[template-motion-ready=true]:data-[template-reveal-state=hidden]:translate-y-3 motion-reduce:opacity-100 motion-reduce:translate-y-0 motion-reduce:transition-none";
 ---
 
 <section
   id={id}
-  class:list={["template-schedule", `template-schedule--${tone}`]}
+  class={`grid grid-cols-[minmax(0,0.72fr)_minmax(0,1.28fr)] gap-[clamp(2.5rem,6vw,7rem)] px-[var(--template-page-inset)] py-[clamp(5rem,10vw,9rem)] ${toneClasses} max-[960px]:block`}
   aria-labelledby={`${id}-title`}
 >
-  <header class="template-schedule__header" data-template-reveal>
-    {content.eyebrow && <p class="template-schedule__eyebrow">{content.eyebrow}</p>}
-    <h2 id={`${id}-title`}>{content.title}</h2>
-    {content.description && <p class="template-schedule__description">{content.description}</p>}
+  <header class={`${revealClasses} max-[960px]:mb-12`} data-template-reveal>
+    {content.eyebrow && <p class="m-0 mb-5 text-[0.72rem] font-bold uppercase tracking-[0.16em]">{content.eyebrow}</p>}
+    <h2 class="m-0 max-w-[12ch] font-template-serif text-[clamp(2.5rem,6vw,calc(5.5rem*var(--template-width-scale)))] font-normal tracking-[-0.065em] leading-[0.96]" id={`${id}-title`}>{content.title}</h2>
+    {content.description && <p class={`m-0 mt-7 max-w-[30rem] leading-[1.7] ${descriptionClass}`}>{content.description}</p>}
   </header>
-  <div class="template-schedule__content" data-template-reveal>
-    <ol class="template-schedule__entries" aria-label={content.title}>
+  <div class={`${revealClasses} min-w-0 self-end`} data-template-reveal>
+    <ol class="m-0 list-none p-0" aria-label={content.title}>
       {content.entries.map((entry) => (
-        <li id={entry.id} class="template-schedule__entry">
-          <time>{entry.time}</time>
+        <li id={entry.id} class="grid grid-cols-[minmax(4rem,0.28fr)_minmax(0,1fr)] gap-4 border-t border-[rgba(244,240,232,0.24)] py-6 first:border-t-0 first:pt-0">
+          <time class="text-[0.9rem] uppercase tracking-[0.08em]">{entry.time}</time>
           <div>
-            <h3>{entry.title}</h3>
-            <p>{entry.body}</p>
-            {entry.location && <p class="template-schedule__location">{entry.location}</p>}
+            <h3 class="m-0 text-[clamp(1.4rem,2.5vw,2rem)] font-medium tracking-[-0.025em] leading-[1.1]">{entry.title}</h3>
+            <p class="m-0 mt-3 max-w-[30rem] leading-[1.6]">{entry.body}</p>
+            {entry.location && <p class="m-0 mt-3 max-w-[30rem] text-[0.9rem] leading-[1.6] text-[rgba(244,240,232,0.7)]">{entry.location}</p>}
           </div>
         </li>
       ))}
     </ol>
     {content.guidance && content.guidance.length > 0 && (
-      <aside class="template-schedule__guidance" aria-labelledby={`${id}-guidance-title`}>
-        <h3 id={`${id}-guidance-title`}>{content.guidanceLabel}</h3>
-        <ul>
+      <aside class="mt-12 border-t border-[rgba(244,240,232,0.24)] pt-8" aria-labelledby={`${id}-guidance-title`}>
+        <h3 class="m-0 mb-7 text-[clamp(1.4rem,2.5vw,2rem)] font-medium tracking-[-0.025em] leading-[1.1]" id={`${id}-guidance-title`}>{content.guidanceLabel}</h3>
+        <ul class="m-0 list-none p-0">
           {content.guidance.map((item) => (
-            <li id={item.id}>
-              <strong>{item.title}</strong>
-              <p>{item.body}</p>
+            <li class="[&+li]:mt-6" id={item.id}>
+              <strong class="text-[clamp(1.4rem,2.5vw,2rem)] font-medium tracking-[-0.025em] leading-[1.1]">{item.title}</strong>
+              <p class="m-0 mt-3 max-w-[30rem] leading-[1.6]">{item.body}</p>
             </li>
           ))}
         </ul>

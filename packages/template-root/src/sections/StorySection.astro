@@ -16,16 +16,17 @@ const frames = storyBackgroundFrames({
   sequence: content.sequence,
 });
 const primary = frames[0] ?? content.media;
+const toneClasses = tone === "olive" ? "bg-template-olive text-template-ivory" : "bg-template-olive text-template-ivory";
 ---
 
 <section
   id={id}
-  class:list={["template-story", `template-story--${tone}`]}
+  class={`relative flex min-h-[clamp(48rem,92svh,68rem)] items-end overflow-hidden mb-[clamp(3rem,5vw,5rem)] px-[var(--template-page-inset)] py-[clamp(3rem,5vw,5rem)] scroll-mt-[calc(var(--template-header-height,4.05rem)+1rem)] ${toneClasses} max-[960px]:m-0 max-[960px]:block max-[960px]:min-h-0 max-[960px]:p-0 max-[960px]:mb-8`}
   data-template-story
   aria-labelledby={`${id}-title`}
   style={`--story-media-ratio: ${primary.width} / ${primary.height};`}
 >
-  <figure class="template-story__media">
+  <figure class="absolute inset-0 z-0 m-0 bg-template-olive max-[960px]:relative max-[960px]:inset-auto max-[960px]:min-h-[min(52svh,26rem)] max-[960px]:w-full max-[960px]:aspect-[var(--story-media-ratio,4/3)]">
     {content.media.kind === "image" ? (
       frames.map((frame, index) =>
         frame.kind === "image" ? (
@@ -37,13 +38,15 @@ const primary = frames[0] ?? content.media;
             loading="lazy"
             decoding="async"
             data-story-frame
-            class:list={{ "is-active": index === 0 }}
+            data-story-active={index === 0 ? "true" : undefined}
+            class="absolute inset-0 block h-full w-full scale-[1.04] object-cover object-[center_6%] opacity-0 transition-opacity duration-[650ms] ease-linear [transition-timing-function:cubic-bezier(0.2,0.7,0.2,1)] data-[story-active=true]:z-[1] data-[story-active=true]:opacity-100 data-[story-active=true]:animate-template-story-media-resolve motion-reduce:scale-100 motion-reduce:animate-none motion-reduce:transition-none data-[story-active=true]:motion-reduce:opacity-100"
             aria-hidden={index === 0 ? undefined : "true"}
           />
         ) : null,
       )
     ) : (
-      <video
+        <video
+        class="absolute inset-0 block h-full w-full scale-[1.04] object-cover object-[center_6%] opacity-100 transition-opacity duration-[650ms] ease-linear [transition-timing-function:cubic-bezier(0.2,0.7,0.2,1)] animate-template-story-media-resolve motion-reduce:scale-100 motion-reduce:animate-none motion-reduce:transition-none"
         src={content.media.src}
         poster={content.media.poster}
         width={content.media.width}
@@ -65,12 +68,15 @@ const primary = frames[0] ?? content.media;
       </video>
     )}
   </figure>
-  <div class="template-story__veil" aria-hidden="true"></div>
-  <div class="template-story__copy" data-story-copy>
-    {content.eyebrow && <p class="template-story__eyebrow">{content.eyebrow}</p>}
-    <h2 id={`${id}-title`}>{content.title}</h2>
-    {content.description && <p class="template-story__description">{content.description}</p>}
-    <p class="template-story__body">{content.body}</p>
+  <div class="absolute inset-0 z-[1] [background:var(--template-story-gradient)]" aria-hidden="true"></div>
+  <div
+    class="relative z-[2] max-w-[min(42rem,100%)] translate-y-0 opacity-100 transition-[opacity,transform] duration-700 ease-out [transition-timing-function:cubic-bezier(0.2,0.7,0.2,1)] data-[story-motion=ready]:not-data-[story-visible=true]:translate-y-6 data-[story-motion=ready]:not-data-[story-visible=true]:opacity-0 data-[story-motion=ready]:data-[story-visible=true]:delay-[80ms] max-[960px]:max-w-none max-[960px]:bg-template-olive max-[960px]:px-4 max-[960px]:pb-10 max-[960px]:pt-8 motion-reduce:translate-y-0 motion-reduce:opacity-100 motion-reduce:transition-none"
+    data-story-copy
+  >
+    {content.eyebrow && <p class="m-0 mb-5 text-[0.72rem] font-bold uppercase tracking-[0.16em]">{content.eyebrow}</p>}
+    <h2 class="m-0 max-w-[18ch] font-template-serif text-[clamp(2.5rem,5.5vw,calc(5.6rem*var(--template-width-scale)))] font-normal tracking-[-0.065em] leading-[0.94] max-[960px]:max-w-[12ch] max-[960px]:text-[clamp(2.5rem,12vw,4.5rem)]" id={`${id}-title`}>{content.title}</h2>
+    {content.description && <p class="m-0 mt-6 max-w-[30rem] text-[rgba(244,240,232,0.78)] leading-[1.55] max-[960px]:max-w-112">{content.description}</p>}
+    <p class="m-0 mt-4 max-w-160 text-[clamp(1rem,1.5vw,1.25rem)] leading-[1.6] text-[rgba(244,240,232,0.96)]">{content.body}</p>
   </div>
 </section>
 
@@ -96,7 +102,7 @@ const primary = frames[0] ?? content.media;
         (observations) => {
           observations.forEach((observation) => {
             if (!observation.isIntersecting) return;
-            observation.target.classList.add("is-visible");
+            observation.target.setAttribute("data-story-visible", "true");
             observer.unobserve(observation.target);
           });
         },

@@ -23,7 +23,10 @@ describe("template-root public boundary", () => {
     ) as {
       exports?: Record<string, string>;
     };
-    expect(packageJson.exports).toEqual({ "./v1": "./src/v1.ts" });
+    expect(packageJson.exports).toEqual({
+      "./v1": "./src/v1.ts",
+      "./theme.css": "./src/theme.css",
+    });
     const publicEntry = readFileSync(
       resolve(templateRoot, "src/v1.ts"),
       "utf8",
@@ -54,7 +57,7 @@ describe("template-root public boundary", () => {
         .map((path) => readFileSync(path, "utf8"))
         .join("\n");
       expect(consumerSource).not.toMatch(
-        /@entrelacos\/template-root\/(?!v1(?:["'])|styles\.css)/,
+        /@entrelacos\/template-root\/(?!v1(?:["'])|theme\.css)/,
       );
       expect(consumerSource).not.toMatch(
         /@entrelacos\/(?:wedding-demo|template-fixture)/,

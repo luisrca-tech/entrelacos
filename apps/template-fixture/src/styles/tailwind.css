@@ -1,0 +1,5 @@
+@import "tailwindcss";
+@import "@entrelacos/template-root/theme.css";
+
+@source "../";
+@source "../../../../packages/template-root/src";

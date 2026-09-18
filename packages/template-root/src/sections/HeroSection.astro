@@ -19,14 +19,19 @@ const hasIntro = content.intro !== undefined && introMedia.length > 0;
 )}
 <section
   id={id}
-  class="template-hero"
+  class="relative grid min-h-svh overflow-hidden bg-template-ink text-template-ivory"
   aria-labelledby={`${id}-title`}
   data-template-hero-intro
   data-template-has-intro={hasIntro ? "true" : undefined}
+  data-template-intro-pending={hasIntro ? "true" : undefined}
 >
-  <div class="template-hero__media">
+  <div
+    class="absolute inset-0 bg-template-olive after:absolute after:inset-0 after:content-[''] after:[background:var(--template-hero-gradient)] animate-template-hero-media-intro data-[template-intro-pending=true]:opacity-0 data-[template-intro-pending=true]:[animation:none] data-[template-intro-media-ready=true]:opacity-100 data-[template-intro-complete=true]:opacity-100 motion-reduce:animate-none"
+    data-template-hero-media
+  >
     {content.media.kind === "image" ? (
       <img
+        class="block h-full w-full object-cover"
         src={content.media.src}
         alt={content.media.alt}
         width={content.media.width}
@@ -35,6 +40,7 @@ const hasIntro = content.intro !== undefined && introMedia.length > 0;
       />
     ) : (
       <video
+        class="block h-full w-full object-cover"
         src={content.media.src}
         poster={content.media.poster}
         width={content.media.width}
@@ -57,16 +63,62 @@ const hasIntro = content.intro !== undefined && introMedia.length > 0;
       </video>
     )}
   </div>
-  <div class="template-hero__content">
-    {content.eyebrow && <p class="template-hero__eyebrow">{content.eyebrow}</p>}
-    <h1 id={`${id}-title`}>{content.title}</h1>
-    {content.description && <p class="template-hero__description">{content.description}</p>}
-    <p class="template-hero__meta">
+  <div class="relative z-[1] w-full self-end px-[var(--template-page-inset)] pb-[clamp(2.5rem,5vh,4rem)] pt-[clamp(8rem,22vh,15rem)]">
+    {content.eyebrow && (
+      <p
+        data-template-hero-copy
+        class:list={[
+          "m-0 mb-4 text-[0.75rem] font-bold uppercase tracking-[0.16em] motion-reduce:animate-none motion-reduce:opacity-100",
+          hasIntro
+            ? "animate-none opacity-0 data-[template-intro-complete=true]:animate-template-hero-copy-intro data-[template-intro-complete=true]:opacity-100 [animation-duration:1s] [animation-timing-function:cubic-bezier(0.14,1,0.34,1)]"
+            : "animate-template-hero-copy-intro [animation-delay:0ms]",
+        ]}
+      >{content.eyebrow}</p>
+    )}
+    <h1
+      data-template-hero-copy
+      class:list={[
+        "m-0 max-w-[10ch] font-template-serif text-[clamp(4rem,12vw,calc(10rem*var(--template-width-scale)))] font-normal tracking-[-0.08em] leading-[0.88] motion-reduce:animate-none motion-reduce:opacity-100",
+        hasIntro
+          ? "animate-none opacity-0 data-[template-intro-complete=true]:animate-template-hero-copy-intro data-[template-intro-complete=true]:opacity-100 [animation-duration:1s] [animation-delay:120ms] [animation-timing-function:cubic-bezier(0.14,1,0.34,1)]"
+          : "animate-template-hero-copy-intro [animation-delay:120ms]",
+      ]}
+      id={`${id}-title`}
+    >{content.title}</h1>
+    {content.description && (
+      <p
+        data-template-hero-copy
+        class:list={[
+          "m-0 mt-8 max-w-[34rem] text-[1.05rem] leading-[1.6] text-[rgba(244,240,232,0.78)] motion-reduce:animate-none motion-reduce:opacity-100",
+          hasIntro
+            ? "animate-none opacity-0 data-[template-intro-complete=true]:animate-template-hero-copy-intro data-[template-intro-complete=true]:opacity-100 [animation-duration:1s] [animation-delay:220ms] [animation-timing-function:cubic-bezier(0.14,1,0.34,1)]"
+            : "animate-template-hero-copy-intro [animation-delay:220ms]",
+        ]}
+      >{content.description}</p>
+    )}
+    <p
+      data-template-hero-copy
+      class:list={[
+        "m-0 mt-8 flex flex-wrap gap-x-6 gap-y-2 text-[0.9rem] uppercase tracking-[0.08em] motion-reduce:animate-none motion-reduce:opacity-100",
+        hasIntro
+          ? "animate-none opacity-0 data-[template-intro-complete=true]:animate-template-hero-copy-intro data-[template-intro-complete=true]:opacity-100 [animation-duration:1s] [animation-delay:320ms] [animation-timing-function:cubic-bezier(0.14,1,0.34,1)]"
+          : "animate-template-hero-copy-intro [animation-delay:320ms]",
+      ]}
+    >
       <span>{content.dateLabel}</span>
       <span>{content.locationLabel}</span>
     </p>
     {content.action && (
-      <a class="template-hero__action" href={content.action.href}>
+      <a
+        data-template-hero-copy
+        class:list={[
+          "mt-8 inline-flex min-h-11 items-center gap-[0.65rem] rounded-full border border-[rgba(244,240,232,0.56)] px-4 py-3 text-[0.78rem] uppercase tracking-[0.1em] text-template-ivory no-underline transition-[background-color,border-color,color] duration-[180ms] hover:border-template-ivory hover:bg-template-ivory hover:text-template-ink focus-visible:border-template-ivory focus-visible:bg-template-ivory focus-visible:text-template-ink motion-reduce:animate-none motion-reduce:opacity-100",
+          hasIntro
+            ? "animate-none opacity-0 data-[template-intro-complete=true]:animate-template-hero-copy-intro data-[template-intro-complete=true]:opacity-100 [animation-duration:1s] [animation-delay:420ms] [animation-timing-function:cubic-bezier(0.14,1,0.34,1)]"
+            : "animate-template-hero-copy-intro [animation-delay:420ms]",
+        ]}
+        href={content.action.href}
+      >
         {content.action.label}
         <span aria-hidden="true">↗</span>
       </a>
@@ -87,7 +139,7 @@ const hasIntro = content.intro !== undefined && introMedia.length > 0;
           return;
         }
 
-        const hero = video.closest<HTMLElement>(".template-hero");
+        const hero = video.closest<HTMLElement>("[data-template-hero-intro]");
         const introPending =
           hero?.dataset.templateHasIntro === "true" &&
           hero.dataset.templateIntroMediaReady !== "true";
