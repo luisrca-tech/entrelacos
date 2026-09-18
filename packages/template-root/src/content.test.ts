@@ -596,8 +596,8 @@ describe("template-root v1 content contracts", () => {
     };
     expect(validateWeddingHomeProps(home)).toEqual([
       "hero",
-      "story",
       "gallery",
+      "story",
       "schedule",
     ]);
   });

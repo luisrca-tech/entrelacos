@@ -83,7 +83,7 @@ export function getGuestDeliveryMessage(
   status: GuestChallengeStartResponse["sendStatus"],
 ): string {
   if (mode === "MANUAL_PIN") {
-    return "Digite o PIN compartilhado pelos noivos ou pela cerimonial.";
+    return "Informe o PIN de 6 dígitos do seu grupo, enviado pelos noivos ou pela cerimonial.";
   }
   if (mode === "SIMULATED") {
     return "Simulação local: este fluxo não envia SMS real.";

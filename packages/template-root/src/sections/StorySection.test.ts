@@ -28,8 +28,11 @@ describe("StorySection compact full-bleed composition", () => {
   });
 
   it("keeps the image immersive while preserving readable copy", () => {
-    expect(stylesSource).toContain("min-height: clamp(42rem, 86svh, 62rem);");
-    expect(stylesSource).toContain("margin-top: clamp(3rem, 5vw, 5rem);");
+    const storyRule = stylesSource.match(/\.template-story\s*\{[^}]*\}/s)?.[0];
+
+    expect(storyRule).toContain("min-height: clamp(48rem, 92svh, 68rem);");
+    expect(storyRule).toContain("margin-top: 0;");
+    expect(storyRule).toContain("margin-bottom: clamp(3rem, 5vw, 5rem);");
     expect(stylesSource).toContain(".template-story__media");
     expect(stylesSource).toContain(
       "aspect-ratio: var(--story-media-ratio, 4 / 3);",

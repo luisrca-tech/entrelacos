@@ -331,7 +331,7 @@ describe("guest access client", () => {
 
   it("does not claim that an unconfirmed real delivery was sent", () => {
     expect(getGuestDeliveryMessage("MANUAL_PIN", "MANUAL")).toContain(
-      "PIN compartilhado",
+      "PIN de 6 dígitos",
     );
     expect(getGuestDeliveryMessage("REAL_SMS", "PROVIDER_ACCEPTED")).toContain(
       "Enviamos",

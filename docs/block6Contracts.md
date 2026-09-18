@@ -44,7 +44,7 @@ The current validators enforce:
 - exactly one hero in a non-empty home order and no order entry for absent content;
 - complete host-owned hero-intro labels and gallery media whenever the standard home preset enables that intro.
 
-`WeddingHome` derives the order `hero`, then each supplied optional section in the contract order when `sectionOrder` is absent. A supplied order may omit or reorder optional sections, but must include `hero` exactly once.
+`WeddingHome` derives the order `hero`, `gallery`, `story`, then each remaining supplied optional section in the contract order when `sectionOrder` is absent. A supplied order may omit or reorder optional sections, but must include `hero` exactly once.
 
 ## Layout, slots, and theme
 

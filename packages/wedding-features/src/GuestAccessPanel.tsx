@@ -41,7 +41,6 @@ import {
 type GuestAccessProps = {
   siteId: string;
   apiOrigin: string;
-  demoMode?: boolean;
   fetcher?: typeof fetch;
   storage?: GuestSessionStorage;
   now?: () => number;
@@ -92,7 +91,6 @@ function sessionFromVerification(
 export function GuestAccess({
   siteId,
   apiOrigin,
-  demoMode = false,
   fetcher,
   storage: providedStorage,
   now = Date.now,
@@ -137,7 +135,6 @@ export function GuestAccess({
   const [phase, setPhase] = useState<GuestAccessPhase>("lookup");
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
-  const [demoGrant, setDemoGrant] = useState("");
   const [code, setCode] = useState("");
   const [challenge, setChallenge] = useState<GuestChallengeStartResult | null>(
     null,
@@ -282,10 +279,7 @@ export function GuestAccess({
     setError("");
     setNotice("");
     try {
-      const result = await apiResult.api.start(
-        parsed.data,
-        demoMode ? demoGrant.trim() || undefined : undefined,
-      );
+      const result = await apiResult.api.start(parsed.data);
       if (shouldDiscardGuestChallenge(result.sendStatus)) {
         setError(responseStatusMessage(result));
         setChallenge(null);
@@ -310,10 +304,7 @@ export function GuestAccess({
     setError("");
     setNotice("");
     try {
-      const result = await apiResult.api.resend(
-        challenge.challengeId,
-        demoMode ? demoGrant.trim() || undefined : undefined,
-      );
+      const result = await apiResult.api.resend(challenge.challengeId);
       if (shouldDiscardGuestChallenge(result.sendStatus)) {
         setError(responseStatusMessage(result));
         setChallenge(null);
@@ -662,8 +653,8 @@ export function GuestAccess({
         </p>
         <h2 id="guest-access-title">Encontre seu convite</h2>
         <p>
-          Informe seu nome completo e o celular usado no convite para acessar os
-          detalhes da sua família.
+          Informe o nome completo e o celular do convite. Em seguida, use o PIN
+          do seu grupo para acessar os detalhes da família.
         </p>
       </div>
 
@@ -695,7 +686,7 @@ export function GuestAccess({
             />
           </label>
           <label>
-            Celular brasileiro
+            Celular
             <input
               autoComplete="tel"
               inputMode="tel"
@@ -705,22 +696,6 @@ export function GuestAccess({
               required
             />
           </label>
-          {demoMode && (
-            <label>
-              Autorização temporária da demonstração
-              <input
-                autoComplete="off"
-                spellCheck={false}
-                value={demoGrant}
-                onChange={(event) => setDemoGrant(event.target.value)}
-                placeholder="Cole a autorização emitida pelo OWNER"
-              />
-              <small>
-                Opcional para SMS real. Obrigatória para revelar o código da
-                simulação, expira em 5 minutos e fica somente nesta página.
-              </small>
-            </label>
-          )}
           <button type="submit" disabled={busy}>
             {busy ? "Verificando…" : "Continuar"}
           </button>

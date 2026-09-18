@@ -6,6 +6,10 @@ const source = readFileSync(
   resolve(import.meta.dirname, "WeddingLayout.astro"),
   "utf8",
 );
+const styles = readFileSync(
+  resolve(import.meta.dirname, "../styles.css"),
+  "utf8",
+);
 
 describe("WeddingLayout landmarks", () => {
   it("keeps host content extension slots inside the main landmark", () => {
@@ -25,6 +29,32 @@ describe("WeddingLayout landmarks", () => {
     );
   });
 
+  it("uses a compact header bar", () => {
+    const headerRule = styles.match(/\.template-header\s*\{[^}]*\}/s)?.[0];
+
+    expect(headerRule).toContain(
+      "padding: 0.65rem var(--template-page-inset);",
+    );
+    expect(headerRule).not.toContain("padding: 1.5rem");
+    expect(styles).toContain("--template-header-height: 4.05rem;");
+  });
+
+  it("tightens the header further on tablet and mobile", () => {
+    expect(styles).toMatch(
+      /@media \(max-width:\s*1024px\)[\s\S]*?\.template-header\s*\{[\s\S]*?padding:\s*0\.4rem var\(--template-page-inset\);/,
+    );
+  });
+
+  it("paints main with the same ivory as the gallery canvas", () => {
+    const mainRule = styles.match(/\.template-main\s*\{[^}]*\}/s)?.[0];
+    const galleryIvoryRule = styles.match(
+      /\.template-gallery--ivory(?:,[^{]+)*\{[^}]*\}/s,
+    )?.[0];
+
+    expect(mainRule).toContain("background: var(--template-ivory);");
+    expect(galleryIvoryRule).toContain("background: var(--template-ivory);");
+  });
+
   it("keeps navigation labels host-owned and metadata complete", () => {
     expect(source).toContain("data-navigation-state");
     expect(source).toContain('class="template-navigation-mobile"');
@@ -38,6 +68,12 @@ describe("WeddingLayout landmarks", () => {
     expect(source).toContain("setupTemplateInteractions,");
     expect(source).toContain("setupTemplateInteractions();");
     expect(source).toContain("navigationStateForHero");
+  });
+
+  it("renders year and names on a single legal line", () => {
+    expect(source).toContain("<span>© {footer.year} {footer.names}</span>");
+    expect(source).not.toContain("<span>{footer.year}</span>");
+    expect(source).not.toContain("<span>{footer.copyright}</span>");
   });
 
   it("publishes the measured header height for sticky sections", () => {

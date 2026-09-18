@@ -25,8 +25,8 @@ const navigation = {
   menuLabel: "Abrir menu",
   extensionAnchorIds: ["guest-access", "mural"],
   links: [
-    { label: "História", href: "#story" },
     { label: "Galeria", href: "#gallery" },
+    { label: "História", href: "#story" },
     { label: "Programação", href: "#schedule" },
     { label: "Local", href: "#venue" },
     { label: "Confirmar presença", href: "#guest-access" },
@@ -37,8 +37,8 @@ const footer = {
   names: "Marina & Caio",
   dateLabel: "18 de setembro de 2027",
   links: [
-    { label: "História", href: "#story" },
     { label: "Galeria", href: "#gallery" },
+    { label: "História", href: "#story" },
     { label: "Programação", href: "#schedule" },
     { label: "Local", href: "#venue" },
   ],
@@ -72,9 +72,9 @@ const hero = {
 const story = {
   id: "story",
   eyebrow: "A nossa história",
-  title: "O acaso apresentou. A vida fez o resto.",
-  description: "Uma história que começou sem roteiro e encontrou seu lugar.",
-  body: "Foi num encontro sem grandes planos que a gente se encontrou. Depois vieram as conversas que demoravam mais do que o café, os caminhos escolhidos juntos e a vontade de transformar os dias simples em casa. O que começou por acaso virou escolha, parceria e agora ganha um novo capítulo ao lado de vocês.",
+  title: "O que o tempo uniu, a festa consagra.",
+  description: "Uma história feita de escolhas, agora pronta para ser celebrada.",
+  body: "Não foi um único instante que os fez casal. Foi o acumular de escolhas: ficar, cuidar, construir um nós. Os dias simples, as decisões a dois, a casa que se fez no outro. O que começou em silêncio agora se faz festa, e vocês estão aqui para testemunhar o voto que o tempo já ensaiou.",
   media: {
     kind: "image" as const,
     src: "/marina-caio-story-encounter.webp",
@@ -103,7 +103,7 @@ const gallery = {
   id: "gallery",
   eyebrow: "Fragmentos",
   title: "Antes do sim, um dia só nosso.",
-  description: "A galeria reúne as fotografias do pré-wedding em uma sequência inteira por vez, preservando cada instante do ensaio.",
+  description: "O pré-wedding é o ensaio do eterno: o casal sozinho, a luz, o silêncio entre um olhar e outro. Aqui, cada sequência guarda esse momento inteiro.",
   controls: {
     ariaLabel: "Navegação da galeria",
     previousLabel: "Anterior",
@@ -184,7 +184,7 @@ const schedule = {
   id: "schedule",
   eyebrow: "O dia",
   title: "Uma programação para viver sem pressa.",
-  description: "Horários e orientações práticas ficam próximos para facilitar a chegada e a celebração.",
+  description: "Qualquer dúvida sobre horários, chegada ou traje, fale com quem enviou o seu convite.",
   guidanceLabel: "Orientações práticas",
   entries: [
     {
@@ -204,14 +204,13 @@ const schedule = {
   ],
   guidance: [
     { id: "arrival", title: "Chegada", body: "Reserve alguns minutos para estacionar e encontrar seu lugar com calma." },
-    { id: "attire", title: "Traje", body: "Venha com o que fizer você se sentir confortável para celebrar." },
+    { id: "attire", title: "Traje", body: "Traje social. Vista-se à altura da celebração: o dia pede elegância, presença e respeito ao momento." },
   ],
 };
 const venue = {
   id: "venue",
   eyebrow: "O local",
   title: "Nos encontramos em Goiânia.",
-  description: "O endereço completo permanece visível mesmo quando o mapa não estiver disponível.",
   name: "Casablanca Eventos",
   address: "Av Ipanema 747, Jardim Atlântico, Goiânia, GO, 74343-010",
   mapEmbedUrl: "https://maps.google.com/maps?q=Casablanca%20Eventos%2C%20Av%20Ipanema%20747%2C%20Jardim%20Atl%C3%A2ntico%2C%20Goi%C3%A2nia%2C%20GO%2074343-010&output=embed",
@@ -265,9 +264,9 @@ const guestAccess = {
         <div class="demo-guest-access__heading">
           <p class="demo-eyebrow">Confirmação</p>
           <h2 id="guest-access-section-title">Seu convite, no seu tempo.</h2>
-          <p>Encontre sua família pelo nome e celular brasileiro. Depois da confirmação, os nomes do convite ficam disponíveis somente nesta aba.</p>
+          <p>Encontre sua família pelo nome e pelo PIN do convite. Depois da confirmação, os nomes ficam disponíveis somente nesta aba.</p>
         </div>
-        <GuestAccess {...guestAccess} demoMode client:only="react">
+        <GuestAccess {...guestAccess} client:only="react">
           <p slot="fallback" class="demo-client-fallback">Esta área interativa precisa de JavaScript. Ative-o para encontrar seu convite e responder à confirmação.</p>
         </GuestAccess>
       </section>
@@ -325,6 +324,12 @@ const guestAccess = {
     font-size: 0.72rem;
     letter-spacing: 0;
     text-transform: none;
+  }
+
+  @media (max-width: 1024px) {
+    .demo-monogram {
+      display: none;
+    }
   }
 
   .demo-guest-access {

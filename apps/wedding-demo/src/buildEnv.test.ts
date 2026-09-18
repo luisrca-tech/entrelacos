@@ -42,6 +42,31 @@ describe("progressive enhancement", () => {
     expect(source).toContain('id="guest-access-section-title"');
   });
 
+  it("lists gallery before story to match the default home order", () => {
+    const source = readFileSync(
+      resolve(import.meta.dirname, "pages/index.astro"),
+      "utf8",
+    );
+    const navigation = source.slice(
+      source.indexOf("const navigation"),
+      source.indexOf("const footer"),
+    );
+    expect(navigation.indexOf('href: "#gallery"')).toBeGreaterThan(-1);
+    expect(navigation.indexOf('href: "#gallery"')).toBeLessThan(
+      navigation.indexOf('href: "#story"'),
+    );
+  });
+
+  it("hides the header monogram on tablet and mobile", () => {
+    const source = readFileSync(
+      resolve(import.meta.dirname, "pages/index.astro"),
+      "utf8",
+    );
+    expect(source).toMatch(
+      /@media \(max-width:\s*1024px\)[\s\S]*?\.demo-monogram\s*\{[\s\S]*?display:\s*none;/,
+    );
+  });
+
   it("keeps the header monogram ring visible after leaving the hero", () => {
     const source = readFileSync(
       resolve(import.meta.dirname, "pages/index.astro"),

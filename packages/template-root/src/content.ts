@@ -683,9 +683,9 @@ export function validateWeddingHomeProps(
   if (value.sectionOrder === undefined) {
     order = [
       "hero",
+      ...(value.gallery !== undefined ? ["gallery" as const] : []),
       ...(value.story !== undefined ? ["story" as const] : []),
       ...(value.details !== undefined ? ["details" as const] : []),
-      ...(value.gallery !== undefined ? ["gallery" as const] : []),
       ...(value.schedule !== undefined ? ["schedule" as const] : []),
       ...(value.venue !== undefined ? ["venue" as const] : []),
     ];

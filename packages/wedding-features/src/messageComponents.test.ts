@@ -88,6 +88,13 @@ describe("guest lookup form", () => {
     expect(guestAccessSource).toContain(
       "Informe o nome completo e um celular brasileiro válido.",
     );
+    expect(guestAccessSource).toContain("Celular");
+    expect(guestAccessSource).not.toContain("Celular brasileiro");
+    expect(guestAccessSource).not.toContain(
+      "Autorização temporária da demonstração",
+    );
+    expect(guestAccessSource).toContain("use o PIN");
+    expect(guestAccessSource).toContain("do seu grupo");
     expect(guestAccessSource).not.toContain(
       "entrelacos-guest-access__foreign-note",
     );

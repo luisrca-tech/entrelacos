@@ -77,8 +77,7 @@ validateWeddingLayoutProps(Astro.props);
             <a href={footer.rsvp.href}>{footer.rsvp.label}</a>
           </nav>
           <div class="template-footer__legal">
-            <span>{footer.year}</span>
-            <span>{footer.copyright}</span>
+            <span>© {footer.year} {footer.names}</span>
             <span>{footer.attribution}</span>
           </div>
           <slot name="footer-addon" />
