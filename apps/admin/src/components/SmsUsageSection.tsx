@@ -10,6 +10,7 @@ import {
   Input,
 } from "@entrelacos/ui";
 import { useCallback, useEffect, useState } from "react";
+import { adminStyles, displayHeading } from "../lib/adminStyles";
 import { ApiError, apiRequest } from "../lib/apiClient";
 import { smsUsageProgress } from "./smsUsage";
 
@@ -99,14 +100,16 @@ export function SmsUsageSection({ siteId, lifecycle, owner }: Props) {
     : null;
 
   return (
-    <section
-      className="panel-section sms-usage"
-      aria-labelledby="sms-usage-title"
-    >
-      <div className="guest-groups-heading">
+    <section className={adminStyles.card} aria-labelledby="sms-usage-title">
+      <div className="flex items-end justify-between gap-3.5 max-[760px]:grid max-[760px]:grid-cols-1">
         <div>
-          <h2 id="sms-usage-title">SMS e PIN manual</h2>
-          <p>
+          <h2
+            className={`m-0 mb-[18px] text-[clamp(1.8rem,3vw,2.7rem)] ${displayHeading}`}
+            id="sms-usage-title"
+          >
+            SMS e PIN manual
+          </h2>
+          <p className="leading-[1.6]">
             O PIN compartilhado manualmente é o acesso padrão do MVP e continua
             disponível sem cota de SMS. A simulação não envia mensagens nem
             representa custo do provedor.
@@ -114,31 +117,43 @@ export function SmsUsageSection({ siteId, lifecycle, owner }: Props) {
         </div>
         {usage && <Badge variant="outline">{alertLabels[usage.alert]}</Badge>}
       </div>
-      {error && <p role="alert">{error}</p>}
-      {notice && <p role="status">{notice}</p>}
+      {error && (
+        <p className={adminStyles.alert} role="alert">
+          {error}
+        </p>
+      )}
+      {notice && (
+        <p className="my-3.5 leading-[1.6] text-admin-muted" role="status">
+          {notice}
+        </p>
+      )}
       {loading ? (
-        <p role="status">Carregando uso mensal…</p>
+        <p className="leading-[1.6]" role="status">
+          Carregando uso mensal…
+        </p>
       ) : !usage ? (
-        <p role="status">Uso mensal indisponível.</p>
+        <p className="leading-[1.6]" role="status">
+          Uso mensal indisponível.
+        </p>
       ) : (
         <>
-          <p>
+          <p className="leading-[1.6]">
             Período de {new Date(usage.periodStart).toLocaleDateString("pt-BR")}{" "}
             a {new Date(usage.periodEnd).toLocaleDateString("pt-BR")} no fuso{" "}
             {usage.timezone}.
           </p>
           {progress === null ? (
-            <p className="notice">
+            <p className={adminStyles.notice}>
               Nenhuma cota foi configurada. O envio real permanece bloqueado.
             </p>
           ) : (
-            <label className="sms-progress">
+            <label className="my-5 grid gap-2 font-semibold">
               Uso real: {usage.realSms.consumed} de {usage.monthlyLimit}
               <progress max={100} value={progress} />
             </label>
           )}
-          <div className="sms-usage-grid">
-            <Card>
+          <div className="my-6 grid gap-4">
+            <Card className="rounded-[10px] border border-admin-line bg-admin-beige p-5">
               <CardHeader>
                 <CardTitle>SMS real</CardTitle>
                 <CardDescription>
@@ -154,7 +169,7 @@ export function SmsUsageSection({ siteId, lifecycle, owner }: Props) {
                 </small>
               </CardContent>
             </Card>
-            <Card>
+            <Card className="rounded-[10px] border border-admin-line bg-admin-beige p-5">
               <CardHeader>
                 <CardTitle>Simulação</CardTitle>
                 <CardDescription>
@@ -172,8 +187,11 @@ export function SmsUsageSection({ siteId, lifecycle, owner }: Props) {
         </>
       )}
       {owner && (
-        <div className="sms-quota-form">
-          <label htmlFor="sms-monthly-limit">
+        <div className="mt-5 flex items-end gap-4 max-[760px]:grid max-[760px]:grid-cols-1">
+          <label
+            className="grid flex-1 basis-60 gap-2 text-[0.88rem] font-semibold text-admin-graphite"
+            htmlFor="sms-monthly-limit"
+          >
             Cota mensal de SMS real
             <Input
               id="sms-monthly-limit"

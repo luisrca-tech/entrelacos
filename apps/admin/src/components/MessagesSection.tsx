@@ -18,6 +18,7 @@ import {
   Checkbox,
 } from "@entrelacos/ui";
 import { useCallback, useEffect, useState } from "react";
+import { adminStyles, displayHeading } from "../lib/adminStyles";
 import { apiRequest } from "../lib/apiClient";
 import { listenForGuestGroupsChanged } from "./guestGroupsRefresh";
 import { mergeSiteMessages, messageAdminError } from "./messageAdmin";
@@ -107,19 +108,21 @@ export function MessagesSection({ siteId, lifecycle }: Props) {
   }
 
   return (
-    <section
-      className="panel-section messages-admin"
-      aria-labelledby="messages-title"
-    >
-      <div className="guest-groups-heading">
+    <section className={adminStyles.card} aria-labelledby="messages-title">
+      <div className="flex items-end justify-between gap-3.5 max-[760px]:grid max-[760px]:grid-cols-1">
         <div>
-          <h2 id="messages-title">Mural de mensagens</h2>
-          <p>
+          <h2
+            className={`m-0 mb-[18px] text-[clamp(1.8rem,3vw,2.7rem)] ${displayHeading}`}
+            id="messages-title"
+          >
+            Mural de mensagens
+          </h2>
+          <p className="leading-[1.6]">
             Controle a publicação do mural e modere os recados enviados por cada
             convite. O texto dos convidados não pode ser editado no painel.
           </p>
         </div>
-        <label className="mural-toggle" htmlFor="mural-enabled">
+        <label className="flex items-center gap-2.5" htmlFor="mural-enabled">
           <Checkbox
             id="mural-enabled"
             checked={muralEnabled}
@@ -140,13 +143,21 @@ export function MessagesSection({ siteId, lifecycle }: Props) {
       </div>
 
       {!mutable && (
-        <p className="panel-notice" role="status">
+        <p className={adminStyles.notice} role="status">
           As mensagens podem ser consultadas, mas não moderadas enquanto o site
           estiver inativo.
         </p>
       )}
-      {error && <p role="alert">{error}</p>}
-      {notice && <p role="status">{notice}</p>}
+      {error && (
+        <p className={adminStyles.alert} role="alert">
+          {error}
+        </p>
+      )}
+      {notice && (
+        <p className="my-3.5 leading-[1.6] text-admin-muted" role="status">
+          {notice}
+        </p>
+      )}
 
       <AlertDialog
         open={removeTarget !== null}
@@ -166,7 +177,7 @@ export function MessagesSection({ siteId, lifecycle }: Props) {
               Cancelar
             </AlertDialogCancel>
             <AlertDialogAction
-              className="danger-action"
+              className="justify-self-start border-admin-terracotta-deep bg-transparent text-admin-terracotta-deep"
               disabled={Boolean(pending)}
               onClick={() => {
                 if (removeTarget)
@@ -187,13 +198,20 @@ export function MessagesSection({ siteId, lifecycle }: Props) {
       </AlertDialog>
 
       {loading ? (
-        <p role="status">Carregando mensagens…</p>
+        <p className="leading-[1.6]" role="status">
+          Carregando mensagens…
+        </p>
       ) : groups.length === 0 ? (
-        <p>Nenhum convite encontrado para moderação.</p>
+        <p className="leading-[1.6]">
+          Nenhum convite encontrado para moderação.
+        </p>
       ) : (
-        <div className="message-group-list">
+        <div className="mt-6 grid gap-3">
           {groups.map((group) => (
-            <Card className="message-group-card" key={group.groupId}>
+            <Card
+              className="items-stretch rounded-[10px] border border-admin-line bg-admin-surface p-5 max-[760px]:grid max-[760px]:grid-cols-1 [&_[data-slot=card-header]]:w-full [&_h3]:mb-2"
+              key={group.groupId}
+            >
               <CardHeader className="flex w-full flex-row items-start justify-between">
                 <div>
                   <CardTitle>{group.groupName}</CardTitle>
@@ -202,7 +220,7 @@ export function MessagesSection({ siteId, lifecycle }: Props) {
                   </CardDescription>
                 </div>
                 <CardAction>
-                  <div className="inline-actions">
+                  <div className="flex flex-wrap items-center gap-3.5">
                     <Button
                       type="button"
                       size="sm"
@@ -244,9 +262,11 @@ export function MessagesSection({ siteId, lifecycle }: Props) {
               </CardHeader>
               <CardContent>
                 {group.message ? (
-                  <div className="message-admin-copy">
-                    <blockquote>{group.message.text}</blockquote>
-                    <p>
+                  <div className="grid gap-4">
+                    <blockquote className="m-0 break-words whitespace-pre-wrap text-[1.1rem] leading-[1.55]">
+                      {group.message.text}
+                    </blockquote>
+                    <p className="leading-[1.6]">
                       <strong>{group.message.authorName}</strong> · Publicada em{" "}
                       <time dateTime={group.message.createdAt}>
                         {new Intl.DateTimeFormat("pt-BR", {
@@ -258,7 +278,9 @@ export function MessagesSection({ siteId, lifecycle }: Props) {
                     </p>
                   </div>
                 ) : (
-                  <p>Este convite ainda não publicou uma mensagem.</p>
+                  <p className="leading-[1.6]">
+                    Este convite ainda não publicou uma mensagem.
+                  </p>
                 )}
               </CardContent>
             </Card>

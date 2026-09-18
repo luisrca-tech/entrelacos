@@ -49,6 +49,7 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
+import { adminStyles, displayHeading } from "../lib/adminStyles";
 import { ApiError, apiRequest } from "../lib/apiClient";
 import type { SiteArea } from "./adminNavigation";
 import { GuestGroupsSection } from "./GuestGroupsSection";
@@ -301,13 +302,24 @@ export function SiteWorkspace({
 
   if (fatal)
     return (
-      <section className="panel-section">
-        <h1>Acesso indisponível</h1>
-        <p role="alert">{error}</p>
+      <section className={adminStyles.card}>
+        <h1
+          className={`m-0 max-w-[780px] text-[clamp(2.6rem,6vw,5.2rem)] ${displayHeading}`}
+        >
+          Acesso indisponível
+        </h1>
+        <p className={adminStyles.alert} role="alert">
+          {error}
+        </p>
         <a href="/login">Entrar novamente</a>
       </section>
     );
-  if (!site) return <p role="status">Carregando casamento…</p>;
+  if (!site)
+    return (
+      <p className="leading-[1.6]" role="status">
+        Carregando casamento…
+      </p>
+    );
 
   const inactive = site.lifecycle === "INACTIVE";
   const heading = getWorkspaceHeading({
@@ -326,21 +338,30 @@ export function SiteWorkspace({
 
   return (
     <>
-      <section className="panel-heading workspace-heading">
+      <section className="mb-[38px] grid gap-2.5 max-[760px]:mb-7">
         {heading.showBackLink && (
-          <Link className="workspace-back" to="/">
+          <Link
+            className="w-fit text-[0.88rem] text-admin-muted no-underline hover:text-admin-ink"
+            to="/"
+          >
             ← Todos os casamentos
           </Link>
         )}
-        <div className="workspace-heading-row">
+        <div className="flex items-end justify-between gap-8 max-[760px]:flex-col max-[760px]:items-start max-[760px]:gap-4">
           <div>
-            <h1>{heading.title}</h1>
-            <p className="workspace-identity">{site.displayName}</p>
+            <h1
+              className={`m-0 max-w-none text-[clamp(1.85rem,3vw,2.6rem)] ${displayHeading}`}
+            >
+              {heading.title}
+            </h1>
+            <p className="mt-2 text-base leading-[1.6] text-admin-muted">
+              {site.displayName}
+            </p>
           </div>
-          <div className="workspace-heading-actions">
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-3 max-[760px]:w-full max-[760px]:justify-start">
             {site.publicUrl && (
               <a
-                className="primary-action"
+                className="inline-flex min-h-[42px] w-fit items-center justify-center rounded-lg border border-admin-graphite bg-admin-graphite px-[17px] py-2.5 text-[0.88rem] font-bold text-[#fffaf6] no-underline hover:bg-admin-ink max-[760px]:w-full"
                 href={publicSiteHandoffUrl(site.publicUrl, panelOrigin)}
               >
                 Ir para o site
@@ -357,19 +378,26 @@ export function SiteWorkspace({
         </div>
       </section>
       {error && !settingsDialog && (
-        <p role="alert">
+        <p className={adminStyles.alert} role="alert">
           {error} <a href="/login">Login</a>
         </p>
       )}
-      {notice && <p role="status">{notice}</p>}
+      {notice && (
+        <p className="my-3.5 leading-[1.6] text-admin-muted" role="status">
+          {notice}
+        </p>
+      )}
       {accessLink && (
-        <Card className="panel-section">
+        <Card className={adminStyles.card}>
           <CardContent>
-            <label htmlFor="site-access-link">
+            <label
+              className="grid gap-2 text-[0.88rem] font-semibold text-admin-graphite"
+              htmlFor="site-access-link"
+            >
               Link de acesso
               <Input
                 id="site-access-link"
-                className="access-link"
+                className="my-3 w-full rounded-lg border border-admin-line bg-admin-beige p-3.5 text-admin-ink"
                 value={accessLink}
                 readOnly
                 onFocus={(event) => event.currentTarget.select()}
@@ -389,7 +417,7 @@ export function SiteWorkspace({
         </Card>
       )}
       {inactive && (
-        <p className="notice">
+        <p className={adminStyles.notice}>
           Casamento inativo. Os dados estão preservados e a consulta permanece
           disponível.
           {owner
@@ -399,16 +427,21 @@ export function SiteWorkspace({
       )}
 
       {area === "overview" && (
-        <section className="workspace-area" data-area="overview">
-          <Card className="panel-section facts" aria-label="Status e datas">
-            <CardContent>
+        <section className="grid gap-6" data-area="overview">
+          <Card
+            className={`${adminStyles.card} grid grid-cols-[repeat(auto-fit,minmax(170px,1fr))] gap-[22px]`}
+            aria-label="Status e datas"
+          >
+            <CardContent className="grid w-full grid-cols-[repeat(auto-fit,minmax(170px,1fr))] items-center gap-[22px]">
               <div>
                 <strong>Casamento</strong>
-                <p>{site.eventDate}</p>
+                <p className="mt-2 leading-[1.6] text-admin-muted">
+                  {site.eventDate}
+                </p>
               </div>
               <div>
                 <strong>Vigência</strong>
-                <p>
+                <p className="mt-2 leading-[1.6] text-admin-muted">
                   {site.termStartsOn
                     ? `${site.termStartsOn} a ${site.termEndsOn}`
                     : "Aguardando aprovação"}
@@ -416,7 +449,9 @@ export function SiteWorkspace({
               </div>
               <div>
                 <strong>Publicação</strong>
-                <p>{labels[site.publicationState]}</p>
+                <p className="mt-2 leading-[1.6] text-admin-muted">
+                  {labels[site.publicationState]}
+                </p>
               </div>
             </CardContent>
           </Card>
@@ -443,11 +478,8 @@ export function SiteWorkspace({
       )}
       {area === "settings" &&
         (owner ? (
-          <section
-            className="workspace-area settings-area"
-            data-area="settings"
-          >
-            <Card className="panel-section">
+          <section className="grid gap-6" data-area="settings">
+            <Card className={adminStyles.card}>
               <CardHeader>
                 <CardTitle>Ciclo de vida</CardTitle>
                 <CardDescription>
@@ -455,7 +487,7 @@ export function SiteWorkspace({
                   inativa o casamento automaticamente.
                 </CardDescription>
               </CardHeader>
-              <CardContent className="inline-actions">
+              <CardContent className={adminStyles.inline}>
                 {site.lifecycle === "DRAFT" && (
                   <Button
                     disabled={pending}
@@ -495,7 +527,7 @@ export function SiteWorkspace({
               </CardContent>
             </Card>
 
-            <Card className="panel-section">
+            <Card className={adminStyles.card}>
               <CardHeader className="flex w-full flex-row items-start justify-between">
                 <div>
                   <CardTitle>Cadastro, datas e publicação</CardTitle>
@@ -524,7 +556,7 @@ export function SiteWorkspace({
               </CardHeader>
             </Card>
 
-            <Card className="panel-section">
+            <Card className={adminStyles.card}>
               <CardHeader className="flex w-full flex-row items-start justify-between">
                 <div>
                   <CardTitle>Administradores</CardTitle>
@@ -542,7 +574,7 @@ export function SiteWorkspace({
                 </CardAction>
               </CardHeader>
               <CardContent>
-                <Table className="record-table">
+                <Table className="w-full">
                   <TableHeader>
                     <TableRow>
                       <TableHead>Nome</TableHead>
@@ -553,7 +585,10 @@ export function SiteWorkspace({
                   </TableHeader>
                   <TableBody>
                     {admins.map((admin) => (
-                      <TableRow className="record-row" key={admin.userId}>
+                      <TableRow
+                        className="border-b border-admin-line py-[18px]"
+                        key={admin.userId}
+                      >
                         <TableCell>{admin.name}</TableCell>
                         <TableCell>{admin.email}</TableCell>
                         <TableCell>
@@ -576,7 +611,7 @@ export function SiteWorkspace({
               </CardContent>
             </Card>
 
-            <Card className="panel-section">
+            <Card className={adminStyles.card}>
               <CardHeader className="flex w-full flex-row items-start justify-between">
                 <div>
                   <CardTitle>Domínios</CardTitle>
@@ -595,7 +630,7 @@ export function SiteWorkspace({
                 </CardAction>
               </CardHeader>
               <CardContent>
-                <Table className="record-table">
+                <Table className="w-full">
                   <TableHeader>
                     <TableRow>
                       <TableHead>Domínio</TableHead>
@@ -608,7 +643,7 @@ export function SiteWorkspace({
                   <TableBody>
                     {domains.map((domain) => (
                       <TableRow
-                        className="record-row"
+                        className="border-b border-admin-line py-[18px]"
                         key={`${domain.id}-${domain.updatedAt}`}
                       >
                         <TableCell>{domain.hostname}</TableCell>
@@ -648,14 +683,18 @@ export function SiteWorkspace({
               open={settingsDialog === "profile"}
               onOpenChange={(open) => !open && closeSettingsDialog()}
             >
-              <DialogContent className="max-w-2xl">
+              <DialogContent className={`${adminStyles.dialog} max-w-2xl`}>
                 <DialogTitle>Editar cadastro</DialogTitle>
                 <DialogDescription>
                   Atualize identificação pública e origens autorizadas.
                 </DialogDescription>
-                {error && <p role="alert">{error}</p>}
+                {error && (
+                  <p className={adminStyles.alert} role="alert">
+                    {error}
+                  </p>
+                )}
                 <form
-                  className="data-form form-grid"
+                  className={adminStyles.formGrid}
                   onSubmit={async (event) => {
                     const saved = await submit(
                       event,
@@ -722,7 +761,7 @@ export function SiteWorkspace({
                       placeholder="https://casamento.exemplo.com"
                     />
                   </label>
-                  <div className="inline-actions">
+                  <div className={adminStyles.inline}>
                     <Button disabled={pending} type="submit">
                       Salvar cadastro
                     </Button>
@@ -751,8 +790,12 @@ export function SiteWorkspace({
                 <DialogDescription>
                   Altere a data do casamento e, quando disponível, a vigência.
                 </DialogDescription>
-                {error && <p role="alert">{error}</p>}
-                <form className="data-form form-grid" onSubmit={submitDates}>
+                {error && (
+                  <p className={adminStyles.alert} role="alert">
+                    {error}
+                  </p>
+                )}
+                <form className={adminStyles.formGrid} onSubmit={submitDates}>
                   <label htmlFor="site-event-date">
                     Data do casamento
                     <DatePicker
@@ -781,7 +824,7 @@ export function SiteWorkspace({
                       </label>
                     </>
                   )}
-                  <div className="inline-actions">
+                  <div className={adminStyles.inline}>
                     <Button disabled={pending} type="submit">
                       Salvar datas
                     </Button>
@@ -811,9 +854,13 @@ export function SiteWorkspace({
                   Registre após verificar a publicação. Esta ação não altera a
                   hospedagem.
                 </DialogDescription>
-                {error && <p role="alert">{error}</p>}
+                {error && (
+                  <p className={adminStyles.alert} role="alert">
+                    {error}
+                  </p>
+                )}
                 <form
-                  className="data-form"
+                  className={adminStyles.form}
                   onSubmit={async (event) => {
                     event.preventDefault();
                     const saved = await mutate(
@@ -848,7 +895,7 @@ export function SiteWorkspace({
                       </SelectContent>
                     </Select>
                   </label>
-                  <div className="inline-actions">
+                  <div className={adminStyles.inline}>
                     <Button disabled={pending} type="submit">
                       Registrar publicação
                     </Button>
@@ -877,9 +924,13 @@ export function SiteWorkspace({
                 <DialogDescription>
                   O link de ativação será exibido apenas nesta sessão.
                 </DialogDescription>
-                {error && <p role="alert">{error}</p>}
+                {error && (
+                  <p className={adminStyles.alert} role="alert">
+                    {error}
+                  </p>
+                )}
                 <form
-                  className="data-form"
+                  className={adminStyles.form}
                   onSubmit={async (event) => {
                     const saved = await submit(
                       event,
@@ -911,7 +962,7 @@ export function SiteWorkspace({
                       maxLength={320}
                     />
                   </label>
-                  <div className="inline-actions">
+                  <div className={adminStyles.inline}>
                     <Button disabled={pending} type="submit">
                       Adicionar administrador
                     </Button>
@@ -944,10 +995,14 @@ export function SiteWorkspace({
                 <DialogDescription>
                   O registro não executa DNS, hospedagem ou renovação.
                 </DialogDescription>
-                {error && <p role="alert">{error}</p>}
+                {error && (
+                  <p className={adminStyles.alert} role="alert">
+                    {error}
+                  </p>
+                )}
                 {domainToEdit ? (
-                  <form className="data-form" onSubmit={saveDomainEdit}>
-                    <p>
+                  <form className={adminStyles.form} onSubmit={saveDomainEdit}>
+                    <p className="leading-[1.6]">
                       <strong>{domainToEdit.hostname}</strong>
                     </p>
                     <label htmlFor="domain-state">
@@ -974,7 +1029,7 @@ export function SiteWorkspace({
                     </label>
                     <label htmlFor="domain-expiry">
                       Renovação
-                      <div className="inline-actions">
+                      <div className={adminStyles.inline}>
                         <DatePicker
                           id="domain-expiry"
                           value={domainExpiry || undefined}
@@ -993,7 +1048,7 @@ export function SiteWorkspace({
                       </div>
                     </label>
                     <label
-                      className="checkbox-label"
+                      className={adminStyles.checkbox}
                       htmlFor="domain-primary-edit"
                     >
                       <Checkbox
@@ -1005,7 +1060,7 @@ export function SiteWorkspace({
                       />
                       Domínio principal
                     </label>
-                    <div className="inline-actions">
+                    <div className={adminStyles.inline}>
                       <Button disabled={pending} type="submit">
                         Salvar domínio
                       </Button>
@@ -1024,7 +1079,7 @@ export function SiteWorkspace({
                   </form>
                 ) : (
                   <form
-                    className="data-form"
+                    className={adminStyles.form}
                     onSubmit={async (event) => {
                       const saved = await submit(
                         event,
@@ -1055,13 +1110,13 @@ export function SiteWorkspace({
                       <DatePicker id="new-domain-expiry" name="expiry" />
                     </label>
                     <label
-                      className="checkbox-label"
+                      className={adminStyles.checkbox}
                       htmlFor="new-domain-primary"
                     >
                       <Checkbox id="new-domain-primary" name="primary" />
                       Domínio principal
                     </label>
-                    <div className="inline-actions">
+                    <div className={adminStyles.inline}>
                       <Button disabled={pending} type="submit">
                         Registrar domínio
                       </Button>
@@ -1148,7 +1203,7 @@ export function SiteWorkspace({
             </AlertDialog>
           </section>
         ) : (
-          <Card className="panel-section" data-area="settings">
+          <Card className={adminStyles.card} data-area="settings">
             <CardHeader>
               <CardTitle>Configurações indisponíveis</CardTitle>
               <CardDescription>

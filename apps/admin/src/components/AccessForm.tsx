@@ -8,6 +8,7 @@ import {
 } from "@entrelacos/ui";
 import { Link } from "@tanstack/react-router";
 import { type FormEvent, useEffect, useState } from "react";
+import { adminStyles } from "../lib/adminStyles";
 import { apiRequest } from "../lib/apiClient";
 import { AuthLayout } from "./AuthLayout";
 import { hasValidAccessToken, readAccessTokenFromHash } from "./accessToken";
@@ -64,12 +65,12 @@ export function AccessForm({
 
   return (
     <AuthLayout>
-      <Card className="auth-card">
+      <Card className="w-full max-w-[480px] mx-auto border-0 bg-transparent shadow-none [&_[data-slot=card-header]]:p-0 [&_[data-slot=card-content]]:p-0 [&_[data-slot=card-description]]:mt-4 [&_[data-slot=card-description]]:max-w-[44ch] [&_[data-slot=card-description]]:text-admin-muted [&_[data-slot=card-description]]:leading-[1.65]">
         <CardHeader>
-          <p className="eyebrow">
+          <p className="m-0 mb-3.5 text-[0.7rem] font-bold uppercase tracking-[0.13em] leading-[1.3] text-admin-terracotta-deep">
             {purpose === "activation" ? "Primeiro acesso" : "Recuperar acesso"}
           </p>
-          <h1 className="auth-title">
+          <h1 className="m-0 max-w-[780px] font-admin-display text-[clamp(2.4rem,5vw,4rem)] font-normal leading-[1.04] tracking-[-0.025em]">
             {email ? "Senha definida." : "Defina sua senha."}
           </h1>
           <CardDescription>
@@ -81,25 +82,30 @@ export function AccessForm({
         <CardContent>
           {email ? (
             <Link
-              className="primary-action"
+              className="mt-6 inline-flex min-h-[42px] w-fit items-center justify-center rounded-lg border border-admin-graphite bg-admin-graphite px-[17px] py-2.5 text-[0.88rem] font-bold text-[#fffaf6] no-underline hover:bg-admin-ink"
               to="/login"
               search={{ email, next: "/" }}
             >
               Ir para o login
             </Link>
           ) : !ready ? (
-            <p role="status">Carregando…</p>
+            <p className="leading-[1.6]" role="status">
+              Carregando…
+            </p>
           ) : !hasValidAccessToken(token) ? (
-            <p role="alert">
+            <p className={adminStyles.alert} role="alert">
               Link inválido. Solicite um novo link ao responsável.
             </p>
           ) : (
             <>
-              <p className="lede">
+              <p className="m-0 mb-5 leading-[1.6] text-admin-muted">
                 O link vale por 24 horas e pode ser usado uma vez.
               </p>
-              <form className="data-form" onSubmit={submit}>
-                <label htmlFor="access-password">
+              <form className={adminStyles.authForm} onSubmit={submit}>
+                <label
+                  className="grid gap-2 text-[0.88rem] font-semibold text-admin-graphite"
+                  htmlFor="access-password"
+                >
                   Nova senha
                   <Input
                     id="access-password"
@@ -111,7 +117,10 @@ export function AccessForm({
                     required
                   />
                 </label>
-                <label htmlFor="access-confirmation">
+                <label
+                  className="grid gap-2 text-[0.88rem] font-semibold text-admin-graphite"
+                  htmlFor="access-confirmation"
+                >
                   Confirmar senha
                   <Input
                     id="access-confirmation"
@@ -123,9 +132,19 @@ export function AccessForm({
                     required
                   />
                 </label>
-                <p className="help-text">Use pelo menos 12 caracteres.</p>
-                {error && <p role="alert">{error}</p>}
-                <Button disabled={pending} type="submit">
+                <p className="text-[0.87rem] leading-[1.6] text-admin-muted">
+                  Use pelo menos 12 caracteres.
+                </p>
+                {error && (
+                  <p className={adminStyles.alert} role="alert">
+                    {error}
+                  </p>
+                )}
+                <Button
+                  className="w-fit justify-self-start"
+                  disabled={pending}
+                  type="submit"
+                >
                   {pending ? "Salvando…" : "Definir senha"}
                 </Button>
               </form>

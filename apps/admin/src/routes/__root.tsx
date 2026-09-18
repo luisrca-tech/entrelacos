@@ -7,7 +7,6 @@ import {
 import type { ReactNode } from "react";
 
 import "../tailwind.css";
-import "../styles.css";
 
 export const Route = createRootRoute({
   head: () => ({
@@ -38,7 +37,7 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
       <head>
         <HeadContent />
       </head>
-      <body>
+      <body className="min-w-[320px] min-h-screen bg-admin-canvas text-admin-ink font-sans antialiased [font-synthesis:none] [text-rendering:optimizeLegibility] [&_a:focus-visible]:border-admin-terracotta [&_a:focus-visible]:outline-[3px] [&_a:focus-visible]:outline-[rgb(168_77_57_/_20%)] [&_a:focus-visible]:outline-offset-2 [&_button]:cursor-pointer [&_button:disabled]:cursor-wait [&_button:focus-visible]:border-admin-terracotta [&_button:focus-visible]:outline-[3px] [&_button:focus-visible]:outline-[rgb(168_77_57_/_20%)] [&_button:focus-visible]:outline-offset-2 [&_button:focus-visible]:ring-0 [&_h3]:m-0 [&_h3]:font-admin-display [&_h3]:text-[1.55rem] [&_h3]:font-normal [&_h3]:leading-[1.08] [&_h3]:tracking-[-0.025em]">
         {children}
         <Scripts />
       </body>
