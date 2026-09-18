@@ -87,6 +87,22 @@ describe("database connection guards", () => {
     });
   });
 
+  it("derives development identity checks from DATABASE_URL only", () => {
+    expect(
+      resolveDatabaseConfig("development", {
+        DATABASE_URL: developmentUrl,
+      }),
+    ).toMatchObject({
+      target: "development",
+      endpoint: "ep-development.example.neon.tech",
+      expectedIdentity: {
+        endpointId: "ep-development",
+        databaseName: "neondb",
+        userName: "user",
+      },
+    });
+  });
+
   it("rejects a test URL that points to development or production", () => {
     expect(() =>
       resolveDatabaseConfig("test", {

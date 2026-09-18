@@ -147,7 +147,7 @@ export function resolveDatabaseConfig(
     }
   }
 
-  if (target === "production") {
+  if (target !== "test") {
     return {
       target,
       url: normalizeDatabaseUrl(rawUrl),
@@ -160,13 +160,8 @@ export function resolveDatabaseConfig(
     };
   }
 
-  const branchVariable =
-    target === "test"
-      ? "DATABASE_TEST_BRANCH_ID"
-      : "DATABASE_DEVELOPMENT_BRANCH_ID";
-  const branchId = requiredEnvironmentValue(env, branchVariable);
+  const branchId = requiredEnvironmentValue(env, "DATABASE_TEST_BRANCH_ID");
   if (
-    target === "test" &&
     branchId === requiredEnvironmentValue(env, "DATABASE_DEVELOPMENT_BRANCH_ID")
   ) {
     throw new Error("Test and development require distinct Neon branches");
