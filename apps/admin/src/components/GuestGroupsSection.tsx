@@ -31,6 +31,7 @@ import {
 } from "@entrelacos/ui";
 import { Trash2 } from "lucide-react";
 import { type FormEvent, useCallback, useEffect, useState } from "react";
+import { adminStyles, displayHeading } from "../lib/adminStyles";
 import { ApiError, apiRequest } from "../lib/apiClient";
 import {
   canIssueDemoGuestGrant,
@@ -382,10 +383,15 @@ export function GuestGroupsSection({
     !brazilianPhoneInputSchema.safeParse(form.phone).success;
 
   return (
-    <section className="panel-section" aria-labelledby="guest-groups-title">
-      <div className="guest-groups-heading">
+    <section className={adminStyles.card} aria-labelledby="guest-groups-title">
+      <div className="flex items-end justify-between gap-3.5 max-[760px]:grid max-[760px]:grid-cols-1">
         <div>
-          <h2 id="guest-groups-title">Grupos de convidados</h2>
+          <h2
+            className={`m-0 mb-[18px] text-[clamp(1.8rem,3vw,2.7rem)] ${displayHeading}`}
+            id="guest-groups-title"
+          >
+            Grupos de convidados
+          </h2>
           <p>
             Cadastre cada convite com seu nome de localização, convidados e um
             único representante. Compartilhe o PIN do grupo junto com o link de
@@ -393,7 +399,7 @@ export function GuestGroupsSection({
           </p>
         </div>
         {!inactive && (
-          <div className="inline-actions">
+          <div className="ml-auto flex shrink-0 flex-wrap items-center gap-3.5 pb-1.5 max-[760px]:ml-0 max-[600px]:items-stretch">
             <Button
               disabled={pending}
               type="button"
@@ -413,27 +419,51 @@ export function GuestGroupsSection({
         )}
       </div>
       {inactive && (
-        <p className="notice" role="note">
+        <p className={adminStyles.notice} role="note">
           Casamento inativo. Os grupos continuam disponíveis para consulta, mas
           criação, edição e exclusão ficam indisponíveis.
         </p>
       )}
-      {error && !form && !deleteTarget && <p role="alert">{error}</p>}
-      {notice && <p role="status">{notice}</p>}
+      {error && !form && !deleteTarget && (
+        <p className={adminStyles.alert} role="alert">
+          {error}
+        </p>
+      )}
+      {notice && (
+        <p className="my-3.5 text-admin-muted" role="status">
+          {notice}
+        </p>
+      )}
 
       <Dialog
         open={form !== null}
         onOpenChange={(open) => !open && closeForm()}
       >
-        <DialogContent className="max-w-3xl max-h-[min(90vh,720px)] overflow-y-auto guest-group-dialog">
-          <DialogTitle>{editingId ? "Editar grupo" : "Novo grupo"}</DialogTitle>
-          <DialogDescription>
+        <DialogContent
+          className={`${adminStyles.dialog} max-w-3xl max-h-[min(90vh,720px)]`}
+        >
+          <DialogTitle
+            className={`font-admin-display text-4xl font-normal ${displayHeading}`}
+          >
+            {editingId ? "Editar grupo" : "Novo grupo"}
+          </DialogTitle>
+          <DialogDescription className="leading-[1.6] text-admin-muted">
             Escolha o representante e revise os dados antes de salvar.
           </DialogDescription>
           {form && (
-            <form className="guest-group-form data-form" onSubmit={save}>
-              {error && <p role="alert">{error}</p>}
-              <label htmlFor="guest-group-name">
+            <form
+              className={`${adminStyles.form} rounded-[10px] border border-admin-line bg-admin-beige p-5`}
+              onSubmit={save}
+            >
+              {error && (
+                <p className={adminStyles.alert} role="alert">
+                  {error}
+                </p>
+              )}
+              <label
+                className="grid gap-2 text-[0.88rem] font-semibold text-admin-graphite"
+                htmlFor="guest-group-name"
+              >
                 Nome do grupo
                 <Input
                   id="guest-group-name"
@@ -446,7 +476,10 @@ export function GuestGroupsSection({
               </label>
               <fieldset>
                 <legend>Tipo de convite</legend>
-                <label className="checkbox-label" htmlFor="guest-group-foreign">
+                <label
+                  className={adminStyles.checkbox}
+                  htmlFor="guest-group-foreign"
+                >
                   <Checkbox
                     id="guest-group-foreign"
                     checked={form.isForeign}
@@ -458,12 +491,18 @@ export function GuestGroupsSection({
                 </label>
               </fieldset>
               {form.isForeign ? (
-                <p className="help-text" role="note">
+                <p
+                  className="text-[0.87rem] leading-[1.6] text-admin-muted"
+                  role="note"
+                >
                   Grupo estrangeiro não usa telefone nem SMS. Este convite exige
                   atendimento administrativo; não há autenticação alternativa.
                 </p>
               ) : (
-                <label htmlFor="guest-group-phone">
+                <label
+                  className="grid gap-2 text-[0.88rem] font-semibold text-admin-graphite"
+                  htmlFor="guest-group-phone"
+                >
                   Celular do representante
                   <Input
                     id="guest-group-phone"
@@ -479,22 +518,28 @@ export function GuestGroupsSection({
                       updateForm({ phone: event.target.value })
                     }
                   />
-                  <span className="help-text" id="guest-group-phone-help">
+                  <span
+                    className="text-[0.87rem] leading-[1.6] text-admin-muted"
+                    id="guest-group-phone-help"
+                  >
                     Use um celular brasileiro com DDD. Exemplo: (62) 99999-9999.
                     {phoneInvalid && " Confira o número informado."}
                   </span>
                 </label>
               )}
-              <fieldset className="guest-members-fieldset">
+              <fieldset className="grid gap-4">
                 <legend>Convidados</legend>
-                <p className="help-text">
+                <p className="text-[0.87rem] leading-[1.6] text-admin-muted">
                   Escolha exatamente um representante. Ele será o contato
                   responsável pela confirmação deste convite.
                 </p>
                 {form.members.map((member, index) => (
-                  <div className="guest-member-editor" key={member.id ?? index}>
-                    <div className="guest-member-heading">
-                      <label htmlFor={`guest-member-${index}`}>
+                  <div
+                    className="grid gap-2.5 max-[760px]:grid-cols-1"
+                    key={member.id ?? index}
+                  >
+                    <div className="flex w-full items-center justify-between gap-3">
+                      <label className="m-0" htmlFor={`guest-member-${index}`}>
                         Nome completo
                       </label>
                       <Button
@@ -518,9 +563,9 @@ export function GuestGroupsSection({
                         updateMember(index, { fullName: event.target.value })
                       }
                     />
-                    <div className="guest-member-footer">
+                    <div className="flex w-full items-center justify-between gap-3 max-[760px]:grid max-[760px]:grid-cols-1">
                       <label
-                        className="checkbox-label"
+                        className={adminStyles.checkbox}
                         htmlFor={`guest-representative-${index}`}
                       >
                         <Checkbox
@@ -546,7 +591,7 @@ export function GuestGroupsSection({
                   </div>
                 ))}
               </fieldset>
-              <div className="inline-actions">
+              <div className={adminStyles.inline}>
                 <Button disabled={pending} type="submit">
                   {pending
                     ? "Salvando…"
@@ -569,7 +614,10 @@ export function GuestGroupsSection({
       </Dialog>
 
       {demoGrant && (
-        <Card className="demo-guest-grant" role="status">
+        <Card
+          className="my-6 rounded-[10px] border border-admin-line bg-admin-beige p-5"
+          role="status"
+        >
           <CardHeader>
             <CardTitle>
               Autorização temporária · {demoGrant.groupName}
@@ -608,8 +656,15 @@ export function GuestGroupsSection({
               do grupo para continuar: <strong>{deleteTarget?.name}</strong>
             </AlertDialogDescription>
           </AlertDialogHeader>
-          {error && <p role="alert">{error}</p>}
-          <label htmlFor="delete-group-confirmation">
+          {error && (
+            <p className={adminStyles.alert} role="alert">
+              {error}
+            </p>
+          )}
+          <label
+            className="grid gap-2 text-[0.88rem] font-semibold text-admin-graphite"
+            htmlFor="delete-group-confirmation"
+          >
             Nome exato do grupo
             <Input
               id="delete-group-confirmation"
@@ -624,7 +679,7 @@ export function GuestGroupsSection({
           <AlertDialogFooter>
             <AlertDialogCancel disabled={pending}>Cancelar</AlertDialogCancel>
             <AlertDialogAction
-              className="danger-action"
+              className="justify-self-start border-admin-terracotta-deep bg-transparent text-admin-terracotta-deep"
               disabled={pending || deleteConfirmation !== deleteTarget?.name}
               onClick={() => deleteTarget && void remove(deleteTarget)}
             >
@@ -667,7 +722,7 @@ export function GuestGroupsSection({
       ) : groups.length === 0 ? (
         <p>Nenhum grupo cadastrado.</p>
       ) : (
-        <div className="guest-group-list">
+        <div className="mt-6 grid gap-3">
           {groups.map((group) => {
             const actions = guestGroupMenuActions({
               owner,
@@ -677,7 +732,10 @@ export function GuestGroupsSection({
               phone: group.phone,
             });
             return (
-              <Card className="guest-group-card" key={group.id}>
+              <Card
+                className="items-stretch rounded-[10px] border border-admin-line bg-admin-surface p-5 max-[760px]:grid max-[760px]:grid-cols-1 [&_[data-slot=card-header]]:w-full [&_h3]:mb-2"
+                key={group.id}
+              >
                 <CardHeader className="flex w-full flex-row items-start justify-between">
                   <div>
                     <CardTitle>{group.name}</CardTitle>
@@ -712,7 +770,7 @@ export function GuestGroupsSection({
                   )}
                 </CardHeader>
                 <CardContent>
-                  <ul className="guest-group-members">
+                  <ul className="m-0 flex-1 basis-[220px] pl-5 leading-[1.6]">
                     {group.members.map((member) => (
                       <li key={member.id}>
                         {member.fullName}

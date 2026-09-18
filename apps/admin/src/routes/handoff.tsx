@@ -3,6 +3,7 @@ import { Button, Card, CardContent, CardHeader } from "@entrelacos/ui";
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { AuthLayout } from "../components/AuthLayout";
+import { adminStyles } from "../lib/adminStyles";
 import { ApiError, apiRequest } from "../lib/apiClient";
 
 export const Route = createFileRoute("/handoff")({ component: HandoffPage });
@@ -45,16 +46,18 @@ function HandoffPage() {
 
   return (
     <AuthLayout>
-      <Card className="auth-card">
+      <Card className="w-full max-w-[480px] mx-auto border-0 bg-transparent shadow-none [&_[data-slot=card-header]]:p-0 [&_[data-slot=card-content]]:p-0">
         <CardHeader>
-          <h1 className="auth-title">
+          <h1 className="m-0 max-w-[780px] font-admin-display text-[clamp(2.4rem,5vw,4rem)] font-normal leading-[1.04] tracking-[-0.025em]">
             {error ? "Acesso indisponível" : "Abrindo seu site…"}
           </h1>
         </CardHeader>
         <CardContent>
           {error ? (
             <>
-              <p role="alert">{error}</p>
+              <p className={adminStyles.alert} role="alert">
+                {error}
+              </p>
               <Button
                 variant="outline"
                 nativeButton={false}

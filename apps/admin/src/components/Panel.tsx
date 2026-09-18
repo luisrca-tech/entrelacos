@@ -29,6 +29,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { adminStyles } from "../lib/adminStyles";
 import { ApiError, apiRequest } from "../lib/apiClient";
 import { AdminShell, ShellLoading } from "./AdminShell";
 import { resolveSiteArea, type SiteArea } from "./adminNavigation";
@@ -81,7 +82,9 @@ export function Panel({ siteId, area }: { siteId?: string; area?: SiteArea }) {
   if (error) {
     return (
       <ShellLoading>
-        <p role="alert">{error}</p>
+        <p className={adminStyles.alert} role="alert">
+          {error}
+        </p>
       </ShellLoading>
     );
   }
@@ -91,7 +94,9 @@ export function Panel({ siteId, area }: { siteId?: string; area?: SiteArea }) {
     if (actor.siteId) return <SiteAdminRedirect siteId={actor.siteId} />;
     return (
       <ShellLoading>
-        <p role="alert">Nenhum casamento foi associado a esta conta.</p>
+        <p className={adminStyles.alert} role="alert">
+          Nenhum casamento foi associado a esta conta.
+        </p>
       </ShellLoading>
     );
   }
@@ -225,17 +230,22 @@ function OwnerSites() {
   }
 
   return (
-    <div className="owner-dashboard">
-      <section className="panel-heading owner-heading">
+    <div>
+      <section className="mb-[38px] flex items-end justify-between gap-8 max-[760px]:mb-7 max-[760px]:flex-col max-[760px]:items-start max-[760px]:gap-5">
         <div>
-          <p className="eyebrow">Gestão global</p>
-          <h1>Seus casamentos</h1>
-          <p className="lede">
+          <p className="m-0 mb-3.5 text-[0.7rem] font-bold uppercase tracking-[0.13em] leading-[1.3] text-admin-muted">
+            Gestão global
+          </p>
+          <h1 className="m-0 max-w-[780px] font-admin-display text-[clamp(2.6rem,6vw,5.2rem)] font-normal leading-[1.08] tracking-[-0.025em]">
+            Seus casamentos
+          </h1>
+          <p className="mt-[18px] max-w-[56ch] text-admin-muted">
             Acompanhe cada celebração e mantenha tudo pronto para o grande dia.
           </p>
         </div>
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <Button
+            className="shrink-0 max-[760px]:w-full"
             type="button"
             onClick={() => {
               setCreateError("");
@@ -244,19 +254,37 @@ function OwnerSites() {
           >
             Novo casamento
           </Button>
-          <DialogContent className="create-site-dialog">
-            <DialogTitle>Novo casamento</DialogTitle>
-            <DialogDescription>
+          <DialogContent className="w-[min(680px,calc(100vw-32px))] max-w-[min(680px,calc(100vw-32px))] max-h-[calc(100vh-32px)] overflow-x-hidden overflow-y-auto rounded-2xl border border-admin-line bg-admin-surface p-[30px] shadow-admin max-[760px]:p-6 max-[760px]:px-[18px]">
+            <DialogTitle className="mb-2.5 font-admin-display text-[2.3rem] font-normal">
+              Novo casamento
+            </DialogTitle>
+            <DialogDescription className="m-0 leading-[1.6] text-admin-muted">
               Cadastre os dados iniciais. A mesma referência mantém novas
               tentativas idempotentes e preserva os dados já salvos.
             </DialogDescription>
-            {createError && <p role="alert">{createError}</p>}
-            <form className="data-form form-grid" onSubmit={create}>
-              <label htmlFor="site-name">
+            {createError && (
+              <p
+                className="break-words rounded-[9px] border border-[rgb(142_58_42_/_30%)] bg-admin-terracotta-wash px-3.5 py-3 text-admin-terracotta-deep"
+                role="alert"
+              >
+                {createError}
+              </p>
+            )}
+            <form
+              className="my-7 grid min-w-0 grid-cols-[repeat(auto-fit,minmax(min(100%,240px),1fr))] items-end gap-[18px]"
+              onSubmit={create}
+            >
+              <label
+                className="grid min-w-0 gap-2 text-[0.88rem] font-semibold text-admin-graphite"
+                htmlFor="site-name"
+              >
                 Nome do casamento
                 <Input id="site-name" name="name" required maxLength={160} />
               </label>
-              <label htmlFor="site-slug">
+              <label
+                className="grid min-w-0 gap-2 text-[0.88rem] font-semibold text-admin-graphite"
+                htmlFor="site-slug"
+              >
                 Identificador do site
                 <Input
                   id="site-slug"
@@ -267,7 +295,10 @@ function OwnerSites() {
                   placeholder="ana-e-joao"
                 />
               </label>
-              <label htmlFor="site-key">
+              <label
+                className="grid min-w-0 gap-2 text-[0.88rem] font-semibold text-admin-graphite"
+                htmlFor="site-key"
+              >
                 Referência do cadastro
                 <Input
                   id="site-key"
@@ -277,11 +308,17 @@ function OwnerSites() {
                   placeholder="casamento-ana-joao-2027"
                 />
               </label>
-              <label htmlFor="site-date">
+              <label
+                className="grid min-w-0 gap-2 text-[0.88rem] font-semibold text-admin-graphite"
+                htmlFor="site-date"
+              >
                 Data do casamento
                 <DatePicker id="site-date" name="date" required />
               </label>
-              <label htmlFor="site-first-name">
+              <label
+                className="grid min-w-0 gap-2 text-[0.88rem] font-semibold text-admin-graphite"
+                htmlFor="site-first-name"
+              >
                 Nome do noivo
                 <Input
                   id="site-first-name"
@@ -290,7 +327,10 @@ function OwnerSites() {
                   maxLength={120}
                 />
               </label>
-              <label htmlFor="site-second-name">
+              <label
+                className="grid min-w-0 gap-2 text-[0.88rem] font-semibold text-admin-graphite"
+                htmlFor="site-second-name"
+              >
                 Nome da noiva
                 <Input
                   id="site-second-name"
@@ -299,7 +339,7 @@ function OwnerSites() {
                   maxLength={120}
                 />
               </label>
-              <div className="dialog-actions">
+              <div className="col-span-full mt-2 flex justify-end gap-2.5 max-[760px]:grid max-[760px]:grid-cols-2 [&>*]:max-[760px]:w-full">
                 <DialogClose
                   render={
                     <Button type="button" variant="ghost">
@@ -316,17 +356,24 @@ function OwnerSites() {
         </Dialog>
       </section>
 
-      {error && <p role="alert">{error}</p>}
+      {error && (
+        <p
+          className="break-words rounded-[9px] border border-[rgb(142_58_42_/_30%)] bg-admin-terracotta-wash px-3.5 py-3 text-admin-terracotta-deep"
+          role="alert"
+        >
+          {error}
+        </p>
+      )}
 
-      <Card className="sites-table-card">
-        <CardHeader>
+      <Card className="overflow-hidden rounded-[14px] border-admin-line bg-admin-surface shadow-[0_5px_24px_rgb(68_49_36_/_3%)]">
+        <CardHeader className="p-[26px_28px_20px] max-[760px]:px-[18px] max-[760px]:pt-[22px] max-[760px]:pb-4">
           <CardTitle>Casamentos cadastrados</CardTitle>
           <CardDescription>
             Selecione um casamento para acompanhar status e acessos.
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          <div className="desktop-table-wrap">
+        <CardContent className="px-7 pb-7 max-[760px]:px-[18px] max-[760px]:pb-[18px]">
+          <div className="overflow-x-auto max-[760px]:hidden">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -341,12 +388,14 @@ function OwnerSites() {
                   <TableRow key={site.id}>
                     <TableCell>
                       <Link
-                        className="site-table-link"
+                        className="grid gap-1 no-underline"
                         to="/sites/$siteId/overview"
                         params={{ siteId: site.id }}
                       >
                         <strong>{site.displayName}</strong>
-                        <span>{site.coupleNames.join(" & ")}</span>
+                        <span className="text-[0.88rem] text-admin-muted">
+                          {site.coupleNames.join(" & ")}
+                        </span>
                       </Link>
                     </TableCell>
                     <TableCell>{formatDate(site.eventDate)}</TableCell>
@@ -361,7 +410,7 @@ function OwnerSites() {
                     </TableCell>
                     <TableCell>
                       <Link
-                        className="table-action"
+                        className="text-[0.88rem] font-bold text-admin-terracotta-deep no-underline"
                         to="/sites/$siteId/overview"
                         params={{ siteId: site.id }}
                       >
@@ -373,16 +422,18 @@ function OwnerSites() {
               </TableBody>
             </Table>
           </div>
-          <div className="mobile-site-cards">
+          <div className="hidden gap-2.5 max-[760px]:grid">
             {sites.map((site) => (
               <Link
-                className="site-mobile-card"
+                className="grid gap-[7px] rounded-xl border border-admin-line bg-admin-surface p-[18px] no-underline"
                 to="/sites/$siteId/overview"
                 params={{ siteId: site.id }}
                 key={site.id}
               >
-                <div className="site-mobile-card-top">
-                  <span className="card-label">Casamento</span>
+                <div className="flex items-center justify-between gap-3">
+                  <span className="inline-block text-[0.7rem] font-bold uppercase tracking-[0.13em] leading-[1.3] text-admin-muted">
+                    Casamento
+                  </span>
                   <Badge
                     variant={
                       site.lifecycle === "ACTIVE" ? "default" : "secondary"
@@ -392,20 +443,26 @@ function OwnerSites() {
                   </Badge>
                 </div>
                 <strong>{site.displayName}</strong>
-                <span>{site.coupleNames.join(" & ")}</span>
-                <small>{formatDate(site.eventDate)}</small>
+                <span className="text-[0.88rem] text-admin-muted">
+                  {site.coupleNames.join(" & ")}
+                </span>
+                <small className="mt-1 text-admin-muted">
+                  {formatDate(site.eventDate)}
+                </small>
               </Link>
             ))}
           </div>
           {sites.length === 0 && (
-            <p className="empty-state">Nenhum casamento cadastrado.</p>
+            <p className="mt-6 text-admin-muted">
+              Nenhum casamento cadastrado.
+            </p>
           )}
         </CardContent>
       </Card>
 
       {cursor && (
         <Button
-          className="load-more"
+          className="mt-[18px]"
           type="button"
           variant="outline"
           disabled={pending || loadingMore}
