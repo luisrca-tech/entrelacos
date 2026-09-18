@@ -53,7 +53,7 @@ The current validators enforce:
 The stable named slots are:
 
 - `head` for host-owned head additions;
-- `header-addon` and `admin-access` inside the header;
+- `admin-access` then `header-addon` inside the header;
 - `before-main` and `after-main` inside the main landmark;
 - `footer-addon` inside the optional footer.
 

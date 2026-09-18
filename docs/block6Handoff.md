@@ -37,7 +37,7 @@ The technical fixture owns Casa Aurora, its April 2028 event data, terracotta SV
 
 `GuestAccess`, RSVP, and `MessageMural` continue to use the Block 3–5 session, origin, concurrency, deadline, moderation, and privacy contracts. Their data remains runtime-only. Template composition changes presentation and placement only.
 
-`AdminRecognition` is a hydrated host feature, not navigation content. Public visitors receive no panel option. Only valid recognition displays `Modo administrador` and `Voltar ao painel`; an error may display feedback but no panel link. The API and authenticated admin handoff remain the authority.
+`AdminRecognition` is a hydrated host feature, not navigation content. Public visitors receive no panel option. Only valid recognition displays a `Painel` header link before the host addon; an error may display feedback but no panel link. The first recognized visit per browser also shows a confirmable administrator-mode banner. The API and authenticated admin handoff remain the authority.
 
 The RSVP dialog uses native modal behavior, restores opener focus, and opts out of Lenis capture. The mobile menu uses native `details`/`summary` and remains navigable without JavaScript.
 

@@ -1417,8 +1417,8 @@ html[data-template-js="true"] .template-home-intro {
   }
 
   .template-header__event {
-    align-items: flex-end;
-    flex-direction: column;
+    align-items: center;
+    flex-direction: row;
     gap: 0.5rem;
     text-align: right;
   }

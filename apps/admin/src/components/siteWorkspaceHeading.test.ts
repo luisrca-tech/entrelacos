@@ -170,6 +170,9 @@ describe("site workspace heading markup", () => {
     expect(workspaceSource).not.toMatch(
       /data-area="overview"[\s\S]*Ir para o site/,
     );
+    expect(workspaceSource).toContain(
+      "publicSiteHandoffUrl(site.publicUrl, panelOrigin)",
+    );
   });
 
   it("sizes the workspace heading as app chrome", () => {

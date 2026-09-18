@@ -1,10 +1,26 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
+  adminIntroBody,
+  adminIntroConfirmLabel,
+  adminIntroTitle,
+  adminPanelLinkLabel,
   createRecognitionChallenge,
   getAdminRecognitionView,
   panelHandoffUrl,
+  readAdminIntroDismissed,
   runAdminHandoffOnce,
+  shouldShowAdminIntro,
+  writeAdminIntroDismissed,
 } from "./adminRecognition";
+
+function localAdminIntroStorage() {
+  try {
+    return typeof window === "undefined" ? undefined : window.localStorage;
+  } catch {
+    return undefined;
+  }
+}
 
 export function AdminRecognition({
   siteId,
@@ -17,6 +33,11 @@ export function AdminRecognition({
 }) {
   const [recognized, setRecognized] = useState(false);
   const [error, setError] = useState("");
+  const [dismissed, setDismissed] = useState(() =>
+    readAdminIntroDismissed(localAdminIntroStorage(), siteId),
+  );
+  const confirmButton = useRef<HTMLButtonElement>(null);
+  const panelLink = useRef<HTMLAnchorElement>(null);
   const initialFragment = useRef("");
   if (typeof window !== "undefined" && !initialFragment.current) {
     initialFragment.current = window.location.hash;
@@ -40,6 +61,11 @@ export function AdminRecognition({
       );
     }
   }, [panelOrigin, siteId, verifierKey]);
+  const dismissIntro = useCallback(() => {
+    writeAdminIntroDismissed(localAdminIntroStorage(), siteId);
+    panelLink.current?.focus();
+    setDismissed(true);
+  }, [siteId]);
   useEffect(() => {
     let active = true;
     let running = false;
@@ -124,19 +150,58 @@ export function AdminRecognition({
     };
   }, [siteId, apiOrigin, enterPanel, verifierKey, tokenKey]);
   const view = getAdminRecognitionView(recognized, error);
+  const showIntro = shouldShowAdminIntro(recognized, dismissed);
+  useEffect(() => {
+    if (!showIntro) return;
+    confirmButton.current?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      dismissIntro();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [showIntro, dismissIntro]);
   if (view === "hidden") return null;
   return (
-    <aside className="admin-recognition" aria-label="Acesso administrativo">
-      {view === "recognized" && <span role="status">Modo administrador</span>}
-      {view === "recognized" && (
-        <a
-          className="admin-recognition__link"
-          href={`${panelOrigin}/sites/${encodeURIComponent(siteId)}`}
-        >
-          Voltar ao painel
-        </a>
-      )}
-      {error && <p role="alert">{error}</p>}
-    </aside>
+    <>
+      <aside className="admin-recognition" aria-label="Acesso administrativo">
+        {view === "recognized" && (
+          <a
+            ref={panelLink}
+            className="admin-recognition__link"
+            href={`${panelOrigin}/sites/${encodeURIComponent(siteId)}`}
+          >
+            {adminPanelLinkLabel}
+          </a>
+        )}
+        {error && <p role="alert">{error}</p>}
+      </aside>
+      {showIntro &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <aside
+            className="admin-intro"
+            role="dialog"
+            aria-modal="false"
+            aria-labelledby="entrelacos-admin-intro-title"
+            aria-describedby="entrelacos-admin-intro-body"
+          >
+            <div>
+              <h2 id="entrelacos-admin-intro-title">{adminIntroTitle}</h2>
+              <p id="entrelacos-admin-intro-body">{adminIntroBody}</p>
+            </div>
+            <button
+              ref={confirmButton}
+              type="button"
+              className="admin-intro__confirm"
+              onClick={dismissIntro}
+            >
+              {adminIntroConfirmLabel}
+            </button>
+          </aside>,
+          document.body,
+        )}
+    </>
   );
 }

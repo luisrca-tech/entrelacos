@@ -99,6 +99,6 @@ export {
   TableRow,
 } from "./components/table";
 export { Textarea } from "./components/textarea";
-export { Toaster } from "./components/toaster";
+export { Toaster, toast } from "./components/toaster";
 export { type DateOnly, formatDateOnly, parseDateOnly } from "./lib/date";
 export { cn, cnState } from "./lib/utils";

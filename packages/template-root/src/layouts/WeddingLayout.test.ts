@@ -27,6 +27,10 @@ describe("WeddingLayout landmarks", () => {
     expect(source.slice(headerStart, headerEnd)).toContain(
       '<slot name="admin-access" />',
     );
+    const headerSource = source.slice(headerStart, headerEnd);
+    expect(headerSource.indexOf('<slot name="admin-access" />')).toBeLessThan(
+      headerSource.indexOf('<slot name="header-addon" />'),
+    );
   });
 
   it("uses a compact header bar", () => {

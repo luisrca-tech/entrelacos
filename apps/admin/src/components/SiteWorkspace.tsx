@@ -42,7 +42,13 @@ import {
   Textarea,
 } from "@entrelacos/ui";
 import { Link } from "@tanstack/react-router";
-import { type FormEvent, useCallback, useEffect, useState } from "react";
+import {
+  type FormEvent,
+  useCallback,
+  useEffect,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { ApiError, apiRequest } from "../lib/apiClient";
 import type { SiteArea } from "./adminNavigation";
 import { GuestGroupsSection } from "./GuestGroupsSection";
@@ -51,7 +57,7 @@ import { OverflowMenu } from "./OverflowMenu";
 import { RsvpSection } from "./RsvpSection";
 import { SmsUsageSection } from "./SmsUsageSection";
 import { siteAdminMenuActions } from "./siteAdminMenu";
-import { publicSiteHandoffUrl } from "./sitePublicUrl";
+import { publicSiteHandoffUrl, subscribeToPanelOrigin } from "./sitePublicUrl";
 import { getWorkspaceHeading } from "./siteWorkspaceHeading";
 
 export type { SiteArea } from "./adminNavigation";
@@ -123,6 +129,11 @@ export function SiteWorkspace({
   const [domainState, setDomainState] = useState<Domain["state"]>("NONE");
   const [domainPrimary, setDomainPrimary] = useState(false);
   const [domainExpiry, setDomainExpiry] = useState("");
+  const panelOrigin = useSyncExternalStore(
+    subscribeToPanelOrigin,
+    () => window.location.origin,
+    () => "",
+  );
   const base = `/v1/owner/sites/${encodeURIComponent(siteId)}`;
 
   const load = useCallback(async () => {
@@ -327,20 +338,20 @@ export function SiteWorkspace({
             <p className="lede">{heading.lede}</p>
           </div>
           <div className="workspace-heading-actions">
+            {site.publicUrl && (
+              <a
+                className="primary-action"
+                href={publicSiteHandoffUrl(site.publicUrl, panelOrigin)}
+              >
+                Ir para o site
+              </a>
+            )}
             {heading.showLifecycleBadge && (
               <Badge
                 variant={site.lifecycle === "ACTIVE" ? "default" : "secondary"}
               >
                 {labels[site.lifecycle]}
               </Badge>
-            )}
-            {site.publicUrl && (
-              <a
-                className="primary-action"
-                href={publicSiteHandoffUrl(site.publicUrl)}
-              >
-                Ir para o site
-              </a>
             )}
           </div>
         </div>

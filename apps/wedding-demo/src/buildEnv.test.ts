@@ -16,6 +16,12 @@ describe("wedding demo build inputs", () => {
       expect.arrayContaining(["PUBLIC_ADMIN_ORIGIN", "PUBLIC_SITE_INACTIVE"]),
     );
   });
+
+  it("applies local PUBLIC defaults only through the astro dev config", () => {
+    expect(astroConfig).toContain("localPublicEnvPatch");
+    expect(astroConfig).toContain("astroCliCommand");
+    expect(astroConfig).toContain("hasEnvFile");
+  });
 });
 
 describe("progressive enhancement", () => {

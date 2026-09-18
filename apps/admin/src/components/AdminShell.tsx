@@ -1,5 +1,10 @@
 import type { MeResponse } from "@entrelacos/contracts";
-import { Popover, PopoverContent, PopoverTrigger } from "@entrelacos/ui";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+  Toaster,
+} from "@entrelacos/ui";
 import { Link } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import {
@@ -92,6 +97,7 @@ export function AdminShell({
           <AdminNavigation area={area} items={navigation} />
         </nav>
       )}
+      <Toaster />
     </div>
   );
 }
