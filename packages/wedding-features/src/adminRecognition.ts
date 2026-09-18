@@ -65,3 +65,44 @@ export function getAdminRecognitionView(
   if (recognized) return "recognized";
   return error ? "error" : "hidden";
 }
+
+export const adminPanelLinkLabel = "Painel";
+export const adminIntroTitle = "Modo administrador";
+export const adminIntroBody =
+  "Você está vendo o site como administrador. Convidados não veem o link Painel no topo. Use-o para voltar ao painel a qualquer momento.";
+export const adminIntroConfirmLabel = "Entendi";
+
+export type AdminIntroStorage = Pick<Storage, "getItem" | "setItem">;
+
+export function adminIntroStorageKey(siteId: string): string {
+  return `entrelacos:admin-intro:${siteId}`;
+}
+
+export function shouldShowAdminIntro(
+  recognized: boolean,
+  dismissed: boolean,
+): boolean {
+  return recognized && !dismissed;
+}
+
+export function readAdminIntroDismissed(
+  storage: AdminIntroStorage | null | undefined,
+  siteId: string,
+): boolean {
+  try {
+    return storage?.getItem(adminIntroStorageKey(siteId)) === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function writeAdminIntroDismissed(
+  storage: AdminIntroStorage | null | undefined,
+  siteId: string,
+): void {
+  try {
+    storage?.setItem(adminIntroStorageKey(siteId), "1");
+  } catch {
+    return;
+  }
+}

@@ -35,6 +35,7 @@ import {
   startGuestChallenge,
   verifyGuestChallenge,
 } from "./guestVerification";
+import { allowsLocalPublicOrigin } from "./localPublicOrigin";
 
 const INVALID_JSON_BODY = Symbol("invalid-json-body");
 
@@ -88,10 +89,12 @@ function originOfPublicUrl(value: string | null): string | undefined {
 
 async function isAuthorizedOrigin(
   options: AuthHttpOptions,
+  request: Request,
   origin: string | undefined,
   siteId?: string,
 ): Promise<boolean> {
   if (!origin) return false;
+  if (allowsLocalPublicOrigin(request.url, origin)) return true;
   const rows = await options.db
     .select({ publicUrl: site.publicUrl, origin: siteOrigin.origin })
     .from(site)
@@ -299,6 +302,7 @@ export function createPublicGuestHttpRouter(options: AuthHttpOptions): Hono {
       if (
         !(await isAuthorizedOrigin(
           options,
+          context.req.raw,
           origin,
           context.req.param("siteId"),
         ))
@@ -312,7 +316,12 @@ export function createPublicGuestHttpRouter(options: AuthHttpOptions): Hono {
   router.post("/v1/public/sites/:siteId/guest/challenge", async (context) => {
     const origin = context.req.header("Origin");
     if (
-      !(await isAuthorizedOrigin(options, origin, context.req.param("siteId")))
+      !(await isAuthorizedOrigin(
+        options,
+        context.req.raw,
+        origin,
+        context.req.param("siteId"),
+      ))
     ) {
       return problem(403, "FORBIDDEN", "Forbidden");
     }
@@ -346,7 +355,10 @@ export function createPublicGuestHttpRouter(options: AuthHttpOptions): Hono {
       const identity = await challengeIdentity(options, challengeId);
       const siteId = identity?.siteId;
       const origin = context.req.header("Origin");
-      if (!siteId || !(await isAuthorizedOrigin(options, origin, siteId))) {
+      if (
+        !siteId ||
+        !(await isAuthorizedOrigin(options, context.req.raw, origin, siteId))
+      ) {
         return problem(403, "FORBIDDEN", "Forbidden");
       }
       return preflight(context, origin as string);
@@ -356,7 +368,10 @@ export function createPublicGuestHttpRouter(options: AuthHttpOptions): Hono {
       const identity = await challengeIdentity(options, challengeId);
       const siteId = identity?.siteId;
       const origin = context.req.header("Origin");
-      if (!siteId || !(await isAuthorizedOrigin(options, origin, siteId))) {
+      if (
+        !siteId ||
+        !(await isAuthorizedOrigin(options, context.req.raw, origin, siteId))
+      ) {
         return problem(403, "FORBIDDEN", "Forbidden");
       }
       setCors(context, origin as string);
@@ -410,7 +425,7 @@ export function createPublicGuestHttpRouter(options: AuthHttpOptions): Hono {
 
   router.options("/v1/public/family/session", async (context) => {
     const origin = context.req.header("Origin");
-    if (!(await isAuthorizedOrigin(options, origin))) {
+    if (!(await isAuthorizedOrigin(options, context.req.raw, origin))) {
       return problem(403, "FORBIDDEN", "Forbidden");
     }
     return preflight(context, origin as string);
@@ -421,7 +436,7 @@ export function createPublicGuestHttpRouter(options: AuthHttpOptions): Hono {
     const siteId = await siteIdForSession(options, token);
     const origin = context.req.header("Origin");
     if (!siteId) {
-      if (await isAuthorizedOrigin(options, origin)) {
+      if (await isAuthorizedOrigin(options, context.req.raw, origin)) {
         setCors(context, origin as string);
         return withCors(
           problem(401, "SESSION_INVALID", "Family session is invalid"),
@@ -430,7 +445,7 @@ export function createPublicGuestHttpRouter(options: AuthHttpOptions): Hono {
       }
       return problem(403, "FORBIDDEN", "Forbidden");
     }
-    if (!(await isAuthorizedOrigin(options, origin, siteId))) {
+    if (!(await isAuthorizedOrigin(options, context.req.raw, origin, siteId))) {
       return problem(403, "FORBIDDEN", "Forbidden");
     }
     setCors(context, origin as string);
@@ -448,7 +463,7 @@ export function createPublicGuestHttpRouter(options: AuthHttpOptions): Hono {
 
   router.options("/v1/public/family/session/leave", async (context) => {
     const origin = context.req.header("Origin");
-    if (!(await isAuthorizedOrigin(options, origin))) {
+    if (!(await isAuthorizedOrigin(options, context.req.raw, origin))) {
       return problem(403, "FORBIDDEN", "Forbidden");
     }
     return preflight(context, origin as string);
@@ -459,7 +474,7 @@ export function createPublicGuestHttpRouter(options: AuthHttpOptions): Hono {
     const siteId = await siteIdForSession(options, token);
     const origin = context.req.header("Origin");
     if (!siteId) {
-      if (await isAuthorizedOrigin(options, origin)) {
+      if (await isAuthorizedOrigin(options, context.req.raw, origin)) {
         setCors(context, origin as string);
         return withCors(
           problem(401, "SESSION_INVALID", "Family session is invalid"),
@@ -468,7 +483,7 @@ export function createPublicGuestHttpRouter(options: AuthHttpOptions): Hono {
       }
       return problem(403, "FORBIDDEN", "Forbidden");
     }
-    if (!(await isAuthorizedOrigin(options, origin, siteId))) {
+    if (!(await isAuthorizedOrigin(options, context.req.raw, origin, siteId))) {
       return problem(403, "FORBIDDEN", "Forbidden");
     }
     setCors(context, origin as string);

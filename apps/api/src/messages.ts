@@ -25,6 +25,7 @@ import {
 import { and, asc, desc, eq, gt, lt, or, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { hashFamilySessionToken } from "./familySession";
+import { allowsLocalPublicOrigin } from "./localPublicOrigin";
 
 export type MessagesDatabase = NodePgDatabase<Record<string, never>>;
 export type MessagesAdminActor = {
@@ -472,6 +473,7 @@ export async function readPublicMural(
   siteId: string,
   origin: string,
   queryValue: unknown,
+  apiRequestUrl = "",
 ) {
   const query = publicMuralQuerySchema.parse(queryValue);
   const cursor = decodeCursor(query.cursor, siteId, "mural");
@@ -500,7 +502,8 @@ export async function readPublicMural(
   if (
     !rows.some(
       (row) => row.registeredOrigin === origin || publicUrlOrigin === origin,
-    )
+    ) &&
+    !allowsLocalPublicOrigin(apiRequestUrl, origin)
   )
     reject(403, "FORBIDDEN", "Forbidden");
   if (siteRow.lifecycle === "INACTIVE")

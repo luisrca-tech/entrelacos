@@ -27,16 +27,21 @@ import {
   DialogDescription,
   DialogTitle,
   Input,
+  toast,
 } from "@entrelacos/ui";
 import { Trash2 } from "lucide-react";
 import { type FormEvent, useCallback, useEffect, useState } from "react";
 import { ApiError, apiRequest } from "../lib/apiClient";
 import {
   canIssueDemoGuestGrant,
+  copyGuestAccessPin,
   createGuestGroupDraft,
   type GuestGroupDraft,
   type GuestGroupMenuAction,
   groupDeletionConfirmation,
+  guestAccessPinCopiedMessage,
+  guestAccessPinCopyFailedMessage,
+  guestAccessPinRotatedMessage,
   guestGroupDraftErrors,
   guestGroupDraftPayload,
   guestGroupMenuActionLabels,
@@ -100,9 +105,6 @@ export function GuestGroupsSection({
   const [demoGrant, setDemoGrant] = useState<
     (DemoGuestGrantResponse & { groupName: string }) | null
   >(null);
-  const [accessPin, setAccessPin] = useState<
-    (GuestAccessPinResponse & { groupId: string; groupName: string }) | null
-  >(null);
   const [deleteTarget, setDeleteTarget] = useState<GuestGroupRecord | null>(
     null,
   );
@@ -151,8 +153,8 @@ export function GuestGroupsSection({
     action: GuestGroupMenuAction,
     group: GuestGroupRecord,
   ) {
-    if (action === "reveal-pin") {
-      void revealAccessPin(group);
+    if (action === "copy-pin") {
+      void copyAccessPin(group);
       return;
     }
     if (action === "rotate-pin") {
@@ -294,7 +296,6 @@ export function GuestGroupsSection({
         `/v1/sites/${encodeURIComponent(siteId)}/groups/${encodeURIComponent(group.id)}`,
         { method: "DELETE", body: confirmation },
       );
-      if (accessPin?.groupId === group.id) setAccessPin(null);
       setNotice("Grupo excluído.");
       setDeleteTarget(null);
       setDeleteConfirmation("");
@@ -333,17 +334,23 @@ export function GuestGroupsSection({
     }
   }
 
-  async function revealAccessPin(group: GuestGroupRecord) {
+  async function copyAccessPin(group: GuestGroupRecord) {
     if (pending || group.isForeign) return;
     setPending(true);
     setError("");
-    setNotice("");
     try {
       const result = await apiRequest<GuestAccessPinResponse>(
         `/v1/sites/${encodeURIComponent(siteId)}/groups/${encodeURIComponent(group.id)}/access-pin`,
       );
-      setAccessPin({ ...result, groupId: group.id, groupName: group.name });
-      setNotice("PIN exibido somente nesta sessão administrativa.");
+      const copied = await copyGuestAccessPin(
+        result.accessPin,
+        navigator.clipboard,
+      );
+      if (copied) {
+        toast.success(guestAccessPinCopiedMessage(group.name));
+        return;
+      }
+      toast.error(guestAccessPinCopyFailedMessage);
     } catch (cause) {
       setError(apiMessage(cause));
     } finally {
@@ -351,33 +358,16 @@ export function GuestGroupsSection({
     }
   }
 
-  async function copyAccessPin() {
-    if (!accessPin) return;
-    try {
-      await navigator.clipboard.writeText(accessPin.accessPin);
-      setNotice(`PIN de ${accessPin.groupName} copiado.`);
-      setError("");
-    } catch {
-      setError(
-        "Não foi possível copiar automaticamente. Selecione o PIN e copie manualmente.",
-      );
-    }
-  }
-
   async function rotateAccessPin(group: GuestGroupRecord) {
     if (pending || inactive || group.isForeign) return;
     setPending(true);
     setError("");
-    setNotice("");
     try {
-      const result = await apiRequest<GuestAccessPinResponse>(
+      await apiRequest<GuestAccessPinResponse>(
         `/v1/sites/${encodeURIComponent(siteId)}/groups/${encodeURIComponent(group.id)}/access-pin/rotate`,
         { method: "POST", body: {} },
       );
-      setAccessPin({ ...result, groupId: group.id, groupName: group.name });
-      setNotice(
-        "Novo PIN gerado. O PIN anterior e os acessos ativos foram revogados.",
-      );
+      toast.success(guestAccessPinRotatedMessage);
     } catch (cause) {
       setError(apiMessage(cause));
     } finally {
@@ -600,39 +590,6 @@ export function GuestGroupsSection({
           </CardContent>
         </Card>
       )}
-      {accessPin && (
-        <Card className="demo-guest-grant" role="status">
-          <CardHeader>
-            <CardTitle>PIN de acesso · {accessPin.groupName}</CardTitle>
-            <CardDescription>
-              Envie este PIN junto com o link por WhatsApp ou pelo canal
-              escolhido. Ele não é enviado automaticamente e permanece válido
-              até ser rotacionado.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Input
-              aria-label={`PIN de acesso de ${accessPin.groupName}`}
-              inputMode="numeric"
-              readOnly
-              value={accessPin.accessPin}
-            />
-            <div className="inline-actions">
-              <Button type="button" onClick={() => void copyAccessPin()}>
-                Copiar PIN
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setAccessPin(null)}
-              >
-                Ocultar PIN
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
       <AlertDialog
         open={deleteTarget !== null}
         onOpenChange={(open) => {

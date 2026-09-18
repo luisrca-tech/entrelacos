@@ -15,6 +15,7 @@ import { type Context, Hono } from "hono";
 import type { AuthHttpOptions } from "./authHttp";
 import { AdminSessionRequiredError, requireAdminSession } from "./authHttp";
 import { hashFamilySessionToken } from "./familySession";
+import { allowsLocalPublicOrigin } from "./localPublicOrigin";
 import {
   listRsvpHistory,
   type RsvpAdminActor,
@@ -134,10 +135,12 @@ async function sessionSiteId(
 
 async function isRegisteredOrigin(
   options: AuthHttpOptions,
+  request: Request,
   origin: string | undefined,
   siteId?: string,
 ): Promise<boolean> {
   if (!origin) return false;
+  if (allowsLocalPublicOrigin(request.url, origin)) return true;
   const rows = await options.db
     .select({ origin: siteOrigin.origin })
     .from(siteOrigin)
@@ -182,7 +185,7 @@ async function requireFamilyRequest(
   const token = bearerToken(request);
   const siteId = await sessionSiteId(options, token);
   if (!siteId) {
-    if (await isRegisteredOrigin(options, origin)) {
+    if (await isRegisteredOrigin(options, request, origin)) {
       return withCors(
         problem(401, "SESSION_INVALID", "Family session is invalid"),
         origin as string,
@@ -190,7 +193,7 @@ async function requireFamilyRequest(
     }
     return problem(403, "FORBIDDEN", "Forbidden");
   }
-  if (!(await isRegisteredOrigin(options, origin, siteId))) {
+  if (!(await isRegisteredOrigin(options, request, origin, siteId))) {
     return problem(403, "FORBIDDEN", "Forbidden");
   }
   return { origin: origin as string, token: token as string };
@@ -305,7 +308,7 @@ export function createRsvpHttpRouter(options: AuthHttpOptions): Hono {
 
   router.options("/v1/public/family/rsvp", async (context) => {
     const origin = context.req.header("Origin");
-    if (!(await isRegisteredOrigin(options, origin))) {
+    if (!(await isRegisteredOrigin(options, context.req.raw, origin))) {
       return problem(403, "FORBIDDEN", "Forbidden");
     }
     return preflight(context, origin as string);

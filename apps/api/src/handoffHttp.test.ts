@@ -117,4 +117,31 @@ describe("handoff HTTP authorization", () => {
       ).status,
     ).toBe(403);
   });
+
+  it("allows a loopback public origin only when the API request is loopback", async () => {
+    rows = [];
+    const localBody = { ...body, origin: "http://localhost:4321" };
+    expect(
+      (
+        await router().fetch(
+          new Request("http://localhost:8080/v1/handoff", {
+            method: "POST",
+            headers: { Origin: panel, "Content-Type": "application/json" },
+            body: JSON.stringify(localBody),
+          }),
+        )
+      ).status,
+    ).toBe(200);
+    expect(
+      (
+        await router().fetch(
+          new Request("https://api.example.test/v1/handoff", {
+            method: "POST",
+            headers: { Origin: panel, "Content-Type": "application/json" },
+            body: JSON.stringify(localBody),
+          }),
+        )
+      ).status,
+    ).toBe(403);
+  });
 });

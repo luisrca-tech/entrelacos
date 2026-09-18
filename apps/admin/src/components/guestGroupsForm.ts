@@ -29,7 +29,7 @@ export function canIssueDemoGuestGrant(
 }
 
 export const guestGroupMenuActionLabels = {
-  "reveal-pin": "Exibir PIN",
+  "copy-pin": "Copiar PIN",
   "rotate-pin": "Rotacionar PIN",
   "demo-grant": "Gerar acesso demo",
   edit: "Editar",
@@ -37,6 +37,28 @@ export const guestGroupMenuActionLabels = {
 } as const;
 
 export type GuestGroupMenuAction = keyof typeof guestGroupMenuActionLabels;
+
+export async function copyGuestAccessPin(
+  accessPin: string,
+  clipboard: Pick<Clipboard, "writeText">,
+): Promise<boolean> {
+  try {
+    await clipboard.writeText(accessPin);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function guestAccessPinCopiedMessage(groupName: string): string {
+  return `PIN de ${groupName} copiado.`;
+}
+
+export const guestAccessPinCopyFailedMessage =
+  "Não foi possível copiar o PIN. Tente novamente.";
+
+export const guestAccessPinRotatedMessage =
+  "Novo PIN gerado. O PIN anterior e os acessos ativos foram revogados.";
 
 export function guestGroupMenuActions({
   owner,
@@ -54,7 +76,7 @@ export function guestGroupMenuActions({
   if (inactive) return [];
   const actions: GuestGroupMenuAction[] = [];
   if (!isForeign) {
-    actions.push("reveal-pin", "rotate-pin");
+    actions.push("copy-pin", "rotate-pin");
   }
   if (canIssueDemoGuestGrant(owner, isDemo, inactive, { isForeign, phone })) {
     actions.push("demo-grant");

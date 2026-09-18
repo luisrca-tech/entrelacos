@@ -1,10 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
   canIssueDemoGuestGrant,
+  copyGuestAccessPin,
   createGuestGroupDraft,
   groupDeletionConfirmation,
+  guestAccessPinCopiedMessage,
+  guestAccessPinCopyFailedMessage,
+  guestAccessPinRotatedMessage,
   guestGroupDraftErrors,
   guestGroupDraftPayload,
+  guestGroupMenuActionLabels,
   guestGroupMenuActions,
 } from "./guestGroupsForm";
 
@@ -18,7 +23,7 @@ describe("guest group admin form", () => {
         isForeign: false,
         phone: "+5562999999999",
       }),
-    ).toEqual(["reveal-pin", "rotate-pin", "edit", "delete"]);
+    ).toEqual(["copy-pin", "rotate-pin", "edit", "delete"]);
   });
 
   it("hides PIN and demo actions for foreign groups", () => {
@@ -42,7 +47,7 @@ describe("guest group admin form", () => {
         isForeign: false,
         phone: "+5562999999999",
       }),
-    ).toEqual(["reveal-pin", "rotate-pin", "demo-grant", "edit", "delete"]);
+    ).toEqual(["copy-pin", "rotate-pin", "demo-grant", "edit", "delete"]);
   });
 
   it("hides the overflow menu when the wedding is inactive", () => {
@@ -127,6 +132,50 @@ describe("guest group admin form", () => {
       phone: "+5562999999999",
       members: [{ id: "member-1", fullName: "Ana", isRepresentative: true }],
     });
+  });
+});
+
+describe("guest group PIN menu", () => {
+  it("labels the PIN action as copy, not reveal", () => {
+    expect(guestGroupMenuActionLabels["copy-pin"]).toBe("Copiar PIN");
+    expect(guestGroupMenuActionLabels).not.toHaveProperty("reveal-pin");
+  });
+});
+
+describe("copy guest access PIN", () => {
+  it("writes the PIN to the clipboard", async () => {
+    const writes: string[] = [];
+
+    await expect(
+      copyGuestAccessPin("004218", {
+        writeText: async (text) => {
+          writes.push(text);
+        },
+      }),
+    ).resolves.toBe(true);
+    expect(writes).toEqual(["004218"]);
+    expect(guestAccessPinCopiedMessage("Confirmed Family")).toBe(
+      "PIN de Confirmed Family copiado.",
+    );
+  });
+
+  it("reports clipboard failure without throwing", async () => {
+    await expect(
+      copyGuestAccessPin("004218", {
+        writeText: async () => {
+          throw new Error("denied");
+        },
+      }),
+    ).resolves.toBe(false);
+    expect(guestAccessPinCopyFailedMessage).toContain(
+      "Não foi possível copiar",
+    );
+  });
+
+  it("describes PIN rotation for the success toast", () => {
+    expect(guestAccessPinRotatedMessage).toBe(
+      "Novo PIN gerado. O PIN anterior e os acessos ativos foram revogados.",
+    );
   });
 });
 

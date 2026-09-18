@@ -19,6 +19,7 @@ import { type Context, Hono } from "hono";
 import type { AuthHttpOptions } from "./authHttp";
 import { AdminSessionRequiredError, requireAdminSession } from "./authHttp";
 import { hashFamilySessionToken } from "./familySession";
+import { allowsLocalPublicOrigin } from "./localPublicOrigin";
 import {
   deleteGroupMessage,
   listSiteMessages,
@@ -110,10 +111,12 @@ async function originsForSite(
 
 async function isRegisteredOrigin(
   options: AuthHttpOptions,
+  request: Request,
   origin: string | undefined,
   siteId?: string,
 ): Promise<boolean> {
   if (!origin) return false;
+  if (allowsLocalPublicOrigin(request.url, origin)) return true;
   if (siteId) return (await originsForSite(options, siteId)).includes(origin);
   const rows = await options.db
     .select({ publicUrl: site.publicUrl, origin: siteOrigin.origin })
@@ -171,7 +174,7 @@ async function requireFamilyRequest(
   const token = bearerToken(request);
   const siteId = await sessionSiteId(options, token);
   if (!siteId) {
-    if (await isRegisteredOrigin(options, origin)) {
+    if (await isRegisteredOrigin(options, request, origin)) {
       return withCors(
         problem(401, "SESSION_INVALID", "Family session is invalid"),
         origin as string,
@@ -179,7 +182,7 @@ async function requireFamilyRequest(
     }
     return problem(403, "FORBIDDEN", "Forbidden");
   }
-  if (!(await isRegisteredOrigin(options, origin, siteId)))
+  if (!(await isRegisteredOrigin(options, request, origin, siteId)))
     return problem(403, "FORBIDDEN", "Forbidden");
   return { origin: origin as string, token: token as string };
 }
@@ -228,7 +231,7 @@ export function createMessagesHttpRouter(options: AuthHttpOptions): Hono {
 
   router.options("/v1/public/family/message", async (context) => {
     const origin = context.req.header("Origin");
-    if (!(await isRegisteredOrigin(options, origin)))
+    if (!(await isRegisteredOrigin(options, context.req.raw, origin)))
       return problem(403, "FORBIDDEN", "Forbidden");
     return preflight(context, origin as string);
   });
@@ -273,7 +276,12 @@ export function createMessagesHttpRouter(options: AuthHttpOptions): Hono {
   router.options("/v1/public/sites/:siteId/mural", async (context) => {
     const origin = context.req.header("Origin");
     if (
-      !(await isRegisteredOrigin(options, origin, context.req.param("siteId")))
+      !(await isRegisteredOrigin(
+        options,
+        context.req.raw,
+        origin,
+        context.req.param("siteId"),
+      ))
     )
       return problem(403, "FORBIDDEN", "Forbidden");
     return preflight(context, origin as string);
@@ -282,7 +290,7 @@ export function createMessagesHttpRouter(options: AuthHttpOptions): Hono {
   router.get("/v1/public/sites/:siteId/mural", async (context) => {
     const origin = context.req.header("Origin");
     const siteId = context.req.param("siteId");
-    if (!(await isRegisteredOrigin(options, origin, siteId)))
+    if (!(await isRegisteredOrigin(options, context.req.raw, origin, siteId)))
       return problem(403, "FORBIDDEN", "Forbidden");
     try {
       const result = await readPublicMural(
@@ -290,6 +298,7 @@ export function createMessagesHttpRouter(options: AuthHttpOptions): Hono {
         siteId,
         origin as string,
         publicMuralQuerySchema.parse(queryObject(context.req.raw)),
+        context.req.url,
       );
       return withCors(
         context.json(publicMuralResponseSchema.parse(result), 200),

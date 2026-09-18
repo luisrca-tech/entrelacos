@@ -8,6 +8,7 @@ import { and, eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { type AuthHttpOptions, getAdministrativeSession } from "./authHttp";
 import { issueHandoff, recognizeSite, redeemHandoff } from "./handoff";
+import { allowsLocalPublicOrigin } from "./localPublicOrigin";
 
 function problem(status: number, code: string) {
   return new Response(
@@ -39,7 +40,8 @@ async function readBody(request: Request) {
 export function createHandoffHttpRouter(options: AuthHttpOptions) {
   const router = new Hono();
   router.onError(() => problem(503, "SERVICE_UNAVAILABLE"));
-  async function registered(origin: string, siteId?: string) {
+  async function registered(origin: string, request: Request, siteId?: string) {
+    if (allowsLocalPublicOrigin(request.url, origin)) return true;
     const rows = await options.db
       .select({ id: siteOrigin.id })
       .from(siteOrigin)
@@ -63,7 +65,7 @@ export function createHandoffHttpRouter(options: AuthHttpOptions) {
     const data = parsed.data;
     if (
       (actor.user.role !== "OWNER" && actor.siteId !== data.siteId) ||
-      !(await registered(data.origin, data.siteId))
+      !(await registered(data.origin, context.req.raw, data.siteId))
     )
       return problem(403, "FORBIDDEN");
     try {
@@ -83,7 +85,7 @@ export function createHandoffHttpRouter(options: AuthHttpOptions) {
   for (const operation of ["redeem", "recognize"] as const) {
     router.options(`/v1/handoff/${operation}`, async (context) => {
       const origin = context.req.header("Origin");
-      if (!origin || !(await registered(origin)))
+      if (!origin || !(await registered(origin, context.req.raw)))
         return problem(403, "FORBIDDEN");
       return new Response(null, {
         status: 204,
@@ -107,7 +109,7 @@ export function createHandoffHttpRouter(options: AuthHttpOptions) {
       const { origin, siteId } = parsed.data;
       if (
         context.req.header("Origin") !== origin ||
-        !(await registered(origin, siteId))
+        !(await registered(origin, context.req.raw, siteId))
       )
         return problem(403, "FORBIDDEN");
       context.header("Access-Control-Allow-Origin", origin);

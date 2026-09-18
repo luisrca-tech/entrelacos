@@ -19,6 +19,12 @@ API before testing administrative recognition. Ordinary visitors see the site
 without an authentication redirect. The Panel link opens the central panel
 directly. Opening the public site from the panel starts a challenge-bound round
 trip; the return carries a one-use code in a fragment.
+When the panel itself is opened on a loopback host (`localhost`, `127.0.0.1`,
+or `[::1]`), **Ir para o site** uses `http://localhost:4321/#panel` instead of
+the stored public URL. When the API request is also loopback, public CORS and
+handoff accept loopback origins without inserting them into `site_origin`.
+Development and production deploys keep the registered public URL and still
+require an exact registered origin.
 The public app stores only a narrow recognition token in session storage and
 sends API requests without cookies. Polling every five seconds rechecks the
 parent session and does not extend its idle deadline. The token cannot read

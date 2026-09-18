@@ -1,5 +1,3 @@
-import { Toaster } from "@entrelacos/ui";
-import "../tailwind.css";
 import {
   createRootRoute,
   HeadContent,
@@ -8,6 +6,7 @@ import {
 } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 
+import "../tailwind.css";
 import "../styles.css";
 
 export const Route = createRootRoute({
@@ -41,7 +40,6 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
       </head>
       <body>
         {children}
-        <Toaster />
         <Scripts />
       </body>
     </html>

@@ -85,8 +85,8 @@ The first independent run reported six failing checklist areas. Five public defe
 
 ## Guest features and admin-only panel access
 
-- [ ] Confirm public and family visitors receive no `Painel` or `Voltar ao painel` option in static HTML, before recognition, or after a failed recognition.
-- [ ] Complete the reviewed admin-to-public handoff with an authenticated authorized admin and confirm only a valid recognition displays `Modo administrador` and `Voltar ao painel`.
+- [ ] Confirm public and family visitors receive no `Painel` option, administrator-mode banner, or `Voltar ao painel` control in static HTML, before recognition, or after a failed recognition.
+- [ ] Complete the reviewed admin-to-public handoff with an authenticated authorized admin and confirm only a valid recognition displays `Painel` before the header addon. Confirm the first recognized visit in that browser shows the administrator-mode banner, `Entendi` dismisses it, and a refresh keeps `Painel` without reopening the banner.
 - [ ] Refresh, visibility-check, expire/revoke, and use a different site/origin to confirm recognition fails closed and never grants operational authority.
 - [ ] Exercise guest lookup, PIN/session, RSVP, deadline/conflict, message edit, mural disabled/block, and API-unavailable states through the existing `wedding-features` UI without duplicating their Block 3–5 state machines.
 - [ ] Confirm mural content is fetched at runtime with private fields absent and is never present in the static build.

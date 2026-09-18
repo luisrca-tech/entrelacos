@@ -1,14 +1,39 @@
 import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { AdminRecognition } from "./AdminRecognition";
 import {
+  adminIntroBody,
+  adminIntroConfirmLabel,
+  adminIntroStorageKey,
+  adminIntroTitle,
+  adminPanelLinkLabel,
   createRecognitionChallenge,
   getAdminRecognitionView,
   panelHandoffUrl,
+  readAdminIntroDismissed,
   runAdminHandoffOnce,
+  shouldShowAdminIntro,
+  writeAdminIntroDismissed,
 } from "./adminRecognition";
+
+const source = readFileSync(
+  resolve(import.meta.dirname, "AdminRecognition.tsx"),
+  "utf8",
+);
+const styles = readFileSync(resolve(import.meta.dirname, "styles.css"), "utf8");
+
+function memoryStorage() {
+  const values = new Map<string, string>();
+  return {
+    getItem: (key: string) => values.get(key) ?? null,
+    setItem: (key: string, value: string) => void values.set(key, value),
+    removeItem: (key: string) => void values.delete(key),
+  };
+}
 
 describe("public administrative handoff", () => {
   it("keeps the public SSR output empty before recognition", () => {
@@ -82,5 +107,65 @@ describe("public administrative handoff", () => {
 
     await runAdminHandoffOnce("one", "https://wedding.test", operation);
     expect(calls).toBe(2);
+  });
+
+  it("shows a recognized Painel link without a persistent administrator-mode status", () => {
+    expect(adminPanelLinkLabel).toBe("Painel");
+    expect(source).toContain("{adminPanelLinkLabel}");
+    expect(source).not.toContain("Voltar ao painel");
+    expect(source).not.toContain('role="status">Modo administrador');
+  });
+
+  it("explains administrator mode in a confirmable banner", () => {
+    expect(adminIntroTitle).toBe("Modo administrador");
+    expect(adminIntroConfirmLabel).toBe("Entendi");
+    expect(adminIntroBody).toBe(
+      "Você está vendo o site como administrador. Convidados não veem o link Painel no topo. Use-o para voltar ao painel a qualquer momento.",
+    );
+    expect(source).toContain('role="dialog"');
+    expect(source).toContain("createPortal");
+    expect(source).toContain("{adminIntroTitle}");
+    expect(source).toContain("{adminIntroBody}");
+    expect(source).toContain("{adminIntroConfirmLabel}");
+  });
+
+  it("explains administrator mode once until the visitor confirms", () => {
+    expect(shouldShowAdminIntro(false, false)).toBe(false);
+    expect(shouldShowAdminIntro(false, true)).toBe(false);
+    expect(shouldShowAdminIntro(true, true)).toBe(false);
+    expect(shouldShowAdminIntro(true, false)).toBe(true);
+  });
+
+  it("namespaces the intro dismissal per site and survives blocked storage", () => {
+    const storage = memoryStorage();
+    expect(adminIntroStorageKey("one")).toBe("entrelacos:admin-intro:one");
+    expect(adminIntroStorageKey("one")).not.toBe(adminIntroStorageKey("two"));
+    expect(readAdminIntroDismissed(storage, "one")).toBe(false);
+    writeAdminIntroDismissed(storage, "one");
+    expect(readAdminIntroDismissed(storage, "one")).toBe(true);
+    expect(readAdminIntroDismissed(storage, "two")).toBe(false);
+    expect(readAdminIntroDismissed(undefined, "one")).toBe(false);
+    const blocked = {
+      getItem: () => {
+        throw new Error("blocked");
+      },
+      setItem: () => {
+        throw new Error("blocked");
+      },
+    };
+    expect(readAdminIntroDismissed(blocked, "one")).toBe(false);
+    expect(() => writeAdminIntroDismissed(blocked, "one")).not.toThrow();
+  });
+
+  it("pins the intro to the viewport bottom and enters with template motion", () => {
+    const rule = styles.match(/\.admin-intro\s*\{[^}]*\}/s)?.[0];
+    expect(rule).toContain("position: fixed;");
+    expect(rule).toContain("bottom: 0;");
+    expect(rule).toContain("top: auto;");
+    expect(rule).toMatch(/animation:\s*admin-intro-enter/);
+    expect(styles).toContain("@keyframes admin-intro-enter");
+    expect(styles).toMatch(
+      /@media \(prefers-reduced-motion:\s*reduce\)[\s\S]*?\.admin-intro\s*\{[\s\S]*?animation:\s*none;/,
+    );
   });
 });
