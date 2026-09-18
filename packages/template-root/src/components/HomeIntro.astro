@@ -53,6 +53,8 @@ const timeline = buildIntroTimeline(frames.length);
 </div>
 
 <script>
+  import { OVERLAY_FADE_MS, shouldExpandIntroIntoHero } from "./homeIntro";
+
   const reduceMotion = window.matchMedia?.(
     "(prefers-reduced-motion: reduce)",
   ).matches;
@@ -183,6 +185,13 @@ const timeline = buildIntroTimeline(frames.length);
     });
 
     void Promise.race([preload, preloadTimeout]).then(() => {
+      const fullscreenAt = numberFromData(intro.dataset.fullscreenAt, 5000);
+      const fadeAt = numberFromData(intro.dataset.fadeAt, 6200);
+      const completeAt = numberFromData(intro.dataset.completeAt, 6650);
+      const expandIntoHero = shouldExpandIntroIntoHero(
+        hero?.getBoundingClientRect() ?? null,
+        window.innerHeight,
+      );
       intro.dataset.templateIntroPhase = "brand";
       schedule(
         () => { intro.dataset.templateIntroPhase = "split"; },
@@ -193,21 +202,27 @@ const timeline = buildIntroTimeline(frames.length);
           frames[index]?.setAttribute("data-template-intro-visible", "true");
         }, delay);
       });
+      if (expandIntoHero) {
+        schedule(
+          () => { intro.dataset.templateIntroPhase = "fullscreen"; },
+          fullscreenAt,
+        );
+        schedule(
+          () => {
+            startHeroMedia();
+            intro.dataset.templateIntroPhase = "fade";
+          },
+          fadeAt,
+        );
+        schedule(complete, completeAt);
+        return;
+      }
+
       schedule(
-        () => { intro.dataset.templateIntroPhase = "fullscreen"; },
-        numberFromData(intro.dataset.fullscreenAt, 5000),
+        () => { intro.dataset.templateIntroPhase = "dismiss"; },
+        fullscreenAt,
       );
-      schedule(
-        () => {
-          startHeroMedia();
-          intro.dataset.templateIntroPhase = "fade";
-        },
-        numberFromData(intro.dataset.fadeAt, 6200),
-      );
-      schedule(
-        complete,
-        numberFromData(intro.dataset.completeAt, 6650),
-      );
+      schedule(complete, fullscreenAt + OVERLAY_FADE_MS);
     });
 
     schedule(complete, numberFromData(intro.dataset.completeAt, 6650) + 5000);

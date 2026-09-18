@@ -5,7 +5,7 @@ const SPLIT_GROW_MS = 1400;
 const REVEAL_STAGGER_MS = 350;
 const FRAME_REVEAL_MS = 1200;
 const FULLSCREEN_GROW_MS = 1200;
-const OVERLAY_FADE_MS = 450;
+export const OVERLAY_FADE_MS = 450;
 
 export type HomeIntroTimeline = {
   splitAt: number;
@@ -40,4 +40,12 @@ export function buildIntroTimeline(frameCount: number): HomeIntroTimeline {
 
 export function introSourceForMedia(media: Media): string {
   return media.kind === "video" ? media.poster : media.src;
+}
+
+export function shouldExpandIntroIntoHero(
+  heroRect: Pick<DOMRect, "top" | "bottom"> | null,
+  viewportHeight: number,
+): boolean {
+  if (!heroRect) return false;
+  return heroRect.bottom > 0 && heroRect.top < viewportHeight;
 }

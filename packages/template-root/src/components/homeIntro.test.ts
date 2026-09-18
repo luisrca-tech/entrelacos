@@ -2,7 +2,12 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { Media } from "../content";
-import { buildIntroTimeline, introSourceForMedia } from "./homeIntro";
+import {
+  OVERLAY_FADE_MS,
+  buildIntroTimeline,
+  introSourceForMedia,
+  shouldExpandIntroIntoHero,
+} from "./homeIntro";
 
 const componentSource = readFileSync(
   resolve(import.meta.dirname, "HomeIntro.astro"),
@@ -72,6 +77,25 @@ describe("home intro sequencing", () => {
     );
     expect(stylesSource).toMatch(
       /\.template-hero\[data-template-has-intro="true"\]:not\(\s*\[data-template-intro-complete="true"\]\s*\)/s,
+    );
+  });
+
+  it("skips the hero handoff when the restored viewport is not the hero", () => {
+    expect(shouldExpandIntroIntoHero({ top: 0, bottom: 728 }, 728)).toBe(true);
+    expect(shouldExpandIntroIntoHero({ top: -80, bottom: 648 }, 728)).toBe(true);
+    expect(shouldExpandIntroIntoHero({ top: -1980, bottom: -1252 }, 728)).toBe(
+      false,
+    );
+    expect(shouldExpandIntroIntoHero(null, 728)).toBe(false);
+    expect(OVERLAY_FADE_MS).toBe(450);
+    expect(componentSource).toContain("shouldExpandIntroIntoHero");
+    expect(componentSource).toContain('templateIntroPhase = "dismiss"');
+    expect(componentSource).toContain("OVERLAY_FADE_MS");
+    expect(stylesSource).toContain(
+      '.template-home-intro[data-template-intro-phase="dismiss"]',
+    );
+    expect(stylesSource).not.toMatch(
+      /\.template-home-intro\[data-template-intro-phase="dismiss"\][\s\S]{0,180}100vw/,
     );
   });
 
