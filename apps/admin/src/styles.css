@@ -309,7 +309,7 @@ p {
 .admin-content {
   width: min(100%, 1440px);
   margin: 0 auto;
-  padding: 48px 42px 72px;
+  padding: 48px 42px 24px;
 }
 
 .page-footer {
@@ -392,10 +392,6 @@ p {
 .panel-heading .lede {
   max-width: 56ch;
   margin: 18px 0 0;
-}
-
-.workspace-heading .lede {
-  margin: 8px 0 0;
 }
 
 .owner-heading > .ui-button,
@@ -535,6 +531,7 @@ body .create-site-dialog {
 }
 
 .data-form label,
+.data-form .field,
 .group-delete-confirmation label,
 .sms-quota-form label {
   display: grid;
@@ -871,20 +868,46 @@ a:focus-visible {
   outline: 2px solid currentColor;
 }
 
+.rsvp-save-bar {
+  display: flex;
+  position: fixed;
+  z-index: 7;
+  right: 0;
+  bottom: 0;
+  left: 248px;
+  justify-content: center;
+  padding: 16px 42px 24px;
+  border-top: 1px solid var(--line);
+  background: var(--canvas);
+  box-shadow: 0 -8px 24px rgb(68 49 36 / 8%);
+}
+
+.rsvp-save-bar [data-slot="button"] {
+  width: 70%;
+}
+
 .rsvp-deadline-summary {
   margin-bottom: 24px;
 }
 
-.rsvp-group-list,
-.message-group-list,
+.rsvp-group-list {
+  display: grid;
+  gap: 12px;
+  margin: 24px 0 0;
+}
+
+.message-group-list {
+  display: grid;
+  gap: 12px;
+  margin: 24px 0 0;
+}
+
 .sms-usage-grid {
   display: grid;
   gap: 16px;
   margin: 24px 0;
 }
 
-.rsvp-group,
-.message-group-card,
 .sms-usage-grid article,
 .guest-group-form,
 .demo-guest-grant {
@@ -892,6 +915,12 @@ a:focus-visible {
   border: 1px solid var(--line);
   border-radius: 10px;
   background: var(--beige);
+}
+
+.rsvp-group-members {
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
 .rsvp-member-row {
@@ -903,7 +932,19 @@ a:focus-visible {
   border-top: 1px solid var(--line);
 }
 
-.rsvp-member-row select,
+.rsvp-member-row:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.rsvp-member-row:last-child {
+  padding-bottom: 0;
+}
+
+.rsvp-member-row [data-slot="select-trigger"] {
+  min-width: 180px;
+}
+
 .rsvp-filters select,
 .sms-quota-form input {
   min-height: 44px;
@@ -923,19 +964,9 @@ a:focus-visible {
 }
 
 .rsvp-export {
-  display: grid;
-  gap: 16px;
   margin: 24px 0;
-  padding: 20px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--beige);
 }
 
-.rsvp-export h3,
-.rsvp-export p,
-.message-group-card h3,
-.message-group-card p,
 .sms-usage-grid h3,
 .sms-usage-grid p,
 .demo-guest-grant p {
@@ -958,19 +989,9 @@ a:focus-visible {
   min-height: 20px;
 }
 
-.message-group-card > header {
-  display: flex;
-  align-items: start;
-  justify-content: space-between;
-  gap: 20px;
-}
-
 .message-admin-copy {
   display: grid;
   gap: 16px;
-  margin-top: 20px;
-  padding-top: 20px;
-  border-top: 1px solid var(--line);
 }
 
 .message-admin-copy blockquote {
@@ -1033,15 +1054,24 @@ a:focus-visible {
   margin-top: 24px;
 }
 
-.guest-group-card {
+.guest-group-card,
+.rsvp-group-card,
+.rsvp-export,
+.message-group-card {
   align-items: stretch;
 }
 
-.guest-group-card [data-slot="card-header"] {
+.guest-group-card [data-slot="card-header"],
+.rsvp-group-card [data-slot="card-header"],
+.rsvp-export [data-slot="card-header"],
+.message-group-card [data-slot="card-header"] {
   width: 100%;
 }
 
-.guest-group-card h3 {
+.guest-group-card h3,
+.rsvp-group-card h3,
+.rsvp-export h3,
+.message-group-card h3 {
   margin-bottom: 8px;
 }
 
@@ -1112,7 +1142,18 @@ a:focus-visible {
   }
 
   .admin-content {
-    padding: 34px 20px 52px;
+    padding: 34px 20px 24px;
+  }
+
+  .admin-content:has(.rsvp-save-bar) {
+    padding-bottom: 80px;
+  }
+
+  .rsvp-save-bar {
+    right: 0;
+    bottom: calc(74px + env(safe-area-inset-bottom));
+    left: 0;
+    padding: 12px 20px 16px;
   }
 
   .page-footer {
@@ -1248,6 +1289,8 @@ a:focus-visible {
   .sms-quota-form,
   .guest-groups-heading,
   .guest-group-card,
+  .rsvp-group-card,
+  .message-group-card,
   .guest-member-editor,
   .rsvp-member-row {
     display: grid;
@@ -1271,6 +1314,12 @@ a:focus-visible {
   .admin-topbar,
   .admin-content,
   .page-footer {
+    padding-right: 28px;
+    padding-left: 28px;
+  }
+
+  .rsvp-save-bar {
+    left: 216px;
     padding-right: 28px;
     padding-left: 28px;
   }

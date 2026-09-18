@@ -58,6 +58,7 @@ import { RsvpSection } from "./RsvpSection";
 import { SmsUsageSection } from "./SmsUsageSection";
 import { siteAdminMenuActions } from "./siteAdminMenu";
 import { publicSiteHandoffUrl, subscribeToPanelOrigin } from "./sitePublicUrl";
+import { siteRecordMenuActions } from "./siteRecordMenu";
 import { getWorkspaceHeading } from "./siteWorkspaceHeading";
 
 export type { SiteArea } from "./adminNavigation";
@@ -335,7 +336,6 @@ export function SiteWorkspace({
           <div>
             <h1>{heading.title}</h1>
             <p className="workspace-identity">{site.displayName}</p>
-            <p className="lede">{heading.lede}</p>
           </div>
           <div className="workspace-heading-actions">
             {site.publicUrl && (
@@ -496,38 +496,32 @@ export function SiteWorkspace({
             </Card>
 
             <Card className="panel-section">
-              <CardHeader>
-                <CardTitle>Cadastro, datas e publicação</CardTitle>
-                <CardDescription>
-                  Edite cada informação em uma janela dedicada.
-                </CardDescription>
+              <CardHeader className="flex w-full flex-row items-start justify-between">
+                <div>
+                  <CardTitle>Cadastro, datas e publicação</CardTitle>
+                  <CardDescription>
+                    Edite cada informação em uma janela dedicada.
+                  </CardDescription>
+                </div>
+                <CardAction>
+                  <OverflowMenu
+                    label="Ações de cadastro, datas e publicação"
+                    items={siteRecordMenuActions}
+                    onSelect={(action) => {
+                      if (action === "publication") {
+                        setPublicationState(site.publicationState);
+                      }
+                      if (
+                        action === "profile" ||
+                        action === "dates" ||
+                        action === "publication"
+                      ) {
+                        setSettingsDialog(action);
+                      }
+                    }}
+                  />
+                </CardAction>
               </CardHeader>
-              <CardContent className="inline-actions">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setSettingsDialog("profile")}
-                >
-                  Editar cadastro
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setSettingsDialog("dates")}
-                >
-                  Editar datas
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => {
-                    setPublicationState(site.publicationState);
-                    setSettingsDialog("publication");
-                  }}
-                >
-                  Registrar publicação
-                </Button>
-              </CardContent>
             </Card>
 
             <Card className="panel-section">

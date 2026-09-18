@@ -8,9 +8,9 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  Badge,
   Button,
   Card,
+  CardAction,
   CardContent,
   CardDescription,
   CardHeader,
@@ -194,38 +194,53 @@ export function MessagesSection({ siteId, lifecycle }: Props) {
         <div className="message-group-list">
           {groups.map((group) => (
             <Card className="message-group-card" key={group.groupId}>
-              <CardHeader>
+              <CardHeader className="flex w-full flex-row items-start justify-between">
                 <div>
                   <CardTitle>{group.groupName}</CardTitle>
                   <CardDescription>
                     {group.blocked ? "Envios bloqueados" : "Envios permitidos"}
                   </CardDescription>
                 </div>
-                <Badge variant={group.blocked ? "destructive" : "outline"}>
-                  {group.blocked ? "Bloqueado" : "Permitido"}
-                </Badge>
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={!mutable || Boolean(pending)}
-                  onClick={() =>
-                    void mutate(
-                      `block:${group.groupId}`,
-                      `${base}/groups/${encodeURIComponent(group.groupId)}/message-block`,
-                      "PATCH",
-                      { blocked: !group.blocked },
-                      group.blocked
-                        ? "Novas mensagens liberadas para o convite."
-                        : "Novas mensagens bloqueadas para o convite.",
-                    )
-                  }
-                >
-                  {pending === `block:${group.groupId}`
-                    ? "Atualizando…"
-                    : group.blocked
-                      ? "Desbloquear envios"
-                      : "Bloquear envios"}
-                </Button>
+                <CardAction>
+                  <div className="inline-actions">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={!mutable || Boolean(pending)}
+                      onClick={() =>
+                        void mutate(
+                          `block:${group.groupId}`,
+                          `${base}/groups/${encodeURIComponent(group.groupId)}/message-block`,
+                          "PATCH",
+                          { blocked: !group.blocked },
+                          group.blocked
+                            ? "Novas mensagens liberadas para o convite."
+                            : "Novas mensagens bloqueadas para o convite.",
+                        )
+                      }
+                    >
+                      {pending === `block:${group.groupId}`
+                        ? "Atualizando…"
+                        : group.blocked
+                          ? "Desbloquear envios"
+                          : "Bloquear envios"}
+                    </Button>
+                    {group.message && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="destructive"
+                        disabled={!mutable || Boolean(pending)}
+                        onClick={() => setRemoveTarget(group)}
+                      >
+                        {pending === `delete:${group.groupId}`
+                          ? "Removendo…"
+                          : "Remover mensagem"}
+                      </Button>
+                    )}
+                  </div>
+                </CardAction>
               </CardHeader>
               <CardContent>
                 {group.message ? (
@@ -241,16 +256,6 @@ export function MessagesSection({ siteId, lifecycle }: Props) {
                         }).format(new Date(group.message.createdAt))}
                       </time>
                     </p>
-                    <Button
-                      type="button"
-                      variant="destructive"
-                      disabled={!mutable || Boolean(pending)}
-                      onClick={() => setRemoveTarget(group)}
-                    >
-                      {pending === `delete:${group.groupId}`
-                        ? "Removendo…"
-                        : "Remover mensagem"}
-                    </Button>
                   </div>
                 ) : (
                   <p>Este convite ainda não publicou uma mensagem.</p>

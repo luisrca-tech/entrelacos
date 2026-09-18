@@ -5,8 +5,10 @@ import type {
   SiteRsvpResponse,
 } from "@entrelacos/contracts";
 import {
+  Badge,
   Button,
   Card,
+  CardAction,
   CardContent,
   CardDescription,
   CardHeader,
@@ -24,15 +26,10 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
 } from "@entrelacos/ui";
 import {
   type FormEvent,
+  type ReactNode,
   useCallback,
   useEffect,
   useMemo,
@@ -85,6 +82,23 @@ function queryString(values: Record<string, string>) {
     Object.entries(values).filter(([, value]) => value),
   ).toString();
   return query ? `?${query}` : "";
+}
+
+function RsvpFilterField({
+  id,
+  label,
+  children,
+}: {
+  id: string;
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="field">
+      <span id={`${id}-label`}>{label}</span>
+      {children}
+    </div>
+  );
 }
 
 export function RsvpSection({ siteId, lifecycle }: Props) {
@@ -522,15 +536,17 @@ export function RsvpSection({ siteId, lifecycle }: Props) {
             </Card>
           )}
           <div className="data-form form-grid rsvp-filters">
-            <label htmlFor="rsvp-group-filter">
-              Grupo
+            <RsvpFilterField id="rsvp-group-filter" label="Grupo">
               <Select
                 value={groupId || "all"}
                 onValueChange={(value) =>
                   setGroupId(value === "all" || !value ? "" : value)
                 }
               >
-                <SelectTrigger id="rsvp-group-filter">
+                <SelectTrigger
+                  id="rsvp-group-filter"
+                  aria-labelledby="rsvp-group-filter-label"
+                >
                   <SelectValue placeholder="Todos" />
                 </SelectTrigger>
                 <SelectContent>
@@ -542,16 +558,18 @@ export function RsvpSection({ siteId, lifecycle }: Props) {
                   ))}
                 </SelectContent>
               </Select>
-            </label>
-            <label htmlFor="rsvp-state-filter">
-              Status
+            </RsvpFilterField>
+            <RsvpFilterField id="rsvp-state-filter" label="Status">
               <Select
                 value={state || "all"}
                 onValueChange={(value) =>
                   setState(value === "all" || !value ? "" : value)
                 }
               >
-                <SelectTrigger id="rsvp-state-filter">
+                <SelectTrigger
+                  id="rsvp-state-filter"
+                  aria-labelledby="rsvp-state-filter-label"
+                >
                   <SelectValue placeholder="Todos" />
                 </SelectTrigger>
                 <SelectContent>
@@ -563,15 +581,38 @@ export function RsvpSection({ siteId, lifecycle }: Props) {
                   ))}
                 </SelectContent>
               </Select>
-            </label>
+            </RsvpFilterField>
           </div>
           <Card className="rsvp-export" aria-labelledby="rsvp-export-title">
-            <CardHeader>
-              <CardTitle id="rsvp-export-title">Exportar relatório</CardTitle>
-              <CardDescription>
-                O arquivo usa os filtros de grupo e status selecionados acima.
-                Telefones ficam de fora até você incluí-los explicitamente.
-              </CardDescription>
+            <CardHeader className="flex w-full flex-row items-start justify-between">
+              <div>
+                <CardTitle id="rsvp-export-title">Exportar relatório</CardTitle>
+                <CardDescription>
+                  O arquivo usa os filtros de grupo e status selecionados acima.
+                  Telefones ficam de fora até você incluí-los explicitamente.
+                </CardDescription>
+              </div>
+              <CardAction>
+                <div className="inline-actions">
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled={Boolean(downloading)}
+                    onClick={() => void downloadExport("csv")}
+                  >
+                    {downloading === "csv" ? "Gerando CSV…" : "Baixar CSV"}
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={Boolean(downloading)}
+                    onClick={() => void downloadExport("pdf")}
+                  >
+                    {downloading === "pdf" ? "Gerando PDF…" : "Baixar PDF"}
+                  </Button>
+                </div>
+              </CardAction>
             </CardHeader>
             <CardContent>
               <label className="checkbox-label" htmlFor="rsvp-include-phone">
@@ -585,23 +626,6 @@ export function RsvpSection({ siteId, lifecycle }: Props) {
                 />
                 Incluir celular do representante
               </label>
-              <div className="inline-actions">
-                <Button
-                  type="button"
-                  disabled={Boolean(downloading)}
-                  onClick={() => void downloadExport("csv")}
-                >
-                  {downloading === "csv" ? "Gerando CSV…" : "Baixar CSV"}
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={Boolean(downloading)}
-                  onClick={() => void downloadExport("pdf")}
-                >
-                  {downloading === "pdf" ? "Gerando PDF…" : "Baixar PDF"}
-                </Button>
-              </div>
             </CardContent>
           </Card>
           {loading ? (
@@ -611,77 +635,79 @@ export function RsvpSection({ siteId, lifecycle }: Props) {
           ) : (
             <div className="rsvp-group-list">
               {view?.groups.map((group) => (
-                <section className="rsvp-group" key={group.id}>
-                  <h3>{group.name}</h3>
-                  <p>
-                    {group.totals.confirmed} confirmados ·{" "}
-                    {group.totals.declined} ausentes · {group.totals.pending}{" "}
-                    pendentes
-                  </p>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Convidado</TableHead>
-                        <TableHead>Confirmação</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
+                <Card className="rsvp-group-card" key={group.id}>
+                  <CardHeader className="flex w-full flex-row items-start justify-between">
+                    <div>
+                      <CardTitle>{group.name}</CardTitle>
+                      <CardDescription>
+                        {group.totals.confirmed} confirmados ·{" "}
+                        {group.totals.declined} ausentes ·{" "}
+                        {group.totals.pending} pendentes
+                      </CardDescription>
+                      <Badge variant="outline">
+                        {group.members.length} convidados
+                      </Badge>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <ul className="rsvp-group-members">
                       {group.members.map((member) => (
-                        <TableRow key={member.id}>
-                          <TableCell>
+                        <li className="rsvp-member-row" key={member.id}>
+                          <span>
                             {member.fullName}
-                            {member.isRepresentative ? " (representante)" : ""}
-                          </TableCell>
-                          <TableCell>
-                            <Select
-                              value={drafts[member.id] ?? member.state}
-                              disabled={inactive || pending}
-                              onValueChange={(value) =>
-                                setDrafts((current) => ({
-                                  ...current,
-                                  [member.id]: value as RsvpState,
-                                }))
-                              }
+                            {member.isRepresentative ? " · representante" : ""}
+                          </span>
+                          <Select
+                            value={drafts[member.id] ?? member.state}
+                            disabled={inactive || pending}
+                            onValueChange={(value) =>
+                              setDrafts((current) => ({
+                                ...current,
+                                [member.id]: value as RsvpState,
+                              }))
+                            }
+                          >
+                            <SelectTrigger
+                              aria-label={`Confirmação de ${member.fullName}`}
                             >
-                              <SelectTrigger
-                                aria-label={`Confirmação de ${member.fullName}`}
-                              >
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {Object.entries(stateLabels).map(
-                                  ([value, label]) => (
-                                    <SelectItem key={value} value={value}>
-                                      {label}
-                                    </SelectItem>
-                                  ),
-                                )}
-                              </SelectContent>
-                            </Select>
-                          </TableCell>
-                        </TableRow>
+                              <SelectValue>
+                                {stateLabels[drafts[member.id] ?? member.state]}
+                              </SelectValue>
+                            </SelectTrigger>
+                            <SelectContent>
+                              {Object.entries(stateLabels).map(
+                                ([value, label]) => (
+                                  <SelectItem key={value} value={value}>
+                                    {label}
+                                  </SelectItem>
+                                ),
+                              )}
+                            </SelectContent>
+                          </Select>
+                        </li>
                       ))}
-                    </TableBody>
-                  </Table>
-                </section>
+                    </ul>
+                  </CardContent>
+                </Card>
               ))}
             </div>
           )}
-          <Button
-            type="button"
-            disabled={inactive || pending || changedMembers.length === 0}
-            onClick={() => void saveRsvp()}
-          >
-            {changedMembers.length === 0
-              ? "Salvar alterações"
-              : `Salvar ${changedMembers.length} ${changedMembers.length === 1 ? "alteração" : "alterações"}`}
-          </Button>
+          <footer className="rsvp-save-bar">
+            <Button
+              type="button"
+              disabled={inactive || pending || changedMembers.length === 0}
+              onClick={() => void saveRsvp()}
+            >
+              {changedMembers.length === 0
+                ? "Salvar alterações"
+                : `Salvar ${changedMembers.length} ${changedMembers.length === 1 ? "alteração" : "alterações"}`}
+            </Button>
+          </footer>
         </>
       ) : (
         <>
           <div className="data-form form-grid rsvp-filters">
-            <label htmlFor="rsvp-history-group">
-              Grupo
+            <RsvpFilterField id="rsvp-history-group" label="Grupo">
               <Select
                 value={historyGroupId || "all"}
                 onValueChange={(value) => {
@@ -689,7 +715,10 @@ export function RsvpSection({ siteId, lifecycle }: Props) {
                   setHistoryMemberId("");
                 }}
               >
-                <SelectTrigger id="rsvp-history-group">
+                <SelectTrigger
+                  id="rsvp-history-group"
+                  aria-labelledby="rsvp-history-group-label"
+                >
                   <SelectValue placeholder="Todos" />
                 </SelectTrigger>
                 <SelectContent>
@@ -701,16 +730,18 @@ export function RsvpSection({ siteId, lifecycle }: Props) {
                   ))}
                 </SelectContent>
               </Select>
-            </label>
-            <label htmlFor="rsvp-history-member">
-              Integrante
+            </RsvpFilterField>
+            <RsvpFilterField id="rsvp-history-member" label="Integrante">
               <Select
                 value={historyMemberId || "all"}
                 onValueChange={(value) =>
                   setHistoryMemberId(value === "all" || !value ? "" : value)
                 }
               >
-                <SelectTrigger id="rsvp-history-member">
+                <SelectTrigger
+                  id="rsvp-history-member"
+                  aria-labelledby="rsvp-history-member-label"
+                >
                   <SelectValue placeholder="Todos" />
                 </SelectTrigger>
                 <SelectContent>
@@ -732,16 +763,18 @@ export function RsvpSection({ siteId, lifecycle }: Props) {
                     ))}
                 </SelectContent>
               </Select>
-            </label>
-            <label htmlFor="rsvp-history-actor">
-              Origem
+            </RsvpFilterField>
+            <RsvpFilterField id="rsvp-history-actor" label="Origem">
               <Select
                 value={historyActor || "all"}
                 onValueChange={(value) =>
                   setHistoryActor(value === "all" || !value ? "" : value)
                 }
               >
-                <SelectTrigger id="rsvp-history-actor">
+                <SelectTrigger
+                  id="rsvp-history-actor"
+                  aria-labelledby="rsvp-history-actor-label"
+                >
                   <SelectValue placeholder="Todas" />
                 </SelectTrigger>
                 <SelectContent>
@@ -750,7 +783,7 @@ export function RsvpSection({ siteId, lifecycle }: Props) {
                   <SelectItem value="ADMIN">Administração</SelectItem>
                 </SelectContent>
               </Select>
-            </label>
+            </RsvpFilterField>
           </div>
           {loading ? (
             <p role="status">Carregando histórico…</p>
