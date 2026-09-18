@@ -2,4 +2,5 @@
 @import "@entrelacos/template-root/theme.css";
 
 @source "../";
+@source "../../../../packages/ui/src";
 @source "../../../../packages/template-root/src";

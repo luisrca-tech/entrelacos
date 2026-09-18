@@ -3,5 +3,5 @@
 @import "@entrelacos/wedding-features/styles.css";
 @import "@entrelacos/template-root/theme.css";
 
-@source "../../../packages/ui/src";
+@source "../../../../packages/ui/src";
 @source "../../../../packages/template-root/src";

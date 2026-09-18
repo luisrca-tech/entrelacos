@@ -111,6 +111,17 @@ describe("home intro sequencing", () => {
   });
 
   it("keeps both split labels above and outside the intro media", () => {
+    expect(componentSource).toContain("group/intro");
+    expect(componentSource).toContain(
+      "group-data-[template-intro-phase=split]/intro:opacity-100",
+    );
+    expect(componentSource).toContain(
+      "group-data-[template-intro-phase=split]/intro:[transform:translate(-50%,calc(-100%_",
+    );
+    expect(componentSource).not.toContain("-translate-x-1/2 -translate-y-1/2");
+    expect(componentSource).not.toMatch(
+      /class="[^"]*\bdata-\[template-intro-phase=split\]:(?:opacity-100|w-\[)/,
+    );
     expect(componentSource).toContain("fixed");
     expect(componentSource).toContain("z-[1]");
     expect(componentSource).toContain("--template-intro-stage-height");

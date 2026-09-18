@@ -165,11 +165,11 @@ export default function GalleryCarousel({ content }: Props) {
       <Carousel
         options={{ align: "start", loop }}
         setApi={setInlineApi}
-        className="min-w-0"
+        className="min-w-0 [&_[data-slot=carousel-content]]:overflow-x-auto [&_[data-slot=carousel-content]]:snap-x [&_[data-slot=carousel-content]]:snap-mandatory [&_[data-slot=carousel-content]]:[scrollbar-width:none] [&_[data-slot=carousel-content]::-webkit-scrollbar]:hidden data-[carousel-ready=true]:[&_[data-slot=carousel-content]]:overflow-hidden data-[carousel-ready=true]:[&_[data-slot=carousel-content]]:snap-none"
         aria-label={content.controls.ariaLabel}
       >
         <div className="relative min-w-0" data-gallery-viewport>
-          <CarouselContent className="flex overflow-x-auto snap-x snap-mandatory [scrollbar-width:none] [&::-webkit-scrollbar]:hidden data-[carousel-ready=true]:overflow-hidden data-[carousel-ready=true]:snap-none">
+          <CarouselContent className="flex">
             {content.items.map((item, index) => (
               <CarouselItem
                 id={item.id}
@@ -232,11 +232,11 @@ export default function GalleryCarousel({ content }: Props) {
           <Carousel
             options={{ align: "start", loop }}
             setApi={setDialogApi}
-            className="grid min-h-0 grid-rows-[minmax(0,1fr)_auto]"
+            className="grid min-h-0 grid-rows-[minmax(0,1fr)_auto] [&_[data-slot=carousel-content]]:overflow-x-auto [&_[data-slot=carousel-content]]:snap-x [&_[data-slot=carousel-content]]:snap-mandatory [&_[data-slot=carousel-content]]:[scrollbar-width:none] [&_[data-slot=carousel-content]::-webkit-scrollbar]:hidden data-[carousel-ready=true]:[&_[data-slot=carousel-content]]:overflow-hidden data-[carousel-ready=true]:[&_[data-slot=carousel-content]]:snap-none"
             aria-label={content.controls.ariaLabel}
           >
             <div className="relative min-h-0 h-full" data-gallery-viewport>
-              <CarouselContent className="flex h-full min-h-0 overflow-x-auto snap-x snap-mandatory [scrollbar-width:none] [&::-webkit-scrollbar]:hidden data-[carousel-ready=true]:overflow-hidden data-[carousel-ready=true]:snap-none">
+              <CarouselContent className="flex h-full min-h-0">
                 {content.items.map((item, index) => (
                   <CarouselItem
                     key={item.id}
