@@ -36,7 +36,7 @@ describe("WeddingLayout landmarks", () => {
   });
 
   it("tightens the header further on tablet and mobile", () => {
-    expect(source).toContain("max-[1024px]:py-[0.4rem]");
+    expect(source).toContain("[@media(max-width:1024px)]:py-[0.4rem]");
   });
 
   it("paints main with the same ivory as the gallery canvas", () => {
@@ -55,6 +55,11 @@ describe("WeddingLayout landmarks", () => {
     expect(source).toContain("setupTemplateInteractions,");
     expect(source).toContain("setupTemplateInteractions();");
     expect(source).toContain("navigationStateForHero");
+  });
+
+  it("disables header motion when reduced motion is requested", () => {
+    expect(source).toContain("motion-reduce:transition-none");
+    expect(source).toContain("motion-reduce:!animate-none");
   });
 
   it("renders year and names on a single legal line", () => {

@@ -38,9 +38,9 @@ validateWeddingLayoutProps(Astro.props);
     <div class="overflow-x-clip">
       <header
         class:list={[
-          "fixed top-0 z-10 flex w-full items-center justify-between px-[var(--template-page-inset)] py-[0.65rem] text-[0.78rem] uppercase tracking-[0.08em] text-template-ink bg-template-ivory transition-[background-color,color] duration-[180ms] ease-linear data-[navigation-state=hero]:bg-transparent data-[navigation-state=hero]:text-template-ivory data-[template-intro-pending=true]:opacity-0 data-[template-intro-pending=true]:[animation:none] data-[template-intro-complete=true]:animate-template-header-intro",
+          "fixed top-0 z-10 flex w-full items-center justify-between px-[var(--template-page-inset)] py-[0.65rem] text-[0.78rem] uppercase tracking-[0.08em] text-template-ink bg-template-ivory transition-[background-color,color] duration-[180ms] ease-linear motion-reduce:transition-none motion-reduce:!animate-none data-[navigation-state=hero]:bg-transparent data-[navigation-state=hero]:text-template-ivory data-[template-intro-pending=true]:opacity-0 data-[template-intro-pending=true]:[animation:none] data-[template-intro-complete=true]:animate-template-header-intro",
           hasHero && "animate-template-hero-copy-intro [animation-delay:500ms]",
-          "max-[1024px]:py-[0.4rem] max-[960px]:flex-nowrap max-[960px]:gap-3",
+          "[@media(max-width:1024px)]:py-[0.4rem] [@media(max-width:960px)]:flex-nowrap [@media(max-width:960px)]:gap-3",
         ]}
         data-template-navigation
         data-navigation-state={hasHero ? "hero" : "solid"}
@@ -49,11 +49,11 @@ validateWeddingLayoutProps(Astro.props);
           class="inline-flex min-h-11 items-center font-template-serif text-[1.1rem] tracking-normal no-underline normal-case"
           href={site.href}
         >{site.name}</a>
-        <div class="flex items-center gap-[clamp(1rem,4vw,3rem)] max-[960px]:flex-row max-[960px]:gap-2 max-[960px]:text-right">
+        <div class="flex items-center gap-[clamp(1rem,4vw,3rem)] [@media(max-width:960px)]:flex-row [@media(max-width:960px)]:gap-2 [@media(max-width:960px)]:text-right">
           {navigation && navigation.links.length > 0 && (
             <>
               <nav
-                class="flex flex-wrap gap-4 max-[960px]:hidden"
+                class="flex flex-wrap gap-4 [@media(max-width:960px)]:hidden"
                 aria-label={navigation.ariaLabel}
               >
                 {navigation.links.map((link) => (
@@ -64,7 +64,7 @@ validateWeddingLayoutProps(Astro.props);
                 ))}
               </nav>
               <details
-                class="relative hidden max-[960px]:block"
+                class="relative hidden [@media(max-width:960px)]:block"
                 data-template-navigation-mobile
               >
                 <summary
@@ -96,7 +96,7 @@ validateWeddingLayoutProps(Astro.props);
         <slot name="after-main" />
       </main>
       {footer && (
-        <footer class="flex flex-wrap items-start justify-between gap-4 bg-template-ink px-[var(--template-page-inset)] py-6 text-[0.74rem] uppercase tracking-[0.08em] text-template-ivory max-[960px]:flex-col">
+        <footer class="flex flex-wrap items-start justify-between gap-4 bg-template-ink px-[var(--template-page-inset)] py-6 text-[0.74rem] uppercase tracking-[0.08em] text-template-ivory [@media(max-width:960px)]:flex-col">
           <div class="flex flex-col items-start gap-2">
             <strong class="font-template-serif text-[1.1rem] font-normal tracking-normal normal-case">{footer.names}</strong>
             <span>{footer.dateLabel}</span>

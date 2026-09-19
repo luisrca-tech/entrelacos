@@ -31,7 +31,7 @@ const labels: Record<RsvpStatus, string> = {
 };
 
 const rsvpDialogClass =
-  "w-[min(44rem,calc(100vw-2rem))] max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-2xl border-0 bg-[var(--template-paper,#f4f0e8)] p-[clamp(1.25rem,4vw,2.5rem)] text-template-ink [&::backdrop]:bg-[rgba(18,28,23,0.72)] max-[560px]:m-0 max-[560px]:h-dvh max-[560px]:max-h-none max-[560px]:w-screen max-[560px]:rounded-none";
+  "w-[min(44rem,calc(100vw-2rem))] max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-2xl border-0 bg-[var(--template-paper,#f4f0e8)] p-[clamp(1.25rem,4vw,2.5rem)] text-template-ink [&::backdrop]:bg-[rgba(18,28,23,0.72)] [@media(max-width:560px)]:m-0 [@media(max-width:560px)]:h-dvh [@media(max-width:560px)]:max-h-none [@media(max-width:560px)]:w-screen [@media(max-width:560px)]:rounded-none";
 const rsvpHeaderClass = "flex items-center justify-between gap-4";
 const rsvpEyebrowClass =
   "m-0 mb-[0.8rem] text-template-muted text-[0.72rem] font-bold tracking-[0.16em] uppercase";
@@ -44,13 +44,13 @@ const rsvpReadonlyClass =
   "border-l-[3px] border-l-[#9c713f] bg-[rgba(156,113,63,0.12)] px-4 py-3";
 const rsvpMembersClass = "my-6 grid gap-3";
 const rsvpMemberClass =
-  "flex items-center justify-between gap-4 border-b border-template-line py-3 max-[560px]:items-stretch max-[560px]:flex-col";
+  "flex items-center justify-between gap-4 border-b border-template-line py-3 [@media(max-width:560px)]:items-stretch [@media(max-width:560px)]:flex-col";
 const rsvpMemberDetailsClass = "grid gap-[0.2rem]";
 const rsvpMemberNoteClass = "text-template-muted";
 const rsvpSelectClass =
   "min-h-11 rounded-[0.4rem] border border-[rgba(37,53,43,0.28)] bg-white px-[0.7rem] py-[0.55rem] text-inherit";
 const rsvpActionsClass =
-  "flex items-center justify-start gap-4 flex-wrap max-[560px]:items-stretch max-[560px]:flex-col";
+  "flex items-center justify-start gap-4 flex-wrap [@media(max-width:560px)]:items-stretch [@media(max-width:560px)]:flex-col";
 const rsvpButtonClass =
   "min-h-11 cursor-pointer rounded-full border border-template-ink bg-template-ink px-4 py-[0.7rem] text-[var(--template-paper,#f4f0e8)] font-[inherit] font-bold disabled:cursor-not-allowed disabled:opacity-50";
 const rsvpSecondaryClass =

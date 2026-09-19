@@ -40,14 +40,16 @@ describe("GallerySection carousel composition", () => {
   });
 
   it("bleeds gallery media on tablet and mobile while keeping copy inset", () => {
-    expect(source).toContain("max-[1024px]:px-0");
-    expect(source).toContain("max-[1024px]:px-[var(--template-page-inset)]");
+    expect(source).toContain("[@media(max-width:1024px)]:px-0");
+    expect(source).toContain(
+      "[@media(max-width:1024px)]:px-[var(--template-page-inset)]",
+    );
   });
 
   it("shrinks gallery overlay controls on compact viewports", () => {
-    expect(carouselSource).toContain("max-[1024px]:size-7");
+    expect(carouselSource).toContain("[@media(max-width:1024px)]:size-7");
     expect(carouselSource).toContain(
-      "max-[1024px]:[&>span:not([aria-hidden])]:hidden",
+      "[@media(max-width:1024px)]:[&>span:not([aria-hidden])]:hidden",
     );
   });
 
@@ -58,7 +60,7 @@ describe("GallerySection carousel composition", () => {
     );
 
     expect(closeButton).toContain("<span>{content.controls.closeLabel}</span>");
-    expect(closeButton).not.toContain("max-[1024px]");
+    expect(closeButton).not.toContain("[@media(max-width:1024px)]");
   });
 
   it("neutralizes shared dialog defaults and fills the expanded viewport", () => {

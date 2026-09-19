@@ -38,6 +38,7 @@ describe("HeroSection media contract", () => {
     expect(source).toContain("min-h-svh");
     expect(source).toContain("animate-template-hero-media-intro");
     expect(source).toContain("motion-reduce");
+    expect(source).toContain("motion-reduce:transition-none");
   });
 
   it("uses the optional host intro and keeps the desktop hero at viewport height", () => {

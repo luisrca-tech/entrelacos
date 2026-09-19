@@ -71,7 +71,7 @@ describe("progressive enhancement", () => {
       resolve(import.meta.dirname, "pages/index.astro"),
       "utf8",
     );
-    expect(source).toContain("max-[1024px]:hidden");
+    expect(source).toContain("[@media(max-width:1024px)]:hidden");
   });
 
   it("keeps the header monogram ring visible after leaving the hero", () => {

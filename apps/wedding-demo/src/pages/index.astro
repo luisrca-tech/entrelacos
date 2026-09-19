@@ -263,7 +263,7 @@ const guestAccess = {
     venue={venue}
   >
     <Fragment slot="head"><link rel="icon" href="/marina-caio-monogram.svg" type="image/svg+xml" /></Fragment>
-    <Fragment slot="header-addon"><span class="inline-flex h-9 min-w-9 items-center justify-center rounded-full border border-[color-mix(in_srgb,currentColor_56%,transparent)] font-template-serif text-[0.72rem] tracking-normal normal-case max-[1024px]:hidden" aria-label="Monograma M e C">M&amp;C</span></Fragment>
+    <Fragment slot="header-addon"><span class="inline-flex h-9 min-w-9 items-center justify-center rounded-full border border-[color-mix(in_srgb,currentColor_56%,transparent)] font-template-serif text-[0.72rem] tracking-normal normal-case [@media(max-width:1024px)]:hidden" aria-label="Monograma M e C">M&amp;C</span></Fragment>
     <Fragment slot="admin-access">{access.siteId && access.apiOrigin && access.panelOrigin && <AdminRecognition {...access} client:load />}</Fragment>
     <Fragment slot="after-main">
       <section

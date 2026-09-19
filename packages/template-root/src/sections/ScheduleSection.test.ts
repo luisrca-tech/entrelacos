@@ -21,5 +21,8 @@ describe("ScheduleSection host-owned practical content", () => {
 
   it("separates the guidance title from the first practical item", () => {
     expect(source).toContain("mb-7");
+    expect(source).not.toContain(
+      '<strong class="text-[clamp(1.4rem,2.5vw,2rem)]',
+    );
   });
 });

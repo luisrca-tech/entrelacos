@@ -64,7 +64,7 @@ function FeatureAvailability({
       className={["min-w-0", className].filter(Boolean).join(" ")}
       {...sectionProps}
     >
-      <div className="flex items-baseline justify-between gap-4 border-b border-template-line pb-4 max-[560px]:items-start max-[560px]:flex-col">
+      <div className="flex items-baseline justify-between gap-4 border-b border-template-line pb-4 [@media(max-width:560px)]:items-start [@media(max-width:560px)]:flex-col">
         <p className="m-0 text-template-muted text-[0.72rem] font-bold tracking-[0.16em] uppercase">
           Área compartilhada
         </p>
@@ -79,7 +79,7 @@ function FeatureAvailability({
         {items.map((item, index) => (
           <motion.li
             key={item.name}
-            className="flex items-start justify-between gap-6 border-b border-template-line py-5 max-[560px]:flex-col"
+            className="flex items-start justify-between gap-6 border-b border-template-line py-5 [@media(max-width:560px)]:flex-col"
             initial={reducedMotion ? false : { opacity: 1, y: 8 }}
             whileInView={reducedMotion ? undefined : { opacity: 1, y: 0 }}
             viewport={{ once: true, amount: 0.25 }}

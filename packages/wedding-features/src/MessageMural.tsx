@@ -16,13 +16,13 @@ export type MessageMuralProps = {
 type MuralMessage = PublicMuralResponse["messages"][number];
 
 const muralSectionClass =
-  "grid min-w-0 gap-6 bg-[var(--template-paper,#fffdf8)] px-[clamp(2rem,5vw,4rem)] py-[clamp(2rem,5vw,4rem)] text-template-ink max-[560px]:px-4 max-[560px]:py-8";
+  "grid min-w-0 gap-6 bg-[var(--template-paper,#fffdf8)] px-[clamp(2rem,5vw,4rem)] py-[clamp(2rem,5vw,4rem)] text-template-ink [@media(max-width:560px)]:px-4 [@media(max-width:560px)]:py-8";
 const muralEyebrowClass =
   "m-0 mb-[0.8rem] text-template-muted text-[0.72rem] font-bold tracking-[0.16em] uppercase";
 const muralHeadingClass =
   "m-0 font-template-serif text-[clamp(2.3rem,6vw,4.8rem)] font-normal leading-[0.96] tracking-[-0.05em]";
 const muralHeaderClass =
-  "flex items-end justify-between gap-6 max-[560px]:items-stretch max-[560px]:flex-col";
+  "flex items-end justify-between gap-6 [@media(max-width:560px)]:items-stretch [@media(max-width:560px)]:flex-col";
 const muralButtonClass =
   "min-h-11 cursor-pointer border border-template-ink bg-transparent px-4 py-[0.65rem] text-template-ink font-[inherit] font-bold disabled:cursor-not-allowed disabled:opacity-50";
 const muralMoreButtonClass =

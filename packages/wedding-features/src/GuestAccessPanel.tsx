@@ -49,7 +49,7 @@ type GuestAccessProps = {
 type GuestAccessPhase = "lookup" | "code" | "authenticated";
 
 const guestAccessSectionClass =
-  "grid min-w-0 gap-6 bg-template-ivory px-[clamp(2rem,5vw,4rem)] py-[clamp(2rem,5vw,4rem)] text-template-ink max-[560px]:px-4 max-[560px]:py-8 min-[961px]:justify-items-center";
+  "grid min-w-0 gap-6 bg-template-ivory px-[clamp(2rem,5vw,4rem)] py-[clamp(2rem,5vw,4rem)] text-template-ink [@media(max-width:560px)]:px-4 [@media(max-width:560px)]:py-8 min-[961px]:justify-items-center";
 const guestAccessIntroClass =
   "max-w-[38rem] min-[961px]:w-full min-[961px]:max-w-[52rem]";
 const guestAccessEyebrowClass =
@@ -821,7 +821,7 @@ export function GuestAccess({
           <ul className="m-0 grid list-none gap-2 p-0">
             {session.members.map((member) => (
               <li
-                className="flex items-baseline justify-between gap-4 border-b border-template-line py-3 max-[560px]:flex-col max-[560px]:items-start max-[560px]:gap-[0.15rem]"
+                className="flex items-baseline justify-between gap-4 border-b border-template-line py-3 [@media(max-width:560px)]:flex-col [@media(max-width:560px)]:items-start [@media(max-width:560px)]:gap-[0.15rem]"
                 key={member.id}
               >
                 <span>{member.fullName}</span>

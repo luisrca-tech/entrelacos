@@ -35,7 +35,7 @@ const familyMessageTextareaClass =
 const familyMessageMetaClass =
   "flex items-center justify-between gap-4 text-template-muted text-xs";
 const familyMessageActionsClass =
-  "flex items-center justify-between gap-4 max-[560px]:items-stretch max-[560px]:flex-col";
+  "flex items-center justify-between gap-4 [@media(max-width:560px)]:items-stretch [@media(max-width:560px)]:flex-col";
 const familyMessageButtonClass =
   "min-h-11 cursor-pointer rounded-none border border-template-ink bg-template-ink px-4 py-[0.65rem] text-template-ivory font-[inherit] font-bold disabled:cursor-not-allowed disabled:opacity-50";
 const familyMessageLinkClass =

@@ -108,7 +108,7 @@ describe("guest lookup form", () => {
     );
     expect(guestAccessSource).toContain("min-[961px]:whitespace-nowrap");
     expect(guestAccessSource).toContain("min-[961px]:max-w-[38rem]");
-    expect(guestAccessSource).toContain("max-[560px]:flex-col");
+    expect(guestAccessSource).toContain("[@media(max-width:560px)]:flex-col");
   });
 });
 

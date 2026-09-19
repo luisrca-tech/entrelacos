@@ -19,14 +19,14 @@ const revealClasses = "opacity-100 translate-y-0 data-[template-motion-ready=tru
 
 <section
   id={content.id}
-  class={`grid grid-cols-[minmax(0,0.72fr)_minmax(0,1.28fr)] gap-[clamp(2.5rem,6vw,7rem)] px-[var(--template-page-inset)] py-[clamp(5rem,10vw,9rem)] ${toneClasses} ${className ?? ""} max-[960px]:block`}
+  class={`grid grid-cols-[minmax(0,0.72fr)_minmax(0,1.28fr)] gap-[clamp(2.5rem,6vw,7rem)] px-[var(--template-page-inset)] py-[clamp(5rem,10vw,9rem)] ${toneClasses} ${className ?? ""} [@media(max-width:960px)]:block`}
 >
   <div class={revealClasses} data-template-reveal>
     {content.eyebrow && <p class="m-0 mb-5 text-[0.72rem] font-bold uppercase tracking-[0.16em]">{content.eyebrow}</p>}
     <Heading class="m-0 max-w-[12ch] font-template-serif text-[clamp(2.5rem,6vw,calc(5.5rem*var(--template-width-scale)))] font-normal tracking-[-0.065em] leading-[0.96]">{content.title}</Heading>
     {content.description && <p class={`m-0 mt-7 max-w-[30rem] leading-[1.7] ${descriptionClass}`}>{content.description}</p>}
   </div>
-  <div class={`${revealClasses} self-end max-w-[42rem] text-[clamp(1.1rem,2vw,1.5rem)] max-[960px]:mt-12 [&>*:first-child]:mt-0 [&>*:last-child]:mb-0`} data-template-reveal>
+  <div class={`${revealClasses} self-end max-w-[42rem] text-[clamp(1.1rem,2vw,1.5rem)] [@media(max-width:960px)]:mt-12 [&>*:first-child]:mt-0 [&>*:last-child]:mb-0`} data-template-reveal>
     {content.body && <p>{content.body}</p>}
     <slot />
   </div>

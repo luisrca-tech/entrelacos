@@ -17,10 +17,10 @@ const revealClasses = "opacity-100 translate-y-0 data-[template-motion-ready=tru
 
 <section
   id={id}
-  class={`grid grid-cols-[minmax(0,0.72fr)_minmax(0,1.28fr)] gap-[clamp(2.5rem,6vw,7rem)] px-[var(--template-page-inset)] py-[clamp(5rem,10vw,9rem)] ${toneClasses} max-[960px]:block`}
+  class={`grid grid-cols-[minmax(0,0.72fr)_minmax(0,1.28fr)] gap-[clamp(2.5rem,6vw,7rem)] px-[var(--template-page-inset)] py-[clamp(5rem,10vw,9rem)] ${toneClasses} [@media(max-width:960px)]:block`}
   aria-labelledby={`${id}-title`}
 >
-  <header class={`${revealClasses} max-[960px]:mb-12`} data-template-reveal>
+  <header class={`${revealClasses} [@media(max-width:960px)]:mb-12`} data-template-reveal>
     {content.eyebrow && <p class="m-0 mb-5 text-[0.72rem] font-bold uppercase tracking-[0.16em]">{content.eyebrow}</p>}
     <h2 class="m-0 max-w-[12ch] font-template-serif text-[clamp(2.5rem,6vw,calc(5.5rem*var(--template-width-scale)))] font-normal tracking-[-0.065em] leading-[0.96]" id={`${id}-title`}>{content.title}</h2>
     {content.description && <p class={`m-0 mt-7 max-w-[30rem] leading-[1.7] ${descriptionClass}`}>{content.description}</p>}
@@ -44,7 +44,7 @@ const revealClasses = "opacity-100 translate-y-0 data-[template-motion-ready=tru
         <ul class="m-0 list-none p-0">
           {content.guidance.map((item) => (
             <li class="[&+li]:mt-6" id={item.id}>
-              <strong class="text-[clamp(1.4rem,2.5vw,2rem)] font-medium tracking-[-0.025em] leading-[1.1]">{item.title}</strong>
+              <strong>{item.title}</strong>
               <p class="m-0 mt-3 max-w-[30rem] leading-[1.6]">{item.body}</p>
             </li>
           ))}

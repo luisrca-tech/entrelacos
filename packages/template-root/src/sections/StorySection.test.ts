@@ -29,7 +29,7 @@ describe("StorySection compact full-bleed composition", () => {
     expect(sectionSource).toContain("min-h-[clamp(48rem,92svh,68rem)]");
     expect(sectionSource).toContain("mb-[clamp(3rem,5vw,5rem)]");
     expect(sectionSource).toContain("object-[center_6%]");
-    expect(sectionSource).toContain("max-[960px]");
+    expect(sectionSource).toContain("[@media(max-width:960px)]");
     expect(sectionSource).not.toContain("sticky");
   });
 
@@ -49,5 +49,6 @@ describe("StorySection compact full-bleed composition", () => {
     expect(sectionSource).toContain("setupStoryMediaCycle");
     expect(sectionSource).toContain("data-story-active");
     expect(sectionSource).toContain("duration-[650ms]");
+    expect(sectionSource).toContain("motion-reduce:!animate-none");
   });
 });

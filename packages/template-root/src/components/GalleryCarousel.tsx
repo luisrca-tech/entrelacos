@@ -92,11 +92,11 @@ function GalleryControls({
   const { canScrollNext, canScrollPrevious, scrollNext, scrollPrevious } =
     useCarousel();
   const responsiveNavClass = compactOnTablet
-    ? "max-[1024px]:px-[0.6rem]"
-    : "max-[720px]:px-3";
+    ? "[@media(max-width:1024px)]:px-[0.6rem]"
+    : "[@media(max-width:720px)]:px-3";
   const responsiveButtonClass = compactOnTablet
-    ? "max-[1024px]:size-7 max-[1024px]:min-h-7 max-[1024px]:basis-7 max-[1024px]:text-[0.62rem]"
-    : "max-[720px]:basis-11 max-[720px]:shrink-0";
+    ? "[@media(max-width:1024px)]:size-7 [@media(max-width:1024px)]:min-h-7 [@media(max-width:1024px)]:basis-7 [@media(max-width:1024px)]:text-[0.62rem]"
+    : "[@media(max-width:720px)]:basis-11 [@media(max-width:720px)]:shrink-0";
   return (
     <nav
       className={`pointer-events-none absolute inset-x-0 top-0 z-[3] flex aspect-[4/3] items-center justify-between px-[clamp(0.75rem,2vw,1.5rem)] text-[0.72rem] uppercase tracking-[0.08em] ${responsiveNavClass} ${className}`}
@@ -190,11 +190,11 @@ export default function GalleryCarousel({ content }: Props) {
                 className="min-w-0 basis-full snap-start"
               >
                 <figure>
-                  <div className="group relative aspect-[4/3] overflow-hidden bg-template-olive max-[1024px]:aspect-[4/3]">
+                  <div className="group relative aspect-[4/3] overflow-hidden bg-template-olive [@media(max-width:1024px)]:aspect-[4/3]">
                     <GalleryMedia media={item.media} />
                     <button
                       type="button"
-                      className="absolute bottom-4 right-4 inline-flex min-h-11 translate-y-2 items-center gap-[0.6rem] border border-[rgba(244,240,232,0.72)] bg-[rgba(37,53,43,0.86)] px-[0.9rem] py-[0.65rem] font-sans text-[0.72rem] uppercase tracking-[0.08em] text-template-ivory opacity-0 transition-[opacity,transform,background-color] duration-[180ms] hover:bg-template-ink focus-visible:translate-y-0 focus-visible:bg-template-ink focus-visible:opacity-100 group-hover:translate-y-0 group-hover:opacity-100 [@media(hover:none)]:translate-y-0 [@media(hover:none)]:opacity-100 max-[1024px]:right-[0.65rem] max-[1024px]:bottom-[0.65rem] max-[1024px]:size-7 max-[1024px]:min-h-7 max-[1024px]:justify-center max-[1024px]:gap-0 max-[1024px]:p-0 max-[1024px]:text-[0.7rem] max-[1024px]:[&>span:not([aria-hidden])]:hidden"
+                      className="absolute bottom-4 right-4 inline-flex min-h-11 translate-y-2 items-center gap-[0.6rem] border border-[rgba(244,240,232,0.72)] bg-[rgba(37,53,43,0.86)] px-[0.9rem] py-[0.65rem] font-sans text-[0.72rem] uppercase tracking-[0.08em] text-template-ivory opacity-0 transition-[opacity,transform,background-color] duration-[180ms] motion-reduce:transition-none hover:bg-template-ink focus-visible:translate-y-0 focus-visible:bg-template-ink focus-visible:opacity-100 group-hover:translate-y-0 group-hover:opacity-100 [@media(hover:none)]:translate-y-0 [@media(hover:none)]:opacity-100 [@media(max-width:1024px)]:right-[0.65rem] [@media(max-width:1024px)]:bottom-[0.65rem] [@media(max-width:1024px)]:size-7 [@media(max-width:1024px)]:min-h-7 [@media(max-width:1024px)]:justify-center [@media(max-width:1024px)]:gap-0 [@media(max-width:1024px)]:p-0 [@media(max-width:1024px)]:text-[0.7rem] [@media(max-width:1024px)]:[&>span:not([aria-hidden])]:hidden"
                       onClick={() => openDialog(index)}
                       aria-label={`${content.controls.expandLabel}: ${item.media.alt}`}
                     >
@@ -203,7 +203,7 @@ export default function GalleryCarousel({ content }: Props) {
                     </button>
                   </div>
                   {item.caption && (
-                    <figcaption className="mt-3 text-[0.9rem] leading-[1.4] max-[1024px]:px-[var(--template-page-inset)]">
+                    <figcaption className="mt-3 text-[0.9rem] leading-[1.4] [@media(max-width:1024px)]:px-[var(--template-page-inset)]">
                       {item.caption}
                     </figcaption>
                   )}
@@ -218,16 +218,16 @@ export default function GalleryCarousel({ content }: Props) {
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent
-          className="fixed inset-0 z-[51] grid h-auto w-auto max-w-none translate-none grid-rows-[auto_minmax(0,1fr)] gap-4 overflow-hidden rounded-none border-0 bg-template-ink px-[clamp(1rem,3vw,2rem)] py-[clamp(1rem,3vw,2rem)] text-template-ivory shadow-none outline-none transition-none data-[starting-style]:opacity-100 max-[720px]:p-4"
+          className="fixed inset-0 z-[51] grid h-auto w-auto max-w-none translate-none grid-rows-[auto_minmax(0,1fr)] gap-4 overflow-hidden rounded-none border-0 bg-template-ink px-[clamp(1rem,3vw,2rem)] py-[clamp(1rem,3vw,2rem)] text-template-ivory shadow-none outline-none transition-none data-[starting-style]:opacity-100 [@media(max-width:720px)]:p-4"
           overlayClassName="fixed inset-0 z-[50] bg-[rgba(10,16,13,0.82)] backdrop-blur-[0.5rem] transition-none data-[starting-style]:opacity-100"
         >
-          <header className="flex items-start justify-between gap-4 max-[720px]:items-center">
+          <header className="flex items-start justify-between gap-4 [@media(max-width:720px)]:items-center">
             <div>
               <DialogTitle className="m-0 block font-template-serif text-[clamp(1.5rem,3vw,2.5rem)] font-normal">
                 {content.title}
               </DialogTitle>
               {content.description && (
-                <DialogDescription className="mt-[0.35rem] block max-w-[42rem] text-[rgba(244,240,232,0.72)] max-[720px]:hidden">
+                <DialogDescription className="mt-[0.35rem] block max-w-[42rem] text-[rgba(244,240,232,0.72)] [@media(max-width:720px)]:hidden">
                   {content.description}
                 </DialogDescription>
               )}
@@ -256,7 +256,7 @@ export default function GalleryCarousel({ content }: Props) {
                     className="min-h-0 h-full min-w-0 basis-full snap-start"
                   >
                     <figure className="h-full min-h-0">
-                      <div className="relative h-full max-h-[calc(100svh-12rem)] overflow-hidden bg-[#111b16] aspect-auto [&_*]:!object-contain max-[720px]:max-h-[calc(100svh-10rem)]">
+                      <div className="relative h-full max-h-[calc(100svh-12rem)] overflow-hidden bg-[#111b16] aspect-auto [&_*]:!object-contain [@media(max-width:720px)]:max-h-[calc(100svh-10rem)]">
                         <GalleryMedia media={item.media} />
                       </div>
                       {item.caption && (
