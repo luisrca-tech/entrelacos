@@ -10,6 +10,20 @@ const tailwindSource = readFileSync(
   resolve(import.meta.dirname, "tailwind.css"),
   "utf8",
 );
+const adminTransitionSources = ["components/AdminShell.tsx"].map(
+  (relativePath) => ({
+    path: relativePath,
+    source: readFileSync(resolve(import.meta.dirname, relativePath), "utf8"),
+  }),
+);
+const adminStylesSource = readFileSync(
+  resolve(import.meta.dirname, "lib/adminStyles.ts"),
+  "utf8",
+);
+const smsUsageSource = readFileSync(
+  resolve(import.meta.dirname, "components/SmsUsageSection.tsx"),
+  "utf8",
+);
 
 describe("admin Tailwind policy", () => {
   it("uses the Tailwind entrypoint without a legacy stylesheet", () => {
@@ -25,5 +39,35 @@ describe("admin Tailwind policy", () => {
       /(^|\n)\s*(?!@(?:import|source|theme|keyframes)\b)[.#[a-zA-Z][^\n]*\{/,
     );
     expect(tailwindSource).not.toContain("@apply");
+  });
+
+  it("keeps reduced-motion coverage on every transitioning admin primitive", () => {
+    for (const { path, source } of adminTransitionSources) {
+      expect(source, path).toMatch(/\btransition(?:-[^\s"`]+)?/);
+      expect(source, path).toContain("motion-reduce:transition-none");
+    }
+  });
+
+  it("keeps legacy data-form focus treatment in Tailwind form utilities", () => {
+    expect(adminStylesSource).toContain(
+      "[&_input:focus]:border-admin-terracotta",
+    );
+    expect(adminStylesSource).toContain(
+      "[&_textarea:focus]:border-admin-terracotta",
+    );
+    expect(adminStylesSource).toContain(
+      "[&_select:focus]:border-admin-terracotta",
+    );
+    expect(adminStylesSource).toContain("[&_input:focus]:outline-[3px]");
+    expect(adminStylesSource).toContain(
+      "[&_input:focus]:outline-[rgb(168_77_57_/_20%)]",
+    );
+  });
+
+  it("keeps the SMS quota control on the legacy admin surface token", () => {
+    expect(smsUsageSource).toContain('id="sms-monthly-limit"');
+    expect(smsUsageSource).toContain("border-admin-line");
+    expect(smsUsageSource).toContain("bg-admin-surface");
+    expect(smsUsageSource).toContain("focus:border-admin-terracotta");
   });
 });

@@ -73,7 +73,7 @@ export function AdminShell({
         ) : (
           <nav className="grid gap-1" aria-label="Navegação global">
             <Link
-              className="flex min-h-[42px] items-center gap-3 rounded-[9px] bg-admin-terracotta-wash px-3 py-2 text-[0.9rem] font-bold text-admin-terracotta-deep no-underline transition-[background,color] duration-150 ease-in-out"
+              className="flex min-h-[42px] items-center gap-3 rounded-[9px] bg-admin-terracotta-wash px-3 py-2 text-[0.9rem] font-bold text-admin-terracotta-deep no-underline transition-[background,color] duration-150 ease-in-out motion-reduce:transition-none"
               to="/"
               aria-current="page"
             >
@@ -142,7 +142,7 @@ function AdminNavigation({
           className={cn(
             mobile
               ? "grid min-h-[54px] flex-1 basis-0 place-items-center gap-[3px] px-[3px] py-1.5 text-center text-[0.65rem] text-admin-muted no-underline"
-              : "flex min-h-[42px] items-center gap-3 rounded-[9px] px-3 py-2 text-[0.9rem] text-admin-muted no-underline transition-[background,color] duration-150 ease-in-out hover:bg-admin-terracotta-wash hover:text-admin-terracotta-deep",
+              : "flex min-h-[42px] items-center gap-3 rounded-[9px] px-3 py-2 text-[0.9rem] text-admin-muted no-underline transition-[background,color] duration-150 ease-in-out motion-reduce:transition-none hover:bg-admin-terracotta-wash hover:text-admin-terracotta-deep",
             item.area === area &&
               "bg-admin-terracotta-wash font-bold text-admin-terracotta-deep",
           )}
@@ -194,7 +194,7 @@ function AccountMenu({
     <Popover>
       <PopoverTrigger
         aria-label={`Abrir menu de ${actor.user.name}`}
-        className="grid size-[42px] shrink-0 place-items-center rounded-full border border-[rgb(142_58_42_/_22%)] bg-admin-terracotta-wash text-[0.78rem] font-extrabold tracking-[0.04em] text-admin-terracotta-deep transition-colors hover:border-admin-terracotta hover:bg-admin-terracotta hover:text-[#fffaf6] aria-expanded:border-admin-terracotta aria-expanded:bg-admin-terracotta aria-expanded:text-[#fffaf6]"
+        className="grid size-[42px] shrink-0 place-items-center rounded-full border border-[rgb(142_58_42_/_22%)] bg-admin-terracotta-wash text-[0.78rem] font-extrabold tracking-[0.04em] text-admin-terracotta-deep transition-colors motion-reduce:transition-none hover:border-admin-terracotta hover:bg-admin-terracotta hover:text-[#fffaf6] aria-expanded:border-admin-terracotta aria-expanded:bg-admin-terracotta aria-expanded:text-[#fffaf6]"
         render={<button type="button" />}
       >
         {initials}

@@ -195,6 +195,7 @@ export function SmsUsageSection({ siteId, lifecycle, owner }: Props) {
             Cota mensal de SMS real
             <Input
               id="sms-monthly-limit"
+              className="min-h-11 w-full rounded-lg border-admin-line bg-admin-surface px-3 py-2.5 text-admin-ink focus:border-admin-terracotta focus:outline-[3px] focus:outline-[rgb(168_77_57_/_20%)] focus:outline-offset-2"
               type="number"
               min={0}
               max={1_000_000}

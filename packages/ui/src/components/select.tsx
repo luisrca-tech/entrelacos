@@ -51,7 +51,7 @@ function SelectTrigger({
       data-size={size}
       className={cnState<SelectPrimitive.Trigger.State>(
         cn(
-          "flex w-full items-center justify-between gap-2 rounded-lg border border-input bg-card px-3 text-sm text-foreground shadow-xs outline-none transition-colors hover:border-foreground/50 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/25 disabled:cursor-not-allowed disabled:opacity-50 data-[placeholder]:text-muted-foreground aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20",
+          "flex w-full items-center justify-between gap-2 rounded-lg border border-input bg-card px-3 text-sm text-foreground shadow-xs outline-none transition-colors motion-reduce:transition-none hover:border-foreground/50 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/25 disabled:cursor-not-allowed disabled:opacity-50 data-[placeholder]:text-muted-foreground aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20",
           size === "sm" ? "h-10" : "h-11",
         ),
         className,
@@ -101,7 +101,7 @@ function SelectContent({
         <SelectPrimitive.Popup
           data-slot="select-content"
           className={cnState<SelectPrimitive.Popup.State>(
-            "relative z-50 max-h-(--available-height) w-(--anchor-width) min-w-32 overflow-x-hidden overflow-y-auto rounded-lg border border-border bg-popover p-1 text-popover-foreground shadow-lg outline-none transition-opacity data-[starting-style]:opacity-0",
+            "relative z-50 max-h-(--available-height) w-(--anchor-width) min-w-32 overflow-x-hidden overflow-y-auto rounded-lg border border-border bg-popover p-1 text-popover-foreground shadow-lg outline-none transition-opacity motion-reduce:transition-none data-[starting-style]:opacity-0",
             className,
           )}
           {...props}
