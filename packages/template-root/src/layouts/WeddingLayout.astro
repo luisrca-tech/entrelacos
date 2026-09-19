@@ -1,5 +1,4 @@
 ---
-import "../styles.css";
 import { validateWeddingLayoutProps } from "../content";
 import type { WeddingLayoutProps } from "../content";
 
@@ -10,7 +9,7 @@ validateWeddingLayoutProps(Astro.props);
 ---
 
 <!doctype html>
-<html lang={locale}>
+<html lang={locale} class="scroll-pt-[var(--template-header-height)] motion-reduce:scroll-auto">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width" />
@@ -32,27 +31,57 @@ validateWeddingLayoutProps(Astro.props);
     <title>{seo.title}</title>
     <slot name="head" />
   </head>
-  <body data-template-has-hero={hasHero ? "true" : "false"}>
-    <div class="template-shell">
+  <body
+    class="min-w-[320px] m-0 bg-template-ivory text-template-ink font-sans leading-normal"
+    data-template-has-hero={hasHero ? "true" : "false"}
+  >
+    <div class="overflow-x-clip">
       <header
-        class="template-header"
+        class:list={[
+          "fixed top-0 z-10 flex w-full items-center justify-between px-[var(--template-page-inset)] py-[0.65rem] text-[0.78rem] uppercase tracking-[0.08em] text-template-ink bg-template-ivory transition-[background-color,color] duration-[180ms] ease-linear motion-reduce:transition-none motion-reduce:!animate-none data-[navigation-state=hero]:bg-transparent data-[navigation-state=hero]:text-template-ivory data-[template-intro-pending=true]:opacity-0 data-[template-intro-pending=true]:[animation:none] data-[template-intro-complete=true]:animate-template-header-intro",
+          hasHero && "animate-template-hero-copy-intro [animation-delay:500ms]",
+          "[@media(max-width:1024px)]:py-[0.4rem] [@media(max-width:960px)]:flex-nowrap [@media(max-width:960px)]:gap-3",
+        ]}
         data-template-navigation
         data-navigation-state={hasHero ? "hero" : "solid"}
       >
-        <a class="template-brand" href={site.href}>{site.name}</a>
-        <div class="template-header__event">
+        <a
+          class="inline-flex min-h-11 items-center font-template-serif text-[1.1rem] tracking-normal no-underline normal-case"
+          href={site.href}
+        >{site.name}</a>
+        <div class="flex items-center gap-[clamp(1rem,4vw,3rem)] [@media(max-width:960px)]:flex-row [@media(max-width:960px)]:gap-2 [@media(max-width:960px)]:text-right">
           {navigation && navigation.links.length > 0 && (
             <>
-              <nav class="template-navigation template-navigation--desktop" aria-label={navigation.ariaLabel}>
-                {navigation.links.map((link) => <a href={link.href}>{link.label}</a>)}
+              <nav
+                class="flex flex-wrap gap-4 [@media(max-width:960px)]:hidden"
+                aria-label={navigation.ariaLabel}
+              >
+                {navigation.links.map((link) => (
+                  <a
+                    class="inline-flex min-h-11 items-center px-1 py-2 no-underline hover:underline hover:underline-offset-4 focus-visible:underline focus-visible:underline-offset-4"
+                    href={link.href}
+                  >{link.label}</a>
+                ))}
               </nav>
               <details
-                class="template-navigation-mobile"
+                class="relative hidden [@media(max-width:960px)]:block"
                 data-template-navigation-mobile
               >
-                <summary aria-label={navigation.menuLabel}>{navigation.menuLabel}</summary>
-                <nav aria-label={navigation.ariaLabel}>
-                  {navigation.links.map((link) => <a href={link.href}>{link.label}</a>)}
+                <summary
+                  class="inline-flex min-h-11 cursor-pointer list-none items-center border border-current px-3 py-2 marker:hidden"
+                  aria-label={navigation.menuLabel}
+                >{navigation.menuLabel}</summary>
+                <nav
+                  class="absolute right-4 top-[calc(100%+0.5rem)] grid min-w-48 gap-0.5 bg-template-ivory px-3 py-2 text-template-ink shadow-[0_1rem_2rem_rgba(37,53,43,0.16)] data-[navigation-state=hero]:bg-template-olive data-[navigation-state=hero]:text-template-ivory"
+                  data-navigation-state={hasHero ? "hero" : "solid"}
+                  aria-label={navigation.ariaLabel}
+                >
+                  {navigation.links.map((link) => (
+                    <a
+                      class="inline-flex min-h-11 items-center px-1 py-2 no-underline hover:underline hover:underline-offset-4 focus-visible:underline focus-visible:underline-offset-4"
+                      href={link.href}
+                    >{link.label}</a>
+                  ))}
                 </nav>
               </details>
             </>
@@ -61,22 +90,24 @@ validateWeddingLayoutProps(Astro.props);
           <slot name="header-addon" />
         </div>
       </header>
-      <main class="template-main">
+      <main class="min-h-[70vh] bg-template-ivory">
         <slot name="before-main" />
         <slot />
         <slot name="after-main" />
       </main>
       {footer && (
-        <footer class="template-footer">
-          <div class="template-footer__identity">
-            <strong>{footer.names}</strong>
+        <footer class="flex flex-wrap items-start justify-between gap-4 bg-template-ink px-[var(--template-page-inset)] py-6 text-[0.74rem] uppercase tracking-[0.08em] text-template-ivory [@media(max-width:960px)]:flex-col">
+          <div class="flex flex-col items-start gap-2">
+            <strong class="font-template-serif text-[1.1rem] font-normal tracking-normal normal-case">{footer.names}</strong>
             <span>{footer.dateLabel}</span>
           </div>
-          <nav class="template-footer__links" aria-label={site.name}>
-            {footer.links.map((link) => <a href={link.href}>{link.label}</a>)}
-            <a href={footer.rsvp.href}>{footer.rsvp.label}</a>
+          <nav class="flex flex-wrap items-center gap-x-4 gap-y-2" aria-label={site.name}>
+            {footer.links.map((link) => (
+              <a class="inline-flex min-h-11 items-center underline-offset-4" href={link.href}>{link.label}</a>
+            ))}
+            <a class="inline-flex min-h-11 items-center underline-offset-4" href={footer.rsvp.href}>{footer.rsvp.label}</a>
           </nav>
-          <div class="template-footer__legal">
+          <div class="flex flex-col items-start gap-2">
             <span>© {footer.year} {footer.names}</span>
             <span>{footer.attribution}</span>
           </div>
@@ -94,7 +125,7 @@ validateWeddingLayoutProps(Astro.props);
   } from "../interactions";
 
   const header = document.querySelector("[data-template-navigation]");
-  const hero = document.querySelector(".template-hero");
+  const hero = document.querySelector("[data-template-hero-intro]");
 
   if (header instanceof HTMLElement) {
     const syncHeaderHeight = () => {

@@ -34,7 +34,7 @@ function AlertDialogOverlay(
     <AlertDialogPrimitive.Backdrop
       data-slot="alert-dialog-overlay"
       className={cnState<AlertDialogPrimitive.Backdrop.State>(
-        "fixed inset-0 z-50 bg-foreground/45 transition-opacity data-[starting-style]:opacity-0",
+        "fixed inset-0 z-50 bg-foreground/45 transition-opacity motion-reduce:transition-none data-[starting-style]:opacity-0",
         className,
       )}
       {...rest}
@@ -63,7 +63,7 @@ function AlertDialogContent({
         data-slot="alert-dialog-content"
         data-size={size}
         className={cnState<AlertDialogPrimitive.Popup.State>(
-          "fixed top-1/2 left-1/2 z-50 grid w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 rounded-xl border border-border bg-card p-6 text-card-foreground shadow-xl outline-none transition-opacity data-[starting-style]:opacity-0",
+          "fixed top-1/2 left-1/2 z-50 grid w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 rounded-xl border border-border bg-card p-6 text-card-foreground shadow-xl outline-none transition-opacity motion-reduce:transition-none data-[starting-style]:opacity-0",
           popupClassName,
         )}
         {...props}

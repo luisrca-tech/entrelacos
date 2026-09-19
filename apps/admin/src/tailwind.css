@@ -1,3 +1,19 @@
 @import "tailwindcss";
 @import "@entrelacos/ui/styles.css";
 @source "../../../packages/ui/src";
+
+@theme {
+  --color-admin-canvas: #f7f3ed;
+  --color-admin-surface: #fffdf9;
+  --color-admin-beige: #ece4d8;
+  --color-admin-beige-deep: #e2d5c4;
+  --color-admin-ink: #282521;
+  --color-admin-muted: #777068;
+  --color-admin-line: #ddd2c5;
+  --color-admin-terracotta: #a84d39;
+  --color-admin-terracotta-deep: #8e3a2a;
+  --color-admin-terracotta-wash: #f3e1d9;
+  --color-admin-graphite: #37322e;
+  --font-admin-display: Georgia, "Times New Roman", serif;
+  --shadow-admin: 0 18px 50px rgb(68 49 36 / 8%);
+}

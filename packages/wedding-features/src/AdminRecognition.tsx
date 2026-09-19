@@ -165,36 +165,53 @@ export function AdminRecognition({
   if (view === "hidden") return null;
   return (
     <>
-      <aside className="admin-recognition" aria-label="Acesso administrativo">
+      <aside
+        className="flex flex-wrap items-center gap-3 text-inherit"
+        aria-label="Acesso administrativo"
+      >
         {view === "recognized" && (
           <a
             ref={panelLink}
-            className="admin-recognition__link"
+            className="inline-flex min-h-11 items-center px-1 py-2 text-inherit no-underline hover:underline hover:underline-offset-4 focus-visible:underline focus-visible:underline-offset-4"
             href={`${panelOrigin}/sites/${encodeURIComponent(siteId)}`}
           >
             {adminPanelLinkLabel}
           </a>
         )}
-        {error && <p role="alert">{error}</p>}
+        {error && (
+          <p className="m-0 max-w-96 normal-case leading-[1.4]" role="alert">
+            {error}
+          </p>
+        )}
       </aside>
       {showIntro &&
         typeof document !== "undefined" &&
         createPortal(
           <aside
-            className="admin-intro"
+            className="fixed inset-x-0 bottom-0 z-40 flex flex-wrap items-end justify-between gap-4 bg-template-ivory px-[var(--template-page-inset,1.5rem)] py-4 text-template-ink shadow-[0_-0.75rem_2rem_rgba(37,53,43,0.16)] normal-case tracking-normal animate-admin-intro-enter motion-reduce:animate-none"
             role="dialog"
             aria-modal="false"
             aria-labelledby="entrelacos-admin-intro-title"
             aria-describedby="entrelacos-admin-intro-body"
           >
             <div>
-              <h2 id="entrelacos-admin-intro-title">{adminIntroTitle}</h2>
-              <p id="entrelacos-admin-intro-body">{adminIntroBody}</p>
+              <h2
+                className="m-0 font-template-serif text-[1.2rem] font-normal tracking-[-0.03em]"
+                id="entrelacos-admin-intro-title"
+              >
+                {adminIntroTitle}
+              </h2>
+              <p
+                className="mt-[0.4rem] mb-0 max-w-[36rem] text-template-muted text-[0.92rem] leading-[1.5]"
+                id="entrelacos-admin-intro-body"
+              >
+                {adminIntroBody}
+              </p>
             </div>
             <button
               ref={confirmButton}
               type="button"
-              className="admin-intro__confirm"
+              className="min-h-11 cursor-pointer border border-template-ink bg-template-ink px-4 py-[0.65rem] text-template-ivory font-[inherit] font-bold"
               onClick={dismissIntro}
             >
               {adminIntroConfirmLabel}

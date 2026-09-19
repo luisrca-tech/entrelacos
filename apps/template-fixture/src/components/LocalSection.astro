@@ -7,33 +7,8 @@ interface Props {
 const { id, title } = Astro.props;
 ---
 
-<section id={id} class="fixture-local-section">
-  <p>Extensão local</p>
-  <h2>{title}</h2>
+<section id={id} class="bg-[#d9a37f] px-[max(1rem,calc((100vw-78rem)/2))] py-20 text-[#2a211d]">
+  <p class="m-0 mb-4 text-[0.75rem] uppercase tracking-[0.16em]">Extensão local</p>
+  <h2 class="m-0 max-w-[14ch] font-template-serif text-[clamp(2.5rem,6vw,5rem)] font-normal tracking-[-0.06em] leading-[0.96]">{title}</h2>
   <slot />
 </section>
-
-<style>
-  .fixture-local-section {
-    padding: 5rem max(1rem, calc((100vw - 78rem) / 2));
-    background: #d9a37f;
-    color: #2a211d;
-  }
-
-  .fixture-local-section p {
-    margin: 0 0 1rem;
-    font-size: 0.75rem;
-    letter-spacing: 0.16em;
-    text-transform: uppercase;
-  }
-
-  .fixture-local-section h2 {
-    max-width: 14ch;
-    margin: 0;
-    font-family: Georgia, "Times New Roman", serif;
-    font-size: clamp(2.5rem, 6vw, 5rem);
-    font-weight: 400;
-    letter-spacing: -0.06em;
-    line-height: 0.96;
-  }
-</style>

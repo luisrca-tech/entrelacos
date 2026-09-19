@@ -44,7 +44,7 @@ function DropdownMenuContent({
         <MenuPrimitive.Popup
           data-slot="dropdown-menu-content"
           className={cnState<MenuPrimitive.Popup.State>(
-            "z-50 min-w-40 origin-(--transform-origin) overflow-x-hidden overflow-y-auto rounded-lg border border-border bg-popover p-1 text-popover-foreground shadow-lg outline-none transition-opacity data-[starting-style]:opacity-0",
+            "z-50 min-w-40 origin-(--transform-origin) overflow-x-hidden overflow-y-auto rounded-lg border border-border bg-popover p-1 text-popover-foreground shadow-lg outline-none transition-opacity motion-reduce:transition-none data-[starting-style]:opacity-0",
             className,
           )}
           {...props}

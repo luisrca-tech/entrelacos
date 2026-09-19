@@ -14,10 +14,6 @@ const workspaceSource = readFileSync(
   resolve(import.meta.dirname, "SiteWorkspace.tsx"),
   "utf8",
 );
-const stylesSource = readFileSync(
-  resolve(import.meta.dirname, "../styles.css"),
-  "utf8",
-);
 const routeSource = readFileSync(
   resolve(import.meta.dirname, "../routes/sites.$siteId.tsx"),
   "utf8",
@@ -35,12 +31,8 @@ describe("admin shell safety regressions", () => {
   });
 
   it("keeps the create-site dialog from growing a horizontal scrollbar", () => {
-    expect(stylesSource).toMatch(
-      /\.create-site-dialog\s*\{[^}]*overflow-x:\s*hidden;[^}]*overflow-y:\s*auto;/s,
-    );
-    expect(stylesSource).toMatch(
-      /\.form-grid\s*>\s*\*\s*\{[^}]*min-width:\s*0;/s,
-    );
+    expect(panelSource).toContain("overflow-x-hidden overflow-y-auto");
+    expect(panelSource).toContain("min-w-0");
   });
 
   it("shows the wedding name in the shell instead of the site id", () => {
@@ -49,7 +41,9 @@ describe("admin shell safety regressions", () => {
       '{siteId && <span className="topbar-site">/ {siteId}</span>}',
     );
     expect(shellSource).not.toContain("<strong>{siteId}</strong>");
-    expect(shellSource).toContain("{siteName && <strong>{siteName}</strong>}");
+    expect(shellSource).toContain(
+      'siteName && <strong className="truncate">{siteName}</strong>',
+    );
     expect(panelSource).toContain("siteName={siteName}");
     expect(workspaceSource).toContain("onSiteName");
   });
@@ -58,7 +52,7 @@ describe("admin shell safety regressions", () => {
     expect(shellSource).toContain(
       'import { Link } from "@tanstack/react-router";',
     );
-    expect(shellSource).toContain('className="admin-nav-link is-active"');
+    expect(shellSource).toContain("bg-admin-terracotta-wash");
     expect(shellSource).toContain('to="/"');
     expect(shellSource).toContain("to={item.href}");
     expect(shellSource).toContain(
@@ -77,9 +71,7 @@ describe("admin shell safety regressions", () => {
     expect(workspaceSource).toContain(
       'import { Link } from "@tanstack/react-router";',
     );
-    expect(workspaceSource).toContain(
-      '<Link className="workspace-back" to="/">',
-    );
+    expect(workspaceSource).toContain("text-[0.88rem] text-admin-muted");
     expect(workspaceSource).not.toContain(
       '<a className="workspace-back" href="/">',
     );
