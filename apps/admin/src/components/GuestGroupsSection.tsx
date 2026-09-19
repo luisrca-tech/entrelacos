@@ -384,7 +384,7 @@ export function GuestGroupsSection({
 
   return (
     <section className={adminStyles.card} aria-labelledby="guest-groups-title">
-      <div className="flex items-end justify-between gap-3.5 max-[760px]:grid max-[760px]:grid-cols-1">
+      <div className="flex items-end justify-between gap-3.5 [@media(max-width:760px)]:grid [@media(max-width:760px)]:grid-cols-1">
         <div>
           <h2
             className={`m-0 mb-[18px] text-[clamp(1.8rem,3vw,2.7rem)] ${displayHeading}`}
@@ -399,7 +399,7 @@ export function GuestGroupsSection({
           </p>
         </div>
         {!inactive && (
-          <div className="ml-auto flex shrink-0 flex-wrap items-center gap-3.5 pb-1.5 max-[760px]:ml-0 max-[600px]:items-stretch">
+          <div className="ml-auto flex shrink-0 flex-wrap items-center gap-3.5 pb-1.5 [@media(max-width:760px)]:ml-0 [@media(max-width:600px)]:items-stretch">
             <Button
               disabled={pending}
               type="button"
@@ -535,7 +535,7 @@ export function GuestGroupsSection({
                 </p>
                 {form.members.map((member, index) => (
                   <div
-                    className="grid gap-2.5 max-[760px]:grid-cols-1"
+                    className="grid gap-2.5 [@media(max-width:760px)]:grid-cols-1"
                     key={member.id ?? index}
                   >
                     <div className="flex w-full items-center justify-between gap-3">
@@ -563,7 +563,7 @@ export function GuestGroupsSection({
                         updateMember(index, { fullName: event.target.value })
                       }
                     />
-                    <div className="flex w-full items-center justify-between gap-3 max-[760px]:grid max-[760px]:grid-cols-1">
+                    <div className="flex w-full items-center justify-between gap-3 [@media(max-width:760px)]:grid [@media(max-width:760px)]:grid-cols-1">
                       <label
                         className={adminStyles.checkbox}
                         htmlFor={`guest-representative-${index}`}
@@ -735,7 +735,7 @@ export function GuestGroupsSection({
             });
             return (
               <Card
-                className="items-stretch rounded-[10px] border border-admin-line bg-admin-surface p-5 max-[760px]:grid max-[760px]:grid-cols-1 [&_[data-slot=card-header]]:w-full [&_h3]:mb-2"
+                className="items-stretch rounded-[10px] border border-admin-line bg-admin-surface p-5 [@media(max-width:760px)]:grid [@media(max-width:760px)]:grid-cols-1 [&_[data-slot=card-header]]:w-full [&_h3]:mb-2"
                 key={group.id}
               >
                 <CardHeader className="flex w-full flex-row items-start justify-between">

@@ -338,7 +338,7 @@ export function SiteWorkspace({
 
   return (
     <>
-      <section className="mb-[38px] grid gap-2.5 max-[760px]:mb-7">
+      <section className="mb-[38px] grid gap-2.5 [@media(max-width:760px)]:mb-7">
         {heading.showBackLink && (
           <Link
             className="w-fit text-[0.88rem] text-admin-muted no-underline hover:text-admin-ink"
@@ -347,7 +347,7 @@ export function SiteWorkspace({
             ← Todos os casamentos
           </Link>
         )}
-        <div className="flex items-end justify-between gap-8 max-[760px]:flex-col max-[760px]:items-start max-[760px]:gap-4">
+        <div className="flex items-end justify-between gap-8 [@media(max-width:760px)]:flex-col [@media(max-width:760px)]:items-start [@media(max-width:760px)]:gap-4">
           <div>
             <h1
               className={`m-0 max-w-none text-[clamp(1.85rem,3vw,2.6rem)] ${displayHeading}`}
@@ -358,10 +358,10 @@ export function SiteWorkspace({
               {site.displayName}
             </p>
           </div>
-          <div className="flex shrink-0 flex-wrap items-center justify-end gap-3 max-[760px]:w-full max-[760px]:justify-start">
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-3 [@media(max-width:760px)]:w-full [@media(max-width:760px)]:justify-start">
             {site.publicUrl && (
               <a
-                className="inline-flex min-h-[42px] w-fit items-center justify-center rounded-lg border border-admin-graphite bg-admin-graphite px-[17px] py-2.5 text-[0.88rem] font-bold text-[#fffaf6] no-underline hover:bg-admin-ink max-[760px]:w-full"
+                className="inline-flex min-h-[42px] w-fit items-center justify-center rounded-lg border border-admin-graphite bg-admin-graphite px-[17px] py-2.5 text-[0.88rem] font-bold text-[#fffaf6] no-underline hover:bg-admin-ink [@media(max-width:760px)]:w-full"
                 href={publicSiteHandoffUrl(site.publicUrl, panelOrigin)}
               >
                 Ir para o site

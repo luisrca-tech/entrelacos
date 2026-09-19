@@ -101,7 +101,7 @@ export function SmsUsageSection({ siteId, lifecycle, owner }: Props) {
 
   return (
     <section className={adminStyles.card} aria-labelledby="sms-usage-title">
-      <div className="flex items-end justify-between gap-3.5 max-[760px]:grid max-[760px]:grid-cols-1">
+      <div className="flex items-end justify-between gap-3.5 [@media(max-width:760px)]:grid [@media(max-width:760px)]:grid-cols-1">
         <div>
           <h2
             className={`m-0 mb-[18px] text-[clamp(1.8rem,3vw,2.7rem)] ${displayHeading}`}
@@ -187,7 +187,7 @@ export function SmsUsageSection({ siteId, lifecycle, owner }: Props) {
         </>
       )}
       {owner && (
-        <div className="mt-5 flex items-end gap-4 max-[760px]:grid max-[760px]:grid-cols-1">
+        <div className="mt-5 flex items-end gap-4 [@media(max-width:760px)]:grid [@media(max-width:760px)]:grid-cols-1">
           <label
             className="grid flex-1 basis-60 gap-2 text-[0.88rem] font-semibold text-admin-graphite"
             htmlFor="sms-monthly-limit"

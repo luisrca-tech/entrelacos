@@ -39,12 +39,13 @@ export function AdminShell({
   return (
     <div
       className={cn(
-        "grid min-h-screen grid-cols-[248px_minmax(0,1fr)] max-[760px]:block min-[761px]:max-[1060px]:grid-cols-[216px_minmax(0,1fr)]",
-        siteId && "max-[760px]:pb-[calc(74px+env(safe-area-inset-bottom))]",
+        "grid min-h-screen grid-cols-[248px_minmax(0,1fr)] [@media(max-width:760px)]:block [@media(min-width:761px)_and_(max-width:1060px)]:grid-cols-[216px_minmax(0,1fr)]",
+        siteId &&
+          "[@media(max-width:760px)]:pb-[calc(74px+env(safe-area-inset-bottom))]",
       )}
     >
       <aside
-        className="sticky top-0 flex h-screen flex-col gap-[30px] border-r border-admin-line bg-admin-surface px-5 pt-[30px] pb-[22px] max-[760px]:hidden min-[761px]:max-[1060px]:w-[216px]"
+        className="sticky top-0 flex h-screen flex-col gap-[30px] border-r border-admin-line bg-admin-surface px-5 pt-[30px] pb-[22px] [@media(max-width:760px)]:hidden [@media(min-width:761px)_and_(max-width:1060px)]:w-[216px]"
         aria-label="Navegação principal"
       >
         <div className="grid gap-2">
@@ -90,24 +91,24 @@ export function AdminShell({
       </aside>
 
       <div className="flex min-h-screen min-w-0 flex-col">
-        <header className="mx-auto flex min-h-[82px] w-full max-w-[1440px] items-center justify-end gap-[18px] border-b border-admin-line px-[42px] py-[18px] max-[760px]:min-h-[68px] max-[760px]:px-5 max-[760px]:py-[14px] min-[761px]:max-[1060px]:px-7">
+        <header className="mx-auto flex min-h-[82px] w-full max-w-[1440px] items-center justify-end gap-[18px] border-b border-admin-line px-[42px] py-[18px] [@media(max-width:760px)]:min-h-[68px] [@media(max-width:760px)]:px-5 [@media(max-width:760px)]:py-[14px] [@media(min-width:761px)_and_(max-width:1060px)]:px-7">
           <Link
-            className="mr-auto hidden font-admin-display text-[1.45rem] tracking-[-0.03em] text-admin-graphite no-underline max-[760px]:block"
+            className="mr-auto hidden font-admin-display text-[1.45rem] tracking-[-0.03em] text-admin-graphite no-underline [@media(max-width:760px)]:block"
             to="/"
           >
             EntreLaços
           </Link>
-          <div className="mr-auto flex items-center gap-2 text-[0.85rem] text-admin-muted max-[760px]:hidden">
+          <div className="mr-auto flex items-center gap-2 text-[0.85rem] text-admin-muted [@media(max-width:760px)]:hidden">
             <span className="text-[0.7rem] font-bold uppercase tracking-[0.13em] leading-[1.3] text-admin-muted">
               {role === "OWNER" ? "Conta proprietária" : "Acesso de equipe"}
             </span>
           </div>
           <AccountMenu actor={actor} initials={initials} onLogout={onLogout} />
         </header>
-        <main className="mx-auto w-full max-w-[1440px] px-[42px] pt-12 pb-6 max-[760px]:px-5 max-[760px]:pt-[34px] max-[760px]:pb-6 min-[761px]:max-[1060px]:px-7">
+        <main className="mx-auto w-full max-w-[1440px] px-[42px] pt-12 pb-6 [@media(max-width:760px)]:px-5 [@media(max-width:760px)]:pt-[34px] [@media(max-width:760px)]:pb-6 [@media(min-width:761px)_and_(max-width:1060px)]:px-7">
           {children}
         </main>
-        <footer className="mx-auto mt-auto flex w-full max-w-[1440px] justify-between gap-6 border-t border-admin-line px-[42px] pt-6 pb-7 text-[0.78rem] text-admin-muted max-[760px]:hidden min-[761px]:max-[1060px]:px-7">
+        <footer className="mx-auto mt-auto flex w-full max-w-[1440px] justify-between gap-6 border-t border-admin-line px-[42px] pt-6 pb-7 text-[0.78rem] text-admin-muted [@media(max-width:760px)]:hidden [@media(min-width:761px)_and_(max-width:1060px)]:px-7">
           <span>EntreLaços · Painel administrativo</span>
           <span>Feito para cuidar de cada detalhe.</span>
         </footer>
@@ -115,7 +116,7 @@ export function AdminShell({
 
       {siteId && (
         <nav
-          className="fixed right-0 bottom-0 left-0 z-[8] hidden border-t border-admin-line bg-[rgb(255_253_249_/_96%)] px-2.5 pt-2 pb-[calc(8px+env(safe-area-inset-bottom))] shadow-[0_-8px_24px_rgb(68_49_36_/_8%)] max-[760px]:block"
+          className="fixed right-0 bottom-0 left-0 z-[8] hidden border-t border-admin-line bg-[rgb(255_253_249_/_96%)] px-2.5 pt-2 pb-[calc(8px+env(safe-area-inset-bottom))] shadow-[0_-8px_24px_rgb(68_49_36_/_8%)] [@media(max-width:760px)]:block"
           aria-label="Navegação do casamento"
         >
           <AdminNavigation area={area} items={navigation} mobile />

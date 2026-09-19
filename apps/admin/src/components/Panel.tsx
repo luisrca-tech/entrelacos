@@ -231,7 +231,7 @@ function OwnerSites() {
 
   return (
     <div>
-      <section className="mb-[38px] flex items-end justify-between gap-8 max-[760px]:mb-7 max-[760px]:flex-col max-[760px]:items-start max-[760px]:gap-5">
+      <section className="mb-[38px] flex items-end justify-between gap-8 [@media(max-width:760px)]:mb-7 [@media(max-width:760px)]:flex-col [@media(max-width:760px)]:items-start [@media(max-width:760px)]:gap-5">
         <div>
           <p className="m-0 mb-3.5 text-[0.7rem] font-bold uppercase tracking-[0.13em] leading-[1.3] text-admin-muted">
             Gestão global
@@ -245,7 +245,7 @@ function OwnerSites() {
         </div>
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <Button
-            className="shrink-0 max-[760px]:w-full"
+            className="shrink-0 [@media(max-width:760px)]:w-full"
             type="button"
             onClick={() => {
               setCreateError("");
@@ -254,7 +254,7 @@ function OwnerSites() {
           >
             Novo casamento
           </Button>
-          <DialogContent className="w-[min(680px,calc(100vw-32px))] max-w-[min(680px,calc(100vw-32px))] max-h-[calc(100vh-32px)] overflow-x-hidden overflow-y-auto rounded-2xl border border-admin-line bg-admin-surface p-[30px] shadow-admin max-[760px]:p-6 max-[760px]:px-[18px]">
+          <DialogContent className="w-[min(680px,calc(100vw-32px))] max-w-[min(680px,calc(100vw-32px))] max-h-[calc(100vh-32px)] overflow-x-hidden overflow-y-auto rounded-2xl border border-admin-line bg-admin-surface p-[30px] shadow-admin [@media(max-width:760px)]:p-6 [@media(max-width:760px)]:px-[18px]">
             <DialogTitle className="mb-2.5 font-admin-display text-[2.3rem] font-normal">
               Novo casamento
             </DialogTitle>
@@ -339,7 +339,7 @@ function OwnerSites() {
                   maxLength={120}
                 />
               </label>
-              <div className="col-span-full mt-2 flex justify-end gap-2.5 max-[760px]:grid max-[760px]:grid-cols-2 [&>*]:max-[760px]:w-full">
+              <div className="col-span-full mt-2 flex justify-end gap-2.5 [@media(max-width:760px)]:grid [@media(max-width:760px)]:grid-cols-2 [&>*]:[@media(max-width:760px)]:w-full">
                 <DialogClose
                   render={
                     <Button type="button" variant="ghost">
@@ -366,14 +366,14 @@ function OwnerSites() {
       )}
 
       <Card className="overflow-hidden rounded-[14px] border-admin-line bg-admin-surface shadow-[0_5px_24px_rgb(68_49_36_/_3%)]">
-        <CardHeader className="p-[26px_28px_20px] max-[760px]:px-[18px] max-[760px]:pt-[22px] max-[760px]:pb-4">
+        <CardHeader className="p-[26px_28px_20px] [@media(max-width:760px)]:px-[18px] [@media(max-width:760px)]:pt-[22px] [@media(max-width:760px)]:pb-4">
           <CardTitle>Casamentos cadastrados</CardTitle>
           <CardDescription>
             Selecione um casamento para acompanhar status e acessos.
           </CardDescription>
         </CardHeader>
-        <CardContent className="px-7 pb-7 max-[760px]:px-[18px] max-[760px]:pb-[18px]">
-          <div className="overflow-x-auto max-[760px]:hidden">
+        <CardContent className="px-7 pb-7 [@media(max-width:760px)]:px-[18px] [@media(max-width:760px)]:pb-[18px]">
+          <div className="overflow-x-auto [@media(max-width:760px)]:hidden">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -422,7 +422,7 @@ function OwnerSites() {
               </TableBody>
             </Table>
           </div>
-          <div className="hidden gap-2.5 max-[760px]:grid">
+          <div className="hidden gap-2.5 [@media(max-width:760px)]:grid">
             {sites.map((site) => (
               <Link
                 className="grid gap-[7px] rounded-xl border border-admin-line bg-admin-surface p-[18px] no-underline"

@@ -16,6 +16,20 @@ const adminTransitionSources = ["components/AdminShell.tsx"].map(
     source: readFileSync(resolve(import.meta.dirname, relativePath), "utf8"),
   }),
 );
+const responsiveSources = [
+  "lib/adminStyles.ts",
+  "components/AdminShell.tsx",
+  "components/AuthLayout.tsx",
+  "components/GuestGroupsSection.tsx",
+  "components/MessagesSection.tsx",
+  "components/Panel.tsx",
+  "components/RsvpSection.tsx",
+  "components/SiteWorkspace.tsx",
+  "components/SmsUsageSection.tsx",
+].map((relativePath) => ({
+  path: relativePath,
+  source: readFileSync(resolve(import.meta.dirname, relativePath), "utf8"),
+}));
 const adminStylesSource = readFileSync(
   resolve(import.meta.dirname, "lib/adminStyles.ts"),
   "utf8",
@@ -46,6 +60,19 @@ describe("admin Tailwind policy", () => {
       expect(source, path).toMatch(/\btransition(?:-[^\s"`]+)?/);
       expect(source, path).toContain("motion-reduce:transition-none");
     }
+  });
+
+  it("keeps legacy responsive boundaries inclusive in Tailwind utilities", () => {
+    const source = responsiveSources.map(({ source }) => source).join("\n");
+
+    expect(source).not.toContain("max-[760px]:");
+    expect(source).not.toContain("max-[600px]:");
+    expect(source).not.toContain("min-[761px]:max-[1060px]:");
+    expect(source).toContain("[@media(max-width:760px)]:");
+    expect(source).toContain("[@media(max-width:600px)]:");
+    expect(source).toContain(
+      "[@media(min-width:761px)_and_(max-width:1060px)]:",
+    );
   });
 
   it("keeps legacy data-form focus treatment in Tailwind form utilities", () => {

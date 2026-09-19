@@ -13,7 +13,7 @@ export const adminStyles = {
   muted: "text-admin-muted",
   checkbox: "flex items-center gap-2.5",
   dialog:
-    "max-h-[calc(100vh-32px)] max-w-[min(680px,calc(100vw-32px))] overflow-y-auto rounded-2xl border border-admin-line bg-admin-surface p-[30px] shadow-admin max-[760px]:p-6 max-[760px]:px-[18px]",
+    "max-h-[calc(100vh-32px)] max-w-[min(680px,calc(100vw-32px))] overflow-y-auto rounded-2xl border border-admin-line bg-admin-surface p-[30px] shadow-admin [@media(max-width:760px)]:p-6 [@media(max-width:760px)]:px-[18px]",
   groupCard:
     "items-stretch rounded-[10px] border border-admin-line bg-admin-beige p-5 [&_[data-slot=card-header]]:w-full [&_h3]:mb-2",
 } as const;

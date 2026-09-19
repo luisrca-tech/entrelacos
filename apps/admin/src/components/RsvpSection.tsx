@@ -380,7 +380,7 @@ export function RsvpSection({ siteId, lifecycle }: Props) {
 
   return (
     <section className={adminStyles.card} aria-labelledby="rsvp-title">
-      <div className="flex items-end justify-between gap-3.5 max-[760px]:grid max-[760px]:grid-cols-1">
+      <div className="flex items-end justify-between gap-3.5 [@media(max-width:760px)]:grid [@media(max-width:760px)]:grid-cols-1">
         <div>
           <h2
             className={`m-0 mb-[18px] text-[clamp(1.8rem,3vw,2.7rem)] ${displayHeading}`}
@@ -685,7 +685,7 @@ export function RsvpSection({ siteId, lifecycle }: Props) {
             <div className="mt-6 grid gap-3">
               {view?.groups.map((group) => (
                 <Card
-                  className="items-stretch rounded-[10px] border border-admin-line bg-admin-surface p-5 max-[760px]:grid max-[760px]:grid-cols-1 [&_[data-slot=card-header]]:w-full [&_h3]:mb-2"
+                  className="items-stretch rounded-[10px] border border-admin-line bg-admin-surface p-5 [@media(max-width:760px)]:grid [@media(max-width:760px)]:grid-cols-1 [&_[data-slot=card-header]]:w-full [&_h3]:mb-2"
                   key={group.id}
                 >
                   <CardHeader className="flex w-full flex-row items-start justify-between">
@@ -705,7 +705,7 @@ export function RsvpSection({ siteId, lifecycle }: Props) {
                     <ul className="m-0 list-none p-0">
                       {group.members.map((member) => (
                         <li
-                          className="grid grid-cols-[minmax(0,1fr)_minmax(180px,260px)] items-center gap-4 border-t border-admin-line py-3 first:border-t-0 first:pt-0 last:pb-0 max-[760px]:grid-cols-1"
+                          className="grid grid-cols-[minmax(0,1fr)_minmax(180px,260px)] items-center gap-4 border-t border-admin-line py-3 first:border-t-0 first:pt-0 last:pb-0 [@media(max-width:760px)]:grid-cols-1"
                           key={member.id}
                         >
                           <span>
@@ -747,11 +747,11 @@ export function RsvpSection({ siteId, lifecycle }: Props) {
               ))}
             </div>
           )}
-          <footer className="fixed right-0 bottom-0 left-[248px] z-[7] flex justify-center border-t border-admin-line bg-admin-canvas px-[42px] pt-4 pb-6 shadow-[0_-8px_24px_rgb(68_49_36_/_8%)] max-[760px]:right-0 max-[760px]:bottom-[calc(74px+env(safe-area-inset-bottom))] max-[760px]:left-0 max-[760px]:px-5 max-[760px]:pt-3 max-[760px]:pb-4 min-[761px]:max-[1060px]:left-[216px] min-[761px]:max-[1060px]:px-7">
+          <footer className="fixed right-0 bottom-0 left-[248px] z-[7] flex justify-center border-t border-admin-line bg-admin-canvas px-[42px] pt-4 pb-6 shadow-[0_-8px_24px_rgb(68_49_36_/_8%)] [@media(max-width:760px)]:right-0 [@media(max-width:760px)]:bottom-[calc(74px+env(safe-area-inset-bottom))] [@media(max-width:760px)]:left-0 [@media(max-width:760px)]:px-5 [@media(max-width:760px)]:pt-3 [@media(max-width:760px)]:pb-4 [@media(min-width:761px)_and_(max-width:1060px)]:left-[216px] [@media(min-width:761px)_and_(max-width:1060px)]:px-7">
             <Button
               type="button"
               disabled={inactive || pending || changedMembers.length === 0}
-              className="w-[70%] max-[760px]:w-full"
+              className="w-[70%] [@media(max-width:760px)]:w-full"
               onClick={() => void saveRsvp()}
             >
               {changedMembers.length === 0
