@@ -51,9 +51,26 @@ describe("GallerySection carousel composition", () => {
     );
   });
 
-  it("shows only the close icon in the gallery dialog on tablet and mobile", () => {
-    expect(carouselSource).toContain(
-      "max-[1024px]:[&>span:not([aria-hidden])]:hidden",
+  it("keeps the main-branch close label visible at every viewport", () => {
+    const closeButton = carouselSource.slice(
+      carouselSource.indexOf("<DialogClose"),
+      carouselSource.indexOf("</DialogClose>"),
     );
+
+    expect(closeButton).toContain("<span>{content.controls.closeLabel}</span>");
+    expect(closeButton).not.toContain("max-[1024px]");
+  });
+
+  it("neutralizes shared dialog defaults and fills the expanded viewport", () => {
+    expect(carouselSource).toContain("w-auto max-w-none");
+    expect(carouselSource).toContain("translate-none");
+    expect(carouselSource).toContain("rounded-none border-0");
+    expect(carouselSource).toContain("shadow-none");
+    expect(carouselSource).toContain("[&_[data-slot=carousel-content]]:h-full");
+    expect(carouselSource).toContain('<figure className="h-full min-h-0">');
+    expect(carouselSource).toContain(
+      '<figcaption className="mt-3 text-[0.9rem] leading-[1.4]">',
+    );
+    expect(carouselSource).toContain("compactOnTablet");
   });
 });

@@ -81,19 +81,30 @@ function GalleryMedia({ media }: { media: Media }) {
 type ControlsProps = {
   labels: GalleryContent["controls"];
   className?: string;
+  compactOnTablet?: boolean;
 };
 
-function GalleryControls({ labels, className = "" }: ControlsProps) {
+function GalleryControls({
+  labels,
+  className = "",
+  compactOnTablet = false,
+}: ControlsProps) {
   const { canScrollNext, canScrollPrevious, scrollNext, scrollPrevious } =
     useCarousel();
+  const responsiveNavClass = compactOnTablet
+    ? "max-[1024px]:px-[0.6rem]"
+    : "max-[720px]:px-3";
+  const responsiveButtonClass = compactOnTablet
+    ? "max-[1024px]:size-7 max-[1024px]:min-h-7 max-[1024px]:basis-7 max-[1024px]:text-[0.62rem]"
+    : "max-[720px]:basis-11 max-[720px]:shrink-0";
   return (
     <nav
-      className={`pointer-events-none absolute inset-x-0 top-0 z-[3] flex aspect-[4/3] items-center justify-between px-[clamp(0.75rem,2vw,1.5rem)] text-[0.72rem] uppercase tracking-[0.08em] max-[1024px]:px-[0.6rem] ${className}`}
+      className={`pointer-events-none absolute inset-x-0 top-0 z-[3] flex aspect-[4/3] items-center justify-between px-[clamp(0.75rem,2vw,1.5rem)] text-[0.72rem] uppercase tracking-[0.08em] ${responsiveNavClass} ${className}`}
       data-gallery-controls
       aria-label={labels.ariaLabel}
     >
       <button
-        className="pointer-events-auto inline-flex size-11 min-h-11 items-center justify-center border border-current bg-[rgba(244,240,232,0.88)] p-0 font-sans text-[0.72rem] uppercase tracking-[0.08em] text-template-ink backdrop-blur-[0.35rem] hover:bg-template-ink hover:text-template-ivory focus-visible:bg-template-ink focus-visible:text-template-ivory disabled:cursor-not-allowed disabled:opacity-35 max-[1024px]:size-7 max-[1024px]:min-h-7 max-[1024px]:basis-7 max-[1024px]:text-[0.62rem]"
+        className={`pointer-events-auto inline-flex size-11 min-h-11 items-center justify-center border border-current bg-[rgba(244,240,232,0.88)] p-0 font-sans text-[0.72rem] uppercase tracking-[0.08em] text-template-ink backdrop-blur-[0.35rem] hover:bg-template-ink hover:text-template-ivory focus-visible:bg-template-ink focus-visible:text-template-ivory disabled:cursor-not-allowed disabled:opacity-35 ${responsiveButtonClass}`}
         type="button"
         onClick={scrollPrevious}
         disabled={!canScrollPrevious}
@@ -103,7 +114,7 @@ function GalleryControls({ labels, className = "" }: ControlsProps) {
         <span className="sr-only">{labels.previousLabel}</span>
       </button>
       <button
-        className="pointer-events-auto inline-flex size-11 min-h-11 items-center justify-center border border-current bg-[rgba(244,240,232,0.88)] p-0 font-sans text-[0.72rem] uppercase tracking-[0.08em] text-template-ink backdrop-blur-[0.35rem] hover:bg-template-ink hover:text-template-ivory focus-visible:bg-template-ink focus-visible:text-template-ivory disabled:cursor-not-allowed disabled:opacity-35 max-[1024px]:size-7 max-[1024px]:min-h-7 max-[1024px]:basis-7 max-[1024px]:text-[0.62rem]"
+        className={`pointer-events-auto inline-flex size-11 min-h-11 items-center justify-center border border-current bg-[rgba(244,240,232,0.88)] p-0 font-sans text-[0.72rem] uppercase tracking-[0.08em] text-template-ink backdrop-blur-[0.35rem] hover:bg-template-ink hover:text-template-ivory focus-visible:bg-template-ink focus-visible:text-template-ivory disabled:cursor-not-allowed disabled:opacity-35 ${responsiveButtonClass}`}
         type="button"
         onClick={scrollNext}
         disabled={!canScrollNext}
@@ -200,15 +211,15 @@ export default function GalleryCarousel({ content }: Props) {
               </CarouselItem>
             ))}
           </CarouselContent>
-          <GalleryControls labels={content.controls} />
+          <GalleryControls labels={content.controls} compactOnTablet />
         </div>
         <GalleryCounter current={inlineSelected} total={content.items.length} />
       </Carousel>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent
-          className="fixed inset-0 z-[51] grid grid-rows-[auto_minmax(0,1fr)] gap-4 overflow-hidden bg-template-ink px-[clamp(1rem,3vw,2rem)] py-[clamp(1rem,3vw,2rem)] text-template-ivory outline-none max-[720px]:p-4"
-          overlayClassName="fixed inset-0 z-[50] bg-[rgba(10,16,13,0.82)] backdrop-blur-[0.5rem]"
+          className="fixed inset-0 z-[51] grid h-auto w-auto max-w-none translate-none grid-rows-[auto_minmax(0,1fr)] gap-4 overflow-hidden rounded-none border-0 bg-template-ink px-[clamp(1rem,3vw,2rem)] py-[clamp(1rem,3vw,2rem)] text-template-ivory shadow-none outline-none transition-none data-[starting-style]:opacity-100 max-[720px]:p-4"
+          overlayClassName="fixed inset-0 z-[50] bg-[rgba(10,16,13,0.82)] backdrop-blur-[0.5rem] transition-none data-[starting-style]:opacity-100"
         >
           <header className="flex items-start justify-between gap-4 max-[720px]:items-center">
             <div>
@@ -222,7 +233,7 @@ export default function GalleryCarousel({ content }: Props) {
               )}
             </div>
             <DialogClose
-              className="inline-flex min-h-11 min-w-0 items-center justify-between gap-3 border border-current bg-transparent px-[0.8rem] py-[0.65rem] font-sans text-[0.72rem] uppercase tracking-[0.08em] text-inherit hover:bg-template-ink hover:text-template-ivory focus-visible:bg-template-ink focus-visible:text-template-ivory max-[1024px]:size-11 max-[1024px]:min-h-11 max-[1024px]:min-w-11 max-[1024px]:justify-center max-[1024px]:gap-0 max-[1024px]:p-0 max-[1024px]:text-[1.35rem] max-[1024px]:tracking-normal max-[1024px]:[&>span:not([aria-hidden])]:hidden"
+              className="inline-flex min-h-11 min-w-0 items-center justify-between gap-3 border border-current bg-transparent px-[0.8rem] py-[0.65rem] font-sans text-[0.72rem] uppercase tracking-[0.08em] text-inherit hover:bg-template-ink hover:text-template-ivory focus-visible:bg-template-ink focus-visible:text-template-ivory"
               aria-label={content.controls.closeLabel}
             >
               <span aria-hidden="true">×</span>
@@ -232,7 +243,7 @@ export default function GalleryCarousel({ content }: Props) {
           <Carousel
             options={{ align: "start", loop }}
             setApi={setDialogApi}
-            className="grid min-h-0 grid-rows-[minmax(0,1fr)_auto] [&_[data-slot=carousel-content]]:overflow-x-auto [&_[data-slot=carousel-content]]:snap-x [&_[data-slot=carousel-content]]:snap-mandatory [&_[data-slot=carousel-content]]:[scrollbar-width:none] [&_[data-slot=carousel-content]::-webkit-scrollbar]:hidden data-[carousel-ready=true]:[&_[data-slot=carousel-content]]:overflow-hidden data-[carousel-ready=true]:[&_[data-slot=carousel-content]]:snap-none"
+            className="grid min-h-0 grid-rows-[minmax(0,1fr)_auto] [&_[data-slot=carousel-content]]:h-full [&_[data-slot=carousel-content]]:min-h-0 [&_[data-slot=carousel-content]]:overflow-x-auto [&_[data-slot=carousel-content]]:snap-x [&_[data-slot=carousel-content]]:snap-mandatory [&_[data-slot=carousel-content]]:[scrollbar-width:none] [&_[data-slot=carousel-content]::-webkit-scrollbar]:hidden data-[carousel-ready=true]:[&_[data-slot=carousel-content]]:overflow-hidden data-[carousel-ready=true]:[&_[data-slot=carousel-content]]:snap-none"
             aria-label={content.controls.ariaLabel}
           >
             <div className="relative min-h-0 h-full" data-gallery-viewport>
@@ -244,11 +255,15 @@ export default function GalleryCarousel({ content }: Props) {
                     aria-label={item.media.alt}
                     className="min-h-0 h-full min-w-0 basis-full snap-start"
                   >
-                    <figure>
+                    <figure className="h-full min-h-0">
                       <div className="relative h-full max-h-[calc(100svh-12rem)] overflow-hidden bg-[#111b16] aspect-auto [&_*]:!object-contain max-[720px]:max-h-[calc(100svh-10rem)]">
                         <GalleryMedia media={item.media} />
                       </div>
-                      {item.caption && <figcaption>{item.caption}</figcaption>}
+                      {item.caption && (
+                        <figcaption className="mt-3 text-[0.9rem] leading-[1.4]">
+                          {item.caption}
+                        </figcaption>
+                      )}
                     </figure>
                   </CarouselItem>
                 ))}
