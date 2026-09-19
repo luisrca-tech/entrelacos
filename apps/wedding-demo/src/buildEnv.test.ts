@@ -71,9 +71,7 @@ describe("progressive enhancement", () => {
       resolve(import.meta.dirname, "pages/index.astro"),
       "utf8",
     );
-    expect(source).toMatch(
-      /@media \(max-width:\s*1024px\)[\s\S]*?\.demo-monogram\s*\{[\s\S]*?display:\s*none;/,
-    );
+    expect(source).toContain("max-[1024px]:hidden");
   });
 
   it("keeps the header monogram ring visible after leaving the hero", () => {
@@ -81,11 +79,9 @@ describe("progressive enhancement", () => {
       resolve(import.meta.dirname, "pages/index.astro"),
       "utf8",
     );
-    const start = source.indexOf(".demo-monogram {");
-    expect(start).toBeGreaterThanOrEqual(0);
-    const block = source.slice(start, source.indexOf("}", start));
-    expect(block).toContain("border:");
-    expect(block).toContain("currentColor");
-    expect(block).not.toContain("rgba(244, 240, 232");
+    expect(source).toContain(
+      "border-[color-mix(in_srgb,currentColor_56%,transparent)]",
+    );
+    expect(source).not.toContain("border-[rgba(244,240,232");
   });
 });

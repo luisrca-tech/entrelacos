@@ -238,9 +238,15 @@ const guestAccess = {
 
 {inactive ? (
   <WeddingLayout locale="pt-BR" site={site} seo={seo}>
-    <section class="demo-inactive" aria-labelledby="demo-inactive-title">
-      <h1 id="demo-inactive-title">Site indisponível</h1>
-      <p>Este site de casamento está temporariamente indisponível.</p>
+    <section
+      class="grid min-h-[70vh] place-content-center bg-template-olive px-8 py-24 text-center text-template-ivory"
+      aria-labelledby="demo-inactive-title"
+    >
+      <h1
+        class="m-0 font-template-serif text-[clamp(2.5rem,7vw,6rem)] font-normal"
+        id="demo-inactive-title"
+      >Site indisponível</h1>
+      <p class="mt-4 mb-0">Este site de casamento está temporariamente indisponível.</p>
     </section>
   </WeddingLayout>
 ) : (
@@ -257,99 +263,26 @@ const guestAccess = {
     venue={venue}
   >
     <Fragment slot="head"><link rel="icon" href="/marina-caio-monogram.svg" type="image/svg+xml" /></Fragment>
-    <Fragment slot="header-addon"><span class="demo-monogram" aria-label="Monograma M e C">M&amp;C</span></Fragment>
+    <Fragment slot="header-addon"><span class="inline-flex h-9 min-w-9 items-center justify-center rounded-full border border-[color-mix(in_srgb,currentColor_56%,transparent)] font-template-serif text-[0.72rem] tracking-normal normal-case max-[1024px]:hidden" aria-label="Monograma M e C">M&amp;C</span></Fragment>
     <Fragment slot="admin-access">{access.siteId && access.apiOrigin && access.panelOrigin && <AdminRecognition {...access} client:load />}</Fragment>
     <Fragment slot="after-main">
-      <section id="guest-access" class="demo-guest-access" aria-label="Confirmação de presença">
+      <section
+        id="guest-access"
+        class="bg-template-ivory px-[var(--template-page-inset)] pt-[clamp(2.5rem,6vw,5rem)] pb-[clamp(1.5rem,3vw,2.5rem)] [&_[data-slot=guest-access]]:bg-transparent [&_[data-slot=guest-access]]:p-0"
+        aria-label="Confirmação de presença"
+      >
         <GuestAccess {...guestAccess} client:only="react">
-          <p slot="fallback" class="demo-client-fallback">Esta área interativa precisa de JavaScript. Ative-o para encontrar seu convite e responder à confirmação.</p>
+          <p slot="fallback" class="m-0 max-w-[38rem] border border-template-line p-5 leading-[1.6] text-template-muted">Esta área interativa precisa de JavaScript. Ative-o para encontrar seu convite e responder à confirmação.</p>
         </GuestAccess>
       </section>
-      <div id="mural" class="demo-mural">
+      <div
+        id="mural"
+        class="bg-template-ivory px-[var(--template-page-inset)] pt-[clamp(1rem,2vw,2rem)] pb-[clamp(4rem,8vw,6rem)]"
+      >
         <MessageMural {...guestAccess} client:only="react">
-          <p slot="fallback" class="demo-client-fallback">Esta área interativa precisa de JavaScript. Ative-o para consultar o mural.</p>
+          <p slot="fallback" class="m-0 max-w-[38rem] border border-template-line p-5 leading-[1.6] text-template-muted">Esta área interativa precisa de JavaScript. Ative-o para consultar o mural.</p>
         </MessageMural>
       </div>
     </Fragment>
   </WeddingHome>
 )}
-
-<style>
-  :global(:root) {
-    --demo-ink: #25352b;
-    --demo-muted: #637066;
-    --demo-paper: #f4f0e8;
-    --demo-line: rgba(37, 53, 43, 0.18);
-    --demo-page-inset: max(
-      clamp(1rem, 2.7778vw, 2.5rem),
-      calc((100vw - 120rem) / 2 + 2.5rem)
-    );
-  }
-
-  .demo-inactive {
-    display: grid;
-    min-height: 70vh;
-    place-content: center;
-    padding: 6rem 2rem;
-    background: #34483d;
-    color: #f4f0e8;
-    text-align: center;
-  }
-
-  .demo-inactive h1 {
-    margin: 0;
-    font-family: Georgia, "Times New Roman", serif;
-    font-size: clamp(2.5rem, 7vw, 6rem);
-    font-weight: 400;
-  }
-
-  .demo-inactive p {
-    margin: 1rem 0 0;
-  }
-
-  .demo-monogram {
-    display: inline-flex;
-    min-width: 2.25rem;
-    height: 2.25rem;
-    align-items: center;
-    justify-content: center;
-    border: 1px solid color-mix(in srgb, currentColor 56%, transparent);
-    border-radius: 50%;
-    font-family: Georgia, "Times New Roman", serif;
-    font-size: 0.72rem;
-    letter-spacing: 0;
-    text-transform: none;
-  }
-
-  @media (max-width: 1024px) {
-    .demo-monogram {
-      display: none;
-    }
-  }
-
-  .demo-guest-access {
-    padding: clamp(2.5rem, 6vw, 5rem) var(--demo-page-inset)
-      clamp(1.5rem, 3vw, 2.5rem);
-    background: var(--demo-paper);
-  }
-
-  .demo-guest-access :global(.entrelacos-guest-access) {
-    padding: 0;
-    background: transparent;
-  }
-
-  .demo-mural {
-    padding: clamp(1rem, 2vw, 2rem) var(--demo-page-inset)
-      clamp(4rem, 8vw, 6rem);
-    background: var(--demo-paper);
-  }
-
-  .demo-client-fallback {
-    max-width: 38rem;
-    margin: 0;
-    padding: 1.25rem;
-    border: 1px solid var(--demo-line);
-    color: var(--demo-muted);
-    line-height: 1.6;
-  }
-</style>

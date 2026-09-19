@@ -283,7 +283,11 @@ export function GuestAccess({
 
   if (!ready)
     return (
-      <section className={guestAccessSectionClass} aria-busy="true">
+      <section
+        className={guestAccessSectionClass}
+        data-slot="guest-access"
+        aria-busy="true"
+      >
         <p className={guestAccessEyebrowClass}>Confirmação de presença</p>
         <p>Carregando seu acesso…</p>
       </section>
@@ -671,6 +675,7 @@ export function GuestAccess({
   return (
     <section
       className={guestAccessSectionClass}
+      data-slot="guest-access"
       aria-labelledby="guest-access-title"
     >
       <div className={guestAccessIntroClass}>
