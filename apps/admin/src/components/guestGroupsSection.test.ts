@@ -41,6 +41,16 @@ describe("guest groups PIN copy", () => {
   });
 });
 
+describe("individual invitation form", () => {
+  it("uses a slim individual dialog instead of the group member list", () => {
+    expect(sectionSource).toContain("Nome do convidado");
+    expect(sectionSource).toContain("Número estrangeiro");
+    expect(sectionSource).toContain("adminStyles.checkbox");
+    expect(sectionSource).toContain("guestGroupSubmitLabel");
+    expect(sectionSource).toContain("guestGroupDraftUpdatePayload");
+  });
+});
+
 describe("admin toaster", () => {
   it("mounts the shared toaster in the hydrated shell so PIN actions can notify at the top center", () => {
     expect(shellSource).toContain("<Toaster />");

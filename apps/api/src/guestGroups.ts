@@ -184,6 +184,7 @@ function recordFor(group: GroupRow, members: MemberRow[]): GuestGroupRecord {
     id: group.id,
     siteId: group.siteId,
     name: group.name,
+    isIndividual: group.isIndividual,
     isForeign: group.isForeign,
     phone: group.phoneE164,
     members: members.map((member) => ({
@@ -449,6 +450,7 @@ export async function createGuestGroup(
         siteId,
         name: displayName(value.name),
         normalizedName: normalizeGuestName(value.name),
+        isIndividual: value.isIndividual,
         isForeign: value.isForeign,
         phoneE164: value.phone,
         representativeMemberId: representative.id,
@@ -508,6 +510,7 @@ export async function updateGuestGroup(
         (member) => member.isRepresentative,
       );
       if (!nextRepresentative) validationError();
+      if (current.isIndividual && nextMembers.length !== 1) validationError();
       const identityChanged =
         nextRepresentative.id !== current.representativeMemberId ||
         nextPhone !== current.phoneE164;

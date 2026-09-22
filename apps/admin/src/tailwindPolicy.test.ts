@@ -85,6 +85,7 @@ describe("admin Tailwind policy", () => {
     expect(adminStylesSource).toContain(
       "[&_select:focus]:border-admin-terracotta",
     );
+    expect(adminStylesSource).toContain('checkbox: "flex! items-center gap-2"');
     expect(adminStylesSource).toContain("[&_input:focus]:outline-[3px]");
     expect(adminStylesSource).toContain(
       "[&_input:focus]:outline-[rgb(168_77_57_/_20%)]",

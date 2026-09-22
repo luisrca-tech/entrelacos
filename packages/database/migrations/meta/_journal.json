@@ -57,6 +57,13 @@
       "when": 1789244123736,
       "tag": "0007_windy_sage",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1789320000000,
+      "tag": "0008_guest_group_individual",
+      "breakpoints": true
     }
   ]
 }

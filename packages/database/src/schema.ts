@@ -231,6 +231,7 @@ export const guestGroup = pgTable(
       .references(() => site.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
     normalizedName: text("normalized_name").notNull(),
+    isIndividual: boolean("is_individual").notNull().default(false),
     isForeign: boolean("is_foreign").notNull().default(false),
     phoneE164: text("phone_e164"),
     representativeMemberId: text("representative_member_id").notNull(),

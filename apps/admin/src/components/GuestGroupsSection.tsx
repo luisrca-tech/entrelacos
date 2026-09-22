@@ -43,10 +43,19 @@ import {
   guestAccessPinCopiedMessage,
   guestAccessPinCopyFailedMessage,
   guestAccessPinRotatedMessage,
+  guestGroupDeleteActionLabel,
+  guestGroupDeletedNotice,
+  guestGroupDeleteExactNameError,
+  guestGroupDialogDescription,
+  guestGroupDialogTitle,
   guestGroupDraftErrors,
   guestGroupDraftPayload,
+  guestGroupDraftUpdatePayload,
+  guestGroupListBadge,
   guestGroupMenuActionLabels,
   guestGroupMenuActions,
+  guestGroupSavedNotice,
+  guestGroupSubmitLabel,
 } from "./guestGroupsForm";
 import { emitGuestGroupsChanged } from "./guestGroupsRefresh";
 import { OverflowMenu } from "./OverflowMenu";
@@ -60,6 +69,7 @@ type GuestGroupsSectionProps = {
 
 function draftFromGroup(group: GuestGroupRecord): GuestGroupDraft {
   return {
+    individual: group.isIndividual,
     name: group.name,
     isForeign: group.isForeign,
     phone: group.phone ?? "",
@@ -258,15 +268,15 @@ export function GuestGroupsSection({
       if (editingId) {
         await apiRequest(`${path}/${encodeURIComponent(editingId)}`, {
           method: "PATCH",
-          body: guestGroupDraftPayload(form),
+          body: guestGroupDraftUpdatePayload(form),
         });
-        setNotice("Grupo atualizado.");
+        setNotice(guestGroupSavedNotice(form.individual, true));
       } else {
         await apiRequest(path, {
           method: "POST",
           body: guestGroupDraftPayload(form),
         });
-        setNotice("Grupo criado.");
+        setNotice(guestGroupSavedNotice(form.individual, false));
       }
       closeForm();
       await load();
@@ -286,7 +296,7 @@ export function GuestGroupsSection({
       deleteConfirmation,
     );
     if (!confirmation) {
-      setError("Digite o nome exato do grupo para confirmar a exclusão.");
+      setError(guestGroupDeleteExactNameError(group.isIndividual));
       return;
     }
     setPending(true);
@@ -297,7 +307,7 @@ export function GuestGroupsSection({
         `/v1/sites/${encodeURIComponent(siteId)}/groups/${encodeURIComponent(group.id)}`,
         { method: "DELETE", body: confirmation },
       );
-      setNotice("Grupo excluído.");
+      setNotice(guestGroupDeletedNotice(group.isIndividual));
       setDeleteTarget(null);
       setDeleteConfirmation("");
       if (editingId === group.id) closeForm();
@@ -445,10 +455,13 @@ export function GuestGroupsSection({
           <DialogTitle
             className={`font-admin-display text-4xl font-normal ${displayHeading}`}
           >
-            {editingId ? "Editar grupo" : "Novo grupo"}
+            {guestGroupDialogTitle(
+              form?.individual === true,
+              Boolean(editingId),
+            )}
           </DialogTitle>
           <DialogDescription className="leading-[1.6] text-admin-muted">
-            Escolha o representante e revise os dados antes de salvar.
+            {guestGroupDialogDescription(form?.individual === true)}
           </DialogDescription>
           {form && (
             <form
@@ -464,21 +477,21 @@ export function GuestGroupsSection({
                 className="grid gap-2 text-[0.88rem] font-semibold text-admin-graphite"
                 htmlFor="guest-group-name"
               >
-                Nome do grupo
+                {form.individual ? "Nome do convidado" : "Nome do grupo"}
                 <Input
                   id="guest-group-name"
                   maxLength={160}
                   required
                   value={form.name}
                   onChange={(event) => updateForm({ name: event.target.value })}
-                  placeholder="Família Silva"
+                  placeholder={form.individual ? "Ana Silva" : "Família Silva"}
                 />
               </label>
-              <fieldset>
-                <legend>Tipo de convite</legend>
+              {form.individual ? (
                 <label
                   className={adminStyles.checkbox}
                   htmlFor="guest-group-foreign"
+                  id="guest-group-foreign-label"
                 >
                   <Checkbox
                     id="guest-group-foreign"
@@ -487,23 +500,42 @@ export function GuestGroupsSection({
                       updateForm({ isForeign: checked === true })
                     }
                   />
-                  Grupo estrangeiro
+                  Número estrangeiro
                 </label>
-              </fieldset>
+              ) : (
+                <fieldset>
+                  <legend>Tipo de convite</legend>
+                  <label
+                    className={adminStyles.checkbox}
+                    htmlFor="guest-group-foreign"
+                    id="guest-group-foreign-label"
+                  >
+                    <Checkbox
+                      id="guest-group-foreign"
+                      checked={form.isForeign}
+                      onCheckedChange={(checked) =>
+                        updateForm({ isForeign: checked === true })
+                      }
+                    />
+                    Grupo estrangeiro
+                  </label>
+                </fieldset>
+              )}
               {form.isForeign ? (
                 <p
                   className="text-[0.87rem] leading-[1.6] text-admin-muted"
                   role="note"
                 >
-                  Grupo estrangeiro não usa telefone nem SMS. Este convite exige
-                  atendimento administrativo; não há autenticação alternativa.
+                  {form.individual
+                    ? "Número estrangeiro não usa telefone nem SMS. Este convite exige atendimento administrativo; não há autenticação alternativa."
+                    : "Grupo estrangeiro não usa telefone nem SMS. Este convite exige atendimento administrativo; não há autenticação alternativa."}
                 </p>
               ) : (
                 <label
                   className="grid gap-2 text-[0.88rem] font-semibold text-admin-graphite"
                   htmlFor="guest-group-phone"
                 >
-                  Celular do representante
+                  {form.individual ? "Celular" : "Celular do representante"}
                   <Input
                     id="guest-group-phone"
                     aria-describedby="guest-group-phone-help"
@@ -527,77 +559,82 @@ export function GuestGroupsSection({
                   </span>
                 </label>
               )}
-              <fieldset className="grid gap-4">
-                <legend>Convidados</legend>
-                <p className="text-[0.87rem] leading-[1.6] text-admin-muted">
-                  Escolha exatamente um representante. Ele será o contato
-                  responsável pela confirmação deste convite.
-                </p>
-                {form.members.map((member, index) => (
-                  <div
-                    className="grid gap-2.5 [@media(max-width:760px)]:grid-cols-1"
-                    key={member.id ?? index}
-                  >
-                    <div className="flex w-full items-center justify-between gap-3">
-                      <label className="m-0" htmlFor={`guest-member-${index}`}>
-                        Nome completo
-                      </label>
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        className="size-8"
-                        disabled={pending || form.members.length <= 1}
-                        type="button"
-                        aria-label="Remover convidado"
-                        onClick={() => removeMember(index)}
-                      >
-                        <Trash2 aria-hidden="true" />
-                      </Button>
-                    </div>
-                    <Input
-                      id={`guest-member-${index}`}
-                      maxLength={160}
-                      required
-                      value={member.fullName}
-                      onChange={(event) =>
-                        updateMember(index, { fullName: event.target.value })
-                      }
-                    />
-                    <div className="flex w-full items-center justify-between gap-3 [@media(max-width:760px)]:grid [@media(max-width:760px)]:grid-cols-1">
-                      <label
-                        className={adminStyles.checkbox}
-                        htmlFor={`guest-representative-${index}`}
-                      >
-                        <Checkbox
-                          id={`guest-representative-${index}`}
-                          checked={member.isRepresentative}
-                          onCheckedChange={(checked) =>
-                            checked && setRepresentative(index)
-                          }
-                        />
-                        Representante
-                      </label>
-                      {index === form.members.length - 1 && (
-                        <Button
-                          disabled={pending}
-                          type="button"
-                          variant="outline"
-                          onClick={addMember}
+              {!form.individual && (
+                <fieldset className="grid gap-4">
+                  <legend>Convidados</legend>
+                  <p className="text-[0.87rem] leading-[1.6] text-admin-muted">
+                    Escolha exatamente um representante. Ele será o contato
+                    responsável pela confirmação deste convite.
+                  </p>
+                  {form.members.map((member, index) => (
+                    <div
+                      className="grid gap-2.5 [@media(max-width:760px)]:grid-cols-1"
+                      key={member.id ?? index}
+                    >
+                      <div className="flex w-full items-center justify-between gap-3">
+                        <label
+                          className="m-0"
+                          htmlFor={`guest-member-${index}`}
                         >
-                          Adicionar convidado
+                          Nome completo
+                        </label>
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          className="size-8"
+                          disabled={pending || form.members.length <= 1}
+                          type="button"
+                          aria-label="Remover convidado"
+                          onClick={() => removeMember(index)}
+                        >
+                          <Trash2 aria-hidden="true" />
                         </Button>
-                      )}
+                      </div>
+                      <Input
+                        id={`guest-member-${index}`}
+                        maxLength={160}
+                        required
+                        value={member.fullName}
+                        onChange={(event) =>
+                          updateMember(index, { fullName: event.target.value })
+                        }
+                      />
+                      <div className="flex w-full items-center justify-between gap-3 [@media(max-width:760px)]:grid [@media(max-width:760px)]:grid-cols-1">
+                        <label
+                          className={adminStyles.checkbox}
+                          htmlFor={`guest-representative-${index}`}
+                        >
+                          <Checkbox
+                            id={`guest-representative-${index}`}
+                            checked={member.isRepresentative}
+                            onCheckedChange={(checked) =>
+                              checked && setRepresentative(index)
+                            }
+                          />
+                          Representante
+                        </label>
+                        {index === form.members.length - 1 && (
+                          <Button
+                            disabled={pending}
+                            type="button"
+                            variant="outline"
+                            onClick={addMember}
+                          >
+                            Adicionar convidado
+                          </Button>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </fieldset>
+                  ))}
+                </fieldset>
+              )}
               <div className={adminStyles.inline}>
                 <Button disabled={pending} type="submit">
-                  {pending
-                    ? "Salvando…"
-                    : editingId
-                      ? "Salvar grupo"
-                      : "Criar grupo"}
+                  {guestGroupSubmitLabel(
+                    form.individual,
+                    Boolean(editingId),
+                    pending,
+                  )}
                 </Button>
                 <Button
                   disabled={pending}
@@ -651,9 +688,10 @@ export function GuestGroupsSection({
           <AlertDialogHeader>
             <AlertDialogTitle>Excluir {deleteTarget?.name}?</AlertDialogTitle>
             <AlertDialogDescription>
-              Esta ação remove o grupo, convidados, respostas, histórico,
-              sessão, mensagem e dados de acesso associados. Digite o nome exato
-              do grupo para continuar: <strong>{deleteTarget?.name}</strong>
+              {deleteTarget?.isIndividual
+                ? "Esta ação remove o convidado, respostas, histórico, sessão, mensagem e dados de acesso associados. Digite o nome exato do convidado para continuar:"
+                : "Esta ação remove o grupo, convidados, respostas, histórico, sessão, mensagem e dados de acesso associados. Digite o nome exato do grupo para continuar:"}{" "}
+              <strong>{deleteTarget?.name}</strong>
             </AlertDialogDescription>
           </AlertDialogHeader>
           {error && (
@@ -665,7 +703,9 @@ export function GuestGroupsSection({
             className="grid gap-2 text-[0.88rem] font-semibold text-admin-graphite"
             htmlFor="delete-group-confirmation"
           >
-            Nome exato do grupo
+            {deleteTarget?.isIndividual
+              ? "Nome exato do convidado"
+              : "Nome exato do grupo"}
             <Input
               id="delete-group-confirmation"
               autoComplete="off"
@@ -683,7 +723,10 @@ export function GuestGroupsSection({
               disabled={pending || deleteConfirmation !== deleteTarget?.name}
               onClick={() => deleteTarget && void remove(deleteTarget)}
             >
-              {pending ? "Excluindo…" : "Excluir grupo definitivamente"}
+              {guestGroupDeleteActionLabel(
+                deleteTarget?.isIndividual === true,
+                pending,
+              )}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -743,11 +786,18 @@ export function GuestGroupsSection({
                     <CardTitle>{group.name}</CardTitle>
                     <CardDescription>
                       {group.isForeign
-                        ? "Grupo estrangeiro · sem SMS"
-                        : `Representante: ${group.members.find((member) => member.isRepresentative)?.fullName ?? "Não informado"} · ${group.phone}`}
+                        ? group.isIndividual
+                          ? "Número estrangeiro · sem SMS"
+                          : "Grupo estrangeiro · sem SMS"
+                        : group.isIndividual
+                          ? group.phone
+                          : `Representante: ${group.members.find((member) => member.isRepresentative)?.fullName ?? "Não informado"} · ${group.phone}`}
                     </CardDescription>
                     <Badge variant="outline">
-                      {group.members.length} convidados
+                      {guestGroupListBadge(
+                        group.isIndividual,
+                        group.members.length,
+                      )}
                     </Badge>
                   </div>
                   {actions.length > 0 && (
@@ -771,16 +821,18 @@ export function GuestGroupsSection({
                     </CardAction>
                   )}
                 </CardHeader>
-                <CardContent>
-                  <ul className="m-0 flex-1 basis-[220px] pl-5 leading-[1.6]">
-                    {group.members.map((member) => (
-                      <li key={member.id}>
-                        {member.fullName}
-                        {member.isRepresentative && " · representante"}
-                      </li>
-                    ))}
-                  </ul>
-                </CardContent>
+                {!group.isIndividual && (
+                  <CardContent>
+                    <ul className="m-0 flex-1 basis-[220px] pl-5 leading-[1.6]">
+                      {group.members.map((member) => (
+                        <li key={member.id}>
+                          {member.fullName}
+                          {member.isRepresentative && " · representante"}
+                        </li>
+                      ))}
+                    </ul>
+                  </CardContent>
+                )}
               </Card>
             );
           })}

@@ -6,6 +6,7 @@ Status: manual group PIN redesign implemented on 2026-09-12. Live Twilio deliver
 
 - A group belongs to one site, has a required name, one or more named members, and exactly one representative.
 - An individual invitation is a normal one-member group. No parallel identity model exists.
+- `isIndividual` is set at creation and is immutable. Individual records always have exactly one member and cannot be converted into a multi-member group. A one-member family group remains a group and can still receive more members.
 - Brazilian groups require one normalized mobile number in E.164 form. The number is unique inside a site and may be reused by another site.
 - Foreign groups have no phone or guest authentication path. They remain administrative records and the UI permanently explains that there is no SMS or alternative authentication.
 - OWNER may operate every site. SITE_ADMIN may operate only the assigned site. Inactive sites allow group reads but reject group mutations.

@@ -6,6 +6,8 @@ import {
   guestChallengeStartResponseSchema,
   guestChallengeVerifyInputSchema,
   guestGroupCreateInputSchema,
+  guestGroupRecordSchema,
+  guestGroupUpdateInputSchema,
   guestLookupInputSchema,
 } from "./index";
 
@@ -37,6 +39,7 @@ describe("Block 3 public contracts", () => {
       }),
     ).toEqual({
       name: "Família Silva",
+      isIndividual: false,
       isForeign: false,
       phone: "+5511999999999",
       members: [
@@ -87,6 +90,47 @@ describe("Block 3 public contracts", () => {
           { fullName: "Ana Silva", isRepresentative: true },
           { fullName: "João Silva", isRepresentative: true },
         ],
+      }),
+    ).toThrow();
+  });
+
+  it("marks individual invitations as one-member groups that cannot change kind", () => {
+    expect(
+      guestGroupCreateInputSchema.parse({
+        name: "Ana Silva",
+        isIndividual: true,
+        isForeign: false,
+        phone: "(11) 99999-9999",
+        members: [{ fullName: "Ana Silva", isRepresentative: true }],
+      }),
+    ).toMatchObject({ isIndividual: true, name: "Ana Silva" });
+    expect(() =>
+      guestGroupCreateInputSchema.parse({
+        name: "Família Silva",
+        isIndividual: true,
+        isForeign: false,
+        phone: "(11) 99999-9999",
+        members: [
+          { fullName: "Ana Silva", isRepresentative: true },
+          { fullName: "João Silva", isRepresentative: false },
+        ],
+      }),
+    ).toThrow();
+    expect(() =>
+      guestGroupUpdateInputSchema.parse({ isIndividual: true }),
+    ).toThrow();
+    expect(() =>
+      guestGroupRecordSchema.parse({
+        id: "group-1",
+        siteId: "site-demo",
+        name: "Ana Silva",
+        isForeign: false,
+        phone: "+5511999999999",
+        members: [
+          { id: "member-1", fullName: "Ana Silva", isRepresentative: true },
+        ],
+        createdAt: "2026-09-11T12:00:00.000Z",
+        updatedAt: "2026-09-11T12:00:00.000Z",
       }),
     ).toThrow();
   });

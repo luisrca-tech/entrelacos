@@ -215,6 +215,105 @@ describe("guest groups PostgreSQL integration", () => {
     expect(foreign).toMatchObject({ isForeign: true, phone: null });
   });
 
+  it("persists individual invitations and rejects adding members later", async () => {
+    const wedding = await createFixture("individual");
+    const created = await createGuestGroup(
+      connection.db,
+      { userId: "owner", role: "OWNER" },
+      wedding.id,
+      {
+        name: "Ana Solo",
+        isIndividual: true,
+        isForeign: false,
+        phone: "+5511977777777",
+        members: [{ fullName: "Ana Solo", isRepresentative: true }],
+      },
+      fixedNow,
+    );
+    expect(created).toMatchObject({
+      isIndividual: true,
+      name: "Ana Solo",
+      members: [{ fullName: "Ana Solo", isRepresentative: true }],
+    });
+    expect(created.members).toHaveLength(1);
+
+    const renamed = await updateGuestGroup(
+      connection.db,
+      { userId: "owner", role: "OWNER" },
+      wedding.id,
+      created.id,
+      {
+        name: "Ana Solo Corrigida",
+        members: [
+          {
+            id: created.members[0]?.id,
+            fullName: "Ana Solo Corrigida",
+            isRepresentative: true,
+          },
+        ],
+      },
+      new Date("2028-03-01T12:00:00.000Z"),
+    );
+    expect(renamed).toMatchObject({
+      isIndividual: true,
+      name: "Ana Solo Corrigida",
+    });
+
+    await expect(
+      updateGuestGroup(
+        connection.db,
+        { userId: "owner", role: "OWNER" },
+        wedding.id,
+        created.id,
+        {
+          members: [
+            {
+              id: created.members[0]?.id,
+              fullName: "Ana Solo Corrigida",
+              isRepresentative: true,
+            },
+            { fullName: "Bia Extra", isRepresentative: false },
+          ],
+        },
+        new Date("2028-03-02T12:00:00.000Z"),
+      ),
+    ).rejects.toMatchObject({ status: 400, code: "VALIDATION_ERROR" });
+
+    const family = await createGuestGroup(
+      connection.db,
+      { userId: "owner", role: "OWNER" },
+      wedding.id,
+      {
+        name: "Família Uma Pessoa",
+        isIndividual: false,
+        isForeign: false,
+        phone: "+5511966666666",
+        members: [{ fullName: "Carla Uma", isRepresentative: true }],
+      },
+      fixedNow,
+    );
+    expect(family.isIndividual).toBe(false);
+    const expanded = await updateGuestGroup(
+      connection.db,
+      { userId: "owner", role: "OWNER" },
+      wedding.id,
+      family.id,
+      {
+        members: [
+          {
+            id: family.members[0]?.id,
+            fullName: "Carla Uma",
+            isRepresentative: true,
+          },
+          { fullName: "Diego Dois", isRepresentative: false },
+        ],
+      },
+      new Date("2028-03-03T12:00:00.000Z"),
+    );
+    expect(expanded.members).toHaveLength(2);
+    expect(expanded.isIndividual).toBe(false);
+  });
+
   it("allows inactive reads but denies all group mutations", async () => {
     const wedding = await createFixture("inactive");
     const group = await createGuestGroup(

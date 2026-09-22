@@ -11,7 +11,7 @@ export const adminStyles = {
   notice:
     "border-l-[3px] border-admin-terracotta bg-admin-beige px-[18px] py-4 leading-[1.6] text-admin-graphite",
   muted: "text-admin-muted",
-  checkbox: "flex items-center gap-2.5",
+  checkbox: "flex! items-center gap-2",
   dialog:
     "max-h-[calc(100vh-32px)] max-w-[min(680px,calc(100vw-32px))] overflow-y-auto rounded-2xl border border-admin-line bg-admin-surface p-[30px] shadow-admin [@media(max-width:760px)]:p-6 [@media(max-width:760px)]:px-[18px]",
   groupCard:

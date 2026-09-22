@@ -573,6 +573,7 @@ const guestMembersWithRepresentativeSchema = z
 
 export const guestGroupCreateInputSchema = strictObject({
   name: nonEmptyText(160),
+  isIndividual: z.boolean().default(false),
   isForeign: z.boolean(),
   phone: brazilianPhoneInputSchema.nullable(),
   members: guestMembersWithRepresentativeSchema,
@@ -582,6 +583,13 @@ export const guestGroupCreateInputSchema = strictObject({
       code: "custom",
       path: ["phone"],
       message: "Foreign groups omit phone; Brazilian groups require one",
+    });
+  }
+  if (value.isIndividual && value.members.length !== 1) {
+    context.addIssue({
+      code: "custom",
+      path: ["members"],
+      message: "Individual invitations require exactly one member",
     });
   }
 });
@@ -642,6 +650,7 @@ export const guestGroupRecordSchema = strictObject({
   id: identifierSchema,
   siteId: siteIdSchema,
   name: nonEmptyText(160),
+  isIndividual: z.boolean(),
   isForeign: z.boolean(),
   phone: brazilianPhoneE164Schema.nullable(),
   members: guestMemberRecordsWithRepresentativeSchema,
