@@ -104,7 +104,7 @@ function GalleryControls({
       aria-label={labels.ariaLabel}
     >
       <button
-        className={`pointer-events-auto inline-flex size-11 min-h-11 items-center justify-center border border-current bg-[rgba(244,240,232,0.88)] p-0 font-sans text-[0.72rem] uppercase tracking-[0.08em] text-template-ink backdrop-blur-[0.35rem] hover:bg-template-ink hover:text-template-ivory focus-visible:bg-template-ink focus-visible:text-template-ivory disabled:cursor-not-allowed disabled:opacity-35 ${responsiveButtonClass}`}
+        className={`pointer-events-auto inline-flex size-11 min-h-11 cursor-pointer items-center justify-center border border-current bg-[rgba(244,240,232,0.88)] p-0 font-sans text-[0.72rem] uppercase tracking-[0.08em] text-template-ink backdrop-blur-[0.35rem] hover:bg-template-ink hover:text-template-ivory focus-visible:bg-template-ink focus-visible:text-template-ivory disabled:cursor-not-allowed disabled:opacity-35 ${responsiveButtonClass}`}
         type="button"
         onClick={scrollPrevious}
         disabled={!canScrollPrevious}
@@ -114,7 +114,7 @@ function GalleryControls({
         <span className="sr-only">{labels.previousLabel}</span>
       </button>
       <button
-        className={`pointer-events-auto inline-flex size-11 min-h-11 items-center justify-center border border-current bg-[rgba(244,240,232,0.88)] p-0 font-sans text-[0.72rem] uppercase tracking-[0.08em] text-template-ink backdrop-blur-[0.35rem] hover:bg-template-ink hover:text-template-ivory focus-visible:bg-template-ink focus-visible:text-template-ivory disabled:cursor-not-allowed disabled:opacity-35 ${responsiveButtonClass}`}
+        className={`pointer-events-auto inline-flex size-11 min-h-11 cursor-pointer items-center justify-center border border-current bg-[rgba(244,240,232,0.88)] p-0 font-sans text-[0.72rem] uppercase tracking-[0.08em] text-template-ink backdrop-blur-[0.35rem] hover:bg-template-ink hover:text-template-ivory focus-visible:bg-template-ink focus-visible:text-template-ivory disabled:cursor-not-allowed disabled:opacity-35 ${responsiveButtonClass}`}
         type="button"
         onClick={scrollNext}
         disabled={!canScrollNext}
@@ -194,7 +194,7 @@ export default function GalleryCarousel({ content }: Props) {
                     <GalleryMedia media={item.media} />
                     <button
                       type="button"
-                      className="absolute bottom-4 right-4 inline-flex min-h-11 translate-y-2 items-center gap-[0.6rem] border border-[rgba(244,240,232,0.72)] bg-[rgba(37,53,43,0.86)] px-[0.9rem] py-[0.65rem] font-sans text-[0.72rem] uppercase tracking-[0.08em] text-template-ivory opacity-0 transition-[opacity,transform,background-color] duration-[180ms] motion-reduce:transition-none hover:bg-template-ink focus-visible:translate-y-0 focus-visible:bg-template-ink focus-visible:opacity-100 group-hover:translate-y-0 group-hover:opacity-100 [@media(hover:none)]:translate-y-0 [@media(hover:none)]:opacity-100 [@media(max-width:1024px)]:right-[0.65rem] [@media(max-width:1024px)]:bottom-[0.65rem] [@media(max-width:1024px)]:size-7 [@media(max-width:1024px)]:min-h-7 [@media(max-width:1024px)]:justify-center [@media(max-width:1024px)]:gap-0 [@media(max-width:1024px)]:p-0 [@media(max-width:1024px)]:text-[0.7rem] [@media(max-width:1024px)]:[&>span:not([aria-hidden])]:hidden"
+                      className="absolute bottom-4 right-4 inline-flex min-h-11 translate-y-2 cursor-pointer items-center gap-[0.6rem] border border-[rgba(244,240,232,0.72)] bg-[rgba(37,53,43,0.86)] px-[0.9rem] py-[0.65rem] font-sans text-[0.72rem] uppercase tracking-[0.08em] text-template-ivory opacity-0 transition-[opacity,transform,background-color] duration-[180ms] motion-reduce:transition-none hover:bg-template-ink focus-visible:translate-y-0 focus-visible:bg-template-ink focus-visible:opacity-100 group-hover:translate-y-0 group-hover:opacity-100 [@media(hover:none)]:translate-y-0 [@media(hover:none)]:opacity-100 [@media(max-width:1024px)]:right-[0.65rem] [@media(max-width:1024px)]:bottom-[0.65rem] [@media(max-width:1024px)]:size-7 [@media(max-width:1024px)]:min-h-7 [@media(max-width:1024px)]:justify-center [@media(max-width:1024px)]:gap-0 [@media(max-width:1024px)]:p-0 [@media(max-width:1024px)]:text-[0.7rem] [@media(max-width:1024px)]:[&>span:not([aria-hidden])]:hidden"
                       onClick={() => openDialog(index)}
                       aria-label={`${content.controls.expandLabel}: ${item.media.alt}`}
                     >
