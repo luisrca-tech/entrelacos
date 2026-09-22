@@ -64,6 +64,13 @@
       "when": 1789320000000,
       "tag": "0008_guest_group_individual",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1790100946382,
+      "tag": "0009_cheerful_ezekiel_stane",
+      "breakpoints": true
     }
   ]
 }

@@ -130,7 +130,7 @@ export function Panel({ siteId, area }: { siteId?: string; area?: SiteArea }) {
 
 function SiteAdminRedirect({ siteId }: { siteId: string }) {
   useEffect(() => {
-    window.location.replace(`/sites/${encodeURIComponent(siteId)}/overview`);
+    window.location.replace(`/sites/${encodeURIComponent(siteId)}/guests`);
   }, [siteId]);
   return <ShellLoading>Abrindo seu casamento…</ShellLoading>;
 }
@@ -216,7 +216,7 @@ function OwnerSites() {
       });
       setDialogOpen(false);
       window.location.assign(
-        `/sites/${encodeURIComponent(result.site.id)}/overview`,
+        `/sites/${encodeURIComponent(result.site.id)}/guests`,
       );
     } catch (cause) {
       setCreateError(
@@ -389,7 +389,7 @@ function OwnerSites() {
                     <TableCell>
                       <Link
                         className="grid gap-1 no-underline"
-                        to="/sites/$siteId/overview"
+                        to="/sites/$siteId/guests"
                         params={{ siteId: site.id }}
                       >
                         <strong>{site.displayName}</strong>
@@ -411,7 +411,7 @@ function OwnerSites() {
                     <TableCell>
                       <Link
                         className="text-[0.88rem] font-bold text-admin-terracotta-deep no-underline"
-                        to="/sites/$siteId/overview"
+                        to="/sites/$siteId/guests"
                         params={{ siteId: site.id }}
                       >
                         Abrir
@@ -426,7 +426,7 @@ function OwnerSites() {
             {sites.map((site) => (
               <Link
                 className="grid gap-[7px] rounded-xl border border-admin-line bg-admin-surface p-[18px] no-underline"
-                to="/sites/$siteId/overview"
+                to="/sites/$siteId/guests"
                 params={{ siteId: site.id }}
                 key={site.id}
               >

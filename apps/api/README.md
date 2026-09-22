@@ -18,7 +18,7 @@ Outside Railway production, `APP_ENV` must explicitly be `development`, `test`, 
 
 The browser can reach login, logout, and the current-user endpoint through the panel's `/api/v1/` BFF. Only explicitly mounted auth routes are available; the unrestricted native Better Auth handler is not exposed. Block 2 implementation and completed acceptance evidence are recorded in `docs/block2Validation.md`.
 
-Block 3 adds tenant-scoped guest-group administration, exact guest lookup, OTP challenges, seven-day family bearer sessions, owner-issued demo grants, and a Twilio Verify adapter. Development defaults to simulated delivery. Real delivery remains disabled unless every explicit runtime gate in `.env.example` is satisfied, including destination allowlists and operator confirmation. Family tokens are sent in `Authorization`, never cookies, and public CORS uses each site's registered exact origins.
+Block 3 adds tenant-scoped guest-group administration, exact guest lookup using the registered phone, manual six-digit PIN challenges, seven-day family bearer sessions, and family RSVP access. No SMS provider or delivery simulation is used. Family tokens are sent in `Authorization`, never cookies, and public CORS uses each site's registered exact origins.
 
 Use `DATABASE_URL_TEST` only for integration tests and test migrations. `DATABASE_URL` serves explicitly selected development or production runtime. No command falls back from the test connection to development or production.
 

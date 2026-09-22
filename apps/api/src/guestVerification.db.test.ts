@@ -1,4 +1,4 @@
-import { createHmac, randomUUID } from "node:crypto";
+import { createHmac } from "node:crypto";
 import {
   createDatabaseConnection,
   type DatabaseConnection,
@@ -6,1084 +6,170 @@ import {
 } from "@entrelacos/database";
 import {
   familySession,
-  guestGroup,
   guestRateLimitEvent,
   guestVerificationChallenge,
-  guestVerificationSend,
   site,
-  siteOrigin,
-  smsSendReservation,
-  smsUsage,
 } from "@entrelacos/database/schema";
-import { eq, inArray, like } from "drizzle-orm";
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { eq, like } from "drizzle-orm";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   FAMILY_SESSION_TTL_MS,
-  hashFamilySessionToken,
   leaveFamilySession,
   readFamilySession,
 } from "./familySession";
-import { createGuestGroup, getGuestGroupAccessPin } from "./guestGroups";
 import {
-  hashGuestVerificationValue,
-  resendGuestChallenge,
-  startGuestChallenge,
-  verifyGuestChallenge,
-} from "./guestVerification";
+  createGuestGroup,
+  getGuestGroupAccessPin,
+  rotateGuestGroupAccessPin,
+} from "./guestGroups";
+import { startGuestChallenge, verifyGuestChallenge } from "./guestVerification";
 import { approveReview, createSite, startReview } from "./sites";
 
-const fixturePrefix = `t3-verification-${process.pid}-${randomUUID().slice(0, 8)}`;
-const fixedNow = new Date("2028-02-29T12:00:00.000Z");
-const fingerprintSecret =
-  "block3-test-fingerprint-secret-with-at-least-32-characters";
-const testIpSeed = randomUUID().replaceAll("-", "").slice(0, 12);
-const fixturePhoneSeed = String(
-  Number.parseInt(randomUUID().slice(0, 8), 16) % 10_000,
-).padStart(4, "0");
+const prefix = `pin-verification-${process.pid}`;
+const now = new Date("2028-02-29T12:00:00.000Z");
+const secret = "guest-verification-db-secret-with-at-least-32-characters";
+const phone = "+5511999999999";
 let connection: DatabaseConnection;
 const siteIds: string[] = [];
-const fixturePhones = new Map<string, string>();
-const fixtureIps = new Set<string>();
-let fixturePhoneCounter = 0;
+const verificationIps = new Set<string>();
 
-function time(minutes: number): Date {
-  return new Date(fixedNow.getTime() + minutes * 60 * 1000);
-}
-
-function testIp(suffix: string): string {
-  const value = `2001:db8:${testIpSeed}::${suffix}`;
-  fixtureIps.add(value);
-  return value;
-}
-
-function phoneForSite(siteId: string): string {
-  const existing = fixturePhones.get(siteId);
-  if (existing) return existing;
-  fixturePhoneCounter += 1;
-  const phone = `+55119${fixturePhoneSeed}${String(fixturePhoneCounter).padStart(4, "0")}`;
-  fixturePhones.set(siteId, phone);
-  return phone;
-}
-
-function phoneInputForSite(siteId: string): string {
-  const phone = phoneForSite(siteId);
-  return `(${phone.slice(3, 5)}) ${phone.slice(5, 10)}-${phone.slice(10)}`;
-}
-
-function testSessionToken(label: string): string {
-  return `${label}-${testIpSeed}`.padEnd(43, label[0] ?? "x").slice(0, 43);
-}
-
-function options(
-  ipAddress: string,
-  codeGenerator: () => string,
-  provider: Parameters<typeof startGuestChallenge>[3]["provider"],
-  sessionTokenGenerator?: () => string,
-) {
+function options(ip: string, challengeId: string, sessionToken?: string) {
+  verificationIps.add(ip);
   return {
-    ipAddress,
-    fingerprintSecret,
-    now: fixedNow,
-    provider,
-    codeGenerator,
-    sessionTokenGenerator,
-    exposeSimulationCode: true,
+    ipAddress: ip,
+    fingerprintSecret: secret,
+    now,
+    challengeIdGenerator: () => challengeId,
+    sessionTokenGenerator: sessionToken ? () => sessionToken : undefined,
   };
 }
 
-async function createFixture(suffix: string) {
-  const created = await createSite(
+function ipFingerprint(ip: string): string {
+  return createHmac("sha256", secret).update(`guest-ip:${ip}`).digest("hex");
+}
+
+async function fixture(label: string) {
+  const wedding = await createSite(
     connection.db,
     {
-      repositorySlug: `${fixturePrefix}-${suffix}`,
-      provisioningKey: `${fixturePrefix}:key-${suffix}`,
-      displayName: `Wedding ${suffix}`,
+      repositorySlug: `${prefix}-${label}`,
+      provisioningKey: `${prefix}:key-${label}`,
+      displayName: `Wedding ${label}`,
       coupleNames: ["Ana", "João"],
       eventDate: "2029-06-10",
     },
-    fixedNow,
+    now,
   );
-  siteIds.push(created.id);
-  const phone = phoneForSite(created.id);
-  await createGuestGroup(
+  siteIds.push(wedding.id);
+  const group = await createGuestGroup(
     connection.db,
     { userId: "owner", role: "OWNER" },
-    created.id,
+    wedding.id,
     {
       name: "Família Silva",
       isForeign: false,
       phone,
       members: [{ fullName: "Ana Silva", isRepresentative: true }],
     },
-    fixedNow,
+    now,
   );
-  await startReview(connection.db, created.id, {}, fixedNow);
-  await approveReview(connection.db, created.id, {}, fixedNow);
-  await connection.db.insert(siteOrigin).values({
-    id: `${created.id}-origin`,
-    siteId: created.id,
-    origin: `https://${created.id}.example.test`,
-  });
-  await connection.db
-    .update(site)
-    .set({ smsMonthlyLimit: 1_000 })
-    .where(eq(site.id, created.id));
-  return created;
+  await startReview(connection.db, wedding.id, {}, now);
+  await approveReview(connection.db, wedding.id, {}, now);
+  return { wedding, group };
 }
 
-function provider(
-  result: Awaited<
-    ReturnType<
-      NonNullable<Parameters<typeof startGuestChallenge>[3]["provider"]>["send"]
-    >
-  >,
-  mode: "MOCK" | "TWILIO" = "MOCK",
-) {
-  return {
-    mode,
-    send: vi.fn().mockResolvedValue(result),
-  };
-}
-
-describe("guest verification and family sessions PostgreSQL integration", () => {
+describe("manual guest PIN verification PostgreSQL boundary", () => {
   beforeAll(async () => {
     connection = createDatabaseConnection({ target: "test" });
     await verifyDatabaseConnection(connection);
     await connection.db
       .delete(site)
-      .where(like(site.repositorySlug, `${fixturePrefix}%`));
+      .where(like(site.repositorySlug, `${prefix}%`));
   });
 
   afterAll(async () => {
-    const phoneFingerprints = [...fixturePhones.values()].map((phone) =>
-      createHmac("sha256", fingerprintSecret)
-        .update(`guest-phone:${phone}`)
-        .digest("hex"),
-    );
-    const ipFingerprints = [...fixtureIps].map((ip) =>
-      createHmac("sha256", fingerprintSecret)
-        .update(`guest-ip:${ip}`)
-        .digest("hex"),
-    );
-    if (phoneFingerprints.length > 0) {
-      await connection.db
-        .delete(guestRateLimitEvent)
-        .where(
-          inArray(guestRateLimitEvent.phoneFingerprint, phoneFingerprints),
-        );
-    }
-    if (ipFingerprints.length > 0) {
-      await connection.db
-        .delete(guestRateLimitEvent)
-        .where(inArray(guestRateLimitEvent.ipFingerprint, ipFingerprints));
-    }
-    for (const siteId of siteIds) {
+    for (const siteId of siteIds)
       await connection.db.delete(site).where(eq(site.id, siteId));
+    for (const ip of verificationIps) {
+      await connection.db
+        .delete(guestRateLimitEvent)
+        .where(eq(guestRateLimitEvent.ipFingerprint, ipFingerprint(ip)));
     }
     await connection.close();
   });
 
-  it("reserves before provider, hashes code/token, verifies once, and leaves immediately", async () => {
-    const wedding = await createFixture("happy");
-    const sms = provider({
-      status: "PROVIDER_ACCEPTED",
-      providerReference: "mock-accepted",
-    });
+  it("requires the registered name and phone, then creates a family session", async () => {
+    const { wedding, group } = await fixture("identity");
     const challenge = await startGuestChallenge(
       connection.db,
       wedding.id,
-      { fullName: "áNA   SILVA", phone: phoneInputForSite(wedding.id) },
-      options(
-        testIp("10"),
-        () => "111111",
-        sms,
-        () => testSessionToken("happy"),
-      ),
+      { fullName: "áNA   SILVA", phone: "(11) 99999-9999" },
+      options("2001:db8::1", "c".repeat(43)),
     );
     expect(challenge).toMatchObject({
-      deliveryMode: "SIMULATED",
-      simulationCode: "111111",
-      sendStatus: "PROVIDER_ACCEPTED",
+      challengeId: "c".repeat(43),
+      expiresAt: new Date(now.getTime() + 10 * 60_000).toISOString(),
     });
-    expect(sms.send).toHaveBeenCalledOnce();
-    const [storedChallenge] = await connection.db
-      .select()
-      .from(guestVerificationChallenge)
-      .where(eq(guestVerificationChallenge.id, challenge.challengeId));
-    expect(storedChallenge?.codeHash).toBe(
-      hashGuestVerificationValue("111111"),
-    );
-    expect(storedChallenge?.codeHash).not.toContain("111111");
-    const sends = await connection.db
-      .select({
-        status: guestVerificationSend.status,
-        smsReservationId: guestVerificationSend.smsReservationId,
-      })
-      .from(guestVerificationSend)
-      .where(eq(guestVerificationSend.challengeId, challenge.challengeId));
-    expect(sends).toEqual([
-      {
-        status: "PROVIDER_ACCEPTED",
-        smsReservationId: expect.any(String),
-      },
-    ]);
-    const reservations = await connection.db
-      .select({ status: smsSendReservation.status })
-      .from(smsSendReservation)
-      .where(eq(smsSendReservation.id, sends[0]?.smsReservationId as string));
-    expect(reservations).toEqual([{ status: "PROVIDER_ACCEPTED" }]);
-    const usage = await connection.db
-      .select({
-        mode: smsUsage.mode,
-        reserved: smsUsage.reserved,
-        providerAccepted: smsUsage.providerAccepted,
-        consumed: smsUsage.consumed,
-      })
-      .from(smsUsage)
-      .where(eq(smsUsage.siteId, wedding.id));
-    expect(usage).toEqual([
-      {
-        mode: "SIMULATED",
-        reserved: 0,
-        providerAccepted: 1,
-        consumed: 1,
-      },
-    ]);
 
+    await expect(
+      startGuestChallenge(
+        connection.db,
+        wedding.id,
+        { fullName: "Ana Silva", phone: "+5511999999998" },
+        options("2001:db8::2", "d".repeat(43)),
+      ),
+    ).rejects.toMatchObject({ status: 404, code: "GUEST_NOT_FOUND" });
+
+    const pin = (
+      await getGuestGroupAccessPin(
+        connection.db,
+        { userId: "owner", role: "OWNER" },
+        wedding.id,
+        group.id,
+        secret,
+      )
+    ).accessPin;
     await expect(
       verifyGuestChallenge(
         connection.db,
         challenge.challengeId,
         { challengeId: challenge.challengeId, code: "000000" },
-        options(testIp("10"), () => "111111", sms),
+        options("2001:db8::1", "x".repeat(43)),
       ),
-    ).rejects.toMatchObject({ code: "INVALID_CODE", status: 401 });
-    const [afterWrong] = await connection.db
-      .select({ wrongAttempts: guestVerificationChallenge.wrongAttempts })
-      .from(guestVerificationChallenge)
-      .where(eq(guestVerificationChallenge.id, challenge.challengeId));
-    expect(afterWrong?.wrongAttempts).toBe(1);
-
+    ).rejects.toMatchObject({ status: 401, code: "INVALID_CODE" });
     const session = await verifyGuestChallenge(
       connection.db,
       challenge.challengeId,
-      { challengeId: challenge.challengeId, code: "111111" },
-      options(
-        testIp("10"),
-        () => "111111",
-        sms,
-        () => testSessionToken("happy"),
-      ),
+      { challengeId: challenge.challengeId, code: pin },
+      options("2001:db8::3", "x".repeat(43), "s".repeat(43)),
     );
-    expect(session.sessionToken).toBe(testSessionToken("happy"));
-    const [storedSession] = await connection.db
-      .select()
-      .from(familySession)
-      .where(eq(familySession.id, session.groupId));
-    expect(storedSession).toBeUndefined();
-    const sessionRows = await connection.db
-      .select()
-      .from(familySession)
-      .where(eq(familySession.groupId, session.groupId));
-    expect(sessionRows).toHaveLength(1);
-    expect(sessionRows[0]?.tokenHash).toBe(
-      hashFamilySessionToken(session.sessionToken),
-    );
-    expect(sessionRows[0]?.tokenHash).not.toContain(session.sessionToken);
-    expect(new Date(session.expiresAt).getTime()).toBe(
-      fixedNow.getTime() + FAMILY_SESSION_TTL_MS,
-    );
-    await expect(
-      verifyGuestChallenge(
-        connection.db,
-        challenge.challengeId,
-        { challengeId: challenge.challengeId, code: "111111" },
-        options(testIp("11"), () => "111111", sms),
-      ),
-    ).rejects.toMatchObject({ code: "CHALLENGE_NOT_ACTIVE" });
-    await expect(
-      readFamilySession(connection.db, session.sessionToken, fixedNow),
-    ).resolves.toMatchObject({
+    expect(session).toMatchObject({
       siteId: wedding.id,
-      groupId: session.groupId,
+      groupId: group.id,
+      sessionToken: "s".repeat(43),
     });
-    await expect(
-      leaveFamilySession(connection.db, session.sessionToken, fixedNow),
-    ).resolves.toEqual({ ok: true });
-    await expect(
-      readFamilySession(connection.db, session.sessionToken, fixedNow),
-    ).rejects.toMatchObject({
-      code: "SESSION_INVALID",
-    });
-  });
-
-  it("uses the persistent group PIN without calling an SMS provider", async () => {
-    const wedding = await createFixture("manual-pin");
-    await connection.db
-      .update(site)
-      .set({ smsMonthlyLimit: null })
-      .where(eq(site.id, wedding.id));
-    const [createdGroup] = await connection.db
-      .select({ id: guestGroup.id })
-      .from(guestGroup)
-      .where(eq(guestGroup.siteId, wedding.id));
-    const groupId = createdGroup?.id as string;
-    const { accessPin } = await getGuestGroupAccessPin(
-      connection.db,
-      { userId: "owner", role: "OWNER" },
-      wedding.id,
-      groupId,
-      fingerprintSecret,
-    );
-    const manualOptions = {
-      ipAddress: testIp("manual"),
-      fingerprintSecret,
-      now: fixedNow,
-      smsMode: "manual" as const,
-      sessionTokenGenerator: () => testSessionToken("manual"),
-    };
-    const challenge = await startGuestChallenge(
-      connection.db,
-      wedding.id,
-      { fullName: "Ana Silva", phone: phoneInputForSite(wedding.id) },
-      manualOptions,
-    );
-    expect(challenge).toMatchObject({
-      deliveryMode: "MANUAL_PIN",
-      sendStatus: "MANUAL",
-    });
-    expect(challenge).not.toHaveProperty("simulationCode");
-    expect(
-      await connection.db
-        .select()
-        .from(guestVerificationSend)
-        .where(eq(guestVerificationSend.challengeId, challenge.challengeId)),
-    ).toHaveLength(0);
-    expect(
-      await connection.db
-        .select()
-        .from(smsUsage)
-        .where(eq(smsUsage.siteId, wedding.id)),
-    ).toHaveLength(0);
-    await expect(
-      verifyGuestChallenge(
-        connection.db,
-        challenge.challengeId,
-        { challengeId: challenge.challengeId, code: "999999" },
-        manualOptions,
-      ),
-    ).rejects.toMatchObject({ code: "INVALID_CODE", status: 401 });
-    await expect(
-      verifyGuestChallenge(
-        connection.db,
-        challenge.challengeId,
-        { challengeId: challenge.challengeId, code: accessPin },
-        manualOptions,
-      ),
-    ).resolves.toMatchObject({ siteId: wedding.id, groupId });
-  });
-
-  it("blocks unconfigured and exhausted SMS before provider calls", async () => {
-    const wedding = await createFixture("quota-block");
-    const sms = provider({ status: "PROVIDER_ACCEPTED" });
-    await connection.db
-      .update(site)
-      .set({ smsMonthlyLimit: null })
-      .where(eq(site.id, wedding.id));
-    await expect(
-      startGuestChallenge(
-        connection.db,
-        wedding.id,
-        { fullName: "Ana Silva", phone: phoneForSite(wedding.id) },
-        options(testIp("quota-null"), () => "123456", sms),
-      ),
-    ).rejects.toMatchObject({
-      status: 503,
-      code: "SMS_QUOTA_NOT_CONFIGURED",
-    });
-    expect(sms.send).not.toHaveBeenCalled();
-
-    await connection.db
-      .update(site)
-      .set({ smsMonthlyLimit: 0 })
-      .where(eq(site.id, wedding.id));
-    await expect(
-      startGuestChallenge(
-        connection.db,
-        wedding.id,
-        { fullName: "Ana Silva", phone: phoneForSite(wedding.id) },
-        options(testIp("quota-zero"), () => "123456", sms),
-      ),
-    ).rejects.toMatchObject({ status: 429, code: "SMS_QUOTA_EXCEEDED" });
-    expect(sms.send).not.toHaveBeenCalled();
-
-    await connection.db
-      .update(site)
-      .set({ smsMonthlyLimit: 1 })
-      .where(eq(site.id, wedding.id));
-    const challenge = await startGuestChallenge(
-      connection.db,
-      wedding.id,
-      { fullName: "Ana Silva", phone: phoneForSite(wedding.id) },
-      options(testIp("quota-resend"), () => "123456", sms),
-    );
-    expect(sms.send).toHaveBeenCalledOnce();
-    await expect(
-      resendGuestChallenge(
-        connection.db,
-        challenge.challengeId,
-        { challengeId: challenge.challengeId },
-        {
-          ...options(testIp("quota-resend"), () => "234567", sms),
-          now: time(1),
-        },
-      ),
-    ).rejects.toMatchObject({ status: 429, code: "SMS_QUOTA_EXCEEDED" });
-    expect(sms.send).toHaveBeenCalledOnce();
-  });
-
-  it("allows an existing session to leave after the site becomes inactive", async () => {
-    const wedding = await createFixture("inactive-leave");
-    const sms = provider({ status: "PROVIDER_ACCEPTED" });
-    const challenge = await startGuestChallenge(
-      connection.db,
-      wedding.id,
-      { fullName: "Ana Silva", phone: phoneForSite(wedding.id) },
-      options(testIp("31"), () => "313131", sms),
-    );
-    const sessionToken = `inactive-${testIpSeed}`.padEnd(43, "i").slice(0, 43);
-    const session = await verifyGuestChallenge(
-      connection.db,
-      challenge.challengeId,
-      { challengeId: challenge.challengeId, code: "313131" },
-      options(
-        testIp("31"),
-        () => "313131",
-        sms,
-        () => sessionToken,
-      ),
-    );
-    await connection.db
-      .update(site)
-      .set({ lifecycle: "INACTIVE", previousLifecycle: "ACTIVE" })
-      .where(eq(site.id, wedding.id));
-
-    await expect(
-      leaveFamilySession(connection.db, session.sessionToken, fixedNow),
-    ).resolves.toEqual({ ok: true });
-    await expect(
-      readFamilySession(connection.db, session.sessionToken, fixedNow),
-    ).rejects.toMatchObject({ code: "SESSION_INVALID", status: 401 });
-  });
-
-  it("preserves expiry and wrong attempts on resend, while enforcing sixty seconds", async () => {
-    const wedding = await createFixture("resend");
-    const sms = provider({ status: "UNKNOWN", failureCode: "timeout" });
-    const first = await startGuestChallenge(
-      connection.db,
-      wedding.id,
-      { fullName: "Ana Silva", phone: phoneForSite(wedding.id) },
-      options(testIp("11"), () => "222222", sms),
+    expect(new Date(session.expiresAt).getTime()).toBe(
+      now.getTime() + FAMILY_SESSION_TTL_MS,
     );
     await expect(
-      resendGuestChallenge(
-        connection.db,
-        first.challengeId,
-        { challengeId: first.challengeId },
-        options(testIp("11"), () => "333333", sms),
-      ),
-    ).rejects.toMatchObject({ code: "RESEND_TOO_SOON", retryAfterSeconds: 60 });
-    await expect(
-      resendGuestChallenge(
-        connection.db,
-        first.challengeId,
-        { challengeId: first.challengeId },
-        { ...options(testIp("11"), () => "333333", sms), now: time(1) },
-      ),
-    ).resolves.toMatchObject({
-      challengeId: first.challengeId,
-      expiresAt: first.expiresAt,
-      simulationCode: "333333",
-      sendStatus: "UNKNOWN",
-    });
-    const [challenge] = await connection.db
-      .select()
-      .from(guestVerificationChallenge)
-      .where(eq(guestVerificationChallenge.id, first.challengeId));
-    expect(challenge?.wrongAttempts).toBe(0);
-    expect(challenge?.codeHash).toBe(hashGuestVerificationValue("333333"));
-    expect(sms.send).toHaveBeenCalledTimes(2);
-
-    await expect(
-      resendGuestChallenge(
-        connection.db,
-        first.challengeId,
-        { challengeId: first.challengeId },
-        { ...options(testIp("11"), () => "333333", sms), now: time(2) },
-      ),
-    ).resolves.toMatchObject({ sendStatus: "UNKNOWN" });
-    const [resendUsage] = await connection.db
-      .select({
-        mode: smsUsage.mode,
-        unknown: smsUsage.unknown,
-        consumed: smsUsage.consumed,
-      })
-      .from(smsUsage)
-      .where(eq(smsUsage.siteId, wedding.id));
-    expect(resendUsage).toEqual({
-      mode: "SIMULATED",
-      unknown: 3,
-      consumed: 3,
-    });
-    await expect(
-      resendGuestChallenge(
-        connection.db,
-        first.challengeId,
-        { challengeId: first.challengeId },
-        { ...options(testIp("11"), () => "333333", sms), now: time(3) },
-      ),
-    ).rejects.toMatchObject({ code: "OTP_SEND_RATE_LIMITED", status: 429 });
-
-    const [sendRecord] = await connection.db
-      .select({ groupId: guestVerificationSend.groupId })
-      .from(guestVerificationSend)
-      .where(eq(guestVerificationSend.challengeId, first.challengeId))
-      .limit(1);
-    const phoneFingerprint = createHmac("sha256", fingerprintSecret)
-      .update(`guest-phone:${phoneForSite(wedding.id)}`)
-      .digest("hex");
-    await connection.db.insert(guestRateLimitEvent).values(
-      Array.from({ length: 7 }, (_, index) => ({
-        id: `${fixturePrefix}-long-${index}-${randomUUID()}`,
-        siteId: wedding.id,
-        groupId: sendRecord?.groupId ?? null,
-        action: "OTP_SEND" as const,
-        scopeKey: `send:group:${wedding.id}:${sendRecord?.groupId}:${phoneFingerprint}:long`,
-        ipFingerprint: "f".repeat(64),
-        phoneFingerprint,
-        occurredAt: new Date(fixedNow.getTime() + (index + 4) * 60 * 1000),
-      })),
-    );
-    await expect(
-      startGuestChallenge(
-        connection.db,
-        wedding.id,
-        { fullName: "Ana Silva", phone: phoneForSite(wedding.id) },
-        { ...options(testIp("11"), () => "444444", sms), now: time(16) },
-      ),
-    ).rejects.toMatchObject({ code: "OTP_SEND_RATE_LIMITED", status: 429 });
-  });
-
-  it("keeps a newer resend usable when an older provider call fails late", async () => {
-    const wedding = await createFixture("late-send-failure");
-    const accepted = provider({ status: "PROVIDER_ACCEPTED" });
-    const first = await startGuestChallenge(
-      connection.db,
-      wedding.id,
-      { fullName: "Ana Silva", phone: phoneForSite(wedding.id) },
-      options(testIp("late-send"), () => "111111", accepted),
-    );
-    let signalStarted: (() => void) | undefined;
-    const started = new Promise<void>((resolve) => {
-      signalStarted = resolve;
-    });
-    let finishDelayed:
-      | ((result: { status: "FAILED_FINAL"; failureCode: string }) => void)
-      | undefined;
-    const delayedFailure = {
-      mode: "MOCK" as const,
-      send: vi.fn(
-        () =>
-          new Promise<{ status: "FAILED_FINAL"; failureCode: string }>(
-            (resolve) => {
-              finishDelayed = resolve;
-              signalStarted?.();
-            },
-          ),
-      ),
-    };
-    const olderResend = resendGuestChallenge(
-      connection.db,
-      first.challengeId,
-      { challengeId: first.challengeId },
-      {
-        ...options(testIp("late-send"), () => "222222", delayedFailure),
-        now: time(1),
-      },
-    );
-    await started;
-
-    const newerResend = await resendGuestChallenge(
-      connection.db,
-      first.challengeId,
-      { challengeId: first.challengeId },
-      {
-        ...options(testIp("late-send"), () => "333333", accepted),
-        now: time(2),
-      },
-    );
-    expect(newerResend).toMatchObject({
-      sendStatus: "PROVIDER_ACCEPTED",
-      simulationCode: "333333",
-    });
-
-    finishDelayed?.({ status: "FAILED_FINAL", failureCode: "late-failure" });
-    const olderResult = await olderResend;
-    expect(olderResult).toMatchObject({ sendStatus: "FAILED_FINAL" });
-    expect(olderResult.simulationCode).toBeUndefined();
-    const [stored] = await connection.db
-      .select({ codeHash: guestVerificationChallenge.codeHash })
-      .from(guestVerificationChallenge)
-      .where(eq(guestVerificationChallenge.id, first.challengeId));
-    expect(stored?.codeHash).toBe(hashGuestVerificationValue("333333"));
-    await expect(
-      verifyGuestChallenge(
-        connection.db,
-        first.challengeId,
-        { challengeId: first.challengeId, code: "333333" },
-        options(testIp("late-send"), () => "333333", accepted),
-      ),
-    ).resolves.toMatchObject({ groupId: expect.any(String) });
-  });
-
-  it("finalizes only site accounting when group deletion wins a provider race", async () => {
-    const wedding = await createFixture("deleted-during-send");
-    let startedSend: (() => void) | undefined;
-    const started = new Promise<void>((resolve) => {
-      startedSend = resolve;
-    });
-    let finishSend:
-      | ((result: {
-          status: "PROVIDER_ACCEPTED";
-          providerReference: string;
-        }) => void)
-      | undefined;
-    const delayed = {
-      mode: "MOCK" as const,
-      send: vi.fn(
-        () =>
-          new Promise<{
-            status: "PROVIDER_ACCEPTED";
-            providerReference: string;
-          }>((resolve) => {
-            finishSend = resolve;
-            startedSend?.();
-          }),
-      ),
-    };
-    const pending = startGuestChallenge(
-      connection.db,
-      wedding.id,
-      { fullName: "Ana Silva", phone: phoneForSite(wedding.id) },
-      options(testIp("deleted-send"), () => "112233", delayed),
-    );
-    await started;
-    const [send] = await connection.db
-      .select({
-        id: guestVerificationSend.id,
-        groupId: guestVerificationSend.groupId,
-        challengeId: guestVerificationSend.challengeId,
-        smsReservationId: guestVerificationSend.smsReservationId,
-      })
-      .from(guestVerificationSend)
-      .where(eq(guestVerificationSend.siteId, wedding.id));
-    await connection.db
-      .delete(guestGroup)
-      .where(eq(guestGroup.id, send?.groupId as string));
-    finishSend?.({
-      status: "PROVIDER_ACCEPTED",
-      providerReference: "accepted-after-delete",
-    });
-    await expect(pending).rejects.toMatchObject({
-      status: 503,
-      code: "SERVICE_UNAVAILABLE",
-    });
-    await expect(
-      connection.db
-        .select()
-        .from(guestVerificationChallenge)
-        .where(eq(guestVerificationChallenge.id, send?.challengeId as string)),
-    ).resolves.toHaveLength(0);
-    await expect(
-      connection.db
-        .select()
-        .from(guestVerificationSend)
-        .where(eq(guestVerificationSend.id, send?.id as string)),
-    ).resolves.toHaveLength(0);
-    await expect(
-      connection.db
-        .select({
-          status: smsSendReservation.status,
-          providerReference: smsSendReservation.providerReference,
-        })
-        .from(smsSendReservation)
-        .where(eq(smsSendReservation.id, send?.smsReservationId as string)),
-    ).resolves.toEqual([
-      {
-        status: "PROVIDER_ACCEPTED",
-        providerReference: "accepted-after-delete",
-      },
-    ]);
-  });
-
-  it("supersedes an active challenge when the guest starts again", async () => {
-    const wedding = await createFixture("superseded");
-    const sms = provider({ status: "PROVIDER_ACCEPTED" });
-    const first = await startGuestChallenge(
-      connection.db,
-      wedding.id,
-      { fullName: "Ana Silva", phone: phoneForSite(wedding.id) },
-      options(testIp("16"), () => "121212", sms),
-    );
-    const second = await startGuestChallenge(
-      connection.db,
-      wedding.id,
-      { fullName: "Ana Silva", phone: phoneForSite(wedding.id) },
-      options(testIp("17"), () => "343434", sms),
-    );
-    expect(second.challengeId).not.toBe(first.challengeId);
-    await expect(
-      verifyGuestChallenge(
-        connection.db,
-        first.challengeId,
-        { challengeId: first.challengeId, code: "121212" },
-        options(testIp("16"), () => "121212", sms),
-      ),
-    ).rejects.toMatchObject({ code: "CHALLENGE_NOT_ACTIVE" });
-    await expect(
-      verifyGuestChallenge(
-        connection.db,
-        second.challengeId,
-        { challengeId: second.challengeId, code: "343434" },
-        options(
-          testIp("17"),
-          () => "343434",
-          sms,
-          () => testSessionToken("superseded"),
-        ),
-      ),
-    ).resolves.toMatchObject({ sessionToken: testSessionToken("superseded") });
-  });
-
-  it("persists final provider failure without permitting local-code verification", async () => {
-    const wedding = await createFixture("failed");
-    const sms = provider({ status: "FAILED_FINAL", failureCode: "blocked" });
-    const challenge = await startGuestChallenge(
-      connection.db,
-      wedding.id,
-      { fullName: "Ana Silva", phone: phoneForSite(wedding.id) },
-      options(testIp("12"), () => "444444", sms),
-    );
-    expect(challenge.sendStatus).toBe("FAILED_FINAL");
-    expect(challenge.simulationCode).toBeUndefined();
-    const [stored] = await connection.db
-      .select({ codeHash: guestVerificationChallenge.codeHash })
-      .from(guestVerificationChallenge)
-      .where(eq(guestVerificationChallenge.id, challenge.challengeId));
-    expect(stored?.codeHash).toBeNull();
-    await expect(
-      verifyGuestChallenge(
-        connection.db,
-        challenge.challengeId,
-        { challengeId: challenge.challengeId, code: "444444" },
-        options(testIp("12"), () => "444444", sms),
-      ),
-    ).rejects.toMatchObject({ code: "CHALLENGE_NOT_ACTIVE" });
-  });
-
-  it("keeps real-provider delivery labeled and prevents provider-mode switching on resend", async () => {
-    const wedding = await createFixture("real-mode");
-    const twilio = provider({ status: "PROVIDER_ACCEPTED" }, "TWILIO");
-    const challenge = await startGuestChallenge(
-      connection.db,
-      wedding.id,
-      { fullName: "Ana Silva", phone: phoneForSite(wedding.id) },
-      options(testIp("18"), () => "888888", twilio),
-    );
-    expect(challenge.deliveryMode).toBe("REAL_SMS");
-    expect(challenge.simulationCode).toBeUndefined();
-    await expect(
-      resendGuestChallenge(
-        connection.db,
-        challenge.challengeId,
-        { challengeId: challenge.challengeId },
-        {
-          ...options(
-            testIp("18"),
-            () => "999999",
-            provider({ status: "PROVIDER_ACCEPTED" }),
-          ),
-          now: time(1),
-        },
-      ),
-    ).rejects.toMatchObject({
-      code: "VERIFICATION_CONFIGURATION_ERROR",
-      status: 503,
-    });
-    await expect(
-      startGuestChallenge(
-        connection.db,
-        wedding.id,
-        { fullName: "Ana Silva", phone: phoneForSite(wedding.id) },
-        {
-          ...options(
-            testIp("18b"),
-            () => "777777",
-            provider({ status: "PROVIDER_ACCEPTED" }),
-          ),
-          provider: undefined,
-          smsMode: "real",
-        },
-      ),
-    ).rejects.toMatchObject({
-      code: "VERIFICATION_CONFIGURATION_ERROR",
-      status: 503,
-    });
-  });
-
-  it("checks real verification outside the transaction and re-locks before creating a session", async () => {
-    const wedding = await createFixture("twilio-check");
-    const twilio = {
-      mode: "TWILIO" as const,
-      send: vi.fn().mockResolvedValue({
-        status: "PROVIDER_ACCEPTED" as const,
-        providerReference: "verify-service",
-      }),
-      check: vi.fn().mockResolvedValue({
-        status: "UNKNOWN" as const,
-        failureCode: "timeout",
-      }),
-    };
-    const challenge = await startGuestChallenge(
-      connection.db,
-      wedding.id,
-      { fullName: "Ana Silva", phone: phoneForSite(wedding.id) },
-      options(testIp("twilio-check"), () => "121212", twilio),
-    );
-    expect(challenge.deliveryMode).toBe("REAL_SMS");
-    expect(challenge.simulationCode).toBeUndefined();
-    const [stored] = await connection.db
-      .select({ codeHash: guestVerificationChallenge.codeHash })
-      .from(guestVerificationChallenge)
-      .where(eq(guestVerificationChallenge.id, challenge.challengeId));
-    expect(stored?.codeHash).toBeNull();
-
-    await expect(
-      verifyGuestChallenge(
-        connection.db,
-        challenge.challengeId,
-        { challengeId: challenge.challengeId, code: "121212" },
-        options(testIp("twilio-check"), () => "121212", twilio),
-      ),
-    ).rejects.toMatchObject({
-      code: "PROVIDER_VERIFICATION_UNKNOWN",
-      status: 503,
-    });
-    const [afterUnknown] = await connection.db
-      .select({ wrongAttempts: guestVerificationChallenge.wrongAttempts })
-      .from(guestVerificationChallenge)
-      .where(eq(guestVerificationChallenge.id, challenge.challengeId));
-    expect(afterUnknown?.wrongAttempts).toBe(0);
-
-    twilio.check.mockResolvedValue({ status: "BOGUS" } as never);
-    await expect(
-      verifyGuestChallenge(
-        connection.db,
-        challenge.challengeId,
-        { challengeId: challenge.challengeId, code: "121212" },
-        options(testIp("twilio-check"), () => "121212", twilio),
-      ),
-    ).rejects.toMatchObject({
-      code: "PROVIDER_VERIFICATION_UNKNOWN",
-      status: 503,
-    });
-    const [afterMalformed] = await connection.db
-      .select({ wrongAttempts: guestVerificationChallenge.wrongAttempts })
-      .from(guestVerificationChallenge)
-      .where(eq(guestVerificationChallenge.id, challenge.challengeId));
-    expect(afterMalformed?.wrongAttempts).toBe(0);
-
-    twilio.check.mockResolvedValue({ status: "DECLINED" as const });
-    await expect(
-      verifyGuestChallenge(
-        connection.db,
-        challenge.challengeId,
-        { challengeId: challenge.challengeId, code: "121212" },
-        options(testIp("twilio-check"), () => "121212", twilio),
-      ),
-    ).rejects.toMatchObject({ code: "INVALID_CODE", status: 401 });
-    twilio.check.mockResolvedValue({ status: "APPROVED" as const });
-    await expect(
-      verifyGuestChallenge(
-        connection.db,
-        challenge.challengeId,
-        { challengeId: challenge.challengeId, code: "121212" },
-        options(
-          testIp("twilio-check"),
-          () => "121212",
-          twilio,
-          () => testSessionToken("twilio"),
-        ),
-      ),
-    ).resolves.toMatchObject({ sessionToken: testSessionToken("twilio") });
-    expect(twilio.check).toHaveBeenCalledTimes(4);
-  });
-
-  it("enforces the global short-window send limit per IP", async () => {
-    const wedding = await createFixture("ip-limit");
-    const ipAddress = testIp("19");
-    const ipFingerprint = createHmac("sha256", fingerprintSecret)
-      .update(`guest-ip:${ipAddress}`)
-      .digest("hex");
-    await connection.db.insert(guestRateLimitEvent).values(
-      Array.from({ length: 10 }, (_, index) => ({
-        id: `${fixturePrefix}-ip-${index}-${randomUUID()}`,
-        siteId: null,
-        groupId: null,
-        action: "OTP_SEND" as const,
-        scopeKey: `send:ip:short:${ipFingerprint}`,
-        ipFingerprint,
-        phoneFingerprint: null,
-        occurredAt: new Date(fixedNow.getTime() - index * 1000),
-      })),
-    );
-    await expect(
-      startGuestChallenge(
-        connection.db,
-        wedding.id,
-        { fullName: "Ana Silva", phone: phoneForSite(wedding.id) },
-        options(ipAddress, () => "989898", provider({ status: "UNKNOWN" })),
-      ),
-    ).rejects.toMatchObject({
-      code: "OTP_SEND_RATE_LIMITED",
-      status: 429,
-    });
-  });
-
-  it("enforces the independent short-window send limit per phone across sites", async () => {
-    const first = await createFixture("phone-limit-first");
-    const phone = phoneForSite(first.id);
-    const second = await createSite(
-      connection.db,
-      {
-        repositorySlug: `${fixturePrefix}-phone-limit-second`,
-        provisioningKey: `${fixturePrefix}:phone-limit-second`,
-        displayName: "Phone Limit Second",
-        coupleNames: ["Bia", "Caio"],
-        eventDate: "2029-06-10",
-      },
-      fixedNow,
-    );
-    siteIds.push(second.id);
-    await createGuestGroup(
-      connection.db,
-      { userId: "owner", role: "OWNER" },
-      second.id,
-      {
-        name: "Família Silva Second",
-        isForeign: false,
-        phone,
-        members: [{ fullName: "Ana Silva", isRepresentative: true }],
-      },
-      fixedNow,
-    );
-    await startReview(connection.db, second.id, {}, fixedNow);
-    await approveReview(connection.db, second.id, {}, fixedNow);
-
-    for (let attempt = 0; attempt < 3; attempt += 1) {
-      await startGuestChallenge(
-        connection.db,
-        first.id,
-        { fullName: "Ana Silva", phone },
-        options(
-          testIp(`phone-${attempt}`),
-          () => "123123",
-          provider({ status: "UNKNOWN" }),
-        ),
-      );
-    }
-    await expect(
-      startGuestChallenge(
-        connection.db,
-        second.id,
-        { fullName: "Ana Silva", phone },
-        options(
-          testIp("phone-fourth"),
-          () => "123123",
-          provider({ status: "UNKNOWN" }),
-        ),
-      ),
-    ).rejects.toMatchObject({ code: "OTP_SEND_RATE_LIMITED", status: 429 });
-  });
-
-  it("marks expired challenges and rejects sessions at the absolute expiry", async () => {
-    const wedding = await createFixture("expiry");
-    const sms = provider({ status: "PROVIDER_ACCEPTED" });
-    const expiredChallenge = await startGuestChallenge(
-      connection.db,
-      wedding.id,
-      { fullName: "Ana Silva", phone: phoneForSite(wedding.id) },
-      options(testIp("20"), () => "101010", sms),
-    );
-    await expect(
-      verifyGuestChallenge(
-        connection.db,
-        expiredChallenge.challengeId,
-        { challengeId: expiredChallenge.challengeId, code: "101010" },
-        { ...options(testIp("20"), () => "101010", sms), now: time(10) },
-      ),
-    ).rejects.toMatchObject({ code: "CHALLENGE_EXPIRED", status: 410 });
-    const [expiredRecord] = await connection.db
-      .select({ status: guestVerificationChallenge.status })
-      .from(guestVerificationChallenge)
-      .where(eq(guestVerificationChallenge.id, expiredChallenge.challengeId));
-    expect(expiredRecord?.status).toBe("EXPIRED");
-
-    const validChallenge = await startGuestChallenge(
-      connection.db,
-      wedding.id,
-      { fullName: "Ana Silva", phone: phoneForSite(wedding.id) },
-      {
-        ...options(
-          testIp("21"),
-          () => "202020",
-          sms,
-          () => testSessionToken("expiry"),
-        ),
-        now: time(11),
-      },
-    );
-    const session = await verifyGuestChallenge(
-      connection.db,
-      validChallenge.challengeId,
-      { challengeId: validChallenge.challengeId, code: "202020" },
-      {
-        ...options(
-          testIp("21"),
-          () => "202020",
-          sms,
-          () => testSessionToken("expiry"),
-        ),
-        now: time(11),
-      },
-    );
+      readFamilySession(connection.db, session.sessionToken, now),
+    ).resolves.toMatchObject({ siteId: wedding.id, groupId: group.id });
     await expect(
       readFamilySession(
         connection.db,
         session.sessionToken,
-        new Date(time(11).getTime() + FAMILY_SESSION_TTL_MS),
+        new Date(now.getTime() + FAMILY_SESSION_TTL_MS),
       ),
-    ).rejects.toMatchObject({ code: "SESSION_INVALID", status: 401 });
+    ).rejects.toMatchObject({ status: 401, code: "SESSION_INVALID" });
   });
 
-  it("locks after five wrong codes and blocks a new challenge during cooldown", async () => {
-    const wedding = await createFixture("cooldown");
-    const sms = provider({ status: "UNKNOWN" });
+  it("expires challenges and locks after five wrong PIN attempts", async () => {
+    const { wedding } = await fixture("cooldown");
     const challenge = await startGuestChallenge(
       connection.db,
       wedding.id,
-      { fullName: "Ana Silva", phone: phoneForSite(wedding.id) },
-      options(testIp("13"), () => "555555", sms),
+      { fullName: "Ana Silva", phone },
+      options("2001:db8::10", "e".repeat(43)),
     );
     for (let attempt = 0; attempt < 4; attempt += 1) {
       await expect(
@@ -1091,65 +177,151 @@ describe("guest verification and family sessions PostgreSQL integration", () => 
           connection.db,
           challenge.challengeId,
           { challengeId: challenge.challengeId, code: "000000" },
-          options(testIp("13"), () => "555555", sms),
+          options(`2001:db8::${11 + attempt}`, "f".repeat(43)),
         ),
-      ).rejects.toMatchObject({ code: "INVALID_CODE" });
+      ).rejects.toMatchObject({ status: 401, code: "INVALID_CODE" });
     }
     await expect(
       verifyGuestChallenge(
         connection.db,
         challenge.challengeId,
         { challengeId: challenge.challengeId, code: "000000" },
-        options(testIp("13"), () => "555555", sms),
+        options("2001:db8::15", "g".repeat(43)),
       ),
-    ).rejects.toMatchObject({
-      code: "CHALLENGE_COOLDOWN",
-      retryAfterSeconds: 900,
-    });
+    ).rejects.toMatchObject({ status: 429, code: "CHALLENGE_COOLDOWN" });
     await expect(
       startGuestChallenge(
         connection.db,
         wedding.id,
-        { fullName: "Ana Silva", phone: phoneForSite(wedding.id) },
-        options(testIp("14"), () => "666666", sms),
+        { fullName: "Ana Silva", phone },
+        options("2001:db8::16", "z".repeat(43)),
       ),
-    ).rejects.toMatchObject({ code: "CHALLENGE_COOLDOWN", status: 429 });
-    const [stored] = await connection.db
-      .select({
-        wrongAttempts: guestVerificationChallenge.wrongAttempts,
-        status: guestVerificationChallenge.status,
-      })
-      .from(guestVerificationChallenge)
-      .where(eq(guestVerificationChallenge.id, challenge.challengeId));
-    expect(stored).toEqual({ wrongAttempts: 5, status: "LOCKED" });
+    ).rejects.toMatchObject({ status: 429, code: "CHALLENGE_COOLDOWN" });
+
+    const { wedding: expiredWedding } = await fixture("expiry");
+    const expired = await startGuestChallenge(
+      connection.db,
+      expiredWedding.id,
+      { fullName: "Ana Silva", phone },
+      options("2001:db8::20", "h".repeat(43)),
+    );
+    await expect(
+      verifyGuestChallenge(
+        connection.db,
+        expired.challengeId,
+        { challengeId: expired.challengeId, code: "000000" },
+        {
+          ...options("2001:db8::21", "i".repeat(43)),
+          now: new Date(now.getTime() + 10 * 60_000),
+        },
+      ),
+    ).rejects.toMatchObject({ status: 410, code: "CHALLENGE_EXPIRED" });
   });
 
-  it("allows only one concurrent verification to create a family session", async () => {
-    const wedding = await createFixture("concurrent");
-    const sms = provider({ status: "PROVIDER_ACCEPTED" });
+  it("revokes superseded challenges, rotated PINs, and family sessions", async () => {
+    const { wedding, group } = await fixture("rotation");
+    const first = await startGuestChallenge(
+      connection.db,
+      wedding.id,
+      { fullName: "Ana Silva", phone },
+      options("2001:db8::30", "j".repeat(43)),
+    );
+    const second = await startGuestChallenge(
+      connection.db,
+      wedding.id,
+      { fullName: "Ana Silva", phone },
+      options("2001:db8::31", "k".repeat(43)),
+    );
+    const [revoked] = await connection.db
+      .select({ status: guestVerificationChallenge.status })
+      .from(guestVerificationChallenge)
+      .where(eq(guestVerificationChallenge.id, first.challengeId));
+    expect(revoked?.status).toBe("REVOKED");
+
+    const pin = (
+      await getGuestGroupAccessPin(
+        connection.db,
+        { userId: "owner", role: "OWNER" },
+        wedding.id,
+        group.id,
+        secret,
+      )
+    ).accessPin;
+    const session = await verifyGuestChallenge(
+      connection.db,
+      second.challengeId,
+      { challengeId: second.challengeId, code: pin },
+      options("2001:db8::32", "l".repeat(43), "m".repeat(43)),
+    );
+    await rotateGuestGroupAccessPin(
+      connection.db,
+      { userId: "owner", role: "OWNER" },
+      wedding.id,
+      group.id,
+      secret,
+      now,
+    );
+    await expect(
+      readFamilySession(connection.db, session.sessionToken, now),
+    ).rejects.toMatchObject({ status: 401, code: "SESSION_INVALID" });
+  });
+
+  it("allows explicit leave after the site becomes inactive", async () => {
+    const { wedding, group } = await fixture("leave-inactive");
     const challenge = await startGuestChallenge(
       connection.db,
       wedding.id,
-      { fullName: "Ana Silva", phone: phoneForSite(wedding.id) },
-      options(
-        testIp("15"),
-        () => "777777",
-        sms,
-        () => testSessionToken("concurrent"),
-      ),
+      { fullName: "Ana Silva", phone },
+      options("2001:db8::40", "l".repeat(43)),
     );
+    const pin = (
+      await getGuestGroupAccessPin(
+        connection.db,
+        { userId: "owner", role: "OWNER" },
+        wedding.id,
+        group.id,
+        secret,
+      )
+    ).accessPin;
+    const session = await verifyGuestChallenge(
+      connection.db,
+      challenge.challengeId,
+      { challengeId: challenge.challengeId, code: pin },
+      options("2001:db8::41", "m".repeat(43), "n".repeat(43)),
+    );
+    await connection.db
+      .update(site)
+      .set({ lifecycle: "INACTIVE", previousLifecycle: "ACTIVE" })
+      .where(eq(site.id, wedding.id));
+    await expect(
+      leaveFamilySession(connection.db, session.sessionToken, now),
+    ).resolves.toEqual({ ok: true });
+  });
+
+  it("allows only one concurrent PIN verification to create a session", async () => {
+    const { wedding, group } = await fixture("concurrent");
+    const challenge = await startGuestChallenge(
+      connection.db,
+      wedding.id,
+      { fullName: "Ana Silva", phone },
+      options("2001:db8::50", "o".repeat(43)),
+    );
+    const pin = (
+      await getGuestGroupAccessPin(
+        connection.db,
+        { userId: "owner", role: "OWNER" },
+        wedding.id,
+        group.id,
+        secret,
+      )
+    ).accessPin;
     const results = await Promise.allSettled(
       Array.from({ length: 2 }, () =>
         verifyGuestChallenge(
           connection.db,
           challenge.challengeId,
-          { challengeId: challenge.challengeId, code: "777777" },
-          options(
-            testIp("15"),
-            () => "777777",
-            sms,
-            () => testSessionToken("concurrent"),
-          ),
+          { challengeId: challenge.challengeId, code: pin },
+          options("2001:db8::51", "p".repeat(43), "q".repeat(43)),
         ),
       ),
     );
@@ -1159,19 +331,37 @@ describe("guest verification and family sessions PostgreSQL integration", () => 
     expect(
       results.filter((result) => result.status === "rejected"),
     ).toHaveLength(1);
-    const sessions = await connection.db
-      .select()
-      .from(familySession)
-      .where(
-        eq(
-          familySession.groupId,
-          (
-            results.find(
-              (result) => result.status === "fulfilled",
-            ) as PromiseFulfilledResult<{ groupId: string }>
-          ).value.groupId,
+    expect(
+      await connection.db
+        .select()
+        .from(familySession)
+        .where(eq(familySession.groupId, group.id)),
+    ).toHaveLength(1);
+  });
+
+  it("propagates the PIN verification rate limit", async () => {
+    const ip = "2001:db8::60";
+    const challengeId = "r".repeat(43);
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      await expect(
+        verifyGuestChallenge(
+          connection.db,
+          challengeId,
+          { challengeId, code: "000000" },
+          options(ip, "s".repeat(43)),
         ),
-      );
-    expect(sessions).toHaveLength(1);
+      ).rejects.toMatchObject({ status: 404, code: "CHALLENGE_NOT_FOUND" });
+    }
+    await expect(
+      verifyGuestChallenge(
+        connection.db,
+        challengeId,
+        { challengeId, code: "000000" },
+        options(ip, "t".repeat(43)),
+      ),
+    ).rejects.toMatchObject({
+      status: 429,
+      code: "PIN_VERIFY_RATE_LIMITED",
+    });
   });
 });

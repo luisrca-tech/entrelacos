@@ -1,11 +1,10 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { Panel } from "../components/Panel";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/sites/$siteId/overview")({
-  component: SiteOverviewRoute,
+  beforeLoad: ({ params }) => {
+    throw redirect({
+      to: "/sites/$siteId/guests",
+      params: { siteId: params.siteId },
+    });
+  },
 });
-
-function SiteOverviewRoute() {
-  const { siteId } = Route.useParams();
-  return <Panel key={siteId} siteId={siteId} area="overview" />;
-}

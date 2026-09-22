@@ -57,7 +57,6 @@ import { GuestGroupsSection } from "./GuestGroupsSection";
 import { MessagesSection } from "./MessagesSection";
 import { OverflowMenu } from "./OverflowMenu";
 import { RsvpSection } from "./RsvpSection";
-import { SmsUsageSection } from "./SmsUsageSection";
 import {
   adminAccessLink,
   adminAccessLinkCopiedMessage,
@@ -105,7 +104,7 @@ type LifecycleAction =
 export function SiteWorkspace({
   siteId,
   owner,
-  area = "overview",
+  area = "guests",
   onSiteName,
 }: {
   siteId: string;
@@ -424,49 +423,8 @@ export function SiteWorkspace({
         </p>
       )}
 
-      {area === "overview" && (
-        <section className="grid gap-6" data-area="overview">
-          <Card
-            className={`${adminStyles.card} grid grid-cols-[repeat(auto-fit,minmax(170px,1fr))] gap-[22px]`}
-            aria-label="Status e datas"
-          >
-            <CardContent className="grid w-full grid-cols-[repeat(auto-fit,minmax(170px,1fr))] items-center gap-[22px]">
-              <div>
-                <strong>Casamento</strong>
-                <p className="mt-2 leading-[1.6] text-admin-muted">
-                  {site.eventDate}
-                </p>
-              </div>
-              <div>
-                <strong>Vigência</strong>
-                <p className="mt-2 leading-[1.6] text-admin-muted">
-                  {site.termStartsOn
-                    ? `${site.termStartsOn} a ${site.termEndsOn}`
-                    : "Aguardando aprovação"}
-                </p>
-              </div>
-              <div>
-                <strong>Publicação</strong>
-                <p className="mt-2 leading-[1.6] text-admin-muted">
-                  {labels[site.publicationState]}
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-          <SmsUsageSection
-            siteId={site.id}
-            lifecycle={site.lifecycle}
-            owner={false}
-          />
-        </section>
-      )}
       {area === "guests" && (
-        <GuestGroupsSection
-          siteId={site.id}
-          lifecycle={site.lifecycle}
-          owner={owner}
-          isDemo={site.isDemo}
-        />
+        <GuestGroupsSection siteId={site.id} lifecycle={site.lifecycle} />
       )}
       {area === "rsvp" && (
         <RsvpSection siteId={site.id} lifecycle={site.lifecycle} />
@@ -477,6 +435,33 @@ export function SiteWorkspace({
       {area === "settings" &&
         (owner ? (
           <section className="grid gap-6" data-area="settings">
+            <Card
+              className={`${adminStyles.card} grid grid-cols-[repeat(auto-fit,minmax(170px,1fr))] gap-[22px]`}
+              aria-label="Status e datas"
+            >
+              <CardContent className="grid w-full grid-cols-[repeat(auto-fit,minmax(170px,1fr))] items-center gap-[22px]">
+                <div>
+                  <strong>Casamento</strong>
+                  <p className="mt-2 leading-[1.6] text-admin-muted">
+                    {site.eventDate}
+                  </p>
+                </div>
+                <div>
+                  <strong>Vigência</strong>
+                  <p className="mt-2 leading-[1.6] text-admin-muted">
+                    {site.termStartsOn
+                      ? `${site.termStartsOn} a ${site.termEndsOn}`
+                      : "Aguardando aprovação"}
+                  </p>
+                </div>
+                <div>
+                  <strong>Publicação</strong>
+                  <p className="mt-2 leading-[1.6] text-admin-muted">
+                    {labels[site.publicationState]}
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
             <Card className={adminStyles.card}>
               <CardHeader>
                 <CardTitle>Ciclo de vida</CardTitle>
@@ -670,12 +655,6 @@ export function SiteWorkspace({
                 </Table>
               </CardContent>
             </Card>
-
-            <SmsUsageSection
-              siteId={site.id}
-              lifecycle={site.lifecycle}
-              owner
-            />
 
             <Dialog
               open={settingsDialog === "profile"}

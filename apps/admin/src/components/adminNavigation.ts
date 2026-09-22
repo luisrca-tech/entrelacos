@@ -1,12 +1,6 @@
 export type AdminRole = "OWNER" | "SITE_ADMIN";
 
-export const siteAreas = [
-  "overview",
-  "guests",
-  "rsvp",
-  "messages",
-  "settings",
-] as const;
+export const siteAreas = ["guests", "rsvp", "messages", "settings"] as const;
 
 export type SiteArea = (typeof siteAreas)[number];
 
@@ -18,7 +12,6 @@ export type SiteNavigationItem = {
 };
 
 const labels: Record<SiteArea, string> = {
-  overview: "Visão geral",
   guests: "Convidados",
   rsvp: "Confirmações",
   messages: "Mensagens",
@@ -38,15 +31,12 @@ export function getSiteNavigation(
   siteId: string,
 ): SiteNavigationItem[] {
   const encodedSiteId = encodeURIComponent(siteId);
-  const areas: SiteArea[] = ["overview", "guests", "rsvp", "messages"];
+  const areas: SiteArea[] = ["guests", "rsvp", "messages"];
   if (role === "OWNER") areas.push("settings");
   return areas.map((area) => ({
     area,
     label: labels[area],
-    href:
-      area === "overview"
-        ? `/sites/${encodedSiteId}/overview`
-        : `/sites/${encodedSiteId}/${area}`,
+    href: `/sites/${encodedSiteId}/${area}`,
     ...(area === "settings" ? { ownerOnly: true } : {}),
   }));
 }
@@ -56,9 +46,9 @@ export function resolveSiteArea(
   requestedArea: string | undefined,
 ): SiteArea {
   if (!requestedArea || !siteAreas.includes(requestedArea as SiteArea)) {
-    return "overview";
+    return "guests";
   }
-  if (requestedArea === "settings" && role !== "OWNER") return "overview";
+  if (requestedArea === "settings" && role !== "OWNER") return "guests";
   return requestedArea as SiteArea;
 }
 

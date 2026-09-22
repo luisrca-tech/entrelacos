@@ -193,7 +193,6 @@ describe("Block 3 database foundation", () => {
         phoneE164: "+5511999999999",
         createdAt,
         expiresAt: new Date("2026-09-11T12:10:00.001Z"),
-        resendAvailableAt: new Date("2026-09-11T12:01:00.000Z"),
       }),
     ).rejects.toThrow();
 

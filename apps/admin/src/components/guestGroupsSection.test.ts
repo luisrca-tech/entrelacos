@@ -32,8 +32,8 @@ describe("guest groups PIN copy", () => {
     );
   });
 
-  it("keeps the demo grant card and does not reuse it for PINs", () => {
-    expect(sectionSource).toContain("demoGrant");
+  it("removes demo access grants and keeps PIN actions separate", () => {
+    expect(sectionSource).not.toContain("demoGrant");
     expect(sectionSource).toContain("bg-admin-beige");
     expect(sectionSource).not.toMatch(
       /accessPin && \([\s\S]*className="demo-guest-grant"/,

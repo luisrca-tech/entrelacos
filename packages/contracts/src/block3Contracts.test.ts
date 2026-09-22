@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  demoGuestGrantResponseSchema,
+  block3EndpointPaths,
   familySessionResponseSchema,
   guestAccessPinResponseSchema,
   guestChallengeStartResponseSchema,
@@ -12,18 +12,10 @@ import {
 } from "./index";
 
 describe("Block 3 public contracts", () => {
-  it("keeps demo grants opaque and short-lived", () => {
-    const response = demoGuestGrantResponseSchema.parse({
-      grant: `${"a".repeat(120)}.${"b".repeat(43)}`,
-      expiresAt: "2026-09-11T12:05:00.000Z",
-    });
-    expect(response.grant).not.toContain("+");
-    expect(() =>
-      demoGuestGrantResponseSchema.parse({
-        grant: `${"a".repeat(120)}.${"b".repeat(42)}!`,
-        expiresAt: "2026-09-11T12:05:00.000Z",
-      }),
-    ).toThrow();
+  it("does not expose a simulation guest-grant endpoint", () => {
+    expect(Object.values(block3EndpointPaths)).not.toContain(
+      "POST /v1/owner/sites/:siteId/demo/guest-grant",
+    );
   });
 
   it("requires a named group with exactly one representative", () => {
@@ -157,34 +149,15 @@ describe("Block 3 public contracts", () => {
       guestChallengeStartResponseSchema.parse({
         challengeId,
         expiresAt: "2026-09-11T12:10:00.000Z",
-        resendAvailableAt: "2026-09-11T12:10:00.000Z",
-        sendStatus: "MANUAL",
-        deliveryMode: "MANUAL_PIN",
       }),
-    ).toMatchObject({ sendStatus: "MANUAL", deliveryMode: "MANUAL_PIN" });
-
-    expect(
-      guestChallengeStartResponseSchema.parse({
-        challengeId,
-        expiresAt: "2026-09-11T12:10:00.000Z",
-        resendAvailableAt: "2026-09-11T12:01:00.000Z",
-        sendStatus: "UNKNOWN",
-        deliveryMode: "SIMULATED",
-        simulationCode: "123456",
-      }),
-    ).toMatchObject({
+    ).toEqual({
       challengeId,
-      sendStatus: "UNKNOWN",
-      deliveryMode: "SIMULATED",
-      simulationCode: "123456",
+      expiresAt: "2026-09-11T12:10:00.000Z",
     });
     expect(() =>
       guestChallengeStartResponseSchema.parse({
         challengeId,
         expiresAt: "2026-09-11T12:10:00.000Z",
-        resendAvailableAt: "2026-09-11T12:01:00.000Z",
-        sendStatus: "PROVIDER_ACCEPTED",
-        deliveryMode: "REAL_SMS",
         simulationCode: "123456",
       }),
     ).toThrow();

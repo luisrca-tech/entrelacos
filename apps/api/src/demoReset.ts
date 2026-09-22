@@ -12,19 +12,15 @@ import {
   guestMember,
   guestRateLimitEvent,
   guestVerificationChallenge,
-  guestVerificationSend,
   messageRequestReceipt,
   rsvpHistory,
   rsvpRequestReceipt,
   rsvpRequestReceiptGroup,
   site,
-  smsSendReservation,
-  smsUsage,
 } from "@entrelacos/database/schema";
 import { and, eq, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { normalizeGuestName } from "./guestGroups";
-import { smsPeriod } from "./smsUsage";
 
 export const DEMO_RESET_DATASET_VERSION = "block7-demo-v1" as const;
 
@@ -146,9 +142,6 @@ async function deleteOperationalRows(
 ): Promise<void> {
   // Delete dependent rows explicitly so every operation carries the demo-site predicate.
   await tx
-    .delete(guestVerificationSend)
-    .where(eq(guestVerificationSend.siteId, siteId));
-  await tx
     .delete(messageRequestReceipt)
     .where(eq(messageRequestReceipt.siteId, siteId));
   await tx
@@ -166,10 +159,6 @@ async function deleteOperationalRows(
   await tx
     .delete(guestRateLimitEvent)
     .where(eq(guestRateLimitEvent.siteId, siteId));
-  await tx
-    .delete(smsSendReservation)
-    .where(eq(smsSendReservation.siteId, siteId));
-  await tx.delete(smsUsage).where(eq(smsUsage.siteId, siteId));
   await tx.delete(guestGroup).where(eq(guestGroup.siteId, siteId));
   // The representative-member FK is RESTRICT; deleting groups first cascades their members.
   await tx.delete(guestMember).where(eq(guestMember.siteId, siteId));
@@ -215,71 +204,14 @@ async function seedOperationalRows(
     ),
   );
 
-  const period = smsPeriod(now);
-  const usageId = "b7-sms-usage-simulated";
-  await tx.insert(smsUsage).values({
-    id: usageId,
-    siteId,
-    periodStart: period.periodStart,
-    periodEnd: period.periodEnd,
-    mode: "SIMULATED",
-    reserved: 0,
-    providerAccepted: 1,
-    failedFinal: 1,
-    unknown: 1,
-    consumed: 3,
-    createdAt: now,
-    updatedAt: now,
-  });
-
-  await tx.insert(smsSendReservation).values([
-    {
-      id: "b7-sms-reservation-accepted",
-      siteId,
-      usageId,
-      mode: "SIMULATED",
-      status: "PROVIDER_ACCEPTED",
-      reservedAt: at(now, -3_000),
-      completedAt: at(now, -2_000),
-      createdAt: at(now, -3_000),
-      updatedAt: at(now, -2_000),
-    },
-    {
-      id: "b7-sms-reservation-failed",
-      siteId,
-      usageId,
-      mode: "SIMULATED",
-      status: "FAILED_FINAL",
-      failureCode: "SIMULATED_FINAL_FAILURE",
-      reservedAt: at(now, -2_000),
-      completedAt: at(now, -1_000),
-      createdAt: at(now, -2_000),
-      updatedAt: at(now, -1_000),
-    },
-    {
-      id: "b7-sms-reservation-unknown",
-      siteId,
-      usageId,
-      mode: "SIMULATED",
-      status: "UNKNOWN",
-      failureCode: "SIMULATED_UNKNOWN",
-      reservedAt: at(now, -1_000),
-      completedAt: now,
-      createdAt: at(now, -1_000),
-      updatedAt: now,
-    },
-  ]);
-
   await tx.insert(guestVerificationChallenge).values([
     {
       id: "b7-challenge-pending",
       siteId,
       groupId: "b7-group-pending",
-      mode: "MANUAL",
       status: "PENDING",
       phoneE164: syntheticBrazilianPhone(1),
       expiresAt: at(now, 5 * 60_000),
-      resendAvailableAt: at(now, 60_000),
       createdAt: now,
       updatedAt: now,
     },
@@ -287,13 +219,11 @@ async function seedOperationalRows(
       id: "b7-challenge-locked",
       siteId,
       groupId: "b7-group-partial",
-      mode: "MANUAL",
       status: "LOCKED",
       phoneE164: syntheticBrazilianPhone(2),
       wrongAttempts: 5,
       cooldownUntil: at(now, 10 * 60_000),
       expiresAt: at(now, 5 * 60_000),
-      resendAvailableAt: at(now, 60_000),
       createdAt: now,
       updatedAt: now,
     },
@@ -301,11 +231,9 @@ async function seedOperationalRows(
       id: "b7-challenge-accepted",
       siteId,
       groupId: "b7-group-confirmed",
-      mode: "MOCK",
       status: "PENDING",
       phoneE164: syntheticBrazilianPhone(3),
       expiresAt: at(now, 5 * 60_000),
-      resendAvailableAt: at(now, 60_000),
       createdAt: now,
       updatedAt: now,
     },
@@ -313,67 +241,10 @@ async function seedOperationalRows(
       id: "b7-challenge-unknown",
       siteId,
       groupId: "b7-group-declined",
-      mode: "MOCK",
       status: "PENDING",
       phoneE164: syntheticBrazilianPhone(4),
       expiresAt: at(now, 5 * 60_000),
-      resendAvailableAt: at(now, 60_000),
       createdAt: now,
-      updatedAt: now,
-    },
-  ]);
-
-  await tx.insert(guestVerificationSend).values([
-    {
-      id: "b7-send-manual",
-      siteId,
-      groupId: "b7-group-pending",
-      challengeId: "b7-challenge-pending",
-      phoneE164: syntheticBrazilianPhone(1),
-      status: "MANUAL",
-      reservedAt: now,
-      createdAt: now,
-      updatedAt: now,
-    },
-    {
-      id: "b7-send-failed",
-      siteId,
-      groupId: "b7-group-partial",
-      challengeId: "b7-challenge-locked",
-      smsReservationId: "b7-sms-reservation-failed",
-      phoneE164: syntheticBrazilianPhone(2),
-      status: "FAILED_FINAL",
-      failureCode: "SIMULATED_FINAL_FAILURE",
-      reservedAt: at(now, -2_000),
-      completedAt: at(now, -1_000),
-      createdAt: at(now, -2_000),
-      updatedAt: at(now, -1_000),
-    },
-    {
-      id: "b7-send-accepted",
-      siteId,
-      groupId: "b7-group-confirmed",
-      challengeId: "b7-challenge-accepted",
-      smsReservationId: "b7-sms-reservation-accepted",
-      phoneE164: syntheticBrazilianPhone(3),
-      status: "PROVIDER_ACCEPTED",
-      reservedAt: at(now, -3_000),
-      completedAt: at(now, -2_000),
-      createdAt: at(now, -3_000),
-      updatedAt: at(now, -2_000),
-    },
-    {
-      id: "b7-send-unknown",
-      siteId,
-      groupId: "b7-group-declined",
-      challengeId: "b7-challenge-unknown",
-      smsReservationId: "b7-sms-reservation-unknown",
-      phoneE164: syntheticBrazilianPhone(4),
-      status: "UNKNOWN",
-      failureCode: "SIMULATED_UNKNOWN",
-      reservedAt: at(now, -1_000),
-      completedAt: now,
-      createdAt: at(now, -1_000),
       updatedAt: now,
     },
   ]);
@@ -458,7 +329,7 @@ async function seedOperationalRows(
       id: "b7-rate-limit-verify",
       siteId,
       groupId: "b7-group-partial",
-      action: "OTP_VERIFY",
+      action: "PIN_VERIFY",
       scopeKey: "block7:verify",
       ipFingerprint: "d".repeat(64),
       phoneFingerprint: "e".repeat(64),
@@ -512,7 +383,6 @@ export async function resetDemoSite(
         rsvpDeadlineAt: null,
         rsvpDeadlineTimezone: null,
         muralEnabled: false,
-        smsMonthlyLimit: null,
         updatedAt: now,
       })
       .where(and(eq(site.id, siteId), eq(site.isDemo, true)));

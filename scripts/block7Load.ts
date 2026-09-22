@@ -262,7 +262,6 @@ function fixtureSiteValues(plan: LoadPlan) {
     publicationState: "PUBLISHED" as const,
     isDemo: false,
     muralEnabled: true,
-    smsMonthlyLimit: 1_000_000,
     publicUrl: tenant.publicUrl,
     createdAt: FIXTURE_TIME,
     updatedAt: FIXTURE_TIME,
@@ -354,7 +353,6 @@ export async function snapshotTenant(
         publicationState: site.publicationState,
         isDemo: site.isDemo,
         muralEnabled: site.muralEnabled,
-        smsMonthlyLimit: site.smsMonthlyLimit,
         publicUrl: site.publicUrl,
       })
       .from(site)
@@ -880,7 +878,7 @@ export async function executeBlock7Load(
     cleanup,
     limitations: [
       "Admin read traffic was not attempted because no local admin identity or session was established without storing credentials.",
-      "Public mural and guest challenge traffic used configured local routes; simulated challenge delivery never contacted Twilio or another live provider.",
+      "Public mural and PIN challenge traffic used configured local routes; no external communication provider belongs to this flow.",
       "This is a load slice, not complete Block 7 contract evidence: RSVP writes, message publication/edit, family-session authentication, and cross-tenant negative requests were not exercised.",
       "The exact requested distribution is 10,000 one-member groups; couple, family, foreign, and other group shapes were not exercised in this load run.",
       "Evidence covers this exact 20-tenant by 500-guest fixture and measured request volumes only; it is not a future capacity guarantee.",
@@ -920,10 +918,9 @@ HTTP target: ${report.httpBaseUrl}
 
 - Runtime: ${report.resources.runtime} on ${report.resources.platform}
 - CPUs: ${report.resources.cpuCount}; host memory: ${report.resources.memoryGiB} GiB
-- API harness: \`APP_ENV=test\`, \`SMS_MODE=simulated\`, \`TRUST_PROXY_HEADERS=true\` on the local server only; synthetic loopback origins and client IPs were used for tenant/rate-limit separation
+- API harness: \`APP_ENV=test\` and \`TRUST_PROXY_HEADERS=true\` on the local server only; synthetic loopback origins and client IPs were used for tenant/rate-limit separation
 - Fixture marker: unique \`block7-load-*\` QA-owned prefix; \`isDemo=false\`; no demo, legacy, or production identifiers were selected
-- Synthetic SMS quota: 1,000,000 per fixture tenant, preventing quota configuration from masking lookup/rate-limit behavior; no provider call is made
-- Provider boundary: local manual/simulation behavior only; no Twilio or live provider calls
+- Verification boundary: full name and registered phone locate the invitation; the six-digit manual PIN remains the only confirmation mechanism
 
 ## Shape and seed
 

@@ -1,6 +1,5 @@
 import {
   brazilianPhoneInputSchema,
-  type DemoGuestGrantResponse,
   type GuestAccessPinResponse,
   type GuestGroupRecord,
 } from "@entrelacos/contracts";
@@ -34,7 +33,6 @@ import { type FormEvent, useCallback, useEffect, useState } from "react";
 import { adminStyles, displayHeading } from "../lib/adminStyles";
 import { ApiError, apiRequest } from "../lib/apiClient";
 import {
-  canIssueDemoGuestGrant,
   copyGuestAccessPin,
   createGuestGroupDraft,
   type GuestGroupDraft,
@@ -63,8 +61,6 @@ import { OverflowMenu } from "./OverflowMenu";
 type GuestGroupsSectionProps = {
   siteId: string;
   lifecycle: "DRAFT" | "IN_REVIEW" | "ACTIVE" | "INACTIVE";
-  owner: boolean;
-  isDemo: boolean;
 };
 
 function draftFromGroup(group: GuestGroupRecord): GuestGroupDraft {
@@ -103,8 +99,6 @@ function apiMessage(cause: unknown): string {
 export function GuestGroupsSection({
   siteId,
   lifecycle,
-  owner,
-  isDemo,
 }: GuestGroupsSectionProps) {
   const [groups, setGroups] = useState<GuestGroupRecord[]>([]);
   const [form, setForm] = useState<GuestGroupDraft | null>(null);
@@ -113,9 +107,6 @@ export function GuestGroupsSection({
   const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(true);
   const [pending, setPending] = useState(false);
-  const [demoGrant, setDemoGrant] = useState<
-    (DemoGuestGrantResponse & { groupName: string }) | null
-  >(null);
   const [deleteTarget, setDeleteTarget] = useState<GuestGroupRecord | null>(
     null,
   );
@@ -170,10 +161,6 @@ export function GuestGroupsSection({
     }
     if (action === "rotate-pin") {
       setRotationTarget(group);
-      return;
-    }
-    if (action === "demo-grant") {
-      void issueDemoAccess(group);
       return;
     }
     if (action === "edit") {
@@ -320,31 +307,6 @@ export function GuestGroupsSection({
     }
   }
 
-  async function issueDemoAccess(group: GuestGroupRecord) {
-    if (
-      pending ||
-      !canIssueDemoGuestGrant(owner, isDemo, inactive, group) ||
-      !group.phone
-    )
-      return;
-    setPending(true);
-    setError("");
-    setNotice("");
-    setDemoGrant(null);
-    try {
-      const result = await apiRequest<DemoGuestGrantResponse>(
-        `/v1/owner/sites/${encodeURIComponent(siteId)}/demo/guest-grant`,
-        { method: "POST", body: { phone: group.phone } },
-      );
-      setDemoGrant({ ...result, groupName: group.name });
-      setNotice("Autorização temporária emitida para a demonstração.");
-    } catch (cause) {
-      setError(apiMessage(cause));
-    } finally {
-      setPending(false);
-    }
-  }
-
   async function copyAccessPin(group: GuestGroupRecord) {
     if (pending || group.isForeign) return;
     setPending(true);
@@ -405,7 +367,7 @@ export function GuestGroupsSection({
           <p className="leading-[1.6]">
             Cadastre cada convite com seu nome de localização, convidados e um
             único representante. Compartilhe o PIN do grupo junto com o link de
-            confirmação; o SMS poderá ser ativado depois.
+            confirmação.
           </p>
         </div>
         {!inactive && (
@@ -527,8 +489,8 @@ export function GuestGroupsSection({
                   role="note"
                 >
                   {form.individual
-                    ? "Número estrangeiro não usa telefone nem SMS. Este convite exige atendimento administrativo; não há autenticação alternativa."
-                    : "Grupo estrangeiro não usa telefone nem SMS. Este convite exige atendimento administrativo; não há autenticação alternativa."}
+                    ? "Número estrangeiro exige atendimento administrativo; não há autenticação alternativa."
+                    : "Grupo estrangeiro exige atendimento administrativo; não há autenticação alternativa."}
                 </p>
               ) : (
                 <label
@@ -650,31 +612,6 @@ export function GuestGroupsSection({
         </DialogContent>
       </Dialog>
 
-      {demoGrant && (
-        <Card
-          className="my-6 rounded-[10px] border border-admin-line bg-admin-beige p-5"
-          role="status"
-        >
-          <CardHeader>
-            <CardTitle>
-              Autorização temporária · {demoGrant.groupName}
-            </CardTitle>
-            <CardDescription>
-              Cole este valor somente no campo de demonstração do site público.
-              Ele expira às {new Date(demoGrant.expiresAt).toLocaleTimeString()}{" "}
-              e não deve ser colocado em URL, cookie ou armazenamento local.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Input
-              aria-label="Autorização temporária da demonstração"
-              readOnly
-              spellCheck={false}
-              value={demoGrant.grant}
-            />
-          </CardContent>
-        </Card>
-      )}
       <AlertDialog
         open={deleteTarget !== null}
         onOpenChange={(open) => {
@@ -770,11 +707,8 @@ export function GuestGroupsSection({
         <div className="mt-6 grid gap-3">
           {groups.map((group) => {
             const actions = guestGroupMenuActions({
-              owner,
-              isDemo,
               inactive,
               isForeign: group.isForeign,
-              phone: group.phone,
             });
             return (
               <Card
@@ -787,8 +721,8 @@ export function GuestGroupsSection({
                     <CardDescription>
                       {group.isForeign
                         ? group.isIndividual
-                          ? "Número estrangeiro · sem SMS"
-                          : "Grupo estrangeiro · sem SMS"
+                          ? "Número estrangeiro · atendimento administrativo"
+                          : "Grupo estrangeiro · atendimento administrativo"
                         : group.isIndividual
                           ? group.phone
                           : `Representante: ${group.members.find((member) => member.isRepresentative)?.fullName ?? "Não informado"} · ${group.phone}`}

@@ -12,8 +12,6 @@ import {
   publicMuralResponseSchema,
   rsvpExportQuerySchema,
   siteMessageBlockInputSchema,
-  smsQuotaInputSchema,
-  smsUsageResponseSchema,
 } from "./index";
 
 const requestId = randomUUID();
@@ -160,37 +158,6 @@ describe("Block 5 contracts", () => {
     ).toThrow();
   });
 
-  it("keeps SMS configuration optional and usage modes separate", () => {
-    expect(smsQuotaInputSchema.parse({ monthlyLimit: 0 })).toEqual({
-      monthlyLimit: 0,
-    });
-    expect(() => smsQuotaInputSchema.parse({ monthlyLimit: -1 })).toThrow();
-    expect(
-      smsUsageResponseSchema.parse({
-        siteId: "site-demo",
-        timezone: "America/Sao_Paulo",
-        periodStart: "2027-05-01T03:00:00.000Z",
-        periodEnd: "2027-06-01T03:00:00.000Z",
-        monthlyLimit: null,
-        alert: "NOT_CONFIGURED",
-        realSms: {
-          reserved: 0,
-          providerAccepted: 0,
-          failedFinal: 0,
-          unknown: 0,
-          consumed: 0,
-        },
-        simulated: {
-          reserved: 2,
-          providerAccepted: 1,
-          failedFinal: 1,
-          unknown: 0,
-          consumed: 4,
-        },
-      }),
-    ).toMatchObject({ monthlyLimit: null, alert: "NOT_CONFIGURED" });
-  });
-
   it("freezes the Block 5 route surface", () => {
     expect(Object.values(block5EndpointPaths)).toEqual([
       "GET /v1/public/family/message",
@@ -204,8 +171,6 @@ describe("Block 5 contracts", () => {
       "DELETE /v1/sites/:siteId/groups/:groupId",
       "GET /v1/sites/:siteId/reports/rsvp.csv",
       "GET /v1/sites/:siteId/reports/rsvp.pdf",
-      "GET /v1/sites/:siteId/sms-usage",
-      "PATCH /v1/owner/sites/:siteId/sms-quota",
     ]);
   });
 });

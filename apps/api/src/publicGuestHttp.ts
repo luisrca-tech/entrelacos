@@ -2,8 +2,6 @@ import {
   emptyMutationInputSchema,
   familySessionReadResponseSchema,
   familySessionResponseSchema,
-  guestChallengeResendInputSchema,
-  guestChallengeStartResponseSchema,
   guestChallengeVerifyInputSchema,
   guestLookupInputSchema,
 } from "@entrelacos/contracts";
@@ -18,11 +16,6 @@ import { eq } from "drizzle-orm";
 import { type Context, Hono } from "hono";
 import type { AuthHttpOptions } from "./authHttp";
 import {
-  DEMO_GUEST_GRANT_HEADER,
-  DemoGuestGrantError,
-  verifyDemoGuestGrant,
-} from "./demoGuestGrant";
-import {
   FamilySessionServiceError,
   hashFamilySessionToken,
   leaveFamilySession,
@@ -31,7 +24,6 @@ import {
 import { GuestLookupServiceError } from "./guestLookup";
 import {
   GuestVerificationServiceError,
-  resendGuestChallenge,
   startGuestChallenge,
   verifyGuestChallenge,
 } from "./guestVerification";
@@ -109,47 +101,15 @@ async function isAuthorizedOrigin(
 async function challengeIdentity(
   options: AuthHttpOptions,
   challengeId: string,
-): Promise<{ siteId: string; phoneE164: string } | undefined> {
+): Promise<{ siteId: string } | undefined> {
   const rows = await options.db
     .select({
       siteId: guestVerificationChallenge.siteId,
-      phoneE164: guestVerificationChallenge.phoneE164,
     })
     .from(guestVerificationChallenge)
     .where(eq(guestVerificationChallenge.id, challengeId))
     .limit(1);
   return rows[0];
-}
-
-async function authorizeDemoGrant(
-  options: AuthHttpOptions,
-  request: Request,
-  siteId: string,
-  phoneE164: string,
-): Promise<boolean> {
-  const token = request.headers.get(DEMO_GUEST_GRANT_HEADER);
-  if (token === null) return false;
-  const [siteRecord] = await options.db
-    .select({ isDemo: site.isDemo })
-    .from(site)
-    .where(eq(site.id, siteId))
-    .limit(1);
-  if (!siteRecord) throw new DemoGuestGrantError(404, "NOT_FOUND", "Not Found");
-  if (!siteRecord.isDemo) {
-    throw new DemoGuestGrantError(
-      403,
-      "DEMO_SITE_REQUIRED",
-      "Demo access is not enabled for this site",
-    );
-  }
-  verifyDemoGuestGrant(token, {
-    siteId,
-    phoneE164,
-    secret:
-      options.guestDemoGrantSecret ?? options.guestFingerprintSecret ?? "",
-    now: options.now?.(),
-  });
-  return true;
 }
 
 function bearerToken(request: Request): string | undefined {
@@ -176,10 +136,7 @@ async function siteIdForSession(
 function setCors(context: Context, origin: string): void {
   context.header("Access-Control-Allow-Origin", origin);
   context.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-  context.header(
-    "Access-Control-Allow-Headers",
-    `Authorization, Content-Type, ${DEMO_GUEST_GRANT_HEADER}`,
-  );
+  context.header("Access-Control-Allow-Headers", "Authorization, Content-Type");
   context.header("Access-Control-Max-Age", "600");
   context.header("Vary", "Origin");
   context.header("Cache-Control", "no-store");
@@ -189,10 +146,7 @@ function withCors(response: Response, origin: string): Response {
   const headers = new Headers(response.headers);
   headers.set("Access-Control-Allow-Origin", origin);
   headers.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-  headers.set(
-    "Access-Control-Allow-Headers",
-    `Authorization, Content-Type, ${DEMO_GUEST_GRANT_HEADER}`,
-  );
+  headers.set("Access-Control-Allow-Headers", "Authorization, Content-Type");
   headers.set("Vary", "Origin");
   headers.set("Cache-Control", "no-store");
   return new Response(response.body, {
@@ -211,8 +165,7 @@ function serviceError(error: unknown): Response | undefined {
   if (
     error instanceof GuestVerificationServiceError ||
     error instanceof GuestLookupServiceError ||
-    error instanceof FamilySessionServiceError ||
-    error instanceof DemoGuestGrantError
+    error instanceof FamilySessionServiceError
   ) {
     return problem(
       error.status,
@@ -237,20 +190,14 @@ function guestOptions(
   options: AuthHttpOptions,
   request: Request,
   context: Context,
-  exposeSimulationCode = false,
 ) {
   const ipAddress = resolveClientIp(options, request, context);
   return {
     ipAddress,
     fingerprintSecret: options.guestFingerprintSecret ?? "",
-    smsMode: options.guestSmsMode,
     now: options.now?.(),
-    provider: options.guestVerificationProvider,
-    codeGenerator: options.guestCodeGenerator,
     challengeIdGenerator: options.guestChallengeIdGenerator,
     sessionTokenGenerator: options.guestSessionTokenGenerator,
-    exposeSimulationCode:
-      exposeSimulationCode && options.guestExposeSimulationCode === true,
   };
 }
 
@@ -330,26 +277,20 @@ export function createPublicGuestHttpRouter(options: AuthHttpOptions): Hono {
       const input = guestLookupInputSchema.parse(
         await readObject(context.req.raw),
       );
-      const demoGrantAuthorized = await authorizeDemoGrant(
-        options,
-        context.req.raw,
-        context.req.param("siteId"),
-        input.phone,
-      );
       const result = await startGuestChallenge(
         options.db,
         context.req.param("siteId"),
         input,
-        guestOptions(options, context.req.raw, context, demoGrantAuthorized),
+        guestOptions(options, context.req.raw, context),
       );
-      return context.json(guestChallengeStartResponseSchema.parse(result), 201);
+      return context.json(result, 201);
     } catch (error) {
       return responseOrThrow(error, origin);
     }
   });
 
-  for (const operation of ["resend", "verify"] as const) {
-    const path = `/v1/public/guest/challenge/:challengeId/${operation}`;
+  {
+    const path = "/v1/public/guest/challenge/:challengeId/verify";
     router.options(path, async (context) => {
       const challengeId = context.req.param("challengeId") ?? "";
       const identity = await challengeIdentity(options, challengeId);
@@ -377,39 +318,7 @@ export function createPublicGuestHttpRouter(options: AuthHttpOptions): Hono {
       setCors(context, origin as string);
       try {
         const body = await readObject(context.req.raw);
-        if (operation === "resend") {
-          const input = guestChallengeResendInputSchema.parse(body);
-          const demoGrantAuthorized = await authorizeDemoGrant(
-            options,
-            context.req.raw,
-            siteId as string,
-            identity?.phoneE164 as string,
-          );
-          const result = await resendGuestChallenge(
-            options.db,
-            challengeId,
-            input,
-            guestOptions(
-              options,
-              context.req.raw,
-              context,
-              demoGrantAuthorized,
-            ),
-          );
-          return context.json(
-            guestChallengeStartResponseSchema.parse(result),
-            200,
-          );
-        }
         const input = guestChallengeVerifyInputSchema.parse(body);
-        if (context.req.raw.headers.has(DEMO_GUEST_GRANT_HEADER)) {
-          await authorizeDemoGrant(
-            options,
-            context.req.raw,
-            siteId as string,
-            identity?.phoneE164 as string,
-          );
-        }
         const result = await verifyGuestChallenge(
           options.db,
           challengeId,
