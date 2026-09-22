@@ -1,28 +1,28 @@
 export type RsvpStatus = "PENDING" | "CONFIRMED" | "DECLINED";
 
-export type RsvpMemberSnapshot = {
-  memberId: string;
-  status: RsvpStatus;
+export type RsvpGuestSnapshot = {
+  guestId: string;
+  state: RsvpStatus;
   revision: number;
 };
 
 export type RsvpDraft = Record<
   string,
   {
-    status: RsvpStatus;
-    persistedStatus: RsvpStatus;
+    state: RsvpStatus;
+    persistedState: RsvpStatus;
     revision: number;
   }
 >;
 
-export function createRsvpDraft(members: RsvpMemberSnapshot[]): RsvpDraft {
+export function createRsvpDraft(guests: RsvpGuestSnapshot[]): RsvpDraft {
   return Object.fromEntries(
-    members.map((member) => [
-      member.memberId,
+    guests.map((guest) => [
+      guest.guestId,
       {
-        status: member.status,
-        persistedStatus: member.status,
-        revision: member.revision,
+        state: guest.state,
+        persistedState: guest.state,
+        revision: guest.revision,
       },
     ]),
   );
@@ -30,43 +30,43 @@ export function createRsvpDraft(members: RsvpMemberSnapshot[]): RsvpDraft {
 
 export function setDraftStatus(
   draft: RsvpDraft,
-  memberId: string,
-  status: RsvpStatus,
+  guestId: string,
+  state: RsvpStatus,
 ): RsvpDraft {
-  const member = draft[memberId];
-  return member ? { ...draft, [memberId]: { ...member, status } } : draft;
+  const guest = draft[guestId];
+  return guest ? { ...draft, [guestId]: { ...guest, state } } : draft;
 }
 
 export function confirmAllDraft(draft: RsvpDraft): RsvpDraft {
   return Object.fromEntries(
-    Object.entries(draft).map(([memberId, member]) => [
-      memberId,
-      { ...member, status: "CONFIRMED" as const },
+    Object.entries(draft).map(([guestId, guest]) => [
+      guestId,
+      { ...guest, state: "CONFIRMED" as const },
     ]),
   );
 }
 
 export function pendingRsvpUpdates(draft: RsvpDraft) {
   return Object.entries(draft)
-    .filter(([, member]) => member.status !== member.persistedStatus)
-    .map(([memberId, member]) => ({
-      memberId,
-      status: member.status,
-      expectedRevision: member.revision,
+    .filter(([, guest]) => guest.state !== guest.persistedState)
+    .map(([guestId, guest]) => ({
+      guestId,
+      state: guest.state,
+      expectedRevision: guest.revision,
     }));
 }
 
 export function reconcileRsvpDraft(
   draft: RsvpDraft,
-  current: RsvpMemberSnapshot[],
+  current: RsvpGuestSnapshot[],
 ): RsvpDraft {
   return Object.fromEntries(
-    current.map((member) => [
-      member.memberId,
+    current.map((guest) => [
+      guest.guestId,
       {
-        status: draft[member.memberId]?.status ?? member.status,
-        persistedStatus: member.status,
-        revision: member.revision,
+        state: draft[guest.guestId]?.state ?? guest.state,
+        persistedState: guest.state,
+        revision: guest.revision,
       },
     ]),
   );

@@ -186,7 +186,9 @@ export function MessageMural({
                 <strong className="text-template-ink">
                   {message.authorName}
                 </strong>
-                <span>{message.groupName}</span>
+                {message.authorName !== message.invitationName && (
+                  <span>{message.invitationName}</span>
+                )}
                 <time dateTime={message.createdAt}>
                   {formatMessageDate(message.createdAt)}
                 </time>

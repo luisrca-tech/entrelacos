@@ -1,24 +1,23 @@
 import {
-  type FamilyMessageResponse,
-  type FamilyRsvpResponse,
-  type FamilySessionResponse,
-  guestLookupInputSchema,
+  formatInvitationPhoneInput,
+  type InvitationMessageResponse,
+  type InvitationRsvpResponse,
+  type InvitationSessionResponse,
+  invitationAccessInputSchema,
 } from "@entrelacos/contracts";
 import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import { FamilyMessageForm } from "./FamilyMessageForm";
 import {
   clearGuestSession,
   GuestAccessApi,
   type GuestAccessApiError,
-  type GuestChallengeStartResult,
   type GuestSessionReadResponse,
   type GuestSessionStorage,
   getGuestLeaveNotice,
   guestAccessErrorMessage,
-  isValidVerificationCode,
   readGuestSession,
   writeGuestSession,
 } from "./guestAccess";
+import { InvitationMessageForm } from "./InvitationMessageForm";
 import {
   getMessageErrorMessage,
   muralRefreshEventName,
@@ -40,10 +39,9 @@ type GuestAccessProps = {
   apiOrigin: string;
   fetcher?: typeof fetch;
   storage?: GuestSessionStorage;
-  now?: () => number;
 };
 
-type GuestAccessPhase = "lookup" | "code" | "authenticated";
+type GuestAccessPhase = "lookup" | "authenticated";
 
 const guestAccessSectionClass =
   "grid min-w-0 gap-6 bg-template-ivory px-[clamp(2rem,5vw,4rem)] py-[clamp(2rem,5vw,4rem)] text-template-ink [@media(max-width:560px)]:px-4 [@media(max-width:560px)]:py-8 min-[961px]:justify-items-center";
@@ -70,7 +68,7 @@ const guestAccessSecondaryClass =
   "min-h-11 cursor-pointer rounded-none border border-template-ink bg-transparent px-4 py-[0.65rem] text-template-ink font-[inherit] font-bold disabled:cursor-not-allowed disabled:opacity-50";
 const guestAccessLinkClass =
   "w-fit cursor-pointer border-0 bg-transparent px-0 py-[0.35rem] text-template-muted underline underline-offset-[0.2rem] disabled:cursor-not-allowed disabled:opacity-50";
-const guestAccessFamilyClass =
+const guestAccessInvitationClass =
   "grid max-w-[42rem] gap-4 min-[961px]:w-full min-[961px]:max-w-[52rem]";
 
 function browserSessionStorage(): GuestSessionStorage | null {
@@ -80,10 +78,6 @@ function browserSessionStorage(): GuestSessionStorage | null {
   } catch {
     return null;
   }
-}
-
-function challengeExpired(challenge: GuestChallengeStartResult, nowMs: number) {
-  return Date.parse(challenge.expiresAt) <= nowMs;
 }
 
 function errorWithRetry(error: unknown): string {
@@ -99,7 +93,7 @@ function errorWithRetry(error: unknown): string {
 }
 
 function sessionFromVerification(
-  result: FamilySessionResponse,
+  result: InvitationSessionResponse,
 ): GuestSessionReadResponse {
   const { sessionToken: _sessionToken, ...session } = result;
   return session;
@@ -110,7 +104,6 @@ export function GuestAccess({
   apiOrigin,
   fetcher,
   storage: providedStorage,
-  now = Date.now,
 }: GuestAccessProps) {
   const storage = useMemo(
     () => providedStorage ?? browserSessionStorage(),
@@ -150,21 +143,17 @@ export function GuestAccess({
   }, [apiOrigin, fetcher, siteId]);
 
   const [phase, setPhase] = useState<GuestAccessPhase>("lookup");
-  const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
-  const [code, setCode] = useState("");
-  const [challenge, setChallenge] = useState<GuestChallengeStartResult | null>(
-    null,
-  );
+  const [pin, setPin] = useState("");
   const [session, setSession] = useState<GuestSessionReadResponse | null>(null);
-  const [rsvp, setRsvp] = useState<FamilyRsvpResponse | null>(null);
+  const [rsvp, setRsvp] = useState<InvitationRsvpResponse | null>(null);
   const [rsvpDraft, setRsvpDraft] = useState<RsvpDraft>({});
   const [rsvpOpen, setRsvpOpen] = useState(false);
   const [rsvpError, setRsvpError] = useState("");
   const [rsvpNotice, setRsvpNotice] = useState("");
   const retryRequest = useRef<{ key: string; requestId: string } | null>(null);
-  const [familyMessage, setFamilyMessage] =
-    useState<FamilyMessageResponse | null>(null);
+  const [invitationMessage, setInvitationMessage] =
+    useState<InvitationMessageResponse | null>(null);
   const [messageDraft, setMessageDraft] = useState("");
   const [messageReady, setMessageReady] = useState(false);
   const [messageBusy, setMessageBusy] = useState(false);
@@ -178,11 +167,9 @@ export function GuestAccess({
   const [ready, setReady] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-  const [nowMs, setNowMs] = useState(() => now());
 
   useEffect(() => {
     let active = true;
-    setNowMs(now());
     if (!apiResult.api) {
       setError(apiResult.error);
       setReady(true);
@@ -214,17 +201,17 @@ export function GuestAccess({
         setPhase("authenticated");
         const [restoredRsvp, restoredMessage] = await Promise.allSettled([
           apiResult.api?.getRsvp(token),
-          messagesApiResult.api?.getFamilyMessage(token),
+          messagesApiResult.api?.getInvitationMessage(token),
         ]);
         if (!active) return;
         if (restoredRsvp.status === "fulfilled" && restoredRsvp.value) {
           setRsvp(restoredRsvp.value);
           setRsvpDraft(
             createRsvpDraft(
-              restoredRsvp.value.members.map((member) => ({
-                memberId: member.id,
-                status: member.state,
-                revision: member.revision,
+              restoredRsvp.value.guests.map((guest) => ({
+                guestId: guest.id,
+                state: guest.state,
+                revision: guest.revision,
               })),
             ),
           );
@@ -232,7 +219,7 @@ export function GuestAccess({
           setRsvpError(errorWithRetry(restoredRsvp.reason));
         }
         if (restoredMessage.status === "fulfilled" && restoredMessage.value) {
-          setFamilyMessage(restoredMessage.value);
+          setInvitationMessage(restoredMessage.value);
           setMessageDraft(restoredMessage.value.message?.text ?? "");
         } else if (restoredMessage.status === "rejected") {
           setMessageError(getMessageErrorMessage(restoredMessage.reason));
@@ -248,7 +235,7 @@ export function GuestAccess({
           setSession(null);
           setRsvp(null);
           setRsvpDraft({});
-          setFamilyMessage(null);
+          setInvitationMessage(null);
           setMessageDraft("");
           setMessageReady(false);
           setPhase("lookup");
@@ -262,13 +249,7 @@ export function GuestAccess({
     return () => {
       active = false;
     };
-  }, [apiResult, messagesApiResult, now, siteId, storage]);
-
-  useEffect(() => {
-    if (phase !== "code" || !challenge) return;
-    const interval = window.setInterval(() => setNowMs(now()), 1000);
-    return () => window.clearInterval(interval);
-  }, [challenge, now, phase]);
+  }, [apiResult, messagesApiResult, siteId, storage]);
 
   if (!ready)
     return (
@@ -282,15 +263,15 @@ export function GuestAccess({
       </section>
     );
 
-  async function startLookup(event: FormEvent<HTMLFormElement>) {
+  async function accessInvitation(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!apiResult.api || busy) return;
-    const parsed = guestLookupInputSchema.safeParse({
-      fullName: fullName.trim(),
+    const parsed = invitationAccessInputSchema.safeParse({
       phone: phone.trim(),
+      accessPin: pin,
     });
     if (!parsed.success) {
-      setError("Informe o nome completo e um celular brasileiro válido.");
+      setError("Informe um telefone válido e o PIN de 6 dígitos do convite.");
       setNotice("");
       return;
     }
@@ -298,54 +279,25 @@ export function GuestAccess({
     setError("");
     setNotice("");
     try {
-      const result = await apiResult.api.start(parsed.data);
-      setChallenge(result);
-      setCode("");
-      setPhase("code");
-    } catch (cause) {
-      setError(errorWithRetry(cause));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function verifyCode(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!apiResult.api || !challenge || busy) return;
-    if (!isValidVerificationCode(code)) {
-      setError("Informe o PIN de 6 dígitos compartilhado com você.");
-      return;
-    }
-    if (challengeExpired(challenge, nowMs)) {
-      setError("Este acesso expirou. Confirme seus dados novamente.");
-      return;
-    }
-    setBusy(true);
-    setError("");
-    setNotice("");
-    try {
-      const result = await apiResult.api.verify({
-        challengeId: challenge.challengeId,
-        code,
-      });
+      const result = await apiResult.api.access(parsed.data);
       if (!storage) throw new Error("Session storage unavailable");
       writeGuestSession(storage, siteId, result.sessionToken);
       setSession(sessionFromVerification(result));
-      setChallenge(null);
       setPhase("authenticated");
+      setPin("");
       setNotice("Acesso confirmado.");
       const [verifiedRsvp, verifiedMessage] = await Promise.allSettled([
         apiResult.api.getRsvp(result.sessionToken),
-        messagesApiResult.api?.getFamilyMessage(result.sessionToken),
+        messagesApiResult.api?.getInvitationMessage(result.sessionToken),
       ]);
       if (verifiedRsvp.status === "fulfilled") {
         setRsvp(verifiedRsvp.value);
         setRsvpDraft(
           createRsvpDraft(
-            verifiedRsvp.value.members.map((member) => ({
-              memberId: member.id,
-              status: member.state,
-              revision: member.revision,
+            verifiedRsvp.value.guests.map((guest) => ({
+              guestId: guest.id,
+              state: guest.state,
+              revision: guest.revision,
             })),
           ),
         );
@@ -353,7 +305,7 @@ export function GuestAccess({
         setRsvpError(errorWithRetry(verifiedRsvp.reason));
       }
       if (verifiedMessage.status === "fulfilled" && verifiedMessage.value) {
-        setFamilyMessage(verifiedMessage.value);
+        setInvitationMessage(verifiedMessage.value);
         setMessageDraft(verifiedMessage.value.message?.text ?? "");
       } else if (verifiedMessage.status === "rejected") {
         setMessageError(getMessageErrorMessage(verifiedMessage.reason));
@@ -362,12 +314,7 @@ export function GuestAccess({
       }
       setMessageReady(true);
     } catch (cause) {
-      const apiError = cause as Partial<GuestAccessApiError>;
-      setError(
-        apiError.code === "INVALID_CODE"
-          ? "O PIN não confere. Confira o valor compartilhado e tente novamente."
-          : errorWithRetry(cause),
-      );
+      setError(errorWithRetry(cause));
     } finally {
       setBusy(false);
     }
@@ -390,15 +337,14 @@ export function GuestAccess({
       setSession(null);
       setRsvp(null);
       setRsvpDraft({});
-      setFamilyMessage(null);
+      setInvitationMessage(null);
       setMessageDraft("");
       setMessageReady(false);
       setMessageError("");
       setMessageNotice("");
       messageRetryRequest.current = null;
       setRsvpOpen(false);
-      setChallenge(null);
-      setCode("");
+      setPin("");
       setPhase("lookup");
       setNotice(getGuestLeaveNotice(serverConfirmed));
       setBusy(false);
@@ -413,10 +359,10 @@ export function GuestAccess({
     try {
       const current = await apiResult.api.getRsvp(token);
       setRsvp(current);
-      const snapshots = current.members.map((member) => ({
-        memberId: member.id,
-        status: member.state,
-        revision: member.revision,
+      const snapshots = current.guests.map((guest) => ({
+        guestId: guest.id,
+        state: guest.state,
+        revision: guest.revision,
       }));
       setRsvpDraft((draft) =>
         preserveDraft
@@ -448,11 +394,7 @@ export function GuestAccess({
   async function saveRsvp() {
     const token = storage ? readGuestSession(storage, siteId) : null;
     if (!token || !apiResult.api || !rsvp?.canEdit || busy) return;
-    const updates = pendingRsvpUpdates(rsvpDraft).map((member) => ({
-      memberId: member.memberId,
-      state: member.status,
-      expectedRevision: member.expectedRevision,
-    }));
+    const updates = pendingRsvpUpdates(rsvpDraft);
     if (updates.length === 0) return;
     const key = JSON.stringify(updates);
     const requestId =
@@ -466,19 +408,17 @@ export function GuestAccess({
     try {
       const saved = await apiResult.api.saveRsvp(token, {
         requestId,
-        members: updates,
+        guests: updates,
       });
-      const byId = new Map(saved.members.map((member) => [member.id, member]));
-      const members = rsvp.members.map(
-        (member) => byId.get(member.id) ?? member,
-      );
-      setRsvp({ ...rsvp, members });
+      const byId = new Map(saved.guests.map((guest) => [guest.id, guest]));
+      const guests = rsvp.guests.map((guest) => byId.get(guest.id) ?? guest);
+      setRsvp({ ...rsvp, guests });
       setRsvpDraft(
         createRsvpDraft(
-          members.map((member) => ({
-            memberId: member.id,
-            status: member.state,
-            revision: member.revision,
+          guests.map((guest) => ({
+            guestId: guest.id,
+            state: guest.state,
+            revision: guest.revision,
           })),
         ),
       );
@@ -514,11 +454,11 @@ export function GuestAccess({
     }
   }
 
-  async function reloadFamilyMessage(preserveDraft: boolean) {
+  async function reloadInvitationMessage(preserveDraft: boolean) {
     const token = storage ? readGuestSession(storage, siteId) : null;
     if (!token || !messagesApiResult.api) {
       setMessageError(
-        messagesApiResult.error || "A sessão da família não está disponível.",
+        messagesApiResult.error || "A sessão do convite não está disponível.",
       );
       setMessageReady(true);
       return;
@@ -526,8 +466,8 @@ export function GuestAccess({
     setMessageBusy(true);
     setMessageError("");
     try {
-      const current = await messagesApiResult.api.getFamilyMessage(token);
-      setFamilyMessage(current);
+      const current = await messagesApiResult.api.getInvitationMessage(token);
+      setInvitationMessage(current);
       if (!preserveDraft) setMessageDraft(current.message?.text ?? "");
       messageRetryRequest.current = null;
     } catch (cause) {
@@ -539,7 +479,7 @@ export function GuestAccess({
         setSession(null);
         setRsvp(null);
         setRsvpDraft({});
-        setFamilyMessage(null);
+        setInvitationMessage(null);
         setMessageDraft("");
         setPhase("lookup");
         setNotice("");
@@ -551,18 +491,18 @@ export function GuestAccess({
     }
   }
 
-  async function saveFamilyMessage() {
+  async function saveInvitationMessage() {
     const token = storage ? readGuestSession(storage, siteId) : null;
     if (
       !token ||
       !messagesApiResult.api ||
-      !familyMessage?.canEdit ||
+      !invitationMessage?.canEdit ||
       messageBusy
     ) {
       return;
     }
     const input = {
-      expectedRevision: familyMessage.currentRevision,
+      expectedRevision: invitationMessage.currentRevision,
       text: messageDraft,
     };
     const key = JSON.stringify(input);
@@ -575,12 +515,12 @@ export function GuestAccess({
     setMessageError("");
     setMessageNotice("");
     try {
-      const saved = await messagesApiResult.api.saveFamilyMessage(token, {
+      const saved = await messagesApiResult.api.saveInvitationMessage(token, {
         requestId,
         ...input,
       });
-      setFamilyMessage({
-        ...familyMessage,
+      setInvitationMessage({
+        ...invitationMessage,
         currentRevision: saved.message.revision,
         message: saved.message,
       });
@@ -602,7 +542,7 @@ export function GuestAccess({
         apiError.code === "MESSAGE_CONFLICT" ||
         apiError.code === "MESSAGE_REMOVED"
       ) {
-        await reloadFamilyMessage(true);
+        await reloadInvitationMessage(true);
         setMessageError(message);
       }
       if (apiError.status === 401) {
@@ -610,7 +550,7 @@ export function GuestAccess({
         setSession(null);
         setRsvp(null);
         setRsvpDraft({});
-        setFamilyMessage(null);
+        setInvitationMessage(null);
         setMessageDraft("");
         setPhase("lookup");
         setNotice("");
@@ -633,8 +573,8 @@ export function GuestAccess({
           Encontre seu convite
         </h2>
         <p className={guestAccessDescriptionClass}>
-          Informe o nome completo e o celular do convite. Em seguida, use o PIN
-          do seu grupo para acessar os detalhes da família.
+          Informe o telefone de contato e o PIN compartilhado com este convite
+          para acessar os convidados e confirmar a presença.
         </p>
       </div>
 
@@ -653,47 +593,22 @@ export function GuestAccess({
         <form
           className={guestAccessFormClass}
           noValidate
-          onSubmit={startLookup}
+          onSubmit={accessInvitation}
         >
           <label className={guestAccessLabelClass}>
-            Nome completo
-            <input
-              className={guestAccessInputClass}
-              autoComplete="name"
-              value={fullName}
-              onChange={(event) => setFullName(event.target.value)}
-              placeholder="Como está no convite"
-              required
-            />
-          </label>
-          <label className={guestAccessLabelClass}>
-            Celular
+            Telefone de contato
             <input
               className={guestAccessInputClass}
               autoComplete="tel"
               inputMode="tel"
               value={phone}
-              onChange={(event) => setPhone(event.target.value)}
-              placeholder="(62) 99999-9999"
+              onChange={(event) =>
+                setPhone(formatInvitationPhoneInput(event.target.value))
+              }
+              placeholder="(62) 99999-9999 ou +1 212 555 0123"
               required
             />
           </label>
-          <button
-            className={guestAccessButtonClass}
-            type="submit"
-            disabled={busy}
-          >
-            {busy ? "Verificando…" : "Continuar"}
-          </button>
-        </form>
-      )}
-
-      {phase === "code" && challenge && (
-        <form className={guestAccessFormClass} noValidate onSubmit={verifyCode}>
-          <p className={guestAccessDescriptionClass}>
-            Informe o PIN de 6 dígitos compartilhado com você pelos noivos ou
-            pela cerimonial.
-          </p>
           <label className={guestAccessLabelClass}>
             PIN de 6 dígitos
             <input
@@ -702,9 +617,9 @@ export function GuestAccess({
               inputMode="numeric"
               pattern="[0-9]{6}"
               maxLength={6}
-              value={code}
+              value={pin}
               onChange={(event) =>
-                setCode(event.target.value.replace(/\D/g, ""))
+                setPin(event.target.value.replace(/\D/g, ""))
               }
               required
             />
@@ -714,42 +629,27 @@ export function GuestAccess({
             type="submit"
             disabled={busy}
           >
-            {busy ? "Confirmando…" : "Confirmar PIN"}
-          </button>
-          <button
-            type="button"
-            className={guestAccessLinkClass}
-            disabled={busy}
-            onClick={() => {
-              setChallenge(null);
-              setCode("");
-              setPhase("lookup");
-              setError("");
-              setNotice("");
-            }}
-          >
-            Usar outros dados
+            {busy ? "Confirmando…" : "Acessar convite"}
           </button>
         </form>
       )}
 
       {phase === "authenticated" && session && (
-        <div className={guestAccessFamilyClass}>
+        <div className={guestAccessInvitationClass}>
           <h3 className={guestAccessSubheadingClass}>
-            Convidados deste convite
+            {session.invitationName}
           </h3>
+          <p className="m-0 text-template-muted">Convidados neste convite</p>
           <ul className="m-0 grid list-none gap-2 p-0">
-            {session.members.map((member) => (
+            {session.guests.map((guest) => (
               <li
                 className="flex items-baseline justify-between gap-4 border-b border-template-line py-3 [@media(max-width:560px)]:flex-col [@media(max-width:560px)]:items-start [@media(max-width:560px)]:gap-[0.15rem]"
-                key={member.id}
+                key={guest.id}
               >
-                <span>{member.fullName}</span>
-                {member.isRepresentative && (
-                  <small className="text-template-muted text-xs">
-                    Responsável pelo convite
-                  </small>
-                )}
+                <span>{guest.fullName}</span>
+                <small className="text-template-muted text-xs">
+                  {guest.guestType === "ADULT" ? "Adulto" : "Criança"}
+                </small>
               </li>
             ))}
           </ul>
@@ -768,12 +668,12 @@ export function GuestAccess({
           )}
           {!messageReady ? (
             <p role="status">Carregando a mensagem deste convite…</p>
-          ) : familyMessage ? (
-            <FamilyMessageForm
-              message={familyMessage.message}
-              currentRevision={familyMessage.currentRevision}
-              canEdit={familyMessage.canEdit}
-              readOnlyReason={familyMessage.readOnlyReason}
+          ) : invitationMessage ? (
+            <InvitationMessageForm
+              message={invitationMessage.message}
+              currentRevision={invitationMessage.currentRevision}
+              canEdit={invitationMessage.canEdit}
+              readOnlyReason={invitationMessage.readOnlyReason}
               value={messageDraft}
               busy={messageBusy}
               error={messageError}
@@ -783,8 +683,8 @@ export function GuestAccess({
                 setMessageError("");
                 setMessageNotice("");
               }}
-              onSave={() => void saveFamilyMessage()}
-              onReload={() => void reloadFamilyMessage(false)}
+              onSave={() => void saveInvitationMessage()}
+              onReload={() => void reloadInvitationMessage(false)}
             />
           ) : (
             <div className="grid gap-4 border-t border-template-line pt-6">
@@ -796,7 +696,7 @@ export function GuestAccess({
                 type="button"
                 className={guestAccessLinkClass}
                 disabled={messageBusy}
-                onClick={() => void reloadFamilyMessage(false)}
+                onClick={() => void reloadInvitationMessage(false)}
               >
                 Recarregar mensagem
               </button>
@@ -815,10 +715,10 @@ export function GuestAccess({
       {rsvp && (
         <RsvpForm
           open={rsvpOpen}
-          members={rsvp.members.map((member) => ({
-            memberId: member.id,
-            fullName: member.fullName,
-            isRepresentative: member.isRepresentative,
+          guests={rsvp.guests.map((guest) => ({
+            guestId: guest.id,
+            fullName: guest.fullName,
+            guestType: guest.guestType,
           }))}
           draft={rsvpDraft}
           canEdit={rsvp.canEdit}
@@ -830,8 +730,8 @@ export function GuestAccess({
           busy={busy}
           error={rsvpError}
           notice={rsvpNotice}
-          onChange={(memberId, status) => {
-            setRsvpDraft((draft) => setDraftStatus(draft, memberId, status));
+          onChange={(guestId, state) => {
+            setRsvpDraft((draft) => setDraftStatus(draft, guestId, state));
             setRsvpError("");
             setRsvpNotice("");
           }}

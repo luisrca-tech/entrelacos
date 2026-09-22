@@ -1,16 +1,16 @@
 import {
-  type FamilyMessageRecord,
-  type FamilyMessageResponse,
+  type InvitationMessageRecord,
+  type InvitationMessageResponse,
   messageTextSchema,
 } from "@entrelacos/contracts";
 import type { FormEvent } from "react";
 import { countMessageCodePoints } from "./messages";
 
-export type FamilyMessageFormProps = {
-  message: FamilyMessageRecord | null;
+export type InvitationMessageFormProps = {
+  message: InvitationMessageRecord | null;
   currentRevision: number;
   canEdit: boolean;
-  readOnlyReason: FamilyMessageResponse["readOnlyReason"];
+  readOnlyReason: InvitationMessageResponse["readOnlyReason"];
   value: string;
   busy: boolean;
   error?: string;
@@ -20,29 +20,31 @@ export type FamilyMessageFormProps = {
   onReload?: () => void;
 };
 
-const familyMessageFormClass = "grid gap-4 border-t border-template-line pt-6";
-const familyMessageEyebrowClass =
+const invitationMessageFormClass =
+  "grid gap-4 border-t border-template-line pt-6";
+const invitationMessageEyebrowClass =
   "m-0 mb-[0.8rem] text-template-muted text-[0.72rem] font-bold tracking-[0.16em] uppercase";
-const familyMessageHeadingClass =
+const invitationMessageHeadingClass =
   "m-0 font-template-serif text-[clamp(1.8rem,4vw,3rem)] font-normal tracking-[-0.05em]";
-const familyMessageClass =
+const invitationMessageClass =
   "m-0 max-w-[42rem] border border-template-line px-4 py-[0.8rem] text-template-ink";
-const familyMessageReadonlyClass =
+const invitationMessageReadonlyClass =
   "m-0 border-l-[3px] border-l-[#9c713f] bg-[rgba(156,113,63,0.1)] px-4 py-3 leading-[1.5]";
-const familyMessageLabelClass = "grid gap-[0.45rem] text-[0.85rem] font-bold";
-const familyMessageTextareaClass =
+const invitationMessageLabelClass =
+  "grid gap-[0.45rem] text-[0.85rem] font-bold";
+const invitationMessageTextareaClass =
   "min-h-32 w-full resize-y rounded-none border border-[rgba(37,53,43,0.32)] bg-[#fffdf8] px-3 py-3 text-template-ink font-[inherit] leading-[1.55]";
-const familyMessageMetaClass =
+const invitationMessageMetaClass =
   "flex items-center justify-between gap-4 text-template-muted text-xs";
-const familyMessageActionsClass =
+const invitationMessageActionsClass =
   "flex items-center justify-between gap-4 [@media(max-width:560px)]:items-stretch [@media(max-width:560px)]:flex-col";
-const familyMessageButtonClass =
+const invitationMessageButtonClass =
   "min-h-11 cursor-pointer rounded-none border border-template-ink bg-template-ink px-4 py-[0.65rem] text-template-ivory font-[inherit] font-bold disabled:cursor-not-allowed disabled:opacity-50";
-const familyMessageLinkClass =
+const invitationMessageLinkClass =
   "w-fit cursor-pointer border-0 bg-transparent px-0 py-[0.35rem] text-template-muted underline underline-offset-[0.2rem] disabled:cursor-not-allowed disabled:opacity-50";
 
 function readOnlyMessage(
-  reason: FamilyMessageResponse["readOnlyReason"],
+  reason: InvitationMessageResponse["readOnlyReason"],
 ): string {
   if (reason === "MESSAGE_BLOCKED") {
     return "A administração bloqueou novas mensagens para este convite. A mensagem publicada continua visível.";
@@ -50,7 +52,7 @@ function readOnlyMessage(
   return "O mural está desativado. Sua mensagem publicada está preservada, mas não pode ser alterada agora.";
 }
 
-export function FamilyMessageForm({
+export function InvitationMessageForm({
   message,
   currentRevision,
   canEdit,
@@ -62,7 +64,7 @@ export function FamilyMessageForm({
   onChange,
   onSave,
   onReload,
-}: FamilyMessageFormProps) {
+}: InvitationMessageFormProps) {
   const count = countMessageCodePoints(value);
   const valid = messageTextSchema.safeParse(value).success;
   const invalidNonblank = value.trim().length > 0 && !valid;
@@ -74,32 +76,32 @@ export function FamilyMessageForm({
   }
 
   return (
-    <form className={familyMessageFormClass} onSubmit={submit}>
+    <form className={invitationMessageFormClass} onSubmit={submit}>
       <div>
-        <p className={familyMessageEyebrowClass}>Mural dos convidados</p>
-        <h3 className={familyMessageHeadingClass}>
+        <p className={invitationMessageEyebrowClass}>Mural dos convidados</p>
+        <h3 className={invitationMessageHeadingClass}>
           {message ? "Sua mensagem" : "Deixe uma mensagem"}
         </h3>
       </div>
       {readOnlyReason && (
-        <p className={familyMessageReadonlyClass} role="status">
+        <p className={invitationMessageReadonlyClass} role="status">
           {readOnlyMessage(readOnlyReason)}
         </p>
       )}
       {error && (
-        <p className={familyMessageClass} role="alert">
+        <p className={invitationMessageClass} role="alert">
           {error}
         </p>
       )}
       {notice && (
-        <p className={familyMessageClass} role="status">
+        <p className={invitationMessageClass} role="status">
           {notice}
         </p>
       )}
-      <label className={familyMessageLabelClass}>
+      <label className={invitationMessageLabelClass}>
         Mensagem em nome do convite
         <textarea
-          className={familyMessageTextareaClass}
+          className={invitationMessageTextareaClass}
           rows={5}
           value={value}
           disabled={!canEdit || busy}
@@ -108,7 +110,7 @@ export function FamilyMessageForm({
           aria-describedby="entrelacos-message-help"
         />
       </label>
-      <div className={familyMessageMetaClass} id="entrelacos-message-help">
+      <div className={invitationMessageMetaClass} id="entrelacos-message-help">
         <span>Texto simples, sem anexos.</span>
         <span
           className="data-[invalid=true]:font-bold data-[invalid=true]:text-[#8e2e24]"
@@ -118,14 +120,14 @@ export function FamilyMessageForm({
         </span>
       </div>
       {invalidNonblank && (
-        <p className={familyMessageClass} role="alert">
+        <p className={invitationMessageClass} role="alert">
           Use somente texto simples, sem sinais de maior ou menor, e limite a
           mensagem a 1000 caracteres.
         </p>
       )}
-      <div className={familyMessageActionsClass}>
+      <div className={invitationMessageActionsClass}>
         <button
-          className={familyMessageButtonClass}
+          className={invitationMessageButtonClass}
           type="submit"
           disabled={!canEdit || busy || !valid || unchanged}
         >
@@ -138,7 +140,7 @@ export function FamilyMessageForm({
         {error && onReload && (
           <button
             type="button"
-            className={familyMessageLinkClass}
+            className={invitationMessageLinkClass}
             disabled={busy}
             onClick={onReload}
           >

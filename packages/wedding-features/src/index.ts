@@ -1,7 +1,5 @@
 export { AdminRecognition } from "./AdminRecognition";
 export { getAdminRecognitionView } from "./adminRecognition";
-export type { FamilyMessageFormProps } from "./FamilyMessageForm";
-export { FamilyMessageForm } from "./FamilyMessageForm";
 export type {
   FeatureAvailabilityItem,
   FeatureAvailabilityProps,
@@ -11,7 +9,6 @@ export { FeatureAvailability } from "./FeatureAvailability";
 export { GuestAccess } from "./GuestAccessPanel";
 export type {
   GuestAccessApiOptions,
-  GuestChallengeStartResult,
   GuestSessionReadResponse,
   GuestSessionStorage,
 } from "./guestAccess";
@@ -26,6 +23,8 @@ export {
   readGuestSession,
   writeGuestSession,
 } from "./guestAccess";
+export type { InvitationMessageFormProps } from "./InvitationMessageForm";
+export { InvitationMessageForm } from "./InvitationMessageForm";
 export type { MessageMuralProps } from "./MessageMural";
 export { MessageMural, mergeMuralMessages } from "./MessageMural";
 export type { WeddingMessagesApiOptions } from "./messages";
@@ -36,9 +35,9 @@ export {
   WeddingMessagesApi,
   WeddingMessagesApiError,
 } from "./messages";
-export type { RsvpFormMember, RsvpFormProps } from "./RsvpForm";
+export type { RsvpFormGuest, RsvpFormProps } from "./RsvpForm";
 export { RsvpForm } from "./RsvpForm";
-export type { RsvpDraft, RsvpMemberSnapshot, RsvpStatus } from "./rsvpDraft";
+export type { RsvpDraft, RsvpGuestSnapshot, RsvpStatus } from "./rsvpDraft";
 export {
   confirmAllDraft,
   createRsvpDraft,
