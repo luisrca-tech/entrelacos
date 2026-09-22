@@ -107,6 +107,7 @@ export function setupTemplateMotion(
     );
     elements.forEach((element) => {
       element.dataset.templateMotionReady = "true";
+      element.dataset.templateRevealState = "hidden";
       observer.observe(element);
     });
   } catch {

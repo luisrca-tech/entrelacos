@@ -8,10 +8,8 @@ export type StoryMediaClock = {
 };
 
 type StoryFrame = {
-  classList: {
-    add: (name: string) => void;
-    remove: (name: string) => void;
-    contains: (name: string) => boolean;
+  dataset: {
+    storyActive?: string;
   };
 };
 
@@ -39,8 +37,8 @@ export function setupStoryMediaCycle(
   const clock = options.clock ?? globalThis;
   const Observer = options.Observer;
   let timer: number | undefined;
-  let current = frames.findIndex((frame) =>
-    frame.classList.contains("is-active"),
+  let current = frames.findIndex(
+    (frame) => frame.dataset.storyActive === "true",
   );
   if (current < 0) current = 0;
 
@@ -51,8 +49,8 @@ export function setupStoryMediaCycle(
   };
   const show = (index: number) => {
     frames.forEach((frame, frameIndex) => {
-      if (frameIndex === index) frame.classList.add("is-active");
-      else frame.classList.remove("is-active");
+      if (frameIndex === index) frame.dataset.storyActive = "true";
+      else delete frame.dataset.storyActive;
     });
     current = index;
   };

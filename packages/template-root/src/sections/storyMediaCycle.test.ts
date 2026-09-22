@@ -15,17 +15,8 @@ const still: Media = {
 };
 
 function createFrame(active = false) {
-  const classes = new Set(active ? ["is-active"] : []);
   return {
-    classList: {
-      add: (name: string) => {
-        classes.add(name);
-      },
-      remove: (name: string) => {
-        classes.delete(name);
-      },
-      contains: (name: string) => classes.has(name),
-    },
+    dataset: active ? { storyActive: "true" } : {},
   };
 }
 
@@ -130,8 +121,8 @@ describe("story media cycle", () => {
       { reducedMotion: true, clock },
     );
     clock.advance(STORY_MEDIA_HOLD_MS);
-    expect(frames[0]?.classList.contains("is-active")).toBe(true);
-    expect(frames[1]?.classList.contains("is-active")).toBe(false);
+    expect(frames[0]?.dataset.storyActive).toBe("true");
+    expect(frames[1]?.dataset.storyActive).toBeUndefined();
   });
 
   it("crossfades to the next still after the hold while the section is in view", () => {
@@ -148,22 +139,22 @@ describe("story media cycle", () => {
       clock,
     });
     observer.emit(story, true);
-    expect(frames[0]?.classList.contains("is-active")).toBe(true);
+    expect(frames[0]?.dataset.storyActive).toBe("true");
 
     clock.advance(STORY_MEDIA_HOLD_MS - 1);
-    expect(frames[0]?.classList.contains("is-active")).toBe(true);
+    expect(frames[0]?.dataset.storyActive).toBe("true");
 
     clock.advance(1);
-    expect(frames[0]?.classList.contains("is-active")).toBe(false);
-    expect(frames[1]?.classList.contains("is-active")).toBe(true);
+    expect(frames[0]?.dataset.storyActive).toBeUndefined();
+    expect(frames[1]?.dataset.storyActive).toBe("true");
 
     clock.advance(STORY_MEDIA_HOLD_MS);
-    expect(frames[1]?.classList.contains("is-active")).toBe(false);
-    expect(frames[2]?.classList.contains("is-active")).toBe(true);
+    expect(frames[1]?.dataset.storyActive).toBeUndefined();
+    expect(frames[2]?.dataset.storyActive).toBe("true");
 
     clock.advance(STORY_MEDIA_HOLD_MS);
-    expect(frames[2]?.classList.contains("is-active")).toBe(false);
-    expect(frames[0]?.classList.contains("is-active")).toBe(true);
+    expect(frames[2]?.dataset.storyActive).toBeUndefined();
+    expect(frames[0]?.dataset.storyActive).toBe("true");
   });
 
   it("pauses while the section leaves the viewport and resumes from the current still", () => {
@@ -181,15 +172,15 @@ describe("story media cycle", () => {
     });
     observer.emit(story, true);
     clock.advance(STORY_MEDIA_HOLD_MS);
-    expect(frames[1]?.classList.contains("is-active")).toBe(true);
+    expect(frames[1]?.dataset.storyActive).toBe("true");
 
     observer.emit(story, false);
     clock.advance(STORY_MEDIA_HOLD_MS * 2);
-    expect(frames[1]?.classList.contains("is-active")).toBe(true);
-    expect(frames[0]?.classList.contains("is-active")).toBe(false);
+    expect(frames[1]?.dataset.storyActive).toBe("true");
+    expect(frames[0]?.dataset.storyActive).toBeUndefined();
 
     observer.emit(story, true);
     clock.advance(STORY_MEDIA_HOLD_MS);
-    expect(frames[0]?.classList.contains("is-active")).toBe(true);
+    expect(frames[0]?.dataset.storyActive).toBe("true");
   });
 });

@@ -10,27 +10,32 @@ interface Props {
 const { content, tone = "ivory" } = Astro.props;
 validateVenueContent(content);
 const id = content.id;
+const toneClasses = tone === "olive" ? "bg-template-olive text-template-ivory" : "bg-template-ivory text-template-ink";
+const descriptionClass = tone === "olive" ? "text-[rgba(244,240,232,0.7)]" : "text-template-muted";
+const mutedClass = tone === "olive" ? "text-[rgba(244,240,232,0.7)]" : "text-template-muted";
+const revealClasses = "opacity-100 translate-y-0 data-[template-motion-ready=true]:transition-[opacity,transform] data-[template-motion-ready=true]:duration-700 data-[template-motion-ready=true]:ease-out data-[template-motion-ready=true]:data-[template-reveal-state=hidden]:opacity-0 data-[template-motion-ready=true]:data-[template-reveal-state=hidden]:translate-y-3 motion-reduce:opacity-100 motion-reduce:translate-y-0 motion-reduce:transition-none";
 ---
 
 <section
   id={id}
-  class:list={["template-venue", `template-venue--${tone}`]}
+  class={`grid grid-cols-[minmax(0,0.72fr)_minmax(0,1.28fr)] gap-[clamp(2.5rem,6vw,7rem)] px-[var(--template-page-inset)] pb-[clamp(2rem,3vw,3rem)] pt-[clamp(5rem,10vw,9rem)] ${toneClasses} [@media(max-width:960px)]:block`}
   aria-labelledby={`${id}-title`}
 >
-  <header class="template-venue__header" data-template-reveal>
-    {content.eyebrow && <p class="template-venue__eyebrow">{content.eyebrow}</p>}
-    <h2 id={`${id}-title`}>{content.title}</h2>
-    {content.description && <p class="template-venue__description">{content.description}</p>}
+  <header class={`${revealClasses} [@media(max-width:960px)]:mb-12`} data-template-reveal>
+    {content.eyebrow && <p class="m-0 mb-5 text-[0.72rem] font-bold uppercase tracking-[0.16em]">{content.eyebrow}</p>}
+    <h2 class="m-0 max-w-[12ch] font-template-serif text-[clamp(2.5rem,6vw,calc(5.5rem*var(--template-width-scale)))] font-normal tracking-[-0.065em] leading-[0.96]" id={`${id}-title`}>{content.title}</h2>
+    {content.description && <p class={`m-0 mt-7 max-w-[30rem] leading-[1.7] ${descriptionClass}`}>{content.description}</p>}
   </header>
-  <div class="template-venue__content" data-template-reveal>
-    <div class="template-venue__details">
-      <h3>{content.name}</h3>
-      <p class="template-venue__address-label">{content.labels.addressLabel}</p>
-      <address id={`${id}-address`}>{content.address}</address>
-      <div class="template-venue__actions">
-        <a href={content.directions.href} target="_blank" rel="noreferrer">{content.directions.label}</a>
-        <a href={content.fallback.href} target="_blank" rel="noreferrer">{content.fallback.label}</a>
+  <div class={`${revealClasses} min-w-0 self-end`} data-template-reveal>
+    <div>
+      <h3 class="m-0 text-[clamp(1.8rem,3vw,2.75rem)] font-medium tracking-[-0.025em] leading-[1.1]">{content.name}</h3>
+      <p class={`m-0 mb-2 mt-8 text-[0.72rem] font-bold uppercase tracking-[0.16em] ${mutedClass}`}>{content.labels.addressLabel}</p>
+      <address class="max-w-[30rem] text-[clamp(1.15rem,2vw,1.5rem)] not-italic leading-[1.45]" id={`${id}-address`}>{content.address}</address>
+      <div class="mt-8 flex flex-wrap gap-x-4 gap-y-3">
+        <a class="inline-flex min-h-11 items-center border border-template-line bg-transparent px-[0.9rem] py-[0.65rem] text-[0.72rem] uppercase tracking-[0.08em] no-underline hover:border-current focus-visible:border-current" href={content.directions.href} target="_blank" rel="noreferrer">{content.directions.label}</a>
+        <a class="inline-flex min-h-11 items-center border border-template-line bg-transparent px-[0.9rem] py-[0.65rem] text-[0.72rem] uppercase tracking-[0.08em] no-underline hover:border-current focus-visible:border-current" href={content.fallback.href} target="_blank" rel="noreferrer">{content.fallback.label}</a>
         <button
+          class="inline-flex min-h-11 items-center border border-template-line bg-transparent px-[0.9rem] py-[0.65rem] font-sans text-[0.72rem] uppercase tracking-[0.08em] hover:border-current focus-visible:border-current"
           type="button"
           data-copy-address
           data-address={content.address}
@@ -38,10 +43,11 @@ const id = content.id;
           data-copy-error={content.labels.copyErrorLabel}
         >{content.labels.copyLabel}</button>
       </div>
-      <p class="template-venue__copy-status" data-copy-status role="status" aria-live="polite"></p>
+      <p class={`m-0 mt-3 min-h-[1.5em] text-[0.9rem] ${mutedClass}`} data-copy-status role="status" aria-live="polite"></p>
     </div>
-    <figure class="template-venue__map">
+    <figure class="mt-0 min-h-[clamp(24rem,34vw,28rem)] overflow-hidden bg-template-olive">
       <iframe
+        class="block h-full min-h-[clamp(24rem,34vw,28rem)] w-full border-0"
         src={content.mapEmbedUrl}
         title={content.labels.mapTitle}
         loading="lazy"

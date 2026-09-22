@@ -10,15 +10,11 @@ const guestSource = readFileSync(
   resolve(import.meta.dirname, "GuestGroupsSection.tsx"),
   "utf8",
 );
-const stylesSource = readFileSync(
-  resolve(import.meta.dirname, "../styles.css"),
-  "utf8",
-);
 
 describe("RSVP cards follow guest group card chrome", () => {
   it("renders each RSVP group as a Card with the guest-group header pattern", () => {
-    expect(guestSource).toContain('className="guest-group-card"');
-    expect(rsvpSource).toContain('className="rsvp-group-card"');
+    expect(guestSource).toContain("rounded-[10px]");
+    expect(rsvpSource).toContain("rounded-[10px]");
     expect(rsvpSource).toContain(
       'className="flex w-full flex-row items-start justify-between"',
     );
@@ -28,11 +24,8 @@ describe("RSVP cards follow guest group card chrome", () => {
   });
 
   it("keeps the export card on the same surface as guest group cards", () => {
-    expect(rsvpSource).toContain('className="rsvp-export"');
-    expect(stylesSource).not.toMatch(
-      /\.rsvp-export\s*\{[^}]*background:\s*var\(--beige\)/s,
-    );
-    expect(stylesSource).not.toMatch(/\.rsvp-group,/);
+    expect(rsvpSource).toContain("border-admin-line");
+    expect(rsvpSource).toContain("bg-admin-surface");
   });
 
   it("places compact export actions in the card header", () => {
@@ -52,10 +45,7 @@ describe("RSVP cards follow guest group card chrome", () => {
   });
 
   it("pins the save action as a centered fixed footer", () => {
-    expect(rsvpSource).toContain('className="rsvp-save-bar"');
-    expect(stylesSource).toMatch(/\.rsvp-save-bar\s*\{[^}]*position:\s*fixed/s);
-    expect(stylesSource).toMatch(
-      /\.rsvp-save-bar \[data-slot="button"\]\s*\{[^}]*width:\s*70%/s,
-    );
+    expect(rsvpSource).toContain("fixed");
+    expect(rsvpSource).toContain("w-[70%]");
   });
 });

@@ -24,7 +24,6 @@ const source = readFileSync(
   resolve(import.meta.dirname, "AdminRecognition.tsx"),
   "utf8",
 );
-const styles = readFileSync(resolve(import.meta.dirname, "styles.css"), "utf8");
 
 function memoryStorage() {
   const values = new Map<string, string>();
@@ -157,15 +156,11 @@ describe("public administrative handoff", () => {
     expect(() => writeAdminIntroDismissed(blocked, "one")).not.toThrow();
   });
 
-  it("pins the intro to the viewport bottom and enters with template motion", () => {
-    const rule = styles.match(/\.admin-intro\s*\{[^}]*\}/s)?.[0];
-    expect(rule).toContain("position: fixed;");
-    expect(rule).toContain("bottom: 0;");
-    expect(rule).toContain("top: auto;");
-    expect(rule).toMatch(/animation:\s*admin-intro-enter/);
-    expect(styles).toContain("@keyframes admin-intro-enter");
-    expect(styles).toMatch(
-      /@media \(prefers-reduced-motion:\s*reduce\)[\s\S]*?\.admin-intro\s*\{[\s\S]*?animation:\s*none;/,
+  it("pins the intro to the viewport bottom and enters with reduced motion utilities", () => {
+    expect(source).toMatch(
+      /className="fixed inset-x-0 bottom-0 z-40[^"]*animate-admin-intro-enter[^"]*motion-reduce:animate-none"/,
     );
+    expect(source).toContain("bg-template-ivory");
+    expect(source).toContain("shadow-[0_-0.75rem_2rem_rgba(37,53,43,0.16)]");
   });
 });
