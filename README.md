@@ -2,7 +2,7 @@
 
 Managed wedding websites in a TypeScript Turborepo. The product interview is complete; this repository contains its requirements, engineering contracts, implementation blocks and an executable foundation.
 
-**Current scope:** controlled administration, guest groups, required name-and-phone invitation lookup, manual PIN confirmation, family sessions, RSVP, messages, mural, reports, demo reset, and reusable wedding presentation. SMS delivery and Twilio integration are not product dependencies.
+**Current scope:** controlled administration, invitations with one or more adult/child guests, required contact phone and optional email, site-scoped phone plus six-digit PIN access, invitation sessions, individual RSVP, messages, mural, CSV/PDF reports, demo reset, and reusable wedding presentation. SMS delivery and Twilio integration are not product dependencies.
 
 ## Read first
 
