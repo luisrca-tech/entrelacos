@@ -438,7 +438,7 @@ export const adminMutationResponseSchema = strictObject({
 
 export const publicAccessConsumeInputSchema = strictObject({
   token: opaqueTokenSchema,
-  password: z.string().min(10).max(12),
+  password: z.string().min(6).max(10),
 });
 export type PublicAccessConsumeInput = z.infer<
   typeof publicAccessConsumeInputSchema

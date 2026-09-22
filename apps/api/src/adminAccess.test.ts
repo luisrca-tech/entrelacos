@@ -29,7 +29,7 @@ describe("administrative access core validation", () => {
     await expect(
       consumeAdminAccess(db as never, {
         token: "a".repeat(43),
-        password: "too-short",
+        password: "short",
         purpose: "ACTIVATION",
       }),
     ).rejects.toBeInstanceOf(AdminAccessRejectedError);
