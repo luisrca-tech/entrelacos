@@ -5,9 +5,9 @@ import {
   verifyDatabaseConnection,
 } from "@entrelacos/database";
 import {
-  familyMessage,
-  guestGroup,
-  guestMember,
+  invitation,
+  invitationGuest,
+  invitationMessage,
   site,
   siteOrigin,
 } from "@entrelacos/database/schema";
@@ -54,37 +54,35 @@ describe("messages HTTP PostgreSQL boundary", () => {
       updatedAt: now,
     });
     siteId = id;
-    const groupId = `${fixturePrefix}-group`;
-    const memberId = `${fixturePrefix}-member`;
+    const invitationId = `${fixturePrefix}-invitation`;
+    const guestId = `${fixturePrefix}-guest`;
     await connection.db.transaction(async (tx) => {
-      await tx.insert(guestGroup).values({
-        id: groupId,
+      await tx.insert(invitation).values({
+        id: invitationId,
         siteId,
         name: "Família HTTP",
         normalizedName: "familia http",
-        isForeign: false,
         phoneE164: "+5511999999999",
-        representativeMemberId: memberId,
         messageRevision: 1,
         createdAt: now,
         updatedAt: now,
       });
-      await tx.insert(guestMember).values({
-        id: memberId,
+      await tx.insert(invitationGuest).values({
+        id: guestId,
         siteId,
-        groupId,
+        invitationId,
         fullName: "Ana HTTP",
         normalizedName: "ana http",
+        guestType: "ADULT",
         createdAt: now,
         updatedAt: now,
       });
-      await tx.insert(familyMessage).values({
+      await tx.insert(invitationMessage).values({
         id: `${fixturePrefix}-message`,
         siteId,
-        groupId,
-        authorMemberId: memberId,
-        authorName: "Ana HTTP",
-        groupName: "Família HTTP",
+        invitationId,
+        authorName: "Família HTTP",
+        invitationName: "Família HTTP",
         text: "Mensagem pública",
         revision: 1,
         createdAt: now,
@@ -119,8 +117,8 @@ describe("messages HTTP PostgreSQL boundary", () => {
       messages: [
         {
           id: `${fixturePrefix}-message`,
-          authorName: "Ana HTTP",
-          groupName: "Família HTTP",
+          authorName: "Família HTTP",
+          invitationName: "Família HTTP",
           text: "Mensagem pública",
           createdAt: "2029-02-10T12:00:00.000Z",
           updatedAt: "2029-02-10T12:00:00.000Z",
@@ -173,12 +171,12 @@ describe("messages HTTP PostgreSQL boundary", () => {
     });
     await expect(
       connection.db
-        .select({ id: familyMessage.id })
-        .from(familyMessage)
+        .select({ id: invitationMessage.id })
+        .from(invitationMessage)
         .where(
           and(
-            eq(familyMessage.siteId, siteId),
-            eq(familyMessage.id, `${fixturePrefix}-message`),
+            eq(invitationMessage.siteId, siteId),
+            eq(invitationMessage.id, `${fixturePrefix}-message`),
           ),
         ),
     ).resolves.toHaveLength(1);

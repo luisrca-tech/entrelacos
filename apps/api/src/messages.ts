@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import {
-  familyMessageResponseSchema,
+  invitationMessageResponseSchema,
   messageDeletionInputSchema,
   messageDeletionResponseSchema,
   messageMutationInputSchema,
@@ -16,15 +16,15 @@ import {
   siteMessagesResponseSchema,
 } from "@entrelacos/contracts";
 import {
-  familyMessage,
-  guestGroup,
+  invitation,
+  invitationMessage,
   messageRequestReceipt,
   site,
   siteOrigin,
 } from "@entrelacos/database/schema";
 import { and, asc, desc, eq, gt, lt, or, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
-import { hashFamilySessionToken } from "./familySession";
+import { hashInvitationSessionToken } from "./guestVerification";
 import { allowsLocalPublicOrigin } from "./localPublicOrigin";
 
 export type MessagesDatabase = NodePgDatabase<Record<string, never>>;
@@ -71,7 +71,7 @@ function asDate(value: Date | string | null): Date | null {
 function messageRecord(row: {
   id: string;
   author_name: string;
-  group_name: string;
+  invitation_name: string;
   text: string;
   revision: number;
   created_at: Date | string;
@@ -80,7 +80,7 @@ function messageRecord(row: {
   return {
     id: row.id,
     authorName: row.author_name,
-    groupName: row.group_name,
+    invitationName: row.invitation_name,
     text: messageTextSchema.parse(row.text),
     revision: row.revision,
     createdAt: new Date(row.created_at).toISOString(),
@@ -88,13 +88,11 @@ function messageRecord(row: {
   };
 }
 
-type FamilyContext = {
+type InvitationContext = {
   sessionId: string;
   siteId: string;
-  groupId: string;
-  groupName: string;
-  representativeMemberId: string;
-  representativeName: string;
+  invitationId: string;
+  invitationName: string;
   muralEnabled: boolean;
   messageBlocked: boolean;
   messageRevision: number;
@@ -102,7 +100,7 @@ type FamilyContext = {
     | {
         id: string;
         author_name: string;
-        group_name: string;
+        invitation_name: string;
         text: string;
         revision: number;
         created_at: Date | string;
@@ -111,50 +109,43 @@ type FamilyContext = {
     | undefined;
 };
 
-async function familyContext(
+async function invitationContext(
   db: MessagesDatabase,
   token: string,
   now: Date,
   lock: boolean,
-): Promise<FamilyContext> {
+): Promise<InvitationContext> {
   const result = await db.execute(sql`
-    SELECT fs.id AS session_id, fs.site_id, fs.group_id,
-      fs.expires_at, fs.revoked_at, s.lifecycle, s.mural_enabled,
-      gg.name AS group_name, gg.is_foreign, gg.message_blocked, gg.message_revision,
-      gg.representative_member_id, rep.full_name AS representative_name,
-      fm.id AS message_id, fm.author_name, fm.group_name AS message_group_name,
+    SELECT session.id AS session_id, session.site_id, session.invitation_id,
+      session.expires_at, session.revoked_at, s.lifecycle, s.mural_enabled,
+      i.name AS invitation_name, i.message_blocked, i.message_revision,
+      fm.id AS message_id, fm.author_name, fm.invitation_name AS message_invitation_name,
       fm.text AS message_text, fm.revision AS message_revision_value,
       fm.created_at AS message_created_at, fm.updated_at AS message_updated_at
-    FROM family_session fs
-    INNER JOIN site s ON s.id = fs.site_id
-    INNER JOIN guest_group gg
-      ON gg.site_id = fs.site_id AND gg.id = fs.group_id
-    INNER JOIN guest_member rep
-      ON rep.site_id = gg.site_id AND rep.group_id = gg.id
-      AND rep.id = gg.representative_member_id
-    LEFT JOIN family_message fm
-      ON fm.site_id = gg.site_id AND fm.group_id = gg.id
-    WHERE fs.token_hash = ${hashFamilySessionToken(token)}
-    ${lock ? sql`FOR UPDATE OF fs, s, gg` : sql``}
+    FROM invitation_session session
+    INNER JOIN site s ON s.id = session.site_id
+    INNER JOIN invitation i
+      ON i.site_id = session.site_id AND i.id = session.invitation_id
+    LEFT JOIN invitation_message fm
+      ON fm.site_id = i.site_id AND fm.invitation_id = i.id
+    WHERE session.token_hash = ${hashInvitationSessionToken(token)}
+    ${lock ? sql`FOR UPDATE OF session, s, i` : sql``}
   `);
   const row = result.rows[0] as
     | {
         session_id: string;
         site_id: string;
-        group_id: string;
+        invitation_id: string;
         expires_at: Date | string;
         revoked_at: Date | string | null;
         lifecycle: string;
         mural_enabled: boolean;
-        group_name: string;
-        is_foreign: boolean;
+        invitation_name: string;
         message_blocked: boolean;
         message_revision: number;
-        representative_member_id: string;
-        representative_name: string;
         message_id: string | null;
         author_name: string | null;
-        message_group_name: string | null;
+        message_invitation_name: string | null;
         message_text: string | null;
         message_revision_value: number | null;
         message_created_at: Date | string | null;
@@ -167,15 +158,14 @@ async function familyContext(
     row.revoked_at ||
     !expiresAt ||
     expiresAt <= now ||
-    row.lifecycle === "INACTIVE" ||
-    row.is_foreign
+    row.lifecycle === "INACTIVE"
   ) {
-    reject(401, "SESSION_INVALID", "Family session is invalid");
+    reject(401, "SESSION_INVALID", "Invitation session is invalid");
   }
   const message =
     row.message_id &&
     row.author_name !== null &&
-    row.message_group_name !== null &&
+    row.message_invitation_name !== null &&
     row.message_text !== null &&
     row.message_revision_value !== null &&
     row.message_created_at !== null &&
@@ -183,7 +173,7 @@ async function familyContext(
       ? {
           id: row.message_id,
           author_name: row.author_name,
-          group_name: row.message_group_name,
+          invitation_name: row.message_invitation_name,
           text: row.message_text,
           revision: row.message_revision_value,
           created_at: row.message_created_at,
@@ -193,10 +183,8 @@ async function familyContext(
   return {
     sessionId: row.session_id,
     siteId: row.site_id,
-    groupId: row.group_id,
-    groupName: row.group_name,
-    representativeMemberId: row.representative_member_id,
-    representativeName: row.representative_name,
+    invitationId: row.invitation_id,
+    invitationName: row.invitation_name,
     muralEnabled: row.mural_enabled,
     messageBlocked: row.message_blocked,
     messageRevision: row.message_revision,
@@ -205,23 +193,23 @@ async function familyContext(
 }
 
 function readOnlyReason(
-  context: FamilyContext,
+  context: InvitationContext,
 ): "MURAL_DISABLED" | "MESSAGE_BLOCKED" | null {
   if (!context.muralEnabled) return "MURAL_DISABLED";
   if (context.messageBlocked) return "MESSAGE_BLOCKED";
   return null;
 }
 
-export async function readFamilyMessage(
+export async function readInvitationMessage(
   db: MessagesDatabase,
   token: string,
   nowValue?: Date,
 ) {
   const now = currentTime(nowValue);
-  const context = await familyContext(db, token, now, false);
-  return familyMessageResponseSchema.parse({
+  const context = await invitationContext(db, token, now, false);
+  return invitationMessageResponseSchema.parse({
     siteId: context.siteId,
-    groupId: context.groupId,
+    invitationId: context.invitationId,
     currentRevision: context.messageRevision,
     canEdit: context.muralEnabled && !context.messageBlocked,
     readOnlyReason: readOnlyReason(context),
@@ -245,13 +233,13 @@ function canonicalRequestHash(input: {
     .digest("hex");
 }
 
-async function lockMessageGroup(
+async function lockMessageInvitation(
   db: MessagesDatabase,
   siteId: string,
-  groupId: string,
+  invitationId: string,
 ): Promise<void> {
   await db.execute(
-    sql`SELECT pg_advisory_xact_lock(hashtext(${`family-message:${siteId}:${groupId}`}))`,
+    sql`SELECT pg_advisory_xact_lock(hashtext(${`invitation-message:${siteId}:${invitationId}`}))`,
   );
 }
 
@@ -259,7 +247,7 @@ function receiptResponse(value: unknown) {
   return messageMutationResponseSchema.parse(value);
 }
 
-export async function writeFamilyMessage(
+export async function writeInvitationMessage(
   db: MessagesDatabase,
   token: string,
   inputValue: unknown,
@@ -268,9 +256,9 @@ export async function writeFamilyMessage(
   const input = messageMutationInputSchema.parse(inputValue);
   const now = currentTime(nowValue);
   return db.transaction(async (tx) => {
-    const initial = await familyContext(tx, token, now, false);
-    await lockMessageGroup(tx, initial.siteId, initial.groupId);
-    const context = await familyContext(tx, token, now, true);
+    const initial = await invitationContext(tx, token, now, false);
+    await lockMessageInvitation(tx, initial.siteId, initial.invitationId);
+    const context = await invitationContext(tx, token, now, true);
     if (!context.muralEnabled)
       reject(409, "MURAL_DISABLED", "The mural is disabled");
     if (context.messageBlocked)
@@ -283,7 +271,7 @@ export async function writeFamilyMessage(
       .where(
         and(
           eq(messageRequestReceipt.siteId, context.siteId),
-          eq(messageRequestReceipt.groupId, context.groupId),
+          eq(messageRequestReceipt.invitationId, context.invitationId),
           eq(messageRequestReceipt.sessionId, context.sessionId),
           eq(messageRequestReceipt.requestId, input.requestId),
         ),
@@ -317,7 +305,7 @@ export async function writeFamilyMessage(
       const nextMessageId = current?.id ?? randomUUID();
       if (current) {
         await tx
-          .update(familyMessage)
+          .update(invitationMessage)
           .set({
             text: input.text,
             revision: nextRevision,
@@ -325,18 +313,17 @@ export async function writeFamilyMessage(
           })
           .where(
             and(
-              eq(familyMessage.siteId, context.siteId),
-              eq(familyMessage.groupId, context.groupId),
+              eq(invitationMessage.siteId, context.siteId),
+              eq(invitationMessage.invitationId, context.invitationId),
             ),
           );
       } else {
-        await tx.insert(familyMessage).values({
+        await tx.insert(invitationMessage).values({
           id: nextMessageId,
           siteId: context.siteId,
-          groupId: context.groupId,
-          authorMemberId: context.representativeMemberId,
-          authorName: context.representativeName,
-          groupName: context.groupName,
+          invitationId: context.invitationId,
+          authorName: context.invitationName,
+          invitationName: context.invitationName,
           text: input.text,
           revision: nextRevision,
           createdAt: now,
@@ -344,18 +331,18 @@ export async function writeFamilyMessage(
         });
       }
       await tx
-        .update(guestGroup)
+        .update(invitation)
         .set({ messageRevision: nextRevision, updatedAt: now })
         .where(
           and(
-            eq(guestGroup.siteId, context.siteId),
-            eq(guestGroup.id, context.groupId),
+            eq(invitation.siteId, context.siteId),
+            eq(invitation.id, context.invitationId),
           ),
         );
       message = {
         id: nextMessageId,
-        author_name: current?.author_name ?? context.representativeName,
-        group_name: current?.group_name ?? context.groupName,
+        author_name: current?.author_name ?? context.invitationName,
+        invitation_name: current?.invitation_name ?? context.invitationName,
         text: input.text,
         revision: nextRevision,
         created_at: current?.created_at ?? now,
@@ -373,7 +360,7 @@ export async function writeFamilyMessage(
     await tx.insert(messageRequestReceipt).values({
       id: randomUUID(),
       siteId: context.siteId,
-      groupId: context.groupId,
+      invitationId: context.invitationId,
       sessionId: context.sessionId,
       requestId: input.requestId,
       requestHash: hash,
@@ -430,7 +417,7 @@ const identifierPattern = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 function decodeCursor(
   value: string | undefined,
   siteId: string,
-  scope: "mural" | "groups",
+  scope: "mural" | "invitations",
 ): Record<string, string> | undefined {
   if (!value) return undefined;
   try {
@@ -443,7 +430,7 @@ function decodeCursor(
     const expectedKeys =
       scope === "mural"
         ? ["scope", "siteId", "createdAt", "id"]
-        : ["scope", "siteId", "groupName", "id"];
+        : ["scope", "siteId", "invitationName", "id"];
     if (
       Object.keys(record).length !== expectedKeys.length ||
       expectedKeys.some((key) => typeof record[key] !== "string") ||
@@ -460,7 +447,7 @@ function decodeCursor(
       )
         throw new Error("invalid cursor");
     }
-    if (scope === "groups" && !(record.groupName as string).trim())
+    if (scope === "invitations" && !(record.invitationName as string).trim())
       throw new Error("invalid cursor");
     return record as Record<string, string>;
   } catch {
@@ -515,24 +502,24 @@ export async function readPublicMural(
       nextCursor: null,
     });
 
-  const conditions = [eq(familyMessage.siteId, siteId)];
+  const conditions = [eq(invitationMessage.siteId, siteId)];
   if (cursor) {
     const createdAt = new Date(cursor.createdAt);
     conditions.push(
       or(
-        lt(familyMessage.createdAt, createdAt),
+        lt(invitationMessage.createdAt, createdAt),
         and(
-          eq(familyMessage.createdAt, createdAt),
-          lt(familyMessage.id, cursor.id),
+          eq(invitationMessage.createdAt, createdAt),
+          lt(invitationMessage.id, cursor.id),
         ),
       ) as (typeof conditions)[number],
     );
   }
   const messages = await db
     .select()
-    .from(familyMessage)
+    .from(invitationMessage)
     .where(and(...conditions))
-    .orderBy(desc(familyMessage.createdAt), desc(familyMessage.id))
+    .orderBy(desc(invitationMessage.createdAt), desc(invitationMessage.id))
     .limit(query.limit + 1);
   const page = messages.slice(0, query.limit);
   return publicMuralResponseSchema.parse({
@@ -540,7 +527,7 @@ export async function readPublicMural(
     messages: page.map((message) => ({
       id: message.id,
       authorName: message.authorName,
-      groupName: message.groupName,
+      invitationName: message.invitationName,
       text: messageTextSchema.parse(message.text),
       createdAt: message.createdAt.toISOString(),
       updatedAt: message.updatedAt.toISOString(),
@@ -564,52 +551,53 @@ export async function listSiteMessages(
   queryValue: unknown,
 ) {
   const query = siteMessagesQuerySchema.parse(queryValue);
-  const cursor = decodeCursor(query.cursor, siteId, "groups");
+  const cursor = decodeCursor(query.cursor, siteId, "invitations");
   await adminSiteContext(db, actor, siteId, false, false);
-  const conditions = [eq(guestGroup.siteId, siteId)];
-  if (query.groupId) conditions.push(eq(guestGroup.id, query.groupId));
+  const conditions = [eq(invitation.siteId, siteId)];
+  if (query.invitationId)
+    conditions.push(eq(invitation.id, query.invitationId));
   if (cursor) {
     conditions.push(
       or(
-        gt(guestGroup.name, cursor.groupName),
+        gt(invitation.name, cursor.invitationName),
         and(
-          eq(guestGroup.name, cursor.groupName),
-          gt(guestGroup.id, cursor.id),
+          eq(invitation.name, cursor.invitationName),
+          gt(invitation.id, cursor.id),
         ),
       ) as (typeof conditions)[number],
     );
   }
   const rows = await db
     .select({
-      groupId: guestGroup.id,
-      groupName: guestGroup.name,
-      blocked: guestGroup.messageBlocked,
-      currentRevision: guestGroup.messageRevision,
-      message: familyMessage,
+      invitationId: invitation.id,
+      invitationName: invitation.name,
+      blocked: invitation.messageBlocked,
+      currentRevision: invitation.messageRevision,
+      message: invitationMessage,
     })
-    .from(guestGroup)
+    .from(invitation)
     .leftJoin(
-      familyMessage,
+      invitationMessage,
       and(
-        eq(familyMessage.siteId, guestGroup.siteId),
-        eq(familyMessage.groupId, guestGroup.id),
+        eq(invitationMessage.siteId, invitation.siteId),
+        eq(invitationMessage.invitationId, invitation.id),
       ),
     )
     .where(and(...conditions))
-    .orderBy(asc(guestGroup.name), asc(guestGroup.id))
+    .orderBy(asc(invitation.name), asc(invitation.id))
     .limit(query.limit + 1);
   const page = rows.slice(0, query.limit);
   return siteMessagesResponseSchema.parse({
-    groups: page.map((row) => ({
-      groupId: row.groupId,
-      groupName: row.groupName,
+    invitations: page.map((row) => ({
+      invitationId: row.invitationId,
+      invitationName: row.invitationName,
       blocked: row.blocked,
       currentRevision: row.currentRevision,
       message: row.message
         ? messageRecord({
             id: row.message.id,
             author_name: row.message.authorName,
-            group_name: row.message.groupName,
+            invitation_name: row.message.invitationName,
             text: row.message.text,
             revision: row.message.revision,
             created_at: row.message.createdAt,
@@ -620,10 +608,10 @@ export async function listSiteMessages(
     nextCursor:
       rows.length > query.limit && page.length > 0
         ? encodeCursor({
-            scope: "groups",
+            scope: "invitations",
             siteId,
-            groupName: page[page.length - 1].groupName,
-            id: page[page.length - 1].groupId,
+            invitationName: page[page.length - 1].invitationName,
+            id: page[page.length - 1].invitationId,
           })
         : null,
   });
@@ -669,7 +657,7 @@ export async function updateMessageBlock(
   db: MessagesDatabase,
   actor: MessagesAdminActor,
   siteId: string,
-  groupId: string,
+  invitationId: string,
   inputValue: unknown,
   nowValue?: Date,
 ) {
@@ -677,33 +665,35 @@ export async function updateMessageBlock(
   const now = currentTime(nowValue);
   return db.transaction(async (tx) => {
     await adminSiteContext(tx, actor, siteId, true, true);
-    const groupResult = await tx.execute(sql`
-      SELECT id, message_blocked FROM guest_group
-      WHERE site_id = ${siteId} AND id = ${groupId}
+    const invitationResult = await tx.execute(sql`
+      SELECT id, message_blocked FROM invitation
+      WHERE site_id = ${siteId} AND id = ${invitationId}
       FOR UPDATE
     `);
-    const group = groupResult.rows[0] as
+    const record = invitationResult.rows[0] as
       | { id: string; message_blocked: boolean }
       | undefined;
-    if (!group) reject(404, "NOT_FOUND", "Not Found");
-    if (group.message_blocked !== input.blocked) {
+    if (!record) reject(404, "NOT_FOUND", "Not Found");
+    if (record.message_blocked !== input.blocked) {
       await tx
-        .update(guestGroup)
+        .update(invitation)
         .set({ messageBlocked: input.blocked, updatedAt: now })
-        .where(and(eq(guestGroup.siteId, siteId), eq(guestGroup.id, groupId)));
+        .where(
+          and(eq(invitation.siteId, siteId), eq(invitation.id, invitationId)),
+        );
     }
     return siteMessageBlockResponseSchema.parse({
-      groupId,
+      invitationId,
       blocked: input.blocked,
     });
   });
 }
 
-export async function deleteGroupMessage(
+export async function deleteInvitationMessage(
   db: MessagesDatabase,
   actor: MessagesAdminActor,
   siteId: string,
-  groupId: string,
+  invitationId: string,
   inputValue: unknown,
   nowValue?: Date,
 ) {
@@ -711,48 +701,50 @@ export async function deleteGroupMessage(
   const now = currentTime(nowValue);
   return db.transaction(async (tx) => {
     await adminSiteContext(tx, actor, siteId, true, true);
-    const groupResult = await tx.execute(sql`
-      SELECT id, message_revision FROM guest_group
-      WHERE site_id = ${siteId} AND id = ${groupId}
+    const invitationResult = await tx.execute(sql`
+      SELECT id, message_revision FROM invitation
+      WHERE site_id = ${siteId} AND id = ${invitationId}
       FOR UPDATE
     `);
-    const group = groupResult.rows[0] as
+    const record = invitationResult.rows[0] as
       | { id: string; message_revision: number }
       | undefined;
-    if (!group) reject(404, "MESSAGE_NOT_FOUND", "Message was not found");
-    if (group.message_revision !== input.expectedRevision)
+    if (!record) reject(404, "MESSAGE_NOT_FOUND", "Message was not found");
+    if (record.message_revision !== input.expectedRevision)
       reject(409, "MESSAGE_CONFLICT", "Message revision changed", {
-        currentRevision: group.message_revision,
+        currentRevision: record.message_revision,
       });
     const messageResult = await tx.execute(sql`
-      SELECT id FROM family_message
-      WHERE site_id = ${siteId} AND group_id = ${groupId}
+      SELECT id FROM invitation_message
+      WHERE site_id = ${siteId} AND invitation_id = ${invitationId}
       FOR UPDATE
     `);
     if (messageResult.rows.length === 0)
       reject(404, "MESSAGE_NOT_FOUND", "Message was not found");
-    const nextRevision = group.message_revision + 1;
+    const nextRevision = record.message_revision + 1;
     await tx
       .update(messageRequestReceipt)
       .set({ result: "REMOVED", responseBody: null, removedAt: now })
       .where(
         and(
           eq(messageRequestReceipt.siteId, siteId),
-          eq(messageRequestReceipt.groupId, groupId),
+          eq(messageRequestReceipt.invitationId, invitationId),
         ),
       );
     await tx
-      .delete(familyMessage)
+      .delete(invitationMessage)
       .where(
         and(
-          eq(familyMessage.siteId, siteId),
-          eq(familyMessage.groupId, groupId),
+          eq(invitationMessage.siteId, siteId),
+          eq(invitationMessage.invitationId, invitationId),
         ),
       );
     await tx
-      .update(guestGroup)
+      .update(invitation)
       .set({ messageRevision: nextRevision, updatedAt: now })
-      .where(and(eq(guestGroup.siteId, siteId), eq(guestGroup.id, groupId)));
+      .where(
+        and(eq(invitation.siteId, siteId), eq(invitation.id, invitationId)),
+      );
     return messageDeletionResponseSchema.parse({
       ok: true,
       currentRevision: nextRevision,
@@ -763,9 +755,7 @@ export async function deleteGroupMessage(
 export const getMuralConfiguration = readMuralConfiguration;
 export const patchMuralConfiguration = updateMuralConfiguration;
 export const patchMessageBlock = updateMessageBlock;
-export const removeGroupMessage = deleteGroupMessage;
 export const readSiteMural = readMuralConfiguration;
 export const updateSiteMural = updateMuralConfiguration;
 export const listMessages = listSiteMessages;
-export const deleteMessage = deleteGroupMessage;
-export const updateGroupMessageBlock = updateMessageBlock;
+export const deleteMessage = deleteInvitationMessage;

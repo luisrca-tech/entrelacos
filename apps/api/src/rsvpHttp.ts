@@ -1,7 +1,7 @@
 import {
   adminRsvpWriteInputSchema,
-  familyRsvpResponseSchema,
-  familyRsvpWriteInputSchema,
+  invitationRsvpResponseSchema,
+  invitationRsvpWriteInputSchema,
   rsvpDeadlineSchema,
   rsvpHistoryQuerySchema,
   rsvpHistoryResponseSchema,
@@ -9,23 +9,23 @@ import {
   siteRsvpQuerySchema,
   siteRsvpResponseSchema,
 } from "@entrelacos/contracts";
-import { familySession, siteOrigin } from "@entrelacos/database/schema";
+import { invitationSession, siteOrigin } from "@entrelacos/database/schema";
 import { eq } from "drizzle-orm";
 import { type Context, Hono } from "hono";
 import type { AuthHttpOptions } from "./authHttp";
 import { AdminSessionRequiredError, requireAdminSession } from "./authHttp";
-import { hashFamilySessionToken } from "./familySession";
+import { hashInvitationSessionToken } from "./guestVerification";
 import { allowsLocalPublicOrigin } from "./localPublicOrigin";
 import {
   listRsvpHistory,
   type RsvpAdminActor,
   RsvpServiceError,
-  readFamilyRsvp,
+  readInvitationRsvp,
   readRsvpDeadline,
   readSiteRsvp,
   updateRsvpDeadline,
   writeAdminRsvp,
-  writeFamilyRsvp,
+  writeInvitationRsvp,
 } from "./rsvp";
 
 function problem(
@@ -126,9 +126,9 @@ async function sessionSiteId(
 ): Promise<string | undefined> {
   if (!token) return undefined;
   const rows = await options.db
-    .select({ siteId: familySession.siteId })
-    .from(familySession)
-    .where(eq(familySession.tokenHash, hashFamilySessionToken(token)))
+    .select({ siteId: invitationSession.siteId })
+    .from(invitationSession)
+    .where(eq(invitationSession.tokenHash, hashInvitationSessionToken(token)))
     .limit(1);
   return rows[0]?.siteId;
 }
@@ -177,7 +177,7 @@ function preflight(context: Context, origin: string): Response {
   return new Response(null, { status: 204, headers: context.res.headers });
 }
 
-async function requireFamilyRequest(
+async function requireInvitationRequest(
   request: Request,
   options: AuthHttpOptions,
 ): Promise<Response | { origin: string; token: string }> {
@@ -187,7 +187,7 @@ async function requireFamilyRequest(
   if (!siteId) {
     if (await isRegisteredOrigin(options, request, origin)) {
       return withCors(
-        problem(401, "SESSION_INVALID", "Family session is invalid"),
+        problem(401, "SESSION_INVALID", "Invitation session is invalid"),
         origin as string,
       );
     }
@@ -199,7 +199,7 @@ async function requireFamilyRequest(
   return { origin: origin as string, token: token as string };
 }
 
-function familyResponse(
+function publicResponse(
   context: Context,
   value: unknown,
   origin: string,
@@ -306,7 +306,8 @@ export function createRsvpHttpRouter(options: AuthHttpOptions): Hono {
     }
   });
 
-  router.options("/v1/public/family/rsvp", async (context) => {
+  const publicPath = "/v1/public/invitation/rsvp";
+  router.options(publicPath, async (context) => {
     const origin = context.req.header("Origin");
     if (!(await isRegisteredOrigin(options, context.req.raw, origin))) {
       return problem(403, "FORBIDDEN", "Forbidden");
@@ -314,18 +315,18 @@ export function createRsvpHttpRouter(options: AuthHttpOptions): Hono {
     return preflight(context, origin as string);
   });
 
-  router.get("/v1/public/family/rsvp", async (context) => {
-    const access = await requireFamilyRequest(context.req.raw, options);
+  router.get(publicPath, async (context) => {
+    const access = await requireInvitationRequest(context.req.raw, options);
     if (isResponse(access)) return access;
     try {
-      const result = await readFamilyRsvp(
+      const result = await readInvitationRsvp(
         options.db,
         access.token,
         options.now?.(),
       );
-      return familyResponse(
+      return publicResponse(
         context,
-        familyRsvpResponseSchema.parse(result),
+        invitationRsvpResponseSchema.parse(result),
         access.origin,
       );
     } catch (error) {
@@ -333,17 +334,17 @@ export function createRsvpHttpRouter(options: AuthHttpOptions): Hono {
     }
   });
 
-  router.post("/v1/public/family/rsvp", async (context) => {
-    const access = await requireFamilyRequest(context.req.raw, options);
+  router.post(publicPath, async (context) => {
+    const access = await requireInvitationRequest(context.req.raw, options);
     if (isResponse(access)) return access;
     try {
-      const result = await writeFamilyRsvp(
+      const result = await writeInvitationRsvp(
         options.db,
         access.token,
-        familyRsvpWriteInputSchema.parse(await readObject(context.req.raw)),
+        invitationRsvpWriteInputSchema.parse(await readObject(context.req.raw)),
         options.now?.(),
       );
-      return familyResponse(
+      return publicResponse(
         context,
         rsvpWriteResponseSchema.parse(result),
         access.origin,

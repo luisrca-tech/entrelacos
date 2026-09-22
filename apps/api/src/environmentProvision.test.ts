@@ -5,24 +5,24 @@ const mocks = vi.hoisted(() => ({
   bootstrapOwner: vi.fn(),
   resetDemoSite: vi.fn(),
   datasetIds: {
-    groupIds: [
-      "b7-group-pending",
-      "b7-group-partial",
-      "b7-group-confirmed",
-      "b7-group-declined",
-      "b7-group-foreign",
+    invitationIds: [
+      "b7-invitation-pending",
+      "b7-invitation-partial",
+      "b7-invitation-confirmed",
+      "b7-invitation-declined",
+      "b7-invitation-foreign",
     ],
-    memberIds: [
-      "b7-member-pending-1",
-      "b7-member-pending-2",
-      "b7-member-partial-1",
-      "b7-member-partial-2",
-      "b7-member-confirmed-1",
-      "b7-member-confirmed-2",
-      "b7-member-declined-1",
-      "b7-member-declined-2",
-      "b7-member-foreign-1",
-      "b7-member-foreign-2",
+    guestIds: [
+      "b7-guest-pending-1",
+      "b7-guest-pending-2",
+      "b7-guest-partial-1",
+      "b7-guest-partial-2",
+      "b7-guest-confirmed-1",
+      "b7-guest-confirmed-2",
+      "b7-guest-declined-1",
+      "b7-guest-declined-2",
+      "b7-guest-foreign-1",
+      "b7-guest-foreign-2",
     ],
     messageId: "b7-message",
   },
@@ -74,8 +74,8 @@ function fakeDatabase(selectResults: unknown[][] = []) {
 
 function completeDatasetResults(): unknown[][] {
   return [
-    mocks.datasetIds.groupIds.map((id) => ({ id })),
-    mocks.datasetIds.memberIds.map((id) => ({ id })),
+    mocks.datasetIds.invitationIds.map((id) => ({ id })),
+    mocks.datasetIds.guestIds.map((id) => ({ id })),
     [{ id: mocks.datasetIds.messageId }],
   ];
 }
@@ -396,8 +396,8 @@ describe("demo environment provisioning", () => {
       ],
       [],
       [{ origin: "https://demo-dev.entrelacos.workers.dev" }],
-      mocks.datasetIds.groupIds.map((id) => ({ id })),
-      mocks.datasetIds.memberIds.slice(0, -1).map((id) => ({ id })),
+      mocks.datasetIds.invitationIds.map((id) => ({ id })),
+      mocks.datasetIds.guestIds.slice(0, -1).map((id) => ({ id })),
       [{ id: mocks.datasetIds.messageId }],
     ]);
 

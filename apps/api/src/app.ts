@@ -3,15 +3,15 @@ import { Hono } from "hono";
 import { createAdminAccessHttpRouter } from "./adminAccessHttp";
 import { type AuthHttpOptions, createAuthHttpRouter } from "./authHttp";
 import { createDemoResetHttpRouter } from "./demoResetHttp";
-import { createGuestGroupsHttpRouter } from "./guestGroupsHttp";
+import { createGuestVerificationHttpRouter } from "./guestVerificationHttp";
 import { createHandoffHttpRouter } from "./handoffHttp";
+import { createInvitationsHttpRouter } from "./invitationsHttp";
 import { createMessagesHttpRouter } from "./messagesHttp";
 import {
   createObservabilityMiddleware,
   type ObservabilityOptions,
   type ObservabilityVariables,
 } from "./observability";
-import { createPublicGuestHttpRouter } from "./publicGuestHttp";
 import { createReportsHttpRouter } from "./reportsHttp";
 import { createRsvpHttpRouter } from "./rsvpHttp";
 import { createSitesHttpRouter } from "./sitesHttp";
@@ -34,9 +34,9 @@ export function createApp(
     app.route("/", createAuthHttpRouter(options));
     app.route("/", createAdminAccessHttpRouter(options));
     app.route("/", createSitesHttpRouter(options));
-    app.route("/", createGuestGroupsHttpRouter(options));
+    app.route("/", createInvitationsHttpRouter(options));
     app.route("/", createDemoResetHttpRouter(options));
-    app.route("/", createPublicGuestHttpRouter(options));
+    app.route("/", createGuestVerificationHttpRouter(options));
     app.route("/", createRsvpHttpRouter(options));
     app.route("/", createReportsHttpRouter(options));
     app.route("/", createMessagesHttpRouter(options));

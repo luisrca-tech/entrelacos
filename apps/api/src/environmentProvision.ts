@@ -1,9 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { originSchema, publicUrlSchema } from "@entrelacos/contracts";
 import {
-  familyMessage,
-  guestGroup,
-  guestMember,
+  invitation,
+  invitationGuest,
+  invitationMessage,
   site,
   siteOrigin,
 } from "@entrelacos/database/schema";
@@ -120,38 +120,39 @@ async function ensureDemoSite(
         throw new Error("Demo site origin conflicts with existing data");
       }
 
-      const groupRows = await tx
-        .select({ id: guestGroup.id })
-        .from(guestGroup)
+      const invitationRows = await tx
+        .select({ id: invitation.id })
+        .from(invitation)
         .where(
           and(
-            eq(guestGroup.siteId, DEMO_SITE_ID),
-            inArray(guestGroup.id, DEMO_RESET_DATASET_IDS.groupIds),
+            eq(invitation.siteId, DEMO_SITE_ID),
+            inArray(invitation.id, DEMO_RESET_DATASET_IDS.invitationIds),
           ),
         );
-      const memberRows = await tx
-        .select({ id: guestMember.id })
-        .from(guestMember)
+      const guestRows = await tx
+        .select({ id: invitationGuest.id })
+        .from(invitationGuest)
         .where(
           and(
-            eq(guestMember.siteId, DEMO_SITE_ID),
-            inArray(guestMember.id, DEMO_RESET_DATASET_IDS.memberIds),
+            eq(invitationGuest.siteId, DEMO_SITE_ID),
+            inArray(invitationGuest.id, DEMO_RESET_DATASET_IDS.guestIds),
           ),
         );
       const messageRows = await tx
-        .select({ id: familyMessage.id })
-        .from(familyMessage)
+        .select({ id: invitationMessage.id })
+        .from(invitationMessage)
         .where(
           and(
-            eq(familyMessage.siteId, DEMO_SITE_ID),
-            eq(familyMessage.id, DEMO_RESET_DATASET_IDS.messageId),
+            eq(invitationMessage.siteId, DEMO_SITE_ID),
+            eq(invitationMessage.id, DEMO_RESET_DATASET_IDS.messageId),
           ),
         );
       return {
         created: false,
         datasetComplete:
-          groupRows.length === DEMO_RESET_DATASET_IDS.groupIds.length &&
-          memberRows.length === DEMO_RESET_DATASET_IDS.memberIds.length &&
+          invitationRows.length ===
+            DEMO_RESET_DATASET_IDS.invitationIds.length &&
+          guestRows.length === DEMO_RESET_DATASET_IDS.guestIds.length &&
           messageRows.length === 1,
         muralEnabled: existing.muralEnabled,
       };

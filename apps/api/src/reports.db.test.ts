@@ -5,73 +5,28 @@ import {
   verifyDatabaseConnection,
 } from "@entrelacos/database";
 import {
-  guestGroup,
-  guestMember,
+  invitation,
+  invitationGuest,
   site,
   siteMembership,
   user,
 } from "@entrelacos/database/schema";
-import { eq, like } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { readRsvpReport } from "./reports";
+import { readInvitationReport } from "./reports";
 
-const fixturePrefix = `b5-reports-${process.pid}-${randomUUID().slice(0, 8)}`;
+const prefix = `invitation-reports-${process.pid}-${randomUUID().slice(0, 8)}`;
 const fixedNow = new Date("2029-01-10T12:00:00.000Z");
-const ownerId = `${fixturePrefix}-owner`;
-const siteAdminId = `${fixturePrefix}-admin`;
+const ownerId = `${prefix}-owner`;
+const adminId = `${prefix}-admin`;
+const siteId = randomUUID();
+const foreignSiteId = randomUUID();
 let connection: DatabaseConnection;
-let siteId = "";
-let inactiveSiteId = "";
-let foreignSiteId = "";
-let groupId = "";
-let foreignGroupId = "";
 
-async function insertGroup(
-  targetSiteId: string,
-  id: string,
-  name: string,
-  phone: string | null,
-  isForeign: boolean,
-  members: Array<{
-    id: string;
-    name: string;
-    state: "PENDING" | "CONFIRMED" | "DECLINED";
-  }>,
-) {
-  await connection.db.transaction(async (tx) => {
-    await tx.insert(guestGroup).values({
-      id,
-      siteId: targetSiteId,
-      name,
-      normalizedName: name.toLocaleLowerCase("pt-BR"),
-      isForeign,
-      phoneE164: phone,
-      representativeMemberId: members[0]?.id ?? `${id}-representative`,
-      createdAt: fixedNow,
-      updatedAt: fixedNow,
-    });
-    await tx.insert(guestMember).values(
-      members.map((member) => ({
-        id: member.id,
-        siteId: targetSiteId,
-        groupId: id,
-        fullName: member.name,
-        normalizedName: member.name.toLocaleLowerCase("pt-BR"),
-        rsvpState: member.state,
-        createdAt: fixedNow,
-        updatedAt: fixedNow,
-      })),
-    );
-  });
-}
-
-describe("RSVP reports PostgreSQL service", () => {
+describe("invitation reports PostgreSQL service", () => {
   beforeAll(async () => {
     connection = createDatabaseConnection({ target: "test" });
     await verifyDatabaseConnection(connection);
-    await connection.db
-      .delete(site)
-      .where(like(site.repositorySlug, `${fixturePrefix}%`));
     await connection.db.insert(user).values([
       {
         id: ownerId,
@@ -82,23 +37,19 @@ describe("RSVP reports PostgreSQL service", () => {
         state: "ACTIVE",
       },
       {
-        id: siteAdminId,
+        id: adminId,
         name: "Report Admin",
-        email: `${siteAdminId}@example.test`,
+        email: `${adminId}@example.test`,
         emailVerified: true,
         role: "SITE_ADMIN",
         state: "ACTIVE",
       },
     ]);
-
-    siteId = randomUUID();
-    inactiveSiteId = randomUUID();
-    foreignSiteId = randomUUID();
     await connection.db.insert(site).values([
       {
         id: siteId,
-        repositorySlug: `${fixturePrefix}-active`,
-        provisioningKey: `${fixturePrefix}-active:key`,
+        repositorySlug: `${prefix}-site`,
+        provisioningKey: `${prefix}-site:key`,
         displayName: "Relatório de Ana & João",
         partnerOneName: "Ana",
         partnerTwoName: "João",
@@ -108,23 +59,10 @@ describe("RSVP reports PostgreSQL service", () => {
         updatedAt: fixedNow,
       },
       {
-        id: inactiveSiteId,
-        repositorySlug: `${fixturePrefix}-inactive`,
-        provisioningKey: `${fixturePrefix}-inactive:key`,
-        displayName: "Relatório Inativo",
-        partnerOneName: "Ana",
-        partnerTwoName: "João",
-        eventDate: "2030-06-10",
-        lifecycle: "INACTIVE",
-        previousLifecycle: "ACTIVE",
-        createdAt: fixedNow,
-        updatedAt: fixedNow,
-      },
-      {
         id: foreignSiteId,
-        repositorySlug: `${fixturePrefix}-foreign`,
-        provisioningKey: `${fixturePrefix}-foreign:key`,
-        displayName: "Outro Site",
+        repositorySlug: `${prefix}-foreign`,
+        provisioningKey: `${prefix}-foreign:key`,
+        displayName: "Outro site",
         partnerOneName: "Outra",
         partnerTwoName: "Pessoa",
         eventDate: "2030-06-10",
@@ -134,149 +72,174 @@ describe("RSVP reports PostgreSQL service", () => {
       },
     ]);
     await connection.db.insert(siteMembership).values({
-      id: `${fixturePrefix}-membership`,
+      id: `${prefix}-membership`,
       siteId,
-      userId: siteAdminId,
+      userId: adminId,
       createdAt: fixedNow,
       updatedAt: fixedNow,
     });
-
-    groupId = `${fixturePrefix}-group-a`;
-    await insertGroup(
-      siteId,
-      groupId,
-      "Família Silva",
-      "+5511999999999",
-      false,
-      [
+    await connection.db.transaction(async (tx) => {
+      await tx.insert(invitation).values([
         {
-          id: `${fixturePrefix}-member-a`,
-          name: "João Silva",
-          state: "CONFIRMED",
+          id: `${prefix}-one`,
+          siteId,
+          name: "Família Silva",
+          normalizedName: "família silva",
+          phoneE164: "+5511999999999",
+          email: "silva@example.test",
+          createdAt: fixedNow,
+          updatedAt: fixedNow,
         },
         {
-          id: `${fixturePrefix}-member-b`,
-          name: "Lívia Silva",
-          state: "PENDING",
+          id: `${prefix}-two`,
+          siteId,
+          name: "Outro convite",
+          normalizedName: "outro convite",
+          phoneE164: "+5511888888888",
+          createdAt: fixedNow,
+          updatedAt: fixedNow,
         },
-      ],
-    );
-    await insertGroup(
-      siteId,
-      `${fixturePrefix}-group-b`,
-      "Grupo externo",
-      null,
-      true,
-      [{ id: `${fixturePrefix}-member-c`, name: "José 外", state: "DECLINED" }],
-    );
-    foreignGroupId = `${fixturePrefix}-foreign-group`;
-    await insertGroup(
-      foreignSiteId,
-      foreignGroupId,
-      "Tenant externo",
-      "+5511988888888",
-      false,
-      [
         {
-          id: `${fixturePrefix}-foreign-member`,
+          id: `${prefix}-foreign-invitation`,
+          siteId: foreignSiteId,
           name: "Não expor",
-          state: "CONFIRMED",
+          normalizedName: "não expor",
+          phoneE164: "+5511777777777",
+          createdAt: fixedNow,
+          updatedAt: fixedNow,
         },
-      ],
-    );
+      ]);
+      await tx.insert(invitationGuest).values([
+        {
+          id: `${prefix}-guest-one`,
+          siteId,
+          invitationId: `${prefix}-one`,
+          fullName: "João Silva",
+          normalizedName: "joão silva",
+          guestType: "ADULT",
+          rsvpState: "CONFIRMED",
+          createdAt: fixedNow,
+          updatedAt: fixedNow,
+        },
+        {
+          id: `${prefix}-guest-two`,
+          siteId,
+          invitationId: `${prefix}-one`,
+          fullName: "Lívia Silva",
+          normalizedName: "lívia silva",
+          guestType: "CHILD",
+          rsvpState: "PENDING",
+          createdAt: fixedNow,
+          updatedAt: fixedNow,
+        },
+        {
+          id: `${prefix}-guest-three`,
+          siteId,
+          invitationId: `${prefix}-two`,
+          fullName: "José 外",
+          normalizedName: "josé 外",
+          guestType: "ADULT",
+          rsvpState: "DECLINED",
+          createdAt: fixedNow,
+          updatedAt: fixedNow,
+        },
+        {
+          id: `${prefix}-foreign-guest`,
+          siteId: foreignSiteId,
+          invitationId: `${prefix}-foreign-invitation`,
+          fullName: "Não expor",
+          normalizedName: "não expor",
+          guestType: "ADULT",
+          rsvpState: "CONFIRMED",
+          createdAt: fixedNow,
+          updatedAt: fixedNow,
+        },
+      ]);
+    });
   });
 
   afterAll(async () => {
-    if (siteId) await connection.db.delete(site).where(eq(site.id, siteId));
-    if (inactiveSiteId)
-      await connection.db.delete(site).where(eq(site.id, inactiveSiteId));
-    if (foreignSiteId)
-      await connection.db.delete(site).where(eq(site.id, foreignSiteId));
+    await connection.db.delete(site).where(eq(site.id, siteId));
+    await connection.db.delete(site).where(eq(site.id, foreignSiteId));
     await connection.db.delete(user).where(eq(user.id, ownerId));
-    await connection.db.delete(user).where(eq(user.id, siteAdminId));
+    await connection.db.delete(user).where(eq(user.id, adminId));
     await connection.close();
   });
 
-  it("reads one tenant snapshot with whole-site and selected totals", async () => {
-    const report = await readRsvpReport(
+  it("returns tenant-scoped totals and only guests matching all filters", async () => {
+    const report = await readInvitationReport(
       connection.db,
       { userId: ownerId, role: "OWNER" },
       siteId,
-      { requestId: randomUUID(), includePhone: true, state: "CONFIRMED" },
+      {
+        requestId: randomUUID(),
+        search: "familia",
+        status: "CONFIRMED",
+        guestType: "ADULT",
+        includePhone: true,
+        includeEmail: true,
+      },
       fixedNow,
     );
     expect(report).toMatchObject({
       siteId,
       reportTitle: "Relatório de Ana & João",
       generatedAt: fixedNow.toISOString(),
-      timezone: "America/Sao_Paulo",
-      stateFilter: "CONFIRMED",
-      totals: { pending: 1, confirmed: 1, declined: 1 },
-      selectedTotals: { pending: 0, confirmed: 1, declined: 0 },
-    });
-    expect(report.rows).toEqual([
-      {
-        groupName: "Família Silva",
-        memberName: "João Silva",
-        rsvpState: "CONFIRMED",
-        representativePhone: "+5511999999999",
+      totals: {
+        invitations: 2,
+        guests: 3,
+        adults: 2,
+        children: 1,
+        pending: 1,
+        confirmed: 1,
+        declined: 1,
       },
-    ]);
+      selectedTotals: {
+        invitations: 1,
+        guests: 1,
+        adults: 1,
+        children: 0,
+        pending: 0,
+        confirmed: 1,
+        declined: 0,
+      },
+      rows: [
+        {
+          invitationName: "Família Silva",
+          guestName: "João Silva",
+          guestType: "ADULT",
+          rsvpState: "CONFIRMED",
+          phone: "+5511999999999",
+          email: "silva@example.test",
+        },
+      ],
+    });
+    expect(report.rows).toHaveLength(1);
   });
 
-  it("includes an empty foreign representative phone and can omit all phones", async () => {
-    const withPhone = await readRsvpReport(
+  it("omits both contact fields by default", async () => {
+    const report = await readInvitationReport(
       connection.db,
-      { userId: siteAdminId, role: "SITE_ADMIN" },
+      { userId: adminId, role: "SITE_ADMIN" },
       siteId,
-      { requestId: randomUUID(), includePhone: true },
+      { requestId: randomUUID() },
       fixedNow,
     );
-    expect(withPhone.rows.at(-1)?.representativePhone).toBe("");
-
-    const withoutPhone = await readRsvpReport(
-      connection.db,
-      { userId: siteAdminId, role: "SITE_ADMIN" },
-      siteId,
-      { requestId: randomUUID(), includePhone: false },
-      fixedNow,
-    );
+    expect(report.rows).toHaveLength(3);
     expect(
-      withoutPhone.rows.every(
-        (row) => !Object.hasOwn(row, "representativePhone"),
+      report.rows.every(
+        (row) => !Object.hasOwn(row, "phone") && !Object.hasOwn(row, "email"),
       ),
     ).toBe(true);
   });
 
-  it("allows inactive reads and denies a site admin another tenant", async () => {
+  it("denies an admin access to another site", async () => {
     await expect(
-      readRsvpReport(
+      readInvitationReport(
         connection.db,
-        { userId: ownerId, role: "OWNER" },
-        inactiveSiteId,
-        { requestId: randomUUID(), includePhone: false },
-        fixedNow,
-      ),
-    ).resolves.toMatchObject({ siteId: inactiveSiteId, rows: [] });
-    await expect(
-      readRsvpReport(
-        connection.db,
-        { userId: siteAdminId, role: "SITE_ADMIN" },
+        { userId: adminId, role: "SITE_ADMIN" },
         foreignSiteId,
-        { requestId: randomUUID(), includePhone: false },
-        fixedNow,
-      ),
-    ).rejects.toMatchObject({ status: 404, code: "NOT_FOUND" });
-    await expect(
-      readRsvpReport(
-        connection.db,
-        { userId: ownerId, role: "OWNER" },
-        siteId,
-        {
-          requestId: randomUUID(),
-          includePhone: false,
-          groupId: foreignGroupId,
-        },
+        { requestId: randomUUID() },
         fixedNow,
       ),
     ).rejects.toMatchObject({ status: 404, code: "NOT_FOUND" });

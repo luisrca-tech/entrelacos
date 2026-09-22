@@ -178,8 +178,8 @@ export function createDemoResetHttpRouter(
         mode: "manual",
         datasetVersion: input.data.datasetVersion,
         count:
-          response.counts.groups +
-          response.counts.members +
+          response.counts.invitations +
+          response.counts.guests +
           response.counts.messages,
       });
       return context.json(response, 200, { "Cache-Control": "no-store" });
