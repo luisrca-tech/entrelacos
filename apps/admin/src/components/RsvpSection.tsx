@@ -62,6 +62,20 @@ const stateLabels: Record<RsvpState, string> = {
   DECLINED: "Não comparecerá",
 };
 
+const statusFilterLabels = { all: "Todos", ...stateLabels };
+const historyActorLabels = {
+  all: "Todas",
+  FAMILY: "Família",
+  ADMIN: "Administração",
+};
+const demoGroupLabels: Record<string, string> = {
+  "b7-group-pending": "Família Pendente",
+  "b7-group-partial": "Família Parcial",
+  "b7-group-confirmed": "Família Confirmada",
+  "b7-group-declined": "Família Ausente",
+  "b7-group-foreign": "Família Estrangeira",
+};
+
 function errorMessage(cause: unknown) {
   if (cause instanceof ApiError) {
     if (cause.code === "RSVP_CONFLICT")
@@ -83,6 +97,20 @@ function queryString(values: Record<string, string>) {
     Object.entries(values).filter(([, value]) => value),
   ).toString();
   return query ? `?${query}` : "";
+}
+
+export function rsvpFilterLabel(
+  value: unknown,
+  labels: Record<string, string>,
+  placeholder: string,
+) {
+  return typeof value === "string"
+    ? (labels[value] ?? placeholder)
+    : placeholder;
+}
+
+export function rsvpGroupLabel(id: string, name: string) {
+  return demoGroupLabels[id] ?? name;
 }
 
 function RsvpFilterField({
@@ -125,7 +153,6 @@ export function RsvpSection({ siteId, lifecycle }: Props) {
   const [history, setHistory] = useState<RsvpHistoryResponse | null>(null);
   const [tab, setTab] = useState<"current" | "history">("current");
   const [historyGroupId, setHistoryGroupId] = useState("");
-  const [historyMemberId, setHistoryMemberId] = useState("");
   const [historyActor, setHistoryActor] = useState("");
   const [loading, setLoading] = useState(true);
   const [pending, setPending] = useState(false);
@@ -135,6 +162,13 @@ export function RsvpSection({ siteId, lifecycle }: Props) {
   const [downloading, setDownloading] = useState<RsvpExportFormat | null>(null);
   const [groupsVersion, setGroupsVersion] = useState(0);
   const [deadlineOpen, setDeadlineOpen] = useState(false);
+  const groupFilterLabels = Object.fromEntries([
+    ["all", "Todos"],
+    ...knownGroups.map((group) => [
+      group.id,
+      rsvpGroupLabel(group.id, group.name),
+    ]),
+  ]);
 
   const loadCurrent = useCallback(async () => {
     void groupsVersion;
@@ -178,7 +212,6 @@ export function RsvpSection({ siteId, lifecycle }: Props) {
         const result = await apiRequest<RsvpHistoryResponse>(
           `${base}/history${queryString({
             groupId: historyGroupId,
-            memberId: historyMemberId,
             actorType: historyActor,
             cursor,
             limit: "50",
@@ -196,7 +229,7 @@ export function RsvpSection({ siteId, lifecycle }: Props) {
         setLoading(false);
       }
     },
-    [base, historyActor, historyGroupId, historyMemberId],
+    [base, historyActor, historyGroupId],
   );
 
   useEffect(() => {
@@ -234,17 +267,6 @@ export function RsvpSection({ siteId, lifecycle }: Props) {
       }),
     );
   }, [drafts, view]);
-
-  const historyMembers = useMemo(
-    () =>
-      knownGroups.flatMap((group) =>
-        group.members.map((member) => ({
-          id: member.id,
-          label: `${group.name} — ${member.fullName}`,
-        })),
-      ),
-    [knownGroups],
-  );
 
   function beginDeadlineEdit(clear = false) {
     const draft = resetDeadlineDraft(savedDeadline);
@@ -586,13 +608,17 @@ export function RsvpSection({ siteId, lifecycle }: Props) {
                   id="rsvp-group-filter"
                   aria-labelledby="rsvp-group-filter-label"
                 >
-                  <SelectValue placeholder="Todos" />
+                  <SelectValue>
+                    {(value) =>
+                      rsvpFilterLabel(value, groupFilterLabels, "Todos")
+                    }
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todos</SelectItem>
                   {knownGroups.map((group) => (
                     <SelectItem key={group.id} value={group.id}>
-                      {group.name}
+                      {rsvpGroupLabel(group.id, group.name)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -609,7 +635,11 @@ export function RsvpSection({ siteId, lifecycle }: Props) {
                   id="rsvp-state-filter"
                   aria-labelledby="rsvp-state-filter-label"
                 >
-                  <SelectValue placeholder="Todos" />
+                  <SelectValue>
+                    {(value) =>
+                      rsvpFilterLabel(value, statusFilterLabels, "Todos")
+                    }
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todos</SelectItem>
@@ -690,7 +720,9 @@ export function RsvpSection({ siteId, lifecycle }: Props) {
                 >
                   <CardHeader className="flex w-full flex-row items-start justify-between">
                     <div>
-                      <CardTitle>{group.name}</CardTitle>
+                      <CardTitle>
+                        {rsvpGroupLabel(group.id, group.name)}
+                      </CardTitle>
                       <CardDescription>
                         {group.totals.confirmed} confirmados ·{" "}
                         {group.totals.declined} ausentes ·{" "}
@@ -766,57 +798,27 @@ export function RsvpSection({ siteId, lifecycle }: Props) {
             <RsvpFilterField id="rsvp-history-group" label="Grupo">
               <Select
                 value={historyGroupId || "all"}
-                onValueChange={(value) => {
-                  setHistoryGroupId(value === "all" || !value ? "" : value);
-                  setHistoryMemberId("");
-                }}
+                onValueChange={(value) =>
+                  setHistoryGroupId(value === "all" || !value ? "" : value)
+                }
               >
                 <SelectTrigger
                   id="rsvp-history-group"
                   aria-labelledby="rsvp-history-group-label"
                 >
-                  <SelectValue placeholder="Todos" />
+                  <SelectValue>
+                    {(value) =>
+                      rsvpFilterLabel(value, groupFilterLabels, "Todos")
+                    }
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todos</SelectItem>
                   {knownGroups.map((group) => (
                     <SelectItem key={group.id} value={group.id}>
-                      {group.name}
+                      {rsvpGroupLabel(group.id, group.name)}
                     </SelectItem>
                   ))}
-                </SelectContent>
-              </Select>
-            </RsvpFilterField>
-            <RsvpFilterField id="rsvp-history-member" label="Integrante">
-              <Select
-                value={historyMemberId || "all"}
-                onValueChange={(value) =>
-                  setHistoryMemberId(value === "all" || !value ? "" : value)
-                }
-              >
-                <SelectTrigger
-                  id="rsvp-history-member"
-                  aria-labelledby="rsvp-history-member-label"
-                >
-                  <SelectValue placeholder="Todos" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos</SelectItem>
-                  {historyMembers
-                    .filter(
-                      (member) =>
-                        !historyGroupId ||
-                        knownGroups
-                          .find((group) => group.id === historyGroupId)
-                          ?.members.some(
-                            (candidate) => candidate.id === member.id,
-                          ),
-                    )
-                    .map((member) => (
-                      <SelectItem key={member.id} value={member.id}>
-                        {member.label}
-                      </SelectItem>
-                    ))}
                 </SelectContent>
               </Select>
             </RsvpFilterField>
@@ -831,7 +833,11 @@ export function RsvpSection({ siteId, lifecycle }: Props) {
                   id="rsvp-history-actor"
                   aria-labelledby="rsvp-history-actor-label"
                 >
-                  <SelectValue placeholder="Todas" />
+                  <SelectValue>
+                    {(value) =>
+                      rsvpFilterLabel(value, historyActorLabels, "Todas")
+                    }
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todas</SelectItem>
@@ -852,7 +858,8 @@ export function RsvpSection({ siteId, lifecycle }: Props) {
               {history?.entries.map((entry) => (
                 <li key={entry.id}>
                   <strong>{entry.memberDisplayName}</strong> em{" "}
-                  {entry.groupName}: {stateLabels[entry.beforeState]} →{" "}
+                  {rsvpGroupLabel(entry.groupId, entry.groupName)}:{" "}
+                  {stateLabels[entry.beforeState]} →{" "}
                   {stateLabels[entry.afterState]}. Alterado por{" "}
                   {entry.actorDisplayName} (
                   {entry.actorType === "ADMIN" ? "administração" : "família"})

@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
+import { rsvpFilterLabel, rsvpGroupLabel } from "./RsvpSection";
 
 const rsvpSource = readFileSync(
   resolve(import.meta.dirname, "RsvpSection.tsx"),
@@ -42,6 +43,51 @@ describe("RSVP cards follow guest group card chrome", () => {
     expect(rsvpSource).not.toContain('htmlFor="rsvp-history-member"');
     expect(rsvpSource).not.toContain('htmlFor="rsvp-history-actor"');
     expect(rsvpSource).toContain('aria-labelledby="rsvp-group-filter-label"');
+  });
+
+  it("formats RSVP filter values with their human labels", () => {
+    expect(
+      rsvpFilterLabel(
+        "CONFIRMED",
+        {
+          all: "Todos",
+          CONFIRMED: "Confirmado",
+        },
+        "Todos",
+      ),
+    ).toBe("Confirmado");
+    expect(
+      rsvpFilterLabel(
+        "b7-group-declined",
+        {
+          all: "Todos",
+          "b7-group-declined": "Família Ausente",
+        },
+        "Todos",
+      ),
+    ).toBe("Família Ausente");
+    expect(rsvpFilterLabel("all", { all: "Todas" }, "Todas")).toBe("Todas");
+    expect(rsvpFilterLabel("FAMILY", { FAMILY: "Família" }, "Todas")).toBe(
+      "Família",
+    );
+  });
+
+  it("localizes legacy demo group names without changing custom names", () => {
+    expect(rsvpGroupLabel("b7-group-confirmed", "Confirmed Family")).toBe(
+      "Família Confirmada",
+    );
+    expect(rsvpGroupLabel("b7-group-declined", "Declined Family")).toBe(
+      "Família Ausente",
+    );
+    expect(rsvpGroupLabel("custom-group", "Família Silva")).toBe(
+      "Família Silva",
+    );
+  });
+
+  it("removes the member filter from RSVP history", () => {
+    expect(rsvpSource).not.toContain("historyMemberId");
+    expect(rsvpSource).not.toContain('id="rsvp-history-member"');
+    expect(rsvpSource).toContain("historyActor");
   });
 
   it("pins the save action as a centered fixed footer", () => {
