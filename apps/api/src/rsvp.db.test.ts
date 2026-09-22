@@ -700,6 +700,8 @@ describe("RSVP PostgreSQL service", () => {
     expect(corrected.members[0]).toMatchObject({ state: "DECLINED" });
     const history = await listRsvpHistory(connection.db, admin, siteId, {
       memberId: target.id,
+      groupId,
+      actorType: "ADMIN",
       limit: 10,
     });
     expect(history.entries).toEqual(
@@ -735,6 +737,17 @@ describe("RSVP PostgreSQL service", () => {
         groupId: current.groups[0]?.id,
       }),
     ).toMatchObject({ groups: [{ id: current.groups[0]?.id }] });
+    const groupAndState = await readSiteRsvp(connection.db, admin, siteId, {
+      groupId: current.groups[0]?.id,
+      state: "CONFIRMED",
+    });
+    expect(groupAndState.groups).toHaveLength(1);
+    expect(groupAndState.groups[0]?.id).toBe(current.groups[0]?.id);
+    expect(
+      groupAndState.groups[0]?.members.every(
+        (member) => member.state === "CONFIRMED",
+      ),
+    ).toBe(true);
 
     await deactivateSite(
       connection.db,
