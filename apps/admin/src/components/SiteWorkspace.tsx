@@ -40,6 +40,7 @@ import {
   TableHeader,
   TableRow,
   Textarea,
+  toast,
 } from "@entrelacos/ui";
 import { Link } from "@tanstack/react-router";
 import {
@@ -57,7 +58,14 @@ import { MessagesSection } from "./MessagesSection";
 import { OverflowMenu } from "./OverflowMenu";
 import { RsvpSection } from "./RsvpSection";
 import { SmsUsageSection } from "./SmsUsageSection";
-import { siteAdminMenuActions } from "./siteAdminMenu";
+import {
+  adminAccessLink,
+  adminAccessLinkCopiedMessage,
+  adminAccessLinkCopyFailedMessage,
+  adminAccessLinkRevokedMessage,
+  copyAdminAccessLink,
+  siteAdminMenuActions,
+} from "./siteAdminMenu";
 import { publicSiteHandoffUrl, subscribeToPanelOrigin } from "./sitePublicUrl";
 import { siteRecordMenuActions } from "./siteRecordMenu";
 import { getWorkspaceHeading } from "./siteWorkspaceHeading";
@@ -112,7 +120,6 @@ export function SiteWorkspace({
   const [fatal, setFatal] = useState(false);
   const [pending, setPending] = useState(false);
   const [notice, setNotice] = useState("");
-  const [accessLink, setAccessLink] = useState("");
   const [lifecycleAction, setLifecycleAction] =
     useState<LifecycleAction | null>(null);
   const [adminToDisable, setAdminToDisable] = useState<Admin | null>(null);
@@ -205,23 +212,51 @@ export function SiteWorkspace({
   async function issue(admin: Admin, purpose: "ACTIVATION" | "RECOVERY") {
     setPending(true);
     setError("");
-    setAccessLink("");
     try {
       const result = await apiRequest<{ token: string }>(
         `/v1/owner/admins/${admin.userId}/access`,
         { method: "POST", body: { userId: admin.userId, purpose } },
       );
-      setAccessLink(
-        `${window.location.origin}/${purpose === "ACTIVATION" ? "activate" : "recover"}#token=${result.token}`,
+      const link = adminAccessLink(
+        window.location.origin,
+        result.token,
+        purpose,
       );
-      setNotice(
-        `Link para ${admin.email}. Entregue em particular. Válido por 24 horas; substitui o link anterior da mesma finalidade.`,
-      );
+      const copied = await copyAdminAccessLink(link, navigator.clipboard);
+      if (copied) {
+        toast.success(adminAccessLinkCopiedMessage(admin.email, purpose));
+        return;
+      }
+      toast.error(adminAccessLinkCopyFailedMessage);
     } catch (cause) {
       setError(
         cause instanceof Error
           ? cause.message
           : "Não foi possível gerar o link.",
+      );
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function revokeAccess(admin: Admin) {
+    setPending(true);
+    setError("");
+    try {
+      await apiRequest(`/v1/owner/admins/${admin.userId}/access/revoke`, {
+        method: "POST",
+        body: {
+          userId: admin.userId,
+          purpose: admin.state === "PENDING" ? "ACTIVATION" : "RECOVERY",
+        },
+      });
+      await load();
+      toast.success(adminAccessLinkRevokedMessage);
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Não foi possível revogar o link.",
       );
     } finally {
       setPending(false);
@@ -234,11 +269,7 @@ export function SiteWorkspace({
       return;
     }
     if (action === "revoke-access") {
-      setAccessLink("");
-      void mutate(`/v1/owner/admins/${admin.userId}/access/revoke`, {
-        userId: admin.userId,
-        purpose: admin.state === "PENDING" ? "ACTIVATION" : "RECOVERY",
-      });
+      void revokeAccess(admin);
       return;
     }
     setAdminToDisable(admin);
@@ -386,35 +417,6 @@ export function SiteWorkspace({
         <p className="my-3.5 leading-[1.6] text-admin-muted" role="status">
           {notice}
         </p>
-      )}
-      {accessLink && (
-        <Card className={adminStyles.card}>
-          <CardContent>
-            <label
-              className="grid gap-2 text-[0.88rem] font-semibold text-admin-graphite"
-              htmlFor="site-access-link"
-            >
-              Link de acesso
-              <Input
-                id="site-access-link"
-                className="my-3 w-full rounded-lg border border-admin-line bg-admin-beige p-3.5 text-admin-ink"
-                value={accessLink}
-                readOnly
-                onFocus={(event) => event.currentTarget.select()}
-              />
-            </label>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => {
-                setAccessLink("");
-                setNotice("");
-              }}
-            >
-              Ocultar link
-            </Button>
-          </CardContent>
-        </Card>
       )}
       {inactive && (
         <p className={adminStyles.notice}>
@@ -1187,7 +1189,6 @@ export function SiteWorkspace({
                     disabled={pending}
                     onClick={() => {
                       if (adminToDisable) {
-                        setAccessLink("");
                         void mutate(
                           `/v1/owner/admins/${adminToDisable.userId}/disable`,
                           { userId: adminToDisable.userId },
