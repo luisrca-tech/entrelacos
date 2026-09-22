@@ -219,7 +219,13 @@ describe("environment demo provisioning PostgreSQL integration", () => {
     expect(firstSnapshot.origins).toEqual([
       { origin: "https://demo-dev.entrelacos.workers.dev" },
     ]);
-    expect(firstSnapshot.groups).toHaveLength(5);
+    expect(firstSnapshot.groups).toMatchObject([
+      { id: "b7-group-confirmed", name: "Família Confirmada" },
+      { id: "b7-group-declined", name: "Família Ausente" },
+      { id: "b7-group-foreign", name: "Família Estrangeira" },
+      { id: "b7-group-partial", name: "Família Parcial" },
+      { id: "b7-group-pending", name: "Família Pendente" },
+    ]);
     expect(firstSnapshot.members).toHaveLength(10);
     expect(firstSnapshot.messages).toEqual([
       {
@@ -228,7 +234,7 @@ describe("environment demo provisioning PostgreSQL integration", () => {
         groupId: "b7-group-pending",
         authorMemberId: "b7-member-pending-1",
         authorName: "Paula Pending",
-        groupName: "Pending Family",
+        groupName: "Família Pendente",
         text: "Que alegria celebrar este momento com vocês!",
         revision: 1,
       },

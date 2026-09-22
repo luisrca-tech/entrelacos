@@ -190,7 +190,9 @@ describe("RSVP HTTP boundary", () => {
   it("requires an admin session and returns the strict site envelope", async () => {
     const router = createRsvpHttpRouter(options());
     const response = await router.request(
-      request("/v1/sites/site-1/rsvp?state=CONFIRMED", { method: "GET" }),
+      request("/v1/sites/site-1/rsvp?groupId=group-1&state=CONFIRMED", {
+        method: "GET",
+      }),
     );
 
     expect(response.status).toBe(200);
@@ -200,7 +202,7 @@ describe("RSVP HTTP boundary", () => {
       expect.anything(),
       { userId: "admin-1", role: "SITE_ADMIN" },
       "site-1",
-      { state: "CONFIRMED" },
+      { groupId: "group-1", state: "CONFIRMED" },
     );
   });
 
