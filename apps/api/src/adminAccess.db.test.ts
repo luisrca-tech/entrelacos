@@ -29,6 +29,7 @@ import { HANDOFF_RECOGNITION_IDENTIFIER, recognizeSite } from "./handoff";
 
 const fixturePrefix = `t4-access-${process.pid}-${randomUUID()}`;
 const fixtureNow = new Date("2026-09-11T12:00:00.000Z");
+const accessPassword = "password10";
 const ownerId = `${fixturePrefix}-owner`;
 const fixtureUsers: string[] = [ownerId];
 const fixtureSites: string[] = [];
@@ -134,7 +135,6 @@ describe("administrative access PostgreSQL integration", () => {
 
   it("creates one pending membership, stores only a hash, and activates once", async () => {
     const fixture = await createSiteAdminFixture("activation");
-    const longPassword = "a".repeat(129);
     const issued = await issueAdminAccess(connection.db, {
       userId: fixture.userId,
       purpose: "ACTIVATION",
@@ -149,7 +149,7 @@ describe("administrative access PostgreSQL integration", () => {
 
     const consumed = await consumeAdminAccess(connection.db, {
       token: issued.token,
-      password: longPassword,
+      password: accessPassword,
       purpose: "ACTIVATION",
       now: fixtureNow,
     });
@@ -170,7 +170,7 @@ describe("administrative access PostgreSQL integration", () => {
     await expect(
       verifyPassword({
         hash: credential?.password ?? "",
-        password: longPassword,
+        password: accessPassword,
       }),
     ).resolves.toBe(true);
     const auth = createAuth({
@@ -188,7 +188,7 @@ describe("administrative access PostgreSQL integration", () => {
         },
         body: JSON.stringify({
           email: `${fixture.userId}@example.test`,
-          password: longPassword,
+          password: accessPassword,
         }),
       }),
     );
@@ -196,7 +196,7 @@ describe("administrative access PostgreSQL integration", () => {
     await expect(
       consumeAdminAccess(connection.db, {
         token: issued.token,
-        password: "activation password",
+        password: accessPassword,
         purpose: "ACTIVATION",
         now: fixtureNow,
       }),
@@ -218,7 +218,7 @@ describe("administrative access PostgreSQL integration", () => {
     await expect(
       consumeAdminAccess(connection.db, {
         token: first.token,
-        password: "reissue password",
+        password: accessPassword,
         purpose: "ACTIVATION",
         now: fixtureNow,
       }),
@@ -226,7 +226,7 @@ describe("administrative access PostgreSQL integration", () => {
     await expect(
       consumeAdminAccess(connection.db, {
         token: second.token,
-        password: "reissue password",
+        password: accessPassword,
         purpose: "ACTIVATION",
         now: new Date(fixtureNow.getTime() + 1),
       }),
@@ -241,7 +241,7 @@ describe("administrative access PostgreSQL integration", () => {
     await expect(
       consumeAdminAccess(connection.db, {
         token: expired.token,
-        password: "expired password",
+        password: accessPassword,
         purpose: "ACTIVATION",
         now: new Date(fixtureNow.getTime() + ADMIN_ACCESS_TTL_MS),
       }),
@@ -257,7 +257,7 @@ describe("administrative access PostgreSQL integration", () => {
     });
     await consumeAdminAccess(connection.db, {
       token: activation.token,
-      password: "initial password",
+      password: accessPassword,
       purpose: "ACTIVATION",
       now: fixtureNow,
     });
@@ -288,7 +288,7 @@ describe("administrative access PostgreSQL integration", () => {
     await expect(
       consumeAdminAccess(connection.db, {
         token: recovery.token,
-        password: "recovered password",
+        password: accessPassword,
         purpose: "RECOVERY",
         now: fixtureNow,
       }),
@@ -315,7 +315,7 @@ describe("administrative access PostgreSQL integration", () => {
     });
     await consumeAdminAccess(connection.db, {
       token: concurrentActivation.token,
-      password: "concurrent initial",
+      password: accessPassword,
       purpose: "ACTIVATION",
       now: fixtureNow,
     });
@@ -327,13 +327,13 @@ describe("administrative access PostgreSQL integration", () => {
     const attempts = await Promise.allSettled([
       consumeAdminAccess(connection.db, {
         token: concurrentRecovery.token,
-        password: "concurrent recovery",
+        password: accessPassword,
         purpose: "RECOVERY",
         now: fixtureNow,
       }),
       consumeAdminAccess(connection.db, {
         token: concurrentRecovery.token,
-        password: "concurrent recovery",
+        password: accessPassword,
         purpose: "RECOVERY",
         now: fixtureNow,
       }),
@@ -358,7 +358,7 @@ describe("administrative access PostgreSQL integration", () => {
     await expect(
       consumeAdminAccess(connection.db, {
         token: recovery.token,
-        password: "disabled password",
+        password: accessPassword,
         purpose: "RECOVERY",
         now: fixtureNow,
       }),
@@ -414,7 +414,7 @@ describe("administrative access PostgreSQL integration", () => {
     await expect(
       consumeAdminAccess(connection.db, {
         token: issued.token,
-        password: "revoked password",
+        password: accessPassword,
         purpose: "RECOVERY",
         now: fixtureNow,
       }),
