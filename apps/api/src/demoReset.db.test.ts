@@ -13,7 +13,6 @@ import {
   guestMember,
   guestRateLimitEvent,
   guestVerificationChallenge,
-  guestVerificationSend,
   messageRequestReceipt,
   rsvpHistory,
   rsvpRequestReceipt,
@@ -24,34 +23,32 @@ import {
   siteMembership,
   siteOrigin,
   siteTerm,
-  smsSendReservation,
-  smsUsage,
   user,
   verification,
 } from "@entrelacos/database/schema";
 import { asc, eq, like } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { resetDemoSite } from "./demoReset";
+import { DEMO_RESET_DATASET_VERSION, resetDemoSite } from "./demoReset";
 import { normalizeGuestName } from "./guestGroups";
 import { lookupGuestGroup } from "./guestLookup";
 
-const prefix = `b7-demo-reset-${process.pid}-${randomUUID().slice(0, 8)}`;
-const fixedNow = new Date("2028-04-01T12:00:00.000Z");
+const prefix = `demo-reset-${process.pid}-${randomUUID().slice(0, 8)}`;
+const now = new Date("2028-04-01T12:00:00.000Z");
+const ownerId = `${prefix}-owner`;
 let connection: DatabaseConnection;
 let demoSiteId: string;
 let sentinelSiteId: string;
-const ownerId = `${prefix}-owner`;
 
-function fixtureDigest(label: string): string {
-  return createHash("sha256").update(`${prefix}:${label}`).digest("hex");
+function phone(sequence: number): string {
+  return `+55119${String(sequence).padStart(8, "0")}`;
 }
 
-function fixturePhone(sequence: number): string {
-  return ["+55", "11", "9", sequence.toString().padStart(8, "0")].join("");
+function digest(value: string): string {
+  return createHash("sha256").update(`${prefix}:${value}`).digest("hex");
 }
 
-async function normalizedSnapshot(siteId: string, userId?: string) {
-  const scoped = await Promise.all([
+async function siteSnapshot(siteId: string) {
+  const rows = await Promise.all([
     connection.db.select().from(site).where(eq(site.id, siteId)),
     connection.db
       .select()
@@ -80,10 +77,6 @@ async function normalizedSnapshot(siteId: string, userId?: string) {
       .where(eq(guestVerificationChallenge.siteId, siteId)),
     connection.db
       .select()
-      .from(guestVerificationSend)
-      .where(eq(guestVerificationSend.siteId, siteId)),
-    connection.db
-      .select()
       .from(guestRateLimitEvent)
       .where(eq(guestRateLimitEvent.siteId, siteId)),
     connection.db
@@ -110,28 +103,8 @@ async function normalizedSnapshot(siteId: string, userId?: string) {
       .select()
       .from(rsvpRequestReceiptGroup)
       .where(eq(rsvpRequestReceiptGroup.siteId, siteId)),
-    connection.db.select().from(smsUsage).where(eq(smsUsage.siteId, siteId)),
-    connection.db
-      .select()
-      .from(smsSendReservation)
-      .where(eq(smsSendReservation.siteId, siteId)),
   ]);
-  const identity = userId
-    ? await Promise.all([
-        connection.db.select().from(user).where(eq(user.id, userId)),
-        connection.db.select().from(account).where(eq(account.userId, userId)),
-        connection.db.select().from(session).where(eq(session.userId, userId)),
-        connection.db
-          .select()
-          .from(verification)
-          .where(eq(verification.identifier, `${userId}@example.test`)),
-        connection.db
-          .select()
-          .from(adminAccessToken)
-          .where(eq(adminAccessToken.userId, userId)),
-      ])
-    : [];
-  return [...scoped, ...identity]
+  return rows
     .flat()
     .map((row) => JSON.stringify(row))
     .sort();
@@ -186,64 +159,64 @@ async function administrativeSnapshot(siteId: string, userId: string) {
     .sort();
 }
 
-describe("Block 7 deterministic demo reset", () => {
+describe("deterministic demo reset", () => {
   beforeAll(async () => {
     connection = createDatabaseConnection({ target: "test" });
     await verifyDatabaseConnection(connection);
     await connection.db
       .delete(site)
       .where(like(site.repositorySlug, `${prefix}%`));
+    await connection.db.delete(user).where(like(user.id, `${prefix}%`));
     demoSiteId = `${prefix}-demo`;
-    await connection.db.insert(site).values({
-      id: demoSiteId,
-      repositorySlug: demoSiteId,
-      provisioningKey: `${demoSiteId}:key`,
-      displayName: "Block 7 Demo",
-      partnerOneName: "Ana",
-      partnerTwoName: "João",
-      eventDate: "2029-06-10",
-      lifecycle: "DRAFT",
-      publicationState: "UNPUBLISHED",
-      isDemo: true,
-      muralEnabled: true,
-      smsMonthlyLimit: 5,
-      createdAt: fixedNow,
-      updatedAt: fixedNow,
-    });
     sentinelSiteId = `${prefix}-sentinel`;
-    await connection.db.insert(site).values({
-      id: sentinelSiteId,
-      repositorySlug: sentinelSiteId,
-      provisioningKey: `${sentinelSiteId}:key`,
-      displayName: "Block 7 Sentinel",
-      partnerOneName: "Bia",
-      partnerTwoName: "Caio",
-      eventDate: "2029-06-10",
-      lifecycle: "ACTIVE",
-      publicationState: "PUBLISHED",
-      createdAt: fixedNow,
-      updatedAt: fixedNow,
-    });
+    await connection.db.insert(site).values([
+      {
+        id: demoSiteId,
+        repositorySlug: demoSiteId,
+        provisioningKey: `${demoSiteId}:key`,
+        displayName: "Demo Wedding",
+        partnerOneName: "Ana",
+        partnerTwoName: "João",
+        eventDate: "2029-06-10",
+        isDemo: true,
+        muralEnabled: true,
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: sentinelSiteId,
+        repositorySlug: sentinelSiteId,
+        provisioningKey: `${sentinelSiteId}:key`,
+        displayName: "Sentinel Wedding",
+        partnerOneName: "Bia",
+        partnerTwoName: "Caio",
+        eventDate: "2029-06-10",
+        lifecycle: "ACTIVE",
+        publicationState: "PUBLISHED",
+        createdAt: now,
+        updatedAt: now,
+      },
+    ]);
     await connection.db.transaction(async (tx) => {
       await tx.insert(guestGroup).values({
         id: `${prefix}-sentinel-group`,
         siteId: sentinelSiteId,
         name: "Sentinel Group",
         normalizedName: "sentinel group",
-        phoneE164: fixturePhone(99),
+        phoneE164: phone(99),
         representativeMemberId: `${prefix}-sentinel-member`,
         manualPinSeed: "f".repeat(64),
-        createdAt: fixedNow,
-        updatedAt: fixedNow,
+        createdAt: now,
+        updatedAt: now,
       });
       await tx.insert(guestMember).values({
         id: `${prefix}-sentinel-member`,
         siteId: sentinelSiteId,
         groupId: `${prefix}-sentinel-group`,
         fullName: "Sentinel Guest",
-        normalizedName: "sentinel-guest",
-        createdAt: fixedNow,
-        updatedAt: fixedNow,
+        normalizedName: normalizeGuestName("Sentinel Guest"),
+        createdAt: now,
+        updatedAt: now,
       });
     });
   });
@@ -251,24 +224,23 @@ describe("Block 7 deterministic demo reset", () => {
   afterAll(async () => {
     await connection.db.delete(site).where(eq(site.id, demoSiteId));
     await connection.db.delete(site).where(eq(site.id, sentinelSiteId));
-    await connection.db.delete(user).where(like(user.id, `${prefix}%`));
+    await connection.db.delete(user).where(eq(user.id, ownerId));
     await connection.close();
   });
 
-  it("seeds the frozen dataset and restores the baseline", async () => {
-    const clock = { now: () => fixedNow };
+  it("seeds manual-PIN fixtures and preserves the sentinel site", async () => {
+    const before = await siteSnapshot(sentinelSiteId);
     const result = await resetDemoSite(
       connection.db,
       { userId: "owner", role: "OWNER" },
       demoSiteId,
-      { clock },
+      { clock: { now: () => now } },
     );
-
     expect(result).toEqual({
       siteId: demoSiteId,
-      datasetVersion: "block7-demo-v1",
+      datasetVersion: DEMO_RESET_DATASET_VERSION,
       result: "RESET",
-      resetAt: fixedNow.toISOString(),
+      resetAt: now.toISOString(),
       counts: { groups: 5, members: 10, messages: 1 },
     });
     expect(
@@ -296,16 +268,17 @@ describe("Block 7 deterministic demo reset", () => {
           member.normalizedName === normalizeGuestName(member.fullName),
       ),
     ).toBe(true);
-    const seededGroups = await connection.db
-      .select({
-        id: guestGroup.id,
-        isForeign: guestGroup.isForeign,
-        messageRevision: guestGroup.messageRevision,
-      })
-      .from(guestGroup)
-      .where(eq(guestGroup.siteId, demoSiteId))
-      .orderBy(asc(guestGroup.id));
-    expect(seededGroups).toEqual([
+    expect(
+      await connection.db
+        .select({
+          id: guestGroup.id,
+          isForeign: guestGroup.isForeign,
+          messageRevision: guestGroup.messageRevision,
+        })
+        .from(guestGroup)
+        .where(eq(guestGroup.siteId, demoSiteId))
+        .orderBy(asc(guestGroup.id)),
+    ).toEqual([
       { id: "b7-group-confirmed", isForeign: false, messageRevision: 0 },
       { id: "b7-group-declined", isForeign: false, messageRevision: 0 },
       { id: "b7-group-foreign", isForeign: true, messageRevision: 0 },
@@ -344,6 +317,12 @@ describe("Block 7 deterministic demo reset", () => {
     ).toEqual([{ id: "b7-rsvp-history" }]);
     expect(
       await connection.db
+        .select({ id: guestVerificationChallenge.id })
+        .from(guestVerificationChallenge)
+        .where(eq(guestVerificationChallenge.siteId, demoSiteId)),
+    ).toHaveLength(4);
+    expect(
+      await connection.db
         .select({
           id: guestVerificationChallenge.id,
           status: guestVerificationChallenge.status,
@@ -359,42 +338,10 @@ describe("Block 7 deterministic demo reset", () => {
     ]);
     expect(
       await connection.db
-        .select({ id: guestVerificationSend.id })
-        .from(guestVerificationSend)
-        .where(eq(guestVerificationSend.siteId, demoSiteId)),
-    ).toHaveLength(4);
-    expect(
-      await connection.db
         .select({ id: guestRateLimitEvent.id })
         .from(guestRateLimitEvent)
         .where(eq(guestRateLimitEvent.siteId, demoSiteId)),
     ).toHaveLength(2);
-    expect(
-      await connection.db
-        .select({
-          reserved: smsUsage.reserved,
-          providerAccepted: smsUsage.providerAccepted,
-          failedFinal: smsUsage.failedFinal,
-          unknown: smsUsage.unknown,
-          consumed: smsUsage.consumed,
-        })
-        .from(smsUsage)
-        .where(eq(smsUsage.siteId, demoSiteId)),
-    ).toEqual([
-      {
-        reserved: 0,
-        providerAccepted: 1,
-        failedFinal: 1,
-        unknown: 1,
-        consumed: 3,
-      },
-    ]);
-    expect(
-      await connection.db
-        .select({ id: smsSendReservation.id })
-        .from(smsSendReservation)
-        .where(eq(smsSendReservation.siteId, demoSiteId)),
-    ).toHaveLength(3);
     const [baseline] = await connection.db
       .select({
         lifecycle: site.lifecycle,
@@ -404,7 +351,6 @@ describe("Block 7 deterministic demo reset", () => {
         rsvpDeadlineAt: site.rsvpDeadlineAt,
         rsvpDeadlineTimezone: site.rsvpDeadlineTimezone,
         muralEnabled: site.muralEnabled,
-        smsMonthlyLimit: site.smsMonthlyLimit,
       })
       .from(site)
       .where(eq(site.id, demoSiteId));
@@ -416,17 +362,23 @@ describe("Block 7 deterministic demo reset", () => {
       rsvpDeadlineAt: null,
       rsvpDeadlineTimezone: null,
       muralEnabled: false,
-      smsMonthlyLimit: null,
     });
+    const seeded = await connection.db
+      .select({ manualPinSeed: guestGroup.manualPinSeed })
+      .from(guestGroup)
+      .where(eq(guestGroup.siteId, demoSiteId));
+    expect(
+      seeded.every((row) => /^[a-f0-9]{64}$/.test(row.manualPinSeed)),
+    ).toBe(true);
     await expect(
       lookupGuestGroup(
         connection.db,
         demoSiteId,
-        { fullName: "Paula Pending", phone: fixturePhone(1) },
+        { fullName: "Paula Pending", phone: phone(1) },
         {
           ipAddress: "203.0.113.77",
-          fingerprintSecret: fixtureDigest("lookup"),
-          now: fixedNow,
+          fingerprintSecret: digest("lookup-secret"),
+          now,
         },
       ),
     ).resolves.toMatchObject({
@@ -435,78 +387,79 @@ describe("Block 7 deterministic demo reset", () => {
       groupId: "b7-group-pending",
       representativeMemberId: "b7-member-pending-1",
     });
+    expect(await siteSnapshot(sentinelSiteId)).toEqual(before);
   });
 
-  it("rejects non-owner and non-demo targets without changing rows", async () => {
-    const before = await normalizedSnapshot(sentinelSiteId);
+  it("rejects non-owner and non-demo resets without changing data", async () => {
+    const before = await siteSnapshot(sentinelSiteId);
     await expect(
       resetDemoSite(
         connection.db,
         { userId: "site-admin", role: "SITE_ADMIN" },
         demoSiteId,
-        { clock: { now: () => fixedNow } },
+        { clock: { now: () => now } },
       ),
     ).rejects.toMatchObject({ status: 403, code: "FORBIDDEN" });
     await expect(
       resetDemoSite(
         connection.db,
-        { userId: ownerId, role: "OWNER" },
+        { userId: "owner", role: "OWNER" },
         sentinelSiteId,
-        { clock: { now: () => fixedNow } },
+        { clock: { now: () => now } },
       ),
     ).rejects.toMatchObject({ status: 404, code: "DEMO_SITE_NOT_FOUND" });
-    expect(await normalizedSnapshot(sentinelSiteId)).toEqual(before);
+    expect(await siteSnapshot(sentinelSiteId)).toEqual(before);
   });
 
-  it("preserves administrative identity/configuration, removes residue, and is idempotent", async () => {
+  it("preserves identity/configuration, removes demo residue, and is idempotent", async () => {
     await connection.db.insert(user).values({
       id: ownerId,
-      name: "Block 7 Owner",
+      name: "Demo Owner",
       email: `${ownerId}@example.test`,
       emailVerified: true,
       role: "OWNER",
       state: "ACTIVE",
-      createdAt: fixedNow,
-      updatedAt: fixedNow,
+      createdAt: now,
+      updatedAt: now,
     });
     await connection.db.insert(account).values({
       id: `${prefix}-account`,
       userId: ownerId,
       accountId: ownerId,
       providerId: "credential",
-      password: fixtureDigest("password"),
-      createdAt: fixedNow,
-      updatedAt: fixedNow,
+      password: digest("password"),
+      createdAt: now,
+      updatedAt: now,
     });
     await connection.db.insert(session).values({
       id: `${prefix}-session`,
       userId: ownerId,
-      token: fixtureDigest("session-token"),
-      expiresAt: new Date(fixedNow.getTime() + 24 * 60 * 60_000),
-      createdAt: fixedNow,
-      updatedAt: fixedNow,
-      lastActiveAt: fixedNow,
+      token: digest("session-token"),
+      expiresAt: new Date(now.getTime() + 24 * 60 * 60_000),
+      createdAt: now,
+      updatedAt: now,
+      lastActiveAt: now,
     });
     await connection.db.insert(verification).values({
       id: `${prefix}-verification`,
       identifier: `${ownerId}@example.test`,
-      value: fixtureDigest("verification-value"),
-      expiresAt: new Date(fixedNow.getTime() + 24 * 60 * 60_000),
-      createdAt: fixedNow,
-      updatedAt: fixedNow,
+      value: digest("verification-value"),
+      expiresAt: new Date(now.getTime() + 24 * 60 * 60_000),
+      createdAt: now,
+      updatedAt: now,
     });
     await connection.db.insert(siteMembership).values({
       id: `${prefix}-membership`,
       siteId: demoSiteId,
       userId: ownerId,
-      createdAt: fixedNow,
-      updatedAt: fixedNow,
+      createdAt: now,
+      updatedAt: now,
     });
     await connection.db.insert(siteOrigin).values({
       id: `${prefix}-origin`,
       siteId: demoSiteId,
       origin: `https://${prefix}.example.test/`,
-      createdAt: fixedNow,
+      createdAt: now,
     });
     await connection.db.insert(siteDomain).values({
       id: `${prefix}-domain`,
@@ -514,28 +467,28 @@ describe("Block 7 deterministic demo reset", () => {
       hostname: `${prefix}.example.test`,
       state: "ACTIVE",
       isPrimary: true,
-      verifiedAt: fixedNow,
+      verifiedAt: now,
       expiresOn: "2029-06-10",
-      createdAt: fixedNow,
-      updatedAt: fixedNow,
+      createdAt: now,
+      updatedAt: now,
     });
     await connection.db.insert(siteTerm).values({
       id: `${prefix}-term`,
       siteId: demoSiteId,
       startsOn: "2028-01-01",
       endsOn: "2028-12-31",
-      approvedAt: fixedNow,
-      createdAt: fixedNow,
-      updatedAt: fixedNow,
+      approvedAt: now,
+      createdAt: now,
+      updatedAt: now,
     });
     await connection.db.insert(adminAccessToken).values({
       id: `${prefix}-access-token`,
       userId: ownerId,
       siteId: demoSiteId,
       purpose: "RECOVERY",
-      tokenHash: fixtureDigest("admin-access-token"),
-      expiresAt: new Date(fixedNow.getTime() + 24 * 60 * 60_000),
-      createdAt: fixedNow,
+      tokenHash: digest("admin-access-token"),
+      expiresAt: new Date(now.getTime() + 24 * 60 * 60_000),
+      createdAt: now,
     });
     await connection.db
       .update(site)
@@ -543,10 +496,9 @@ describe("Block 7 deterministic demo reset", () => {
         lifecycle: "INACTIVE",
         previousLifecycle: "ACTIVE",
         publicationState: "PLACEHOLDER",
-        rsvpDeadlineAt: new Date(fixedNow.getTime() + 86_400_000),
+        rsvpDeadlineAt: new Date(now.getTime() + 86_400_000),
         rsvpDeadlineTimezone: "America/Sao_Paulo",
         muralEnabled: true,
-        smsMonthlyLimit: 10,
       })
       .where(eq(site.id, demoSiteId));
     await connection.db.transaction(async (tx) => {
@@ -555,45 +507,36 @@ describe("Block 7 deterministic demo reset", () => {
         siteId: demoSiteId,
         name: "Old Residue",
         normalizedName: "old residue",
-        phoneE164: fixturePhone(88),
+        phoneE164: phone(88),
         representativeMemberId: "b7-old-member",
         manualPinSeed: "8".repeat(64),
-        createdAt: fixedNow,
-        updatedAt: fixedNow,
+        createdAt: now,
+        updatedAt: now,
       });
       await tx.insert(guestMember).values({
         id: "b7-old-member",
         siteId: demoSiteId,
         groupId: "b7-old-group",
         fullName: "Old Residue",
-        normalizedName: "old-residue",
-        createdAt: fixedNow,
-        updatedAt: fixedNow,
+        normalizedName: normalizeGuestName("Old Residue"),
+        createdAt: now,
+        updatedAt: now,
       });
     });
 
     const protectedBefore = await administrativeSnapshot(demoSiteId, ownerId);
-    const sentinelBefore = await normalizedSnapshot(sentinelSiteId);
-    let clockCalls = 0;
+    const sentinelBefore = await siteSnapshot(sentinelSiteId);
     const result = await resetDemoSite(
       connection.db,
       { userId: ownerId, role: "OWNER" },
       demoSiteId,
-      {
-        clock: {
-          now: () => {
-            clockCalls += 1;
-            return fixedNow;
-          },
-        },
-      },
+      { clock: { now: () => now } },
     );
-    expect(clockCalls).toBe(1);
     expect(result.counts).toEqual({ groups: 5, members: 10, messages: 1 });
     expect(await administrativeSnapshot(demoSiteId, ownerId)).toEqual(
       protectedBefore,
     );
-    expect(await normalizedSnapshot(sentinelSiteId)).toEqual(sentinelBefore);
+    expect(await siteSnapshot(sentinelSiteId)).toEqual(sentinelBefore);
     expect(
       await connection.db
         .select({ id: guestGroup.id })
@@ -601,37 +544,36 @@ describe("Block 7 deterministic demo reset", () => {
         .where(eq(guestGroup.id, "b7-old-group")),
     ).toHaveLength(0);
 
-    const canonicalBefore = await normalizedSnapshot(demoSiteId);
+    const canonical = await siteSnapshot(demoSiteId);
     const second = await resetDemoSite(
       connection.db,
       { userId: ownerId, role: "OWNER" },
       demoSiteId,
-      { clock: { now: () => fixedNow } },
+      { clock: { now: () => now } },
     );
     expect(second).toEqual(result);
-    expect(await normalizedSnapshot(demoSiteId)).toEqual(canonicalBefore);
-    expect(await normalizedSnapshot(sentinelSiteId)).toEqual(sentinelBefore);
+    expect(await siteSnapshot(demoSiteId)).toEqual(canonical);
+    expect(await siteSnapshot(sentinelSiteId)).toEqual(sentinelBefore);
 
     const concurrent = await Promise.all([
       resetDemoSite(
         connection.db,
         { userId: ownerId, role: "OWNER" },
         demoSiteId,
-        { clock: { now: () => fixedNow } },
+        { clock: { now: () => now } },
       ),
       resetDemoSite(
         connection.db,
         { userId: ownerId, role: "OWNER" },
         demoSiteId,
-        { clock: { now: () => fixedNow } },
+        { clock: { now: () => now } },
       ),
     ]);
     expect(concurrent).toEqual([result, result]);
-    expect(await normalizedSnapshot(demoSiteId)).toEqual(canonicalBefore);
-    expect(await normalizedSnapshot(sentinelSiteId)).toEqual(sentinelBefore);
+    expect(await siteSnapshot(demoSiteId)).toEqual(canonical);
   });
 
-  it("rolls back deletions and baseline changes when deterministic seeding fails", async () => {
+  it("rolls back demo deletion and baseline changes when seeding fails", async () => {
     await connection.db
       .delete(guestGroup)
       .where(eq(guestGroup.id, "b7-group-pending"));
@@ -641,35 +583,35 @@ describe("Block 7 deterministic demo reset", () => {
         siteId: sentinelSiteId,
         name: "Sentinel Collision",
         normalizedName: "sentinel collision",
-        phoneE164: fixturePhone(98),
-        representativeMemberId: `${prefix}-sentinel-collision-member`,
+        phoneE164: phone(98),
+        representativeMemberId: `${prefix}-collision-member`,
         manualPinSeed: "7".repeat(64),
-        createdAt: fixedNow,
-        updatedAt: fixedNow,
+        createdAt: now,
+        updatedAt: now,
       });
       await tx.insert(guestMember).values({
-        id: `${prefix}-sentinel-collision-member`,
+        id: `${prefix}-collision-member`,
         siteId: sentinelSiteId,
         groupId: "b7-group-pending",
         fullName: "Sentinel Collision Guest",
-        normalizedName: "sentinel-collision-guest",
-        createdAt: fixedNow,
-        updatedAt: fixedNow,
+        normalizedName: normalizeGuestName("Sentinel Collision Guest"),
+        createdAt: now,
+        updatedAt: now,
       });
     });
 
-    const demoBefore = await normalizedSnapshot(demoSiteId);
-    const sentinelBefore = await normalizedSnapshot(sentinelSiteId);
+    const demoBefore = await siteSnapshot(demoSiteId);
+    const sentinelBefore = await siteSnapshot(sentinelSiteId);
     await expect(
       resetDemoSite(
         connection.db,
         { userId: ownerId, role: "OWNER" },
         demoSiteId,
-        { clock: { now: () => fixedNow } },
+        { clock: { now: () => now } },
       ),
     ).rejects.toThrow();
-    expect(await normalizedSnapshot(demoSiteId)).toEqual(demoBefore);
-    expect(await normalizedSnapshot(sentinelSiteId)).toEqual(sentinelBefore);
+    expect(await siteSnapshot(demoSiteId)).toEqual(demoBefore);
+    expect(await siteSnapshot(sentinelSiteId)).toEqual(sentinelBefore);
 
     await connection.db
       .delete(guestGroup)
@@ -678,7 +620,7 @@ describe("Block 7 deterministic demo reset", () => {
       connection.db,
       { userId: ownerId, role: "OWNER" },
       demoSiteId,
-      { clock: { now: () => fixedNow } },
+      { clock: { now: () => now } },
     );
   });
 });

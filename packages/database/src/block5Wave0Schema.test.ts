@@ -5,13 +5,12 @@ import { describe, expect, it } from "vitest";
 import {
   familyMessage,
   guestGroup,
-  guestVerificationSend,
+  guestRateLimitAction,
+  guestVerificationChallenge,
   messageRequestReceipt,
   rsvpRequestReceipt,
   rsvpRequestReceiptGroup,
   site,
-  smsSendReservation,
-  smsUsage,
 } from "./schema";
 
 const migrationsDirectory = join(
@@ -27,10 +26,19 @@ function migrationSql(): string {
     .join("\n");
 }
 
+function latestMigrationSql(): string {
+  const names = readdirSync(migrationsDirectory)
+    .filter((name) => /^\d{4}_.+\.sql$/.test(name))
+    .sort();
+  const latest = names.at(-1);
+  if (!latest) throw new Error("No database migrations found");
+  return readFileSync(join(migrationsDirectory, latest), "utf8");
+}
+
 describe("Block 5 Wave 0 database foundation", () => {
-  it("declares site mural and SMS configuration plus group message state", () => {
+  it("declares site mural and group message state without SMS configuration", () => {
     expect(site.muralEnabled).toBeDefined();
-    expect(site.smsMonthlyLimit).toBeDefined();
+    expect(Object.hasOwn(site, "smsMonthlyLimit")).toBe(false);
     expect(guestGroup.messageBlocked).toBeDefined();
     expect(guestGroup.messageRevision).toBeDefined();
   });
@@ -58,20 +66,23 @@ describe("Block 5 Wave 0 database foundation", () => {
     expect(rsvpRequestReceiptGroup.groupId).toBeDefined();
   });
 
-  it("declares site-owned, mode-separated SMS usage and reservations", () => {
-    expect(smsUsage.siteId).toBeDefined();
-    expect(smsUsage.periodStart).toBeDefined();
-    expect(smsUsage.periodEnd).toBeDefined();
-    expect(smsUsage.mode).toBeDefined();
-    expect(smsUsage.reserved).toBeDefined();
-    expect(smsUsage.providerAccepted).toBeDefined();
-    expect(smsUsage.failedFinal).toBeDefined();
-    expect(smsUsage.unknown).toBeDefined();
-    expect(smsUsage.consumed).toBeDefined();
-    expect(smsSendReservation.usageId).toBeDefined();
-    expect(smsSendReservation.mode).toBeDefined();
-    expect(smsSendReservation.status).toBeDefined();
-    expect(guestVerificationSend.smsReservationId).toBeDefined();
+  it("keeps verification challenge state limited to manual PIN confirmation", () => {
+    expect(guestRateLimitAction.enumValues).toEqual(["LOOKUP", "PIN_VERIFY"]);
+    expect(guestVerificationChallenge.phoneE164).toBeDefined();
+    expect(guestVerificationChallenge.expiresAt).toBeDefined();
+    expect(guestVerificationChallenge.wrongAttempts).toBeDefined();
+    expect(guestVerificationChallenge.cooldownUntil).toBeDefined();
+    expect(Object.hasOwn(guestVerificationChallenge, "mode")).toBe(false);
+    expect(Object.hasOwn(guestVerificationChallenge, "codeHash")).toBe(false);
+    expect(Object.hasOwn(guestVerificationChallenge, "providerReference")).toBe(
+      false,
+    );
+    expect(Object.hasOwn(guestVerificationChallenge, "resendAvailableAt")).toBe(
+      false,
+    );
+    expect(Object.hasOwn(guestVerificationChallenge, "smsReservationId")).toBe(
+      false,
+    );
   });
 
   it("generates the Wave 0 migration with tenant-safe indexes and checks", () => {
@@ -102,5 +113,19 @@ describe("Block 5 Wave 0 database foundation", () => {
     expect(sql).not.toContain("message_request_receipt_site_group_fk");
     expect(sql).not.toContain("message_request_receipt_site_group_session_fk");
     expect(sql).toContain("ON DELETE cascade");
+  });
+
+  it("generates a non-SMS migration that preserves manual challenge state", () => {
+    const sql = latestMigrationSql();
+    expect(sql).toContain('DROP TABLE "guest_verification_send" CASCADE');
+    expect(sql).toContain('DROP TABLE "sms_send_reservation" CASCADE');
+    expect(sql).toContain('DROP TABLE "sms_usage" CASCADE');
+    expect(sql).toContain('DROP COLUMN "resend_available_at"');
+    expect(sql).toContain('DROP COLUMN "code_hash"');
+    expect(sql).toContain('DROP COLUMN "provider_reference"');
+    expect(sql).toContain(
+      "CREATE TYPE \"public\".\"guest_rate_limit_action\" AS ENUM('LOOKUP', 'PIN_VERIFY')",
+    );
+    expect(sql).not.toContain('DROP COLUMN "phone_e164"');
   });
 });

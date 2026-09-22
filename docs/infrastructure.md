@@ -14,8 +14,6 @@ No real provider resource was created, configured or mutated by the scaffold. Do
 | Cross-origin browser topology | Authentication spike | Distinct panel/API/site origins, local equivalents initially and eventual provider URLs | Actual independent-origin/mobile tests; first-party cookies/BFF and narrow site handoff decisions recorded |
 | Cloudflare | Manual publication | Account ownership, approved worker names, deploy capability, admin compatibility settings, static assets config | Manual deploy, public URL, HTTPS, fallback/static routing; no fabricated account ID |
 | Railway | API publication | Project/service access, root build context, PORT, server environment variables | API liveness; later authenticated readiness/integration evidence separately |
-| Twilio Verify | First real SMS | Account SID, Auth Token or supported server credential, Verify Service SID, enabled Brazilian destinations, trial restrictions/balance, allowlisted test phone | Controlled real delivery and verification; never treat trial as unlimited/free sandbox |
-| SMS policies | Abuse/usage task | Owner-selected monthly per-site ceiling, existing IP limits, `America/Sao_Paulo` accounting periods, provider failure accounting | Concurrent requests cannot exceed reservations; alerts and block behavior verified; no default budget inferred |
 | Domain / DNS | Optional custom domain task | Client domain ownership/access, domain provider account, DNS control, renewal responsibility | Verify correct deployment target and TLS; domain renewal remains external |
 | Repository CI | CI publication | GitHub repository if selected later, runner access, read-only default workflow permissions | Frozen install/check; no main migration/deploy jobs; add test-only secrets with database suite |
 | AI imagery | Media production task | Approved fictional couple reference, prompts, approved generation tool and usage terms | Consistent characters, approved crop/poster, no claim that generated photos depict the real venue |
@@ -25,7 +23,7 @@ No real provider resource was created, configured or mutated by the scaffold. Do
 
 ## Environment variables
 
-Names below reflect the runtime through Block 5. Messages, reports, and quota accounting add no secret or provider dependency. PDF generation uses the pinned local PDFKit and DejaVu font packages and contacts no rendering service. Empty examples are not functioning connections, and every secret remains server-only.
+Names below reflect the PIN-only runtime. Messages and reports add no secret or provider dependency. PDF generation uses the pinned local PDFKit and DejaVu font packages and contacts no rendering service. Every secret remains server-only.
 
 API URL examples use the origin `http://localhost:8080`; `/v1` belongs to the HTTP route path. The panel remains on `http://localhost:3000`, and the public demo remains on `http://localhost:4321`. `PUBLIC_SITE_ID=demo-wedding` is the deterministic environment-local demo identifier created by the provisioning command; it is not an authorization value.
 
@@ -40,19 +38,8 @@ Database integration tests use `DATABASE_URL_TEST` exclusively and verify the ac
 | `BETTER_AUTH_SECRET` | API | Secret; separate per environment |
 | `BETTER_AUTH_URL` | API outside Railway | Auth endpoint base URL; Railway derives it from `RAILWAY_PUBLIC_DOMAIN` |
 | `ADMIN_ORIGIN` | API | Explicit trusted admin origin |
-| `SMS_MODE` | API | `manual` MVP default; `simulated` for explicit demo/testing; `real` only behind Twilio gates |
 | `GUEST_FINGERPRINT_SECRET` | API | Secret HMAC key for phone/IP fingerprints and domain-separated group PIN derivation |
-| `EXPOSE_SIMULATION_CODE` | API | Development-only opt-in; disclosure still requires a valid demo grant |
 | `TRUST_PROXY_HEADERS` | API outside Railway | Explicit opt-in for trusted proxies; Railway automatically trusts its documented `X-Real-IP` header |
-| `GUEST_DEMO_GRANT_SECRET` | API | Secret HMAC key for five-minute owner-issued demo grants |
-| `DEMO_PHONE_ALLOWLIST` | API | Private normalized Brazilian phone allowlist for demo grant issuance |
-| `TWILIO_ACCOUNT_SID` | API | Server provider identifier |
-| `TWILIO_AUTH_TOKEN` | API | Secret |
-| `TWILIO_VERIFY_SERVICE_SID` | API | Server Verify service identifier |
-| `TWILIO_TEST_PHONE_ALLOWLIST` | API | Private operator test phone list |
-| `SMS_REAL_AUTHORIZED` | API | Explicit operator authorization gate for real SMS mode |
-| `TWILIO_BRAZIL_CONFIRMED` | API | Explicit confirmation that Brazilian Verify destinations are enabled |
-| `TWILIO_TRIAL_USAGE_CONFIRMED` | API | Explicit confirmation that account/trial destination and usage constraints were reviewed |
 | `PUBLIC_API_URL` / `PUBLIC_SITE_ID` | Astro build | Public API origin and environment-local wedding identifier; never authorization |
 | `VITE_API_URL` / `API_BASE_URL` | Admin BFF/runtime | Endpoint address only; never a credential |
 
@@ -126,10 +113,10 @@ Do not copy development secrets or database rows to main. A stable repository we
 
 ## Open engineering inputs
 
-The Block 3 IP policy is implemented as 10 sends/15 minutes, 30 sends/24 hours, 10 verification attempts/15 minutes, and 10 exact lookups/15 minutes. Block 5 has no numeric monthly SMS ceiling by default: new real SMS sends remain blocked until an `OWNER` explicitly configures a limit and the provider gates pass. Manual PIN is the expected MVP verification path; deterministic simulation may validate quota accounting without proving provider delivery or account usage. Block 4 uses no new environment variable: it requires only verified `DATABASE_URL_TEST` for isolated migration/tests and existing API/admin/family-session configuration. Apply generated migrations to the test database first; apply to development only after separate review; never connect to production. Select the video tool during media preflight. Verify provider plan/limits and recovery costs then, not from an old pricing snapshot. The guest browser transport is an `Authorization` bearer held only in site-namespaced `sessionStorage`; the separate admin-to-public handoff remains a later cross-origin decision.
+The guest verification policy is 10 PIN attempts/15 minutes and 10 exact lookups/15 minutes. Full name plus the registered phone locates the invitation; the six-digit manual PIN confirms it. Block 4 uses no new environment variable: it requires only verified `DATABASE_URL_TEST` for isolated migration/tests and existing API/admin/family-session configuration. Apply generated migrations to the test database first; apply to development only after separate review; never connect to production. The guest browser transport is an `Authorization` bearer held only in site-namespaced `sessionStorage`; the separate admin-to-public handoff remains a later cross-origin decision.
 
 ## Listening
 
-Block 3 keeps `DATABASE_URL` as the development connection and `DATABASE_URL_TEST` as the only integration-test connection. Real Twilio mode uses multiple independent acknowledgement gates so merely adding credentials cannot send an SMS. Forwarded IP headers are ignored unless the deployment explicitly declares a trusted proxy boundary.
+Block 3 keeps `DATABASE_URL` as the development connection and `DATABASE_URL_TEST` as the only integration-test connection. Guest verification is provider-free and PIN-only. Forwarded IP headers are ignored unless the deployment explicitly declares a trusted proxy boundary.
 
-Block 4 keeps persistence in the existing Neon topology. RSVP writes, revision checks, history entries, and idempotency receipts are one transactional unit; concurrency and tenant isolation require real PostgreSQL evidence against the disposable test resource. The admin deadline input stores an explicit UTC instant plus IANA timezone. No SMS, personal phone, or provider credential is needed to validate an authenticated RSVP.
+Block 4 keeps persistence in the existing Neon topology. RSVP writes, revision checks, history entries, and idempotency receipts are one transactional unit; concurrency and tenant isolation require real PostgreSQL evidence against the disposable test resource. The admin deadline input stores an explicit UTC instant plus IANA timezone. No communication-provider credential is needed to validate an authenticated RSVP.

@@ -43,23 +43,13 @@ export const adminAccessPurpose = pgEnum("admin_access_purpose", [
   "ACTIVATION",
   "RECOVERY",
 ]);
-export const guestVerificationMode = pgEnum("guest_verification_mode", [
-  "MANUAL",
-  "MOCK",
-  "TWILIO",
-]);
 export const guestVerificationChallengeStatus = pgEnum(
   "guest_verification_challenge_status",
   ["PENDING", "VERIFIED", "EXPIRED", "LOCKED", "REVOKED"],
 );
-export const guestVerificationSendStatus = pgEnum(
-  "guest_verification_send_status",
-  ["MANUAL", "RESERVED", "PROVIDER_ACCEPTED", "FAILED_FINAL", "UNKNOWN"],
-);
 export const guestRateLimitAction = pgEnum("guest_rate_limit_action", [
   "LOOKUP",
-  "OTP_SEND",
-  "OTP_VERIFY",
+  "PIN_VERIFY",
 ]);
 export const rsvpState = pgEnum("rsvp_state", [
   "PENDING",
@@ -76,14 +66,6 @@ export const messageRequestResult = pgEnum("message_request_result", [
   "NO_CHANGE",
   "REMOVED",
 ]);
-export const smsUsageMode = pgEnum("sms_usage_mode", ["SIMULATED", "REAL_SMS"]);
-export const smsReservationStatus = pgEnum("sms_reservation_status", [
-  "RESERVED",
-  "PROVIDER_ACCEPTED",
-  "FAILED_FINAL",
-  "UNKNOWN",
-]);
-
 export const user = pgTable("user", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
@@ -191,7 +173,6 @@ export const site = pgTable(
     rsvpDeadlineAt: timestamp("rsvp_deadline_at", { withTimezone: true }),
     rsvpDeadlineTimezone: text("rsvp_deadline_timezone"),
     muralEnabled: boolean("mural_enabled").notNull().default(false),
-    smsMonthlyLimit: integer("sms_monthly_limit"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -214,10 +195,6 @@ export const site = pgTable(
     check(
       "site_rsvp_deadline_pair_check",
       sql`(${table.rsvpDeadlineAt} IS NULL) = (${table.rsvpDeadlineTimezone} IS NULL)`,
-    ),
-    check(
-      "site_sms_monthly_limit_check",
-      sql`${table.smsMonthlyLimit} IS NULL OR ${table.smsMonthlyLimit} BETWEEN 0 AND 1000000`,
     ),
   ],
 );
@@ -324,17 +301,11 @@ export const guestVerificationChallenge = pgTable(
     id: text("id").primaryKey(),
     siteId: text("site_id").notNull(),
     groupId: text("group_id").notNull(),
-    mode: guestVerificationMode("mode").notNull().default("MOCK"),
     status: guestVerificationChallengeStatus("status")
       .notNull()
       .default("PENDING"),
     phoneE164: text("phone_e164").notNull(),
-    codeHash: text("code_hash"),
-    providerReference: text("provider_reference"),
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
-    resendAvailableAt: timestamp("resend_available_at", {
-      withTimezone: true,
-    }).notNull(),
     wrongAttempts: integer("wrong_attempts").notNull().default(0),
     cooldownUntil: timestamp("cooldown_until", { withTimezone: true }),
     verifiedAt: timestamp("verified_at", { withTimezone: true }),
@@ -373,169 +344,6 @@ export const guestVerificationChallenge = pgTable(
     check(
       "guest_verification_challenge_expiry_check",
       sql`${table.expiresAt} > ${table.createdAt} AND ${table.expiresAt} <= ${table.createdAt} + interval '10 minutes'`,
-    ),
-    check(
-      "guest_verification_challenge_resend_check",
-      sql`${table.resendAvailableAt} >= ${table.createdAt}`,
-    ),
-    check(
-      "guest_verification_challenge_code_hash_check",
-      sql`${table.codeHash} IS NULL OR ${table.codeHash} ~ '^[a-f0-9]{64}$'`,
-    ),
-  ],
-);
-
-export const smsUsage = pgTable(
-  "sms_usage",
-  {
-    id: text("id").primaryKey(),
-    siteId: text("site_id")
-      .notNull()
-      .references(() => site.id, { onDelete: "cascade" }),
-    periodStart: timestamp("period_start", { withTimezone: true }).notNull(),
-    periodEnd: timestamp("period_end", { withTimezone: true }).notNull(),
-    mode: smsUsageMode("mode").notNull(),
-    reserved: integer("reserved").notNull().default(0),
-    providerAccepted: integer("provider_accepted").notNull().default(0),
-    failedFinal: integer("failed_final").notNull().default(0),
-    unknown: integer("unknown").notNull().default(0),
-    consumed: integer("consumed").notNull().default(0),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-  },
-  (table) => [
-    uniqueIndex("sms_usage_site_period_mode_idx").on(
-      table.siteId,
-      table.periodStart,
-      table.mode,
-    ),
-    unique("sms_usage_site_id_mode_key").on(table.siteId, table.id, table.mode),
-    index("sms_usage_site_period_idx").on(table.siteId, table.periodStart),
-    check(
-      "sms_usage_period_check",
-      sql`${table.periodEnd} > ${table.periodStart}`,
-    ),
-    check("sms_usage_reserved_check", sql`${table.reserved} >= 0`),
-    check(
-      "sms_usage_provider_accepted_check",
-      sql`${table.providerAccepted} >= 0`,
-    ),
-    check("sms_usage_failed_final_check", sql`${table.failedFinal} >= 0`),
-    check("sms_usage_unknown_check", sql`${table.unknown} >= 0`),
-    check("sms_usage_consumed_check", sql`${table.consumed} >= 0`),
-    check(
-      "sms_usage_consumed_total_check",
-      sql`${table.consumed} = ${table.reserved} + ${table.providerAccepted} + ${table.failedFinal} + ${table.unknown}`,
-    ),
-  ],
-);
-
-export const smsSendReservation = pgTable(
-  "sms_send_reservation",
-  {
-    id: text("id").primaryKey(),
-    siteId: text("site_id")
-      .notNull()
-      .references(() => site.id, { onDelete: "cascade" }),
-    usageId: text("usage_id").notNull(),
-    mode: smsUsageMode("mode").notNull(),
-    status: smsReservationStatus("status").notNull().default("RESERVED"),
-    providerReference: text("provider_reference"),
-    failureCode: text("failure_code"),
-    reservedAt: timestamp("reserved_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-    completedAt: timestamp("completed_at", { withTimezone: true }),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-  },
-  (table) => [
-    unique("sms_send_reservation_site_id_key").on(table.siteId, table.id),
-    index("sms_send_reservation_site_usage_idx").on(
-      table.siteId,
-      table.usageId,
-    ),
-    index("sms_send_reservation_site_status_idx").on(
-      table.siteId,
-      table.status,
-    ),
-    foreignKey({
-      columns: [table.siteId, table.usageId, table.mode],
-      foreignColumns: [smsUsage.siteId, smsUsage.id, smsUsage.mode],
-      name: "sms_send_reservation_site_usage_mode_fk",
-    }).onDelete("cascade"),
-  ],
-);
-
-export const guestVerificationSend = pgTable(
-  "guest_verification_send",
-  {
-    id: text("id").primaryKey(),
-    siteId: text("site_id").notNull(),
-    groupId: text("group_id").notNull(),
-    challengeId: text("challenge_id").notNull(),
-    smsReservationId: text("sms_reservation_id"),
-    phoneE164: text("phone_e164").notNull(),
-    status: guestVerificationSendStatus("status").notNull().default("RESERVED"),
-    providerReference: text("provider_reference"),
-    failureCode: text("failure_code"),
-    reservedAt: timestamp("reserved_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-    completedAt: timestamp("completed_at", { withTimezone: true }),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-  },
-  (table) => [
-    uniqueIndex("guest_verification_send_site_id_id_idx").on(
-      table.siteId,
-      table.id,
-    ),
-    index("guest_verification_send_challenge_status_idx").on(
-      table.challengeId,
-      table.status,
-    ),
-    index("guest_verification_send_site_group_idx").on(
-      table.siteId,
-      table.groupId,
-    ),
-    index("guest_verification_send_site_reservation_idx").on(
-      table.siteId,
-      table.smsReservationId,
-    ),
-    foreignKey({
-      columns: [table.siteId, table.groupId],
-      foreignColumns: [guestGroup.siteId, guestGroup.id],
-      name: "guest_verification_send_site_group_fk",
-    }).onDelete("cascade"),
-    foreignKey({
-      columns: [table.siteId, table.challengeId],
-      foreignColumns: [
-        guestVerificationChallenge.siteId,
-        guestVerificationChallenge.id,
-      ],
-      name: "guest_verification_send_challenge_fk",
-    }).onDelete("cascade"),
-    foreignKey({
-      columns: [table.siteId, table.smsReservationId],
-      foreignColumns: [smsSendReservation.siteId, smsSendReservation.id],
-      name: "guest_verification_send_sms_reservation_fk",
-    }).onDelete("cascade"),
-    check(
-      "guest_verification_send_phone_e164_check",
-      sql`${table.phoneE164} ~ '^[+]55[1-9]{2}9[0-9]{8}$'`,
     ),
   ],
 );
@@ -1016,7 +824,6 @@ export const siteRelations = relations(site, ({ many, one }) => ({
   accessTokens: many(adminAccessToken),
   guestGroups: many(guestGroup),
   guestVerificationChallenges: many(guestVerificationChallenge),
-  guestVerificationSends: many(guestVerificationSend),
   guestRateLimitEvents: many(guestRateLimitEvent),
   familySessions: many(familySession),
   familyMessages: many(familyMessage),
@@ -1024,8 +831,6 @@ export const siteRelations = relations(site, ({ many, one }) => ({
   rsvpHistory: many(rsvpHistory),
   rsvpRequestReceipts: many(rsvpRequestReceipt),
   rsvpRequestReceiptGroups: many(rsvpRequestReceiptGroup),
-  smsUsage: many(smsUsage),
-  smsSendReservations: many(smsSendReservation),
   term: one(siteTerm),
 }));
 
@@ -1036,7 +841,6 @@ export const guestGroupRelations = relations(guestGroup, ({ one, many }) => ({
   }),
   members: many(guestMember),
   verificationChallenges: many(guestVerificationChallenge),
-  verificationSends: many(guestVerificationSend),
   rateLimitEvents: many(guestRateLimitEvent),
   familySessions: many(familySession),
   familyMessages: many(familyMessage),
@@ -1059,7 +863,7 @@ export const guestMemberRelations = relations(guestMember, ({ one, many }) => ({
 
 export const guestVerificationChallengeRelations = relations(
   guestVerificationChallenge,
-  ({ one, many }) => ({
+  ({ one }) => ({
     site: one(site, {
       fields: [guestVerificationChallenge.siteId],
       references: [site.id],
@@ -1070,35 +874,6 @@ export const guestVerificationChallengeRelations = relations(
         guestVerificationChallenge.groupId,
       ],
       references: [guestGroup.siteId, guestGroup.id],
-    }),
-    sends: many(guestVerificationSend),
-  }),
-);
-
-export const guestVerificationSendRelations = relations(
-  guestVerificationSend,
-  ({ one }) => ({
-    site: one(site, {
-      fields: [guestVerificationSend.siteId],
-      references: [site.id],
-    }),
-    group: one(guestGroup, {
-      fields: [guestVerificationSend.siteId, guestVerificationSend.groupId],
-      references: [guestGroup.siteId, guestGroup.id],
-    }),
-    challenge: one(guestVerificationChallenge, {
-      fields: [guestVerificationSend.siteId, guestVerificationSend.challengeId],
-      references: [
-        guestVerificationChallenge.siteId,
-        guestVerificationChallenge.id,
-      ],
-    }),
-    smsReservation: one(smsSendReservation, {
-      fields: [
-        guestVerificationSend.siteId,
-        guestVerificationSend.smsReservationId,
-      ],
-      references: [smsSendReservation.siteId, smsSendReservation.id],
     }),
   }),
 );
@@ -1197,33 +972,6 @@ export const rsvpRequestReceiptGroupRelations = relations(
       fields: [rsvpRequestReceiptGroup.siteId, rsvpRequestReceiptGroup.groupId],
       references: [guestGroup.siteId, guestGroup.id],
     }),
-  }),
-);
-
-export const smsUsageRelations = relations(smsUsage, ({ one, many }) => ({
-  site: one(site, {
-    fields: [smsUsage.siteId],
-    references: [site.id],
-  }),
-  reservations: many(smsSendReservation),
-}));
-
-export const smsSendReservationRelations = relations(
-  smsSendReservation,
-  ({ one, many }) => ({
-    site: one(site, {
-      fields: [smsSendReservation.siteId],
-      references: [site.id],
-    }),
-    usage: one(smsUsage, {
-      fields: [
-        smsSendReservation.siteId,
-        smsSendReservation.usageId,
-        smsSendReservation.mode,
-      ],
-      references: [smsUsage.siteId, smsUsage.id, smsUsage.mode],
-    }),
-    verificationSends: many(guestVerificationSend),
   }),
 );
 

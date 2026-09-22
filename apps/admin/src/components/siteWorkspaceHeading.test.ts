@@ -7,11 +7,11 @@ describe("site workspace heading", () => {
   it("titles the page by area for both roles", () => {
     expect(
       getWorkspaceHeading({
-        area: "overview",
+        area: "guests",
         owner: true,
         lifecycle: "DRAFT",
       }).title,
-    ).toBe("Visão geral");
+    ).toBe("Convidados");
     expect(
       getWorkspaceHeading({
         area: "guests",
@@ -42,27 +42,17 @@ describe("site workspace heading", () => {
     ).toBe("Configurações");
   });
 
-  it("does not carry area ledes", () => {
-    expect(
-      getWorkspaceHeading({
-        area: "overview",
-        owner: true,
-        lifecycle: "ACTIVE",
-      }),
-    ).not.toHaveProperty("lede");
-  });
-
   it("shows the back link only to owners", () => {
     expect(
       getWorkspaceHeading({
-        area: "overview",
+        area: "guests",
         owner: true,
         lifecycle: "ACTIVE",
       }).showBackLink,
     ).toBe(true);
     expect(
       getWorkspaceHeading({
-        area: "overview",
+        area: "guests",
         owner: false,
         lifecycle: "ACTIVE",
       }).showBackLink,
@@ -72,14 +62,14 @@ describe("site workspace heading", () => {
   it("always shows lifecycle status to owners", () => {
     expect(
       getWorkspaceHeading({
-        area: "overview",
+        area: "settings",
         owner: true,
         lifecycle: "DRAFT",
       }).showLifecycleBadge,
     ).toBe(true);
     expect(
       getWorkspaceHeading({
-        area: "overview",
+        area: "settings",
         owner: true,
         lifecycle: "ACTIVE",
       }).showLifecycleBadge,
@@ -89,28 +79,21 @@ describe("site workspace heading", () => {
   it("shows lifecycle status to site admins only when inactive", () => {
     expect(
       getWorkspaceHeading({
-        area: "overview",
+        area: "guests",
         owner: false,
         lifecycle: "ACTIVE",
       }).showLifecycleBadge,
     ).toBe(false);
     expect(
       getWorkspaceHeading({
-        area: "overview",
-        owner: false,
-        lifecycle: "DRAFT",
-      }).showLifecycleBadge,
-    ).toBe(false);
-    expect(
-      getWorkspaceHeading({
-        area: "overview",
+        area: "guests",
         owner: false,
         lifecycle: "IN_REVIEW",
       }).showLifecycleBadge,
     ).toBe(false);
     expect(
       getWorkspaceHeading({
-        area: "overview",
+        area: "guests",
         owner: false,
         lifecycle: "INACTIVE",
       }).showLifecycleBadge,
@@ -118,7 +101,7 @@ describe("site workspace heading", () => {
   });
 });
 
-describe("site workspace heading markup", () => {
+describe("site workspace markup", () => {
   const workspaceSource = readFileSync(
     resolve(import.meta.dirname, "SiteWorkspace.tsx"),
     "utf8",
@@ -130,7 +113,7 @@ describe("site workspace heading markup", () => {
     expect(workspaceSource).not.toContain('owner ? "Gestão do casamento"');
   });
 
-  it("uses couple identity as the heading subtitle", () => {
+  it("uses the wedding identity as the heading subtitle", () => {
     expect(workspaceSource).toContain(
       "text-base leading-[1.6] text-admin-muted",
     );
@@ -141,14 +124,18 @@ describe("site workspace heading markup", () => {
     );
   });
 
-  it("keeps the public site CTA in the heading, not the overview facts", () => {
+  it("keeps the public site CTA in the heading", () => {
     expect(workspaceSource).toContain("Ir para o site");
-    expect(workspaceSource).not.toMatch(
-      /data-area="overview"[\s\S]*Ir para o site/,
-    );
     expect(workspaceSource).toContain(
       "publicSiteHandoffUrl(site.publicUrl, panelOrigin)",
     );
+  });
+
+  it("keeps status, dates, and publication in owner settings", () => {
+    expect(workspaceSource).toContain('data-area="settings"');
+    expect(workspaceSource).toContain('aria-label="Status e datas"');
+    expect(workspaceSource).toContain("<strong>Publicação</strong>");
+    expect(workspaceSource).not.toContain('data-area="overview"');
   });
 
   it("sizes the workspace heading as app chrome", () => {

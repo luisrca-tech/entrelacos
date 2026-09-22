@@ -13,13 +13,10 @@ import {
   type GuestChallengeStartResult,
   type GuestSessionReadResponse,
   type GuestSessionStorage,
-  getGuestDeliveryMessage,
   getGuestLeaveNotice,
-  getResendCountdownSeconds,
   guestAccessErrorMessage,
   isValidVerificationCode,
   readGuestSession,
-  shouldDiscardGuestChallenge,
   writeGuestSession,
 } from "./guestAccess";
 import {
@@ -83,14 +80,6 @@ function browserSessionStorage(): GuestSessionStorage | null {
   } catch {
     return null;
   }
-}
-
-function responseStatusMessage(result: GuestChallengeStartResult): string {
-  if (result.sendStatus === "FAILED_FINAL")
-    return "Não foi possível enviar o código. Confira os dados e tente novamente.";
-  if (result.sendStatus === "UNKNOWN")
-    return "O envio está sendo confirmado. Se o código chegar, informe-o abaixo.";
-  return "";
 }
 
 function challengeExpired(challenge: GuestChallengeStartResult, nowMs: number) {
@@ -310,40 +299,9 @@ export function GuestAccess({
     setNotice("");
     try {
       const result = await apiResult.api.start(parsed.data);
-      if (shouldDiscardGuestChallenge(result.sendStatus)) {
-        setError(responseStatusMessage(result));
-        setChallenge(null);
-        return;
-      }
       setChallenge(result);
       setCode("");
       setPhase("code");
-      setNotice(responseStatusMessage(result));
-    } catch (cause) {
-      setError(errorWithRetry(cause));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function resendCode() {
-    if (!apiResult.api || !challenge || busy) return;
-    if (getResendCountdownSeconds(challenge.resendAvailableAt, nowMs) > 0)
-      return;
-    setBusy(true);
-    setError("");
-    setNotice("");
-    try {
-      const result = await apiResult.api.resend(challenge.challengeId);
-      if (shouldDiscardGuestChallenge(result.sendStatus)) {
-        setError(responseStatusMessage(result));
-        setChallenge(null);
-        setCode("");
-        setPhase("lookup");
-        return;
-      }
-      setChallenge(result);
-      setNotice(responseStatusMessage(result));
     } catch (cause) {
       setError(errorWithRetry(cause));
     } finally {
@@ -355,11 +313,7 @@ export function GuestAccess({
     event.preventDefault();
     if (!apiResult.api || !challenge || busy) return;
     if (!isValidVerificationCode(code)) {
-      setError(
-        challenge.deliveryMode === "MANUAL_PIN"
-          ? "Informe o PIN de 6 dígitos compartilhado com você."
-          : "Informe o código de 6 dígitos recebido.",
-      );
+      setError("Informe o PIN de 6 dígitos compartilhado com você.");
       return;
     }
     if (challengeExpired(challenge, nowMs)) {
@@ -410,8 +364,7 @@ export function GuestAccess({
     } catch (cause) {
       const apiError = cause as Partial<GuestAccessApiError>;
       setError(
-        challenge.deliveryMode === "MANUAL_PIN" &&
-          apiError.code === "INVALID_CODE"
+        apiError.code === "INVALID_CODE"
           ? "O PIN não confere. Confira o valor compartilhado e tente novamente."
           : errorWithRetry(cause),
       );
@@ -451,10 +404,6 @@ export function GuestAccess({
       setBusy(false);
     }
   }
-
-  const resendSeconds = challenge
-    ? getResendCountdownSeconds(challenge.resendAvailableAt, nowMs)
-    : 0;
 
   async function reloadRsvp(preserveDraft: boolean) {
     const token = storage ? readGuestSession(storage, siteId) : null;
@@ -742,24 +691,11 @@ export function GuestAccess({
       {phase === "code" && challenge && (
         <form className={guestAccessFormClass} noValidate onSubmit={verifyCode}>
           <p className={guestAccessDescriptionClass}>
-            {getGuestDeliveryMessage(
-              challenge.deliveryMode,
-              challenge.sendStatus,
-            )}
+            Informe o PIN de 6 dígitos compartilhado com você pelos noivos ou
+            pela cerimonial.
           </p>
-          {challenge.deliveryMode === "SIMULATED" &&
-            challenge.simulationCode && (
-              <p
-                className="m-0 border-l-[3px] border-l-[#718c72] bg-[rgba(113,140,114,0.12)] px-4 py-3"
-                role="status"
-              >
-                Código da simulação: <strong>{challenge.simulationCode}</strong>
-              </p>
-            )}
           <label className={guestAccessLabelClass}>
-            {challenge.deliveryMode === "MANUAL_PIN"
-              ? "PIN de 6 dígitos"
-              : "Código de 6 dígitos"}
+            PIN de 6 dígitos
             <input
               className={guestAccessInputClass}
               autoComplete="one-time-code"
@@ -778,24 +714,8 @@ export function GuestAccess({
             type="submit"
             disabled={busy}
           >
-            {busy
-              ? "Confirmando…"
-              : challenge.deliveryMode === "MANUAL_PIN"
-                ? "Confirmar PIN"
-                : "Confirmar código"}
+            {busy ? "Confirmando…" : "Confirmar PIN"}
           </button>
-          {challenge.deliveryMode !== "MANUAL_PIN" && (
-            <button
-              type="button"
-              className={guestAccessSecondaryClass}
-              disabled={busy || resendSeconds > 0}
-              onClick={() => void resendCode()}
-            >
-              {resendSeconds > 0
-                ? `Reenviar código em ${resendSeconds}s`
-                : "Reenviar código"}
-            </button>
-          )}
           <button
             type="button"
             className={guestAccessLinkClass}

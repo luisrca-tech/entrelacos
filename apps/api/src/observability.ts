@@ -1,11 +1,6 @@
 import type { MiddlewareHandler } from "hono";
 
-export const OBSERVABILITY_MODES = [
-  "simulated",
-  "unavailable",
-  "manual",
-  "live",
-] as const;
+export const OBSERVABILITY_MODES = ["unavailable", "manual", "live"] as const;
 
 export type ObservabilityMode = (typeof OBSERVABILITY_MODES)[number];
 

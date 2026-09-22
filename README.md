@@ -2,7 +2,7 @@
 
 Managed wedding websites in a TypeScript Turborepo. The product interview is complete; this repository contains its requirements, engineering contracts, implementation blocks and an executable foundation.
 
-**Current scope: Block 2.** Controlled administrative access, wedding persistence and lifecycle, tenant-scoped panel navigation, and public-site recognition are implemented. RSVP, guest OTP/sessions, messages, exports, production media, and finished visual customization belong to later blocks. See the validation record for acceptance evidence.
+**Current scope:** controlled administration, guest groups, required name-and-phone invitation lookup, manual PIN confirmation, family sessions, RSVP, messages, mural, reports, demo reset, and reusable wedding presentation. SMS delivery and Twilio integration are not product dependencies.
 
 ## Read first
 

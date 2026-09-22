@@ -2,7 +2,6 @@ import type { SiteRecord } from "@entrelacos/contracts";
 import type { SiteArea } from "./adminNavigation";
 
 const areaTitle: Record<SiteArea, string> = {
-  overview: "Visão geral",
   guests: "Convidados",
   rsvp: "Confirmações",
   messages: "Mensagens",

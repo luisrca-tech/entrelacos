@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  canIssueDemoGuestGrant,
   copyGuestAccessPin,
   createGuestGroupDraft,
   groupDeletionConfirmation,
@@ -26,11 +25,8 @@ describe("guest group admin form", () => {
   it("lists overflow actions for an active Brazilian group", () => {
     expect(
       guestGroupMenuActions({
-        owner: false,
-        isDemo: false,
         inactive: false,
         isForeign: false,
-        phone: "+5562999999999",
       }),
     ).toEqual(["copy-pin", "rotate-pin", "edit", "delete"]);
   });
@@ -38,52 +34,19 @@ describe("guest group admin form", () => {
   it("hides PIN and demo actions for foreign groups", () => {
     expect(
       guestGroupMenuActions({
-        owner: true,
-        isDemo: true,
         inactive: false,
         isForeign: true,
-        phone: null,
       }),
     ).toEqual(["edit", "delete"]);
-  });
-
-  it("adds demo grant only for the owner of a Brazilian demo group", () => {
-    expect(
-      guestGroupMenuActions({
-        owner: true,
-        isDemo: true,
-        inactive: false,
-        isForeign: false,
-        phone: "+5562999999999",
-      }),
-    ).toEqual(["copy-pin", "rotate-pin", "demo-grant", "edit", "delete"]);
   });
 
   it("hides the overflow menu when the wedding is inactive", () => {
     expect(
       guestGroupMenuActions({
-        owner: true,
-        isDemo: true,
         inactive: true,
         isForeign: false,
-        phone: "+5562999999999",
       }),
     ).toEqual([]);
-  });
-
-  it("offers demo authorization only to the owner for a Brazilian demo group", () => {
-    const group = { isForeign: false, phone: "+5562999999999" };
-
-    expect(canIssueDemoGuestGrant(true, true, false, group)).toBe(true);
-    expect(canIssueDemoGuestGrant(false, true, false, group)).toBe(false);
-    expect(canIssueDemoGuestGrant(true, false, false, group)).toBe(false);
-    expect(canIssueDemoGuestGrant(true, true, true, group)).toBe(false);
-    expect(
-      canIssueDemoGuestGrant(true, true, false, {
-        isForeign: true,
-        phone: null,
-      }),
-    ).toBe(false);
   });
 
   it("starts individual invitation with one representative member", () => {

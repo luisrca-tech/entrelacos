@@ -100,7 +100,6 @@ async function addIdentityFixtures(siteId: string, groupId: string) {
     phoneE164: "+5511999999999",
     createdAt,
     expiresAt: new Date("2028-02-29T12:10:00.000Z"),
-    resendAvailableAt: new Date("2028-02-29T12:01:00.000Z"),
   });
   return { challengeId };
 }

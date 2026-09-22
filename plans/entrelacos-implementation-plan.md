@@ -8,7 +8,7 @@ These eight larger blocks define the intended implementation map. Block 1 is com
 
 - **Documentation:** PRD and this draft plan are the documentation deliverables.
 - **Scaffold:** Block 1 is complete at the approved runnable-boundary scope. Bun 1.3.14 and Node.js 24.20.0 passed frozen installation, lint on 52 files, seven forced typecheck tasks, four deterministic API tests and three forced application builds; raw HTTP and clean-browser evidence also passed. See `docs/scaffoldValidation.md` for evidence and limits.
-- **Product:** Block 2 completion is recorded in [its validation report](../docs/block2Validation.md). Block 3 is merged into `main`, with local acceptance recorded in [its validation report](../docs/block3Validation.md); live Twilio delivery remains pending. Block 4 passed its isolated migration, database, browser, artifact, and final-gate evidence on `block-4/member-rsvp`, as recorded in [the Block 4 validation record](../docs/block4Validation.md). This documentation revision does not rerun Block 3 acceptance. Blocks 5–8 remain planned. No provider, secret, deployment, media, or production claim is implied by a mock, placeholder, or passing local health check.
+- **Product:** Block 2 completion is recorded in [its validation report](../docs/block2Validation.md). Block 3 is merged into `main`, with local acceptance recorded in [its validation report](../docs/block3Validation.md); that historical record includes a provider branch now superseded by the accepted PIN-only scope. Block 4 passed its isolated migration, database, browser, artifact, and final-gate evidence on `block-4/member-rsvp`, as recorded in [the Block 4 validation record](../docs/block4Validation.md). This documentation revision does not rerun Block 3 acceptance. Blocks 5–8 remain planned. No provider, secret, deployment, media, or production claim is implied by a mock, placeholder, or passing local health check.
 
 ## Template/site study revision — 2026-09-12
 
@@ -23,12 +23,12 @@ These decisions apply across the blocks and remain subject to the explicit gates
 - **API authority:** one Hono Node.js/TypeScript API on Railway owns business rules, authentication, authorization, tenant isolation, and database access.
 - **API routes:** versioned HTTP JSON contract under `/v1`, with standardized errors and shared contracts separate from database models. Exact endpoint names are an architecture-specification decision.
 - **Database:** shared PostgreSQL on Neon, with every business operation scoped by stable wedding/site identity. Development, main, and disposable integration resources are separate. The public frontend never accesses Neon.
-- **Core data model:** wedding/site lifecycle and configuration; `OWNER`; wedding-bound `SITE_ADMIN`; family/group; member; representative and normalized phone; guest challenges and sessions; member RSVP and history; one group message and moderation state; domain/origin and publication status; SMS usage and limits.
-- **Authentication:** Better Auth with Drizzle persistence for admins; independent family-scoped guest sessions after a manually shared group PIN for the MVP, with Twilio Verify retained as an optional future channel. The selected cross-origin session/handoff design remains a required spike.
+- **Core data model:** wedding/site lifecycle and configuration; `OWNER`; wedding-bound `SITE_ADMIN`; family/group; member; representative and normalized phone; guest challenges and sessions; member RSVP and history; one group message and moderation state; domain/origin and publication status.
+- **Authentication:** Better Auth with Drizzle persistence for admins; independent family-scoped guest sessions after exact full-name plus registered-phone lookup and manually shared six-digit group PIN confirmation. The selected cross-origin session/handoff design remains a required spike.
 - **Data access and migrations:** Drizzle with node-postgres and reviewed/manual SQL migrations. Main-environment migrations are explicit manual operations.
 - **UI and motion:** shadcn with Base UI, Sonner for shared feedback, and Motion for the approved intro, text, and story choreography. CSS/Intersection Observer remain appropriate for simple interactions and entrances.
 - **Template model:** composition over inheritance with a public `@entrelacos/template-root/v1` presentation boundary planned in B6-T0. The host owns routes, serializable editorial content, SEO inputs, media and local extensions; the template owns reusable rendering and the standard page preset. `wedding-features` owns shared guest UI/API integration; the API retains operational authority. See the template/site study for the two-consumer proof and versioning limits. A reusable template supplies sections, layout, and defaults; each wedding composes its own pages and approved content. Shared changes affect newly built sites only. Template and public-site copy is always Brazilian Portuguese (`pt-BR`), never `en-US`.
-- **External services:** Manual group PIN delivery is the provider-free MVP path. Twilio Verify remains the opt-in real SMS boundary; tests use the manual path or deterministic mocks. Cloudflare, Railway, Neon, CI resources, and any media provider require real account access and explicit credentials. No provider guarantee is assumed.
+- **External services:** Manual group PIN delivery is the only guest-confirmation path; administrators share the PIN through their own channel. Cloudflare, Railway, Neon, CI resources, and any media provider require real account access and explicit credentials. No provider guarantee is assumed.
 - **Operational control:** production deployment, domains, DNS, lifecycle status, main migrations, and provider setup are manual and recorded as owner-entered status. No silent mass publication or automatic expiry deletion exists.
 
 ## Cross-cutting rules for every block
@@ -36,11 +36,11 @@ These decisions apply across the blocks and remain subject to the explicit gates
 - Use English for persisted documentation, code, comments, and implementation artifacts; use deterministic fixtures for tests.
 - Templates and public wedding sites are always Brazilian Portuguese (`pt-BR`). Do not author template defaults, site copy, or guest-facing site UI in `en-US`. Site and template fixtures follow the same locale.
 - Apply TDD to logic-bearing behavior: write the focused failing test first, then implement the smallest complete vertical slice.
-- Keep mock integrations visibly distinct from real provider results. A mocked Twilio flow proves application behavior only.
+- Keep infrastructure and media-provider evidence separate from local fixtures; a placeholder or mock never proves a live provider guarantee.
 - Verify authorization in the API and prove cross-tenant isolation with a second wedding and sentinel data.
 - Treat guest data, sessions, passwords, secrets, and production code as separate concerns during reset, reuse, deletion, and deployment.
 - Add browser evidence for protected or interactive behavior in a clean browser, including mobile and reduced-motion states where relevant.
-- Record unresolved legal, retention, recovery, media, authentication, and provider assumptions as gates; do not convert them into guarantees through wording.
+- Record unresolved legal, retention, recovery, media, authentication, and infrastructure assumptions as gates; do not convert them into guarantees through wording.
 
 ---
 
@@ -56,15 +56,15 @@ These decisions apply across the blocks and remain subject to the explicit gates
 
 ### BEFORE START
 
-- **Infrastructure:** None for local scaffold. Do not create Cloudflare, Railway, Neon, Twilio, CI, or media resources as part of this block.
+- **Infrastructure:** None for local scaffold. Do not create Cloudflare, Railway, Neon, CI, or media resources as part of this block.
 - **Tools:** Node 24, Bun workspaces, Turborepo, TypeScript, the selected lint/test/build tools, and browser tooling must be available to the implementer. Install the pinned workspace dependencies as part of scaffold setup; no live provider connection is required.
-- **Secrets and access:** None. Use examples and placeholders only; never place Neon, Railway, Better Auth, Twilio, Cloudflare, CI, or media secrets in the repository.
+- **Secrets and access:** None. Use examples and placeholders only; never place Neon, Railway, Better Auth, Cloudflare, CI, or media secrets in the repository.
 - **Decisions:** Package/application boundaries, `/v1` contract boundary, server-only database access, environment naming, and liveness semantics must be recorded in the architecture specification before implementation starts.
 
 ### Concrete vertical-slice tasks
 
 1. **B1-T1 — Establish workspace boundaries.** Establish the approved workspace boundaries for the public demo site, central panel, API, template foundation, shared guest behavior, UI primitives, contracts, and database concerns.
-2. **B1-T2 — Add liveness paths.** Give each runnable surface a minimal liveness response. Liveness must not claim database, SMS, media, or other provider readiness.
+2. **B1-T2 — Add liveness paths.** Give each runnable surface a minimal liveness response. Liveness must not claim database, media, or other provider readiness.
 3. **B1-T3 — Define configuration gates.** Record environment examples and the future validation boundary that distinguishes public configuration from server secrets. Do not implement provider readiness or required-secret checks in the liveness scaffold.
 4. **B1-T4 — Establish test/build entry points.** Establish a shared contract/test path with deterministic fixtures and a CI command shape for type checks, lint, tests, and builds. Keep integration tests gated on an explicit disposable database URL.
 5. **B1-T5 — Record deferred gates.** Document scaffold status and deferred product gates so a green skeleton cannot be interpreted as a working wedding product.
@@ -90,9 +90,9 @@ These decisions apply across the blocks and remain subject to the explicit gates
 ### Tests and acceptance evidence
 
 - `bun run lint`, `bun run typecheck --force`, `bun run test` and `bun run build --force` pass with the pinned Bun and Node versions; the forced Turbo runs report zero cached tasks.
-- Liveness responses identify the running surface and do not report database, SMS, or media readiness.
+- Liveness responses identify the running surface and do not report database, media, or provider readiness.
 - Provider readiness and required-secret validation are recorded as later integration gates; no current scaffold test is presented as proof of them.
-- The disposable Neon integration gate is documented as pending and is not replaced by an in-memory imitation. No live database, authentication, SMS, cross-origin, recovery or finished visual acceptance was exercised.
+- The disposable Neon integration gate is documented as pending and is not replaced by an in-memory imitation. No live database, authentication, cross-origin, recovery or finished visual acceptance was exercised.
 - Evidence names the exact scaffold commands and confirms no production mutation, external provider setup, commit, push or deployment occurred during this completion run.
 
 ---
@@ -150,31 +150,29 @@ These decisions apply across the blocks and remain subject to the explicit gates
 
 ---
 
-## Block 3: Guest groups, access PINs, optional SMS, sessions, and abuse controls
+## Block 3: Guest groups, access PINs, sessions, and abuse controls
 
-**Implementation status (2026-09-12):** B3-T1 through B3-T5 now use a persistent manually shared group PIN as the provider-free MVP path. The PIN is generated at group creation, transiently revealed or rotated by an authorized administrator, and verified through the existing protected challenge/session flow. The B3-T6 Twilio Verify adapter and fail-closed runtime gates remain implemented, but live delivery stays disabled pending a paid/provider-ready account and explicit authorization to send. See `docs/block3Contracts.md`, `docs/block3Validation.md`, and `docs/block3Handoff.md`.
+**Historical implementation status (2026-09-12, superseded where noted):** B3-T1 through B3-T4 use a persistent manually shared group PIN. The PIN is generated at group creation, transiently revealed or rotated by an authorized administrator, and verified through the protected challenge/session flow. Earlier B3-T5/B3-T6 demo/provider work is retired by the accepted PIN-only scope; the linked Block 3 documents remain historical evidence and are not current requirements. See `docs/block3Contracts.md`, `docs/block3Validation.md`, and `docs/block3Handoff.md`.
 
 **Track:** Product. This block establishes the family-scoped guest identity used by RSVP and messages.
 
-**User stories:** US-041–US-065, US-102–US-103.
+**User stories:** US-041–US-064. US-065 and US-102–US-103 remain as retired PRD IDs only.
 
-**Dependencies:** Blocks 1–2; guest data and contract design; disposable Neon base; provider boundary; cross-origin result where guest requests span origins.
+**Dependencies:** Blocks 1–2; guest data and contract design; disposable Neon base; cross-origin result where guest requests span origins.
 
 ### BEFORE START
 
-- **Infrastructure:** Disposable Neon integration resources are required. The manual PIN path needs no messaging provider. Real Twilio Verify is optional and is only eligible after account/country/usage checks.
-- **Tools:** PIN derivation and rotation tests, rate-limit test utilities, clean-browser tooling, deterministic SMS mocks, and the selected Twilio Verify adapter boundary are required.
-- **Secrets and access:** Manual PIN derivation uses the existing server-only guest HMAC secret. A real SMS test additionally requires Twilio Account SID, Auth Token, Verify Service SID, permitted destination phone(s), country/geo permissions, account usage confirmation, and explicit owner authorization. Never expose server secrets in frontend configuration.
-- **Decisions:** Required group name, minimum one member, one representative, normalized Brazilian phone uniqueness per wedding, foreign-number behavior, exact lookup, persistent PIN lifetime, rotation revocation, session lifetime, attempt/cooldown limits, and demo authorization are fixed.
+- **Infrastructure:** Disposable Neon integration resources are required. No messaging provider is required or configured.
+- **Tools:** PIN derivation and rotation tests, rate-limit test utilities, and clean-browser tooling are required.
+- **Secrets and access:** Manual PIN derivation uses the existing server-only guest HMAC secret. Never expose server secrets in frontend configuration.
+- **Decisions:** Required group name, minimum one member, one representative, normalized Brazilian phone uniqueness per wedding, foreign-number behavior, exact full-name plus registered-phone lookup, persistent PIN lifetime, rotation revocation, session lifetime, and attempt/cooldown limits are fixed.
 
 ### Concrete vertical-slice tasks
 
 1. **B3-T1 — Manage groups, members, and access PINs.** Deliver admin creation, editing, representative selection, deletion, and validation for named groups, one or more members, individual invitations, and one wedding-scoped phone. Generate a server-derived six-digit PIN per Brazilian group; allow authorized transient reveal, copy, and explicit rotation without storing plaintext.
 2. **B3-T2 — Locate a group safely.** Implement deterministic lookup normalization for case, accents, and extra spaces while rejecting approximate, abbreviated, or incomplete names. Add the foreign-number path and its persistent explanation.
-3. **B3-T3 — Enforce verification protection.** Make the manually shared group PIN the default MVP channel. Reuse an expiring challenge, exact lookup, IP verification throttles, five failed attempts, and a 15-minute cooldown. Keep the SMS-only resend and send ceilings for simulated/live SMS; manual challenges never create provider-send records and cannot be resent.
+3. **B3-T3 — Enforce verification protection.** Make exact full-name plus registered-phone lookup followed by the manually shared six-digit group PIN the only guest-confirmation flow. Reuse an expiring challenge, IP verification throttles, five failed attempts, and a 15-minute cooldown.
 4. **B3-T4 — Create and revoke guest sessions.** Create family-bound guest sessions with seven-day absolute expiry and an explicit leave action. Revoke sessions and pending challenges after representative/phone changes or PIN rotation; preserve them for spelling-only corrections.
-5. **B3-T5 — Isolate demo simulation.** Add owner-authorized, demo-marked simulation behavior that cannot become a general bypass. Label simulated outcomes separately from provider responses.
-6. **B3-T6 — Preserve opt-in live SMS.** Keep the Twilio path behind explicit fail-closed gates. Activate and verify it only after the paid/provider-ready account, permissions, destination allowlist, and separate send authorization are confirmed; manual PIN remains the operational MVP path meanwhile.
 
 ### Task-level preflight
 
@@ -182,24 +180,22 @@ These decisions apply across the blocks and remain subject to the explicit gates
 | --- | --- | --- |
 | B3-T1 | **Infrastructure:** Neon disposable base. **Tools:** contract/migration tests. **Secrets/access:** site-admin fixture and development DB URL. **Decisions:** required group name, representative, phone scope, individual invitation model. | B2-T1, B2-T4 |
 | B3-T2 | **Infrastructure:** none beyond B3-T1 data. **Tools:** normalization and browser tests. **Secrets/access:** guest fixture data. **Decisions:** exact normalization and strict rejection rules; foreign-number behavior. | B3-T1 |
-| B3-T3 | **Infrastructure:** none beyond the database for manual mode. **Tools:** deterministic PIN/challenge and rate-limit clock. **Secrets/access:** server guest HMAC secret; no messaging credentials. **Decisions:** persistent PIN plus expiring challenge, five attempts, cooldown, lookup/IP scopes, and no manual resend. | B3-T2 |
+| B3-T3 | **Infrastructure:** none beyond the database. **Tools:** deterministic PIN/challenge and rate-limit clock. **Secrets/access:** server guest HMAC secret. **Decisions:** persistent PIN plus expiring challenge, five attempts, cooldown, and exact lookup/IP scopes. | B3-T2 |
 | B3-T4 | **Infrastructure:** Neon disposable base. **Tools:** session/expiry test clock. **Secrets/access:** guest session secret. **Decisions:** seven-day absolute lifetime and revocation triggers. | B3-T3 |
-| B3-T5 | **Infrastructure:** isolated demo-marked tenant and sentinel tenant. **Tools:** deterministic simulation fixture. **Secrets/access:** owner-authorized demo browser/phone allowlist. **Decisions:** simulation label and no general bypass. | B3-T4 |
-| B3-T6 | **Infrastructure:** Twilio Verify account/trial or paid usage access. **Tools:** live provider adapter and clean-browser test. **Secrets/access:** SID, Auth Token, Verify Service SID, permitted phone, country/geo access. **Decisions:** explicit owner opt-in and evidence standard; otherwise remain mock/pending. | B3-T3, B3-T4 |
 
 ### What to deliver
 
 - A wedding-scoped guest group and member management path.
 - Safe lookup, foreign-number handling, persistent group PIN, expiring verification challenge, family session, revocation, and abuse controls.
-- Provider-free manual delivery as the MVP default, plus an honest opt-in Twilio verification path.
-- Owner-authorized demo simulation isolated from real tenants.
+- Manual six-digit PIN confirmation as the only guest access path.
 
 ### Tests and acceptance evidence
 
 - TDD covers validation, uniqueness, lookup normalization, foreign-number rules, session boundaries, revocation, and every rate-limit counter edge.
 - Disposable Neon tests prove no cross-tenant group lookup, member mutation, session use, or phone uniqueness leakage.
-- Clean-browser mobile/desktop evidence shows PIN reveal/copy/rotation, lookup, manual PIN entry without resend, SMS-only resend behavior, error/cooldown states, session leave, and persistent foreign-number explanation.
-- A real Twilio test is reported only if the account, destination, country, trial, and usage permissions are confirmed. Otherwise evidence states that provider validation remains pending; mock success is never presented as live delivery.
+- Clean-browser mobile/desktop evidence shows PIN reveal/copy/rotation, full-name plus registered-phone lookup, manual PIN entry, error/cooldown states, session leave, and persistent foreign-number explanation.
+
+**Retired task IDs:** B3-T5 (demo verification simulation) and B3-T6 (optional provider verification) are retained only as historical references and are not implementation work.
 
 ---
 
@@ -209,7 +205,7 @@ These decisions apply across the blocks and remain subject to the explicit gates
 
 **Track:** Product. This block turns verified family access into reliable member-level attendance operations.
 
-**User stories:** US-066–US-082.
+**User stories:** US-066–US-081. US-082 is retired in the PRD because no messaging quota exists.
 
 **Dependencies:** Blocks 1–3; member-level RSVP model; explicit timezone handling; disposable Neon integration; clean-browser guest identity.
 
@@ -217,7 +213,7 @@ These decisions apply across the blocks and remain subject to the explicit gates
 
 - **Infrastructure:** Disposable Neon integration database with repeatable fixtures. No new production infrastructure is required.
 - **Tools:** Browser test runner, timezone-aware test clock, deterministic fixtures, and database transaction/concurrency test support.
-- **Secrets and access:** None beyond Block 2/3 development credentials. No SMS send is needed to test saved RSVP after a guest session fixture exists.
+- **Secrets and access:** None beyond Block 2/3 development credentials. A guest session fixture is sufficient to test saved RSVP.
 - **Decisions:** Three states (`PENDING`, `CONFIRMED`, `DECLINED`), explicit save, confirm-all draft shortcut, partial pending, and no automatic pending decline are fixed. A deadline is either absent as paired null instant/timezone, which permits public RSVP subject to session/lifecycle rules, or configured with a UTC instant and explicit IANA timezone; the server allows public writes before the instant and blocks them at or after it. Authorized admins may correct an active wedding after the deadline. Member-level versioning, all-or-nothing conflict handling, idempotent replay after a lost response including after the deadline, changed-payload rejection, and a separate history view are fixed.
 
 ### Concrete vertical-slice tasks
@@ -227,7 +223,7 @@ These decisions apply across the blocks and remain subject to the explicit gates
 3. **B4-T3 — Enforce deadline.** Add admin UX for setting/removing a local wall-clock deadline with explicit IANA timezone, persist the UTC instant/timezone pair, and enforce it from the server clock. Guests can read after the deadline but cannot save new changes; authorized admins can correct an active wedding after it.
 4. **B4-T4 — Protect concurrent updates.** Add member-level optimistic concurrency, serialized request receipts, and all-or-nothing writes. A stale submitted member returns `RSVP_CONFLICT` with current state/revision details, retains local selections, and leaves unrelated members independently editable.
 5. **B4-T5 — Record operational history.** Deliver a separate history view and API with actor type/ID/display snapshot, before/after state, timestamp, group/member filters, time filters, and stable cursor pagination. Keep daily current-state operations readable and tenant bound.
-6. **B4-T6 — Preserve pending state.** Preserve pending states through deadline and export preparation; never infer decline from silence. Keep RSVP usable after stale SMS/provider state and independent from Block 5 quotas.
+6. **B4-T6 — Preserve pending state.** Preserve pending states through deadline and export preparation; never infer decline from silence. Keep RSVP independent from message and mural state.
 
 ### Task-level preflight
 
@@ -238,7 +234,7 @@ These decisions apply across the blocks and remain subject to the explicit gates
 | B4-T3 | **Infrastructure:** Neon disposable base. **Tools:** timezone-aware server test clock and admin form. **Secrets/access:** site-admin fixture. **Decisions:** paired nullable deadline, exact blocked boundary, guest read-only state, active-site admin correction. | B4-T1 |
 | B4-T4 | **Infrastructure:** Neon transaction/concurrency support. **Tools:** concurrent request test harness and deterministic request IDs. **Secrets/access:** two valid family/session fixtures plus admin actor. **Decisions:** member-level versioning, conflict details, all-or-nothing rollback, replay after lost response. | B4-T1 |
 | B4-T5 | **Infrastructure:** Neon disposable base. **Tools:** history/filter/cursor tests and admin history view. **Secrets/access:** owner/site-admin actor fixtures. **Decisions:** actor representation, snapshot fields, filter set, cursor order, separate operational view. | B4-T3, B4-T4 |
-| B4-T6 | **Infrastructure:** none beyond RSVP persistence. **Tools:** regression tests. **Secrets/access:** none. **Decisions:** no automatic pending decline and no SMS/quota dependency. | B4-T1, B4-T3 |
+| B4-T6 | **Infrastructure:** none beyond RSVP persistence. **Tools:** regression tests. **Secrets/access:** none. **Decisions:** no automatic pending decline and no message/mural dependency. | B4-T1, B4-T3 |
 
 ### Template integration boundary
 
@@ -251,7 +247,7 @@ Shared RSVP presentation, draft state, and API/session handling belong in `packa
 - Concurrency conflict handling that avoids stale overwrites.
 - Operational history distinct from current RSVP data.
 - Public and administrative routes, payloads, actor representation, history cursor/filter contract, no-deadline representation, and idempotency replay behavior documented in `docs/block4Contracts.md`.
-- Static builds remain independent of API, database, and SMS availability and contain no family data, sessions, responses, credentials, or operational fixtures.
+- Static builds remain independent of API and database availability and contain no family data, sessions, responses, credentials, or operational fixtures.
 
 ### Tests and acceptance evidence
 
@@ -271,20 +267,20 @@ Block 4 uses a paired nullable deadline because “no deadline” must not acqui
 
 ---
 
-## Block 5: Messages, mural moderation, exports, and SMS usage controls
+## Block 5: Messages, mural moderation, and exports
 
 **Track:** Product. This block completes the operational data surface and reporting path.
 
-**User stories:** US-083–US-103.
+**User stories:** US-083–US-097. US-098–US-103 are retired in the PRD because no messaging provider, simulation, resend, or quota exists.
 
-**Dependencies:** Blocks 1–4; guest session and representative identity; admin roles; disposable Neon integration; reviewed PDF/CSV generation; explicit owner configuration before real SMS.
+**Dependencies:** Blocks 1–4; guest session and representative identity; admin roles; disposable Neon integration; reviewed PDF/CSV generation.
 
 ### BEFORE START
 
-- **Infrastructure:** Disposable Neon integration resources. No message or report provider is needed. A Twilio usage account is needed only if live usage accounting is verified.
-- **Tools:** Deterministic message fixtures, CSV/PDF generation and pagination tools, browser print/PDF evidence, and usage-counter test support.
-- **Secrets and access:** None for mocked message/export tests. A live SMS ceiling test requires Twilio usage access and the owner-approved service configuration; do not invent provider usage data.
-- **Decisions:** One message per group, 1,000-character limit with emojis/newlines, no HTML/attachments, representative-only edit, admin-only delete, group block independent from RSVP, per-site mural toggle retaining data, public author privacy, deletion cascade, report fields/filters, and an owner-configured nullable monthly send ceiling are frozen in `docs/block5Contracts.md`. No default numeric ceiling is inferred.
+- **Infrastructure:** Disposable Neon integration resources. No message or report provider is needed.
+- **Tools:** Deterministic message fixtures, CSV/PDF generation and pagination tools, and browser print/PDF evidence.
+- **Secrets and access:** None beyond the existing development and disposable database access.
+- **Decisions:** One message per group, 1,000-character limit with emojis/newlines, no HTML/attachments, representative-only edit, admin-only delete, group block independent from RSVP, per-site mural toggle retaining data, public author privacy, deletion cascade, and report fields/filters are frozen in `docs/block5Contracts.md`.
 
 ### Concrete vertical-slice tasks
 
@@ -293,7 +289,6 @@ Block 4 uses a paired nullable deadline because “no deadline” must not acqui
 3. **B5-T3 — Moderate messages.** Deliver admin delete and group message block/unblock. Verify deletion permits later publication and blocking never prevents RSVP.
 4. **B5-T4 — Delete a group safely.** Deliver confirmed group deletion with explicit confirmation and cascade of members, RSVP, messages, sessions, and pending challenges. Preserve unrelated tenant and sentinel data.
 5. **B5-T5 — Export wedding reports.** Deliver wedding-scoped CSV and paginated printable PDF reports with heading, generated date/time, totals, groups, member names/statuses, representative phone inclusion/omission, and RSVP filters. Exclude messages.
-6. **B5-T6 — Enforce SMS usage ceiling.** Deliver owner-configured monthly SMS ceiling, usage display, 80%/100% alerts, and blocked-new-send guidance while keeping saved RSVP, existing sessions, admin RSVP, and manual PIN available. With no configured value, real SMS remains blocked; there is no numeric default.
 
 ### Task-level preflight
 
@@ -304,7 +299,6 @@ Block 4 uses a paired nullable deadline because “no deadline” must not acqui
 | B5-T3 | **Infrastructure:** Neon disposable base. **Tools:** admin/browser moderation tests. **Secrets/access:** site-admin and owner fixtures. **Decisions:** admin delete only; group block independent from RSVP. | B5-T1, B5-T2 |
 | B5-T4 | **Infrastructure:** Neon disposable base with sentinel tenant. **Tools:** transaction/cascade tests. **Secrets/access:** site-admin/owner fixture. **Decisions:** explicit confirmation and deletion cascade; retention policy gate remains open. | B4-T5, B5-T3 |
 | B5-T5 | **Infrastructure:** Neon disposable base. **Tools:** CSV/PDF generation and print/browser evidence. **Secrets/access:** authorized admin fixture. **Decisions:** report fields, filters, pagination, messages excluded. | B4-T5, B5-T4 |
-| B5-T6 | **Infrastructure:** site-level usage store; no provider is required for deterministic simulation. **Tools:** counter/alert test clock. **Secrets/access:** owner fixture; live usage access only if separately provider-approved. **Decisions:** nullable explicit limit, fail-closed real SMS, civil month in `America/Sao_Paulo`, and manual PIN outside quota. | B3-T3, B5-T1 |
 
 ### Template integration boundary
 
@@ -315,17 +309,18 @@ Shared message presentation and API/session handling belong in `packages/wedding
 - Verified representative message lifecycle and public mural controls.
 - Admin moderation and destructive group deletion with safe confirmation.
 - Wedding-scoped CSV/PDF reporting.
-- Transparent SMS usage and ceiling behavior.
 
 ### Tests and acceptance evidence
 
-- TDD covers limits, emojis/newlines, identity derivation, blocked groups, mural disablement, deletion cascade, report filters, and send-ceiling boundary values.
-- Browser evidence proves public privacy, message edit/delete/re-publish, mural disabled state, admin moderation, exports, PDF pagination, and blocked-send guidance.
+- TDD covers message limits, emojis/newlines, identity derivation, blocked groups, mural disablement, deletion cascade, report filters, and export boundaries.
+- Browser evidence proves public privacy, message edit/delete/re-publish, mural disabled state, admin moderation, exports, and PDF pagination.
 - Database isolation tests prove deletion and exports cannot touch or include a second wedding; a sentinel tenant remains unchanged.
 - PDF/CSV fixtures prove messages are omitted and selected phone/RSVP fields are included exactly as requested.
-- Usage evidence distinguishes mocked counters from real Twilio account usage and makes no delivery or budget guarantee without provider verification.
+- Export evidence distinguishes report generation from public mural data and makes no cross-tenant or data-retention guarantee beyond the tested boundary.
 
-**Implementation status — 2026-09-12:** Complete for the authorized local boundary. All six slices passed contract, full isolated PostgreSQL, independent browser, static artifact, and repository validation. See `docs/block5Validation.md` for executed evidence and remaining external gates, and `docs/block5Handoff.md` for Block 6 integration constraints. No development/production migration, deployment, provider call, commit, or push is included in this status.
+**Historical implementation status (2026-09-12, superseded where noted):** Complete for the authorized local boundary. Earlier evidence described six slices, including the now-retired messaging-usage slice. The current scope contains five active slices; the other message, mural, deletion, and report evidence remains applicable. See `docs/block5Validation.md` for historical evidence and remaining external gates, and `docs/block5Handoff.md` for Block 6 integration constraints. No development/production migration, deployment, provider call, commit, or push is included in this status.
+
+**Retired task ID:** B5-T6 (messaging usage ceiling) is retained only as a historical reference and is not implementation work.
 
 ---
 
@@ -380,7 +375,7 @@ Shared message presentation and API/session handling belong in `packages/wedding
 - Clean-browser evidence at agreed mobile, tablet, and desktop viewports covers hero, navigation theme transition, gallery controls, sticky story fallback, practical sections, map fallback, footer, RSVP entry, and mural entry.
 - Accessibility evidence covers reading order, keyboard focus, reduced motion, no forced scroll, no content loss, and no layout shift from late media.
 - Media evidence names approved assets and permissions. A mocked or placeholder video is never reported as an approved provider workflow.
-- Public-site tests prove no static bundle contains Neon, Railway, Better Auth, Twilio, or other server credentials.
+- Public-site tests prove no static bundle contains Neon, Railway, Better Auth, or other server credentials.
 - Contract checks reject malformed selected-section content, duplicate IDs, invalid links/media/canonical values and missing required preset data. Optional sections can be absent or reordered.
 - Both consumer builds verify independent names, media, metadata and navigation; an extra route and local section need no template fork. Repeated sections have isolated IDs/behavior. Builds require no live API/database.
 - Validate host-owned controls as well as shared markup. Review/noindex behavior, one canonical/robots directive per page and social image URLs are checked in emitted HTML; no private guest data is statically embedded.
@@ -391,7 +386,7 @@ Shared message presentation and API/session handling belong in `packages/wedding
 
 **Track:** Cross-cutting product readiness. This block proves the slices together and establishes honest operational evidence before production.
 
-**User stories:** US-065, US-101–US-103, US-114–US-118, US-123–US-124.
+**User stories:** US-114–US-118, US-124. The former demo/provider stories US-065, US-101–US-103, and US-123 are retired in the PRD.
 
 **Dependencies:** Blocks 1–6; representative end-to-end fixtures; CI access; disposable Neon resources; chosen logging/metrics boundary; explicit legal/retention and RPO/RTO decisions.
 
@@ -399,16 +394,16 @@ Shared message presentation and API/session handling belong in `packages/wedding
 
 - **Infrastructure:** Disposable Neon base and CI test resources are required for database integration. Production recovery resources are not assumed until Neon tier/retention/cost are selected.
 - **Tools:** Clean-browser automation, load/burst tooling, database isolation fixtures, CI runner, structured logging/metrics, and a restoration exercise procedure.
-- **Secrets and access:** CI requires an explicit disposable Neon test URL and test-only server secrets. Real Twilio credentials require the same gated permissions as Block 3. Recovery evidence requires authorized Neon backup/restore access. No production secret belongs in test logs.
-- **Decisions:** Demo site identity/allowlist, sentinel tenant, target load (20 active weddings and 500 guests each), alert and log retention, RPO ≤1 hour/RTO ≤8 hours claims, privacy/retention schedule, legal rights/media permissions, and go/no-go criteria must be settled or marked blocked.
+- **Secrets and access:** CI requires an explicit disposable Neon test URL and test-only server secrets. Recovery evidence requires authorized Neon backup/restore access. No production secret belongs in test logs.
+- **Decisions:** Demo site identity, sentinel tenant, target load (20 active weddings and 500 guests each), alert and log retention, RPO ≤1 hour/RTO ≤8 hours claims, privacy/retention schedule, legal rights/media permissions, and go/no-go criteria must be settled or marked blocked.
 
 ### Concrete vertical-slice tasks
 
-1. **B7-T1 — Seed and reset the demo.** Keep fictional copy, media, banner and demonstration entry in the demo app; API authority controls simulation. The second composition is a local test fixture, not a permanent demo environment.  Build deterministic demo data covering pending, partial, confirmed, declined, messages, disabled mural, rate-limit states, inactive site, and representative changes. Add an owner-only manual reset limited to the demo site and prove sentinel preservation.
+1. **B7-T1 — Seed and reset the demo.** Keep fictional copy, media, banner and demonstration entry in the demo app; API authority controls the same full-name, registered-phone, and manual-PIN flow as every site. The second composition is a local test fixture, not a permanent demo environment. Build deterministic demo data covering pending, partial, confirmed, declined, messages, disabled mural, rate-limit states, inactive site, and representative changes. Add an owner-only manual reset limited to the demo site and prove sentinel preservation.
 2. **B7-T2 — Run end-to-end browser QA.** Exercise end-to-end owner, site-admin, representative, RSVP, message, export, deadline, inactive-site, and public navigation flows in a clean browser.
 3. **B7-T3 — Measure target load.** Run burst/load tests against the target planning scale and record latency, failures, rate limits, and tenant isolation. Treat results as evidence for observed capacity, not a guarantee beyond the tested shape.
 4. **B7-T4 — Gate CI.** Add public-import ownership checks, both template consumer builds, emitted SEO/media assertions and nested-workspace discovery verification.  Add CI gates for types, lint, tests, builds, and disposable-database integration when credentials/resources exist. Keep main migration and production deploy manual.
-5. **B7-T5 — Add safe observability.** Add structured operational logging, usage/error signals, and alerts without logging passwords, OTPs, phones beyond policy, or secret values. Make simulated provider outcomes distinguishable from live outcomes.
+5. **B7-T5 — Add safe observability.** Add structured operational logging, usage/error signals, and alerts without logging passwords, PINs, phones beyond policy, or secret values.
 6. **B7-T6 — Prove recovery.** Perform a real backup/restore exercise and calculate observed RPO/RTO. If Neon tier, retention, cost, legal retention, or restoration proof is incomplete, keep the corresponding launch gate open.
 7. **B7-T7 — Review legal and rights gates.** Review privacy, data rights, retention, deletion, client media permission, and support procedures with the responsible human/legal owner. Record unresolved items instead of inferring compliance.
 
@@ -416,11 +411,11 @@ Shared message presentation and API/session handling belong in `packages/wedding
 
 | Task | Must have before start | Depends on |
 | --- | --- | --- |
-| B7-T1 | **Infrastructure:** isolated demo and sentinel tenants in disposable Neon. **Tools:** deterministic seed/reset runner. **Secrets/access:** owner-authorized demo browser/phone allowlist. **Decisions:** demo marker, reset scope, simulation labels. | B3-T5, B5-T4, B6-T4 |
+| B7-T1 | **Infrastructure:** isolated demo and sentinel tenants in disposable Neon. **Tools:** deterministic seed/reset runner. **Secrets/access:** owner fixture and guest fixture using the manual PIN flow. **Decisions:** demo marker and reset scope. | B3-T4, B5-T4, B6-T4 |
 | B7-T2 | **Infrastructure:** integrated local/test API, panel, and public site. **Tools:** clean-browser automation. **Secrets/access:** test owner/site-admin/guest fixtures. **Decisions:** end-to-end acceptance matrix. | B4-T2, B5-T5, B6-T5 |
 | B7-T3 | **Infrastructure:** disposable load environment and database. **Tools:** burst/load/isolation runner. **Secrets/access:** test-only DB/API credentials. **Decisions:** 20 active weddings × 500 guests planning target and evidence limits. | B7-T1, B7-T2 |
 | B7-T4 | **Infrastructure:** CI runner and disposable Neon resource. **Tools:** type/lint/test/build tooling. **Secrets/access:** explicit CI test URL and test secrets only. **Decisions:** no main migration/deploy automation. | B1-T4, B7-T2 |
-| B7-T5 | **Infrastructure:** approved log/metrics sink or local structured output. **Tools:** redaction and alert tests. **Secrets/access:** observability access without production secret exposure. **Decisions:** retention and sensitive-field policy; simulated/live labels. | B3-T3, B5-T6 |
+| B7-T5 | **Infrastructure:** approved log/metrics sink or local structured output. **Tools:** redaction and alert tests. **Secrets/access:** observability access without production secret exposure. **Decisions:** retention and sensitive-field policy. | B3-T3, B5-T5 |
 | B7-T6 | **Infrastructure:** chosen Neon tier/retention and authorized backup/restore access. **Tools:** restoration procedure and timestamp measurement. **Secrets/access:** backup credentials. **Decisions:** RPO ≤1h/RTO ≤8h claim and cost acceptance. | B7-T3 |
 | B7-T7 | **Infrastructure:** none. **Tools:** legal/privacy/media review process. **Secrets/access:** responsible owner/legal and media-rights reviewers. **Decisions:** retention, rights, deletion, permissions, support, and launch outcome. | B5-T4, B6-T6, B7-T5 |
 
@@ -429,12 +424,12 @@ Shared message presentation and API/session handling belong in `packages/wedding
 - Isolated, repeatable demo fixtures and owner-only reset behavior.
 - End-to-end quality evidence across public, admin, guest, RSVP, message, export, and lifecycle paths.
 - Capacity, abuse, observability, CI, and recovery evidence with explicit limits.
-- Launch-gate register for legal/retention, media rights, provider access, authentication, and RPO/RTO.
+- Launch-gate register for legal/retention, media rights, authentication, infrastructure, and RPO/RTO.
 
 ### Tests and acceptance evidence
 
 - Demo reset changes only demo site data; a sentinel wedding, owner, and unrelated tenant remain unchanged.
-- Clean-browser end-to-end run passes with both mocked provider and explicitly labelled provider-unavailable states.
+- Clean-browser end-to-end run passes with the manual PIN path and explicitly tested error/cooldown states.
 - Burst/load/isolation reports identify test shape and observed results; no hard capacity guarantee is made.
 - CI evidence shows disposable Neon integration is gated by explicit credentials and cannot target main.
 - Restore evidence includes measured timestamps and cost/tier assumptions. RPO/RTO remain “unproven” until real restoration passes.
@@ -454,13 +449,13 @@ B7-T6 remains `UNPROVEN`: no authorized real backup/restore source and separate 
 
 **User stories:** US-018, US-031–US-037, US-104–US-113, US-118.
 
-**Dependencies:** Blocks 1–7; architecture specification; cross-origin authentication proof; production Cloudflare/Railway/Neon access; domain/DNS ownership; Twilio/media decisions where used; legal/retention and recovery gates for launch.
+**Dependencies:** Blocks 1–7; architecture specification; cross-origin authentication proof; production Cloudflare/Railway/Neon access; domain/DNS ownership; approved media decisions where used; legal/retention and recovery gates for launch.
 
 ### BEFORE START
 
 - **Infrastructure:** Cloudflare account and per-site Worker configuration, Railway API environment, Neon development/main projects, CI integration base, and any approved media provider must be manually provisioned and documented. No permanent third demo environment/database is allowed.
 - **Tools:** Deployment CLI/dashboard access, repository provisioning skill mechanism, idempotence/dry-run tests, migration review process, DNS tooling, rollback procedure, and clean-browser production smoke checks.
-- **Secrets and access:** Cloudflare deploy credentials, Railway secrets, Neon development/main URLs, Better Auth secret, approved origin/public URLs, Twilio SID/Auth token/Verify Service SID and geo allowlist if real SMS is enabled, CI test URL, and media provider keys if approved. Values must be held in server/provider secret stores and never bundled into public sites.
+- **Secrets and access:** Cloudflare deploy credentials, Railway secrets, Neon development/main URLs, Better Auth secret, approved origin/public URLs, CI test URL, and media provider keys if approved. Values must be held in server/provider secret stores and never bundled into public sites.
 - **Decisions:** Production approval owner, domain/DNS responsibilities, renewal policy, launch warning, rollback state, inactive placeholder, retention/deletion after term, custom-domain policy, and whether every unresolved gate blocks launch must be explicit.
 
 ### Concrete vertical-slice tasks
@@ -471,7 +466,7 @@ B7-T6 remains `UNPROVEN`: no authorized real backup/restore source and separate 
 4. **B8-T4 — Protect first production data.** Exercise the first production path with clean operational data, allow real guest entry during review, and prove launch does not wipe guests, RSVP, sessions, or passwords. Preserve a verified rollback backup before mutation.
 5. **B8-T5 — Configure origins and domains.** Configure and smoke-test explicit per-wedding browser origins/CORS, domain/DNS records, panel/site navigation, and the selected cross-origin auth behavior. Keep custom-domain registration and renewal as separate manual responsibilities.
 6. **B8-T6 — Operate deactivation and reactivation.** Deliver manual deactivation, neutral placeholder, read-only consultation/export, reactivation, and data-preservation operations. Keep expiration deletion and renewal automation out of scope.
-7. **B8-T7 — Run go/no-go review.** Run final go/no-go review for cloud access, Twilio/media permissions, legal/retention, recovery proof, visual approval, target quality evidence, and operator support readiness. Block claims where evidence is missing.
+7. **B8-T7 — Run go/no-go review.** Run final go/no-go review for Cloudflare/Railway/Neon access, media permissions, legal/retention, recovery proof, visual approval, target quality evidence, and operator support readiness. Block claims where evidence is missing.
 
 ### Task-level preflight
 
@@ -483,7 +478,7 @@ B7-T6 remains `UNPROVEN`: no authorized real backup/restore source and separate 
 | B8-T4 | **Infrastructure:** main database and verified rollback backup. **Tools:** migration review and clean-browser smoke checks. **Secrets/access:** production access approved for named operator only. **Decisions:** clean operational data, review-entry period, no launch reset. | B8-T3, B7-T6, B7-T7 |
 | B8-T5 | **Infrastructure:** per-wedding public/panel/API origins and domain/DNS access. **Tools:** DNS/browser smoke checks. **Secrets/access:** explicit browser-origin/CORS configuration and deployment credentials. **Decisions:** cross-origin auth proof, custom-domain ownership/renewal. | B2-T5, B8-T3 |
 | B8-T6 | **Infrastructure:** deployed public site/API/panel. **Tools:** lifecycle browser and export checks. **Secrets/access:** owner/site-admin fixtures. **Decisions:** neutral placeholder, read-only access, data preservation, no automatic deletion. | B2-T6, B5-T5, B8-T3 |
-| B8-T7 | **Infrastructure:** all required production accounts and rollback/recovery resources. **Tools:** release checklist and evidence review. **Secrets/access:** Cloudflare/Railway/Neon/Twilio/CI/media access individually verified. **Decisions:** legal, retention, recovery, media, visual, support, and launch approval gates. | B7-T6, B7-T7, B8-T4, B8-T5, B8-T6 |
+| B8-T7 | **Infrastructure:** all required production accounts and rollback/recovery resources. **Tools:** release checklist and evidence review. **Secrets/access:** Cloudflare/Railway/Neon/CI/media access individually verified. **Decisions:** legal, retention, recovery, media, visual, support, and launch approval gates. | B7-T6, B7-T7, B8-T4, B8-T5, B8-T6 |
 
 ### What to deliver
 
@@ -498,7 +493,7 @@ B7-T6 remains `UNPROVEN`: no authorized real backup/restore source and separate 
 - Deployment evidence includes reviewed build output, public URL, API health, database migration review, manual DNS/origin confirmation, and clean-browser public/admin/guest smoke checks.
 - A rollback backup is verified before production mutation; restoration evidence is preserved according to the recovery gate.
 - Deactivation/reactivation evidence proves public neutral state, admin read-only behavior, export availability, and retained data.
-- Final report names Cloudflare, Railway, Neon, Twilio, CI, and media access status individually. Missing credentials or provider permissions remain pending and do not become fake guarantees.
+- Final report names Cloudflare, Railway, Neon, CI, and media access status individually. Missing credentials or infrastructure/media permissions remain pending and do not become fake guarantees.
 
 ---
 

@@ -18,6 +18,10 @@ const routeSource = readFileSync(
   resolve(import.meta.dirname, "../routes/sites.$siteId.tsx"),
   "utf8",
 );
+const overviewRouteSource = readFileSync(
+  resolve(import.meta.dirname, "../routes/sites.$siteId.overview.tsx"),
+  "utf8",
+);
 
 describe("admin shell safety regressions", () => {
   it("guards load-more against concurrent requests and pending create", () => {
@@ -28,6 +32,12 @@ describe("admin shell safety regressions", () => {
   it("redirects only the compatibility parent path", () => {
     expect(routeSource).toContain("location.pathname");
     expect(routeSource).toContain("if (pathname === parentPath)");
+  });
+
+  it("keeps overview as a compatibility redirect to guests", () => {
+    expect(overviewRouteSource).toContain('to: "/sites/$siteId/guests"');
+    expect(overviewRouteSource).toContain("throw redirect");
+    expect(overviewRouteSource).not.toContain("<Panel");
   });
 
   it("keeps the create-site dialog from growing a horizontal scrollbar", () => {
@@ -65,7 +75,7 @@ describe("admin shell safety regressions", () => {
     expect(panelSource).toContain(
       'import { Link } from "@tanstack/react-router";',
     );
-    expect(panelSource).toContain('to="/sites/$siteId/overview"');
+    expect(panelSource).toContain('to="/sites/$siteId/guests"');
     expect(panelSource).toContain("params={{ siteId: site.id }}");
     expect(panelSource).not.toContain("href=");
     expect(workspaceSource).toContain(
