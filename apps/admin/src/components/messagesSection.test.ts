@@ -6,14 +6,8 @@ const messagesSource = readFileSync(
   resolve(import.meta.dirname, "MessagesSection.tsx"),
   "utf8",
 );
-const guestSource = readFileSync(
-  resolve(import.meta.dirname, "GuestGroupsSection.tsx"),
-  "utf8",
-);
-
-describe("message cards follow guest group card chrome", () => {
-  it("uses the guest-group header with compact CardAction buttons", () => {
-    expect(guestSource).toContain("CardAction");
+describe("message cards use shared card chrome", () => {
+  it("uses a compact header with CardAction buttons", () => {
     expect(messagesSource).toContain(
       'className="flex w-full flex-row items-start justify-between"',
     );

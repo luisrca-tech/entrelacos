@@ -6,7 +6,7 @@ export const Route = createFileRoute("/sites/$siteId")({
     const parentPath = `/sites/${encodeURIComponent(params.siteId)}`;
     if (pathname === parentPath) {
       throw redirect({
-        to: "/sites/$siteId/guests",
+        to: "/sites/$siteId/invitations",
         params: { siteId: params.siteId },
       });
     }

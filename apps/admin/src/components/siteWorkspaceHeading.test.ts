@@ -7,25 +7,18 @@ describe("site workspace heading", () => {
   it("titles the page by area for both roles", () => {
     expect(
       getWorkspaceHeading({
-        area: "guests",
+        area: "invitations",
         owner: true,
         lifecycle: "DRAFT",
       }).title,
-    ).toBe("Convidados");
+    ).toBe("Convites");
     expect(
       getWorkspaceHeading({
-        area: "guests",
+        area: "invitations",
         owner: false,
         lifecycle: "ACTIVE",
       }).title,
-    ).toBe("Convidados");
-    expect(
-      getWorkspaceHeading({
-        area: "rsvp",
-        owner: false,
-        lifecycle: "ACTIVE",
-      }).title,
-    ).toBe("Confirmações");
+    ).toBe("Convites");
     expect(
       getWorkspaceHeading({
         area: "messages",
@@ -45,14 +38,14 @@ describe("site workspace heading", () => {
   it("shows the back link only to owners", () => {
     expect(
       getWorkspaceHeading({
-        area: "guests",
+        area: "invitations",
         owner: true,
         lifecycle: "ACTIVE",
       }).showBackLink,
     ).toBe(true);
     expect(
       getWorkspaceHeading({
-        area: "guests",
+        area: "invitations",
         owner: false,
         lifecycle: "ACTIVE",
       }).showBackLink,
@@ -79,21 +72,21 @@ describe("site workspace heading", () => {
   it("shows lifecycle status to site admins only when inactive", () => {
     expect(
       getWorkspaceHeading({
-        area: "guests",
+        area: "invitations",
         owner: false,
         lifecycle: "ACTIVE",
       }).showLifecycleBadge,
     ).toBe(false);
     expect(
       getWorkspaceHeading({
-        area: "guests",
+        area: "invitations",
         owner: false,
         lifecycle: "IN_REVIEW",
       }).showLifecycleBadge,
     ).toBe(false);
     expect(
       getWorkspaceHeading({
-        area: "guests",
+        area: "invitations",
         owner: false,
         lifecycle: "INACTIVE",
       }).showLifecycleBadge,

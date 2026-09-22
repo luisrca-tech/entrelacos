@@ -20,7 +20,7 @@ import {
 import { useCallback, useEffect, useState } from "react";
 import { adminStyles, displayHeading } from "../lib/adminStyles";
 import { apiRequest } from "../lib/apiClient";
-import { listenForGuestGroupsChanged } from "./guestGroupsRefresh";
+import { listenForInvitationsChanged } from "./invitationsRefresh";
 import { mergeSiteMessages, messageAdminError } from "./messageAdmin";
 
 type Props = {
@@ -29,13 +29,13 @@ type Props = {
 };
 
 type MessagesResponse = {
-  groups: SiteMessageRecord[];
+  invitations: SiteMessageRecord[];
   nextCursor: string | null;
 };
 
 export function MessagesSection({ siteId, lifecycle }: Props) {
   const base = `/v1/sites/${encodeURIComponent(siteId)}`;
-  const [groups, setGroups] = useState<SiteMessageRecord[]>([]);
+  const [invitations, setInvitations] = useState<SiteMessageRecord[]>([]);
   const [muralEnabled, setMuralEnabled] = useState(false);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -60,8 +60,8 @@ export function MessagesSection({ siteId, lifecycle }: Props) {
             ? Promise.resolve(null)
             : apiRequest<{ siteId: string; enabled: boolean }>(`${base}/mural`),
         ]);
-        setGroups((current) =>
-          mergeSiteMessages(current, messages.groups, Boolean(cursor)),
+        setInvitations((current) =>
+          mergeSiteMessages(current, messages.invitations, Boolean(cursor)),
         );
         setNextCursor(messages.nextCursor);
         if (mural) setMuralEnabled(mural.enabled);
@@ -79,7 +79,7 @@ export function MessagesSection({ siteId, lifecycle }: Props) {
   }, [load]);
 
   useEffect(
-    () => listenForGuestGroupsChanged(window, siteId, () => void load()),
+    () => listenForInvitationsChanged(window, siteId, () => void load()),
     [load, siteId],
   );
 
@@ -168,7 +168,7 @@ export function MessagesSection({ siteId, lifecycle }: Props) {
             <AlertDialogTitle>Remover mensagem?</AlertDialogTitle>
             <AlertDialogDescription>
               {removeTarget
-                ? `Remover a mensagem de ${removeTarget.groupName}? O texto não poderá ser recuperado.`
+                ? `Remover a mensagem de ${removeTarget.invitationName}? O texto não poderá ser recuperado.`
                 : ""}
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -182,8 +182,8 @@ export function MessagesSection({ siteId, lifecycle }: Props) {
               onClick={() => {
                 if (removeTarget)
                   void mutate(
-                    `delete:${removeTarget.groupId}`,
-                    `${base}/groups/${encodeURIComponent(removeTarget.groupId)}/message`,
+                    `delete:${removeTarget.invitationId}`,
+                    `${base}/invitations/${encodeURIComponent(removeTarget.invitationId)}/message`,
                     "DELETE",
                     { expectedRevision: removeTarget.currentRevision },
                     "Mensagem removida do mural.",
@@ -201,22 +201,24 @@ export function MessagesSection({ siteId, lifecycle }: Props) {
         <p className="leading-[1.6]" role="status">
           Carregando mensagens…
         </p>
-      ) : groups.length === 0 ? (
+      ) : invitations.length === 0 ? (
         <p className="leading-[1.6]">
           Nenhum convite encontrado para moderação.
         </p>
       ) : (
         <div className="mt-6 grid gap-3">
-          {groups.map((group) => (
+          {invitations.map((invitation) => (
             <Card
               className="items-stretch rounded-[10px] border border-admin-line bg-admin-surface p-5 [@media(max-width:760px)]:grid [@media(max-width:760px)]:grid-cols-1 [&_[data-slot=card-header]]:w-full [&_h3]:mb-2"
-              key={group.groupId}
+              key={invitation.invitationId}
             >
               <CardHeader className="flex w-full flex-row items-start justify-between">
                 <div>
-                  <CardTitle>{group.groupName}</CardTitle>
+                  <CardTitle>{invitation.invitationName}</CardTitle>
                   <CardDescription>
-                    {group.blocked ? "Envios bloqueados" : "Envios permitidos"}
+                    {invitation.blocked
+                      ? "Envios bloqueados"
+                      : "Envios permitidos"}
                   </CardDescription>
                 </div>
                 <CardAction>
@@ -228,31 +230,31 @@ export function MessagesSection({ siteId, lifecycle }: Props) {
                       disabled={!mutable || Boolean(pending)}
                       onClick={() =>
                         void mutate(
-                          `block:${group.groupId}`,
-                          `${base}/groups/${encodeURIComponent(group.groupId)}/message-block`,
+                          `block:${invitation.invitationId}`,
+                          `${base}/invitations/${encodeURIComponent(invitation.invitationId)}/message-block`,
                           "PATCH",
-                          { blocked: !group.blocked },
-                          group.blocked
+                          { blocked: !invitation.blocked },
+                          invitation.blocked
                             ? "Novas mensagens liberadas para o convite."
                             : "Novas mensagens bloqueadas para o convite.",
                         )
                       }
                     >
-                      {pending === `block:${group.groupId}`
+                      {pending === `block:${invitation.invitationId}`
                         ? "Atualizando…"
-                        : group.blocked
+                        : invitation.blocked
                           ? "Desbloquear envios"
                           : "Bloquear envios"}
                     </Button>
-                    {group.message && (
+                    {invitation.message && (
                       <Button
                         type="button"
                         size="sm"
                         variant="destructive"
                         disabled={!mutable || Boolean(pending)}
-                        onClick={() => setRemoveTarget(group)}
+                        onClick={() => setRemoveTarget(invitation)}
                       >
-                        {pending === `delete:${group.groupId}`
+                        {pending === `delete:${invitation.invitationId}`
                           ? "Removendo…"
                           : "Remover mensagem"}
                       </Button>
@@ -261,19 +263,19 @@ export function MessagesSection({ siteId, lifecycle }: Props) {
                 </CardAction>
               </CardHeader>
               <CardContent>
-                {group.message ? (
+                {invitation.message ? (
                   <div className="grid gap-4">
                     <blockquote className="m-0 break-words whitespace-pre-wrap text-[1.1rem] leading-[1.55]">
-                      {group.message.text}
+                      {invitation.message.text}
                     </blockquote>
                     <p className="leading-[1.6]">
-                      <strong>{group.message.authorName}</strong> · Publicada em{" "}
-                      <time dateTime={group.message.createdAt}>
+                      Publicada em{" "}
+                      <time dateTime={invitation.message.createdAt}>
                         {new Intl.DateTimeFormat("pt-BR", {
                           dateStyle: "medium",
                           timeStyle: "short",
                           timeZone: "America/Sao_Paulo",
-                        }).format(new Date(group.message.createdAt))}
+                        }).format(new Date(invitation.message.createdAt))}
                       </time>
                     </p>
                   </div>

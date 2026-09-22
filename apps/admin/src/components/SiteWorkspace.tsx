@@ -53,10 +53,9 @@ import {
 import { adminStyles, displayHeading } from "../lib/adminStyles";
 import { ApiError, apiRequest } from "../lib/apiClient";
 import type { SiteArea } from "./adminNavigation";
-import { GuestGroupsSection } from "./GuestGroupsSection";
+import { InvitationsSection } from "./InvitationsSection";
 import { MessagesSection } from "./MessagesSection";
 import { OverflowMenu } from "./OverflowMenu";
-import { RsvpSection } from "./RsvpSection";
 import {
   adminAccessLink,
   adminAccessLinkCopiedMessage,
@@ -104,7 +103,7 @@ type LifecycleAction =
 export function SiteWorkspace({
   siteId,
   owner,
-  area = "guests",
+  area = "invitations",
   onSiteName,
 }: {
   siteId: string;
@@ -423,11 +422,8 @@ export function SiteWorkspace({
         </p>
       )}
 
-      {area === "guests" && (
-        <GuestGroupsSection siteId={site.id} lifecycle={site.lifecycle} />
-      )}
-      {area === "rsvp" && (
-        <RsvpSection siteId={site.id} lifecycle={site.lifecycle} />
+      {area === "invitations" && (
+        <InvitationsSection siteId={site.id} lifecycle={site.lifecycle} />
       )}
       {area === "messages" && (
         <MessagesSection siteId={site.id} lifecycle={site.lifecycle} />

@@ -18,8 +18,8 @@ const routeSource = readFileSync(
   resolve(import.meta.dirname, "../routes/sites.$siteId.tsx"),
   "utf8",
 );
-const overviewRouteSource = readFileSync(
-  resolve(import.meta.dirname, "../routes/sites.$siteId.overview.tsx"),
+const invitationRouteSource = readFileSync(
+  resolve(import.meta.dirname, "../routes/sites.$siteId.invitations.tsx"),
   "utf8",
 );
 
@@ -34,10 +34,12 @@ describe("admin shell safety regressions", () => {
     expect(routeSource).toContain("if (pathname === parentPath)");
   });
 
-  it("keeps overview as a compatibility redirect to guests", () => {
-    expect(overviewRouteSource).toContain('to: "/sites/$siteId/guests"');
-    expect(overviewRouteSource).toContain("throw redirect");
-    expect(overviewRouteSource).not.toContain("<Panel");
+  it("uses invitations as the only invitation and RSVP workspace route", () => {
+    expect(routeSource).toContain('to: "/sites/$siteId/invitations"');
+    expect(invitationRouteSource).toContain('area="invitations"');
+    expect(workspaceSource).toContain("<InvitationsSection");
+    expect(workspaceSource).not.toContain("<GuestGroupsSection");
+    expect(workspaceSource).not.toContain("<RsvpSection");
   });
 
   it("keeps the create-site dialog from growing a horizontal scrollbar", () => {
@@ -75,7 +77,7 @@ describe("admin shell safety regressions", () => {
     expect(panelSource).toContain(
       'import { Link } from "@tanstack/react-router";',
     );
-    expect(panelSource).toContain('to="/sites/$siteId/guests"');
+    expect(panelSource).toContain('to="/sites/$siteId/invitations"');
     expect(panelSource).toContain("params={{ siteId: site.id }}");
     expect(panelSource).not.toContain("href=");
     expect(workspaceSource).toContain(
