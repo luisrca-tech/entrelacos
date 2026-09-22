@@ -142,7 +142,7 @@ describe("admin access HTTP boundary", () => {
     const activation = await router.request(
       request("/v1/auth/activation/consume", {
         token: "a".repeat(43),
-        password: "a secure password",
+        password: "password10",
       }),
     );
     expect(activation.status).toBe(200);
@@ -155,7 +155,7 @@ describe("admin access HTTP boundary", () => {
     });
     expect(consumeAdminAccess).toHaveBeenCalledWith(expect.anything(), {
       token: "a".repeat(43),
-      password: "a secure password",
+      password: "password10",
       purpose: "ACTIVATION",
     });
     expect((await activation.headers.get("set-cookie")) ?? "").toBe("");
@@ -169,13 +169,13 @@ describe("admin access HTTP boundary", () => {
     const recovery = await router.request(
       request("/v1/auth/recovery/consume", {
         token: "a".repeat(43),
-        password: "a secure password",
+        password: "password10",
       }),
     );
     expect(recovery.status).toBe(200);
     expect(consumeAdminAccess).toHaveBeenLastCalledWith(expect.anything(), {
       token: "a".repeat(43),
-      password: "a secure password",
+      password: "password10",
       purpose: "RECOVERY",
     });
   });

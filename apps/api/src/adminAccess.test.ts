@@ -33,6 +33,13 @@ describe("administrative access core validation", () => {
         purpose: "ACTIVATION",
       }),
     ).rejects.toBeInstanceOf(AdminAccessRejectedError);
+    await expect(
+      consumeAdminAccess(db as never, {
+        token: "a".repeat(43),
+        password: "too-long-pass",
+        purpose: "ACTIVATION",
+      }),
+    ).rejects.toBeInstanceOf(AdminAccessRejectedError);
     expect(db.transaction).not.toHaveBeenCalled();
   });
 });

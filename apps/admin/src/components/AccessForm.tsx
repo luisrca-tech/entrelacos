@@ -112,8 +112,8 @@ export function AccessForm({
                     name="password"
                     type="password"
                     autoComplete="new-password"
-                    minLength={12}
-                    maxLength={200}
+                    minLength={10}
+                    maxLength={12}
                     required
                   />
                 </label>
@@ -127,13 +127,13 @@ export function AccessForm({
                     name="confirmation"
                     type="password"
                     autoComplete="new-password"
-                    minLength={12}
-                    maxLength={200}
+                    minLength={10}
+                    maxLength={12}
                     required
                   />
                 </label>
                 <p className="text-[0.87rem] leading-[1.6] text-admin-muted">
-                  Use pelo menos 12 caracteres.
+                  Use de 10 a 12 caracteres.
                 </p>
                 {error && (
                   <p className={adminStyles.alert} role="alert">

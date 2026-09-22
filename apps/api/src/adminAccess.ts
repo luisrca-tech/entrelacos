@@ -424,7 +424,7 @@ export async function consumeAdminAccess(
 ): Promise<ConsumedAdminAccess> {
   const token = validateToken(input.token);
   const purpose = validatePurpose(input.purpose);
-  if (input.password.length < 12 || input.password.length > 200) reject();
+  if (input.password.length < 10 || input.password.length > 12) reject();
   const now = currentTime(input.now);
 
   const email = await findAccessTokenEmail(db, sha256(token), purpose);
