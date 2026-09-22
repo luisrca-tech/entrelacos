@@ -64,5 +64,11 @@ export function adminAccessLinkCopiedMessage(
 export const adminAccessLinkCopyFailedMessage =
   "Não foi possível copiar o link. Tente novamente.";
 
-export const adminAccessLinkRevokedMessage =
-  "Link revogado. O link anterior deixou de funcionar.";
+export function adminAccessLinkRevokedMessage(
+  email: string,
+  purpose: AdminAccessPurpose,
+): string {
+  return purpose === "ACTIVATION"
+    ? `Link anterior revogado. Link de ativação de ${email} copiado.`
+    : `Link anterior revogado. Link de recuperação de ${email} copiado.`;
+}

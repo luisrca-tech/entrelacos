@@ -179,30 +179,30 @@ describe("Block 2 public contracts", () => {
     ).toThrow();
   });
 
-  it("limits the first-access password to 10-12 characters", () => {
+  it("limits the first-access password to 6-10 characters", () => {
     const token = "a".repeat(43);
+    expect(
+      publicAccessConsumeInputSchema.parse({
+        token,
+        password: "a".repeat(6),
+      }).password,
+    ).toHaveLength(6);
     expect(
       publicAccessConsumeInputSchema.parse({
         token,
         password: "a".repeat(10),
       }).password,
     ).toHaveLength(10);
-    expect(
-      publicAccessConsumeInputSchema.parse({
-        token,
-        password: "a".repeat(12),
-      }).password,
-    ).toHaveLength(12);
     expect(() =>
       publicAccessConsumeInputSchema.parse({
         token,
-        password: "a".repeat(9),
+        password: "a".repeat(5),
       }),
     ).toThrow();
     expect(() =>
       publicAccessConsumeInputSchema.parse({
         token,
-        password: "a".repeat(13),
+        password: "a".repeat(11),
       }),
     ).toThrow();
   });

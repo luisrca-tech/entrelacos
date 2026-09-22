@@ -209,7 +209,12 @@ export function SiteWorkspace({
     return mutate(path, body(new FormData(event.currentTarget)), method);
   }
 
-  async function issue(admin: Admin, purpose: "ACTIVATION" | "RECOVERY") {
+  async function issueAndCopy(
+    admin: Admin,
+    purpose: "ACTIVATION" | "RECOVERY",
+    copiedMessage: string,
+    failedMessage: string,
+  ) {
     setPending(true);
     setError("");
     try {
@@ -224,43 +229,34 @@ export function SiteWorkspace({
       );
       const copied = await copyAdminAccessLink(link, navigator.clipboard);
       if (copied) {
-        toast.success(adminAccessLinkCopiedMessage(admin.email, purpose));
+        toast.success(copiedMessage);
         return;
       }
       toast.error(adminAccessLinkCopyFailedMessage);
     } catch (cause) {
-      setError(
-        cause instanceof Error
-          ? cause.message
-          : "Não foi possível gerar o link.",
-      );
+      setError(cause instanceof Error ? cause.message : failedMessage);
     } finally {
       setPending(false);
     }
   }
 
+  async function issue(admin: Admin, purpose: "ACTIVATION" | "RECOVERY") {
+    await issueAndCopy(
+      admin,
+      purpose,
+      adminAccessLinkCopiedMessage(admin.email, purpose),
+      "Não foi possível gerar o link.",
+    );
+  }
+
   async function revokeAccess(admin: Admin) {
-    setPending(true);
-    setError("");
-    try {
-      await apiRequest(`/v1/owner/admins/${admin.userId}/access/revoke`, {
-        method: "POST",
-        body: {
-          userId: admin.userId,
-          purpose: admin.state === "PENDING" ? "ACTIVATION" : "RECOVERY",
-        },
-      });
-      await load();
-      toast.success(adminAccessLinkRevokedMessage);
-    } catch (cause) {
-      setError(
-        cause instanceof Error
-          ? cause.message
-          : "Não foi possível revogar o link.",
-      );
-    } finally {
-      setPending(false);
-    }
+    const purpose = admin.state === "PENDING" ? "ACTIVATION" : "RECOVERY";
+    await issueAndCopy(
+      admin,
+      purpose,
+      adminAccessLinkRevokedMessage(admin.email, purpose),
+      "Não foi possível revogar o link.",
+    );
   }
 
   function handleAdminMenuAction(action: string, admin: Admin) {

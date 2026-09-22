@@ -8,11 +8,12 @@ const source = readFileSync(
 );
 
 describe("first-access password bounds", () => {
-  it("asks for 10 to 12 characters instead of a 12-character minimum", () => {
-    expect(source).toContain("minLength={10}");
-    expect(source).toContain("maxLength={12}");
-    expect(source).toContain("Use de 10 a 12 caracteres.");
-    expect(source).not.toContain("minLength={12}");
-    expect(source).not.toContain("Use pelo menos 12 caracteres.");
+  it("asks for 6 to 10 characters", () => {
+    expect(source).toContain("minLength={6}");
+    expect(source).toContain("maxLength={10}");
+    expect(source).toContain("Use de 6 a 10 caracteres.");
+    expect(source).not.toContain("minLength={10}");
+    expect(source).not.toContain("maxLength={12}");
+    expect(source).not.toContain("Use de 10 a 12 caracteres.");
   });
 });

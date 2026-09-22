@@ -91,9 +91,12 @@ describe("admin access link copy", () => {
     );
   });
 
-  it("describes revocation for the success toast", () => {
-    expect(adminAccessLinkRevokedMessage).toBe(
-      "Link revogado. O link anterior deixou de funcionar.",
+  it("describes revocation plus copy for the success toast", () => {
+    expect(adminAccessLinkRevokedMessage("ana@example.com", "ACTIVATION")).toBe(
+      "Link anterior revogado. Link de ativação de ana@example.com copiado.",
+    );
+    expect(adminAccessLinkRevokedMessage("ana@example.com", "RECOVERY")).toBe(
+      "Link anterior revogado. Link de recuperação de ana@example.com copiado.",
     );
   });
 
@@ -101,8 +104,10 @@ describe("admin access link copy", () => {
     expect(workspaceSource).toContain("copyAdminAccessLink");
     expect(workspaceSource).toContain("toast.success");
     expect(workspaceSource).toContain("adminAccessLinkCopiedMessage");
-    expect(workspaceSource).toContain(
-      "toast.success(adminAccessLinkRevokedMessage)",
+    expect(workspaceSource).toContain("toast.success(copiedMessage)");
+    expect(workspaceSource).toContain("void revokeAccess(admin)");
+    expect(workspaceSource).toMatch(
+      /async function revokeAccess[\s\S]*issueAndCopy[\s\S]*adminAccessLinkRevokedMessage/,
     );
     expect(workspaceSource).not.toContain("setAccessLink");
     expect(workspaceSource).not.toContain("Link de acesso");
