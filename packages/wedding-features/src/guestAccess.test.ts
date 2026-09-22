@@ -3,13 +3,10 @@ import {
   clearGuestSession,
   GuestAccessApi,
   GuestAccessApiError,
-  getGuestDeliveryMessage,
   getGuestLeaveNotice,
   getGuestSessionStorageKey,
-  getResendCountdownSeconds,
   guestAccessErrorMessage,
   readGuestSession,
-  shouldDiscardGuestChallenge,
   writeGuestSession,
 } from "./guestAccess";
 
@@ -28,9 +25,6 @@ describe("guest access client", () => {
         response({
           challengeId: "a".repeat(43),
           expiresAt: "2026-09-11T12:10:00.000Z",
-          resendAvailableAt: "2026-09-11T12:01:00.000Z",
-          sendStatus: "PROVIDER_ACCEPTED",
-          deliveryMode: "REAL_SMS",
         }),
       );
     });
@@ -42,7 +36,7 @@ describe("guest access client", () => {
 
     await expect(
       api.start({ fullName: "Ana Silva", phone: "62999999999" }),
-    ).resolves.toMatchObject({ sendStatus: "PROVIDER_ACCEPTED" });
+    ).resolves.toMatchObject({ challengeId: "a".repeat(43) });
   });
 
   it("namespaces and clears the session token per site", () => {
@@ -63,13 +57,6 @@ describe("guest access client", () => {
     expect(readGuestSession(storage, "casamento-a")).toBeNull();
   });
 
-  it("counts down from the server-provided resend instant", () => {
-    const now = Date.parse("2026-09-11T12:00:00.000Z");
-    expect(getResendCountdownSeconds("2026-09-11T12:01:00.000Z", now)).toBe(60);
-    expect(getResendCountdownSeconds("2026-09-11T12:00:00.500Z", now)).toBe(1);
-    expect(getResendCountdownSeconds("2026-09-11T11:59:59.000Z", now)).toBe(0);
-  });
-
   it("uses direct API requests and bearer auth only for session calls", async () => {
     const calls: Array<[string, RequestInit]> = [];
     const fetcher = vi.fn(
@@ -79,9 +66,6 @@ describe("guest access client", () => {
           return response({
             challengeId: "a".repeat(43),
             expiresAt: "2026-09-11T12:10:00.000Z",
-            resendAvailableAt: "2026-09-11T12:01:00.000Z",
-            sendStatus: "PROVIDER_ACCEPTED",
-            deliveryMode: "REAL_SMS",
           });
         return response({
           siteId: "casamento-a",
@@ -105,7 +89,7 @@ describe("guest access client", () => {
     });
     await api.getSession("b".repeat(43));
 
-    expect(challenge.deliveryMode).toBe("REAL_SMS");
+    expect(challenge).not.toHaveProperty("deliveryMode");
     expect(calls[0]?.[0]).toBe(
       "https://api.example.test/v1/public/sites/casamento-a/guest/challenge",
     );
@@ -204,35 +188,6 @@ describe("guest access client", () => {
     ).rejects.toMatchObject({ status: 0, code: "NETWORK_ERROR" });
   });
 
-  it("sends an owner-issued demo grant only in the dedicated header", async () => {
-    const grant = `${"g".repeat(24)}.${"s".repeat(43)}`;
-    const fetcher = vi.fn(
-      async (_input: RequestInfo | URL, _init?: RequestInit) =>
-        response({
-          challengeId: "a".repeat(43),
-          expiresAt: "2026-09-11T12:10:00.000Z",
-          resendAvailableAt: "2026-09-11T12:01:00.000Z",
-          sendStatus: "PROVIDER_ACCEPTED",
-          deliveryMode: "SIMULATED",
-          simulationCode: "123456",
-        }),
-    );
-    const api = new GuestAccessApi({
-      apiOrigin: "https://api.example.test",
-      siteId: "casamento-demo",
-      fetcher,
-    });
-
-    await api.start({ fullName: "Ana", phone: "62999999999" }, grant);
-
-    const [url, init] = fetcher.mock.calls[0] ?? [];
-    expect(String(url)).not.toContain(grant);
-    expect(init?.headers).toMatchObject({
-      "X-EntreLacos-Demo-Grant": grant,
-    });
-    expect(init?.credentials).toBe("omit");
-  });
-
   it("rejects unsafe public API origins", () => {
     expect(
       () =>
@@ -247,7 +202,7 @@ describe("guest access client", () => {
     const fetcher = vi.fn(async () =>
       response(
         {
-          code: "OTP_COOLDOWN",
+          code: "CHALLENGE_COOLDOWN",
           retryAfterSeconds: 43,
         },
         { status: 429 },
@@ -264,7 +219,7 @@ describe("guest access client", () => {
     ).rejects.toEqual(
       expect.objectContaining<Partial<GuestAccessApiError>>({
         status: 429,
-        code: "OTP_COOLDOWN",
+        code: "CHALLENGE_COOLDOWN",
         retryAfterSeconds: 43,
       }),
     );
@@ -273,7 +228,7 @@ describe("guest access client", () => {
   it("reads the backend Retry-After header for cooldown messages", async () => {
     const fetcher = vi.fn(async () =>
       response(
-        { code: "RESEND_TOO_SOON" },
+        { code: "CHALLENGE_COOLDOWN" },
         { status: 429, headers: { "Retry-After": "17" } },
       ),
     );
@@ -283,10 +238,12 @@ describe("guest access client", () => {
       fetcher,
     });
 
-    await expect(api.resend("a".repeat(43))).rejects.toEqual(
+    await expect(
+      api.start({ fullName: "Ana", phone: "62999999999" }),
+    ).rejects.toEqual(
       expect.objectContaining({
         status: 429,
-        code: "RESEND_TOO_SOON",
+        code: "CHALLENGE_COOLDOWN",
         retryAfterSeconds: 17,
       }),
     );
@@ -303,7 +260,7 @@ describe("guest access client", () => {
     ).toContain("atendimento administrativo");
     expect(
       guestAccessErrorMessage(new GuestAccessApiError(401, "INVALID_CODE")),
-    ).toContain("código ou PIN não confere");
+    ).toContain("PIN não confere");
     expect(
       guestAccessErrorMessage(
         new GuestAccessApiError(429, "CHALLENGE_COOLDOWN", 15),
@@ -317,37 +274,6 @@ describe("guest access client", () => {
         new GuestAccessApiError(409, "RSVP_DEADLINE_PASSED"),
       ),
     ).toContain("prazo");
-    expect(
-      guestAccessErrorMessage(
-        new GuestAccessApiError(503, "SMS_QUOTA_NOT_CONFIGURED"),
-      ),
-    ).toContain("organização do casamento");
-    expect(
-      guestAccessErrorMessage(
-        new GuestAccessApiError(429, "SMS_QUOTA_EXCEEDED"),
-      ),
-    ).toContain("organização do casamento");
-  });
-
-  it("does not claim that an unconfirmed real delivery was sent", () => {
-    expect(getGuestDeliveryMessage("MANUAL_PIN", "MANUAL")).toContain(
-      "PIN de 6 dígitos",
-    );
-    expect(getGuestDeliveryMessage("REAL_SMS", "PROVIDER_ACCEPTED")).toContain(
-      "Enviamos",
-    );
-    expect(getGuestDeliveryMessage("REAL_SMS", "UNKNOWN")).not.toContain(
-      "Enviamos",
-    );
-    expect(getGuestDeliveryMessage("SIMULATED", "UNKNOWN")).toContain(
-      "não envia SMS real",
-    );
-  });
-
-  it("discards a challenge only after a final delivery failure", () => {
-    expect(shouldDiscardGuestChallenge("FAILED_FINAL")).toBe(true);
-    expect(shouldDiscardGuestChallenge("PROVIDER_ACCEPTED")).toBe(false);
-    expect(shouldDiscardGuestChallenge("UNKNOWN")).toBe(false);
   });
 
   it("distinguishes confirmed server leave from local-only cleanup", () => {

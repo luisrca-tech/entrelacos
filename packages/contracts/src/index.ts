@@ -675,21 +675,6 @@ export const guestLookupInputSchema = strictObject({
 });
 export type GuestLookupInput = z.infer<typeof guestLookupInputSchema>;
 
-export const demoGuestGrantSchema = z
-  .string()
-  .regex(/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]{43}$/)
-  .max(512);
-export const demoGuestGrantIssueInputSchema = strictObject({
-  phone: brazilianPhoneInputSchema,
-});
-export const demoGuestGrantResponseSchema = strictObject({
-  grant: demoGuestGrantSchema,
-  expiresAt: instantSchema,
-});
-export type DemoGuestGrantResponse = z.infer<
-  typeof demoGuestGrantResponseSchema
->;
-
 export const guestChallengeIdSchema = opaqueTokenSchema;
 export const guestAccessPinSchema = z
   .string()
@@ -701,12 +686,6 @@ export const guestAccessPinResponseSchema = strictObject({
 export type GuestAccessPinResponse = z.infer<
   typeof guestAccessPinResponseSchema
 >;
-export const guestVerificationModeSchema = z.enum(["MANUAL", "MOCK", "TWILIO"]);
-export const guestDeliveryModeSchema = z.enum([
-  "MANUAL_PIN",
-  "SIMULATED",
-  "REAL_SMS",
-]);
 export const guestVerificationChallengeStatusSchema = z.enum([
   "PENDING",
   "VERIFIED",
@@ -714,40 +693,14 @@ export const guestVerificationChallengeStatusSchema = z.enum([
   "LOCKED",
   "REVOKED",
 ]);
-export const guestVerificationSendStatusSchema = z.enum([
-  "MANUAL",
-  "RESERVED",
-  "PROVIDER_ACCEPTED",
-  "FAILED_FINAL",
-  "UNKNOWN",
-]);
 
 export const guestChallengeStartResponseSchema = strictObject({
   challengeId: guestChallengeIdSchema,
   expiresAt: instantSchema,
-  resendAvailableAt: instantSchema,
-  sendStatus: guestVerificationSendStatusSchema,
-  deliveryMode: guestDeliveryModeSchema,
-  simulationCode: guestVerificationCodeSchema.optional(),
-}).superRefine((value, context) => {
-  if (value.deliveryMode === "REAL_SMS" && value.simulationCode !== undefined) {
-    context.addIssue({
-      code: "custom",
-      path: ["simulationCode"],
-      message: "Simulation code is not available for real SMS",
-    });
-  }
 });
 export type GuestChallengeStartResponse = z.infer<
   typeof guestChallengeStartResponseSchema
 >;
-
-export const guestChallengeResendInputSchema = strictObject({
-  challengeId: guestChallengeIdSchema,
-});
-
-export const guestChallengeResendResponseSchema =
-  guestChallengeStartResponseSchema;
 
 export const guestChallengeVerifyInputSchema = strictObject({
   challengeId: guestChallengeIdSchema,
@@ -949,9 +902,6 @@ export const block3EndpointPaths = {
   siteGroupAccessPinRotate:
     "POST /v1/sites/:siteId/groups/:groupId/access-pin/rotate",
   publicGuestChallengeStart: "POST /v1/public/sites/:siteId/guest/challenge",
-  demoGuestGrant: "POST /v1/owner/sites/:siteId/demo/guest-grant",
-  publicGuestChallengeResend:
-    "POST /v1/public/guest/challenge/:challengeId/resend",
   publicGuestChallengeVerify:
     "POST /v1/public/guest/challenge/:challengeId/verify",
   publicFamilySession: "GET /v1/public/family/session",
@@ -1120,54 +1070,6 @@ export const rsvpExportQuerySchema = strictObject({
 });
 export type RsvpExportQuery = z.infer<typeof rsvpExportQuerySchema>;
 
-export const smsQuotaInputSchema = strictObject({
-  monthlyLimit: z.number().int().min(0).max(1_000_000),
-});
-export type SmsQuotaInput = z.infer<typeof smsQuotaInputSchema>;
-
-export const smsQuotaResponseSchema = strictObject({
-  siteId: siteIdSchema,
-  monthlyLimit: z.number().int().min(0).max(1_000_000),
-});
-
-export const smsUsageAlertSchema = z.enum([
-  "NOT_CONFIGURED",
-  "BELOW_80",
-  "AT_OR_ABOVE_80",
-  "AT_OR_ABOVE_100",
-]);
-
-export const smsUsageCountersSchema = strictObject({
-  reserved: z.number().int().nonnegative(),
-  providerAccepted: z.number().int().nonnegative(),
-  failedFinal: z.number().int().nonnegative(),
-  unknown: z.number().int().nonnegative(),
-  consumed: z.number().int().nonnegative(),
-}).superRefine((value, context) => {
-  if (
-    value.consumed !==
-    value.reserved + value.providerAccepted + value.failedFinal + value.unknown
-  ) {
-    context.addIssue({
-      code: "custom",
-      path: ["consumed"],
-      message: "Consumed SMS usage must equal all reserved outcomes",
-    });
-  }
-});
-
-export const smsUsageResponseSchema = strictObject({
-  siteId: siteIdSchema,
-  timezone: z.literal("America/Sao_Paulo"),
-  periodStart: instantSchema,
-  periodEnd: instantSchema,
-  monthlyLimit: z.number().int().min(0).max(1_000_000).nullable(),
-  alert: smsUsageAlertSchema,
-  realSms: smsUsageCountersSchema,
-  simulated: smsUsageCountersSchema,
-});
-export type SmsUsageResponse = z.infer<typeof smsUsageResponseSchema>;
-
 export const block5ErrorCodeSchema = z.enum([
   "MURAL_DISABLED",
   "MESSAGE_BLOCKED",
@@ -1176,8 +1078,6 @@ export const block5ErrorCodeSchema = z.enum([
   "MESSAGE_NOT_FOUND",
   "GROUP_CONFIRMATION_MISMATCH",
   "RSVP_RESULT_REMOVED",
-  "SMS_QUOTA_NOT_CONFIGURED",
-  "SMS_QUOTA_EXCEEDED",
 ]);
 
 export const block5EndpointPaths = {
@@ -1193,8 +1093,6 @@ export const block5EndpointPaths = {
   siteGroupDelete: "DELETE /v1/sites/:siteId/groups/:groupId",
   siteRsvpCsvExport: "GET /v1/sites/:siteId/reports/rsvp.csv",
   siteRsvpPdfExport: "GET /v1/sites/:siteId/reports/rsvp.pdf",
-  siteSmsUsageRead: "GET /v1/sites/:siteId/sms-usage",
-  ownerSiteSmsQuotaUpdate: "PATCH /v1/owner/sites/:siteId/sms-quota",
 } as const;
 
 export type Block5EndpointPath =

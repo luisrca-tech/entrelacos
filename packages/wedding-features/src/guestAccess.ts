@@ -1,5 +1,4 @@
 import {
-  demoGuestGrantSchema,
   type FamilyRsvpResponse,
   type FamilyRsvpWriteInput,
   type FamilySessionResponse,
@@ -22,12 +21,7 @@ import {
   siteIdSchema,
 } from "@entrelacos/contracts";
 
-export type GuestDeliveryMode = "MANUAL_PIN" | "SIMULATED" | "REAL_SMS";
-
-export type GuestChallengeStartResult = GuestChallengeStartResponse & {
-  deliveryMode: GuestDeliveryMode;
-  simulationCode?: string;
-};
+export type GuestChallengeStartResult = GuestChallengeStartResponse;
 
 export type GuestSessionReadResponse = Omit<
   FamilySessionResponse,
@@ -67,37 +61,6 @@ export function clearGuestSession(
   siteId: string,
 ): void {
   storage.removeItem(getGuestSessionStorageKey(siteId));
-}
-
-export function getResendCountdownSeconds(
-  resendAvailableAt: string,
-  nowMs: number,
-): number {
-  const remainingMs = Date.parse(resendAvailableAt) - nowMs;
-  if (!Number.isFinite(remainingMs) || remainingMs <= 0) return 0;
-  return Math.ceil(remainingMs / 1000);
-}
-
-export function getGuestDeliveryMessage(
-  mode: GuestDeliveryMode,
-  status: GuestChallengeStartResponse["sendStatus"],
-): string {
-  if (mode === "MANUAL_PIN") {
-    return "Informe o PIN de 6 dígitos do seu grupo, enviado pelos noivos ou pela cerimonial.";
-  }
-  if (mode === "SIMULATED") {
-    return "Simulação local: este fluxo não envia SMS real.";
-  }
-  if (status === "PROVIDER_ACCEPTED") {
-    return "Enviamos um código por SMS para o celular informado.";
-  }
-  return "A entrega do SMS ainda não foi confirmada pelo provedor.";
-}
-
-export function shouldDiscardGuestChallenge(
-  status: GuestChallengeStartResponse["sendStatus"],
-): boolean {
-  return status === "FAILED_FINAL";
 }
 
 export function getGuestLeaveNotice(serverConfirmed: boolean): string {
@@ -173,35 +136,13 @@ export class GuestAccessApi {
     this.fetcher = (input, init) => fetcher(input, init);
   }
 
-  async start(
-    input: GuestLookupInput,
-    demoGrant?: string,
-  ): Promise<GuestChallengeStartResult> {
+  async start(input: GuestLookupInput): Promise<GuestChallengeStartResult> {
     const parsed = guestLookupInputSchema.parse(input);
-    const grant = demoGrant ? demoGuestGrantSchema.parse(demoGrant) : undefined;
     return this.request(
       `/v1/public/sites/${encodeURIComponent(this.siteId)}/guest/challenge`,
       {
         method: "POST",
         body: parsed,
-        ...(grant ? { headers: { "X-EntreLacos-Demo-Grant": grant } } : {}),
-      },
-      parseChallengeStart,
-    );
-  }
-
-  async resend(
-    challengeId: string,
-    demoGrant?: string,
-  ): Promise<GuestChallengeStartResult> {
-    const parsed = opaqueTokenSchema.parse(challengeId);
-    const grant = demoGrant ? demoGuestGrantSchema.parse(demoGrant) : undefined;
-    return this.request(
-      `/v1/public/guest/challenge/${encodeURIComponent(parsed)}/resend`,
-      {
-        method: "POST",
-        body: { challengeId: parsed },
-        ...(grant ? { headers: { "X-EntreLacos-Demo-Grant": grant } } : {}),
       },
       parseChallengeStart,
     );
@@ -327,33 +268,18 @@ export function guestAccessErrorMessage(error: unknown): string {
   if (error.code === "GUEST_NOT_FOUND" || error.code === "LOOKUP_NOT_FOUND")
     return "Não encontramos um convite com esses dados. Confira o nome completo e o celular.";
   if (error.code === "FOREIGN_GUEST_CONTACT_ADMIN")
-    return "Este convite usa número estrangeiro e precisa de atendimento administrativo. Não há SMS ou outra alternativa de autenticação.";
+    return "Este convite usa número estrangeiro e precisa de atendimento administrativo. Não há outra alternativa de autenticação.";
   if (
-    error.code === "OTP_COOLDOWN" ||
     error.code === "CHALLENGE_COOLDOWN" ||
-    error.code === "OTP_RATE_LIMIT" ||
-    error.code === "OTP_SEND_RATE_LIMITED" ||
-    error.code === "OTP_VERIFY_RATE_LIMITED" ||
     error.code === "LOOKUP_RATE_LIMITED"
   )
     return error.retryAfterSeconds
       ? `Aguarde ${error.retryAfterSeconds} segundos antes de tentar novamente.`
       : "Muitas tentativas. Aguarde alguns minutos e tente novamente.";
-  if (error.code === "RESEND_TOO_SOON")
-    return error.retryAfterSeconds
-      ? `Aguarde ${error.retryAfterSeconds} segundos para reenviar o código.`
-      : "Aguarde um pouco para reenviar o código.";
-  if (error.code === "OTP_WRONG_CODE" || error.code === "INVALID_CODE")
-    return "O código ou PIN não confere. Confira o valor e tente novamente.";
-  if (error.code === "OTP_LOCKED")
-    return "Muitas tentativas. Aguarde o desbloqueio e tente novamente.";
-  if (error.code === "OTP_EXPIRED" || error.code === "CHALLENGE_EXPIRED")
+  if (error.code === "INVALID_CODE")
+    return "O PIN não confere. Confira o valor e tente novamente.";
+  if (error.code === "CHALLENGE_EXPIRED")
     return "Este acesso expirou. Confirme seus dados novamente.";
-  if (
-    error.code === "SMS_QUOTA_NOT_CONFIGURED" ||
-    error.code === "SMS_QUOTA_EXCEEDED"
-  )
-    return "O envio de SMS está indisponível. Entre em contato com a organização do casamento para receber seu PIN de acesso.";
   if (
     error.code === "CHALLENGE_NOT_FOUND" ||
     error.code === "CHALLENGE_NOT_ACTIVE" ||

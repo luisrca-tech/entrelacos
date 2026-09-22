@@ -6,7 +6,6 @@ import { serve } from "@hono/node-server";
 import { createApp } from "./app";
 import { createAuth } from "./auth";
 import { readRuntimeConfig } from "./runtimeConfig";
-import { createTwilioVerifyProvider } from "./twilioVerify";
 
 async function start() {
   const config = readRuntimeConfig(process.env);
@@ -19,13 +18,6 @@ async function start() {
       db: connection.db,
       adminOrigin: config.adminOrigin,
       guestFingerprintSecret: config.fingerprintSecret,
-      guestSmsMode: config.smsMode,
-      guestVerificationProvider: config.twilio
-        ? createTwilioVerifyProvider(config.twilio)
-        : undefined,
-      guestExposeSimulationCode: config.exposeSimulationCode,
-      guestDemoGrantSecret: config.demoGrantSecret,
-      guestDemoPhoneAllowlist: config.demoPhoneAllowlist,
       guestTrustProxyHeaders: config.trustProxyHeaders,
       authForDatabase: (db) => createAuth({ db, ...config }),
     });

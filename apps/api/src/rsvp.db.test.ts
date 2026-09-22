@@ -7,7 +7,6 @@ import {
 import {
   familySession,
   guestMember,
-  guestVerificationChallenge,
   rsvpHistory,
   site,
   siteMembership,
@@ -203,31 +202,6 @@ describe("RSVP PostgreSQL service", () => {
       actorDisplayName: initial.members.find(
         (member) => member.isRepresentative,
       )?.fullName,
-    });
-  });
-
-  it("does not depend on the prior SMS provider state after authentication", async () => {
-    await connection.db.insert(guestVerificationChallenge).values({
-      id: `${prefix}-stale-sms`,
-      siteId,
-      groupId,
-      mode: "TWILIO",
-      status: "REVOKED",
-      phoneE164: "+5511999999999",
-      expiresAt: new Date("2028-04-01T12:05:00.000Z"),
-      resendAvailableAt: now,
-      revokedAt: now,
-      revocationReason: "TEST_PROVIDER_STATE",
-      createdAt: now,
-      updatedAt: now,
-    });
-
-    await expect(
-      readFamilyRsvp(connection.db, token, now),
-    ).resolves.toMatchObject({
-      siteId,
-      groupId,
-      canEdit: true,
     });
   });
 

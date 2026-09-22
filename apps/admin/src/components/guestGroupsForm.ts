@@ -19,21 +19,9 @@ export type GuestGroupDraft = {
   members: GuestGroupDraftMember[];
 };
 
-export function canIssueDemoGuestGrant(
-  owner: boolean,
-  isDemo: boolean,
-  inactive: boolean,
-  group: Pick<GuestGroupCreateInput, "isForeign" | "phone">,
-): boolean {
-  return (
-    owner && isDemo && !inactive && !group.isForeign && group.phone !== null
-  );
-}
-
 export const guestGroupMenuActionLabels = {
   "copy-pin": "Copiar PIN",
   "rotate-pin": "Rotacionar PIN",
-  "demo-grant": "Gerar acesso demo",
   edit: "Editar",
   delete: "Excluir",
 } as const;
@@ -63,25 +51,16 @@ export const guestAccessPinRotatedMessage =
   "Novo PIN gerado. O PIN anterior e os acessos ativos foram revogados.";
 
 export function guestGroupMenuActions({
-  owner,
-  isDemo,
   inactive,
   isForeign,
-  phone,
 }: {
-  owner: boolean;
-  isDemo: boolean;
   inactive: boolean;
   isForeign: boolean;
-  phone: string | null;
 }): GuestGroupMenuAction[] {
   if (inactive) return [];
   const actions: GuestGroupMenuAction[] = [];
   if (!isForeign) {
     actions.push("copy-pin", "rotate-pin");
-  }
-  if (canIssueDemoGuestGrant(owner, isDemo, inactive, { isForeign, phone })) {
-    actions.push("demo-grant");
   }
   actions.push("edit", "delete");
   return actions;

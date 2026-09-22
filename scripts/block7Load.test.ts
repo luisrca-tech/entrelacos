@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   assertSafeLoadPrefix,
@@ -10,6 +11,15 @@ import {
 } from "./block7Load";
 
 describe("Block 7 load shape", () => {
+  it("keeps the load harness PIN-only", () => {
+    const source = readFileSync(
+      new URL("./block7Load.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).not.toMatch(/smsMonthlyLimit|SMS_MODE|Twilio|simulated/i);
+  });
+
   it("builds exactly 20 active tenants with 500 guests each", () => {
     const plan = buildLoadPlan("block7-load-test");
 

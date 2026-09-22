@@ -13,8 +13,6 @@ describe("API runtime configuration", () => {
     expect(readRuntimeConfig(settings)).toMatchObject({
       target: "development",
       port: 8080,
-      smsMode: "manual",
-      exposeSimulationCode: false,
       trustProxyHeaders: false,
     });
     expect(
@@ -43,6 +41,7 @@ describe("API runtime configuration", () => {
       trustProxyHeaders: true,
     });
   });
+
   it("derives development defaults from Railway", () => {
     expect(
       readRuntimeConfig({
@@ -55,63 +54,43 @@ describe("API runtime configuration", () => {
       trustProxyHeaders: true,
     });
   });
+
   it.each(["", "0", "65536", "abc", "8080.5"])(
     "rejects invalid port %s",
     (PORT) => {
       expect(() => readRuntimeConfig({ ...settings, PORT })).toThrow();
     },
   );
+
   it("rejects missing or weak server secrets", () => {
     expect(() =>
       readRuntimeConfig({ ...settings, BETTER_AUTH_SECRET: "short" }),
     ).toThrow();
   });
-  it("requires explicit opt-in before trusting proxy IP headers or exposing mock codes", () => {
+
+  it("keeps runtime configuration focused on API concerns", () => {
+    const config = readRuntimeConfig(settings);
+
+    expect(config).not.toHaveProperty("smsMode");
+    expect(config).not.toHaveProperty("twilio");
+    expect(config).not.toHaveProperty("demoGrantSecret");
+    expect(config).not.toHaveProperty("exposeSimulationCode");
+  });
+
+  it("preserves proxy trust and fingerprint configuration", () => {
     expect(
       readRuntimeConfig({
         ...settings,
         TRUST_PROXY_HEADERS: "true",
-        EXPOSE_SIMULATION_CODE: "true",
+        GUEST_FINGERPRINT_SECRET:
+          "fingerprint-secret-with-at-least-32-characters",
       }),
-    ).toMatchObject({ trustProxyHeaders: true, exposeSimulationCode: true });
-    expect(() =>
-      readRuntimeConfig({ ...settings, SMS_MODE: "unknown" }),
-    ).toThrow();
-    expect(
-      readRuntimeConfig({ ...settings, SMS_MODE: "simulated" }),
     ).toMatchObject({
-      smsMode: "simulated",
-      twilio: undefined,
+      trustProxyHeaders: true,
+      fingerprintSecret: "fingerprint-secret-with-at-least-32-characters",
     });
   });
-  it("fails closed until every real Twilio safeguard is configured", () => {
-    const real = {
-      ...settings,
-      SMS_MODE: "real",
-      SMS_REAL_AUTHORIZED: "true",
-      TWILIO_ACCOUNT_SID: `AC${"a".repeat(32)}`,
-      TWILIO_AUTH_TOKEN: "b".repeat(32),
-      TWILIO_VERIFY_SERVICE_SID: `VA${"c".repeat(32)}`,
-      TWILIO_TEST_PHONE_ALLOWLIST: "+5521999999999",
-      TWILIO_BRAZIL_CONFIRMED: "true",
-      TWILIO_TRIAL_USAGE_CONFIRMED: "true",
-    };
-    expect(readRuntimeConfig(real).twilio).toMatchObject({
-      verifyServiceSid: real.TWILIO_VERIFY_SERVICE_SID,
-      phoneAllowlist: [real.TWILIO_TEST_PHONE_ALLOWLIST],
-    });
-    for (const key of [
-      "SMS_REAL_AUTHORIZED",
-      "TWILIO_ACCOUNT_SID",
-      "TWILIO_AUTH_TOKEN",
-      "TWILIO_VERIFY_SERVICE_SID",
-      "TWILIO_TEST_PHONE_ALLOWLIST",
-      "TWILIO_BRAZIL_CONFIRMED",
-      "TWILIO_TRIAL_USAGE_CONFIRMED",
-    ]) {
-      expect(() => readRuntimeConfig({ ...real, [key]: undefined })).toThrow();
-    }
-  });
+
   it.each([
     "javascript:alert(1)",
     "https://name:secret@example.test",

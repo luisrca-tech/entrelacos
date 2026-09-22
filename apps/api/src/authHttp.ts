@@ -5,9 +5,7 @@ import type { AuthDatabase, createAuth } from "./auth";
 import { withCredentialAdvisoryLock } from "./credentialLock";
 import type {
   GuestChallengeIdGenerator,
-  GuestCodeGenerator,
   GuestSessionTokenGenerator,
-  GuestVerificationProvider,
 } from "./guestVerification";
 
 export const ADMIN_IDLE_TIMEOUT_MS = 24 * 60 * 60 * 1000;
@@ -22,14 +20,8 @@ export interface AuthHttpOptions {
   adminOrigin: string;
   now?: () => Date;
   guestFingerprintSecret?: string;
-  guestDemoGrantSecret?: string;
-  guestDemoPhoneAllowlist?: readonly string[];
-  guestSmsMode?: "manual" | "simulated" | "real";
-  guestVerificationProvider?: GuestVerificationProvider;
-  guestCodeGenerator?: GuestCodeGenerator;
   guestChallengeIdGenerator?: GuestChallengeIdGenerator;
   guestSessionTokenGenerator?: GuestSessionTokenGenerator;
-  guestExposeSimulationCode?: boolean;
   guestResolveClientIp?: (request: Request) => string;
   guestTrustProxyHeaders?: boolean;
 }

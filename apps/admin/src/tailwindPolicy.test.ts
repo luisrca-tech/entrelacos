@@ -25,7 +25,6 @@ const responsiveSources = [
   "components/Panel.tsx",
   "components/RsvpSection.tsx",
   "components/SiteWorkspace.tsx",
-  "components/SmsUsageSection.tsx",
 ].map((relativePath) => ({
   path: relativePath,
   source: readFileSync(resolve(import.meta.dirname, relativePath), "utf8"),
@@ -34,8 +33,12 @@ const adminStylesSource = readFileSync(
   resolve(import.meta.dirname, "lib/adminStyles.ts"),
   "utf8",
 );
-const smsUsageSource = readFileSync(
-  resolve(import.meta.dirname, "components/SmsUsageSection.tsx"),
+const workspaceSource = readFileSync(
+  resolve(import.meta.dirname, "components/SiteWorkspace.tsx"),
+  "utf8",
+);
+const guestGroupsSource = readFileSync(
+  resolve(import.meta.dirname, "components/GuestGroupsSection.tsx"),
   "utf8",
 );
 
@@ -92,10 +95,10 @@ describe("admin Tailwind policy", () => {
     );
   });
 
-  it("keeps the SMS quota control on the legacy admin surface token", () => {
-    expect(smsUsageSource).toContain('id="sms-monthly-limit"');
-    expect(smsUsageSource).toContain("border-admin-line");
-    expect(smsUsageSource).toContain("bg-admin-surface");
-    expect(smsUsageSource).toContain("focus:border-admin-terracotta");
+  it("removes SMS quota and delivery UI from the admin workspace", () => {
+    expect(workspaceSource).not.toContain("SmsUsageSection");
+    expect(workspaceSource).not.toContain("sms-usage");
+    expect(guestGroupsSource).not.toContain("SMS");
+    expect(guestGroupsSource).not.toContain("demo-grant");
   });
 });

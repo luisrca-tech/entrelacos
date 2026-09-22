@@ -169,8 +169,6 @@ function AdminNavigation({
 
 function navigationIcon(area: SiteArea) {
   switch (area) {
-    case "overview":
-      return "⌂";
     case "guests":
       return "○";
     case "rsvp":

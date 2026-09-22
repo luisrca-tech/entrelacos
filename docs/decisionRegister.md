@@ -10,18 +10,18 @@
 | Customer access | The central panel has global `OWNER` access and wedding-bound `SITE_ADMIN` access. There is no public signup. | Accepted |
 | Site delivery | One independently deployed static site per wedding; shared changes affect newly built sites only. | Accepted |
 | Guests | Groups are the unit of authorization. Group name is required, each group has at least one named member, one representative, and one wedding-scoped normalized Brazilian phone. | Accepted |
-| Foreign numbers | Foreign-number groups may omit phone and use administrative RSVP only; no guest authentication, messages, or automatic SMS fallback. | Accepted |
-| Guest verification | Full name plus registered phone locates the group. For the MVP, an administrator copies the persistent six-digit group PIN and shares it with the invitation link through an external channel. Twilio Verify remains configured as a future opt-in SMS channel, not an MVP dependency. Matching ignores case, accents, and extra spaces but rejects approximate or abbreviated names. | Accepted |
-| Verification protection | A manual group PIN remains valid until explicit rotation, while each verification challenge lasts 10 minutes. Five declined codes cause a 15-minute cooldown, and lookup/verification limits use the numeric scopes recorded in the Block 3 contract. SMS-only flows retain the 60-second resend and send ceilings. | Accepted |
-| Family session | Successful PIN or SMS verification creates a site-and-group-bound opaque bearer with seven-day absolute expiry. The browser keeps it only in site-namespaced `sessionStorage`; explicit leave, representative/phone changes, and PIN rotation revoke it server-side. | Accepted |
+| Foreign numbers | Foreign-number groups may omit phone and use administrative RSVP only; no guest authentication or messages. | Accepted |
+| Guest verification | Full name plus registered phone locates the group, and both remain required. An administrator copies the persistent six-digit group PIN and shares it with the invitation link through an external channel. The PIN is the only confirmation mechanism; SMS delivery, simulation, and Twilio integration are retired. Matching ignores case, accents, and extra spaces but rejects approximate or abbreviated names. | Accepted |
+| Verification protection | A manual group PIN remains valid until explicit rotation, while each verification challenge lasts 10 minutes. Five declined PINs cause a 15-minute cooldown, and lookup/verification limits use the numeric scopes recorded in the Block 3 contract. There is no resend operation. | Accepted |
+| Family session | Successful PIN verification creates a site-and-group-bound opaque bearer with seven-day absolute expiry. The browser keeps it only in site-namespaced `sessionStorage`; explicit leave, representative/phone changes, and PIN rotation revoke it server-side. | Accepted |
 | RSVP | Member states are exactly `PENDING`, `CONFIRMED`, and `DECLINED`. The authenticated representative answers for the group; partial responses and fully pending groups are valid; save is explicit; “confirm all” is a draft shortcut. A nullable deadline is represented by paired null instant/timezone; with both fields null, no deadline blocks RSVP. When configured, the server evaluates the UTC instant with an explicit IANA timezone for display. Guests can read but cannot write at or after the exact deadline; authorized admins can correct an active wedding after it. | Accepted |
 | Messages | One text message per group, at most 1,000 characters, emojis/newlines allowed, no HTML/attachments. Representative may edit; admins may delete but never edit. | Accepted |
 | Mural | Per-site toggle and per-group message block affect message writes only and retain data. Public output omits phone, member list, and RSVP. | Accepted |
 | Exports | Wedding-scoped CSV and paginated printable PDF include selected RSVP/guest fields and exclude messages. | Accepted |
 | Lifecycle | The first public deployment may occur before or during review with a warning not to share it. Review approval starts an editable one-year term. Deactivation is manual, shows a neutral public placeholder, preserves data, and keeps admin consultation/export read-only. | Accepted |
-| Demo operation | Demo is a demo-marked site in an existing environment, with owner-authorized browser/phone simulation and manual reset limited to that site. There is no permanent third demo environment or database; a sentinel tenant must remain unchanged. | Accepted |
+| Demo operation | Demo is a demo-marked site in an existing environment and uses the same PIN-only flow as every wedding. Manual reset is limited to that site. There is no permanent third demo environment or database; a sentinel tenant must remain unchanged. | Accepted |
 | Demo venue | The illustrative demo ceremony/reception venue is Casablanca Eventos, Av Ipanema 747, Jardim Atlantico, Goiania, GO 74343-010, with `https://casablancaeventosgoiania.com.br/contato` as the approved location link. | Accepted |
-| Scope exclusions | Gifts, checkout, payments, uploads/object storage, integrated WhatsApp messaging, international SMS, individual guest accounts, secret links, self-service CMS, automatic provider/domain operations, and a permanent demo environment/database are out of MVP. Copying a PIN for manual delivery through WhatsApp does not integrate WhatsApp. | Accepted |
+| Scope exclusions | Gifts, checkout, payments, uploads/object storage, integrated outbound messaging, individual guest accounts, secret links, self-service CMS, automatic provider/domain operations, and a permanent demo environment/database are out of MVP. Copying a PIN through WhatsApp does not integrate WhatsApp. | Accepted |
 
 ## Confirmed technical boundaries
 
@@ -55,6 +55,8 @@ The `block-4/member-rsvp` working tree contains the RSVP schemas, migrations, se
 The operational choices checked before this record are: no deadline is allowed through a paired null value; a configured deadline rejects public writes at `serverNow >= deadlineAt`; a replay of an identical successful request is accepted even after the deadline; a changed payload with the same request ID is rejected; a stale submitted member rolls back the whole submission; omitted members do not conflict; history stores actor and display snapshots; and foreign groups remain administrative-only. The admin UI exposes deadline configuration, current totals/filters, and a separate history view. Any behavior that differs in executed validation must update this record and the contract before acceptance.
 
 ## Block 5 contract record — 2026-09-12
+
+This section records the historical Block 5 boundary. Its SMS accounting and provider-readiness decisions were superseded by the PIN-only decision above; messages, mural, deletion, and reports remain current.
 
 The operator approved the Block 5 orchestration playbook and the detailed contract in [the Block 5 contract](./block5Contracts.md). The implementation must keep one revision-protected message per group, runtime-only mural reads, administrator deletion without text editing, message-only group blocking, confirmed transactional group deletion, wedding-scoped CSV/PDF reports, and site-level monthly SMS accounting.
 
@@ -115,7 +117,7 @@ The 20-wedding by 500-guest run is evidence only for its recorded local endpoint
 ## Open decisions and release gates
 
 1. Commercial buyer, price, revision policy, cancellation, renewal, tolerance period, and support service levels. These are external business-policy decisions, not technical MVP blockers, but must be addressed for commercial operations.
-2. Cloudflare, Railway, Neon, CI, Twilio, and media-provider account ownership, credentials, permissions, region/country access, and costs.
+2. Cloudflare, Railway, Neon, CI, and media-provider account ownership, credentials, permissions, region/country access, and costs.
 3. The guest-to-API cross-origin transport is resolved as an exact-origin bearer flow using site-namespaced `sessionStorage`. The authenticated admin panel-to-public-site handoff and recognized-only return link are implemented locally; final independent clean-browser proof remains pending.
 4. Privacy notice, retention schedule, data rights, deletion exceptions, client media permissions, and legal review.
 5. Neon tier, retention/cost, backup strategy, and real restoration evidence for RPO at most one hour and RTO at most eight hours.
@@ -134,4 +136,4 @@ The template/site study preserves the reference repository's host/package owners
 
 Block 4 keeps RSVP presentation in `packages/wedding-features` while leaving deadline, authorization, concurrency, persistence, and history in the API. A template or site may choose location and styling through the public feature seam, but static output cannot contain family data, sessions, responses, credentials, or operational fixtures. This preserves the Block 6 design boundary and keeps Block 5 reporting/messages from creating a second RSVP authority.
 
-Block 5 keeps manual PIN as the operational MVP path and uses a nullable site SMS limit as an explicit closed gate. This avoids inferring provider budget while still requiring quota concurrency and alert behavior to be proven with deterministic simulation before any later real-SMS approval.
+The current verification flow requires full name, registered phone, and the persistent manual PIN. SMS quota, simulation, delivery, and provider integration are retired rather than retained as dormant options.

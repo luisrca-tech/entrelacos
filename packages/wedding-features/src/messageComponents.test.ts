@@ -101,6 +101,13 @@ describe("guest lookup form", () => {
     );
   });
 
+  it("keeps guest verification PIN-only", () => {
+    expect(guestAccessSource).toContain("PIN de 6 dígitos");
+    expect(guestAccessSource).not.toMatch(
+      /deliveryMode|simulationCode|resendCode|Reenviar|SMS/,
+    );
+  });
+
   it("centers a wider confirmation column on desktop without wrapping the title", () => {
     expect(guestAccessSource).toContain("min-[961px]:justify-items-center");
     expect(guestAccessSource).toContain(
