@@ -1,5 +1,6 @@
 import type { MeResponse } from "@entrelacos/contracts";
 import {
+  cn,
   Popover,
   PopoverContent,
   PopoverTrigger,
@@ -36,35 +37,51 @@ export function AdminShell({
   const initials = getInitials(actor.user.name);
 
   return (
-    <div className={`admin-app-shell${siteId ? " has-site-navigation" : ""}`}>
-      <aside className="admin-sidebar" aria-label="Navegação principal">
-        <div className="sidebar-top">
-          <Link className="brand" to="/">
+    <div
+      className={cn(
+        "grid min-h-screen grid-cols-[248px_minmax(0,1fr)] [@media(max-width:760px)]:block [@media(min-width:761px)_and_(max-width:1060px)]:grid-cols-[216px_minmax(0,1fr)]",
+        siteId &&
+          "[@media(max-width:760px)]:pb-[calc(74px+env(safe-area-inset-bottom))]",
+      )}
+    >
+      <aside
+        className="sticky top-0 flex h-screen flex-col gap-[30px] border-r border-admin-line bg-admin-surface px-5 pt-[30px] pb-[22px] [@media(max-width:760px)]:hidden [@media(min-width:761px)_and_(max-width:1060px)]:w-[216px]"
+        aria-label="Navegação principal"
+      >
+        <div className="grid gap-2">
+          <Link
+            className="font-admin-display text-[1.45rem] tracking-[-0.03em] text-admin-graphite no-underline"
+            to="/"
+          >
             EntreLaços
           </Link>
-          <span className="sidebar-kicker">Painel de casamentos</span>
+          <span className="text-[0.7rem] font-bold uppercase tracking-[0.13em] leading-[1.3] text-admin-muted">
+            Painel de casamentos
+          </span>
         </div>
         {siteId && (
-          <div className="sidebar-site">
-            <span className="sidebar-kicker">Casamento atual</span>
-            {siteName && <strong>{siteName}</strong>}
+          <div className="grid gap-2 rounded-xl border border-admin-line bg-admin-canvas p-[15px]">
+            <span className="text-[0.7rem] font-bold uppercase tracking-[0.13em] leading-[1.3] text-admin-muted">
+              Casamento atual
+            </span>
+            {siteName && <strong className="truncate">{siteName}</strong>}
           </div>
         )}
         {siteId ? (
-          <nav
-            className="admin-navigation-landmark"
-            aria-label="Navegação do casamento"
-          >
+          <nav className="block" aria-label="Navegação do casamento">
             <AdminNavigation area={area} items={navigation} />
           </nav>
         ) : (
-          <nav className="admin-navigation" aria-label="Navegação global">
+          <nav className="grid gap-1" aria-label="Navegação global">
             <Link
-              className="admin-nav-link is-active"
+              className="flex min-h-[42px] items-center gap-3 rounded-[9px] bg-admin-terracotta-wash px-3 py-2 text-[0.9rem] font-bold text-admin-terracotta-deep no-underline transition-[background,color] duration-150 ease-in-out motion-reduce:transition-none"
               to="/"
               aria-current="page"
             >
-              <span className="admin-nav-icon" aria-hidden="true">
+              <span
+                className="grid w-5 place-items-center text-[1.1rem] leading-none"
+                aria-hidden="true"
+              >
                 ⌂
               </span>
               <span>Casamentos</span>
@@ -73,28 +90,36 @@ export function AdminShell({
         )}
       </aside>
 
-      <div className="admin-main-column">
-        <header className="admin-topbar">
-          <Link className="mobile-brand brand" to="/">
+      <div className="flex min-h-screen min-w-0 flex-col">
+        <header className="mx-auto flex min-h-[82px] w-full max-w-[1440px] items-center justify-end gap-[18px] border-b border-admin-line px-[42px] py-[18px] [@media(max-width:760px)]:min-h-[68px] [@media(max-width:760px)]:px-5 [@media(max-width:760px)]:py-[14px] [@media(min-width:761px)_and_(max-width:1060px)]:px-7">
+          <Link
+            className="mr-auto hidden font-admin-display text-[1.45rem] tracking-[-0.03em] text-admin-graphite no-underline [@media(max-width:760px)]:block"
+            to="/"
+          >
             EntreLaços
           </Link>
-          <div className="topbar-context">
-            <span className="topbar-kicker">
+          <div className="mr-auto flex items-center gap-2 text-[0.85rem] text-admin-muted [@media(max-width:760px)]:hidden">
+            <span className="text-[0.7rem] font-bold uppercase tracking-[0.13em] leading-[1.3] text-admin-muted">
               {role === "OWNER" ? "Conta proprietária" : "Acesso de equipe"}
             </span>
           </div>
           <AccountMenu actor={actor} initials={initials} onLogout={onLogout} />
         </header>
-        <main className="admin-content">{children}</main>
-        <footer className="page-footer">
+        <main className="mx-auto w-full max-w-[1440px] px-[42px] pt-12 pb-6 [@media(max-width:760px)]:px-5 [@media(max-width:760px)]:pt-[34px] [@media(max-width:760px)]:pb-6 [@media(min-width:761px)_and_(max-width:1060px)]:px-7">
+          {children}
+        </main>
+        <footer className="mx-auto mt-auto flex w-full max-w-[1440px] justify-between gap-6 border-t border-admin-line px-[42px] pt-6 pb-7 text-[0.78rem] text-admin-muted [@media(max-width:760px)]:hidden [@media(min-width:761px)_and_(max-width:1060px)]:px-7">
           <span>EntreLaços · Painel administrativo</span>
           <span>Feito para cuidar de cada detalhe.</span>
         </footer>
       </div>
 
       {siteId && (
-        <nav className="mobile-navigation" aria-label="Navegação do casamento">
-          <AdminNavigation area={area} items={navigation} />
+        <nav
+          className="fixed right-0 bottom-0 left-0 z-[8] hidden border-t border-admin-line bg-[rgb(255_253_249_/_96%)] px-2.5 pt-2 pb-[calc(8px+env(safe-area-inset-bottom))] shadow-[0_-8px_24px_rgb(68_49_36_/_8%)] [@media(max-width:760px)]:block"
+          aria-label="Navegação do casamento"
+        >
+          <AdminNavigation area={area} items={navigation} mobile />
         </nav>
       )}
       <Toaster />
@@ -105,20 +130,34 @@ export function AdminShell({
 function AdminNavigation({
   items,
   area,
+  mobile = false,
 }: {
   items: ReturnType<typeof getSiteNavigation>;
   area?: SiteArea;
+  mobile?: boolean;
 }) {
   return (
-    <div className="admin-navigation">
+    <div className={cn("grid gap-1", mobile && "flex justify-around gap-0.5")}>
       {items.map((item) => (
         <Link
-          className={`admin-nav-link${item.area === area ? " is-active" : ""}`}
+          className={cn(
+            mobile
+              ? "grid min-h-[54px] flex-1 basis-0 place-items-center gap-[3px] px-[3px] py-1.5 text-center text-[0.65rem] text-admin-muted no-underline"
+              : "flex min-h-[42px] items-center gap-3 rounded-[9px] px-3 py-2 text-[0.9rem] text-admin-muted no-underline transition-[background,color] duration-150 ease-in-out motion-reduce:transition-none hover:bg-admin-terracotta-wash hover:text-admin-terracotta-deep",
+            item.area === area &&
+              "bg-admin-terracotta-wash font-bold text-admin-terracotta-deep",
+          )}
           to={item.href}
           aria-current={item.area === area ? "page" : undefined}
           key={item.area}
         >
-          <span className="admin-nav-icon" aria-hidden="true">
+          <span
+            className={cn(
+              "grid w-5 place-items-center text-[1.1rem] leading-none",
+              mobile && "text-base",
+            )}
+            aria-hidden="true"
+          >
             {navigationIcon(item.area)}
           </span>
           <span>{item.label}</span>
@@ -156,30 +195,39 @@ function AccountMenu({
     <Popover>
       <PopoverTrigger
         aria-label={`Abrir menu de ${actor.user.name}`}
-        className="account-trigger"
+        className="grid size-[42px] shrink-0 place-items-center rounded-full border border-[rgb(142_58_42_/_22%)] bg-admin-terracotta-wash text-[0.78rem] font-extrabold tracking-[0.04em] text-admin-terracotta-deep transition-colors motion-reduce:transition-none hover:border-admin-terracotta hover:bg-admin-terracotta hover:text-[#fffaf6] aria-expanded:border-admin-terracotta aria-expanded:bg-admin-terracotta aria-expanded:text-[#fffaf6]"
         render={<button type="button" />}
       >
         {initials}
       </PopoverTrigger>
-      <PopoverContent align="end" className="account-popover">
-        <div className="account-popover-heading">
+      <PopoverContent
+        align="end"
+        className="z-10 w-[min(320px,calc(100vw-32px))] rounded-[14px] border border-admin-line bg-admin-surface p-[18px] shadow-admin"
+      >
+        <div className="flex items-center gap-3">
           <span
-            className="account-avatar account-avatar-large"
+            className="grid size-12 shrink-0 place-items-center rounded-full border border-[rgb(142_58_42_/_22%)] bg-admin-terracotta-wash text-[0.78rem] font-extrabold tracking-[0.04em] text-admin-terracotta-deep"
             aria-hidden="true"
           >
             {initials}
           </span>
-          <div>
-            <strong>{actor.user.name}</strong>
-            <span>{actor.user.email}</span>
+          <div className="grid min-w-0 gap-[3px]">
+            <strong className="truncate">{actor.user.name}</strong>
+            <span className="truncate text-[0.82rem] text-admin-muted">
+              {actor.user.email}
+            </span>
           </div>
         </div>
-        <div className="account-role">
+        <div className="my-4 border-t border-admin-line pt-3.5 text-[0.78rem] text-admin-muted">
           {actor.user.role === "OWNER"
             ? "Proprietário"
             : "Administrador do casamento"}
         </div>
-        <button className="account-logout" type="button" onClick={onLogout}>
+        <button
+          className="min-h-[38px] w-full rounded-lg border border-admin-line bg-transparent px-3 py-2 text-left text-admin-terracotta-deep hover:bg-admin-terracotta-wash"
+          type="button"
+          onClick={onLogout}
+        >
           Sair
         </button>
       </PopoverContent>
@@ -188,5 +236,9 @@ function AccountMenu({
 }
 
 export function ShellLoading({ children }: { children: ReactNode }) {
-  return <main className="panel-loading-shell">{children}</main>;
+  return (
+    <main className="grid min-h-screen place-items-center bg-admin-canvas p-6 text-admin-muted">
+      {children}
+    </main>
+  );
 }

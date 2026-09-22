@@ -35,6 +35,7 @@ import {
   useMemo,
   useState,
 } from "react";
+import { adminStyles, displayHeading } from "../lib/adminStyles";
 import { ApiError, apiRequest } from "../lib/apiClient";
 import { listenForGuestGroupsChanged } from "./guestGroupsRefresh";
 import {
@@ -94,7 +95,7 @@ function RsvpFilterField({
   children: ReactNode;
 }) {
   return (
-    <div className="field">
+    <div className="grid min-w-0 flex-1 gap-2 text-[0.88rem] font-semibold text-admin-graphite">
       <span id={`${id}-label`}>{label}</span>
       {children}
     </div>
@@ -378,14 +379,21 @@ export function RsvpSection({ siteId, lifecycle }: Props) {
   }
 
   return (
-    <section className="panel-section rsvp-admin" aria-labelledby="rsvp-title">
-      <div className="guest-groups-heading">
+    <section className={adminStyles.card} aria-labelledby="rsvp-title">
+      <div className="flex items-end justify-between gap-3.5 [@media(max-width:760px)]:grid [@media(max-width:760px)]:grid-cols-1">
         <div>
-          <h2 id="rsvp-title">Confirmações de presença</h2>
-          <p>Consulte e ajuste a resposta individual de cada convidado.</p>
+          <h2
+            className={`m-0 mb-[18px] text-[clamp(1.8rem,3vw,2.7rem)] ${displayHeading}`}
+            id="rsvp-title"
+          >
+            Confirmações de presença
+          </h2>
+          <p className="leading-[1.6]">
+            Consulte e ajuste a resposta individual de cada convidado.
+          </p>
         </div>
         <div
-          className="inline-actions"
+          className="flex flex-wrap items-center gap-3.5"
           role="tablist"
           aria-label="Visões de confirmação"
         >
@@ -409,12 +417,20 @@ export function RsvpSection({ siteId, lifecycle }: Props) {
           </Button>
         </div>
       </div>
-      {error && !deadlineOpen && <p role="alert">{error}</p>}
-      {notice && <p role="status">{notice}</p>}
+      {error && !deadlineOpen && (
+        <p className={adminStyles.alert} role="alert">
+          {error}
+        </p>
+      )}
+      {notice && (
+        <p className="my-3.5 leading-[1.6] text-admin-muted" role="status">
+          {notice}
+        </p>
+      )}
 
       {tab === "current" ? (
         <>
-          <Card className="rsvp-deadline-summary">
+          <Card className="mb-6 rounded-[14px] border border-admin-line bg-admin-surface p-[26px] shadow-none">
             <CardHeader>
               <CardTitle>Prazo de confirmação</CardTitle>
               <CardDescription>
@@ -423,7 +439,7 @@ export function RsvpSection({ siteId, lifecycle }: Props) {
                   : "Nenhum prazo configurado."}
               </CardDescription>
             </CardHeader>
-            <CardContent className="inline-actions">
+            <CardContent className={adminStyles.inline}>
               <Button
                 type="button"
                 disabled={inactive || pending}
@@ -450,17 +466,25 @@ export function RsvpSection({ siteId, lifecycle }: Props) {
               else cancelDeadlineEdit();
             }}
           >
-            <DialogContent>
-              <DialogTitle>Editar prazo de confirmação</DialogTitle>
-              <DialogDescription>
+            <DialogContent className={adminStyles.dialog}>
+              <DialogTitle
+                className={`font-admin-display text-4xl font-normal ${displayHeading}`}
+              >
+                Editar prazo de confirmação
+              </DialogTitle>
+              <DialogDescription className="leading-[1.6] text-admin-muted">
                 Use a data e hora local junto do fuso IANA correspondente.
               </DialogDescription>
-              {error && <p role="alert">{error}</p>}
-              <form
-                className="data-form form-grid rsvp-deadline-form"
-                onSubmit={saveDeadline}
-              >
-                <label htmlFor="rsvp-deadline-date">
+              {error && (
+                <p className={adminStyles.alert} role="alert">
+                  {error}
+                </p>
+              )}
+              <form className={adminStyles.formGrid} onSubmit={saveDeadline}>
+                <label
+                  className="grid gap-2 text-[0.88rem] font-semibold text-admin-graphite"
+                  htmlFor="rsvp-deadline-date"
+                >
                   Data do prazo
                   <DatePicker
                     id="rsvp-deadline-date"
@@ -472,7 +496,10 @@ export function RsvpSection({ siteId, lifecycle }: Props) {
                     }}
                   />
                 </label>
-                <label htmlFor="rsvp-deadline-time">
+                <label
+                  className="grid gap-2 text-[0.88rem] font-semibold text-admin-graphite"
+                  htmlFor="rsvp-deadline-time"
+                >
                   Horário do prazo
                   <Input
                     id="rsvp-deadline-time"
@@ -482,7 +509,10 @@ export function RsvpSection({ siteId, lifecycle }: Props) {
                     onChange={(event) => setDeadlineTime(event.target.value)}
                   />
                 </label>
-                <label htmlFor="rsvp-deadline-timezone">
+                <label
+                  className="grid gap-2 text-[0.88rem] font-semibold text-admin-graphite"
+                  htmlFor="rsvp-deadline-timezone"
+                >
                   Fuso horário
                   <Input
                     id="rsvp-deadline-timezone"
@@ -496,7 +526,7 @@ export function RsvpSection({ siteId, lifecycle }: Props) {
                     placeholder="America/Sao_Paulo"
                   />
                 </label>
-                <div className="inline-actions">
+                <div className={adminStyles.inline}>
                   <Button type="submit" disabled={inactive || pending}>
                     {pending ? "Salvando…" : "Salvar prazo"}
                   </Button>
@@ -518,24 +548,33 @@ export function RsvpSection({ siteId, lifecycle }: Props) {
           </Dialog>
 
           {view && (
-            <Card className="facts" aria-label="Totais de confirmação">
-              <CardContent>
+            <Card
+              className="grid grid-cols-[repeat(auto-fit,minmax(170px,1fr))] gap-[22px] rounded-[14px] border border-admin-line bg-admin-surface p-[26px] shadow-none"
+              aria-label="Totais de confirmação"
+            >
+              <CardContent className="grid w-full grid-cols-[repeat(auto-fit,minmax(170px,1fr))] items-center gap-[22px]">
                 <div>
                   <strong>Pendentes</strong>
-                  <p>{view.totals.pending}</p>
+                  <p className="mt-2 leading-[1.6] text-admin-muted">
+                    {view.totals.pending}
+                  </p>
                 </div>
                 <div>
                   <strong>Confirmados</strong>
-                  <p>{view.totals.confirmed}</p>
+                  <p className="mt-2 leading-[1.6] text-admin-muted">
+                    {view.totals.confirmed}
+                  </p>
                 </div>
                 <div>
                   <strong>Não comparecerão</strong>
-                  <p>{view.totals.declined}</p>
+                  <p className="mt-2 leading-[1.6] text-admin-muted">
+                    {view.totals.declined}
+                  </p>
                 </div>
               </CardContent>
             </Card>
           )}
-          <div className="data-form form-grid rsvp-filters">
+          <div className="my-7 grid min-w-0 grid-cols-[repeat(auto-fit,minmax(min(100%,240px),1fr))] items-end gap-[18px]">
             <RsvpFilterField id="rsvp-group-filter" label="Grupo">
               <Select
                 value={groupId || "all"}
@@ -583,7 +622,10 @@ export function RsvpSection({ siteId, lifecycle }: Props) {
               </Select>
             </RsvpFilterField>
           </div>
-          <Card className="rsvp-export" aria-labelledby="rsvp-export-title">
+          <Card
+            className="my-6 items-stretch rounded-[14px] border border-admin-line bg-admin-surface p-[26px] shadow-none [&_[data-slot=card-header]]:w-full [&_h3]:mb-2"
+            aria-labelledby="rsvp-export-title"
+          >
             <CardHeader className="flex w-full flex-row items-start justify-between">
               <div>
                 <CardTitle id="rsvp-export-title">Exportar relatório</CardTitle>
@@ -593,7 +635,7 @@ export function RsvpSection({ siteId, lifecycle }: Props) {
                 </CardDescription>
               </div>
               <CardAction>
-                <div className="inline-actions">
+                <div className={adminStyles.inline}>
                   <Button
                     type="button"
                     size="sm"
@@ -615,7 +657,10 @@ export function RsvpSection({ siteId, lifecycle }: Props) {
               </CardAction>
             </CardHeader>
             <CardContent>
-              <label className="checkbox-label" htmlFor="rsvp-include-phone">
+              <label
+                className={adminStyles.checkbox}
+                htmlFor="rsvp-include-phone"
+              >
                 <Checkbox
                   id="rsvp-include-phone"
                   checked={includePhone}
@@ -629,13 +674,20 @@ export function RsvpSection({ siteId, lifecycle }: Props) {
             </CardContent>
           </Card>
           {loading ? (
-            <p role="status">Carregando confirmações…</p>
+            <p className="leading-[1.6]" role="status">
+              Carregando confirmações…
+            </p>
           ) : view?.groups.length === 0 ? (
-            <p>Nenhum convidado corresponde aos filtros.</p>
+            <p className="leading-[1.6]">
+              Nenhum convidado corresponde aos filtros.
+            </p>
           ) : (
-            <div className="rsvp-group-list">
+            <div className="mt-6 grid gap-3">
               {view?.groups.map((group) => (
-                <Card className="rsvp-group-card" key={group.id}>
+                <Card
+                  className="items-stretch rounded-[10px] border border-admin-line bg-admin-surface p-5 [@media(max-width:760px)]:grid [@media(max-width:760px)]:grid-cols-1 [&_[data-slot=card-header]]:w-full [&_h3]:mb-2"
+                  key={group.id}
+                >
                   <CardHeader className="flex w-full flex-row items-start justify-between">
                     <div>
                       <CardTitle>{group.name}</CardTitle>
@@ -650,9 +702,12 @@ export function RsvpSection({ siteId, lifecycle }: Props) {
                     </div>
                   </CardHeader>
                   <CardContent>
-                    <ul className="rsvp-group-members">
+                    <ul className="m-0 list-none p-0">
                       {group.members.map((member) => (
-                        <li className="rsvp-member-row" key={member.id}>
+                        <li
+                          className="grid grid-cols-[minmax(0,1fr)_minmax(180px,260px)] items-center gap-4 border-t border-admin-line py-3 first:border-t-0 first:pt-0 last:pb-0 [@media(max-width:760px)]:grid-cols-1"
+                          key={member.id}
+                        >
                           <span>
                             {member.fullName}
                             {member.isRepresentative ? " · representante" : ""}
@@ -692,10 +747,11 @@ export function RsvpSection({ siteId, lifecycle }: Props) {
               ))}
             </div>
           )}
-          <footer className="rsvp-save-bar">
+          <footer className="fixed right-0 bottom-0 left-[248px] z-[7] flex justify-center border-t border-admin-line bg-admin-canvas px-[42px] pt-4 pb-6 shadow-[0_-8px_24px_rgb(68_49_36_/_8%)] [@media(max-width:760px)]:right-0 [@media(max-width:760px)]:bottom-[calc(74px+env(safe-area-inset-bottom))] [@media(max-width:760px)]:left-0 [@media(max-width:760px)]:px-5 [@media(max-width:760px)]:pt-3 [@media(max-width:760px)]:pb-4 [@media(min-width:761px)_and_(max-width:1060px)]:left-[216px] [@media(min-width:761px)_and_(max-width:1060px)]:px-7">
             <Button
               type="button"
               disabled={inactive || pending || changedMembers.length === 0}
+              className="w-[70%] [@media(max-width:760px)]:w-full"
               onClick={() => void saveRsvp()}
             >
               {changedMembers.length === 0
@@ -706,7 +762,7 @@ export function RsvpSection({ siteId, lifecycle }: Props) {
         </>
       ) : (
         <>
-          <div className="data-form form-grid rsvp-filters">
+          <div className="my-7 grid min-w-0 grid-cols-[repeat(auto-fit,minmax(min(100%,240px),1fr))] items-end gap-[18px]">
             <RsvpFilterField id="rsvp-history-group" label="Grupo">
               <Select
                 value={historyGroupId || "all"}
@@ -786,11 +842,13 @@ export function RsvpSection({ siteId, lifecycle }: Props) {
             </RsvpFilterField>
           </div>
           {loading ? (
-            <p role="status">Carregando histórico…</p>
+            <p className="leading-[1.6]" role="status">
+              Carregando histórico…
+            </p>
           ) : history?.entries.length === 0 ? (
-            <p>Nenhuma alteração registrada.</p>
+            <p className="leading-[1.6]">Nenhuma alteração registrada.</p>
           ) : (
-            <ol className="rsvp-history">
+            <ol className="grid gap-3 pl-6 leading-[1.6]">
               {history?.entries.map((entry) => (
                 <li key={entry.id}>
                   <strong>{entry.memberDisplayName}</strong> em{" "}

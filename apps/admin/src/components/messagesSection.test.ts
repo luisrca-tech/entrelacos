@@ -10,10 +10,6 @@ const guestSource = readFileSync(
   resolve(import.meta.dirname, "GuestGroupsSection.tsx"),
   "utf8",
 );
-const stylesSource = readFileSync(
-  resolve(import.meta.dirname, "../styles.css"),
-  "utf8",
-);
 
 describe("message cards follow guest group card chrome", () => {
   it("uses the guest-group header with compact CardAction buttons", () => {
@@ -30,9 +26,7 @@ describe("message cards follow guest group card chrome", () => {
   });
 
   it("keeps message cards on the shared card surface", () => {
-    expect(messagesSource).toContain('className="message-group-card"');
-    expect(stylesSource).not.toContain(
-      ".message-group-card,\n.sms-usage-grid article",
-    );
+    expect(messagesSource).toContain("border-admin-line");
+    expect(messagesSource).toContain("bg-admin-surface");
   });
 });

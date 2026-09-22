@@ -11,10 +11,6 @@ const guestAccessSource = readFileSync(
   resolve(import.meta.dirname, "GuestAccessPanel.tsx"),
   "utf8",
 );
-const guestAccessStyles = readFileSync(
-  resolve(import.meta.dirname, "styles.css"),
-  "utf8",
-);
 
 const message = {
   id: "message-a",
@@ -43,6 +39,8 @@ describe("family message form", () => {
 
     expect(html).toContain("15 / 1000");
     expect(html).toContain("Viva os noivos!");
+    expect(html).toContain("grid gap-4 border-t border-template-line pt-6");
+    expect(html).toContain("data-[invalid=true]:font-bold");
     expect(html).toContain('disabled=""');
   });
 
@@ -86,9 +84,8 @@ describe("family message form", () => {
 
 describe("guest lookup form", () => {
   it("uses the localized application validation path", () => {
-    expect(guestAccessSource).toMatch(
-      /<form\s+className="entrelacos-guest-access__form"\s+noValidate\s+onSubmit=\{startLookup\}/,
-    );
+    expect(guestAccessSource).toContain("className={guestAccessFormClass}");
+    expect(guestAccessSource).toContain("onSubmit={startLookup}");
     expect(guestAccessSource).toContain(
       "Informe o nome completo e um celular brasileiro válido.",
     );
@@ -105,18 +102,13 @@ describe("guest lookup form", () => {
   });
 
   it("centers a wider confirmation column on desktop without wrapping the title", () => {
-    expect(guestAccessStyles).toMatch(
-      /@media \(min-width:\s*961px\)[\s\S]*?\.entrelacos-guest-access\s*\{[\s\S]*?justify-items:\s*center;/,
+    expect(guestAccessSource).toContain("min-[961px]:justify-items-center");
+    expect(guestAccessSource).toContain(
+      "min-[961px]:w-full min-[961px]:max-w-[52rem]",
     );
-    expect(guestAccessStyles).toMatch(
-      /@media \(min-width:\s*961px\)[\s\S]*?\.entrelacos-guest-access__intro[\s\S]*?max-width:\s*52rem;/,
-    );
-    expect(guestAccessStyles).toMatch(
-      /@media \(min-width:\s*961px\)[\s\S]*?\.entrelacos-guest-access h2\s*\{[\s\S]*?white-space:\s*nowrap;/,
-    );
-    expect(guestAccessStyles).toMatch(
-      /@media \(min-width:\s*961px\)[\s\S]*?\.entrelacos-guest-access__intro > p:last-child[\s\S]*?max-width:\s*38rem;/,
-    );
+    expect(guestAccessSource).toContain("min-[961px]:whitespace-nowrap");
+    expect(guestAccessSource).toContain("min-[961px]:max-w-[38rem]");
+    expect(guestAccessSource).toContain("[@media(max-width:560px)]:flex-col");
   });
 });
 

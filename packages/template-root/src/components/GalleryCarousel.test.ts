@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
@@ -41,6 +43,11 @@ const content = {
     },
   ],
 };
+
+const source = readFileSync(
+  resolve(import.meta.dirname, "GalleryCarousel.tsx"),
+  "utf8",
+);
 
 describe("GalleryCarousel", () => {
   it("tracks Embla selection and removes both listeners", () => {
@@ -110,5 +117,11 @@ describe("GalleryCarousel", () => {
     );
     expect(source).not.toContain("Previous slide");
     expect(source).not.toContain("Next slide");
+  });
+
+  it("disables gallery hover transitions when reduced motion is requested", () => {
+    expect(source).toContain(
+      "transition-[opacity,transform,background-color] duration-[180ms] motion-reduce:transition-none",
+    );
   });
 });

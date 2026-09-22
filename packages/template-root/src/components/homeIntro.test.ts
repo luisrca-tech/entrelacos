@@ -13,8 +13,8 @@ const componentSource = readFileSync(
   resolve(import.meta.dirname, "HomeIntro.astro"),
   "utf8",
 );
-const stylesSource = readFileSync(
-  resolve(import.meta.dirname, "../styles.css"),
+const themeSource = readFileSync(
+  resolve(import.meta.dirname, "../theme.css"),
   "utf8",
 );
 
@@ -75,9 +75,7 @@ describe("home intro sequencing", () => {
     expect(componentSource).toMatch(
       /window\.requestAnimationFrame\(\(\) => \{\s*window\.requestAnimationFrame\(revealHeroChrome\);\s*\}\);/s,
     );
-    expect(stylesSource).toMatch(
-      /\.template-hero\[data-template-has-intro="true"\]:not\(\s*\[data-template-intro-complete="true"\]\s*\)/s,
-    );
+    expect(componentSource).toContain("data-template-intro-pending");
   });
 
   it("skips the hero handoff when the restored viewport is not the hero", () => {
@@ -93,11 +91,9 @@ describe("home intro sequencing", () => {
     expect(componentSource).toContain("shouldExpandIntroIntoHero");
     expect(componentSource).toContain('templateIntroPhase = "dismiss"');
     expect(componentSource).toContain("OVERLAY_FADE_MS");
-    expect(stylesSource).toContain(
-      '.template-home-intro[data-template-intro-phase="dismiss"]',
-    );
-    expect(stylesSource).not.toMatch(
-      /\.template-home-intro\[data-template-intro-phase="dismiss"\][\s\S]{0,180}100vw/,
+    expect(componentSource).toContain("data-[template-intro-phase=dismiss]");
+    expect(componentSource).not.toContain(
+      "data-[template-intro-phase=dismiss]:w-screen",
     );
   });
 
@@ -110,33 +106,26 @@ describe("home intro sequencing", () => {
       /<div\s+[\s\S]*?data-template-home-intro[\s\S]*?>/,
     )?.[0];
     expect(introOpeningTag).not.toContain('aria-hidden="true"');
-    expect(stylesSource).toMatch(
-      /\.template-home-intro__skip \{[\s\S]*?position: absolute;[\s\S]*?z-index: 3;/,
-    );
+    expect(componentSource).toContain("absolute");
+    expect(componentSource).toContain("z-[3]");
   });
 
   it("keeps both split labels above and outside the intro media", () => {
-    const labelRules = Array.from(
-      stylesSource.matchAll(
-        /\.template-home-intro__label \{(?<body>[\s\S]*?)\n\}/g,
-      ),
-      (match) => match.groups?.body ?? "",
+    expect(componentSource).toContain("group/intro");
+    expect(componentSource).toContain(
+      "group-data-[template-intro-phase=split]/intro:opacity-100",
     );
-    const stageRule = stylesSource.match(
-      /\.template-home-intro__stage \{(?<body>[\s\S]*?)\n\}/,
-    )?.groups?.body;
-
-    expect(labelRules.some((rule) => rule.includes("position: fixed"))).toBe(
-      true,
+    expect(componentSource).toContain(
+      "group-data-[template-intro-phase=split]/intro:[transform:translate(-50%,calc(-100%_",
     );
-    expect(labelRules.some((rule) => rule.includes("z-index: 1"))).toBe(true);
-    expect(stageRule).toContain("z-index: 0");
-    expect(stylesSource).toContain("--template-intro-stage-height");
-    expect(stylesSource).toMatch(
-      /calc\(\s*-100%\s*-\s*var\(--template-intro-stage-height\)\s*\/\s*2\s*-\s*var\(--template-intro-label-gap\)\s*\)/s,
+    expect(componentSource).not.toContain("-translate-x-1/2 -translate-y-1/2");
+    expect(componentSource).not.toMatch(
+      /class="[^"]*\bdata-\[template-intro-phase=split\]:(?:opacity-100|w-\[)/,
     );
-    expect(stylesSource).toMatch(
-      /calc\(\s*var\(--template-intro-stage-height\)\s*\/\s*2\s*\+\s*var\(--template-intro-label-gap\)\s*\)/s,
-    );
+    expect(componentSource).toContain("fixed");
+    expect(componentSource).toContain("z-[1]");
+    expect(componentSource).toContain("--template-intro-stage-height");
+    expect(componentSource).toContain("--template-intro-label-gap");
+    expect(themeSource).toContain("template-hero-copy-intro");
   });
 });

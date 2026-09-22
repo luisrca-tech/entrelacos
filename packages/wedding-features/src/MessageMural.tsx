@@ -15,6 +15,20 @@ export type MessageMuralProps = {
 
 type MuralMessage = PublicMuralResponse["messages"][number];
 
+const muralSectionClass =
+  "grid min-w-0 gap-6 bg-[var(--template-paper,#fffdf8)] px-[clamp(2rem,5vw,4rem)] py-[clamp(2rem,5vw,4rem)] text-template-ink [@media(max-width:560px)]:px-4 [@media(max-width:560px)]:py-8";
+const muralEyebrowClass =
+  "m-0 mb-[0.8rem] text-template-muted text-[0.72rem] font-bold tracking-[0.16em] uppercase";
+const muralHeadingClass =
+  "m-0 font-template-serif text-[clamp(2.3rem,6vw,4.8rem)] font-normal leading-[0.96] tracking-[-0.05em]";
+const muralHeaderClass =
+  "flex items-end justify-between gap-6 [@media(max-width:560px)]:items-stretch [@media(max-width:560px)]:flex-col";
+const muralButtonClass =
+  "min-h-11 cursor-pointer border border-template-ink bg-transparent px-4 py-[0.65rem] text-template-ink font-[inherit] font-bold disabled:cursor-not-allowed disabled:opacity-50";
+const muralMoreButtonClass =
+  "min-h-11 cursor-pointer justify-self-center border border-template-ink bg-transparent px-4 py-[0.65rem] text-template-ink font-[inherit] font-bold disabled:cursor-not-allowed disabled:opacity-50";
+const muralStatusClass = "m-0 border border-template-line p-4";
+
 export function mergeMuralMessages(
   current: MuralMessage[],
   incoming: MuralMessage[],
@@ -127,15 +141,17 @@ export function MessageMural({
   }, [load, refreshIntervalMs, siteId]);
 
   return (
-    <section className="entrelacos-message-mural" aria-labelledby="mural-title">
-      <header>
+    <section className={muralSectionClass} aria-labelledby="mural-title">
+      <header className={muralHeaderClass}>
         <div>
-          <p className="entrelacos-guest-access__eyebrow">Recados</p>
-          <h2 id="mural-title">Mural dos convidados</h2>
+          <p className={muralEyebrowClass}>Recados</p>
+          <h2 className={muralHeadingClass} id="mural-title">
+            Mural dos convidados
+          </h2>
         </div>
         <button
           type="button"
-          className="entrelacos-message-mural__refresh"
+          className={muralButtonClass}
           disabled={loading}
           onClick={() => void load(false)}
         >
@@ -144,25 +160,32 @@ export function MessageMural({
       </header>
 
       {error && (
-        <p className="entrelacos-message-mural__status" role="alert">
+        <p className={muralStatusClass} role="alert">
           {error} As mensagens exibidas podem estar desatualizadas.
         </p>
       )}
       {!enabled && !loading ? (
-        <p className="entrelacos-message-mural__status" role="status">
+        <p className={muralStatusClass} role="status">
           O mural está desativado neste momento.
         </p>
       ) : messages.length === 0 && !loading && !error ? (
-        <p className="entrelacos-message-mural__status" role="status">
+        <p className={muralStatusClass} role="status">
           Ainda não há mensagens publicadas.
         </p>
       ) : (
-        <ul className="entrelacos-message-mural__list">
+        <ul className="m-0 grid list-none gap-4 p-0 [grid-template-columns:repeat(auto-fit,minmax(min(100%,17rem),1fr))]">
           {messages.map((message) => (
-            <li key={message.id}>
-              <blockquote>{message.text}</blockquote>
-              <p>
-                <strong>{message.authorName}</strong>
+            <li
+              className="flex min-h-56 flex-col justify-between border border-template-line bg-template-ivory p-[1.35rem]"
+              key={message.id}
+            >
+              <blockquote className="m-0 whitespace-pre-wrap break-words font-template-serif text-[1.2rem] leading-[1.5] [overflow-wrap:anywhere]">
+                {message.text}
+              </blockquote>
+              <p className="mt-8 mb-0 grid gap-[0.2rem] text-template-muted text-[0.78rem]">
+                <strong className="text-template-ink">
+                  {message.authorName}
+                </strong>
                 <span>{message.groupName}</span>
                 <time dateTime={message.createdAt}>
                   {formatMessageDate(message.createdAt)}
@@ -176,7 +199,7 @@ export function MessageMural({
       {enabled && nextCursor && (
         <button
           type="button"
-          className="entrelacos-message-mural__more"
+          className={muralMoreButtonClass}
           disabled={loadingMore}
           onClick={() => void load(true)}
         >

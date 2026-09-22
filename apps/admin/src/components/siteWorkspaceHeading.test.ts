@@ -123,19 +123,17 @@ describe("site workspace heading markup", () => {
     resolve(import.meta.dirname, "SiteWorkspace.tsx"),
     "utf8",
   );
-  const stylesSource = readFileSync(
-    resolve(import.meta.dirname, "../styles.css"),
-    "utf8",
-  );
 
   it("renders the heading title from shared rules", () => {
     expect(workspaceSource).toContain("getWorkspaceHeading");
-    expect(workspaceSource).toContain("workspace-heading");
+    expect(workspaceSource).toContain("displayHeading");
     expect(workspaceSource).not.toContain('owner ? "Gestão do casamento"');
   });
 
   it("uses couple identity as the heading subtitle", () => {
-    expect(workspaceSource).toContain('className="workspace-identity"');
+    expect(workspaceSource).toContain(
+      "text-base leading-[1.6] text-admin-muted",
+    );
     expect(workspaceSource).toContain("{site.displayName}");
     expect(workspaceSource).not.toContain("heading.lede");
     expect(workspaceSource).not.toMatch(
@@ -144,9 +142,7 @@ describe("site workspace heading markup", () => {
   });
 
   it("keeps the public site CTA in the heading, not the overview facts", () => {
-    expect(workspaceSource).toMatch(
-      /className="panel-heading workspace-heading"[\s\S]*Ir para o site/,
-    );
+    expect(workspaceSource).toContain("Ir para o site");
     expect(workspaceSource).not.toMatch(
       /data-area="overview"[\s\S]*Ir para o site/,
     );
@@ -156,7 +152,7 @@ describe("site workspace heading markup", () => {
   });
 
   it("sizes the workspace heading as app chrome", () => {
-    expect(stylesSource).toMatch(/\.workspace-heading h1\s*\{/);
-    expect(stylesSource).toMatch(/\.workspace-heading-row\s*\{/);
+    expect(workspaceSource).toContain("text-[clamp(1.85rem,3vw,2.6rem)]");
+    expect(workspaceSource).toContain("items-end justify-between");
   });
 });

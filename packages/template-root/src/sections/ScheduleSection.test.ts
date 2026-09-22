@@ -20,12 +20,9 @@ describe("ScheduleSection host-owned practical content", () => {
   });
 
   it("separates the guidance title from the first practical item", () => {
-    const styles = readFileSync(
-      resolve(import.meta.dirname, "../styles.css"),
-      "utf8",
-    );
-    expect(styles).toMatch(
-      /\.template-schedule__guidance\s*>\s*h3\s*\{[^}]*margin-bottom:\s*1\.75rem;/,
+    expect(source).toContain("mb-7");
+    expect(source).not.toContain(
+      '<strong class="text-[clamp(1.4rem,2.5vw,2rem)]',
     );
   });
 });
