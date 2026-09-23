@@ -53,6 +53,7 @@ import {
 import { adminStyles, displayHeading } from "../lib/adminStyles";
 import { ApiError, apiRequest } from "../lib/apiClient";
 import type { SiteArea } from "./adminNavigation";
+import { formatBrazilianDate } from "./brazilianDate";
 import { InvitationsSection } from "./InvitationsSection";
 import { MessagesSection } from "./MessagesSection";
 import { OverflowMenu } from "./OverflowMenu";
@@ -437,11 +438,11 @@ export function SiteWorkspace({
             >
               {(
                 [
-                  ["Casamento", site.eventDate],
+                  ["Casamento", formatBrazilianDate(site.eventDate)],
                   [
                     "Vigência",
                     site.termStartsOn
-                      ? `${site.termStartsOn} a ${site.termEndsOn}`
+                      ? `${formatBrazilianDate(site.termStartsOn)} a ${formatBrazilianDate(site.termEndsOn ?? "")}`
                       : "Aguardando aprovação",
                   ],
                   ["Publicação", labels[site.publicationState]],
