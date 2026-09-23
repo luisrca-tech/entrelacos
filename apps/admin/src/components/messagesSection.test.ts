@@ -6,27 +6,24 @@ const messagesSource = readFileSync(
   resolve(import.meta.dirname, "MessagesSection.tsx"),
   "utf8",
 );
-const guestSource = readFileSync(
-  resolve(import.meta.dirname, "GuestGroupsSection.tsx"),
-  "utf8",
-);
-
-describe("message cards follow guest group card chrome", () => {
-  it("uses the guest-group header with compact CardAction buttons", () => {
-    expect(guestSource).toContain("CardAction");
-    expect(messagesSource).toContain(
-      'className="flex w-full flex-row items-start justify-between"',
-    );
-    expect(messagesSource).toContain("CardAction");
+describe("message rows use the invitation surface", () => {
+  it("keeps moderation actions on each invitation row", () => {
+    expect(messagesSource).toContain("Bloquear envios");
+    expect(messagesSource).toContain("Remover mensagem");
     expect(messagesSource).toContain('size="sm"');
-    expect(messagesSource).toMatch(/CardAction[\s\S]*Bloquear envios/);
-    expect(messagesSource).toMatch(/CardAction[\s\S]*Remover mensagem/);
-    expect(messagesSource).toContain("CardDescription");
+    expect(messagesSource).not.toContain("CardAction");
+    expect(messagesSource).not.toContain("clamp(1.8rem");
     expect(messagesSource).not.toContain("Badge");
   });
 
-  it("keeps message cards on the shared card surface", () => {
-    expect(messagesSource).toContain("border-admin-line");
-    expect(messagesSource).toContain("bg-admin-surface");
+  it("keeps messages on one bordered surface", () => {
+    expect(messagesSource).toContain("adminStyles.surface");
+    expect(messagesSource).toContain("border-b border-admin-line");
+  });
+
+  it("toasts moderation results instead of leaving a status line", () => {
+    expect(messagesSource).toContain("toast.success(success)");
+    expect(messagesSource).toContain("toast.error(message)");
+    expect(messagesSource).not.toContain("setNotice");
   });
 });

@@ -3,8 +3,8 @@ import { describe, expect, it } from "vitest";
 import {
   adminRsvpWriteInputSchema,
   block4EndpointPaths,
-  familyRsvpResponseSchema,
-  familyRsvpWriteInputSchema,
+  invitationRsvpResponseSchema,
+  invitationRsvpWriteInputSchema,
   rsvpDeadlineSchema,
   rsvpErrorCodeSchema,
   rsvpHistoryQuerySchema,
@@ -16,7 +16,7 @@ import {
 const requestId = randomUUID();
 
 describe("Block 4 RSVP contracts", () => {
-  it("accepts the three member states and rejects unknown states", () => {
+  it("accepts the three guest states and rejects unknown states", () => {
     expect(rsvpStateSchema.options).toEqual([
       "PENDING",
       "CONFIRMED",
@@ -72,66 +72,67 @@ describe("Block 4 RSVP contracts", () => {
     ).toThrow();
   });
 
-  it("requires UUID idempotency and member-level expected revisions", () => {
+  it("requires UUID idempotency and guest-level expected revisions", () => {
     const payload = {
       requestId,
-      members: [
-        { memberId: "member-1", state: "CONFIRMED", expectedRevision: 0 },
-        { memberId: "member-2", state: "PENDING", expectedRevision: 4 },
+      guests: [
+        { guestId: "guest-1", state: "CONFIRMED", expectedRevision: 0 },
+        { guestId: "guest-2", state: "PENDING", expectedRevision: 4 },
       ],
     } as const;
 
-    expect(familyRsvpWriteInputSchema.parse(payload)).toEqual(payload);
+    expect(invitationRsvpWriteInputSchema.parse(payload)).toEqual(payload);
     expect(adminRsvpWriteInputSchema.parse(payload)).toEqual(payload);
     expect(() =>
-      familyRsvpWriteInputSchema.parse({
+      invitationRsvpWriteInputSchema.parse({
         ...payload,
         requestId: "request-1",
       }),
     ).toThrow();
     expect(() =>
-      familyRsvpWriteInputSchema.parse({
+      invitationRsvpWriteInputSchema.parse({
         ...payload,
-        members: [
-          { memberId: "member-1", state: "CONFIRMED", expectedRevision: -1 },
+        guests: [
+          { guestId: "guest-1", state: "CONFIRMED", expectedRevision: -1 },
         ],
       }),
     ).toThrow();
     expect(() =>
-      familyRsvpWriteInputSchema.parse({
+      invitationRsvpWriteInputSchema.parse({
         ...payload,
-        members: [
-          { memberId: "member-1", state: "CONFIRMED", expectedRevision: 0 },
-          { memberId: "member-1", state: "DECLINED", expectedRevision: 0 },
+        guests: [
+          { guestId: "guest-1", state: "CONFIRMED", expectedRevision: 0 },
+          { guestId: "guest-1", state: "DECLINED", expectedRevision: 0 },
         ],
       }),
     ).toThrow();
     expect(() =>
-      familyRsvpWriteInputSchema.parse({ ...payload, actorId: "admin-1" }),
+      invitationRsvpWriteInputSchema.parse({ ...payload, actorId: "admin-1" }),
     ).toThrow();
   });
 
   it("keeps public and administrative reads explicit and strict", () => {
     expect(
-      familyRsvpResponseSchema.parse({
+      invitationRsvpResponseSchema.parse({
         siteId: "site-demo",
-        groupId: "group-demo",
+        invitationId: "invitation-demo",
+        invitationName: "Família Silva",
         deadlineAt: null,
         deadlineTimezone: null,
         serverNow: "2027-04-01T18:00:00.000Z",
         canEdit: true,
         readOnlyReason: null,
-        members: [
+        guests: [
           {
-            id: "member-1",
+            id: "guest-1",
             fullName: "Ana Silva",
-            isRepresentative: true,
+            guestType: "ADULT",
             state: "CONFIRMED",
             revision: 1,
           },
         ],
       }),
-    ).toMatchObject({ siteId: "site-demo", groupId: "group-demo" });
+    ).toMatchObject({ siteId: "site-demo", invitationId: "invitation-demo" });
 
     expect(
       siteRsvpResponseSchema.parse({
@@ -140,16 +141,16 @@ describe("Block 4 RSVP contracts", () => {
         deadlineTimezone: "America/Sao_Paulo",
         lifecycle: "ACTIVE",
         totals: { pending: 0, confirmed: 1, declined: 0 },
-        groups: [
+        invitations: [
           {
-            id: "group-demo",
+            id: "invitation-demo",
             name: "Família Silva",
             totals: { pending: 0, confirmed: 1, declined: 0 },
-            members: [
+            guests: [
               {
-                id: "member-1",
+                id: "guest-1",
                 fullName: "Ana Silva",
-                isRepresentative: true,
+                guestType: "ADULT",
                 state: "CONFIRMED",
                 revision: 1,
               },
@@ -160,12 +161,12 @@ describe("Block 4 RSVP contracts", () => {
     ).toMatchObject({ siteId: "site-demo" });
 
     expect(() =>
-      familyRsvpResponseSchema.parse({
+      invitationRsvpResponseSchema.parse({
         siteId: "site-demo",
-        groupId: "group-demo",
+        invitationId: "invitation-demo",
         deadlineAt: null,
         deadlineTimezone: null,
-        members: [],
+        guests: [],
         phone: "+5511999999999",
       }),
     ).toThrow();
@@ -176,16 +177,16 @@ describe("Block 4 RSVP contracts", () => {
       rsvpHistoryQuerySchema.parse({
         cursor: "cursor-1",
         limit: "25",
-        groupId: "group-demo",
-        memberId: "member-1",
-        actorType: "FAMILY",
+        invitationId: "invitation-demo",
+        guestId: "guest-1",
+        actorType: "INVITATION",
       }),
     ).toEqual({
       cursor: "cursor-1",
       limit: 25,
-      groupId: "group-demo",
-      memberId: "member-1",
-      actorType: "FAMILY",
+      invitationId: "invitation-demo",
+      guestId: "guest-1",
+      actorType: "INVITATION",
     });
     expect(() =>
       rsvpHistoryQuerySchema.parse({ cursor: "cursor-1", unknown: true }),
@@ -196,14 +197,14 @@ describe("Block 4 RSVP contracts", () => {
           {
             id: "history-1",
             siteId: "site-demo",
-            groupId: "group-demo",
-            groupName: "Família Silva",
-            memberId: "member-1",
-            memberDisplayName: "Ana Silva",
+            invitationId: "invitation-demo",
+            invitationName: "Família Silva",
+            guestId: "guest-1",
+            guestDisplayName: "Ana Silva",
             beforeState: "PENDING",
             afterState: "CONFIRMED",
-            actorType: "FAMILY",
-            actorId: "member-1",
+            actorType: "INVITATION",
+            actorId: "invitation-1",
             actorDisplayName: "Ana Silva",
             occurredAt: "2027-04-01T18:00:00.000Z",
           },
@@ -224,8 +225,8 @@ describe("Block 4 RSVP contracts", () => {
 
   it("freezes the Block 4 HTTP surface", () => {
     expect(block4EndpointPaths).toEqual({
-      publicFamilyRsvpRead: "GET /v1/public/family/rsvp",
-      publicFamilyRsvpWrite: "POST /v1/public/family/rsvp",
+      publicInvitationRsvpRead: "GET /v1/public/invitation/rsvp",
+      publicInvitationRsvpWrite: "POST /v1/public/invitation/rsvp",
       siteRsvpRead: "GET /v1/sites/:siteId/rsvp",
       siteRsvpWrite: "POST /v1/sites/:siteId/rsvp",
       siteRsvpDeadlineRead: "GET /v1/sites/:siteId/rsvp/deadline",

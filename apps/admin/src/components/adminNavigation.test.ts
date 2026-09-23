@@ -15,16 +15,18 @@ describe("admin shell navigation", () => {
   it("shows settings only to owners", () => {
     expect(
       getSiteNavigation("OWNER", "site-1").map((item) => item.area),
-    ).toEqual(["guests", "rsvp", "messages", "settings"]);
+    ).toEqual(["invitations", "messages", "settings"]);
     expect(
       getSiteNavigation("SITE_ADMIN", "site-1").map((item) => item.area),
-    ).toEqual(["guests", "rsvp", "messages"]);
+    ).toEqual(["invitations", "messages"]);
   });
 
-  it("defaults every site entry to guests and fails closed there", () => {
-    expect(resolveSiteArea("SITE_ADMIN", undefined)).toBe("guests");
-    expect(resolveSiteArea("SITE_ADMIN", "settings")).toBe("guests");
+  it("defaults every site entry to invitations and rejects removed pages", () => {
+    expect(resolveSiteArea("SITE_ADMIN", undefined)).toBe("invitations");
+    expect(resolveSiteArea("SITE_ADMIN", "settings")).toBe("invitations");
     expect(resolveSiteArea("OWNER", "settings")).toBe("settings");
-    expect(resolveSiteArea("SITE_ADMIN", "unknown")).toBe("guests");
+    expect(resolveSiteArea("SITE_ADMIN", "unknown")).toBe("invitations");
+    expect(resolveSiteArea("SITE_ADMIN", "guests")).toBe("invitations");
+    expect(resolveSiteArea("SITE_ADMIN", "rsvp")).toBe("invitations");
   });
 });

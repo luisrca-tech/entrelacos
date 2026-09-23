@@ -1,5 +1,13 @@
 import type { PublicMuralResponse } from "@entrelacos/contracts";
+import { toast } from "@entrelacos/ui/toaster";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  browserGuestSessionStorage,
+  type GuestSessionStorage,
+  guestSessionEventName,
+  readGuestSession,
+} from "./guestAccess";
+import { InvitationMessageDialog } from "./InvitationMessageDialog";
 import {
   getMessageErrorMessage,
   muralRefreshEventName,
@@ -11,6 +19,7 @@ export type MessageMuralProps = {
   apiOrigin: string;
   fetcher?: typeof fetch;
   refreshIntervalMs?: number;
+  storage?: GuestSessionStorage;
 };
 
 type MuralMessage = PublicMuralResponse["messages"][number];
@@ -23,8 +32,11 @@ const muralHeadingClass =
   "m-0 font-template-serif text-[clamp(2.3rem,6vw,4.8rem)] font-normal leading-[0.96] tracking-[-0.05em]";
 const muralHeaderClass =
   "flex items-end justify-between gap-6 [@media(max-width:560px)]:items-stretch [@media(max-width:560px)]:flex-col";
+const muralActionsClass = "flex flex-wrap items-center gap-2";
 const muralButtonClass =
   "min-h-11 cursor-pointer border border-template-ink bg-transparent px-4 py-[0.65rem] text-template-ink font-[inherit] font-bold disabled:cursor-not-allowed disabled:opacity-50";
+const muralPrimaryButtonClass =
+  "min-h-11 cursor-pointer border border-template-ink bg-template-ink px-4 py-[0.65rem] text-template-ivory font-[inherit] font-bold disabled:cursor-not-allowed disabled:opacity-50";
 const muralMoreButtonClass =
   "min-h-11 cursor-pointer justify-self-center border border-template-ink bg-transparent px-4 py-[0.65rem] text-template-ink font-[inherit] font-bold disabled:cursor-not-allowed disabled:opacity-50";
 const muralStatusClass = "m-0 border border-template-line p-4";
@@ -52,6 +64,7 @@ export function MessageMural({
   apiOrigin,
   fetcher,
   refreshIntervalMs = 30_000,
+  storage: providedStorage,
 }: MessageMuralProps) {
   const apiResult = useMemo(() => {
     try {
@@ -74,11 +87,20 @@ export function MessageMural({
   const [error, setError] = useState("");
   const refreshVersion = useRef(0);
   const nextCursorRef = useRef<string | null>(null);
+  const storage = useMemo(
+    () => providedStorage ?? browserGuestSessionStorage(),
+    [providedStorage],
+  );
+  const [hasSession, setHasSession] = useState(() =>
+    Boolean(storage && readGuestSession(storage, siteId)),
+  );
+  const [messageOpen, setMessageOpen] = useState(false);
 
   const load = useCallback(
-    async (append: boolean) => {
+    async (append: boolean, notify = false) => {
       if (!apiResult.api) {
         setError(apiResult.error);
+        if (notify) toast.error(apiResult.error);
         setLoading(false);
         return;
       }
@@ -104,7 +126,13 @@ export function MessageMural({
         setNextCursor(result.nextCursor);
       } catch (cause) {
         if (version === refreshVersion.current) {
-          setError(getMessageErrorMessage(cause));
+          const message = getMessageErrorMessage(cause);
+          setError(message);
+          if (notify) {
+            toast.error(
+              `${message} As mensagens exibidas podem estar desatualizadas.`,
+            );
+          }
         }
       } finally {
         if (version === refreshVersion.current) {
@@ -117,8 +145,22 @@ export function MessageMural({
   );
 
   useEffect(() => {
-    void load(false);
+    void load(false, true);
   }, [load]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const syncSession = () => {
+      const present = Boolean(storage && readGuestSession(storage, siteId));
+      setHasSession(present);
+      if (!present) setMessageOpen(false);
+    };
+    syncSession();
+    window.addEventListener(guestSessionEventName(siteId), syncSession);
+    return () => {
+      window.removeEventListener(guestSessionEventName(siteId), syncSession);
+    };
+  }, [siteId, storage]);
 
   useEffect(() => {
     if (typeof window === "undefined" || typeof document === "undefined") {
@@ -149,21 +191,27 @@ export function MessageMural({
             Mural dos convidados
           </h2>
         </div>
-        <button
-          type="button"
-          className={muralButtonClass}
-          disabled={loading}
-          onClick={() => void load(false)}
-        >
-          {loading ? "Atualizando…" : "Atualizar"}
-        </button>
+        <div className={muralActionsClass}>
+          {hasSession && (
+            <button
+              type="button"
+              className={muralPrimaryButtonClass}
+              onClick={() => setMessageOpen(true)}
+            >
+              Deixar uma mensagem
+            </button>
+          )}
+          <button
+            type="button"
+            className={muralButtonClass}
+            disabled={loading}
+            onClick={() => void load(false, true)}
+          >
+            {loading ? "Atualizando…" : "Atualizar"}
+          </button>
+        </div>
       </header>
 
-      {error && (
-        <p className={muralStatusClass} role="alert">
-          {error} As mensagens exibidas podem estar desatualizadas.
-        </p>
-      )}
       {!enabled && !loading ? (
         <p className={muralStatusClass} role="status">
           O mural está desativado neste momento.
@@ -186,7 +234,9 @@ export function MessageMural({
                 <strong className="text-template-ink">
                   {message.authorName}
                 </strong>
-                <span>{message.groupName}</span>
+                {message.authorName !== message.invitationName && (
+                  <span>{message.invitationName}</span>
+                )}
                 <time dateTime={message.createdAt}>
                   {formatMessageDate(message.createdAt)}
                 </time>
@@ -201,11 +251,19 @@ export function MessageMural({
           type="button"
           className={muralMoreButtonClass}
           disabled={loadingMore}
-          onClick={() => void load(true)}
+          onClick={() => void load(true, true)}
         >
           {loadingMore ? "Carregando…" : "Ver mais mensagens"}
         </button>
       )}
+      <InvitationMessageDialog
+        open={messageOpen && hasSession}
+        siteId={siteId}
+        api={apiResult.api}
+        apiError={apiResult.error}
+        storage={storage}
+        onClose={() => setMessageOpen(false)}
+      />
     </section>
   );
 }

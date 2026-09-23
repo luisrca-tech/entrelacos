@@ -1,59 +1,46 @@
 import { randomUUID } from "node:crypto";
-import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import {
   createDatabaseConnection,
   type DatabaseConnection,
   verifyDatabaseConnection,
 } from "@entrelacos/database";
 import {
-  guestMember,
+  invitationGuest,
   rsvpHistory,
   rsvpRequestReceipt,
-  rsvpRequestReceiptGroup,
+  rsvpRequestReceiptInvitation,
   site,
   user,
 } from "@entrelacos/database/schema";
-import { and, eq } from "drizzle-orm";
+import { and, eq, like } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createGuestGroup, deleteGuestGroup } from "./guestGroups";
+import {
+  createInvitation,
+  deleteInvitation,
+  updateInvitation,
+} from "./invitations";
 import { writeAdminRsvp } from "./rsvp";
 import { createSite } from "./sites";
 
-const prefix = `b5-rsvp-redaction-${process.pid}-${randomUUID().slice(0, 8)}`;
+const prefix = `rsvp-redaction-${process.pid}-${randomUUID().slice(0, 8)}`;
 const now = new Date("2028-05-02T12:00:00.000Z");
 const ownerId = `${prefix}-owner`;
 const owner = { userId: ownerId, role: "OWNER" as const };
 
 let connection: DatabaseConnection;
 let siteId: string;
-let removedGroupId: string;
-let retainedGroupId: string;
-let removedMemberId: string;
-let retainedMemberId: string;
-let legacyRemovedMemberId: string;
-
-function legacyReceiptReconciliationSql(): string {
-  const migration = readFileSync(
-    join(
-      dirname(fileURLToPath(import.meta.url)),
-      "../../../packages/database/migrations/0007_windy_sage.sql",
-    ),
-    "utf8",
-  );
-  const statements = migration.match(
-    /UPDATE "rsvp_request_receipt" AS receipt[\s\S]+?ON CONFLICT DO NOTHING;/,
-  );
-  if (!statements)
-    throw new Error("Legacy RSVP receipt reconciliation is missing");
-  return statements[0].replaceAll("--> statement-breakpoint", "");
-}
+let removedInvitationId: string;
+let retainedInvitationId: string;
+let removedGuestId: string;
+let retainedGuestId: string;
 
 describe("RSVP receipt redaction PostgreSQL integration", () => {
   beforeAll(async () => {
     connection = createDatabaseConnection({ target: "test" });
     await verifyDatabaseConnection(connection);
+    await connection.db
+      .delete(site)
+      .where(like(site.repositorySlug, `${prefix}%`));
     await connection.db.insert(user).values({
       id: ownerId,
       name: "RSVP Redaction Owner",
@@ -73,58 +60,32 @@ describe("RSVP receipt redaction PostgreSQL integration", () => {
       now,
     );
     siteId = wedding.id;
-    const removedGroup = await createGuestGroup(
+    const removed = await createInvitation(
       connection.db,
       owner,
       siteId,
       {
         name: "Família Removida",
-        isForeign: false,
         phone: "+5511999999999",
-        members: [{ fullName: "Ana Removida", isRepresentative: true }],
+        guests: [{ fullName: "Ana Removida", guestType: "ADULT" }],
       },
       now,
     );
-    removedGroupId = removedGroup.id;
-    removedMemberId = removedGroup.members[0]?.id ?? "";
-    const retainedGroup = await createGuestGroup(
+    const retained = await createInvitation(
       connection.db,
       owner,
       siteId,
       {
         name: "Família Mantida",
-        isForeign: false,
         phone: "+5511988888888",
-        members: [{ fullName: "Bia Mantida", isRepresentative: true }],
+        guests: [{ fullName: "Bia Mantida", guestType: "ADULT" }],
       },
       now,
     );
-    retainedGroupId = retainedGroup.id;
-    retainedMemberId = retainedGroup.members[0]?.id ?? "";
-    const legacyRemovedGroup = await createGuestGroup(
-      connection.db,
-      owner,
-      siteId,
-      {
-        name: "Família Legada",
-        isForeign: false,
-        phone: "+5511977777777",
-        members: [{ fullName: "Caio Legado", isRepresentative: true }],
-      },
-      now,
-    );
-    legacyRemovedMemberId = legacyRemovedGroup.members[0]?.id ?? "";
-    await deleteGuestGroup(
-      connection.db,
-      owner,
-      siteId,
-      legacyRemovedGroup.id,
-      {
-        confirmGroupId: legacyRemovedGroup.id,
-        confirmGroupName: "Família Legada",
-      },
-      now,
-    );
+    removedInvitationId = removed.id;
+    retainedInvitationId = retained.id;
+    removedGuestId = removed.guests[0]?.id ?? "";
+    retainedGuestId = retained.guests[0]?.id ?? "";
   });
 
   afterAll(async () => {
@@ -133,17 +94,17 @@ describe("RSVP receipt redaction PostgreSQL integration", () => {
     await connection.close();
   });
 
-  it("redacts affected admin receipts and preserves unaffected replays", async () => {
+  it("redacts mixed admin receipts and preserves unaffected idempotent replays", async () => {
     const removedRequest = {
       requestId: randomUUID(),
-      members: [
+      guests: [
         {
-          memberId: removedMemberId,
+          guestId: removedGuestId,
           state: "CONFIRMED" as const,
           expectedRevision: 0,
         },
         {
-          memberId: retainedMemberId,
+          guestId: retainedGuestId,
           state: "CONFIRMED" as const,
           expectedRevision: 0,
         },
@@ -160,9 +121,9 @@ describe("RSVP receipt redaction PostgreSQL integration", () => {
 
     const retainedRequest = {
       requestId: randomUUID(),
-      members: [
+      guests: [
         {
-          memberId: retainedMemberId,
+          guestId: retainedGuestId,
           state: "CONFIRMED" as const,
           expectedRevision: 1,
         },
@@ -177,7 +138,7 @@ describe("RSVP receipt redaction PostgreSQL integration", () => {
     );
     expect(retainedResult.result).toBe("NO_CHANGE");
 
-    const [removedReceipt] = await connection.db
+    const [receipt] = await connection.db
       .select()
       .from(rsvpRequestReceipt)
       .where(
@@ -186,31 +147,36 @@ describe("RSVP receipt redaction PostgreSQL integration", () => {
           eq(rsvpRequestReceipt.requestId, removedRequest.requestId),
         ),
       );
-    expect(removedReceipt).toMatchObject({
+    expect(receipt).toMatchObject({
       responseStatus: "APPLIED",
       responseBody: removedResult,
     });
     expect(
       await connection.db
         .select()
-        .from(rsvpRequestReceiptGroup)
-        .where(eq(rsvpRequestReceiptGroup.receiptId, removedReceipt?.id ?? "")),
+        .from(rsvpRequestReceiptInvitation)
+        .where(
+          and(
+            eq(rsvpRequestReceiptInvitation.siteId, siteId),
+            eq(rsvpRequestReceiptInvitation.receiptId, receipt?.id ?? ""),
+          ),
+        ),
     ).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ groupId: removedGroupId }),
-        expect.objectContaining({ groupId: retainedGroupId }),
+        expect.objectContaining({ invitationId: removedInvitationId }),
+        expect.objectContaining({ invitationId: retainedInvitationId }),
       ]),
     );
 
     await expect(
-      deleteGuestGroup(
+      deleteInvitation(
         connection.db,
         owner,
         siteId,
-        removedGroupId,
+        removedInvitationId,
         {
-          confirmGroupId: removedGroupId,
-          confirmGroupName: "Família Removida",
+          confirmInvitationId: removedInvitationId,
+          confirmInvitationName: "Família Removida",
         },
         new Date(now.getTime() + 1_000),
       ),
@@ -219,10 +185,10 @@ describe("RSVP receipt redaction PostgreSQL integration", () => {
     const [redactedReceipt] = await connection.db
       .select()
       .from(rsvpRequestReceipt)
-      .where(eq(rsvpRequestReceipt.id, removedReceipt?.id ?? ""));
+      .where(eq(rsvpRequestReceipt.id, receipt?.id ?? ""));
     expect(redactedReceipt).toMatchObject({
       requestId: removedRequest.requestId,
-      requestHash: removedReceipt?.requestHash,
+      requestHash: receipt?.requestHash,
       responseStatus: "REMOVED",
       responseBody: null,
       removedAt: new Date(now.getTime() + 1_000),
@@ -230,14 +196,15 @@ describe("RSVP receipt redaction PostgreSQL integration", () => {
     await expect(
       writeAdminRsvp(connection.db, owner, siteId, removedRequest, now),
     ).rejects.toMatchObject({ status: 410, code: "RSVP_RESULT_REMOVED" });
+
     expect(
       await connection.db
         .select({
-          state: guestMember.rsvpState,
-          revision: guestMember.rsvpRevision,
+          state: invitationGuest.rsvpState,
+          revision: invitationGuest.rsvpRevision,
         })
-        .from(guestMember)
-        .where(eq(guestMember.id, retainedMemberId)),
+        .from(invitationGuest)
+        .where(eq(invitationGuest.id, retainedGuestId)),
     ).toEqual([{ state: "CONFIRMED", revision: 1 }]);
     expect(
       await connection.db
@@ -245,7 +212,6 @@ describe("RSVP receipt redaction PostgreSQL integration", () => {
         .from(rsvpHistory)
         .where(eq(rsvpHistory.siteId, siteId)),
     ).toHaveLength(1);
-
     await expect(
       writeAdminRsvp(connection.db, owner, siteId, retainedRequest, now),
     ).resolves.toMatchObject({
@@ -255,59 +221,68 @@ describe("RSVP receipt redaction PostgreSQL integration", () => {
     });
   });
 
-  it("redacts a legacy mixed receipt when one response member was already deleted", async () => {
-    const client = await connection.pool.connect();
-    const receiptId = randomUUID();
-    try {
-      await client.query("BEGIN");
-      await client.query(
-        `INSERT INTO rsvp_request_receipt (
-          id, site_id, group_id, scope, actor_type, actor_id, request_id,
-          request_hash, response_status, response_body, created_at
-        ) VALUES ($1, $2, NULL, 'ADMIN', 'ADMIN', $3, $4, $5, 'APPLIED', $6::jsonb, $7)`,
-        [
-          receiptId,
-          siteId,
-          ownerId,
-          randomUUID(),
-          "a".repeat(64),
-          JSON.stringify({
-            requestId: randomUUID(),
-            replayed: false,
-            result: "APPLIED",
-            members: [
-              { id: retainedMemberId, state: "CONFIRMED", revision: 1 },
-              {
-                id: legacyRemovedMemberId,
-                state: "DECLINED",
-                revision: 1,
-              },
-            ],
-          }),
-          now,
+  it("tombstones a cached RSVP response when one guest is removed", async () => {
+    const record = await createInvitation(
+      connection.db,
+      owner,
+      siteId,
+      {
+        name: "Convite com ajuste",
+        phone: "+5511977777777",
+        guests: [
+          { fullName: "Convidado removido", guestType: "ADULT" },
+          { fullName: "Convidado mantido", guestType: "CHILD" },
         ],
-      );
+      },
+      now,
+    );
+    const removedId = record.guests[0]?.id ?? "";
+    const retained = record.guests[1];
+    const request = {
+      requestId: randomUUID(),
+      guests: [
+        {
+          guestId: removedId,
+          state: "CONFIRMED" as const,
+          expectedRevision: 0,
+        },
+      ],
+    };
+    await writeAdminRsvp(connection.db, owner, siteId, request, now);
 
-      await client.query(legacyReceiptReconciliationSql());
+    await updateInvitation(
+      connection.db,
+      owner,
+      siteId,
+      record.id,
+      {
+        guests: [
+          {
+            id: retained?.id,
+            fullName: retained?.fullName ?? "Convidado mantido",
+            guestType: "CHILD",
+          },
+        ],
+      },
+      new Date(now.getTime() + 1_000),
+    );
 
-      const receipt = await client.query(
-        `SELECT response_status, response_body, removed_at
-         FROM rsvp_request_receipt WHERE id = $1`,
-        [receiptId],
+    const [receipt] = await connection.db
+      .select()
+      .from(rsvpRequestReceipt)
+      .where(
+        and(
+          eq(rsvpRequestReceipt.siteId, siteId),
+          eq(rsvpRequestReceipt.requestId, request.requestId),
+        ),
       );
-      expect(receipt.rows[0]).toMatchObject({
-        response_status: "REMOVED",
-        response_body: null,
-      });
-      expect(receipt.rows[0]?.removed_at).toBeInstanceOf(Date);
-      const links = await client.query(
-        `SELECT group_id FROM rsvp_request_receipt_group WHERE receipt_id = $1`,
-        [receiptId],
-      );
-      expect(links.rows).toEqual([]);
-    } finally {
-      await client.query("ROLLBACK");
-      client.release();
-    }
+    expect(receipt).toMatchObject({
+      responseStatus: "REMOVED",
+      responseBody: null,
+      removedAt: new Date(now.getTime() + 1_000),
+    });
+    await expect(
+      writeAdminRsvp(connection.db, owner, siteId, request, now),
+    ).rejects.toMatchObject({ status: 410, code: "RSVP_RESULT_REMOVED" });
   });
 });

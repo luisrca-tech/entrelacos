@@ -1,13 +1,14 @@
 import type { MeResponse } from "@entrelacos/contracts";
 import {
+  Button,
   cn,
   Popover,
   PopoverContent,
   PopoverTrigger,
-  Toaster,
 } from "@entrelacos/ui";
 import { Link } from "@tanstack/react-router";
-import type { ReactNode } from "react";
+import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { type ReactNode, useState } from "react";
 import {
   type AdminRole,
   getInitials,
@@ -35,48 +36,122 @@ export function AdminShell({
   const role = actor.user.role as AdminRole;
   const navigation = siteId ? getSiteNavigation(role, siteId) : [];
   const initials = getInitials(actor.user.name);
+  const [expanded, setExpanded] = useState(true);
 
   return (
     <div
       className={cn(
-        "grid min-h-screen grid-cols-[248px_minmax(0,1fr)] [@media(max-width:760px)]:block [@media(min-width:761px)_and_(max-width:1060px)]:grid-cols-[216px_minmax(0,1fr)]",
+        "grid min-h-screen transition-[grid-template-columns] duration-200 ease-out motion-reduce:transition-none [@media(max-width:760px)]:block",
+        expanded
+          ? "grid-cols-[248px_minmax(0,1fr)] [@media(min-width:761px)_and_(max-width:1060px)]:grid-cols-[216px_minmax(0,1fr)]"
+          : "grid-cols-[76px_minmax(0,1fr)]",
         siteId &&
           "[@media(max-width:760px)]:pb-[calc(74px+env(safe-area-inset-bottom))]",
       )}
     >
       <aside
-        className="sticky top-0 flex h-screen flex-col gap-[30px] border-r border-admin-line bg-admin-surface px-5 pt-[30px] pb-[22px] [@media(max-width:760px)]:hidden [@media(min-width:761px)_and_(max-width:1060px)]:w-[216px]"
+        id="admin-primary-nav"
+        className={cn(
+          "sticky top-0 flex h-screen w-full min-w-0 flex-col overflow-x-hidden border-r border-admin-line bg-admin-surface pt-[30px] pb-[22px] transition-[padding] duration-200 ease-out motion-reduce:transition-none [@media(max-width:760px)]:hidden",
+          expanded ? "px-5" : "px-2",
+        )}
         aria-label="Navegação principal"
       >
-        <div className="grid gap-2">
+        <div
+          className={cn(
+            "grid items-center transition-[grid-template-columns,gap] duration-200 ease-out motion-reduce:transition-none",
+            expanded
+              ? "grid-cols-[minmax(0,1fr)_auto] gap-2"
+              : "grid-cols-[0fr_1fr] gap-0",
+          )}
+        >
           <Link
-            className="font-admin-display text-[1.45rem] tracking-[-0.03em] text-admin-graphite no-underline"
+            className={cn(
+              "min-w-0 overflow-hidden font-admin-display text-[1.45rem] tracking-[-0.03em] whitespace-nowrap text-admin-graphite no-underline transition-opacity duration-200 ease-out motion-reduce:transition-none",
+              expanded ? "opacity-100" : "pointer-events-none opacity-0",
+            )}
             to="/"
+            tabIndex={expanded ? undefined : -1}
           >
             EntreLaços
           </Link>
-          <span className="text-[0.7rem] font-bold uppercase tracking-[0.13em] leading-[1.3] text-admin-muted">
-            Painel de casamentos
-          </span>
-        </div>
-        {siteId && (
-          <div className="grid gap-2 rounded-xl border border-admin-line bg-admin-canvas p-[15px]">
-            <span className="text-[0.7rem] font-bold uppercase tracking-[0.13em] leading-[1.3] text-admin-muted">
-              Casamento atual
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            className="size-8 shrink-0 justify-self-center text-admin-muted hover:bg-admin-terracotta-wash hover:text-admin-terracotta-deep"
+            aria-expanded={expanded}
+            aria-controls="admin-primary-nav"
+            aria-label={expanded ? "Recolher navegação" : "Expandir navegação"}
+            onClick={() => setExpanded((open) => !open)}
+          >
+            <span className="relative grid size-4 place-items-center">
+              <PanelLeftClose
+                aria-hidden="true"
+                className={cn(
+                  "col-start-1 row-start-1 size-4 transition-opacity duration-200 ease-out motion-reduce:transition-none",
+                  expanded ? "opacity-100" : "opacity-0",
+                )}
+              />
+              <PanelLeftOpen
+                aria-hidden="true"
+                className={cn(
+                  "col-start-1 row-start-1 size-4 transition-opacity duration-200 ease-out motion-reduce:transition-none",
+                  expanded ? "opacity-0" : "opacity-100",
+                )}
+              />
             </span>
-            {siteName && <strong className="truncate">{siteName}</strong>}
+          </Button>
+        </div>
+        <div
+          className={cn(
+            "grid transition-[grid-template-rows,opacity,margin-top] duration-200 ease-out motion-reduce:transition-none",
+            expanded
+              ? "mt-2 grid-rows-[1fr] opacity-100"
+              : "pointer-events-none mt-0 grid-rows-[0fr] opacity-0",
+          )}
+        >
+          <div className="min-h-0 overflow-hidden">
+            <span className="text-[0.7rem] font-bold uppercase tracking-[0.13em] leading-[1.3] text-admin-muted">
+              Painel de casamentos
+            </span>
+            {siteId && (
+              <div className="mt-[30px] grid gap-2 rounded-xl border border-admin-line bg-admin-canvas p-[15px]">
+                <span className="text-[0.7rem] font-bold uppercase tracking-[0.13em] leading-[1.3] text-admin-muted">
+                  Casamento atual
+                </span>
+                {siteName && <strong className="truncate">{siteName}</strong>}
+              </div>
+            )}
           </div>
-        )}
+        </div>
         {siteId ? (
-          <nav className="block" aria-label="Navegação do casamento">
-            <AdminNavigation area={area} items={navigation} />
+          <nav
+            className={cn(
+              "block transition-[margin-top] duration-200 ease-out motion-reduce:transition-none",
+              expanded ? "mt-[30px]" : "mt-6",
+            )}
+            aria-label="Navegação do casamento"
+          >
+            <AdminNavigation
+              area={area}
+              collapsed={!expanded}
+              items={navigation}
+            />
           </nav>
         ) : (
-          <nav className="grid gap-1" aria-label="Navegação global">
+          <nav
+            className={cn(
+              "grid gap-1 transition-[margin-top] duration-200 ease-out motion-reduce:transition-none",
+              expanded ? "mt-[30px]" : "mt-6",
+            )}
+            aria-label="Navegação global"
+          >
             <Link
-              className="flex min-h-[42px] items-center gap-3 rounded-[9px] bg-admin-terracotta-wash px-3 py-2 text-[0.9rem] font-bold text-admin-terracotta-deep no-underline transition-[background,color] duration-150 ease-in-out motion-reduce:transition-none"
+              className={navigationLinkClass(true, !expanded, false)}
               to="/"
               aria-current="page"
+              title={expanded ? undefined : "Casamentos"}
             >
               <span
                 className="grid w-5 place-items-center text-[1.1rem] leading-none"
@@ -84,14 +159,16 @@ export function AdminShell({
               >
                 ⌂
               </span>
-              <span>Casamentos</span>
+              <NavigationLabel collapsed={!expanded}>
+                Casamentos
+              </NavigationLabel>
             </Link>
           </nav>
         )}
       </aside>
 
       <div className="flex min-h-screen min-w-0 flex-col">
-        <header className="mx-auto flex min-h-[82px] w-full max-w-[1440px] items-center justify-end gap-[18px] border-b border-admin-line px-[42px] py-[18px] [@media(max-width:760px)]:min-h-[68px] [@media(max-width:760px)]:px-5 [@media(max-width:760px)]:py-[14px] [@media(min-width:761px)_and_(max-width:1060px)]:px-7">
+        <header className="mx-auto flex w-full max-w-[1700px] items-center justify-end gap-[18px] border-b border-admin-line px-[42px] py-2.5 [@media(max-width:760px)]:px-5 [@media(max-width:760px)]:py-2 [@media(min-width:761px)_and_(max-width:1060px)]:px-7">
           <Link
             className="mr-auto hidden font-admin-display text-[1.45rem] tracking-[-0.03em] text-admin-graphite no-underline [@media(max-width:760px)]:block"
             to="/"
@@ -105,10 +182,10 @@ export function AdminShell({
           </div>
           <AccountMenu actor={actor} initials={initials} onLogout={onLogout} />
         </header>
-        <main className="mx-auto w-full max-w-[1440px] px-[42px] pt-12 pb-6 [@media(max-width:760px)]:px-5 [@media(max-width:760px)]:pt-[34px] [@media(max-width:760px)]:pb-6 [@media(min-width:761px)_and_(max-width:1060px)]:px-7">
+        <main className="mx-auto w-full max-w-[1700px] px-[42px] pt-6 pb-6 [@media(max-width:760px)]:px-5 [@media(max-width:760px)]:pt-5 [@media(max-width:760px)]:pb-6 [@media(min-width:761px)_and_(max-width:1060px)]:px-7">
           {children}
         </main>
-        <footer className="mx-auto mt-auto flex w-full max-w-[1440px] justify-between gap-6 border-t border-admin-line px-[42px] pt-6 pb-7 text-[0.78rem] text-admin-muted [@media(max-width:760px)]:hidden [@media(min-width:761px)_and_(max-width:1060px)]:px-7">
+        <footer className="mx-auto mt-auto flex w-full max-w-[1700px] justify-between gap-6 border-t border-admin-line px-[42px] pt-6 pb-7 text-[0.78rem] text-admin-muted [@media(max-width:760px)]:hidden [@media(min-width:761px)_and_(max-width:1060px)]:px-7">
           <span>EntreLaços · Painel administrativo</span>
           <span>Feito para cuidar de cada detalhe.</span>
         </footer>
@@ -122,7 +199,6 @@ export function AdminShell({
           <AdminNavigation area={area} items={navigation} mobile />
         </nav>
       )}
-      <Toaster />
     </div>
   );
 }
@@ -130,25 +206,22 @@ export function AdminShell({
 function AdminNavigation({
   items,
   area,
+  collapsed = false,
   mobile = false,
 }: {
   items: ReturnType<typeof getSiteNavigation>;
   area?: SiteArea;
+  collapsed?: boolean;
   mobile?: boolean;
 }) {
   return (
     <div className={cn("grid gap-1", mobile && "flex justify-around gap-0.5")}>
       {items.map((item) => (
         <Link
-          className={cn(
-            mobile
-              ? "grid min-h-[54px] flex-1 basis-0 place-items-center gap-[3px] px-[3px] py-1.5 text-center text-[0.65rem] text-admin-muted no-underline"
-              : "flex min-h-[42px] items-center gap-3 rounded-[9px] px-3 py-2 text-[0.9rem] text-admin-muted no-underline transition-[background,color] duration-150 ease-in-out motion-reduce:transition-none hover:bg-admin-terracotta-wash hover:text-admin-terracotta-deep",
-            item.area === area &&
-              "bg-admin-terracotta-wash font-bold text-admin-terracotta-deep",
-          )}
+          className={navigationLinkClass(item.area === area, collapsed, mobile)}
           to={item.href}
           aria-current={item.area === area ? "page" : undefined}
+          title={collapsed && !mobile ? item.label : undefined}
           key={item.area}
         >
           <span
@@ -160,19 +233,55 @@ function AdminNavigation({
           >
             {navigationIcon(item.area)}
           </span>
-          <span>{item.label}</span>
+          <NavigationLabel collapsed={collapsed && !mobile}>
+            {item.label}
+          </NavigationLabel>
         </Link>
       ))}
     </div>
   );
 }
 
+function navigationLinkClass(
+  active: boolean,
+  collapsed: boolean,
+  mobile: boolean,
+) {
+  return cn(
+    mobile
+      ? "grid min-h-[54px] flex-1 basis-0 place-items-center gap-[3px] px-[3px] py-1.5 text-center text-[0.65rem] text-admin-muted no-underline"
+      : "grid min-h-[42px] items-center overflow-hidden rounded-[9px] py-2 text-[0.9rem] text-admin-muted no-underline transition-[grid-template-columns,gap,padding,background,color] duration-200 ease-out motion-reduce:transition-none hover:bg-admin-terracotta-wash hover:text-admin-terracotta-deep",
+    !mobile &&
+      (collapsed
+        ? "grid-cols-[1fr_0fr] justify-items-center gap-0 px-0"
+        : "grid-cols-[auto_minmax(0,1fr)] gap-3 px-3"),
+    active && "bg-admin-terracotta-wash font-bold text-admin-terracotta-deep",
+  );
+}
+
+function NavigationLabel({
+  children,
+  collapsed,
+}: {
+  children: string;
+  collapsed: boolean;
+}) {
+  return (
+    <span
+      className={cn(
+        "overflow-hidden whitespace-nowrap transition-[max-width,opacity] duration-200 ease-out motion-reduce:transition-none",
+        collapsed ? "max-w-0 opacity-0" : "max-w-40 opacity-100",
+      )}
+    >
+      {children}
+    </span>
+  );
+}
+
 function navigationIcon(area: SiteArea) {
   switch (area) {
-    case "guests":
+    case "invitations":
       return "○";
-    case "rsvp":
-      return "✓";
     case "messages":
       return "□";
     case "settings":

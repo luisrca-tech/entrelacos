@@ -1,3 +1,4 @@
+import parsePhoneNumber, { AsYouType } from "libphonenumber-js";
 import { z } from "zod";
 
 const strictObject = <T extends z.ZodRawShape>(shape: T) =>
@@ -536,206 +537,184 @@ export const block2EndpointPaths = {
 export type Block2EndpointPath =
   (typeof block2EndpointPaths)[keyof typeof block2EndpointPaths];
 
-export const brazilianPhoneE164Schema = z
+export const invitationPhoneE164Schema = z
   .string()
-  .regex(/^\+55[1-9]{2}9\d{8}$/, "Expected a Brazilian mobile E.164 phone");
+  .regex(/^\+[1-9][0-9]{1,14}$/, "Expected an E.164 phone number");
 
-export const brazilianPhoneInputSchema = z
+export const invitationPhoneInputSchema = z
   .string()
   .min(1)
   .max(40)
   .transform((value) => {
-    const digits = value.replace(/\D/g, "");
-    if (digits.length === 11) return `+55${digits}`;
-    if (digits.length === 13 && digits.startsWith("55")) return `+${digits}`;
-    return value;
+    const phone = parsePhoneNumber(value, {
+      defaultCountry: "BR",
+      extract: false,
+    });
+    return phone?.isPossible() && !phone.ext ? phone.number : "";
   })
-  .pipe(brazilianPhoneE164Schema);
+  .pipe(invitationPhoneE164Schema);
 
-export const guestMemberInputSchema = strictObject({
+export function formatInvitationPhoneInput(value: string): string {
+  return new AsYouType("BR").input(value);
+}
+
+const invitationEmailValueSchema = z
+  .string()
+  .max(320)
+  .transform((value) => {
+    const normalized = value.trim().toLowerCase();
+    return normalized === "" ? null : normalized;
+  })
+  .pipe(z.string().email().max(320).nullable());
+
+export const invitationEmailInputSchema = z
+  .union([z.string().max(320), z.null()])
+  .optional()
+  .transform((value) => (value === undefined || value === null ? null : value))
+  .pipe(invitationEmailValueSchema.or(z.null()));
+
+export const invitationGuestTypeSchema = z.enum(["ADULT", "CHILD"]);
+export type InvitationGuestType = z.infer<typeof invitationGuestTypeSchema>;
+export const rsvpStateSchema = z.enum(["PENDING", "CONFIRMED", "DECLINED"]);
+export type RsvpState = z.infer<typeof rsvpStateSchema>;
+
+export const invitationGuestInputSchema = strictObject({
   id: identifierSchema.optional(),
   fullName: nonEmptyText(160),
-  isRepresentative: z.boolean(),
+  guestType: invitationGuestTypeSchema,
 });
 
-const guestMembersWithRepresentativeSchema = z
-  .array(guestMemberInputSchema)
-  .min(1, "At least one group member is required")
-  .superRefine((members, context) => {
-    const representatives = members.filter((member) => member.isRepresentative);
-    if (representatives.length !== 1) {
-      context.addIssue({
-        code: "custom",
-        message: "Exactly one group representative is required",
-      });
-    }
-  });
+const invitationGuestsInputSchema = z
+  .array(invitationGuestInputSchema)
+  .min(1, "At least one guest is required");
 
-export const guestGroupCreateInputSchema = strictObject({
+export const invitationCreateInputSchema = strictObject({
   name: nonEmptyText(160),
-  isIndividual: z.boolean().default(false),
-  isForeign: z.boolean(),
-  phone: brazilianPhoneInputSchema.nullable(),
-  members: guestMembersWithRepresentativeSchema,
-}).superRefine((value, context) => {
-  if (value.isForeign !== (value.phone === null)) {
-    context.addIssue({
-      code: "custom",
-      path: ["phone"],
-      message: "Foreign groups omit phone; Brazilian groups require one",
-    });
-  }
-  if (value.isIndividual && value.members.length !== 1) {
-    context.addIssue({
-      code: "custom",
-      path: ["members"],
-      message: "Individual invitations require exactly one member",
-    });
-  }
+  phone: invitationPhoneInputSchema,
+  email: invitationEmailInputSchema,
+  guests: invitationGuestsInputSchema,
 });
-export type GuestGroupCreateInput = z.infer<typeof guestGroupCreateInputSchema>;
+export type InvitationCreateInput = z.infer<typeof invitationCreateInputSchema>;
 
-export const guestGroupUpdateInputSchema = strictObject({
+export const invitationUpdateInputSchema = strictObject({
   name: nonEmptyText(160).optional(),
-  isForeign: z.boolean().optional(),
-  phone: brazilianPhoneInputSchema.nullable().optional(),
-  members: guestMembersWithRepresentativeSchema.optional(),
+  phone: invitationPhoneInputSchema.optional(),
+  email: invitationEmailInputSchema.optional(),
+  guests: invitationGuestsInputSchema.optional(),
 }).superRefine((value, context) => {
   if (Object.keys(value).length === 0) {
     context.addIssue({
       code: "custom",
-      message: "At least one group field is required",
-    });
-  }
-  if (
-    value.isForeign === true &&
-    value.phone !== undefined &&
-    value.phone !== null
-  ) {
-    context.addIssue({
-      code: "custom",
-      path: ["phone"],
-      message: "Foreign groups omit phone",
-    });
-  }
-  if (value.isForeign === false && value.phone === null) {
-    context.addIssue({
-      code: "custom",
-      path: ["phone"],
-      message: "Brazilian groups require phone",
+      message: "At least one invitation field is required",
     });
   }
 });
-export type GuestGroupUpdateInput = z.infer<typeof guestGroupUpdateInputSchema>;
+export type InvitationUpdateInput = z.infer<typeof invitationUpdateInputSchema>;
 
-export const guestMemberRecordSchema = strictObject({
+export const invitationGuestRecordSchema = strictObject({
   id: identifierSchema,
   fullName: nonEmptyText(160),
-  isRepresentative: z.boolean(),
+  guestType: invitationGuestTypeSchema,
+  rsvpState: rsvpStateSchema,
+  rsvpRevision: z.number().int().nonnegative(),
 });
 
-const guestMemberRecordsWithRepresentativeSchema = z
-  .array(guestMemberRecordSchema)
-  .min(1, "At least one group member is required")
-  .superRefine((members, context) => {
-    if (members.filter((member) => member.isRepresentative).length !== 1) {
-      context.addIssue({
-        code: "custom",
-        message: "Exactly one group representative is required",
-      });
-    }
-  });
+const invitationGuestRecordsSchema = z
+  .array(invitationGuestRecordSchema)
+  .min(1, "At least one guest is required");
 
-export const guestGroupRecordSchema = strictObject({
+export const invitationRecordSchema = strictObject({
   id: identifierSchema,
   siteId: siteIdSchema,
   name: nonEmptyText(160),
-  isIndividual: z.boolean(),
-  isForeign: z.boolean(),
-  phone: brazilianPhoneE164Schema.nullable(),
-  members: guestMemberRecordsWithRepresentativeSchema,
+  phone: invitationPhoneE164Schema,
+  email: z.string().email().max(320).nullable(),
+  guests: invitationGuestRecordsSchema,
   createdAt: instantSchema,
   updatedAt: instantSchema,
 });
-export type GuestGroupRecord = z.infer<typeof guestGroupRecordSchema>;
+export type InvitationRecord = z.infer<typeof invitationRecordSchema>;
 
-export const guestGroupResponseSchema = strictObject({
-  group: guestGroupRecordSchema,
+export const invitationResponseSchema = strictObject({
+  invitation: invitationRecordSchema,
 });
 
-export const guestGroupListResponseSchema = strictObject({
-  groups: z.array(guestGroupRecordSchema),
+export const invitationListResponseSchema = strictObject({
+  invitations: z.array(invitationRecordSchema),
 });
 
-export const guestGroupDeleteResponseSchema = adminMutationResponseSchema;
+export const invitationDeleteResponseSchema = adminMutationResponseSchema;
 
-export const guestLookupInputSchema = strictObject({
-  fullName: nonEmptyText(160),
-  phone: brazilianPhoneInputSchema,
+export const invitationLookupInputSchema = strictObject({
+  phone: invitationPhoneInputSchema,
 });
-export type GuestLookupInput = z.infer<typeof guestLookupInputSchema>;
+export type InvitationLookupInput = z.infer<typeof invitationLookupInputSchema>;
 
-export const guestChallengeIdSchema = opaqueTokenSchema;
-export const guestAccessPinSchema = z
+export const invitationAccessPinSchema = z
   .string()
-  .regex(/^\d{6}$/, "Expected a six-digit verification code");
-export const guestVerificationCodeSchema = guestAccessPinSchema;
-export const guestAccessPinResponseSchema = strictObject({
-  accessPin: guestAccessPinSchema,
+  .regex(/^\d{6}$/, "Expected a six-digit access PIN");
+export const invitationAccessInputSchema = strictObject({
+  phone: invitationPhoneInputSchema,
+  accessPin: invitationAccessPinSchema,
 });
-export type GuestAccessPinResponse = z.infer<
-  typeof guestAccessPinResponseSchema
->;
-export const guestVerificationChallengeStatusSchema = z.enum([
-  "PENDING",
-  "VERIFIED",
-  "EXPIRED",
-  "LOCKED",
-  "REVOKED",
-]);
-
-export const guestChallengeStartResponseSchema = strictObject({
-  challengeId: guestChallengeIdSchema,
-  expiresAt: instantSchema,
+export type InvitationAccessInput = z.infer<typeof invitationAccessInputSchema>;
+export const invitationAccessPinResponseSchema = strictObject({
+  accessPin: invitationAccessPinSchema,
 });
-export type GuestChallengeStartResponse = z.infer<
-  typeof guestChallengeStartResponseSchema
+export type InvitationAccessPinResponse = z.infer<
+  typeof invitationAccessPinResponseSchema
 >;
 
-export const guestChallengeVerifyInputSchema = strictObject({
-  challengeId: guestChallengeIdSchema,
-  code: guestVerificationCodeSchema,
+export const invitationSessionGuestSchema = strictObject({
+  id: identifierSchema,
+  fullName: nonEmptyText(160),
+  guestType: invitationGuestTypeSchema,
+  rsvpState: rsvpStateSchema,
 });
-export type GuestChallengeVerifyInput = z.infer<
-  typeof guestChallengeVerifyInputSchema
->;
 
-export const familyMemberRecordSchema = guestMemberRecordSchema;
-export const familySessionResponseSchema = strictObject({
+export const invitationSessionResponseSchema = strictObject({
   sessionToken: opaqueTokenSchema,
   siteId: siteIdSchema,
-  groupId: identifierSchema,
-  members: z.array(familyMemberRecordSchema).min(1),
+  invitationId: identifierSchema,
+  invitationName: nonEmptyText(160),
+  guests: z.array(invitationSessionGuestSchema).min(1),
   expiresAt: instantSchema,
 });
-export type FamilySessionResponse = z.infer<typeof familySessionResponseSchema>;
-
-export const familySessionReadResponseSchema = strictObject({
-  siteId: siteIdSchema,
-  groupId: identifierSchema,
-  members: z.array(familyMemberRecordSchema).min(1),
-  expiresAt: instantSchema,
-});
-export type FamilySessionReadResponse = z.infer<
-  typeof familySessionReadResponseSchema
+export type InvitationSessionResponse = z.infer<
+  typeof invitationSessionResponseSchema
 >;
 
-export const familySessionLeaveResponseSchema = adminMutationResponseSchema;
+export const invitationSessionReadResponseSchema = strictObject({
+  siteId: siteIdSchema,
+  invitationId: identifierSchema,
+  invitationName: nonEmptyText(160),
+  guests: z.array(invitationSessionGuestSchema).min(1),
+  expiresAt: instantSchema,
+});
+export type InvitationSessionReadResponse = z.infer<
+  typeof invitationSessionReadResponseSchema
+>;
 
-export const rsvpStateSchema = z.enum(["PENDING", "CONFIRMED", "DECLINED"]);
-export type RsvpState = z.infer<typeof rsvpStateSchema>;
+export const invitationSessionLeaveResponseSchema = adminMutationResponseSchema;
 
-export const rsvpActorTypeSchema = z.enum(["ADMIN", "FAMILY"]);
+export const invitationEndpointPaths = {
+  siteInvitationsList: "GET /v1/sites/:siteId/invitations",
+  siteInvitationsCreate: "POST /v1/sites/:siteId/invitations",
+  siteInvitationUpdate: "PATCH /v1/sites/:siteId/invitations/:invitationId",
+  siteInvitationDelete: "DELETE /v1/sites/:siteId/invitations/:invitationId",
+  siteInvitationAccessPin:
+    "GET /v1/sites/:siteId/invitations/:invitationId/access-pin",
+  siteInvitationAccessPinRotate:
+    "POST /v1/sites/:siteId/invitations/:invitationId/access-pin/rotate",
+  publicInvitationAccess: "POST /v1/public/sites/:siteId/invitation/access",
+  publicInvitationSession: "GET /v1/public/invitation/session",
+  publicInvitationSessionLeave: "POST /v1/public/invitation/session/leave",
+} as const;
+
+export type InvitationEndpointPath =
+  (typeof invitationEndpointPaths)[keyof typeof invitationEndpointPaths];
+
+export const rsvpActorTypeSchema = z.enum(["ADMIN", "INVITATION"]);
 export type RsvpActorType = z.infer<typeof rsvpActorTypeSchema>;
 
 export const rsvpDeadlineSchema = strictObject({
@@ -752,66 +731,71 @@ export const rsvpDeadlineSchema = strictObject({
 });
 export type RsvpDeadline = z.infer<typeof rsvpDeadlineSchema>;
 
-export const rsvpMemberRecordSchema = strictObject({
+export const rsvpGuestRecordSchema = strictObject({
   id: identifierSchema,
   fullName: nonEmptyText(160),
-  isRepresentative: z.boolean(),
+  guestType: invitationGuestTypeSchema,
   state: rsvpStateSchema,
   revision: z.number().int().nonnegative(),
 });
-export type RsvpMemberRecord = z.infer<typeof rsvpMemberRecordSchema>;
+export type RsvpGuestRecord = z.infer<typeof rsvpGuestRecordSchema>;
 
-const rsvpMemberUpdateSchema = strictObject({
-  memberId: identifierSchema,
+const rsvpGuestUpdateSchema = strictObject({
+  guestId: identifierSchema,
   state: rsvpStateSchema,
   expectedRevision: z.number().int().nonnegative(),
 });
-export type RsvpMemberUpdate = z.infer<typeof rsvpMemberUpdateSchema>;
+export type RsvpGuestUpdate = z.infer<typeof rsvpGuestUpdateSchema>;
 
-function uniqueMemberUpdates<T extends z.ZodTypeAny>(schema: T) {
+function uniqueGuestUpdates<T extends z.ZodTypeAny>(schema: T) {
   return strictObject({
     requestId: z.string().uuid(),
-    members: z.array(schema).min(1).max(500),
+    guests: z.array(schema).min(1).max(500),
   }).superRefine((value, context) => {
     const ids = new Set<string>();
-    for (const member of value.members as Array<{ memberId: string }>) {
-      if (ids.has(member.memberId)) {
+    for (const guest of value.guests as Array<{ guestId: string }>) {
+      if (ids.has(guest.guestId)) {
         context.addIssue({
           code: "custom",
-          path: ["members"],
-          message: "RSVP member updates must be unique",
+          path: ["guests"],
+          message: "RSVP guest updates must be unique",
         });
       }
-      ids.add(member.memberId);
+      ids.add(guest.guestId);
     }
   });
 }
 
-export const familyRsvpWriteInputSchema = uniqueMemberUpdates(
-  rsvpMemberUpdateSchema,
+export const invitationRsvpWriteInputSchema = uniqueGuestUpdates(
+  rsvpGuestUpdateSchema,
 );
-export const adminRsvpWriteInputSchema = familyRsvpWriteInputSchema;
-export type FamilyRsvpWriteInput = z.infer<typeof familyRsvpWriteInputSchema>;
+export const adminRsvpWriteInputSchema = invitationRsvpWriteInputSchema;
+export type InvitationRsvpWriteInput = z.infer<
+  typeof invitationRsvpWriteInputSchema
+>;
 export type AdminRsvpWriteInput = z.infer<typeof adminRsvpWriteInputSchema>;
 
-export const familyRsvpResponseSchema = strictObject({
+export const invitationRsvpResponseSchema = strictObject({
   siteId: siteIdSchema,
-  groupId: identifierSchema,
+  invitationId: identifierSchema,
+  invitationName: nonEmptyText(160),
   deadlineAt: instantSchema.nullable(),
   deadlineTimezone: ianaTimezoneSchema.nullable(),
   serverNow: instantSchema,
   canEdit: z.boolean(),
   readOnlyReason: z.enum(["DEADLINE_PASSED"]).nullable(),
-  members: z.array(rsvpMemberRecordSchema).min(1),
+  guests: z.array(rsvpGuestRecordSchema).min(1),
 });
-export type FamilyRsvpResponse = z.infer<typeof familyRsvpResponseSchema>;
+export type InvitationRsvpResponse = z.infer<
+  typeof invitationRsvpResponseSchema
+>;
 
 export const rsvpWriteResponseSchema = strictObject({
   requestId: z.string().uuid(),
   acceptedAt: instantSchema,
   result: z.enum(["APPLIED", "NO_CHANGE"]),
   replayed: z.boolean(),
-  members: z.array(rsvpMemberRecordSchema).min(1),
+  guests: z.array(rsvpGuestRecordSchema).min(1),
 });
 export type RsvpWriteResponse = z.infer<typeof rsvpWriteResponseSchema>;
 
@@ -821,15 +805,15 @@ export const rsvpTotalsSchema = strictObject({
   declined: z.number().int().nonnegative(),
 });
 
-export const rsvpGroupRecordSchema = strictObject({
+export const rsvpInvitationRecordSchema = strictObject({
   id: identifierSchema,
   name: nonEmptyText(160),
-  members: z.array(rsvpMemberRecordSchema),
+  guests: z.array(rsvpGuestRecordSchema),
   totals: rsvpTotalsSchema,
 });
 
 export const siteRsvpQuerySchema = strictObject({
-  groupId: identifierSchema.optional(),
+  invitationId: identifierSchema.optional(),
   state: rsvpStateSchema.optional(),
 });
 
@@ -839,15 +823,15 @@ export const siteRsvpResponseSchema = strictObject({
   deadlineAt: instantSchema.nullable(),
   deadlineTimezone: ianaTimezoneSchema.nullable(),
   totals: rsvpTotalsSchema,
-  groups: z.array(rsvpGroupRecordSchema),
+  invitations: z.array(rsvpInvitationRecordSchema),
 });
 export type SiteRsvpResponse = z.infer<typeof siteRsvpResponseSchema>;
 
 export const rsvpHistoryQuerySchema = strictObject({
   cursor: z.string().min(1).max(500).optional(),
   limit: z.coerce.number().int().min(1).max(100).default(50),
-  groupId: identifierSchema.optional(),
-  memberId: identifierSchema.optional(),
+  invitationId: identifierSchema.optional(),
+  guestId: identifierSchema.optional(),
   actorType: rsvpActorTypeSchema.optional(),
   beforeState: rsvpStateSchema.optional(),
   afterState: rsvpStateSchema.optional(),
@@ -859,10 +843,10 @@ export type RsvpHistoryQuery = z.infer<typeof rsvpHistoryQuerySchema>;
 export const rsvpHistoryEntrySchema = strictObject({
   id: identifierSchema,
   siteId: siteIdSchema,
-  groupId: identifierSchema,
-  groupName: nonEmptyText(160),
-  memberId: identifierSchema,
-  memberDisplayName: nonEmptyText(160),
+  invitationId: identifierSchema,
+  invitationName: nonEmptyText(160),
+  guestId: identifierSchema,
+  guestDisplayName: nonEmptyText(160),
   beforeState: rsvpStateSchema,
   afterState: rsvpStateSchema,
   actorType: rsvpActorTypeSchema,
@@ -884,32 +868,14 @@ export const rsvpErrorCodeSchema = z.enum([
 ]);
 
 export const block4EndpointPaths = {
-  publicFamilyRsvpRead: "GET /v1/public/family/rsvp",
-  publicFamilyRsvpWrite: "POST /v1/public/family/rsvp",
+  publicInvitationRsvpRead: "GET /v1/public/invitation/rsvp",
+  publicInvitationRsvpWrite: "POST /v1/public/invitation/rsvp",
   siteRsvpRead: "GET /v1/sites/:siteId/rsvp",
   siteRsvpWrite: "POST /v1/sites/:siteId/rsvp",
   siteRsvpDeadlineRead: "GET /v1/sites/:siteId/rsvp/deadline",
   siteRsvpDeadlineUpdate: "PATCH /v1/sites/:siteId/rsvp/deadline",
   siteRsvpHistoryRead: "GET /v1/sites/:siteId/rsvp/history",
 } as const;
-
-export const block3EndpointPaths = {
-  siteGroupsList: "GET /v1/sites/:siteId/groups",
-  siteGroupsCreate: "POST /v1/sites/:siteId/groups",
-  siteGroupUpdate: "PATCH /v1/sites/:siteId/groups/:groupId",
-  siteGroupDelete: "DELETE /v1/sites/:siteId/groups/:groupId",
-  siteGroupAccessPin: "GET /v1/sites/:siteId/groups/:groupId/access-pin",
-  siteGroupAccessPinRotate:
-    "POST /v1/sites/:siteId/groups/:groupId/access-pin/rotate",
-  publicGuestChallengeStart: "POST /v1/public/sites/:siteId/guest/challenge",
-  publicGuestChallengeVerify:
-    "POST /v1/public/guest/challenge/:challengeId/verify",
-  publicFamilySession: "GET /v1/public/family/session",
-  publicFamilySessionLeave: "POST /v1/public/family/session/leave",
-} as const;
-
-export type Block3EndpointPath =
-  (typeof block3EndpointPaths)[keyof typeof block3EndpointPaths];
 
 function validMessageText(value: string): boolean {
   if (!/\S/u.test(value) || value.includes("<") || value.includes(">")) {
@@ -930,21 +896,23 @@ export const messageTextSchema = z
   .transform((value) => value.replace(/\r\n?/g, "\n"))
   .refine(validMessageText, "Expected 1-1000 plain-text Unicode code points");
 
-export const familyMessageReadOnlyReasonSchema = z.enum([
+export const invitationMessageReadOnlyReasonSchema = z.enum([
   "MURAL_DISABLED",
   "MESSAGE_BLOCKED",
 ]);
 
-export const familyMessageRecordSchema = strictObject({
+export const invitationMessageRecordSchema = strictObject({
   id: identifierSchema,
   authorName: nonEmptyText(160),
-  groupName: nonEmptyText(160),
+  invitationName: nonEmptyText(160),
   text: messageTextSchema,
   revision: z.number().int().positive(),
   createdAt: instantSchema,
   updatedAt: instantSchema,
 });
-export type FamilyMessageRecord = z.infer<typeof familyMessageRecordSchema>;
+export type InvitationMessageRecord = z.infer<
+  typeof invitationMessageRecordSchema
+>;
 
 export const messageMutationInputSchema = strictObject({
   requestId: z.string().uuid(),
@@ -958,21 +926,23 @@ export const messageMutationResponseSchema = strictObject({
   acceptedAt: instantSchema,
   result: z.enum(["APPLIED", "NO_CHANGE"]),
   replayed: z.boolean(),
-  message: familyMessageRecordSchema,
+  message: invitationMessageRecordSchema,
 });
 export type MessageMutationResponse = z.infer<
   typeof messageMutationResponseSchema
 >;
 
-export const familyMessageResponseSchema = strictObject({
+export const invitationMessageResponseSchema = strictObject({
   siteId: siteIdSchema,
-  groupId: identifierSchema,
+  invitationId: identifierSchema,
   currentRevision: z.number().int().nonnegative(),
   canEdit: z.boolean(),
-  readOnlyReason: familyMessageReadOnlyReasonSchema.nullable(),
-  message: familyMessageRecordSchema.nullable(),
+  readOnlyReason: invitationMessageReadOnlyReasonSchema.nullable(),
+  message: invitationMessageRecordSchema.nullable(),
 });
-export type FamilyMessageResponse = z.infer<typeof familyMessageResponseSchema>;
+export type InvitationMessageResponse = z.infer<
+  typeof invitationMessageResponseSchema
+>;
 
 export const publicMuralQuerySchema = strictObject({
   cursor: z.string().min(1).max(500).optional(),
@@ -986,7 +956,7 @@ export const publicMuralResponseSchema = strictObject({
     strictObject({
       id: identifierSchema,
       authorName: nonEmptyText(160),
-      groupName: nonEmptyText(160),
+      invitationName: nonEmptyText(160),
       text: messageTextSchema,
       createdAt: instantSchema,
       updatedAt: instantSchema,
@@ -1009,20 +979,20 @@ export type PublicMuralResponse = z.infer<typeof publicMuralResponseSchema>;
 export const siteMessagesQuerySchema = strictObject({
   cursor: z.string().min(1).max(500).optional(),
   limit: z.coerce.number().int().min(1).max(100).default(20),
-  groupId: identifierSchema.optional(),
+  invitationId: identifierSchema.optional(),
 });
 
 export const siteMessageRecordSchema = strictObject({
-  groupId: identifierSchema,
-  groupName: nonEmptyText(160),
+  invitationId: identifierSchema,
+  invitationName: nonEmptyText(160),
   blocked: z.boolean(),
   currentRevision: z.number().int().nonnegative(),
-  message: familyMessageRecordSchema.nullable(),
+  message: invitationMessageRecordSchema.nullable(),
 });
 export type SiteMessageRecord = z.infer<typeof siteMessageRecordSchema>;
 
 export const siteMessagesResponseSchema = strictObject({
-  groups: z.array(siteMessageRecordSchema),
+  invitations: z.array(siteMessageRecordSchema),
   nextCursor: z.string().min(1).max(500).nullable(),
 });
 
@@ -1038,7 +1008,7 @@ export const siteMessageBlockInputSchema = strictObject({
   blocked: z.boolean(),
 });
 export const siteMessageBlockResponseSchema = strictObject({
-  groupId: identifierSchema,
+  invitationId: identifierSchema,
   blocked: z.boolean(),
 });
 
@@ -1050,25 +1020,32 @@ export const messageDeletionResponseSchema = strictObject({
   currentRevision: z.number().int().nonnegative(),
 });
 
-export const groupDeleteConfirmationSchema = strictObject({
-  confirmGroupId: identifierSchema,
-  confirmGroupName: nonEmptyText(160),
+export const invitationDeleteConfirmationSchema = strictObject({
+  confirmInvitationId: identifierSchema,
+  confirmInvitationName: nonEmptyText(160),
 });
-export type GroupDeleteConfirmation = z.infer<
-  typeof groupDeleteConfirmationSchema
+export type InvitationDeleteConfirmation = z.infer<
+  typeof invitationDeleteConfirmationSchema
 >;
 
 const explicitBooleanQuerySchema = z
   .enum(["true", "false"])
   .transform((value) => value === "true");
 
-export const rsvpExportQuerySchema = strictObject({
+export const invitationExportQuerySchema = strictObject({
   requestId: z.string().uuid(),
-  includePhone: explicitBooleanQuerySchema,
-  groupId: identifierSchema.optional(),
-  state: rsvpStateSchema.optional(),
+  search: z
+    .string()
+    .trim()
+    .max(160)
+    .optional()
+    .transform((value) => (value === "" ? undefined : value)),
+  status: rsvpStateSchema.optional(),
+  guestType: invitationGuestTypeSchema.optional(),
+  includePhone: explicitBooleanQuerySchema.optional().default(false),
+  includeEmail: explicitBooleanQuerySchema.optional().default(false),
 });
-export type RsvpExportQuery = z.infer<typeof rsvpExportQuerySchema>;
+export type InvitationExportQuery = z.infer<typeof invitationExportQuerySchema>;
 
 export const block5ErrorCodeSchema = z.enum([
   "MURAL_DISABLED",
@@ -1076,23 +1053,24 @@ export const block5ErrorCodeSchema = z.enum([
   "MESSAGE_CONFLICT",
   "MESSAGE_REMOVED",
   "MESSAGE_NOT_FOUND",
-  "GROUP_CONFIRMATION_MISMATCH",
+  "INVITATION_CONFIRMATION_MISMATCH",
   "RSVP_RESULT_REMOVED",
 ]);
 
 export const block5EndpointPaths = {
-  publicFamilyMessageRead: "GET /v1/public/family/message",
-  publicFamilyMessageWrite: "PUT /v1/public/family/message",
+  publicInvitationMessageRead: "GET /v1/public/invitation/message",
+  publicInvitationMessageWrite: "PUT /v1/public/invitation/message",
   publicMuralRead: "GET /v1/public/sites/:siteId/mural",
   siteMessagesRead: "GET /v1/sites/:siteId/messages",
   siteMuralRead: "GET /v1/sites/:siteId/mural",
   siteMuralUpdate: "PATCH /v1/sites/:siteId/mural",
-  siteMessageDelete: "DELETE /v1/sites/:siteId/groups/:groupId/message",
+  siteMessageDelete:
+    "DELETE /v1/sites/:siteId/invitations/:invitationId/message",
   siteMessageBlockUpdate:
-    "PATCH /v1/sites/:siteId/groups/:groupId/message-block",
-  siteGroupDelete: "DELETE /v1/sites/:siteId/groups/:groupId",
-  siteRsvpCsvExport: "GET /v1/sites/:siteId/reports/rsvp.csv",
-  siteRsvpPdfExport: "GET /v1/sites/:siteId/reports/rsvp.pdf",
+    "PATCH /v1/sites/:siteId/invitations/:invitationId/message-block",
+  siteInvitationDelete: "DELETE /v1/sites/:siteId/invitations/:invitationId",
+  siteInvitationCsvExport: "GET /v1/sites/:siteId/reports/invitations.csv",
+  siteInvitationPdfExport: "GET /v1/sites/:siteId/reports/invitations.pdf",
 } as const;
 
 export type Block5EndpointPath =
@@ -1110,8 +1088,8 @@ export const demoResetResponseSchema = strictObject({
   result: z.literal("RESET"),
   resetAt: instantSchema,
   counts: strictObject({
-    groups: z.number().int().nonnegative(),
-    members: z.number().int().nonnegative(),
+    invitations: z.number().int().nonnegative(),
+    guests: z.number().int().nonnegative(),
     messages: z.number().int().nonnegative(),
   }),
 });

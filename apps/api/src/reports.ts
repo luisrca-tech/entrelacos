@@ -1,5 +1,10 @@
 import { createRequire } from "node:module";
-import { type RsvpState, rsvpExportQuerySchema } from "@entrelacos/contracts";
+import {
+  type InvitationExportQuery,
+  type InvitationGuestType,
+  invitationExportQuerySchema,
+  type RsvpState,
+} from "@entrelacos/contracts";
 import { sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import PDFDocument from "pdfkit";
@@ -9,30 +14,32 @@ export type ReportsAdminActor = {
   userId: string;
   role: "OWNER" | "SITE_ADMIN";
 };
-
-export type RsvpTotals = {
+export type InvitationReportTotals = {
+  invitations: number;
+  guests: number;
+  adults: number;
+  children: number;
   pending: number;
   confirmed: number;
   declined: number;
 };
-
-export type RsvpReportRow = {
-  groupName: string;
-  memberName: string;
+export type InvitationReportRow = {
+  invitationName: string;
+  guestName: string;
+  guestType: InvitationGuestType;
   rsvpState: RsvpState;
-  representativePhone?: string;
+  phone?: string;
+  email?: string;
 };
-
-export type RsvpReport = {
+export type InvitationReport = {
   siteId: string;
   reportTitle: string;
   generatedAt: string;
   timezone: "America/Sao_Paulo";
-  groupFilter: string | null;
-  stateFilter: RsvpState | null;
-  totals: RsvpTotals;
-  selectedTotals: RsvpTotals;
-  rows: RsvpReportRow[];
+  filters: Pick<InvitationExportQuery, "search" | "status" | "guestType">;
+  totals: InvitationReportTotals;
+  selectedTotals: InvitationReportTotals;
+  rows: InvitationReportRow[];
 };
 
 export class ReportsServiceError extends Error {
@@ -50,384 +57,285 @@ function reject(status: number, code: string, title: string): never {
   throw new ReportsServiceError(status, code, title);
 }
 
-function parseQuery(value: unknown) {
-  if (
-    value &&
-    typeof value === "object" &&
-    !Array.isArray(value) &&
-    typeof (value as Record<string, unknown>).includePhone === "boolean"
-  ) {
+function parseQuery(value: unknown): InvitationExportQuery {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
     const input = value as Record<string, unknown>;
-    return rsvpExportQuerySchema.parse({
+    return invitationExportQuerySchema.parse({
       ...input,
-      includePhone: String(input.includePhone),
+      ...(typeof input.includePhone === "boolean"
+        ? { includePhone: String(input.includePhone) }
+        : {}),
+      ...(typeof input.includeEmail === "boolean"
+        ? { includeEmail: String(input.includeEmail) }
+        : {}),
     });
   }
-  return rsvpExportQuerySchema.parse(value);
+  return invitationExportQuerySchema.parse(value);
 }
 
-function emptyTotals(): RsvpTotals {
-  return { pending: 0, confirmed: 0, declined: 0 };
+function searchKey(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLocaleLowerCase("pt-BR")
+    .trim();
 }
 
-function addState(totals: RsvpTotals, state: RsvpState): void {
-  if (state === "PENDING") totals.pending += 1;
-  if (state === "CONFIRMED") totals.confirmed += 1;
-  if (state === "DECLINED") totals.declined += 1;
+export function filterInvitationReportRows<
+  T extends Pick<
+    InvitationReportRow,
+    "invitationName" | "rsvpState" | "guestType"
+  >,
+>(
+  rows: readonly T[],
+  filters: Partial<
+    Pick<InvitationExportQuery, "search" | "status" | "guestType">
+  >,
+): T[] {
+  const search = searchKey(filters.search ?? "");
+  return rows.filter(
+    (row) =>
+      (!search || searchKey(row.invitationName).includes(search)) &&
+      (!filters.status || row.rsvpState === filters.status) &&
+      (!filters.guestType || row.guestType === filters.guestType),
+  );
 }
 
-const RSVP_STATE_LABELS = {
-  PENDING: "Pendente",
-  CONFIRMED: "Confirmado",
-  DECLINED: "Não comparecerá",
-} satisfies Record<RsvpState, string>;
+type DatabaseRow = InvitationReportRow & { invitationId: string };
 
-export function formatRsvpState(state: RsvpState): string {
-  return RSVP_STATE_LABELS[state];
+function summarize(rows: readonly DatabaseRow[]): InvitationReportTotals {
+  const invitationIds = new Set<string>();
+  const totals: InvitationReportTotals = {
+    invitations: 0,
+    guests: 0,
+    adults: 0,
+    children: 0,
+    pending: 0,
+    confirmed: 0,
+    declined: 0,
+  };
+  for (const row of rows) {
+    invitationIds.add(row.invitationId);
+    totals.guests += 1;
+    if (row.guestType === "ADULT") totals.adults += 1;
+    else totals.children += 1;
+    if (row.rsvpState === "PENDING") totals.pending += 1;
+    else if (row.rsvpState === "CONFIRMED") totals.confirmed += 1;
+    else totals.declined += 1;
+  }
+  totals.invitations = invitationIds.size;
+  return totals;
 }
 
-type ReportDatabaseRow = {
-  group_id: string;
-  group_name: string;
-  group_phone: string | null;
-  member_id: string;
-  member_name: string;
-  rsvp_state: RsvpState;
-};
-
-export async function readRsvpReport(
+export async function readInvitationReport(
   db: ReportsDatabase,
   actor: ReportsAdminActor,
   siteId: string,
   queryValue: unknown,
   nowValue?: Date,
-): Promise<RsvpReport> {
+): Promise<InvitationReport> {
   const query = parseQuery(queryValue);
   const generatedAt = nowValue ? new Date(nowValue.getTime()) : new Date();
-  if (!Number.isFinite(generatedAt.getTime()))
+  if (!Number.isFinite(generatedAt.getTime())) {
     reject(400, "VALIDATION_ERROR", "Invalid report request");
-
+  }
   return db.transaction(
     async (tx) => {
       const access = await tx.execute(sql`
-      SELECT s.id, s.display_name
-      FROM site s
-      INNER JOIN "user" u
-        ON u.id = ${actor.userId} AND u.state = 'ACTIVE'
-      WHERE s.id = ${siteId}
-        AND (
-          ${actor.role === "OWNER"}
-          OR EXISTS (
-            SELECT 1
-            FROM site_membership sm
-            WHERE sm.site_id = s.id AND sm.user_id = u.id
+        SELECT s.id, s.display_name
+        FROM site s
+        INNER JOIN "user" u ON u.id = ${actor.userId} AND u.state = 'ACTIVE'
+        WHERE s.id = ${siteId}
+          AND (
+            ${actor.role === "OWNER"}
+            OR EXISTS (
+              SELECT 1 FROM site_membership sm
+              WHERE sm.site_id = s.id AND sm.user_id = u.id
+            )
           )
-        )
-    `);
+      `);
       const site = access.rows[0] as
         | { id: string; display_name: string }
         | undefined;
       if (!site) reject(404, "NOT_FOUND", "Not Found");
 
-      if (query.groupId) {
-        const group = await tx.execute(sql`
-        SELECT 1
-        FROM guest_group
-        WHERE site_id = ${site.id} AND id = ${query.groupId}
-        LIMIT 1
-      `);
-        if (group.rows.length === 0) reject(404, "NOT_FOUND", "Not Found");
-      }
-
       const result = await tx.execute(sql`
-      SELECT
-        gg.id AS group_id,
-        gg.name AS group_name,
-        ${query.includePhone ? sql`gg.phone_e164` : sql`NULL::text`} AS group_phone,
-        gm.id AS member_id,
-        gm.full_name AS member_name,
-        gm.rsvp_state
-      FROM guest_group gg
-      INNER JOIN guest_member gm
-        ON gm.site_id = gg.site_id AND gm.group_id = gg.id
-      WHERE gg.site_id = ${site.id}
-      ORDER BY gg.name ASC, gg.id ASC, gm.full_name ASC, gm.id ASC
-    `);
-      const rows = result.rows as unknown as ReportDatabaseRow[];
-      const totals = emptyTotals();
-      const selectedTotals = emptyTotals();
-      for (const row of rows) {
-        addState(totals, row.rsvp_state);
-        if (
-          (!query.groupId || row.group_id === query.groupId) &&
-          (!query.state || row.rsvp_state === query.state)
-        ) {
-          addState(selectedTotals, row.rsvp_state);
-        }
-      }
-
+        SELECT
+          i.id AS "invitationId",
+          i.name AS "invitationName",
+          ${query.includePhone ? sql`i.phone_e164` : sql`NULL::text`} AS phone,
+          ${query.includeEmail ? sql`i.email` : sql`NULL::text`} AS email,
+          g.full_name AS "guestName",
+          g.guest_type AS "guestType",
+          g.rsvp_state AS "rsvpState"
+        FROM invitation i
+        INNER JOIN invitation_guest g
+          ON g.site_id = i.site_id AND g.invitation_id = i.id
+        WHERE i.site_id = ${site.id}
+        ORDER BY i.name ASC, i.id ASC, g.full_name ASC, g.id ASC
+      `);
+      const allRows = result.rows as unknown as DatabaseRow[];
+      const selectedRows = filterInvitationReportRows(allRows, query);
       return {
         siteId: site.id,
         reportTitle: site.display_name,
         generatedAt: generatedAt.toISOString(),
         timezone: "America/Sao_Paulo",
-        groupFilter: query.groupId ?? null,
-        stateFilter: query.state ?? null,
-        totals,
-        selectedTotals,
-        rows: rows
-          .filter(
-            (row) =>
-              (!query.groupId || row.group_id === query.groupId) &&
-              (!query.state || row.rsvp_state === query.state),
-          )
-          .map((row) => ({
-            groupName: row.group_name,
-            memberName: row.member_name,
-            rsvpState: row.rsvp_state,
-            ...(query.includePhone
-              ? { representativePhone: row.group_phone ?? "" }
-              : {}),
-          })),
+        filters: {
+          search: query.search,
+          status: query.status,
+          guestType: query.guestType,
+        },
+        totals: summarize(allRows),
+        selectedTotals: summarize(selectedRows),
+        rows: selectedRows.map((row) => ({
+          invitationName: row.invitationName,
+          guestName: row.guestName,
+          guestType: row.guestType,
+          rsvpState: row.rsvpState,
+          ...(query.includePhone ? { phone: row.phone ?? "" } : {}),
+          ...(query.includeEmail ? { email: row.email ?? "" } : {}),
+        })),
       };
     },
     { isolationLevel: "repeatable read", accessMode: "read only" },
   );
 }
 
-const CSV_COLUMNS = [
-  "recordType",
-  "reportTitle",
-  "generatedAt",
-  "timezone",
-  "groupFilter",
-  "stateFilter",
-  "totalPending",
-  "totalConfirmed",
-  "totalDeclined",
-  "selectedPending",
-  "selectedConfirmed",
-  "selectedDeclined",
-  "groupName",
-  "memberName",
-  "rsvpState",
-] as const;
+const RSVP_LABELS = {
+  PENDING: "Sem resposta",
+  CONFIRMED: "Irá comparecer",
+  DECLINED: "Não comparecerá",
+} satisfies Record<RsvpState, string>;
+const TYPE_LABELS = {
+  ADULT: "Adulto",
+  CHILD: "Criança",
+} satisfies Record<InvitationGuestType, string>;
 
 function protectSpreadsheetCell(value: string): string {
   return /^[=+\-@\t\r\n]/u.test(value) ? `'${value}` : value;
 }
 
-function csvCell(value: string | number): string {
-  return `"${protectSpreadsheetCell(String(value)).replaceAll('"', '""')}"`;
+function csvCell(value: string): string {
+  return `"${protectSpreadsheetCell(value).replaceAll('"', '""')}"`;
 }
 
-function csvRow(values: Array<string | number>): string {
-  return values.map(csvCell).join(",");
-}
+type ContactOptions = { includePhone: boolean; includeEmail: boolean };
 
-export function createRsvpCsv(
-  report: RsvpReport,
-  includePhone = false,
+export function createInvitationCsv(
+  report: InvitationReport,
+  options: ContactOptions,
 ): Uint8Array {
-  const columns = [
-    ...CSV_COLUMNS,
-    ...(includePhone ? ["representativePhone"] : []),
+  const rows = [
+    [
+      "Convite",
+      "Convidado",
+      "Tipo",
+      "Status",
+      ...(options.includePhone ? ["Telefone"] : []),
+      ...(options.includeEmail ? ["E-mail"] : []),
+    ],
+    ...report.rows.map((row) => [
+      row.invitationName,
+      row.guestName,
+      TYPE_LABELS[row.guestType],
+      RSVP_LABELS[row.rsvpState],
+      ...(options.includePhone ? [row.phone ?? ""] : []),
+      ...(options.includeEmail ? [row.email ?? ""] : []),
+    ]),
   ];
-  const summary = [
-    "SUMMARY",
-    report.reportTitle,
-    report.generatedAt,
-    report.timezone,
-    report.groupFilter ?? "",
-    report.stateFilter ? formatRsvpState(report.stateFilter) : "",
-    report.totals.pending,
-    report.totals.confirmed,
-    report.totals.declined,
-    report.selectedTotals.pending,
-    report.selectedTotals.confirmed,
-    report.selectedTotals.declined,
-    "",
-    "",
-    "",
-    ...(includePhone ? [""] : []),
-  ];
-  const members = report.rows.map((row) => [
-    "MEMBER",
-    "",
-    "",
-    "",
-    "",
-    "",
-    "",
-    "",
-    "",
-    "",
-    "",
-    "",
-    row.groupName,
-    row.memberName,
-    formatRsvpState(row.rsvpState),
-    ...(includePhone ? [row.representativePhone ?? ""] : []),
-  ]);
-  const csv = [csvRow(columns), csvRow(summary), ...members.map(csvRow)].join(
-    "\r\n",
+  return new TextEncoder().encode(
+    `\uFEFF${rows.map((row) => row.map(csvCell).join(",")).join("\r\n")}\r\n`,
   );
-  return new TextEncoder().encode(`\uFEFF${csv}\r\n`);
 }
-
-export const generateRsvpCsv = createRsvpCsv;
 
 const require = createRequire(import.meta.url);
 const regularFont = require.resolve("dejavu-fonts-ttf/ttf/DejaVuSans.ttf");
 const boldFont = require.resolve("dejavu-fonts-ttf/ttf/DejaVuSans-Bold.ttf");
 const MM = 72 / 25.4;
-const PAGE_WIDTH = 595.28;
 const MARGIN = 15 * MM;
 const FOOTER_Y = 785;
-
-function formatFilter(value: string | null): string {
-  return value ?? "Todos";
-}
-
-function formatStateFilter(value: RsvpState | null): string {
-  return value ? formatRsvpState(value) : "Todos";
-}
-
-function createPdfDocument() {
-  return new PDFDocument({
-    size: "A4",
-    margins: { top: MARGIN, bottom: MARGIN, left: MARGIN, right: MARGIN },
-    bufferPages: true,
-    autoFirstPage: true,
-  });
-}
+const PAGE_WIDTH = 595.28;
 
 function pdfText(value: string): string {
   return Array.from(value)
     .filter((character) => {
-      const codePoint = character.codePointAt(0) ?? 0;
+      const point = character.codePointAt(0) ?? 0;
       return (
-        codePoint === 9 ||
-        codePoint === 10 ||
-        codePoint === 13 ||
-        (codePoint >= 32 && codePoint !== 127)
+        point === 9 ||
+        point === 10 ||
+        point === 13 ||
+        (point >= 32 && point !== 127)
       );
     })
     .join("");
 }
 
-export function createRsvpPdf(
-  report: RsvpReport,
-  includePhone = false,
+export function createInvitationPdf(
+  report: InvitationReport,
+  options: ContactOptions,
 ): Promise<Uint8Array> {
   return new Promise((resolve, rejectPromise) => {
-    const document = createPdfDocument();
+    const document = new PDFDocument({
+      size: "A4",
+      margins: { top: MARGIN, bottom: MARGIN, left: MARGIN, right: MARGIN },
+      bufferPages: true,
+    });
     const chunks: Buffer[] = [];
     document.on("data", (chunk: Buffer) => chunks.push(chunk));
     document.on("error", rejectPromise);
     document.on("end", () => resolve(new Uint8Array(Buffer.concat(chunks))));
-
     try {
       document.registerFont("DejaVu", regularFont);
       document.registerFont("DejaVu-Bold", boldFont);
-      document.font("DejaVu");
       document
-        .fontSize(18)
         .font("DejaVu-Bold")
+        .fontSize(18)
         .text(pdfText(report.reportTitle));
-      document.moveDown(0.35);
-      document
-        .fontSize(9)
-        .font("DejaVu")
-        .text(`Gerado em ${report.generatedAt} (UTC)`);
-      document.text(`Fuso de exibição: ${report.timezone}`);
+      document.font("DejaVu").fontSize(9).moveDown(0.4);
+      document.text(`Gerado em ${report.generatedAt} (UTC)`);
       document.text(
-        `Grupo: ${formatFilter(report.groupFilter)} | Estado: ${formatStateFilter(report.stateFilter)}`,
+        `Busca: ${pdfText(report.filters.search || "Todas")} | Status: ${report.filters.status ? RSVP_LABELS[report.filters.status] : "Todos"} | Tipo: ${report.filters.guestType ? TYPE_LABELS[report.filters.guestType] : "Todos"}`,
       );
       document.moveDown(0.5);
-      document.fontSize(11).font("DejaVu-Bold").text("Totais do site");
-      document
-        .fontSize(9)
-        .font("DejaVu")
-        .text(
-          `Pendente: ${report.totals.pending} | Confirmado: ${report.totals.confirmed} | Não comparecerá: ${report.totals.declined}`,
-        );
-      document.text("Totais selecionados");
       document.text(
-        `Pendente: ${report.selectedTotals.pending} | Confirmado: ${report.selectedTotals.confirmed} | Não comparecerá: ${report.selectedTotals.declined}`,
+        `Total do site: ${report.totals.invitations} convites, ${report.totals.guests} convidados`,
+      );
+      document.text(
+        `Seleção: ${report.selectedTotals.invitations} convites, ${report.selectedTotals.guests} convidados — ${report.selectedTotals.adults} adultos, ${report.selectedTotals.children} crianças`,
+      );
+      document.text(
+        `Sem resposta: ${report.selectedTotals.pending} | Irá comparecer: ${report.selectedTotals.confirmed} | Não comparecerá: ${report.selectedTotals.declined}`,
       );
       document.moveDown(0.65);
-
-      const tableTop = () => {
-        document.font("DejaVu-Bold").fontSize(9);
-        const columns = includePhone
-          ? [
-              ["Grupo", 140],
-              ["Convidado", 195],
-              ["Estado", 75],
-              ["Telefone", 100],
-            ]
-          : [
-              ["Grupo", 175],
-              ["Convidado", 235],
-              ["Estado", 100],
-            ];
-        const y = document.y;
-        let x = MARGIN;
-        for (const [label, width] of columns) {
-          document.text(String(label), x, y, {
-            width: width as number,
-            height: 12,
-            lineBreak: false,
-          });
-          x += width as number;
-        }
-        document.y = y + 15;
-        document.font("DejaVu").fontSize(8);
-        return columns as Array<[string, number]>;
-      };
-
-      let columns = tableTop();
       for (const row of report.rows) {
-        const values = includePhone
-          ? [
-              row.groupName,
-              row.memberName,
-              formatRsvpState(row.rsvpState),
-              row.representativePhone ?? "",
-            ]
-          : [row.groupName, row.memberName, formatRsvpState(row.rsvpState)];
-        const heights = values.map((value, index) =>
-          document.heightOfString(pdfText(String(value)), {
-            width: columns[index]?.[1] ?? 0,
-          }),
-        );
-        const rowHeight = Math.max(...heights, 12) + 4;
-        if (document.y + rowHeight > FOOTER_Y - 18) {
-          document.addPage({
-            size: "A4",
-            margins: {
-              top: MARGIN,
-              bottom: MARGIN,
-              left: MARGIN,
-              right: MARGIN,
-            },
-          });
-          columns = tableTop();
+        const lines = [
+          `${row.invitationName} — ${row.guestName}`,
+          `${TYPE_LABELS[row.guestType]} | ${RSVP_LABELS[row.rsvpState]}`,
+          ...(options.includePhone ? [`Telefone: ${row.phone ?? ""}`] : []),
+          ...(options.includeEmail ? [`E-mail: ${row.email ?? ""}`] : []),
+        ].map(pdfText);
+        const height =
+          lines.reduce(
+            (sum, line, index) =>
+              sum +
+              document
+                .font(index === 0 ? "DejaVu-Bold" : "DejaVu")
+                .fontSize(index === 0 ? 9 : 8)
+                .heightOfString(line, { width: PAGE_WIDTH - 2 * MARGIN }),
+            0,
+          ) + 9;
+        if (document.y + height > FOOTER_Y - 18) {
+          document.addPage();
         }
-        const y = document.y;
-        let x = MARGIN;
-        for (let index = 0; index < values.length; index += 1) {
-          const width = columns[index]?.[1] ?? 0;
-          document.text(pdfText(String(values[index] ?? "")), x, y, {
-            width,
-            height: rowHeight,
-          });
-          x += width;
+        for (const [index, line] of lines.entries()) {
+          document
+            .font(index === 0 ? "DejaVu-Bold" : "DejaVu")
+            .fontSize(index === 0 ? 9 : 8)
+            .text(line);
         }
-        document.y = y + rowHeight;
+        document.moveDown(0.45);
       }
-
       const range = document.bufferedPageRange();
       for (
         let index = range.start;
@@ -445,7 +353,6 @@ export function createRsvpPdf(
             align: "right",
           },
         );
-        document.fillColor("#000000");
       }
       document.end();
     } catch (error) {
@@ -453,5 +360,3 @@ export function createRsvpPdf(
     }
   });
 }
-
-export const generateRsvpPdf = createRsvpPdf;

@@ -1,6 +1,6 @@
 import {
-  type FamilyMessageResponse,
-  familyMessageResponseSchema,
+  type InvitationMessageResponse,
+  invitationMessageResponseSchema,
   type MessageMutationInput,
   type MessageMutationResponse,
   messageMutationInputSchema,
@@ -67,23 +67,25 @@ export class WeddingMessagesApi {
     this.fetcher = (input, init) => fetcher(input, init);
   }
 
-  async getFamilyMessage(sessionToken: string): Promise<FamilyMessageResponse> {
+  async getInvitationMessage(
+    sessionToken: string,
+  ): Promise<InvitationMessageResponse> {
     const token = opaqueTokenSchema.parse(sessionToken);
     return this.request(
-      "/v1/public/family/message",
+      "/v1/public/invitation/message",
       { headers: { Authorization: `Bearer ${token}` } },
-      (value) => familyMessageResponseSchema.parse(value),
+      (value) => invitationMessageResponseSchema.parse(value),
     );
   }
 
-  async saveFamilyMessage(
+  async saveInvitationMessage(
     sessionToken: string,
     input: MessageMutationInput,
   ): Promise<MessageMutationResponse> {
     const token = opaqueTokenSchema.parse(sessionToken);
     const body = messageMutationInputSchema.parse(input);
     return this.request(
-      "/v1/public/family/message",
+      "/v1/public/invitation/message",
       {
         method: "PUT",
         headers: { Authorization: `Bearer ${token}` },

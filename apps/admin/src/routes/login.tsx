@@ -5,6 +5,7 @@ import {
   CardDescription,
   CardHeader,
   Input,
+  toast,
 } from "@entrelacos/ui";
 import { createFileRoute } from "@tanstack/react-router";
 import { type FormEvent, useEffect, useState } from "react";
@@ -22,7 +23,6 @@ export const Route = createFileRoute("/login")({
 
 function LoginPage() {
   const search = Route.useSearch();
-  const [error, setError] = useState("");
   const [hydrated, setHydrated] = useState(false);
   const [pending, setPending] = useState(false);
 
@@ -32,7 +32,6 @@ function LoginPage() {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     setPending(true);
-    setError("");
     try {
       await apiRequest("/v1/auth/sign-in/email", {
         method: "POST",
@@ -40,7 +39,7 @@ function LoginPage() {
       });
       window.location.assign(search.next);
     } catch {
-      setError(
+      toast.error(
         "Não foi possível entrar. Confira o e-mail e a senha ou solicite um novo acesso ao responsável.",
       );
       setPending(false);
@@ -102,11 +101,6 @@ function LoginPage() {
                 maxLength={200}
               />
             </label>
-            {error && (
-              <p className={adminStyles.alert} role="alert">
-                {error}
-              </p>
-            )}
             <Button
               className="w-fit justify-self-start"
               type="submit"

@@ -49,8 +49,8 @@ describe("panel API boundary", () => {
     expect(safePanelReturn("/handoff?siteId=one&challenge=abc")).toBe(
       "/handoff?siteId=one&challenge=abc",
     );
-    expect(safePanelReturn("/sites/demo/overview")).toBe(
-      "/sites/demo/overview",
+    expect(safePanelReturn("/sites/demo/invitations")).toBe(
+      "/sites/demo/invitations",
     );
     expect(safePanelReturn("/sites/demo/settings?tab=domain")).toBe(
       "/sites/demo/settings?tab=domain",
@@ -61,6 +61,8 @@ describe("panel API boundary", () => {
       "/login",
       "/sites",
       "/sites/demo/unknown",
+      "/sites/demo/guests",
+      "/sites/demo/rsvp",
       "/sites/demo/overview#evil",
       "/handoff/../evil",
       "/handoff#evil",

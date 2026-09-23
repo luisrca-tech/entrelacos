@@ -19,6 +19,5 @@ export {
   readDatabaseIdentity,
   resolveDatabaseConfig,
   resolveMigrationConnectionUrl,
-  runDatabaseMigrations,
   verifyDatabaseConnection,
 } from "./connection";

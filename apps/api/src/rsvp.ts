@@ -2,10 +2,10 @@ import { createHash, randomUUID } from "node:crypto";
 import {
   type AdminRsvpWriteInput,
   adminRsvpWriteInputSchema,
-  type FamilyRsvpResponse,
-  type FamilyRsvpWriteInput,
-  familyRsvpResponseSchema,
-  familyRsvpWriteInputSchema,
+  type InvitationRsvpResponse,
+  type InvitationRsvpWriteInput,
+  invitationRsvpResponseSchema,
+  invitationRsvpWriteInputSchema,
   type RsvpDeadline,
   type RsvpHistoryQuery,
   type RsvpState,
@@ -19,16 +19,16 @@ import {
   siteRsvpResponseSchema,
 } from "@entrelacos/contracts";
 import {
-  guestGroup,
-  guestMember,
+  invitation,
+  invitationGuest,
   rsvpHistory,
   rsvpRequestReceipt,
-  rsvpRequestReceiptGroup,
+  rsvpRequestReceiptInvitation,
   site,
 } from "@entrelacos/database/schema";
 import { and, asc, desc, eq, gte, inArray, lt, or, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
-import { hashFamilySessionToken } from "./familySession";
+import { hashInvitationSessionToken } from "./guestVerification";
 
 export type RsvpDatabase = NodePgDatabase<Record<string, never>>;
 export type RsvpAdminActor = { userId: string; role: "OWNER" | "SITE_ADMIN" };
@@ -56,151 +56,143 @@ function reject(
 
 function currentTime(value?: Date): Date {
   const now = value ? new Date(value.getTime()) : new Date();
-  if (!Number.isFinite(now.getTime()))
+  if (!Number.isFinite(now.getTime())) {
     reject(400, "VALIDATION_ERROR", "Invalid RSVP request");
+  }
   return now;
 }
 
 function asDate(value: Date | string | null): Date | null {
-  return value === null
-    ? null
-    : value instanceof Date
-      ? value
-      : new Date(value);
+  if (value === null) return null;
+  return value instanceof Date ? value : new Date(value);
 }
 
-type FamilyContext = {
+type InvitationContext = {
   sessionId: string;
   siteId: string;
-  groupId: string;
+  invitationId: string;
+  invitationName: string;
   expiresAt: Date;
   lifecycle: "DRAFT" | "IN_REVIEW" | "ACTIVE" | "INACTIVE";
   deadlineAt: Date | null;
   deadlineTimezone: string | null;
-  groupName: string;
-  representativeId: string;
-  representativeName: string;
 };
 
-async function familyContext(
+async function invitationContext(
   db: RsvpDatabase,
   token: string,
   now: Date,
   lock: boolean,
-): Promise<FamilyContext> {
-  const tokenHash = hashFamilySessionToken(token);
+): Promise<InvitationContext> {
+  const tokenHash = hashInvitationSessionToken(token);
   const result = await db.execute(sql`
-    SELECT fs.id AS session_id, fs.site_id, fs.group_id, fs.expires_at,
-      fs.revoked_at, s.lifecycle, s.rsvp_deadline_at,
-      s.rsvp_deadline_timezone, gg.name AS group_name, gg.is_foreign,
-      gg.representative_member_id, gm.full_name AS representative_name
-    FROM family_session fs
-    INNER JOIN site s ON s.id = fs.site_id
-    INNER JOIN guest_group gg
-      ON gg.site_id = fs.site_id AND gg.id = fs.group_id
-    INNER JOIN guest_member gm
-      ON gm.site_id = gg.site_id AND gm.group_id = gg.id
-      AND gm.id = gg.representative_member_id
-    WHERE fs.token_hash = ${tokenHash}
-    ${lock ? sql`FOR SHARE OF fs, s, gg` : sql``}
+    SELECT session.id AS session_id, session.site_id, session.invitation_id,
+      session.expires_at, session.revoked_at, wedding.lifecycle,
+      wedding.rsvp_deadline_at, wedding.rsvp_deadline_timezone,
+      invite.name AS invitation_name
+    FROM invitation_session AS session
+    INNER JOIN site AS wedding ON wedding.id = session.site_id
+    INNER JOIN invitation AS invite
+      ON invite.site_id = session.site_id AND invite.id = session.invitation_id
+    WHERE session.token_hash = ${tokenHash}
+    ${lock ? sql`FOR SHARE OF session, wedding, invite` : sql``}
   `);
   const row = result.rows[0] as
     | {
         session_id: string;
         site_id: string;
-        group_id: string;
+        invitation_id: string;
         expires_at: Date | string;
         revoked_at: Date | string | null;
-        lifecycle: FamilyContext["lifecycle"];
+        lifecycle: InvitationContext["lifecycle"];
         rsvp_deadline_at: Date | string | null;
         rsvp_deadline_timezone: string | null;
-        group_name: string;
-        is_foreign: boolean;
-        representative_member_id: string;
-        representative_name: string;
+        invitation_name: string;
       }
     | undefined;
+  const expiresAt = row ? asDate(row.expires_at) : null;
   if (
     !row ||
     row.revoked_at ||
-    asDate(row.expires_at) === null ||
-    (asDate(row.expires_at) as Date) <= now ||
-    row.lifecycle === "INACTIVE" ||
-    row.is_foreign
+    !expiresAt ||
+    expiresAt <= now ||
+    row.lifecycle === "INACTIVE"
   ) {
-    reject(401, "SESSION_INVALID", "Family session is invalid");
+    reject(401, "SESSION_INVALID", "Invitation session is invalid");
   }
   return {
     sessionId: row.session_id,
     siteId: row.site_id,
-    groupId: row.group_id,
-    expiresAt: asDate(row.expires_at) as Date,
+    invitationId: row.invitation_id,
+    invitationName: row.invitation_name,
+    expiresAt,
     lifecycle: row.lifecycle,
     deadlineAt: asDate(row.rsvp_deadline_at),
     deadlineTimezone: row.rsvp_deadline_timezone,
-    groupName: row.group_name,
-    representativeId: row.representative_member_id,
-    representativeName: row.representative_name,
   };
 }
 
-async function membersForGroup(
+async function invitationGuests(
   db: RsvpDatabase,
   siteId: string,
-  groupId: string,
+  invitationId: string,
 ) {
-  const [group] = await db
-    .select({ representativeId: guestGroup.representativeMemberId })
-    .from(guestGroup)
-    .where(and(eq(guestGroup.siteId, siteId), eq(guestGroup.id, groupId)))
-    .limit(1);
-  if (!group) reject(401, "SESSION_INVALID", "Family session is invalid");
   return db
     .select({
-      id: guestMember.id,
-      fullName: guestMember.fullName,
-      state: guestMember.rsvpState,
-      revision: guestMember.rsvpRevision,
+      id: invitationGuest.id,
+      fullName: invitationGuest.fullName,
+      guestType: invitationGuest.guestType,
+      state: invitationGuest.rsvpState,
+      revision: invitationGuest.rsvpRevision,
     })
-    .from(guestMember)
+    .from(invitationGuest)
     .where(
-      and(eq(guestMember.siteId, siteId), eq(guestMember.groupId, groupId)),
+      and(
+        eq(invitationGuest.siteId, siteId),
+        eq(invitationGuest.invitationId, invitationId),
+      ),
     )
-    .orderBy(asc(guestMember.id))
-    .then((rows) =>
-      rows.map((member) => ({
-        ...member,
-        isRepresentative: member.id === group.representativeId,
-      })),
-    );
+    .orderBy(asc(invitationGuest.id));
 }
 
-export async function readFamilyRsvp(
+export async function readInvitationRsvp(
   db: RsvpDatabase,
   token: string,
   nowValue?: Date,
-): Promise<FamilyRsvpResponse> {
+): Promise<InvitationRsvpResponse> {
   const now = currentTime(nowValue);
-  const context = await familyContext(db, token, now, false);
+  const context = await invitationContext(db, token, now, false);
   const deadlinePassed =
     context.deadlineAt !== null && now >= context.deadlineAt;
-  return familyRsvpResponseSchema.parse({
+  return invitationRsvpResponseSchema.parse({
     siteId: context.siteId,
-    groupId: context.groupId,
+    invitationId: context.invitationId,
+    invitationName: context.invitationName,
     deadlineAt: context.deadlineAt?.toISOString() ?? null,
     deadlineTimezone: context.deadlineTimezone,
     serverNow: now.toISOString(),
     canEdit: !deadlinePassed,
     readOnlyReason: deadlinePassed ? "DEADLINE_PASSED" : null,
-    members: await membersForGroup(db, context.siteId, context.groupId),
+    guests: await invitationGuests(db, context.siteId, context.invitationId),
   });
 }
 
-function requestHash(input: FamilyRsvpWriteInput): string {
+type WriteContext = {
+  scope: "PUBLIC" | "ADMIN";
+  actorType: "INVITATION" | "ADMIN";
+  actorId: string;
+  receiptActorId: string;
+  actorDisplayName: string;
+  siteId: string;
+  invitationId: string | null;
+  deadlineAt?: Date | null;
+};
+
+function requestHash(input: InvitationRsvpWriteInput): string {
   const canonical = {
     requestId: input.requestId,
-    members: [...input.members].sort((left, right) =>
-      left.memberId.localeCompare(right.memberId),
+    guests: [...input.guests].sort((left, right) =>
+      left.guestId.localeCompare(right.guestId),
     ),
   };
   return createHash("sha256").update(JSON.stringify(canonical)).digest("hex");
@@ -208,23 +200,15 @@ function requestHash(input: FamilyRsvpWriteInput): string {
 
 async function writeRsvp(
   db: RsvpDatabase,
-  context: {
-    scope: "PUBLIC" | "ADMIN";
-    actorType: "FAMILY" | "ADMIN";
-    actorId: string;
-    receiptActorId: string;
-    actorDisplayName: string;
-    siteId: string;
-    groupId: string | null;
-    deadlineAt?: Date | null;
-  },
-  input: FamilyRsvpWriteInput,
+  context: WriteContext,
+  input: InvitationRsvpWriteInput,
   now: Date,
 ): Promise<RsvpWriteResponse> {
   const hash = requestHash(input);
   return db.transaction(async (tx) => {
     const lockKey = `${context.siteId}:${context.scope}:${context.actorType}:${context.receiptActorId}:${input.requestId}`;
     await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${lockKey}))`);
+
     const [receipt] = await tx
       .select()
       .from(rsvpRequestReceipt)
@@ -239,14 +223,19 @@ async function writeRsvp(
       )
       .limit(1);
     if (receipt) {
-      if (receipt.requestHash !== hash)
+      if (receipt.requestHash !== hash) {
         reject(
           409,
           "IDEMPOTENCY_KEY_REUSED",
           "RSVP request ID was already used",
         );
-      if (receipt.responseStatus === "REMOVED" || receipt.responseBody === null)
+      }
+      if (
+        receipt.responseStatus === "REMOVED" ||
+        receipt.responseBody === null
+      ) {
         reject(410, "RSVP_RESULT_REMOVED", "RSVP result was removed");
+      }
       return rsvpWriteResponseSchema.parse({
         ...(receipt.responseBody as Record<string, unknown>),
         replayed: true,
@@ -257,84 +246,95 @@ async function writeRsvp(
       reject(409, "RSVP_DEADLINE_PASSED", "The RSVP deadline has passed");
     }
 
-    const memberIds = input.members
-      .map((member) => member.memberId)
+    const guestIds = input.guests
+      .map((guest) => guest.guestId)
       .sort((left, right) => left.localeCompare(right));
-    for (const memberId of memberIds) {
+    for (const guestId of guestIds) {
       await tx.execute(
-        sql`SELECT pg_advisory_xact_lock(hashtext(${`rsvp-member:${memberId}`}))`,
+        sql`SELECT pg_advisory_xact_lock(hashtext(${`rsvp-guest:${guestId}`}))`,
       );
     }
+
     const conditions = [
-      eq(guestMember.siteId, context.siteId),
-      inArray(guestMember.id, memberIds),
+      eq(invitationGuest.siteId, context.siteId),
+      inArray(invitationGuest.id, guestIds),
     ];
-    if (context.groupId)
-      conditions.push(eq(guestMember.groupId, context.groupId));
+    if (context.invitationId) {
+      conditions.push(eq(invitationGuest.invitationId, context.invitationId));
+    }
     const current = await tx
       .select()
-      .from(guestMember)
+      .from(invitationGuest)
       .where(and(...conditions))
-      .orderBy(asc(guestMember.id))
+      .orderBy(asc(invitationGuest.id))
       .for("update");
-    if (current.length !== memberIds.length)
-      reject(404, "NOT_FOUND", "RSVP member was not found");
+    if (current.length !== guestIds.length) {
+      reject(404, "NOT_FOUND", "RSVP guest was not found");
+    }
 
     const updateById = new Map(
-      input.members.map((member) => [member.memberId, member]),
+      input.guests.map((guest) => [guest.guestId, guest]),
     );
     const conflicts = current.filter(
-      (member) =>
-        member.rsvpRevision !== updateById.get(member.id)?.expectedRevision,
+      (guest) =>
+        guest.rsvpRevision !== updateById.get(guest.id)?.expectedRevision,
     );
     if (conflicts.length > 0) {
       reject(409, "RSVP_CONFLICT", "RSVP data changed", {
-        members: conflicts.map((member) => ({
-          id: member.id,
-          state: member.rsvpState,
-          revision: member.rsvpRevision,
+        guests: conflicts.map((guest) => ({
+          id: guest.id,
+          state: guest.rsvpState,
+          revision: guest.rsvpRevision,
         })),
       });
     }
 
-    const changed = current.filter(
-      (member) => member.rsvpState !== updateById.get(member.id)?.state,
+    const invitationIds = [
+      ...new Set(current.map((guest) => guest.invitationId)),
+    ];
+    const invitationRows = await tx
+      .select({ id: invitation.id, name: invitation.name })
+      .from(invitation)
+      .where(
+        and(
+          eq(invitation.siteId, context.siteId),
+          inArray(invitation.id, invitationIds),
+        ),
+      );
+    const invitationNames = new Map(
+      invitationRows.map((record) => [record.id, record.name]),
     );
-    for (const member of changed) {
-      const nextState = updateById.get(member.id)?.state as RsvpState;
+    if (invitationNames.size !== invitationIds.length) {
+      reject(404, "NOT_FOUND", "RSVP invitation was not found");
+    }
+
+    const changed = current.filter(
+      (guest) => guest.rsvpState !== updateById.get(guest.id)?.state,
+    );
+    for (const guest of changed) {
+      const nextState = updateById.get(guest.id)?.state as RsvpState;
       await tx
-        .update(guestMember)
+        .update(invitationGuest)
         .set({
           rsvpState: nextState,
-          rsvpRevision: member.rsvpRevision + 1,
+          rsvpRevision: guest.rsvpRevision + 1,
           updatedAt: now,
         })
         .where(
           and(
-            eq(guestMember.siteId, member.siteId),
-            eq(guestMember.groupId, member.groupId),
-            eq(guestMember.id, member.id),
+            eq(invitationGuest.siteId, guest.siteId),
+            eq(invitationGuest.invitationId, guest.invitationId),
+            eq(invitationGuest.id, guest.id),
           ),
         );
-      const [group] = await tx
-        .select({ name: guestGroup.name })
-        .from(guestGroup)
-        .where(
-          and(
-            eq(guestGroup.siteId, member.siteId),
-            eq(guestGroup.id, member.groupId),
-          ),
-        )
-        .limit(1);
-      if (!group) reject(404, "NOT_FOUND", "RSVP group was not found");
       await tx.insert(rsvpHistory).values({
         id: randomUUID(),
-        siteId: member.siteId,
-        groupId: member.groupId,
-        memberId: member.id,
-        groupName: group.name,
-        memberDisplayName: member.fullName,
-        beforeState: member.rsvpState,
+        siteId: guest.siteId,
+        invitationId: guest.invitationId,
+        guestId: guest.id,
+        invitationName: invitationNames.get(guest.invitationId) as string,
+        guestDisplayName: guest.fullName,
+        beforeState: guest.rsvpState,
         afterState: nextState,
         actorType: context.actorType,
         actorId: context.actorId,
@@ -343,42 +343,27 @@ async function writeRsvp(
       });
     }
 
-    const resultMembers = current.map((member) => {
-      const state = updateById.get(member.id)?.state as RsvpState;
-      return {
-        id: member.id,
-        fullName: member.fullName,
-        isRepresentative: false,
-        state,
-        revision: member.rsvpRevision + (member.rsvpState === state ? 0 : 1),
-      };
-    });
-    if (context.groupId) {
-      const [group] = await tx
-        .select({ representativeId: guestGroup.representativeMemberId })
-        .from(guestGroup)
-        .where(
-          and(
-            eq(guestGroup.siteId, context.siteId),
-            eq(guestGroup.id, context.groupId),
-          ),
-        )
-        .limit(1);
-      for (const member of resultMembers)
-        member.isRepresentative = member.id === group?.representativeId;
-    }
     const response = rsvpWriteResponseSchema.parse({
       requestId: input.requestId,
       acceptedAt: now.toISOString(),
       result: changed.length > 0 ? "APPLIED" : "NO_CHANGE",
       replayed: false,
-      members: resultMembers,
+      guests: current.map((guest) => {
+        const state = updateById.get(guest.id)?.state as RsvpState;
+        return {
+          id: guest.id,
+          fullName: guest.fullName,
+          guestType: guest.guestType,
+          state,
+          revision: guest.rsvpRevision + (guest.rsvpState === state ? 0 : 1),
+        };
+      }),
     });
     const receiptId = randomUUID();
     await tx.insert(rsvpRequestReceipt).values({
       id: receiptId,
       siteId: context.siteId,
-      groupId: context.groupId,
+      invitationId: context.invitationId,
       scope: context.scope,
       actorType: context.actorType,
       actorId: context.receiptActorId,
@@ -386,15 +371,15 @@ async function writeRsvp(
       requestHash: hash,
       responseStatus: response.result,
       responseBody: response,
+      removedAt: null,
       createdAt: now,
     });
     if (context.scope === "ADMIN") {
-      const groupIds = [...new Set(current.map((member) => member.groupId))];
-      await tx.insert(rsvpRequestReceiptGroup).values(
-        groupIds.map((groupId) => ({
+      await tx.insert(rsvpRequestReceiptInvitation).values(
+        invitationIds.map((invitationId) => ({
           siteId: context.siteId,
           receiptId,
-          groupId,
+          invitationId,
         })),
       );
     }
@@ -402,26 +387,26 @@ async function writeRsvp(
   });
 }
 
-export async function writeFamilyRsvp(
+export async function writeInvitationRsvp(
   db: RsvpDatabase,
   token: string,
   inputValue: unknown,
   nowValue?: Date,
 ): Promise<RsvpWriteResponse> {
-  const input = familyRsvpWriteInputSchema.parse(inputValue);
+  const input = invitationRsvpWriteInputSchema.parse(inputValue);
   const now = currentTime(nowValue);
   return db.transaction(async (tx) => {
-    const context = await familyContext(tx, token, now, true);
+    const context = await invitationContext(tx, token, now, true);
     return writeRsvp(
       tx,
       {
         scope: "PUBLIC",
-        actorType: "FAMILY",
-        actorId: context.representativeId,
+        actorType: "INVITATION",
+        actorId: context.invitationId,
         receiptActorId: context.sessionId,
-        actorDisplayName: context.representativeName,
+        actorDisplayName: context.invitationName,
         siteId: context.siteId,
-        groupId: context.groupId,
+        invitationId: context.invitationId,
         deadlineAt: context.deadlineAt,
       },
       input,
@@ -475,8 +460,9 @@ async function adminContext(
       }
     | undefined;
   if (!row) reject(404, "NOT_FOUND", "Not Found");
-  if (mutation && row.lifecycle === "INACTIVE")
+  if (mutation && row.lifecycle === "INACTIVE") {
     reject(409, "SITE_INACTIVE", "Site is inactive");
+  }
   return {
     siteId: row.site_id,
     lifecycle: row.lifecycle,
@@ -530,8 +516,8 @@ function addState(
   state: RsvpState,
 ): void {
   if (state === "PENDING") totals.pending += 1;
-  if (state === "CONFIRMED") totals.confirmed += 1;
-  if (state === "DECLINED") totals.declined += 1;
+  else if (state === "CONFIRMED") totals.confirmed += 1;
+  else totals.declined += 1;
 }
 
 export async function readSiteRsvp(
@@ -544,36 +530,36 @@ export async function readSiteRsvp(
   const context = await adminContext(db, actor, siteId, null, false);
   const rows = await db
     .select({
-      groupId: guestGroup.id,
-      groupName: guestGroup.name,
-      representativeId: guestGroup.representativeMemberId,
-      memberId: guestMember.id,
-      memberName: guestMember.fullName,
-      state: guestMember.rsvpState,
-      revision: guestMember.rsvpRevision,
+      invitationId: invitation.id,
+      invitationName: invitation.name,
+      guestId: invitationGuest.id,
+      guestName: invitationGuest.fullName,
+      guestType: invitationGuest.guestType,
+      state: invitationGuest.rsvpState,
+      revision: invitationGuest.rsvpRevision,
     })
-    .from(guestGroup)
+    .from(invitation)
     .innerJoin(
-      guestMember,
+      invitationGuest,
       and(
-        eq(guestMember.siteId, guestGroup.siteId),
-        eq(guestMember.groupId, guestGroup.id),
+        eq(invitationGuest.siteId, invitation.siteId),
+        eq(invitationGuest.invitationId, invitation.id),
       ),
     )
-    .where(eq(guestGroup.siteId, siteId))
-    .orderBy(asc(guestGroup.name), asc(guestMember.id));
+    .where(eq(invitation.siteId, siteId))
+    .orderBy(asc(invitation.name), asc(invitationGuest.id));
 
   const totals = emptyTotals();
-  const groups = new Map<
+  const invitations = new Map<
     string,
     {
       id: string;
       name: string;
       totals: ReturnType<typeof emptyTotals>;
-      members: Array<{
+      guests: Array<{
         id: string;
         fullName: string;
-        isRepresentative: boolean;
+        guestType: "ADULT" | "CHILD";
         state: RsvpState;
         revision: number;
       }>;
@@ -581,26 +567,26 @@ export async function readSiteRsvp(
   >();
   for (const row of rows) {
     addState(totals, row.state);
-    const group = groups.get(row.groupId) ?? {
-      id: row.groupId,
-      name: row.groupName,
+    const record = invitations.get(row.invitationId) ?? {
+      id: row.invitationId,
+      name: row.invitationName,
       totals: emptyTotals(),
-      members: [],
+      guests: [],
     };
-    addState(group.totals, row.state);
+    addState(record.totals, row.state);
     if (
-      (!query.groupId || query.groupId === row.groupId) &&
+      (!query.invitationId || query.invitationId === row.invitationId) &&
       (!query.state || query.state === row.state)
     ) {
-      group.members.push({
-        id: row.memberId,
-        fullName: row.memberName,
-        isRepresentative: row.memberId === row.representativeId,
+      record.guests.push({
+        id: row.guestId,
+        fullName: row.guestName,
+        guestType: row.guestType,
         state: row.state,
         revision: row.revision,
       });
     }
-    groups.set(row.groupId, group);
+    invitations.set(row.invitationId, record);
   }
   return siteRsvpResponseSchema.parse({
     siteId,
@@ -608,10 +594,10 @@ export async function readSiteRsvp(
     deadlineAt: context.deadlineAt?.toISOString() ?? null,
     deadlineTimezone: context.deadlineTimezone,
     totals,
-    groups: [...groups.values()].filter(
-      (group) =>
-        group.members.length > 0 &&
-        (!query.groupId || group.id === query.groupId),
+    invitations: [...invitations.values()].filter(
+      (record) =>
+        record.guests.length > 0 &&
+        (!query.invitationId || record.id === query.invitationId),
     ),
   });
 }
@@ -637,7 +623,7 @@ export async function writeAdminRsvp(
         receiptActorId: actor.userId,
         actorDisplayName: context.actorDisplayName,
         siteId,
-        groupId: null,
+        invitationId: null,
       },
       input,
       now,
@@ -655,8 +641,9 @@ function decodeHistoryCursor(value: string): HistoryCursor {
       !Number.isFinite(Date.parse(parsed.occurredAt)) ||
       typeof parsed.id !== "string" ||
       parsed.id.length === 0
-    )
+    ) {
       throw new Error();
+    }
     return parsed;
   } catch {
     reject(400, "VALIDATION_ERROR", "Invalid RSVP history cursor");
@@ -676,14 +663,18 @@ export async function listRsvpHistory(
   const query: RsvpHistoryQuery = rsvpHistoryQuerySchema.parse(queryValue);
   await adminContext(db, actor, siteId, null, false);
   const conditions = [eq(rsvpHistory.siteId, siteId)];
-  if (query.groupId) conditions.push(eq(rsvpHistory.groupId, query.groupId));
-  if (query.memberId) conditions.push(eq(rsvpHistory.memberId, query.memberId));
+  if (query.invitationId) {
+    conditions.push(eq(rsvpHistory.invitationId, query.invitationId));
+  }
+  if (query.guestId) conditions.push(eq(rsvpHistory.guestId, query.guestId));
   if (query.actorType)
     conditions.push(eq(rsvpHistory.actorType, query.actorType));
-  if (query.beforeState)
+  if (query.beforeState) {
     conditions.push(eq(rsvpHistory.beforeState, query.beforeState));
-  if (query.afterState)
+  }
+  if (query.afterState) {
     conditions.push(eq(rsvpHistory.afterState, query.afterState));
+  }
   if (query.from)
     conditions.push(gte(rsvpHistory.occurredAt, new Date(query.from)));
   if (query.to) conditions.push(lt(rsvpHistory.occurredAt, new Date(query.to)));

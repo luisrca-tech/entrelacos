@@ -1,4 +1,5 @@
 ---
+import Toaster from "../components/TemplateToaster";
 import { validateWeddingLayoutProps } from "../content";
 import type { WeddingLayoutProps } from "../content";
 
@@ -115,6 +116,7 @@ validateWeddingLayoutProps(Astro.props);
         </footer>
       )}
     </div>
+    <Toaster client:load />
   </body>
 </html>
 

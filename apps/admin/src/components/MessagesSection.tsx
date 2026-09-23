@@ -9,18 +9,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
   Button,
-  Card,
-  CardAction,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
   Checkbox,
+  toast,
 } from "@entrelacos/ui";
 import { useCallback, useEffect, useState } from "react";
-import { adminStyles, displayHeading } from "../lib/adminStyles";
+import { adminStyles } from "../lib/adminStyles";
 import { apiRequest } from "../lib/apiClient";
-import { listenForGuestGroupsChanged } from "./guestGroupsRefresh";
+import { listenForInvitationsChanged } from "./invitationsRefresh";
 import { mergeSiteMessages, messageAdminError } from "./messageAdmin";
 
 type Props = {
@@ -29,19 +24,18 @@ type Props = {
 };
 
 type MessagesResponse = {
-  groups: SiteMessageRecord[];
+  invitations: SiteMessageRecord[];
   nextCursor: string | null;
 };
 
 export function MessagesSection({ siteId, lifecycle }: Props) {
   const base = `/v1/sites/${encodeURIComponent(siteId)}`;
-  const [groups, setGroups] = useState<SiteMessageRecord[]>([]);
+  const [invitations, setInvitations] = useState<SiteMessageRecord[]>([]);
   const [muralEnabled, setMuralEnabled] = useState(false);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [pending, setPending] = useState("");
   const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
   const [removeTarget, setRemoveTarget] = useState<SiteMessageRecord | null>(
     null,
   );
@@ -60,8 +54,8 @@ export function MessagesSection({ siteId, lifecycle }: Props) {
             ? Promise.resolve(null)
             : apiRequest<{ siteId: string; enabled: boolean }>(`${base}/mural`),
         ]);
-        setGroups((current) =>
-          mergeSiteMessages(current, messages.groups, Boolean(cursor)),
+        setInvitations((current) =>
+          mergeSiteMessages(current, messages.invitations, Boolean(cursor)),
         );
         setNextCursor(messages.nextCursor);
         if (mural) setMuralEnabled(mural.enabled);
@@ -79,7 +73,7 @@ export function MessagesSection({ siteId, lifecycle }: Props) {
   }, [load]);
 
   useEffect(
-    () => listenForGuestGroupsChanged(window, siteId, () => void load()),
+    () => listenForInvitationsChanged(window, siteId, () => void load()),
     [load, siteId],
   );
 
@@ -92,56 +86,21 @@ export function MessagesSection({ siteId, lifecycle }: Props) {
   ) {
     if (!mutable || pending) return;
     setPending(key);
-    setError("");
-    setNotice("");
     try {
       await apiRequest(path, { method, body });
-      setNotice(success);
+      toast.success(success);
       await load();
     } catch (cause) {
       const message = messageAdminError(cause);
       await load();
-      setError(message);
+      toast.error(message);
     } finally {
       setPending("");
     }
   }
 
   return (
-    <section className={adminStyles.card} aria-labelledby="messages-title">
-      <div className="flex items-end justify-between gap-3.5 [@media(max-width:760px)]:grid [@media(max-width:760px)]:grid-cols-1">
-        <div>
-          <h2
-            className={`m-0 mb-[18px] text-[clamp(1.8rem,3vw,2.7rem)] ${displayHeading}`}
-            id="messages-title"
-          >
-            Mural de mensagens
-          </h2>
-          <p className="leading-[1.6]">
-            Controle a publicação do mural e modere os recados enviados por cada
-            convite. O texto dos convidados não pode ser editado no painel.
-          </p>
-        </div>
-        <label className="flex items-center gap-2.5" htmlFor="mural-enabled">
-          <Checkbox
-            id="mural-enabled"
-            checked={muralEnabled}
-            disabled={!mutable || Boolean(pending)}
-            onCheckedChange={(checked) => {
-              const enabled = checked === true;
-              void mutate(
-                "mural",
-                `${base}/mural`,
-                "PATCH",
-                { enabled },
-                enabled ? "Mural ativado." : "Mural desativado.",
-              );
-            }}
-          />
-          Mural público ativo
-        </label>
-      </div>
-
+    <section className="grid gap-4" aria-label="Mensagens">
       {!mutable && (
         <p className={adminStyles.notice} role="status">
           As mensagens podem ser consultadas, mas não moderadas enquanto o site
@@ -153,11 +112,128 @@ export function MessagesSection({ siteId, lifecycle }: Props) {
           {error}
         </p>
       )}
-      {notice && (
-        <p className="my-3.5 leading-[1.6] text-admin-muted" role="status">
-          {notice}
-        </p>
-      )}
+
+      <div className={`${adminStyles.surface} overflow-hidden`}>
+        <div className="flex flex-wrap items-start justify-between gap-4 border-b border-admin-line p-5 [@media(max-width:760px)]:grid">
+          <div className="min-w-0">
+            <h2 className="m-0 font-admin-display text-[1.35rem] text-admin-graphite">
+              Mural de mensagens
+            </h2>
+            <p className="mb-0 mt-1 max-w-[62ch] text-sm leading-[1.6] text-admin-muted">
+              Controle a publicação do mural e modere os recados enviados por
+              cada convite. O texto dos convidados não pode ser editado no
+              painel.
+            </p>
+          </div>
+          <label className="flex items-center gap-2.5" htmlFor="mural-enabled">
+            <Checkbox
+              id="mural-enabled"
+              checked={muralEnabled}
+              disabled={!mutable || Boolean(pending)}
+              onCheckedChange={(checked) => {
+                const enabled = checked === true;
+                void mutate(
+                  "mural",
+                  `${base}/mural`,
+                  "PATCH",
+                  { enabled },
+                  enabled ? "Mural ativado." : "Mural desativado.",
+                );
+              }}
+            />
+            Mural público ativo
+          </label>
+        </div>
+
+        {loading ? (
+          <p className="m-0 p-5 leading-[1.6] text-admin-muted" role="status">
+            Carregando mensagens…
+          </p>
+        ) : invitations.length === 0 ? (
+          <p className="m-0 p-5 leading-[1.6] text-admin-muted">
+            Nenhum convite encontrado para moderação.
+          </p>
+        ) : (
+          invitations.map((invitation) => (
+            <article
+              key={invitation.invitationId}
+              className="border-b border-admin-line p-5 last:border-b-0 [@media(max-width:600px)]:p-4"
+            >
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <h3 className="m-0 break-words font-admin-display text-[1.3rem] text-admin-graphite">
+                    {invitation.invitationName}
+                  </h3>
+                  <p className="mb-0 mt-1 text-xs text-admin-muted">
+                    {invitation.blocked
+                      ? "Envios bloqueados"
+                      : "Envios permitidos"}
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={!mutable || Boolean(pending)}
+                    onClick={() =>
+                      void mutate(
+                        `block:${invitation.invitationId}`,
+                        `${base}/invitations/${encodeURIComponent(invitation.invitationId)}/message-block`,
+                        "PATCH",
+                        { blocked: !invitation.blocked },
+                        invitation.blocked
+                          ? "Novas mensagens liberadas para o convite."
+                          : "Novas mensagens bloqueadas para o convite.",
+                      )
+                    }
+                  >
+                    {pending === `block:${invitation.invitationId}`
+                      ? "Atualizando…"
+                      : invitation.blocked
+                        ? "Desbloquear envios"
+                        : "Bloquear envios"}
+                  </Button>
+                  {invitation.message && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="destructive"
+                      disabled={!mutable || Boolean(pending)}
+                      onClick={() => setRemoveTarget(invitation)}
+                    >
+                      {pending === `delete:${invitation.invitationId}`
+                        ? "Removendo…"
+                        : "Remover mensagem"}
+                    </Button>
+                  )}
+                </div>
+              </div>
+              {invitation.message ? (
+                <div className="mt-4 grid gap-2">
+                  <blockquote className="m-0 break-words whitespace-pre-wrap text-sm leading-[1.55] text-admin-ink">
+                    {invitation.message.text}
+                  </blockquote>
+                  <p className="m-0 text-xs text-admin-muted">
+                    Publicada em{" "}
+                    <time dateTime={invitation.message.createdAt}>
+                      {new Intl.DateTimeFormat("pt-BR", {
+                        dateStyle: "medium",
+                        timeStyle: "short",
+                        timeZone: "America/Sao_Paulo",
+                      }).format(new Date(invitation.message.createdAt))}
+                    </time>
+                  </p>
+                </div>
+              ) : (
+                <p className="mb-0 mt-4 text-sm text-admin-muted">
+                  Este convite ainda não publicou uma mensagem.
+                </p>
+              )}
+            </article>
+          ))
+        )}
+      </div>
 
       <AlertDialog
         open={removeTarget !== null}
@@ -168,7 +244,7 @@ export function MessagesSection({ siteId, lifecycle }: Props) {
             <AlertDialogTitle>Remover mensagem?</AlertDialogTitle>
             <AlertDialogDescription>
               {removeTarget
-                ? `Remover a mensagem de ${removeTarget.groupName}? O texto não poderá ser recuperado.`
+                ? `Remover a mensagem de ${removeTarget.invitationName}? O texto não poderá ser recuperado.`
                 : ""}
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -182,8 +258,8 @@ export function MessagesSection({ siteId, lifecycle }: Props) {
               onClick={() => {
                 if (removeTarget)
                   void mutate(
-                    `delete:${removeTarget.groupId}`,
-                    `${base}/groups/${encodeURIComponent(removeTarget.groupId)}/message`,
+                    `delete:${removeTarget.invitationId}`,
+                    `${base}/invitations/${encodeURIComponent(removeTarget.invitationId)}/message`,
                     "DELETE",
                     { expectedRevision: removeTarget.currentRevision },
                     "Mensagem removida do mural.",
@@ -196,97 +272,6 @@ export function MessagesSection({ siteId, lifecycle }: Props) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-
-      {loading ? (
-        <p className="leading-[1.6]" role="status">
-          Carregando mensagens…
-        </p>
-      ) : groups.length === 0 ? (
-        <p className="leading-[1.6]">
-          Nenhum convite encontrado para moderação.
-        </p>
-      ) : (
-        <div className="mt-6 grid gap-3">
-          {groups.map((group) => (
-            <Card
-              className="items-stretch rounded-[10px] border border-admin-line bg-admin-surface p-5 [@media(max-width:760px)]:grid [@media(max-width:760px)]:grid-cols-1 [&_[data-slot=card-header]]:w-full [&_h3]:mb-2"
-              key={group.groupId}
-            >
-              <CardHeader className="flex w-full flex-row items-start justify-between">
-                <div>
-                  <CardTitle>{group.groupName}</CardTitle>
-                  <CardDescription>
-                    {group.blocked ? "Envios bloqueados" : "Envios permitidos"}
-                  </CardDescription>
-                </div>
-                <CardAction>
-                  <div className="flex flex-wrap items-center gap-3.5">
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      disabled={!mutable || Boolean(pending)}
-                      onClick={() =>
-                        void mutate(
-                          `block:${group.groupId}`,
-                          `${base}/groups/${encodeURIComponent(group.groupId)}/message-block`,
-                          "PATCH",
-                          { blocked: !group.blocked },
-                          group.blocked
-                            ? "Novas mensagens liberadas para o convite."
-                            : "Novas mensagens bloqueadas para o convite.",
-                        )
-                      }
-                    >
-                      {pending === `block:${group.groupId}`
-                        ? "Atualizando…"
-                        : group.blocked
-                          ? "Desbloquear envios"
-                          : "Bloquear envios"}
-                    </Button>
-                    {group.message && (
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="destructive"
-                        disabled={!mutable || Boolean(pending)}
-                        onClick={() => setRemoveTarget(group)}
-                      >
-                        {pending === `delete:${group.groupId}`
-                          ? "Removendo…"
-                          : "Remover mensagem"}
-                      </Button>
-                    )}
-                  </div>
-                </CardAction>
-              </CardHeader>
-              <CardContent>
-                {group.message ? (
-                  <div className="grid gap-4">
-                    <blockquote className="m-0 break-words whitespace-pre-wrap text-[1.1rem] leading-[1.55]">
-                      {group.message.text}
-                    </blockquote>
-                    <p className="leading-[1.6]">
-                      <strong>{group.message.authorName}</strong> · Publicada em{" "}
-                      <time dateTime={group.message.createdAt}>
-                        {new Intl.DateTimeFormat("pt-BR", {
-                          dateStyle: "medium",
-                          timeStyle: "short",
-                          timeZone: "America/Sao_Paulo",
-                        }).format(new Date(group.message.createdAt))}
-                      </time>
-                    </p>
-                  </div>
-                ) : (
-                  <p className="leading-[1.6]">
-                    Este convite ainda não publicou uma mensagem.
-                  </p>
-                )}
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
 
       {nextCursor && (
         <Button

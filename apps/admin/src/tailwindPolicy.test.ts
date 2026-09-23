@@ -20,10 +20,10 @@ const responsiveSources = [
   "lib/adminStyles.ts",
   "components/AdminShell.tsx",
   "components/AuthLayout.tsx",
-  "components/GuestGroupsSection.tsx",
+  "components/InvitationsSection.tsx",
+  "components/InvitationList.tsx",
   "components/MessagesSection.tsx",
   "components/Panel.tsx",
-  "components/RsvpSection.tsx",
   "components/SiteWorkspace.tsx",
 ].map((relativePath) => ({
   path: relativePath,
@@ -37,8 +37,8 @@ const workspaceSource = readFileSync(
   resolve(import.meta.dirname, "components/SiteWorkspace.tsx"),
   "utf8",
 );
-const guestGroupsSource = readFileSync(
-  resolve(import.meta.dirname, "components/GuestGroupsSection.tsx"),
+const invitationsSource = readFileSync(
+  resolve(import.meta.dirname, "components/InvitationsSection.tsx"),
   "utf8",
 );
 
@@ -98,7 +98,7 @@ describe("admin Tailwind policy", () => {
   it("removes SMS quota and delivery UI from the admin workspace", () => {
     expect(workspaceSource).not.toContain("SmsUsageSection");
     expect(workspaceSource).not.toContain("sms-usage");
-    expect(guestGroupsSource).not.toContain("SMS");
-    expect(guestGroupsSource).not.toContain("demo-grant");
+    expect(invitationsSource).not.toContain("SMS");
+    expect(invitationsSource).not.toContain("demo-grant");
   });
 });

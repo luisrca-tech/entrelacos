@@ -94,19 +94,19 @@ describe("admin API proxy", () => {
             "Cache-Control": "no-store",
             "Content-Type": "text/csv; charset=utf-8",
             "Content-Disposition":
-              'attachment; filename="entrelacos-rsvp-casamento.csv"',
+              'attachment; filename="entrelacos-convites-casamento.csv"',
           },
         }),
       ),
     );
 
     const response = await proxyApiRequest(
-      proxyRequest("/api/v1/sites/casamento-a/reports/rsvp.csv"),
+      proxyRequest("/api/v1/sites/casamento-a/reports/invitations.csv"),
       config,
     );
 
     expect(response.headers.get("content-disposition")).toBe(
-      'attachment; filename="entrelacos-rsvp-casamento.csv"',
+      'attachment; filename="entrelacos-convites-casamento.csv"',
     );
     expect(new Uint8Array(await response.arrayBuffer())).toEqual(bytes);
   });

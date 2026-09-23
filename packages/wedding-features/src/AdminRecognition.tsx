@@ -1,3 +1,4 @@
+import { toast } from "@entrelacos/ui/toaster";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -56,9 +57,10 @@ export function AdminRecognition({
       sessionStorage.setItem(verifierKey, verifier);
       window.location.assign(url);
     } catch {
-      setError(
-        "Não foi possível iniciar o acesso administrativo neste navegador. Tente novamente.",
-      );
+      const message =
+        "Não foi possível iniciar o acesso administrativo neste navegador. Tente novamente.";
+      toast.error(message);
+      setError(message);
     }
   }, [panelOrigin, siteId, verifierKey]);
   const dismissIntro = useCallback(() => {
@@ -126,10 +128,12 @@ export function AdminRecognition({
             sessionStorage.setItem(tokenKey, result.recognitionToken);
           } catch {
             sessionStorage.removeItem(tokenKey);
-            if (active)
-              setError(
-                "Acesso administrativo não reconhecido. Tente novamente a partir do ambiente administrativo.",
-              );
+            if (active) {
+              const message =
+                "Acesso administrativo não reconhecido. Tente novamente a partir do ambiente administrativo.";
+              toast.error(message);
+              setError(message);
+            }
           }
         });
       }
@@ -162,27 +166,20 @@ export function AdminRecognition({
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [showIntro, dismissIntro]);
-  if (view === "hidden") return null;
+  if (view !== "recognized") return null;
   return (
     <>
       <aside
         className="flex flex-wrap items-center gap-3 text-inherit"
         aria-label="Acesso administrativo"
       >
-        {view === "recognized" && (
-          <a
-            ref={panelLink}
-            className="inline-flex min-h-11 items-center px-1 py-2 text-inherit no-underline hover:underline hover:underline-offset-4 focus-visible:underline focus-visible:underline-offset-4"
-            href={`${panelOrigin}/sites/${encodeURIComponent(siteId)}`}
-          >
-            {adminPanelLinkLabel}
-          </a>
-        )}
-        {error && (
-          <p className="m-0 max-w-96 normal-case leading-[1.4]" role="alert">
-            {error}
-          </p>
-        )}
+        <a
+          ref={panelLink}
+          className="inline-flex min-h-11 items-center px-1 py-2 text-inherit no-underline hover:underline hover:underline-offset-4 focus-visible:underline focus-visible:underline-offset-4"
+          href={`${panelOrigin}/sites/${encodeURIComponent(siteId)}`}
+        >
+          {adminPanelLinkLabel}
+        </a>
       </aside>
       {showIntro &&
         typeof document !== "undefined" &&

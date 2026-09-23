@@ -51,6 +51,15 @@ describe("WeddingLayout landmarks", () => {
     expect(source).toContain('name="twitter:image:alt"');
   });
 
+  it("mounts one toaster for public action feedback", () => {
+    expect(source).toContain(
+      'import Toaster from "../components/TemplateToaster"',
+    );
+    expect(source).toContain("<Toaster client:load />");
+    expect(source).not.toContain("@entrelacos/ui/toaster");
+    expect(source.match(/<Toaster/g)).toHaveLength(1);
+  });
+
   it("boots shared motion, scrolling, and menu behavior from the public layout", () => {
     expect(source).toContain("setupTemplateInteractions,");
     expect(source).toContain("setupTemplateInteractions();");

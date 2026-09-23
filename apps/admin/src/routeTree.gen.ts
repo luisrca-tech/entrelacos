@@ -16,10 +16,8 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as RecoverRouteImport } from './routes/recover'
 import { Route as ApiSplatRouteImport } from './routes/api.$'
 import { Route as SitesSiteIdRouteImport } from './routes/sites.$siteId'
-import { Route as SitesSiteIdGuestsRouteImport } from './routes/sites.$siteId.guests'
+import { Route as SitesSiteIdInvitationsRouteImport } from './routes/sites.$siteId.invitations'
 import { Route as SitesSiteIdMessagesRouteImport } from './routes/sites.$siteId.messages'
-import { Route as SitesSiteIdOverviewRouteImport } from './routes/sites.$siteId.overview'
-import { Route as SitesSiteIdRsvpRouteImport } from './routes/sites.$siteId.rsvp'
 import { Route as SitesSiteIdSettingsRouteImport } from './routes/sites.$siteId.settings'
 
 const IndexRoute = IndexRouteImport.update({
@@ -57,24 +55,14 @@ const SitesSiteIdRoute = SitesSiteIdRouteImport.update({
   path: '/sites/$siteId',
   getParentRoute: () => rootRouteImport,
 } as any)
-const SitesSiteIdGuestsRoute = SitesSiteIdGuestsRouteImport.update({
-  id: '/guests',
-  path: '/guests',
+const SitesSiteIdInvitationsRoute = SitesSiteIdInvitationsRouteImport.update({
+  id: '/invitations',
+  path: '/invitations',
   getParentRoute: () => SitesSiteIdRoute,
 } as any)
 const SitesSiteIdMessagesRoute = SitesSiteIdMessagesRouteImport.update({
   id: '/messages',
   path: '/messages',
-  getParentRoute: () => SitesSiteIdRoute,
-} as any)
-const SitesSiteIdOverviewRoute = SitesSiteIdOverviewRouteImport.update({
-  id: '/overview',
-  path: '/overview',
-  getParentRoute: () => SitesSiteIdRoute,
-} as any)
-const SitesSiteIdRsvpRoute = SitesSiteIdRsvpRouteImport.update({
-  id: '/rsvp',
-  path: '/rsvp',
   getParentRoute: () => SitesSiteIdRoute,
 } as any)
 const SitesSiteIdSettingsRoute = SitesSiteIdSettingsRouteImport.update({
@@ -91,10 +79,8 @@ export interface FileRoutesByFullPath {
   '/recover': typeof RecoverRoute
   '/api/$': typeof ApiSplatRoute
   '/sites/$siteId': typeof SitesSiteIdRouteWithChildren
-  '/sites/$siteId/guests': typeof SitesSiteIdGuestsRoute
+  '/sites/$siteId/invitations': typeof SitesSiteIdInvitationsRoute
   '/sites/$siteId/messages': typeof SitesSiteIdMessagesRoute
-  '/sites/$siteId/overview': typeof SitesSiteIdOverviewRoute
-  '/sites/$siteId/rsvp': typeof SitesSiteIdRsvpRoute
   '/sites/$siteId/settings': typeof SitesSiteIdSettingsRoute
 }
 export interface FileRoutesByTo {
@@ -105,10 +91,8 @@ export interface FileRoutesByTo {
   '/recover': typeof RecoverRoute
   '/api/$': typeof ApiSplatRoute
   '/sites/$siteId': typeof SitesSiteIdRouteWithChildren
-  '/sites/$siteId/guests': typeof SitesSiteIdGuestsRoute
+  '/sites/$siteId/invitations': typeof SitesSiteIdInvitationsRoute
   '/sites/$siteId/messages': typeof SitesSiteIdMessagesRoute
-  '/sites/$siteId/overview': typeof SitesSiteIdOverviewRoute
-  '/sites/$siteId/rsvp': typeof SitesSiteIdRsvpRoute
   '/sites/$siteId/settings': typeof SitesSiteIdSettingsRoute
 }
 export interface FileRoutesById {
@@ -120,10 +104,8 @@ export interface FileRoutesById {
   '/recover': typeof RecoverRoute
   '/api/$': typeof ApiSplatRoute
   '/sites/$siteId': typeof SitesSiteIdRouteWithChildren
-  '/sites/$siteId/guests': typeof SitesSiteIdGuestsRoute
+  '/sites/$siteId/invitations': typeof SitesSiteIdInvitationsRoute
   '/sites/$siteId/messages': typeof SitesSiteIdMessagesRoute
-  '/sites/$siteId/overview': typeof SitesSiteIdOverviewRoute
-  '/sites/$siteId/rsvp': typeof SitesSiteIdRsvpRoute
   '/sites/$siteId/settings': typeof SitesSiteIdSettingsRoute
 }
 export interface FileRouteTypes {
@@ -136,10 +118,8 @@ export interface FileRouteTypes {
     | '/recover'
     | '/api/$'
     | '/sites/$siteId'
-    | '/sites/$siteId/guests'
+    | '/sites/$siteId/invitations'
     | '/sites/$siteId/messages'
-    | '/sites/$siteId/overview'
-    | '/sites/$siteId/rsvp'
     | '/sites/$siteId/settings'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -150,10 +130,8 @@ export interface FileRouteTypes {
     | '/recover'
     | '/api/$'
     | '/sites/$siteId'
-    | '/sites/$siteId/guests'
+    | '/sites/$siteId/invitations'
     | '/sites/$siteId/messages'
-    | '/sites/$siteId/overview'
-    | '/sites/$siteId/rsvp'
     | '/sites/$siteId/settings'
   id:
     | '__root__'
@@ -164,10 +142,8 @@ export interface FileRouteTypes {
     | '/recover'
     | '/api/$'
     | '/sites/$siteId'
-    | '/sites/$siteId/guests'
+    | '/sites/$siteId/invitations'
     | '/sites/$siteId/messages'
-    | '/sites/$siteId/overview'
-    | '/sites/$siteId/rsvp'
     | '/sites/$siteId/settings'
   fileRoutesById: FileRoutesById
 }
@@ -232,11 +208,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SitesSiteIdRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/sites/$siteId/guests': {
-      id: '/sites/$siteId/guests'
-      path: '/guests'
-      fullPath: '/sites/$siteId/guests'
-      preLoaderRoute: typeof SitesSiteIdGuestsRouteImport
+    '/sites/$siteId/invitations': {
+      id: '/sites/$siteId/invitations'
+      path: '/invitations'
+      fullPath: '/sites/$siteId/invitations'
+      preLoaderRoute: typeof SitesSiteIdInvitationsRouteImport
       parentRoute: typeof SitesSiteIdRoute
     }
     '/sites/$siteId/messages': {
@@ -244,20 +220,6 @@ declare module '@tanstack/react-router' {
       path: '/messages'
       fullPath: '/sites/$siteId/messages'
       preLoaderRoute: typeof SitesSiteIdMessagesRouteImport
-      parentRoute: typeof SitesSiteIdRoute
-    }
-    '/sites/$siteId/overview': {
-      id: '/sites/$siteId/overview'
-      path: '/overview'
-      fullPath: '/sites/$siteId/overview'
-      preLoaderRoute: typeof SitesSiteIdOverviewRouteImport
-      parentRoute: typeof SitesSiteIdRoute
-    }
-    '/sites/$siteId/rsvp': {
-      id: '/sites/$siteId/rsvp'
-      path: '/rsvp'
-      fullPath: '/sites/$siteId/rsvp'
-      preLoaderRoute: typeof SitesSiteIdRsvpRouteImport
       parentRoute: typeof SitesSiteIdRoute
     }
     '/sites/$siteId/settings': {
@@ -271,18 +233,14 @@ declare module '@tanstack/react-router' {
 }
 
 interface SitesSiteIdRouteChildren {
-  SitesSiteIdGuestsRoute: typeof SitesSiteIdGuestsRoute
+  SitesSiteIdInvitationsRoute: typeof SitesSiteIdInvitationsRoute
   SitesSiteIdMessagesRoute: typeof SitesSiteIdMessagesRoute
-  SitesSiteIdOverviewRoute: typeof SitesSiteIdOverviewRoute
-  SitesSiteIdRsvpRoute: typeof SitesSiteIdRsvpRoute
   SitesSiteIdSettingsRoute: typeof SitesSiteIdSettingsRoute
 }
 
 const SitesSiteIdRouteChildren: SitesSiteIdRouteChildren = {
-  SitesSiteIdGuestsRoute: SitesSiteIdGuestsRoute,
+  SitesSiteIdInvitationsRoute: SitesSiteIdInvitationsRoute,
   SitesSiteIdMessagesRoute: SitesSiteIdMessagesRoute,
-  SitesSiteIdOverviewRoute: SitesSiteIdOverviewRoute,
-  SitesSiteIdRsvpRoute: SitesSiteIdRsvpRoute,
   SitesSiteIdSettingsRoute: SitesSiteIdSettingsRoute,
 }
 

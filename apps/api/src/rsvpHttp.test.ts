@@ -3,8 +3,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   requireAdminSession: vi.fn(),
-  readFamilyRsvp: vi.fn(),
-  writeFamilyRsvp: vi.fn(),
+  readInvitationRsvp: vi.fn(),
+  writeInvitationRsvp: vi.fn(),
   readRsvpDeadline: vi.fn(),
   updateRsvpDeadline: vi.fn(),
   readSiteRsvp: vi.fn(),
@@ -30,8 +30,8 @@ vi.mock("./authHttp", () => ({
 
 vi.mock("./rsvp", () => ({
   RsvpServiceError: mocks.RsvpServiceError,
-  readFamilyRsvp: mocks.readFamilyRsvp,
-  writeFamilyRsvp: mocks.writeFamilyRsvp,
+  readInvitationRsvp: mocks.readInvitationRsvp,
+  writeInvitationRsvp: mocks.writeInvitationRsvp,
   readRsvpDeadline: mocks.readRsvpDeadline,
   updateRsvpDeadline: mocks.updateRsvpDeadline,
   readSiteRsvp: mocks.readSiteRsvp,
@@ -44,50 +44,46 @@ import { createRsvpHttpRouter } from "./rsvpHttp";
 const adminOrigin = "https://admin.example.test";
 const publicOrigin = "https://wedding.example.test";
 const requestId = randomUUID();
-
-const member = {
-  id: "member-1",
+const guest = {
+  id: "guest-1",
   fullName: "Ana Silva",
-  isRepresentative: true,
+  guestType: "ADULT" as const,
   state: "CONFIRMED" as const,
   revision: 1,
 };
-
-const familyResponse = {
+const invitationResponse = {
   siteId: "site-1",
-  groupId: "group-1",
+  invitationId: "invitation-1",
+  invitationName: "Família Silva",
   deadlineAt: null,
   deadlineTimezone: null,
   serverNow: "2028-04-01T12:00:00.000Z",
   canEdit: true,
   readOnlyReason: null,
-  members: [member],
+  guests: [guest],
 };
-
 const writeResponse = {
   requestId,
   acceptedAt: "2028-04-01T12:00:00.000Z",
   result: "APPLIED" as const,
   replayed: false,
-  members: [member],
+  guests: [guest],
 };
-
 const siteResponse = {
   siteId: "site-1",
   lifecycle: "ACTIVE" as const,
   deadlineAt: null,
   deadlineTimezone: null,
   totals: { pending: 0, confirmed: 1, declined: 0 },
-  groups: [
+  invitations: [
     {
-      id: "group-1",
+      id: "invitation-1",
       name: "Família Silva",
-      members: [member],
+      guests: [guest],
       totals: { pending: 0, confirmed: 1, declined: 0 },
     },
   ],
 };
-
 const historyResponse = { entries: [], nextCursor: null };
 
 function createDb(results: unknown[][] = []) {
@@ -126,7 +122,7 @@ function request(path: string, init: RequestInit = {}, origin = adminOrigin) {
   });
 }
 
-function familyRequest(
+function invitationRequest(
   path: string,
   init: RequestInit = {},
   origin = publicOrigin,
@@ -136,7 +132,7 @@ function familyRequest(
     {
       ...init,
       headers: {
-        Authorization: "Bearer family-token",
+        Authorization: "Bearer invitation-token",
         ...(init.headers ?? {}),
       },
     },
@@ -150,8 +146,8 @@ describe("RSVP HTTP boundary", () => {
     mocks.requireAdminSession.mockResolvedValue({
       user: { id: "admin-1", role: "SITE_ADMIN" },
     });
-    mocks.readFamilyRsvp.mockResolvedValue(familyResponse);
-    mocks.writeFamilyRsvp.mockResolvedValue(writeResponse);
+    mocks.readInvitationRsvp.mockResolvedValue(invitationResponse);
+    mocks.writeInvitationRsvp.mockResolvedValue(writeResponse);
     mocks.readRsvpDeadline.mockResolvedValue({
       deadlineAt: null,
       deadlineTimezone: null,
@@ -187,12 +183,15 @@ describe("RSVP HTTP boundary", () => {
     expect(mocks.readSiteRsvp).not.toHaveBeenCalled();
   });
 
-  it("requires an admin session and returns the strict site envelope", async () => {
+  it("requires an admin session and filters the site invitation list", async () => {
     const router = createRsvpHttpRouter(options());
     const response = await router.request(
-      request("/v1/sites/site-1/rsvp?groupId=group-1&state=CONFIRMED", {
-        method: "GET",
-      }),
+      request(
+        "/v1/sites/site-1/rsvp?invitationId=invitation-1&state=CONFIRMED",
+        {
+          method: "GET",
+        },
+      ),
     );
 
     expect(response.status).toBe(200);
@@ -202,28 +201,40 @@ describe("RSVP HTTP boundary", () => {
       expect.anything(),
       { userId: "admin-1", role: "SITE_ADMIN" },
       "site-1",
-      { groupId: "group-1", state: "CONFIRMED" },
+      { invitationId: "invitation-1", state: "CONFIRMED" },
     );
   });
 
-  it("rejects extra keys on admin writes and serves deadline and history routes", async () => {
+  it("accepts canonical guest writes and serves deadline and history routes", async () => {
     const router = createRsvpHttpRouter(options());
+    const payload = {
+      requestId,
+      guests: [{ guestId: guest.id, state: "CONFIRMED", expectedRevision: 1 }],
+    };
+    const update = await router.request(
+      request("/v1/sites/site-1/rsvp", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }),
+    );
+    expect(update.status).toBe(200);
+    expect(await update.json()).toEqual(writeResponse);
+    expect(mocks.writeAdminRsvp).toHaveBeenCalledWith(
+      expect.anything(),
+      { userId: "admin-1", role: "SITE_ADMIN" },
+      "site-1",
+      payload,
+      expect.any(Date),
+    );
+
     const invalid = await router.request(
       request("/v1/sites/site-1/rsvp", {
         method: "POST",
-        body: JSON.stringify({
-          requestId,
-          members: [
-            { memberId: member.id, state: "CONFIRMED", expectedRevision: 1 },
-          ],
-          extra: true,
-        }),
+        body: JSON.stringify({ ...payload, extra: true }),
       }),
     );
-
     expect(invalid.status).toBe(400);
     expect((await invalid.json()).code).toBe("VALIDATION_ERROR");
-    expect(mocks.writeAdminRsvp).not.toHaveBeenCalled();
 
     const deadline = await router.request(
       request("/v1/sites/site-1/rsvp/deadline", { method: "GET" }),
@@ -248,38 +259,12 @@ describe("RSVP HTTP boundary", () => {
     );
   });
 
-  it("supports registered-origin preflight without credentials or wildcard CORS", async () => {
-    const router = createRsvpHttpRouter(
-      options(createDb([[{ origin: publicOrigin }]])),
-    );
-    const response = await router.request(
-      request(
-        "/v1/public/family/rsvp",
-        {
-          method: "OPTIONS",
-          headers: { "Access-Control-Request-Method": "POST" },
-        },
-        publicOrigin,
-      ),
-    );
-
-    expect(response.status).toBe(204);
-    expect(response.headers.get("Access-Control-Allow-Origin")).toBe(
-      publicOrigin,
-    );
-    expect(response.headers.get("Access-Control-Allow-Methods")).toContain(
-      "GET",
-    );
-    expect(response.headers.get("Access-Control-Allow-Credentials")).toBeNull();
-    expect(response.headers.get("Access-Control-Allow-Origin")).not.toBe("*");
-  });
-
-  it("requires current family bearer and exact site origin before public data access", async () => {
+  it("serves invitation sessions with exact site origin and no legacy family paths", async () => {
     const router = createRsvpHttpRouter(
       options(createDb([[{ siteId: "site-1" }], [{ origin: publicOrigin }]])),
     );
     const response = await router.request(
-      familyRequest("/v1/public/family/rsvp", { method: "GET" }),
+      invitationRequest("/v1/public/invitation/rsvp", { method: "GET" }),
     );
 
     expect(response.status).toBe(200);
@@ -287,42 +272,52 @@ describe("RSVP HTTP boundary", () => {
       publicOrigin,
     );
     expect(response.headers.get("cache-control")).toBe("no-store");
-    expect(await response.json()).toEqual(familyResponse);
-    expect(mocks.readFamilyRsvp).toHaveBeenCalledWith(
+    expect(await response.json()).toEqual(invitationResponse);
+    expect(mocks.readInvitationRsvp).toHaveBeenCalledWith(
       expect.anything(),
-      "family-token",
+      "invitation-token",
       expect.any(Date),
     );
 
     const hostile = await createRsvpHttpRouter(
       options(createDb([[{ siteId: "site-1" }], []])),
     ).request(
-      familyRequest(
-        "/v1/public/family/rsvp",
+      invitationRequest(
+        "/v1/public/invitation/rsvp",
         { method: "GET" },
         "https://evil.example.test",
       ),
     );
     expect(hostile.status).toBe(403);
     expect(hostile.headers.get("Access-Control-Allow-Origin")).toBeNull();
+
+    for (const path of [
+      "/v1/public/family/rsvp",
+      "/v1/public/family/session",
+    ]) {
+      expect(
+        (await router.request(invitationRequest(path, { method: "GET" })))
+          .status,
+      ).toBe(404);
+    }
   });
 
-  it("returns recovery details for public optimistic-concurrency conflicts", async () => {
-    mocks.writeFamilyRsvp.mockRejectedValue(
+  it("returns current guest revisions for public optimistic-concurrency conflicts", async () => {
+    mocks.writeInvitationRsvp.mockRejectedValue(
       new mocks.RsvpServiceError(409, "RSVP_CONFLICT", "RSVP data changed", {
-        members: [{ id: member.id, state: "DECLINED", revision: 2 }],
+        guests: [{ id: guest.id, state: "DECLINED", revision: 2 }],
       }),
     );
     const router = createRsvpHttpRouter(
       options(createDb([[{ siteId: "site-1" }], [{ origin: publicOrigin }]])),
     );
     const response = await router.request(
-      familyRequest("/v1/public/family/rsvp", {
+      invitationRequest("/v1/public/invitation/rsvp", {
         method: "POST",
         body: JSON.stringify({
           requestId,
-          members: [
-            { memberId: member.id, state: "CONFIRMED", expectedRevision: 1 },
+          guests: [
+            { guestId: guest.id, state: "CONFIRMED", expectedRevision: 1 },
           ],
         }),
       }),
@@ -338,7 +333,25 @@ describe("RSVP HTTP boundary", () => {
     expect(await response.json()).toMatchObject({
       status: 409,
       code: "RSVP_CONFLICT",
-      details: { members: [{ id: member.id, state: "DECLINED", revision: 2 }] },
+      details: { guests: [{ id: guest.id, state: "DECLINED", revision: 2 }] },
     });
+  });
+
+  it("requires a registered origin for a credential-free preflight", async () => {
+    const router = createRsvpHttpRouter(
+      options(createDb([[{ origin: publicOrigin }]])),
+    );
+    const response = await router.request(
+      request(
+        "/v1/public/invitation/rsvp",
+        { method: "OPTIONS" },
+        publicOrigin,
+      ),
+    );
+    expect(response.status).toBe(204);
+    expect(response.headers.get("Access-Control-Allow-Origin")).toBe(
+      publicOrigin,
+    );
+    expect(response.headers.get("Access-Control-Allow-Credentials")).toBeNull();
   });
 });

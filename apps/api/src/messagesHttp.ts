@@ -1,5 +1,5 @@
 import {
-  familyMessageResponseSchema,
+  invitationMessageResponseSchema,
   messageDeletionInputSchema,
   messageDeletionResponseSchema,
   messageMutationInputSchema,
@@ -13,23 +13,27 @@ import {
   siteMessagesQuerySchema,
   siteMessagesResponseSchema,
 } from "@entrelacos/contracts";
-import { familySession, site, siteOrigin } from "@entrelacos/database/schema";
+import {
+  invitationSession,
+  site,
+  siteOrigin,
+} from "@entrelacos/database/schema";
 import { eq } from "drizzle-orm";
 import { type Context, Hono } from "hono";
 import type { AuthHttpOptions } from "./authHttp";
 import { AdminSessionRequiredError, requireAdminSession } from "./authHttp";
-import { hashFamilySessionToken } from "./familySession";
+import { hashInvitationSessionToken } from "./guestVerification";
 import { allowsLocalPublicOrigin } from "./localPublicOrigin";
 import {
-  deleteGroupMessage,
+  deleteInvitationMessage,
   listSiteMessages,
   MessagesServiceError,
-  readFamilyMessage,
+  readInvitationMessage,
   readMuralConfiguration,
   readPublicMural,
   updateMessageBlock,
   updateMuralConfiguration,
-  writeFamilyMessage,
+  writeInvitationMessage,
 } from "./messages";
 
 function problem(
@@ -153,30 +157,30 @@ function preflight(context: Context, origin: string): Response {
   return new Response(null, { status: 204, headers: context.res.headers });
 }
 
-async function sessionSiteId(
+async function invitationSessionSiteId(
   options: AuthHttpOptions,
   token: string | undefined,
 ): Promise<string | undefined> {
   if (!token) return undefined;
   const [row] = await options.db
-    .select({ siteId: familySession.siteId })
-    .from(familySession)
-    .where(eq(familySession.tokenHash, hashFamilySessionToken(token)))
+    .select({ siteId: invitationSession.siteId })
+    .from(invitationSession)
+    .where(eq(invitationSession.tokenHash, hashInvitationSessionToken(token)))
     .limit(1);
   return row?.siteId;
 }
 
-async function requireFamilyRequest(
+async function requireInvitationRequest(
   request: Request,
   options: AuthHttpOptions,
 ): Promise<Response | { origin: string; token: string }> {
   const origin = request.headers.get("origin") ?? undefined;
   const token = bearerToken(request);
-  const siteId = await sessionSiteId(options, token);
+  const siteId = await invitationSessionSiteId(options, token);
   if (!siteId) {
     if (await isRegisteredOrigin(options, request, origin)) {
       return withCors(
-        problem(401, "SESSION_INVALID", "Family session is invalid"),
+        problem(401, "SESSION_INVALID", "Invitation session is invalid"),
         origin as string,
       );
     }
@@ -229,24 +233,24 @@ export function createMessagesHttpRouter(options: AuthHttpOptions): Hono {
       problem(503, "SERVICE_UNAVAILABLE", "Service unavailable"),
   );
 
-  router.options("/v1/public/family/message", async (context) => {
+  router.options("/v1/public/invitation/message", async (context) => {
     const origin = context.req.header("Origin");
     if (!(await isRegisteredOrigin(options, context.req.raw, origin)))
       return problem(403, "FORBIDDEN", "Forbidden");
     return preflight(context, origin as string);
   });
 
-  router.get("/v1/public/family/message", async (context) => {
-    const access = await requireFamilyRequest(context.req.raw, options);
+  router.get("/v1/public/invitation/message", async (context) => {
+    const access = await requireInvitationRequest(context.req.raw, options);
     if (isResponse(access)) return access;
     try {
-      const result = await readFamilyMessage(
+      const result = await readInvitationMessage(
         options.db,
         access.token,
         options.now?.(),
       );
       return withCors(
-        context.json(familyMessageResponseSchema.parse(result), 200),
+        context.json(invitationMessageResponseSchema.parse(result), 200),
         access.origin,
       );
     } catch (error) {
@@ -254,11 +258,11 @@ export function createMessagesHttpRouter(options: AuthHttpOptions): Hono {
     }
   });
 
-  router.put("/v1/public/family/message", async (context) => {
-    const access = await requireFamilyRequest(context.req.raw, options);
+  router.put("/v1/public/invitation/message", async (context) => {
+    const access = await requireInvitationRequest(context.req.raw, options);
     if (isResponse(access)) return access;
     try {
-      const result = await writeFamilyMessage(
+      const result = await writeInvitationMessage(
         options.db,
         access.token,
         messageMutationInputSchema.parse(await readObject(context.req.raw)),
@@ -364,16 +368,16 @@ export function createMessagesHttpRouter(options: AuthHttpOptions): Hono {
   });
 
   router.delete(
-    "/v1/sites/:siteId/groups/:groupId/message",
+    "/v1/sites/:siteId/invitations/:invitationId/message",
     async (context) => {
       const actor = await requireAdminActor(context.req.raw, options);
       if (isResponse(actor)) return actor;
       try {
-        const result = await deleteGroupMessage(
+        const result = await deleteInvitationMessage(
           options.db,
           actor,
           context.req.param("siteId"),
-          context.req.param("groupId"),
+          context.req.param("invitationId"),
           messageDeletionInputSchema.parse(await readObject(context.req.raw)),
           options.now?.(),
         );
@@ -387,7 +391,7 @@ export function createMessagesHttpRouter(options: AuthHttpOptions): Hono {
   );
 
   router.patch(
-    "/v1/sites/:siteId/groups/:groupId/message-block",
+    "/v1/sites/:siteId/invitations/:invitationId/message-block",
     async (context) => {
       const actor = await requireAdminActor(context.req.raw, options);
       if (isResponse(actor)) return actor;
@@ -396,7 +400,7 @@ export function createMessagesHttpRouter(options: AuthHttpOptions): Hono {
           options.db,
           actor,
           context.req.param("siteId"),
-          context.req.param("groupId"),
+          context.req.param("invitationId"),
           siteMessageBlockInputSchema.parse(await readObject(context.req.raw)),
           options.now?.(),
         );

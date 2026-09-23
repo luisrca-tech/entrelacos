@@ -17,8 +17,12 @@ describe("Toaster defaults", () => {
     expect(source).toContain("richColors = true");
   });
 
-  it("re-exports toast so apps do not import sonner directly", () => {
-    expect(source).toContain('export { toast } from "sonner"');
+  it("keeps sonner inside the wrapper and publishes toasts for every island", () => {
+    expect(source).toContain('from "sonner"');
+    expect(source).toContain("toastEventName");
+    expect(source).toContain("sonnerToast[detail.kind]");
+    expect(source).toContain('export { toast } from "../lib/publishToast"');
+    expect(source).not.toContain('export { toast } from "sonner"');
     expect(barrel).toContain("toast");
     expect(barrel).toContain("Toaster");
   });

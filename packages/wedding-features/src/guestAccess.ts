@@ -1,19 +1,15 @@
 import {
-  type FamilyRsvpResponse,
-  type FamilyRsvpWriteInput,
-  type FamilySessionResponse,
-  familyRsvpResponseSchema,
-  familyRsvpWriteInputSchema,
-  familySessionLeaveResponseSchema,
-  familySessionReadResponseSchema,
-  familySessionResponseSchema,
-  type GuestChallengeStartResponse,
-  type GuestChallengeVerifyInput,
-  type GuestLookupInput,
-  guestChallengeStartResponseSchema,
-  guestChallengeVerifyInputSchema,
-  guestLookupInputSchema,
-  guestVerificationCodeSchema,
+  type InvitationAccessInput,
+  type InvitationRsvpResponse,
+  type InvitationRsvpWriteInput,
+  type InvitationSessionResponse,
+  invitationAccessInputSchema,
+  invitationAccessPinSchema,
+  invitationRsvpResponseSchema,
+  invitationRsvpWriteInputSchema,
+  invitationSessionLeaveResponseSchema,
+  invitationSessionReadResponseSchema,
+  invitationSessionResponseSchema,
   opaqueTokenSchema,
   originSchema,
   type RsvpWriteResponse,
@@ -21,10 +17,8 @@ import {
   siteIdSchema,
 } from "@entrelacos/contracts";
 
-export type GuestChallengeStartResult = GuestChallengeStartResponse;
-
 export type GuestSessionReadResponse = Omit<
-  FamilySessionResponse,
+  InvitationSessionResponse,
   "sessionToken"
 >;
 
@@ -61,6 +55,24 @@ export function clearGuestSession(
   siteId: string,
 ): void {
   storage.removeItem(getGuestSessionStorageKey(siteId));
+}
+
+export function guestSessionEventName(siteId: string): string {
+  return `entrelacos:guest-session:${encodeURIComponent(siteId)}`;
+}
+
+export function publishGuestSessionChange(siteId: string): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new Event(guestSessionEventName(siteId)));
+}
+
+export function browserGuestSessionStorage(): GuestSessionStorage | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return window.sessionStorage;
+  } catch {
+    return null;
+  }
 }
 
 export function getGuestLeaveNotice(serverConfirmed: boolean): string {
@@ -107,10 +119,6 @@ function parseRetryAfterHeader(value: string | null): number | undefined {
   return Math.max(0, Number(value));
 }
 
-function parseChallengeStart(value: unknown): GuestChallengeStartResult {
-  return guestChallengeStartResponseSchema.parse(value);
-}
-
 function parseJsonResponse(response: Response): Promise<unknown> {
   return response.json().catch(() => ({}));
 }
@@ -136,58 +144,47 @@ export class GuestAccessApi {
     this.fetcher = (input, init) => fetcher(input, init);
   }
 
-  async start(input: GuestLookupInput): Promise<GuestChallengeStartResult> {
-    const parsed = guestLookupInputSchema.parse(input);
+  async access(
+    input: InvitationAccessInput,
+  ): Promise<InvitationSessionResponse> {
+    const parsed = invitationAccessInputSchema.parse(input);
     return this.request(
-      `/v1/public/sites/${encodeURIComponent(this.siteId)}/guest/challenge`,
+      `/v1/public/sites/${encodeURIComponent(this.siteId)}/invitation/access`,
       {
         method: "POST",
         body: parsed,
       },
-      parseChallengeStart,
-    );
-  }
-
-  async verify(
-    input: GuestChallengeVerifyInput,
-  ): Promise<FamilySessionResponse> {
-    const parsed = guestChallengeVerifyInputSchema.parse(input);
-    return this.request(
-      `/v1/public/guest/challenge/${encodeURIComponent(parsed.challengeId)}/verify`,
-      {
-        method: "POST",
-        body: { challengeId: parsed.challengeId, code: parsed.code },
-      },
-      (value) => familySessionResponseSchema.parse(value),
+      (value) => invitationSessionResponseSchema.parse(value),
     );
   }
 
   async getSession(sessionToken: string): Promise<GuestSessionReadResponse> {
     const token = opaqueTokenSchema.parse(sessionToken);
     return this.request(
-      "/v1/public/family/session",
+      "/v1/public/invitation/session",
       { headers: { Authorization: `Bearer ${token}` } },
-      (value) => familySessionReadResponseSchema.parse({ ...asRecord(value) }),
+      (value) =>
+        invitationSessionReadResponseSchema.parse({ ...asRecord(value) }),
     );
   }
 
-  async getRsvp(sessionToken: string): Promise<FamilyRsvpResponse> {
+  async getRsvp(sessionToken: string): Promise<InvitationRsvpResponse> {
     const token = opaqueTokenSchema.parse(sessionToken);
     return this.request(
-      "/v1/public/family/rsvp",
+      "/v1/public/invitation/rsvp",
       { headers: { Authorization: `Bearer ${token}` } },
-      (value) => familyRsvpResponseSchema.parse(value),
+      (value) => invitationRsvpResponseSchema.parse(value),
     );
   }
 
   async saveRsvp(
     sessionToken: string,
-    input: FamilyRsvpWriteInput,
+    input: InvitationRsvpWriteInput,
   ): Promise<RsvpWriteResponse> {
     const token = opaqueTokenSchema.parse(sessionToken);
-    const body = familyRsvpWriteInputSchema.parse(input);
+    const body = invitationRsvpWriteInputSchema.parse(input);
     return this.request(
-      "/v1/public/family/rsvp",
+      "/v1/public/invitation/rsvp",
       {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
@@ -200,13 +197,13 @@ export class GuestAccessApi {
   async leave(sessionToken: string): Promise<void> {
     const token = opaqueTokenSchema.parse(sessionToken);
     await this.request(
-      "/v1/public/family/session/leave",
+      "/v1/public/invitation/session/leave",
       {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
       },
       (value) => {
-        familySessionLeaveResponseSchema.parse(value);
+        invitationSessionLeaveResponseSchema.parse(value);
         return undefined;
       },
     );
@@ -265,27 +262,14 @@ export class GuestAccessApi {
 export function guestAccessErrorMessage(error: unknown): string {
   if (!(error instanceof GuestAccessApiError))
     return "Não foi possível concluir agora. Tente novamente.";
-  if (error.code === "GUEST_NOT_FOUND" || error.code === "LOOKUP_NOT_FOUND")
-    return "Não encontramos um convite com esses dados. Confira o nome completo e o celular.";
-  if (error.code === "FOREIGN_GUEST_CONTACT_ADMIN")
-    return "Este convite usa número estrangeiro e precisa de atendimento administrativo. Não há outra alternativa de autenticação.";
-  if (
-    error.code === "CHALLENGE_COOLDOWN" ||
-    error.code === "LOOKUP_RATE_LIMITED"
-  )
+  if (error.code === "INVITATION_ACCESS_INVALID")
+    return "Não foi possível confirmar esse telefone e PIN. Confira os dados e tente novamente.";
+  if (error.code === "INVITATION_ACCESS_RATE_LIMITED")
     return error.retryAfterSeconds
       ? `Aguarde ${error.retryAfterSeconds} segundos antes de tentar novamente.`
       : "Muitas tentativas. Aguarde alguns minutos e tente novamente.";
-  if (error.code === "INVALID_CODE")
-    return "O PIN não confere. Confira o valor e tente novamente.";
-  if (error.code === "CHALLENGE_EXPIRED")
-    return "Este acesso expirou. Confirme seus dados novamente.";
-  if (
-    error.code === "CHALLENGE_NOT_FOUND" ||
-    error.code === "CHALLENGE_NOT_ACTIVE" ||
-    error.code === "UNAUTHORIZED"
-  )
-    return "Esta verificação expirou. Comece novamente.";
+  if (error.code === "UNAUTHORIZED")
+    return "Esta sessão expirou. Comece novamente.";
   if (error.status === 429)
     return "Muitas tentativas. Aguarde um pouco e tente novamente.";
   if (error.code === "SITE_INACTIVE")
@@ -299,5 +283,5 @@ export function guestAccessErrorMessage(error: unknown): string {
 }
 
 export function isValidVerificationCode(value: string): boolean {
-  return guestVerificationCodeSchema.safeParse(value).success;
+  return invitationAccessPinSchema.safeParse(value).success;
 }

@@ -20,6 +20,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  toast,
 } from "@entrelacos/ui";
 import { Link } from "@tanstack/react-router";
 import {
@@ -29,10 +30,11 @@ import {
   useRef,
   useState,
 } from "react";
-import { adminStyles } from "../lib/adminStyles";
+import { adminStyles, displayHeading } from "../lib/adminStyles";
 import { ApiError, apiRequest } from "../lib/apiClient";
 import { AdminShell, ShellLoading } from "./AdminShell";
 import { resolveSiteArea, type SiteArea } from "./adminNavigation";
+import { formatBrazilianDate } from "./brazilianDate";
 import {
   getCachedPanelActor,
   loadPanelActor,
@@ -75,7 +77,7 @@ export function Panel({ siteId, area }: { siteId?: string; area?: SiteArea }) {
       resetPanelActorCache();
       window.location.replace("/login");
     } catch {
-      setError("Não foi possível sair. Tente novamente.");
+      toast.error("Não foi possível sair. Tente novamente.");
     }
   }
 
@@ -130,7 +132,7 @@ export function Panel({ siteId, area }: { siteId?: string; area?: SiteArea }) {
 
 function SiteAdminRedirect({ siteId }: { siteId: string }) {
   useEffect(() => {
-    window.location.replace(`/sites/${encodeURIComponent(siteId)}/guests`);
+    window.location.replace(`/sites/${encodeURIComponent(siteId)}/invitations`);
   }, [siteId]);
   return <ShellLoading>Abrindo seu casamento…</ShellLoading>;
 }
@@ -156,7 +158,6 @@ function OwnerSites() {
   const [loadingMore, setLoadingMore] = useState(false);
   const loadingMoreRef = useRef(false);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [createError, setCreateError] = useState("");
 
   const load = useCallback(async (next?: string) => {
     const result = await apiRequest<{
@@ -176,7 +177,7 @@ function OwnerSites() {
     try {
       await load(cursor);
     } catch (cause) {
-      setError(
+      toast.error(
         cause instanceof Error
           ? cause.message
           : "Não foi possível carregar mais casamentos.",
@@ -201,8 +202,6 @@ function OwnerSites() {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     setPending(true);
-    setError("");
-    setCreateError("");
     try {
       const result = await apiRequest<{ site: SiteRecord }>("/v1/owner/sites", {
         method: "POST",
@@ -216,10 +215,10 @@ function OwnerSites() {
       });
       setDialogOpen(false);
       window.location.assign(
-        `/sites/${encodeURIComponent(result.site.id)}/guests`,
+        `/sites/${encodeURIComponent(result.site.id)}/invitations`,
       );
     } catch (cause) {
-      setCreateError(
+      toast.error(
         cause instanceof Error
           ? cause.message
           : "Não foi possível criar o casamento.",
@@ -231,12 +230,14 @@ function OwnerSites() {
 
   return (
     <div>
-      <section className="mb-[38px] flex items-end justify-between gap-8 [@media(max-width:760px)]:mb-7 [@media(max-width:760px)]:flex-col [@media(max-width:760px)]:items-start [@media(max-width:760px)]:gap-5">
+      <section className="mb-6 flex items-end justify-between gap-8 [@media(max-width:760px)]:flex-col [@media(max-width:760px)]:items-start [@media(max-width:760px)]:gap-5">
         <div>
           <p className="m-0 mb-3.5 text-[0.7rem] font-bold uppercase tracking-[0.13em] leading-[1.3] text-admin-muted">
             Gestão global
           </p>
-          <h1 className="m-0 max-w-[780px] font-admin-display text-[clamp(2.6rem,6vw,5.2rem)] font-normal leading-[1.08] tracking-[-0.025em]">
+          <h1
+            className={`m-0 max-w-none text-[clamp(1.85rem,3vw,2.6rem)] ${displayHeading}`}
+          >
             Seus casamentos
           </h1>
           <p className="mt-[18px] max-w-[56ch] leading-[1.6] text-admin-muted">
@@ -248,7 +249,6 @@ function OwnerSites() {
             className="shrink-0 [@media(max-width:760px)]:w-full"
             type="button"
             onClick={() => {
-              setCreateError("");
               setDialogOpen(true);
             }}
           >
@@ -262,14 +262,6 @@ function OwnerSites() {
               Cadastre os dados iniciais. A mesma referência mantém novas
               tentativas idempotentes e preserva os dados já salvos.
             </DialogDescription>
-            {createError && (
-              <p
-                className="break-words rounded-[9px] border border-[rgb(142_58_42_/_30%)] bg-admin-terracotta-wash px-3.5 py-3 text-admin-terracotta-deep"
-                role="alert"
-              >
-                {createError}
-              </p>
-            )}
             <form
               className="my-7 grid min-w-0 grid-cols-[repeat(auto-fit,minmax(min(100%,240px),1fr))] items-end gap-[18px]"
               onSubmit={create}
@@ -365,14 +357,14 @@ function OwnerSites() {
         </p>
       )}
 
-      <Card className="overflow-hidden rounded-[14px] border-admin-line bg-admin-surface shadow-[0_5px_24px_rgb(68_49_36_/_3%)]">
-        <CardHeader className="p-[26px_28px_20px] [@media(max-width:760px)]:px-[18px] [@media(max-width:760px)]:pt-[22px] [@media(max-width:760px)]:pb-4">
+      <Card className={`${adminStyles.surface} overflow-hidden`}>
+        <CardHeader>
           <CardTitle>Casamentos cadastrados</CardTitle>
           <CardDescription>
             Selecione um casamento para acompanhar status e acessos.
           </CardDescription>
         </CardHeader>
-        <CardContent className="px-7 pb-7 [@media(max-width:760px)]:px-[18px] [@media(max-width:760px)]:pb-[18px]">
+        <CardContent>
           <div className="overflow-x-auto [@media(max-width:760px)]:hidden">
             <Table>
               <TableHeader>
@@ -389,7 +381,7 @@ function OwnerSites() {
                     <TableCell>
                       <Link
                         className="grid gap-1 no-underline"
-                        to="/sites/$siteId/guests"
+                        to="/sites/$siteId/invitations"
                         params={{ siteId: site.id }}
                       >
                         <strong>{site.displayName}</strong>
@@ -398,7 +390,7 @@ function OwnerSites() {
                         </span>
                       </Link>
                     </TableCell>
-                    <TableCell>{formatDate(site.eventDate)}</TableCell>
+                    <TableCell>{formatBrazilianDate(site.eventDate)}</TableCell>
                     <TableCell>
                       <Badge
                         variant={
@@ -411,7 +403,7 @@ function OwnerSites() {
                     <TableCell>
                       <Link
                         className="text-[0.88rem] font-bold text-admin-terracotta-deep no-underline"
-                        to="/sites/$siteId/guests"
+                        to="/sites/$siteId/invitations"
                         params={{ siteId: site.id }}
                       >
                         Abrir
@@ -426,7 +418,7 @@ function OwnerSites() {
             {sites.map((site) => (
               <Link
                 className="grid gap-[7px] rounded-xl border border-admin-line bg-admin-surface p-[18px] no-underline"
-                to="/sites/$siteId/guests"
+                to="/sites/$siteId/invitations"
                 params={{ siteId: site.id }}
                 key={site.id}
               >
@@ -447,7 +439,7 @@ function OwnerSites() {
                   {site.coupleNames.join(" & ")}
                 </span>
                 <small className="mt-1 text-admin-muted">
-                  {formatDate(site.eventDate)}
+                  {formatBrazilianDate(site.eventDate)}
                 </small>
               </Link>
             ))}
@@ -473,13 +465,6 @@ function OwnerSites() {
       )}
     </div>
   );
-}
-
-function formatDate(value: string) {
-  const date = new Date(`${value}T12:00:00Z`);
-  return Number.isNaN(date.valueOf())
-    ? value
-    : new Intl.DateTimeFormat("pt-BR", { dateStyle: "medium" }).format(date);
 }
 
 export function lifecycleLabel(value: string) {

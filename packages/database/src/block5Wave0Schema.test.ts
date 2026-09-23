@@ -3,13 +3,13 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
-  familyMessage,
-  guestGroup,
-  guestRateLimitAction,
-  guestVerificationChallenge,
+  invitation,
+  invitationAccessChallenge,
+  invitationMessage,
+  invitationRateLimitAction,
   messageRequestReceipt,
   rsvpRequestReceipt,
-  rsvpRequestReceiptGroup,
+  rsvpRequestReceiptInvitation,
   site,
 } from "./schema";
 
@@ -26,33 +26,24 @@ function migrationSql(): string {
     .join("\n");
 }
 
-function latestMigrationSql(): string {
-  const names = readdirSync(migrationsDirectory)
-    .filter((name) => /^\d{4}_.+\.sql$/.test(name))
-    .sort();
-  const latest = names.at(-1);
-  if (!latest) throw new Error("No database migrations found");
-  return readFileSync(join(migrationsDirectory, latest), "utf8");
-}
-
 describe("Block 5 Wave 0 database foundation", () => {
-  it("declares site mural and group message state without SMS configuration", () => {
+  it("declares site mural and invitation message state without SMS configuration", () => {
     expect(site.muralEnabled).toBeDefined();
     expect(Object.hasOwn(site, "smsMonthlyLimit")).toBe(false);
-    expect(guestGroup.messageBlocked).toBeDefined();
-    expect(guestGroup.messageRevision).toBeDefined();
+    expect(invitation.messageBlocked).toBeDefined();
+    expect(invitation.messageRevision).toBeDefined();
   });
 
-  it("declares current messages, durable message receipts, and RSVP redaction", () => {
-    expect(familyMessage.authorMemberId).toBeDefined();
-    expect(familyMessage.authorName).toBeDefined();
-    expect(familyMessage.groupName).toBeDefined();
-    expect(familyMessage.text).toBeDefined();
-    expect(familyMessage.revision).toBeDefined();
-    expect(familyMessage.createdAt).toBeDefined();
-    expect(familyMessage.updatedAt).toBeDefined();
+  it("declares current invitation messages, receipts, and RSVP redaction", () => {
+    expect(Object.hasOwn(invitationMessage, "authorGuestId")).toBe(false);
+    expect(invitationMessage.authorName).toBeDefined();
+    expect(invitationMessage.invitationName).toBeDefined();
+    expect(invitationMessage.text).toBeDefined();
+    expect(invitationMessage.revision).toBeDefined();
+    expect(invitationMessage.createdAt).toBeDefined();
+    expect(invitationMessage.updatedAt).toBeDefined();
     expect(messageRequestReceipt.siteId).toBeDefined();
-    expect(messageRequestReceipt.groupId).toBeDefined();
+    expect(messageRequestReceipt.invitationId).toBeDefined();
     expect(messageRequestReceipt.sessionId).toBeDefined();
     expect(messageRequestReceipt.requestId).toBeDefined();
     expect(messageRequestReceipt.requestHash).toBeDefined();
@@ -62,25 +53,28 @@ describe("Block 5 Wave 0 database foundation", () => {
     expect(messageRequestReceipt.removedAt).toBeDefined();
     expect(rsvpRequestReceipt.responseBody).toBeDefined();
     expect(rsvpRequestReceipt.removedAt).toBeDefined();
-    expect(rsvpRequestReceiptGroup.receiptId).toBeDefined();
-    expect(rsvpRequestReceiptGroup.groupId).toBeDefined();
+    expect(rsvpRequestReceiptInvitation.receiptId).toBeDefined();
+    expect(rsvpRequestReceiptInvitation.invitationId).toBeDefined();
   });
 
   it("keeps verification challenge state limited to manual PIN confirmation", () => {
-    expect(guestRateLimitAction.enumValues).toEqual(["LOOKUP", "PIN_VERIFY"]);
-    expect(guestVerificationChallenge.phoneE164).toBeDefined();
-    expect(guestVerificationChallenge.expiresAt).toBeDefined();
-    expect(guestVerificationChallenge.wrongAttempts).toBeDefined();
-    expect(guestVerificationChallenge.cooldownUntil).toBeDefined();
-    expect(Object.hasOwn(guestVerificationChallenge, "mode")).toBe(false);
-    expect(Object.hasOwn(guestVerificationChallenge, "codeHash")).toBe(false);
-    expect(Object.hasOwn(guestVerificationChallenge, "providerReference")).toBe(
+    expect(invitationRateLimitAction.enumValues).toEqual([
+      "LOOKUP",
+      "PIN_VERIFY",
+    ]);
+    expect(invitationAccessChallenge.phoneE164).toBeDefined();
+    expect(invitationAccessChallenge.expiresAt).toBeDefined();
+    expect(invitationAccessChallenge.wrongAttempts).toBeDefined();
+    expect(invitationAccessChallenge.cooldownUntil).toBeDefined();
+    expect(Object.hasOwn(invitationAccessChallenge, "mode")).toBe(false);
+    expect(Object.hasOwn(invitationAccessChallenge, "codeHash")).toBe(false);
+    expect(Object.hasOwn(invitationAccessChallenge, "providerReference")).toBe(
       false,
     );
-    expect(Object.hasOwn(guestVerificationChallenge, "resendAvailableAt")).toBe(
+    expect(Object.hasOwn(invitationAccessChallenge, "resendAvailableAt")).toBe(
       false,
     );
-    expect(Object.hasOwn(guestVerificationChallenge, "smsReservationId")).toBe(
+    expect(Object.hasOwn(invitationAccessChallenge, "smsReservationId")).toBe(
       false,
     );
   });
@@ -115,8 +109,8 @@ describe("Block 5 Wave 0 database foundation", () => {
     expect(sql).toContain("ON DELETE cascade");
   });
 
-  it("generates a non-SMS migration that preserves manual challenge state", () => {
-    const sql = latestMigrationSql();
+  it("records the SMS removal and preserves manual challenge state", () => {
+    const sql = migrationSql();
     expect(sql).toContain('DROP TABLE "guest_verification_send" CASCADE');
     expect(sql).toContain('DROP TABLE "sms_send_reservation" CASCADE');
     expect(sql).toContain('DROP TABLE "sms_usage" CASCADE');
