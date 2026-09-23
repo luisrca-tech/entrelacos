@@ -20,7 +20,9 @@ describe("VenueSection map and address fallback", () => {
 
   it("uses the shared copy helper and host-owned immediate feedback", () => {
     expect(source).toContain('import { copyAddress } from "../venue"');
-    expect(source).toContain('import { publishToast } from "@entrelacos/ui/toast"');
+    expect(source).toContain(
+      'import { publishToast } from "@entrelacos/ui/toast"',
+    );
     expect(source).toContain("button.dataset.copySuccess");
     expect(source).toContain("button.dataset.copyError");
     expect(source).toContain("publishToast(");
