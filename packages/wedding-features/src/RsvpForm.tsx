@@ -16,7 +16,6 @@ export type RsvpFormProps = {
   readOnlyMessage?: string;
   busy: boolean;
   error?: string;
-  notice?: string;
   onChange: (guestId: string, state: RsvpStatus) => void;
   onConfirmAll: () => void;
   onSave: () => void;
@@ -38,8 +37,6 @@ const rsvpEyebrowClass =
 const rsvpHeadingClass = "m-0 text-[clamp(1.8rem,5vw,3rem)] font-normal";
 const rsvpLinkClass =
   "w-fit cursor-pointer border-0 bg-transparent px-0 py-[0.35rem] text-template-muted underline underline-offset-[0.2rem] disabled:cursor-not-allowed disabled:opacity-50";
-const rsvpMessageClass =
-  "m-0 max-w-[42rem] border border-template-line px-4 py-[0.8rem] text-template-ink";
 const rsvpReadonlyClass =
   "border-l-[3px] border-l-[#9c713f] bg-[rgba(156,113,63,0.12)] px-4 py-3";
 const rsvpMembersClass = "my-6 grid gap-3";
@@ -64,7 +61,6 @@ export function RsvpForm({
   readOnlyMessage,
   busy,
   error,
-  notice,
   onChange,
   onConfirmAll,
   onSave,
@@ -138,16 +134,6 @@ export function RsvpForm({
         <p className={rsvpReadonlyClass} role="status">
           {readOnlyMessage ??
             "As respostas podem ser consultadas, mas não alteradas agora."}
-        </p>
-      )}
-      {error && (
-        <p className={rsvpMessageClass} role="alert">
-          {error}
-        </p>
-      )}
-      {notice && (
-        <p className={rsvpMessageClass} role="status">
-          {notice}
         </p>
       )}
 

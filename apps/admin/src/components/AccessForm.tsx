@@ -5,6 +5,7 @@ import {
   CardDescription,
   CardHeader,
   Input,
+  toast,
 } from "@entrelacos/ui";
 import { Link } from "@tanstack/react-router";
 import { type FormEvent, useEffect, useState } from "react";
@@ -25,7 +26,6 @@ export function AccessForm({
   );
   const [ready, setReady] = useState(false);
   const [email, setEmail] = useState("");
-  const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
 
   useEffect(() => {
@@ -40,10 +40,9 @@ export function AccessForm({
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     if (form.get("password") !== form.get("confirmation")) {
-      setError("As senhas precisam ser iguais.");
+      toast.error("As senhas precisam ser iguais.");
       return;
     }
-    setError("");
     setPending(true);
     try {
       const result = await apiRequest<{ email: string }>(
@@ -53,7 +52,7 @@ export function AccessForm({
       setEmail(result.email);
       setToken("");
     } catch (cause) {
-      setError(
+      toast.error(
         cause instanceof Error
           ? cause.message
           : "Não foi possível definir a senha.",
@@ -135,11 +134,6 @@ export function AccessForm({
                 <p className="text-[0.87rem] leading-[1.6] text-admin-muted">
                   Use de 6 a 10 caracteres.
                 </p>
-                {error && (
-                  <p className={adminStyles.alert} role="alert">
-                    {error}
-                  </p>
-                )}
                 <Button
                   className="w-fit justify-self-start"
                   disabled={pending}

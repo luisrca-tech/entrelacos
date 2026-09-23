@@ -24,7 +24,6 @@ type Props = {
   loading: boolean;
   busy: boolean;
   inactive: boolean;
-  error: string;
   onSave: (updates: AdminRsvpWriteInput["guests"]) => void;
   onLoadMoreHistory: () => void;
 };
@@ -49,7 +48,6 @@ export function ManageConfirmationsDialog({
   loading,
   busy,
   inactive,
-  error,
   onSave,
   onLoadMoreHistory,
 }: Props) {
@@ -105,11 +103,6 @@ export function ManageConfirmationsDialog({
             Histórico
           </button>
         </div>
-        {error && (
-          <p role="alert" className={adminStyles.alert}>
-            {error}
-          </p>
-        )}
         {tab === "current" ? (
           <div
             role="tabpanel"

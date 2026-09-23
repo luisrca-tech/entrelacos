@@ -20,6 +20,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  toast,
 } from "@entrelacos/ui";
 import { Link } from "@tanstack/react-router";
 import {
@@ -76,7 +77,7 @@ export function Panel({ siteId, area }: { siteId?: string; area?: SiteArea }) {
       resetPanelActorCache();
       window.location.replace("/login");
     } catch {
-      setError("Não foi possível sair. Tente novamente.");
+      toast.error("Não foi possível sair. Tente novamente.");
     }
   }
 
@@ -157,7 +158,6 @@ function OwnerSites() {
   const [loadingMore, setLoadingMore] = useState(false);
   const loadingMoreRef = useRef(false);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [createError, setCreateError] = useState("");
 
   const load = useCallback(async (next?: string) => {
     const result = await apiRequest<{
@@ -177,7 +177,7 @@ function OwnerSites() {
     try {
       await load(cursor);
     } catch (cause) {
-      setError(
+      toast.error(
         cause instanceof Error
           ? cause.message
           : "Não foi possível carregar mais casamentos.",
@@ -202,8 +202,6 @@ function OwnerSites() {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     setPending(true);
-    setError("");
-    setCreateError("");
     try {
       const result = await apiRequest<{ site: SiteRecord }>("/v1/owner/sites", {
         method: "POST",
@@ -220,7 +218,7 @@ function OwnerSites() {
         `/sites/${encodeURIComponent(result.site.id)}/invitations`,
       );
     } catch (cause) {
-      setCreateError(
+      toast.error(
         cause instanceof Error
           ? cause.message
           : "Não foi possível criar o casamento.",
@@ -251,7 +249,6 @@ function OwnerSites() {
             className="shrink-0 [@media(max-width:760px)]:w-full"
             type="button"
             onClick={() => {
-              setCreateError("");
               setDialogOpen(true);
             }}
           >
@@ -265,14 +262,6 @@ function OwnerSites() {
               Cadastre os dados iniciais. A mesma referência mantém novas
               tentativas idempotentes e preserva os dados já salvos.
             </DialogDescription>
-            {createError && (
-              <p
-                className="break-words rounded-[9px] border border-[rgb(142_58_42_/_30%)] bg-admin-terracotta-wash px-3.5 py-3 text-admin-terracotta-deep"
-                role="alert"
-              >
-                {createError}
-              </p>
-            )}
             <form
               className="my-7 grid min-w-0 grid-cols-[repeat(auto-fit,minmax(min(100%,240px),1fr))] items-end gap-[18px]"
               onSubmit={create}

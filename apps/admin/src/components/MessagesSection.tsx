@@ -10,6 +10,7 @@ import {
   AlertDialogTitle,
   Button,
   Checkbox,
+  toast,
 } from "@entrelacos/ui";
 import { useCallback, useEffect, useState } from "react";
 import { adminStyles } from "../lib/adminStyles";
@@ -35,7 +36,6 @@ export function MessagesSection({ siteId, lifecycle }: Props) {
   const [loading, setLoading] = useState(true);
   const [pending, setPending] = useState("");
   const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
   const [removeTarget, setRemoveTarget] = useState<SiteMessageRecord | null>(
     null,
   );
@@ -86,16 +86,14 @@ export function MessagesSection({ siteId, lifecycle }: Props) {
   ) {
     if (!mutable || pending) return;
     setPending(key);
-    setError("");
-    setNotice("");
     try {
       await apiRequest(path, { method, body });
-      setNotice(success);
+      toast.success(success);
       await load();
     } catch (cause) {
       const message = messageAdminError(cause);
       await load();
-      setError(message);
+      toast.error(message);
     } finally {
       setPending("");
     }
@@ -112,11 +110,6 @@ export function MessagesSection({ siteId, lifecycle }: Props) {
       {error && (
         <p className={adminStyles.alert} role="alert">
           {error}
-        </p>
-      )}
-      {notice && (
-        <p className="m-0 leading-[1.6] text-admin-muted" role="status">
-          {notice}
         </p>
       )}
 

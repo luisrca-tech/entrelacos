@@ -8,9 +8,9 @@ import {
   DialogContent,
   DialogDescription,
   DialogTitle,
+  toast,
 } from "@entrelacos/ui";
-import { Copy, Eye, Pencil, Plus, RotateCcw, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { Copy, Pencil, Plus, RotateCcw, Trash2 } from "lucide-react";
 import { adminStyles } from "../lib/adminStyles";
 import { InvitationStatus } from "./InvitationStatus";
 
@@ -21,7 +21,8 @@ type Props = {
   onEdit: () => void;
   onDelete: () => void;
   onRotatePin: () => void;
-  onRevealPin: () => Promise<string>;
+  accessPin: string | null;
+  pinLoading: boolean;
 };
 
 export function InvitationDetailDialog({
@@ -31,46 +32,21 @@ export function InvitationDetailDialog({
   onEdit,
   onDelete,
   onRotatePin,
-  onRevealPin,
+  accessPin,
+  pinLoading,
 }: Props) {
-  const [pin, setPin] = useState<string | null>(null);
-  const [pinBusy, setPinBusy] = useState(false);
-  const [pinError, setPinError] = useState("");
-  const [copyNotice, setCopyNotice] = useState("");
-
-  function changeOpen(open: boolean) {
-    if (!open) {
-      setPin(null);
-      setPinError("");
-      setCopyNotice("");
-    }
-    onOpenChange(open);
-  }
-
-  async function revealPin() {
-    setPinBusy(true);
-    setPinError("");
-    try {
-      setPin(await onRevealPin());
-    } catch {
-      setPinError("Não foi possível consultar o PIN. Tente novamente.");
-    } finally {
-      setPinBusy(false);
-    }
-  }
-
   async function copyPin() {
-    if (!pin) return;
+    if (!accessPin) return;
     try {
-      await navigator.clipboard.writeText(pin);
-      setCopyNotice("PIN copiado.");
+      await navigator.clipboard.writeText(accessPin);
+      toast.success("PIN copiado.");
     } catch {
-      setCopyNotice("Não foi possível copiar o PIN.");
+      toast.error("Não foi possível copiar o PIN.");
     }
   }
 
   return (
-    <Dialog open={invitation !== null} onOpenChange={changeOpen}>
+    <Dialog open={invitation !== null} onOpenChange={onOpenChange}>
       <DialogContent
         className={`${adminStyles.dialog} max-w-[min(680px,calc(100vw-32px))]`}
       >
@@ -126,33 +102,27 @@ export function InvitationDetailDialog({
                     <span className="text-xs text-admin-muted">
                       PIN do convite
                     </span>
-                    <p className="m-0 mt-1 font-mono text-lg tracking-[0.18em] text-admin-ink">
-                      {pin ?? "••••••"}
+                    <p
+                      className={
+                        accessPin
+                          ? "m-0 mt-1 font-mono text-lg tracking-[0.18em] text-admin-ink"
+                          : "m-0 mt-1 text-sm text-admin-muted"
+                      }
+                    >
+                      {accessPin ?? (pinLoading ? "Consultando…" : "—")}
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    {pin ? (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={copyPin}
-                        className="border-admin-line"
-                      >
-                        <Copy aria-hidden="true" className="size-4" />
-                        Copiar
-                      </Button>
-                    ) : (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={revealPin}
-                        disabled={pinBusy}
-                        className="border-admin-line"
-                      >
-                        <Eye aria-hidden="true" className="size-4" />
-                        {pinBusy ? "Consultando…" : "Revelar PIN"}
-                      </Button>
-                    )}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={copyPin}
+                      disabled={!accessPin}
+                      className="border-admin-line"
+                    >
+                      <Copy aria-hidden="true" className="size-4" />
+                      Copiar
+                    </Button>
                     <Button
                       type="button"
                       variant="ghost"
@@ -164,27 +134,17 @@ export function InvitationDetailDialog({
                     </Button>
                   </div>
                 </div>
-                {pinError && (
-                  <p
-                    role="alert"
-                    className="mb-0 text-xs text-admin-status-declined"
-                  >
-                    {pinError}
-                  </p>
-                )}
-                {copyNotice && (
-                  <p role="status" className="mb-0 text-xs text-admin-muted">
-                    {copyNotice}
-                  </p>
-                )}
                 <p className="mb-0 mt-3 text-xs leading-relaxed text-admin-muted">
                   O telefone e este PIN permitem acessar as confirmações no
                   site. Compartilhe-os somente com os convidados deste convite.
                 </p>
               </div>
             </section>
-            <section aria-label="Convidados neste convite">
-              <h3 className="m-0 mb-3 font-admin-display text-xl text-admin-graphite">
+            <section
+              aria-label="Convidados neste convite"
+              className="grid gap-6"
+            >
+              <h3 className="m-0 font-admin-display text-xl text-admin-graphite">
                 Convidados neste convite ({invitation.guests.length})
               </h3>
               <ul className="grid gap-2.5">

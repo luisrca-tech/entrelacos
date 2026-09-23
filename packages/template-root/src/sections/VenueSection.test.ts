@@ -15,14 +15,15 @@ describe("VenueSection map and address fallback", () => {
     expect(source).toContain("src={content.mapEmbedUrl}");
     expect(source).toContain("content.labels.mapTitle");
     expect(source).toContain("data-copy-address");
-    expect(source).toContain("data-copy-status");
+    expect(source).not.toContain("data-copy-status");
   });
 
   it("uses the shared copy helper and host-owned immediate feedback", () => {
     expect(source).toContain('import { copyAddress } from "../venue"');
+    expect(source).toContain('import { publishToast } from "@entrelacos/ui/toast"');
     expect(source).toContain("button.dataset.copySuccess");
     expect(source).toContain("button.dataset.copyError");
-    expect(source).toContain('aria-live="polite"');
+    expect(source).toContain("publishToast(");
     expect(source).not.toContain("site-specific venue content");
   });
 });

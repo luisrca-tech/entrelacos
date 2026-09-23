@@ -170,6 +170,7 @@
       "version": "0.0.0",
       "dependencies": {
         "@entrelacos/contracts": "workspace:*",
+        "@entrelacos/ui": "workspace:*",
         "motion": "13.2.0",
       },
       "devDependencies": {

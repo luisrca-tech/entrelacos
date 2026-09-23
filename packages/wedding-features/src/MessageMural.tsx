@@ -1,4 +1,5 @@
 import type { PublicMuralResponse } from "@entrelacos/contracts";
+import { toast } from "@entrelacos/ui/toaster";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   getMessageErrorMessage,
@@ -76,9 +77,10 @@ export function MessageMural({
   const nextCursorRef = useRef<string | null>(null);
 
   const load = useCallback(
-    async (append: boolean) => {
+    async (append: boolean, notify = false) => {
       if (!apiResult.api) {
         setError(apiResult.error);
+        if (notify) toast.error(apiResult.error);
         setLoading(false);
         return;
       }
@@ -104,7 +106,13 @@ export function MessageMural({
         setNextCursor(result.nextCursor);
       } catch (cause) {
         if (version === refreshVersion.current) {
-          setError(getMessageErrorMessage(cause));
+          const message = getMessageErrorMessage(cause);
+          setError(message);
+          if (notify) {
+            toast.error(
+              `${message} As mensagens exibidas podem estar desatualizadas.`,
+            );
+          }
         }
       } finally {
         if (version === refreshVersion.current) {
@@ -117,7 +125,7 @@ export function MessageMural({
   );
 
   useEffect(() => {
-    void load(false);
+    void load(false, true);
   }, [load]);
 
   useEffect(() => {
@@ -153,17 +161,12 @@ export function MessageMural({
           type="button"
           className={muralButtonClass}
           disabled={loading}
-          onClick={() => void load(false)}
+          onClick={() => void load(false, true)}
         >
           {loading ? "Atualizando…" : "Atualizar"}
         </button>
       </header>
 
-      {error && (
-        <p className={muralStatusClass} role="alert">
-          {error} As mensagens exibidas podem estar desatualizadas.
-        </p>
-      )}
       {!enabled && !loading ? (
         <p className={muralStatusClass} role="status">
           O mural está desativado neste momento.
@@ -203,7 +206,7 @@ export function MessageMural({
           type="button"
           className={muralMoreButtonClass}
           disabled={loadingMore}
-          onClick={() => void load(true)}
+          onClick={() => void load(true, true)}
         >
           {loadingMore ? "Carregando…" : "Ver mais mensagens"}
         </button>

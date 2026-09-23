@@ -15,9 +15,10 @@ import {
   DialogDescription,
   DialogTitle,
   Input,
+  toast,
 } from "@entrelacos/ui";
 import { Search } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { adminStyles } from "../lib/adminStyles";
 import { ApiError, apiRequest } from "../lib/apiClient";
 import { InvitationDeleteDialog } from "./InvitationDeleteDialog";
@@ -71,7 +72,6 @@ export function InvitationsSection({ siteId, lifecycle }: Props) {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
   const [formOpen, setFormOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
@@ -90,6 +90,9 @@ export function InvitationsSection({ siteId, lifecycle }: Props) {
   );
   const [history, setHistory] = useState<RsvpHistoryResponse | null>(null);
   const [confirmationsLoading, setConfirmationsLoading] = useState(false);
+  const [accessPin, setAccessPin] = useState<string | null>(null);
+  const [pinLoading, setPinLoading] = useState(false);
+  const pinRequest = useRef(0);
 
   const selectedInvitation =
     invitations.find((item) => item.id === detailId) ?? null;
@@ -153,19 +156,18 @@ export function InvitationsSection({ siteId, lifecycle }: Props) {
     operation: () => Promise<T>,
     success: string,
     onSuccess?: () => void,
+    tone: "success" | "warning" = "success",
   ) {
     setBusy(true);
-    setError("");
-    setNotice("");
     try {
       const result = await operation();
       onSuccess?.();
       await loadInvitations();
       emitInvitationsChanged(window, siteId);
-      setNotice(success);
+      toast[tone](success);
       return result;
     } catch (cause) {
-      setError(invitationAdminError(cause));
+      toast.error(invitationAdminError(cause));
       return null;
     } finally {
       setBusy(false);
@@ -219,26 +221,44 @@ export function InvitationsSection({ siteId, lifecycle }: Props) {
           },
         ),
       "Novo PIN gerado. Compartilhe o novo PIN com os convidados deste convite.",
-      () => setDetailId(null),
+      () => closeInvitationDetail(),
+      "warning",
     );
   }
 
-  async function revealPin(): Promise<string> {
-    if (!selectedInvitation) throw new Error("Convite não encontrado.");
-    const response = await apiRequest<InvitationAccessPinResponse>(
-      `${invitationBase}/${encodeURIComponent(selectedInvitation.id)}/access-pin`,
-    );
-    return response.accessPin;
+  async function openInvitationDetail(invitationId: string) {
+    const request = ++pinRequest.current;
+    setDetailId(invitationId);
+    setAccessPin(null);
+    setPinLoading(true);
+    try {
+      const response = await apiRequest<InvitationAccessPinResponse>(
+        `${invitationBase}/${encodeURIComponent(invitationId)}/access-pin`,
+      );
+      if (pinRequest.current !== request) return;
+      setAccessPin(response.accessPin);
+    } catch {
+      if (pinRequest.current !== request) return;
+      toast.error("Não foi possível consultar o PIN. Tente novamente.");
+    } finally {
+      if (pinRequest.current === request) setPinLoading(false);
+    }
+  }
+
+  function closeInvitationDetail() {
+    pinRequest.current += 1;
+    setDetailId(null);
+    setAccessPin(null);
+    setPinLoading(false);
   }
 
   async function openConfirmations() {
     setConfirmationOpen(true);
     setConfirmationsLoading(true);
-    setError("");
     try {
       await Promise.all([loadConfirmations(), loadHistory()]);
     } catch (cause) {
-      setError(invitationAdminError(cause));
+      toast.error(invitationAdminError(cause));
     } finally {
       setConfirmationsLoading(false);
     }
@@ -247,7 +267,6 @@ export function InvitationsSection({ siteId, lifecycle }: Props) {
   async function saveConfirmations(guests: AdminRsvpWriteInput["guests"]) {
     if (inactive || guests.length === 0) return;
     setBusy(true);
-    setError("");
     try {
       await apiRequest(`${base}/rsvp`, {
         method: "POST",
@@ -259,12 +278,12 @@ export function InvitationsSection({ siteId, lifecycle }: Props) {
         loadInvitations(),
       ]);
       emitInvitationsChanged(window, siteId);
-      setNotice("Confirmações salvas.");
+      toast.success("Confirmações salvas.");
     } catch (cause) {
       if (cause instanceof ApiError && cause.code === "RSVP_CONFLICT") {
         await Promise.all([loadConfirmations(), loadInvitations()]);
       }
-      setError(invitationAdminError(cause));
+      toast.error(invitationAdminError(cause));
     } finally {
       setBusy(false);
     }
@@ -272,7 +291,6 @@ export function InvitationsSection({ siteId, lifecycle }: Props) {
 
   async function openDeadline() {
     setDeadlineOpen(true);
-    setError("");
     try {
       const response = await apiRequest<RsvpDeadline>(`${base}/rsvp/deadline`);
       setDeadline(response);
@@ -286,7 +304,7 @@ export function InvitationsSection({ siteId, lifecycle }: Props) {
       setDeadlineDate(parts.date);
       setDeadlineTime(parts.time);
     } catch (cause) {
-      setError(invitationAdminError(cause));
+      toast.error(invitationAdminError(cause));
     }
   }
 
@@ -294,7 +312,6 @@ export function InvitationsSection({ siteId, lifecycle }: Props) {
     event.preventDefault();
     if (inactive) return;
     setBusy(true);
-    setError("");
     try {
       const local = joinDeadlineLocal(deadlineDate, deadlineTime);
       const next: RsvpDeadline = local
@@ -309,9 +326,9 @@ export function InvitationsSection({ siteId, lifecycle }: Props) {
       });
       setDeadline(next);
       setDeadlineOpen(false);
-      setNotice(local ? "Prazo de confirmação salvo." : "Prazo removido.");
+      toast.success(local ? "Prazo de confirmação salvo." : "Prazo removido.");
     } catch (cause) {
-      setError(invitationAdminError(cause));
+      toast.error(invitationAdminError(cause));
     } finally {
       setBusy(false);
     }
@@ -322,7 +339,6 @@ export function InvitationsSection({ siteId, lifecycle }: Props) {
     options: { includePhone: boolean; includeEmail: boolean },
   ) {
     setBusy(true);
-    setError("");
     try {
       const path = invitationExportPath(siteId, format, {
         ...filters,
@@ -352,9 +368,9 @@ export function InvitationsSection({ siteId, lifecycle }: Props) {
       link.remove();
       window.setTimeout(() => URL.revokeObjectURL(blobUrl), 0);
       setExportOpen(false);
-      setNotice(`Relatório ${format.toUpperCase()} gerado.`);
+      toast.success(`Relatório ${format.toUpperCase()} gerado.`);
     } catch (cause) {
-      setError(invitationAdminError(cause));
+      toast.error(invitationAdminError(cause));
     } finally {
       setBusy(false);
     }
@@ -365,11 +381,6 @@ export function InvitationsSection({ siteId, lifecycle }: Props) {
       {error && (
         <p role="alert" className={adminStyles.alert}>
           {error}
-        </p>
-      )}
-      {notice && (
-        <p role="status" className={adminStyles.notice}>
-          {notice}
         </p>
       )}
       <div className="grid items-start gap-6 xl:grid-cols-[minmax(280px,370px)_minmax(0,1fr)]">
@@ -429,8 +440,7 @@ export function InvitationsSection({ siteId, lifecycle }: Props) {
                 filters.guestType !== "ALL"
               }
               onOpen={(invitation) => {
-                setDetailId(invitation.id);
-                setError("");
+                void openInvitationDetail(invitation.id);
               }}
             />
           )}
@@ -441,7 +451,6 @@ export function InvitationsSection({ siteId, lifecycle }: Props) {
         invitation={editingInvitation}
         inactive={inactive}
         busy={busy}
-        error={formOpen ? error : ""}
         onOpenChange={(open) => {
           setFormOpen(open);
           if (!open) setEditId(null);
@@ -453,24 +462,24 @@ export function InvitationsSection({ siteId, lifecycle }: Props) {
         invitation={selectedInvitation}
         inactive={inactive}
         onOpenChange={(open) => {
-          if (!open) setDetailId(null);
+          if (!open) closeInvitationDetail();
         }}
+        accessPin={accessPin}
+        pinLoading={pinLoading}
         onEdit={() => {
           setEditId(detailId);
-          setDetailId(null);
+          closeInvitationDetail();
           setFormOpen(true);
         }}
         onDelete={() => {
           setDeleteId(detailId);
-          setDetailId(null);
+          closeInvitationDetail();
         }}
         onRotatePin={() => void rotatePin()}
-        onRevealPin={revealPin}
       />
       <InvitationDeleteDialog
         invitation={deletingInvitation}
         busy={busy}
-        error={deleteId ? error : ""}
         onOpenChange={(open) => {
           if (!open) setDeleteId(null);
         }}
@@ -484,13 +493,12 @@ export function InvitationsSection({ siteId, lifecycle }: Props) {
         loading={confirmationsLoading}
         busy={busy}
         inactive={inactive}
-        error={confirmationOpen ? error : ""}
         onSave={(updates) => void saveConfirmations(updates)}
         onLoadMoreHistory={() => {
           if (!history?.nextCursor) return;
           setConfirmationsLoading(true);
           void loadHistory(history.nextCursor)
-            .catch((cause) => setError(invitationAdminError(cause)))
+            .catch((cause) => toast.error(invitationAdminError(cause)))
             .finally(() => setConfirmationsLoading(false));
         }}
       />
@@ -510,11 +518,6 @@ export function InvitationsSection({ siteId, lifecycle }: Props) {
             Após o prazo, os convidados podem consultar as respostas, mas não
             alterá-las.
           </DialogDescription>
-          {deadlineOpen && error && (
-            <p role="alert" className={adminStyles.alert}>
-              {error}
-            </p>
-          )}
           <form
             onSubmit={(event) => void saveDeadline(event)}
             className="mt-5 grid gap-4"

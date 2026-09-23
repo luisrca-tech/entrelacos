@@ -22,6 +22,7 @@
     "./dropdown-menu": "./src/components/dropdown-menu.tsx",
     "./date": "./src/lib/date.ts",
     "./toaster": "./src/components/toaster.tsx",
+    "./toast": "./src/lib/publishToast.ts",
     "./utils": "./src/lib/utils.ts",
     "./styles.css": "./src/styles.css"
   },

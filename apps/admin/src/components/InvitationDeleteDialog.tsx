@@ -14,12 +14,10 @@ import {
   Input,
 } from "@entrelacos/ui";
 import { useState } from "react";
-import { adminStyles } from "../lib/adminStyles";
 
 type Props = {
   invitation: InvitationRecord | null;
   busy: boolean;
-  error: string;
   onOpenChange: (open: boolean) => void;
   onConfirm: (confirmation: InvitationDeleteConfirmation) => void;
 };
@@ -27,7 +25,6 @@ type Props = {
 export function InvitationDeleteDialog({
   invitation,
   busy,
-  error,
   onOpenChange,
   onConfirm,
 }: Props) {
@@ -50,11 +47,6 @@ export function InvitationDeleteDialog({
             <strong>{invitation?.name}</strong>
           </AlertDialogDescription>
         </AlertDialogHeader>
-        {error && (
-          <p role="alert" className={adminStyles.alert}>
-            {error}
-          </p>
-        )}
         <label
           htmlFor="invitation-delete-name"
           className="grid gap-2 text-sm font-semibold text-admin-graphite"

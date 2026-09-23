@@ -1,9 +1,8 @@
 import { handoffIssueInputSchema } from "@entrelacos/contracts";
-import { Button, Card, CardContent, CardHeader } from "@entrelacos/ui";
+import { Button, Card, CardContent, CardHeader, toast } from "@entrelacos/ui";
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { AuthLayout } from "../components/AuthLayout";
-import { adminStyles } from "../lib/adminStyles";
 import { ApiError, apiRequest } from "../lib/apiClient";
 
 export const Route = createFileRoute("/handoff")({ component: HandoffPage });
@@ -15,9 +14,10 @@ function HandoffPage() {
     const query = new URLSearchParams(window.location.search);
     const input = handoffIssueInputSchema.safeParse(Object.fromEntries(query));
     if (!input.success) {
-      setError(
-        "Link de navegação inválido. Volte ao site e use o botão Painel.",
-      );
+      const message =
+        "Link de navegação inválido. Volte ao site e use o botão Painel.";
+      toast.error(message);
+      setError(message);
       return;
     }
     apiRequest<{ code: string }>("/v1/handoff", {
@@ -35,11 +35,12 @@ function HandoffPage() {
             `/login?next=${encodeURIComponent(window.location.pathname + window.location.search)}`,
           );
         } else {
-          setError(
+          const message =
             cause instanceof Error
               ? cause.message
-              : "Não foi possível reconhecer o acesso.",
-          );
+              : "Não foi possível reconhecer o acesso.";
+          toast.error(message);
+          setError(message);
         }
       });
   }, []);
@@ -54,18 +55,13 @@ function HandoffPage() {
         </CardHeader>
         <CardContent>
           {error ? (
-            <>
-              <p className={adminStyles.alert} role="alert">
-                {error}
-              </p>
-              <Button
-                variant="outline"
-                nativeButton={false}
-                render={<a href="/" />}
-              >
-                Voltar ao painel
-              </Button>
-            </>
+            <Button
+              variant="outline"
+              nativeButton={false}
+              render={<a href="/" />}
+            >
+              Voltar ao painel
+            </Button>
           ) : (
             <p className="leading-[1.6]" role="status">
               Verificando seu acesso ao casamento.

@@ -5,7 +5,6 @@ import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-  Toaster,
 } from "@entrelacos/ui";
 import { Link } from "@tanstack/react-router";
 import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
@@ -200,7 +199,6 @@ export function AdminShell({
           <AdminNavigation area={area} items={navigation} mobile />
         </nav>
       )}
-      <Toaster />
     </div>
   );
 }

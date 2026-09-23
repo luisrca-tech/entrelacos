@@ -20,4 +20,10 @@ describe("message rows use the invitation surface", () => {
     expect(messagesSource).toContain("adminStyles.surface");
     expect(messagesSource).toContain("border-b border-admin-line");
   });
+
+  it("toasts moderation results instead of leaving a status line", () => {
+    expect(messagesSource).toContain("toast.success(success)");
+    expect(messagesSource).toContain("toast.error(message)");
+    expect(messagesSource).not.toContain("setNotice");
+  });
 });

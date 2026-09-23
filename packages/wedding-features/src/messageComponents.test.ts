@@ -87,8 +87,10 @@ describe("invitation access form", () => {
     expect(guestAccessSource).toContain("className={guestAccessFormClass}");
     expect(guestAccessSource).toContain("onSubmit={accessInvitation}");
     expect(guestAccessSource).toContain(
-      "Informe um telefone válido e o PIN de 6 dígitos do convite.",
+      'toast.error(\n        "Informe um telefone válido e o PIN de 6 dígitos do convite.",\n      );',
     );
+    expect(guestAccessSource).toContain('toast.success("Acesso confirmado.")');
+    expect(guestAccessSource).not.toContain("setNotice");
     expect(guestAccessSource).toContain("Telefone de contato");
     expect(guestAccessSource).toContain("formatInvitationPhoneInput");
     expect(guestAccessSource).not.toContain("Nome completo\n");

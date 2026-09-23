@@ -14,7 +14,6 @@ export type InvitationMessageFormProps = {
   value: string;
   busy: boolean;
   error?: string;
-  notice?: string;
   onChange: (value: string) => void;
   onSave: () => void;
   onReload?: () => void;
@@ -60,7 +59,6 @@ export function InvitationMessageForm({
   value,
   busy,
   error,
-  notice,
   onChange,
   onSave,
   onReload,
@@ -86,16 +84,6 @@ export function InvitationMessageForm({
       {readOnlyReason && (
         <p className={invitationMessageReadonlyClass} role="status">
           {readOnlyMessage(readOnlyReason)}
-        </p>
-      )}
-      {error && (
-        <p className={invitationMessageClass} role="alert">
-          {error}
-        </p>
-      )}
-      {notice && (
-        <p className={invitationMessageClass} role="status">
-          {notice}
         </p>
       )}
       <label className={invitationMessageLabelClass}>

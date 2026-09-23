@@ -5,6 +5,7 @@ import {
   type InvitationSessionResponse,
   invitationAccessInputSchema,
 } from "@entrelacos/contracts";
+import { toast } from "@entrelacos/ui/toaster";
 import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
   clearGuestSession,
@@ -150,7 +151,6 @@ export function GuestAccess({
   const [rsvpDraft, setRsvpDraft] = useState<RsvpDraft>({});
   const [rsvpOpen, setRsvpOpen] = useState(false);
   const [rsvpError, setRsvpError] = useState("");
-  const [rsvpNotice, setRsvpNotice] = useState("");
   const retryRequest = useRef<{ key: string; requestId: string } | null>(null);
   const [invitationMessage, setInvitationMessage] =
     useState<InvitationMessageResponse | null>(null);
@@ -158,7 +158,6 @@ export function GuestAccess({
   const [messageReady, setMessageReady] = useState(false);
   const [messageBusy, setMessageBusy] = useState(false);
   const [messageError, setMessageError] = useState("");
-  const [messageNotice, setMessageNotice] = useState("");
   const messageRetryRequest = useRef<{
     key: string;
     requestId: string;
@@ -166,7 +165,6 @@ export function GuestAccess({
   const [busy, setBusy] = useState(false);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -239,9 +237,8 @@ export function GuestAccess({
           setMessageDraft("");
           setMessageReady(false);
           setPhase("lookup");
-          setNotice("");
-          setError(errorWithRetry(cause));
-        } else setError(errorWithRetry(cause));
+          toast.error(errorWithRetry(cause));
+        } else toast.error(errorWithRetry(cause));
       })
       .finally(() => {
         if (active) setReady(true);
@@ -271,13 +268,13 @@ export function GuestAccess({
       accessPin: pin,
     });
     if (!parsed.success) {
-      setError("Informe um telefone válido e o PIN de 6 dígitos do convite.");
-      setNotice("");
+      toast.error(
+        "Informe um telefone válido e o PIN de 6 dígitos do convite.",
+      );
       return;
     }
     setBusy(true);
     setError("");
-    setNotice("");
     try {
       const result = await apiResult.api.access(parsed.data);
       if (!storage) throw new Error("Session storage unavailable");
@@ -285,7 +282,7 @@ export function GuestAccess({
       setSession(sessionFromVerification(result));
       setPhase("authenticated");
       setPin("");
-      setNotice("Acesso confirmado.");
+      toast.success("Acesso confirmado.");
       const [verifiedRsvp, verifiedMessage] = await Promise.allSettled([
         apiResult.api.getRsvp(result.sessionToken),
         messagesApiResult.api?.getInvitationMessage(result.sessionToken),
@@ -302,7 +299,9 @@ export function GuestAccess({
           ),
         );
       } else {
-        setRsvpError(errorWithRetry(verifiedRsvp.reason));
+        const message = errorWithRetry(verifiedRsvp.reason);
+        setRsvpError(message);
+        toast.error(message);
       }
       if (verifiedMessage.status === "fulfilled" && verifiedMessage.value) {
         setInvitationMessage(verifiedMessage.value);
@@ -314,7 +313,7 @@ export function GuestAccess({
       }
       setMessageReady(true);
     } catch (cause) {
-      setError(errorWithRetry(cause));
+      toast.error(errorWithRetry(cause));
     } finally {
       setBusy(false);
     }
@@ -330,8 +329,8 @@ export function GuestAccess({
         await apiResult.api.leave(token);
         serverConfirmed = true;
       }
-    } catch (cause) {
-      setError(errorWithRetry(cause));
+    } catch {
+      serverConfirmed = false;
     } finally {
       if (storage) clearGuestSession(storage, siteId);
       setSession(null);
@@ -341,12 +340,13 @@ export function GuestAccess({
       setMessageDraft("");
       setMessageReady(false);
       setMessageError("");
-      setMessageNotice("");
       messageRetryRequest.current = null;
       setRsvpOpen(false);
       setPin("");
       setPhase("lookup");
-      setNotice(getGuestLeaveNotice(serverConfirmed));
+      const leaveNotice = getGuestLeaveNotice(serverConfirmed);
+      if (serverConfirmed) toast.success(leaveNotice);
+      else toast.warning(leaveNotice);
       setBusy(false);
     }
   }
@@ -372,6 +372,7 @@ export function GuestAccess({
       if (!preserveDraft) retryRequest.current = null;
     } catch (cause) {
       const apiError = cause as Partial<GuestAccessApiError>;
+      const message = errorWithRetry(cause);
       if (apiError.status === 401) {
         if (storage) clearGuestSession(storage, siteId);
         setSession(null);
@@ -379,12 +380,11 @@ export function GuestAccess({
         setRsvpDraft({});
         setRsvpOpen(false);
         setPhase("lookup");
-        setNotice("");
-        setRsvpNotice("");
         setRsvpError("");
-        setError(errorWithRetry(cause));
+        toast.error(message);
       } else {
-        setRsvpError(errorWithRetry(cause));
+        setRsvpError(message);
+        if (!preserveDraft) toast.error(message);
       }
     } finally {
       setBusy(false);
@@ -404,7 +404,6 @@ export function GuestAccess({
     retryRequest.current = { key, requestId };
     setBusy(true);
     setRsvpError("");
-    setRsvpNotice("");
     try {
       const saved = await apiResult.api.saveRsvp(token, {
         requestId,
@@ -423,7 +422,7 @@ export function GuestAccess({
         ),
       );
       retryRequest.current = null;
-      setRsvpNotice(
+      toast.success(
         saved.result === "NO_CHANGE"
           ? "As respostas já estavam atualizadas."
           : "Respostas salvas.",
@@ -431,10 +430,8 @@ export function GuestAccess({
     } catch (cause) {
       const apiError = cause as Partial<GuestAccessApiError>;
       const message = errorWithRetry(cause);
-      setRsvpError(message);
       if (apiError.code === "RSVP_CONFLICT") {
         await reloadRsvp(true);
-        setRsvpError(message);
       }
       if (apiError.status === 401) {
         if (storage) clearGuestSession(storage, siteId);
@@ -444,11 +441,11 @@ export function GuestAccess({
         setRsvpOpen(false);
         retryRequest.current = null;
         setPhase("lookup");
-        setNotice("");
-        setRsvpNotice("");
         setRsvpError("");
-        setError(message);
+      } else {
+        setRsvpError(message);
       }
+      toast.error(message);
     } finally {
       setBusy(false);
     }
@@ -482,8 +479,9 @@ export function GuestAccess({
         setInvitationMessage(null);
         setMessageDraft("");
         setPhase("lookup");
-        setNotice("");
-        setError(message);
+        toast.error(message);
+      } else if (invitationMessage && !preserveDraft) {
+        toast.error(message);
       }
     } finally {
       setMessageReady(true);
@@ -513,7 +511,6 @@ export function GuestAccess({
     messageRetryRequest.current = { key, requestId };
     setMessageBusy(true);
     setMessageError("");
-    setMessageNotice("");
     try {
       const saved = await messagesApiResult.api.saveInvitationMessage(token, {
         requestId,
@@ -526,7 +523,7 @@ export function GuestAccess({
       });
       setMessageDraft(saved.message.text);
       messageRetryRequest.current = null;
-      setMessageNotice(
+      toast.success(
         saved.result === "NO_CHANGE"
           ? "A mensagem já estava atualizada."
           : "Mensagem publicada no mural.",
@@ -553,9 +550,9 @@ export function GuestAccess({
         setInvitationMessage(null);
         setMessageDraft("");
         setPhase("lookup");
-        setNotice("");
-        setError(message);
+        setMessageError("");
       }
+      toast.error(message);
     } finally {
       setMessageBusy(false);
     }
@@ -581,11 +578,6 @@ export function GuestAccess({
       {error && (
         <p className={guestAccessMessageClass} role="alert">
           {error}
-        </p>
-      )}
-      {notice && (
-        <p className={guestAccessMessageClass} role="status">
-          {notice}
         </p>
       )}
 
@@ -677,11 +669,9 @@ export function GuestAccess({
               value={messageDraft}
               busy={messageBusy}
               error={messageError}
-              notice={messageNotice}
               onChange={(value) => {
                 setMessageDraft(value);
                 setMessageError("");
-                setMessageNotice("");
               }}
               onSave={() => void saveInvitationMessage()}
               onReload={() => void reloadInvitationMessage(false)}
@@ -729,16 +719,13 @@ export function GuestAccess({
           }
           busy={busy}
           error={rsvpError}
-          notice={rsvpNotice}
           onChange={(guestId, state) => {
             setRsvpDraft((draft) => setDraftStatus(draft, guestId, state));
             setRsvpError("");
-            setRsvpNotice("");
           }}
           onConfirmAll={() => {
             setRsvpDraft(confirmAllDraft);
             setRsvpError("");
-            setRsvpNotice("");
           }}
           onSave={() => void saveRsvp()}
           onReload={() => void reloadRsvp(false)}

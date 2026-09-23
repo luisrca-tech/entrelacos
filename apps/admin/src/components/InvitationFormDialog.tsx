@@ -27,7 +27,6 @@ type Props = {
   invitation: InvitationRecord | null;
   inactive: boolean;
   busy: boolean;
-  error: string;
   onOpenChange: (open: boolean) => void;
   onSave: (value: InvitationCreateInput) => void;
 };
@@ -37,7 +36,6 @@ export function InvitationFormDialog({
   invitation,
   inactive,
   busy,
-  error,
   onOpenChange,
   onSave,
 }: Props) {
@@ -80,11 +78,6 @@ export function InvitationFormDialog({
               individualmente.
             </DialogDescription>
             <div className="mt-5 grid gap-6 pb-6">
-              {error && (
-                <p role="alert" className={adminStyles.alert}>
-                  {error}
-                </p>
-              )}
               <fieldset className="grid gap-4">
                 <legend className="mb-3 font-admin-display text-xl text-admin-graphite">
                   Dados do convite

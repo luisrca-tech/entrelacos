@@ -118,7 +118,6 @@ export function SiteWorkspace({
   const [error, setError] = useState("");
   const [fatal, setFatal] = useState(false);
   const [pending, setPending] = useState(false);
-  const [notice, setNotice] = useState("");
   const [lifecycleAction, setLifecycleAction] =
     useState<LifecycleAction | null>(null);
   const [adminToDisable, setAdminToDisable] = useState<Admin | null>(null);
@@ -181,15 +180,13 @@ export function SiteWorkspace({
     method = "POST",
   ): Promise<boolean> {
     setPending(true);
-    setError("");
-    setNotice("");
     try {
       await apiRequest(path, { method, body });
       await load();
-      setNotice("Alteração salva.");
+      toast.success("Alteração salva.");
       return true;
     } catch (cause) {
-      setError(
+      toast.error(
         cause instanceof Error ? cause.message : "Não foi possível salvar.",
       );
       return false;
@@ -215,7 +212,6 @@ export function SiteWorkspace({
     failedMessage: string,
   ) {
     setPending(true);
-    setError("");
     try {
       const result = await apiRequest<{ token: string }>(
         `/v1/owner/admins/${admin.userId}/access`,
@@ -233,7 +229,7 @@ export function SiteWorkspace({
       }
       toast.error(adminAccessLinkCopyFailedMessage);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : failedMessage);
+      toast.error(cause instanceof Error ? cause.message : failedMessage);
     } finally {
       setPending(false);
     }
@@ -281,7 +277,6 @@ export function SiteWorkspace({
   function closeSettingsDialog() {
     setSettingsDialog(null);
     setDomainToEdit(null);
-    setError("");
   }
 
   async function submitDates(event: FormEvent<HTMLFormElement>) {
@@ -291,7 +286,7 @@ export function SiteWorkspace({
       (site?.termStartsOn && (!values.get("start") || !values.get("end")));
     if (missingDate) {
       event.preventDefault();
-      setError("Informe todas as datas obrigatórias.");
+      toast.error("Informe todas as datas obrigatórias.");
       return;
     }
     const saved = await submit(
@@ -403,16 +398,6 @@ export function SiteWorkspace({
           </div>
         </div>
       </section>
-      {error && !settingsDialog && (
-        <p className={adminStyles.alert} role="alert">
-          {error} <a href="/login">Login</a>
-        </p>
-      )}
-      {notice && (
-        <p className="my-3.5 leading-[1.6] text-admin-muted" role="status">
-          {notice}
-        </p>
-      )}
       {inactive && (
         <p className={adminStyles.notice}>
           Casamento inativo. Os dados estão preservados e a consulta permanece
@@ -666,11 +651,6 @@ export function SiteWorkspace({
                 <DialogDescription>
                   Atualize identificação pública e origens autorizadas.
                 </DialogDescription>
-                {error && (
-                  <p className={adminStyles.alert} role="alert">
-                    {error}
-                  </p>
-                )}
                 <form
                   className={adminStyles.formGrid}
                   onSubmit={async (event) => {
@@ -768,11 +748,6 @@ export function SiteWorkspace({
                 <DialogDescription>
                   Altere a data do casamento e, quando disponível, a vigência.
                 </DialogDescription>
-                {error && (
-                  <p className={adminStyles.alert} role="alert">
-                    {error}
-                  </p>
-                )}
                 <form className={adminStyles.formGrid} onSubmit={submitDates}>
                   <label htmlFor="site-event-date">
                     Data do casamento
@@ -832,11 +807,6 @@ export function SiteWorkspace({
                   Registre após verificar a publicação. Esta ação não altera a
                   hospedagem.
                 </DialogDescription>
-                {error && (
-                  <p className={adminStyles.alert} role="alert">
-                    {error}
-                  </p>
-                )}
                 <form
                   className={adminStyles.form}
                   onSubmit={async (event) => {
@@ -902,11 +872,6 @@ export function SiteWorkspace({
                 <DialogDescription>
                   O link de ativação será exibido apenas nesta sessão.
                 </DialogDescription>
-                {error && (
-                  <p className={adminStyles.alert} role="alert">
-                    {error}
-                  </p>
-                )}
                 <form
                   className={adminStyles.form}
                   onSubmit={async (event) => {
@@ -973,11 +938,6 @@ export function SiteWorkspace({
                 <DialogDescription>
                   O registro não executa DNS, hospedagem ou renovação.
                 </DialogDescription>
-                {error && (
-                  <p className={adminStyles.alert} role="alert">
-                    {error}
-                  </p>
-                )}
                 {domainToEdit ? (
                   <form className={adminStyles.form} onSubmit={saveDomainEdit}>
                     <p className="leading-[1.6]">

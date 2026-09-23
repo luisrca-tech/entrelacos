@@ -43,7 +43,6 @@ const revealClasses = "opacity-100 translate-y-0 data-[template-motion-ready=tru
           data-copy-error={content.labels.copyErrorLabel}
         >{content.labels.copyLabel}</button>
       </div>
-      <p class={`m-0 mt-3 min-h-[1.5em] text-[0.9rem] ${mutedClass}`} data-copy-status role="status" aria-live="polite"></p>
     </div>
     <figure class="mt-0 min-h-[clamp(24rem,34vw,28rem)] overflow-hidden bg-template-olive">
       <iframe
@@ -59,18 +58,17 @@ const revealClasses = "opacity-100 translate-y-0 data-[template-motion-ready=tru
 </section>
 
 <script>
+  import { publishToast } from "@entrelacos/ui/toast";
   import { copyAddress } from "../venue";
 
   document.querySelectorAll<HTMLButtonElement>("[data-copy-address]").forEach((button) => {
     button.addEventListener("click", async () => {
       const address = button.dataset.address ?? "";
-      const status = button.parentElement?.parentElement?.querySelector<HTMLElement>("[data-copy-status]");
       const copied = await copyAddress(address, navigator.clipboard);
-      if (copied) {
-        if (status) status.textContent = button.dataset.copySuccess ?? "";
-      } else {
-        if (status) status.textContent = button.dataset.copyError ?? "";
-      }
+      publishToast(
+        copied ? "success" : "error",
+        (copied ? button.dataset.copySuccess : button.dataset.copyError) ?? "",
+      );
     });
   });
 </script>

@@ -22,8 +22,31 @@ const invitationRouteSource = readFileSync(
   resolve(import.meta.dirname, "../routes/sites.$siteId.invitations.tsx"),
   "utf8",
 );
+const rootSource = readFileSync(
+  resolve(import.meta.dirname, "../routes/__root.tsx"),
+  "utf8",
+);
+const invitationsSource = readFileSync(
+  resolve(import.meta.dirname, "InvitationsSection.tsx"),
+  "utf8",
+);
 
 describe("admin shell safety regressions", () => {
+  it("mounts one toaster on the admin root", () => {
+    expect(rootSource).toContain("<Toaster />");
+    expect(shellSource).not.toContain("<Toaster");
+  });
+
+  it("toasts invitation results instead of a page banner", () => {
+    expect(invitationsSource).toContain(
+      'id ? "Convite atualizado." : "Convite adicionado."',
+    );
+    expect(invitationsSource).toContain("toast[tone](success)");
+    expect(invitationsSource).toContain('"warning"');
+    expect(invitationsSource).not.toContain("setNotice");
+    expect(invitationsSource).not.toContain("adminStyles.notice");
+  });
+
   it("guards load-more against concurrent requests and pending create", () => {
     expect(panelSource).toContain("loadingMoreRef.current");
     expect(panelSource).toContain("disabled={pending || loadingMore}");
