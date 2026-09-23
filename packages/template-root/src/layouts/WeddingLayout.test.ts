@@ -53,9 +53,10 @@ describe("WeddingLayout landmarks", () => {
 
   it("mounts one toaster for public action feedback", () => {
     expect(source).toContain(
-      'import { Toaster } from "@entrelacos/ui/toaster"',
+      'import Toaster from "../components/TemplateToaster"',
     );
     expect(source).toContain("<Toaster client:load />");
+    expect(source).not.toContain("@entrelacos/ui/toaster");
     expect(source.match(/<Toaster/g)).toHaveLength(1);
   });
 
