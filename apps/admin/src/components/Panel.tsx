@@ -33,6 +33,7 @@ import { adminStyles, displayHeading } from "../lib/adminStyles";
 import { ApiError, apiRequest } from "../lib/apiClient";
 import { AdminShell, ShellLoading } from "./AdminShell";
 import { resolveSiteArea, type SiteArea } from "./adminNavigation";
+import { formatBrazilianDate } from "./brazilianDate";
 import {
   getCachedPanelActor,
   loadPanelActor,
@@ -400,7 +401,7 @@ function OwnerSites() {
                         </span>
                       </Link>
                     </TableCell>
-                    <TableCell>{formatDate(site.eventDate)}</TableCell>
+                    <TableCell>{formatBrazilianDate(site.eventDate)}</TableCell>
                     <TableCell>
                       <Badge
                         variant={
@@ -449,7 +450,7 @@ function OwnerSites() {
                   {site.coupleNames.join(" & ")}
                 </span>
                 <small className="mt-1 text-admin-muted">
-                  {formatDate(site.eventDate)}
+                  {formatBrazilianDate(site.eventDate)}
                 </small>
               </Link>
             ))}
@@ -475,13 +476,6 @@ function OwnerSites() {
       )}
     </div>
   );
-}
-
-function formatDate(value: string) {
-  const date = new Date(`${value}T12:00:00Z`);
-  return Number.isNaN(date.valueOf())
-    ? value
-    : new Intl.DateTimeFormat("pt-BR", { dateStyle: "medium" }).format(date);
 }
 
 export function lifecycleLabel(value: string) {

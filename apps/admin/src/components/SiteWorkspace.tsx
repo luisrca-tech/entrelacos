@@ -632,7 +632,11 @@ export function SiteWorkspace({
                             {labels[domain.state]}
                           </Badge>
                         </TableCell>
-                        <TableCell>{domain.expiresOn ?? "—"}</TableCell>
+                        <TableCell>
+                          {domain.expiresOn
+                            ? formatBrazilianDate(domain.expiresOn)
+                            : "—"}
+                        </TableCell>
                         <TableCell>
                           {domain.isPrimary ? "Sim" : "Não"}
                         </TableCell>
