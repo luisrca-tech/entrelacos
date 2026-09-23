@@ -169,12 +169,7 @@ export function AdminShell({
       </aside>
 
       <div className="flex min-h-screen min-w-0 flex-col">
-        <header
-          className={cn(
-            "mx-auto flex min-h-[82px] w-full items-center justify-end gap-[18px] border-b border-admin-line px-[42px] py-[18px] [@media(max-width:760px)]:min-h-[68px] [@media(max-width:760px)]:px-5 [@media(max-width:760px)]:py-[14px] [@media(min-width:761px)_and_(max-width:1060px)]:px-7",
-            area === "invitations" ? "max-w-[1700px]" : "max-w-[1440px]",
-          )}
-        >
+        <header className="mx-auto flex w-full max-w-[1700px] items-center justify-end gap-[18px] border-b border-admin-line px-[42px] py-2.5 [@media(max-width:760px)]:px-5 [@media(max-width:760px)]:py-2 [@media(min-width:761px)_and_(max-width:1060px)]:px-7">
           <Link
             className="mr-auto hidden font-admin-display text-[1.45rem] tracking-[-0.03em] text-admin-graphite no-underline [@media(max-width:760px)]:block"
             to="/"
@@ -188,20 +183,10 @@ export function AdminShell({
           </div>
           <AccountMenu actor={actor} initials={initials} onLogout={onLogout} />
         </header>
-        <main
-          className={cn(
-            "mx-auto w-full px-[42px] pt-12 pb-6 [@media(max-width:760px)]:px-5 [@media(max-width:760px)]:pt-[34px] [@media(max-width:760px)]:pb-6 [@media(min-width:761px)_and_(max-width:1060px)]:px-7",
-            area === "invitations" ? "max-w-[1700px]" : "max-w-[1440px]",
-          )}
-        >
+        <main className="mx-auto w-full max-w-[1700px] px-[42px] pt-6 pb-6 [@media(max-width:760px)]:px-5 [@media(max-width:760px)]:pt-5 [@media(max-width:760px)]:pb-6 [@media(min-width:761px)_and_(max-width:1060px)]:px-7">
           {children}
         </main>
-        <footer
-          className={cn(
-            "mx-auto mt-auto flex w-full justify-between gap-6 border-t border-admin-line px-[42px] pt-6 pb-7 text-[0.78rem] text-admin-muted [@media(max-width:760px)]:hidden [@media(min-width:761px)_and_(max-width:1060px)]:px-7",
-            area === "invitations" ? "max-w-[1700px]" : "max-w-[1440px]",
-          )}
-        >
+        <footer className="mx-auto mt-auto flex w-full max-w-[1700px] justify-between gap-6 border-t border-admin-line px-[42px] pt-6 pb-7 text-[0.78rem] text-admin-muted [@media(max-width:760px)]:hidden [@media(min-width:761px)_and_(max-width:1060px)]:px-7">
           <span>EntreLaços · Painel administrativo</span>
           <span>Feito para cuidar de cada detalhe.</span>
         </footer>

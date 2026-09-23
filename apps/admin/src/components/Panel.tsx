@@ -29,7 +29,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { adminStyles } from "../lib/adminStyles";
+import { adminStyles, displayHeading } from "../lib/adminStyles";
 import { ApiError, apiRequest } from "../lib/apiClient";
 import { AdminShell, ShellLoading } from "./AdminShell";
 import { resolveSiteArea, type SiteArea } from "./adminNavigation";
@@ -231,12 +231,14 @@ function OwnerSites() {
 
   return (
     <div>
-      <section className="mb-[38px] flex items-end justify-between gap-8 [@media(max-width:760px)]:mb-7 [@media(max-width:760px)]:flex-col [@media(max-width:760px)]:items-start [@media(max-width:760px)]:gap-5">
+      <section className="mb-6 flex items-end justify-between gap-8 [@media(max-width:760px)]:flex-col [@media(max-width:760px)]:items-start [@media(max-width:760px)]:gap-5">
         <div>
           <p className="m-0 mb-3.5 text-[0.7rem] font-bold uppercase tracking-[0.13em] leading-[1.3] text-admin-muted">
             Gestão global
           </p>
-          <h1 className="m-0 max-w-[780px] font-admin-display text-[clamp(2.6rem,6vw,5.2rem)] font-normal leading-[1.08] tracking-[-0.025em]">
+          <h1
+            className={`m-0 max-w-none text-[clamp(1.85rem,3vw,2.6rem)] ${displayHeading}`}
+          >
             Seus casamentos
           </h1>
           <p className="mt-[18px] max-w-[56ch] leading-[1.6] text-admin-muted">
@@ -365,14 +367,14 @@ function OwnerSites() {
         </p>
       )}
 
-      <Card className="overflow-hidden rounded-[14px] border-admin-line bg-admin-surface shadow-[0_5px_24px_rgb(68_49_36_/_3%)]">
-        <CardHeader className="p-[26px_28px_20px] [@media(max-width:760px)]:px-[18px] [@media(max-width:760px)]:pt-[22px] [@media(max-width:760px)]:pb-4">
+      <Card className={`${adminStyles.surface} overflow-hidden`}>
+        <CardHeader>
           <CardTitle>Casamentos cadastrados</CardTitle>
           <CardDescription>
             Selecione um casamento para acompanhar status e acessos.
           </CardDescription>
         </CardHeader>
-        <CardContent className="px-7 pb-7 [@media(max-width:760px)]:px-[18px] [@media(max-width:760px)]:pb-[18px]">
+        <CardContent>
           <div className="overflow-x-auto [@media(max-width:760px)]:hidden">
             <Table>
               <TableHeader>
