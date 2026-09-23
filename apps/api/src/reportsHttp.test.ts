@@ -2,9 +2,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   requireAdminSession: vi.fn(),
-  readRsvpReport: vi.fn(),
-  createRsvpCsv: vi.fn(),
-  createRsvpPdf: vi.fn(),
+  readInvitationReport: vi.fn(),
+  createInvitationCsv: vi.fn(),
+  createInvitationPdf: vi.fn(),
   ReportsServiceError: class ReportsServiceError extends Error {
     constructor(
       readonly status: number,
@@ -24,9 +24,9 @@ vi.mock("./authHttp", () => ({
 
 vi.mock("./reports", () => ({
   ReportsServiceError: mocks.ReportsServiceError,
-  readRsvpReport: mocks.readRsvpReport,
-  createRsvpCsv: mocks.createRsvpCsv,
-  createRsvpPdf: mocks.createRsvpPdf,
+  readInvitationReport: mocks.readInvitationReport,
+  createInvitationCsv: mocks.createInvitationCsv,
+  createInvitationPdf: mocks.createInvitationPdf,
 }));
 
 import { createReportsHttpRouter } from "./reportsHttp";
@@ -38,10 +38,25 @@ const report = {
   reportTitle: "Ana & João",
   generatedAt: "2029-01-10T12:00:00.000Z",
   timezone: "America/Sao_Paulo" as const,
-  groupFilter: null,
-  stateFilter: null,
-  totals: { pending: 1, confirmed: 0, declined: 0 },
-  selectedTotals: { pending: 1, confirmed: 0, declined: 0 },
+  filters: {},
+  totals: {
+    invitations: 1,
+    guests: 1,
+    adults: 1,
+    children: 0,
+    pending: 1,
+    confirmed: 0,
+    declined: 0,
+  },
+  selectedTotals: {
+    invitations: 1,
+    guests: 1,
+    adults: 1,
+    children: 0,
+    pending: 1,
+    confirmed: 0,
+    declined: 0,
+  },
   rows: [],
 };
 
@@ -60,21 +75,23 @@ function router() {
   });
 }
 
-describe("RSVP report HTTP boundary", () => {
+describe("invitation report HTTP boundary", () => {
   beforeEach(() => {
     vi.resetAllMocks();
     mocks.requireAdminSession.mockResolvedValue({
       user: { id: "admin-1", role: "SITE_ADMIN" },
     });
-    mocks.readRsvpReport.mockResolvedValue(report);
-    mocks.createRsvpCsv.mockReturnValue(new TextEncoder().encode("csv"));
-    mocks.createRsvpPdf.mockResolvedValue(new TextEncoder().encode("pdf"));
+    mocks.readInvitationReport.mockResolvedValue(report);
+    mocks.createInvitationCsv.mockReturnValue(new TextEncoder().encode("csv"));
+    mocks.createInvitationPdf.mockResolvedValue(
+      new TextEncoder().encode("pdf"),
+    );
   });
 
-  it("requires exact admin origin and explicit UUID and phone query", async () => {
+  it("requires exact admin origin and UUID", async () => {
     const foreign = await router().request(
       request(
-        `/v1/sites/site-1/reports/rsvp.csv?requestId=${requestId}&includePhone=false`,
+        `/v1/sites/site-1/reports/invitations.csv?requestId=${requestId}`,
         "https://evil.example.test",
       ),
     );
@@ -82,17 +99,17 @@ describe("RSVP report HTTP boundary", () => {
     expect(mocks.requireAdminSession).not.toHaveBeenCalled();
 
     const missing = await router().request(
-      request(`/v1/sites/site-1/reports/rsvp.csv?requestId=${requestId}`),
+      request("/v1/sites/site-1/reports/invitations.csv"),
     );
     expect(missing.status).toBe(400);
     expect((await missing.json()).code).toBe("VALIDATION_ERROR");
-    expect(mocks.readRsvpReport).not.toHaveBeenCalled();
+    expect(mocks.readInvitationReport).not.toHaveBeenCalled();
   });
 
   it("returns binary attachment bytes, no-store, and safe filename", async () => {
     const response = await router().request(
       request(
-        `/v1/sites/site-1/reports/rsvp.csv?requestId=${requestId}&includePhone=true&state=CONFIRMED`,
+        `/v1/sites/site-1/reports/invitations.csv?requestId=${requestId}&includePhone=true&status=CONFIRMED`,
       ),
     );
     expect(response.status).toBe(200);
@@ -101,14 +118,19 @@ describe("RSVP report HTTP boundary", () => {
     );
     expect(response.headers.get("cache-control")).toBe("no-store");
     expect(response.headers.get("content-disposition")).toBe(
-      `attachment; filename="entrelacos-rsvp-site-1-20290110120000-${requestId}.csv"`,
+      `attachment; filename="entrelacos-invitations-site-1-20290110120000-${requestId}.csv"`,
     );
     expect(await response.text()).toBe("csv");
-    expect(mocks.readRsvpReport).toHaveBeenCalledWith(
+    expect(mocks.readInvitationReport).toHaveBeenCalledWith(
       expect.anything(),
       { userId: "admin-1", role: "SITE_ADMIN" },
       "site-1",
-      { requestId, includePhone: true, state: "CONFIRMED" },
+      {
+        requestId,
+        includePhone: true,
+        includeEmail: false,
+        status: "CONFIRMED",
+      },
       expect.any(Date),
     );
   });
@@ -116,22 +138,50 @@ describe("RSVP report HTTP boundary", () => {
   it("uses PDF content type and converts generation failures to problem responses", async () => {
     const pdf = await router().request(
       request(
-        `/v1/sites/site-1/reports/rsvp.pdf?requestId=${requestId}&includePhone=false`,
+        `/v1/sites/site-1/reports/invitations.pdf?requestId=${requestId}`,
       ),
     );
     expect(pdf.status).toBe(200);
     expect(pdf.headers.get("content-type")).toBe("application/pdf");
     expect(await pdf.text()).toBe("pdf");
 
-    mocks.createRsvpPdf.mockRejectedValue(new Error("font failure"));
+    mocks.createInvitationPdf.mockRejectedValue(new Error("font failure"));
     const failed = await router().request(
       request(
-        `/v1/sites/site-1/reports/rsvp.pdf?requestId=${requestId}&includePhone=false`,
+        `/v1/sites/site-1/reports/invitations.pdf?requestId=${requestId}`,
       ),
     );
     expect(failed.status).toBe(503);
     expect(failed.headers.get("content-type")).toContain(
       "application/problem+json",
     );
+  });
+
+  it("passes search and both contact opt-ins without accepting unknown fields", async () => {
+    const response = await router().request(
+      request(
+        `/v1/sites/site-1/reports/invitations.csv?requestId=${requestId}&search=Fam%C3%ADlia&guestType=CHILD&includePhone=false&includeEmail=true`,
+      ),
+    );
+    expect(response.status).toBe(200);
+    expect(mocks.readInvitationReport).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      "site-1",
+      {
+        requestId,
+        search: "Família",
+        guestType: "CHILD",
+        includePhone: false,
+        includeEmail: true,
+      },
+      expect.any(Date),
+    );
+    const invalid = await router().request(
+      request(
+        `/v1/sites/site-1/reports/invitations.csv?requestId=${requestId}&pin=true`,
+      ),
+    );
+    expect(invalid.status).toBe(400);
   });
 });

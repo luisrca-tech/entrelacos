@@ -1,6 +1,6 @@
 # EntreLaços Decision Register
 
-**Status:** Durable product decisions from the accepted interview dated 2026-09-09, including the Block 4 and Block 5 implementation decisions recorded on 2026-09-12 and the local Block 6 implementation decisions recorded on 2026-09-13. This register is a concise companion to the PRD; it does not replace the interview record, architecture specification, validation record, or launch approvals.
+**Status:** Durable product decisions from the accepted interview dated 2026-09-09, as amended by the invitation-model decision on 2026-09-22. Block implementation records below describe their state at the time; where they mention groups, representatives, foreign-number exceptions, or SMS, the invitation-model decision supersedes them. This register does not replace the architecture specification, validation record, or launch approvals.
 
 ## Confirmed product decisions
 
@@ -9,17 +9,17 @@
 | Service model | EntreLaços is a managed Brazilian wedding-site service. The operator creates, customizes, publishes, and maintains each site. | Accepted |
 | Customer access | The central panel has global `OWNER` access and wedding-bound `SITE_ADMIN` access. There is no public signup. | Accepted |
 | Site delivery | One independently deployed static site per wedding; shared changes affect newly built sites only. | Accepted |
-| Guests | Groups are the unit of authorization. Group name is required, each group has at least one named member, one representative, and one wedding-scoped normalized Brazilian phone. | Accepted |
-| Foreign numbers | Foreign-number groups may omit phone and use administrative RSVP only; no guest authentication or messages. | Accepted |
-| Guest verification | Full name plus registered phone locates the group, and both remain required. An administrator copies the persistent six-digit group PIN and shares it with the invitation link through an external channel. The PIN is the only confirmation mechanism; SMS delivery, simulation, and Twilio integration are retired. Matching ignores case, accents, and extra spaces but rejects approximate or abbreviated names. | Accepted |
-| Verification protection | A manual group PIN remains valid until explicit rotation, while each verification challenge lasts 10 minutes. Five declined PINs cause a 15-minute cooldown, and lookup/verification limits use the numeric scopes recorded in the Block 3 contract. There is no resend operation. | Accepted |
-| Family session | Successful PIN verification creates a site-and-group-bound opaque bearer with seven-day absolute expiry. The browser keeps it only in site-namespaced `sessionStorage`; explicit leave, representative/phone changes, and PIN rotation revoke it server-side. | Accepted |
-| RSVP | Member states are exactly `PENDING`, `CONFIRMED`, and `DECLINED`. The authenticated representative answers for the group; partial responses and fully pending groups are valid; save is explicit; “confirm all” is a draft shortcut. A nullable deadline is represented by paired null instant/timezone; with both fields null, no deadline blocks RSVP. When configured, the server evaluates the UTC instant with an explicit IANA timezone for display. Guests can read but cannot write at or after the exact deadline; authorized admins can correct an active wedding after it. | Accepted |
-| Messages | One text message per group, at most 1,000 characters, emojis/newlines allowed, no HTML/attachments. Representative may edit; admins may delete but never edit. | Accepted |
-| Mural | Per-site toggle and per-group message block affect message writes only and retain data. Public output omits phone, member list, and RSVP. | Accepted |
-| Exports | Wedding-scoped CSV and paginated printable PDF include selected RSVP/guest fields and exclude messages. | Accepted |
+| Invitations | The invitation is the authorization and contact unit: required identification, required unique site-scoped phone, optional validated email, and at least one named guest. One guest is an individual invitation; multiple guests make it a group invitation. Guests are `ADULT` or `CHILD`; there is no representative. | Accepted 2026-09-22 |
+| Phone numbers | The UI accepts Brazilian national numbers by default and international numbers with `+`; the API stores validated E.164. There is no country selector or foreign-number exception. | Accepted 2026-09-22 |
+| Guest verification | A site-scoped phone and persistent six-digit invitation PIN establish access. The operator shares the PIN externally; no full-name lookup, SMS delivery, simulation, or provider integration is part of this flow. | Accepted 2026-09-22 |
+| Verification protection | An invitation PIN remains valid until explicit rotation. Failed attempts are limited without disclosing whether a phone exists. There is no resend operation. | Accepted 2026-09-22 |
+| Invitation session | Successful verification creates a site-and-invitation-bound opaque bearer with seven-day absolute expiry. The browser keeps it only in site-namespaced `sessionStorage`; explicit leave, invitation identity changes, and PIN rotation revoke it server-side. | Accepted 2026-09-22 |
+| RSVP | Guest states are exactly `PENDING`, `CONFIRMED`, and `DECLINED`. An authenticated invitation session may answer for its guests; partial responses and fully pending invitations are valid; save is explicit; “confirm all” is a draft shortcut. A nullable deadline is represented by paired null instant/timezone; with both fields null, no deadline blocks RSVP. When configured, the server evaluates the UTC instant with an explicit IANA timezone for display. Guests can read but cannot write at or after the exact deadline; authorized admins can correct an active wedding after it. | Accepted 2026-09-22 |
+| Messages | One text message per invitation, at most 1,000 characters, emojis/newlines allowed, no HTML/attachments. An invitation session may edit; admins may delete but never edit. | Accepted 2026-09-22 |
+| Mural | Per-site toggle and per-invitation message block affect message writes only and retain data. Public output omits phone, guest list, and RSVP. | Accepted 2026-09-22 |
+| Exports | Site-scoped CSV and paginated PDF contain one row or entry per guest, respect active search/status/type filters, and exclude messages, PINs, tokens, and internal IDs. Phone and email are opt-in export fields, off by default. There is no import. | Accepted 2026-09-22 |
 | Lifecycle | The first public deployment may occur before or during review with a warning not to share it. Review approval starts an editable one-year term. Deactivation is manual, shows a neutral public placeholder, preserves data, and keeps admin consultation/export read-only. | Accepted |
-| Demo operation | Demo is a demo-marked site in an existing environment and uses the same PIN-only flow as every wedding. Manual reset is limited to that site. There is no permanent third demo environment or database; a sentinel tenant must remain unchanged. | Accepted |
+| Demo operation | Demo is a demo-marked site in an existing environment and uses the same invitation PIN-only flow as every wedding. Manual reset is limited to that site. There is no permanent third demo environment or database; a sentinel tenant must remain unchanged. | Accepted |
 | Demo venue | The illustrative demo ceremony/reception venue is Casablanca Eventos, Av Ipanema 747, Jardim Atlantico, Goiania, GO 74343-010, with `https://casablancaeventosgoiania.com.br/contato` as the approved location link. | Accepted |
 | Scope exclusions | Gifts, checkout, payments, uploads/object storage, integrated outbound messaging, individual guest accounts, secret links, self-service CMS, automatic provider/domain operations, and a permanent demo environment/database are out of MVP. Copying a PIN through WhatsApp does not integrate WhatsApp. | Accepted |
 
@@ -32,8 +32,14 @@
 - The monorepo uses Bun workspaces and Turborepo. Agreed boundaries include admin, API, demo site, template foundation, shared wedding behavior, UI, contracts, and database concerns.
 - Drizzle, node-postgres, reviewed/manual SQL migrations, Better Auth, `/v1` JSON contracts, shadcn/Base UI, and Sonner remain current directions. Block 6 uses Lenis plus CSS/Intersection Observer for its approved scrolling and restrained public motion; no Motion dependency was needed for this implementation.
 - All authorization is server-side. Public frontends never access Neon. Allowed browser origins/CORS are explicit per wedding; wildcard CORS or authorization is forbidden.
-- Block 4 RSVP uses the existing family bearer and site-namespaced `sessionStorage`; the API derives public site/group scope from the validated session. Member revisions, all-or-nothing transactions, request receipts, and separate history are API/database concerns. `wedding-features` owns reusable presentation only.
+- RSVP uses the invitation bearer and site-namespaced `sessionStorage`; the API derives public site/invitation scope from the validated session. Guest revisions, all-or-nothing transactions, request receipts, and separate history are API/database concerns. `wedding-features` owns reusable presentation only.
 - Production deployment, domain/DNS work, main migrations, provider setup, and lifecycle status are manual operations recorded by the operator.
+
+## Invitation-model amendment — 2026-09-22
+
+The current admin surface is one `/sites/:siteId/invitations` page combining invitations and confirmations. It uses one “Adicionar Convite” flow, a guest list in the invitation form, search by invitation identification, status/type filters, a confirmations/history dialog, and CSV/PDF export. Old group, guest, RSVP, and overview admin pages are removed without redirects. Tags, tables, automatic reminders, guest promotion, and import are outside this amendment.
+
+The SQL migration fails before changing schema if legacy operational rows remain; there is no backfill because the operator will clear pre-production data. This local implementation has not run the migration against a database and is not a release or production approval. The dated Block 3–7 contracts, validation records, and implementation notes below remain historical evidence, not current API or product authority where they conflict with this amendment.
 
 ## Template/site planning refinement — 2026-09-12
 
@@ -136,4 +142,4 @@ The template/site study preserves the reference repository's host/package owners
 
 Block 4 keeps RSVP presentation in `packages/wedding-features` while leaving deadline, authorization, concurrency, persistence, and history in the API. A template or site may choose location and styling through the public feature seam, but static output cannot contain family data, sessions, responses, credentials, or operational fixtures. This preserves the Block 6 design boundary and keeps Block 5 reporting/messages from creating a second RSVP authority.
 
-The current verification flow requires full name, registered phone, and the persistent manual PIN. SMS quota, simulation, delivery, and provider integration are retired rather than retained as dormant options.
+The 2026-09-22 verification flow requires the registered invitation phone and its persistent manual PIN, without a name lookup. SMS quota, simulation, delivery, and provider integration are retired rather than retained as dormant options.

@@ -11,13 +11,16 @@
     "deploy": "bun run build && wrangler deploy"
   },
   "dependencies": {
+    "@entrelacos/contracts": "workspace:*",
+    "@entrelacos/ui": "workspace:*",
+    "@hookform/resolvers": "5.9.1",
     "@tanstack/react-router": "1.170.34",
     "@tanstack/react-start": "1.168.51",
+    "lucide-react": "0.511.0",
     "react": "19.3.0",
     "react-dom": "19.3.0",
-    "@entrelacos/ui": "workspace:*",
-    "@entrelacos/contracts": "workspace:*",
-    "lucide-react": "0.511.0"
+    "react-hook-form": "7.88.0",
+    "zod": "4.6.1"
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "1.54.6",

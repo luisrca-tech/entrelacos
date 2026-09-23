@@ -17,7 +17,7 @@ function response(body: unknown, init: ResponseInit = {}) {
 const message = {
   id: "message-a",
   authorName: "Ana Silva",
-  groupName: "Família Silva",
+  invitationName: "Família Silva",
   text: "Viva os noivos!",
   revision: 1,
   createdAt: "2026-09-12T12:00:00.000Z",
@@ -43,7 +43,7 @@ describe("wedding messages client", () => {
     });
 
     expect(countMessageCodePoints("Olá\r\n🎉")).toBe(5);
-    await api.saveFamilyMessage("s".repeat(43), {
+    await api.saveInvitationMessage("s".repeat(43), {
       requestId: "2c7f8f3b-7d7d-4bd7-a21d-9d68ac3fb8b5",
       expectedRevision: 0,
       text: "Olá\r\n🎉",
@@ -51,7 +51,7 @@ describe("wedding messages client", () => {
 
     const [url, init] = fetcher.mock.calls[0] ?? [];
     expect(String(url)).toBe(
-      "https://api.example.test/v1/public/family/message",
+      "https://api.example.test/v1/public/invitation/message",
     );
     expect(init).toMatchObject({
       method: "PUT",
@@ -65,12 +65,12 @@ describe("wedding messages client", () => {
     expect(init?.body).toContain('"text":"Olá\\n🎉"');
   });
 
-  it("reads the family message with only the family bearer", async () => {
+  it("reads the invitation message with only the invitation bearer", async () => {
     const fetcher = vi.fn(
       async (_input: RequestInfo | URL, _init?: RequestInit) =>
         response({
           siteId: "casamento-a",
-          groupId: "group-a",
+          invitationId: "invitation-a",
           currentRevision: 1,
           canEdit: true,
           readOnlyReason: null,
@@ -83,7 +83,9 @@ describe("wedding messages client", () => {
       fetcher,
     });
 
-    await expect(api.getFamilyMessage("s".repeat(43))).resolves.toMatchObject({
+    await expect(
+      api.getInvitationMessage("s".repeat(43)),
+    ).resolves.toMatchObject({
       currentRevision: 1,
       message: { authorName: "Ana Silva" },
     });

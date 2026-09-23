@@ -7,8 +7,11 @@ export function mergeSiteMessages(
   append: boolean,
 ): SiteMessageRecord[] {
   if (!append) return incoming;
-  const ids = new Set(current.map(({ groupId }) => groupId));
-  return [...current, ...incoming.filter(({ groupId }) => !ids.has(groupId))];
+  const ids = new Set(current.map(({ invitationId }) => invitationId));
+  return [
+    ...current,
+    ...incoming.filter(({ invitationId }) => !ids.has(invitationId)),
+  ];
 }
 
 export function messageAdminError(error: unknown): string {

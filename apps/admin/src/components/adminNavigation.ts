@@ -1,6 +1,6 @@
 export type AdminRole = "OWNER" | "SITE_ADMIN";
 
-export const siteAreas = ["guests", "rsvp", "messages", "settings"] as const;
+export const siteAreas = ["invitations", "messages", "settings"] as const;
 
 export type SiteArea = (typeof siteAreas)[number];
 
@@ -12,8 +12,7 @@ export type SiteNavigationItem = {
 };
 
 const labels: Record<SiteArea, string> = {
-  guests: "Convidados",
-  rsvp: "Confirmações",
+  invitations: "Convites",
   messages: "Mensagens",
   settings: "Configurações",
 };
@@ -31,7 +30,7 @@ export function getSiteNavigation(
   siteId: string,
 ): SiteNavigationItem[] {
   const encodedSiteId = encodeURIComponent(siteId);
-  const areas: SiteArea[] = ["guests", "rsvp", "messages"];
+  const areas: SiteArea[] = ["invitations", "messages"];
   if (role === "OWNER") areas.push("settings");
   return areas.map((area) => ({
     area,
@@ -46,9 +45,9 @@ export function resolveSiteArea(
   requestedArea: string | undefined,
 ): SiteArea {
   if (!requestedArea || !siteAreas.includes(requestedArea as SiteArea)) {
-    return "guests";
+    return "invitations";
   }
-  if (requestedArea === "settings" && role !== "OWNER") return "guests";
+  if (requestedArea === "settings" && role !== "OWNER") return "invitations";
   return requestedArea as SiteArea;
 }
 

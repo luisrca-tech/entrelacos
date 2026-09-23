@@ -2,8 +2,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   requireAdminSession: vi.fn(),
-  readFamilyMessage: vi.fn(),
-  writeFamilyMessage: vi.fn(),
+  readInvitationMessage: vi.fn(),
+  writeInvitationMessage: vi.fn(),
   listSiteMessages: vi.fn(),
   MessagesServiceError: class MessagesServiceError extends Error {
     constructor(
@@ -25,24 +25,24 @@ vi.mock("./authHttp", () => ({
 
 vi.mock("./messages", () => ({
   MessagesServiceError: mocks.MessagesServiceError,
-  readFamilyMessage: mocks.readFamilyMessage,
-  writeFamilyMessage: mocks.writeFamilyMessage,
+  readInvitationMessage: mocks.readInvitationMessage,
+  writeInvitationMessage: mocks.writeInvitationMessage,
   listSiteMessages: mocks.listSiteMessages,
 }));
 
 import { createMessagesHttpRouter } from "./messagesHttp";
 
 const publicOrigin = "https://wedding.example.test";
-const familyResponse = {
+const invitationResponse = {
   siteId: "site-1",
-  groupId: "group-1",
+  invitationId: "invitation-1",
   currentRevision: 1,
   canEdit: true,
   readOnlyReason: null,
   message: {
     id: "message-1",
     authorName: "Ana Silva",
-    groupName: "Família Silva",
+    invitationName: "Família Silva",
     text: "Com carinho",
     revision: 1,
     createdAt: "2028-04-01T12:00:00.000Z",
@@ -55,7 +55,7 @@ function request(path: string, init: RequestInit = {}) {
     ...init,
     headers: {
       Origin: publicOrigin,
-      Authorization: "Bearer family-token",
+      Authorization: "Bearer invitation-token",
       ...(init.headers ?? {}),
     },
   });
@@ -96,13 +96,16 @@ describe("messages HTTP boundary", () => {
     mocks.requireAdminSession.mockResolvedValue({
       user: { id: "admin-1", role: "SITE_ADMIN" },
     });
-    mocks.readFamilyMessage.mockResolvedValue(familyResponse);
-    mocks.listSiteMessages.mockResolvedValue({ groups: [], nextCursor: null });
+    mocks.readInvitationMessage.mockResolvedValue(invitationResponse);
+    mocks.listSiteMessages.mockResolvedValue({
+      invitations: [],
+      nextCursor: null,
+    });
   });
 
-  it("reads family message through the bearer session and exact public origin", async () => {
+  it("reads invitation message through the bearer session and exact public origin", async () => {
     const response = await router().request(
-      request("/v1/public/family/message", { method: "GET" }),
+      request("/v1/public/invitation/message", { method: "GET" }),
     );
 
     expect(response.status).toBe(200);
@@ -110,17 +113,17 @@ describe("messages HTTP boundary", () => {
       publicOrigin,
     );
     expect(response.headers.get("cache-control")).toBe("no-store");
-    expect(mocks.readFamilyMessage).toHaveBeenCalledWith(
+    expect(mocks.readInvitationMessage).toHaveBeenCalledWith(
       expect.anything(),
-      "family-token",
+      "invitation-token",
       undefined,
     );
-    await expect(response.json()).resolves.toEqual(familyResponse);
+    await expect(response.json()).resolves.toEqual(invitationResponse);
   });
 
-  it("rejects extra fields before invoking the family write service", async () => {
+  it("rejects extra fields before invoking the invitation write service", async () => {
     const response = await router().request(
-      request("/v1/public/family/message", {
+      request("/v1/public/invitation/message", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -149,12 +152,29 @@ describe("messages HTTP boundary", () => {
     );
 
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ groups: [], nextCursor: null });
+    expect(await response.json()).toEqual({
+      invitations: [],
+      nextCursor: null,
+    });
     expect(mocks.listSiteMessages).toHaveBeenCalledWith(
       expect.anything(),
       { userId: "admin-1", role: "SITE_ADMIN" },
       "site-1",
       { limit: 10 },
     );
+  });
+
+  it("does not expose legacy family or group message routes", async () => {
+    const publicLegacy = await router().request(
+      request("/v1/public/family/message"),
+    );
+    expect(publicLegacy.status).toBe(404);
+    const adminLegacy = await router().request(
+      new Request(
+        "https://api.example.test/v1/sites/site-1/groups/group-1/message",
+        { method: "DELETE", headers: { Origin: "https://admin.example.test" } },
+      ),
+    );
+    expect(adminLegacy.status).toBe(404);
   });
 });

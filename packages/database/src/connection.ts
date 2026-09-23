@@ -1,5 +1,4 @@
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
-import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { Pool, type PoolConfig } from "pg";
 
 export type DatabaseTarget = "development" | "test" | "production";
@@ -287,21 +286,4 @@ export function resolveMigrationConnectionUrl(
   env: DatabaseEnvironment = process.env,
 ): string {
   return normalizeDatabaseUrl(requiredEnvironmentValue(env, "DATABASE_URL"));
-}
-
-export async function runDatabaseMigrations(options: {
-  migrationsFolder: string;
-  env?: DatabaseEnvironment;
-}): Promise<void> {
-  const pool = new Pool({
-    connectionString: resolveMigrationConnectionUrl(options.env),
-  });
-  const db = drizzle(pool, { logger: false });
-  try {
-    await migrate(db, {
-      migrationsFolder: options.migrationsFolder,
-    });
-  } finally {
-    await pool.end();
-  }
 }

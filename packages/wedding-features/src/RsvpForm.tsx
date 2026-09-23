@@ -2,22 +2,22 @@ import { useEffect, useRef } from "react";
 import { captureFocus, type FocusTarget, restoreFocus } from "./dialogFocus";
 import type { RsvpDraft, RsvpStatus } from "./rsvpDraft";
 
-export type RsvpFormMember = {
-  memberId: string;
+export type RsvpFormGuest = {
+  guestId: string;
   fullName: string;
-  isRepresentative: boolean;
+  guestType: "ADULT" | "CHILD";
 };
 
 export type RsvpFormProps = {
   open: boolean;
-  members: RsvpFormMember[];
+  guests: RsvpFormGuest[];
   draft: RsvpDraft;
   canEdit: boolean;
   readOnlyMessage?: string;
   busy: boolean;
   error?: string;
   notice?: string;
-  onChange: (memberId: string, status: RsvpStatus) => void;
+  onChange: (guestId: string, state: RsvpStatus) => void;
   onConfirmAll: () => void;
   onSave: () => void;
   onReload: () => void;
@@ -58,7 +58,7 @@ const rsvpSecondaryClass =
 
 export function RsvpForm({
   open,
-  members,
+  guests,
   draft,
   canEdit,
   readOnlyMessage,
@@ -74,7 +74,7 @@ export function RsvpForm({
   const dialog = useRef<HTMLDialogElement>(null);
   const opener = useRef<FocusTarget | null>(null);
   const changed = Object.values(draft).some(
-    (member) => member.status !== member.persistedStatus,
+    (guest) => guest.state !== guest.persistedState,
   );
 
   useEffect(() => {
@@ -152,22 +152,20 @@ export function RsvpForm({
       )}
 
       <div className={rsvpMembersClass}>
-        {members.map((member) => (
-          <label key={member.memberId} className={rsvpMemberClass}>
+        {guests.map((guest) => (
+          <label key={guest.guestId} className={rsvpMemberClass}>
             <span className={rsvpMemberDetailsClass}>
-              <strong>{member.fullName}</strong>
-              {member.isRepresentative && (
-                <small className={rsvpMemberNoteClass}>
-                  Responsável pelo convite
-                </small>
-              )}
+              <strong>{guest.fullName}</strong>
+              <small className={rsvpMemberNoteClass}>
+                {guest.guestType === "ADULT" ? "Adulto" : "Criança"}
+              </small>
             </span>
             <select
               className={rsvpSelectClass}
               disabled={!canEdit || busy}
-              value={draft[member.memberId]?.status ?? "PENDING"}
+              value={draft[guest.guestId]?.state ?? "PENDING"}
               onChange={(event) =>
-                onChange(member.memberId, event.target.value as RsvpStatus)
+                onChange(guest.guestId, event.target.value as RsvpStatus)
               }
             >
               {Object.entries(labels).map(([value, label]) => (

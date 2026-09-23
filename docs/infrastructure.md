@@ -113,7 +113,7 @@ Do not copy development secrets or database rows to main. A stable repository we
 
 ## Open engineering inputs
 
-The guest verification policy is 10 PIN attempts/15 minutes and 10 exact lookups/15 minutes. Full name plus the registered phone locates the invitation; the six-digit manual PIN confirms it. Block 4 uses no new environment variable: it requires only verified `DATABASE_URL_TEST` for isolated migration/tests and existing API/admin/family-session configuration. Apply generated migrations to the test database first; apply to development only after separate review; never connect to production. The guest browser transport is an `Authorization` bearer held only in site-namespaced `sessionStorage`; the separate admin-to-public handoff remains a later cross-origin decision.
+The invitation access policy is 10 phone/PIN attempts per IP per 15 minutes, with a per-invitation cooldown after repeated incorrect PINs. The site-scoped registered phone and six-digit manual PIN grant access; no guest name or SMS lookup is required. Integration tests require a verified, isolated `DATABASE_URL_TEST`; no migration runs automatically. Apply reviewed migrations to test first, then development only after separate review; production remains a separate manual decision. The guest browser transport is an `Authorization` bearer held only in site-namespaced `sessionStorage`; the separate admin-to-public handoff remains a later cross-origin decision.
 
 ## Listening
 

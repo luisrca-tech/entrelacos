@@ -190,12 +190,12 @@ describe("safe observability", () => {
         sink: (event) => events.push(event),
       }),
     );
-    api.post("/v1/public/sites/:siteId/guest/challenge", (context) =>
+    api.post("/v1/public/sites/:siteId/invitation/access", (context) =>
       context.json({ code: "LOOKUP_RATE_LIMITED" }, 429),
     );
 
     const response = await api.request(
-      "https://api.example.test/v1/public/sites/site-demo/guest/challenge",
+      "https://api.example.test/v1/public/sites/site-demo/invitation/access",
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -207,7 +207,7 @@ describe("safe observability", () => {
     expect(events).toHaveLength(1);
     expect(events[0]).toMatchObject({
       event: "http.request",
-      routeTemplate: "/v1/public/sites/:siteId/guest/challenge",
+      routeTemplate: "/v1/public/sites/:siteId/invitation/access",
       status: 429,
       result: "failure",
       rateLimitOutcome: "limited",

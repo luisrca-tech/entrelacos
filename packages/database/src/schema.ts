@@ -43,20 +43,24 @@ export const adminAccessPurpose = pgEnum("admin_access_purpose", [
   "ACTIVATION",
   "RECOVERY",
 ]);
-export const guestVerificationChallengeStatus = pgEnum(
-  "guest_verification_challenge_status",
+export const invitationAccessChallengeStatus = pgEnum(
+  "invitation_access_challenge_status",
   ["PENDING", "VERIFIED", "EXPIRED", "LOCKED", "REVOKED"],
 );
-export const guestRateLimitAction = pgEnum("guest_rate_limit_action", [
-  "LOOKUP",
-  "PIN_VERIFY",
+export const invitationRateLimitAction = pgEnum(
+  "invitation_rate_limit_action",
+  ["LOOKUP", "PIN_VERIFY"],
+);
+export const invitationGuestType = pgEnum("invitation_guest_type", [
+  "ADULT",
+  "CHILD",
 ]);
 export const rsvpState = pgEnum("rsvp_state", [
   "PENDING",
   "CONFIRMED",
   "DECLINED",
 ]);
-export const rsvpActorType = pgEnum("rsvp_actor_type", ["ADMIN", "FAMILY"]);
+export const rsvpActorType = pgEnum("rsvp_actor_type", ["ADMIN", "INVITATION"]);
 export const rsvpRequestScope = pgEnum("rsvp_request_scope", [
   "PUBLIC",
   "ADMIN",
@@ -199,8 +203,8 @@ export const site = pgTable(
   ],
 );
 
-export const guestGroup = pgTable(
-  "guest_group",
+export const invitation = pgTable(
+  "invitation",
   {
     id: text("id").primaryKey(),
     siteId: text("site_id")
@@ -208,10 +212,8 @@ export const guestGroup = pgTable(
       .references(() => site.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
     normalizedName: text("normalized_name").notNull(),
-    isIndividual: boolean("is_individual").notNull().default(false),
-    isForeign: boolean("is_foreign").notNull().default(false),
-    phoneE164: text("phone_e164"),
-    representativeMemberId: text("representative_member_id").notNull(),
+    phoneE164: text("phone_e164").notNull(),
+    email: text("email"),
     messageBlocked: boolean("message_blocked").notNull().default(false),
     messageRevision: integer("message_revision").notNull().default(0),
     manualPinSeed: text("manual_pin_seed")
@@ -225,46 +227,44 @@ export const guestGroup = pgTable(
       .defaultNow(),
   },
   (table) => [
-    uniqueIndex("guest_group_site_id_id_idx").on(table.siteId, table.id),
-    uniqueIndex("guest_group_site_id_phone_e164_idx")
-      .on(table.siteId, table.phoneE164)
-      .where(sql`${table.phoneE164} IS NOT NULL`),
-    index("guest_group_site_id_idx").on(table.siteId),
+    uniqueIndex("invitation_site_id_id_idx").on(table.siteId, table.id),
+    uniqueIndex("invitation_site_id_phone_e164_idx").on(
+      table.siteId,
+      table.phoneE164,
+    ),
+    index("invitation_site_id_idx").on(table.siteId),
     check(
-      "guest_group_name_not_blank_check",
+      "invitation_name_not_blank_check",
       sql`length(trim(${table.name})) > 0`,
     ),
     check(
-      "guest_group_normalized_name_not_blank_check",
+      "invitation_normalized_name_not_blank_check",
       sql`length(trim(${table.normalizedName})) > 0`,
     ),
     check(
-      "guest_group_phone_e164_check",
-      sql`${table.phoneE164} IS NULL OR ${table.phoneE164} ~ '^[+]55[1-9]{2}9[0-9]{8}$'`,
+      "invitation_phone_e164_check",
+      sql`${table.phoneE164} ~ '^[+][1-9][0-9]{1,14}$'`,
     ),
     check(
-      "guest_group_foreign_phone_check",
-      sql`${table.isForeign} = (${table.phoneE164} IS NULL)`,
-    ),
-    check(
-      "guest_group_manual_pin_seed_check",
+      "invitation_manual_pin_seed_check",
       sql`${table.manualPinSeed} ~ '^[a-f0-9]{64}$'`,
     ),
     check(
-      "guest_group_message_revision_check",
+      "invitation_message_revision_check",
       sql`${table.messageRevision} >= 0`,
     ),
   ],
 );
 
-export const guestMember = pgTable(
-  "guest_member",
+export const invitationGuest = pgTable(
+  "invitation_guest",
   {
     id: text("id").primaryKey(),
     siteId: text("site_id").notNull(),
-    groupId: text("group_id").notNull(),
+    invitationId: text("invitation_id").notNull(),
     fullName: text("full_name").notNull(),
     normalizedName: text("normalized_name").notNull(),
+    guestType: invitationGuestType("guest_type").notNull(),
     rsvpState: rsvpState("rsvp_state").notNull().default("PENDING"),
     rsvpRevision: integer("rsvp_revision").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true })
@@ -275,33 +275,36 @@ export const guestMember = pgTable(
       .defaultNow(),
   },
   (table) => [
-    uniqueIndex("guest_member_site_id_group_id_id_idx").on(
+    uniqueIndex("invitation_guest_site_id_invitation_id_id_idx").on(
       table.siteId,
-      table.groupId,
+      table.invitationId,
       table.id,
     ),
-    index("guest_member_site_id_idx").on(table.siteId),
-    index("guest_member_group_id_idx").on(table.groupId),
+    index("invitation_guest_site_id_idx").on(table.siteId),
+    index("invitation_guest_invitation_id_idx").on(table.invitationId),
     foreignKey({
-      columns: [table.siteId, table.groupId],
-      foreignColumns: [guestGroup.siteId, guestGroup.id],
-      name: "guest_member_site_group_fk",
+      columns: [table.siteId, table.invitationId],
+      foreignColumns: [invitation.siteId, invitation.id],
+      name: "invitation_guest_site_invitation_fk",
     }).onDelete("cascade"),
     check(
-      "guest_member_normalized_name_not_blank_check",
+      "invitation_guest_normalized_name_not_blank_check",
       sql`length(trim(${table.normalizedName})) > 0`,
     ),
-    check("guest_member_rsvp_revision_check", sql`${table.rsvpRevision} >= 0`),
+    check(
+      "invitation_guest_rsvp_revision_check",
+      sql`${table.rsvpRevision} >= 0`,
+    ),
   ],
 );
 
-export const guestVerificationChallenge = pgTable(
-  "guest_verification_challenge",
+export const invitationAccessChallenge = pgTable(
+  "invitation_access_challenge",
   {
     id: text("id").primaryKey(),
     siteId: text("site_id").notNull(),
-    groupId: text("group_id").notNull(),
-    status: guestVerificationChallengeStatus("status")
+    invitationId: text("invitation_id").notNull(),
+    status: invitationAccessChallengeStatus("status")
       .notNull()
       .default("PENDING"),
     phoneE164: text("phone_e164").notNull(),
@@ -319,42 +322,42 @@ export const guestVerificationChallenge = pgTable(
       .defaultNow(),
   },
   (table) => [
-    uniqueIndex("guest_verification_challenge_site_id_id_idx").on(
+    uniqueIndex("invitation_access_challenge_site_id_id_idx").on(
       table.siteId,
       table.id,
     ),
-    index("guest_verification_challenge_group_status_idx").on(
-      table.groupId,
+    index("invitation_access_challenge_invitation_status_idx").on(
+      table.invitationId,
       table.status,
     ),
-    index("guest_verification_challenge_phone_idx").on(table.phoneE164),
+    index("invitation_access_challenge_phone_idx").on(table.phoneE164),
     foreignKey({
-      columns: [table.siteId, table.groupId],
-      foreignColumns: [guestGroup.siteId, guestGroup.id],
-      name: "guest_verification_challenge_site_group_fk",
+      columns: [table.siteId, table.invitationId],
+      foreignColumns: [invitation.siteId, invitation.id],
+      name: "invitation_access_challenge_site_invitation_fk",
     }).onDelete("cascade"),
     check(
-      "guest_verification_challenge_phone_e164_check",
-      sql`${table.phoneE164} ~ '^[+]55[1-9]{2}9[0-9]{8}$'`,
+      "invitation_access_challenge_phone_e164_check",
+      sql`${table.phoneE164} ~ '^[+][1-9][0-9]{1,14}$'`,
     ),
     check(
-      "guest_verification_challenge_wrong_attempts_check",
+      "invitation_access_challenge_wrong_attempts_check",
       sql`${table.wrongAttempts} BETWEEN 0 AND 5`,
     ),
     check(
-      "guest_verification_challenge_expiry_check",
+      "invitation_access_challenge_expiry_check",
       sql`${table.expiresAt} > ${table.createdAt} AND ${table.expiresAt} <= ${table.createdAt} + interval '10 minutes'`,
     ),
   ],
 );
 
-export const guestRateLimitEvent = pgTable(
-  "guest_rate_limit_event",
+export const invitationRateLimitEvent = pgTable(
+  "invitation_rate_limit_event",
   {
     id: text("id").primaryKey(),
     siteId: text("site_id"),
-    groupId: text("group_id"),
-    action: guestRateLimitAction("action").notNull(),
+    invitationId: text("invitation_id"),
+    action: invitationRateLimitAction("action").notNull(),
     scopeKey: text("scope_key").notNull(),
     ipFingerprint: text("ip_fingerprint").notNull(),
     phoneFingerprint: text("phone_fingerprint"),
@@ -363,34 +366,35 @@ export const guestRateLimitEvent = pgTable(
       .defaultNow(),
   },
   (table) => [
-    index("guest_rate_limit_event_action_scope_time_idx").on(
+    index("invitation_rate_limit_event_action_scope_time_idx").on(
       table.action,
       table.scopeKey,
       table.occurredAt,
     ),
-    index("guest_rate_limit_event_site_group_time_idx").on(
+    index("invitation_rate_limit_event_occurred_at_idx").on(table.occurredAt),
+    index("invitation_rate_limit_event_site_invitation_time_idx").on(
       table.siteId,
-      table.groupId,
+      table.invitationId,
       table.occurredAt,
     ),
     foreignKey({
-      columns: [table.siteId, table.groupId],
-      foreignColumns: [guestGroup.siteId, guestGroup.id],
-      name: "guest_rate_limit_event_site_group_fk",
+      columns: [table.siteId, table.invitationId],
+      foreignColumns: [invitation.siteId, invitation.id],
+      name: "invitation_rate_limit_event_site_invitation_fk",
     }).onDelete("cascade"),
     check(
-      "guest_rate_limit_event_scope_pair_check",
-      sql`${table.groupId} IS NULL OR ${table.siteId} IS NOT NULL`,
+      "invitation_rate_limit_event_scope_pair_check",
+      sql`${table.invitationId} IS NULL OR ${table.siteId} IS NOT NULL`,
     ),
   ],
 );
 
-export const familySession = pgTable(
-  "family_session",
+export const invitationSession = pgTable(
+  "invitation_session",
   {
     id: text("id").primaryKey(),
     siteId: text("site_id").notNull(),
-    groupId: text("group_id").notNull(),
+    invitationId: text("invitation_id").notNull(),
     tokenHash: text("token_hash").notNull(),
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
     revokedAt: timestamp("revoked_at", { withTimezone: true }),
@@ -400,37 +404,39 @@ export const familySession = pgTable(
       .defaultNow(),
   },
   (table) => [
-    uniqueIndex("family_session_token_hash_idx").on(table.tokenHash),
-    index("family_session_site_group_idx").on(table.siteId, table.groupId),
-    index("family_session_active_expiry_idx").on(
-      table.groupId,
+    uniqueIndex("invitation_session_token_hash_idx").on(table.tokenHash),
+    index("invitation_session_site_invitation_idx").on(
+      table.siteId,
+      table.invitationId,
+    ),
+    index("invitation_session_active_expiry_idx").on(
+      table.invitationId,
       table.expiresAt,
     ),
     foreignKey({
-      columns: [table.siteId, table.groupId],
-      foreignColumns: [guestGroup.siteId, guestGroup.id],
-      name: "family_session_site_group_fk",
+      columns: [table.siteId, table.invitationId],
+      foreignColumns: [invitation.siteId, invitation.id],
+      name: "invitation_session_site_invitation_fk",
     }).onDelete("cascade"),
     check(
-      "family_session_expiry_check",
+      "invitation_session_expiry_check",
       sql`${table.expiresAt} > ${table.createdAt} AND ${table.expiresAt} <= ${table.createdAt} + interval '7 days'`,
     ),
     check(
-      "family_session_token_hash_format_check",
+      "invitation_session_token_hash_format_check",
       sql`${table.tokenHash} ~ '^[a-f0-9]{64}$'`,
     ),
   ],
 );
 
-export const familyMessage = pgTable(
-  "family_message",
+export const invitationMessage = pgTable(
+  "invitation_message",
   {
     id: text("id").primaryKey(),
     siteId: text("site_id").notNull(),
-    groupId: text("group_id").notNull(),
-    authorMemberId: text("author_member_id").notNull(),
+    invitationId: text("invitation_id").notNull(),
     authorName: text("author_name").notNull(),
-    groupName: text("group_name").notNull(),
+    invitationName: text("invitation_name").notNull(),
     text: text("text").notNull(),
     revision: integer("revision").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true })
@@ -441,43 +447,43 @@ export const familyMessage = pgTable(
       .defaultNow(),
   },
   (table) => [
-    uniqueIndex("family_message_site_group_idx").on(
+    uniqueIndex("invitation_message_site_invitation_idx").on(
       table.siteId,
-      table.groupId,
+      table.invitationId,
     ),
-    index("family_message_mural_order_idx").on(
+    index("invitation_message_mural_order_idx").on(
       table.siteId,
       table.createdAt,
       table.id,
     ),
     foreignKey({
-      columns: [table.siteId, table.groupId],
-      foreignColumns: [guestGroup.siteId, guestGroup.id],
-      name: "family_message_site_group_fk",
+      columns: [table.siteId, table.invitationId],
+      foreignColumns: [invitation.siteId, invitation.id],
+      name: "invitation_message_site_invitation_fk",
     }).onDelete("cascade"),
-    check("family_message_revision_check", sql`${table.revision} > 0`),
+    check("invitation_message_revision_check", sql`${table.revision} > 0`),
     check(
-      "family_message_author_name_not_blank_check",
+      "invitation_message_author_name_not_blank_check",
       sql`length(trim(${table.authorName})) > 0`,
     ),
     check(
-      "family_message_group_name_not_blank_check",
-      sql`length(trim(${table.groupName})) > 0`,
+      "invitation_message_invitation_name_not_blank_check",
+      sql`length(trim(${table.invitationName})) > 0`,
     ),
     check(
-      "family_message_text_not_blank_check",
+      "invitation_message_text_not_blank_check",
       sql`length(regexp_replace(${table.text}, '[[:space:]]', '', 'g')) > 0`,
     ),
     check(
-      "family_message_text_length_check",
+      "invitation_message_text_length_check",
       sql`char_length(${table.text}) BETWEEN 1 AND 1000`,
     ),
     check(
-      "family_message_text_no_angle_brackets_check",
+      "invitation_message_text_no_angle_brackets_check",
       sql`position('<' in ${table.text}) = 0 AND position('>' in ${table.text}) = 0`,
     ),
     check(
-      "family_message_text_control_chars_check",
+      "invitation_message_text_control_chars_check",
       sql`regexp_replace(${table.text}, E'\\n', '', 'g') !~ '[[:cntrl:]]' AND ${table.text} !~ (E'[' || chr(127) || '-' || chr(159) || ']')`,
     ),
   ],
@@ -490,7 +496,7 @@ export const messageRequestReceipt = pgTable(
     siteId: text("site_id")
       .notNull()
       .references(() => site.id, { onDelete: "cascade" }),
-    groupId: text("group_id").notNull(),
+    invitationId: text("invitation_id").notNull(),
     sessionId: text("session_id").notNull(),
     requestId: text("request_id").notNull(),
     requestHash: text("request_hash").notNull(),
@@ -503,15 +509,12 @@ export const messageRequestReceipt = pgTable(
       .defaultNow(),
   },
   (table) => [
-    uniqueIndex("message_request_receipt_site_group_session_request_idx").on(
+    uniqueIndex(
+      "message_request_receipt_site_invitation_session_request_idx",
+    ).on(table.siteId, table.invitationId, table.sessionId, table.requestId),
+    index("message_request_receipt_site_invitation_created_idx").on(
       table.siteId,
-      table.groupId,
-      table.sessionId,
-      table.requestId,
-    ),
-    index("message_request_receipt_site_group_created_idx").on(
-      table.siteId,
-      table.groupId,
+      table.invitationId,
       table.createdAt,
     ),
     check(
@@ -534,10 +537,10 @@ export const rsvpHistory = pgTable(
   {
     id: text("id").primaryKey(),
     siteId: text("site_id").notNull(),
-    groupId: text("group_id").notNull(),
-    memberId: text("member_id").notNull(),
-    groupName: text("group_name").notNull(),
-    memberDisplayName: text("member_display_name").notNull(),
+    invitationId: text("invitation_id").notNull(),
+    guestId: text("guest_id").notNull(),
+    invitationName: text("invitation_name").notNull(),
+    guestDisplayName: text("guest_display_name").notNull(),
     beforeState: rsvpState("before_state").notNull(),
     afterState: rsvpState("after_state").notNull(),
     actorType: rsvpActorType("actor_type").notNull(),
@@ -553,17 +556,24 @@ export const rsvpHistory = pgTable(
       table.occurredAt,
       table.id,
     ),
-    index("rsvp_history_site_group_idx").on(table.siteId, table.groupId),
-    index("rsvp_history_site_member_idx").on(table.siteId, table.memberId),
+    index("rsvp_history_site_invitation_idx").on(
+      table.siteId,
+      table.invitationId,
+    ),
+    index("rsvp_history_site_guest_idx").on(table.siteId, table.guestId),
     foreignKey({
-      columns: [table.siteId, table.groupId],
-      foreignColumns: [guestGroup.siteId, guestGroup.id],
-      name: "rsvp_history_site_group_fk",
+      columns: [table.siteId, table.invitationId],
+      foreignColumns: [invitation.siteId, invitation.id],
+      name: "rsvp_history_site_invitation_fk",
     }).onDelete("cascade"),
     foreignKey({
-      columns: [table.siteId, table.groupId, table.memberId],
-      foreignColumns: [guestMember.siteId, guestMember.groupId, guestMember.id],
-      name: "rsvp_history_site_group_member_fk",
+      columns: [table.siteId, table.invitationId, table.guestId],
+      foreignColumns: [
+        invitationGuest.siteId,
+        invitationGuest.invitationId,
+        invitationGuest.id,
+      ],
+      name: "rsvp_history_site_invitation_guest_fk",
     }).onDelete("cascade"),
     check(
       "rsvp_history_transition_check",
@@ -579,7 +589,7 @@ export const rsvpRequestReceipt = pgTable(
     siteId: text("site_id")
       .notNull()
       .references(() => site.id, { onDelete: "cascade" }),
-    groupId: text("group_id"),
+    invitationId: text("invitation_id"),
     scope: rsvpRequestScope("scope").notNull(),
     actorType: rsvpActorType("actor_type").notNull(),
     actorId: text("actor_id").notNull(),
@@ -606,17 +616,17 @@ export const rsvpRequestReceipt = pgTable(
       table.createdAt,
     ),
     foreignKey({
-      columns: [table.siteId, table.groupId],
-      foreignColumns: [guestGroup.siteId, guestGroup.id],
-      name: "rsvp_request_receipt_site_group_fk",
+      columns: [table.siteId, table.invitationId],
+      foreignColumns: [invitation.siteId, invitation.id],
+      name: "rsvp_request_receipt_site_invitation_fk",
     }).onDelete("cascade"),
     check(
       "rsvp_request_receipt_request_hash_check",
       sql`${table.requestHash} ~ '^[a-f0-9]{64}$'`,
     ),
     check(
-      "rsvp_request_receipt_group_scope_check",
-      sql`(${table.scope} = 'PUBLIC' AND ${table.groupId} IS NOT NULL) OR (${table.scope} = 'ADMIN')`,
+      "rsvp_request_receipt_invitation_scope_check",
+      sql`(${table.scope} = 'PUBLIC' AND ${table.invitationId} IS NOT NULL) OR (${table.scope} = 'ADMIN')`,
     ),
     check(
       "rsvp_request_receipt_removal_check",
@@ -625,32 +635,32 @@ export const rsvpRequestReceipt = pgTable(
   ],
 );
 
-export const rsvpRequestReceiptGroup = pgTable(
-  "rsvp_request_receipt_group",
+export const rsvpRequestReceiptInvitation = pgTable(
+  "rsvp_request_receipt_invitation",
   {
     siteId: text("site_id").notNull(),
     receiptId: text("receipt_id").notNull(),
-    groupId: text("group_id").notNull(),
+    invitationId: text("invitation_id").notNull(),
   },
   (table) => [
     primaryKey({
-      columns: [table.siteId, table.receiptId, table.groupId],
-      name: "rsvp_request_receipt_group_pk",
+      columns: [table.siteId, table.receiptId, table.invitationId],
+      name: "rsvp_request_receipt_invitation_pk",
     }),
-    index("rsvp_request_receipt_group_lookup_idx").on(
+    index("rsvp_request_receipt_invitation_lookup_idx").on(
       table.siteId,
-      table.groupId,
+      table.invitationId,
       table.receiptId,
     ),
     foreignKey({
       columns: [table.siteId, table.receiptId],
       foreignColumns: [rsvpRequestReceipt.siteId, rsvpRequestReceipt.id],
-      name: "rsvp_request_receipt_group_receipt_fk",
+      name: "rsvp_request_receipt_invitation_receipt_fk",
     }).onDelete("cascade"),
     foreignKey({
-      columns: [table.siteId, table.groupId],
-      foreignColumns: [guestGroup.siteId, guestGroup.id],
-      name: "rsvp_request_receipt_group_site_group_fk",
+      columns: [table.siteId, table.invitationId],
+      foreignColumns: [invitation.siteId, invitation.id],
+      name: "rsvp_request_receipt_invitation_site_invitation_fk",
     }).onDelete("cascade"),
   ],
 );
@@ -822,97 +832,109 @@ export const siteRelations = relations(site, ({ many, one }) => ({
   origins: many(siteOrigin),
   memberships: many(siteMembership),
   accessTokens: many(adminAccessToken),
-  guestGroups: many(guestGroup),
-  guestVerificationChallenges: many(guestVerificationChallenge),
-  guestRateLimitEvents: many(guestRateLimitEvent),
-  familySessions: many(familySession),
-  familyMessages: many(familyMessage),
+  invitations: many(invitation),
+  invitationAccessChallenges: many(invitationAccessChallenge),
+  invitationRateLimitEvents: many(invitationRateLimitEvent),
+  invitationSessions: many(invitationSession),
+  invitationMessages: many(invitationMessage),
   messageRequestReceipts: many(messageRequestReceipt),
   rsvpHistory: many(rsvpHistory),
   rsvpRequestReceipts: many(rsvpRequestReceipt),
-  rsvpRequestReceiptGroups: many(rsvpRequestReceiptGroup),
+  rsvpRequestReceiptInvitations: many(rsvpRequestReceiptInvitation),
   term: one(siteTerm),
 }));
 
-export const guestGroupRelations = relations(guestGroup, ({ one, many }) => ({
+export const invitationRelations = relations(invitation, ({ one, many }) => ({
   site: one(site, {
-    fields: [guestGroup.siteId],
+    fields: [invitation.siteId],
     references: [site.id],
   }),
-  members: many(guestMember),
-  verificationChallenges: many(guestVerificationChallenge),
-  rateLimitEvents: many(guestRateLimitEvent),
-  familySessions: many(familySession),
-  familyMessages: many(familyMessage),
+  guests: many(invitationGuest),
+  accessChallenges: many(invitationAccessChallenge),
+  rateLimitEvents: many(invitationRateLimitEvent),
+  sessions: many(invitationSession),
+  messages: many(invitationMessage),
   rsvpHistory: many(rsvpHistory),
   rsvpRequestReceipts: many(rsvpRequestReceipt),
-  rsvpRequestReceiptGroups: many(rsvpRequestReceiptGroup),
+  rsvpRequestReceiptInvitations: many(rsvpRequestReceiptInvitation),
 }));
 
-export const guestMemberRelations = relations(guestMember, ({ one, many }) => ({
-  site: one(site, {
-    fields: [guestMember.siteId],
-    references: [site.id],
-  }),
-  group: one(guestGroup, {
-    fields: [guestMember.siteId, guestMember.groupId],
-    references: [guestGroup.siteId, guestGroup.id],
-  }),
-  rsvpHistory: many(rsvpHistory),
-}));
-
-export const guestVerificationChallengeRelations = relations(
-  guestVerificationChallenge,
-  ({ one }) => ({
+export const invitationGuestRelations = relations(
+  invitationGuest,
+  ({ one, many }) => ({
     site: one(site, {
-      fields: [guestVerificationChallenge.siteId],
+      fields: [invitationGuest.siteId],
       references: [site.id],
     }),
-    group: one(guestGroup, {
+    invitation: one(invitation, {
+      fields: [invitationGuest.siteId, invitationGuest.invitationId],
+      references: [invitation.siteId, invitation.id],
+    }),
+    rsvpHistory: many(rsvpHistory),
+  }),
+);
+
+export const invitationAccessChallengeRelations = relations(
+  invitationAccessChallenge,
+  ({ one }) => ({
+    site: one(site, {
+      fields: [invitationAccessChallenge.siteId],
+      references: [site.id],
+    }),
+    invitation: one(invitation, {
       fields: [
-        guestVerificationChallenge.siteId,
-        guestVerificationChallenge.groupId,
+        invitationAccessChallenge.siteId,
+        invitationAccessChallenge.invitationId,
       ],
-      references: [guestGroup.siteId, guestGroup.id],
+      references: [invitation.siteId, invitation.id],
     }),
   }),
 );
 
-export const guestRateLimitEventRelations = relations(
-  guestRateLimitEvent,
+export const invitationRateLimitEventRelations = relations(
+  invitationRateLimitEvent,
   ({ one }) => ({
     site: one(site, {
-      fields: [guestRateLimitEvent.siteId],
+      fields: [invitationRateLimitEvent.siteId],
       references: [site.id],
     }),
-    group: one(guestGroup, {
-      fields: [guestRateLimitEvent.siteId, guestRateLimitEvent.groupId],
-      references: [guestGroup.siteId, guestGroup.id],
+    invitation: one(invitation, {
+      fields: [
+        invitationRateLimitEvent.siteId,
+        invitationRateLimitEvent.invitationId,
+      ],
+      references: [invitation.siteId, invitation.id],
     }),
   }),
 );
 
-export const familySessionRelations = relations(familySession, ({ one }) => ({
-  site: one(site, {
-    fields: [familySession.siteId],
-    references: [site.id],
+export const invitationSessionRelations = relations(
+  invitationSession,
+  ({ one }) => ({
+    site: one(site, {
+      fields: [invitationSession.siteId],
+      references: [site.id],
+    }),
+    invitation: one(invitation, {
+      fields: [invitationSession.siteId, invitationSession.invitationId],
+      references: [invitation.siteId, invitation.id],
+    }),
   }),
-  group: one(guestGroup, {
-    fields: [familySession.siteId, familySession.groupId],
-    references: [guestGroup.siteId, guestGroup.id],
-  }),
-}));
+);
 
-export const familyMessageRelations = relations(familyMessage, ({ one }) => ({
-  site: one(site, {
-    fields: [familyMessage.siteId],
-    references: [site.id],
+export const invitationMessageRelations = relations(
+  invitationMessage,
+  ({ one }) => ({
+    site: one(site, {
+      fields: [invitationMessage.siteId],
+      references: [site.id],
+    }),
+    invitation: one(invitation, {
+      fields: [invitationMessage.siteId, invitationMessage.invitationId],
+      references: [invitation.siteId, invitation.id],
+    }),
   }),
-  group: one(guestGroup, {
-    fields: [familyMessage.siteId, familyMessage.groupId],
-    references: [guestGroup.siteId, guestGroup.id],
-  }),
-}));
+);
 
 export const messageRequestReceiptRelations = relations(
   messageRequestReceipt,
@@ -929,13 +951,17 @@ export const rsvpHistoryRelations = relations(rsvpHistory, ({ one }) => ({
     fields: [rsvpHistory.siteId],
     references: [site.id],
   }),
-  group: one(guestGroup, {
-    fields: [rsvpHistory.siteId, rsvpHistory.groupId],
-    references: [guestGroup.siteId, guestGroup.id],
+  invitation: one(invitation, {
+    fields: [rsvpHistory.siteId, rsvpHistory.invitationId],
+    references: [invitation.siteId, invitation.id],
   }),
-  member: one(guestMember, {
-    fields: [rsvpHistory.siteId, rsvpHistory.groupId, rsvpHistory.memberId],
-    references: [guestMember.siteId, guestMember.groupId, guestMember.id],
+  guest: one(invitationGuest, {
+    fields: [rsvpHistory.siteId, rsvpHistory.invitationId, rsvpHistory.guestId],
+    references: [
+      invitationGuest.siteId,
+      invitationGuest.invitationId,
+      invitationGuest.id,
+    ],
   }),
 }));
 
@@ -946,31 +972,34 @@ export const rsvpRequestReceiptRelations = relations(
       fields: [rsvpRequestReceipt.siteId],
       references: [site.id],
     }),
-    group: one(guestGroup, {
-      fields: [rsvpRequestReceipt.siteId, rsvpRequestReceipt.groupId],
-      references: [guestGroup.siteId, guestGroup.id],
+    invitation: one(invitation, {
+      fields: [rsvpRequestReceipt.siteId, rsvpRequestReceipt.invitationId],
+      references: [invitation.siteId, invitation.id],
     }),
-    groups: many(rsvpRequestReceiptGroup),
+    invitations: many(rsvpRequestReceiptInvitation),
   }),
 );
 
-export const rsvpRequestReceiptGroupRelations = relations(
-  rsvpRequestReceiptGroup,
+export const rsvpRequestReceiptInvitationRelations = relations(
+  rsvpRequestReceiptInvitation,
   ({ one }) => ({
     site: one(site, {
-      fields: [rsvpRequestReceiptGroup.siteId],
+      fields: [rsvpRequestReceiptInvitation.siteId],
       references: [site.id],
     }),
     receipt: one(rsvpRequestReceipt, {
       fields: [
-        rsvpRequestReceiptGroup.siteId,
-        rsvpRequestReceiptGroup.receiptId,
+        rsvpRequestReceiptInvitation.siteId,
+        rsvpRequestReceiptInvitation.receiptId,
       ],
       references: [rsvpRequestReceipt.siteId, rsvpRequestReceipt.id],
     }),
-    group: one(guestGroup, {
-      fields: [rsvpRequestReceiptGroup.siteId, rsvpRequestReceiptGroup.groupId],
-      references: [guestGroup.siteId, guestGroup.id],
+    invitation: one(invitation, {
+      fields: [
+        rsvpRequestReceiptInvitation.siteId,
+        rsvpRequestReceiptInvitation.invitationId,
+      ],
+      references: [invitation.siteId, invitation.id],
     }),
   }),
 );

@@ -37,7 +37,7 @@ const resetResponse = {
   datasetVersion: "block7-demo-v1",
   result: "RESET",
   resetAt: "2028-04-01T12:00:00.000Z",
-  counts: { groups: 5, members: 10, messages: 1 },
+  counts: { invitations: 5, guests: 10, messages: 1 },
 };
 
 function router() {

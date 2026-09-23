@@ -53,10 +53,10 @@ import {
 import { adminStyles, displayHeading } from "../lib/adminStyles";
 import { ApiError, apiRequest } from "../lib/apiClient";
 import type { SiteArea } from "./adminNavigation";
-import { GuestGroupsSection } from "./GuestGroupsSection";
+import { formatBrazilianDate } from "./brazilianDate";
+import { InvitationsSection } from "./InvitationsSection";
 import { MessagesSection } from "./MessagesSection";
 import { OverflowMenu } from "./OverflowMenu";
-import { RsvpSection } from "./RsvpSection";
 import {
   adminAccessLink,
   adminAccessLinkCopiedMessage,
@@ -104,7 +104,7 @@ type LifecycleAction =
 export function SiteWorkspace({
   siteId,
   owner,
-  area = "guests",
+  area = "invitations",
   onSiteName,
 }: {
   siteId: string;
@@ -364,7 +364,7 @@ export function SiteWorkspace({
 
   return (
     <>
-      <section className="mb-[38px] grid gap-2.5 [@media(max-width:760px)]:mb-7">
+      <section className="mb-6 grid gap-2.5">
         {heading.showBackLink && (
           <Link
             className="w-fit text-[0.88rem] text-admin-muted no-underline hover:text-admin-ink"
@@ -423,11 +423,8 @@ export function SiteWorkspace({
         </p>
       )}
 
-      {area === "guests" && (
-        <GuestGroupsSection siteId={site.id} lifecycle={site.lifecycle} />
-      )}
-      {area === "rsvp" && (
-        <RsvpSection siteId={site.id} lifecycle={site.lifecycle} />
+      {area === "invitations" && (
+        <InvitationsSection siteId={site.id} lifecycle={site.lifecycle} />
       )}
       {area === "messages" && (
         <MessagesSection siteId={site.id} lifecycle={site.lifecycle} />
@@ -435,34 +432,34 @@ export function SiteWorkspace({
       {area === "settings" &&
         (owner ? (
           <section className="grid gap-6" data-area="settings">
-            <Card
-              className={`${adminStyles.card} grid grid-cols-[repeat(auto-fit,minmax(170px,1fr))] gap-[22px]`}
+            <dl
+              className="grid gap-2.5 sm:grid-cols-3"
               aria-label="Status e datas"
             >
-              <CardContent className="grid w-full grid-cols-[repeat(auto-fit,minmax(170px,1fr))] items-center gap-[22px]">
-                <div>
-                  <strong>Casamento</strong>
-                  <p className="mt-2 leading-[1.6] text-admin-muted">
-                    {site.eventDate}
-                  </p>
+              {(
+                [
+                  ["Casamento", formatBrazilianDate(site.eventDate)],
+                  [
+                    "Vigência",
+                    site.termStartsOn
+                      ? `${formatBrazilianDate(site.termStartsOn)} a ${formatBrazilianDate(site.termEndsOn ?? "")}`
+                      : "Aguardando aprovação",
+                  ],
+                  ["Publicação", labels[site.publicationState]],
+                ] as const
+              ).map(([label, value]) => (
+                <div
+                  key={label}
+                  className="rounded-xl border border-admin-line bg-admin-canvas p-4"
+                >
+                  <dt className="text-xs text-admin-muted">{label}</dt>
+                  <dd className="m-0 mt-1 text-base font-semibold text-admin-ink">
+                    {value}
+                  </dd>
                 </div>
-                <div>
-                  <strong>Vigência</strong>
-                  <p className="mt-2 leading-[1.6] text-admin-muted">
-                    {site.termStartsOn
-                      ? `${site.termStartsOn} a ${site.termEndsOn}`
-                      : "Aguardando aprovação"}
-                  </p>
-                </div>
-                <div>
-                  <strong>Publicação</strong>
-                  <p className="mt-2 leading-[1.6] text-admin-muted">
-                    {labels[site.publicationState]}
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-            <Card className={adminStyles.card}>
+              ))}
+            </dl>
+            <Card className={adminStyles.surface}>
               <CardHeader>
                 <CardTitle>Ciclo de vida</CardTitle>
                 <CardDescription>
@@ -510,7 +507,7 @@ export function SiteWorkspace({
               </CardContent>
             </Card>
 
-            <Card className={adminStyles.card}>
+            <Card className={adminStyles.surface}>
               <CardHeader className="flex w-full flex-row items-start justify-between">
                 <div>
                   <CardTitle>Cadastro, datas e publicação</CardTitle>
@@ -539,7 +536,7 @@ export function SiteWorkspace({
               </CardHeader>
             </Card>
 
-            <Card className={adminStyles.card}>
+            <Card className={adminStyles.surface}>
               <CardHeader className="flex w-full flex-row items-start justify-between">
                 <div>
                   <CardTitle>Administradores</CardTitle>
@@ -594,7 +591,7 @@ export function SiteWorkspace({
               </CardContent>
             </Card>
 
-            <Card className={adminStyles.card}>
+            <Card className={adminStyles.surface}>
               <CardHeader className="flex w-full flex-row items-start justify-between">
                 <div>
                   <CardTitle>Domínios</CardTitle>
@@ -635,7 +632,11 @@ export function SiteWorkspace({
                             {labels[domain.state]}
                           </Badge>
                         </TableCell>
-                        <TableCell>{domain.expiresOn ?? "—"}</TableCell>
+                        <TableCell>
+                          {domain.expiresOn
+                            ? formatBrazilianDate(domain.expiresOn)
+                            : "—"}
+                        </TableCell>
                         <TableCell>
                           {domain.isPrimary ? "Sim" : "Não"}
                         </TableCell>
@@ -1179,7 +1180,7 @@ export function SiteWorkspace({
             </AlertDialog>
           </section>
         ) : (
-          <Card className={adminStyles.card} data-area="settings">
+          <Card className={adminStyles.surface} data-area="settings">
             <CardHeader>
               <CardTitle>Configurações indisponíveis</CardTitle>
               <CardDescription>

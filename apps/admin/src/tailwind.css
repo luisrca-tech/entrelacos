@@ -14,6 +14,9 @@
   --color-admin-terracotta-deep: #8e3a2a;
   --color-admin-terracotta-wash: #f3e1d9;
   --color-admin-graphite: #37322e;
+  --color-admin-status-pending: #a65d12;
+  --color-admin-status-confirmed: #197551;
+  --color-admin-status-declined: #b44040;
   --font-admin-display: Georgia, "Times New Roman", serif;
   --shadow-admin: 0 18px 50px rgb(68 49 36 / 8%);
 }

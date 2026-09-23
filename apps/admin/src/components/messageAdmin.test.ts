@@ -2,26 +2,37 @@ import { describe, expect, it } from "vitest";
 import { ApiError } from "../lib/apiClient";
 import { mergeSiteMessages, messageAdminError } from "./messageAdmin";
 
-const group = {
-  groupId: "group-a",
-  groupName: "Família Silva",
+const invitation = {
+  invitationId: "invitation-a",
+  invitationName: "Família Silva",
   blocked: false,
   currentRevision: 1,
   message: null,
 };
 
 describe("message administration helpers", () => {
-  it("replaces refreshed pages and deduplicates appended groups", () => {
-    expect(
-      mergeSiteMessages([group], [{ ...group, blocked: true }], false),
-    ).toEqual([{ ...group, blocked: true }]);
+  it("replaces refreshed pages and deduplicates appended invitations", () => {
     expect(
       mergeSiteMessages(
-        [group],
-        [group, { ...group, groupId: "group-b", groupName: "Família Lima" }],
+        [invitation],
+        [{ ...invitation, blocked: true }],
+        false,
+      ),
+    ).toEqual([{ ...invitation, blocked: true }]);
+    expect(
+      mergeSiteMessages(
+        [invitation],
+        [
+          invitation,
+          {
+            ...invitation,
+            invitationId: "invitation-b",
+            invitationName: "Família Lima",
+          },
+        ],
         true,
-      ).map(({ groupId }) => groupId),
-    ).toEqual(["group-a", "group-b"]);
+      ).map(({ invitationId }) => invitationId),
+    ).toEqual(["invitation-a", "invitation-b"]);
   });
 
   it("explains moderation conflicts without exposing backend details", () => {

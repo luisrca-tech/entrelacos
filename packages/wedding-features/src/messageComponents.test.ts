@@ -4,7 +4,7 @@ import type { PublicMuralResponse } from "@entrelacos/contracts";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import { FamilyMessageForm } from "./FamilyMessageForm";
+import { InvitationMessageForm } from "./InvitationMessageForm";
 import { mergeMuralMessages } from "./MessageMural";
 
 const guestAccessSource = readFileSync(
@@ -15,17 +15,17 @@ const guestAccessSource = readFileSync(
 const message = {
   id: "message-a",
   authorName: "Ana Silva",
-  groupName: "Família Silva",
+  invitationName: "Família Silva",
   text: "Viva os noivos!",
   revision: 1,
   createdAt: "2026-09-12T12:00:00.000Z",
   updatedAt: "2026-09-12T12:00:00.000Z",
 };
 
-describe("family message form", () => {
+describe("invitation message form", () => {
   it("shows the Unicode counter and disables unchanged submissions", () => {
     const html = renderToStaticMarkup(
-      createElement(FamilyMessageForm, {
+      createElement(InvitationMessageForm, {
         message,
         currentRevision: 1,
         canEdit: true,
@@ -44,9 +44,9 @@ describe("family message form", () => {
     expect(html).toContain('disabled=""');
   });
 
-  it("keeps a moderated group message visible while explaining the block", () => {
+  it("keeps a moderated invitation message visible while explaining the block", () => {
     const html = renderToStaticMarkup(
-      createElement(FamilyMessageForm, {
+      createElement(InvitationMessageForm, {
         message,
         currentRevision: 1,
         canEdit: false,
@@ -65,7 +65,7 @@ describe("family message form", () => {
 
   it("explains why a nonblank message cannot be published", () => {
     const html = renderToStaticMarkup(
-      createElement(FamilyMessageForm, {
+      createElement(InvitationMessageForm, {
         message: null,
         currentRevision: 0,
         canEdit: true,
@@ -82,23 +82,17 @@ describe("family message form", () => {
   });
 });
 
-describe("guest lookup form", () => {
+describe("invitation access form", () => {
   it("uses the localized application validation path", () => {
     expect(guestAccessSource).toContain("className={guestAccessFormClass}");
-    expect(guestAccessSource).toContain("onSubmit={startLookup}");
+    expect(guestAccessSource).toContain("onSubmit={accessInvitation}");
     expect(guestAccessSource).toContain(
-      "Informe o nome completo e um celular brasileiro válido.",
+      "Informe um telefone válido e o PIN de 6 dígitos do convite.",
     );
-    expect(guestAccessSource).toContain("Celular");
-    expect(guestAccessSource).not.toContain("Celular brasileiro");
-    expect(guestAccessSource).not.toContain(
-      "Autorização temporária da demonstração",
-    );
-    expect(guestAccessSource).toContain("use o PIN");
-    expect(guestAccessSource).toContain("do seu grupo");
-    expect(guestAccessSource).not.toContain(
-      "entrelacos-guest-access__foreign-note",
-    );
+    expect(guestAccessSource).toContain("Telefone de contato");
+    expect(guestAccessSource).toContain("formatInvitationPhoneInput");
+    expect(guestAccessSource).not.toContain("Nome completo\n");
+    expect(guestAccessSource).not.toContain("do seu grupo");
   });
 
   it("keeps guest verification PIN-only", () => {
@@ -125,7 +119,7 @@ describe("message mural pagination", () => {
       {
         id: "message-a",
         authorName: "Ana Silva",
-        groupName: "Família Silva",
+        invitationName: "Família Silva",
         text: "Viva os noivos!",
         createdAt: "2026-09-12T12:00:00.000Z",
         updatedAt: "2026-09-12T12:00:00.000Z",

@@ -1,13 +1,16 @@
-import { rsvpExportQuerySchema, siteIdSchema } from "@entrelacos/contracts";
+import {
+  invitationExportQuerySchema,
+  siteIdSchema,
+} from "@entrelacos/contracts";
 import { Hono } from "hono";
 import type { AuthHttpOptions } from "./authHttp";
 import { AdminSessionRequiredError, requireAdminSession } from "./authHttp";
 import {
-  createRsvpCsv,
-  createRsvpPdf,
+  createInvitationCsv,
+  createInvitationPdf,
   type ReportsAdminActor,
   ReportsServiceError,
-  readRsvpReport,
+  readInvitationReport,
 } from "./reports";
 
 function problem(status: number, code: string, title: string): Response {
@@ -71,7 +74,7 @@ function attachmentName(
   extension: "csv" | "pdf",
 ): string {
   const utc = generatedAt.replace(/\D/gu, "").slice(0, 14);
-  return `entrelacos-rsvp-${safeSegment(siteId)}-${utc}-${safeSegment(requestId)}.${extension}`;
+  return `entrelacos-invitations-${safeSegment(siteId)}-${utc}-${safeSegment(requestId)}.${extension}`;
 }
 
 function binaryResponse(
@@ -102,7 +105,7 @@ export function createReportsHttpRouter(options: AuthHttpOptions): Hono {
     ["pdf", "application/pdf"],
   ] as const) {
     router.get(
-      `/v1/sites/:siteId/reports/rsvp.${extension}`,
+      `/v1/sites/:siteId/reports/invitations.${extension}`,
       async (context) => {
         const actor = await requireAdminActor(context.req.raw, options);
         if (actor instanceof Response) return actor;
@@ -110,14 +113,14 @@ export function createReportsHttpRouter(options: AuthHttpOptions): Hono {
         if (!siteIdSchema.safeParse(siteId).success) {
           return problem(400, "VALIDATION_ERROR", "Invalid report request");
         }
-        const query = rsvpExportQuerySchema.safeParse(
+        const query = invitationExportQuerySchema.safeParse(
           queryObject(context.req.raw),
         );
         if (!query.success) {
           return problem(400, "VALIDATION_ERROR", "Invalid report request");
         }
         try {
-          const report = await readRsvpReport(
+          const report = await readInvitationReport(
             options.db,
             actor,
             siteId,
@@ -126,8 +129,8 @@ export function createReportsHttpRouter(options: AuthHttpOptions): Hono {
           );
           const bytes =
             extension === "csv"
-              ? createRsvpCsv(report, query.data.includePhone)
-              : await createRsvpPdf(report, query.data.includePhone);
+              ? createInvitationCsv(report, query.data)
+              : await createInvitationPdf(report, query.data);
           return binaryResponse(
             bytes,
             contentType,

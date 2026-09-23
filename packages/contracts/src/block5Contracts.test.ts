@@ -2,15 +2,15 @@ import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import {
   block5EndpointPaths,
-  familyMessageResponseSchema,
-  groupDeleteConfirmationSchema,
+  invitationDeleteConfirmationSchema,
+  invitationExportQuerySchema,
+  invitationMessageResponseSchema,
   messageMutationInputSchema,
   messageMutationResponseSchema,
   messageTextSchema,
   muralConfigurationSchema,
   publicMuralQuerySchema,
   publicMuralResponseSchema,
-  rsvpExportQuerySchema,
   siteMessageBlockInputSchema,
 } from "./index";
 
@@ -43,20 +43,20 @@ describe("Block 5 contracts", () => {
     ).toThrow();
   });
 
-  it("keeps family message state explicit and private", () => {
+  it("keeps invitation message state explicit and private", () => {
     const message = {
       id: "message-1",
       authorName: "Ana Silva",
-      groupName: "Família Silva",
+      invitationName: "Família Silva",
       text: "Com carinho",
       revision: 1,
       createdAt: instant,
       updatedAt: instant,
     };
     expect(
-      familyMessageResponseSchema.parse({
+      invitationMessageResponseSchema.parse({
         siteId: "site-demo",
-        groupId: "group-demo",
+        invitationId: "invitation-demo",
         currentRevision: 1,
         canEdit: true,
         readOnlyReason: null,
@@ -64,9 +64,9 @@ describe("Block 5 contracts", () => {
       }),
     ).toMatchObject({ message });
     expect(() =>
-      familyMessageResponseSchema.parse({
+      invitationMessageResponseSchema.parse({
         siteId: "site-demo",
-        groupId: "group-demo",
+        invitationId: "invitation-demo",
         currentRevision: 1,
         canEdit: true,
         readOnlyReason: null,
@@ -104,7 +104,7 @@ describe("Block 5 contracts", () => {
           {
             id: "message-1",
             authorName: "Ana Silva",
-            groupName: "Família Silva",
+            invitationName: "Família Silva",
             text: "Olá",
             createdAt: instant,
             updatedAt: instant,
@@ -124,35 +124,44 @@ describe("Block 5 contracts", () => {
       blocked: true,
     });
     expect(
-      groupDeleteConfirmationSchema.parse({
-        confirmGroupId: "group-1",
-        confirmGroupName: "Família Silva",
+      invitationDeleteConfirmationSchema.parse({
+        confirmInvitationId: "invitation-1",
+        confirmInvitationName: "Família Silva",
       }),
-    ).toMatchObject({ confirmGroupId: "group-1" });
+    ).toMatchObject({ confirmInvitationId: "invitation-1" });
     expect(() =>
-      groupDeleteConfirmationSchema.parse({ confirmGroupId: "group-1" }),
+      invitationDeleteConfirmationSchema.parse({
+        confirmInvitationId: "invitation-1",
+      }),
     ).toThrow();
   });
 
-  it("requires export phone intent and accepts only RSVP filters", () => {
+  it("defaults both export contacts off and accepts invitation filters", () => {
     expect(
-      rsvpExportQuerySchema.parse({
+      invitationExportQuerySchema.parse({
         requestId,
         includePhone: "false",
-        state: "PENDING",
-        groupId: "group-1",
+        includeEmail: "true",
+        search: " Família Silva ",
+        status: "PENDING",
+        guestType: "CHILD",
       }),
     ).toEqual({
       requestId,
       includePhone: false,
-      state: "PENDING",
-      groupId: "group-1",
+      includeEmail: true,
+      search: "Família Silva",
+      status: "PENDING",
+      guestType: "CHILD",
     });
-    expect(() => rsvpExportQuerySchema.parse({ requestId })).toThrow();
+    expect(invitationExportQuerySchema.parse({ requestId })).toEqual({
+      requestId,
+      includePhone: false,
+      includeEmail: false,
+    });
     expect(() =>
-      rsvpExportQuerySchema.parse({
+      invitationExportQuerySchema.parse({
         requestId,
-        includePhone: "false",
         includeMessages: "true",
       }),
     ).toThrow();
@@ -160,17 +169,17 @@ describe("Block 5 contracts", () => {
 
   it("freezes the Block 5 route surface", () => {
     expect(Object.values(block5EndpointPaths)).toEqual([
-      "GET /v1/public/family/message",
-      "PUT /v1/public/family/message",
+      "GET /v1/public/invitation/message",
+      "PUT /v1/public/invitation/message",
       "GET /v1/public/sites/:siteId/mural",
       "GET /v1/sites/:siteId/messages",
       "GET /v1/sites/:siteId/mural",
       "PATCH /v1/sites/:siteId/mural",
-      "DELETE /v1/sites/:siteId/groups/:groupId/message",
-      "PATCH /v1/sites/:siteId/groups/:groupId/message-block",
-      "DELETE /v1/sites/:siteId/groups/:groupId",
-      "GET /v1/sites/:siteId/reports/rsvp.csv",
-      "GET /v1/sites/:siteId/reports/rsvp.pdf",
+      "DELETE /v1/sites/:siteId/invitations/:invitationId/message",
+      "PATCH /v1/sites/:siteId/invitations/:invitationId/message-block",
+      "DELETE /v1/sites/:siteId/invitations/:invitationId",
+      "GET /v1/sites/:siteId/reports/invitations.csv",
+      "GET /v1/sites/:siteId/reports/invitations.pdf",
     ]);
   });
 });
