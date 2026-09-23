@@ -1,6 +1,5 @@
 import {
   formatInvitationPhoneInput,
-  type InvitationMessageResponse,
   type InvitationRsvpResponse,
   type InvitationSessionResponse,
   invitationAccessInputSchema,
@@ -8,23 +7,18 @@ import {
 import { toast } from "@entrelacos/ui/toaster";
 import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
+  browserGuestSessionStorage,
   clearGuestSession,
   GuestAccessApi,
   type GuestAccessApiError,
   type GuestSessionReadResponse,
   type GuestSessionStorage,
-  getGuestLeaveNotice,
   guestAccessErrorMessage,
+  guestSessionEventName,
+  publishGuestSessionChange,
   readGuestSession,
   writeGuestSession,
 } from "./guestAccess";
-import { InvitationMessageForm } from "./InvitationMessageForm";
-import {
-  getMessageErrorMessage,
-  muralRefreshEventName,
-  WeddingMessagesApi,
-  type WeddingMessagesApiError,
-} from "./messages";
 import { RsvpForm } from "./RsvpForm";
 import {
   confirmAllDraft,
@@ -65,21 +59,8 @@ const guestAccessInputClass =
   "min-h-11 w-full rounded-none border border-[rgba(37,53,43,0.32)] bg-[#fffdf8] px-3 py-[0.65rem] text-template-ink font-[inherit]";
 const guestAccessButtonClass =
   "min-h-11 cursor-pointer rounded-none border border-template-ink bg-template-ink px-4 py-[0.65rem] text-template-ivory font-[inherit] font-bold disabled:cursor-not-allowed disabled:opacity-50";
-const guestAccessSecondaryClass =
-  "min-h-11 cursor-pointer rounded-none border border-template-ink bg-transparent px-4 py-[0.65rem] text-template-ink font-[inherit] font-bold disabled:cursor-not-allowed disabled:opacity-50";
-const guestAccessLinkClass =
-  "w-fit cursor-pointer border-0 bg-transparent px-0 py-[0.35rem] text-template-muted underline underline-offset-[0.2rem] disabled:cursor-not-allowed disabled:opacity-50";
 const guestAccessInvitationClass =
   "grid max-w-[42rem] gap-4 min-[961px]:w-full min-[961px]:max-w-[52rem]";
-
-function browserSessionStorage(): GuestSessionStorage | null {
-  if (typeof window === "undefined") return null;
-  try {
-    return window.sessionStorage;
-  } catch {
-    return null;
-  }
-}
 
 function errorWithRetry(error: unknown): string {
   const message = guestAccessErrorMessage(error);
@@ -107,7 +88,7 @@ export function GuestAccess({
   storage: providedStorage,
 }: GuestAccessProps) {
   const storage = useMemo(
-    () => providedStorage ?? browserSessionStorage(),
+    () => providedStorage ?? browserGuestSessionStorage(),
     [providedStorage],
   );
   const apiResult = useMemo(() => {
@@ -126,23 +107,6 @@ export function GuestAccess({
       };
     }
   }, [apiOrigin, fetcher, siteId]);
-  const messagesApiResult = useMemo(() => {
-    try {
-      return {
-        api: new WeddingMessagesApi({ apiOrigin, siteId, fetcher }),
-        error: "",
-      };
-    } catch (error) {
-      return {
-        api: null,
-        error:
-          error instanceof Error
-            ? error.message
-            : "A configuração pública deste site está inválida.",
-      };
-    }
-  }, [apiOrigin, fetcher, siteId]);
-
   const [phase, setPhase] = useState<GuestAccessPhase>("lookup");
   const [phone, setPhone] = useState("");
   const [pin, setPin] = useState("");
@@ -152,16 +116,6 @@ export function GuestAccess({
   const [rsvpOpen, setRsvpOpen] = useState(false);
   const [rsvpError, setRsvpError] = useState("");
   const retryRequest = useRef<{ key: string; requestId: string } | null>(null);
-  const [invitationMessage, setInvitationMessage] =
-    useState<InvitationMessageResponse | null>(null);
-  const [messageDraft, setMessageDraft] = useState("");
-  const [messageReady, setMessageReady] = useState(false);
-  const [messageBusy, setMessageBusy] = useState(false);
-  const [messageError, setMessageError] = useState("");
-  const messageRetryRequest = useRef<{
-    key: string;
-    requestId: string;
-  } | null>(null);
   const [busy, setBusy] = useState(false);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState("");
@@ -197,9 +151,8 @@ export function GuestAccess({
         if (!active) return;
         setSession(restored);
         setPhase("authenticated");
-        const [restoredRsvp, restoredMessage] = await Promise.allSettled([
+        const [restoredRsvp] = await Promise.allSettled([
           apiResult.api?.getRsvp(token),
-          messagesApiResult.api?.getInvitationMessage(token),
         ]);
         if (!active) return;
         if (restoredRsvp.status === "fulfilled" && restoredRsvp.value) {
@@ -216,26 +169,15 @@ export function GuestAccess({
         } else if (restoredRsvp.status === "rejected") {
           setRsvpError(errorWithRetry(restoredRsvp.reason));
         }
-        if (restoredMessage.status === "fulfilled" && restoredMessage.value) {
-          setInvitationMessage(restoredMessage.value);
-          setMessageDraft(restoredMessage.value.message?.text ?? "");
-        } else if (restoredMessage.status === "rejected") {
-          setMessageError(getMessageErrorMessage(restoredMessage.reason));
-        } else if (!messagesApiResult.api) {
-          setMessageError(messagesApiResult.error);
-        }
-        setMessageReady(true);
       })
       .catch((cause: unknown) => {
         if (!active) return;
         if ((cause as Partial<GuestAccessApiError>).status === 401) {
           clearGuestSession(storage, siteId);
+          publishGuestSessionChange(siteId);
           setSession(null);
           setRsvp(null);
           setRsvpDraft({});
-          setInvitationMessage(null);
-          setMessageDraft("");
-          setMessageReady(false);
           setPhase("lookup");
           toast.error(errorWithRetry(cause));
         } else toast.error(errorWithRetry(cause));
@@ -246,7 +188,28 @@ export function GuestAccess({
     return () => {
       active = false;
     };
-  }, [apiResult, messagesApiResult, siteId, storage]);
+  }, [apiResult, siteId, storage]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onSessionChange = () => {
+      const token = storage ? readGuestSession(storage, siteId) : null;
+      if (token) return;
+      setSession(null);
+      setRsvp(null);
+      setRsvpDraft({});
+      setRsvpOpen(false);
+      setRsvpError("");
+      setPhase("lookup");
+    };
+    window.addEventListener(guestSessionEventName(siteId), onSessionChange);
+    return () => {
+      window.removeEventListener(
+        guestSessionEventName(siteId),
+        onSessionChange,
+      );
+    };
+  }, [siteId, storage]);
 
   if (!ready)
     return (
@@ -279,13 +242,13 @@ export function GuestAccess({
       const result = await apiResult.api.access(parsed.data);
       if (!storage) throw new Error("Session storage unavailable");
       writeGuestSession(storage, siteId, result.sessionToken);
+      publishGuestSessionChange(siteId);
       setSession(sessionFromVerification(result));
       setPhase("authenticated");
       setPin("");
       toast.success("Acesso confirmado.");
-      const [verifiedRsvp, verifiedMessage] = await Promise.allSettled([
+      const [verifiedRsvp] = await Promise.allSettled([
         apiResult.api.getRsvp(result.sessionToken),
-        messagesApiResult.api?.getInvitationMessage(result.sessionToken),
       ]);
       if (verifiedRsvp.status === "fulfilled") {
         setRsvp(verifiedRsvp.value);
@@ -303,50 +266,9 @@ export function GuestAccess({
         setRsvpError(message);
         toast.error(message);
       }
-      if (verifiedMessage.status === "fulfilled" && verifiedMessage.value) {
-        setInvitationMessage(verifiedMessage.value);
-        setMessageDraft(verifiedMessage.value.message?.text ?? "");
-      } else if (verifiedMessage.status === "rejected") {
-        setMessageError(getMessageErrorMessage(verifiedMessage.reason));
-      } else if (!messagesApiResult.api) {
-        setMessageError(messagesApiResult.error);
-      }
-      setMessageReady(true);
     } catch (cause) {
       toast.error(errorWithRetry(cause));
     } finally {
-      setBusy(false);
-    }
-  }
-
-  async function leave() {
-    const token = storage ? readGuestSession(storage, siteId) : null;
-    let serverConfirmed = token === null;
-    setBusy(true);
-    setError("");
-    try {
-      if (token && apiResult.api) {
-        await apiResult.api.leave(token);
-        serverConfirmed = true;
-      }
-    } catch {
-      serverConfirmed = false;
-    } finally {
-      if (storage) clearGuestSession(storage, siteId);
-      setSession(null);
-      setRsvp(null);
-      setRsvpDraft({});
-      setInvitationMessage(null);
-      setMessageDraft("");
-      setMessageReady(false);
-      setMessageError("");
-      messageRetryRequest.current = null;
-      setRsvpOpen(false);
-      setPin("");
-      setPhase("lookup");
-      const leaveNotice = getGuestLeaveNotice(serverConfirmed);
-      if (serverConfirmed) toast.success(leaveNotice);
-      else toast.warning(leaveNotice);
       setBusy(false);
     }
   }
@@ -375,6 +297,7 @@ export function GuestAccess({
       const message = errorWithRetry(cause);
       if (apiError.status === 401) {
         if (storage) clearGuestSession(storage, siteId);
+        publishGuestSessionChange(siteId);
         setSession(null);
         setRsvp(null);
         setRsvpDraft({});
@@ -435,6 +358,7 @@ export function GuestAccess({
       }
       if (apiError.status === 401) {
         if (storage) clearGuestSession(storage, siteId);
+        publishGuestSessionChange(siteId);
         setSession(null);
         setRsvp(null);
         setRsvpDraft({});
@@ -448,113 +372,6 @@ export function GuestAccess({
       toast.error(message);
     } finally {
       setBusy(false);
-    }
-  }
-
-  async function reloadInvitationMessage(preserveDraft: boolean) {
-    const token = storage ? readGuestSession(storage, siteId) : null;
-    if (!token || !messagesApiResult.api) {
-      setMessageError(
-        messagesApiResult.error || "A sessão do convite não está disponível.",
-      );
-      setMessageReady(true);
-      return;
-    }
-    setMessageBusy(true);
-    setMessageError("");
-    try {
-      const current = await messagesApiResult.api.getInvitationMessage(token);
-      setInvitationMessage(current);
-      if (!preserveDraft) setMessageDraft(current.message?.text ?? "");
-      messageRetryRequest.current = null;
-    } catch (cause) {
-      const apiError = cause as Partial<WeddingMessagesApiError>;
-      const message = getMessageErrorMessage(cause);
-      setMessageError(message);
-      if (apiError.status === 401) {
-        if (storage) clearGuestSession(storage, siteId);
-        setSession(null);
-        setRsvp(null);
-        setRsvpDraft({});
-        setInvitationMessage(null);
-        setMessageDraft("");
-        setPhase("lookup");
-        toast.error(message);
-      } else if (invitationMessage && !preserveDraft) {
-        toast.error(message);
-      }
-    } finally {
-      setMessageReady(true);
-      setMessageBusy(false);
-    }
-  }
-
-  async function saveInvitationMessage() {
-    const token = storage ? readGuestSession(storage, siteId) : null;
-    if (
-      !token ||
-      !messagesApiResult.api ||
-      !invitationMessage?.canEdit ||
-      messageBusy
-    ) {
-      return;
-    }
-    const input = {
-      expectedRevision: invitationMessage.currentRevision,
-      text: messageDraft,
-    };
-    const key = JSON.stringify(input);
-    const requestId =
-      messageRetryRequest.current?.key === key
-        ? messageRetryRequest.current.requestId
-        : globalThis.crypto.randomUUID();
-    messageRetryRequest.current = { key, requestId };
-    setMessageBusy(true);
-    setMessageError("");
-    try {
-      const saved = await messagesApiResult.api.saveInvitationMessage(token, {
-        requestId,
-        ...input,
-      });
-      setInvitationMessage({
-        ...invitationMessage,
-        currentRevision: saved.message.revision,
-        message: saved.message,
-      });
-      setMessageDraft(saved.message.text);
-      messageRetryRequest.current = null;
-      toast.success(
-        saved.result === "NO_CHANGE"
-          ? "A mensagem já estava atualizada."
-          : "Mensagem publicada no mural.",
-      );
-      if (typeof window !== "undefined") {
-        window.dispatchEvent(new Event(muralRefreshEventName(siteId)));
-      }
-    } catch (cause) {
-      const apiError = cause as Partial<WeddingMessagesApiError>;
-      const message = getMessageErrorMessage(cause);
-      setMessageError(message);
-      if (
-        apiError.code === "MESSAGE_CONFLICT" ||
-        apiError.code === "MESSAGE_REMOVED"
-      ) {
-        await reloadInvitationMessage(true);
-        setMessageError(message);
-      }
-      if (apiError.status === 401) {
-        if (storage) clearGuestSession(storage, siteId);
-        setSession(null);
-        setRsvp(null);
-        setRsvpDraft({});
-        setInvitationMessage(null);
-        setMessageDraft("");
-        setPhase("lookup");
-        setMessageError("");
-      }
-      toast.error(message);
-    } finally {
-      setMessageBusy(false);
     }
   }
 
@@ -658,48 +475,6 @@ export function GuestAccess({
               As respostas de presença não estão disponíveis agora.
             </p>
           )}
-          {!messageReady ? (
-            <p role="status">Carregando a mensagem deste convite…</p>
-          ) : invitationMessage ? (
-            <InvitationMessageForm
-              message={invitationMessage.message}
-              currentRevision={invitationMessage.currentRevision}
-              canEdit={invitationMessage.canEdit}
-              readOnlyReason={invitationMessage.readOnlyReason}
-              value={messageDraft}
-              busy={messageBusy}
-              error={messageError}
-              onChange={(value) => {
-                setMessageDraft(value);
-                setMessageError("");
-              }}
-              onSave={() => void saveInvitationMessage()}
-              onReload={() => void reloadInvitationMessage(false)}
-            />
-          ) : (
-            <div className="grid gap-4 border-t border-template-line pt-6">
-              <p className={guestAccessMessageClass} role="alert">
-                {messageError ||
-                  "A mensagem deste convite não está disponível agora."}
-              </p>
-              <button
-                type="button"
-                className={guestAccessLinkClass}
-                disabled={messageBusy}
-                onClick={() => void reloadInvitationMessage(false)}
-              >
-                Recarregar mensagem
-              </button>
-            </div>
-          )}
-          <button
-            type="button"
-            className={guestAccessSecondaryClass}
-            disabled={busy}
-            onClick={() => void leave()}
-          >
-            {busy ? "Saindo…" : "Sair"}
-          </button>
         </div>
       )}
       {rsvp && (

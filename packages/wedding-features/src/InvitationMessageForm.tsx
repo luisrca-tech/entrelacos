@@ -19,12 +19,7 @@ export type InvitationMessageFormProps = {
   onReload?: () => void;
 };
 
-const invitationMessageFormClass =
-  "grid gap-4 border-t border-template-line pt-6";
-const invitationMessageEyebrowClass =
-  "m-0 mb-[0.8rem] text-template-muted text-[0.72rem] font-bold tracking-[0.16em] uppercase";
-const invitationMessageHeadingClass =
-  "m-0 font-template-serif text-[clamp(1.8rem,4vw,3rem)] font-normal tracking-[-0.05em]";
+const invitationMessageFormClass = "grid gap-4";
 const invitationMessageClass =
   "m-0 max-w-[42rem] border border-template-line px-4 py-[0.8rem] text-template-ink";
 const invitationMessageReadonlyClass =
@@ -75,12 +70,6 @@ export function InvitationMessageForm({
 
   return (
     <form className={invitationMessageFormClass} onSubmit={submit}>
-      <div>
-        <p className={invitationMessageEyebrowClass}>Mural dos convidados</p>
-        <h3 className={invitationMessageHeadingClass}>
-          {message ? "Sua mensagem" : "Deixe uma mensagem"}
-        </h3>
-      </div>
       {readOnlyReason && (
         <p className={invitationMessageReadonlyClass} role="status">
           {readOnlyMessage(readOnlyReason)}

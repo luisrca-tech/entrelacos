@@ -6,6 +6,7 @@ import {
   getGuestLeaveNotice,
   getGuestSessionStorageKey,
   guestAccessErrorMessage,
+  guestSessionEventName,
   isValidVerificationCode,
   readGuestSession,
   writeGuestSession,
@@ -29,6 +30,9 @@ describe("invitation access client safety", () => {
 
     expect(getGuestSessionStorageKey("casamento-a")).not.toBe(
       getGuestSessionStorageKey("casamento-b"),
+    );
+    expect(guestSessionEventName("casamento-a")).not.toBe(
+      guestSessionEventName("casamento-b"),
     );
     writeGuestSession(storage, "casamento-a", "a".repeat(43));
     expect(readGuestSession(storage, "casamento-a")).toBe("a".repeat(43));

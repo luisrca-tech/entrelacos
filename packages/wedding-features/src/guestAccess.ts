@@ -57,6 +57,24 @@ export function clearGuestSession(
   storage.removeItem(getGuestSessionStorageKey(siteId));
 }
 
+export function guestSessionEventName(siteId: string): string {
+  return `entrelacos:guest-session:${encodeURIComponent(siteId)}`;
+}
+
+export function publishGuestSessionChange(siteId: string): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new Event(guestSessionEventName(siteId)));
+}
+
+export function browserGuestSessionStorage(): GuestSessionStorage | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return window.sessionStorage;
+  } catch {
+    return null;
+  }
+}
+
 export function getGuestLeaveNotice(serverConfirmed: boolean): string {
   return serverConfirmed
     ? "Você saiu. Para entrar novamente, confirme seus dados."

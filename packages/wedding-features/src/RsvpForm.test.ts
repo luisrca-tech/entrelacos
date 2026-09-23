@@ -35,6 +35,8 @@ describe("invitation RSVP form", () => {
     );
     expect(html).toContain("Adulto");
     expect(html).toContain("Criança");
+    expect(html).toContain("m-auto");
+    expect(html).toContain("[@media(max-width:560px)]:m-0");
     expect(html).not.toContain("Responsável pelo convite");
   });
 });

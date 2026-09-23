@@ -13,13 +13,16 @@ export type {
   GuestSessionStorage,
 } from "./guestAccess";
 export {
+  browserGuestSessionStorage,
   clearGuestSession,
   GuestAccessApi,
   GuestAccessApiError,
   getGuestLeaveNotice,
   getGuestSessionStorageKey,
   guestAccessErrorMessage,
+  guestSessionEventName,
   isValidVerificationCode,
+  publishGuestSessionChange,
   readGuestSession,
   writeGuestSession,
 } from "./guestAccess";

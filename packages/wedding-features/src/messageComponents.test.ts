@@ -11,6 +11,18 @@ const guestAccessSource = readFileSync(
   resolve(import.meta.dirname, "GuestAccessPanel.tsx"),
   "utf8",
 );
+const muralSource = readFileSync(
+  resolve(import.meta.dirname, "MessageMural.tsx"),
+  "utf8",
+);
+const messageDialogSource = readFileSync(
+  resolve(import.meta.dirname, "InvitationMessageDialog.tsx"),
+  "utf8",
+);
+const siteDialogSource = readFileSync(
+  resolve(import.meta.dirname, "SiteDialog.tsx"),
+  "utf8",
+);
 
 const message = {
   id: "message-a",
@@ -39,7 +51,8 @@ describe("invitation message form", () => {
 
     expect(html).toContain("15 / 1000");
     expect(html).toContain("Viva os noivos!");
-    expect(html).toContain("grid gap-4 border-t border-template-line pt-6");
+    expect(html).toContain("grid gap-4");
+    expect(html).not.toContain("border-t border-template-line pt-6");
     expect(html).toContain("data-[invalid=true]:font-bold");
     expect(html).toContain('disabled=""');
   });
@@ -104,6 +117,12 @@ describe("invitation access form", () => {
     );
   });
 
+  it("keeps confirmation in the access panel and leaves messages to the mural", () => {
+    expect(guestAccessSource).not.toContain("Sair");
+    expect(guestAccessSource).not.toContain("InvitationMessageForm");
+    expect(guestAccessSource).toContain("publishGuestSessionChange");
+  });
+
   it("centers a wider confirmation column on desktop without wrapping the title", () => {
     expect(guestAccessSource).toContain("min-[961px]:justify-items-center");
     expect(guestAccessSource).toContain(
@@ -112,6 +131,20 @@ describe("invitation access form", () => {
     expect(guestAccessSource).toContain("min-[961px]:whitespace-nowrap");
     expect(guestAccessSource).toContain("min-[961px]:max-w-[38rem]");
     expect(guestAccessSource).toContain("[@media(max-width:560px)]:flex-col");
+  });
+});
+
+describe("message mural compose", () => {
+  it("offers a centered message dialog only after the invitation session exists", () => {
+    expect(muralSource).toContain("hasSession &&");
+    expect(muralSource).toContain("Deixar uma mensagem");
+    expect(muralSource).toContain("readGuestSession");
+    expect(muralSource).toContain("guestSessionEventName");
+    expect(messageDialogSource).toContain("<SiteDialog");
+    expect(siteDialogSource).toContain("m-auto");
+    expect(messageDialogSource).toContain("Deixe uma mensagem");
+    expect(messageDialogSource).toContain("Sua mensagem");
+    expect(messageDialogSource).toContain("publishGuestSessionChange");
   });
 });
 
