@@ -84,8 +84,8 @@ export function InvitationFiltersPopover({
         <PopoverTitle className="border-b border-admin-line px-4 py-3 text-base">
           Filtrar convidados
         </PopoverTitle>
-        <fieldset className="grid border-b border-admin-line px-4 py-3">
-          <legend className="mb-2 text-[0.78rem] font-bold uppercase tracking-[0.08em] text-admin-muted">
+        <fieldset className="grid border-b border-admin-line px-4 pb-3">
+          <legend className="mb-1 pt-3 text-[0.78rem] font-bold uppercase tracking-[0.08em] text-admin-muted">
             Status
           </legend>
           {statusOptions.map((option) => (
@@ -112,8 +112,8 @@ export function InvitationFiltersPopover({
             </label>
           ))}
         </fieldset>
-        <fieldset className="grid px-4 py-3">
-          <legend className="mb-2 text-[0.78rem] font-bold uppercase tracking-[0.08em] text-admin-muted">
+        <fieldset className="grid px-4 pb-3">
+          <legend className="mb-1 pt-3 text-[0.78rem] font-bold uppercase tracking-[0.08em] text-admin-muted">
             Faixa etária
           </legend>
           {typeOptions.map((option) => (

@@ -18,7 +18,7 @@ import {
 } from "@entrelacos/ui";
 import { Search } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { adminStyles, displayHeading } from "../lib/adminStyles";
+import { adminStyles } from "../lib/adminStyles";
 import { ApiError, apiRequest } from "../lib/apiClient";
 import { InvitationDeleteDialog } from "./InvitationDeleteDialog";
 import { InvitationDetailDialog } from "./InvitationDetailDialog";
@@ -361,18 +361,7 @@ export function InvitationsSection({ siteId, lifecycle }: Props) {
   }
 
   return (
-    <section data-area="invitations" aria-labelledby="invitations-title">
-      <div className="mb-7">
-        <h2
-          id="invitations-title"
-          className={`m-0 text-[clamp(2rem,3vw,3rem)] ${displayHeading}`}
-        >
-          Convites
-        </h2>
-        <p className="mb-0 mt-2 text-admin-muted">
-          Organize convites, convidados e confirmações em um só lugar.
-        </p>
-      </div>
+    <section data-area="invitations" aria-label="Convites">
       {error && (
         <p role="alert" className={adminStyles.alert}>
           {error}

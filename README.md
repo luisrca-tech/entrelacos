@@ -36,6 +36,8 @@ Run individual apps with `bun run --filter @entrelacos/admin dev`, `bun run --fi
 
 `bun run lint`, `bun run typecheck`, `bun run test` and `bun run build` are separate checks. `bun run check` runs all four. Biome handles supported source formats; Astro performs its own syntax/type validation. `bun run test:db` runs the real, serialized PostgreSQL acceptance suite against the verified test branch. CI runs the same credential-free checks; it does not deploy or migrate main.
 
+Use `bun db:generate` to generate a migration without connecting to a database, then review its SQL. Use `bun db:migrate` to apply reviewed migrations to the database selected by `packages/database/.env` (or an explicit `DATABASE_URL` in the shell). The migration command does not infer development versus production; see the [database operations guide](packages/database/README.md) before running it.
+
 ## Workspace
 
 ```text

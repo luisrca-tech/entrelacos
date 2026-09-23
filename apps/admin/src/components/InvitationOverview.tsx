@@ -107,19 +107,18 @@ export function InvitationOverview({
         </Button>
         <Button
           type="button"
-          variant="outline"
           onClick={onExport}
-          className="min-h-11 w-full justify-start gap-2 border-admin-line"
+          className="min-h-11 w-full justify-start gap-2"
         >
           <FileDown aria-hidden="true" className="size-4" />
           Exportar CSV ou PDF
         </Button>
         <Button
           type="button"
-          variant="ghost"
+          variant="outline"
           onClick={onConfigureDeadline}
           disabled={inactive}
-          className="min-h-11 w-full justify-start gap-2 text-admin-muted"
+          className="min-h-11 w-full justify-start gap-2 border-admin-line"
         >
           <CalendarClock aria-hidden="true" className="size-4" />
           Prazo de confirmação
