@@ -4,14 +4,10 @@ import {
   block5EndpointPaths,
   invitationDeleteConfirmationSchema,
   invitationExportQuerySchema,
-  invitationMessageResponseSchema,
-  messageMutationInputSchema,
-  messageMutationResponseSchema,
   messageTextSchema,
   muralConfigurationSchema,
   publicMuralQuerySchema,
   publicMuralResponseSchema,
-  siteMessageBlockInputSchema,
 } from "./index";
 
 const requestId = randomUUID();
@@ -27,61 +23,6 @@ describe("Block 5 contracts", () => {
     expect(() => messageTextSchema.parse("   \n ")).toThrow();
     expect(() => messageTextSchema.parse("<strong>Olá</strong>")).toThrow();
     expect(() => messageTextSchema.parse("Olá\u0000")).toThrow();
-  });
-
-  it("requires revision and UUID idempotency without accepting identity", () => {
-    const input = { requestId, expectedRevision: 0, text: "Com carinho" };
-    expect(messageMutationInputSchema.parse(input)).toEqual(input);
-    expect(() =>
-      messageMutationInputSchema.parse({
-        ...input,
-        authorName: "Pessoa inventada",
-      }),
-    ).toThrow();
-    expect(() =>
-      messageMutationInputSchema.parse({ ...input, expectedRevision: -1 }),
-    ).toThrow();
-  });
-
-  it("keeps invitation message state explicit and private", () => {
-    const message = {
-      id: "message-1",
-      authorName: "Ana Silva",
-      invitationName: "Família Silva",
-      text: "Com carinho",
-      revision: 1,
-      createdAt: instant,
-      updatedAt: instant,
-    };
-    expect(
-      invitationMessageResponseSchema.parse({
-        siteId: "site-demo",
-        invitationId: "invitation-demo",
-        currentRevision: 1,
-        canEdit: true,
-        readOnlyReason: null,
-        message,
-      }),
-    ).toMatchObject({ message });
-    expect(() =>
-      invitationMessageResponseSchema.parse({
-        siteId: "site-demo",
-        invitationId: "invitation-demo",
-        currentRevision: 1,
-        canEdit: true,
-        readOnlyReason: null,
-        message: { ...message, phone: "+5562999999999" },
-      }),
-    ).toThrow();
-    expect(
-      messageMutationResponseSchema.parse({
-        requestId,
-        acceptedAt: instant,
-        result: "APPLIED",
-        replayed: false,
-        message,
-      }),
-    ).toMatchObject({ result: "APPLIED" });
   });
 
   it("defines no-store mural pagination without private guest fields", () => {
@@ -104,10 +45,8 @@ describe("Block 5 contracts", () => {
           {
             id: "message-1",
             authorName: "Ana Silva",
-            invitationName: "Família Silva",
             text: "Olá",
             createdAt: instant,
-            updatedAt: instant,
             rsvpState: "CONFIRMED",
           },
         ],
@@ -119,9 +58,6 @@ describe("Block 5 contracts", () => {
   it("requires explicit administration inputs", () => {
     expect(muralConfigurationSchema.parse({ enabled: true })).toEqual({
       enabled: true,
-    });
-    expect(siteMessageBlockInputSchema.parse({ blocked: true })).toEqual({
-      blocked: true,
     });
     expect(
       invitationDeleteConfirmationSchema.parse({
@@ -169,14 +105,12 @@ describe("Block 5 contracts", () => {
 
   it("freezes the Block 5 route surface", () => {
     expect(Object.values(block5EndpointPaths)).toEqual([
-      "GET /v1/public/invitation/message",
-      "PUT /v1/public/invitation/message",
       "GET /v1/public/sites/:siteId/mural",
+      "POST /v1/public/sites/:siteId/mural",
       "GET /v1/sites/:siteId/messages",
       "GET /v1/sites/:siteId/mural",
       "PATCH /v1/sites/:siteId/mural",
-      "DELETE /v1/sites/:siteId/invitations/:invitationId/message",
-      "PATCH /v1/sites/:siteId/invitations/:invitationId/message-block",
+      "DELETE /v1/sites/:siteId/messages/:messageId",
       "DELETE /v1/sites/:siteId/invitations/:invitationId",
       "GET /v1/sites/:siteId/reports/invitations.csv",
       "GET /v1/sites/:siteId/reports/invitations.pdf",

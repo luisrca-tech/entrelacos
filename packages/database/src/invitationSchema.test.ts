@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -14,13 +14,11 @@ const migrationsDirectory = join(
   "../migrations",
 );
 
-function latestMigrationSql(): string {
-  const latest = readdirSync(migrationsDirectory)
-    .filter((name) => /^\d{4}_.+\.sql$/.test(name))
-    .sort()
-    .at(-1);
-  if (!latest) throw new Error("No database migrations found");
-  return readFileSync(join(migrationsDirectory, latest), "utf8");
+function invitationMigrationSql(): string {
+  return readFileSync(
+    join(migrationsDirectory, "0010_invitation_model.sql"),
+    "utf8",
+  );
 }
 
 describe("invitation database schema", () => {
@@ -43,7 +41,7 @@ describe("invitation database schema", () => {
   });
 
   it("refuses to discard existing invitation data and preserves minimum guest invariant", () => {
-    const sql = latestMigrationSql();
+    const sql = invitationMigrationSql();
     const lockPosition = sql.indexOf('LOCK TABLE "guest_group"');
     expect(lockPosition).toBeGreaterThanOrEqual(0);
     expect(lockPosition).toBeLessThan(sql.indexOf("DO $$"));

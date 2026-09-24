@@ -65,11 +65,6 @@ export const rsvpRequestScope = pgEnum("rsvp_request_scope", [
   "PUBLIC",
   "ADMIN",
 ]);
-export const messageRequestResult = pgEnum("message_request_result", [
-  "APPLIED",
-  "NO_CHANGE",
-  "REMOVED",
-]);
 export const user = pgTable("user", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
@@ -214,8 +209,6 @@ export const invitation = pgTable(
     normalizedName: text("normalized_name").notNull(),
     phoneE164: text("phone_e164").notNull(),
     email: text("email"),
-    messageBlocked: boolean("message_blocked").notNull().default(false),
-    messageRevision: integer("message_revision").notNull().default(0),
     manualPinSeed: text("manual_pin_seed")
       .notNull()
       .default(sql`encode(gen_random_bytes(32), 'hex')`),
@@ -248,10 +241,6 @@ export const invitation = pgTable(
     check(
       "invitation_manual_pin_seed_check",
       sql`${table.manualPinSeed} ~ '^[a-f0-9]{64}$'`,
-    ),
-    check(
-      "invitation_message_revision_check",
-      sql`${table.messageRevision} >= 0`,
     ),
   ],
 );
@@ -429,105 +418,96 @@ export const invitationSession = pgTable(
   ],
 );
 
-export const invitationMessage = pgTable(
-  "invitation_message",
-  {
-    id: text("id").primaryKey(),
-    siteId: text("site_id").notNull(),
-    invitationId: text("invitation_id").notNull(),
-    authorName: text("author_name").notNull(),
-    invitationName: text("invitation_name").notNull(),
-    text: text("text").notNull(),
-    revision: integer("revision").notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-  },
-  (table) => [
-    uniqueIndex("invitation_message_site_invitation_idx").on(
-      table.siteId,
-      table.invitationId,
-    ),
-    index("invitation_message_mural_order_idx").on(
-      table.siteId,
-      table.createdAt,
-      table.id,
-    ),
-    foreignKey({
-      columns: [table.siteId, table.invitationId],
-      foreignColumns: [invitation.siteId, invitation.id],
-      name: "invitation_message_site_invitation_fk",
-    }).onDelete("cascade"),
-    check("invitation_message_revision_check", sql`${table.revision} > 0`),
-    check(
-      "invitation_message_author_name_not_blank_check",
-      sql`length(trim(${table.authorName})) > 0`,
-    ),
-    check(
-      "invitation_message_invitation_name_not_blank_check",
-      sql`length(trim(${table.invitationName})) > 0`,
-    ),
-    check(
-      "invitation_message_text_not_blank_check",
-      sql`length(regexp_replace(${table.text}, '[[:space:]]', '', 'g')) > 0`,
-    ),
-    check(
-      "invitation_message_text_length_check",
-      sql`char_length(${table.text}) BETWEEN 1 AND 1000`,
-    ),
-    check(
-      "invitation_message_text_no_angle_brackets_check",
-      sql`position('<' in ${table.text}) = 0 AND position('>' in ${table.text}) = 0`,
-    ),
-    check(
-      "invitation_message_text_control_chars_check",
-      sql`regexp_replace(${table.text}, E'\\n', '', 'g') !~ '[[:cntrl:]]' AND ${table.text} !~ (E'[' || chr(127) || '-' || chr(159) || ']')`,
-    ),
-  ],
-);
-
-export const messageRequestReceipt = pgTable(
-  "message_request_receipt",
+export const muralMessage = pgTable(
+  "mural_message",
   {
     id: text("id").primaryKey(),
     siteId: text("site_id")
       .notNull()
       .references(() => site.id, { onDelete: "cascade" }),
-    invitationId: text("invitation_id").notNull(),
-    sessionId: text("session_id").notNull(),
-    requestId: text("request_id").notNull(),
-    requestHash: text("request_hash").notNull(),
-    revision: integer("revision").notNull(),
-    result: messageRequestResult("result").notNull(),
-    responseBody: jsonb("response_body"),
-    removedAt: timestamp("removed_at", { withTimezone: true }),
+    authorName: text("author_name").notNull(),
+    text: text("text").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
   },
   (table) => [
-    uniqueIndex(
-      "message_request_receipt_site_invitation_session_request_idx",
-    ).on(table.siteId, table.invitationId, table.sessionId, table.requestId),
-    index("message_request_receipt_site_invitation_created_idx").on(
+    index("mural_message_site_order_idx").on(
       table.siteId,
-      table.invitationId,
       table.createdAt,
+      table.id,
     ),
     check(
-      "message_request_receipt_request_hash_check",
+      "mural_message_author_name_check",
+      sql`${table.authorName} = regexp_replace(trim(${table.authorName}), '[[:space:]]+', ' ', 'g') AND char_length(${table.authorName}) BETWEEN 1 AND 160 AND position('<' in ${table.authorName}) = 0 AND position('>' in ${table.authorName}) = 0 AND ${table.authorName} !~ '[[:cntrl:]]'`,
+    ),
+    check(
+      "mural_message_text_not_blank_check",
+      sql`length(regexp_replace(${table.text}, '[[:space:]]', '', 'g')) > 0`,
+    ),
+    check(
+      "mural_message_text_length_check",
+      sql`char_length(${table.text}) BETWEEN 1 AND 1000`,
+    ),
+    check(
+      "mural_message_text_no_angle_brackets_check",
+      sql`position('<' in ${table.text}) = 0 AND position('>' in ${table.text}) = 0`,
+    ),
+    check(
+      "mural_message_text_control_chars_check",
+      sql`regexp_replace(${table.text}, E'\\n', '', 'g') !~ '[[:cntrl:]]' AND ${table.text} !~ (E'[' || chr(127) || '-' || chr(159) || ']')`,
+    ),
+  ],
+);
+
+export const muralMessageRequestReceipt = pgTable(
+  "mural_message_request_receipt",
+  {
+    id: text("id").primaryKey(),
+    siteId: text("site_id")
+      .notNull()
+      .references(() => site.id, { onDelete: "cascade" }),
+    requestId: text("request_id").notNull(),
+    requestHash: text("request_hash").notNull(),
+    messageId: text("message_id").notNull(),
+    acceptedAt: timestamp("accepted_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("mural_message_request_receipt_site_request_idx").on(
+      table.siteId,
+      table.requestId,
+    ),
+    check(
+      "mural_message_request_receipt_request_hash_check",
       sql`${table.requestHash} ~ '^[a-f0-9]{64}$'`,
     ),
-    check(
-      "message_request_receipt_revision_check",
-      sql`${table.revision} >= 0`,
+  ],
+);
+
+export const muralMessageRateLimitEvent = pgTable(
+  "mural_message_rate_limit_event",
+  {
+    id: text("id").primaryKey(),
+    siteId: text("site_id")
+      .notNull()
+      .references(() => site.id, { onDelete: "cascade" }),
+    ipFingerprint: text("ip_fingerprint").notNull(),
+    occurredAt: timestamp("occurred_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("mural_message_rate_limit_site_ip_time_idx").on(
+      table.siteId,
+      table.ipFingerprint,
+      table.occurredAt,
     ),
+    index("mural_message_rate_limit_occurred_at_idx").on(table.occurredAt),
     check(
-      "message_request_receipt_removal_check",
-      sql`(${table.result} = 'REMOVED' AND ${table.removedAt} IS NOT NULL AND ${table.responseBody} IS NULL) OR (${table.result} <> 'REMOVED' AND ${table.removedAt} IS NULL AND ${table.responseBody} IS NOT NULL)`,
+      "mural_message_rate_limit_ip_fingerprint_check",
+      sql`${table.ipFingerprint} ~ '^[a-f0-9]{64}$'`,
     ),
   ],
 );
@@ -836,8 +816,9 @@ export const siteRelations = relations(site, ({ many, one }) => ({
   invitationAccessChallenges: many(invitationAccessChallenge),
   invitationRateLimitEvents: many(invitationRateLimitEvent),
   invitationSessions: many(invitationSession),
-  invitationMessages: many(invitationMessage),
-  messageRequestReceipts: many(messageRequestReceipt),
+  muralMessages: many(muralMessage),
+  muralMessageRequestReceipts: many(muralMessageRequestReceipt),
+  muralMessageRateLimitEvents: many(muralMessageRateLimitEvent),
   rsvpHistory: many(rsvpHistory),
   rsvpRequestReceipts: many(rsvpRequestReceipt),
   rsvpRequestReceiptInvitations: many(rsvpRequestReceiptInvitation),
@@ -853,7 +834,6 @@ export const invitationRelations = relations(invitation, ({ one, many }) => ({
   accessChallenges: many(invitationAccessChallenge),
   rateLimitEvents: many(invitationRateLimitEvent),
   sessions: many(invitationSession),
-  messages: many(invitationMessage),
   rsvpHistory: many(rsvpHistory),
   rsvpRequestReceipts: many(rsvpRequestReceipt),
   rsvpRequestReceiptInvitations: many(rsvpRequestReceiptInvitation),
@@ -922,25 +902,28 @@ export const invitationSessionRelations = relations(
   }),
 );
 
-export const invitationMessageRelations = relations(
-  invitationMessage,
+export const muralMessageRelations = relations(muralMessage, ({ one }) => ({
+  site: one(site, {
+    fields: [muralMessage.siteId],
+    references: [site.id],
+  }),
+}));
+
+export const muralMessageRequestReceiptRelations = relations(
+  muralMessageRequestReceipt,
   ({ one }) => ({
     site: one(site, {
-      fields: [invitationMessage.siteId],
+      fields: [muralMessageRequestReceipt.siteId],
       references: [site.id],
-    }),
-    invitation: one(invitation, {
-      fields: [invitationMessage.siteId, invitationMessage.invitationId],
-      references: [invitation.siteId, invitation.id],
     }),
   }),
 );
 
-export const messageRequestReceiptRelations = relations(
-  messageRequestReceipt,
+export const muralMessageRateLimitEventRelations = relations(
+  muralMessageRateLimitEvent,
   ({ one }) => ({
     site: one(site, {
-      fields: [messageRequestReceipt.siteId],
+      fields: [muralMessageRateLimitEvent.siteId],
       references: [site.id],
     }),
   }),

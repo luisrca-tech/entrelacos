@@ -5,9 +5,10 @@ import { describe, expect, it } from "vitest";
 import {
   invitation,
   invitationAccessChallenge,
-  invitationMessage,
   invitationRateLimitAction,
-  messageRequestReceipt,
+  muralMessage,
+  muralMessageRateLimitEvent,
+  muralMessageRequestReceipt,
   rsvpRequestReceipt,
   rsvpRequestReceiptInvitation,
   site,
@@ -27,30 +28,26 @@ function migrationSql(): string {
 }
 
 describe("Block 5 Wave 0 database foundation", () => {
-  it("declares site mural and invitation message state without SMS configuration", () => {
+  it("declares site mural state without invitation-level message configuration", () => {
     expect(site.muralEnabled).toBeDefined();
     expect(Object.hasOwn(site, "smsMonthlyLimit")).toBe(false);
-    expect(invitation.messageBlocked).toBeDefined();
-    expect(invitation.messageRevision).toBeDefined();
+    expect(Object.hasOwn(invitation, "messageBlocked")).toBe(false);
+    expect(Object.hasOwn(invitation, "messageRevision")).toBe(false);
   });
 
-  it("declares current invitation messages, receipts, and RSVP redaction", () => {
-    expect(Object.hasOwn(invitationMessage, "authorGuestId")).toBe(false);
-    expect(invitationMessage.authorName).toBeDefined();
-    expect(invitationMessage.invitationName).toBeDefined();
-    expect(invitationMessage.text).toBeDefined();
-    expect(invitationMessage.revision).toBeDefined();
-    expect(invitationMessage.createdAt).toBeDefined();
-    expect(invitationMessage.updatedAt).toBeDefined();
-    expect(messageRequestReceipt.siteId).toBeDefined();
-    expect(messageRequestReceipt.invitationId).toBeDefined();
-    expect(messageRequestReceipt.sessionId).toBeDefined();
-    expect(messageRequestReceipt.requestId).toBeDefined();
-    expect(messageRequestReceipt.requestHash).toBeDefined();
-    expect(messageRequestReceipt.revision).toBeDefined();
-    expect(messageRequestReceipt.result).toBeDefined();
-    expect(messageRequestReceipt.responseBody).toBeDefined();
-    expect(messageRequestReceipt.removedAt).toBeDefined();
+  it("declares independent messages, durable request receipts, and publish events", () => {
+    expect(muralMessage.siteId).toBeDefined();
+    expect(muralMessage.authorName).toBeDefined();
+    expect(muralMessage.text).toBeDefined();
+    expect(muralMessage.createdAt).toBeDefined();
+    expect(muralMessageRequestReceipt.siteId).toBeDefined();
+    expect(muralMessageRequestReceipt.requestId).toBeDefined();
+    expect(muralMessageRequestReceipt.requestHash).toBeDefined();
+    expect(muralMessageRequestReceipt.messageId).toBeDefined();
+    expect(muralMessageRequestReceipt.acceptedAt).toBeDefined();
+    expect(muralMessageRateLimitEvent.siteId).toBeDefined();
+    expect(muralMessageRateLimitEvent.ipFingerprint).toBeDefined();
+    expect(muralMessageRateLimitEvent.occurredAt).toBeDefined();
     expect(rsvpRequestReceipt.responseBody).toBeDefined();
     expect(rsvpRequestReceipt.removedAt).toBeDefined();
     expect(rsvpRequestReceiptInvitation.receiptId).toBeDefined();
@@ -85,17 +82,16 @@ describe("Block 5 Wave 0 database foundation", () => {
     expect(sql).toContain('CREATE TYPE "public"."sms_usage_mode"');
     expect(sql).toContain('CREATE TYPE "public"."sms_reservation_status"');
     expect(sql).toContain('CREATE TABLE "family_message"');
-    expect(sql).toContain('CREATE TABLE "message_request_receipt"');
+    expect(sql).toContain('CREATE TABLE "mural_message"');
+    expect(sql).toContain('CREATE TABLE "mural_message_request_receipt"');
     expect(sql).toContain('CREATE TABLE "rsvp_request_receipt_group"');
     expect(sql).toContain('CREATE TABLE "sms_usage"');
     expect(sql).toContain('CREATE TABLE "sms_send_reservation"');
-    expect(sql).toContain("family_message_mural_order_idx");
-    expect(sql).toContain(
-      "message_request_receipt_site_group_session_request_idx",
-    );
+    expect(sql).toContain("mural_message_site_order_idx");
+    expect(sql).toContain("mural_message_request_receipt_site_request_idx");
     expect(sql).toContain("sms_usage_site_period_mode_idx");
-    expect(sql).toContain("family_message_text_control_chars_check");
-    expect(sql).toContain("message_request_receipt_site_id_site_id_fk");
+    expect(sql).toContain("mural_message_text_control_chars_check");
+    expect(sql).toContain("mural_message_request_receipt_site_id_site_id_fk");
     expect(sql).toContain("rsvp_request_receipt_site_id_key");
     expect(sql).toContain('INSERT INTO "rsvp_request_receipt_group"');
     expect(sql).toContain("jsonb_array_elements");

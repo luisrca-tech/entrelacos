@@ -6,6 +6,7 @@ import {
 } from "@entrelacos/database";
 import {
   invitationGuest,
+  muralMessage,
   rsvpHistory,
   rsvpRequestReceipt,
   rsvpRequestReceiptInvitation,
@@ -95,6 +96,14 @@ describe("RSVP receipt redaction PostgreSQL integration", () => {
   });
 
   it("redacts mixed admin receipts and preserves unaffected idempotent replays", async () => {
+    const muralMessageId = randomUUID();
+    await connection.db.insert(muralMessage).values({
+      id: muralMessageId,
+      siteId,
+      authorName: "Convidado independente",
+      text: "Felicidades aos noivos!",
+      createdAt: now,
+    });
     const removedRequest = {
       requestId: randomUUID(),
       guests: [
@@ -181,6 +190,13 @@ describe("RSVP receipt redaction PostgreSQL integration", () => {
         new Date(now.getTime() + 1_000),
       ),
     ).resolves.toEqual({ ok: true });
+
+    expect(
+      await connection.db
+        .select({ id: muralMessage.id })
+        .from(muralMessage)
+        .where(eq(muralMessage.id, muralMessageId)),
+    ).toEqual([{ id: muralMessageId }]);
 
     const [redactedReceipt] = await connection.db
       .select()
