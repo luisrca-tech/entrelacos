@@ -24,7 +24,6 @@ const mocks = vi.hoisted(() => ({
       "b7-guest-foreign-1",
       "b7-guest-foreign-2",
     ],
-    messageId: "b7-message",
   },
 }));
 
@@ -76,7 +75,6 @@ function completeDatasetResults(): unknown[][] {
   return [
     mocks.datasetIds.invitationIds.map((id) => ({ id })),
     mocks.datasetIds.guestIds.map((id) => ({ id })),
-    [{ id: mocks.datasetIds.messageId }],
   ];
 }
 
@@ -398,7 +396,6 @@ describe("demo environment provisioning", () => {
       [{ origin: "https://demo-dev.entrelacos.workers.dev" }],
       mocks.datasetIds.invitationIds.map((id) => ({ id })),
       mocks.datasetIds.guestIds.slice(0, -1).map((id) => ({ id })),
-      [{ id: mocks.datasetIds.messageId }],
     ]);
 
     await expect(

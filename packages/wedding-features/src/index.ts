@@ -26,8 +26,6 @@ export {
   readGuestSession,
   writeGuestSession,
 } from "./guestAccess";
-export type { InvitationMessageFormProps } from "./InvitationMessageForm";
-export { InvitationMessageForm } from "./InvitationMessageForm";
 export type { MessageMuralProps } from "./MessageMural";
 export { MessageMural, mergeMuralMessages } from "./MessageMural";
 export type { WeddingMessagesApiOptions } from "./messages";
@@ -38,6 +36,8 @@ export {
   WeddingMessagesApi,
   WeddingMessagesApiError,
 } from "./messages";
+export type { PublicMessageFormProps } from "./PublicMessageForm";
+export { PublicMessageForm } from "./PublicMessageForm";
 export type { RsvpFormGuest, RsvpFormProps } from "./RsvpForm";
 export { RsvpForm } from "./RsvpForm";
 export type { RsvpDraft, RsvpGuestSnapshot, RsvpStatus } from "./rsvpDraft";

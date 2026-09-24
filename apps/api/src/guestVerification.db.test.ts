@@ -28,7 +28,6 @@ import { approveReview, createSite, startReview } from "./sites";
 const prefix = `invitation-access-${process.pid}`;
 const now = new Date("2028-02-29T12:00:00.000Z");
 const secret = "invitation-access-test-secret-with-at-least-32-characters";
-const publicOrigin = "https://invitation-access.example.test";
 const actor = { userId: "owner", role: "OWNER" as const };
 const phone = "+5511999999999";
 let connection: DatabaseConnection;
@@ -47,6 +46,7 @@ async function fixture(label: string) {
     now,
   );
   siteIds.push(wedding.id);
+  const origin = `https://${wedding.id}.invitation-access.example.test`;
   const createdInvitation = await createInvitation(
     connection.db,
     actor,
@@ -66,7 +66,7 @@ async function fixture(label: string) {
   await connection.db.insert(siteOrigin).values({
     id: `${wedding.id}-origin`,
     siteId: wedding.id,
-    origin: publicOrigin,
+    origin,
   });
   const accessPin = (
     await getInvitationAccessPin(
@@ -77,7 +77,7 @@ async function fixture(label: string) {
       secret,
     )
   ).accessPin;
-  return { wedding, invitation: createdInvitation, accessPin };
+  return { wedding, invitation: createdInvitation, accessPin, origin };
 }
 
 function verificationOptions(ipAddress: string, sessionToken?: string) {
@@ -119,11 +119,20 @@ describe("public invitation access PostgreSQL boundary", () => {
       invitationId: invitation.id,
       invitationName: "Família Silva",
       sessionToken: "s".repeat(43),
-      guests: [
-        { fullName: "Ana Silva", guestType: "ADULT" },
-        { fullName: "Bia Silva", guestType: "CHILD" },
-      ],
     });
+    expect(created.guests).toHaveLength(2);
+    expect(created.guests).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          fullName: "Ana Silva",
+          guestType: "ADULT",
+        }),
+        expect.objectContaining({
+          fullName: "Bia Silva",
+          guestType: "CHILD",
+        }),
+      ]),
+    );
     expect(new Date(created.expiresAt).getTime()).toBe(
       now.getTime() + INVITATION_SESSION_TTL_MS,
     );
@@ -258,8 +267,8 @@ describe("public invitation access PostgreSQL boundary", () => {
       invitationId: null,
       action: "PIN_VERIFY",
       scopeKey: "expired-test-scope",
-      ipFingerprint: "expired-test-ip",
-      phoneFingerprint: "expired-test-phone",
+      ipFingerprint: "a".repeat(64),
+      phoneFingerprint: "b".repeat(64),
       occurredAt: new Date(now.getTime() - INVITATION_ACCESS_WINDOW_MS - 1),
     });
 
@@ -280,7 +289,7 @@ describe("public invitation access PostgreSQL boundary", () => {
   });
 
   it("serves canonical access and session routes and leaves legacy routes unmounted", async () => {
-    const { wedding, invitation, accessPin } = await fixture("http");
+    const { wedding, invitation, accessPin, origin } = await fixture("http");
     const app = createApp({
       auth: {} as never,
       db: connection.db,
@@ -294,14 +303,12 @@ describe("public invitation access PostgreSQL boundary", () => {
       `/v1/public/sites/${wedding.id}/invitation/access`,
       {
         method: "POST",
-        headers: { Origin: publicOrigin, "Content-Type": "application/json" },
+        headers: { Origin: origin, "Content-Type": "application/json" },
         body: JSON.stringify({ phone, accessPin }),
       },
     );
     expect(access.status).toBe(200);
-    expect(access.headers.get("Access-Control-Allow-Origin")).toBe(
-      publicOrigin,
-    );
+    expect(access.headers.get("Access-Control-Allow-Origin")).toBe(origin);
     const session = await access.json();
     expect(session).toMatchObject({
       invitationId: invitation.id,
@@ -310,7 +317,7 @@ describe("public invitation access PostgreSQL boundary", () => {
 
     const read = await app.request("/v1/public/invitation/session", {
       headers: {
-        Origin: publicOrigin,
+        Origin: origin,
         Authorization: `Bearer ${session.sessionToken}`,
       },
     });
@@ -320,7 +327,7 @@ describe("public invitation access PostgreSQL boundary", () => {
     const left = await app.request("/v1/public/invitation/session/leave", {
       method: "POST",
       headers: {
-        Origin: publicOrigin,
+        Origin: origin,
         Authorization: `Bearer ${session.sessionToken}`,
       },
     });

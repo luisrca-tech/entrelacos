@@ -67,7 +67,7 @@ describe("invitation demo provisioning PostgreSQL integration", () => {
     expect(first.reset?.counts).toEqual({
       invitations: 5,
       guests: 10,
-      messages: 1,
+      messages: 0,
     });
     const seeded = await connection.db
       .select()

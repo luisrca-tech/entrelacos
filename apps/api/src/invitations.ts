@@ -14,10 +14,8 @@ import {
   invitation,
   invitationAccessChallenge,
   invitationGuest,
-  invitationMessage,
   invitationRateLimitEvent,
   invitationSession,
-  messageRequestReceipt,
   rsvpHistory,
   rsvpRequestReceipt,
   rsvpRequestReceiptInvitation,
@@ -682,22 +680,6 @@ export async function deleteInvitation(
         );
     }
 
-    await tx
-      .delete(messageRequestReceipt)
-      .where(
-        and(
-          eq(messageRequestReceipt.siteId, siteId),
-          eq(messageRequestReceipt.invitationId, invitationId),
-        ),
-      );
-    await tx
-      .delete(invitationMessage)
-      .where(
-        and(
-          eq(invitationMessage.siteId, siteId),
-          eq(invitationMessage.invitationId, invitationId),
-        ),
-      );
     await tx
       .delete(rsvpHistory)
       .where(

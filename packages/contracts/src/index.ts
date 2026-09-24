@@ -896,52 +896,49 @@ export const messageTextSchema = z
   .transform((value) => value.replace(/\r\n?/g, "\n"))
   .refine(validMessageText, "Expected 1-1000 plain-text Unicode code points");
 
-export const invitationMessageReadOnlyReasonSchema = z.enum([
-  "MURAL_DISABLED",
-  "MESSAGE_BLOCKED",
-]);
+const publicMessageAuthorNameSchema = z
+  .string()
+  .transform((value) => value.trim().replace(/\s+/gu, " "))
+  .refine((value) => {
+    const length = Array.from(value).length;
+    return (
+      length >= 1 &&
+      length <= 160 &&
+      !/[<>]/u.test(value) &&
+      !Array.from(value).some((character) => {
+        const code = character.charCodeAt(0);
+        return code < 32 || (code >= 127 && code <= 159);
+      })
+    );
+  }, "Expected plain text with 1-160 Unicode code points");
 
-export const invitationMessageRecordSchema = strictObject({
+export const publicSiteMessageRecordSchema = strictObject({
   id: identifierSchema,
-  authorName: nonEmptyText(160),
-  invitationName: nonEmptyText(160),
+  authorName: publicMessageAuthorNameSchema,
   text: messageTextSchema,
-  revision: z.number().int().positive(),
   createdAt: instantSchema,
-  updatedAt: instantSchema,
 });
-export type InvitationMessageRecord = z.infer<
-  typeof invitationMessageRecordSchema
+export type PublicSiteMessageRecord = z.infer<
+  typeof publicSiteMessageRecordSchema
 >;
 
-export const messageMutationInputSchema = strictObject({
+export const createPublicSiteMessageRequestSchema = strictObject({
   requestId: z.string().uuid(),
-  expectedRevision: z.number().int().nonnegative(),
+  authorName: publicMessageAuthorNameSchema,
   text: messageTextSchema,
 });
-export type MessageMutationInput = z.infer<typeof messageMutationInputSchema>;
+export type CreatePublicSiteMessageRequest = z.infer<
+  typeof createPublicSiteMessageRequestSchema
+>;
 
-export const messageMutationResponseSchema = strictObject({
+export const createPublicSiteMessageResponseSchema = strictObject({
   requestId: z.string().uuid(),
   acceptedAt: instantSchema,
-  result: z.enum(["APPLIED", "NO_CHANGE"]),
   replayed: z.boolean(),
-  message: invitationMessageRecordSchema,
+  message: publicSiteMessageRecordSchema,
 });
-export type MessageMutationResponse = z.infer<
-  typeof messageMutationResponseSchema
->;
-
-export const invitationMessageResponseSchema = strictObject({
-  siteId: siteIdSchema,
-  invitationId: identifierSchema,
-  currentRevision: z.number().int().nonnegative(),
-  canEdit: z.boolean(),
-  readOnlyReason: invitationMessageReadOnlyReasonSchema.nullable(),
-  message: invitationMessageRecordSchema.nullable(),
-});
-export type InvitationMessageResponse = z.infer<
-  typeof invitationMessageResponseSchema
+export type CreatePublicSiteMessageResponse = z.infer<
+  typeof createPublicSiteMessageResponseSchema
 >;
 
 export const publicMuralQuerySchema = strictObject({
@@ -952,49 +949,25 @@ export type PublicMuralQuery = z.infer<typeof publicMuralQuerySchema>;
 
 export const publicMuralResponseSchema = strictObject({
   enabled: z.boolean(),
-  messages: z.array(
-    strictObject({
-      id: identifierSchema,
-      authorName: nonEmptyText(160),
-      invitationName: nonEmptyText(160),
-      text: messageTextSchema,
-      createdAt: instantSchema,
-      updatedAt: instantSchema,
-    }),
-  ),
+  messages: z.array(publicSiteMessageRecordSchema),
   nextCursor: z.string().min(1).max(500).nullable(),
-}).superRefine((value, context) => {
-  if (
-    !value.enabled &&
-    (value.messages.length > 0 || value.nextCursor !== null)
-  ) {
-    context.addIssue({
-      code: "custom",
-      message: "A disabled mural cannot expose stored messages",
-    });
-  }
 });
 export type PublicMuralResponse = z.infer<typeof publicMuralResponseSchema>;
 
 export const siteMessagesQuerySchema = strictObject({
   cursor: z.string().min(1).max(500).optional(),
   limit: z.coerce.number().int().min(1).max(100).default(20),
-  invitationId: identifierSchema.optional(),
+  search: z.string().trim().max(160).optional(),
 });
 
-export const siteMessageRecordSchema = strictObject({
-  invitationId: identifierSchema,
-  invitationName: nonEmptyText(160),
-  blocked: z.boolean(),
-  currentRevision: z.number().int().nonnegative(),
-  message: invitationMessageRecordSchema.nullable(),
-});
-export type SiteMessageRecord = z.infer<typeof siteMessageRecordSchema>;
+export const siteMessageRecordSchema = publicSiteMessageRecordSchema;
+export type SiteMessageRecord = PublicSiteMessageRecord;
 
 export const siteMessagesResponseSchema = strictObject({
-  invitations: z.array(siteMessageRecordSchema),
+  messages: z.array(siteMessageRecordSchema),
   nextCursor: z.string().min(1).max(500).nullable(),
 });
+export type SiteMessagesResponse = z.infer<typeof siteMessagesResponseSchema>;
 
 export const muralConfigurationSchema = strictObject({ enabled: z.boolean() });
 export type MuralConfiguration = z.infer<typeof muralConfigurationSchema>;
@@ -1002,22 +975,6 @@ export type MuralConfiguration = z.infer<typeof muralConfigurationSchema>;
 export const muralConfigurationResponseSchema = strictObject({
   siteId: siteIdSchema,
   enabled: z.boolean(),
-});
-
-export const siteMessageBlockInputSchema = strictObject({
-  blocked: z.boolean(),
-});
-export const siteMessageBlockResponseSchema = strictObject({
-  invitationId: identifierSchema,
-  blocked: z.boolean(),
-});
-
-export const messageDeletionInputSchema = strictObject({
-  expectedRevision: z.number().int().positive(),
-});
-export const messageDeletionResponseSchema = strictObject({
-  ok: z.literal(true),
-  currentRevision: z.number().int().nonnegative(),
 });
 
 export const invitationDeleteConfirmationSchema = strictObject({
@@ -1049,7 +1006,9 @@ export type InvitationExportQuery = z.infer<typeof invitationExportQuerySchema>;
 
 export const block5ErrorCodeSchema = z.enum([
   "MURAL_DISABLED",
-  "MESSAGE_BLOCKED",
+  "SITE_INACTIVE",
+  "FORBIDDEN",
+  "RATE_LIMITED",
   "MESSAGE_CONFLICT",
   "MESSAGE_REMOVED",
   "MESSAGE_NOT_FOUND",
@@ -1058,16 +1017,12 @@ export const block5ErrorCodeSchema = z.enum([
 ]);
 
 export const block5EndpointPaths = {
-  publicInvitationMessageRead: "GET /v1/public/invitation/message",
-  publicInvitationMessageWrite: "PUT /v1/public/invitation/message",
   publicMuralRead: "GET /v1/public/sites/:siteId/mural",
+  publicMuralCreate: "POST /v1/public/sites/:siteId/mural",
   siteMessagesRead: "GET /v1/sites/:siteId/messages",
   siteMuralRead: "GET /v1/sites/:siteId/mural",
   siteMuralUpdate: "PATCH /v1/sites/:siteId/mural",
-  siteMessageDelete:
-    "DELETE /v1/sites/:siteId/invitations/:invitationId/message",
-  siteMessageBlockUpdate:
-    "PATCH /v1/sites/:siteId/invitations/:invitationId/message-block",
+  siteMessageDelete: "DELETE /v1/sites/:siteId/messages/:messageId",
   siteInvitationDelete: "DELETE /v1/sites/:siteId/invitations/:invitationId",
   siteInvitationCsvExport: "GET /v1/sites/:siteId/reports/invitations.csv",
   siteInvitationPdfExport: "GET /v1/sites/:siteId/reports/invitations.pdf",
@@ -1076,7 +1031,7 @@ export const block5EndpointPaths = {
 export type Block5EndpointPath =
   (typeof block5EndpointPaths)[keyof typeof block5EndpointPaths];
 
-export const demoResetDatasetVersionSchema = z.literal("block7-demo-v1");
+export const demoResetDatasetVersionSchema = z.literal("block7-demo-v2");
 export const demoResetInputSchema = strictObject({
   datasetVersion: demoResetDatasetVersionSchema,
 });

@@ -45,6 +45,18 @@ describe("panel API boundary", () => {
       message: "Sua sessão expirou ou não está autenticada. Entre novamente.",
     });
   });
+  it("accepts an empty successful moderation response", async () => {
+    const fetcher = vi
+      .fn()
+      .mockResolvedValue(new Response(null, { status: 204 }));
+    await expect(
+      apiRequest(
+        "/v1/sites/demo/messages/message-a",
+        { method: "DELETE" },
+        fetcher,
+      ),
+    ).resolves.toBeUndefined();
+  });
   it("limits login return destinations to the panel or handoff page", () => {
     expect(safePanelReturn("/handoff?siteId=one&challenge=abc")).toBe(
       "/handoff?siteId=one&challenge=abc",

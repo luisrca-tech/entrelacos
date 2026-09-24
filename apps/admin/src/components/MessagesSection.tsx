@@ -10,13 +10,15 @@ import {
   AlertDialogTitle,
   Button,
   Checkbox,
+  Input,
   toast,
 } from "@entrelacos/ui";
-import { useCallback, useEffect, useState } from "react";
+import { Search } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { adminStyles } from "../lib/adminStyles";
 import { apiRequest } from "../lib/apiClient";
-import { listenForInvitationsChanged } from "./invitationsRefresh";
 import { mergeSiteMessages, messageAdminError } from "./messageAdmin";
+import { messagesQuery } from "./messageSearch";
 
 type Props = {
   siteId: string;
@@ -24,58 +26,63 @@ type Props = {
 };
 
 type MessagesResponse = {
-  invitations: SiteMessageRecord[];
+  messages: SiteMessageRecord[];
   nextCursor: string | null;
 };
 
 export function MessagesSection({ siteId, lifecycle }: Props) {
   const base = `/v1/sites/${encodeURIComponent(siteId)}`;
-  const [invitations, setInvitations] = useState<SiteMessageRecord[]>([]);
+  const [messages, setMessages] = useState<SiteMessageRecord[]>([]);
   const [muralEnabled, setMuralEnabled] = useState(false);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [pending, setPending] = useState("");
   const [error, setError] = useState("");
+  const [searchInput, setSearchInput] = useState("");
   const [removeTarget, setRemoveTarget] = useState<SiteMessageRecord | null>(
     null,
   );
+  const requestVersion = useRef(0);
+  const searchInputRef = useRef("");
   const mutable = lifecycle !== "INACTIVE";
 
   const load = useCallback(
-    async (cursor?: string) => {
+    async (cursor: string | undefined, search: string) => {
+      const requestVersionForLoad = ++requestVersion.current;
       if (!cursor) setLoading(true);
       setError("");
       try {
-        const [messages, mural] = await Promise.all([
+        const [response, mural] = await Promise.all([
           apiRequest<MessagesResponse>(
-            `${base}/messages?limit=20${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`,
+            `${base}/messages?${messagesQuery(search, cursor)}`,
           ),
           cursor
             ? Promise.resolve(null)
             : apiRequest<{ siteId: string; enabled: boolean }>(`${base}/mural`),
         ]);
-        setInvitations((current) =>
-          mergeSiteMessages(current, messages.invitations, Boolean(cursor)),
+        if (requestVersionForLoad !== requestVersion.current) return;
+        setMessages((current) =>
+          mergeSiteMessages(current, response.messages, Boolean(cursor)),
         );
-        setNextCursor(messages.nextCursor);
+        setNextCursor(response.nextCursor);
         if (mural) setMuralEnabled(mural.enabled);
       } catch (cause) {
+        if (requestVersionForLoad !== requestVersion.current) return;
         setError(messageAdminError(cause));
       } finally {
-        setLoading(false);
+        if (requestVersionForLoad === requestVersion.current) setLoading(false);
       }
     },
     [base],
   );
 
   useEffect(() => {
-    void load();
-  }, [load]);
-
-  useEffect(
-    () => listenForInvitationsChanged(window, siteId, () => void load()),
-    [load, siteId],
-  );
+    const timeout = setTimeout(
+      () => void load(undefined, searchInput),
+      searchInput ? 250 : 0,
+    );
+    return () => clearTimeout(timeout);
+  }, [load, searchInput]);
 
   async function mutate(
     key: string,
@@ -89,10 +96,10 @@ export function MessagesSection({ siteId, lifecycle }: Props) {
     try {
       await apiRequest(path, { method, body });
       toast.success(success);
-      await load();
+      await load(undefined, searchInputRef.current);
     } catch (cause) {
       const message = messageAdminError(cause);
-      await load();
+      await load(undefined, searchInputRef.current);
       toast.error(message);
     } finally {
       setPending("");
@@ -113,6 +120,34 @@ export function MessagesSection({ siteId, lifecycle }: Props) {
         </p>
       )}
 
+      <label
+        className="relative block w-full max-w-xl"
+        htmlFor="message-author-search"
+      >
+        <Search
+          aria-hidden="true"
+          className="absolute left-3 top-3.5 size-4 text-admin-muted"
+        />
+        <span className="sr-only">Buscar pelo nome de quem publicou</span>
+        <Input
+          id="message-author-search"
+          type="search"
+          value={searchInput}
+          onChange={(event) => {
+            requestVersion.current += 1;
+            const value = event.target.value;
+            searchInputRef.current = value;
+            setSearchInput(value);
+            setMessages([]);
+            setNextCursor(null);
+            setLoading(true);
+            setError("");
+          }}
+          placeholder="Buscar pelo nome de quem publicou"
+          className="min-h-11 border-admin-line bg-admin-surface pl-10"
+        />
+      </label>
+
       <div className={`${adminStyles.surface} overflow-hidden`}>
         <div className="flex flex-wrap items-start justify-between gap-4 border-b border-admin-line p-5 [@media(max-width:760px)]:grid">
           <div className="min-w-0">
@@ -120,9 +155,8 @@ export function MessagesSection({ siteId, lifecycle }: Props) {
               Mural de mensagens
             </h2>
             <p className="mb-0 mt-1 max-w-[62ch] text-sm leading-[1.6] text-admin-muted">
-              Controle a publicação do mural e modere os recados enviados por
-              cada convite. O texto dos convidados não pode ser editado no
-              painel.
+              Controle a publicação do mural e remova mensagens inadequadas. O
+              texto enviado não pode ser editado no painel.
             </p>
           </div>
           <label className="flex items-center gap-2.5" htmlFor="mural-enabled">
@@ -137,7 +171,9 @@ export function MessagesSection({ siteId, lifecycle }: Props) {
                   `${base}/mural`,
                   "PATCH",
                   { enabled },
-                  enabled ? "Mural ativado." : "Mural desativado.",
+                  enabled
+                    ? "Mural ativado. Visitantes podem publicar novas mensagens."
+                    : "Mural desativado para novos envios. As mensagens existentes continuam visíveis.",
                 );
               }}
             />
@@ -149,87 +185,47 @@ export function MessagesSection({ siteId, lifecycle }: Props) {
           <p className="m-0 p-5 leading-[1.6] text-admin-muted" role="status">
             Carregando mensagens…
           </p>
-        ) : invitations.length === 0 ? (
+        ) : messages.length === 0 ? (
           <p className="m-0 p-5 leading-[1.6] text-admin-muted">
-            Nenhum convite encontrado para moderação.
+            {searchInput.trim()
+              ? "Nenhuma mensagem encontrada para esse nome."
+              : "Nenhuma mensagem publicada."}
           </p>
         ) : (
-          invitations.map((invitation) => (
+          messages.map((message) => (
             <article
-              key={invitation.invitationId}
+              key={message.id}
               className="border-b border-admin-line p-5 last:border-b-0 [@media(max-width:600px)]:p-4"
             >
               <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <h3 className="m-0 break-words font-admin-display text-[1.3rem] text-admin-graphite">
-                    {invitation.invitationName}
-                  </h3>
-                  <p className="mb-0 mt-1 text-xs text-admin-muted">
-                    {invitation.blocked
-                      ? "Envios bloqueados"
-                      : "Envios permitidos"}
-                  </p>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    disabled={!mutable || Boolean(pending)}
-                    onClick={() =>
-                      void mutate(
-                        `block:${invitation.invitationId}`,
-                        `${base}/invitations/${encodeURIComponent(invitation.invitationId)}/message-block`,
-                        "PATCH",
-                        { blocked: !invitation.blocked },
-                        invitation.blocked
-                          ? "Novas mensagens liberadas para o convite."
-                          : "Novas mensagens bloqueadas para o convite.",
-                      )
-                    }
-                  >
-                    {pending === `block:${invitation.invitationId}`
-                      ? "Atualizando…"
-                      : invitation.blocked
-                        ? "Desbloquear envios"
-                        : "Bloquear envios"}
-                  </Button>
-                  {invitation.message && (
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="destructive"
-                      disabled={!mutable || Boolean(pending)}
-                      onClick={() => setRemoveTarget(invitation)}
-                    >
-                      {pending === `delete:${invitation.invitationId}`
-                        ? "Removendo…"
-                        : "Remover mensagem"}
-                    </Button>
-                  )}
-                </div>
+                <h3 className="m-0 break-words font-admin-display text-[1.3rem] text-admin-graphite">
+                  {message.authorName}
+                </h3>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="destructive"
+                  disabled={!mutable || Boolean(pending)}
+                  onClick={() => setRemoveTarget(message)}
+                >
+                  {pending === `delete:${message.id}`
+                    ? "Removendo…"
+                    : "Remover mensagem"}
+                </Button>
               </div>
-              {invitation.message ? (
-                <div className="mt-4 grid gap-2">
-                  <blockquote className="m-0 break-words whitespace-pre-wrap text-sm leading-[1.55] text-admin-ink">
-                    {invitation.message.text}
-                  </blockquote>
-                  <p className="m-0 text-xs text-admin-muted">
-                    Publicada em{" "}
-                    <time dateTime={invitation.message.createdAt}>
-                      {new Intl.DateTimeFormat("pt-BR", {
-                        dateStyle: "medium",
-                        timeStyle: "short",
-                        timeZone: "America/Sao_Paulo",
-                      }).format(new Date(invitation.message.createdAt))}
-                    </time>
-                  </p>
-                </div>
-              ) : (
-                <p className="mb-0 mt-4 text-sm text-admin-muted">
-                  Este convite ainda não publicou uma mensagem.
-                </p>
-              )}
+              <blockquote className="mb-0 mt-4 break-words whitespace-pre-wrap text-sm leading-[1.55] text-admin-ink">
+                {message.text}
+              </blockquote>
+              <p className="mb-0 mt-2 text-xs text-admin-muted">
+                Publicada em{" "}
+                <time dateTime={message.createdAt}>
+                  {new Intl.DateTimeFormat("pt-BR", {
+                    dateStyle: "medium",
+                    timeStyle: "short",
+                    timeZone: "America/Sao_Paulo",
+                  }).format(new Date(message.createdAt))}
+                </time>
+              </p>
             </article>
           ))
         )}
@@ -244,7 +240,7 @@ export function MessagesSection({ siteId, lifecycle }: Props) {
             <AlertDialogTitle>Remover mensagem?</AlertDialogTitle>
             <AlertDialogDescription>
               {removeTarget
-                ? `Remover a mensagem de ${removeTarget.invitationName}? O texto não poderá ser recuperado.`
+                ? `Remover a mensagem de ${removeTarget.authorName}? O texto não poderá ser recuperado.`
                 : ""}
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -258,10 +254,10 @@ export function MessagesSection({ siteId, lifecycle }: Props) {
               onClick={() => {
                 if (removeTarget)
                   void mutate(
-                    `delete:${removeTarget.invitationId}`,
-                    `${base}/invitations/${encodeURIComponent(removeTarget.invitationId)}/message`,
+                    `delete:${removeTarget.id}`,
+                    `${base}/messages/${encodeURIComponent(removeTarget.id)}`,
                     "DELETE",
-                    { expectedRevision: removeTarget.currentRevision },
+                    undefined,
                     "Mensagem removida do mural.",
                   );
                 setRemoveTarget(null);
@@ -278,9 +274,9 @@ export function MessagesSection({ siteId, lifecycle }: Props) {
           type="button"
           variant="outline"
           disabled={loading || Boolean(pending)}
-          onClick={() => void load(nextCursor)}
+          onClick={() => void load(nextCursor, searchInput)}
         >
-          Ver mais convites
+          Ver mais mensagens
         </Button>
       )}
     </section>
