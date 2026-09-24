@@ -40,12 +40,18 @@ type GuestAccessPhase = "lookup" | "authenticated";
 
 const guestAccessSectionClass =
   "grid min-w-0 gap-6 bg-template-ivory px-[clamp(2rem,5vw,4rem)] py-[clamp(2rem,5vw,4rem)] text-template-ink [@media(max-width:560px)]:px-4 [@media(max-width:560px)]:py-8 min-[961px]:justify-items-center";
+const guestAccessAuthenticatedSectionClass =
+  "grid min-w-0 grid-cols-[minmax(0,0.72fr)_minmax(0,1.28fr)] items-start gap-[clamp(2.5rem,6vw,7rem)] bg-template-ivory text-template-ink [@media(max-width:960px)]:block";
 const guestAccessIntroClass =
   "max-w-[38rem] min-[961px]:w-full min-[961px]:max-w-[52rem]";
+const guestAccessAuthenticatedIntroClass =
+  "min-w-0 [@media(max-width:960px)]:mb-12";
 const guestAccessEyebrowClass =
   "m-0 mb-[0.8rem] text-template-muted text-[0.72rem] font-bold tracking-[0.16em] uppercase";
 const guestAccessHeadingClass =
   "m-0 font-template-serif text-[clamp(2.5rem,6vw,5rem)] font-normal leading-[0.96] tracking-[-0.05em] min-[961px]:whitespace-nowrap min-[961px]:text-[clamp(2.75rem,4.4vw,4.25rem)]";
+const guestAccessAuthenticatedHeadingClass =
+  "m-0 max-w-[12ch] font-template-serif text-[clamp(2.5rem,6vw,5rem)] font-normal leading-[0.96] tracking-[-0.065em]";
 const guestAccessSubheadingClass =
   "m-0 font-template-serif text-[clamp(1.8rem,4vw,3rem)] font-normal tracking-[-0.05em]";
 const guestAccessDescriptionClass =
@@ -59,8 +65,7 @@ const guestAccessInputClass =
   "min-h-11 w-full rounded-none border border-[rgba(37,53,43,0.32)] bg-[#fffdf8] px-3 py-[0.65rem] text-template-ink font-[inherit]";
 const guestAccessButtonClass =
   "min-h-11 cursor-pointer rounded-none border border-template-ink bg-template-ink px-4 py-[0.65rem] text-template-ivory font-[inherit] font-bold disabled:cursor-not-allowed disabled:opacity-50";
-const guestAccessInvitationClass =
-  "grid max-w-[42rem] gap-4 min-[961px]:w-full min-[961px]:max-w-[52rem]";
+const guestAccessInvitationClass = "grid min-w-0 gap-4 self-start";
 
 function errorWithRetry(error: unknown): string {
   const message = guestAccessErrorMessage(error);
@@ -375,24 +380,54 @@ export function GuestAccess({
     }
   }
 
+  const showingInvitation = phase === "authenticated" && session;
+
   return (
     <section
-      className={guestAccessSectionClass}
+      className={
+        showingInvitation
+          ? guestAccessAuthenticatedSectionClass
+          : guestAccessSectionClass
+      }
       data-slot="guest-access"
       aria-labelledby="guest-access-title"
     >
-      <div className={guestAccessIntroClass}>
+      {showingInvitation && error && (
+        <p className={`${guestAccessMessageClass} col-span-2`} role="alert">
+          {error}
+        </p>
+      )}
+      <div
+        className={
+          showingInvitation
+            ? guestAccessAuthenticatedIntroClass
+            : guestAccessIntroClass
+        }
+      >
         <p className={guestAccessEyebrowClass}>Confirmação de presença</p>
-        <h2 className={guestAccessHeadingClass} id="guest-access-title">
+        <h2
+          className={
+            showingInvitation
+              ? guestAccessAuthenticatedHeadingClass
+              : guestAccessHeadingClass
+          }
+          id="guest-access-title"
+        >
           Encontre seu convite
         </h2>
-        <p className={guestAccessDescriptionClass}>
+        <p
+          className={
+            showingInvitation
+              ? `${guestAccessDescriptionClass} mt-7 max-w-[30rem]`
+              : guestAccessDescriptionClass
+          }
+        >
           Informe o telefone de contato e o PIN compartilhado com este convite
           para acessar os convidados e confirmar a presença.
         </p>
       </div>
 
-      {error && (
+      {!showingInvitation && error && (
         <p className={guestAccessMessageClass} role="alert">
           {error}
         </p>

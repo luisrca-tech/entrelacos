@@ -132,6 +132,16 @@ describe("invitation access form", () => {
     expect(guestAccessSource).toContain("min-[961px]:max-w-[38rem]");
     expect(guestAccessSource).toContain("[@media(max-width:560px)]:flex-col");
   });
+
+  it("places the opened invitation beside the intro, like the split sections", () => {
+    expect(guestAccessSource).toContain(
+      "grid-cols-[minmax(0,0.72fr)_minmax(0,1.28fr)]",
+    );
+    expect(guestAccessSource).toContain("[@media(max-width:960px)]:block");
+    expect(guestAccessSource).toContain(
+      "showingInvitation\n          ? guestAccessAuthenticatedSectionClass",
+    );
+  });
 });
 
 describe("message mural compose", () => {
