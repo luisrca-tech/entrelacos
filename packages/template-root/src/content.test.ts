@@ -504,6 +504,60 @@ describe("template-root v1 content contracts", () => {
     ).toThrow(/at least two/i);
   });
 
+  it("accepts an optional guidance detail image and rejects video", () => {
+    const schedule = {
+      id: "schedule",
+      title: "Programação",
+      guidanceLabel: "Orientações",
+      entries: [
+        { id: "ceremony", time: "16:00", title: "Cerimônia", body: "Início" },
+        { id: "dinner", time: "19:30", title: "Jantar", body: "Mesa" },
+      ],
+      guidance: [
+        {
+          id: "attire",
+          title: "Traje",
+          body: "Traje social.",
+          detail: {
+            label: "Cortejo",
+            title: "O cortejo",
+            body: "A paleta do cortejo.",
+            closeLabel: "Fechar",
+            media: {
+              kind: "image" as const,
+              src: "/party.webp",
+              alt: "Paleta do cortejo",
+              width: 800,
+              height: 1200,
+            },
+          },
+        },
+      ],
+    };
+    expect(() => validateScheduleContent(schedule)).not.toThrow();
+    expect(() =>
+      validateScheduleContent({
+        ...schedule,
+        guidance: [
+          {
+            ...schedule.guidance[0],
+            detail: {
+              ...schedule.guidance[0].detail,
+              media: {
+                kind: "video",
+                src: "/party.mp4",
+                poster: "/party.webp",
+                alt: "Paleta",
+                width: 800,
+                height: 1200,
+              },
+            },
+          },
+        ],
+      }),
+    ).toThrow(/image/i);
+  });
+
   it("requires a visible address fallback and safe directions link", () => {
     const venue = {
       id: "venue",

@@ -117,10 +117,19 @@ export type ScheduleEntry = {
   location?: string;
 };
 
+export type GuidanceDetail = {
+  label: string;
+  title: string;
+  body: string;
+  closeLabel: string;
+  media: ImageMedia;
+};
+
 export type PracticalGuidance = {
   id: string;
   title: string;
   body: string;
+  detail?: GuidanceDetail;
 };
 
 export type ScheduleContent = SectionContent & {
@@ -567,6 +576,23 @@ function validatePracticalGuidance(
   validateSectionIds([value.id]);
   assertNonEmptyString(value.title, `${name}.title`);
   assertNonEmptyString(value.body, `${name}.body`);
+  if (value.detail !== undefined)
+    validateGuidanceDetail(value.detail, `${name}.detail`);
+}
+
+function validateGuidanceDetail(
+  value: unknown,
+  name: string,
+): asserts value is GuidanceDetail {
+  assertObject(value, name);
+  validateSerializableContent(value, name);
+  assertNonEmptyString(value.label, `${name}.label`);
+  assertNonEmptyString(value.title, `${name}.title`);
+  assertNonEmptyString(value.body, `${name}.body`);
+  assertNonEmptyString(value.closeLabel, `${name}.closeLabel`);
+  validateMedia(value.media, `${name}.media`);
+  if (value.media.kind !== "image")
+    throw new TypeError(`${name}.media must be an image`);
 }
 
 export function validateScheduleContent(
@@ -765,8 +791,12 @@ export function validateWeddingHomeProps(
       generatedIds.push(`${value.gallery.id}-title`);
     if (key === "schedule" && value.schedule !== undefined) {
       generatedIds.push(`${value.schedule.id}-title`);
-      if (value.schedule.guidance && value.schedule.guidance.length > 0)
+      if (value.schedule.guidance && value.schedule.guidance.length > 0) {
         generatedIds.push(`${value.schedule.id}-guidance-title`);
+        for (const item of value.schedule.guidance) {
+          if (item.detail) generatedIds.push(`${item.id}-detail-title`);
+        }
+      }
     }
     if (key === "venue" && value.venue !== undefined) {
       generatedIds.push(`${value.venue.id}-title`, `${value.venue.id}-address`);

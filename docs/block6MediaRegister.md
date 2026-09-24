@@ -8,6 +8,7 @@ Status: the final fictional-couple image set, hero poster, and hero video were a
 - The hero video was generated and refined in Google Flow from the approved fictional-couple visual reference. The exact Flow video-model identifier was not retained.
 - Retained operator source files are the eleven `*-source.png` images, `marina-caio-couple-reference.png`, `marina-caio-video-start-frame-source.png`, and `Couple_walking_in_natural_landscape_20260914013913.mp4`. Source files remain outside the repository; only delivery assets are versioned.
 - The project owner approved the resulting fictional identities, stills, and completed video for use in the Marina & Caio demo in this conversation on 2026-09-14.
+- On 2026-09-24 the operator supplied a collage for the schedule attire detail. It was replaced by a generated attire illustration, then a second version with circular color swatches. Both generated WebP versions remain in the repository; the swatch version is active. Source files stay outside the repository.
 - No real couple or real client likeness is claimed. Provider output terms still govern the generated media. Exact per-asset cost and a separate production cost ceiling were not supplied because generation used the owner's existing accounts; future client or commercial reuse must record them independently.
 - No provider credential, account token, prompt history, or private reference path is stored in the repository or static build.
 
@@ -30,10 +31,12 @@ All files are owned by their host app, not `packages/template-root`.
 | `apps/wedding-demo/public/marina-caio-gallery-four.webp` | Fourth gallery item | `1448x1086` | 190 KiB | Approved fictional-demo image |
 | `apps/wedding-demo/public/marina-caio-gallery-five.webp` | Fifth gallery item | `1448x1086` | 277 KiB | Approved fictional-demo image |
 | `apps/wedding-demo/public/marina-caio-gallery-six.webp` | Sixth gallery item | `1448x1086` | 168 KiB | Approved fictional-demo image |
+| `apps/wedding-demo/public/marina-caio-attire-palette.webp` | Retained attire illustration | `1440x1440` | 264 KiB | Generated fictional-demo illustration without swatches; retained at the owner's request |
+| `apps/wedding-demo/public/marina-caio-attire-palette-swatches.webp` | Schedule attire detail | `1440x1440` | 264 KiB | Generated fictional-demo illustration with six circular color swatches; wedding-party palette, not a guest dress code |
 | `apps/wedding-demo/public/marina-caio-monogram.svg` | Demo favicon/identity mark | `64x64` | Lightweight SVG | Provisional monogram; not final logo or brand approval |
 | `apps/template-fixture/public/fixture-hero.svg` | Technical fixture hero | `1600x1000` | Lightweight SVG | Permanent test fixture; not client/product media |
 
-The optimized WebP delivery set totals approximately 2.7 MiB. The original PNG files are intentionally not duplicated in the repository. The demo supplies exact intrinsic dimensions and meaningful Portuguese alt text from host-owned content.
+The optimized WebP delivery set, including the retained attire version, totals approximately 3.3 MiB. The original PNG files are intentionally not duplicated in the repository. The demo supplies exact intrinsic dimensions and meaningful Portuguese alt text from host-owned content.
 
 ## Hero video behavior
 

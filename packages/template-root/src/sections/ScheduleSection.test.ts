@@ -15,6 +15,9 @@ describe("ScheduleSection host-owned practical content", () => {
     expect(source).toContain("entry.body");
     expect(source).toContain("content.guidance.map");
     expect(source).toContain("content.guidanceLabel");
+    expect(source).toContain("item.detail");
+    expect(source).toContain("GuidanceDetail");
+    expect(source).not.toContain("Madrinhas");
     expect(source).not.toContain("Cerimônia");
     expect(source).not.toContain("Recepção");
   });

@@ -103,6 +103,9 @@ describe("template-root public boundary", () => {
     expect(demoPage).toContain('src: "/marina-caio-story-encounter.webp"');
     expect(demoPage).toContain('src: "/marina-caio-story-home.webp"');
     expect(demoPage).toContain('src: "/marina-caio-story-celebration.webp"');
+    expect(demoPage).toContain(
+      'src: "/marina-caio-attire-palette-swatches.webp"',
+    );
     expect(
       existsSync(
         resolve(repoRoot, "apps/wedding-demo/public/marina-caio-hero.mp4"),
@@ -142,6 +145,22 @@ describe("template-root public boundary", () => {
         resolve(
           repoRoot,
           "apps/wedding-demo/public/marina-caio-gallery-six.webp",
+        ),
+      ),
+    ).toBe(true);
+    expect(
+      existsSync(
+        resolve(
+          repoRoot,
+          "apps/wedding-demo/public/marina-caio-attire-palette.webp",
+        ),
+      ),
+    ).toBe(true);
+    expect(
+      existsSync(
+        resolve(
+          repoRoot,
+          "apps/wedding-demo/public/marina-caio-attire-palette-swatches.webp",
         ),
       ),
     ).toBe(true);

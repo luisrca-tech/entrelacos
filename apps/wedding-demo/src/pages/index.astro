@@ -188,22 +188,43 @@ const schedule = {
   entries: [
     {
       id: "ceremony",
-      time: "17:00",
+      time: "16:00",
       title: "Cerimônia",
-      body: "A celebração começa no mesmo local da recepção.",
-      location: "Casablanca Eventos",
+      body: "A celebração começa no mesmo salão. Em seguida, as fotos.",
     },
     {
-      id: "reception",
-      time: "19:00",
-      title: "Recepção",
-      body: "Jantar, brindes e pista para continuar a noite juntos.",
-      location: "Casablanca Eventos",
+      id: "cocktail",
+      time: "18:00",
+      title: "Coquetel",
+      body: "Frios e um bar de drinks, depois da cerimônia.",
+    },
+    {
+      id: "dinner",
+      time: "19:30",
+      title: "Jantar",
+      body: "Jantar, brindes, pista e gravata.",
     },
   ],
   guidance: [
-    { id: "arrival", title: "Chegada", body: "Reserve alguns minutos para estacionar e encontrar seu lugar com calma." },
-    { id: "attire", title: "Traje", body: "Traje social. Vista-se à altura da celebração: o dia pede elegância, presença e respeito ao momento." },
+    { id: "arrival", title: "Chegada", body: "Reserve alguns minutos para estacionar. Na entrada, a equipe autoriza pelo nome na lista e indica onde a cerimônia acontece." },
+    {
+      id: "attire",
+      title: "Traje",
+      body: "Traje social. Vista-se à altura da celebração: o dia pede elegância, presença e respeito ao momento.",
+      detail: {
+        label: "Madrinhas & Padrinhos",
+        title: "Madrinhas e padrinhos",
+        body: "Madrinhas em vestidos de verde oliva. Padrinhos de terno cinza claro, gravata na mesma paleta e tênis branco.",
+        closeLabel: "Fechar",
+        media: {
+          kind: "image" as const,
+          src: "/marina-caio-attire-palette-swatches.webp",
+          alt: "Dois vestidos longos verde oliva, terno cinza claro, gravata verde oliva, tênis branco e seis círculos com as cores da paleta",
+          width: 1440,
+          height: 1440,
+        },
+      },
+    },
   ],
 };
 const venue = {

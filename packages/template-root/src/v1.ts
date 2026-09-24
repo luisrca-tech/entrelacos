@@ -3,6 +3,7 @@ export type {
   GalleryContent,
   GalleryControls,
   GalleryItem,
+  GuidanceDetail,
   HeroAction,
   HeroContent,
   HeroIntroContent,
