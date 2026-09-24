@@ -7,19 +7,13 @@ export function mergeSiteMessages(
   append: boolean,
 ): SiteMessageRecord[] {
   if (!append) return incoming;
-  const ids = new Set(current.map(({ invitationId }) => invitationId));
-  return [
-    ...current,
-    ...incoming.filter(({ invitationId }) => !ids.has(invitationId)),
-  ];
+  const ids = new Set(current.map(({ id }) => id));
+  return [...current, ...incoming.filter(({ id }) => !ids.has(id))];
 }
 
 export function messageAdminError(error: unknown): string {
   if (!(error instanceof ApiError)) {
     return "Não foi possível atualizar a moderação. Tente novamente.";
-  }
-  if (error.code === "MESSAGE_CONFLICT") {
-    return "A mensagem foi alterada em outro acesso. Os dados foram recarregados.";
   }
   if (error.code === "MESSAGE_NOT_FOUND") {
     return "A mensagem não existe mais. Os dados foram recarregados.";

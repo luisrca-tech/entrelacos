@@ -7,7 +7,7 @@ import {
 import {
   invitation,
   invitationGuest,
-  invitationMessage,
+  muralMessage,
   site,
 } from "@entrelacos/database/schema";
 import { eq } from "drizzle-orm";
@@ -81,7 +81,7 @@ describe("invitation demo reset PostgreSQL integration", () => {
     const first = await resetDemoSite(connection.db, actor, demoSiteId, {
       clock: { now: () => now },
     });
-    expect(first.counts).toEqual({ invitations: 5, guests: 10, messages: 1 });
+    expect(first.counts).toEqual({ invitations: 5, guests: 10, messages: 0 });
 
     const [invitations, guests, messages, sentinelInvitations] =
       await Promise.all([
@@ -95,8 +95,8 @@ describe("invitation demo reset PostgreSQL integration", () => {
           .where(eq(invitationGuest.siteId, demoSiteId)),
         connection.db
           .select()
-          .from(invitationMessage)
-          .where(eq(invitationMessage.siteId, demoSiteId)),
+          .from(muralMessage)
+          .where(eq(muralMessage.siteId, demoSiteId)),
         connection.db
           .select()
           .from(invitation)
@@ -112,13 +112,27 @@ describe("invitation demo reset PostgreSQL integration", () => {
     expect(invitations.some((item) => item.phoneE164.startsWith("+1"))).toBe(
       true,
     );
-    expect(messages).toHaveLength(1);
+    expect(messages).toHaveLength(0);
     expect(sentinelInvitations).toHaveLength(0);
+
+    await connection.db.insert(muralMessage).values({
+      id: randomUUID(),
+      siteId: demoSiteId,
+      authorName: "Visitante",
+      text: "Mensagem de teste",
+      createdAt: now,
+    });
 
     const second = await resetDemoSite(connection.db, actor, demoSiteId, {
       clock: { now: () => now },
     });
     expect(second.counts).toEqual(first.counts);
+    expect(
+      await connection.db
+        .select()
+        .from(muralMessage)
+        .where(eq(muralMessage.siteId, demoSiteId)),
+    ).toHaveLength(0);
     expect(
       await connection.db
         .select()

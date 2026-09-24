@@ -8,10 +8,11 @@ import {
   invitation,
   invitationAccessChallenge,
   invitationGuest,
-  invitationMessage,
   invitationRateLimitEvent,
   invitationSession,
-  messageRequestReceipt,
+  muralMessage,
+  muralMessageRateLimitEvent,
+  muralMessageRequestReceipt,
   rsvpHistory,
   rsvpRequestReceipt,
   rsvpRequestReceiptInvitation,
@@ -21,7 +22,7 @@ import { and, eq, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { normalizeInvitationName } from "./invitations";
 
-export const DEMO_RESET_DATASET_VERSION = "block7-demo-v1" as const;
+export const DEMO_RESET_DATASET_VERSION = "block7-demo-v2" as const;
 export type DemoResetDatabase = NodePgDatabase<Record<string, never>>;
 export type DemoResetActor = { userId: string; role: "OWNER" | "SITE_ADMIN" };
 export interface DemoResetClock {
@@ -156,7 +157,6 @@ const invitations = [
 export const DEMO_RESET_DATASET_IDS = {
   invitationIds: invitations.map((item) => item.id),
   guestIds: invitations.flatMap((item) => item.guests.map((guest) => guest.id)),
-  messageId: "b7-message",
 } as const;
 
 const pinSeeds = ["1", "2", "3", "4", "5"].map((value) => value.repeat(64));
@@ -167,8 +167,11 @@ async function deleteOperationalRows(
 ): Promise<void> {
   // Explicit site predicates keep a demo reset confined to its tenant.
   await tx
-    .delete(messageRequestReceipt)
-    .where(eq(messageRequestReceipt.siteId, siteId));
+    .delete(muralMessageRequestReceipt)
+    .where(eq(muralMessageRequestReceipt.siteId, siteId));
+  await tx
+    .delete(muralMessageRateLimitEvent)
+    .where(eq(muralMessageRateLimitEvent.siteId, siteId));
   await tx
     .delete(rsvpRequestReceiptInvitation)
     .where(eq(rsvpRequestReceiptInvitation.siteId, siteId));
@@ -179,9 +182,7 @@ async function deleteOperationalRows(
   await tx
     .delete(invitationSession)
     .where(eq(invitationSession.siteId, siteId));
-  await tx
-    .delete(invitationMessage)
-    .where(eq(invitationMessage.siteId, siteId));
+  await tx.delete(muralMessage).where(eq(muralMessage.siteId, siteId));
   await tx
     .delete(invitationAccessChallenge)
     .where(eq(invitationAccessChallenge.siteId, siteId));
@@ -205,8 +206,6 @@ async function seedOperationalRows(
       normalizedName: normalizeInvitationName(item.name),
       phoneE164: item.phone,
       email: null,
-      messageBlocked: false,
-      messageRevision: item.id === "b7-invitation-pending" ? 1 : 0,
       manualPinSeed: pinSeeds[index] ?? "0".repeat(64),
       createdAt: now,
       updatedAt: now,
@@ -228,21 +227,10 @@ async function seedOperationalRows(
       })),
     ),
   );
-  await tx.insert(invitationMessage).values({
-    id: DEMO_RESET_DATASET_IDS.messageId,
-    siteId,
-    invitationId: "b7-invitation-pending",
-    authorName: "Convite Pendente",
-    invitationName: "Convite Pendente",
-    text: "Que alegria celebrar este momento com vocês!",
-    revision: 1,
-    createdAt: now,
-    updatedAt: now,
-  });
   return {
     invitations: invitations.length,
     guests: invitations.reduce((total, item) => total + item.guests.length, 0),
-    messages: 1,
+    messages: 0,
   };
 }
 

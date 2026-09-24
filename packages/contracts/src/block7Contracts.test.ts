@@ -8,13 +8,13 @@ import {
 describe("Block 7 demo reset contracts", () => {
   it("accepts only the frozen reset dataset version", () => {
     expect(
-      demoResetInputSchema.parse({ datasetVersion: "block7-demo-v1" }),
+      demoResetInputSchema.parse({ datasetVersion: "block7-demo-v2" }),
     ).toEqual({
-      datasetVersion: "block7-demo-v1",
+      datasetVersion: "block7-demo-v2",
     });
     expect(() =>
       demoResetInputSchema.parse({
-        datasetVersion: "block7-demo-v1",
+        datasetVersion: "block7-demo-v2",
         force: true,
       }),
     ).toThrow();
@@ -30,11 +30,14 @@ describe("Block 7 demo reset contracts", () => {
     expect(
       demoResetResponseSchema.parse({
         siteId: "site-demo",
-        datasetVersion: "block7-demo-v1",
+        datasetVersion: "block7-demo-v2",
         result: "RESET",
         resetAt: "2028-04-01T12:00:00.000Z",
-        counts: { invitations: 5, guests: 10, messages: 1 },
+        counts: { invitations: 5, guests: 10, messages: 0 },
       }),
-    ).toMatchObject({ result: "RESET", counts: { invitations: 5 } });
+    ).toMatchObject({
+      result: "RESET",
+      counts: { invitations: 5, messages: 0 },
+    });
   });
 });

@@ -17,81 +17,13 @@ function response(body: unknown, init: ResponseInit = {}) {
 const message = {
   id: "message-a",
   authorName: "Ana Silva",
-  invitationName: "Família Silva",
   text: "Viva os noivos!",
-  revision: 1,
   createdAt: "2026-09-12T12:00:00.000Z",
-  updatedAt: "2026-09-12T12:00:00.000Z",
 };
 
-describe("wedding messages client", () => {
-  it("counts Unicode code points and normalizes line endings before writes", async () => {
-    const fetcher = vi.fn(
-      async (_input: RequestInfo | URL, _init?: RequestInit) =>
-        response({
-          requestId: "2c7f8f3b-7d7d-4bd7-a21d-9d68ac3fb8b5",
-          acceptedAt: "2026-09-12T12:00:00.000Z",
-          result: "APPLIED",
-          replayed: false,
-          message: { ...message, text: "Olá\n🎉" },
-        }),
-    );
-    const api = new WeddingMessagesApi({
-      apiOrigin: "https://api.example.test",
-      siteId: "casamento-a",
-      fetcher,
-    });
-
+describe("public mural client", () => {
+  it("counts Unicode code points", () => {
     expect(countMessageCodePoints("Olá\r\n🎉")).toBe(5);
-    await api.saveInvitationMessage("s".repeat(43), {
-      requestId: "2c7f8f3b-7d7d-4bd7-a21d-9d68ac3fb8b5",
-      expectedRevision: 0,
-      text: "Olá\r\n🎉",
-    });
-
-    const [url, init] = fetcher.mock.calls[0] ?? [];
-    expect(String(url)).toBe(
-      "https://api.example.test/v1/public/invitation/message",
-    );
-    expect(init).toMatchObject({
-      method: "PUT",
-      credentials: "omit",
-      cache: "no-store",
-      headers: {
-        Authorization: `Bearer ${"s".repeat(43)}`,
-        "Content-Type": "application/json",
-      },
-    });
-    expect(init?.body).toContain('"text":"Olá\\n🎉"');
-  });
-
-  it("reads the invitation message with only the invitation bearer", async () => {
-    const fetcher = vi.fn(
-      async (_input: RequestInfo | URL, _init?: RequestInit) =>
-        response({
-          siteId: "casamento-a",
-          invitationId: "invitation-a",
-          currentRevision: 1,
-          canEdit: true,
-          readOnlyReason: null,
-          message,
-        }),
-    );
-    const api = new WeddingMessagesApi({
-      apiOrigin: "https://api.example.test",
-      siteId: "casamento-a",
-      fetcher,
-    });
-
-    await expect(
-      api.getInvitationMessage("s".repeat(43)),
-    ).resolves.toMatchObject({
-      currentRevision: 1,
-      message: { authorName: "Ana Silva" },
-    });
-    expect(fetcher.mock.calls[0]?.[1]?.headers).toMatchObject({
-      Authorization: `Bearer ${"s".repeat(43)}`,
-    });
   });
 
   it("reads a cursor-bound public mural without credentials or authorization", async () => {
@@ -112,7 +44,75 @@ describe("wedding messages client", () => {
       "https://api.example.test/v1/public/sites/casamento-a/mural?cursor=created%2Fid%2Bsite&limit=12",
     );
     expect(init).toMatchObject({ credentials: "omit", cache: "no-store" });
-    expect(init?.headers).not.toHaveProperty("Authorization");
+    expect(new Headers(init?.headers).has("Authorization")).toBe(false);
+  });
+
+  it("creates an independent public message without invitation credentials", async () => {
+    const requestId = "2c7f8f3b-7d7d-4bd7-a21d-9d68ac3fb8b5";
+    const fetcher = vi.fn(
+      async (_input: RequestInfo | URL, _init?: RequestInit) =>
+        response({
+          requestId,
+          acceptedAt: "2026-09-12T12:00:00.000Z",
+          replayed: false,
+          message,
+        }),
+    );
+    const api = new WeddingMessagesApi({
+      apiOrigin: "https://api.example.test",
+      siteId: "casamento-a",
+      fetcher,
+    });
+
+    await expect(
+      api.createPublicSiteMessage({
+        requestId,
+        authorName: " Ana Silva ",
+        text: "Viva os noivos!",
+      }),
+    ).resolves.toMatchObject({ message: { authorName: "Ana Silva" } });
+
+    const [url, init] = fetcher.mock.calls[0] ?? [];
+    expect(String(url)).toBe(
+      "https://api.example.test/v1/public/sites/casamento-a/mural",
+    );
+    expect(init).toMatchObject({
+      method: "POST",
+      credentials: "omit",
+      cache: "no-store",
+      headers: { "Content-Type": "application/json" },
+    });
+    expect(new Headers(init?.headers).has("Authorization")).toBe(false);
+    expect(JSON.parse(String(init?.body))).toEqual({
+      requestId,
+      authorName: "Ana Silva",
+      text: "Viva os noivos!",
+    });
+  });
+
+  it("keeps Retry-After seconds on public post rate-limit errors", async () => {
+    const api = new WeddingMessagesApi({
+      apiOrigin: "https://api.example.test",
+      siteId: "casamento-a",
+      fetcher: vi.fn(async () =>
+        response(
+          { code: "RATE_LIMITED" },
+          { status: 429, headers: { "Retry-After": "60" } },
+        ),
+      ),
+    });
+
+    await expect(
+      api.createPublicSiteMessage({
+        requestId: "2c7f8f3b-7d7d-4bd7-a21d-9d68ac3fb8b5",
+        authorName: "Ana Silva",
+        text: "Viva os noivos!",
+      }),
+    ).rejects.toMatchObject({
+      status: 429,
+      code: "RATE_LIMITED",
+      retryAfterSeconds: 60,
+    });
   });
 
   it("rejects invalid configuration and invalid API responses", async () => {
@@ -137,18 +137,21 @@ describe("wedding messages client", () => {
 
   it("maps message failures to honest Portuguese feedback", () => {
     expect(
-      getMessageErrorMessage(
-        new WeddingMessagesApiError(409, "MESSAGE_CONFLICT"),
-      ),
-    ).toContain("alterada em outro acesso");
-    expect(
-      getMessageErrorMessage(
-        new WeddingMessagesApiError(403, "MESSAGE_BLOCKED"),
-      ),
-    ).toContain("bloqueou novas mensagens");
-    expect(
       getMessageErrorMessage(new WeddingMessagesApiError(0, "NETWORK_ERROR")),
     ).toContain("conexão");
+    expect(
+      getMessageErrorMessage(
+        new WeddingMessagesApiError(429, "RATE_LIMITED", 60),
+      ),
+    ).toContain("60 segundos");
+    expect(
+      getMessageErrorMessage(
+        new WeddingMessagesApiError(409, "MURAL_DISABLED"),
+      ),
+    ).toContain("desativado");
+    expect(
+      getMessageErrorMessage(new WeddingMessagesApiError(409, "SITE_INACTIVE")),
+    ).toContain("temporariamente indisponível");
   });
 
   it("namespaces the local refresh event by site", () => {
