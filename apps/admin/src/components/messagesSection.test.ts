@@ -6,24 +6,33 @@ const messagesSource = readFileSync(
   resolve(import.meta.dirname, "MessagesSection.tsx"),
   "utf8",
 );
-describe("message rows use the invitation surface", () => {
-  it("keeps moderation actions on each invitation row", () => {
-    expect(messagesSource).toContain("Bloquear envios");
+describe("public message moderation", () => {
+  it("lists independent messages and removes the selected message by ID", () => {
+    expect(messagesSource).toContain("response.messages");
+    expect(messagesSource).toContain("messages.map((message)");
+    expect(messagesSource).toContain("removeTarget.id");
     expect(messagesSource).toContain("Remover mensagem");
-    expect(messagesSource).toContain('size="sm"');
-    expect(messagesSource).not.toContain("CardAction");
-    expect(messagesSource).not.toContain("clamp(1.8rem");
-    expect(messagesSource).not.toContain("Badge");
+    expect(messagesSource).not.toContain("message-block");
   });
 
-  it("keeps messages on one bordered surface", () => {
-    expect(messagesSource).toContain("adminStyles.surface");
-    expect(messagesSource).toContain("border-b border-admin-line");
-  });
-
-  it("toasts moderation results instead of leaving a status line", () => {
+  it("keeps the mural switch and moderation feedback", () => {
+    expect(messagesSource).toContain("mural-enabled");
     expect(messagesSource).toContain("toast.success(success)");
     expect(messagesSource).toContain("toast.error(message)");
+    expect(messagesSource).toContain(
+      "Visitantes podem publicar novas mensagens.",
+    );
+    expect(messagesSource).toContain(
+      "As mensagens existentes continuam visíveis.",
+    );
     expect(messagesSource).not.toContain("setNotice");
+  });
+
+  it("searches by author through the paginated API request", () => {
+    expect(messagesSource).toContain("message-author-search");
+    expect(messagesSource).toContain("messagesQuery(search, cursor)");
+    expect(messagesSource).toContain("requestVersionForLoad");
+    expect(messagesSource).toContain("searchInputRef.current");
+    expect(messagesSource).toContain("setNextCursor(null)");
   });
 });

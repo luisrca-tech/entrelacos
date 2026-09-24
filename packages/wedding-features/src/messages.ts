@@ -1,11 +1,8 @@
 import {
-  type InvitationMessageResponse,
-  invitationMessageResponseSchema,
-  type MessageMutationInput,
-  type MessageMutationResponse,
-  messageMutationInputSchema,
-  messageMutationResponseSchema,
-  opaqueTokenSchema,
+  type CreatePublicSiteMessageRequest,
+  type CreatePublicSiteMessageResponse,
+  createPublicSiteMessageRequestSchema,
+  createPublicSiteMessageResponseSchema,
   originSchema,
   type PublicMuralQuery,
   type PublicMuralResponse,
@@ -36,6 +33,7 @@ export class WeddingMessagesApiError extends Error {
   constructor(
     public readonly status: number,
     public readonly code: string,
+    public readonly retryAfterSeconds?: number,
   ) {
     super(code);
     this.name = "WeddingMessagesApiError";
@@ -67,34 +65,6 @@ export class WeddingMessagesApi {
     this.fetcher = (input, init) => fetcher(input, init);
   }
 
-  async getInvitationMessage(
-    sessionToken: string,
-  ): Promise<InvitationMessageResponse> {
-    const token = opaqueTokenSchema.parse(sessionToken);
-    return this.request(
-      "/v1/public/invitation/message",
-      { headers: { Authorization: `Bearer ${token}` } },
-      (value) => invitationMessageResponseSchema.parse(value),
-    );
-  }
-
-  async saveInvitationMessage(
-    sessionToken: string,
-    input: MessageMutationInput,
-  ): Promise<MessageMutationResponse> {
-    const token = opaqueTokenSchema.parse(sessionToken);
-    const body = messageMutationInputSchema.parse(input);
-    return this.request(
-      "/v1/public/invitation/message",
-      {
-        method: "PUT",
-        headers: { Authorization: `Bearer ${token}` },
-        body,
-      },
-      (value) => messageMutationResponseSchema.parse(value),
-    );
-  }
-
   async getMural(
     query: Partial<PublicMuralQuery> = {},
   ): Promise<PublicMuralResponse> {
@@ -109,12 +79,22 @@ export class WeddingMessagesApi {
     );
   }
 
+  async createPublicSiteMessage(
+    input: CreatePublicSiteMessageRequest,
+  ): Promise<CreatePublicSiteMessageResponse> {
+    const body = createPublicSiteMessageRequestSchema.parse(input);
+    return this.request(
+      `/v1/public/sites/${encodeURIComponent(this.siteId)}/mural`,
+      { method: "POST", body },
+      (value) => createPublicSiteMessageResponseSchema.parse(value),
+    );
+  }
+
   private async request<T>(
     path: string,
     options: {
       method?: string;
       body?: unknown;
-      headers?: Record<string, string>;
     },
     parse: (value: unknown) => T,
   ): Promise<T> {
@@ -124,15 +104,12 @@ export class WeddingMessagesApi {
         method: options.method ?? "GET",
         credentials: "omit",
         cache: "no-store",
-        headers: {
-          ...(options.body === undefined
-            ? {}
-            : { "Content-Type": "application/json" }),
-          ...options.headers,
-        },
         ...(options.body === undefined
           ? {}
-          : { body: JSON.stringify(options.body) }),
+          : {
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(options.body),
+            }),
       });
     } catch {
       throw new WeddingMessagesApiError(0, "NETWORK_ERROR");
@@ -140,9 +117,13 @@ export class WeddingMessagesApi {
     const value = await parseJson(response);
     if (!response.ok) {
       const record = asRecord(value);
+      const retryAfter = Number(response.headers.get("Retry-After"));
       throw new WeddingMessagesApiError(
         response.status,
         typeof record.code === "string" ? record.code : "REQUEST_FAILED",
+        Number.isFinite(retryAfter) && retryAfter > 0
+          ? Math.ceil(retryAfter)
+          : undefined,
       );
     }
     try {
@@ -165,23 +146,16 @@ export function getMessageErrorMessage(error: unknown): string {
   if (!(error instanceof WeddingMessagesApiError)) {
     return "Não foi possível concluir agora. Tente novamente.";
   }
-  if (error.code === "MESSAGE_CONFLICT") {
-    return "A mensagem foi alterada em outro acesso. Recarregue antes de tentar novamente.";
-  }
-  if (error.code === "MESSAGE_BLOCKED") {
-    return "A administração bloqueou novas mensagens para este convite.";
+  if (error.status === 429 || error.code === "RATE_LIMITED") {
+    return error.retryAfterSeconds
+      ? `Muitas mensagens foram enviadas em pouco tempo. Tente novamente em ${error.retryAfterSeconds} segundos.`
+      : "Muitas mensagens foram enviadas em pouco tempo. Aguarde antes de tentar novamente.";
   }
   if (error.code === "MURAL_DISABLED") {
     return "O mural está desativado neste momento.";
   }
-  if (error.code === "MESSAGE_REMOVED") {
-    return "Esta mensagem foi removida. Recarregue antes de publicar novamente.";
-  }
-  if (error.code === "SITE_INACTIVE") {
+  if (error.code === "SITE_INACTIVE" || error.code === "SITE_NOT_FOUND") {
     return "Este site está temporariamente indisponível.";
-  }
-  if (error.status === 401 || error.code === "SESSION_INVALID") {
-    return "Esta sessão expirou. Entre novamente para continuar.";
   }
   if (error.status === 0 || error.code === "NETWORK_ERROR") {
     return "Não foi possível acessar o mural por falha de conexão.";

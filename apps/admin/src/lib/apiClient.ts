@@ -41,6 +41,7 @@ export async function apiRequest<T>(
     };
     throw new ApiError(response.status, problem.code ?? "REQUEST_FAILED");
   }
+  if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;
 }
 

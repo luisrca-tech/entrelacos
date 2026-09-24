@@ -3,7 +3,6 @@ import { originSchema, publicUrlSchema } from "@entrelacos/contracts";
 import {
   invitation,
   invitationGuest,
-  invitationMessage,
   site,
   siteOrigin,
 } from "@entrelacos/database/schema";
@@ -138,22 +137,12 @@ async function ensureDemoSite(
             inArray(invitationGuest.id, DEMO_RESET_DATASET_IDS.guestIds),
           ),
         );
-      const messageRows = await tx
-        .select({ id: invitationMessage.id })
-        .from(invitationMessage)
-        .where(
-          and(
-            eq(invitationMessage.siteId, DEMO_SITE_ID),
-            eq(invitationMessage.id, DEMO_RESET_DATASET_IDS.messageId),
-          ),
-        );
       return {
         created: false,
         datasetComplete:
           invitationRows.length ===
             DEMO_RESET_DATASET_IDS.invitationIds.length &&
-          guestRows.length === DEMO_RESET_DATASET_IDS.guestIds.length &&
-          messageRows.length === 1,
+          guestRows.length === DEMO_RESET_DATASET_IDS.guestIds.length,
         muralEnabled: existing.muralEnabled,
       };
     }

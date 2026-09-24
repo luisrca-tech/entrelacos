@@ -2,24 +2,18 @@ import type { PublicMuralResponse } from "@entrelacos/contracts";
 import { toast } from "@entrelacos/ui/toaster";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  browserGuestSessionStorage,
-  type GuestSessionStorage,
-  guestSessionEventName,
-  readGuestSession,
-} from "./guestAccess";
-import { InvitationMessageDialog } from "./InvitationMessageDialog";
-import {
   getMessageErrorMessage,
   muralRefreshEventName,
   WeddingMessagesApi,
+  WeddingMessagesApiError,
 } from "./messages";
+import { PublicMessageDialog } from "./PublicMessageDialog";
 
 export type MessageMuralProps = {
   siteId: string;
   apiOrigin: string;
   fetcher?: typeof fetch;
   refreshIntervalMs?: number;
-  storage?: GuestSessionStorage;
 };
 
 type MuralMessage = PublicMuralResponse["messages"][number];
@@ -51,6 +45,20 @@ export function mergeMuralMessages(
   return [...current, ...incoming.filter(({ id }) => !ids.has(id))];
 }
 
+export function getMuralVisibility(
+  enabled: boolean,
+  messageCount: number,
+  hasNextPage: boolean,
+) {
+  return {
+    showComposer: enabled,
+    showMessages: messageCount > 0,
+    showEmptyState: enabled && messageCount === 0,
+    showPausedStatus: !enabled,
+    showMore: hasNextPage,
+  };
+}
+
 function formatMessageDate(value: string): string {
   return new Intl.DateTimeFormat("pt-BR", {
     dateStyle: "medium",
@@ -64,7 +72,6 @@ export function MessageMural({
   apiOrigin,
   fetcher,
   refreshIntervalMs = 30_000,
-  storage: providedStorage,
 }: MessageMuralProps) {
   const apiResult = useMemo(() => {
     try {
@@ -80,20 +87,13 @@ export function MessageMural({
     }
   }, [apiOrigin, fetcher, siteId]);
   const [messages, setMessages] = useState<MuralMessage[]>([]);
-  const [enabled, setEnabled] = useState(true);
+  const [enabled, setEnabled] = useState(false);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState("");
   const refreshVersion = useRef(0);
   const nextCursorRef = useRef<string | null>(null);
-  const storage = useMemo(
-    () => providedStorage ?? browserGuestSessionStorage(),
-    [providedStorage],
-  );
-  const [hasSession, setHasSession] = useState(() =>
-    Boolean(storage && readGuestSession(storage, siteId)),
-  );
   const [messageOpen, setMessageOpen] = useState(false);
 
   const load = useCallback(
@@ -119,6 +119,7 @@ export function MessageMural({
         });
         if (version !== refreshVersion.current) return;
         setEnabled(result.enabled);
+        if (!result.enabled) setMessageOpen(false);
         setMessages((current) =>
           mergeMuralMessages(current, result.messages, append),
         );
@@ -126,6 +127,18 @@ export function MessageMural({
         setNextCursor(result.nextCursor);
       } catch (cause) {
         if (version === refreshVersion.current) {
+          if (
+            cause instanceof WeddingMessagesApiError &&
+            (cause.code === "MURAL_DISABLED" || cause.code === "SITE_INACTIVE")
+          ) {
+            setEnabled(false);
+            setMessageOpen(false);
+            if (cause.code === "SITE_INACTIVE") {
+              setMessages([]);
+              nextCursorRef.current = null;
+              setNextCursor(null);
+            }
+          }
           const message = getMessageErrorMessage(cause);
           setError(message);
           if (notify) {
@@ -144,23 +157,15 @@ export function MessageMural({
     [apiResult],
   );
 
+  const visibility = getMuralVisibility(
+    enabled,
+    messages.length,
+    Boolean(nextCursor),
+  );
+
   useEffect(() => {
     void load(false, true);
   }, [load]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const syncSession = () => {
-      const present = Boolean(storage && readGuestSession(storage, siteId));
-      setHasSession(present);
-      if (!present) setMessageOpen(false);
-    };
-    syncSession();
-    window.addEventListener(guestSessionEventName(siteId), syncSession);
-    return () => {
-      window.removeEventListener(guestSessionEventName(siteId), syncSession);
-    };
-  }, [siteId, storage]);
 
   useEffect(() => {
     if (typeof window === "undefined" || typeof document === "undefined") {
@@ -192,7 +197,7 @@ export function MessageMural({
           </h2>
         </div>
         <div className={muralActionsClass}>
-          {hasSession && (
+          {visibility.showComposer && (
             <button
               type="button"
               className={muralPrimaryButtonClass}
@@ -212,16 +217,24 @@ export function MessageMural({
         </div>
       </header>
 
-      {!enabled && !loading ? (
-        <p className={muralStatusClass} role="status">
-          O mural está desativado neste momento.
+      {error && !loading && (
+        <p className={muralStatusClass} role="alert">
+          {error}
         </p>
-      ) : messages.length === 0 && !loading && !error ? (
+      )}
+      {visibility.showPausedStatus && !loading && !error && (
+        <p className={muralStatusClass} role="status">
+          O mural está pausado para novas mensagens. As mensagens já publicadas
+          continuam disponíveis.
+        </p>
+      )}
+      {visibility.showEmptyState && !loading && !error && (
         <p className={muralStatusClass} role="status">
           Ainda não há mensagens publicadas.
         </p>
-      ) : (
-        <ul className="m-0 grid list-none gap-4 p-0 [grid-template-columns:repeat(auto-fit,minmax(min(100%,17rem),1fr))]">
+      )}
+      {visibility.showMessages && (
+        <ul className="m-0 grid list-none grid-cols-2 gap-4 p-0 [@media(max-width:560px)]:grid-cols-1">
           {messages.map((message) => (
             <li
               className="flex min-h-56 flex-col justify-between border border-template-line bg-template-ivory p-[1.35rem]"
@@ -234,9 +247,6 @@ export function MessageMural({
                 <strong className="text-template-ink">
                   {message.authorName}
                 </strong>
-                {message.authorName !== message.invitationName && (
-                  <span>{message.invitationName}</span>
-                )}
                 <time dateTime={message.createdAt}>
                   {formatMessageDate(message.createdAt)}
                 </time>
@@ -246,7 +256,7 @@ export function MessageMural({
         </ul>
       )}
 
-      {enabled && nextCursor && (
+      {visibility.showMore && (
         <button
           type="button"
           className={muralMoreButtonClass}
@@ -256,12 +266,11 @@ export function MessageMural({
           {loadingMore ? "Carregando…" : "Ver mais mensagens"}
         </button>
       )}
-      <InvitationMessageDialog
-        open={messageOpen && hasSession}
+      <PublicMessageDialog
+        open={messageOpen && visibility.showComposer}
         siteId={siteId}
         api={apiResult.api}
         apiError={apiResult.error}
-        storage={storage}
         onClose={() => setMessageOpen(false)}
       />
     </section>

@@ -4,8 +4,8 @@ import type { PublicMuralResponse } from "@entrelacos/contracts";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import { InvitationMessageForm } from "./InvitationMessageForm";
-import { mergeMuralMessages } from "./MessageMural";
+import { getMuralVisibility, mergeMuralMessages } from "./MessageMural";
+import { PublicMessageForm } from "./PublicMessageForm";
 
 const guestAccessSource = readFileSync(
   resolve(import.meta.dirname, "GuestAccessPanel.tsx"),
@@ -16,7 +16,7 @@ const muralSource = readFileSync(
   "utf8",
 );
 const messageDialogSource = readFileSync(
-  resolve(import.meta.dirname, "InvitationMessageDialog.tsx"),
+  resolve(import.meta.dirname, "PublicMessageDialog.tsx"),
   "utf8",
 );
 const siteDialogSource = readFileSync(
@@ -27,71 +27,129 @@ const siteDialogSource = readFileSync(
 const message = {
   id: "message-a",
   authorName: "Ana Silva",
-  invitationName: "Família Silva",
   text: "Viva os noivos!",
-  revision: 1,
   createdAt: "2026-09-12T12:00:00.000Z",
-  updatedAt: "2026-09-12T12:00:00.000Z",
 };
 
-describe("invitation message form", () => {
-  it("shows the Unicode counter and disables unchanged submissions", () => {
+describe("public message form", () => {
+  it("requires an author name and message", () => {
     const html = renderToStaticMarkup(
-      createElement(InvitationMessageForm, {
-        message,
-        currentRevision: 1,
-        canEdit: true,
-        readOnlyReason: null,
-        value: "Viva os noivos!",
+      createElement(PublicMessageForm, {
+        authorName: "Ana Silva",
+        message: "Viva os noivos!",
         busy: false,
-        onChange: vi.fn(),
-        onSave: vi.fn(),
+        onAuthorNameChange: vi.fn(),
+        onMessageChange: vi.fn(),
+        onSubmit: vi.fn(),
       }),
     );
 
-    expect(html).toContain("15 / 1000");
+    expect(html).toContain("Seu nome");
+    expect(html).toContain("Mensagem");
+    expect(html).toContain('name="authorName"');
+    expect(html).toContain('name="text"');
+    expect(html.match(/required=""/g)).toHaveLength(2);
+    expect(html).toContain("Ana Silva");
     expect(html).toContain("Viva os noivos!");
-    expect(html).toContain("grid gap-4");
-    expect(html).not.toContain("border-t border-template-line pt-6");
-    expect(html).toContain("data-[invalid=true]:font-bold");
-    expect(html).toContain('disabled=""');
   });
 
-  it("keeps a moderated invitation message visible while explaining the block", () => {
+  it("keeps entered values visible with the error after a failed post", () => {
     const html = renderToStaticMarkup(
-      createElement(InvitationMessageForm, {
-        message,
-        currentRevision: 1,
-        canEdit: false,
-        readOnlyReason: "MESSAGE_BLOCKED",
-        value: message.text,
+      createElement(PublicMessageForm, {
+        authorName: "Ana Silva",
+        message: "Viva os noivos!",
         busy: false,
-        onChange: vi.fn(),
-        onSave: vi.fn(),
+        error: "Tente novamente em 60 segundos.",
+        onAuthorNameChange: vi.fn(),
+        onMessageChange: vi.fn(),
+        onSubmit: vi.fn(),
       }),
     );
 
+    expect(html).toContain('role="alert"');
+    expect(html).toContain("Tente novamente em 60 segundos.");
+    expect(html).toContain("Ana Silva");
     expect(html).toContain("Viva os noivos!");
-    expect(html).toContain("bloqueou novas mensagens");
-    expect(html).toContain('disabled=""');
   });
 
-  it("explains why a nonblank message cannot be published", () => {
+  it("disables invalid or empty submissions", () => {
     const html = renderToStaticMarkup(
-      createElement(InvitationMessageForm, {
-        message: null,
-        currentRevision: 0,
-        canEdit: true,
-        readOnlyReason: null,
-        value: "Parab<ens>",
+      createElement(PublicMessageForm, {
+        authorName: " ",
+        message: "Parab<ens>",
         busy: false,
-        onChange: vi.fn(),
-        onSave: vi.fn(),
+        onAuthorNameChange: vi.fn(),
+        onMessageChange: vi.fn(),
+        onSubmit: vi.fn(),
       }),
     );
 
     expect(html).toContain("Use somente texto simples");
     expect(html).toContain('disabled=""');
+  });
+
+  it("rejects angle brackets and control characters in names", () => {
+    for (const authorName of ["Ana <Silva>", "Ana\u0000 Silva"]) {
+      const html = renderToStaticMarkup(
+        createElement(PublicMessageForm, {
+          authorName,
+          message: "Viva os noivos!",
+          busy: false,
+          onAuthorNameChange: vi.fn(),
+          onMessageChange: vi.fn(),
+          onSubmit: vi.fn(),
+        }),
+      );
+
+      expect(html).toContain("sem sinais de maior ou menor");
+      expect(html).toContain('disabled=""');
+    }
+  });
+
+  it("accepts accented and repeated author names", () => {
+    for (const authorName of ["José da Silva", "José da Silva"]) {
+      const html = renderToStaticMarkup(
+        createElement(PublicMessageForm, {
+          authorName,
+          message: "Viva os noivos!",
+          busy: false,
+          onAuthorNameChange: vi.fn(),
+          onMessageChange: vi.fn(),
+          onSubmit: vi.fn(),
+        }),
+      );
+
+      expect(html).toContain("José da Silva");
+      expect(html).not.toContain('disabled=""');
+    }
+  });
+
+  it("counts a public author name by Unicode code points", () => {
+    const html = renderToStaticMarkup(
+      createElement(PublicMessageForm, {
+        authorName: "🎉".repeat(100),
+        message: "Viva os noivos!",
+        busy: false,
+        onAuthorNameChange: vi.fn(),
+        onMessageChange: vi.fn(),
+        onSubmit: vi.fn(),
+      }),
+    );
+
+    expect(html).not.toContain('disabled=""');
+
+    const tooLongHtml = renderToStaticMarkup(
+      createElement(PublicMessageForm, {
+        authorName: "🎉".repeat(161),
+        message: "Viva os noivos!",
+        busy: false,
+        onAuthorNameChange: vi.fn(),
+        onMessageChange: vi.fn(),
+        onSubmit: vi.fn(),
+      }),
+    );
+
+    expect(tooLongHtml).toContain('disabled=""');
   });
 });
 
@@ -118,8 +176,7 @@ describe("invitation access form", () => {
   });
 
   it("keeps confirmation in the access panel and leaves messages to the mural", () => {
-    expect(guestAccessSource).not.toContain("Sair");
-    expect(guestAccessSource).not.toContain("InvitationMessageForm");
+    expect(guestAccessSource).not.toContain("PublicMessageForm");
     expect(guestAccessSource).toContain("publishGuestSessionChange");
   });
 
@@ -144,32 +201,25 @@ describe("invitation access form", () => {
   });
 });
 
-describe("message mural compose", () => {
-  it("offers a centered message dialog only after the invitation session exists", () => {
-    expect(muralSource).toContain("hasSession &&");
+describe("public mural compose", () => {
+  it("offers public posting without tying the mural to guest session state", () => {
     expect(muralSource).toContain("Deixar uma mensagem");
-    expect(muralSource).toContain("readGuestSession");
-    expect(muralSource).toContain("guestSessionEventName");
+    expect(muralSource).not.toContain("hasSession");
+    expect(muralSource).not.toContain("readGuestSession");
+    expect(muralSource).not.toContain("guestSessionEventName");
+    expect(muralSource).not.toContain("invitationName");
     expect(messageDialogSource).toContain("<SiteDialog");
     expect(siteDialogSource).toContain("m-auto");
-    expect(messageDialogSource).toContain("Deixe uma mensagem");
-    expect(messageDialogSource).toContain("Sua mensagem");
-    expect(messageDialogSource).toContain("publishGuestSessionChange");
+    expect(messageDialogSource).toContain("createPublicSiteMessage");
+    expect(messageDialogSource).toContain("muralRefreshEventName");
+    expect(messageDialogSource).not.toContain("getInvitationMessage");
+    expect(messageDialogSource).not.toContain("readGuestSession");
   });
 });
 
 describe("message mural pagination", () => {
   it("replaces stale pages on refresh and deduplicates appended pages", () => {
-    const first: PublicMuralResponse["messages"] = [
-      {
-        id: "message-a",
-        authorName: "Ana Silva",
-        invitationName: "Família Silva",
-        text: "Viva os noivos!",
-        createdAt: "2026-09-12T12:00:00.000Z",
-        updatedAt: "2026-09-12T12:00:00.000Z",
-      },
-    ];
+    const first: PublicMuralResponse["messages"] = [message];
     const second: PublicMuralResponse["messages"] = [
       { ...first[0] },
       {
@@ -183,6 +233,30 @@ describe("message mural pagination", () => {
     expect(mergeMuralMessages(first, second, false)).toEqual(second);
     expect(mergeMuralMessages(first, second, true).map(({ id }) => id)).toEqual(
       ["message-a", "message-b"],
+    );
+  });
+});
+
+describe("public mural visibility", () => {
+  it("keeps stored cards and pagination visible while new posts are paused", () => {
+    expect(getMuralVisibility(false, 2, true)).toEqual({
+      showComposer: false,
+      showMessages: true,
+      showEmptyState: false,
+      showPausedStatus: true,
+      showMore: true,
+    });
+  });
+
+  it("shows only two columns on wide screens and one on narrow screens", () => {
+    expect(muralSource).toContain(
+      "grid-cols-2 gap-4 p-0 [@media(max-width:560px)]:grid-cols-1",
+    );
+  });
+
+  it("closes an open composer after publishing is paused", () => {
+    expect(muralSource).toContain(
+      "if (!result.enabled) setMessageOpen(false);",
     );
   });
 });

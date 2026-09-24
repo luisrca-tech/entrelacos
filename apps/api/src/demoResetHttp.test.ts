@@ -34,10 +34,10 @@ const adminOrigin = "https://admin.example.test";
 const db = {} as never;
 const resetResponse = {
   siteId: "site-demo",
-  datasetVersion: "block7-demo-v1",
+  datasetVersion: "block7-demo-v2",
   result: "RESET",
   resetAt: "2028-04-01T12:00:00.000Z",
-  counts: { invitations: 5, guests: 10, messages: 1 },
+  counts: { invitations: 5, guests: 10, messages: 0 },
 };
 
 function router() {
@@ -50,7 +50,7 @@ function router() {
 
 function request(
   path = "/v1/owner/sites/site-demo/demo/reset",
-  body: unknown = { datasetVersion: "block7-demo-v1" },
+  body: unknown = { datasetVersion: "block7-demo-v2" },
   headers: Record<string, string> = {},
 ) {
   return new Request(`https://api.example.test${path}`, {
@@ -135,7 +135,7 @@ describe("demo reset HTTP boundary", () => {
   it("rejects query-string overrides", async () => {
     const response = await router().request(
       request(
-        "/v1/owner/sites/site-demo/demo/reset?datasetVersion=block7-demo-v1",
+        "/v1/owner/sites/site-demo/demo/reset?datasetVersion=block7-demo-v2",
       ),
     );
 
@@ -264,8 +264,8 @@ describe("demo reset HTTP boundary", () => {
           siteId: "site-demo",
           actorRole: "OWNER",
           mode: "manual",
-          datasetVersion: "block7-demo-v1",
-          count: 16,
+          datasetVersion: "block7-demo-v2",
+          count: 15,
         }),
       ]),
     );

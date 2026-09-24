@@ -1,6 +1,6 @@
 # EntreLaços architecture and engineering contracts
 
-Status: accepted product boundaries translated into an incremental engineering specification. The invitation refactor consolidates guest administration and confirmations into one panel page and one invitation identity model. Messages, runtime mural controls, safe invitation deletion, CSV/PDF exports, and manual PIN verification remain; SMS delivery and Twilio integration are retired. The current refactor has not yet received database/browser acceptance or production migration.
+Status: accepted product boundaries translated into an incremental engineering specification. The invitation refactor consolidates guest administration and confirmations into one panel page and one invitation identity model. Messages, runtime mural controls, safe invitation deletion, CSV/PDF exports, and manual PIN verification remain; SMS delivery and Twilio integration are retired. The public mural decision in [publicMural.md](./publicMural.md) supersedes the invitation-owned message rules below. The current refactor has not yet received database/browser acceptance or production migration.
 
 ## Authority and document order
 
@@ -22,7 +22,7 @@ The admin application must not connect to Neon, import the database package or d
 | Package | Owns | Must not own |
 | --- | --- | --- |
 | `template-root` | Astro layouts, reusable editorial sections, default theme, motion conventions | Customer identity, credentials, business authorization |
-| `wedding-features` | Shared guest-facing feature presentation, invitation-session transport, RSVP form, invitation message editor, runtime mural, and draft/reconciliation helpers | Direct SQL, administrative authority, deadline or moderation enforcement, provider secrets |
+| `wedding-features` | Shared guest-facing feature presentation, invitation-session transport, RSVP form, public message composer, runtime mural, and draft/reconciliation helpers | Direct SQL, administrative authority, deadline or moderation enforcement, provider secrets |
 | `ui` | shadcn/Base UI primitives, Sonner, reusable derived controls | Wedding-specific layout or domain rules |
 | `contracts` | Public request/response validation and stable types | Drizzle tables, private authentication records |
 | `database` | Server-only schema, connections and reviewed migrations | Browser imports or customer-specific seeds without an explicit scope |
@@ -49,29 +49,29 @@ The demo is a marked wedding in each environment, not a third environment. It ha
 
 ## Conceptual data model
 
-Schema names below describe the current product model. A site owns invitations; each invitation owns one or more guests and one contact phone. The guest count determines whether it is a single-person or multi-person invitation. Administrative identity, site membership, site-scoped phone/PIN verification, and invitation sessions form the identity boundary. RSVP changes carry individual guest revisions, a paired site deadline, history snapshots, and site-scoped request receipts. Messages carry durable revisions and request receipts. Historical SMS accounting records are retired.
+Schema names below describe the current product model. A site owns invitations; each invitation owns one or more guests and one contact phone. The guest count determines whether it is a single-person or multi-person invitation. Administrative identity, site membership, site-scoped phone/PIN verification, and invitation sessions form the identity boundary. RSVP changes carry individual guest revisions, a paired site deadline, history snapshots, and site-scoped request receipts. Public mural messages belong directly to the site and use request receipts for safe retries. Historical SMS accounting records are retired.
 
 | Record | Essential contract |
 | --- | --- |
 | Site | Environment-local ID, stable project key, display name, demo marker, recorded lifecycle, public URL, explicit origins, publication/review/term dates, RSVP deadline and time zone, mural flag |
 | Administrative user/session | Better Auth records, OWNER role or SITE_ADMIN membership, activation state, idle and absolute expiry |
 | Site membership | Account-to-wedding authorization; initial SITE_ADMIN limited to one wedding; OWNER global scope |
-| Invitation | Site ID, required identification name, required unique E.164 contact phone, optional validated email, random PIN seed, message block/revision |
+| Invitation | Site ID, required identification name, required unique E.164 contact phone, optional validated email, random PIN seed |
 | Invitation guest | Site/invitation ID, full name, ADULT or CHILD type, individual RSVP state and revision |
 | RSVP history | Site/invitation/guest, old/new state, actor type/ID/display snapshot, timestamp; filtered cursor pagination in the invitations panel |
 | RSVP request receipt | Site/invitation/actor scope, request ID and hash, response body/status; unique idempotency key for replay-safe writes |
 | Invitation session | Site/invitation, expiry, revocation, opaque token hash independent of admin |
 | PIN attempt state | Site/invitation/phone scope, expiry, wrong-attempt and cooldown controls; the PIN itself is derived and never stored in plaintext |
-| Invitation message | Site/invitation display snapshot, normalized plain text, created/edited timestamps; one current message per invitation plus durable revision and idempotency receipt |
+| Mural message | Site ID, self-declared author name, normalized plain text, creation time; independent entries with idempotency receipts and publication rate events |
 | Activation/recovery/handoff | Hashed one-use token, purpose, scope, expiry and redemption/revocation state |
 
 All tenant-owned relations include the site scope. Composite constraints prevent referencing an invitation or guest from another site. The normalized contact phone is unique within a wedding; each invitation must have at least one guest, including after concurrent edits. Do not add gifts/payments tables.
 
 ### Authorization
 
-Derive administrative tenant access from the authenticated account, never merely a submitted site ID. Derive public invitation access from the validated invitation session, including its site and invitation. A public site ID, route ID, guest ID, administrative recognition, or demo grant identifies context at most and grants no privilege. Origin allowlists/CORS are additional browser controls, not identity checks. Recheck lifecycle and deadline when performing RSVP writes.
+Derive administrative tenant access from the authenticated account, never merely a submitted site ID. Derive public invitation access from the validated invitation session, including its site and invitation. Public mural submissions require no invitation session; their names do not establish guest identity. A public site ID, route ID, guest ID, administrative recognition, or demo grant identifies context at most and grants no privilege. Origin allowlists/CORS are additional browser controls, not identity checks. Recheck lifecycle and deadline when performing RSVP writes.
 
-OWNER can manage every wedding, accounts and lifecycle. SITE_ADMIN can operate only its wedding and cannot call OWNER endpoints. Admins may delete messages but never edit guest text. Message blocks do not block RSVP. Inactive weddings reject public writes; SITE_ADMIN retains read/export, while OWNER retains administrative authority.
+OWNER can manage every wedding, accounts and lifecycle. SITE_ADMIN can operate only its wedding and cannot call OWNER endpoints. Admins may delete messages but never edit visitor text. Inactive weddings reject public writes; SITE_ADMIN retains read/export, while OWNER retains administrative authority.
 
 ### RSVP transactions
 
@@ -79,7 +79,7 @@ Update only submitted guests using expected revisions. Verify every target belon
 
 ### Invitation changes and deletion
 
-Changing the invitation name or phone, or rotating the PIN, revokes invitation sessions and pending PIN attempts. Explicit deletion requires the exact invitation ID and name, then removes linked guests, RSVP/history, messages and sessions transactionally within the site. Expiration of site service is a different event and never triggers bulk deletion. Long-term retention and data-subject handling remain a pre-launch policy gate, not a claim of indefinite legal retention.
+Changing the invitation name or phone, or rotating the PIN, revokes invitation sessions and pending PIN attempts. Explicit deletion requires the exact invitation ID and name, then removes linked guests, RSVP/history and sessions transactionally within the site. Site-owned mural messages remain independent of invitation deletion. Expiration of site service is a different event and never triggers bulk deletion. Long-term retention and data-subject handling remain a pre-launch policy gate, not a claim of indefinite legal retention.
 
 ## Authentication contract and validation gate
 
@@ -104,8 +104,8 @@ Current route groups:
 - `/v1/public/invitation/session` and `/leave`: bearer-bound invitation read and explicit revocation.
 - `/v1/public/invitation/rsvp`: guest-level read/write using the invitation bearer and exact registered origin; reads remain available after the deadline while writes are rejected.
 - `/v1/sites/:siteId/rsvp`, `/deadline`, and `/history`: admin current read/write, paired nullable deadline instant/timezone, and filtered cursor-paginated history. The panel presents these inside the invitations page, not a separate RSVP page.
-- `/v1/public/invitation/message` and `/v1/public/sites/:siteId/mural`: one invitation message and privacy-limited runtime mural read.
-- `/v1/sites/:siteId/messages`, `/mural`, and `/invitations/:invitationId/message[-block]`: site-scoped moderation without administrator text editing.
+- `GET/POST /v1/public/sites/:siteId/mural`: privacy-limited runtime read and independent public message creation with application rate limits.
+- `/v1/sites/:siteId/messages` and `/mural`: site-scoped individual-message moderation and mural configuration without administrator text editing.
 - `/v1/sites/:siteId/reports/invitations.csv` and `.pdf`: consistent-snapshot one-guest-per-row downloads using the current invitation-name, status, and guest-type filters; contact fields require individual opt-in.
 
 Exact routes/verbs/payloads are frozen with their task, with schema validation, examples and negative tests. Use structured errors with HTTP status and stable machine codes such as `VALIDATION_ERROR`, `UNAUTHORIZED`, `FORBIDDEN`, `RSVP_DEADLINE_PASSED`, `RSVP_CONFLICT`, `INVALID_CODE`, and `SITE_INACTIVE`. Error text must not disclose secrets, SQL internals or another tenant's data. UI maps codes to Portuguese messages. Export endpoints validate tenant access, filter scope, CSV formula injection and safe PDF escaping. Do not equate a successful HTTP response with a successful business mutation when a conflict occurred.

@@ -40,9 +40,9 @@ export const featureAvailabilityItems: readonly FeatureAvailabilityItem[] = [
     note: "Sessões reais e o PIN manual do convite protegem os fluxos operacionais.",
   },
   {
-    name: "Mensagens por convite e mural público",
+    name: "Mensagens e mural público",
     status: "scaffold",
-    note: "Cada convite pode publicar um recado, exibido no mural em tempo de execução.",
+    note: "Cada visitante pode assinar um recado, exibido no mural em tempo de execução.",
   },
   {
     name: "Fluxo de mídia aprovada",
