@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 660 140" role="img" aria-labelledby="title">
+  <title id="title">EntreLaços</title>
+  <g fill="none" stroke="#A84D39" stroke-linecap="round" stroke-linejoin="round" stroke-width="7">
+    <path d="M6 86 C21 72 35 71 49 81 C59 88 66 92 73 84 C81 75 87 76 98 82 C112 90 125 88 139 78" />
+    <path d="M72 45 C59 31 48 21 37 22 C21 23 15 39 23 54 C31 69 51 85 67 97 C73 92 80 84 84 75 C90 61 83 50 72 45 Z" />
+    <path d="M72 45 C85 31 96 21 107 22 C123 23 129 39 121 54 C113 69 93 85 77 97 C71 92 64 84 60 75 C54 61 61 50 72 45 Z" />
+  </g>
+  <text x="170" y="96" fill="#282521" font-family="Georgia, 'Times New Roman', serif" font-size="74" letter-spacing="-2.5">EntreLaços</text>
+</svg>

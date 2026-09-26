@@ -62,18 +62,37 @@ export function AdminShell({
             "grid items-center transition-[grid-template-columns,gap] duration-200 ease-out motion-reduce:transition-none",
             expanded
               ? "grid-cols-[minmax(0,1fr)_auto] gap-2"
-              : "grid-cols-[0fr_1fr] gap-0",
+              : "grid-cols-1 justify-items-center gap-2",
           )}
         >
           <Link
             className={cn(
-              "min-w-0 overflow-hidden font-admin-display text-[1.45rem] tracking-[-0.03em] whitespace-nowrap text-admin-graphite no-underline transition-opacity duration-200 ease-out motion-reduce:transition-none",
-              expanded ? "opacity-100" : "pointer-events-none opacity-0",
+              "relative grid min-w-0 place-items-center overflow-hidden no-underline",
+              expanded ? "justify-items-start" : "justify-items-center",
             )}
             to="/"
-            tabIndex={expanded ? undefined : -1}
+            aria-label="EntreLaços — início"
           >
-            EntreLaços
+            <img
+              src="/brand/entrelacos-logo.svg"
+              alt=""
+              aria-hidden="true"
+              className={cn(
+                "h-9 w-full object-contain object-left transition-opacity duration-200 ease-out motion-reduce:transition-none",
+                "col-start-1 row-start-1",
+                expanded ? "opacity-100" : "pointer-events-none opacity-0",
+              )}
+            />
+            <img
+              src="/brand/entrelacos-favicon.svg"
+              alt=""
+              aria-hidden="true"
+              className={cn(
+                "size-7 object-contain transition-opacity duration-200 ease-out motion-reduce:transition-none",
+                "col-start-1 row-start-1",
+                expanded ? "pointer-events-none opacity-0" : "opacity-100",
+              )}
+            />
           </Link>
           <Button
             type="button"

@@ -11,7 +11,7 @@ import "../tailwind.css";
 
 export const Route = createRootRoute({
   head: () => ({
-    links: [{ rel: "icon", href: "data:," }],
+    links: [{ rel: "icon", href: "/brand/entrelacos-favicon.svg" }],
     meta: [
       { charSet: "utf-8" },
       {
