@@ -516,6 +516,12 @@ The frozen local base is SOURCE_CHECKPOINT_ACCEPTED:5697/224 serial NONDB, seven
 
 No real env/generated Graphify/machine hook enters the commit. Database/DDL/build/browser/provider/pilot evidence and remaining fee/worker/withdrawal/reversal/runtime code remain separate. Receiving and public gift/payment activation stay disabled until readiness is proved; this is a reviewed local foundation, not production approval.
 
+## Published foundation and active integration — 2026-10-14 02:41 UTC
+
+Actual source foundation SHA is2a33c1b326c3496db64e9c825b86b596c4949632, committed/pushed on feat/internal-gifts-asaas and verified remotely. release-gift-payment was created/pushed from the same SHA; principal checkout now uses that integration branch. Later worktrees derive from this SHA or a recorded coordination-only descendant, never main/default. A/B handoffs and C/D identities/grants remain pending until actually recorded. No PR/merge/deploy/DDL/provider resource or funds movement occurred.
+
+The published checkpoint excludes all real env and generated index/machine hooks. Local evidence remains5697/224 NONDB, supported typing, Biome554 and preserved migration JSON semantics. Physical database/browser/build/provider/pilot acceptance stays separate, and effective DIRECT is still blocked. Code-index parser limitations are navigation-only; explicit source/check evidence and central leases remain authoritative.
+
 ## Checkpoint protocol
 
 1. A0 publishes a proposed C1 type/route/data-model shape in `internalGiftsFinanceStatus.md`; B0 records consumer/access/catalog requests in `internalGiftsRegistryStatus.md`.
@@ -525,6 +531,8 @@ No real env/generated Graphify/machine hook enters the commit. Database/DDL/buil
 5. Central coordination arbitrates unresolved choices, records grants in the coordination document and schedules joint integration/QA checkpoints.
 
 ## Listening
+
+Published SHAs establish reproducible branch ancestry without enabling production or silently transferring ownership. Actual worktree identities are required before new source lanes start.
 
 The exact local acceptance scope is published with the incomplete foundation rather than being represented as production readiness. Later worktree branches derive from a verified checkpoint and retain ownership and database execution gates.
 

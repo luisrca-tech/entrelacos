@@ -1215,6 +1215,16 @@ Principal may now stage the exact306 audited current release candidate paths, ex
 
 The ignored code-only post-commit Graphify hook may run under principal's exclusive local index lane after this commit, with no competing semantic writer or active source writer. Its result is navigation state only and never staged. B remains frozen, A keeps shared-file ownership, deputy's inventory is CLOSED and discussion remains excluded. The reviewed foundation is intentionally incomplete local implementation, not a production release or proof of native funds/fees/withdrawals.
 
+### Foundation published; integration branch activated — 2026-10-14 02:41 UTC
+
+Principal committed the reviewed306-path local foundation as2a33c1b326c3496db64e9c825b86b596c4949632 (feat(gifts): checkpoint local payment foundation), pushed feat/internal-gifts-asaas and verified its remote SHA. Principal created release-gift-payment from that exact SHA, switched the principal checkout to it, pushed it and verified both remote refs at the same foundation SHA. This is actual approved branch publication, not a PR, merge, deploy, database migration or provider action. Root working tree was clean after publication. Real env and ignored generated Graphify/machine hooks are absent from the checkpoint. Existing unrelated detached portfolio worktree was not modified.
+
+The principal remains in /home/lfrca/personal-projects/entrelacos on release-gift-payment and is the only integration/central-document writer. Upcoming managed implementation worktrees/branches must derive from this foundation or a subsequently recorded coordination-only descendant, never remote main/default. A/B are currently idle/frozen in the original checkout until the app handoff actually completes; their future worktree identities and specific next grants must be recorded before source execution. Deputy remains a finite read-only lane; the user-only Asaas discussion is still excluded. C/D creation remains pending exact identities: A has released only the absent C worker pair and D execution/posting four paths, not shared foundations or later refund/export source.
+
+The installed local code-only Graphify commit/branch hooks refreshed ignored navigation output after all source/semantic writers drained. The latest graph has5962 nodes/13385 links and preserves the three hyperedges, but parser warnings affect34 files and four migration JSONs produce no nodes. This is partial navigation, not failing TypeScript/source or runtime acceptance. Health and central semantic refresh remain a bounded separate lane; do not run competing global hooks/index writers while semantic maintenance owns the graph. Coordination-only commits may suppress ONLY this generated-index hook for that invocation and use the existing bounded semantic worker afterwards; source quality/security checks remain intact. Generated output is never versioned.
+
+The development effective DIRECT duplicate/mismatch remains unresolved and no SQL has been applied. Publication does not enable financial/provider/media operations. Root will continue the approved worktree transition and exact local-code lanes independently of that environment correction and Asaas support, preserving physical QA and production gates.
+
 ## Status protocol and central listening
 
 Each lead exclusively maintains its own status file in normal English. Update after its first checkpoint, each meaningful handoff, a failed required test, or a blocker requiring coordination. Include current branch, last update, phase/task state, files actively edited, subagent model/task, passing/failing tests and exact commands, provided/required contract checkpoint, cross-owner requests, internal versus provider/user blockers, and the next independent action. Do not report percent complete without a measured basis.
@@ -1246,6 +1256,8 @@ Use the full release test matrix, not only a child subagent's claim. Preserve ex
 Readiness-first configuration and the 2%-nominal initial proposal are mandatory. Bank-verification implementation stays pending Asaas. Never collect all gifts in the parent account for manual redistribution, expose keys/card data/KYC assets, or weaken critical-action security to remove a UI step.
 
 ## Listening
+
+A verified published foundation and explicit integration branch make later handoffs reproducible. App worktree completion and grants are recorded as separate facts, preserving the previous leads and avoiding default-main forks. Navigation parser limitations are disclosed without substituting an index warning for the passing source/compiler evidence.
 
 Publication now follows complete serial runtime tests, supported typing, hygiene and explicit human inclusion/deploy boundaries. The checkpoint preserves disabled financial/provider gates and unapplied migration artifacts; worktrees will isolate later code without implying environment or production readiness.
 
