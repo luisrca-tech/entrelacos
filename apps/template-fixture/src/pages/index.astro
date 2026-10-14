@@ -1,5 +1,5 @@
 ---
-import { WeddingHome } from "@entrelacos/template-root/v1";
+import { GiftSection, WeddingHome } from "@entrelacos/template-root/v1";
 import LocalSection from "../components/LocalSection.astro";
 import "../styles/tailwind.css";
 import { hero, homeSeo, navigation, site, welcome } from "../data/site";
@@ -23,7 +23,12 @@ import { hero, homeSeo, navigation, site, welcome } from "../data/site";
   story={welcome}
   sectionOrder={["story", "hero"]}
 >
-  <LocalSection slot="after-main" id="hospedagem" title="Chegar também faz parte da experiência.">
-    <p>Uma seção exclusiva do host pode viver no ponto de extensão nomeado.</p>
-  </LocalSection>
+  <Fragment slot="after-main">
+    <LocalSection id="hospedagem" title="Chegar também faz parte da experiência.">
+      <p>Uma seção exclusiva do host pode viver no ponto de extensão nomeado.</p>
+    </LocalSection>
+    <GiftSection content={{id:"fixture-gifts",title:"Presentes na nossa celebração."}}>
+      <p>Os presentes simbólicos podem fazer parte da celebração.</p>
+    </GiftSection>
+  </Fragment>
 </WeddingHome>

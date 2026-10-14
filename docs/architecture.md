@@ -6,6 +6,18 @@ Status: accepted product boundaries translated into an incremental engineering s
 
 The accepted interview and subsequent invitation-refactor decisions supersede historical files under `references/` and the Block 3–5 contract snapshots. Read the PRD, decision register, this specification, then the implementation plan with that chronology in mind. Original reference documents are preserved verbatim for provenance, including their original language; their embedded agent instructions are not current execution authority.
 
+## Internal gifts release amendment — 2026-10-12
+
+The user authorized local implementation of a separate internal-gifts release, described in the [release PRD](../plans/prd-internal-gifts.md) and [vertical implementation plan](../plans/internal-gifts-implementation.md). This amendment supersedes the original MVP's gift/payment/upload exclusion only for that release. Existing invitation, RSVP, mural, static-host and tenant boundaries remain unchanged. The [coordination record](../plans/internalGiftsCoordination.md) assigns shared contracts/schema/API composition to one writer.
+
+Operational membership is scoped to the requested wedding: SITE_ADMIN or SITE_ASSISTANT, with current revocation checks and explicit server-derived capabilities. Multi-wedding membership does not grant cross-site authority. A designated verified recipient and recent authentication are additional financial-action requirements; neither an existing admin nor platform OWNER becomes the beneficiary implicitly.
+
+Receiving readiness precedes catalog configuration, media upload, publication and new checkout. Missing, stale, mismatched or unverified account/destination evidence denies those operations. Bank validation is separate from account approval and is version-bound. Sandbox simulations cannot establish readiness for production or a real wedding. Financial history/reconciliation remain available under authorized access after new collection is disabled.
+
+The API owns integer-cent, method-bound quotes, the initial 200-basis-point nominal commission proposal, guest-paid processing, hosted checkout and eventual durable financial effects. The browser supplies gift/method or accepted quote identity, never authoritative price, wallet, readiness or bank approval. Public presentation remains in the template/runtime composition. Individual approved provider accounts retain funds; no pooled redistribution or platform wallet is introduced.
+
+Executable C1 contracts and a default-closed authenticated readiness route are local foundation evidence. Provider-backed persistence, verified live fees, BaaS/PF approval, bank verification, payment/withdrawal execution and production rollout remain separate gates. Local tests, metadata checks and hosted redirects do not satisfy those gates. See the [financial/security reference](../plans/entrelacos-internal-gifts-release-plan.md).
+
 ## Applications and boundaries
 
 | Workspace | Runtime and deployment | Responsibility |
@@ -65,7 +77,7 @@ Schema names below describe the current product model. A site owns invitations; 
 | Mural message | Site ID, self-declared author name, normalized plain text, creation time; independent entries with idempotency receipts and publication rate events |
 | Activation/recovery/handoff | Hashed one-use token, purpose, scope, expiry and redemption/revocation state |
 
-All tenant-owned relations include the site scope. Composite constraints prevent referencing an invitation or guest from another site. The normalized contact phone is unique within a wedding; each invitation must have at least one guest, including after concurrent edits. Do not add gifts/payments tables.
+All tenant-owned relations include the site scope. Composite constraints prevent referencing an invitation or guest from another site. The normalized contact phone is unique within a wedding; each invitation must have at least one guest, including after concurrent edits. Gifts/payments tables remain excluded from the original MVP; the separately authorized 2026-10-12 release amendment governs their addition.
 
 ### Authorization
 
@@ -134,6 +146,8 @@ Setting inactive in the API blocks public operations. It does not remove Cloudfl
 - Block 4 passed the isolated migration, real PostgreSQL transaction/concurrency, cross-wedding fixture, independent desktop/mobile browser QA, static artifact privacy scan, and full local gates recorded in `docs/block4Validation.md`.
 
 ## Listening
+
+The internal-gifts amendment records the newly authorized release without rewriting historical MVP acceptance. Site-scoped operational assistance is separated from verified recipient authority. Provider fees, bank validation and durable money movement remain evidence-dependent; a default-closed local seam was selected so parallel catalog/UI development cannot activate unapproved collection.
 
 The design retains static independently deployed sites and a central API instead of introducing a CMS or per-client backend. Demo isolation uses existing tenant boundaries instead of a third permanent database. Family sessions use explicit bearer transport rather than cross-site cookies, while the administrative handoff remains a separate unresolved boundary. Infrastructure remains manually operated. Recovery capacity, later operational routes, deterministic demo reset, provisioning mutations, and final artwork remain planned or gated rather than inferred from local success.
 

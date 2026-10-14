@@ -1,4 +1,4 @@
-import type { MeResponse } from "@entrelacos/contracts";
+import type { MeResponse, SiteAccess } from "@entrelacos/contracts";
 import {
   Button,
   cn,
@@ -19,6 +19,7 @@ import {
 type AdminShellProps = {
   actor: MeResponse;
   siteId?: string;
+  siteAccess?: SiteAccess;
   siteName?: string;
   area?: SiteArea;
   onLogout: () => void;
@@ -28,12 +29,13 @@ type AdminShellProps = {
 export function AdminShell({
   actor,
   siteId,
+  siteAccess,
   siteName,
   area,
   onLogout,
   children,
 }: AdminShellProps) {
-  const role = actor.user.role as AdminRole;
+  const role = (siteAccess?.membershipRole ?? actor.user.role) as AdminRole;
   const navigation = siteId ? getSiteNavigation(role, siteId) : [];
   const initials = getInitials(actor.user.name);
   const [expanded, setExpanded] = useState(true);
@@ -252,7 +254,7 @@ function AdminNavigation({
           >
             {navigationIcon(item.area)}
           </span>
-          <NavigationLabel collapsed={collapsed && !mobile}>
+          <NavigationLabel collapsed={collapsed && !mobile} mobile={mobile}>
             {item.label}
           </NavigationLabel>
         </Link>
@@ -281,14 +283,18 @@ function navigationLinkClass(
 function NavigationLabel({
   children,
   collapsed,
+  mobile = false,
 }: {
   children: string;
   collapsed: boolean;
+  mobile?: boolean;
 }) {
   return (
     <span
       className={cn(
         "overflow-hidden whitespace-nowrap transition-[max-width,opacity] duration-200 ease-out motion-reduce:transition-none",
+        mobile &&
+          "min-w-0 max-w-full whitespace-normal break-words leading-tight",
         collapsed ? "max-w-0 opacity-0" : "max-w-40 opacity-100",
       )}
     >
@@ -303,6 +309,12 @@ function navigationIcon(area: SiteArea) {
       return "○";
     case "messages":
       return "□";
+    case "gifts":
+      return "◇";
+    case "receiving":
+      return "↗";
+    case "team":
+      return "◎";
     case "settings":
       return "⚙";
   }

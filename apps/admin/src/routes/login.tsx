@@ -5,11 +5,16 @@ import {
   CardDescription,
   CardHeader,
   Input,
+  PasswordInput,
   toast,
 } from "@entrelacos/ui";
 import { createFileRoute } from "@tanstack/react-router";
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 import { AuthLayout } from "../components/AuthLayout";
+import {
+  createPanelAuthenticationActions,
+  panelActorOwner,
+} from "../components/panelActor";
 import { adminStyles } from "../lib/adminStyles";
 import { apiRequest, safePanelReturn } from "../lib/apiClient";
 
@@ -21,29 +26,61 @@ export const Route = createFileRoute("/login")({
   component: LoginPage,
 });
 
+export function signInPanel(body: {
+  email: FormDataEntryValue | null;
+  password: FormDataEntryValue | null;
+}) {
+  return panelActorOwner.runAuthentication(() =>
+    apiRequest("/v1/auth/sign-in/email", { method: "POST", body }),
+  );
+}
+export function submitPanelSignIn(
+  actions: ReturnType<typeof createPanelAuthenticationActions>,
+  body: Parameters<typeof signInPanel>[0],
+  onSuccess: () => void,
+  onFailure: () => void,
+) {
+  return actions.run(() => signInPanel(body), onSuccess, onFailure);
+}
+
 function LoginPage() {
   const search = Route.useSearch();
   const [hydrated, setHydrated] = useState(false);
   const [pending, setPending] = useState(false);
+  const authActions = useRef<ReturnType<
+    typeof createPanelAuthenticationActions
+  > | null>(null);
 
-  useEffect(() => setHydrated(true), []);
+  useEffect(() => {
+    const actions = createPanelAuthenticationActions();
+    authActions.current = actions;
+    setHydrated(true);
+    return () => {
+      actions.dispose();
+      if (authActions.current === actions) authActions.current = null;
+    };
+  }, []);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
+    const actions = authActions.current;
+    if (!actions) return;
     setPending(true);
-    try {
-      await apiRequest("/v1/auth/sign-in/email", {
-        method: "POST",
-        body: { email: form.get("email"), password: form.get("password") },
-      });
-      window.location.assign(search.next);
-    } catch {
-      toast.error(
-        "Não foi possível entrar. Confira o e-mail e a senha ou solicite um novo acesso ao responsável.",
-      );
-      setPending(false);
-    }
+    await submitPanelSignIn(
+      actions,
+      {
+        email: form.get("email"),
+        password: form.get("password"),
+      },
+      () => window.location.assign(search.next),
+      () => {
+        toast.error(
+          "Não foi possível entrar. Confira o e-mail e a senha ou solicite um novo acesso ao responsável.",
+        );
+        setPending(false);
+      },
+    );
   }
 
   return (
@@ -87,20 +124,16 @@ function LoginPage() {
                 maxLength={320}
               />
             </label>
-            <label
-              className="grid gap-2 text-[0.88rem] font-semibold text-admin-graphite"
-              htmlFor="login-password"
-            >
-              Senha
-              <Input
+            <div className="grid gap-2 text-[0.88rem] font-semibold text-admin-graphite">
+              <label htmlFor="login-password">Senha</label>
+              <PasswordInput
                 id="login-password"
                 name="password"
-                type="password"
                 autoComplete="current-password"
                 required
                 maxLength={200}
               />
-            </label>
+            </div>
             <Button
               className="w-fit justify-self-start"
               type="submit"

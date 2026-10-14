@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -14,13 +14,11 @@ const migrationsDirectory = join(
   "../migrations",
 );
 
-function latestMigrationSql(): string {
-  const latest = readdirSync(migrationsDirectory)
-    .filter((name) => /^\d{4}_.+\.sql$/.test(name))
-    .sort()
-    .at(-1);
-  if (!latest) throw new Error("No database migrations found");
-  return readFileSync(join(migrationsDirectory, latest), "utf8");
+function muralMigrationSql(): string {
+  return readFileSync(
+    join(migrationsDirectory, "0011_rainy_archangel.sql"),
+    "utf8",
+  );
 }
 
 describe("public mural database schema", () => {
@@ -45,7 +43,7 @@ describe("public mural database schema", () => {
   });
 
   it("locks and refuses legacy messages before dropping their schema", () => {
-    const sql = latestMigrationSql();
+    const sql = muralMigrationSql();
     const lockPosition = sql.indexOf(
       'LOCK TABLE "invitation_message", "message_request_receipt"',
     );

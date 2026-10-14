@@ -84,10 +84,23 @@ describe("Block 2 database constraints", () => {
     await connection.close();
   });
 
-  it("enforces one site membership per user and binds tokens to that membership", async () => {
+  it("allows scoped multi-site membership while binding tokens to one wedding", async () => {
+    const [secondMembership] = await connection.db
+      .insert(siteMembership)
+      .values({
+        id: secondMembershipId,
+        siteId: secondSiteId,
+        userId,
+        role: "SITE_ASSISTANT",
+      })
+      .returning({ siteId: siteMembership.siteId, role: siteMembership.role });
+    expect(secondMembership).toEqual({
+      siteId: secondSiteId,
+      role: "SITE_ASSISTANT",
+    });
     await expect(
       connection.db.insert(siteMembership).values({
-        id: secondMembershipId,
+        id: `${secondMembershipId}-duplicate`,
         siteId: secondSiteId,
         userId,
       }),

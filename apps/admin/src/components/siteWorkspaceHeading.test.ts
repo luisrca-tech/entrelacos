@@ -52,6 +52,16 @@ describe("site workspace heading", () => {
     ).toBe(false);
   });
 
+  it("names the gifts workspace before catalog activation", () => {
+    expect(
+      getWorkspaceHeading({
+        area: "gifts",
+        owner: false,
+        lifecycle: "ACTIVE",
+      }).title,
+    ).toBe("Presentes");
+  });
+
   it("always shows lifecycle status to owners", () => {
     expect(
       getWorkspaceHeading({

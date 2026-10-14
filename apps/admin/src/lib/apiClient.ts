@@ -48,7 +48,7 @@ export async function apiRequest<T>(
 export function safePanelReturn(value: unknown): string {
   if (typeof value !== "string") return "/";
   if (
-    /^\/sites\/[^/?#]+\/(invitations|messages|settings)(?:\?[^#]*)?$/.test(
+    /^\/sites\/[^/?#]+\/(invitations|messages|gifts|receiving|team|settings)(?:\?[^#]*)?$/.test(
       value,
     ) &&
     !value.includes("\\") &&

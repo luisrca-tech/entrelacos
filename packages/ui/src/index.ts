@@ -67,6 +67,7 @@ export {
   FieldTitle,
 } from "./components/field";
 export { Input } from "./components/input";
+export { PasswordInput } from "./components/password-input";
 export {
   Popover,
   PopoverClose,

@@ -1,4 +1,5 @@
 import type { DatabaseTarget } from "@entrelacos/database";
+import { readGiftMediaConfig } from "./giftMediaConfig";
 
 function origin(value: string | undefined, name: string): string {
   try {
@@ -53,6 +54,13 @@ function betterAuthOrigin(env: Record<string, string | undefined>): string {
 
 export function readRuntimeConfig(env: Record<string, string | undefined>) {
   const target = databaseTarget(env);
+  const historyMode = env.GIFT_PAYMENT_HISTORY_MODE?.trim() || "disabled";
+  if (
+    historyMode !== "disabled" &&
+    historyMode !== "sandbox" &&
+    historyMode !== "live"
+  )
+    throw new Error("Gift payment history configuration is invalid");
   const port = Number(env.PORT ?? "8080");
   if (!Number.isInteger(port) || port < 1 || port > 65535) {
     throw new Error("PORT must be an integer between 1 and 65535");
@@ -81,5 +89,11 @@ export function readRuntimeConfig(env: Record<string, string | undefined>) {
     adminOrigin: origin(env.ADMIN_ORIGIN, "ADMIN_ORIGIN"),
     fingerprintSecret,
     trustProxyHeaders,
+    giftPaymentHistory: Object.freeze({
+      mode: historyMode,
+      applicationEnvironment: target,
+      policy: "SITE_HISTORY" as const,
+    }),
+    giftMedia: readGiftMediaConfig(env),
   };
 }

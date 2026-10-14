@@ -3,6 +3,7 @@ import type { accountState } from "@entrelacos/database/schema";
 import { session, user, verification } from "@entrelacos/database/schema";
 import { and, eq } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
+import { resolveSiteAccess } from "./siteAccess";
 
 export const HANDOFF_CHALLENGE_IDENTIFIER = "entrelacos:handoff:challenge";
 export const HANDOFF_RECOGNITION_IDENTIFIER = "entrelacos:handoff:recognition";
@@ -77,7 +78,10 @@ interface RecognitionRecordValue {
   parentSessionId: string;
 }
 
-type HandoffStore = Pick<HandoffDatabase, "select" | "insert" | "delete">;
+type HandoffStore = Pick<
+  HandoffDatabase,
+  "select" | "insert" | "delete" | "execute"
+>;
 
 function rejectHandoff(): never {
   throw new Error("Handoff request rejected");
@@ -217,6 +221,7 @@ async function activeAdminSession(
   db: HandoffStore,
   parentSessionId: string,
   now: Date,
+  requestedSiteId: string,
 ): Promise<ActiveAdminSession | undefined> {
   const [sessionRow] = await db
     .select({
@@ -232,7 +237,7 @@ async function activeAdminSession(
   if (!sessionRow) return undefined;
 
   const [userRow] = await db
-    .select({ state: user.state })
+    .select({ state: user.state, role: user.role })
     .from(user)
     .where(eq(user.id, sessionRow.userId))
     .limit(1);
@@ -245,6 +250,12 @@ async function activeAdminSession(
     createdAt: sessionRow.createdAt,
   };
   if (!isAdminSessionActive(snapshot, now)) return undefined;
+  const access = await resolveSiteAccess(db, {
+    userId: sessionRow.userId,
+    platformRole: userRow.role,
+    siteId: requestedSiteId,
+  });
+  if (!access) return undefined;
 
   const absoluteExpiresAt = new Date(
     Math.min(
@@ -272,7 +283,12 @@ export async function issueHandoff(
   const now = validatedNow(input.now);
 
   return db.transaction(async (tx) => {
-    const parent = await activeAdminSession(tx, requestedSessionId, now);
+    const parent = await activeAdminSession(
+      tx,
+      requestedSessionId,
+      now,
+      requestedSiteId,
+    );
     if (!parent) rejectHandoff();
 
     const code = opaqueToken();
@@ -337,7 +353,12 @@ export async function redeemHandoff(
     }
     if (!sameSecret(value.challenge, hash(verifier))) rejectHandoff();
 
-    const parent = await activeAdminSession(tx, value.parentSessionId, now);
+    const parent = await activeAdminSession(
+      tx,
+      value.parentSessionId,
+      now,
+      requestedSiteId,
+    );
     if (!parent) rejectHandoff();
 
     const consumed = await tx
@@ -413,6 +434,8 @@ export async function recognizeSite(
       return false;
     }
 
-    return Boolean(await activeAdminSession(tx, value.parentSessionId, now));
+    return Boolean(
+      await activeAdminSession(tx, value.parentSessionId, now, requestedSiteId),
+    );
   });
 }

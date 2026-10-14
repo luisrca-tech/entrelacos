@@ -29,71 +29,137 @@ import {
   useEffect,
   useRef,
   useState,
+  useSyncExternalStore,
 } from "react";
 import { adminStyles, displayHeading } from "../lib/adminStyles";
-import { ApiError, apiRequest } from "../lib/apiClient";
+import { apiRequest } from "../lib/apiClient";
 import { AdminShell, ShellLoading } from "./AdminShell";
 import { resolveSiteArea, type SiteArea } from "./adminNavigation";
 import { formatBrazilianDate } from "./brazilianDate";
 import {
-  getCachedPanelActor,
-  loadPanelActor,
-  resetPanelActorCache,
+  createPanelAuthenticationActions,
+  mountPanelSessionLifecycle,
+  type PanelSessionSnapshot,
+  panelActorOwner,
 } from "./panelActor";
+import {
+  getPanelLanding,
+  getSelectedSiteAccess,
+  loadAssignedSiteName,
+} from "./panelMemberships";
 import { SiteWorkspace } from "./SiteWorkspace";
 
 export function Panel({ siteId, area }: { siteId?: string; area?: SiteArea }) {
-  const [actor, setActor] = useState<MeResponse | null>(getCachedPanelActor);
+  const snapshot = useSyncExternalStore(
+    panelActorOwner.subscribe,
+    panelActorOwner.getSnapshot,
+    panelActorOwner.getServerSnapshot,
+  );
   const [siteName, setSiteName] = useState<string>();
-  const [error, setError] = useState("");
-
+  const authActions = useRef<ReturnType<
+    typeof createPanelAuthenticationActions
+  > | null>(null);
   useEffect(() => {
-    let active = true;
-    loadPanelActor()
-      .then((value) => {
-        if (active) setActor(value);
-      })
-      .catch((cause) => {
-        if (!active) return;
-        if (cause instanceof ApiError && cause.status === 401) {
-          const next = window.location.pathname + window.location.search;
-          window.location.replace(`/login?next=${encodeURIComponent(next)}`);
-        } else {
-          setError(
-            cause instanceof Error
-              ? cause.message
-              : "Não foi possível abrir o painel.",
-          );
-        }
-      });
+    const actions = createPanelAuthenticationActions();
+    authActions.current = actions;
+    const cleanup = mountPanelSessionLifecycle({ target: window, document });
     return () => {
-      active = false;
+      actions.dispose();
+      if (authActions.current === actions) authActions.current = null;
+      cleanup();
     };
   }, []);
+  useEffect(() => {
+    setSiteName(undefined);
+    if (
+      snapshot.status === "unauthenticated" &&
+      panelActorOwner.getSnapshot() === snapshot
+    ) {
+      const next = window.location.pathname + window.location.search;
+      window.location.replace(`/login?next=${encodeURIComponent(next)}`);
+    }
+  }, [snapshot]);
 
   async function logout() {
-    try {
-      await apiRequest("/v1/auth/sign-out", { method: "POST", body: {} });
-      resetPanelActorCache();
-      window.location.replace("/login");
-    } catch {
-      toast.error("Não foi possível sair. Tente novamente.");
-    }
+    const actions = authActions.current;
+    if (!actions) return;
+    await submitPanelSignOut(
+      actions,
+      () => window.location.replace("/login"),
+      () => toast.error("Não foi possível sair. Tente novamente."),
+    );
   }
 
-  if (error) {
+  return (
+    <PanelSessionView
+      snapshot={snapshot}
+      siteId={siteId}
+      area={area}
+      siteName={siteName}
+      onSiteName={setSiteName}
+      onVerify={() => {
+        void panelActorOwner.load(true).catch(() => {});
+      }}
+      onLogout={() => void logout()}
+    />
+  );
+}
+
+export function signOutPanel() {
+  return panelActorOwner.runAuthentication(() =>
+    apiRequest("/v1/auth/sign-out", { method: "POST", body: {} }),
+  );
+}
+export function submitPanelSignOut(
+  actions: ReturnType<typeof createPanelAuthenticationActions>,
+  onSuccess: () => void,
+  onFailure: () => void,
+) {
+  return actions.run(signOutPanel, onSuccess, onFailure);
+}
+
+export function PanelSessionView({
+  snapshot,
+  siteId,
+  area,
+  siteName,
+  onSiteName,
+  onVerify,
+  onLogout,
+}: {
+  snapshot: PanelSessionSnapshot;
+  siteId?: string;
+  area?: SiteArea;
+  siteName?: string;
+  onSiteName?: (name: string) => void;
+  onVerify: () => void;
+  onLogout: () => void;
+}) {
+  const { actor, sessionEpoch } = snapshot;
+  if (snapshot.status !== "verified" || !actor || sessionEpoch === null) {
     return (
       <ShellLoading>
-        <p className={adminStyles.alert} role="alert">
-          {error}
+        <p
+          className={adminStyles.alert}
+          role={snapshot.status === "loading" ? "status" : "alert"}
+        >
+          {snapshot.status === "loading"
+            ? "Verificando sessão…"
+            : snapshot.status === "denied"
+              ? "Acesso ao painel indisponível. Verifique sua sessão."
+              : "Verifique sua sessão para abrir o painel."}
         </p>
+        {snapshot.status !== "loading" && (
+          <Button onClick={onVerify}>Verificar sessão</Button>
+        )}
       </ShellLoading>
     );
   }
-  if (!actor) return <ShellLoading>Carregando painel…</ShellLoading>;
 
-  if (!siteId && actor.user.role === "SITE_ADMIN") {
-    if (actor.siteId) return <SiteAdminRedirect siteId={actor.siteId} />;
+  const landing = getPanelLanding(actor);
+  if (!siteId && landing.kind === "SITE")
+    return <SiteAdminRedirect siteId={landing.siteId} />;
+  if (!siteId && landing.kind === "EMPTY") {
     return (
       <ShellLoading>
         <p className={adminStyles.alert} role="alert">
@@ -103,7 +169,17 @@ export function Panel({ siteId, area }: { siteId?: string; area?: SiteArea }) {
     );
   }
 
-  const resolvedArea = resolveSiteArea(actor.user.role, area);
+  const selectedAccess = siteId ? getSelectedSiteAccess(actor, siteId) : null;
+  if (siteId && actor.user.role !== "OWNER" && !selectedAccess)
+    return (
+      <ShellLoading>
+        <p className={adminStyles.alert} role="alert">
+          Acesso negado ou casamento não encontrado.
+        </p>
+      </ShellLoading>
+    );
+  const selectedRole = selectedAccess?.membershipRole ?? actor.user.role;
+  const resolvedArea = resolveSiteArea(selectedRole, area);
   if (siteId && area && resolvedArea !== area) {
     return <SiteAreaRedirect siteId={siteId} area={resolvedArea} />;
   }
@@ -111,22 +187,83 @@ export function Panel({ siteId, area }: { siteId?: string; area?: SiteArea }) {
   return (
     <AdminShell
       actor={actor}
+      siteAccess={selectedAccess ?? undefined}
       siteId={siteId}
       siteName={siteName}
       area={siteId ? resolvedArea : undefined}
-      onLogout={() => void logout()}
+      onLogout={onLogout}
     >
       {siteId ? (
         <SiteWorkspace
+          key={`${siteId}:${sessionEpoch}`}
           siteId={siteId}
+          sessionEpoch={sessionEpoch}
           owner={actor.user.role === "OWNER"}
+          access={selectedAccess}
           area={resolvedArea}
-          onSiteName={setSiteName}
+          onSiteName={onSiteName}
         />
+      ) : landing.kind === "SELECT" ? (
+        <AssignedSites key={sessionEpoch} actor={actor} />
       ) : (
-        <OwnerSites />
+        <OwnerSites key={sessionEpoch} />
       )}
     </AdminShell>
+  );
+}
+
+function AssignedSiteName({ siteId }: { siteId: string }) {
+  const [result, setResult] = useState<{ siteId: string; name: string } | null>(
+    null,
+  );
+  useEffect(() => {
+    let active = true;
+    void loadAssignedSiteName(siteId)
+      .then((name) => {
+        if (active) setResult({ siteId, name });
+      })
+      .catch(() => {
+        if (active) setResult({ siteId, name: "Casamento indisponível" });
+      });
+    return () => {
+      active = false;
+    };
+  }, [siteId]);
+  return (
+    <span>
+      {result?.siteId === siteId ? result.name : "Carregando casamento…"}
+    </span>
+  );
+}
+
+function AssignedSites({ actor }: { actor: MeResponse }) {
+  return (
+    <section className="grid gap-5">
+      <h1 className={displayHeading}>Seus casamentos</h1>
+      <p className="m-0 text-admin-muted">
+        Escolha o casamento que deseja acompanhar.
+      </p>
+      <ul className="m-0 grid list-none gap-3 p-0">
+        {(actor.memberships ?? [])
+          .filter((entry) => entry.userId === actor.user.id)
+          .map((entry) => (
+            <li key={entry.siteId}>
+              <Link
+                className="flex min-h-14 items-center justify-between gap-4 rounded-xl border border-admin-line bg-admin-surface p-4 text-admin-graphite no-underline"
+                to="/sites/$siteId/invitations"
+                params={{ siteId: entry.siteId }}
+              >
+                <AssignedSiteName siteId={entry.siteId} />
+                <span className="text-sm text-admin-muted">
+                  {entry.membershipRole === "SITE_ASSISTANT"
+                    ? "Assessor"
+                    : "Administrador"}
+                </span>
+              </Link>
+            </li>
+          ))}
+      </ul>
+    </section>
   );
 }
 

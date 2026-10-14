@@ -4,7 +4,7 @@ import {
   CardContent,
   CardDescription,
   CardHeader,
-  Input,
+  PasswordInput,
   toast,
 } from "@entrelacos/ui";
 import { Link } from "@tanstack/react-router";
@@ -101,36 +101,28 @@ export function AccessForm({
                 O link vale por 24 horas e pode ser usado uma vez.
               </p>
               <form className={adminStyles.authForm} onSubmit={submit}>
-                <label
-                  className="grid gap-2 text-[0.88rem] font-semibold text-admin-graphite"
-                  htmlFor="access-password"
-                >
-                  Nova senha
-                  <Input
+                <div className="grid gap-2 text-[0.88rem] font-semibold text-admin-graphite">
+                  <label htmlFor="access-password">Nova senha</label>
+                  <PasswordInput
                     id="access-password"
                     name="password"
-                    type="password"
                     autoComplete="new-password"
                     minLength={6}
                     maxLength={10}
                     required
                   />
-                </label>
-                <label
-                  className="grid gap-2 text-[0.88rem] font-semibold text-admin-graphite"
-                  htmlFor="access-confirmation"
-                >
-                  Confirmar senha
-                  <Input
+                </div>
+                <div className="grid gap-2 text-[0.88rem] font-semibold text-admin-graphite">
+                  <label htmlFor="access-confirmation">Confirmar senha</label>
+                  <PasswordInput
                     id="access-confirmation"
                     name="confirmation"
-                    type="password"
                     autoComplete="new-password"
                     minLength={6}
                     maxLength={10}
                     required
                   />
-                </label>
+                </div>
                 <p className="text-[0.87rem] leading-[1.6] text-admin-muted">
                   Use de 6 a 10 caracteres.
                 </p>

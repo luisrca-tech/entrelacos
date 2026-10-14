@@ -244,7 +244,9 @@ function ipFingerprint(
 async function requireAdminActor(
   request: Request,
   options: MessagesHttpOptions,
-): Promise<Response | { userId: string; role: "OWNER" | "SITE_ADMIN" }> {
+): Promise<
+  Response | { userId: string; role: "OWNER" | "SITE_ADMIN" | "SITE_ASSISTANT" }
+> {
   if (request.headers.get("origin") !== options.adminOrigin)
     return problem(403, "FORBIDDEN", "Forbidden");
   try {

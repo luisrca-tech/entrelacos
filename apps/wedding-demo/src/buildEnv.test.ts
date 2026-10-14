@@ -25,6 +25,17 @@ describe("wedding demo build inputs", () => {
 });
 
 describe("progressive enhancement", () => {
+  it("composes runtime gifts in the template seam without enabling live demo payments", () => {
+    const source = readFileSync(
+      resolve(import.meta.dirname, "pages/index.astro"),
+      "utf8",
+    );
+    expect(source).toContain("<GiftSection");
+    expect(source).toContain("<GiftRegistry");
+    expect(source).toContain("demo={true}");
+    expect(source).not.toContain("gift-quotes");
+    expect(source).not.toContain("R2_SECRET");
+  });
   it("transforms the workspace UI package during SSR development", () => {
     expect(astroConfig).toContain('noExternal: ["@entrelacos/ui"]');
   });

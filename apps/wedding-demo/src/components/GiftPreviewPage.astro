@@ -1,0 +1,21 @@
+---
+import { GiftRegistryPreview } from "./GiftRegistryPreview";
+---
+
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>Prévia local de presentes</title>
+  </head>
+  <body class="m-0 min-w-[320px] bg-template-ivory font-sans text-template-ink">
+    <main class="px-[var(--template-page-inset)] py-12">
+      <section id="gifts" aria-label="Prévia local de presentes">
+        <h1 class="mb-6 font-template-serif text-3xl font-normal">Prévia local de presentes</h1>
+        <GiftRegistryPreview client:only="react" />
+      </section>
+    </main>
+  </body>
+</html>

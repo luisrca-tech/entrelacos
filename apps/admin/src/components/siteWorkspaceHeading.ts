@@ -4,6 +4,9 @@ import type { SiteArea } from "./adminNavigation";
 const areaTitle: Record<SiteArea, string> = {
   invitations: "Convites",
   messages: "Mensagens",
+  gifts: "Presentes",
+  receiving: "Recebimentos",
+  team: "Equipe",
   settings: "Configurações",
 };
 

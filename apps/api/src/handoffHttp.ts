@@ -64,7 +64,11 @@ export function createHandoffHttpRouter(options: AuthHttpOptions) {
     if (!parsed.success) return problem(400, "VALIDATION_ERROR");
     const data = parsed.data;
     if (
-      (actor.user.role !== "OWNER" && actor.siteId !== data.siteId) ||
+      (actor.user.role !== "OWNER" &&
+        !actor.memberships?.some(
+          (entry) =>
+            entry.siteId === data.siteId && entry.userId === actor.user.id,
+        )) ||
       !(await registered(data.origin, context.req.raw, data.siteId))
     )
       return problem(403, "FORBIDDEN");

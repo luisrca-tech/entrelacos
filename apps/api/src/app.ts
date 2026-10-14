@@ -1,8 +1,36 @@
-import type { ApiProblem, HealthResponse } from "@entrelacos/contracts";
+import {
+  type ApiProblem,
+  type HealthResponse,
+  internalGiftsEndpointPaths,
+} from "@entrelacos/contracts";
 import { Hono } from "hono";
 import { createAdminAccessHttpRouter } from "./adminAccessHttp";
-import { type AuthHttpOptions, createAuthHttpRouter } from "./authHttp";
+import {
+  type AsaasWebhookHttpReceiver,
+  createAsaasWebhookHttpRouter,
+} from "./asaasWebhookHttp";
+import { createAuthHttpRouter } from "./authHttp";
 import { createDemoResetHttpRouter } from "./demoResetHttp";
+import {
+  createFinanceHttpRouter,
+  type FinanceHttpOptions,
+} from "./financeHttp";
+import type { FinancialReauthentication } from "./financialReauthentication";
+import { createFinancialReauthenticationHttpRouter } from "./financialReauthenticationHttp";
+import {
+  createGiftMediaHttpRouter,
+  type GiftMediaHttpOptions,
+} from "./giftMediaHttp";
+import {
+  createGiftPaymentHistoryHttpRouter,
+  type GiftPaymentHistoryHttpOptions,
+  giftPaymentHistoryHttpPaths,
+} from "./giftPaymentHistoryHttp";
+import {
+  createGiftPaymentsHttpRouter,
+  type GiftPaymentsHttpOptions,
+} from "./giftPaymentsHttp";
+import { createGiftsHttpRouter } from "./giftsHttp";
 import { createGuestVerificationHttpRouter } from "./guestVerificationHttp";
 import { createHandoffHttpRouter } from "./handoffHttp";
 import { createInvitationsHttpRouter } from "./invitationsHttp";
@@ -12,12 +40,41 @@ import {
   type ObservabilityOptions,
   type ObservabilityVariables,
 } from "./observability";
+import { createReceivingHttpRouter } from "./receivingHttp";
+import type { ReceivingNominationService } from "./receivingNomination";
+import {
+  createReceivingNominationHttpRouter,
+  type ReceivingNominationHttpOptions,
+} from "./receivingNominationHttp";
+import {
+  type ReceivingRepositoryOptions,
+  readReceivingReadiness,
+} from "./receivingRepository";
 import { createReportsHttpRouter } from "./reportsHttp";
 import { createRsvpHttpRouter } from "./rsvpHttp";
 import { createSitesHttpRouter } from "./sitesHttp";
+import { createSiteTeamHttpRouter } from "./siteTeamHttp";
+
+export type ApiOptions = GiftPaymentsHttpOptions &
+  Pick<
+    GiftMediaHttpOptions,
+    "storage" | "storageNamespace" | "processing" | "decode"
+  > &
+  Pick<FinanceHttpOptions, "finance" | "withdrawalReservation"> &
+  Pick<
+    ReceivingNominationHttpOptions,
+    "receivingNominationContext" | "readAdministrativeSession"
+  > & {
+    receiving?: ReceivingRepositoryOptions;
+    asaasWebhook?: AsaasWebhookHttpReceiver;
+    financialReauthentication?: FinancialReauthentication;
+    receivingNomination?: ReceivingNominationService;
+    giftMediaAuth?: GiftMediaHttpOptions["auth"];
+    giftPaymentHistory?: GiftPaymentHistoryHttpOptions["giftPaymentHistory"];
+  };
 
 export function createApp(
-  options?: AuthHttpOptions,
+  options?: ApiOptions,
   observability?: ObservabilityOptions,
 ) {
   const app = new Hono<{ Variables: ObservabilityVariables }>();
@@ -30,10 +87,75 @@ export function createApp(
     } satisfies HealthResponse);
   });
 
+  const historyRouter = createGiftPaymentHistoryHttpRouter({
+    adminOrigin: options?.adminOrigin,
+    giftPaymentHistory: options?.giftPaymentHistory,
+  });
+  // Exact history dispatch keeps other routers' activity middleware outside this read.
+  for (const path of giftPaymentHistoryHttpPaths) {
+    app.all(path, (context) => historyRouter.fetch(context.req.raw));
+  }
+
   if (options) {
+    app.route("/", createAsaasWebhookHttpRouter(options.asaasWebhook));
+    const readReadiness = (siteId: string) =>
+      readReceivingReadiness(options.db, siteId, options.receiving);
     app.route("/", createAuthHttpRouter(options));
     app.route("/", createAdminAccessHttpRouter(options));
     app.route("/", createSitesHttpRouter(options));
+    const teamRouter = createSiteTeamHttpRouter(options);
+    // Dispatch only team contracts so its private middleware cannot guard guest routes.
+    for (const endpoint of [
+      internalGiftsEndpointPaths.access,
+      internalGiftsEndpointPaths.teamRead,
+      internalGiftsEndpointPaths.teamInvite,
+      internalGiftsEndpointPaths.teamInvitationRevoke,
+      internalGiftsEndpointPaths.teamMemberRevoke,
+      internalGiftsEndpointPaths.teamAccept,
+    ]) {
+      const [method, path] = endpoint.split(" ");
+      app.on(method, path, (context) => teamRouter.fetch(context.req.raw));
+    }
+    app.route("/", createReceivingHttpRouter({ ...options, readReadiness }));
+    app.route("/", createFinanceHttpRouter(options));
+    app.route("/", createFinancialReauthenticationHttpRouter(options));
+    app.route("/", createReceivingNominationHttpRouter(options));
+    const mediaRouter = createGiftMediaHttpRouter({
+      ...options,
+      auth: options.giftMediaAuth ?? options.auth,
+      readReadiness,
+    });
+    for (const endpoint of [
+      internalGiftsEndpointPaths.mediaUpload,
+      internalGiftsEndpointPaths.mediaFinalize,
+    ]) {
+      const [method, path] = endpoint.split(" ");
+      app.on(method, path, (context) => mediaRouter.fetch(context.req.raw));
+    }
+    const giftsRouter = createGiftsHttpRouter({ ...options, readReadiness });
+    for (const endpoint of [
+      internalGiftsEndpointPaths.giftsRead,
+      internalGiftsEndpointPaths.giftsCreate,
+      internalGiftsEndpointPaths.giftUpdate,
+      internalGiftsEndpointPaths.giftPublication,
+      internalGiftsEndpointPaths.giftsReorder,
+      internalGiftsEndpointPaths.publicGifts,
+      "OPTIONS /v1/public/sites/:siteId/gifts",
+    ]) {
+      const [method, path] = endpoint.split(" ");
+      app.on(method, path, (context) => giftsRouter.fetch(context.req.raw));
+    }
+    const paymentsRouter = createGiftPaymentsHttpRouter(options);
+    for (const endpoint of [
+      internalGiftsEndpointPaths.quote,
+      internalGiftsEndpointPaths.checkout,
+      internalGiftsEndpointPaths.checkoutStatus,
+    ]) {
+      const [method, path] = endpoint.split(" ");
+      app.on([method, "OPTIONS"], path, (context) =>
+        paymentsRouter.fetch(context.req.raw),
+      );
+    }
     app.route("/", createInvitationsHttpRouter(options));
     app.route("/", createDemoResetHttpRouter(options));
     app.route("/", createGuestVerificationHttpRouter(options));
@@ -56,7 +178,7 @@ export function createApp(
     );
   });
 
-  return app;
+  return Object.assign(app, { close: historyRouter.close });
 }
 
 export const app = createApp();

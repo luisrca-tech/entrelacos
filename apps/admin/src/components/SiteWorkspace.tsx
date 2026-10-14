@@ -1,5 +1,6 @@
 import type {
   adminSummarySchema,
+  SiteAccess,
   SiteRecord,
   siteDomainRecordSchema,
 } from "@entrelacos/contracts";
@@ -47,6 +48,7 @@ import {
   type FormEvent,
   useCallback,
   useEffect,
+  useRef,
   useState,
   useSyncExternalStore,
 } from "react";
@@ -54,9 +56,13 @@ import { adminStyles, displayHeading } from "../lib/adminStyles";
 import { ApiError, apiRequest } from "../lib/apiClient";
 import type { SiteArea } from "./adminNavigation";
 import { formatBrazilianDate } from "./brazilianDate";
+import { GiftsSection } from "./GiftsSection";
 import { InvitationsSection } from "./InvitationsSection";
 import { MessagesSection } from "./MessagesSection";
 import { OverflowMenu } from "./OverflowMenu";
+import { isCurrentPanelSessionEpoch, panelActorOwner } from "./panelActor";
+import { ReceivingSection } from "./ReceivingSection";
+import { SiteTeamSection } from "./SiteTeamSection";
 import {
   adminAccessLink,
   adminAccessLinkCopiedMessage,
@@ -101,16 +107,93 @@ type LifecycleAction =
   | "reactivate"
   | "deactivate";
 
+type WorkspaceSessionCallbacks = {
+  isActive: () => boolean;
+  pending: (value: boolean) => void;
+  failed: (cause: unknown) => void;
+};
+export async function mutateWorkspaceSession(
+  epoch: number | null,
+  path: string,
+  body: unknown,
+  options: WorkspaceSessionCallbacks & {
+    method?: string;
+    load: () => Promise<void>;
+    success: () => void;
+  },
+): Promise<boolean> {
+  const current = () => options.isActive() && isCurrentPanelSessionEpoch(epoch);
+  if (!current()) return false;
+  options.pending(true);
+  try {
+    await apiRequest(path, { method: options.method ?? "POST", body });
+    if (!current()) return false;
+    await options.load();
+    if (!current()) return false;
+    options.success();
+    return current();
+  } catch (cause) {
+    if (current()) {
+      panelActorOwner.reportFailure(cause, epoch);
+      if (current()) options.failed(cause);
+    }
+    return false;
+  } finally {
+    if (current()) options.pending(false);
+  }
+}
+
+export async function issueWorkspaceAccess(
+  epoch: number | null,
+  options: WorkspaceSessionCallbacks & {
+    userId: string;
+    purpose: "ACTIVATION" | "RECOVERY";
+    origin: string;
+    clipboard: Pick<Clipboard, "writeText">;
+    copied: (copied: boolean) => void;
+  },
+) {
+  const current = () => options.isActive() && isCurrentPanelSessionEpoch(epoch);
+  if (!current()) return;
+  options.pending(true);
+  try {
+    const result = await apiRequest<{ token: string }>(
+      `/v1/owner/admins/${options.userId}/access`,
+      {
+        method: "POST",
+        body: { userId: options.userId, purpose: options.purpose },
+      },
+    );
+    if (!current()) return;
+    const copied = await copyAdminAccessLink(
+      adminAccessLink(options.origin, result.token, options.purpose),
+      options.clipboard,
+    );
+    if (current()) options.copied(copied);
+  } catch (cause) {
+    if (current()) {
+      panelActorOwner.reportFailure(cause, epoch);
+      if (current()) options.failed(cause);
+    }
+  } finally {
+    if (current()) options.pending(false);
+  }
+}
+
 export function SiteWorkspace({
   siteId,
   owner,
   area = "invitations",
   onSiteName,
+  access = null,
+  sessionEpoch = null,
 }: {
   siteId: string;
   owner: boolean;
   area?: SiteArea;
   onSiteName?: (name: string) => void;
+  access?: SiteAccess | null;
+  sessionEpoch?: number | null;
 }) {
   const [site, setSite] = useState<SiteView | null>(null);
   const [admins, setAdmins] = useState<Admin[]>([]);
@@ -118,6 +201,15 @@ export function SiteWorkspace({
   const [error, setError] = useState("");
   const [fatal, setFatal] = useState(false);
   const [pending, setPending] = useState(false);
+  const mountScope = useRef<{ active: boolean } | null>(null);
+  useEffect(() => {
+    const scope = { active: true };
+    mountScope.current = scope;
+    return () => {
+      scope.active = false;
+      if (mountScope.current === scope) mountScope.current = null;
+    };
+  }, []);
   const [lifecycleAction, setLifecycleAction] =
     useState<LifecycleAction | null>(null);
   const [adminToDisable, setAdminToDisable] = useState<Admin | null>(null);
@@ -143,26 +235,35 @@ export function SiteWorkspace({
   );
   const base = `/v1/owner/sites/${encodeURIComponent(siteId)}`;
 
-  const load = useCallback(async () => {
-    const result = await apiRequest<{ site: SiteView }>(
-      owner ? base : `/v1/sites/${encodeURIComponent(siteId)}`,
-    );
-    setSite(result.site);
-    onSiteName?.(result.site.displayName);
-    // Settings data is owner-scoped and never requested for SITE_ADMIN.
-    if (owner && area === "settings") {
-      const [users, names] = await Promise.all([
-        apiRequest<{ admins: Admin[] }>(`${base}/admins`),
-        apiRequest<{ domains: Domain[] }>(`${base}/domains`),
-      ]);
-      setAdmins(users.admins);
-      setDomains(names.domains);
-    }
-  }, [area, base, onSiteName, owner, siteId]);
+  const load = useCallback(
+    async (isActive: () => boolean = () => true) => {
+      if (!isActive() || !isCurrentPanelSessionEpoch(sessionEpoch)) return;
+      const result = await apiRequest<{ site: SiteView }>(
+        owner ? base : `/v1/sites/${encodeURIComponent(siteId)}`,
+      );
+      if (!isActive() || !isCurrentPanelSessionEpoch(sessionEpoch)) return;
+      setSite(result.site);
+      onSiteName?.(result.site.displayName);
+      // Settings data is owner-scoped and never requested for SITE_ADMIN.
+      if (owner && area === "settings") {
+        const [users, names] = await Promise.all([
+          apiRequest<{ admins: Admin[] }>(`${base}/admins`),
+          apiRequest<{ domains: Domain[] }>(`${base}/domains`),
+        ]);
+        if (!isActive() || !isCurrentPanelSessionEpoch(sessionEpoch)) return;
+        setAdmins(users.admins);
+        setDomains(names.domains);
+      }
+    },
+    [area, base, onSiteName, owner, siteId, sessionEpoch],
+  );
 
   useEffect(() => {
+    let active = true;
     setFatal(false);
-    void load().catch((cause) => {
+    void load(() => active).catch((cause) => {
+      if (!active || !isCurrentPanelSessionEpoch(sessionEpoch)) return;
+      panelActorOwner.reportFailure(cause, sessionEpoch);
       setFatal(true);
       setError(
         cause instanceof ApiError && cause.status === 404
@@ -172,27 +273,28 @@ export function SiteWorkspace({
             : "Não foi possível carregar o casamento.",
       );
     });
-  }, [load]);
+    return () => {
+      active = false;
+    };
+  }, [load, sessionEpoch]);
 
   async function mutate(
     path: string,
     body: unknown,
     method = "POST",
   ): Promise<boolean> {
-    setPending(true);
-    try {
-      await apiRequest(path, { method, body });
-      await load();
-      toast.success("Alteração salva.");
-      return true;
-    } catch (cause) {
-      toast.error(
-        cause instanceof Error ? cause.message : "Não foi possível salvar.",
-      );
-      return false;
-    } finally {
-      setPending(false);
-    }
+    const mount = mountScope.current;
+    return mutateWorkspaceSession(sessionEpoch, path, body, {
+      method,
+      load: () => load(() => mount?.active === true),
+      isActive: () => mount?.active === true,
+      pending: setPending,
+      success: () => toast.success("Alteração salva."),
+      failed: (cause) =>
+        toast.error(
+          cause instanceof Error ? cause.message : "Não foi possível salvar.",
+        ),
+    });
   }
 
   async function submit(
@@ -211,28 +313,21 @@ export function SiteWorkspace({
     copiedMessage: string,
     failedMessage: string,
   ) {
-    setPending(true);
-    try {
-      const result = await apiRequest<{ token: string }>(
-        `/v1/owner/admins/${admin.userId}/access`,
-        { method: "POST", body: { userId: admin.userId, purpose } },
-      );
-      const link = adminAccessLink(
-        window.location.origin,
-        result.token,
-        purpose,
-      );
-      const copied = await copyAdminAccessLink(link, navigator.clipboard);
-      if (copied) {
-        toast.success(copiedMessage);
-        return;
-      }
-      toast.error(adminAccessLinkCopyFailedMessage);
-    } catch (cause) {
-      toast.error(cause instanceof Error ? cause.message : failedMessage);
-    } finally {
-      setPending(false);
-    }
+    const mount = mountScope.current;
+    await issueWorkspaceAccess(sessionEpoch, {
+      userId: admin.userId,
+      purpose,
+      origin: window.location.origin,
+      clipboard: navigator.clipboard,
+      isActive: () => mount?.active === true,
+      pending: setPending,
+      copied: (copied) => {
+        if (copied) toast.success(copiedMessage);
+        else toast.error(adminAccessLinkCopyFailedMessage);
+      },
+      failed: (cause) =>
+        toast.error(cause instanceof Error ? cause.message : failedMessage),
+    });
   }
 
   async function issue(admin: Admin, purpose: "ACTIVATION" | "RECOVERY") {
@@ -413,6 +508,46 @@ export function SiteWorkspace({
       )}
       {area === "messages" && (
         <MessagesSection siteId={site.id} lifecycle={site.lifecycle} />
+      )}
+      {area === "gifts" && (
+        <GiftsSection
+          key={site.id}
+          siteId={site.id}
+          canManage={
+            owner ||
+            (access?.siteId === site.id && access.capabilities.manageCatalog)
+          }
+          receivingAction={
+            access?.siteId === site.id &&
+            access.capabilities.configureReceiving ? (
+              <Link
+                className="text-admin-terracotta-deep underline underline-offset-4"
+                to="/sites/$siteId/receiving"
+                params={{ siteId: site.id }}
+              >
+                Ver recebimentos
+              </Link>
+            ) : undefined
+          }
+        />
+      )}
+      {area === "receiving" && (
+        <ReceivingSection
+          key={`${site.id}:${sessionEpoch}`}
+          siteId={site.id}
+          access={access}
+          sessionEpoch={sessionEpoch}
+        />
+      )}
+      {area === "team" && (
+        <SiteTeamSection
+          key={site.id}
+          siteId={site.id}
+          canManage={
+            owner ||
+            (access?.siteId === site.id && access.capabilities.manageTeam)
+          }
+        />
       )}
       {area === "settings" &&
         (owner ? (

@@ -85,6 +85,27 @@
       "when": 1790220584145,
       "tag": "0011_rainy_archangel",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1791827856153,
+      "tag": "0012_internal_gifts_foundation",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1791835610582,
+      "tag": "0013_internal_gifts_financial_media",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1791859440962,
+      "tag": "0014_internal_gifts_withdrawal_consent",
+      "breakpoints": true
     }
   ]
 }

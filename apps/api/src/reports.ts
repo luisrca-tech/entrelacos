@@ -12,7 +12,7 @@ import PDFDocument from "pdfkit";
 export type ReportsDatabase = NodePgDatabase<Record<string, never>>;
 export type ReportsAdminActor = {
   userId: string;
-  role: "OWNER" | "SITE_ADMIN";
+  role: "OWNER" | "SITE_ADMIN" | "SITE_ASSISTANT";
 };
 export type InvitationReportTotals = {
   invitations: number;
@@ -144,13 +144,13 @@ export async function readInvitationReport(
       const access = await tx.execute(sql`
         SELECT s.id, s.display_name
         FROM site s
-        INNER JOIN "user" u ON u.id = ${actor.userId} AND u.state = 'ACTIVE'
+        INNER JOIN "user" u ON u.id = ${actor.userId} AND u.state = 'ACTIVE' AND u.role = ${actor.role}
         WHERE s.id = ${siteId}
           AND (
             ${actor.role === "OWNER"}
             OR EXISTS (
               SELECT 1 FROM site_membership sm
-              WHERE sm.site_id = s.id AND sm.user_id = u.id
+              WHERE sm.site_id = s.id AND sm.user_id = u.id AND sm.revoked_at IS NULL AND sm.role IN ('SITE_ADMIN', 'SITE_ASSISTANT')
             )
           )
       `);

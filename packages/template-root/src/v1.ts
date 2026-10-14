@@ -52,6 +52,7 @@ export { default as WeddingLayout } from "./layouts/WeddingLayout.astro";
 export { default as WeddingHome } from "./pages/WeddingHome.astro";
 export { default as DetailsSection } from "./sections/DetailsSection.astro";
 export { default as GallerySection } from "./sections/GallerySection.astro";
+export { default as GiftSection } from "./sections/GiftSection.astro";
 export { default as HeroSection } from "./sections/HeroSection.astro";
 export { default as ScheduleSection } from "./sections/ScheduleSection.astro";
 export { default as StorySection } from "./sections/StorySection.astro";

@@ -67,6 +67,11 @@ describe("panel API boundary", () => {
     expect(safePanelReturn("/sites/demo/settings?tab=domain")).toBe(
       "/sites/demo/settings?tab=domain",
     );
+    expect(safePanelReturn("/sites/demo/gifts")).toBe("/sites/demo/gifts");
+    expect(safePanelReturn("/sites/demo/team")).toBe("/sites/demo/team");
+    expect(safePanelReturn("/sites/demo/receiving")).toBe(
+      "/sites/demo/receiving",
+    );
     for (const value of [
       "//evil.test",
       "https://evil.test",

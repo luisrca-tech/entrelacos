@@ -169,7 +169,7 @@ async function findAdminMembership(
 ): Promise<
   | {
       email: string;
-      role: "OWNER" | "SITE_ADMIN";
+      role: "OWNER" | "SITE_ADMIN" | "SITE_ASSISTANT";
       state: "PENDING" | "ACTIVE" | "DISABLED";
       siteId: string;
     }
@@ -184,7 +184,13 @@ async function findAdminMembership(
     })
     .from(user)
     .innerJoin(siteMembership, eq(siteMembership.userId, user.id))
-    .where(eq(user.id, userId))
+    .where(
+      and(
+        eq(user.id, userId),
+        eq(siteMembership.role, "SITE_ADMIN"),
+        isNull(siteMembership.revokedAt),
+      ),
+    )
     .limit(1);
   return record;
 }
@@ -262,7 +268,12 @@ export async function listSiteAdmins(
     .from(siteMembership)
     .innerJoin(user, eq(siteMembership.userId, user.id))
     .where(
-      and(eq(siteMembership.siteId, validSiteId), eq(user.role, "SITE_ADMIN")),
+      and(
+        eq(siteMembership.siteId, validSiteId),
+        eq(user.role, "SITE_ADMIN"),
+        eq(siteMembership.role, "SITE_ADMIN"),
+        isNull(siteMembership.revokedAt),
+      ),
     );
   return rows.map((row) => ({ ...row, role: "SITE_ADMIN" as const }));
 }
@@ -308,7 +319,7 @@ interface AccessTokenRecord {
   userId: string;
   siteId: string;
   email: string;
-  role: "OWNER" | "SITE_ADMIN";
+  role: "OWNER" | "SITE_ADMIN" | "SITE_ASSISTANT";
   state: "PENDING" | "ACTIVE" | "DISABLED";
   expiresAt: Date;
   consumedAt: Date | null;
@@ -336,6 +347,8 @@ async function findAndLockToken(
     INNER JOIN site_membership AS membership
       ON membership.site_id = access_token.site_id
       AND membership.user_id = access_token.user_id
+      AND membership.role = 'SITE_ADMIN'
+      AND membership.revoked_at IS NULL
     WHERE access_token.token_hash = ${tokenHash}
       AND access_token.purpose = ${purpose}
     FOR UPDATE

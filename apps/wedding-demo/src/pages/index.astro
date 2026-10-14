@@ -1,6 +1,6 @@
 ---
-import { WeddingHome, WeddingLayout } from "@entrelacos/template-root/v1";
-import { AdminRecognition, GuestAccess, MessageMural } from "@entrelacos/wedding-features";
+import { GiftSection, WeddingHome, WeddingLayout } from "@entrelacos/template-root/v1";
+import { AdminRecognition, GiftRegistry, GuestAccess, MessageMural } from "@entrelacos/wedding-features";
 import "../styles/tailwind.css";
 
 const inactive = import.meta.env.PUBLIC_SITE_INACTIVE === "true";
@@ -23,7 +23,7 @@ const seo = {
 const navigation = {
   ariaLabel: "Navegação principal",
   menuLabel: "Abrir menu",
-  extensionAnchorIds: ["guest-access", "mural"],
+  extensionAnchorIds: ["guest-access", "mural", "gifts"],
   links: [
     { label: "Galeria", href: "#gallery" },
     { label: "História", href: "#story" },
@@ -286,6 +286,9 @@ const guestAccess = {
     <Fragment slot="header-addon"><span class="inline-flex h-9 min-w-9 items-center justify-center rounded-full border border-[color-mix(in_srgb,currentColor_56%,transparent)] font-template-serif text-[0.72rem] tracking-normal normal-case [@media(max-width:1024px)]:hidden" aria-label="Monograma M e C">M&amp;C</span></Fragment>
     <Fragment slot="admin-access">{access.siteId && access.apiOrigin && access.panelOrigin && <AdminRecognition {...access} client:load />}</Fragment>
     <Fragment slot="after-main">
+      <GiftSection content={{id:"gifts",eyebrow:"Presentes",title:"Um carinho para nossa nova história.",description:"Escolha um presente simbólico para celebrar este novo capítulo com a gente."}}>
+        <GiftRegistry {...guestAccess} demo={true} client:only="react" />
+      </GiftSection>
       <section
         id="guest-access"
         class="bg-template-ivory px-[var(--template-page-inset)] pt-[clamp(2.5rem,6vw,5rem)] pb-[clamp(1.5rem,3vw,2.5rem)] [&_[data-slot=guest-access]]:bg-transparent [&_[data-slot=guest-access]]:p-0"

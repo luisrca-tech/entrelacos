@@ -6,7 +6,19 @@ export type {
   FeatureAvailabilityStatus,
 } from "./FeatureAvailability";
 export { FeatureAvailability } from "./FeatureAvailability";
+export { GiftCatalogView } from "./GiftCatalogView";
+export { GiftQuoteView } from "./GiftQuoteView";
+export type { GiftRecoveryViewProps } from "./GiftRecoveryView";
+export { GiftRecoveryView } from "./GiftRecoveryView";
+export type { GiftRegistryProps } from "./GiftRegistry";
+export { GiftRegistry } from "./GiftRegistry";
 export { GuestAccess } from "./GuestAccessPanel";
+export type { WeddingGiftsApiOptions } from "./gifts";
+export {
+  getGiftErrorMessage,
+  WeddingGiftsApi,
+  WeddingGiftsApiError,
+} from "./gifts";
 export type {
   GuestAccessApiOptions,
   GuestSessionReadResponse,

@@ -5,7 +5,7 @@ import {
   user,
   verification,
 } from "@entrelacos/database/schema";
-import { betterAuth } from "better-auth";
+import { type BetterAuthOptions, betterAuth } from "better-auth";
 import { eq } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 
@@ -28,13 +28,13 @@ function requiredSetting(value: string, name: string): string {
   return value;
 }
 
-export function createAuth(options: AuthFactoryOptions) {
+function authConfiguration(options: AuthFactoryOptions) {
   const secret = requiredSetting(options.secret, "secret");
   const baseURL = requiredSetting(options.baseURL, "baseURL");
   const adminOrigin = requiredSetting(options.adminOrigin, "adminOrigin");
   const db = options.db;
 
-  return betterAuth({
+  return {
     database: drizzleAdapter(db, {
       provider: "pg",
       schema: { user, session, account, verification },
@@ -53,7 +53,7 @@ export function createAuth(options: AuthFactoryOptions) {
     user: {
       additionalFields: {
         role: {
-          type: ["OWNER", "SITE_ADMIN"],
+          type: ["OWNER", "SITE_ADMIN", "SITE_ASSISTANT"],
           required: true,
           defaultValue: "SITE_ADMIN",
           input: false,
@@ -99,5 +99,21 @@ export function createAuth(options: AuthFactoryOptions) {
         },
       },
     },
-  });
+  } satisfies BetterAuthOptions;
+}
+
+export function createAuth(options: AuthFactoryOptions) {
+  return betterAuth(authConfiguration(options));
+}
+
+// Internal GET session lookup only; never mount this instance's auth handler.
+export function createSessionReadAuth(
+  options: AuthFactoryOptions,
+): ReturnType<typeof createAuth> {
+  const configuration = authConfiguration(options);
+  const readConfiguration = {
+    ...configuration,
+    session: { ...configuration.session, deferSessionRefresh: true },
+  };
+  return betterAuth<ReturnType<typeof authConfiguration>>(readConfiguration);
 }

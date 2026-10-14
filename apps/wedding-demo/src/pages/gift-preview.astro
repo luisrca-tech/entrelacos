@@ -1,0 +1,15 @@
+---
+import GiftPreviewPage from "../components/GiftPreviewPage.astro";
+import { isLocalGiftPreview } from "../localGiftPreview";
+import "../styles/tailwind.css";
+
+const allowed = isLocalGiftPreview(import.meta.env.DEV, Astro.url);
+if (!allowed) Astro.response.status = 404;
+---
+
+{allowed ? <GiftPreviewPage /> : (
+  <html lang="pt-BR">
+    <head><meta charset="UTF-8" /><meta name="robots" content="noindex, nofollow" /><title>Indisponível</title></head>
+    <body><p>Prévia indisponível.</p></body>
+  </html>
+)}

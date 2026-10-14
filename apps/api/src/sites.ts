@@ -21,11 +21,11 @@ import {
   siteOrigin,
   siteTerm,
 } from "@entrelacos/database/schema";
-import { and, asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 
 export type SiteDatabase = NodePgDatabase<Record<string, never>>;
-export type SiteRole = "OWNER" | "SITE_ADMIN";
+export type SiteRole = "OWNER" | "SITE_ADMIN" | "SITE_ASSISTANT";
 
 export interface SiteActor {
   userId: string;
@@ -368,6 +368,8 @@ export async function getSiteForActor(
             and(
               eq(siteMembership.siteId, siteId),
               eq(siteMembership.userId, actor.userId),
+              isNull(siteMembership.revokedAt),
+              inArray(siteMembership.role, ["SITE_ADMIN", "SITE_ASSISTANT"]),
             ),
           )
           .limit(1);
