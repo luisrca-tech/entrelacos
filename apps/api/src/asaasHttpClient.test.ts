@@ -1180,3 +1180,472 @@ describe("Asaas GET actual completion ownership", () => {
     );
   }
 });
+
+describe("exact account fee observations", () => {
+  function fees(text: string, init: ResponseInit = {}) {
+    return fixture(
+      new Response(text, {
+        ...init,
+        headers: { "content-type": "application/json", ...init.headers },
+      }),
+    );
+  }
+
+  it("reads the fixed bodyless account endpoint and preserves only selected original decimal fields", async () => {
+    const { options, fetch } = fees(
+      '{"payment":{"creditCard":{"operationValue":0.49,"oneInstallmentPercentage":2.99},"pix":{"fixedFeeValue":0,"percentageFee":null}},"transfer":{"monthlyTransfersWithoutFee":30,"ted":{"feeValue":5,"consideredInMonthlyTransfersWithoutFee":false}},"apiKey":"private"}',
+    );
+    expect(await createAsaasHttpClient(options).getAccountFees()).toEqual({
+      source: "provider",
+      ...options.binding,
+      currency: "BRL",
+      observedAt: now,
+      completedAt: now,
+      fees: {
+        payment: {
+          creditCard: {
+            operationValue: "0.49",
+            oneInstallmentPercentage: "2.99",
+          },
+          pix: { fixedFeeValue: "0.00", percentageFee: null },
+        },
+        transfer: {
+          monthlyTransfersWithoutFee: 30,
+          ted: {
+            feeValue: "5.00",
+            consideredInMonthlyTransfersWithoutFee: false,
+          },
+        },
+      },
+    });
+    expect(fetch.mock.calls[0][0]).toBe(
+      "https://api-sandbox.asaas.com/v3/myAccount/fees/",
+    );
+    expect(fetch.mock.calls[0][1]).toMatchObject({
+      method: "GET",
+      redirect: "error",
+      cache: "no-store",
+      credentials: "omit",
+    });
+    expect(fetch.mock.calls[0][1]).not.toHaveProperty("body");
+  });
+
+  it.each([
+    "0.49000000000000001",
+    "2.9900000000000001",
+    "-0",
+    "1e-2",
+    "1e100000",
+    "0.001",
+    "99.999",
+    "21474836.48",
+    '"0.49"',
+    '{"lexeme":"0.49"}',
+    "1111111111111111111111111111111111111111111111111111111111111111111",
+  ])(
+    "rejects an unsupported original numeric token %s before rounded normalization",
+    async (lexeme) => {
+      const { options } = fees(
+        `{"payment":{"creditCard":{"operationValue":${lexeme}}}}`,
+      );
+      await rejected(createAsaasHttpClient(options).getAccountFees());
+    },
+  );
+
+  it.each(["100", "-1", "0.001"])(
+    "rejects an unrepresentable percentage %s",
+    async (lexeme) => {
+      const { options } = fees(
+        `{"payment":{"pix":{"percentageFee":${lexeme}}}}`,
+      );
+      await rejected(createAsaasHttpClient(options).getAccountFees());
+    },
+  );
+
+  it("distinguishes absent, null and explicit zero without interpreting fee authority", async () => {
+    for (const [text, expected] of [
+      ["{}", {}],
+      ['{"payment":null}', { payment: null }],
+      [
+        '{"payment":{"pix":{"fixedFeeValue":null}}}',
+        { payment: { pix: { fixedFeeValue: null } } },
+      ],
+      [
+        '{"payment":{"pix":{"fixedFeeValue":0}}}',
+        { payment: { pix: { fixedFeeValue: "0.00" } } },
+      ],
+    ] as const) {
+      const { options } = fees(text);
+      const result = await createAsaasHttpClient(options).getAccountFees();
+      expect(result.fees).toEqual(expected);
+      expect(result).not.toHaveProperty("verification");
+      expect(result).not.toHaveProperty("expiresAt");
+    }
+  });
+
+  it("fails closed when JSON reviver numeric-source capability is absent", async () => {
+    const parse = JSON.parse;
+    const spy = vi.spyOn(JSON, "parse").mockImplementation((text, reviver) =>
+      parse(
+        text,
+        reviver
+          ? function (key, value) {
+              return reviver.call(this, key, value);
+            }
+          : undefined,
+      ),
+    );
+    try {
+      const { options } = fees('{"payment":{"pix":{"fixedFeeValue":0}}}');
+      await rejected(createAsaasHttpClient(options).getAccountFees());
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("uses the original native Response body and captured acquisition/read methods", async () => {
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(
+          new TextEncoder().encode('{"transfer":{"ted":{"feeValue":5}}}'),
+        );
+        controller.close();
+      },
+    });
+    const response = new Response(body, {
+      headers: { "content-type": "application/json" },
+    });
+    const shadowedBody = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode("{}"));
+        controller.close();
+      },
+    });
+    const fakeAcquisition = vi.fn(() => shadowedBody.getReader());
+    Object.defineProperty(response, "body", { value: shadowedBody });
+    Object.defineProperty(body, "getReader", { value: fakeAcquisition });
+    const readSpy = vi
+      .spyOn(ReadableStreamDefaultReader.prototype, "read")
+      .mockImplementation(async () => ({ done: true, value: undefined }));
+    try {
+      const { options } = fixture(response);
+      expect(
+        (await createAsaasHttpClient(options).getAccountFees()).fees,
+      ).toEqual({ transfer: { ted: { feeValue: "5.00" } } });
+      expect(fakeAcquisition).not.toHaveBeenCalled();
+      expect(readSpy).not.toHaveBeenCalled();
+      expect(body.locked).toBe(false);
+    } finally {
+      readSpy.mockRestore();
+    }
+  });
+
+  it("does not accept a synthetic stream or an unrelated native body as original response provenance", async () => {
+    const { options } = fixture({
+      status: 200,
+      redirected: false,
+      url: "",
+      headers: new Headers({ "content-type": "application/json" }),
+      body: new ReadableStream({
+        start(controller) {
+          controller.close();
+        },
+      }),
+    } as Response);
+    await rejected(createAsaasHttpClient(options).getAccountFees());
+  });
+
+  it("keeps the pre-dispatch observation and refuses backward completion clocks", async () => {
+    const { options, fetch } = fees("{}");
+    let time = now.getTime();
+    options.now = () => new Date(time);
+    fetch.mockImplementationOnce(async () => {
+      time += 50;
+      return new Response("{}", {
+        headers: { "content-type": "application/json" },
+      });
+    });
+    expect(await createAsaasHttpClient(options).getAccountFees()).toMatchObject(
+      { observedAt: now, completedAt: new Date(now.getTime() + 50) },
+    );
+    fetch.mockImplementationOnce(async () => {
+      time -= 100;
+      return new Response("{}", {
+        headers: { "content-type": "application/json" },
+      });
+    });
+    await rejected(createAsaasHttpClient(options).getAccountFees());
+  });
+
+  it("waits for an ignored-abort fetch and genuine native cancellation despite a forged body.cancel", async () => {
+    vi.useFakeTimers();
+    let resolveFetch!: (value: Response) => void;
+    let resolveCancel!: () => void;
+    const cleanup = new Promise<void>((done) => {
+      resolveCancel = done;
+    });
+    const cancel = vi.fn(() => cleanup);
+    const body = new ReadableStream<Uint8Array>({ cancel });
+    const forgedCancel = vi.fn(() => Promise.resolve());
+    Object.defineProperty(body, "cancel", { value: forgedCancel });
+    const { options, fetch } = fees("{}");
+    fetch.mockReturnValueOnce(
+      new Promise<Response>((done) => {
+        resolveFetch = done;
+      }),
+    );
+    let settled = false;
+    const action = createAsaasHttpClient(options)
+      .getAccountFees()
+      .catch((error) => error)
+      .finally(() => {
+        settled = true;
+      });
+    try {
+      await vi.advanceTimersByTimeAsync(100);
+      expect(settled).toBe(false);
+      resolveFetch(
+        new Response(body, { headers: { "content-type": "application/json" } }),
+      );
+      await vi.advanceTimersByTimeAsync(0);
+      expect(cancel).toHaveBeenCalledTimes(1);
+      expect(forgedCancel).not.toHaveBeenCalled();
+      expect(settled).toBe(false);
+    } finally {
+      resolveCancel();
+      await action;
+    }
+    await rejected(Promise.reject(await action));
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("waits for native reader cancellation while a genuine stalled read is released", async () => {
+    vi.useFakeTimers();
+    let resolveCancel!: () => void;
+    const cancel = vi.fn(
+      () =>
+        new Promise<void>((done) => {
+          resolveCancel = done;
+        }),
+    );
+    const body = new ReadableStream<Uint8Array>({ cancel });
+    const { options } = fixture(
+      new Response(body, { headers: { "content-type": "application/json" } }),
+    );
+    let settled = false;
+    const action = createAsaasHttpClient(options)
+      .getAccountFees()
+      .catch((error) => error)
+      .finally(() => {
+        settled = true;
+      });
+    try {
+      await vi.advanceTimersByTimeAsync(100);
+      expect(cancel).toHaveBeenCalledTimes(1);
+      expect(body.locked).toBe(true);
+      expect(settled).toBe(false);
+    } finally {
+      resolveCancel();
+      await action;
+    }
+    expect(body.locked).toBe(false);
+    await rejected(Promise.reject(await action));
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it.each(["rejects", "pending"] as const)(
+    "retains genuine native cancellation uncertainty that %s",
+    async (failure) => {
+      vi.useFakeTimers();
+      const cancel = vi.fn(() =>
+        failure === "rejects"
+          ? Promise.reject(new Error("private cleanup"))
+          : new Promise<void>(() => {}),
+      );
+      const body = new ReadableStream<Uint8Array>({ cancel });
+      const { options } = fixture(
+        new Response(body, {
+          status: 500,
+          headers: { "content-type": "application/json" },
+        }),
+      );
+      let settled = false;
+      createAsaasHttpClient(options)
+        .getAccountFees()
+        .then(
+          () => {
+            settled = true;
+          },
+          () => {
+            settled = true;
+          },
+        );
+      await vi.advanceTimersByTimeAsync(100);
+      expect(cancel).toHaveBeenCalledTimes(1);
+      expect(settled).toBe(false);
+      // This offline stream has no I/O; its uncertain owner intentionally stays pending.
+      vi.clearAllTimers();
+    },
+  );
+
+  it.each(["status", "mime", "length", "bytes", "utf8", "json"] as const)(
+    "rejects %s with real EOF or genuine cancellation",
+    async (failure) => {
+      const cancel = vi.fn(async () => {});
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          if (["bytes", "utf8", "json"].includes(failure)) {
+            controller.enqueue(
+              failure === "bytes"
+                ? new Uint8Array(32_769)
+                : failure === "utf8"
+                  ? new Uint8Array([255])
+                  : new TextEncoder().encode("{"),
+            );
+            if (failure === "json") controller.close();
+          }
+        },
+        cancel,
+      });
+      const { options } = fixture(
+        new Response(body, {
+          status: failure === "status" ? 500 : 200,
+          headers: {
+            "content-type":
+              failure === "mime" ? "text/html" : "application/json",
+            ...(failure === "length" ? { "content-length": "32769" } : {}),
+          },
+        }),
+      );
+      await rejected(createAsaasHttpClient(options).getAccountFees());
+      expect(cancel).toHaveBeenCalledTimes(failure === "json" ? 0 : 1);
+      expect(body.locked).toBe(false);
+    },
+  );
+
+  it("bounds unsupported token precision and length before any BigInt conversion", async () => {
+    const conversion = vi.spyOn(globalThis, "BigInt");
+    try {
+      for (const lexeme of [
+        "0.49000000000000001",
+        "111111111111111111111111111111111",
+      ]) {
+        const { options } = fees(
+          `{"payment":{"creditCard":{"operationValue":${lexeme}}}}`,
+        );
+        await rejected(createAsaasHttpClient(options).getAccountFees());
+      }
+      expect(conversion).not.toHaveBeenCalled();
+    } finally {
+      conversion.mockRestore();
+    }
+  });
+
+  it("counts actual native chunk bytes even when its byteLength property is shadowed", async () => {
+    const chunk = new TextEncoder().encode("{}");
+    let accesses = 0;
+    Object.defineProperty(chunk, "byteLength", {
+      get: () => (accesses++ === 0 ? 0 : 2),
+    });
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(chunk);
+        controller.close();
+      },
+    });
+    const { options } = fixture(
+      new Response(body, {
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    options.maxResponseBytes = 1;
+    await rejected(createAsaasHttpClient(options).getAccountFees());
+    expect(body.locked).toBe(false);
+  });
+
+  it("keeps the original maximum cents and basis-point representation exact", async () => {
+    const { options } = fees(
+      '{"payment":{"creditCard":{"operationValue":21474836.47,"oneInstallmentPercentage":99.99}}}',
+    );
+    expect(
+      (await createAsaasHttpClient(options).getAccountFees()).fees,
+    ).toEqual({
+      payment: {
+        creditCard: {
+          operationValue: "21474836.47",
+          oneInstallmentPercentage: "99.99",
+        },
+      },
+    });
+  });
+
+  it.each([
+    '{"transfer":{"monthlyTransfersWithoutFee":1.1}}',
+    '{"transfer":{"monthlyTransfersWithoutFee":2147483648}}',
+    '{"transfer":{"ted":{"consideredInMonthlyTransfersWithoutFee":"false"}}}',
+    '{"payment":{"pix":{"discountExpiration":1}}}',
+    '{"payment":[]}',
+  ])("refuses a malformed selected fee condition %s", async (text) => {
+    const { options } = fees(text);
+    await rejected(createAsaasHttpClient(options).getAccountFees());
+  });
+
+  it("rejects late fee parsing before a starved timer callback and preserves natural EOF", async () => {
+    const { options } = fees('{"payment":{"pix":{"fixedFeeValue":0}}}');
+    let elapsed = 0;
+    const monotonic = vi
+      .spyOn(performance, "now")
+      .mockImplementation(() => elapsed);
+    const parse = JSON.parse;
+    const parser = vi
+      .spyOn(JSON, "parse")
+      .mockImplementation((text, reviver) => {
+        if (text !== "0") elapsed = options.timeoutMs;
+        return parse(text, reviver);
+      });
+    try {
+      await rejected(createAsaasHttpClient(options).getAccountFees());
+    } finally {
+      parser.mockRestore();
+      monotonic.mockRestore();
+    }
+  });
+
+  it("uses captured native reader cancellation rather than a decorated replacement", async () => {
+    vi.useFakeTimers();
+    let release!: () => void;
+    const cancel = vi.fn(
+      () =>
+        new Promise<void>((done) => {
+          release = done;
+        }),
+    );
+    const body = new ReadableStream<Uint8Array>({ cancel });
+    const { options } = fixture(
+      new Response(body, { headers: { "content-type": "application/json" } }),
+    );
+    const forged = vi
+      .spyOn(ReadableStreamDefaultReader.prototype, "cancel")
+      .mockImplementation(async () => {});
+    let settled = false;
+    const action = createAsaasHttpClient(options)
+      .getAccountFees()
+      .catch((error) => error)
+      .finally(() => {
+        settled = true;
+      });
+    try {
+      await vi.advanceTimersByTimeAsync(100);
+      expect(cancel).toHaveBeenCalledTimes(1);
+      expect(forged).not.toHaveBeenCalled();
+      expect(settled).toBe(false);
+    } finally {
+      release();
+      await action;
+      forged.mockRestore();
+    }
+    await rejected(Promise.reject(await action));
+    expect(body.locked).toBe(false);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+});
