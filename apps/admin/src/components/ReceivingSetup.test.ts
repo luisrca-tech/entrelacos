@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
-import { createHmac, webcrypto } from "node:crypto";
+import { createHash, createHmac, webcrypto } from "node:crypto";
 import { createRequire } from "node:module";
 import { URL as NodeURL } from "node:url";
+import { isDeepStrictEqual } from "node:util";
 import {
   type MeResponse,
   type ReceivingNominationContext,
@@ -17,6 +18,10 @@ import * as authModule from "../../../api/src/auth";
 import { createAuth } from "../../../api/src/auth";
 import { createFinancialPasswordVerifier } from "../../../api/src/financialPasswordVerifier";
 import { createFinancialReauthenticationRateLimit } from "../../../api/src/financialReauthenticationRateLimit";
+import type {
+  ReceivingNominationAdmissionAuthority,
+  ReceivingNominationAdmissionContext,
+} from "../../../api/src/receivingNomination";
 import { createReceivingNominationComposition } from "../../../api/src/receivingNominationComposition";
 import { createReceivingNominationRepository } from "../../../api/src/receivingNominationRepository";
 import { ApiError, apiRequest } from "../lib/apiClient";
@@ -46,6 +51,95 @@ const { drizzle: bridgeDrizzle } = apiRequire("drizzle-orm/node-postgres") as {
 const httpBridges: Array<{ cleanup(): Promise<void> }> = [];
 
 const start = Date.parse("2026-10-12T18:00:00.000Z");
+const bridgeAdmissionPolicy = Object.freeze({
+  issuerId: "synthetic-bridge-issuer",
+  issuerVersion: "issuer-v1",
+  disclosureId: "synthetic-bridge-disclosure",
+  disclosureVersion: "disclosure-v1",
+});
+const bridgeRequestId = `nr1_${createHash("sha256")
+  .update(
+    JSON.stringify([
+      "receiving.self-nomination.request.v1",
+      "wedding-a",
+      "admin-a",
+      "ASAAS",
+      "sandbox",
+    ]),
+  )
+  .digest("base64url")}`;
+// Synthetic holder and consent are fixed before any actor or request adapter runs.
+const bridgeAuthority: ReceivingNominationAdmissionAuthority = Object.freeze({
+  version: "receiving.new-admission.v1" as const,
+  ...bridgeAdmissionPolicy,
+  holderUserId: "admin-a",
+  authorityId: "synthetic-bridge-authority",
+  authorityVersion: "authority-v1",
+  consentId: "synthetic-bridge-consent",
+  consentVersion: "consent-v1",
+  custodyId: "synthetic-bridge-custody",
+  custodyVersion: "custody-v1",
+  issuedAt: "2026-10-12T18:00:00.000Z",
+  expiresAt: "2026-10-12T18:05:00.000Z",
+  context: Object.freeze({
+    draft: Object.freeze({
+      state: "AWAITING_PROVIDER_VERIFICATION" as const,
+      siteId: "wedding-a",
+      requestId: bridgeRequestId,
+      operatorUserId: "admin-a",
+      environment: "sandbox" as const,
+      policyVersion: "bridge-policy-a",
+      accountId: "account-bridge-a",
+      operationId: "operation-bridge-a",
+      createdAt: "2026-10-12T18:00:00.000Z",
+      requestHash: createHash("sha256")
+        .update(
+          JSON.stringify([
+            "receiving.self-nomination.v1",
+            "wedding-a",
+            bridgeRequestId,
+            "admin-a",
+            "sandbox",
+            "bridge-policy-a",
+            true,
+          ]),
+        )
+        .digest("hex"),
+      authentication: Object.freeze({
+        userId: "admin-a",
+        siteId: "wedding-a",
+        sessionId: "session-a",
+        proofKind: "PASSWORD_REAUTHENTICATION" as const,
+        authenticatedAt: "2026-10-12T18:00:00.000Z",
+        expiresAt: "2026-10-12T18:05:00.000Z",
+      }),
+    }),
+    input: Object.freeze({
+      requestId: bridgeRequestId,
+      confirmSelfAsRecipient: true as const,
+      policyVersion: "bridge-policy-a",
+    }),
+    actor: Object.freeze({
+      userId: "admin-a",
+      siteId: "wedding-a",
+      sessionId: "session-a",
+    }),
+    applicationEnvironment: "test" as const,
+  }),
+});
+type BridgeAuthority = ReceivingNominationAdmissionAuthority;
+type BridgeStage =
+  | "READ"
+  | "LOCK"
+  | "ACCOUNT"
+  | "OPERATION"
+  | "COMMIT"
+  | "ROLLBACK";
+type BridgeTransaction = Parameters<
+  Parameters<
+    Parameters<typeof createReceivingNominationRepository>[0]["transaction"]
+  >[0]
+>[0];
 const access: SiteAccess = {
   siteId: "wedding-a",
   userId: "admin-a",
@@ -147,6 +241,7 @@ async function receivingHttpBridge(
     accounts: Record<string, unknown>[];
     operations: Record<string, unknown>[];
   },
+  admissionOptions: { reader?: boolean; custody?: boolean } = {},
 ) {
   vi.stubGlobal("crypto", webcrypto);
   const origin = "https://admin.example.test";
@@ -193,6 +288,96 @@ async function receivingHttpBridge(
     tables.accounts = structuredClone(initial.accounts);
     tables.operations = structuredClone(initial.operations);
   }
+  let authority: BridgeAuthority = structuredClone(bridgeAuthority);
+  let consentRevoked = false;
+  const finiteGates = new Set<ReturnType<typeof deferred<boolean>>>();
+  const custody = {
+    heldTransaction: null as BridgeTransaction | null,
+    transactions: [] as BridgeTransaction[],
+    reads: [] as unknown[],
+    locks: [] as unknown[],
+    events: [] as Array<{
+      stage: BridgeStage;
+      transaction: BridgeTransaction | null;
+      held: boolean;
+      accounts: number;
+      operations: number;
+    }>,
+    pauseAt: null as BridgeStage | null,
+    failAt: null as BridgeStage | null,
+    entered: deferred<BridgeStage | null>(),
+    gate: deferred<boolean>(),
+    settledGates: 0,
+    controlSignalsSettled: false,
+    mutate(next: BridgeAuthority, revoked = false) {
+      if (custody.heldTransaction)
+        throw new Error("Synthetic custody is locked");
+      authority = structuredClone(next);
+      consentRevoked = revoked;
+    },
+    snapshot: () => structuredClone(authority),
+  };
+  let activeTransaction: BridgeTransaction | null = null;
+  const observeStage = async (stage: BridgeStage) => {
+    if (
+      (stage === "COMMIT" || stage === "ROLLBACK") &&
+      !custody.heldTransaction
+    )
+      return;
+    custody.events.push({
+      stage,
+      transaction: activeTransaction,
+      held: custody.heldTransaction !== null,
+      accounts: tables.accounts.length,
+      operations: tables.operations.length,
+    });
+    if (custody.pauseAt === stage) {
+      custody.pauseAt = null;
+      finiteGates.add(custody.gate);
+      custody.entered.resolve(stage);
+      try {
+        if (!(await custody.gate.promise) && stage !== "ROLLBACK")
+          throw new Error("Synthetic action canceled during cleanup");
+      } finally {
+        finiteGates.delete(custody.gate);
+        custody.settledGates++;
+      }
+    }
+    if (custody.failAt === stage)
+      throw new Error("Synthetic uncommitted insert failure");
+  };
+  const readAuthority = async (
+    context: ReceivingNominationAdmissionContext,
+  ) => {
+    custody.reads.push(structuredClone(context));
+    const stored =
+      !consentRevoked && isDeepStrictEqual(authority.context, context)
+        ? structuredClone(authority)
+        : null;
+    await observeStage("READ");
+    return stored;
+  };
+  const lockAuthority = async (
+    tx: BridgeTransaction,
+    context: ReceivingNominationAdmissionContext,
+    originalAuthority: ReceivingNominationAdmissionAuthority,
+  ) => {
+    if (
+      Object.is(tx, db) ||
+      tx !== activeTransaction ||
+      !before ||
+      custody.heldTransaction ||
+      !isDeepStrictEqual(originalAuthority.context, context)
+    ) {
+      throw new Error("Expected the actual active bridge transaction");
+    }
+    custody.heldTransaction = tx;
+    custody.locks.push(structuredClone(context));
+    await observeStage("LOCK");
+    return !consentRevoked && isDeepStrictEqual(authority.context, context)
+      ? structuredClone(authority)
+      : null;
+  };
   const nativeGates = new Set<ReturnType<typeof deferred<boolean>>>();
   let credential = "";
   let before: typeof tables | null = null;
@@ -206,6 +391,7 @@ async function receivingHttpBridge(
       return { rows: [] };
     }
     if (/^commit/i.test(sql)) {
+      await observeStage("COMMIT");
       before = null;
       if (state.commitLost && tables.operations.length) {
         state.commitLost = false;
@@ -214,6 +400,7 @@ async function receivingHttpBridge(
       return { rows: [] };
     }
     if (/^rollback/i.test(sql)) {
+      await observeStage("ROLLBACK");
       if (before) Object.assign(tables, before);
       before = null;
       return { rows: [] };
@@ -462,6 +649,9 @@ async function receivingHttpBridge(
       /^insert into "(receiving_account|financial_operation)" \((.*?)\) values \((.*?)\)/i,
     );
     if (insert) {
+      await observeStage(
+        insert[1] === "receiving_account" ? "ACCOUNT" : "OPERATION",
+      );
       const columns = [...insert[2].matchAll(/"([a-z_]+)"/g)].map((value) =>
         value[1].replace(/_([a-z])/g, (_, c: string) => c.toUpperCase()),
       );
@@ -492,6 +682,20 @@ async function receivingHttpBridge(
     throw new Error("Unsupported receiving bridge query");
   };
   const db = bridgeDrizzle({ query });
+  const transaction = db.transaction.bind(db);
+  vi.spyOn(db, "transaction").mockImplementation((run, configuration) =>
+    transaction(async (tx) => {
+      if (activeTransaction)
+        throw new Error("Unexpected overlapping bridge transaction");
+      activeTransaction = tx;
+      custody.transactions.push(tx);
+      return run(tx);
+    }, configuration).finally(() => {
+      // Drizzle has genuinely settled COMMIT or the subsequent ROLLBACK here.
+      custody.heldTransaction = null;
+      activeTransaction = null;
+    }),
+  );
   const auth = createAuth({
     db,
     secret,
@@ -524,6 +728,9 @@ async function receivingHttpBridge(
     applicationEnvironment: "test",
     maxAuthAgeMs: 300000,
     now: clock,
+    ...(admissionOptions.custody === false
+      ? {}
+      : { admission: { ...bridgeAdmissionPolicy, lockAuthority } }),
   });
   const ports = createReceivingNominationComposition({
     standardAuth: auth,
@@ -544,6 +751,9 @@ async function receivingHttpBridge(
       loadSite: async (siteId) =>
         siteId === access.siteId ? { siteId, isDemo: false } : null,
       generateId: (kind) => `${kind}-bridge-a`,
+      ...(admissionOptions.reader === false
+        ? {}
+        : { admission: { ...bridgeAdmissionPolicy, readAuthority } }),
     },
     reauthentication: {
       keyId: "bridge-proof-a",
@@ -655,6 +865,9 @@ async function receivingHttpBridge(
   const cleanup = async () => {
     state.readGate?.resolve(false);
     for (const gate of nativeGates) gate.resolve(false);
+    for (const gate of finiteGates) gate.resolve(false);
+    custody.entered.resolve(null);
+    custody.gate.resolve(false);
     await act(async () => {
       if (entry.active) {
         entry.root.unmount();
@@ -662,10 +875,15 @@ async function receivingHttpBridge(
       }
     });
     await Promise.allSettled([...pending]);
+    await Promise.allSettled([custody.entered.promise, custody.gate.promise]);
+    custody.controlSignalsSettled = true;
     owner.dispose();
     expect(pending.size).toBe(0);
     expect(unknownQueries).toEqual([]);
     expect(readDelete).not.toHaveBeenCalled();
+    expect(finiteGates.size).toBe(0);
+    expect(activeTransaction).toBeNull();
+    expect(custody.heldTransaction).toBeNull();
   };
   const settle = async () =>
     act(async () => {
@@ -690,8 +908,257 @@ async function receivingHttpBridge(
     ports,
     settle,
     scope,
+    custody,
+    cleanup,
   };
 }
+
+async function prepareBridgeNomination(
+  f: Awaited<ReturnType<typeof receivingHttpBridge>>,
+) {
+  const issued = (await f.request(
+    "/v1/sites/wedding-a/financial-reauthentication",
+    {
+      method: "POST",
+      body: { action: "CONFIGURE_RECEIVING", password: "fictional-password" },
+    },
+  )) as { reauthenticationToken: string };
+  return {
+    ...bridgeAuthority.context.input,
+    reauthenticationToken: issued.reauthenticationToken,
+  };
+}
+
+function observeBridgeNomination(
+  f: Awaited<ReturnType<typeof receivingHttpBridge>>,
+  body: unknown,
+) {
+  return f
+    .request("/v1/sites/wedding-a/receiving/nomination", {
+      method: "POST",
+      body,
+    })
+    .then(
+      (value) => ({ value, error: null }),
+      (error: unknown) => ({ value: null, error }),
+    );
+}
+
+describe("receiving HTTP bridge independent finite synthetic admission", () => {
+  it("uses independent pinned reader and actual transaction custody without extending the original intent", async () => {
+    const f = await receivingHttpBridge();
+    const body = await prepareBridgeNomination(f);
+    const outcome = await observeBridgeNomination(f, body);
+    expect(outcome.error).toBeNull();
+    expect(f.custody.reads).toEqual([bridgeAuthority.context]);
+    expect(f.custody.locks).toEqual([bridgeAuthority.context]);
+    expect(
+      f.custody.events.filter((event) => event.stage === "LOCK")[0]
+        ?.transaction,
+    ).toBe(f.custody.transactions.at(-1));
+    expect(f.tables.accounts).toHaveLength(1);
+    expect(f.tables.accounts[0]).toMatchObject({
+      id: "account-bridge-a",
+      operatorUserId: "admin-a",
+      providerAccountState: "UNVERIFIED",
+      receivingCapability: false,
+      withdrawalCapability: false,
+      commercialEnabled: false,
+    });
+    expect(f.tables.operations).toHaveLength(1);
+    expect(f.tables.operations[0]).toMatchObject({
+      id: "operation-bridge-a",
+      kind: "ACCOUNT_CREATE",
+      state: "REQUESTED",
+      requestId: bridgeRequestId,
+      requestHash: bridgeAuthority.context.draft.requestHash,
+      requestSnapshot: bridgeAuthority.context.draft,
+    });
+    expect(JSON.stringify(f.tables.operations)).not.toContain(
+      bridgeAuthority.consentId,
+    );
+    expect(f.custody.heldTransaction).toBeNull();
+  });
+  it.each(["reader", "custody"] as const)(
+    "denies NEW without independent %s",
+    async (missing) => {
+      const f = await receivingHttpBridge(undefined, undefined, {
+        [missing]: false,
+      });
+      const body = await prepareBridgeNomination(f);
+      const outcome = await observeBridgeNomination(f, body);
+      expect(outcome.error).toMatchObject({ status: 503 });
+      expect(f.tables.accounts).toHaveLength(0);
+      expect(f.tables.operations).toHaveLength(0);
+      expect(f.custody.heldTransaction).toBeNull();
+    },
+  );
+  it.each(["holder", "foreign", "revoked", "expired"] as const)(
+    "denies independent %s consent without inventing a holder",
+    async (kind) => {
+      const f = await receivingHttpBridge();
+      const record = f.custody.snapshot();
+      if (kind === "holder")
+        f.custody.mutate({ ...record, holderUserId: "another-holder" });
+      if (kind === "foreign")
+        f.custody.mutate({
+          ...record,
+          context: {
+            ...record.context,
+            actor: { ...record.context.actor, siteId: "foreign-site" },
+          },
+        });
+      if (kind === "revoked") f.custody.mutate(record, true);
+      if (kind === "expired")
+        f.custody.mutate({ ...record, expiresAt: "2026-10-12T18:00:00.000Z" });
+      const body = await prepareBridgeNomination(f);
+      const outcome = await observeBridgeNomination(f, body);
+      expect(outcome.error).toMatchObject({ status: 503 });
+      expect(f.tables.accounts).toHaveLength(0);
+      expect(f.tables.operations).toHaveLength(0);
+      expect(f.custody.heldTransaction).toBeNull();
+    },
+  );
+  it("independently rereads revoked custody after a finite reader await rather than echoing the original authority", async () => {
+    const f = await receivingHttpBridge();
+    const body = await prepareBridgeNomination(f);
+    f.custody.pauseAt = "READ";
+    const work = observeBridgeNomination(f, body);
+    expect(
+      await Promise.race([
+        f.custody.entered.promise.then(() => true),
+        work.then(() => false),
+      ]),
+    ).toBe(true);
+    expect(f.custody.heldTransaction).toBeNull();
+    f.custody.mutate(f.custody.snapshot(), true);
+    f.custody.gate.resolve(true);
+    expect((await work).error).toMatchObject({ status: 503 });
+    expect(f.custody.reads).toHaveLength(1);
+    expect(f.custody.locks).toHaveLength(1);
+    expect(f.queries.some(({ sql }) => /^rollback/i.test(sql))).toBe(true);
+    expect(f.tables.accounts).toHaveLength(0);
+    expect(f.tables.operations).toHaveLength(0);
+    expect(f.custody.heldTransaction).toBeNull();
+    expect(f.custody.settledGates).toBe(1);
+  });
+  it.each(["LOCK", "ACCOUNT", "OPERATION", "COMMIT"] as const)(
+    "retains immutable custody and actual transaction through finite %s settlement",
+    async (stage) => {
+      const f = await receivingHttpBridge();
+      const body = await prepareBridgeNomination(f);
+      f.custody.pauseAt = stage;
+      const work = observeBridgeNomination(f, body);
+      expect(
+        await Promise.race([
+          f.custody.entered.promise.then(() => true),
+          work.then(() => false),
+        ]),
+      ).toBe(true);
+      const transaction = f.custody.transactions.at(-1);
+      expect(f.custody.heldTransaction).toBe(transaction);
+      expect(f.custody.events.at(-1)).toMatchObject({
+        stage,
+        transaction,
+        held: true,
+      });
+      expect(f.pending.size).toBe(1);
+      expect(() =>
+        f.custody.mutate(
+          { ...f.custody.snapshot(), consentVersion: "revoked-v2" },
+          true,
+        ),
+      ).toThrow("Synthetic custody is locked");
+      f.custody.gate.resolve(true);
+      expect((await work).error).toBeNull();
+      expect(f.custody.snapshot()).toEqual(bridgeAuthority);
+      expect(f.tables.accounts).toHaveLength(1);
+      expect(f.tables.operations).toHaveLength(1);
+      expect(
+        f.custody.events.find((event) => event.stage === "COMMIT"),
+      ).toMatchObject({ transaction, held: true, accounts: 1, operations: 1 });
+      expect(f.custody.heldTransaction).toBeNull();
+      expect(f.custody.settledGates).toBe(1);
+    },
+  );
+  it("retains custody until rollback acknowledgment restores uncommitted account and operation rows", async () => {
+    const f = await receivingHttpBridge();
+    const body = await prepareBridgeNomination(f);
+    f.custody.failAt = "OPERATION";
+    f.custody.pauseAt = "ROLLBACK";
+    const work = observeBridgeNomination(f, body);
+    expect(
+      await Promise.race([
+        f.custody.entered.promise.then(() => true),
+        work.then(() => false),
+      ]),
+    ).toBe(true);
+    expect(f.tables.accounts).toHaveLength(1);
+    expect(f.tables.operations).toHaveLength(0);
+    expect(f.custody.heldTransaction).toBe(f.custody.transactions.at(-1));
+    expect(() => f.custody.mutate(f.custody.snapshot(), true)).toThrow(
+      "Synthetic custody is locked",
+    );
+    f.custody.gate.resolve(true);
+    expect((await work).error).toMatchObject({ status: 503 });
+    expect(f.tables.accounts).toHaveLength(0);
+    expect(f.tables.operations).toHaveLength(0);
+    expect(f.custody.heldTransaction).toBeNull();
+    expect(f.custody.settledGates).toBe(1);
+  });
+  it("preserves durable rows and custody after a lost COMMIT acknowledgment until the subsequent rollback settles", async () => {
+    const f = await receivingHttpBridge();
+    const body = await prepareBridgeNomination(f);
+    f.state.commitLost = true;
+    f.custody.pauseAt = "ROLLBACK";
+    const work = observeBridgeNomination(f, body);
+    expect(
+      await Promise.race([
+        f.custody.entered.promise.then(() => true),
+        work.then(() => false),
+      ]),
+    ).toBe(true);
+    expect(f.tables.accounts).toHaveLength(1);
+    expect(f.tables.operations).toHaveLength(1);
+    const committed = structuredClone(f.tables);
+    expect(f.custody.heldTransaction).toBe(f.custody.transactions.at(-1));
+    expect(() => f.custody.mutate(f.custody.snapshot(), true)).toThrow(
+      "Synthetic custody is locked",
+    );
+    f.custody.gate.resolve(true);
+    expect((await work).error).toMatchObject({ status: 503 });
+    expect(f.tables).toEqual(committed);
+    expect(f.custody.heldTransaction).toBeNull();
+    expect(f.pending.size).toBe(0);
+    expect(f.custody.settledGates).toBe(1);
+  });
+  it.each(["READ", "LOCK", "COMMIT", "ROLLBACK"] as const)(
+    "settles the controlled finite %s action and native request during cleanup",
+    async (stage) => {
+      const f = await receivingHttpBridge();
+      const body = await prepareBridgeNomination(f);
+      f.custody.pauseAt = stage;
+      if (stage === "ROLLBACK") f.custody.failAt = "OPERATION";
+      const work = observeBridgeNomination(f, body);
+      expect(
+        await Promise.race([
+          f.custody.entered.promise.then(() => true),
+          work.then(() => false),
+        ]),
+      ).toBe(true);
+      if (stage !== "READ")
+        expect(f.custody.heldTransaction).toBe(f.custody.transactions.at(-1));
+      await f.cleanup();
+      expect((await work).error).toMatchObject({ status: 503 });
+      expect(f.pending.size).toBe(0);
+      expect(f.custody.heldTransaction).toBeNull();
+      expect(f.custody.settledGates).toBe(1);
+      expect(f.tables.accounts).toHaveLength(0);
+      expect(f.tables.operations).toHaveLength(0);
+      expect(f.custody.controlSignalsSettled).toBe(true);
+    },
+  );
+});
 
 describe("receiving setup mounted consumer through actual private HTTP", () => {
   it("loads a canonical nomination context through signed native auth and leaves the financial GET read-only", async () => {
