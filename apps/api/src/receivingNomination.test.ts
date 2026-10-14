@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { isDeepStrictEqual } from "node:util";
 import type { SiteAccess } from "@entrelacos/contracts";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -10,6 +11,9 @@ import {
 import {
   createReceivingNominationService,
   deriveReceivingNominationRequestId,
+  type ReceivingNominationAdmissionAuthority,
+  type ReceivingNominationAdmissionContext,
+  type ReceivingNominationAdmissionFrame,
   type ReceivingNominationCurrentAuthorization,
   type ReceivingNominationLockedState,
   type ReceivingNominationOptions,
@@ -141,6 +145,88 @@ describe("private provisioning snapshot projection", () => {
   );
 });
 
+const admissionPolicy = Object.freeze({
+  issuerId: "fixture-issuer",
+  issuerVersion: "issuer-v1",
+  disclosureId: "fixture-disclosure",
+  disclosureVersion: "disclosure-v1",
+});
+// These independently pinned fixture records exist before any adapter receives an actor.
+function independentCustody() {
+  const records: ReceivingNominationAdmissionAuthority[] = [];
+  for (const identity of [
+    { userId: "operator-1", sessionId: "session-1" },
+    { userId: "operator.one:1", sessionId: "session.one:1" },
+  ])
+    for (const environment of ["sandbox", "live"] as const)
+      for (const proofKind of [
+        "PASSWORD_REAUTHENTICATION",
+        "MFA_REAUTHENTICATION",
+      ] as const) {
+        const requestId = deriveReceivingNominationRequestId({
+          siteId: "site-1",
+          operatorUserId: identity.userId,
+          environment,
+        });
+        const actor = { siteId: "site-1", ...identity };
+        const draft: ReceivingNominationSnapshot = {
+          state: "AWAITING_PROVIDER_VERIFICATION",
+          siteId: "site-1",
+          requestId,
+          operatorUserId: identity.userId,
+          environment,
+          policyVersion: "receiving-intent-v1",
+          accountId: "account-1",
+          operationId: "operation-1",
+          createdAt: now.toISOString(),
+          requestHash: createHash("sha256")
+            .update(
+              JSON.stringify([
+                "receiving.self-nomination.v1",
+                "site-1",
+                requestId,
+                identity.userId,
+                environment,
+                "receiving-intent-v1",
+                true,
+              ]),
+            )
+            .digest("hex"),
+          authentication: {
+            ...actor,
+            proofKind,
+            authenticatedAt: "2026-10-12T11:59:30.000Z",
+            expiresAt: "2026-10-12T12:04:30.000Z",
+          },
+        };
+        records.push({
+          version: "receiving.new-admission.v1",
+          ...admissionPolicy,
+          holderUserId: identity.userId,
+          authorityId: "fixture-authority",
+          authorityVersion: "authority-v1",
+          consentId: "fixture-consent",
+          consentVersion: "consent-v1",
+          custodyId: "fixture-custody",
+          custodyVersion: "custody-v1",
+          issuedAt: "2026-10-12T11:59:30.000Z",
+          expiresAt: "2026-10-12T12:04:30.000Z",
+          context: {
+            draft,
+            actor,
+            input: {
+              requestId,
+              confirmSelfAsRecipient: true,
+              policyVersion: "receiving-intent-v1",
+            },
+            applicationEnvironment:
+              environment === "live" ? "production" : "test",
+          },
+        });
+      }
+  return records;
+}
+
 function fixture() {
   const actor: FinancialActor = {
     userId: "operator-1",
@@ -191,9 +277,24 @@ function fixture() {
       snapshot: ReceivingNominationSnapshot,
       authorize: (state: ReceivingNominationLockedState) => Promise<void>,
       _authorization: ReceivingNominationCurrentAuthorization,
+      admission?: ReceivingNominationAdmissionFrame,
     ) => {
       await authorize(locked);
+      if (locked.designatedOperatorUserId === null && admission === undefined)
+        throw new ReceivingNominationServiceError(
+          503,
+          "RECEIVING_NOMINATION_UNAVAILABLE",
+        );
       return snapshot;
+    },
+  );
+  const custody = independentCustody();
+  const readAuthority = vi.fn(
+    async (context: ReceivingNominationAdmissionContext): Promise<unknown> => {
+      const record = custody.find((stored) =>
+        isDeepStrictEqual(stored.context, context),
+      );
+      return record === undefined ? null : structuredClone(record);
     },
   );
   const generateId = vi.fn((kind: "account" | "operation") => `${kind}-1`);
@@ -206,6 +307,7 @@ function fixture() {
     generateId,
     loadSite,
     repository: { findByRequest, readNominationScope, reserveNomination },
+    admission: { ...admissionPolicy, readAuthority },
   };
   return {
     options,
@@ -219,6 +321,8 @@ function fixture() {
     readNominationScope,
     reserveNomination,
     generateId,
+    custody,
+    readAuthority,
   };
 }
 
@@ -877,4 +981,577 @@ describe("explicit initial receiving nomination", () => {
     });
     await denied(nominate(values), "RECEIVING_NOMINATION_UNAVAILABLE", 503);
   });
+});
+
+function pendingValue<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((finish) => {
+    resolve = finish;
+  });
+  return { promise, resolve };
+}
+async function nominationTick() {
+  await new Promise<void>((resolve) => setImmediate(resolve));
+}
+
+describe("independent NEW nomination admission", () => {
+  it("denies a valid administrator with current proof when independent custody ports are absent", async () => {
+    const values = fixture();
+    delete values.options.admission;
+    await denied(nominate(values), "RECEIVING_NOMINATION_UNAVAILABLE", 503);
+    expect(values.reserveNomination).toHaveBeenCalledOnce();
+    expect(values.reserveNomination.mock.calls[0][3]).toBeUndefined();
+  });
+});
+
+describe("independent original holder evidence", () => {
+  it.each(["missing", "planner", "foreign-holder"])(
+    "refuses administrative self confirmation with %s holder evidence",
+    async (variant) => {
+      const values = fixture();
+      if (variant === "missing") values.readAuthority.mockResolvedValue(null);
+      else
+        values.custody.forEach((record) => {
+          Object.assign(record, {
+            holderUserId:
+              variant === "planner" ? "actual-bride" : "foreign-holder",
+          });
+        });
+      await denied(nominate(values), "RECEIVING_NOMINATION_UNAVAILABLE", 503);
+      expect(values.reserveNomination).not.toHaveBeenCalled();
+    },
+  );
+  it.each([
+    "site",
+    "account",
+    "operation",
+    "request",
+    "hash",
+    "environment",
+    "policy",
+    "session",
+    "input",
+    "server-environment",
+    "issuer",
+    "issuer-version",
+    "disclosure",
+    "disclosure-version",
+    "future",
+    "expired",
+    "unbounded",
+    "missing-consent",
+    "missing-custody",
+  ])(
+    "refuses independent authority with foreign or invalid %s",
+    async (variant) => {
+      const values = fixture();
+      const record = structuredClone(values.custody[0]);
+      if (variant === "site")
+        Object.assign(record.context.draft, { siteId: "foreign" });
+      if (variant === "account")
+        Object.assign(record.context.draft, { accountId: "foreign" });
+      if (variant === "operation")
+        Object.assign(record.context.draft, { operationId: "foreign" });
+      if (variant === "request")
+        Object.assign(record.context.draft, { requestId: "foreign" });
+      if (variant === "hash")
+        Object.assign(record.context.draft, { requestHash: "0".repeat(64) });
+      if (variant === "environment")
+        Object.assign(record.context.draft, { environment: "live" });
+      if (variant === "policy")
+        Object.assign(record.context.draft, { policyVersion: "foreign" });
+      if (variant === "session")
+        Object.assign(record.context.actor, { sessionId: "foreign" });
+      if (variant === "input")
+        Object.assign(record.context.input, { confirmSelfAsRecipient: false });
+      if (variant === "server-environment")
+        Object.assign(record.context, { applicationEnvironment: "production" });
+      if (variant === "issuer") Object.assign(record, { issuerId: "foreign" });
+      if (variant === "issuer-version")
+        Object.assign(record, { issuerVersion: "foreign" });
+      if (variant === "disclosure")
+        Object.assign(record, { disclosureId: "foreign" });
+      if (variant === "disclosure-version")
+        Object.assign(record, { disclosureVersion: "foreign" });
+      if (variant === "future")
+        Object.assign(record, { issuedAt: "2026-10-12T12:00:00.001Z" });
+      if (variant === "expired")
+        Object.assign(record, { expiresAt: now.toISOString() });
+      if (variant === "unbounded")
+        Object.assign(record, { expiresAt: "2026-10-13T12:00:00.000Z" });
+      if (variant === "missing-consent")
+        Object.assign(record, { consentId: "" });
+      if (variant === "missing-custody")
+        Object.assign(record, { custodyId: "" });
+      values.readAuthority.mockResolvedValue(record);
+      await denied(nominate(values), "RECEIVING_NOMINATION_UNAVAILABLE", 503);
+      expect(values.reserveNomination).not.toHaveBeenCalled();
+    },
+  );
+  it.each(["actor-proof", "holder-proof", "clock-rewind"])(
+    "checks %s again after genuinely pending authority read",
+    async (variant) => {
+      const values = fixture();
+      const pending = pendingValue<unknown>();
+      let current = new Date(now);
+      values.options.now = () => new Date(current);
+      values.readAuthority.mockImplementation(() => pending.promise);
+      const action = nominate(values);
+      await nominationTick();
+      const record = structuredClone(values.custody[0]);
+      if (variant === "actor-proof")
+        current = new Date("2026-10-12T12:04:30.000Z");
+      if (variant === "holder-proof")
+        Object.assign(record, { expiresAt: now.toISOString() });
+      if (variant === "clock-rewind") current = new Date(now.getTime() - 1);
+      pending.resolve(record);
+      await denied(
+        action,
+        variant === "actor-proof"
+          ? "RECENT_AUTH_REQUIRED"
+          : "RECEIVING_NOMINATION_UNAVAILABLE",
+        variant === "actor-proof" ? 403 : 503,
+      );
+      expect(values.reserveNomination).not.toHaveBeenCalled();
+    },
+  );
+  it("captures ports and original values before awaits despite caller and configuration mutation", async () => {
+    const values = fixture();
+    const foreignRead = vi.fn().mockResolvedValue(null);
+    values.loadSite.mockImplementationOnce(async () => {
+      Object.assign(values.actor, { userId: "foreign", sessionId: "foreign" });
+      Object.assign(values.input, {
+        policyVersion: "foreign",
+        requestId: "foreign",
+      });
+      values.recentAuth.authenticatedAt!.setTime(0);
+      Object.assign(values.options, {
+        policyVersion: "foreign",
+        now: () => new Date(0),
+      });
+      Object.assign(values.options.admission!, {
+        issuerId: "foreign",
+        readAuthority: foreignRead,
+      });
+      return { siteId: "site-1", isDemo: true };
+    });
+    const result = await nominate(values);
+    expect(result).toEqual(values.custody[0].context.draft);
+    expect(values.readAuthority).toHaveBeenCalledOnce();
+    expect(foreignRead).not.toHaveBeenCalled();
+  });
+  it.each(["options", "authority", "input"])(
+    "rejects %s accessors without executing callback code",
+    async (variant) => {
+      const values = fixture();
+      const getter = vi.fn(() =>
+        variant === "options" ? "sandbox" : "operator-1",
+      );
+      if (variant === "options")
+        Object.defineProperty(values.options, "mode", { get: getter });
+      if (variant === "input")
+        Object.defineProperty(values.input, "requestId", { get: getter });
+      if (variant === "authority") {
+        const record = structuredClone(values.custody[0]);
+        Object.defineProperty(record, "holderUserId", { get: getter });
+        values.readAuthority.mockResolvedValue(record);
+      }
+      await denied(
+        nominate(values),
+        variant === "input"
+          ? "NOMINATION_INVALID"
+          : "RECEIVING_NOMINATION_UNAVAILABLE",
+        variant === "input" ? 400 : 503,
+      );
+      expect(getter).not.toHaveBeenCalled();
+      expect(values.reserveNomination).not.toHaveBeenCalled();
+    },
+  );
+  it("retains pending ownership despite reentrant mutations and hostile promise metadata", async () => {
+    const values = fixture();
+    const pending = pendingValue<unknown>();
+    const metadata = vi.fn(() => {
+      throw new Error("metadata is not settlement");
+    });
+    Object.defineProperty(pending.promise, "status", { get: metadata });
+    let mutationRejected = false;
+    values.readAuthority.mockImplementation((context) => {
+      try {
+        Object.assign(context.draft, { accountId: "foreign" });
+      } catch {
+        mutationRejected = true;
+      }
+      Object.assign(values.options.admission!, {
+        readAuthority: () => Promise.resolve(null),
+      });
+      return pending.promise;
+    });
+    let settled = false;
+    const action = nominate(values).finally(() => {
+      settled = true;
+    });
+    await nominationTick();
+    try {
+      expect(values.readAuthority).toHaveBeenCalledOnce();
+      expect(mutationRejected).toBe(true);
+      expect(settled).toBe(false);
+      expect(values.reserveNomination).not.toHaveBeenCalled();
+      expect(metadata).not.toHaveBeenCalled();
+    } finally {
+      pending.resolve(structuredClone(values.custody[0]));
+      await action.catch(() => {});
+    }
+    expect(await action).toEqual(values.custody[0].context.draft);
+  });
+  it("keeps original expired audit replay with fresh actor proof and no NEW reader", async () => {
+    const values = fixture();
+    const original = await nominate(values);
+    delete values.options.admission;
+    values.findByRequest.mockResolvedValue(original);
+    values.locked.designatedOperatorUserId = "operator-1";
+    values.options.now = () => new Date("2026-10-12T12:10:00.000Z");
+    values.recentAuth.authenticatedAt = new Date("2026-10-12T12:09:30.000Z");
+    values.recentAuth.expiresAt = new Date("2026-10-12T12:14:30.000Z");
+    values.readAuthority.mockClear();
+    expect(await nominate(values)).toEqual(original);
+    expect(values.readAuthority).not.toHaveBeenCalled();
+  });
+});
+
+describe("original native authentication capture", () => {
+  it("captures original authentication before the first reentrant clock callable", async () => {
+    const values = fixture();
+    let invoked = false;
+    values.options.now = () => {
+      if (!invoked) {
+        invoked = true;
+        values.recentAuth.authenticatedAt!.setTime(0);
+        Object.assign(values.recentAuth, { sessionId: "foreign" });
+      }
+      return new Date(now);
+    };
+    expect(await nominate(values)).toEqual(values.custody[0].context.draft);
+  });
+  it("uses native Date values instead of a shadowed authentication getTime", async () => {
+    const values = fixture();
+    const shadow = vi.fn(() => 0);
+    Object.defineProperty(values.recentAuth.authenticatedAt!, "getTime", {
+      value: shadow,
+    });
+    expect(await nominate(values)).toEqual(values.custody[0].context.draft);
+    expect(shadow).not.toHaveBeenCalled();
+  });
+});
+
+describe("authoritative NEW and callable capture", () => {
+  it("lets the locked repository decide a raced original winner conflict even without a NEW read port", async () => {
+    const values = fixture();
+    delete values.options.admission;
+    values.reserveNomination.mockImplementationOnce(
+      async (_snapshot, authorize) => {
+        await authorize(values.locked);
+        throw new ReceivingNominationServiceError(409, "REQUEST_CONFLICT");
+      },
+    );
+    await denied(nominate(values), "REQUEST_CONFLICT", 409);
+    expect(values.reserveNomination).toHaveBeenCalledOnce();
+    expect(values.reserveNomination.mock.calls[0][3]).toBeUndefined();
+  });
+  it("captures a callable without invoking its shadowed bind accessor", async () => {
+    const values = fixture();
+    const getter = vi.fn(() => {
+      throw new Error("shadowed bind");
+    });
+    Object.defineProperty(values.loadSite, "bind", { get: getter });
+    expect(await nominate(values)).toEqual(values.custody[0].context.draft);
+    expect(getter).not.toHaveBeenCalled();
+  });
+});
+
+describe("admission acknowledgment validity", () => {
+  it("does not acknowledge expired authority after awaited repository settlement", async () => {
+    const values = fixture();
+    let current = new Date(now);
+    values.options.now = () => new Date(current);
+    values.custody.forEach((record) => {
+      Object.assign(record, { expiresAt: "2026-10-12T12:00:01.000Z" });
+    });
+    values.reserveNomination.mockImplementationOnce(
+      async (snapshot, authorize) => {
+        await authorize(values.locked);
+        current = new Date("2026-10-12T12:00:01.000Z");
+        return snapshot;
+      },
+    );
+    await denied(nominate(values), "RECEIVING_NOMINATION_UNAVAILABLE", 503);
+    expect(values.reserveNomination).toHaveBeenCalledOnce();
+  });
+});
+
+describe("optional private ports preserve known replay", () => {
+  it.each(["missing-callable", "missing-policy", "accessor-policy"])(
+    "keeps exact known replay when private NEW configuration has %s",
+    async (variant) => {
+      const values = fixture();
+      const original = await nominate(values);
+      values.findByRequest.mockResolvedValue(original);
+      values.locked.designatedOperatorUserId = "operator-1";
+      const configuration: Record<string, unknown> =
+        variant === "missing-policy"
+          ? { readAuthority: values.readAuthority }
+          : { ...admissionPolicy };
+      const getter = vi.fn(() => "fixture-issuer");
+      if (variant === "accessor-policy")
+        Object.defineProperty(configuration, "issuerId", { get: getter });
+      Object.assign(values.options, { admission: configuration });
+      expect(await nominate(values)).toEqual(original);
+      expect(getter).not.toHaveBeenCalled();
+    },
+  );
+});
+
+// These ports return the exact native promise; no async/mock wrapper assimilates it.
+const settlementTestThen = Promise.prototype.then;
+function nativeSettlementGate<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<T>((fulfill, fail) => {
+    resolve = fulfill;
+    reject = fail;
+  });
+  const state = { settled: false, fulfilled: false };
+  const observed = Reflect.apply(settlementTestThen, promise, [
+    () => {
+      state.settled = true;
+      state.fulfilled = true;
+    },
+    () => {
+      state.settled = true;
+    },
+  ]) as Promise<void>;
+  return { promise, resolve, reject, state, observed };
+}
+function poisonSettlementMetadata(
+  promise: Promise<unknown>,
+  kind: "constructor" | "species" | "then",
+) {
+  let accesses = 0;
+  const trap = () => {
+    accesses++;
+    throw new Error("private pending promise metadata");
+  };
+  if (kind === "constructor")
+    Object.defineProperty(promise, "constructor", { get: trap });
+  if (kind === "species")
+    Object.defineProperty(promise, "constructor", {
+      value: Object.defineProperty({}, Symbol.species, { get: trap }),
+    });
+  if (kind === "then") {
+    Object.defineProperty(promise, "constructor", { value: undefined });
+    // biome-ignore lint/suspicious/noThenProperty: The own then getter is the exact hostile native promise fixture under test.
+    Object.defineProperty(promise, "then", { get: trap });
+  }
+  return {
+    accesses: () => accesses,
+    descriptor: Object.getOwnPropertyDescriptor(
+      promise,
+      kind === "then" ? "then" : "constructor",
+    ),
+  };
+}
+function observeNominationOutcome(action: Promise<unknown>) {
+  const state = { settled: false, fulfilled: false, error: null as unknown };
+  Reflect.apply(settlementTestThen, action, [
+    () => {
+      state.settled = true;
+      state.fulfilled = true;
+    },
+    (error: unknown) => {
+      state.settled = true;
+      state.error = error;
+    },
+  ]);
+  return state;
+}
+
+describe("genuine nomination settlement metadata", () => {
+  it.each(["authority", "reservation"] as const)(
+    "retains %s ownership when its exact pending native promise has a throwing constructor",
+    async (stage) => {
+      const values = fixture();
+      const gate = nativeSettlementGate<unknown>();
+      const decoration = poisonSettlementMetadata(gate.promise, "constructor");
+      let delivered: Promise<unknown> | null = null;
+      let calls = 0;
+      let originalReservation: ReceivingNominationSnapshot | null = null;
+      if (stage === "authority")
+        Object.assign(values.options.admission!, {
+          readAuthority: () => {
+            calls++;
+            delivered = gate.promise;
+            return gate.promise;
+          },
+        });
+      else
+        Object.assign(values.options.repository, {
+          reserveNomination: (
+            snapshot: ReceivingNominationSnapshot,
+            authorize: (state: ReceivingNominationLockedState) => Promise<void>,
+          ) => {
+            calls++;
+            delivered = gate.promise;
+            originalReservation = snapshot;
+            Reflect.apply(settlementTestThen, authorize(values.locked), [
+              () => {},
+              () => {},
+            ]);
+            return gate.promise;
+          },
+        });
+      const action = nominate(values);
+      const outcome = observeNominationOutcome(action);
+      await nominationTick();
+      try {
+        expect(calls).toBe(1);
+        expect(delivered).toBe(gate.promise);
+        expect(gate.state.settled).toBe(false);
+        expect(decoration.accesses()).toBeGreaterThan(0);
+        expect(outcome.settled).toBe(false);
+      } finally {
+        gate.resolve(
+          stage === "authority"
+            ? structuredClone(values.custody[0])
+            : originalReservation,
+        );
+        await gate.observed;
+      }
+      await nominationTick();
+      expect(gate.state.settled).toBe(true);
+      expect(outcome.settled).toBe(false);
+      expect(
+        Object.getOwnPropertyDescriptor(gate.promise, "constructor"),
+      ).toEqual(decoration.descriptor);
+      // Failed attachment remains explicitly unresolved, without native work/timers.
+    },
+  );
+  it.each(["species", "then"] as const)(
+    "retains the native producer until genuine fulfillment despite %s metadata",
+    async (kind) => {
+      const values = fixture();
+      const gate = nativeSettlementGate<unknown>();
+      const decoration = poisonSettlementMetadata(gate.promise, kind);
+      let delivered: Promise<unknown> | null = null;
+      let calls = 0;
+      Object.assign(values.options.admission!, {
+        readAuthority: () => {
+          calls++;
+          delivered = gate.promise;
+          return gate.promise;
+        },
+      });
+      const action = nominate(values);
+      const outcome = observeNominationOutcome(action);
+      await nominationTick();
+      try {
+        expect(delivered).toBe(gate.promise);
+        expect(calls).toBe(1);
+        expect(gate.state.settled).toBe(false);
+        expect(outcome.settled).toBe(false);
+      } finally {
+        gate.resolve(structuredClone(values.custody[0]));
+        await gate.observed;
+      }
+      await nominationTick();
+      expect(gate.state.fulfilled).toBe(true);
+      if (kind === "then") {
+        expect(await action).toEqual(values.custody[0].context.draft);
+        expect(decoration.accesses()).toBe(0);
+      } else expect(outcome.settled).toBe(false);
+      expect(
+        Object.getOwnPropertyDescriptor(
+          gate.promise,
+          kind === "then" ? "then" : "constructor",
+        ),
+      ).toEqual(decoration.descriptor);
+    },
+  );
+  it.each(["fulfill", "reject"] as const)(
+    "observes normal native %s only after the original authority producer settles",
+    async (result) => {
+      const values = fixture();
+      const gate = nativeSettlementGate<unknown>();
+      let delivered: Promise<unknown> | null = null;
+      Object.assign(values.options.admission!, {
+        readAuthority: () => {
+          delivered = gate.promise;
+          return gate.promise;
+        },
+      });
+      const action = nominate(values);
+      const outcome = observeNominationOutcome(action);
+      await nominationTick();
+      expect(delivered).toBe(gate.promise);
+      expect(outcome.settled).toBe(false);
+      if (result === "fulfill")
+        gate.resolve(structuredClone(values.custody[0]));
+      else gate.reject(new Error("private original authority rejection"));
+      await gate.observed;
+      if (result === "fulfill")
+        expect(await action).toEqual(values.custody[0].context.draft);
+      else await denied(action, "RECEIVING_NOMINATION_UNAVAILABLE", 503);
+      expect(gate.state.settled).toBe(true);
+      expect(outcome.settled).toBe(true);
+    },
+  );
+});
+
+describe("freshness after observable native settlement", () => {
+  it.each(["authority", "reservation"] as const)(
+    "checks current proof only after genuine %s completion with a poisoned then getter",
+    async (stage) => {
+      const values = fixture();
+      const gate = nativeSettlementGate<unknown>();
+      const decoration = poisonSettlementMetadata(gate.promise, "then");
+      let current = new Date(now);
+      values.options.now = () => new Date(current);
+      let delivered: Promise<unknown> | null = null;
+      let original: ReceivingNominationSnapshot | null = null;
+      if (stage === "authority")
+        Object.assign(values.options.admission!, {
+          readAuthority: () => {
+            delivered = gate.promise;
+            return gate.promise;
+          },
+        });
+      else
+        Object.assign(values.options.repository, {
+          reserveNomination: (
+            snapshot: ReceivingNominationSnapshot,
+            authorize: (state: ReceivingNominationLockedState) => Promise<void>,
+          ) => {
+            delivered = gate.promise;
+            original = snapshot;
+            Reflect.apply(settlementTestThen, authorize(values.locked), [
+              () => {},
+              () => {},
+            ]);
+            return gate.promise;
+          },
+        });
+      const action = nominate(values);
+      const outcome = observeNominationOutcome(action);
+      await nominationTick();
+      current = new Date("2026-10-12T12:04:30.000Z");
+      expect(delivered).toBe(gate.promise);
+      expect(gate.state.settled).toBe(false);
+      expect(outcome.settled).toBe(false);
+      gate.resolve(
+        stage === "authority" ? structuredClone(values.custody[0]) : original,
+      );
+      await gate.observed;
+      await denied(action, "RECENT_AUTH_REQUIRED", 403);
+      expect(gate.state.settled).toBe(true);
+      expect(decoration.accesses()).toBe(0);
+    },
+  );
 });

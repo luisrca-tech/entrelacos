@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { isDeepStrictEqual } from "node:util";
+import { isDeepStrictEqual, types } from "node:util";
 import {
   giftQuoteSchema,
   siteAccessSchema,
@@ -10,6 +10,33 @@ import type {
   RecentFinancialAuthenticationEvidence,
 } from "./financialAuthorization";
 import type { ProviderCredentialEnvelope } from "./providerCredentials";
+
+const NominationPromise = Promise;
+const nominationPromiseThen = Promise.prototype.then;
+const nominationPromiseApply = Reflect.apply;
+const isNominationPromise = types.isPromise;
+
+// Metadata failure alone never completes ownership of the original native operation.
+export function observeNominationSettlement<T>(
+  operation: Promise<T>,
+): Promise<Readonly<{ value: T }>> {
+  return new NominationPromise((resolve, reject) => {
+    try {
+      if (!isNominationPromise(operation)) return;
+      nominationPromiseApply(nominationPromiseThen, operation, [
+        (value: T) => {
+          resolve(Object.freeze({ value }));
+        },
+        (reason: unknown) => {
+          reject(reason);
+        },
+      ]);
+    } catch {
+      // Constructor/species attachment failure leaves ownership unresolved.
+      // Without an independent completion port there is no finite drain proof.
+    }
+  });
+}
 
 export interface ReceivingNominationInput {
   requestId: string;
@@ -143,6 +170,159 @@ export interface ReceivingNominationCurrentAuthorization {
   readonly recentAuth: RecentFinancialAuthenticationEvidence;
 }
 
+// Transient admission evidence deliberately stays outside the persisted v1 intent.
+export interface ReceivingNominationAdmissionContext {
+  readonly draft: ReceivingNominationSnapshot;
+  readonly input: Readonly<ReceivingNominationInput>;
+  readonly actor: FinancialActor;
+  readonly applicationEnvironment: ReceivingNominationConfiguration["applicationEnvironment"];
+}
+export interface ReceivingNominationAdmissionPolicy {
+  readonly issuerId: string;
+  readonly issuerVersion: string;
+  readonly disclosureId: string;
+  readonly disclosureVersion: string;
+}
+export interface ReceivingNominationAdmissionAuthority
+  extends ReceivingNominationAdmissionPolicy {
+  readonly version: "receiving.new-admission.v1";
+  readonly context: ReceivingNominationAdmissionContext;
+  readonly holderUserId: string;
+  readonly authorityId: string;
+  readonly authorityVersion: string;
+  readonly consentId: string;
+  readonly consentVersion: string;
+  readonly custodyId: string;
+  readonly custodyVersion: string;
+  readonly issuedAt: string;
+  readonly expiresAt: string;
+}
+export interface ReceivingNominationAdmissionFrame {
+  readonly context: ReceivingNominationAdmissionContext;
+  readonly authority: ReceivingNominationAdmissionAuthority;
+}
+export interface ReceivingNominationAdmissionReader
+  extends ReceivingNominationAdmissionPolicy {
+  readAuthority(context: ReceivingNominationAdmissionContext): Promise<unknown>;
+}
+
+export function captureReceivingNominationAdmissionPolicy(
+  value: unknown,
+): ReceivingNominationAdmissionPolicy {
+  const raw = captureDataProperties(value, [
+    "issuerId",
+    "issuerVersion",
+    "disclosureId",
+    "disclosureVersion",
+  ]);
+  return Object.freeze({
+    issuerId: identifier(raw.issuerId),
+    issuerVersion: identifier(raw.issuerVersion),
+    disclosureId: identifier(raw.disclosureId),
+    disclosureVersion: identifier(raw.disclosureVersion),
+  });
+}
+export function captureReceivingNominationAdmissionContext(
+  value: unknown,
+): ReceivingNominationAdmissionContext {
+  try {
+    const raw = exactRecord(value, [
+      "draft",
+      "input",
+      "actor",
+      "applicationEnvironment",
+    ]);
+    const draft = readReceivingNominationSnapshot(raw.draft);
+    const actor = readActor(raw.actor);
+    const input = readInput(raw.input, draft.policyVersion);
+    if (
+      actor.siteId !== draft.siteId ||
+      actor.userId !== draft.operatorUserId ||
+      input.requestId !== draft.requestId ||
+      !["test", "development", "production"].includes(
+        raw.applicationEnvironment as string,
+      ) ||
+      (draft.environment === "live" &&
+        raw.applicationEnvironment !== "production")
+    )
+      return unavailable();
+    return Object.freeze({
+      draft,
+      input,
+      actor,
+      applicationEnvironment:
+        raw.applicationEnvironment as ReceivingNominationConfiguration["applicationEnvironment"],
+    });
+  } catch {
+    return unavailable();
+  }
+}
+
+export function captureReceivingNominationAdmissionAuthority(
+  value: unknown,
+  context: ReceivingNominationAdmissionContext,
+  policy: ReceivingNominationAdmissionPolicy,
+): ReceivingNominationAdmissionAuthority {
+  const raw = exactRecord(value, [
+    "version",
+    "context",
+    "holderUserId",
+    "authorityId",
+    "authorityVersion",
+    "consentId",
+    "consentVersion",
+    "custodyId",
+    "custodyVersion",
+    "issuerId",
+    "issuerVersion",
+    "disclosureId",
+    "disclosureVersion",
+    "issuedAt",
+    "expiresAt",
+  ]);
+  const capturedContext = captureReceivingNominationAdmissionContext(
+    raw.context,
+  );
+  const capturedPolicy = captureReceivingNominationAdmissionPolicy(raw);
+  if (
+    raw.version !== "receiving.new-admission.v1" ||
+    raw.holderUserId !== context.actor.userId ||
+    !isDeepStrictEqual(capturedContext, context) ||
+    !isDeepStrictEqual(capturedPolicy, policy)
+  )
+    return unavailable();
+  return Object.freeze({
+    version: "receiving.new-admission.v1",
+    context: capturedContext,
+    holderUserId: identifier(raw.holderUserId),
+    authorityId: identifier(raw.authorityId),
+    authorityVersion: identifier(raw.authorityVersion),
+    consentId: identifier(raw.consentId),
+    consentVersion: identifier(raw.consentVersion),
+    custodyId: identifier(raw.custodyId),
+    custodyVersion: identifier(raw.custodyVersion),
+    ...capturedPolicy,
+    issuedAt: instant(raw.issuedAt),
+    expiresAt: instant(raw.expiresAt),
+  });
+}
+export function requireReceivingNominationAdmissionTime(
+  authority: ReceivingNominationAdmissionAuthority,
+  clock: number,
+  maxAgeMs: number,
+): void {
+  const issued = Date.parse(authority.issuedAt),
+    expires = Date.parse(authority.expiresAt);
+  if (
+    issued > clock ||
+    clock - issued > maxAgeMs ||
+    expires <= clock ||
+    expires <= issued ||
+    expires - issued > maxAgeMs
+  )
+    unavailable();
+}
+
 export interface ReceivingNominationRepository {
   // Null means a verified empty site/environment scope, never filtered history.
   readNominationScope(
@@ -160,6 +340,7 @@ export interface ReceivingNominationRepository {
       state: ReceivingNominationLockedState,
     ) => Promise<void>,
     currentAuthorization: ReceivingNominationCurrentAuthorization,
+    admission?: ReceivingNominationAdmissionFrame,
   ): Promise<ReceivingNominationSnapshot>;
 }
 
@@ -173,6 +354,7 @@ export interface ReceivingNominationOptions {
   generateId(kind: "account" | "operation"): string;
   loadSite(siteId: string): Promise<{ siteId: string; isDemo: boolean } | null>;
   repository: ReceivingNominationRepository;
+  admission?: ReceivingNominationAdmissionReader;
 }
 
 export interface ReceivingNominationAttempt {
@@ -215,6 +397,20 @@ function unavailable(): never {
   );
 }
 
+export function captureDataProperties(
+  value: unknown,
+  fields: readonly string[],
+): Record<string, unknown> {
+  if (!value || typeof value !== "object") return unavailable();
+  const result: Record<string, unknown> = {};
+  for (const field of fields) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, field);
+    if (!descriptor || !("value" in descriptor)) return unavailable();
+    result[field] = descriptor.value;
+  }
+  return result;
+}
+
 function exactRecord(
   value: unknown,
   fields: readonly string[],
@@ -229,7 +425,7 @@ function exactRecord(
     keys.some((key) => typeof key !== "string" || !fields.includes(key))
   )
     return unavailable();
-  return value as Record<string, unknown>;
+  return captureDataProperties(value, fields);
 }
 
 function identifier(value: unknown): string {
@@ -569,15 +765,18 @@ function readInput(
   }
 }
 
+const nativeDateTime = Date.prototype.getTime;
 function dateTime(value: unknown): number {
+  if (!(value instanceof Date)) return unavailable();
+  const time = nativeDateTime.call(value);
   if (
-    !(value instanceof Date) ||
-    !Number.isSafeInteger(value.getTime()) ||
-    value.getTime() < 0 ||
-    !giftQuoteSchema.shape.expiresAt.safeParse(value.toISOString()).success
+    !Number.isSafeInteger(time) ||
+    time < 0 ||
+    !giftQuoteSchema.shape.expiresAt.safeParse(new Date(time).toISOString())
+      .success
   )
     return unavailable();
-  return value.getTime();
+  return time;
 }
 
 function freshProof(
@@ -599,7 +798,7 @@ function freshProof(
 function captureProof(
   value: unknown,
   actor: FinancialActor,
-  now: number,
+  now: () => number,
   maxAuthAgeMs: number,
 ): ReceivingNominationAuthenticationAudit {
   try {
@@ -630,7 +829,7 @@ function captureProof(
       authenticatedAt: new Date(dateTime(raw.authenticatedAt)).toISOString(),
       expiresAt: new Date(dateTime(raw.expiresAt)).toISOString(),
     });
-    freshProof(audit, now, maxAuthAgeMs);
+    freshProof(audit, now(), maxAuthAgeMs);
     return audit;
   } catch {
     throw new ReceivingNominationServiceError(403, "RECENT_AUTH_REQUIRED");
@@ -658,8 +857,50 @@ export function createReceivingNominationService(
   options: ReceivingNominationOptions,
 ): ReceivingNominationService {
   try {
-    const mode = options.mode;
-    const applicationEnvironment = options.applicationEnvironment;
+    const raw = captureDataProperties(options, [
+      "mode",
+      "applicationEnvironment",
+      "policyVersion",
+      "maxAuthAgeMs",
+      "now",
+      "generateId",
+      "loadSite",
+      "repository",
+    ]);
+    const maxAuthAgeMs = raw.maxAuthAgeMs as number;
+    const mode = raw.mode as ReceivingNominationOptions["mode"];
+    const applicationEnvironment =
+      raw.applicationEnvironment as ReceivingNominationOptions["applicationEnvironment"];
+    const ports = captureDataProperties(raw.repository, [
+      "readNominationScope",
+      "findByRequest",
+      "reserveNomination",
+    ]);
+    let admissionPolicy: ReceivingNominationAdmissionPolicy | null = null;
+    let admissionRead:
+      | ReceivingNominationAdmissionReader["readAuthority"]
+      | null = null;
+    try {
+      const descriptor = Object.getOwnPropertyDescriptor(options, "admission");
+      if (
+        descriptor &&
+        "value" in descriptor &&
+        descriptor.value !== undefined
+      ) {
+        const policy = captureReceivingNominationAdmissionPolicy(
+          descriptor.value,
+        );
+        const read = captureDataProperties(descriptor.value, [
+          "readAuthority",
+        ]).readAuthority;
+        if (typeof read !== "function") unavailable();
+        admissionPolicy = policy;
+        admissionRead =
+          read as ReceivingNominationAdmissionReader["readAuthority"];
+      }
+    } catch {
+      // Missing private NEW authority must not reinterpret known replay.
+    }
     if (
       (mode !== "sandbox" && mode !== "live") ||
       (mode === "live" && applicationEnvironment !== "production")
@@ -670,31 +911,42 @@ export function createReceivingNominationService(
       );
     if (
       !["test", "development", "production"].includes(applicationEnvironment) ||
-      !Number.isSafeInteger(options.maxAuthAgeMs) ||
-      options.maxAuthAgeMs < 1 ||
-      options.maxAuthAgeMs > 300_000 ||
-      typeof options.now !== "function" ||
-      typeof options.generateId !== "function" ||
-      typeof options.loadSite !== "function" ||
-      typeof options.repository?.readNominationScope !== "function" ||
-      typeof options.repository?.findByRequest !== "function" ||
-      typeof options.repository?.reserveNomination !== "function"
+      !Number.isSafeInteger(maxAuthAgeMs) ||
+      maxAuthAgeMs < 1 ||
+      maxAuthAgeMs > 300_000 ||
+      typeof raw.now !== "function" ||
+      typeof raw.generateId !== "function" ||
+      typeof raw.loadSite !== "function" ||
+      typeof ports.readNominationScope !== "function" ||
+      typeof ports.findByRequest !== "function" ||
+      typeof ports.reserveNomination !== "function"
     )
       return unavailable();
-    const policyVersion = identifier(options.policyVersion);
-    const maxAuthAgeMs = options.maxAuthAgeMs;
-    const now = options.now.bind(options);
-    const generateId = options.generateId.bind(options);
-    const loadSite = options.loadSite.bind(options);
-    const findByRequest = options.repository.findByRequest.bind(
-      options.repository,
-    );
-    const reserveNomination = options.repository.reserveNomination.bind(
-      options.repository,
-    );
-    const readScope = options.repository.readNominationScope.bind(
-      options.repository,
-    );
+    const policyVersion = identifier(raw.policyVersion);
+    const now = Function.prototype.bind.call(
+      raw.now,
+      options,
+    ) as ReceivingNominationOptions["now"];
+    const generateId = Function.prototype.bind.call(
+      raw.generateId,
+      options,
+    ) as ReceivingNominationOptions["generateId"];
+    const loadSite = Function.prototype.bind.call(
+      raw.loadSite,
+      options,
+    ) as ReceivingNominationOptions["loadSite"];
+    const findByRequest = Function.prototype.bind.call(
+      ports.findByRequest,
+      raw.repository,
+    ) as ReceivingNominationRepository["findByRequest"];
+    const reserveNomination = Function.prototype.bind.call(
+      ports.reserveNomination,
+      raw.repository,
+    ) as ReceivingNominationRepository["reserveNomination"];
+    const readScope = Function.prototype.bind.call(
+      ports.readNominationScope,
+      raw.repository,
+    ) as ReceivingNominationRepository["readNominationScope"];
     return {
       configuration: readReceivingNominationConfiguration({
         mode,
@@ -704,9 +956,15 @@ export function createReceivingNominationService(
       }),
       async nominate(attempt) {
         try {
-          const actor = readActor(attempt.actor);
-          eligible(attempt.access, actor);
-          const input = readInput(attempt.input, policyVersion);
+          const originalAttempt = captureDataProperties(attempt, [
+            "actor",
+            "access",
+            "recentAuth",
+            "input",
+          ]);
+          const actor = readActor(originalAttempt.actor);
+          eligible(originalAttempt.access, actor);
+          const input = readInput(originalAttempt.input, policyVersion);
           let lastClock: number | null = null;
           const clock = () => {
             const current = dateTime(now());
@@ -715,15 +973,15 @@ export function createReceivingNominationService(
             return current;
           };
           const audit = captureProof(
-            attempt.recentAuth,
+            originalAttempt.recentAuth,
             actor,
-            clock(),
+            clock,
             maxAuthAgeMs,
           );
-          const site = exactRecord(await loadSite(actor.siteId), [
-            "siteId",
-            "isDemo",
-          ]);
+          const site = exactRecord(
+            (await observeNominationSettlement(loadSite(actor.siteId))).value,
+            ["siteId", "isDemo"],
+          );
           freshProof(audit, clock(), maxAuthAgeMs);
           if (site.siteId !== actor.siteId || typeof site.isDemo !== "boolean")
             return unavailable();
@@ -732,17 +990,20 @@ export function createReceivingNominationService(
               409,
               "PROVIDER_MODE_UNAVAILABLE",
             );
-          let previousValue = await findByRequest(
-            actor.siteId,
-            input.requestId,
-          );
+          let previousValue = (
+            await observeNominationSettlement(
+              findByRequest(actor.siteId, input.requestId),
+            )
+          ).value;
           if (previousValue === null) {
             const scope = Object.freeze({
               siteId: actor.siteId,
               operatorUserId: actor.userId,
               environment: mode,
             });
-            previousValue = await readScope(scope);
+            previousValue = (
+              await observeNominationSettlement(readScope(scope))
+            ).value;
             if (
               previousValue === null &&
               input.requestId !== deriveReceivingNominationRequestId(scope)
@@ -806,52 +1067,89 @@ export function createReceivingNominationService(
               authentication: audit,
             });
           }
+          const authorization = currentAuthorization(actor, audit);
+          let admissionFrame: ReceivingNominationAdmissionFrame | undefined;
+          if (
+            previous === null &&
+            admissionPolicy &&
+            typeof admissionRead === "function"
+          ) {
+            const context = captureReceivingNominationAdmissionContext({
+              draft: snapshot,
+              input,
+              actor,
+              applicationEnvironment,
+            });
+            const authority = captureReceivingNominationAdmissionAuthority(
+              (await observeNominationSettlement(admissionRead(context))).value,
+              context,
+              admissionPolicy,
+            );
+            const capturedAt = clock();
+            freshProof(audit, capturedAt, maxAuthAgeMs);
+            requireReceivingNominationAdmissionTime(
+              authority,
+              capturedAt,
+              maxAuthAgeMs,
+            );
+            admissionFrame = Object.freeze({ context, authority });
+          }
           let authorized = false;
-          const committed = await reserveNomination(
-            snapshot,
-            async (state) => {
-              authorized = false;
-              const locked = exactRecord(state, [
-                "access",
-                "currentSession",
-                "designatedOperatorUserId",
-                "hasProviderBinding",
-              ]);
-              const currentSession = readActor(locked.currentSession);
-              if (!isDeepStrictEqual(currentSession, actor))
-                throw new ReceivingNominationServiceError(
-                  403,
-                  "MEMBERSHIP_DENIED",
-                );
-              eligible(locked.access, actor);
-              freshProof(audit, clock(), maxAuthAgeMs);
-              if (
-                typeof locked.hasProviderBinding !== "boolean" ||
-                (locked.designatedOperatorUserId !== null &&
-                  typeof locked.designatedOperatorUserId !== "string")
-              )
-                return unavailable();
-              if (locked.designatedOperatorUserId !== null)
-                identifier(locked.designatedOperatorUserId);
-              if (locked.hasProviderBinding)
-                throw new ReceivingNominationServiceError(
-                  409,
-                  "RECEIVING_BINDING_EXISTS",
-                );
-              if (
-                locked.designatedOperatorUserId !== null &&
-                (locked.designatedOperatorUserId !== actor.userId ||
-                  previous === null)
-              )
-                throw new ReceivingNominationServiceError(
-                  409,
-                  "RECIPIENT_CONFLICT",
-                );
-              authorized = true;
-            },
-            currentAuthorization(actor, audit),
+          const { value: committed } = await observeNominationSettlement(
+            reserveNomination(
+              snapshot,
+              async (state) => {
+                authorized = false;
+                const locked = exactRecord(state, [
+                  "access",
+                  "currentSession",
+                  "designatedOperatorUserId",
+                  "hasProviderBinding",
+                ]);
+                const currentSession = readActor(locked.currentSession);
+                if (!isDeepStrictEqual(currentSession, actor))
+                  throw new ReceivingNominationServiceError(
+                    403,
+                    "MEMBERSHIP_DENIED",
+                  );
+                eligible(locked.access, actor);
+                freshProof(audit, clock(), maxAuthAgeMs);
+                if (
+                  typeof locked.hasProviderBinding !== "boolean" ||
+                  (locked.designatedOperatorUserId !== null &&
+                    typeof locked.designatedOperatorUserId !== "string")
+                )
+                  return unavailable();
+                if (locked.designatedOperatorUserId !== null)
+                  identifier(locked.designatedOperatorUserId);
+                if (locked.hasProviderBinding)
+                  throw new ReceivingNominationServiceError(
+                    409,
+                    "RECEIVING_BINDING_EXISTS",
+                  );
+                if (
+                  locked.designatedOperatorUserId !== null &&
+                  (locked.designatedOperatorUserId !== actor.userId ||
+                    previous === null)
+                )
+                  throw new ReceivingNominationServiceError(
+                    409,
+                    "RECIPIENT_CONFLICT",
+                  );
+                authorized = true;
+              },
+              authorization,
+              admissionFrame,
+            ),
           );
-          freshProof(audit, clock(), maxAuthAgeMs);
+          const acknowledgedAt = clock();
+          freshProof(audit, acknowledgedAt, maxAuthAgeMs);
+          if (admissionFrame)
+            requireReceivingNominationAdmissionTime(
+              admissionFrame.authority,
+              acknowledgedAt,
+              maxAuthAgeMs,
+            );
           if (!authorized) return unavailable();
           const result = readReceivingNominationSnapshot(committed);
           if (!isDeepStrictEqual(result, snapshot)) return unavailable();

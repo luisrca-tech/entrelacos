@@ -2,6 +2,9 @@ import { createHash } from "node:crypto";
 import { drizzle, type NodePgClient } from "drizzle-orm/node-postgres";
 import { describe, expect, it, vi } from "vitest";
 import type {
+  ReceivingNominationAdmissionAuthority,
+  ReceivingNominationAdmissionContext,
+  ReceivingNominationAdmissionFrame,
   ReceivingNominationCurrentAuthorization,
   ReceivingNominationLockedState,
   ReceivingNominationSnapshot,
@@ -89,6 +92,74 @@ function fixture(rawTimestamps = false) {
     expireAfterInsert: false,
     failRead: false,
   };
+  const custody = {
+    authority: {
+      version: "receiving.new-admission.v1",
+      issuerId: "fixture-issuer",
+      issuerVersion: "issuer-v1",
+      disclosureId: "fixture-disclosure",
+      disclosureVersion: "disclosure-v1",
+      holderUserId: "user-one",
+      authorityId: "fixture-authority",
+      authorityVersion: "authority-v1",
+      consentId: "fixture-consent",
+      consentVersion: "consent-v1",
+      custodyId: "fixture-custody",
+      custodyVersion: "custody-v1",
+      issuedAt: "2026-10-12T18:19:30.000Z",
+      expiresAt: "2026-10-12T18:24:30.000Z",
+      context: {
+        draft: structuredClone(snapshot),
+        actor: {
+          userId: "user-one",
+          siteId: "site-one",
+          sessionId: "session-one",
+        },
+        input: {
+          requestId: canonicalRequestId,
+          confirmSelfAsRecipient: true,
+          policyVersion: "intent-v1",
+        },
+        applicationEnvironment: "test",
+      },
+    } as ReceivingNominationAdmissionAuthority | null,
+    locked: false,
+    transaction: null as unknown,
+    events: [] as string[],
+    beforeLockedRead: null as (() => Promise<void>) | null,
+    beforeCommit: null as (() => Promise<void>) | null,
+    beforeRollback: null as (() => Promise<void>) | null,
+    afterInsert: null as (() => void) | null,
+    mutate: (change: Partial<ReceivingNominationAdmissionAuthority>) => {
+      if (custody.locked) return false;
+      if (custody.authority) Object.assign(custody.authority, change);
+      return true;
+    },
+  };
+  const frame: ReceivingNominationAdmissionFrame = structuredClone({
+    context: custody.authority!.context,
+    authority: custody.authority!,
+  });
+  const lockAuthority = vi.fn(
+    async (
+      transaction: unknown,
+      _context: ReceivingNominationAdmissionContext,
+      _original: ReceivingNominationAdmissionAuthority,
+    ): Promise<unknown> => {
+      if (custody.beforeLockedRead) await custody.beforeLockedRead();
+      // This is the fixture's actual transaction lifetime, independently stored custody.
+      if (
+        before === null ||
+        !transaction ||
+        typeof (transaction as { execute?: unknown }).execute !== "function"
+      )
+        throw new Error("No active fixture transaction");
+      custody.transaction = transaction;
+      custody.locked = true;
+      custody.events.push("lock");
+      return structuredClone(custody.authority);
+    },
+  );
   const queries: Array<{ sql: string; params: unknown[] }> = [];
   let before: typeof tables | null = null;
   const query = vi.fn(
@@ -103,11 +174,21 @@ function fixture(rawTimestamps = false) {
         return { rows: [] };
       }
       if (/^commit/i.test(text)) {
+        if (custody.beforeCommit) await custody.beforeCommit();
+        custody.events.push(
+          custody.locked ? "commit-locked" : "commit-unlocked",
+        );
         before = null;
+        custody.locked = false;
         if (state.commitLost) throw new Error("private database commit");
         return { rows: [] };
       }
       if (/^rollback/i.test(text)) {
+        if (custody.beforeRollback) await custody.beforeRollback();
+        custody.events.push(
+          custody.locked ? "rollback-locked" : "rollback-unlocked",
+        );
+        custody.locked = false;
         if (before) {
           tables.accounts = before.accounts;
           tables.operations = before.operations;
@@ -306,6 +387,7 @@ function fixture(rawTimestamps = false) {
           ? tables.accounts
           : tables.operations
         ).push(row);
+        if (custody.afterInsert) custody.afterInsert();
         if (state.expireAfterInsert)
           state.clock = new Date("2026-10-12T18:24:30.000Z");
         return {
@@ -346,7 +428,15 @@ function fixture(rawTimestamps = false) {
     applicationEnvironment: "test" as const,
     maxAuthAgeMs: 300000,
     now: () => new Date(state.clock),
+    admission: {
+      issuerId: "fixture-issuer",
+      issuerVersion: "issuer-v1",
+      disclosureId: "fixture-disclosure",
+      disclosureVersion: "disclosure-v1",
+      lockAuthority,
+    },
   };
+  const rawRepository = createReceivingNominationRepository(db, options);
   return {
     snapshot,
     authorization,
@@ -355,7 +445,26 @@ function fixture(rawTimestamps = false) {
     queries,
     db,
     options,
-    repository: createReceivingNominationRepository(db, options),
+    custody,
+    frame,
+    lockAuthority,
+    rawRepository,
+    // Original NEW-success fixtures gain only a transient independently pinned frame.
+    repository: {
+      ...rawRepository,
+      reserveNomination: (
+        draft: ReceivingNominationSnapshot,
+        authorize: (state: ReceivingNominationLockedState) => Promise<void>,
+        authorization: ReceivingNominationCurrentAuthorization,
+        suppliedFrame: ReceivingNominationAdmissionFrame | undefined = frame,
+      ) =>
+        rawRepository.reserveNomination(
+          draft,
+          authorize,
+          authorization,
+          suppliedFrame,
+        ),
+    },
     authorize: vi.fn(async (_state: ReceivingNominationLockedState) => {}),
   };
 }
@@ -1077,5 +1186,888 @@ describe("authoritative nomination scope recovery", () => {
     ).rejects.toMatchObject({ status: 503 });
     expect(v.tables.accounts).toHaveLength(1);
     expect(v.tables.operations).toHaveLength(1);
+  });
+});
+
+describe("transaction-bound independent NEW admission", () => {
+  it("denies authoritative NEW without a captured authority and independent custody lock port", async () => {
+    const values = fixture();
+    const { admission: _admission, ...legacyOptions } = values.options;
+    const repository = createReceivingNominationRepository(
+      values.db,
+      legacyOptions,
+    );
+    await expect(
+      repository.reserveNomination(
+        values.snapshot,
+        values.authorize,
+        values.authorization,
+      ),
+    ).rejects.toMatchObject({
+      status: 503,
+      code: "RECEIVING_NOMINATION_UNAVAILABLE",
+    });
+    expect(values.tables.accounts).toHaveLength(0);
+    expect(values.tables.operations).toHaveLength(0);
+    expect(values.queries.some((entry) => /^insert/i.test(entry.sql))).toBe(
+      false,
+    );
+  });
+});
+
+function deferredAdmission() {
+  let resolve!: () => void;
+  const promise = new Promise<void>((finish) => {
+    resolve = finish;
+  });
+  return { promise, resolve };
+}
+async function repositoryTick() {
+  await new Promise<void>((resolve) => setImmediate(resolve));
+}
+
+describe("locked original custody invariants", () => {
+  it("locks independently stored custody through actual COMMIT and blocks substitution", async () => {
+    const values = fixture();
+    const pending = deferredAdmission();
+    values.custody.beforeCommit = () => pending.promise;
+    let settled = false;
+    const action = values.repository
+      .reserveNomination(
+        values.snapshot,
+        values.authorize,
+        values.authorization,
+      )
+      .finally(() => {
+        settled = true;
+      });
+    await repositoryTick();
+    try {
+      expect(values.lockAuthority).toHaveBeenCalledOnce();
+      expect(values.lockAuthority.mock.calls[0][0]).toBe(
+        values.custody.transaction,
+      );
+      expect(values.custody.locked).toBe(true);
+      expect(values.custody.mutate({ holderUserId: "planner" })).toBe(false);
+      expect(settled).toBe(false);
+      expect(values.tables.operations).toHaveLength(1);
+    } finally {
+      pending.resolve();
+      await action.catch(() => {});
+    }
+    expect(await action).toEqual(values.snapshot);
+    expect(values.custody.events).toEqual(["lock", "commit-locked"]);
+    expect(values.custody.locked).toBe(false);
+  });
+  it.each([
+    "revoked",
+    "holder",
+    "authority",
+    "authority-version",
+    "consent",
+    "consent-version",
+    "custody",
+    "custody-version",
+    "issuer",
+    "disclosure",
+    "expiry",
+  ])(
+    "rejects %s substitution in the independent transaction read",
+    async (variant) => {
+      const values = fixture();
+      values.custody.beforeLockedRead = async () => {
+        if (variant === "revoked") values.custody.authority = null;
+        else {
+          const fields = {
+            holder: "holderUserId",
+            authority: "authorityId",
+            "authority-version": "authorityVersion",
+            consent: "consentId",
+            "consent-version": "consentVersion",
+            custody: "custodyId",
+            "custody-version": "custodyVersion",
+            issuer: "issuerId",
+            disclosure: "disclosureId",
+            expiry: "expiresAt",
+          } as const;
+          const field = fields[variant as keyof typeof fields];
+          values.custody.mutate({
+            [field]:
+              variant === "expiry" ? "2026-10-12T18:24:00.000Z" : "foreign",
+          });
+        }
+      };
+      await expect(
+        values.repository.reserveNomination(
+          values.snapshot,
+          values.authorize,
+          values.authorization,
+        ),
+      ).rejects.toMatchObject({ code: "RECEIVING_NOMINATION_UNAVAILABLE" });
+      expect(values.tables.accounts).toHaveLength(0);
+      expect(values.tables.operations).toHaveLength(0);
+      expect(values.queries.some((entry) => /^insert/i.test(entry.sql))).toBe(
+        false,
+      );
+      expect(values.queries.at(-1)?.sql).toBe("rollback");
+    },
+  );
+  it.each([
+    "site",
+    "account",
+    "operation",
+    "request",
+    "hash",
+    "environment",
+    "input",
+    "policy",
+    "session",
+    "server-environment",
+  ])(
+    "rejects a captured frame for another %s before custody activation",
+    async (variant) => {
+      const values = fixture();
+      const frame = structuredClone(values.frame);
+      if (variant === "site")
+        Object.assign(frame.context.draft, { siteId: "foreign" });
+      if (variant === "account")
+        Object.assign(frame.context.draft, { accountId: "foreign" });
+      if (variant === "operation")
+        Object.assign(frame.context.draft, { operationId: "foreign" });
+      if (variant === "request")
+        Object.assign(frame.context.draft, { requestId: "foreign" });
+      if (variant === "hash")
+        Object.assign(frame.context.draft, { requestHash: "0".repeat(64) });
+      if (variant === "environment")
+        Object.assign(frame.context.draft, { environment: "live" });
+      if (variant === "input")
+        Object.assign(frame.context.input, { confirmSelfAsRecipient: false });
+      if (variant === "policy")
+        Object.assign(frame.context.draft, { policyVersion: "foreign" });
+      if (variant === "session")
+        Object.assign(frame.context.actor, { sessionId: "foreign" });
+      if (variant === "server-environment")
+        Object.assign(frame.context, { applicationEnvironment: "production" });
+      Object.assign(frame.authority, {
+        context: structuredClone(frame.context),
+      });
+      await expect(
+        values.rawRepository.reserveNomination(
+          values.snapshot,
+          values.authorize,
+          values.authorization,
+          frame,
+        ),
+      ).rejects.toMatchObject({ code: "RECEIVING_NOMINATION_UNAVAILABLE" });
+      expect(values.lockAuthority).not.toHaveBeenCalled();
+      expect(values.tables.accounts).toHaveLength(0);
+      expect(values.tables.operations).toHaveLength(0);
+    },
+  );
+  it.each(["locked-read", "precommit"])(
+    "rejects authority expiry after %s and rolls back all inserts",
+    async (stage) => {
+      const values = fixture();
+      Object.assign(values.custody.authority!, {
+        expiresAt: "2026-10-12T18:20:01.000Z",
+      });
+      Object.assign(values.frame.authority, {
+        expiresAt: "2026-10-12T18:20:01.000Z",
+      });
+      const expire = () => {
+        values.state.clock = new Date("2026-10-12T18:20:01.000Z");
+      };
+      if (stage === "locked-read")
+        values.custody.beforeLockedRead = async () => {
+          expire();
+        };
+      else {
+        let inserted = 0;
+        values.custody.afterInsert = () => {
+          if (++inserted === 2) expire();
+        };
+      }
+      await expect(
+        values.repository.reserveNomination(
+          values.snapshot,
+          values.authorize,
+          values.authorization,
+        ),
+      ).rejects.toMatchObject({ code: "RECEIVING_NOMINATION_UNAVAILABLE" });
+      expect(values.tables.accounts).toHaveLength(0);
+      expect(values.tables.operations).toHaveLength(0);
+      expect(values.custody.locked).toBe(false);
+      expect(values.custody.events).toEqual(["lock", "rollback-locked"]);
+      expect(
+        values.queries.filter((entry) => /^insert/i.test(entry.sql)),
+      ).toHaveLength(stage === "precommit" ? 2 : 0);
+    },
+  );
+  it.each(["proof-expiry", "clock-rewind"])(
+    "rechecks %s after a pending independent locked read",
+    async (variant) => {
+      const values = fixture();
+      const pending = deferredAdmission();
+      values.custody.beforeLockedRead = () => pending.promise;
+      const action = values.repository.reserveNomination(
+        values.snapshot,
+        values.authorize,
+        values.authorization,
+      );
+      await repositoryTick();
+      values.state.clock = new Date(
+        variant === "proof-expiry"
+          ? "2026-10-12T18:24:30.000Z"
+          : "2026-10-12T18:19:59.999Z",
+      );
+      pending.resolve();
+      await expect(action).rejects.toMatchObject({
+        code:
+          variant === "proof-expiry"
+            ? "RECENT_AUTH_REQUIRED"
+            : "RECEIVING_NOMINATION_UNAVAILABLE",
+      });
+      expect(values.tables.accounts).toHaveLength(0);
+      expect(values.tables.operations).toHaveLength(0);
+    },
+  );
+  it("captures the original frame, actor proof and lock callable before transaction callbacks mutate them", async () => {
+    const values = fixture();
+    const substitute = vi.fn().mockResolvedValue(null);
+    values.authorize.mockImplementation(async () => {
+      Object.assign(values.snapshot, { accountId: "foreign" });
+      Object.assign(values.authorization.actor, { sessionId: "foreign" });
+      values.authorization.recentAuth.expiresAt!.setTime(0);
+      Object.assign(values.frame.authority, { holderUserId: "foreign" });
+      Object.assign(values.options.admission, {
+        issuerId: "foreign",
+        lockAuthority: substitute,
+      });
+    });
+    const result = await values.repository.reserveNomination(
+      values.snapshot,
+      values.authorize,
+      values.authorization,
+    );
+    expect(result).toEqual(values.custody.authority!.context.draft);
+    expect(values.lockAuthority).toHaveBeenCalledOnce();
+    expect(substitute).not.toHaveBeenCalled();
+  });
+  it("retains pending lock ownership despite hostile metadata and reentrant frame mutation", async () => {
+    const values = fixture();
+    const pending = deferredAdmission();
+    const metadata = vi.fn(() => {
+      throw new Error("metadata is not settlement");
+    });
+    Object.defineProperty(pending.promise, "status", { get: metadata });
+    values.custody.beforeLockedRead = () => pending.promise;
+    let settled = false;
+    const action = values.repository
+      .reserveNomination(
+        values.snapshot,
+        values.authorize,
+        values.authorization,
+      )
+      .finally(() => {
+        settled = true;
+      });
+    await repositoryTick();
+    try {
+      expect(values.lockAuthority).toHaveBeenCalledOnce();
+      expect(settled).toBe(false);
+      expect(values.tables.accounts).toHaveLength(0);
+      Object.assign(values.frame.authority, { consentId: "foreign" });
+      expect(metadata).not.toHaveBeenCalled();
+    } finally {
+      pending.resolve();
+      await action.catch(() => {});
+    }
+    expect(await action).toEqual(values.custody.authority!.context.draft);
+    expect(values.custody.events).toEqual(["lock", "commit-locked"]);
+  });
+  it("keeps exact winner replay without adapters, including an expired original audit and fresh actor proof", async () => {
+    const values = fixture();
+    const original = await values.repository.reserveNomination(
+      values.snapshot,
+      values.authorize,
+      values.authorization,
+    );
+    values.state.clock = new Date("2026-10-12T18:30:00.000Z");
+    values.state.lastActiveAt = new Date(values.state.clock);
+    values.authorization.recentAuth.authenticatedAt = new Date(
+      "2026-10-12T18:29:30.000Z",
+    );
+    values.authorization.recentAuth.expiresAt = new Date(
+      "2026-10-12T18:34:30.000Z",
+    );
+    const { admission: _admission, ...legacyOptions } = values.options;
+    const repository = createReceivingNominationRepository(
+      values.db,
+      legacyOptions,
+    );
+    values.lockAuthority.mockClear();
+    expect(
+      await repository.reserveNomination(
+        original,
+        values.authorize,
+        values.authorization,
+      ),
+    ).toEqual(original);
+    expect(values.lockAuthority).not.toHaveBeenCalled();
+    expect(values.tables.accounts).toHaveLength(1);
+    expect(values.tables.operations).toHaveLength(1);
+  });
+  it("does not adopt an original winner under a different generated draft's authority", async () => {
+    const values = fixture();
+    await values.repository.reserveNomination(
+      values.snapshot,
+      values.authorize,
+      values.authorization,
+    );
+    const other = {
+      ...values.snapshot,
+      accountId: "other-account",
+      operationId: "other-operation",
+    };
+    const frame = structuredClone(values.frame);
+    Object.assign(frame.context.draft, other);
+    Object.assign(frame.authority, { context: structuredClone(frame.context) });
+    values.lockAuthority.mockClear();
+    await expect(
+      values.rawRepository.reserveNomination(
+        other,
+        values.authorize,
+        values.authorization,
+        frame,
+      ),
+    ).rejects.toMatchObject({ code: "REQUEST_CONFLICT", status: 409 });
+    expect(values.lockAuthority).not.toHaveBeenCalled();
+    expect(values.tables.accounts).toHaveLength(1);
+    expect(values.tables.operations).toHaveLength(1);
+  });
+  it("recovers lost acknowledgment with the exact committed original and no NEW adapter", async () => {
+    const values = fixture();
+    values.state.commitLost = true;
+    await expect(
+      values.repository.reserveNomination(
+        values.snapshot,
+        values.authorize,
+        values.authorization,
+      ),
+    ).rejects.toMatchObject({ code: "RECEIVING_NOMINATION_UNAVAILABLE" });
+    values.state.commitLost = false;
+    const { admission: _admission, ...legacyOptions } = values.options;
+    const repository = createReceivingNominationRepository(
+      values.db,
+      legacyOptions,
+    );
+    values.lockAuthority.mockClear();
+    expect(
+      await repository.reserveNomination(
+        values.snapshot,
+        values.authorize,
+        values.authorization,
+      ),
+    ).toEqual(values.snapshot);
+    expect(values.lockAuthority).not.toHaveBeenCalled();
+    expect(values.tables.accounts).toHaveLength(1);
+    expect(values.tables.operations).toHaveLength(1);
+    expect(values.custody.events[1]).toBe("commit-locked");
+  });
+  it("rejects a configuration getter before any callback executes", () => {
+    const values = fixture();
+    const getter = vi.fn(() => "sandbox");
+    Object.defineProperty(values.options, "mode", { get: getter });
+    expect(() =>
+      createReceivingNominationRepository(values.db, values.options),
+    ).toThrow();
+    expect(getter).not.toHaveBeenCalled();
+    expect(values.lockAuthority).not.toHaveBeenCalled();
+  });
+});
+
+describe("original transaction callable capture", () => {
+  it("uses captured transaction callables after a reentrant custody callback replaces the methods", async () => {
+    const values = fixture();
+    const original = values.lockAuthority.getMockImplementation()!;
+    const substitute = vi.fn().mockResolvedValue({ rows: [] });
+    values.lockAuthority.mockImplementation(
+      async (transaction, context, authority) => {
+        const result = await original(transaction, context, authority);
+        Object.assign(transaction as object, { execute: substitute });
+        return result;
+      },
+    );
+    await expect(
+      values.repository.reserveNomination(
+        values.snapshot,
+        values.authorize,
+        values.authorization,
+      ),
+    ).rejects.toMatchObject({ code: "RECEIVING_NOMINATION_UNAVAILABLE" });
+    expect(substitute).not.toHaveBeenCalled();
+    expect(values.tables.accounts).toHaveLength(0);
+    expect(values.tables.operations).toHaveLength(0);
+    expect(values.custody.events).toEqual(["lock", "rollback-locked"]);
+    expect(values.queries.at(-1)?.sql).toBe("rollback");
+  });
+});
+
+describe("native backend proof and final acknowledgment", () => {
+  it.each(["proof", "clock"])(
+    "captures native %s Date scalars without invoking shadowed getTime",
+    async (variant) => {
+      const values = fixture();
+      const getter = vi.fn(() => {
+        throw new Error("shadowed native date");
+      });
+      if (variant === "proof")
+        Object.defineProperty(
+          values.authorization.recentAuth.authenticatedAt!,
+          "getTime",
+          { value: getter },
+        );
+      else {
+        const clock = new Date(currentTime);
+        Object.defineProperty(clock, "getTime", { value: getter });
+        values.options.now = () => clock;
+      }
+      const repository = createReceivingNominationRepository(
+        values.db,
+        values.options,
+      );
+      expect(
+        await repository.reserveNomination(
+          values.snapshot,
+          values.authorize,
+          values.authorization,
+          values.frame,
+        ),
+      ).toEqual(values.snapshot);
+      expect(getter).not.toHaveBeenCalled();
+    },
+  );
+  it("waits for pending native COMMIT then refuses expired acknowledgment without claiming rollback", async () => {
+    const values = fixture();
+    Object.assign(values.custody.authority!, {
+      expiresAt: "2026-10-12T18:20:01.000Z",
+    });
+    Object.assign(values.frame.authority, {
+      expiresAt: "2026-10-12T18:20:01.000Z",
+    });
+    const pending = deferredAdmission();
+    values.custody.beforeCommit = () => pending.promise;
+    const action = values.repository.reserveNomination(
+      values.snapshot,
+      values.authorize,
+      values.authorization,
+    );
+    await repositoryTick();
+    values.state.clock = new Date("2026-10-12T18:20:01.000Z");
+    pending.resolve();
+    await expect(action).rejects.toMatchObject({
+      code: "RECEIVING_NOMINATION_UNAVAILABLE",
+    });
+    expect(values.tables.accounts).toHaveLength(1);
+    expect(values.tables.operations).toHaveLength(1);
+    expect(values.custody.events).toEqual(["lock", "commit-locked"]);
+    const { admission: _admission, ...legacyOptions } = values.options;
+    expect(
+      await createReceivingNominationRepository(
+        values.db,
+        legacyOptions,
+      ).reserveNomination(
+        values.snapshot,
+        values.authorize,
+        values.authorization,
+      ),
+    ).toEqual(values.snapshot);
+    expect(values.tables.accounts).toHaveLength(1);
+    expect(values.tables.operations).toHaveLength(1);
+  });
+  it.each(["missing-frame", "missing-lock"])(
+    "denies authoritative NEW with %s before inserts",
+    async (variant) => {
+      const values = fixture();
+      const { admission: _admission, ...legacyOptions } = values.options;
+      const repository =
+        variant === "missing-lock"
+          ? createReceivingNominationRepository(values.db, legacyOptions)
+          : values.rawRepository;
+      await expect(
+        repository.reserveNomination(
+          values.snapshot,
+          values.authorize,
+          values.authorization,
+          variant === "missing-frame" ? undefined : values.frame,
+        ),
+      ).rejects.toMatchObject({ code: "RECEIVING_NOMINATION_UNAVAILABLE" });
+      expect(values.tables.accounts).toHaveLength(0);
+      expect(values.tables.operations).toHaveLength(0);
+      expect(values.lockAuthority).not.toHaveBeenCalled();
+    },
+  );
+});
+
+describe("optional private custody preserves authoritative replay", () => {
+  it.each(["missing-callable", "missing-policy", "accessor-policy"])(
+    "keeps exact known replay when private NEW configuration has %s",
+    async (variant) => {
+      const values = fixture();
+      await values.repository.reserveNomination(
+        values.snapshot,
+        values.authorize,
+        values.authorization,
+      );
+      const configuration: Record<string, unknown> =
+        variant === "missing-policy"
+          ? { lockAuthority: values.lockAuthority }
+          : {
+              issuerId: "fixture-issuer",
+              issuerVersion: "issuer-v1",
+              disclosureId: "fixture-disclosure",
+              disclosureVersion: "disclosure-v1",
+            };
+      const getter = vi.fn(() => "fixture-issuer");
+      if (variant === "accessor-policy")
+        Object.defineProperty(configuration, "issuerId", { get: getter });
+      Object.assign(values.options, { admission: configuration });
+      const repository = createReceivingNominationRepository(
+        values.db,
+        values.options,
+      );
+      values.lockAuthority.mockClear();
+      expect(
+        await repository.reserveNomination(
+          values.snapshot,
+          values.authorize,
+          values.authorization,
+        ),
+      ).toEqual(values.snapshot);
+      expect(values.lockAuthority).not.toHaveBeenCalled();
+      expect(getter).not.toHaveBeenCalled();
+    },
+  );
+});
+
+const repositorySettlementThen = Promise.prototype.then;
+function originalRepositoryGate<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<T>((fulfill, fail) => {
+    resolve = fulfill;
+    reject = fail;
+  });
+  const state = { settled: false };
+  const observed = Reflect.apply(repositorySettlementThen, promise, [
+    () => {
+      state.settled = true;
+    },
+    () => {
+      state.settled = true;
+    },
+  ]) as Promise<void>;
+  return { promise, resolve, reject, state, observed };
+}
+function poisonRepositoryConstructor(promise: Promise<unknown>) {
+  let accesses = 0;
+  const getter = () => {
+    accesses++;
+    throw new Error("private native constructor metadata");
+  };
+  Object.defineProperty(promise, "constructor", { get: getter });
+  return {
+    accesses: () => accesses,
+    descriptor: Object.getOwnPropertyDescriptor(promise, "constructor"),
+  };
+}
+function observeRepositoryOutcome(action: Promise<unknown>) {
+  const state = { settled: false, error: null as unknown };
+  Reflect.apply(repositorySettlementThen, action, [
+    () => {
+      state.settled = true;
+    },
+    (error: unknown) => {
+      state.settled = true;
+      state.error = error;
+    },
+  ]);
+  return state;
+}
+
+describe("genuine native custody and transaction settlement", () => {
+  it("keeps the actual transaction and authority lock owned while the exact native custody promise is unobservable", async () => {
+    const values = fixture();
+    const gate = originalRepositoryGate<unknown>();
+    const decoration = poisonRepositoryConstructor(gate.promise);
+    let delivered: Promise<unknown> | null = null;
+    let lockCalls = 0;
+    let actualTransaction: unknown = null;
+    Object.assign(values.options.admission, {
+      lockAuthority: (transaction: unknown) => {
+        lockCalls++;
+        actualTransaction = transaction;
+        values.custody.transaction = transaction;
+        values.custody.locked = true;
+        values.custody.events.push("lock");
+        delivered = gate.promise;
+        return gate.promise;
+      },
+    });
+    const repository = createReceivingNominationRepository(
+      values.db,
+      values.options,
+    );
+    const action = repository.reserveNomination(
+      values.snapshot,
+      values.authorize,
+      values.authorization,
+      values.frame,
+    );
+    const outcome = observeRepositoryOutcome(action);
+    await repositoryTick();
+    try {
+      expect(lockCalls).toBe(1);
+      expect(delivered).toBe(gate.promise);
+      expect(actualTransaction).toBe(values.custody.transaction);
+      expect(gate.state.settled).toBe(false);
+      expect(decoration.accesses()).toBeGreaterThan(0);
+      expect(outcome.settled).toBe(false);
+      expect(values.custody.locked).toBe(true);
+      expect(values.custody.mutate({ consentId: "foreign" })).toBe(false);
+      expect(
+        values.queries.some((entry) => /^(commit|rollback)/i.test(entry.sql)),
+      ).toBe(false);
+      expect(values.tables.accounts).toHaveLength(0);
+    } finally {
+      gate.resolve(structuredClone(values.custody.authority));
+      await gate.observed;
+    }
+    await repositoryTick();
+    expect(gate.state.settled).toBe(true);
+    expect(outcome.settled).toBe(false);
+    expect(values.custody.locked).toBe(true);
+    expect(
+      values.queries.some((entry) => /^(commit|rollback)/i.test(entry.sql)),
+    ).toBe(false);
+    expect(
+      Object.getOwnPropertyDescriptor(gate.promise, "constructor"),
+    ).toEqual(decoration.descriptor);
+    // The unobservable synthetic transaction remains held; no finite drain is claimed.
+  });
+  it.each(["commit", "rollback"] as const)(
+    "waits for original native %s despite decorated outer transaction metadata",
+    async (settlement) => {
+      const values = fixture();
+      const gate = originalRepositoryGate<void>();
+      if (settlement === "commit")
+        values.custody.beforeCommit = () => gate.promise;
+      else {
+        values.state.failOperation = true;
+        values.custody.beforeRollback = () => gate.promise;
+      }
+      const nativeTransaction = values.db.transaction.bind(values.db);
+      let calls = 0;
+      let delivered: Promise<unknown> | null = null;
+      let originalSettled = false;
+      let decoration: ReturnType<typeof poisonRepositoryConstructor> | null =
+        null;
+      let nativeObserved: Promise<void> | null = null;
+      Object.assign(values.db, {
+        transaction: (...args: Parameters<typeof nativeTransaction>) => {
+          calls++;
+          const operation = nativeTransaction(...args);
+          nativeObserved = Reflect.apply(repositorySettlementThen, operation, [
+            () => {
+              originalSettled = true;
+            },
+            () => {
+              originalSettled = true;
+            },
+          ]) as Promise<void>;
+          decoration = poisonRepositoryConstructor(operation);
+          delivered = operation;
+          return operation;
+        },
+      });
+      const repository = createReceivingNominationRepository(
+        values.db,
+        values.options,
+      );
+      const action = repository.reserveNomination(
+        values.snapshot,
+        values.authorize,
+        values.authorization,
+        values.frame,
+      );
+      const outcome = observeRepositoryOutcome(action);
+      await repositoryTick();
+      try {
+        expect(calls).toBe(1);
+        expect(delivered).not.toBeNull();
+        expect(decoration!.accesses()).toBeGreaterThan(0);
+        expect(originalSettled).toBe(false);
+        expect(values.custody.locked).toBe(true);
+        expect(values.queries.at(-1)?.sql).toBe(settlement);
+        expect(outcome.settled).toBe(false);
+      } finally {
+        gate.resolve();
+        await gate.observed;
+        if (nativeObserved) await nativeObserved;
+      }
+      await repositoryTick();
+      expect(originalSettled).toBe(true);
+      expect(outcome.settled).toBe(false);
+      expect(values.custody.locked).toBe(false);
+      expect(values.queries.at(-1)?.sql).toBe(settlement);
+      expect(values.tables.accounts).toHaveLength(
+        settlement === "commit" ? 1 : 0,
+      );
+      expect(values.tables.operations).toHaveLength(
+        settlement === "commit" ? 1 : 0,
+      );
+      expect(
+        Object.getOwnPropertyDescriptor(delivered!, "constructor"),
+      ).toEqual(decoration!.descriptor);
+    },
+  );
+});
+
+function poisonRepositoryThen(promise: Promise<unknown>) {
+  let accesses = 0;
+  Object.defineProperty(promise, "constructor", { value: undefined });
+  // biome-ignore lint/suspicious/noThenProperty: The own then getter is the exact hostile native promise fixture under test.
+  Object.defineProperty(promise, "then", {
+    get: () => {
+      accesses++;
+      throw new Error("private poisoned then");
+    },
+  });
+  return { accesses: () => accesses };
+}
+describe("expiry after genuine observable transaction work", () => {
+  it("waits for native custody completion before denying expiry and genuinely rolling back", async () => {
+    const values = fixture();
+    Object.assign(values.custody.authority!, {
+      expiresAt: "2026-10-12T18:20:01.000Z",
+    });
+    Object.assign(values.frame.authority, {
+      expiresAt: "2026-10-12T18:20:01.000Z",
+    });
+    const gate = originalRepositoryGate<unknown>();
+    const decoration = poisonRepositoryThen(gate.promise);
+    let delivered: Promise<unknown> | null = null;
+    Object.assign(values.options.admission, {
+      lockAuthority: (transaction: unknown) => {
+        values.custody.transaction = transaction;
+        values.custody.locked = true;
+        values.custody.events.push("lock");
+        delivered = gate.promise;
+        return gate.promise;
+      },
+    });
+    const repository = createReceivingNominationRepository(
+      values.db,
+      values.options,
+    );
+    const action = repository.reserveNomination(
+      values.snapshot,
+      values.authorize,
+      values.authorization,
+      values.frame,
+    );
+    const outcome = observeRepositoryOutcome(action);
+    await repositoryTick();
+    values.state.clock = new Date("2026-10-12T18:20:01.000Z");
+    expect(delivered).toBe(gate.promise);
+    expect(gate.state.settled).toBe(false);
+    expect(outcome.settled).toBe(false);
+    expect(values.custody.locked).toBe(true);
+    expect(
+      values.queries.some((entry) => /^(commit|rollback)/i.test(entry.sql)),
+    ).toBe(false);
+    gate.resolve(structuredClone(values.custody.authority));
+    await gate.observed;
+    await expect(action).rejects.toMatchObject({
+      code: "RECEIVING_NOMINATION_UNAVAILABLE",
+    });
+    expect(values.custody.events).toEqual(["lock", "rollback-locked"]);
+    expect(values.tables.accounts).toHaveLength(0);
+    expect(values.tables.operations).toHaveLength(0);
+    expect(decoration.accesses()).toBe(0);
+  });
+  it("waits for genuine COMMIT before unavailable expiry acknowledgment and exact recovery", async () => {
+    const values = fixture();
+    Object.assign(values.custody.authority!, {
+      expiresAt: "2026-10-12T18:20:01.000Z",
+    });
+    Object.assign(values.frame.authority, {
+      expiresAt: "2026-10-12T18:20:01.000Z",
+    });
+    const gate = originalRepositoryGate<void>();
+    values.custody.beforeCommit = () => gate.promise;
+    const nativeTransaction = values.db.transaction.bind(values.db);
+    let delivered: Promise<unknown> | null = null;
+    let originalSettled = false;
+    const decorations: Array<ReturnType<typeof poisonRepositoryThen>> = [];
+    Object.assign(values.db, {
+      transaction: (...args: Parameters<typeof nativeTransaction>) => {
+        const operation = nativeTransaction(...args);
+        Reflect.apply(repositorySettlementThen, operation, [
+          () => {
+            originalSettled = true;
+          },
+          () => {
+            originalSettled = true;
+          },
+        ]);
+        decorations.push(poisonRepositoryThen(operation));
+        delivered = operation;
+        return operation;
+      },
+    });
+    const repository = createReceivingNominationRepository(
+      values.db,
+      values.options,
+    );
+    const action = repository.reserveNomination(
+      values.snapshot,
+      values.authorize,
+      values.authorization,
+      values.frame,
+    );
+    const outcome = observeRepositoryOutcome(action);
+    await repositoryTick();
+    expect(delivered).not.toBeNull();
+    expect(originalSettled).toBe(false);
+    expect(outcome.settled).toBe(false);
+    expect(values.custody.locked).toBe(true);
+    values.state.clock = new Date("2026-10-12T18:20:01.000Z");
+    gate.resolve();
+    await gate.observed;
+    await expect(action).rejects.toMatchObject({
+      code: "RECEIVING_NOMINATION_UNAVAILABLE",
+    });
+    expect(originalSettled).toBe(true);
+    expect(values.custody.events).toEqual(["lock", "commit-locked"]);
+    expect(values.tables.accounts).toHaveLength(1);
+    expect(values.tables.operations).toHaveLength(1);
+    expect(values.queries.at(-1)?.sql).toBe("commit");
+    const { admission: _admission, ...legacyOptions } = values.options;
+    const recovered = await createReceivingNominationRepository(
+      values.db,
+      legacyOptions,
+    ).reserveNomination(
+      values.snapshot,
+      values.authorize,
+      values.authorization,
+    );
+    expect(recovered).toEqual(values.snapshot);
+    expect(values.tables.accounts).toHaveLength(1);
+    expect(values.tables.operations).toHaveLength(1);
+    expect(decorations).toHaveLength(2);
+    expect(decorations.every((decoration) => decoration.accesses() === 0)).toBe(
+      true,
+    );
   });
 });
