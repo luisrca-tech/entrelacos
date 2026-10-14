@@ -21,7 +21,7 @@ export interface ReceivingNominationCompositionOptions {
   configuration: ReceivingNominationConfiguration;
   nomination: Pick<
     ReceivingNominationOptions,
-    "repository" | "loadSite" | "generateId"
+    "repository" | "loadSite" | "generateId" | "admission"
   >;
   reauthentication: Omit<FinancialReauthenticationOptions, "now">;
   now(): Date;
@@ -73,6 +73,16 @@ export function createReceivingNominationComposition(
     const repository = options.nomination.repository;
     const suppliedSiteReader = options.nomination.loadSite;
     const suppliedIdGenerator = options.nomination.generateId;
+    let admission: ReceivingNominationOptions["admission"];
+    try {
+      const descriptor = Object.getOwnPropertyDescriptor(
+        options.nomination,
+        "admission",
+      );
+      if (descriptor && "value" in descriptor) admission = descriptor.value;
+    } catch {
+      // Optional authority is absent when its own descriptor cannot be captured.
+    }
     if (
       typeof suppliedSiteReader !== "function" ||
       typeof suppliedIdGenerator !== "function"
@@ -92,6 +102,7 @@ export function createReceivingNominationComposition(
       loadSite,
       generateId,
       repository,
+      admission,
     });
     const receivingNominationContext = createReceivingNominationContext({
       configuration,
