@@ -522,6 +522,26 @@ Actual source foundation SHA is2a33c1b326c3496db64e9c825b86b596c4949632, committ
 
 The published checkpoint excludes all real env and generated index/machine hooks. Local evidence remains5697/224 NONDB, supported typing, Biome554 and preserved migration JSON semantics. Physical database/browser/build/provider/pilot acceptance stays separate, and effective DIRECT is still blocked. Code-index parser limitations are navigation-only; explicit source/check evidence and central leases remain authoritative.
 
+## Registered worktrees and private next units — 2026-10-14 02:47 UTC
+
+The four exact child worktrees/branches at9777b823eacc66d93c58d3dd1eed78b3e0bd641e are registered in the dated coordination table. Current A/B IDs are the app handoff destinations01a1384a-97dd-70a3-bae2-1c5bb9066f16 and01a1384b-b01b-7240-91b1-91145540ee0b; historical IDs are not active writers. C01a1384d-a3d7-79a1-82c9-f75ac2e4103f owns only its future worker-loop pair/status; D01a13851-1e3a-77a0-be3f-9162c8edf763 has only status/orientation and an exact-four read-only withdrawal design, not source. Principal remains on release-gift-payment; main local/remote is unchanged862d9ec and contains no foundation commit. No merge/deploy/DDL/provider action occurred.
+
+Private source grants are A's reviewed six-path fee adapter and C's purpose-specific loop over the frozen existing worker. Their exact original-account/numeric provenance/unsupported-fee and actual-pending-step shutdown invariants are mandatory in coordination. Shared contracts/schema/composition/runtime/manifests and every existing financial foundation remain A-owned/frozen; no new public wire is granted. Serial frozen-lockfile setup is principal-owned for A then C, with no env copies, followed by individually granted finite serial NONDB check windows. B/D proposals remain read-only.
+
+Current worktree status files, not stale principal copies, provide handoff evidence. Principal absolute central docs control any later grant; no child may self-integrate/commit/push, edit another owner or infer a native transfer/recovery/profile. The desired convergence branch is only release-gift-payment. Receiving/production/physical/native/provider/pilot gates remain unchanged.
+
+## Worktree-local TDD setup — 2026-10-14 02:55 UTC
+
+A/C frozen-lockfile dependency setup completed serially without tracked changes or private env copies. Use verified /home/lfrca/.bun/bin/bun and Node24.20.0/local binaries. After the explicit launch follow-up, only their tiny owned TDD files may run independently in their respective worktrees, with one Vitest worker and no file parallelism. Shared regressions/typing/global/native-heavy/DB/build/provider/index work still need the principal's separate serialized lease. Source freeze and closed review precede integration; no child commit/push is authorized yet.
+
+## Human-confirmed receiving holder and local execution — 2026-10-14 03:09 UTC
+
+The bride is the confirmed site and individual receiving-account owner. A bride or authorized wedding planner may administer the site, but that role never transfers receiving ownership or automatically grants withdrawals. Retain separate assessor restrictions, designated verified recipient/current authentication, verified destination and full authorized same-site history across previous operators. Account provisioning belongs to receiving setup, with the bride's consent and approved provider verification/disclosures, never anonymous guest checkout. BaaS is the target journey, not established account approval or a silent non-BaaS fallback.
+
+Continue confirmed-rule local development without waiting for support, using controlled adapters and current primary documentation for supported native schemas. Unproved account-specific fees/disclosures, bank ownership, commercial eligibility, critical approval, recovery and settlement remain explicit unavailable evidence/configuration ports. Passing local tests or a mocked READY does not unlock actual collection, catalog/publication, withdrawals or provider resources. All existing immutable financial snapshots, UNKNOWN handling and readiness gates are preserved.
+
+This is a product/planning amendment, not a new executable C1, migration or broader source grant. A finishes its existing fee unit before a bounded holder/administrator nomination-consent gap audit; B only records future UX/QA implications; D retains holder/actor separation in its current read-only design; C's captured original worker scope is unchanged. Any subsequent schema, shared wire, onboarding or UI change requires the exact owner's principal-approved unit. Future discussion-chat monitoring remains excluded despite this single human-confirmed handoff.
+
 ## Checkpoint protocol
 
 1. A0 publishes a proposed C1 type/route/data-model shape in `internalGiftsFinanceStatus.md`; B0 records consumer/access/catalog requests in `internalGiftsRegistryStatus.md`.
@@ -531,6 +551,12 @@ The published checkpoint excludes all real env and generated index/machine hooks
 5. Central coordination arbitrates unresolved choices, records grants in the coordination document and schedules joint integration/QA checkpoints.
 
 ## Listening
+
+Confirmed product identity is separated from native/commercial evidence and current source ownership. This enables local progress without pretending the existing nomination flow already proves bride-owned receipts or expanding active writers. Historical financial visibility remains a site permission, not withdrawal authority.
+
+Isolated small TDD is separated from shared execution cost and operational authority. This permits local progress without pretending a worktree contains production configuration or proving native settlement.
+
+Exact branches, migrated chat identities and private two/six-path units establish useful independent local progress without multiplying shared writers or native permissions. Promise settlement and trusted commercial authority remain boundaries that worktree isolation cannot waive.
 
 Published SHAs establish reproducible branch ancestry without enabling production or silently transferring ownership. Actual worktree identities are required before new source lanes start.
 

@@ -4,11 +4,11 @@
 
 ## Architectural decisions
 
-- **Execution:** one shared branch from main; two feature workstreams A (receiving/payments/finance) and B (access/catalog/public experience). No separate branches/worktrees. Exclusive shared-file ownership and dated checkpoints are mandatory.
+- **Execution:** principal integration stays on `release-gift-payment`; A/B and the exact C/D grants use separate registered worktrees from checkpoint `9777b823eacc66d93c58d3dd1eed78b3e0bd641e`, a coordination-only descendant of source `2a33c1b326c3496db64e9c825b86b596c4949632`. `internalGiftsCoordination.md` owns exact paths, identities and leases; main/development/PR/deploy are excluded.
 - **Routes:** authenticated operations stay under `/v1/sites/:siteId/`; public catalog/quote/checkout stay under `/v1/public/sites/:siteId/`; provider webhooks use a dedicated authenticated receiver. Exact verbs and schemas are frozen at the integration checkpoint, not guessed from provider APIs.
 - **Schema:** site-scoped memberships/invitations, readiness evidence, verified destination versions, catalog/media, immutable gift-order/quote records, durable external-operation/event records, append-only financial entries and withdrawal intents.
-- **Provider:** approved BaaS/subaccounts with PJ platform and verified individual recipients. Runtime modes are disabled, sandbox and live; production bank validation and provider enablement remain pending.
-- **Authorization:** couple admins invite assessors; assessors never read private finances or move money. Financial changes require designated recipient authority, recent authentication and verified stored bindings.
+- **Provider:** target BaaS with PJ platform and a bride-owned individual receiving account, subject to account-specific approval. Runtime modes are disabled, sandbox and live; production bank validation and provider enablement remain pending. Unknown commercial/native capabilities stay explicit unavailable ports, not invented defaults.
+- **Authorization:** the bride owns her site and receiving account; she or an authorized wedding planner may administer the site and invite assessors. Site administration never confers receiving ownership or automatic withdrawal rights. Assessors never read private finances or move money. Financial changes retain designated recipient authority, recent authentication and verified stored bindings; authorized site admins retain full same-site history across operator changes.
 - **Readiness:** catalog configuration/upload/publication and new checkout remain locked until receiving readiness. No cent-transfer shortcut or simulated production approval.
 - **Money:** cents, versioned 2%-nominal initial commission, guest-paid processing, authoritative method-specific quote, exact supported split, distinct receipt/settlement/availability/withdrawal states.
 - **UX:** receiving setup first; existing template tokens; anonymous guest checkout; private provider-backed finance/withdrawal screens; accessible mobile and cross-origin flows.
@@ -52,9 +52,13 @@ B delivers admin-issued assessor invitations, acceptance, revocation and a team 
 
 A delivers receiving setup, designated recipient binding, provider status and bank-validation boundary across persistence/API/UI. B connects navigation and the catalog lock to the published readiness service. Local tests simulate approved/pending/rejected transitions; real sites remain pending until provider-backed bank verification exists.
 
+Implement the human-confirmed bride/administrator separation without waiting for support: audit the existing nomination/binding boundary before changing its identity semantics, then route any shared schema/contract or UI change through the exact owner. Receiving setup identifies the bride as holder and requires her consent and the provider-approved identity/disclosure continuation. BaaS account creation belongs to receiving setup, never anonymous guest checkout. This plan does not expand current finite source grants.
+
 ### Acceptance criteria
 
 - [ ] Provider/account/environment/destination evidence is stored and audited, never accepted from the browser.
+- [ ] A planner administering the bride's site cannot nominate themselves as receiving owner or gain withdrawals from their site role; holder consent and identity are distinct from the initiating administrator.
+- [ ] Receiving disclosures identify the bride-owned account; unsupported provider continuations remain unavailable. The desired BaaS journey is not silently replaced or declared approved.
 - [ ] Pending/rejected/stale evidence remains actionable and locked.
 - [ ] A changed bank destination or relevant provider suspension invalidates READY.
 - [ ] No first guest payment is needed to establish readiness; actual available balance is a separate withdrawal check.
@@ -102,6 +106,7 @@ A delivers the private Financeiro dashboard and withdrawal flow across provider-
 ### Acceptance criteria
 
 - [ ] Only authorized admins see private history; only the designated verified recipient can request withdrawal.
+- [ ] Administrator replacement preserves authorized full same-site history without transferring ownership or withdrawal permissions; original account/destination/consent snapshots remain immutable.
 - [ ] Recent authentication, verified destination version, available balance, fees and provider critical-action requirements are checked.
 - [ ] Concurrent requests/repeated clicks/timeouts cannot cause overdraw or duplicate transfers; reservations are neither omitted nor subtracted twice.
 - [ ] Accepted, awaiting authorization, processing and completed bank receipt are distinct.
@@ -138,5 +143,7 @@ Only after human/account-specific provider and accounting gates are settled, cen
 - [ ] Delayed card settlement stays pending; rollout follows a recorded decision, not a local test result.
 
 ## Listening
+
+The 2026-10-14 user confirmation supplies executable local product direction, not native/commercial acceptance. The bride's identity, planner administration and separate withdrawal authority must be proved at their actual boundaries before integration. Local adapters can exercise consent, denial and recovery while unresolved fees, bank proof, BaaS approval and real operations remain gated. Existing source grants are not broadened by this amendment.
 
 The previous G0–G7 technical checklist is retained as a risk reference. These phases reorganize delivery into demoable end-to-end slices shared by two independent feature owners. Local work is not blocked by automated support, but bank-validation and production approvals cannot be substituted by mocks.

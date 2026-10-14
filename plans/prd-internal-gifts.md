@@ -1,6 +1,6 @@
 # PRD: Internal Gifts and Couple Finance
 
-Prepared on 2026-10-12. Product scope comes from the approved Internal Gifts Asaas Release Plan and subsequent user decisions. Implementation is authorized in a single release branch; real-money/provider mutations still need concrete approval.
+Prepared on 2026-10-12; execution and recipient direction amended on 2026-10-14. Product scope comes from the approved Internal Gifts Asaas Release Plan and subsequent user decisions. Local implementation uses reviewed worktrees converging only into `release-gift-payment`; real-money/provider mutations still need concrete approval.
 
 ## Problem Statement
 
@@ -53,10 +53,12 @@ Provide readiness-first receiving setup, a role-scoped gift catalog with Cloudfl
 
 ## Implementation Decisions
 
-- One branch from main, one shared checkout and two feature-owning implementation chats. Central coordination owns integration decisions and final validation scheduling.
+- The reviewed source checkpoint is `2a33c1b326c3496db64e9c825b86b596c4949632`; implementation worktrees start from its coordination-only descendant `9777b823eacc66d93c58d3dd1eed78b3e0bd641e`. The principal integrates only into `release-gift-payment`. Exact branches, writers, grants and execution leases are recorded in `internalGiftsCoordination.md`; no integration into main/development, PR or deployment is authorized.
 - Workstream A owns receiving readiness, the Asaas boundary, payment/commission/event processing, finance and withdrawals. Workstream B owns site access/assessor invitations, gifts/media/public presentation and guest checkout UX. Each slice closes schema/API/UI/tests through explicit cross-workstream handoffs.
 - Preserve the Hono API, TanStack administrative application, static Astro public hosts, presentation-only template, reusable public runtime, PostgreSQL/Drizzle and Cloudflare/Railway topology.
 - Site-scoped membership distinguishes platform owner, couple admin and assessor. Financial authority also requires a designated verified recipient; a role alone cannot select the beneficiary.
+- The bride owns the wedding site and the individual receiving account. The bride or an authorized wedding planner may administer her site; administrator status never transfers receiving ownership or automatically grants withdrawals. Preserve the separate assessor role and authorized same-site historical access, including previous operators, without extending financial authority.
+- BaaS is the confirmed target journey, not an enabled provider capability. Receiving setup precedes catalog/checkout, clearly identifies the bride as account holder, and requires her consent and the approved provider verification/disclosure flow. Do not create a receiving account as a side effect of guest checkout or silently substitute another account model.
 - Catalog configuration, media upload, publication and checkout are gated by authoritative receiving readiness. Bank-verification evidence is separate from account approval; unknown status fails closed.
 - Monetary values use integer cents. Immutable orders freeze item, recipient, method, policy and quote. Initial commission is 2% of nominal value, added with processing to the guest total; final live pricing remains pending.
 - Hosted payment is method-restricted to the accepted quote. No invitation login is required. Provider events and reconciliation establish money states, not browser redirects.
@@ -71,8 +73,10 @@ External gift lists, another gateway, installments, shopping carts, physical del
 
 ## Further Notes
 
-The provider's automated support did not answer. This is neither approval nor rejection. PF/BaaS eligibility, bank-validation mechanism, contract fees, ongoing credential access, security/withdrawal approval and accounting adequacy remain live-release gates. Local implementation and isolated tests are authorized; credentials, provider writes, live money, non-disposable migrations, deployment and Git publication are not automatically authorized.
+The provider's automated support did not answer. This is neither approval nor rejection. Continue local implementation of the confirmed product rules without waiting for support. Account-specific symbolic-gifts/PF/BaaS acceptance, bank-validation mechanism, contract fees and permitted fee disclosures, ongoing credential access, lost-response recovery, security/withdrawal approval, refunds/disputes/liability and accounting adequacy remain external gates. Missing evidence returns unavailable; synthetic acceptance never establishes production READY. The separate reviewed release-branch commit/push permission does not authorize provider resources, live money, migrations or deployment.
 
 ## Listening
+
+The 2026-10-14 confirmation fixes the bride's receiving ownership and allows planner administration without financial-role inheritance. Implement these rules locally while retaining provider-dependent ports and explicit unavailable states. This rejects both waiting for support before useful local work and treating the chosen BaaS journey as already approved. Worktree isolation preserves, rather than replaces, exclusive ownership and execution leases.
 
 The existing study is formalized into user outcomes without re-interviewing decisions already approved. Two feature-owning chats are preferred to isolated frontend/backend delivery: each phase has an end-to-end acceptance path, while shared-file ownership prevents concurrent editing collisions.

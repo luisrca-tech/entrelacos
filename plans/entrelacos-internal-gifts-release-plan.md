@@ -1,8 +1,10 @@
 # EntreLaços Internal Gifts Asaas Release Plan
 
-Status: Planning can proceed without an Asaas support response. Provider enablement and commercial decisions remain pending; live collection and withdrawals require the production gates. Prepared and updated on 2026-10-12.
+Status: Local development proceeds without an Asaas support response. Provider enablement and commercial decisions remain pending; live collection and withdrawals require the production gates. Prepared on 2026-10-12; execution and recipient direction amended on 2026-10-14.
 
 Execution amendment, 2026-10-12: the user authorized local implementation from main in the single branch `feat/internal-gifts-asaas`, with two collaborating Sol-high chat leads and complexity-based Sol 6.1/Luna 6 xhigh subagents. See [Product requirements](prd-internal-gifts.md), [vertical implementation phases](internal-gifts-implementation.md), [coordination and file ownership](internalGiftsCoordination.md), and [integration contract seed](internalGiftsIntegrationContract.md). Provider writes, live money, non-disposable migrations, deployment and Git publication retain their explicit approval gates.
+
+Superseding execution amendment, 2026-10-14: the user approved reviewed release-branch commit/push and separate implementation worktrees. Source checkpoint `2a33c1b326c3496db64e9c825b86b596c4949632` is published; worktrees start from its coordination-only descendant `9777b823eacc66d93c58d3dd1eed78b3e0bd641e`. The principal integrates only into `release-gift-payment`, with exact A/B/C/D paths and authority in the coordination document. No main/development merge, PR, deploy, provider resources or live money is authorized. Read-only development configuration access is not indiscriminate migration authority.
 
 Deliver an administrator-managed catalog of symbolic gifts, image uploads to Cloudflare R2, public presentation in the existing wedding design, and real Pix and credit-card payments through Asaas. Include a private financial dashboard with balances, history and customer-requested bank withdrawals through the panel. Each couple receives funds through its approved Asaas account, and EntreLaços receives its agreed commission through split. Receiving readiness must be established before the site's gift catalog can be configured or activated. The first release starts with internal gifts; external gift lists are deferred.
 
@@ -16,7 +18,7 @@ The user selected Asaas and reported completing registration with their existing
 | Gift administration | Confirmed | New Presentes area in the existing central panel |
 | Gift configuration gate | Confirmed | Catalog configuration, publication and checkout remain blocked until the backend establishes receiving readiness |
 | Financial dashboard | Confirmed | Private panel area for received amounts, fees, amounts awaiting release, available balance, pending withdrawals and history; assessors have no access |
-| Site roles and invitations | Confirmed | Couple remains site admin; admins invite/revoke site-scoped assessors; assessors have no receiving-account or money-movement permissions |
+| Site roles and invitations | Confirmed | Bride owns the site; bride or authorized wedding planner can administer it and invite/revoke site-scoped assessors. Administration alone conveys no receiving ownership or automatic withdrawals; assessors have no receiving-account or money-movement permissions |
 | Public presentation | Confirmed | Existing template design, reusable feature, demo composition |
 | Images | Confirmed | Cloudflare R2 |
 | Payment interface | Proposed | Select Pix or one-payment credit card on the site, show that method's total, then open Asaas-hosted checkout restricted to the quoted method |
@@ -25,8 +27,8 @@ The user selected Asaas and reported completing registration with their existing
 | Processing fees | Confirmed direction | Add processing costs to the amount paid by the guest, subject to provider support and approved disclosure |
 | Platform commission | Initial proposal accepted for evaluation, not final pricing | 2% of the nominal gift amount, added to the guest's payment; owner-defined and versioned; validate commercial viability and provider costs before live collection |
 | Commission base | Confirmed for the initial proposal | Nominal gift amount, excluding processing charges and the commission itself; not the guest's final payment total or Asaas net proceeds |
-| Legal recipient | Pending | One verified adult member of the couple, initially PF, if Asaas approves this use case |
-| Account operation | Confirmed target, provider enablement pending | BaaS with individual recipient subaccounts and a PJ parent account; confirm PF eligibility, verification and ongoing API access |
+| Receiving holder | Product choice confirmed; provider eligibility pending | The bride owns the individual receiving account and supplies her own consent/identity verification; account-specific PF/use-case acceptance remains external |
+| Account operation | Confirmed target, provider enablement pending | BaaS with a bride-owned individual subaccount and a PJ parent; receiving setup precedes catalog/checkout, with approved verification/disclosures and ongoing API access still to establish |
 | Panel withdrawals | Confirmed product scope, provider conditions pending | Authorized recipient admin requests a transfer from the recipient Asaas balance to a verified external bank/Pix destination; no EntreLaços wallet or pooled redistribution |
 | Bank validation | Pending Asaas confirmation | No assumed BRL 0.01 transfer/refund procedure; select and prove the provider-supported destination/titularity verification mechanism before enabling real sites |
 | Support dependency | Confirmed planning direction | Continue planning and provider-independent design/tests without an answer; unanswered automated support is neither approval nor rejection of the model |
@@ -88,6 +90,8 @@ Show the nominal gift amount, EntreLaços commission, processing charges and fin
 
 Keep platform OWNER distinct from customer site administration. The couple holds the site-admin role; an assessor is a restricted operational member. SITE_ASSISTANT is the candidate internal role name, displayed as Assessor in Portuguese. Finalize identifiers and membership/session contracts in G2.
 
+2026-10-14 confirmed amendment: the bride owns the site and receiving account; the bride or an authorized wedding planner may be SITE_ADMIN. The capability table's site-admin column applies to that authorized administrator, not only a member of the couple. Recipient-restricted configuration and withdrawals still require the separately verified holder/operator binding, consent and current authorization. A planner's site role alone must never establish that binding. Authorized admins retain full history for the same site, including previous operators, without acquiring their withdrawal authority. Audit existing nomination and binding code before claiming this separation is implemented; do not silently reassign legacy holders or rewrite historical transactions.
+
 | Capability | Couple site admin | Assessor | Platform OWNER |
 | --- | --- | --- | --- |
 | Manage invitations, messages and symbolic gift catalog | Allowed within the site | Allowed within assigned sites | Existing authorized platform support |
@@ -105,6 +109,8 @@ Review existing SITE_ADMIN memberships before enabling financial access; do not 
 ### Receiving-account experience
 
 The admin starts Configure receipts inside EntreLaços, consents to the approved Asaas account journey, completes provider identity verification and configures a verified bank account or Pix destination. Under the proposed BaaS model, the integration creates the individual's Asaas subaccount; the customer need not independently register or routinely use the Asaas dashboard. This still creates a real Asaas account in the recipient's name and requires provider approval; it is not a bank-details-only bypass of onboarding.
+
+The confirmed target holder is the bride, even when a planner initiates site administration. Setup must clearly identify whose account is being configured and obtain the holder's consent and approved verification; administrator consent cannot substitute for holder consent. Account provisioning belongs to receiving setup before readiness, never to guest checkout. Required provider links, identity disclosures and branding follow current official documentation and the account's approved journey; do not invent mandatory wording or silently fall back to a non-BaaS model. Local implementation can prove these boundaries through controlled adapters while account-specific approval remains pending.
 
 The recipient's existing external bank account is the withdrawal destination, not a substitute for the Asaas account used by split. Charge the recipient subaccount and split only the platform commission to EntreLaços; transfer available recipient funds to the approved external destination when the authorized admin requests a withdrawal through EntreLaços. Confirm supported institutions, titularity checks, limits, timing, fees and any provider-required critical-action approval before promising an entirely in-panel flow. Automatic withdrawals are deferred. Do not restrict recipients to digital banks without a verified provider constraint. [BaaS account experience](https://docs.asaas.com/docs/sobre-baas), [External bank/Pix transfers](https://docs.asaas.com/docs/transferencia-para-contas-de-outra-instituicao-pix-ted).
 
@@ -301,13 +307,15 @@ Roll out only after a recorded release decision. Monitor the pilot's pending pay
 
 ## Mutation boundaries and starting instructions
 
-The earlier planning sessions did not authorize execution. The user's 2026-10-12 execution amendment now authorizes one release branch, two collaborating implementation chats, local code/tests and central status coordination. It does not authorize creating provider accounts, keys or buckets, starting the production evaluation period, sending external support messages, non-disposable migrations, live payments/refunds/withdrawals, deployment, commit, push or merge.
+The earlier planning sessions did not authorize execution. The 2026-10-12 execution amendment authorized local implementation and central coordination; the 2026-10-14 amendment supersedes its single-checkout/Git restrictions only for reviewed release-branch publication and the registered worktrees. Continue authorized local development using the confirmed bride/planner/BaaS rules without waiting for support. Preserve exclusive paths and leases, and return unavailable for unconfirmed commercial/native evidence. Neither amendment authorizes provider resources, evaluation-period activation, external support messages, unrestricted migrations, live money, main/development merge, PR or deploy. Actual migration, protected browser, native provider and pilot execution retain their separate target/evidence/authorization gates.
 
 In the next implementation session, start with G0/G1 and local implementation explicitly requested by the user. Read current repository instructions, verify branch/worktree and graph, preserve unrelated changes, and update this plan with provider findings and approved decisions. Continue provider-independent architecture, UX and deterministic tests without waiting for automated support. Use authenticated browser access supplied by the user for account verification. Prepare concrete provider changes before requesting their approval; do not ask repeatedly for already authorized work. Never treat proposed pricing or pending provider capabilities as production approval.
 
 If account access or production approval is missing, continue the local catalog, deterministic contracts, tests and sandbox preparation that are independent of it. Report the precise blocked gate rather than claiming the entire release is ready or changing providers without authorization.
 
 ## Listening
+
+The user confirmed bride-owned receipts, planner administration without automatic financial rights and BaaS as the desired journey on 2026-10-14. These rules now guide local implementation rather than remaining unanswered product questions. Provider-specific acceptance, fees/disclosures, bank proof, credential lifecycle, lost-response recovery, critical approval, settlement and refund/dispute liability remain evidence requirements. Keeping these unavailable when unproved permits useful development without inventing approval or weakening the readiness lock.
 
 The user moved the priority from external lists to internal gifts and chose Asaas after creating an account. The release therefore starts with a complete internal financial path and retains external links as future scope. Existing invitation and mural contracts remain the baseline.
 
