@@ -1,5 +1,11 @@
 # Internal Gifts Integration Contract — Local Checkpoint C1
 
+## Current execution coordination authority — 2026-10-14 04:00 UTC
+
+Human approval promotes existing auxiliary01a1380b-3489-79e3-a918-800c3bcae2c6 to supervised execution coordination of current A/B/C/D, not a second principal. Current topology and the finite delegated dependency lease are specified at the top of principal `plans/internalGiftsCoordination.md`. Auxiliary may read/message those four leads and principal, maintain only its own `plans/internalGiftsExecutionCoordinatorStatus.md`, execute exact D-then-B frozen installs under the principal's nominal serial grant, and relay unchanged03:56 A/D grants after genuine dependency-ready closure. It cannot grant new scopes/leases, accept source for principal, write central/shared/lead files, publish Git or create schedules. B browser/C startup/shared checks remain ungranted. The SINGLE existing principal heartbeat supervises auxiliary deltas; independent Asaas/harness chats remain excluded. Financial/readiness/provider/DB/secret safety gates are unchanged.
+
+04:06 root clarification permits only the existing frozen esbuild/sharp/workerd trusted installation scripts, with manifest/lock bytes matching prior successful A/C setup. No workspace install lifecycle, added trust/package, runtime/build/provider or browser download is permitted. Auxiliary can resume the exact D-then-B install lease, preserving the genuine-stop history and before/after inputs.
+
 Status: executable C1 exported locally and consumed by B's readiness/access integration, with focused contract and HTTP tests. Full end-to-end acceptance remains pending; this is not a provider capability claim. Prepared 2026-10-12. Lead A owns executable shared contract/schema registration. Lead B proposes access/catalog/media amendments through its own status file. Central coordination owns this document and version changes.
 
 ## Central C1 naming decision, 2026-10-12
@@ -564,7 +570,105 @@ A now owns the exclusive exact-six fee/money/quote/withdrawal NONDB regression, 
 
 D's one review found missing independent historical bride-holder consent. The minimum corrected private custody port receives one SAME-reviewer narrow amendment check; it does not modify existing consent/schema/aggregate or authorize source/native dispatch. Historical holder evidence remains an unavailable predecessor, and administration still grants no automatic withdrawals.
 
+## Minimum corrective and private withdrawal units — 2026-10-14 03:56 UTC
+
+C's accepted loop source is published as child5d5d8d961d7d0b6cea2c6d2f40c591eabccffe50, not parent-integrated or started. A's final681/6 regression passed but its candidate remains unaccepted: one concrete fee-only shadowed-byteLength cap bypass, one TS2352 and exact mechanical hygiene corrections are now released only inside the original six candidate paths. Genuine decorated-chunk RED precedes captured native byte-length accounting; validated fee-request typing must compile without weakening runtime checks. All original223 cases/four original files/17 boundaries stay exact. The SAME reviewer checks the corrective amendment after freeze; shared validation/publication needs another serial grant.
+
+D's SAME reviewer accepts the separate immutable historical bride-holder/consent amendment. Source is now conditionally released only in the four new withdrawalExecution/withdrawalPostingRepository source/test paths after principal's frozen dependency-ready follow-up. Existing reservation/consent/schema/financialAuthorization/aggregate/public/runtime remain unchanged. One original positive-ACK arm, retained fence and hold, no redispatch on expiry/absence/uncertainty, real pending lifetime, existing-only reconciliation and separately retained immutable bank-completion proof govern the subset. Native holder custody/dispatch/critical approval/lookup/receipt evidence remains unavailable; neither operator consent nor SITE_ADMIN is holder proof. The unchanged aggregate refuses terminal semantics until a later A-owned integration unit.
+
+Principal exclusively installs unchanged locked dependencies in D then B without env copying or runtime/browser downloads. After explicit ready, only the three A fee/client/stored suites and two D new suites may overlap, one runner each; shared regressions/typing/hygiene/Graphify/dependencies/browser/build remain serial. B's existing fictional public browser proposal is queued, not actual browser or protected-flow acceptance. No extra coordinator grant or authority expansion follows from the human's hierarchy question.
+
 ## Checkpoint protocol
+
+### Nominal exact consolidation and integrated QA scope — 2026-10-14 15:58 UTC
+
+Root verified published immutable A a33ca463/D6c3d5455 and previously acceptedcfb52/C5d5d against fresh remote advertisements, exact parents/trees/paths; integrationc785/main862d9ec/development346bf remain untouched. Coordination15:58 conditionally assigns principal one serial release-gift-payment-only checkpoint/exact four cherry-picks/integrated default NONDB/typing/changed-union hygiene lane after fresh four-lead HOLDs. Only root's two central docs may be staged in the prerequisite checkpoint; live aux/uncommitted lead/private/generated state is excluded. No auto-merge/conflict resolution/source edits/force push/operational enablement. Graphify hook and auto-GC are prevented only per command, hooks/config preserved; current scoped housekeeping/locks absent. Consolidated publication requires later actual check acceptance. DB/browser/build/native/provider and new local implementation grants remain separate; no whole-release readiness claim follows.
+
+### Accepted nomination admission and private withdrawal execution children — 2026-10-14 15:26 UTC
+
+Root15:17 actually CLOSED: D723/9/A429/6 NONDB and both API typings passed; exact-four Biome errors0 retains D94warnings/1info and A23warnings. Final hashes/outside729D/726A match; independent real-TypeScript preservation closes A's formatted-original evidence gap, while its old token report stays inconclusive. Original69 test declarations spanning181 cases are retained unchanged; all276 current pass. D whole-four structural comparison preserves159 cases after only nominal mechanical edits. Initial root helper zero-argument error is a corrected diagnostic failure, not fabricated product/TDD evidence.
+
+Accept the exact four nomination and four withdrawal execution/posting hashes in coordination15:26 as PRIVATE_SYNTHETIC_SOURCE_ONLY. Missing real authority/custody/native settlement/COMMIT/dispatch/critical approval/bank receipt and six nonfinite A logical owners are explicit. No receiving/list/catalog/media/publication/checkout/native readiness or full-release acceptance follows. Base/fees/C source remain distinct accepted checkpoints.
+
+Coordination15:26 grants ONLY finite child publication SERIAL D then A, accepted4 plus each owned status, exact parents9777/cfb52 and exact feat branches; hashes/index/path list/remote SHA must match. CI push-main-only and human external autodeploy evidence rechecked; preserve Graphify hook with per-command GRAPHIFY_SKIP_HOOK=1, no detached indexing or broad hook bypass. No auto-integration/PR/main/development/deploy/source/check/DB/provider/env scope; auxiliary relays only. Later consolidation must be separately recorded against exact accepted child SHAs on release-gift-payment. Development/TEST recovery/identity queue remains unexecuted.
+
+### Independent final mechanical acceptance evidence — 2026-10-14 15:17 UTC
+
+Both lead mechanical windows genuinely CLOSED/frozen/HOLD under auxiliary15:13. Coordination15:17 assigns principal one serial D-then-A proportional NONDB/API typing/four-file read-only hygiene and exact hashes/outside preservation check. A's token-comparator limitations require actual TypeScript parser/source assessment of exact snapshots/original181 assertions, not waiver or broad semantic normalization. No source/reviewer/Git/DB/provider/index mutation follows. Six A logical owners stay explicitly nonfinite; actual native holder/custody/COMMIT and external acceptance remain absent. Root accepts or returns a concrete discrepancy only after executed evidence.
+
+### Exact D outside inventory correction — 2026-10-14 13:54 UTC
+
+Root's earlier728 count accidentally omitted the tracked historical plans/internalGiftsFinanceStatus.md in D. Fresh set comparison identifies only that path; the corrected729 outside Git objects all match exact HEAD9777 and all four candidate hashes remain frozen. Coordination13:54 explicitly resumes SAME D's unchanged13:37 mechanical grant with that historical A status protected, no additional exclusion, scope or test/review. A726 is unaffected; A stays queued until D actual closure/release. Prior728 evidence is not silently relabeled; durable root report records the new metadata verification. No DB/provider/Git mutation or source acceptance follows.
+
+### A/D independent checks and serial mechanical closure — 2026-10-14 13:37 UTC
+
+Root13:30 actually CLOSED: D723/9 NONDB passed, API TS2345 in its pending-dispatch mock and10 four-file hygiene errors; A429/6 NONDB/API typing passed,11 four-file hygiene errors. Exact four hashes stayed frozen,728 D/726 A outside tracked files matched exact HEAD before checks; end Git scope remains owned-only. Neither candidate is root-accepted or published. Coordination13:37 grants SAME writers exact-four mechanical fixture typing/local names/callback/void-return/import/format corrections with intentional thenable coverage preserved, ONE delegated SERIAL D-then-A owned-two/API-type/four-hygiene window, real closure/freeze/holds and later root repetition. No financial/admission/custody behavior, assertion/timeout/guard weakening, new reviewer or operational scope is granted. A's six nonfinite logical owners/lost old /tmp evidence and all native/provider/DB gates remain explicit; queued development/TEST preflight remains unexecuted.
+
+### Root independent A/D NONDB check boundary — 2026-10-14 13:30 UTC
+
+Coordination13:30 conditionally assigns principal one serial D-then-A frozen-source validation window after fresh MAIN/SAME-writer holds. Exact four-file hashes/outside HEAD preservation, bounded owned/connected NONDB suites, API typing and read-only four-file hygiene are evidence requirements, not automatic acceptance. No source edits, new reviewer, DB/provider/env/Git/browser/build/index/dependency work is included. A's nonfinite logical fixture ownership and lost historical /tmp artifacts remain explicit; synthetic settlement and private holder/custody ports do not establish native guarantees. Development migrations and TEST execution remain queued under the separate13:07 recovery/identity plan.
+
+### Development migration and TEST separation preflight — 2026-10-14 13:07 UTC
+
+Human requested development migration plus isolated TEST suites. Current private URL metadata shows matching unpooled development DIRECT and a distinct TEST endpoint, but expected branch/project/name identity guard variables are absent and no development backup/verified recovery is available. No pg_dump client was found; Docker WSL execution is unavailable. Coordination13:07 queues actual native identity/ledger/recovery review before a separate serial SQL/test lease. No database connected, no DDL/tests/reset/env mutation; never bypass TEST identity guards or apply development cleanup fixtures. Actual pending journal entries (through0014) and TEST schema preparation require the explicit reviewed plan; old README migration routing is stale relative to the actual DIRECT resolver.
+
+### Available fictional browser QA acceptance — 2026-10-14 12:51 UTC
+
+Root reviewed the complete final report/mainClosure and desktop/mobile screenshots for B's publicQa-noUrl fixture. Accept only original fictional Q1–Q6 at1280x900/390x844 across normal/quote-error/catalog-error, counter0/no CREATE and actual owned browser/server drain with728-input/config/branch preservation. Structured errors empty/local49GETs and explicit favicon404 are observations, not complete background-network isolation. No repeat B QA/product fix follows. Auxiliary activates only existing queued A12:33 after this CLOSED lane; D shared-check/source acceptance remains separate. Three cards establish no multipage/quota/SQL/exact debounce/native/protected/provider/bank/Safari/pilot proof.
+
+### Development DIRECT configuration verified — 2026-10-14 12:44 UTC
+
+After the human's correction, private metadata verification found one active DATABASE_DIRECT_URL, matching normalized runtime endpoint/database/user and an unpooled direct connection. The previous duplicate/divergent target blocker is resolved, without env edits/disclosure/copy, connection or SQL. Exact migration/recovery/target execution still requires its separate documented serial lease; no pooled fallback, DB acceptance or current QA/source authority expansion follows.
+
+### Genuine nomination settlement amendment — 2026-10-14 12:33 UTC
+
+A's ONE SAME source review closed CHANGES_REQUIRED: direct awaits of genuine authority/reservation/locked custody/transaction promises can fail on own constructor metadata before actual native settlement; unused status-getter tests do not reproduce it. Root read cited source, not executed probes. Coordination12:33 queues only SAME-writer/exact-four actual constructor RED-first settlement correction after B actual cleanup/release, preserving263 cases/original181/v1/replay/fees/outside boundaries. Safe native observation failure must retain pending ownership, never fake a completed failure, mutate caller promise, add deadline/retry or pretend post-COMMIT rollback. SAME narrow review follows genuine freeze/drain, no automatic shared check/acceptance/publication. New amendment artifacts must survive outside volatile /tmp; lost historical evidence and native custody/COMMIT limits stay explicit. B currently owns actual QA after no-URL init and route success; partial desktop evidence is not complete QA acceptance.
+
+### No-navigation browser initialization — 2026-10-14 12:26 UTC
+
+Relative config resolved B's server blocker; explicit hostless about:blank navigation then failed under the unchanged domain guard. Actual owned cleanup and728-input/config preservation are proved in report/mainClosure; no target/UI/guard/visible counter was observed. Root read the installed core/commands/README, which document `open` with no URL as clean launch before network route and first navigation. Coordination12:26 grants ONE SAME isolated B continuation replacing only that bootstrap command, retaining the domain list and requiring actual HTTPS-abort route success before the loopback target. Failure stays BLOCKED with cleanup/no bypass/retry. A/D eight frozen hashes/fresh HOLDs exist; root checks/publication remain held and original temporary A evidence loss remains explicit. No candidate/native/production acceptance follows.
+
+### Private NEW admission implementation and QA argument boundary — 2026-10-14 05:56 UTC
+
+ONE independent A feasibility review accepted only the four-path private NEW admission guard. Coordination05:56 grants exactly receivingNomination.ts/test and receivingNominationRepository.ts/test with one complex writer, meaningful RED-first/two-suite serial TDD, immutable original identity/independent locked custody/commit expiry and unchanged v1/hash/replay/history. Missing real proof adapters deny NEW. Synthetic fixture custody is independent of administrative actor input; no durable holder source, schema/wrapper/on-behalf UI, downstream native authority or source acceptance is created. SAME bounded source review follows final freeze/drain. This A scoped TDD may overlap only the disjoint D05:27 two suites; all global checks remain held.
+
+B's exact external-config launch failed before browser and genuinely drained; installed Astro7.3.2 joins configFile to root. Root read that implementation and authorizes only preparation of the same existing file's relative --config argument in coordination05:56. SAME05:02 browser/server continuation waits BOTH A/D actual executable drain/hold, changes only that argument and retains every safety/cleanup/no-CREATE limit. No installed package/repository config/env mutation or blind retry is granted. Auxiliary handles relays, not new authority or acceptance.
+
+### Single-capture withdrawal configuration amendment — 2026-10-14 05:27 UTC
+
+D's122/2 owned GREEN and SAME corrective closure leave one source-read residual: mode/environment and numeric/lease configuration can be reread after validation through accessor properties. Root read the cited factories but ran no probe. Coordination05:27 queues only a SAME-writer/exact-four meaningful RED-first data-descriptor capture amendment, rejecting accessors and validating/constructing from identical captured values before ports activate. Preserve122 cases/14 predecessors and actual pending ownership/history; SAME narrow review follows final freeze/drain. Execution/source correction starts only after the prior B05:02 window genuinely closes with owned cleanup, or a preparation-only blocked/no-launch handoff. No shared check, acceptance, native financial authority or publication is implied.
+
+### Original holder NEW-admission design review — 2026-10-14 05:14 UTC
+
+A closed a private four-path NEW-only draft/authority/locked-recheck design without changing v1 snapshots/hash/replay or claiming canonical identity/custody. Root now grants exactly ONE independent bounded READ-ONLY Sol6.1xhigh feasibility review under coordination05:14, no source/check/global execution or recursive study. Review must establish genuine authoritative NEW/rollback/clock/custody semantics and existing-constructor/legacy replay compatibility, returning concrete smallest blockers or local design acceptance. Real holder-consent store/resolver, downstream native provisioning/KYC and any schema/custody amendments stay unavailable/separately granted; no design verdict alone enables receiving or money.
+
+### Process-isolated public QA continuation — 2026-10-14 05:02 UTC
+
+B's first browser run is BLOCKED by tester clearing/focus and Astro development-toolbar external-fetch boundary, not a verified gift-registry defect. Counter0/source preserved/owned browser and server actual cleanup are proved; quote/error/mobile/full observability remain pending. Primary Astro docs support a temporary --config wrapper overriding only devToolbar.enabled=false and a process-only telemetry flag. MAIN B may prepare that outside-Git wrapper/checklist now without execution or persistent/source/env/preferences changes. SAME black-box runner's fresh-session rerun is conditional on concrete D corrective writer/runner freeze/drain and auxiliary's explicit exclusive B handoff. Exact safety/procedure/HTTPS-abort guard/owned cleanup is in coordination05:02; no forbidden-fetch repro or product source fix is granted. Preserve old BLOCKED evidence and distinguish corrected QA environment from product acceptance.
+
+### Corrective boundaries and original holder admission — 2026-10-14 04:48 UTC
+
+D's SAME review identified runtime live/nonproduction admission, genuine-promise metadata early ownership release and mutable current-reference denial of authentic historical completion. The exact-four RED-first correction is nominally queued only AFTER actual B browser/server cleanup and explicit auxiliary lease release, with original91 cases/14 predecessors preserved and SAME narrow review after freeze. No release/retry/native guarantee or shared schema/runtime expansion follows. Current-reference authorization remains required for first dispatch; original immutable proof governs historical settlement.
+
+A's holder/admin audit closed with a concrete local self-nomination gap but unchanged UNVERIFIED/readiness/withdrawal safeguards. MAIN A may now design only the finite four-path private admission/locked-recheck boundary and inspect the two named canonical identity/access dependencies without editing them. Original bride consent is independent of administration; old v1 intent/snapshot/lookup/history cannot be rebound or relabeled. Missing native custody stays unavailable, and source/independent design review require subsequent principal decisions. B retains exclusive executable QA ownership throughout.
+
+### Anonymous fictional browser QA — 2026-10-14 04:40 UTC
+
+Root verified A's exact child cfb52e0ae5c784b294bc2a268016a6841c0d24a2 and remote main unchanged; no parent integration. D owned91/2/source freeze still awaits SAME review/root validation. B now has one conditional exclusive SERIAL loopback gift-preview server/browser lease after auxiliary confirms D actual runner/writer drain and read-only-only review. Exact boundaries/checklist/owned cleanup are in coordination04:40. One independent black-box QA subagent uses installed agent-browser/explicit existing Linux Chromium/fresh session, no auth/private config/provider/API/checkout CREATE/download/doctor/repair. Source fixes/checks, protected/native/DB/production proof and unrelated fixture/tour expansion are ungranted; reproducible findings need a later principal correction/QA rerun. All other executable global checks remain queued until actual B browser/server cleanup.
+
+### Account-fee source root acceptance — 2026-10-14 04:30 UTC
+
+D's real natural runner exit/explicit hold preceded root's final frozen A check. Root independently passed682/6 exact NONDB, API TypeScript0, read-only Biome6 and corrected hashes/original-four/223-case/17-boundary/whitespace preservation. The six private fee/client/stored paths are accepted only as source/synthetic regression, not native provider/commercial/holder readiness. Missing trusted profile authority and native wiring stay unavailable; immutable quotes/replay remain unchanged. The unsupported constant-zero trigger is retracted; actual stateful getter RED and captured native-byte accounting govern the correction.
+
+Root window is CLOSED/drained; auxiliary relays D's original tiny TDD/source/review continuation, without waiving its new fixture failures. A receives only exact-six plus owned-status child commit/push on feat/gifts-finance, no self-integration/main/development/PR/deploy. After publication closure, MAIN A alone may perform the finite status-only nominee/holder/admin/consent gap audit specified in coordination04:30, no new writer/reviewer/source or native authority. B real browser and parent integration remain separate grants.
+
+### Corrected fee root-check scheduling — 2026-10-14 04:26 UTC
+
+A's corrected candidate/SAME narrow review are closed; root inspected native-byte accounting, stateful0/2 getter RED and validated type bridge, but has not accepted source. Root now owns only the exact frozen six-suite NONDB/API-type/read-only-six-hygiene/preservation window in coordination04:26. Auxiliary must first obtain D's genuine current-runner drain and next-runner hold at a natural boundary; disjoint D source writing may continue. No competing runner/global/browser/index execution, duplicate A checks, source rewrite or extra reviewer. Root launch requires six expected hashes and result validity requires unchanged candidate/predecessors; D's original tiny TDD resumes only after explicit window closure.
+
+### Dependency-ready and queued browser capability — 2026-10-14 04:16 UTC
+
+Auxiliary closed the D-then-B frozen setup and relayed03:56 A/D grants. Root snapshots show only intermediate A353 owned GREEN and D service22-case RED; no final acceptance/shared checks follow. B may perform ONLY the finite installed CLI/browser-executable/port capability reads specified in coordination04:16, with installed core/dogfood guidance. No browser launch/doctor/repair/download/private-profile/env/runtime/build/source change is granted. Auxiliary consolidates genuine freeze/review handoffs for a later principal serial decision; no duplicate coordinator or operational readiness is created.
 
 1. A0 publishes a proposed C1 type/route/data-model shape in `internalGiftsFinanceStatus.md`; B0 records consumer/access/catalog requests in `internalGiftsRegistryStatus.md`.
 2. A integrates executable shared types/schema/exports serially, preserving unrelated work. B tests consumption and acknowledges C1 in its status file.
@@ -573,6 +677,10 @@ D's one review found missing independent historical bride-holder consent. The mi
 5. Central coordination arbitrates unresolved choices, records grants in the coordination document and schedules joint integration/QA checkpoints.
 
 ## Listening
+
+Supervised execution coordination changes who dispatches and consolidates evidence, not source ownership or financial permission. One principal remains the acceptance/integration boundary, with one heartbeat and nominal serial execution grants.
+
+Source-only correction and a representable private withdrawal unit advance local implementation while genuine operational predecessors stay missing. Explicit tiny disjoint execution does not grant shared checks, provider resources or release integration.
 
 Accepted local worker source, child publication, parent integration and actual runtime are separate checkpoints. A concrete holder-consent finding is corrected in the proposed boundary before withdrawal implementation, without fabricating existing evidence.
 
