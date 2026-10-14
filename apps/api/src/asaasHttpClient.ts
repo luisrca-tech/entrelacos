@@ -26,6 +26,55 @@ export interface AsaasBalanceObservation {
   balanceCents: number;
 }
 
+export interface AsaasAccountFees {
+  payment?: {
+    creditCard?: {
+      operationValue?: string | null;
+      oneInstallmentPercentage?: string | null;
+      discountOneInstallmentPercentage?: string | null;
+      discountExpiration?: string | null;
+    } | null;
+    pix?: {
+      fixedFeeValue?: string | null;
+      fixedFeeValueWithDiscount?: string | null;
+      percentageFee?: string | null;
+      minimumFeeValue?: string | null;
+      maximumFeeValue?: string | null;
+      discountExpiration?: string | null;
+      monthlyCreditsWithoutFee?: number | null;
+      creditsReceivedOfCurrentMonth?: number | null;
+    } | null;
+  } | null;
+  transfer?: {
+    monthlyTransfersWithoutFee?: number | null;
+    ted?: {
+      feeValue?: string | null;
+      consideredInMonthlyTransfersWithoutFee?: boolean | null;
+    } | null;
+    pix?: {
+      feeValue?: string | null;
+      discountValue?: string | null;
+      expirationDate?: string | null;
+      consideredInMonthlyTransfersWithoutFee?: boolean | null;
+    } | null;
+  } | null;
+}
+
+// Decimal strings came from original numeric tokens, never rounded Number values.
+// A fee read supplies no commercial interpretation or future validity guarantee.
+export interface AsaasAccountFeesObservation {
+  source: "provider";
+  provider: "ASAAS";
+  siteId: string;
+  accountBindingId: string;
+  accountReference: string;
+  environment: "sandbox" | "live";
+  currency: "BRL";
+  observedAt: Date;
+  completedAt: Date;
+  fees: AsaasAccountFees;
+}
+
 export interface AsaasPaymentSplit {
   id: string;
   walletId: string;
@@ -63,6 +112,7 @@ export interface AsaasHttpClient {
     providerPaymentReference: string,
   ): Promise<AsaasPaymentObservation>;
   getBalance(): Promise<AsaasBalanceObservation>;
+  getAccountFees(): Promise<AsaasAccountFeesObservation>;
 }
 
 export class AsaasHttpClientServiceError extends Error {
@@ -78,6 +128,191 @@ export class AsaasHttpClientServiceError extends Error {
 
 function unavailable(): never {
   throw new AsaasHttpClientServiceError();
+}
+
+// Capture the trusted platform at module load. Only the fee branch uses these
+// intrinsics; legacy payment/balance transport and its fixtures remain unchanged.
+const feeBody = Object.getOwnPropertyDescriptor(
+  Response.prototype,
+  "body",
+)?.get;
+const feeStatus = Object.getOwnPropertyDescriptor(
+  Response.prototype,
+  "status",
+)?.get;
+const feeRedirected = Object.getOwnPropertyDescriptor(
+  Response.prototype,
+  "redirected",
+)?.get;
+const feeUrl = Object.getOwnPropertyDescriptor(Response.prototype, "url")?.get;
+const feeHeaders = Object.getOwnPropertyDescriptor(
+  Response.prototype,
+  "headers",
+)?.get;
+const feeHeaderGet = Headers.prototype.get;
+const feeGetReader = ReadableStream.prototype.getReader;
+const feeBodyCancel = ReadableStream.prototype.cancel;
+const feeRead = ReadableStreamDefaultReader.prototype.read;
+const feeReaderCancel = ReadableStreamDefaultReader.prototype.cancel;
+const feeRelease = ReadableStreamDefaultReader.prototype.releaseLock;
+const feeThen = Promise.prototype.then;
+const feeByteLength = Object.getOwnPropertyDescriptor(
+  Object.getPrototypeOf(Uint8Array.prototype),
+  "byteLength",
+)?.get;
+
+function decodeAccountFees(text: string): AsaasAccountFees {
+  const numericTokens = new WeakSet<object>();
+  const parse = JSON.parse as (
+    text: string,
+    reviver: (
+      key: string,
+      value: unknown,
+      context: { source?: string },
+    ) => unknown,
+  ) => unknown;
+  const revive = (
+    _key: string,
+    value: unknown,
+    context: { source?: string },
+  ) => {
+    if (typeof value !== "number") return value;
+    const lexeme = context?.source;
+    if (typeof lexeme !== "string" || lexeme.length > 32) return unavailable();
+    const token = { lexeme };
+    numericTokens.add(token);
+    return token;
+  };
+  // Even a body with no numbers must not hide an unsupported runtime capability.
+  const capability = parse("0", revive);
+  if (
+    !capability ||
+    typeof capability !== "object" ||
+    !numericTokens.has(capability)
+  )
+    return unavailable();
+  const raw = record(parse(text, revive));
+  function token(value: unknown): string {
+    if (!value || typeof value !== "object" || !numericTokens.has(value))
+      return unavailable();
+    return (value as { lexeme: string }).lexeme;
+  }
+  function decimal(value: unknown, percentage = false): string {
+    const lexeme = token(value);
+    // Bound precision before the existing parser constructs any BigInt.
+    if (!/^(0|[1-9]\d{0,9})(?:\.\d{1,2})?$/.test(lexeme)) return unavailable();
+    const cents = parseBrlCents(lexeme);
+    if (percentage && cents >= 10_000) return unavailable();
+    return serializeBrlCents(cents);
+  }
+  function count(value: unknown): number {
+    const lexeme = token(value);
+    if (!/^(0|[1-9]\d{0,9})$/.test(lexeme)) return unavailable();
+    const result = Number(lexeme);
+    if (result > 2_147_483_647) return unavailable();
+    return result;
+  }
+  function fields(
+    value: unknown,
+    amounts: string[],
+    percentages: string[] = [],
+    counts: string[] = [],
+    flags: string[] = [],
+    dates: string[] = [],
+  ) {
+    if (value === null) return null;
+    const object = record(value);
+    const result: Record<string, string | number | boolean | null> = {};
+    for (const key of [
+      ...amounts,
+      ...percentages,
+      ...counts,
+      ...flags,
+      ...dates,
+    ]) {
+      if (!Object.hasOwn(object, key)) continue;
+      const value = object[key];
+      if (value === null) result[key] = null;
+      else if (amounts.includes(key) || percentages.includes(key))
+        result[key] = decimal(value, percentages.includes(key));
+      else if (counts.includes(key)) result[key] = count(value);
+      else if (flags.includes(key)) {
+        if (typeof value !== "boolean") return unavailable();
+        result[key] = value;
+      } else {
+        if (
+          typeof value !== "string" ||
+          value.length === 0 ||
+          value.length > 64
+        )
+          return unavailable();
+        result[key] = value;
+      }
+    }
+    return result;
+  }
+  const fees: AsaasAccountFees = {};
+  if (Object.hasOwn(raw, "payment")) {
+    if (raw.payment === null) fees.payment = null;
+    else {
+      const payment = record(raw.payment);
+      fees.payment = {};
+      if (Object.hasOwn(payment, "creditCard"))
+        fees.payment.creditCard = fields(
+          payment.creditCard,
+          ["operationValue"],
+          ["oneInstallmentPercentage", "discountOneInstallmentPercentage"],
+          [],
+          [],
+          ["discountExpiration"],
+        );
+      if (Object.hasOwn(payment, "pix"))
+        fees.payment.pix = fields(
+          payment.pix,
+          [
+            "fixedFeeValue",
+            "fixedFeeValueWithDiscount",
+            "minimumFeeValue",
+            "maximumFeeValue",
+          ],
+          ["percentageFee"],
+          ["monthlyCreditsWithoutFee", "creditsReceivedOfCurrentMonth"],
+          [],
+          ["discountExpiration"],
+        );
+    }
+  }
+  if (Object.hasOwn(raw, "transfer")) {
+    if (raw.transfer === null) fees.transfer = null;
+    else {
+      const transfer = record(raw.transfer);
+      fees.transfer = fields(
+        transfer,
+        [],
+        [],
+        ["monthlyTransfersWithoutFee"],
+      ) as AsaasAccountFees["transfer"];
+      if (!fees.transfer) return unavailable();
+      if (Object.hasOwn(transfer, "ted"))
+        fees.transfer.ted = fields(
+          transfer.ted,
+          ["feeValue"],
+          [],
+          [],
+          ["consideredInMonthlyTransfersWithoutFee"],
+        );
+      if (Object.hasOwn(transfer, "pix"))
+        fees.transfer.pix = fields(
+          transfer.pix,
+          ["feeValue", "discountValue"],
+          [],
+          [],
+          ["consideredInMonthlyTransfersWithoutFee"],
+          ["expirationDate"],
+        );
+    }
+  }
+  return fees;
 }
 
 function record(value: unknown): Record<string, unknown> {
@@ -453,6 +688,125 @@ export function createAsaasHttpClient(
       }
     }
 
+    async function requestAccountFees(): Promise<AsaasAccountFees> {
+      if (
+        !feeBody ||
+        !feeStatus ||
+        !feeRedirected ||
+        !feeUrl ||
+        !feeHeaders ||
+        !feeByteLength
+      )
+        return unavailable();
+      const controller = new AbortController();
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      let body: ReadableStream<Uint8Array> | null = null;
+      let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+      let endOfBody = false;
+      let cancelled = false;
+      let cancellation: Promise<unknown> | undefined;
+      const startedAt = performance.now();
+      const cancel = () => {
+        if (cancelled || endOfBody || !body) return;
+        cancelled = true;
+        try {
+          cancellation = feeThen.call(
+            reader ? feeReaderCancel.call(reader) : feeBodyCancel.call(body),
+            () => undefined,
+            () => new Promise<void>(() => {}),
+          );
+        } catch {
+          cancellation = new Promise<void>(() => {});
+        }
+      };
+      const abort = () => {
+        if (!controller.signal.aborted) controller.abort();
+        cancel();
+      };
+      const assertDeadline = () => {
+        const elapsed = performance.now() - startedAt;
+        if (
+          controller.signal.aborted ||
+          !Number.isFinite(elapsed) ||
+          elapsed < 0 ||
+          elapsed >= timeoutMs
+        ) {
+          abort();
+          return unavailable();
+        }
+      };
+      try {
+        timer = setTimeout(abort, timeoutMs);
+        const url = `${base}/myAccount/fees/`;
+        const response = await fetch(url, {
+          method: "GET",
+          redirect: "error",
+          credentials: "omit",
+          cache: "no-store",
+          headers: {
+            access_token: accessToken,
+            "User-Agent": "EntreLacos-API",
+            Accept: "application/json",
+          },
+          signal: controller.signal,
+        });
+        body = feeBody.call(response) as ReadableStream<Uint8Array> | null;
+        assertDeadline();
+        const headers = feeHeaders.call(response) as Headers;
+        const responseUrl = feeUrl.call(response) as string;
+        if (
+          feeStatus.call(response) !== 200 ||
+          feeRedirected.call(response) ||
+          (responseUrl && responseUrl !== url) ||
+          !/^application\/json(?:\s*;\s*charset=(?:utf-8|"utf-8"))?\s*$/i.test(
+            feeHeaderGet.call(headers, "content-type") ?? "",
+          ) ||
+          !body
+        )
+          return unavailable();
+        const length = feeHeaderGet.call(headers, "content-length");
+        if (
+          length !== null &&
+          (!/^\d+$/.test(length) ||
+            !Number.isSafeInteger(Number(length)) ||
+            Number(length) > maxResponseBytes)
+        )
+          return unavailable();
+        reader = feeGetReader.call(
+          body,
+        ) as ReadableStreamDefaultReader<Uint8Array>;
+        const decoder = new TextDecoder("utf-8", { fatal: true });
+        let text = "";
+        let bytes = 0;
+        for (let chunks = 0; ; chunks++) {
+          assertDeadline();
+          if (chunks >= 4096) return unavailable();
+          const chunk = await feeRead.call(reader);
+          if (chunk.done) endOfBody = true;
+          assertDeadline();
+          if (chunk.done) break;
+          if (!(chunk.value instanceof Uint8Array)) return unavailable();
+          bytes += feeByteLength.call(chunk.value) as number;
+          if (bytes > maxResponseBytes) return unavailable();
+          text += decoder.decode(chunk.value, { stream: true });
+        }
+        text += decoder.decode();
+        const result = decodeAccountFees(text);
+        assertDeadline();
+        return result;
+      } catch {
+        return unavailable();
+      } finally {
+        if (!endOfBody) cancel();
+        try {
+          if (cancellation) await cancellation;
+          if (reader) feeRelease.call(reader);
+        } finally {
+          if (timer !== undefined) clearTimeout(timer);
+        }
+      }
+    }
+
     function observedAt(): Date {
       const time = clock();
       if (!(time instanceof Date) || !Number.isFinite(time.getTime()))
@@ -461,6 +815,24 @@ export function createAsaasHttpClient(
     }
 
     return {
+      async getAccountFees(): Promise<AsaasAccountFeesObservation> {
+        try {
+          const startedAt = observedAt();
+          const fees = await requestAccountFees();
+          const completedAt = observedAt();
+          if (completedAt.getTime() < startedAt.getTime()) return unavailable();
+          return {
+            source: "provider",
+            ...binding,
+            currency: "BRL",
+            observedAt: startedAt,
+            completedAt,
+            fees,
+          };
+        } catch {
+          return unavailable();
+        }
+      },
       async getBalance(): Promise<AsaasBalanceObservation> {
         try {
           // The response has no provider as-of timestamp. Keep the earliest

@@ -7,6 +7,7 @@ import {
 } from "@entrelacos/database/schema";
 import { sql } from "drizzle-orm";
 import {
+  type AsaasAccountFeesObservation,
   type AsaasBalanceObservation,
   type AsaasPaymentObservation,
   createAsaasHttpClient,
@@ -29,6 +30,9 @@ export interface AsaasStoredAccountReaderOptions {
   now(): Date;
 }
 export interface AsaasStoredAccountReader {
+  getAccountFees(
+    binding: FinancialAccountBinding,
+  ): Promise<AsaasAccountFeesObservation>;
   getPayment(claim: GiftPaymentInboxClaim): Promise<AsaasPaymentObservation>;
   getBalance(
     binding: FinancialAccountBinding,
@@ -266,6 +270,18 @@ export function createAsaasStoredAccountReader(
       });
     }
     return {
+      async getAccountFees(
+        value: FinancialAccountBinding,
+      ): Promise<AsaasAccountFeesObservation> {
+        try {
+          activeMode();
+          const binding = readBinding(value);
+          const client = await loadClient(binding);
+          return await client.getAccountFees();
+        } catch {
+          return unavailable();
+        }
+      },
       async getPayment(
         value: GiftPaymentInboxClaim,
       ): Promise<AsaasPaymentObservation> {

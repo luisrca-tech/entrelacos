@@ -633,3 +633,129 @@ describe("server-only stored Asaas account reads", () => {
     expect(key).toEqual(new Uint8Array(31).fill(42));
   });
 });
+
+describe("stored account fee reads", () => {
+  function feeFixture(
+    mode: "disabled" | "sandbox" | "live" = "sandbox",
+    applicationEnvironment: "development" | "test" | "production" = "test",
+  ) {
+    const values = fixture(mode, applicationEnvironment);
+    values.fetch.mockImplementation(
+      async () =>
+        new Response(
+          '{"payment":{"pix":{"fixedFeeValue":0,"percentageFee":0}},"transfer":{"ted":{"feeValue":5}}}',
+          { headers: { "content-type": "application/json" } },
+        ),
+    );
+    return values;
+  }
+
+  it("reuses the original stored inactive account credential without attesting approval", async () => {
+    const values = feeFixture();
+    const result = await values.reader.getAccountFees(values.binding);
+    expect(result).toMatchObject({
+      source: "provider",
+      ...values.binding,
+      observedAt: instant,
+      completedAt: instant,
+      fees: {
+        payment: { pix: { fixedFeeValue: "0.00", percentageFee: "0.00" } },
+        transfer: { ted: { feeValue: "5.00" } },
+      },
+    });
+    expect(result).not.toHaveProperty("verification");
+    expect(result).not.toHaveProperty("expiresAt");
+    expect(values.fetch.mock.calls[0][0]).toBe(
+      "https://api-sandbox.asaas.com/v3/myAccount/fees/",
+    );
+    expect(values.queries).toHaveLength(1);
+    expect(values.queries[0].sql).not.toMatch(
+      /FOR UPDATE|BEGIN|is_current|receiving_capability|provider_account_state|lifecycle|financial_event_inbox/,
+    );
+    expect(
+      new Headers(values.fetch.mock.calls[0][1]?.headers).get("access_token"),
+    ).toBe(values.token);
+    expect(JSON.stringify(result)).not.toMatch(/credential|ciphertext|apiKey/);
+  });
+
+  it("copies the original account before the asynchronous stored lookup", async () => {
+    const values = feeFixture();
+    const action = values.reader.getAccountFees(values.binding);
+    values.binding.accountReference = "replacement_account";
+    values.binding.accountBindingId = "replacement.account";
+    expect(await action).toMatchObject({
+      accountBindingId: "account.one",
+      accountReference: "remote_account_one",
+    });
+  });
+
+  it.each([
+    { siteId: "foreign:site" },
+    { accountBindingId: "foreign.account" },
+    { accountReference: "other_remote_account" },
+    { environment: "live" },
+    { provider: "OTHER" },
+    { rail: "PIX" },
+  ])("rejects unbound fee scope %j", async (change) => {
+    const values = feeFixture();
+    Object.assign(values.binding, change);
+    await rejectsSafely(values.reader.getAccountFees(values.binding), values);
+    expect(values.fetch).not.toHaveBeenCalled();
+  });
+
+  it.each(["disabled", "live"] as const)(
+    "denies %s fee reads in test before SQL or HTTP",
+    async (mode) => {
+      const values = feeFixture(mode);
+      await rejectsSafely(values.reader.getAccountFees(values.binding), values);
+      expect(values.queries).toHaveLength(0);
+      expect(values.fetch).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["credential", "duplicate", "sql", "native"] as const)(
+    "fails closed for %s without native approval or credential leakage",
+    async (failure) => {
+      const values = feeFixture();
+      if (failure === "credential") values.account.credential_tag = "invalid";
+      if (failure === "duplicate") values.faults.duplicate = true;
+      if (failure === "sql") values.faults.sql = true;
+      if (failure === "native")
+        values.fetch.mockRejectedValue(new Error(values.token));
+      await rejectsSafely(values.reader.getAccountFees(values.binding), values);
+      expect(values.fetch).toHaveBeenCalledTimes(failure === "native" ? 1 : 0);
+    },
+  );
+
+  it("keeps stored fee completion pending until actual native cancellation finishes", async () => {
+    vi.useFakeTimers();
+    const values = feeFixture();
+    let release!: () => void;
+    const cleanup = new Promise<void>((done) => {
+      release = done;
+    });
+    const cancel = vi.fn(() => cleanup);
+    values.fetch.mockResolvedValueOnce(
+      new Response(new ReadableStream({ cancel }), {
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    let settled = false;
+    const action = values.reader
+      .getAccountFees(values.binding)
+      .catch((error) => error)
+      .finally(() => {
+        settled = true;
+      });
+    try {
+      await vi.advanceTimersByTimeAsync(100);
+      expect(cancel).toHaveBeenCalledTimes(1);
+      expect(settled).toBe(false);
+    } finally {
+      release();
+      await action;
+    }
+    await rejectsSafely(Promise.reject(await action), values);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+});
