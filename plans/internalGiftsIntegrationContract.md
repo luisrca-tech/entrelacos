@@ -542,6 +542,28 @@ Continue confirmed-rule local development without waiting for support, using con
 
 This is a product/planning amendment, not a new executable C1, migration or broader source grant. A finishes its existing fee unit before a bounded holder/administrator nomination-consent gap audit; B only records future UX/QA implications; D retains holder/actor separation in its current read-only design; C's captured original worker scope is unchanged. Any subsequent schema, shared wire, onboarding or UI change requires the exact owner's principal-approved unit. Future discussion-chat monitoring remains excluded despite this single human-confirmed handoff.
 
+## Frozen candidates and final-check arbitration — 2026-10-14 03:31 UTC
+
+C's frozen new loop pair has57 owned passing cases and one CLOSED independent read-only review without supported findings. Only C receives the exclusive serial six-file worker/inbox/posting/lookup/reconciliation NONDB run, then API typing, then read-only pair hygiene/hash checks; root acceptance and Git remain pending. No source correction or second reviewer is granted. The generated-document index lane is CLOSED/released; navigation health does not prove runtime readiness.
+
+A's frozen six-path fee candidate reports352/3 owned PASS with223 byte-preserved original cases and17 boundary hashes unchanged. A may start only its ONE independent read-only source review; its exact-six regression/type/hygiene request is queued behind C, not active. Trusted commercial/holder authority and native evidence remain mandatory missing adapters, not data proved by the fee GET.
+
+D receives ONE finite independent read-only feasibility review of the existing exact-four proposal, with no executable wire/source/schema/SQL grant. Real dispatch authority, unique native correlation and authentic immutable proof custody remain missing; terminal debit and hold consumption cannot become public aggregate eligibility by a local fixture. B's anonymous preview QA/dependency setup is queued; neither independent user discussion (Asaas or harness) is monitored. All current ownership, snapshot, readiness and external gates remain unchanged.
+
+## Overnight handoff and test-only hygiene window — 2026-10-14 03:36 UTC
+
+C's exact six-file worker regression passes373/373 and API typing passes; production pair and all predecessors remain frozen. Only its NEW test receives the two required assertion wraps and single-use let-to-const correction, then serial57-case/API/pair hygiene/hash recheck. No behavior/shared source/new reviewer/Git grant follows. A/D read-only reviews continue; expensive checks, dependencies, browser and generated index wait C's release.
+
+Human-requested overnight continuation preserves every existing authority boundary. The authorized env inventory found no Asaas-specific entries, five populated development R2 settings and the unchanged duplicate/effective DIRECT endpoint mismatch. This proves presence/configuration only, not native enablement, bank proof or real resource QA. Missing native runtime/fees/withdrawal proof, real provider identity/configuration, exact SQL target/recovery and protected/public integration QA remain named follow-ups, not invented defaults.
+
+## Root worker acceptance and fee final-check lane — 2026-10-14 03:41 UTC
+
+Root accepts C's private loop pair after its own373/6 NONDB, API typing0, Biome2 and immutable predecessor repeat. Final source/test hashes are36fa3495fa0de0b5b0406696c8c635a47a71c366c11e459633881906eb0d0905 /df5b4dc1914ba10c733305cc494fba3dab92a5ec00a5f77b525774ffa90d91e9. Only reviewed pair plus owned status may be committed/pushed on feat/gifts-worker under the exact coordination publication grant; root integration/runtime/native evidence remains later, no main/PR/deploy.
+
+A now owns the exclusive exact-six fee/money/quote/withdrawal NONDB regression, then API typing, then read-only candidate hygiene/preservation. Its existing independent read-only review can close without executable overlap; no source corrections are automatic. B's dependency/public browser lane and generated semantic checkpoint update remain queued after A drain.
+
+D's one review found missing independent historical bride-holder consent. The minimum corrected private custody port receives one SAME-reviewer narrow amendment check; it does not modify existing consent/schema/aggregate or authorize source/native dispatch. Historical holder evidence remains an unavailable predecessor, and administration still grants no automatic withdrawals.
+
 ## Checkpoint protocol
 
 1. A0 publishes a proposed C1 type/route/data-model shape in `internalGiftsFinanceStatus.md`; B0 records consumer/access/catalog requests in `internalGiftsRegistryStatus.md`.
@@ -551,6 +573,12 @@ This is a product/planning amendment, not a new executable C1, migration or broa
 5. Central coordination arbitrates unresolved choices, records grants in the coordination document and schedules joint integration/QA checkpoints.
 
 ## Listening
+
+Accepted local worker source, child publication, parent integration and actual runtime are separate checkpoints. A concrete holder-consent finding is corrected in the proposed boundary before withdrawal implementation, without fabricating existing evidence.
+
+Finite mechanical test correction closes a reported hygiene gate without reopening reviewed behavior. Overnight progress and morning reporting distinguish local code, isolated tests and actual operational evidence.
+
+Final checks remain serialized while source-only reviews are bounded and independent. Passing a candidate's new tests, preserving its predecessors or reviewing its design does not substitute for root source acceptance or real operational proof.
 
 Confirmed product identity is separated from native/commercial evidence and current source ownership. This enables local progress without pretending the existing nomination flow already proves bride-owned receipts or expanding active writers. Historical financial visibility remains a site permission, not withdrawal authority.
 
