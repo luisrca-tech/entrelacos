@@ -13,6 +13,8 @@ import {
   historyUnavailable,
 } from "./giftPaymentHistory";
 
+import { encodeGiftPurchaseHistoryCsv } from "./giftPaymentHistoryCsv";
+
 export interface GiftPaymentHistoryHttpOptions {
   adminOrigin?: string;
   giftPaymentHistory?: GiftPaymentHistoryService;
@@ -21,6 +23,7 @@ export type GiftPaymentHistoryHttpRouter = Hono & { close(): Promise<void> };
 export const giftPaymentHistoryHttpPaths = Object.freeze([
   "/v1/sites/:siteId/finance/purchases",
   "/v1/sites/:siteId/finance/purchases/:orderId/history",
+  "/v1/sites/:siteId/finance/purchases.csv",
 ] as const);
 
 function problem(
@@ -119,7 +122,9 @@ function normalize(
   value: unknown,
   siteId: string,
   orderId: string | undefined,
+  csv: boolean,
 ): string {
+  if (csv) return encodeGiftPurchaseHistoryCsv(value, siteId);
   const reply =
     orderId === undefined
       ? giftPurchaseHistoryPageResponseSchema.parse(value)
@@ -149,12 +154,22 @@ export function createGiftPaymentHistoryHttpRouter(
     closed: Promise<void> | undefined;
   router.onError(() => unavailable());
 
-  async function read(context: Context, detail: boolean): Promise<Response> {
+  async function read(
+    context: Context,
+    detail: boolean,
+    csv: boolean,
+  ): Promise<Response> {
     if (closing || !configured) return unavailable();
     if (context.req.header("origin") !== configured.origin)
       return problem(403, "FORBIDDEN");
     const parsed = input(context, detail);
     if (!parsed) return problem(400, "VALIDATION_ERROR");
+    if (
+      csv &&
+      parsed.cursor !== null &&
+      !/^gh1\.[A-Za-z0-9_-]+$/.test(parsed.cursor)
+    )
+      return problem(400, "VALIDATION_ERROR");
     const { request, siteId, orderId, cursor } = parsed,
       signal = request.signal;
     if (signal.aborted) return unavailable();
@@ -197,7 +212,7 @@ export function createGiftPaymentHistoryHttpRouter(
       const result = (async () => {
         const promise = owner.result;
         if (!isPromise(promise)) return historyUnavailable();
-        return normalize(await promise, siteId, orderId);
+        return normalize(await promise, siteId, orderId, csv);
       })();
       const completion = (async () => {
         const promise = owner.completion;
@@ -225,8 +240,17 @@ export function createGiftPaymentHistoryHttpRouter(
       return new Response(outcomes[0].value, {
         status: 200,
         headers: {
-          "Content-Type": "application/json; charset=UTF-8",
+          "Content-Type": csv
+            ? "text/csv; charset=UTF-8"
+            : "application/json; charset=UTF-8",
           "Cache-Control": "no-store",
+          ...(csv
+            ? {
+                "Content-Disposition":
+                  'attachment; filename="gift-purchases.csv"',
+                "X-Content-Type-Options": "nosniff",
+              }
+            : {}),
         },
       });
     } catch {
@@ -239,7 +263,7 @@ export function createGiftPaymentHistoryHttpRouter(
     }
   }
   for (const [index, path] of giftPaymentHistoryHttpPaths.entries()) {
-    router.get(path, (context) => read(context, index === 1));
+    router.get(path, (context) => read(context, index === 1, index === 2));
     router.all(path, () => problem(405, "METHOD_NOT_ALLOWED", true));
   }
   function close(): Promise<void> {

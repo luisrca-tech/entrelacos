@@ -1518,3 +1518,674 @@ describe("history proxy boundary semantics", () => {
     expect(fetcher).not.toHaveBeenCalled();
   });
 });
+
+const csvPath = "/api/v1/sites/site-a/finance/purchases.csv";
+const csvType = "text/csv; charset=UTF-8";
+function csvDeferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+function csvResponse(
+  body: BodyInit | null = '"original","\'＝1+1"\r\n',
+  status = 200,
+  headers: Record<string, string> = {},
+) {
+  return new Response(body, {
+    status,
+    headers: { "Content-Type": csvType, ...headers },
+  });
+}
+async function csvMicrotasks() {
+  for (let step = 0; step < 8; step++) await Promise.resolve();
+}
+
+describe("private purchase CSV proxy admission and raw transport", () => {
+  it("reserves unsupported CSV methods before any deferred body pull or upstream dispatch", async () => {
+    const pull = vi.fn();
+    let source!: ReadableStreamDefaultController<Uint8Array>;
+    const body = new ReadableStream<Uint8Array>(
+      {
+        start(controller) {
+          source = controller;
+        },
+        pull,
+      },
+      { highWaterMark: 0 },
+    );
+    const fetcher = vi.fn(async () => csvResponse());
+    vi.stubGlobal("fetch", fetcher);
+    const work = proxyApiRequest(
+      proxyRequest(csvPath, { method: "POST", body, ...{ duplex: "half" } }),
+      config,
+    );
+    try {
+      await csvMicrotasks();
+      expect(pull).not.toHaveBeenCalled();
+      expect(fetcher).not.toHaveBeenCalled();
+    } finally {
+      source.close();
+      await work;
+    }
+    const reply = await work;
+    expect(reply.status).toBe(405);
+    expect(reply.headers.get("allow")).toBe("GET, HEAD");
+  });
+  it.each(["PUT", "PATCH", "DELETE", "OPTIONS"])(
+    "denies CSV %s locally",
+    async (method) => {
+      const fetcher = vi.fn(async () => csvResponse());
+      vi.stubGlobal("fetch", fetcher);
+      const reply = await proxyApiRequest(
+        proxyRequest(csvPath, { method, body: "private" }),
+        config,
+      );
+      expect(reply.status).toBe(405);
+      expect(fetcher).not.toHaveBeenCalled();
+    },
+  );
+  it.each([
+    "/api/v1/sites//finance/purchases.csv",
+    "/api/v1/sites/bad:site/finance/purchases.csv",
+    "/api/v1/sites/%73ite-a/finance/purchases.csv",
+    `${csvPath}/`,
+    `${csvPath}/history`,
+    `${csvPath}/order-a/history`,
+    `${csvPath}?cursor=`,
+    `${csvPath}?cursor=plain-opaque`,
+    `${csvPath}?cursor=gh1.opaque:next`,
+    `${csvPath}?cursor=gh1.`,
+    `${csvPath}?cursor=gh1.one&cursor=gh1.two`,
+    `${csvPath}?mode=live`,
+    `${csvPath}?cursor=gh1.${"a".repeat(1025)}`,
+  ])("rejects reserved CSV path or query %s without fetch", async (path) => {
+    const fetcher = vi.fn(async () => csvResponse());
+    vi.stubGlobal("fetch", fetcher);
+    const reply = await proxyApiRequest(proxyRequest(path), config);
+    expect([400, 404]).toContain(reply.status);
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+  it.each<Record<string, string>>([
+    { "Content-Length": "1" },
+    { "Content-Length": "00" },
+    { "Transfer-Encoding": "chunked" },
+    { "Content-Encoding": "gzip" },
+  ])("denies CSV request framing %j without fetch", async (headers) => {
+    const fetcher = vi.fn(async () => csvResponse());
+    vi.stubGlobal("fetch", fetcher);
+    expect(
+      (await proxyApiRequest(proxyRequest(csvPath, { headers }), config))
+        .status,
+    ).toBe(400);
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+  it("requires exact trusted configuration and origin for CSV before dispatch", async () => {
+    const fetcher = vi.fn(async () => csvResponse());
+    vi.stubGlobal("fetch", fetcher);
+    for (const options of [
+      { ...config, adminOrigin: `${config.adminOrigin}/` },
+      { ...config, apiBaseUrl: `${config.apiBaseUrl}/private` },
+    ]) {
+      expect(
+        (await proxyApiRequest(proxyRequest(csvPath), options)).status,
+      ).toBe(500);
+    }
+    for (const request of [
+      new Request(`https://foreign.example.test${csvPath}`),
+      proxyRequest(csvPath, {
+        headers: { Origin: "https://foreign.example.test" },
+      }),
+      proxyRequest(csvPath, { headers: { "Sec-Fetch-Site": "cross-site" } }),
+    ])
+      expect((await proxyApiRequest(request, config)).status).toBe(403);
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+  it.each([131073, 262144, 262145])(
+    "measures actual streamed CSV bytes at %s, validates UTF-8, and preserves every original byte",
+    async (size) => {
+      const bytes = new Uint8Array(size).fill(0x61);
+      bytes.set(
+        new Uint8Array([0xef, 0xbb, 0xbf, 0x22, 0xc3, 0xa1, 0x22, 0x0d, 0x0a]),
+      );
+      let sent = false;
+      const cancel = vi.fn();
+      const body = new ReadableStream<Uint8Array>(
+        {
+          pull(controller) {
+            if (sent) controller.close();
+            else {
+              sent = true;
+              controller.enqueue(bytes);
+            }
+          },
+          cancel,
+        },
+        { highWaterMark: 0 },
+      );
+      const fetcher = vi.fn<typeof fetch>(async () => {
+        const response = csvResponse(body, 200, {
+          "Content-Length": size === 131073 ? "99999999" : "1",
+          "Content-Disposition": 'attachment; filename="private-upstream.csv"',
+          "Set-Cookie": "private-cookie=discard",
+          "X-Request-Id": "private-diagnostic",
+          "X-Private": "discard",
+        });
+        Object.defineProperties(response, {
+          text: {
+            value() {
+              throw new Error("Unbounded CSV text read");
+            },
+          },
+          arrayBuffer: {
+            value() {
+              throw new Error("Unbounded CSV buffer read");
+            },
+          },
+        });
+        return response;
+      });
+      vi.stubGlobal("fetch", fetcher);
+      try {
+        const reply = await proxyApiRequest(
+          new Request(
+            `https://admin.example.test${csvPath}?cursor=gh1%2Eopaque_next`,
+            {
+              headers: {
+                Cookie: "session=synthetic",
+                Authorization: "discard",
+                "X-Forwarded-Host": "foreign.example.test",
+              },
+            },
+          ),
+          config,
+        );
+        expect(reply.status).toBe(size <= 262144 ? 200 : 502);
+        if (size <= 262144) {
+          expect(new Uint8Array(await reply.arrayBuffer())).toEqual(bytes);
+          expect(Object.fromEntries(reply.headers)).toEqual({
+            "cache-control": "no-store",
+            "content-disposition": 'attachment; filename="gift-purchases.csv"',
+            "content-type": csvType,
+            "x-content-type-options": "nosniff",
+          });
+        } else {
+          expect(await reply.json()).toMatchObject({
+            code: "UPSTREAM_UNAVAILABLE",
+          });
+          expect(cancel).toHaveBeenCalledOnce();
+        }
+        const [target, init] = fetcher.mock.calls[0];
+        expect(target).toBe(
+          "https://api.example.test/v1/sites/site-a/finance/purchases.csv?cursor=gh1%2Eopaque_next",
+        );
+        expect(init).toMatchObject({
+          method: "GET",
+          redirect: "manual",
+          cache: "no-store",
+          signal: expect.any(AbortSignal),
+        });
+        expect(Object.fromEntries(new Headers(init?.headers))).toEqual({
+          cookie: "session=synthetic",
+          origin: config.adminOrigin,
+        });
+      } finally {
+        if (!body.locked) await body.cancel();
+      }
+      expect(body.locked).toBe(false);
+    },
+  );
+  it.each([131072, 131073])(
+    "keeps CSV error responses under the unchanged %s-byte JSON boundary",
+    async (size) => {
+      const json = JSON.stringify(historyProblem(401));
+      const fetcher = vi.fn(
+        async () =>
+          new Response(json + " ".repeat(size - json.length), {
+            status: 401,
+            headers: {
+              "Content-Type": "application/problem+json",
+              "Content-Length": "1",
+              "Set-Cookie": "private=discard",
+              "Content-Disposition": 'attachment; filename="private.csv"',
+            },
+          }),
+      );
+      vi.stubGlobal("fetch", fetcher);
+      const reply = await proxyApiRequest(proxyRequest(csvPath), config);
+      expect(reply.status).toBe(size === 131072 ? 401 : 502);
+      const text = await reply.text();
+      expect(text).not.toMatch(/private upstream|PRIVATE_CODE|private.csv/);
+      expect(reply.headers.get("set-cookie")).toBeNull();
+      expect(reply.headers.get("content-disposition")).toBeNull();
+      expect(reply.headers.get("cache-control")).toBe("no-store");
+      expect(JSON.parse(text).code).toBe(
+        size === 131072 ? "UNAUTHENTICATED" : "UPSTREAM_UNAVAILABLE",
+      );
+    },
+  );
+  it.each([
+    [200, "text/plain", "private"],
+    [200, "application/json", "{}"],
+    [200, "text/csv; charset=iso-8859-1", "private"],
+    [201, csvType, "private"],
+    [302, csvType, "private"],
+    [401, "text/plain", "private"],
+    [403, "application/problem+json", '{"private":'],
+    [401, "application/problem+json", JSON.stringify(historyProblem(403))],
+  ] as const)(
+    "sanitizes unsupported CSV status/media %s/%s without authority loss",
+    async (status, type, body) => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(
+          async () =>
+            new Response(body, {
+              status,
+              headers: {
+                "Content-Type": type,
+                Location: "https://private.example.test",
+                "X-Private": "diagnostic",
+              },
+            }),
+        ),
+      );
+      const reply = await proxyApiRequest(proxyRequest(csvPath), config);
+      expect(reply.status).toBe(502);
+      expect(await reply.json()).toMatchObject({
+        code: "UPSTREAM_UNAVAILABLE",
+      });
+      expect(reply.headers.get("location")).toBeNull();
+      expect(reply.headers.get("x-private")).toBeNull();
+    },
+  );
+  it.each(["GET", "HEAD"])(
+    "rejects malformed successful CSV UTF-8 for %s",
+    async (method) => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () => csvResponse(new Uint8Array([0xff]))),
+      );
+      const reply = await proxyApiRequest(
+        proxyRequest(csvPath, { method }),
+        config,
+      );
+      expect(reply.status).toBe(502);
+      if (method === "HEAD") expect(reply.body).toBeNull();
+    },
+  );
+  it.each([200, 403, 503])(
+    "sends authorized upstream HEAD and drains unexpected status%s bodies without returning them",
+    async (status) => {
+      const fetcher = vi.fn<typeof fetch>(async () =>
+        status === 200
+          ? csvResponse('"head"\r\n')
+          : upstreamJson(historyProblem(status), status),
+      );
+      vi.stubGlobal("fetch", fetcher);
+      const reply = await proxyApiRequest(
+        proxyRequest(csvPath, { method: "HEAD" }),
+        config,
+      );
+      expect(reply.status).toBe(status);
+      expect(reply.body).toBeNull();
+      expect(fetcher.mock.calls[0]?.[1]).toMatchObject({
+        method: "HEAD",
+        cache: "no-store",
+        signal: expect.any(AbortSignal),
+      });
+      expect(reply.headers.get("content-disposition")).toBe(
+        status === 200 ? 'attachment; filename="gift-purchases.csv"' : null,
+      );
+    },
+  );
+  it.each([200, 401])(
+    "bounds unexpected CSV HEAD status%s bytes and always returns bodyless failures",
+    async (status) => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () =>
+          csvResponse("a".repeat(status === 200 ? 262145 : 131073), status),
+        ),
+      );
+      const reply = await proxyApiRequest(
+        proxyRequest(csvPath, { method: "HEAD" }),
+        config,
+      );
+      expect(reply.status).toBe(502);
+      expect(reply.body).toBeNull();
+    },
+  );
+  it("keeps local CSV HEAD failures bodyless and a pre-aborted CSV request undispatched", async () => {
+    const fetcher = vi.fn(async () => csvResponse());
+    vi.stubGlobal("fetch", fetcher);
+    for (const path of [`${csvPath}/child`, `${csvPath}?cursor=bad`]) {
+      const reply = await proxyApiRequest(
+        proxyRequest(path, { method: "HEAD" }),
+        config,
+      );
+      expect([400, 404]).toContain(reply.status);
+      expect(reply.body).toBeNull();
+    }
+    const abort = new AbortController();
+    abort.abort();
+    const reply = await proxyApiRequest(
+      proxyRequest(csvPath, { signal: abort.signal }),
+      config,
+    );
+    expect(reply.status).toBe(502);
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+});
+
+describe("private purchase CSV actual finite ownership", () => {
+  it.each(["abort", "deadline"])(
+    "retains ignored-abort fetch and late body cancellation through %s",
+    async (boundary) => {
+      if (boundary === "deadline") vi.useFakeTimers();
+      const abort = new AbortController();
+      const fetched = csvDeferred<Response>();
+      const canceled = csvDeferred<void>();
+      const cancel = vi.fn(() => canceled.promise);
+      const body = new ReadableStream<Uint8Array>(
+        { cancel },
+        { highWaterMark: 0 },
+      );
+      const lateResponse = csvResponse(body);
+      let signal: AbortSignal | null | undefined;
+      vi.stubGlobal(
+        "fetch",
+        vi.fn<typeof fetch>((_input, init) => {
+          signal = init?.signal;
+          return fetched.promise;
+        }),
+      );
+      let settled = false;
+      const work = proxyApiRequest(
+        proxyRequest(csvPath, { signal: abort.signal }),
+        config,
+      ).then((reply) => {
+        settled = true;
+        return reply;
+      });
+      try {
+        if (boundary === "abort") abort.abort();
+        else await vi.advanceTimersByTimeAsync(45000);
+        expect(signal?.aborted).toBe(true);
+        expect(settled).toBe(false);
+        fetched.resolve(lateResponse);
+        await csvMicrotasks();
+        expect(cancel).toHaveBeenCalledOnce();
+        expect(body.locked).toBe(true);
+        expect(settled).toBe(false);
+      } finally {
+        fetched.resolve(lateResponse);
+        canceled.resolve();
+        await work;
+        if (!body.locked) await body.cancel();
+        await Promise.allSettled([fetched.promise, canceled.promise]);
+      }
+      expect((await work).status).toBe(502);
+      expect(body.locked).toBe(false);
+      expect(settled).toBe(true);
+    },
+  );
+  it.each(["abort", "deadline"])(
+    "owns pending stream read and independent cancel completion after %s",
+    async (boundary) => {
+      if (boundary === "deadline") vi.useFakeTimers();
+      const abort = new AbortController();
+      const reading = csvDeferred<void>();
+      const read = csvDeferred<void>();
+      const completion = csvDeferred<void>();
+      let canceled = false;
+      const cancel = vi.fn(async () => {
+        canceled = true;
+        await Promise.allSettled([read.promise, completion.promise]);
+      });
+      const body = new ReadableStream<Uint8Array>(
+        {
+          async pull(controller) {
+            reading.resolve();
+            await read.promise;
+            if (!canceled) {
+              controller.enqueue(new TextEncoder().encode('"original"\r\n'));
+              controller.close();
+            }
+          },
+          cancel,
+        },
+        { highWaterMark: 0 },
+      );
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () => csvResponse(body)),
+      );
+      let settled = false;
+      const work = proxyApiRequest(
+        proxyRequest(csvPath, { signal: abort.signal }),
+        config,
+      ).then((reply) => {
+        settled = true;
+        return reply;
+      });
+      try {
+        expect(
+          await Promise.race([
+            reading.promise.then(() => true),
+            work.then(() => false),
+          ]),
+        ).toBe(true);
+        if (boundary === "abort") abort.abort();
+        else await vi.advanceTimersByTimeAsync(45000);
+        await csvMicrotasks();
+        expect(cancel).toHaveBeenCalledOnce();
+        expect(body.locked).toBe(true);
+        expect(settled).toBe(false);
+        read.resolve();
+        await csvMicrotasks();
+        expect(settled).toBe(false);
+      } finally {
+        reading.resolve();
+        read.resolve();
+        completion.resolve();
+        await work;
+        if (!body.locked) await body.cancel();
+        await Promise.allSettled([
+          reading.promise,
+          read.promise,
+          completion.promise,
+        ]);
+      }
+      expect((await work).status).toBe(502);
+      expect(body.locked).toBe(false);
+    },
+  );
+  it("does not borrow the binary slot or add a global CSV semaphore", async () => {
+    const first = csvDeferred<Response>();
+    let csvCalls = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>(async (input) =>
+        String(input).endsWith("purchases.csv") && ++csvCalls === 1
+          ? first.promise
+          : String(input).endsWith("purchases.csv")
+            ? csvResponse()
+            : upstreamJson(),
+      ),
+    );
+    const work = proxyApiRequest(proxyRequest(csvPath), config);
+    try {
+      expect(
+        (await proxyApiRequest(proxyRequest(csvPath), config)).status,
+      ).toBe(200);
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.close();
+        },
+      });
+      expect(
+        (
+          await proxyApiRequest(
+            proxyRequest("/api/v1/sites/site-a/gift-media/asset-a/finalize", {
+              method: "POST",
+              headers: { "Content-Type": "image/png" },
+              body,
+              ...{ duplex: "half" },
+            }),
+            config,
+          )
+        ).status,
+      ).toBe(200);
+    } finally {
+      first.resolve(csvResponse());
+      await work;
+      await first.promise;
+    }
+    expect((await work).status).toBe(200);
+  });
+});
+
+describe("private purchase CSV proxy to accepted HTTP bridge", () => {
+  const page = {
+    history: {
+      scope: {
+        siteId: "site-a",
+        mode: "sandbox" as const,
+        policy: "SITE_HISTORY" as const,
+      },
+      consistency: "PER_READ" as const,
+      readObservedAtMicros: "10000",
+      currentKnowledge: "UNKNOWN" as const,
+      sourceOrdering: "UNAVAILABLE" as const,
+      nextCursor: null,
+      items: [
+        {
+          siteId: "site-a",
+          mode: "sandbox" as const,
+          orderId: "order:a..b",
+          quoteId: "quote-a",
+          giftId: "gift-a",
+          titleSnapshot: "＝SUM(1,2)",
+          method: "PIX" as const,
+          currency: "BRL" as const,
+          purchasedAtMicros: "100",
+          destinationVersion: 1,
+          policyVersion: "policy-a",
+          binding: "AVAILABLE" as const,
+          quoted: {
+            nominalCents: 1000,
+            commissionCents: 100,
+            processingCents: 0,
+            totalCents: 1100,
+          },
+        },
+      ],
+    },
+  };
+  it.each(["success", "abort"])(
+    "preserves actual CSV bytes and finite service result/completion ownership for %s",
+    async (outcome) => {
+      const result = csvDeferred<typeof page>();
+      const completion = csvDeferred<void>();
+      const entered = csvDeferred<void>();
+      const cancel = vi.fn();
+      const inputs: Array<{
+        request: Request;
+        siteId: string;
+        cursor?: string | null;
+      }> = [];
+      const router = createGiftPaymentHistoryHttpRouter({
+        adminOrigin: config.adminOrigin,
+        giftPaymentHistory: {
+          available: true,
+          readPurchasePage(input) {
+            inputs.push(input);
+            entered.resolve();
+            return {
+              result: result.promise,
+              completion: completion.promise,
+              cancel,
+            };
+          },
+          readPurchaseDetailPage() {
+            throw new Error(
+              "CSV must use only the accepted purchase index owner",
+            );
+          },
+          async close() {},
+        },
+      });
+      const abort = new AbortController();
+      let upstreamBytes: Uint8Array | undefined;
+      vi.stubGlobal(
+        "fetch",
+        vi.fn<typeof fetch>(async (input, init) => {
+          const response = await router.fetch(new Request(String(input), init));
+          const raw = await response.arrayBuffer();
+          upstreamBytes = new Uint8Array(raw);
+          return new Response(raw, {
+            status: response.status,
+            headers: response.headers,
+          });
+        }),
+      );
+      let settled = false;
+      const work = proxyApiRequest(
+        proxyRequest(`${csvPath}?cursor=gh1.opaque_next`, {
+          signal: abort.signal,
+          headers: { Cookie: "session=synthetic" },
+        }),
+        config,
+      ).then((reply) => {
+        settled = true;
+        return reply;
+      });
+      try {
+        await entered.promise;
+        expect(inputs).toHaveLength(1);
+        expect(inputs[0]).toMatchObject({
+          siteId: "site-a",
+          cursor: "gh1.opaque_next",
+        });
+        expect(inputs[0].request.headers.get("origin")).toBe(
+          config.adminOrigin,
+        );
+        expect(settled).toBe(false);
+        result.resolve(page);
+        await csvMicrotasks();
+        expect(settled).toBe(false);
+        if (outcome === "abort") {
+          abort.abort();
+          await csvMicrotasks();
+          expect(cancel).toHaveBeenCalledOnce();
+          expect(settled).toBe(false);
+        }
+      } finally {
+        entered.resolve();
+        result.resolve(page);
+        completion.resolve();
+        await work;
+        await router.close();
+        await Promise.allSettled([
+          entered.promise,
+          result.promise,
+          completion.promise,
+        ]);
+      }
+      const reply = await work;
+      expect(reply.status).toBe(outcome === "success" ? 200 : 502);
+      if (outcome === "success") {
+        expect(new Uint8Array(await reply.arrayBuffer())).toEqual(
+          upstreamBytes,
+        );
+        expect(new TextDecoder().decode(upstreamBytes)).toContain(
+          '"\'＝SUM(1,2)"',
+        );
+        expect(reply.headers.get("x-content-type-options")).toBe("nosniff");
+        expect(cancel).not.toHaveBeenCalled();
+      }
+    },
+  );
+});

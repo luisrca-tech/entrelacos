@@ -263,16 +263,23 @@ function isNativeAuthPath(pathname: string): boolean {
   );
 }
 
-type HistoryTarget = { target: URL; origin: string; method: "GET" | "HEAD" };
+type HistoryTarget = {
+  target: URL;
+  origin: string;
+  method: "GET" | "HEAD";
+  csv: boolean;
+};
 function historyProblem(
   method: string,
   status: number,
   code: string,
   title: string,
   allow = false,
+  csv = false,
 ): Response {
   const response = problem(status, code, title);
   if (allow) response.headers.set("Allow", "GET, HEAD");
+  if (csv) response.headers.set("X-Content-Type-Options", "nosniff");
   return method === "HEAD"
     ? new Response(null, { status, headers: response.headers })
     : response;
@@ -290,12 +297,17 @@ function resolveHistoryTarget(
   }
   // Reserve the family before validating its method or tuple; invalid history never uses ordinary buffering.
   if (
-    !/^\/api\/v1\/sites\/[^/]*\/finance\/purchases(?:\/|$)/.test(url.pathname)
+    !/^\/api\/v1\/sites\/[^/]*\/finance\/purchases(?:\.csv)?(?:\/|$)/.test(
+      url.pathname,
+    )
   )
     return undefined;
+  const csv = /^\/api\/v1\/sites\/[^/]*\/finance\/purchases\.csv(?:\/|$)/.test(
+    url.pathname,
+  );
   const method = request.method.toUpperCase();
   const denied = (status: number, code: string, title: string, allow = false) =>
-    historyProblem(method, status, code, title, allow);
+    historyProblem(method, status, code, title, allow, csv);
   let origin: string, base: URL;
   try {
     origin = options.adminOrigin;
@@ -326,7 +338,11 @@ function resolveHistoryTarget(
   const parts = url.pathname.split("/");
   if (!siteIdSchema.safeParse(parts[4]).success)
     return denied(404, "NOT_FOUND", "Not Found");
-  if (parts.length !== 7 && (parts.length !== 9 || parts[8] !== "history"))
+  if (
+    csv
+      ? parts.length !== 7
+      : parts.length !== 7 && (parts.length !== 9 || parts[8] !== "history")
+  )
     return denied(404, "NOT_FOUND", "Not Found");
   if (parts.length === 9) {
     const raw = parts[7];
@@ -352,12 +368,16 @@ function resolveHistoryTarget(
     request.body ||
     (length !== null && length !== "0") ||
     request.headers.has("transfer-encoding") ||
+    (csv && request.headers.has("content-encoding")) ||
     new TextEncoder().encode(url.search).byteLength > 1024 ||
     parameters.length > 1 ||
     (parameters.length === 1 && parameters[0][0] !== "cursor") ||
     !giftPurchaseHistoryPageResponseSchema.shape.history.shape.nextCursor.safeParse(
       parameters.length ? parameters[0][1] : null,
-    ).success
+    ).success ||
+    (csv &&
+      parameters.length === 1 &&
+      !/^gh1\.[A-Za-z0-9_-]+$/.test(parameters[0][1]))
   )
     return denied(400, "VALIDATION_ERROR", "Invalid purchase history request");
   const path = `/v1/${url.pathname.slice("/api/v1/".length)}`;
@@ -365,14 +385,14 @@ function resolveHistoryTarget(
   if (target.origin !== base.origin || target.pathname !== path)
     return denied(404, "NOT_FOUND", "Not Found");
   target.search = url.search;
-  return { target, origin, method };
+  return { target, origin, method, csv };
 }
 
 async function historyUpstream(
   request: Request,
   resolved: HistoryTarget,
 ): Promise<Response> {
-  const { target, origin, method } = resolved;
+  const { target, origin, method, csv } = resolved;
   const transport = fetch,
     signal = request.signal,
     abort = new AbortController();
@@ -396,7 +416,14 @@ async function historyUpstream(
     cancel();
   };
   const unavailable = () =>
-    historyProblem(method, 502, "UPSTREAM_UNAVAILABLE", "API unavailable");
+    historyProblem(
+      method,
+      502,
+      "UPSTREAM_UNAVAILABLE",
+      "API unavailable",
+      false,
+      csv,
+    );
   const assertCurrent = () => {
     if (abort.signal.aborted) throw new Error("History transport unavailable");
   };
@@ -422,7 +449,16 @@ async function historyUpstream(
     });
     if (upstream.body) reader = upstream.body.getReader();
     assertCurrent();
-    const bytes = new Uint8Array(giftPurchaseHistoryLimits.jsonBytes);
+    const status = upstream.status;
+    const rawContentType = upstream.headers.get("content-type");
+    const contentType = rawContentType?.split(";")[0].trim().toLowerCase();
+    const csvSuccess =
+      csv &&
+      status === 200 &&
+      /^text\/csv\s*;\s*charset=utf-8$/i.test(rawContentType?.trim() ?? "");
+    const bytes = new Uint8Array(
+      csvSuccess ? 262_144 : giftPurchaseHistoryLimits.jsonBytes,
+    );
     let size = 0;
     if (reader) {
       while (true) {
@@ -440,28 +476,36 @@ async function historyUpstream(
         size += value.byteLength;
       }
     }
+    const originalBytes = bytes.subarray(0, size);
     const text = new TextDecoder("utf-8", { fatal: true }).decode(
-      bytes.subarray(0, size),
+      originalBytes,
     );
-    const status = upstream.status;
-    const contentType = upstream.headers
-      .get("content-type")
-      ?.split(";")[0]
-      .trim()
-      .toLowerCase();
     assertCurrent();
     if (upstream.ok) {
-      if (reader || method !== "HEAD") {
-        if (contentType !== "application/json")
-          throw new Error("History JSON unavailable");
-        JSON.parse(text);
+      if (csv) {
+        if (!csvSuccess) throw new Error("History CSV unavailable");
+        result = new Response(method === "HEAD" ? null : originalBytes, {
+          status,
+          headers: {
+            "Content-Type": "text/csv; charset=UTF-8",
+            "Cache-Control": "no-store",
+            "Content-Disposition": 'attachment; filename="gift-purchases.csv"',
+            "X-Content-Type-Options": "nosniff",
+          },
+        });
+      } else {
+        if (reader || method !== "HEAD") {
+          if (contentType !== "application/json")
+            throw new Error("History JSON unavailable");
+          JSON.parse(text);
+        }
+        const headers = copyResponseHeaders(upstream.headers);
+        headers.set("Cache-Control", "no-store");
+        result = new Response(method === "HEAD" ? null : text, {
+          status,
+          headers,
+        });
       }
-      const headers = copyResponseHeaders(upstream.headers);
-      headers.set("Cache-Control", "no-store");
-      result = new Response(method === "HEAD" ? null : text, {
-        status,
-        headers,
-      });
     } else {
       if (reader || method !== "HEAD") {
         if (
@@ -493,6 +537,7 @@ async function historyUpstream(
             ? "Forbidden"
             : "Purchase history unavailable",
         status === 405,
+        csv,
       );
     }
   } catch {
