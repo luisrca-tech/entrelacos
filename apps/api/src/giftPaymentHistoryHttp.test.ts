@@ -26,6 +26,70 @@ const instant = new Date("2026-10-13T14:00:00.000Z");
 const origin = "https://admin.example.test";
 const indexPath = "/v1/sites/site-one/finance/purchases";
 const detailPath = `${indexPath}/order-one/history`;
+
+describe("OWNER purchase history consultation", () => {
+  it.each([indexPath, detailPath, `${indexPath}.csv`])(
+    "serves %s with a real OWNER session and no membership",
+    async (path) => {
+      const v = await fixture();
+      v.user.role = "OWNER";
+      Object.assign(v.membership, {
+        membership_id: null,
+        membership_user_id: null,
+        membership_role: null,
+      });
+      const response = await v.router.fetch(v.request(path));
+      expect(response.status).toBe(200);
+      expect(response.headers.get("cache-control")).toBe("no-store");
+      await response.text();
+      const reads = [
+        ...v.repository.readPurchasePage.mock.calls,
+        ...v.repository.readPurchaseDetailPage.mock.calls,
+      ];
+      expect(reads.length).toBeGreaterThan(0);
+      for (const [scope] of reads)
+        expect(scope).toMatchObject({
+          membershipId: null,
+          userId: "viewer-one",
+          siteId: "site-one",
+        });
+      for (const write of [v.db.insert, v.db.update, v.db.delete, v.deletes])
+        expect(write).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([indexPath, detailPath, `${indexPath}.csv`])(
+    "suppresses %s when the OWNER session expires during the stored read",
+    async (path) => {
+      const v = await fixture();
+      v.user.role = "OWNER";
+      Object.assign(v.membership, {
+        membership_id: null,
+        membership_user_id: null,
+        membership_role: null,
+      });
+      const page = v.repository.readPurchasePage.getMockImplementation();
+      const detailPage =
+        v.repository.readPurchaseDetailPage.getMockImplementation();
+      if (!page || !detailPage) throw new Error("Missing stored fixture");
+      v.repository.readPurchasePage.mockImplementation(async (...args) => {
+        const result = await page(...args);
+        v.session.expiresAt = new Date(instant);
+        return result;
+      });
+      v.repository.readPurchaseDetailPage.mockImplementation(
+        async (...args) => {
+          const result = await detailPage(...args);
+          v.session.expiresAt = new Date(instant);
+          return result;
+        },
+      );
+      const response = await v.router.fetch(v.request(path));
+      await problem(response);
+      expect(response.headers.get("content-disposition")).toBeNull();
+    },
+  );
+});
 const releases: Array<() => void> = [];
 const closers: Array<() => Promise<void>> = [];
 beforeEach(() => {
@@ -541,7 +605,6 @@ describe("owned private purchase history HTTP", () => {
     "idle",
     "absolute",
     "inactive",
-    "OWNER",
     "SITE_ASSISTANT",
     "membership",
     "foreign",
@@ -559,7 +622,7 @@ describe("owned private purchase history HTTP", () => {
       if (kind === "absolute")
         v.session.createdAt = new Date(instant.getTime() - 7 * 86400000);
       if (kind === "inactive") v.user.state = "DISABLED";
-      if (kind === "OWNER" || kind === "SITE_ASSISTANT") v.user.role = kind;
+      if (kind === "SITE_ASSISTANT") v.user.role = kind;
       if (kind === "membership")
         v.membership.revoked_at = "2026-10-13T13:59:00Z";
       if (kind === "foreign") v.membership.site_id = "foreign-site";
@@ -1045,7 +1108,6 @@ describe("CSV native privacy and finite read ownership", () => {
     "idle",
     "absolute",
     "inactive",
-    "OWNER",
     "SITE_ASSISTANT",
     "membership",
     "foreign",
@@ -1061,7 +1123,7 @@ describe("CSV native privacy and finite read ownership", () => {
     if (kind === "absolute")
       v.session.createdAt = new Date(instant.getTime() - 7 * 86400000);
     if (kind === "inactive") v.user.state = "DISABLED";
-    if (kind === "OWNER" || kind === "SITE_ASSISTANT") v.user.role = kind;
+    if (kind === "SITE_ASSISTANT") v.user.role = kind;
     if (kind === "membership") v.membership.revoked_at = "2026-10-13T13:59:00Z";
     if (kind === "foreign") v.membership.site_id = "foreign-site";
     const response = await v.router.fetch(request);

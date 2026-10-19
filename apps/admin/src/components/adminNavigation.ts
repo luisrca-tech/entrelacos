@@ -41,7 +41,7 @@ export function getSiteNavigation(
 ): SiteNavigationItem[] {
   const encodedSiteId = encodeURIComponent(siteId);
   const areas: SiteArea[] = ["invitations", "messages", "gifts"];
-  if (role === "SITE_ADMIN") areas.push("receiving");
+  if (role === "SITE_ADMIN" || role === "OWNER") areas.push("receiving");
   if (role !== "SITE_ASSISTANT") areas.push("team");
   if (role === "OWNER") areas.push("settings");
   return areas.map((area) => ({
@@ -60,7 +60,7 @@ export function resolveSiteArea(
     return "invitations";
   }
   if (requestedArea === "settings" && role !== "OWNER") return "invitations";
-  if (requestedArea === "receiving" && role !== "SITE_ADMIN")
+  if (requestedArea === "receiving" && role === "SITE_ASSISTANT")
     return "invitations";
   if (requestedArea === "team" && role === "SITE_ASSISTANT")
     return "invitations";

@@ -54,6 +54,48 @@ async function rejected(action: Promise<unknown>) {
 
 afterEach(() => vi.useRealTimers());
 
+describe("complete checkout payment correlation reads", () => {
+  it("reads a complete filtered account-scoped list and retains only correlation references", async () => {
+    const values = fixture(
+      json({ hasMore: false, totalCount: 1, data: [payment()] }),
+    );
+    const result = await createAsaasHttpClient(
+      values.options,
+    ).listCheckoutPayments("checkout-1");
+    expect(result.payments).toEqual([
+      {
+        id: "pay_1",
+        checkoutSession: "checkout-1",
+        externalReference: "attempt-1",
+        status: "RECEIVED",
+      },
+    ]);
+    expect(String(values.fetch.mock.calls[0][0])).toBe(
+      "https://api-sandbox.asaas.com/v3/payments?checkoutSession=checkout-1&limit=100&offset=0",
+    );
+    expect(result).toMatchObject({
+      siteId: "site-1",
+      accountBindingId: "account-1",
+      environment: "sandbox",
+      accountReference: "remote-account-1",
+    });
+  });
+  it.each([
+    { hasMore: true, totalCount: 0, data: [] },
+    { hasMore: false, totalCount: 1, data: [] },
+    {
+      hasMore: false,
+      totalCount: 1,
+      data: [payment({ checkoutSession: "another" })],
+    },
+  ])("rejects incomplete or contradictory provider lists: %j", async (body) => {
+    const values = fixture(json(body));
+    await rejected(
+      createAsaasHttpClient(values.options).listCheckoutPayments("checkout-1"),
+    );
+  });
+});
+
 function fixture(
   response = new Response('{"balance":123.45}', {
     headers: { "content-type": "application/json" },
@@ -1230,6 +1272,26 @@ describe("exact account fee observations", () => {
     expect(fetch.mock.calls[0][1]).not.toHaveProperty("body");
   });
 
+  it("retains the observed fixed Pix tariff type and card promotion flag without inventing either", async () => {
+    const { options } = fees(
+      '{"payment":{"pix":{"type":"FIXED","fixedFeeValue":1.99,"monthlyCreditsWithoutFee":100,"creditsReceivedOfCurrentMonth":0},"creditCard":{"operationValue":0.49,"oneInstallmentPercentage":2.99,"discountOneInstallmentPercentage":1.99,"hasValidDiscount":true,"discountExpiration":"2027-01-16 00:00:00"}}}',
+    );
+    expect(
+      (await createAsaasHttpClient(options).getAccountFees()).fees.payment,
+    ).toMatchObject({
+      pix: {
+        type: "FIXED",
+        fixedFeeValue: "1.99",
+        monthlyCreditsWithoutFee: 100,
+        creditsReceivedOfCurrentMonth: 0,
+      },
+      creditCard: {
+        hasValidDiscount: true,
+        discountOneInstallmentPercentage: "1.99",
+      },
+    });
+  });
+
   it.each([
     "0.49000000000000001",
     "2.9900000000000001",
@@ -1647,5 +1709,133 @@ describe("exact account fee observations", () => {
     await rejected(Promise.reject(await action));
     expect(body.locked).toBe(false);
     expect(vi.getTimerCount()).toBe(0);
+  });
+});
+
+describe("native Asaas Pix transfer transport", () => {
+  const transfer = () => ({
+    id: "transfer-1",
+    status: "DONE",
+    type: "PIX",
+    operationType: "PIX",
+    value: 95,
+    netValue: 95,
+    transferFee: 0,
+    externalReference: "operation-1",
+    transactionReceiptUrl: "https://sandbox.asaas.com/receipt/1",
+    endToEndIdentifier: "E123",
+    effectiveDate: "2026-10-12",
+  });
+  it("sends only native Pix fields, with the exact transferred amount", async () => {
+    const f = fixture(json(transfer()));
+    const result = await createAsaasHttpClient(f.options).createPixTransfer({
+      valueCents: 9500,
+      pixAddressKey: "cliente-a00001@pix.bcb.gov.br",
+      pixAddressKeyType: "EMAIL",
+      externalReference: "operation-1",
+    });
+    expect(f.fetch).toHaveBeenCalledTimes(1);
+    expect(f.fetch.mock.calls[0][0]).toBe(
+      "https://api-sandbox.asaas.com/v3/transfers",
+    );
+    const request = f.fetch.mock.calls[0][1] ?? {};
+    expect(request.method).toBe("POST");
+    expect(JSON.parse(String(request.body))).toEqual({
+      value: 95,
+      operationType: "PIX",
+      pixAddressKey: "cliente-a00001@pix.bcb.gov.br",
+      pixAddressKeyType: "EMAIL",
+      externalReference: "operation-1",
+    });
+    expect(result.transfer).toMatchObject({
+      value: "95.00",
+      netValue: "95.00",
+      transferFee: "0.00",
+      status: "DONE",
+    });
+    expect(result).toMatchObject({
+      source: "provider",
+      siteId: "site-1",
+      accountBindingId: "account-1",
+      environment: "sandbox",
+    });
+  });
+  it("reads by ID and verifies the response ID", async () => {
+    const f = fixture(json(transfer()));
+    await createAsaasHttpClient(f.options).getTransfer("transfer-1");
+    expect(f.fetch.mock.calls[0][0]).toBe(
+      "https://api-sandbox.asaas.com/v3/transfers/transfer-1",
+    );
+    const wrong = fixture(json(transfer()));
+    await rejected(createAsaasHttpClient(wrong.options).getTransfer("another"));
+  });
+  it("lists bounded native pages without an unsupported externalReference filter", async () => {
+    const f = fixture(
+      json({
+        hasMore: true,
+        totalCount: 101,
+        limit: 100,
+        offset: 0,
+        data: [transfer()],
+      }),
+    );
+    const result = await createAsaasHttpClient(f.options).listTransfers(0);
+    expect(result.hasMore).toBe(true);
+    expect(result.transfers).toHaveLength(1);
+    expect(f.fetch.mock.calls[0][0]).toBe(
+      "https://api-sandbox.asaas.com/v3/transfers?limit=100&offset=0",
+    );
+  });
+  it("rejects precision loss in native financial fields", async () => {
+    const f = fixture(
+      new Response(
+        JSON.stringify(transfer()).replace(
+          '"value":95',
+          '"value":95.000000000000001',
+        ),
+        { headers: { "content-type": "application/json" } },
+      ),
+    );
+    await rejected(createAsaasHttpClient(f.options).getTransfer("transfer-1"));
+  });
+  it("never retries a lost POST response", async () => {
+    const f = fixture();
+    f.fetch.mockRejectedValue(new Error("lost response"));
+    await rejected(
+      createAsaasHttpClient(f.options).createPixTransfer({
+        valueCents: 9500,
+        pixAddressKey: "cliente-a00001@pix.bcb.gov.br",
+        pixAddressKeyType: "EMAIL",
+        externalReference: "operation-1",
+      }),
+    );
+    expect(f.fetch).toHaveBeenCalledTimes(1);
+  });
+  it.each([-1, 1, 1001, Number.NaN])(
+    "rejects invalid pagination offset %s before fetch",
+    async (offset) => {
+      const f = fixture();
+      await rejected(createAsaasHttpClient(f.options).listTransfers(offset));
+      expect(f.fetch).not.toHaveBeenCalled();
+    },
+  );
+});
+
+describe("Sandbox-only native transfer dispatch", () => {
+  it("rejects a live POST even with valid live-scoped credentials", async () => {
+    const f = fixture();
+    f.options.mode = "live";
+    f.options.binding.environment = "live";
+    f.options.credentials.context.environment = "live";
+    f.options.credentials.accessToken = "$aact_prod_offline-test-token";
+    await rejected(
+      createAsaasHttpClient(f.options).createPixTransfer({
+        valueCents: 100,
+        pixAddressKey: "sandbox@example.test",
+        pixAddressKeyType: "EMAIL",
+        externalReference: "operation-1",
+      }),
+    );
+    expect(f.fetch).not.toHaveBeenCalled();
   });
 });

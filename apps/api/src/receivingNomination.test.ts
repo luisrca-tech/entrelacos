@@ -3,11 +3,16 @@ import { isDeepStrictEqual } from "node:util";
 import type { SiteAccess } from "@entrelacos/contracts";
 import { describe, expect, it, vi } from "vitest";
 import {
+  databaseTimestampEpochMicroseconds,
+  readDatabaseTimestamp,
+} from "./databaseTimestamp";
+import {
   assertRecipientFinancialAction,
   type FinancialActor,
   type FinancialRecipientBinding,
   type RecentFinancialAuthenticationEvidence,
 } from "./financialAuthorization";
+import type { ReceivingAuthenticationEvidence } from "./receivingNomination";
 import {
   createReceivingNominationService,
   deriveReceivingNominationRequestId,
@@ -248,7 +253,7 @@ function fixture() {
       requestWithdrawal: false,
     },
   };
-  const recentAuth: RecentFinancialAuthenticationEvidence = {
+  const recentAuth: ReceivingAuthenticationEvidence = {
     ...actor,
     proofKind: "PASSWORD_REAUTHENTICATION",
     verification: "verified",
@@ -352,6 +357,39 @@ async function denied(
 }
 
 describe("explicit initial receiving nomination", () => {
+  it("keeps real session authentication and SQL timestamp precision without claiming password confirmation", async () => {
+    const values = fixture();
+    Object.assign(values.recentAuth, {
+      proofKind: "SESSION_AUTHENTICATION",
+      authenticatedAt: readDatabaseTimestamp("2026-10-12T11:00:00.123456Z"),
+      expiresAt: readDatabaseTimestamp("2026-10-19T11:00:00.123456Z"),
+    });
+    const record = values.custody.find(
+      (entry) =>
+        entry.context.draft.environment === "sandbox" &&
+        entry.context.actor.userId === values.actor.userId,
+    );
+    if (!record) throw new Error("Missing independent fixture authority");
+    Object.assign(record.context.draft.authentication, {
+      proofKind: "SESSION_AUTHENTICATION",
+      authenticatedAt: "2026-10-12T11:00:00.123456Z",
+      expiresAt: "2026-10-19T11:00:00.123456Z",
+    });
+    const result = await nominate(values);
+    expect(result.authentication).toMatchObject({
+      proofKind: "SESSION_AUTHENTICATION",
+      authenticatedAt: "2026-10-12T11:00:00.123456Z",
+      expiresAt: "2026-10-19T11:00:00.123456Z",
+    });
+    const authorization = values.reserveNomination.mock.calls[0][2];
+    expect(
+      databaseTimestampEpochMicroseconds(
+        authorization.recentAuth.authenticatedAt,
+      ),
+    ).toBe(
+      databaseTimestampEpochMicroseconds(values.recentAuth.authenticatedAt),
+    );
+  });
   it("rejects a non-canonical request in a proven empty scope before ID generation or reservation", async () => {
     const v = fixture();
     v.input.requestId = "random-first-request";
@@ -532,7 +570,7 @@ describe("explicit initial receiving nomination", () => {
         environment: "sandbox",
         actor: values.actor,
         access: values.access,
-        recentAuth: values.recentAuth,
+        recentAuth: values.recentAuth as RecentFinancialAuthenticationEvidence,
         recipientBinding: snapshot as unknown as FinancialRecipientBinding,
         now,
         maxAuthAgeMs: 300_000,

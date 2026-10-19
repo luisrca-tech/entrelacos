@@ -22,6 +22,98 @@ import * as receivingRepository from "./receivingRepository";
 import * as siteAccess from "./siteAccess";
 
 describe("API composition", () => {
+  it("mounts explicit session-bound incoming verification in the actual app", async () => {
+    vi.spyOn(authHttp, "requireAdminSession").mockResolvedValue({
+      user: { id: "holder-one", role: "SITE_ADMIN" },
+      session: { id: "session-one" },
+    } as never);
+    vi.spyOn(siteAccess, "resolveSiteAccess").mockResolvedValue({
+      siteId: "site-one",
+      userId: "holder-one",
+      membershipId: "membership-one",
+      membershipRole: "SITE_ADMIN",
+      capabilities: { configureReceiving: true, readFinance: true },
+    } as never);
+    const readiness = {
+      siteId: "site-one",
+      mode: "sandbox" as const,
+      state: "READY" as const,
+      reason: null,
+      observedAt: "2026-10-19T12:00:00Z",
+      destinationVersion: 2,
+      catalogEligible: true,
+    };
+    const verify = vi.fn(async () => readiness);
+    const api = createApp(
+      {
+        auth: {} as never,
+        db: {} as never,
+        adminOrigin: "http://localhost:3001",
+        receivingVerification: { verify },
+      },
+      { sink: () => {} },
+    );
+    const response = await api.request(
+      "/v1/sites/site-one/receiving/incoming-verification",
+      {
+        method: "POST",
+        headers: {
+          origin: "http://localhost:3001",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ confirmIncomingAccount: true }),
+      },
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ readiness });
+    expect(verify).toHaveBeenCalledWith({
+      siteId: "site-one",
+      userId: "holder-one",
+      sessionId: "session-one",
+    });
+  });
+
+  it("mounts receiving holder designation without leaking its private middleware to the webhook", async () => {
+    vi.spyOn(authHttp, "requireAdminSession").mockResolvedValue({
+      user: { id: "owner-one", role: "OWNER" },
+      session: { id: "owner-session" },
+    } as never);
+    const designate = vi.fn(async () => {});
+    const receive = vi.fn(async () => ({ accepted: true as const }));
+    const api = createApp(
+      {
+        auth: {} as never,
+        db: {} as never,
+        adminOrigin: "http://localhost:3001",
+        receivingSetup: { designate } as never,
+        asaasWebhook: { receive },
+      },
+      { sink: () => {} },
+    );
+    const response = await api.request("/v1/sites/site-one/receiving/holder", {
+      method: "POST",
+      headers: {
+        origin: "http://localhost:3001",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ holderUserId: "bride-one" }),
+    });
+    expect(response.status).toBe(204);
+    expect(designate).toHaveBeenCalledWith(
+      { userId: "owner-one", sessionId: "owner-session", siteId: "site-one" },
+      "bride-one",
+    );
+    const webhook = await api.request("/v1/webhooks/asaas", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "asaas-access-token": "a".repeat(32),
+      },
+      body: JSON.stringify({ id: "event-one" }),
+    });
+    expect(webhook.status).toBe(200);
+    expect(receive).toHaveBeenCalledOnce();
+  });
   it("forwards singleton media ports and separate read auth only to media routes", async () => {
     const standardAuth = { standard: true } as never;
     const readAuth = { readOnly: true } as never;

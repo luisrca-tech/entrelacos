@@ -46,7 +46,7 @@ export class WeddingGiftsApi {
   }: WeddingGiftsApiOptions) {
     this.apiOrigin = originSchema.parse(apiOrigin);
     this.siteId = siteIdSchema.parse(siteId);
-    this.fetcher = fetcher;
+    this.fetcher = (input, init) => fetcher(input, init);
     this.demo = demo;
   }
   private enforceDemoMode(mode: string) {

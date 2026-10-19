@@ -535,7 +535,6 @@ describe("gift media PostgreSQL inline service acceptance (separate execution gr
       currency: "BRL" as const,
       mediaAssetId: upload.upload.id,
       altText: "Gift image",
-      sortOrder: 0,
     };
     await expect(
       createSiteGift(connection.db, f.actor, f.siteId, input, f.options),

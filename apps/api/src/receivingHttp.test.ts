@@ -30,6 +30,25 @@ function request(
 }
 
 describe("receiving HTTP lock", () => {
+  it("allows native OWNER readiness consultation without a site membership", async () => {
+    mocks.requireAdminSession.mockResolvedValue({
+      user: { id: "owner-one", role: "OWNER" },
+      memberships: [],
+    });
+    mocks.resolveSiteAccess.mockResolvedValue({
+      siteId: "wedding-a",
+      userId: "owner-one",
+      membershipId: null,
+      membershipRole: "OWNER",
+    });
+    const response = await router().request(request());
+    expect(response.status).toBe(200);
+    expect(mocks.resolveSiteAccess).toHaveBeenCalledWith(expect.anything(), {
+      siteId: "wedding-a",
+      userId: "owner-one",
+      platformRole: "OWNER",
+    });
+  });
   beforeEach(() => {
     vi.resetAllMocks();
     mocks.requireAdminSession.mockResolvedValue({

@@ -7,8 +7,8 @@ import { loadGiftsReadiness } from "./giftsReadiness";
 import { panelActorOwner } from "./panelActor";
 import { ReceivingSectionView, readReceivingSection } from "./ReceivingSection";
 
-vi.mock("./ReceivingSetup", () => ({
-  ReceivingSetup: ({ sessionEpoch }: { sessionEpoch: number | null }) =>
+vi.mock("./ReceivingAccountSetup", () => ({
+  ReceivingAccountSetup: ({ sessionEpoch }: { sessionEpoch: number | null }) =>
     createElement("div", { "data-setup-epoch": sessionEpoch }),
 }));
 
@@ -156,6 +156,34 @@ describe("receiving asynchronous session ownership", () => {
   });
 });
 describe("receiving session boundary", () => {
+  it("withholds OWNER financial surfaces until selected-site access is returned by the server", () => {
+    const html = renderToStaticMarkup(
+      createElement(ReceivingSectionView, {
+        siteId: "wedding-1",
+        access: null,
+        sessionEpoch: 9,
+        platformOwner: true,
+        readiness: null,
+        failed: false,
+        onRetry: vi.fn(),
+      }),
+    );
+    expect(html).toContain("Consultando o acesso de leitura");
+    expect(html).not.toContain("data-finance-access");
+  });
+  it("lets the owner designate a holder without granting financial capabilities", () => {
+    const ownerAccess = {
+      ...access,
+      membershipRole: "OWNER" as const,
+      membershipId: null,
+      capabilities: {
+        ...access.capabilities,
+        configureReceiving: false,
+        readFinance: false,
+      },
+    };
+    expect(render(9, ownerAccess)).toContain('data-setup-epoch="9"');
+  });
   it("mounts onboarding only for a verified same-site configuring administrator", () => {
     expect(render(null)).not.toContain("data-setup-epoch");
     expect(render(9)).toContain('data-setup-epoch="9"');

@@ -182,6 +182,9 @@ export const receivingAccount = pgTable(
     credentialCiphertext: text("credential_ciphertext"),
     credentialTag: text("credential_tag"),
     webhookTokenHash: text("webhook_token_hash"),
+    webhookRegistration: jsonb("webhook_registration").$type<
+      Record<string, unknown>
+    >(),
     observedAt: timestamp("observed_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
@@ -259,6 +262,40 @@ export const receivingDestination = pgTable(
     check(
       "receiving_destination_mask_check",
       sql`${table.maskedDescriptor} IS NULL OR length(${table.maskedDescriptor}) <= 120`,
+    ),
+  ],
+);
+
+// External payout configuration does not establish an Asaas receiving bank or readiness.
+export const receivingPixDestination = pgTable(
+  "receiving_pix_destination",
+  {
+    ...scopedColumns(),
+    version: integer("version").notNull(),
+    state: text("state").notNull().default("PENDING"),
+    isCurrent: boolean("is_current").notNull().default(false),
+    pixConfiguration: jsonb("pix_configuration")
+      .$type<Record<string, unknown>>()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    unique("receiving_pix_destination_version_key").on(
+      table.siteId,
+      table.accountId,
+      table.environment,
+      table.version,
+    ),
+    uniqueIndex("receiving_pix_destination_current_idx")
+      .on(table.siteId, table.accountId, table.environment)
+      .where(sql`${table.isCurrent} = true`),
+    accountForeignKey(table, "receiving_pix_destination_account_fk"),
+    check("receiving_pix_destination_version_check", sql`${table.version} > 0`),
+    check(
+      "receiving_pix_destination_pending_check",
+      sql`${table.state} = 'PENDING'`,
     ),
   ],
 );
@@ -364,7 +401,17 @@ export const giftQuoteRecord = pgTable(
     ),
     check(
       "gift_quote_allocation_check",
-      sql`${table.totalCents}::bigint = ${table.nominalCents}::bigint + ${table.commissionCents}::bigint + ${table.processingCents}::bigint`,
+      sql`coalesce((
+        ((( ${table.snapshot} #> '{quote,feeAllocation}' IS NULL
+             AND ${table.snapshot} #> '{pricing,policy,feeAllocation}' IS NULL)
+           OR (${table.snapshot} #> '{quote,feeAllocation}' = '"BUYER_GROSS_UP"'::jsonb
+               AND ${table.snapshot} #> '{pricing,policy,feeAllocation}' = '"BUYER_GROSS_UP"'::jsonb))
+          AND ${table.totalCents}::bigint = ${table.nominalCents}::bigint + ${table.commissionCents}::bigint + ${table.processingCents}::bigint)
+        OR (${table.snapshot} #> '{quote,feeAllocation}' = '"RECIPIENT_DEDUCTED"'::jsonb
+            AND ${table.snapshot} #> '{pricing,policy,feeAllocation}' = '"RECIPIENT_DEDUCTED"'::jsonb
+            AND ${table.totalCents}::bigint = ${table.nominalCents}::bigint
+            AND ${table.totalCents}::bigint > ${table.commissionCents}::bigint + ${table.processingCents}::bigint)
+      ), false)`,
     ),
     check(
       "gift_quote_commission_check",
@@ -993,7 +1040,7 @@ export const financialEventInbox = pgTable(
     ),
     check(
       "financial_event_provider_reference_check",
-      sql`${table.providerEventReference} IS NULL OR (${table.providerEventReference} ~ '^[ -~]{1,256}$' AND length(trim(${table.providerEventReference})) > 0)`,
+      sql`${table.providerEventReference} IS NULL OR (${table.providerEventReference} ~ '^[ -~]+$' AND length(${table.providerEventReference}) BETWEEN 1 AND 256 AND length(trim(${table.providerEventReference})) > 0)`,
     ),
     check(
       "financial_event_type_check",
@@ -1151,3 +1198,57 @@ export const financialLedgerEntry = pgTable(
 );
 
 export type NewFinancialLedgerEntry = typeof financialLedgerEntry.$inferInsert;
+
+// Provider observations are append-only. Workflow state remains in financial_operation.
+export const withdrawalProviderObservation = pgTable(
+  "withdrawal_provider_observation",
+  {
+    id: text("id").primaryKey(),
+    siteId: text("site_id").notNull(),
+    accountId: text("account_id").notNull(),
+    environment: financialEnvironment("environment").notNull(),
+    operationId: text("operation_id").notNull(),
+    providerReference: text("provider_reference").notNull(),
+    payloadHash: text("payload_hash").notNull(),
+    payload: jsonb("payload").$type<Record<string, unknown>>().notNull(),
+    observedAt: timestamp("observed_at", { withTimezone: true }).notNull(),
+    recordedAt: timestamp("recorded_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    foreignKey({
+      name: "withdrawal_observation_operation_fk",
+      columns: [
+        table.siteId,
+        table.accountId,
+        table.environment,
+        table.operationId,
+      ],
+      foreignColumns: [
+        financialOperation.siteId,
+        financialOperation.accountId,
+        financialOperation.environment,
+        financialOperation.id,
+      ],
+    })
+      .onDelete("restrict")
+      .onUpdate("restrict"),
+    check(
+      "withdrawal_observation_hash_check",
+      sql`${table.payloadHash} ~ '^[a-f0-9]{64}$' AND ${table.id} = 'asaas-transfer:' || ${table.payloadHash}`,
+    ),
+    check(
+      "withdrawal_observation_payload_check",
+      sql`jsonb_typeof(${table.payload}) = 'object' AND octet_length(${table.payload}::text) <= 32768`,
+    ),
+    check(
+      "withdrawal_observation_time_check",
+      sql`${table.recordedAt} >= ${table.observedAt}`,
+    ),
+    check(
+      "withdrawal_observation_provider_check",
+      sql`${table.providerReference} ~ '^[A-Za-z0-9_-]{1,128}$'`,
+    ),
+  ],
+);

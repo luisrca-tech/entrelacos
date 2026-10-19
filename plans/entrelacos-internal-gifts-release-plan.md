@@ -6,6 +6,41 @@ Execution amendment, 2026-10-12: the user authorized local implementation from m
 
 Superseding execution amendment, 2026-10-14: the user approved reviewed release-branch commit/push and separate implementation worktrees. Source checkpoint `2a33c1b326c3496db64e9c825b86b596c4949632` is published; worktrees start from its coordination-only descendant `9777b823eacc66d93c58d3dd1eed78b3e0bd641e`. The principal integrates only into `release-gift-payment`, with exact A/B/C/D paths and authority in the coordination document. No main/development merge, PR, deploy, provider resources or live money is authorized. Read-only development configuration access is not indiscriminate migration authority.
 
+## Current internal checkpoint and remaining handoff — 2026-10-14 22:35 UTC
+
+Superseding local checkpoint, 2026-10-15 01:04 UTC: private one-page purchase-index CSV source is narrowly root-accepted in principal as LOCAL UNCOMMITTED; its two new files remain untracked and are NOT included in published746. The single updated integrated default NONDB invocation genuinely completed229/229 files and6253/6253 cases PASS/0 pending,577 nested suites NOT files, with full741 inputs/index/ref/current-document preservation. Evidence: root `integratedNonDb-20261015-0057/closure.md`. Prior6161/228 below is the pre-CSV checkpoint. A finite B READ-ONLY proposal for the existing panel connection is queued in current centrals; no UI source or publication is admitted. PURCHASE_INDEX_ONLY/META/max25/continuation/PER_READ/unknown does not claim full financial/native/atomic history or spreadsheet-save/reopen certification. Macro requirements, native/DB/provider/Astro/protected-browser gates and historical process limitations remain unchanged.
+
+The reviewed internal consolidation is published on `release-gift-payment` at `7462376940c3f8c10d48fe4099203fb1f80c9c16`, verified local and remote at21:51. Main/development remain unchanged; no deployment or real financial operation occurred. Subsequent coordination/handoff documentation is local and uncommitted, not part of those immutable published blobs. Current grants and evidence are authoritative in [coordination](internalGiftsCoordination.md) and [integration contract](internalGiftsIntegrationContract.md); the earlier baseline and G0–G7 sections below remain requirements/history, not current completion declarations.
+
+Published and integrated source provenance:
+
+| Work | Published feature checkpoint | Consolidation status |
+| --- | --- | --- |
+| Financial fee client/stored presentation | `cfb52e0` | Integrated; narrowly reviewed source acceptance |
+| Independent private nomination admission/repository | `a33ca463` | Integrated; private synthetic acceptance only |
+| Optional composition forwarding | `ea5e03a` | Integrated by exact local pick `101ce82`; private synthetic acceptance only |
+| Worker loop and tests | `5d5d8d9` | Integrated; worker has not been started |
+| Withdrawal execution/posting repository | `6c3d545` | Integrated; private synthetic source only, native dispatch/bank evidence unavailable |
+| Compatible admin receiving-test fixture | Root `7462376` | Accepted and published in the consolidated checkout; no production receiving change |
+
+Earlier access/catalog/media/public/history foundation remains part of published source `2a33c1`. All currently accepted source changes above are already integrated and published; they do not need another pick/push/review. Future code and runtime integration are separate, not implied by these source acceptances.
+
+Actual complete integrated NONDB validation:228/228 files and6161/6161 expanded cases passed,0 pending. Historical6135PASS/3FAIL is superseded at this NONDB boundary; it is not a current unresolved three-test result. Six direct TypeScript targets passed (API/admin and contracts/database/UI/wedding-features), not Astro framework coverage. Read-only repository Biome checked562 files with0 errors,117 warnings and1 info, no fixes/suppression/skips. Native reports and full-input preservation are retained in root evidence directories `integratedNonDb-20261014-2125`, `integratedStatic-20261014-2143` and `consolidationPublication-20261014-2147`.
+
+Remaining gates are explicit:
+
+- Astro/framework/build and public artifact privacy checks are unexecuted at this checkpoint. Static proposals identified real env/config/hooks, prerender and existing cache/output effects. A read-only/network-isolated partial diagnostic attempt stopped during native `/usr` bind setup before the isolation guard or any Astro import; a bounded original/classic-API mount diagnosis also failed. No partial diagnostic PASS or product defect is claimed. Host739 tracked files/index and existing output/cache trees were preserved. An appropriate isolated runner or separately approved execution boundary is required; no installation, privilege expansion or host fallback was performed. Evidence: `astroPartial-20261014-2229`.
+- Protected authenticated browser/R2/provider/native receiving and withdrawal flows remain unverified. Prior desktop/mobile public QA used fictional data only and is not reopened by this handoff.
+- DEV migrations and isolated TEST DB execution need verified DEV recovery/backup and explicit TEST identity/schema preparation. The corrected DEV DIRECT identity is no longer the old duplication/divergence blocker. The pending PostgreSQL-client/backup permission question is unchanged; no new connection, SQL or installation occurred.
+- Native holder/consent/custody/lock-through-COMMIT, provider-approved receiving/bank readiness, critical transfer approval/dispatch/terminal bank proof and runtime worker integration remain unavailable. Six retained A logical owners/one synthetic lock remain deliberately nonfinite; OS/test completion does not prove their logical/native settlement.
+- Refund/dispute/export/support/reconciliation/operations and the real pilot retain their unclosed macro acceptance requirements below. Existing private history/UI source must not be relabeled wholly missing or operationally complete without a separate exact acceptance.
+
+Real receiving, catalog configuration/images/publication and new checkout remain locked until authentic readiness. No public pricing/provider terms, mock consent or synthetic custody is production approval. Generated-index/documentation housekeeping has separate nominal ownership and is not proof of code, provider or release readiness.
+
+### Listening
+
+This additive handoff reconciles the published internal source and actual full regression with older planning snapshots, without marking unproved macro checkboxes complete. It preserves commercial/security requirements and names the failed isolation boundary instead of claiming an Astro failure or silently weakening env/output protection.
+
 Deliver an administrator-managed catalog of symbolic gifts, image uploads to Cloudflare R2, public presentation in the existing wedding design, and real Pix and credit-card payments through Asaas. Include a private financial dashboard with balances, history and customer-requested bank withdrawals through the panel. Each couple receives funds through its approved Asaas account, and EntreLaços receives its agreed commission through split. Receiving readiness must be established before the site's gift catalog can be configured or activated. The first release starts with internal gifts; external gift lists are deferred.
 
 ## Confirmed direction and remaining decisions

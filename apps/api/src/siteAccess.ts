@@ -84,7 +84,7 @@ function accessFromRow(
       manageMessages: true,
       manageCatalog: true,
       manageTeam: owner || siteAdmin,
-      readFinance: siteAdmin,
+      readFinance: owner || siteAdmin,
       configureReceiving: siteAdmin,
       // Withdrawal additionally requires designated-recipient and recent-auth evidence.
       requestWithdrawal: false,

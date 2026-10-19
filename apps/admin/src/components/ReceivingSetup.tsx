@@ -5,7 +5,7 @@ import {
   receivingNominationResponseSchema,
   type SiteAccess,
 } from "@entrelacos/contracts";
-import { Button } from "@entrelacos/ui";
+import { Button, showSandboxNotice } from "@entrelacos/ui";
 import { useLayoutEffect, useRef, useState } from "react";
 import { ApiError, apiRequest } from "../lib/apiClient";
 import {
@@ -425,7 +425,7 @@ export function ReceivingSetupView({
               nova confirmação está bloqueada.
             </p>
           )}
-          {context.mode === "sandbox" && <p>Ambiente de teste.</p>}
+          {showSandboxNotice(context.mode) && <p>Ambiente de teste.</p>}
         </>
       ) : (
         <p role={state.status === "loading" ? "status" : "alert"}>

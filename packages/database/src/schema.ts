@@ -1272,3 +1272,5 @@ export const adminAccessTokenRelations = relations(
 );
 
 export * from "./financialSchema";
+
+export { receivingSetupHolder } from "./receivingSetupSchema";

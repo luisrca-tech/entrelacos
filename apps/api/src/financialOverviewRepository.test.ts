@@ -7,6 +7,7 @@ import {
 } from "./financialOverview";
 import { createFinancialOverviewRepository } from "./financialOverviewRepository";
 import { giftReceivedEffectKey } from "./giftPaymentReconciliation";
+import { withdrawalCompletedEffectKey } from "./withdrawalExecution";
 
 type Row = Record<string, unknown>;
 const instant = new Date("2026-10-12T19:00:00.000Z");
@@ -368,6 +369,80 @@ async function denied(values: ReturnType<typeof fixture>) {
   });
 }
 describe("authoritative stored financial overview totals", () => {
+  it.each([
+    [99, 9940],
+    [0, 10039],
+  ])(
+    "reports actual provider fee %i and conserved recipient credit %i",
+    async (fee, net) => {
+      const values = fixture();
+      const rows = received(values);
+      rows.p.processing_cents = fee;
+      rows.p.recipient_net_cents = net;
+      rows.l.amount_cents = net;
+      const result = await values.repository.loadStoredTotals(values.binding);
+      expect(result?.totals).toMatchObject({
+        nominalReceivedCents: 10000,
+        netReceivedCents: net,
+        processingCents: fee,
+        commissionCents: 200,
+      });
+      expect(rows.q.processing_cents).toBe(39);
+    },
+  );
+  it.each(["RECEIVED", "CONFIRMED"])(
+    "reads recipient-deducted %s allocations without changing historical receipts",
+    async (status) => {
+      const values = fixture();
+      const rows = received(values, "new", status);
+      rows.q.nominal_cents = 1000;
+      rows.q.commission_cents = 20;
+      rows.q.processing_cents = 0;
+      rows.q.total_cents = 1000;
+      Object.assign(rows.q.snapshot as Row, {
+        quote: { feeAllocation: "RECIPIENT_DEDUCTED" },
+        pricing: { policy: { feeAllocation: "RECIPIENT_DEDUCTED" } },
+      });
+      Object.assign(rows.p, {
+        gross_cents: 1000,
+        processing_cents: 99,
+        commission_cents: status === "CONFIRMED" ? null : 20,
+        recipient_net_cents: 881,
+        split_fixed_cents: 20,
+      });
+      rows.l.amount_cents = 881;
+      received(values, "legacy");
+      const result = await values.repository.loadStoredTotals(values.binding);
+      expect(result?.totals).toMatchObject({
+        nominalReceivedCents: status === "RECEIVED" ? 11000 : 10000,
+        netReceivedCents: status === "RECEIVED" ? 10881 : 10000,
+        processingCents: status === "RECEIVED" ? 138 : 39,
+        commissionCents: status === "RECEIVED" ? 220 : 200,
+        awaitingReleaseCents: status === "CONFIRMED" ? 881 : 0,
+      });
+      expect(rows.q.processing_cents).toBe(0);
+    },
+  );
+  it.each([
+    ["RECIPIENT_DEDUCTED", undefined],
+    [undefined, "RECIPIENT_DEDUCTED"],
+    ["BUYER_GROSS_UP", undefined],
+    [undefined, "BUYER_GROSS_UP"],
+    ["UNKNOWN", "UNKNOWN"],
+    [null, null],
+    [1, 1],
+  ])(
+    "rejects mixed or unsupported quote allocation markers %#",
+    async (quote, policy) => {
+      const values = fixture();
+      const rows = received(values);
+      Object.assign(rows.q.snapshot as Row, {
+        quote: { feeAllocation: quote },
+        pricing: { policy: { feeAllocation: policy } },
+      });
+      await denied(values);
+    },
+  );
   it("returns actual zeros only for an authoritative bound empty repeatable-read snapshot", async () => {
     const values = fixture();
     expect(await values.repository.loadStoredTotals(values.binding)).toEqual({
@@ -502,10 +577,22 @@ describe("authoritative stored financial overview totals", () => {
       (await values.repository.loadStoredTotals(values.binding))?.totals,
     ).toEqual({ ...zeros, awaitingReleaseCents: rows.p.recipient_net_cents });
   });
+
+  it("keeps an observed confirmed allocation awaiting release before the configured commission settles", async () => {
+    const values = fixture();
+    const rows = received(values, "one", "CONFIRMED");
+    rows.p.commission_cents = null;
+    values.tables.events.length = 0;
+    const totals = await values.repository.loadStoredTotals(values.binding);
+    expect(totals?.totals).toMatchObject({
+      awaitingReleaseCents: 10000,
+      nominalReceivedCents: 0,
+      commissionCents: 0,
+    });
+  });
   it.each([
     "recipient_net_cents",
     "processing_cents",
-    "commission_cents",
     "gross_cents",
     "split_fixed_cents",
   ])("fails closed on unknown confirmed actual %s", async (field) => {
@@ -1131,5 +1218,84 @@ describe("stored balance consistency after the provider GET", () => {
       balanceObservedAt: instant,
     });
     expect(bound).toEqual(instant);
+  });
+});
+
+it("counts an immutable provider-proven withdrawal actual debit and releases its unused maximum", async () => {
+  const f = fixture();
+  const w = hold(f, "COMPLETED");
+  Object.assign(w, {
+    reservation_state: "CONSUMED",
+    reserved_cents: 0,
+    provider_reference: "transfer-1",
+    receipt_reference: "proof-1",
+    resolution_observed_at: new Date("2026-10-12T18:58:00.000Z"),
+  });
+  f.tables.operations.push({
+    ...f.scope,
+    id: "operation-w",
+    kind: "WITHDRAWAL",
+    state: "SUCCEEDED",
+    order_id: null,
+    payment_id: null,
+    withdrawal_intent_id: w.id,
+    provider_operation_reference: "transfer-1",
+    created_at: w.created_at,
+    updated_at: w.updated_at,
+  });
+  f.tables.ledgers.push({
+    ...f.scope,
+    id: "ledger-w",
+    effect_key: withdrawalCompletedEffectKey({
+      siteId: f.binding.siteId,
+      accountId: f.binding.accountBindingId,
+      environment: f.binding.environment,
+      withdrawalId: String(w.id),
+      operationId: "operation-w",
+    }),
+    kind: "WITHDRAWAL_COMPLETED",
+    direction: "DEBIT",
+    currency: "BRL",
+    amount_cents: 4900,
+    payment_id: null,
+    withdrawal_intent_id: w.id,
+    operation_id: "operation-w",
+    event_id: null,
+    compensates_entry_id: null,
+    created_at: w.updated_at,
+  });
+  const proof = {
+    outcome: "COMPLETED",
+    custody: "immutable-durable",
+    verification: "verified",
+    provenance: "provider",
+    bankCompleted: true,
+    currency: "BRL",
+    proofReference: "proof-1",
+    receiptReference: "proof-1",
+    providerReference: "transfer-1",
+    totalDebitCents: 4900,
+    feeCents: 0,
+    netCents: 4900,
+    correlation: {
+      siteId: f.binding.siteId,
+      accountId: f.binding.accountBindingId,
+      environment: f.binding.environment,
+      withdrawalId: w.id,
+      operationId: "operation-w",
+      amountCents: 5000,
+      feeCents: 100,
+      netCents: 4900,
+    },
+    observedAt: "2026-10-12T18:58:00.000Z",
+    recordedAt: "2026-10-12T18:58:00.000Z",
+  };
+  const repository = createFinancialOverviewRepository(f.db, {
+    ...f.options,
+    loadWithdrawalCompletionProofInTransaction: async () => proof as never,
+  });
+  expect((await repository.loadStoredTotals(f.binding))?.totals).toMatchObject({
+    withdrawnCents: 4900,
+    pendingCommitmentsCents: 0,
   });
 });

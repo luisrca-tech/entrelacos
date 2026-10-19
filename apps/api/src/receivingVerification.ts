@@ -126,6 +126,8 @@ export interface ReceivingVerificationOptions {
   readonly observer: ReceivingVerificationObserver;
   readonly repository: ReceivingVerificationRepository;
   readonly now: () => Date;
+  // Only the original own-account setup composition enables receiving-only sessions.
+  readonly setupSessionSelection?: boolean;
 }
 export type ReceivingVerificationCommand =
   | {
@@ -386,6 +388,7 @@ export function prepareReceivingVerificationObservation(
 function capturedAuthorization(
   value: unknown,
   scope: ReceivingVerificationScope,
+  setupSessionSelection = false,
 ): ReceivingVerificationAuthorization {
   const data = receivingVerificationData(value, ["actor", "recentAuth"]);
   const actorData = receivingVerificationData(data.actor, [
@@ -417,7 +420,11 @@ function capturedAuthorization(
     proofData.provenance !== "backend" ||
     proofData.verification !== "verified" ||
     (proofData.proofKind !== "PASSWORD_REAUTHENTICATION" &&
-      proofData.proofKind !== "MFA_REAUTHENTICATION")
+      proofData.proofKind !== "MFA_REAUTHENTICATION" &&
+      !(
+        setupSessionSelection &&
+        proofData.proofKind === "SESSION_AUTHENTICATION"
+      ))
   )
     return unavailable();
   return Object.freeze({
@@ -464,7 +471,9 @@ export function createReceivingVerification(
   let observer: ReceivingVerificationObserver;
   let policy: ReceivingVerificationOptions["readObserverPolicy"];
   let now: () => Date;
+  let setupSessionSelection = false;
   try {
+    setupSessionSelection = options?.setupSessionSelection === true;
     if (options?.profile !== "rv1") return inactive();
     const readPolicy = options.readObserverPolicy;
     if (typeof readPolicy !== "function") return inactive();
@@ -583,7 +592,11 @@ export function createReceivingVerification(
               : undefined;
           const authorization =
             action === "SELECT"
-              ? capturedAuthorization(data.authorization, scope)
+              ? capturedAuthorization(
+                  data.authorization,
+                  scope,
+                  setupSessionSelection,
+                )
               : undefined;
           if (action === "SELECT" && data.confirmDestinationSelection !== true)
             return unavailable();

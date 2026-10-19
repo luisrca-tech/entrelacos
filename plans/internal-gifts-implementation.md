@@ -2,6 +2,22 @@
 
 > Source PRD: Internal Gifts and Couple Finance, prepared 2026-10-12. The Internal Gifts Asaas Release Plan remains the detailed financial/security reference.
 
+## Current execution handoff — 2026-10-14 22:35 UTC
+
+Superseding local checkpoint, 2026-10-15 01:04 UTC: private purchase-index CSV source is root-accepted LOCAL UNCOMMITTED/new2untracked, not published746 or fullG5. One actual updated integrated default NONDB process finished229 files/6253 cases PASS/0 pending,577 nested suites NOTfiles; full741 source/docs/index/ref preserved in `integratedNonDb-20261015-0057/closure.md`. Previous6161/228 below is pre-CSV history. Existing-panel connection remains a finite B READ-ONLY/OWNstatus proposal in current centrals, not a source/check grant. One-page PURCHASE_INDEX_ONLY/max25/continuation/PER_READ/unknown is not complete financial/native/atomic history, spreadsheet certification or money readiness. All original macro checkboxes and external/framework/DB/native gates remain unchanged.
+
+Published internal consolidation: `release-gift-payment/7462376940c3f8c10d48fe4099203fb1f80c9c16`, independently verified local/fresh remote21:51. Reviewed A fee/nomination/composition, C worker and D withdrawal source are already integrated; the compatible B receiving-test fixture is accepted and included in this publication. There is no pending pick/integration of these accepted source units. Later central and handoff documentation remains local/uncommitted; main/development/PR/deploy are untouched. Exact ownership/grants and native evidence remain in [coordination](internalGiftsCoordination.md), [integration contract](internalGiftsIntegrationContract.md) and the [release-plan current checkpoint](entrelacos-internal-gifts-release-plan.md).
+
+Actual full NONDB checkpoint:228 files/6161 expanded cases passed/0 pending, superseding historical three failures only at that boundary. Six direct TypeScript targets passed, excluding Astro framework claims. Repository Biome562 files/0 errors/117 warnings/1 info, unchanged rules/no fixes. These accept an internal source/static checkpoint, not any complete macro phase below or runtime/financial readiness; original phase checkboxes remain unchanged.
+
+Remaining available-QA boundary: Astro check/build must account for env/config/hooks/prerender and preserve existing generated outputs. Root's isolated partial diagnostics stopped at native `/usr` bind setup before guard/Astro import, and one bounded documented API variant did not resolve that infrastructure failure. No actual Astro result, skip waiver or product bug is claimed; source/index/output trees remained unchanged. A suitable isolated runner or separately approved execution boundary is needed; no host fallback/install/escalation.
+
+Protected browser/R2/native provider/receiving/custody/COMMIT/worker startup/critical withdrawal dispatch/bank proof remain distinct unverified gates. DEV migration recovery/backup and TEST identity/schema preparation are pending; corrected DEV DIRECT mismatch is resolved, and no new SQL/client installation occurred. Six retained A logical owners and a lock remain nonfinite. Refund/dispute/export/support/reconciliation/operations and pilot acceptance below remain open; existing private history/UI source is not a native-operation acceptance. Real catalog/images/publication/new checkout stay locked by readiness.
+
+### Listening
+
+The published internal checkpoint closes accepted-source integration and the full local NONDB/direct-static gate, not framework, physical DB, operational or real-money phases. Keep that distinction visible while handing off the actual isolation/access boundaries; do not regenerate accepted code or mark unchecked macro requirements complete.
+
 ## Architectural decisions
 
 - **Execution:** principal integration stays on `release-gift-payment`; A/B and the exact C/D grants use separate registered worktrees from checkpoint `9777b823eacc66d93c58d3dd1eed78b3e0bd641e`, a coordination-only descendant of source `2a33c1b326c3496db64e9c825b86b596c4949632`. `internalGiftsCoordination.md` owns exact paths, identities and leases; main/development/PR/deploy are excluded.

@@ -2,6 +2,7 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import {
   checkoutResultSchema,
+  giftCentsSchema,
   giftQuoteSchema,
   publicGiftItemSchema,
 } from "@entrelacos/contracts";
@@ -20,6 +21,7 @@ import {
   receivingVerificationEvidence,
 } from "@entrelacos/database/schema";
 import { sql } from "drizzle-orm";
+import { hashAsaasEventIdentity } from "./asaasWebhook";
 import {
   compareDatabaseTimestamps,
   readDatabaseTimestamp,
@@ -600,6 +602,124 @@ async function readRecord(
   };
   const payment = paymentRows[0];
   const ledger = ledgerRows[0];
+  const actualProcessing = giftCentsSchema.safeParse(payment?.processingCents);
+  const recipientNet = giftCentsSchema.safeParse(payment?.recipientNetCents);
+  if (
+    paymentRows.length === 1 &&
+    ledgerRows.length === 0 &&
+    row.method === "CREDIT_CARD" &&
+    payment &&
+    payment.attemptId === attempt.attemptId &&
+    nonempty(payment.providerPaymentReference) &&
+    payment.providerStatus === "CONFIRMED" &&
+    payment.verificationStatus === "VERIFIED" &&
+    validTime(payment.observedAt) &&
+    payment.currency === row.currency &&
+    payment.grossCents === row.totalCents &&
+    actualProcessing.success &&
+    recipientNet.success &&
+    recipientNet.data > 0 &&
+    BigInt(row.totalCents) ===
+      BigInt(actualProcessing.data) +
+        BigInt(row.commissionCents) +
+        BigInt(recipientNet.data) &&
+    payment.commissionCents === null &&
+    payment.splitFixedCents === row.commissionCents &&
+    (row.commissionCents === 0 || nonempty(payment.splitProviderReference))
+  ) {
+    const events =
+      await tx.execute(sql`SELECT e.id, e.site_id AS "siteId", e.account_id AS "accountId", e.environment,
+      e.payment_id AS "paymentId", e.event_type AS "eventType", e.state, e.payload, e.payload_hash AS "payloadHash",
+      e.provider_event_reference AS "providerEventReference", e.authenticated_at AS "authenticatedAt",
+      e.received_at AS "receivedAt", e.processed_at AS "processedAt"
+      FROM ${financialEventInbox} e WHERE e.site_id = ${siteId} AND e.account_id = ${row.accountId} AND e.environment = ${row.environment}
+        AND (starts_with(e.event_type, 'PAYMENT_') OR starts_with(e.event_type, 'CHECKOUT_'))
+        AND (e.payment_id = ${payment.id} OR e.payload->>'paymentId' = ${payment.providerPaymentReference}
+          OR e.payload->>'externalReference' = ${attempt.attemptId} OR e.payload->>'checkoutId' = ${attempt.providerReference})`);
+    let confirmation: {
+      eventId: string;
+      providerEventReference: string;
+    } | null = null;
+    for (const event of events.rows) {
+      const payload = event.payload as Record<string, string> | null;
+      const authenticated =
+        event.authenticatedAt === null
+          ? null
+          : readDatabaseTimestamp(event.authenticatedAt);
+      const received =
+        event.receivedAt === null
+          ? null
+          : readDatabaseTimestamp(event.receivedAt);
+      const processed =
+        event.processedAt === null
+          ? null
+          : readDatabaseTimestamp(event.processedAt);
+      if (
+        !scoped(event as unknown as GiftCheckoutAccountScope, row) ||
+        !["PAYMENT_CONFIRMED", "CHECKOUT_CREATED", "CHECKOUT_PAID"].includes(
+          String(event.eventType),
+        ) ||
+        event.state !== "PROCESSED" ||
+        !giftQuoteSchema.shape.siteId.safeParse(event.id).success ||
+        !nonempty(event.providerEventReference) ||
+        !payload ||
+        typeof payload !== "object" ||
+        Array.isArray(payload) ||
+        (payload.externalReference !== undefined &&
+          payload.externalReference !== attempt.attemptId) ||
+        (payload.checkoutId !== undefined &&
+          payload.checkoutId !== attempt.providerReference) ||
+        (payload.paymentId !== undefined &&
+          payload.paymentId !== payment.providerPaymentReference) ||
+        Object.entries(payload).some(
+          ([key, value]) =>
+            !["paymentId", "checkoutId", "externalReference"].includes(key) ||
+            !nonempty(value),
+        ) ||
+        event.payloadHash !==
+          hashAsaasEventIdentity(
+            event.providerEventReference,
+            String(event.eventType),
+            quoteSnapshot.receiving.accountReference,
+            payload,
+          ) ||
+        !validTime(authenticated) ||
+        !validTime(received) ||
+        !validTime(processed) ||
+        compareDatabaseTimestamps(authenticated, received) < 0 ||
+        compareDatabaseTimestamps(processed, authenticated) < 0
+      )
+        return record;
+      if (event.eventType === "PAYMENT_CONFIRMED") {
+        if (
+          confirmation ||
+          event.paymentId !== payment.id ||
+          payload.paymentId !== payment.providerPaymentReference ||
+          compareDatabaseTimestamps(payment.observedAt, authenticated) < 0 ||
+          compareDatabaseTimestamps(payment.observedAt, processed) > 0
+        )
+          return record;
+        confirmation = {
+          eventId: event.id as string,
+          providerEventReference: event.providerEventReference,
+        };
+      } else if (payload.checkoutId !== attempt.providerReference)
+        return record;
+    }
+    if (confirmation)
+      return {
+        ...record,
+        state: "CONFIRMED",
+        observedAt: instant(payment.observedAt),
+        evidence: {
+          ...evidence,
+          kind: "PAYMENT_CONFIRMATION",
+          observedAt: instant(payment.observedAt),
+          providerPaymentReference: payment.providerPaymentReference,
+          ...confirmation,
+        },
+      };
+  }
   if (
     paymentRows.length === 1 &&
     ledgerRows.length === 1 &&
@@ -612,16 +732,21 @@ async function readRecord(
     validTime(payment.observedAt) &&
     payment.currency === row.currency &&
     payment.grossCents === row.totalCents &&
-    payment.processingCents === row.processingCents &&
+    actualProcessing.success &&
+    recipientNet.success &&
+    recipientNet.data > 0 &&
+    BigInt(row.totalCents) ===
+      BigInt(actualProcessing.data) +
+        BigInt(row.commissionCents) +
+        BigInt(recipientNet.data) &&
     payment.commissionCents === row.commissionCents &&
-    payment.recipientNetCents === row.nominalCents &&
     payment.splitFixedCents === row.commissionCents &&
     (row.commissionCents === 0 || nonempty(payment.splitProviderReference)) &&
     ledger.paymentId === payment.id &&
     ledger.kind === "GIFT_RECEIVED" &&
     ledger.direction === "CREDIT" &&
     ledger.currency === row.currency &&
-    ledger.amountCents === row.nominalCents &&
+    ledger.amountCents === recipientNet.data &&
     ledger.effectKey ===
       giftReceivedEffectKey(payment.providerPaymentReference) &&
     ledger.compensatesEntryId === null &&
@@ -677,6 +802,81 @@ async function readRecord(
         },
       };
   }
+  const lifecycle =
+    await tx.execute(sql`SELECT e.id, e.site_id AS "siteId", e.account_id AS "accountId", e.environment,
+    e.event_type AS "eventType", e.state, e.payload, e.payload_hash AS "payloadHash", e.provider_event_reference AS "providerEventReference",
+    e.authenticated_at AS "authenticatedAt", e.received_at AS "receivedAt", e.processed_at AS "processedAt", e.last_error_code AS "lastErrorCode"
+    FROM ${financialEventInbox} e WHERE e.site_id = ${siteId} AND e.account_id = ${row.accountId} AND e.environment = ${row.environment}
+      AND e.state = 'PROCESSED' AND e.event_type IN ('CHECKOUT_PAID','CHECKOUT_CANCELED','CHECKOUT_EXPIRED')
+      AND e.payload->>'checkoutId' = ${attempt.providerReference} ORDER BY e.processed_at DESC, e.id`);
+  let closed:
+    | { reason: "CANCELED" | "EXPIRED"; observedAt: string }
+    | undefined;
+  for (const event of lifecycle.rows) {
+    if (
+      !["CHECKOUT_PAID", "CHECKOUT_CANCELED", "CHECKOUT_EXPIRED"].includes(
+        String(event.eventType),
+      )
+    )
+      continue;
+    const payload = event.payload as Record<string, string> | null;
+    const date = (value: unknown) => {
+      try {
+        return readDatabaseTimestamp(value);
+      } catch {
+        return null;
+      }
+    };
+    const authenticated = date(event.authenticatedAt);
+    const received = date(event.receivedAt);
+    const processed = date(event.processedAt);
+    if (
+      !scoped(event as unknown as GiftCheckoutAccountScope, row) ||
+      event.state !== "PROCESSED" ||
+      !payload ||
+      payload.checkoutId !== attempt.providerReference ||
+      (payload.externalReference !== undefined &&
+        payload.externalReference !== attempt.attemptId) ||
+      Object.entries(payload).some(
+        ([key, value]) =>
+          !["checkoutId", "externalReference"].includes(key) ||
+          !nonempty(value),
+      ) ||
+      typeof event.providerEventReference !== "string" ||
+      event.payloadHash !==
+        hashAsaasEventIdentity(
+          event.providerEventReference,
+          String(event.eventType),
+          quoteSnapshot.receiving.accountReference,
+          payload,
+        ) ||
+      !validTime(authenticated) ||
+      !validTime(received) ||
+      !validTime(processed) ||
+      compareDatabaseTimestamps(authenticated, received) < 0 ||
+      compareDatabaseTimestamps(processed, authenticated) < 0
+    )
+      return record;
+    if (event.eventType === "CHECKOUT_PAID") return record;
+    const reason =
+      event.eventType === "CHECKOUT_CANCELED" ? "CANCELED" : "EXPIRED";
+    if (event.lastErrorCode === `${event.eventType}_EMPTY` && !closed)
+      closed = { reason, observedAt: instant(processed) };
+  }
+  if (closed && paymentRows.length === 0 && ledgerRows.length === 0)
+    return {
+      ...record,
+      state: "CLOSED_UNPAID",
+      closedReason: closed.reason,
+      observedAt: closed.observedAt,
+      evidence: {
+        ...evidence,
+        kind: "CLOSED_UNPAID",
+        observedAt: closed.observedAt,
+        noOutstandingPayment: true,
+        closedReason: closed.reason,
+      },
+    };
   if (
     ledgerRows.length === 0 &&
     (paymentRows.length === 0 ||

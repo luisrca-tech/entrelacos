@@ -99,6 +99,58 @@ describe("gift media runtime configuration", () => {
     });
   });
 
+  it.each(["development", "test"] as const)(
+    "allows the development R2 public endpoint only with explicit %s application scope",
+    (target) => {
+      expect(
+        readGiftMediaConfig(
+          {
+            ...configured,
+            R2_PUBLIC_ORIGIN: "https://pub-development.r2.dev/",
+          },
+          target,
+        ),
+      ).toMatchObject({ publicOrigin: "https://pub-development.r2.dev" });
+    },
+  );
+
+  it.each([undefined, "production"] as const)(
+    "retains the production R2 endpoint policy for %s application scope",
+    (target) => {
+      expect(() =>
+        readGiftMediaConfig(
+          {
+            ...configured,
+            APP_ENV: "development",
+            R2_PUBLIC_ORIGIN: "https://pub-development.r2.dev",
+          },
+          target,
+        ),
+      ).toThrow("Gift media configuration is invalid");
+    },
+  );
+
+  it.each([
+    "https://r2.dev",
+    "https://pub-development.r2.dev.",
+    "http://pub-development.r2.dev",
+    "https://pub-development.r2.dev/path",
+    "https://pub-development.r2.cloudflarestorage.com",
+  ])(
+    "keeps rejecting unsafe R2 delivery settings in development (%s)",
+    (publicOrigin) => {
+      expect(() =>
+        readGiftMediaConfig(
+          {
+            ...configured,
+            R2_PUBLIC_ORIGIN: publicOrigin,
+          },
+          "development",
+        ),
+      ).toThrow("Gift media configuration is invalid");
+    },
+  );
+
   it.each([
     { GIFT_MEDIA_MODE: "fake" },
     { R2_ACCOUNT_ID: "account/other" },

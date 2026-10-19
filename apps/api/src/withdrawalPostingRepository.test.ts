@@ -20,7 +20,7 @@ import {
   readWithdrawalConsentSnapshot,
 } from "./withdrawalReservations";
 
-function fixture() {
+function fixture(maximum = false) {
   const time = new Date("2026-10-14T04:00:00.000Z");
   const sqlClock = { value: time.toISOString() };
   const actor = {
@@ -33,6 +33,7 @@ function fixture() {
     siteId: actor.siteId,
     amountCents: 10000,
     feeCents: 500,
+    ...(maximum ? { feeSemantics: "MAXIMUM" as const } : {}),
     netCents: 9500,
     currency: "BRL" as const,
     destinationVersion: 3,
@@ -43,6 +44,7 @@ function fixture() {
   };
   const feeQuote = {
     feeCents: 500,
+    ...(maximum ? { feeSemantics: "MAXIMUM" as const } : {}),
     policyVersion: "fee-v1",
     provenance: "provider" as const,
     observedAt: time.toISOString(),
@@ -108,6 +110,7 @@ function fixture() {
       mode: "sandbox",
       amountCents: 10000,
       feeCents: 500,
+      ...(maximum ? { feeSemantics: "MAXIMUM" as const } : {}),
       netCents: 9500,
       currency: "BRL",
       destinationVersion: 3,
@@ -442,7 +445,7 @@ function fixture() {
       fields.forEach((field, index) => {
         const raw = values[index].trim();
         row[field] = raw.startsWith("$")
-          ? params[Number(raw.match(/^\$(\d+)/)![1]) - 1]
+          ? params[Number(raw.match(/^\$(\d+)/)?.[1]) - 1]
           : raw === "NULL"
             ? null
             : raw.startsWith("'")
@@ -1631,4 +1634,33 @@ describe("withdrawal repository configuration capture amendment", () => {
     expect(f.db.transaction).toHaveBeenCalledTimes(1);
     expect(f.tables.financial_operation[0].attempts).toBe(0);
   });
+});
+
+describe("maximum approved withdrawal budget settlement", () => {
+  it("posts only actual debit and consumes the held budget without rewriting consent", async () => {
+    const f = fixture(true);
+    const armed = await f.arm();
+    const original = structuredClone(armed.original);
+    const proof = f.makeProof(armed);
+    proof.totalDebitCents = 9500;
+    proof.feeCents = 0;
+    const completed = await f.repository.postCompleted(
+      armed.original,
+      armed.fence,
+      proof.proofReference,
+    );
+    expect(completed.outcome).toBe("COMPLETED");
+    expect(f.tables.financial_ledger_entry[0].amountCents).toBe(9500);
+    expect(completed).toMatchObject({
+      stored: { reservedCents: 0, reservationState: "CONSUMED" },
+    });
+    expect(armed.original).toEqual(original);
+  });
+});
+
+it("never gives dispatch a lease beyond the accepted recent-auth validity", async () => {
+  const f = fixture();
+  f.attempt.recentAuth.expiresAt = new Date(+f.time + 1000);
+  const armed = await f.arm();
+  expect(Date.parse(armed.fence.leaseExpiresAt)).toBe(+f.time + 1000);
 });

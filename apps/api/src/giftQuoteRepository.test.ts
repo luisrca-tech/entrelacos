@@ -167,6 +167,26 @@ describe("immutable stored gift quote append", () => {
     );
   });
 
+  it("persists recipient-deducted money and both allocation markers unchanged", async () => {
+    const values = fixture();
+    const input = snapshot();
+    input.quote.feeAllocation = "RECIPIENT_DEDUCTED";
+    input.pricing.policy.feeAllocation = "RECIPIENT_DEDUCTED";
+    input.quote.processingCents = 99;
+    input.quote.totalCents = input.quote.nominalCents;
+    input.pricing.policy.processingFixedCents = 99;
+    await values.repository.append(input);
+    const insert = values.queries.find((entry) =>
+      entry.sql.startsWith('insert into "gift_quote_record"'),
+    );
+    const frozen = insert?.params.find(
+      (value) => typeof value === "string" && value.startsWith('{"quote"'),
+    );
+    expect(JSON.parse(frozen as string)).toEqual(input);
+    expect(insert?.params).toContain(99);
+    expect(values.queries.at(-1)?.sql).toBe("commit");
+  });
+
   it.each([
     ["accountReference", "foreign"],
     ["recipientReference", "foreign"],

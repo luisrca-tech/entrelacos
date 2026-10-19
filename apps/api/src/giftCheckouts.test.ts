@@ -11,6 +11,7 @@ import {
   type GiftCheckoutServiceDependencies,
   GiftCheckoutServiceError,
   type GiftHostedCheckout,
+  readGiftQuoteSnapshot,
 } from "./giftCheckouts";
 import type {
   GiftQuoteReceivingContext,
@@ -252,6 +253,33 @@ function fixture() {
   };
   return { dependencies, snapshot, context, gift, records, key };
 }
+
+describe("quote fee allocation compatibility", () => {
+  it("preserves historical unmarked snapshots without adding a new policy", () => {
+    const { snapshot } = fixture();
+    expect(readGiftQuoteSnapshot(snapshot)).toEqual(snapshot);
+    expect(snapshot.quote.totalCents).toBe(10200);
+  });
+
+  it("retains recipient deductions and rejects mixed or missing allocation markers", () => {
+    const { snapshot } = fixture();
+    Object.assign(snapshot.quote, {
+      totalCents: 10000,
+      feeAllocation: "RECIPIENT_DEDUCTED",
+    });
+    snapshot.pricing.policy.feeAllocation = "RECIPIENT_DEDUCTED";
+    expect(readGiftQuoteSnapshot(snapshot)).toEqual(snapshot);
+    const mixed = structuredClone(snapshot);
+    delete mixed.pricing.policy.feeAllocation;
+    expect(() => readGiftQuoteSnapshot(mixed)).toThrow();
+    const missing = structuredClone(snapshot);
+    delete missing.quote.feeAllocation;
+    expect(() => readGiftQuoteSnapshot(missing)).toThrow();
+    const inconsistent = structuredClone(snapshot);
+    inconsistent.quote.processingCents = 99;
+    expect(() => readGiftQuoteSnapshot(inconsistent)).toThrow();
+  });
+});
 
 describe("durable gift checkout orchestration", () => {
   it("reserves immutable identities and only a capability hash before hosting", async () => {
@@ -815,7 +843,7 @@ describe("durable gift checkout orchestration", () => {
     },
   );
 
-  it.each(["RECEIVED", "CLOSED_UNPAID", "REFUNDED"] as const)(
+  it.each(["CONFIRMED", "RECEIVED", "CLOSED_UNPAID", "REFUNDED"] as const)(
     "does not trust %s without durable terminal evidence",
     async (state) => {
       const values = fixture();
@@ -841,7 +869,12 @@ describe("durable gift checkout orchestration", () => {
     },
   );
 
-  it.each(["SETTLEMENT", "CLOSED_UNPAID", "REFUND"] as const)(
+  it.each([
+    "PAYMENT_CONFIRMATION",
+    "SETTLEMENT",
+    "CLOSED_UNPAID",
+    "REFUND",
+  ] as const)(
     "projects recorded %s evidence and never rehosts the same request",
     async (kind) => {
       const values = fixture();
@@ -854,17 +887,21 @@ describe("durable gift checkout orchestration", () => {
         ...required(record.evidence),
         kind,
         providerPaymentReference: "payment-private",
+        providerEventReference: "event-private",
+        eventId: "event-one",
         providerRefundReference: "refund-private",
         ledgerEntryId: "ledger-one",
         noOutstandingPayment: true,
         closedReason: "EXPIRED",
       } as GiftCheckoutEvidence;
       const state =
-        kind === "SETTLEMENT"
-          ? "RECEIVED"
-          : kind === "REFUND"
-            ? "REFUNDED"
-            : "CLOSED_UNPAID";
+        kind === "PAYMENT_CONFIRMATION"
+          ? "CONFIRMED"
+          : kind === "SETTLEMENT"
+            ? "RECEIVED"
+            : kind === "REFUND"
+              ? "REFUNDED"
+              : "CLOSED_UNPAID";
       values.records.set(values.key("site-one", body.requestId), {
         ...record,
         state,
@@ -900,6 +937,43 @@ describe("durable gift checkout orchestration", () => {
       code: "EXTERNAL_OUTCOME_UNKNOWN",
     });
   });
+
+  it.each([
+    { kind: "HOSTED_CHECKOUT" },
+    { providerPaymentReference: "" },
+    { providerEventReference: "" },
+    { eventId: "" },
+    { accountReference: "foreign-account" },
+    { attemptId: "foreign-attempt" },
+    { observedAt: "2026-10-12T12:00:00.000Z" },
+  ])(
+    "rejects incomplete or unbound card confirmation proof %o",
+    async (override) => {
+      const values = fixture();
+      const service = createGiftCheckoutService(values.dependencies);
+      await service.createCheckout("site-one", body);
+      const record = required(
+        values.records.get(values.key("site-one", body.requestId)),
+      );
+      values.records.set(values.key("site-one", body.requestId), {
+        ...record,
+        state: "CONFIRMED",
+        checkout: null,
+        evidence: {
+          ...required(record.evidence),
+          kind: "PAYMENT_CONFIRMATION",
+          providerPaymentReference: "payment-private",
+          providerEventReference: "event-private",
+          eventId: "event-one",
+          ...override,
+        } as GiftCheckoutEvidence,
+      });
+      await expect(service.getStatus("site-one", body)).rejects.toMatchObject({
+        code: "EXTERNAL_OUTCOME_UNKNOWN",
+      });
+      expect(values.dependencies.createHostedCheckout).toHaveBeenCalledTimes(1);
+    },
+  );
 
   it("sanitizes repository failures without exposing raw error causes", async () => {
     const values = fixture();

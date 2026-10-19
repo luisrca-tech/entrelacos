@@ -124,7 +124,11 @@ function fixture(rawTimestamps = false) {
           e.lease_token !== parameter("lease_token") ||
           e.attempts !== parameter("attempts") ||
           e.state !== "CLAIMED" ||
-          e.event_type !== "PAYMENT_RECEIVED" ||
+          !(
+            e.event_type === "PAYMENT_RECEIVED" ||
+            (e.event_type === "PAYMENT_CONFIRMED" &&
+              sql.includes("PAYMENT_CONFIRMED"))
+          ) ||
           !(e.authenticated_at instanceof Date) ||
           e.authenticated_at > now ||
           !(e.received_at instanceof Date) ||
@@ -151,6 +155,14 @@ function fixture(rawTimestamps = false) {
                 sameScope(a, e) &&
                 (a.id === payload?.externalReference ||
                   a.provider_reference === payload?.checkoutId ||
+                  (sql.match(/a\.provider_reference=\$(\d+)/)?.[1] !==
+                    undefined &&
+                    a.provider_reference ===
+                      params[
+                        Number(
+                          sql.match(/a\.provider_reference=\$(\d+)/)?.[1],
+                        ) - 1
+                      ]) ||
                   (p && a.id === p.attempt_id && a.order_id === p.order_id)),
             );
             for (const a of candidates.length ? candidates : [null]) {
@@ -288,6 +300,64 @@ function storedPayment(
 }
 
 describe("durable payment checkout lookup", () => {
+  it("resolves payment-only correlation from a server-observed checkout session", async () => {
+    const values = fixture();
+    values.event.payload = { paymentId: "pay_one" };
+    values.rehash();
+    expect(
+      await values.lookup.loadCheckout(values.claim, "checkout_one"),
+    ).toEqual(values.binding);
+    expect(values.queries[0].params).toContain("checkout_one");
+  });
+
+  it("does not resolve a server-observed session from another account", async () => {
+    const values = fixture();
+    values.event.payload = { paymentId: "pay_one" };
+    values.rehash();
+    values.attempt.account_id = "foreign-account";
+    expect(
+      await values.lookup.loadCheckout(values.claim, "checkout_one"),
+    ).toBeNull();
+  });
+
+  it("rejects contradictory native and event checkout references", async () => {
+    const values = fixture();
+    await expect(
+      values.lookup.loadCheckout(values.claim, "other_checkout"),
+    ).rejects.toMatchObject({ code: "PAYMENT_CHECKOUT_LOOKUP_UNAVAILABLE" });
+  });
+
+  it("rejects stale leases even with a server-observed session", async () => {
+    const values = fixture();
+    values.event.payload = { paymentId: "pay_one" };
+    values.rehash();
+    values.event.lease_token = "new-lease";
+    await expect(
+      values.lookup.loadCheckout(values.claim, "checkout_one"),
+    ).rejects.toMatchObject({ code: "PAYMENT_CHECKOUT_LOOKUP_UNAVAILABLE" });
+  });
+
+  it("rejects malformed server-observed session before SQL", async () => {
+    const values = fixture();
+    await expect(
+      values.lookup.loadCheckout(values.claim, "checkout:invalid"),
+    ).rejects.toMatchObject({ code: "PAYMENT_CHECKOUT_LOOKUP_UNAVAILABLE" });
+    expect(values.queries).toHaveLength(0);
+  });
+
+  it("resolves confirmed event correlation using its original authenticated hash", async () => {
+    const values = fixture();
+    values.event.event_type = "PAYMENT_CONFIRMED";
+    values.event.payload_hash = hashAsaasEventIdentity(
+      String(values.event.provider_event_reference),
+      "PAYMENT_CONFIRMED",
+      String(values.account.account_reference),
+      values.event.payload as Record<string, string>,
+    );
+    expect(await values.lookup.loadCheckout(values.claim)).toEqual(
+      values.binding,
+    );
+  });
   it("loads checkout evidence from raw Drizzle timestamps without weakening claim fences", async () => {
     const v = fixture(true);
     expect(await v.lookup.loadCheckout(v.claim)).toEqual(v.binding);

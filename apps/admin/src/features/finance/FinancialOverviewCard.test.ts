@@ -1,7 +1,7 @@
 import type { FinancialOverview, SiteAccess } from "@entrelacos/contracts";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FinancialOverviewCard } from "./FinancialOverviewCard";
 
 const access: SiteAccess = {
@@ -50,6 +50,24 @@ function render(
 }
 
 describe("financial overview card", () => {
+  it("shows financial amounts to an OWNER with explicit read-only site access", () => {
+    const html = render({
+      access: {
+        ...access,
+        userId: "owner-one",
+        membershipRole: "OWNER",
+        membershipId: null,
+        capabilities: {
+          ...access.capabilities,
+          configureReceiving: false,
+          requestWithdrawal: false,
+        },
+      },
+    });
+    expect(html).toContain("Resumo financeiro");
+    expect(html).toContain("100,00");
+    expect(html).not.toMatch(/<form|<input|Solicitar saque|Confirme sua senha/);
+  });
   it("keeps private amounts hidden from missing, owner, assistant and other-site access", () => {
     for (const value of [
       null,
@@ -134,3 +152,21 @@ describe("financial overview card", () => {
     }
   });
 });
+
+beforeEach(() => vi.stubGlobal("__APP_ENV__", "development"));
+afterEach(() => vi.unstubAllGlobals());
+
+it.each([
+  ["development", "sandbox", true],
+  ["production", "sandbox", false],
+  ["development", "live", false],
+  ["production", "live", false],
+] as const)(
+  "gates private notices by application and provider mode (%s, %s)",
+  (environment, mode, visible) => {
+    vi.stubGlobal("__APP_ENV__", environment);
+    expect(
+      render({ overview: { ...overview, mode } }).includes("Sandbox"),
+    ).toBe(visible);
+  },
+);

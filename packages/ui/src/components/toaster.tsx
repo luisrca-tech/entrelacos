@@ -6,12 +6,7 @@ import {
   toast as sonnerToast,
   type ToasterProps,
 } from "sonner";
-import { type ToastKind, toastEventName } from "../lib/publishToast";
-
-type ToastDetail = {
-  kind: ToastKind;
-  message: string;
-};
+import { type ToastDetail, toastEventName } from "../lib/publishToast";
 
 function Toaster({
   position = "top-center",
@@ -22,7 +17,10 @@ function Toaster({
     const onToast = (event: Event) => {
       const detail = (event as CustomEvent<ToastDetail>).detail;
       if (!detail?.message) return;
-      sonnerToast[detail.kind](detail.message);
+      sonnerToast[detail.kind](
+        detail.message,
+        detail.action ? { action: detail.action } : undefined,
+      );
     };
     window.addEventListener(toastEventName, onToast);
     return () => window.removeEventListener(toastEventName, onToast);

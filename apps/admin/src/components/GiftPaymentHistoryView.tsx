@@ -1,4 +1,4 @@
-import { Button } from "@entrelacos/ui";
+import { Button, showSandboxNotice } from "@entrelacos/ui";
 import { useLayoutEffect, useReducer, useRef } from "react";
 import {
   createGiftPaymentHistoryController,
@@ -172,7 +172,7 @@ export function GiftPaymentHistoryView(
                 className="grid min-w-0 gap-2 rounded-lg border border-admin-line p-4"
               >
                 <h3 className="m-0">{purchase.titleSnapshot}</h3>
-                {purchase.mode === "sandbox" && (
+                {showSandboxNotice(purchase.mode) && (
                   <p>
                     Sandbox — valores de teste, sem movimentação de dinheiro
                     real.

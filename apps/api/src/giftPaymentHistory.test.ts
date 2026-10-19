@@ -184,6 +184,28 @@ async function fixture() {
   };
 }
 describe("native owned private purchase history service", () => {
+  it("reads for a freshly verified OWNER without fabricating a site membership", async () => {
+    const v = await fixture();
+    v.user.role = "OWNER";
+    Object.assign(v.membership, {
+      membership_id: null,
+      membership_user_id: null,
+      membership_role: null,
+    });
+    const owner = v.service.readPurchasePage({
+      request: v.request(),
+      siteId: "site-one",
+    });
+    await expect(owner.result).resolves.toEqual(v.page);
+    await owner.completion;
+    expect(v.repository.readPurchasePage.mock.calls[0]?.[0]).toMatchObject({
+      membershipId: null,
+      userId: "viewer-one",
+      siteId: "site-one",
+    });
+    expect(v.db.update).not.toHaveBeenCalled();
+    await v.service.close();
+  });
   it("uses actual signed native session and fresh memberships before and after a stored read", async () => {
     const v = await fixture();
     expect(v.service.available).toBe(true);
@@ -227,7 +249,7 @@ describe("native owned private purchase history service", () => {
         request.headers.set("cookie", "better-auth.session_token=unsigned");
       if (fault === "origin")
         request.headers.set("origin", "https://foreign.example.test");
-      if (fault === "role") v.user.role = "OWNER";
+      if (fault === "role") v.user.role = "SITE_ASSISTANT";
       if (fault === "membership")
         v.membership.revoked_at = "2026-10-13T13:59:00Z";
       if (fault === "state") v.user.state = "DISABLED";

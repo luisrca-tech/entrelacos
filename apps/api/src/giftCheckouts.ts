@@ -29,7 +29,7 @@ export interface GiftCheckoutIdentity {
   attemptId: string;
 }
 
-// Provider evidence and money states require verified observations and posted ledger rows.
+// Provider approval requires verified observations; received funds also require posted ledger rows.
 // A durable backend seal can prove that a request never dispatched. Request bodies
 // never supply either proof; the repository must enforce their references atomically.
 interface GiftCheckoutEvidenceBinding {
@@ -48,6 +48,12 @@ export type GiftCheckoutEvidence =
   | (GiftCheckoutEvidenceBinding &
       (
         | { kind: "HOSTED_CHECKOUT" }
+        | {
+            kind: "PAYMENT_CONFIRMATION";
+            providerPaymentReference: string;
+            providerEventReference: string;
+            eventId: string;
+          }
         | {
             kind: "SETTLEMENT";
             providerPaymentReference: string;
@@ -291,6 +297,10 @@ export function readGiftQuoteSnapshot(
     !Number.isSafeInteger(binding.destinationVersion) ||
     binding.destinationVersion <= 0 ||
     !pricing ||
+    !pricing.policy ||
+    quote.data.feeAllocation !== pricing.policy.feeAllocation ||
+    (pricing.policy.feeBasis === "OBSERVED_ESTIMATE" &&
+      binding.environment !== "sandbox") ||
     !sameBinding(binding, pricing) ||
     pricing.verification !== "verified" ||
     !["provider", "local-test"].includes(pricing.provenance) ||
@@ -343,6 +353,12 @@ export function readGiftQuoteSnapshot(
         processingBasisPoints: pricing.policy.processingBasisPoints,
         processingFixedCents: pricing.policy.processingFixedCents,
         rounding: pricing.policy.rounding,
+        ...(pricing.policy.feeBasis
+          ? { feeBasis: pricing.policy.feeBasis }
+          : {}),
+        ...(pricing.policy.feeAllocation
+          ? { feeAllocation: pricing.policy.feeAllocation }
+          : {}),
       },
     },
     createdAt: value.createdAt,
@@ -439,6 +455,14 @@ function projectStatus(record: GiftCheckoutRecord, now: Date): CheckoutStatus {
   if (
     record.state === "AWAITING_PAYMENT" &&
     evidence.kind !== "HOSTED_CHECKOUT"
+  )
+    return fail("EXTERNAL_OUTCOME_UNKNOWN");
+  if (
+    record.state === "CONFIRMED" &&
+    (evidence.kind !== "PAYMENT_CONFIRMATION" ||
+      !nonempty(evidence.providerPaymentReference) ||
+      !nonempty(evidence.providerEventReference) ||
+      !checkoutResultSchema.shape.orderId.safeParse(evidence.eventId).success)
   )
     return fail("EXTERNAL_OUTCOME_UNKNOWN");
   if (

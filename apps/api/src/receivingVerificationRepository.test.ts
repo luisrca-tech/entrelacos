@@ -145,6 +145,7 @@ function fixture() {
   const state = {
     clock: "2026-10-13T00:00:03.000123Z",
     active: true,
+    demo: false,
     role: "SITE_ADMIN",
     session: true,
     membership: true,
@@ -192,7 +193,7 @@ function fixture() {
       if (/clock_timestamp/.test(sql))
         return { rows: [{ currentTime: state.clock }] };
       if (/FOR UPDATE OF st/.test(sql))
-        return { rows: [{ siteId: "site-one", isDemo: false }] };
+        return { rows: [{ siteId: "site-one", isDemo: state.demo }] };
       if (/FOR SHARE OF u/.test(sql))
         return {
           rows: state.active
@@ -439,6 +440,147 @@ describe("locked immutable receiving verification repository", () => {
     expect(v.tables.destinations).toHaveLength(1);
     expect(v.tables.destinations[0].version).toBe(1);
   });
+  it.each([true, false])(
+    "setup session selection requires its distinct locked authority port (approved=%s)",
+    async (approved) => {
+      const v = fixture();
+      const authorization = {
+        ...v.authorization,
+        recentAuth: {
+          ...v.authorization.recentAuth,
+          proofKind: "SESSION_AUTHENTICATION" as const,
+          authenticatedAt: new Date("2026-10-13T00:00:00.000Z"),
+          expiresAt: new Date("2026-10-14T00:00:00.000Z"),
+        },
+      };
+      const authorizeSetupSelectionInTransaction = vi.fn(async () => approved);
+      const repository = createReceivingVerificationRepository(v.db, {
+        ...v.options,
+        applicationEnvironment: "development",
+        authorizeSetupSelectionInTransaction,
+      });
+      if (approved)
+        await expect(
+          repository.captureSelection(v.scope(), authorization),
+        ).resolves.toMatchObject({ scope: v.scope() });
+      else
+        await expect(
+          repository.captureSelection(v.scope(), authorization),
+        ).rejects.toThrow();
+      expect(authorizeSetupSelectionInTransaction).toHaveBeenCalledOnce();
+      await expect(
+        v.repository.captureSelection(v.scope(), authorization),
+      ).rejects.toThrow();
+    },
+  );
+  it("rejects a forged setup attestation with timestamps different from the actual locked session", async () => {
+    const v = fixture();
+    const repository = createReceivingVerificationRepository(v.db, {
+      ...v.options,
+      applicationEnvironment: "development",
+      authorizeSetupSelectionInTransaction: async () => true,
+    });
+    const authorization = {
+      ...v.authorization,
+      recentAuth: {
+        ...v.authorization.recentAuth,
+        proofKind: "SESSION_AUTHENTICATION" as const,
+        authenticatedAt: new Date("2026-10-12T23:59:59.999Z"),
+        expiresAt: new Date("2026-10-14T00:00:00Z"),
+      },
+    };
+    await expect(
+      repository.captureSelection(v.scope(), authorization),
+    ).rejects.toThrow();
+  });
+  it("retains Sandbox simulation history without using it as native verification authority", async () => {
+    const v = fixture();
+    await v.select();
+    await v.append();
+    v.state.demo = true;
+    v.tables.evidence[0].provenance = "SIMULATION";
+    v.tables.evidence[0].verification_reference =
+      "simulation:demo-checkout:v1:fixture-one";
+    v.tables.destinations[0].bank_reference =
+      "simulation:demo-checkout:account-one";
+    v.tables.destinations[0].masked_descriptor =
+      "Simulated destination - Sandbox checkout only";
+    v.tables.evidence[0].bank_reference =
+      v.tables.destinations[0].bank_reference;
+    const historical = structuredClone(v.tables.evidence[0]);
+    const repository = createReceivingVerificationRepository(v.db, {
+      ...v.options,
+      applicationEnvironment: "development",
+      allowSandboxSimulationHistory: true,
+    });
+    const fence = await repository.captureSelection(v.scope(), v.authorization);
+    await repository.selectDestination(
+      fence,
+      "native-selection-two",
+      { ...v.candidate(), bankReference: "native-bank-two" },
+      v.authorization,
+    );
+    expect(v.tables.evidence[0]).toEqual(historical);
+    expect(v.tables.destinations.find((row) => row.is_current)).toMatchObject({
+      version: 2,
+      bank_state: "PENDING",
+    });
+    expect(v.tables.evidence).toHaveLength(1);
+  });
+  it.each([
+    "bank",
+    "label",
+    "proof",
+    "scope",
+    "foreign",
+    "native",
+    "environment",
+    "disabled",
+    "live",
+  ] as const)(
+    "rejects historical Sandbox destination compatibility with a mismatched %s",
+    async (changed) => {
+      const v = fixture();
+      await v.select();
+      await v.append();
+      v.state.demo = true;
+      Object.assign(v.tables.destinations[0], {
+        bank_reference: "simulation:demo-checkout:account-one",
+        masked_descriptor: "Simulated destination - Sandbox checkout only",
+      });
+      Object.assign(v.tables.evidence[0], {
+        bank_reference: "simulation:demo-checkout:account-one",
+        provenance: "SIMULATION",
+        verification_reference: "simulation:demo-checkout:v1:fixture-one",
+      });
+      if (changed === "bank")
+        v.tables.destinations[0].bank_reference = "unrelated-bank";
+      if (changed === "label")
+        v.tables.destinations[0].masked_descriptor = "Account 123456789012";
+      if (changed === "proof") v.tables.evidence[0].provenance = "PROVIDER";
+      if (changed === "scope") v.state.demo = false;
+      if (changed === "foreign")
+        v.tables.evidence[0].account_id = "other-account";
+      if (changed === "native") {
+        v.tables.destinations[0].bank_reference = "asaas-bank-native";
+        v.tables.evidence[0].bank_reference = "asaas-bank-native";
+      }
+      const repository = createReceivingVerificationRepository(v.db, {
+        ...v.options,
+        mode: changed === "live" ? "live" : "sandbox",
+        applicationEnvironment:
+          changed === "live"
+            ? "production"
+            : changed === "environment"
+              ? "test"
+              : "development",
+        allowSandboxSimulationHistory: changed !== "disabled",
+      });
+      await expect(
+        repository.captureSelection(v.scope(), v.authorization),
+      ).rejects.toThrow();
+    },
+  );
   it("lost initial selection ACK consults the original expected version without allocating again", async () => {
     const v = fixture();
     const fence = await v.repository.captureSelection(

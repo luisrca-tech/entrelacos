@@ -97,6 +97,13 @@ function fixture(rawTimestamps = false) {
   };
 }
 describe("durable received-payment inbox claims", () => {
+  it("also selects confirmed events for an observation without granting settlement authority", async () => {
+    const values = fixture();
+    await values.repository.claimNextReceivedPayment();
+    expect(
+      values.queries.find((entry) => entry.sql.startsWith("SELECT"))?.sql,
+    ).toContain("PAYMENT_CONFIRMED");
+  });
   it("claims authenticated due events represented by raw Drizzle timestamp strings", async () => {
     const v = fixture(true);
     expect(await v.repository.claimNextReceivedPayment()).toMatchObject({

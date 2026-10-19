@@ -33,6 +33,12 @@ import {
 } from "./financialAuthorization";
 import { ReceivingReadinessServiceError } from "./receivingReadiness";
 
+import {
+  readWithdrawalPayoutBinding,
+  sameWithdrawalPayout,
+  type WithdrawalPayoutBinding,
+} from "./withdrawalPayout";
+
 type Environment = "sandbox" | "live";
 
 // All context, proof and ports are server-loaded. These types do not establish
@@ -65,6 +71,7 @@ export type WithdrawalPresentationScope = Omit<
 
 export interface WithdrawalFeeQuote extends WithdrawalFeeScope {
   feeCents: number;
+  feeSemantics?: "MAXIMUM";
   policyVersion: string;
   provenance: "provider" | "simulation";
   verification: "verified" | "unverified";
@@ -86,6 +93,7 @@ export interface WithdrawalReservationSnapshot {
   readonly authenticationAuditHash: string;
   readonly feeQuote: {
     readonly feeCents: number;
+    readonly feeSemantics?: "MAXIMUM";
     readonly policyVersion: string;
     readonly provenance: "provider" | "simulation";
     readonly observedAt: string;
@@ -187,6 +195,7 @@ export interface WithdrawalConfirmationReference {
 // These are internal stored-evidence ports. Matching caller flags never establish
 // bank masking or ownership; an adapter must read the exact stored association.
 export interface WithdrawalVerifiedPresentation extends WithdrawalFeeScope {
+  payout?: WithdrawalPayoutBinding;
   source: "stored";
   verification: "verified";
   provenance: "provider" | "simulation";
@@ -279,6 +288,7 @@ export function readWithdrawalConsentSnapshot(
     const operatorUserId = id(raw.operatorUserId);
     const recipientReference = reference(raw.recipientReference);
     const p = exact(raw.presentation, [
+      ...(Object.hasOwn(record(raw.presentation), "payout") ? ["payout"] : []),
       ...Object.keys(scope),
       "source",
       "verification",
@@ -321,10 +331,16 @@ export function readWithdrawalConsentSnapshot(
       operatorProfileUpdatedAt: canonicalStoredInstant(
         p.operatorProfileUpdatedAt,
       ),
+      ...(p.payout === undefined
+        ? {}
+        : { payout: readWithdrawalPayoutBinding(p.payout) }),
       maskedDestination: preview.maskedDestination,
       operatorDisplayName: preview.operatorDisplayName,
     };
     const f = exact(raw.feeQuote, [
+      ...(Object.hasOwn(record(raw.feeQuote), "feeSemantics")
+        ? ["feeSemantics"]
+        : []),
       "feeCents",
       "policyVersion",
       "provenance",
@@ -333,6 +349,9 @@ export function readWithdrawalConsentSnapshot(
     ]);
     const feeQuote: WithdrawalConsentSnapshot["feeQuote"] = {
       feeCents: cents(f.feeCents),
+      ...(f.feeSemantics === "MAXIMUM"
+        ? { feeSemantics: "MAXIMUM" as const }
+        : {}),
       policyVersion: id(f.policyVersion),
       provenance: f.provenance as "provider" | "simulation",
       observedAt: instant(f.observedAt),
@@ -341,6 +360,12 @@ export function readWithdrawalConsentSnapshot(
     const issued = BigInt(Date.parse(preview.issuedAt)) * 1000n;
     if (
       feeQuote.feeCents !== preview.feeCents ||
+      feeQuote.feeSemantics !== preview.feeSemantics ||
+      (f.feeSemantics !== undefined && f.feeSemantics !== "MAXIMUM") ||
+      (presentation.payout !== undefined &&
+        (preview.payoutRecipientName !== presentation.payout.ownerName ||
+          preview.maskedDestination !==
+            `Pix ${presentation.payout.keyType}: ${presentation.payout.maskedKey}`)) ||
       feeQuote.policyVersion !== preview.policyVersion ||
       !["provider", "simulation"].includes(feeQuote.provenance) ||
       (feeQuote.provenance === "simulation" && preview.mode !== "sandbox") ||
@@ -594,6 +619,9 @@ export function readWithdrawalReservationSnapshot(
     ]);
     const intent = withdrawalIntentSchema.parse(raw.intent);
     const fee = exact(raw.feeQuote, [
+      ...(Object.hasOwn(record(raw.feeQuote), "feeSemantics")
+        ? ["feeSemantics"]
+        : []),
       "feeCents",
       "policyVersion",
       "provenance",
@@ -616,6 +644,8 @@ export function readWithdrawalReservationSnapshot(
       (raw.environment !== "sandbox" && raw.environment !== "live") ||
       intent.mode !== raw.environment ||
       feeCents !== intent.feeCents ||
+      (fee.feeSemantics !== undefined && fee.feeSemantics !== "MAXIMUM") ||
+      fee.feeSemantics !== intent.feeSemantics ||
       BigInt(intent.feeCents) + BigInt(intent.netCents) !==
         BigInt(intent.amountCents) ||
       balanceCents < intent.amountCents ||
@@ -645,6 +675,9 @@ export function readWithdrawalReservationSnapshot(
       authenticationAuditHash: raw.authenticationAuditHash,
       feeQuote: Object.freeze({
         feeCents,
+        ...(fee.feeSemantics === "MAXIMUM"
+          ? { feeSemantics: "MAXIMUM" as const }
+          : {}),
         policyVersion: id(fee.policyVersion),
         provenance: fee.provenance,
         observedAt,
@@ -873,6 +906,7 @@ function feeObservation(
     if (
       Object.entries(scope).some(([key, expected]) => raw[key] !== expected) ||
       raw.verification !== "verified" ||
+      (raw.feeSemantics !== undefined && raw.feeSemantics !== "MAXIMUM") ||
       (raw.provenance !== "provider" && raw.provenance !== "simulation") ||
       (raw.provenance === "simulation" &&
         (scope.environment !== "sandbox" ||
@@ -893,6 +927,9 @@ function feeObservation(
     return Object.freeze({
       feeCents,
       policyVersion: id(raw.policyVersion),
+      ...(raw.feeSemantics === "MAXIMUM"
+        ? { feeSemantics: "MAXIMUM" as const }
+        : {}),
       provenance: raw.provenance,
       observedAt: new Date(observed).toISOString(),
       expiresAt: new Date(expiry).toISOString(),
@@ -909,7 +946,7 @@ export function captureWithdrawalPresentation(
   operatorUserId: string,
   at: number,
   freshnessMs: number,
-  applicationEnvironment: string,
+  _applicationEnvironment: string,
 ): WithdrawalConsentSnapshot["presentation"] {
   const raw = record(value);
   if (
@@ -918,11 +955,7 @@ export function captureWithdrawalPresentation(
     raw.verification !== "verified" ||
     raw.operatorUserId !== operatorUserId ||
     raw.recipientReference !== context.recipientBinding?.recipientReference ||
-    !["provider", "simulation"].includes(String(raw.provenance)) ||
-    (raw.provenance === "simulation" &&
-      (scope.environment !== "sandbox" ||
-        !context.isDemo ||
-        applicationEnvironment === "production"))
+    raw.provenance !== "provider"
   )
     return deny("DESTINATION_UNVERIFIED", 409);
   const times = [
@@ -941,6 +974,9 @@ export function captureWithdrawalPresentation(
   }
   return {
     ...scope,
+    ...(raw.payout === undefined
+      ? {}
+      : { payout: readWithdrawalPayoutBinding(raw.payout) }),
     source: "stored",
     verification: "verified",
     provenance: raw.provenance as "provider" | "simulation",
@@ -984,6 +1020,8 @@ export function sameWithdrawalConsentTerms(
       consent.preview.destinationVersion &&
     candidate.feeQuote.policyVersion === consent.preview.policyVersion &&
     candidate.feeQuote.provenance === consent.feeQuote.provenance &&
+    candidate.feeQuote.feeSemantics === consent.feeQuote.feeSemantics &&
+    sameWithdrawalPayout(presentation.payout, consent.presentation.payout) &&
     presentation.destinationId === consent.presentation.destinationId &&
     presentation.maskedDestination === consent.preview.maskedDestination &&
     presentation.operatorDisplayName === consent.preview.operatorDisplayName &&
@@ -1285,11 +1323,15 @@ export function createWithdrawalReservationService(
               currency: "BRL",
               amountCents: scope.amountCents,
               feeCents: fee.feeCents,
+              ...(fee.feeSemantics ? { feeSemantics: fee.feeSemantics } : {}),
               netCents: Number(
                 BigInt(scope.amountCents) - BigInt(fee.feeCents),
               ),
               destinationVersion: scope.destinationVersion,
               maskedDestination: presentation.maskedDestination,
+              ...(presentation.payout
+                ? { payoutRecipientName: presentation.payout.ownerName }
+                : {}),
               operatorDisplayName: presentation.operatorDisplayName,
               policyVersion: fee.policyVersion,
               issuedAt: new Date(issued).toISOString(),
@@ -1525,6 +1567,7 @@ export function createWithdrawalReservationService(
               siteId: currentActor.siteId,
               amountCents: input.amountCents,
               feeCents: fee.feeCents,
+              ...(fee.feeSemantics ? { feeSemantics: fee.feeSemantics } : {}),
               netCents: Number(
                 BigInt(input.amountCents) - BigInt(fee.feeCents),
               ),

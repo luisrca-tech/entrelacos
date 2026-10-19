@@ -536,6 +536,7 @@ export function SiteWorkspace({
           key={`${site.id}:${sessionEpoch}`}
           siteId={site.id}
           access={access}
+          platformOwner={owner}
           sessionEpoch={sessionEpoch}
         />
       )}

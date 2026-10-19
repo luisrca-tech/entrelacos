@@ -67,6 +67,20 @@ const catalogPage = (gifts: Array<typeof gift>, mode = "sandbox") => ({
   hasNext: gifts.length > 20,
 });
 describe("public gifts API boundary", () => {
+  it("calls the browser fetch function without binding it to the API instance", async () => {
+    const browserFetch = function (
+      this: unknown,
+      _input: RequestInfo | URL,
+      _init?: RequestInit,
+    ): Promise<Response> {
+      if (this !== undefined) throw new TypeError("Illegal invocation");
+      return Promise.resolve(Response.json(catalogPage([gift])));
+    };
+    await expect(api(browserFetch).getCatalog()).resolves.toMatchObject({
+      gifts: [gift],
+    });
+  });
+
   it("posts recovery capability only in the body and validates operation/status binding", async () => {
     const status = {
       siteId: "wedding-a",

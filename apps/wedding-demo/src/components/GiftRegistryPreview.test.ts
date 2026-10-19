@@ -283,8 +283,8 @@ describe("local gift registry preview", () => {
       commissionBasisPoints: 200,
       commissionCents: Math.round((gift.nominalCents * 200) / 10000),
       processingCents: 90,
-      totalCents:
-        gift.nominalCents + Math.round((gift.nominalCents * 200) / 10000) + 90,
+      totalCents: gift.nominalCents,
+      feeAllocation: "RECIPIENT_DEDUCTED",
       policyVersion: "local-gift-policy-v1",
       expiresAt: "2026-10-12T12:05:00.000Z",
       mode: "sandbox",

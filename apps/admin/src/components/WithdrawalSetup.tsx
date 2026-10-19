@@ -5,7 +5,7 @@ import {
   type WithdrawalRequestContext,
   type WithdrawalRequestStatus,
 } from "@entrelacos/contracts";
-import { Button } from "@entrelacos/ui";
+import { Button, showSandboxNotice } from "@entrelacos/ui";
 import { type FormEvent, useLayoutEffect, useRef, useState } from "react";
 import { ApiError, apiRequest } from "../lib/apiClient";
 import {
@@ -350,6 +350,7 @@ export function createWithdrawalSetupController(
             "mode",
             "amountCents",
             "feeCents",
+            "feeSemantics",
             "netCents",
             "destinationVersion",
             "createdAt",
@@ -1194,6 +1195,7 @@ export function createWithdrawalSetupController(
           withdrawal.mode !== retained.mode ||
           withdrawal.amountCents !== terms.amountCents ||
           withdrawal.feeCents !== terms.feeCents ||
+          withdrawal.feeSemantics !== terms.feeSemantics ||
           withdrawal.netCents !== terms.netCents ||
           withdrawal.destinationVersion !== terms.destinationVersion ||
           (retained.state === "EXISTING" &&
@@ -1415,18 +1417,20 @@ function WithdrawalSetupView({
       >
         Solicitação de saque
       </h2>
-      {state.context?.mode === "sandbox" && (
+      {showSandboxNotice(state.context?.mode) && (
         <p>Sandbox — valores de teste, sem movimentação de dinheiro real.</p>
       )}
-      {state.request && (
-        <p>
-          Ambiente da solicitação:{" "}
-          {state.request.mode === "sandbox"
-            ? "Sandbox — teste"
-            : "Live — valores reais"}
-          .
-        </p>
-      )}
+      {state.request &&
+        (state.request.mode === "live" ||
+          showSandboxNotice(state.request.mode)) && (
+          <p>
+            Ambiente da solicitação:{" "}
+            {state.request.mode === "sandbox"
+              ? "Sandbox — teste"
+              : "Live — valores reais"}
+            .
+          </p>
+        )}
       {state.status === "denied" ? (
         <p role="status">Acesso financeiro restrito.</p>
       ) : state.status === "storage_unavailable" ? (
@@ -1448,10 +1452,21 @@ function WithdrawalSetupView({
       {preview && (
         <dl>
           {[
-            ["Valor solicitado", money.format(preview.amountCents / 100)],
-            ["Taxa", money.format(preview.feeCents / 100)],
+            [
+              preview.feeSemantics === "MAXIMUM"
+                ? "Débito máximo aprovado"
+                : "Valor solicitado",
+              money.format(preview.amountCents / 100),
+            ],
+            [
+              preview.feeSemantics === "MAXIMUM" ? "Taxa máxima" : "Taxa",
+              money.format(preview.feeCents / 100),
+            ],
             ["Valor líquido", money.format(preview.netCents / 100)],
             ["Destino verificado", preview.maskedDestination],
+            ...(preview.payoutRecipientName
+              ? [["Recebedor Pix", preview.payoutRecipientName]]
+              : []),
             ["Nome no perfil", preview.operatorDisplayName],
             ["Validade da prévia", preview.expiresAt],
           ].map(([label, value]) => (
@@ -1462,14 +1477,37 @@ function WithdrawalSetupView({
           ))}
         </dl>
       )}
+      {preview?.feeSemantics === "MAXIMUM" && (
+        <p>
+          O valor líquido é fixo. A taxa efetiva pode ser menor que o limite; a
+          reserva não utilizada volta ao saldo após a confirmação.
+        </p>
+      )}
       {!preview && state.request?.state === "EXISTING" && (
         <dl>
           {[
             [
-              "Valor solicitado",
-              money.format(state.request.withdrawal.amountCents / 100),
+              state.request.withdrawal.settlement
+                ? "Valor debitado"
+                : state.request.withdrawal.feeSemantics === "MAXIMUM"
+                  ? "Débito máximo aprovado"
+                  : "Valor solicitado",
+              money.format(
+                (state.request.withdrawal.settlement?.totalDebitCents ??
+                  state.request.withdrawal.amountCents) / 100,
+              ),
             ],
-            ["Taxa", money.format(state.request.withdrawal.feeCents / 100)],
+            [
+              state.request.withdrawal.settlement
+                ? "Taxa efetiva"
+                : state.request.withdrawal.feeSemantics === "MAXIMUM"
+                  ? "Taxa máxima"
+                  : "Taxa",
+              money.format(
+                (state.request.withdrawal.settlement?.feeCents ??
+                  state.request.withdrawal.feeCents) / 100,
+              ),
+            ],
             [
               "Valor líquido",
               money.format(state.request.withdrawal.netCents / 100),

@@ -922,6 +922,25 @@ describe("internal gifts C1 contracts", () => {
       mode: "sandbox",
     };
     expect(giftQuoteSchema.parse(quote)).toEqual(quote);
+    const recipientQuote = {
+      ...quote,
+      totalCents: quote.nominalCents,
+      feeAllocation: "RECIPIENT_DEDUCTED",
+    };
+    expect(giftQuoteSchema.parse(recipientQuote)).toEqual(recipientQuote);
+    expect(
+      giftQuoteSchema.safeParse({ ...recipientQuote, totalCents: 10350 })
+        .success,
+    ).toBe(false);
+    expect(
+      giftQuoteSchema.safeParse({ ...recipientQuote, processingCents: 9800 })
+        .success,
+    ).toBe(false);
+    expect(
+      giftQuoteSchema.safeParse({ ...recipientQuote, feeAllocation: undefined })
+        .success,
+    ).toBe(false);
+
     expect(
       giftQuoteSchema.safeParse({ ...quote, totalCents: 10200 }).success,
     ).toBe(false);
@@ -974,6 +993,31 @@ describe("internal gifts C1 contracts", () => {
       checkout: null,
     };
     expect(checkoutStatusResponseSchema.parse({ status })).toEqual({ status });
+    const confirmed = { ...status, state: "CONFIRMED", observedAt };
+    expect(
+      checkoutStatusResponseSchema.safeParse({ status: confirmed }).success,
+    ).toBe(true);
+    for (const override of [
+      { observedAt: null },
+      { mayStartNewAttempt: true },
+      { closedReason: "EXPIRED" },
+      {
+        checkout: {
+          orderId: "order-a",
+          attemptId: "attempt-a",
+          quoteId: "quote-a",
+          method: "PIX",
+          mode: "sandbox",
+          hostedUrl: "https://checkout.example.test/hosted",
+        },
+      },
+    ]) {
+      expect(
+        checkoutStatusResponseSchema.safeParse({
+          status: { ...confirmed, ...override },
+        }).success,
+      ).toBe(false);
+    }
     for (const invalid of [
       { ...status, mayStartNewAttempt: true },
       { ...status, state: "RECEIVED" },
@@ -1357,6 +1401,20 @@ describe("conservative private purchase history", () => {
     };
     expect(giftPurchaseHistoryPageResponseSchema.parse(value)).toEqual(value);
   });
+  it("retains recipient-deducted history without accepting ambiguous unmarked totals", () => {
+    const value = fixture().page;
+    Object.assign(value.history.items[0].quoted, {
+      totalCents: 10000,
+      feeAllocation: "RECIPIENT_DEDUCTED",
+    });
+    expect(giftPurchaseHistoryPageResponseSchema.parse(value)).toEqual(value);
+    delete (value.history.items[0].quoted as { feeAllocation?: string })
+      .feeAllocation;
+    expect(giftPurchaseHistoryPageResponseSchema.safeParse(value).success).toBe(
+      false,
+    );
+  });
+
   it("retains nullable actual observations beside a separately correlated historical receipt", () => {
     const value = fixture().detail;
     expect(giftPurchaseHistoryDetailResponseSchema.parse(value)).toEqual(value);
@@ -1368,6 +1426,45 @@ describe("conservative private purchase history", () => {
     value.history.retainedPayments = [];
     value.history.nextCursor = "opaque-next_1";
     expect(giftPurchaseHistoryDetailResponseSchema.parse(value)).toEqual(value);
+  });
+  it.each([
+    [99, 9940],
+    [0, 10039],
+  ])(
+    "preserves actual fee %i and recipient credit %i beside the frozen quote",
+    (fee, net) => {
+      const value = fixture().detail;
+      value.history.originalPurchase.quoted.processingCents = 39;
+      value.history.originalPurchase.quoted.totalCents = 10239;
+      const receipt = value.history.validatedHistoricalReceipts[0];
+      receipt.recipientCreditCents = net;
+      Object.assign(value.history.retainedPayments[0], {
+        paymentId: receipt.paymentId,
+        recordedState: "RECEIVED",
+        observedAtMicros: receipt.sourceObservedAtMicros,
+        grossCents: 10239,
+        processingCents: fee,
+        commissionCents: 200,
+        recipientNetCents: net,
+      });
+      expect(giftPurchaseHistoryDetailResponseSchema.parse(value)).toEqual(
+        value,
+      );
+      expect(value.history.originalPurchase.quoted.processingCents).toBe(39);
+      value.history.retainedPayments = [];
+      value.history.nextCursor = "opaque-next_1";
+      expect(giftPurchaseHistoryDetailResponseSchema.parse(value)).toEqual(
+        value,
+      );
+    },
+  );
+  it("rejects a receipt-only credit that exceeds gross after the exact commission", () => {
+    const value = fixture().detail;
+    value.history.retainedPayments = [];
+    value.history.validatedHistoricalReceipts[0].recipientCreditCents = 10501;
+    expect(
+      giftPurchaseHistoryDetailResponseSchema.safeParse(value).success,
+    ).toBe(false);
   });
   it("retains genuine zero actual amounts separately from null and the quoted allocation", () => {
     const value = fixture().detail;
@@ -1629,6 +1726,16 @@ describe("conservative private purchase history", () => {
     [
       "wrong historical credit",
       (v: Fixture) => {
+        const receipt = v.detail.history.validatedHistoricalReceipts[0];
+        Object.assign(v.detail.history.retainedPayments[0], {
+          paymentId: receipt.paymentId,
+          recordedState: "RECEIVED",
+          observedAtMicros: receipt.sourceObservedAtMicros,
+          grossCents: 10700,
+          processingCents: 500,
+          commissionCents: 200,
+          recipientNetCents: 10000,
+        });
         v.detail.history.validatedHistoricalReceipts[0].recipientCreditCents = 9999;
       },
     ],

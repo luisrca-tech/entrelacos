@@ -5,6 +5,7 @@ type Props = {
   gifts: PublicGiftItem[];
   mode: "disabled" | "sandbox" | "live";
   busy: boolean;
+  actionLabel?: string;
   onSelect: (gift: PublicGiftItem) => void;
   search?: {
     value: string;
@@ -31,6 +32,7 @@ export function GiftCatalogView({
   gifts,
   mode,
   busy,
+  actionLabel,
   onSelect,
   search,
 }: Props) {
@@ -49,14 +51,6 @@ export function GiftCatalogView({
         >
           Presentes simbólicos
         </h2>
-        {mode === "sandbox" && (
-          <p
-            role="status"
-            className="m-0 border border-template-line px-4 py-3 text-sm"
-          >
-            Ambiente de testes — sem pagamentos reais.
-          </p>
-        )}
         <p className="m-0 text-template-muted">
           Presente simbólico: não há produto físico ou entrega.
         </p>
@@ -107,9 +101,6 @@ export function GiftCatalogView({
             </button>
           </nav>
           {search.loading && <p role="status">Carregando presentes…</p>}
-          {search.error && (
-            <p role="alert">Não foi possível carregar os presentes agora.</p>
-          )}
           {!search.loading && !search.error && gifts.length === 0 && (
             <p role="status">Nenhum presente nesta página.</p>
           )}
@@ -147,7 +138,7 @@ export function GiftCatalogView({
                 disabled={busy}
                 onClick={() => onSelect(gift)}
               >
-                {busy ? "Aguarde…" : "Escolher presente"}
+                {busy ? "Aguarde…" : (actionLabel ?? "Escolher presente")}
               </button>
             </div>
           </li>

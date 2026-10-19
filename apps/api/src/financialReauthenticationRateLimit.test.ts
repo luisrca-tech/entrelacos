@@ -83,6 +83,19 @@ function fixture(rawTimestamps = false) {
 }
 
 describe("durable financial password attempt limit", () => {
+  it("keeps Pix lookup counters in a separate bounded namespace", async () => {
+    const v = fixture();
+    const pix = createFinancialReauthenticationRateLimit(v.db, {
+      maxAttempts: 5,
+      windowMs: 60000,
+      namespace: "receiving-pix-destination-lookup-v1",
+    });
+    await pix.consume("account-one");
+    expect(v.state.row?.identifier).toBe("receiving-pix-destination-lookup-v1");
+    expect(
+      v.queries.find((query) => query.sql.startsWith("INSERT"))?.params[0],
+    ).not.toContain("account-one");
+  });
   it("reads raw Drizzle timestamp strings while preserving the bounded counter", async () => {
     const v = fixture(true);
     expect(await v.limiter.consume("admin-one")).toBe(true);

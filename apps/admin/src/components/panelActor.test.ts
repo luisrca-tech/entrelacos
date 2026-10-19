@@ -79,6 +79,36 @@ describe("observable administrative session ownership", () => {
     expect(f.request).not.toHaveBeenCalled();
     f.owner.dispose();
   });
+  it("verifies an initially hidden tab without releasing mutation suspension", async () => {
+    const pending = deferred<unknown>();
+    const f = fixture(vi.fn(() => pending.promise));
+    const cleanup = mountPanelSessionLifecycle(
+      {
+        target: new EventTarget(),
+        document: Object.assign(new EventTarget(), {
+          visibilityState: "hidden" as DocumentVisibilityState,
+        }),
+      },
+      f.owner,
+    );
+    try {
+      expect(f.owner.getSnapshot().status).toBe("loading");
+      expect(f.owner.isSuspended()).toBe(true);
+      await Promise.resolve();
+      expect(f.request).toHaveBeenCalledTimes(1);
+      const verification = f.owner.load();
+      pending.resolve(actor);
+      await verification;
+      expect(f.owner.getSnapshot()).toMatchObject({
+        status: "verified",
+        actor,
+      });
+      expect(f.owner.isSuspended()).toBe(true);
+    } finally {
+      cleanup();
+      f.owner.dispose();
+    }
+  });
   it("attaches real entry/resume/hint listeners and cleans up its final owner", async () => {
     const f = fixture();
     const target = new EventTarget();
@@ -98,14 +128,14 @@ describe("observable administrative session ownership", () => {
     const firstEpoch = f.owner.getSnapshot().sessionEpoch;
     document.visibilityState = "hidden";
     document.dispatchEvent(new Event("visibilitychange"));
-    expect(f.owner.getSnapshot().sessionEpoch).toBeNull();
+    expect(f.owner.getSnapshot().sessionEpoch).toBe(firstEpoch);
+    expect(f.owner.isSuspended()).toBe(true);
     expect(f.request).toHaveBeenCalledTimes(1);
     document.visibilityState = "visible";
     document.dispatchEvent(new Event("visibilitychange"));
     await f.owner.load();
-    expect(f.owner.getSnapshot().sessionEpoch).toBeGreaterThan(
-      firstEpoch as number,
-    );
+    expect(f.owner.getSnapshot().sessionEpoch).toBe(firstEpoch);
+    expect(f.owner.isSuspended()).toBe(false);
     channel.onmessage?.call(
       {} as BroadcastChannel,
       new MessageEvent("message", {
@@ -150,6 +180,48 @@ describe("observable administrative session ownership", () => {
     second();
     expect(channel.close).toHaveBeenCalledTimes(1);
     expect(createChannel).toHaveBeenCalledTimes(1);
+    f.owner.dispose();
+  });
+  it("keeps the expiry timer active during silent revalidation and rejects its late success", async () => {
+    const f = fixture(
+      vi.fn().mockResolvedValue({
+        ...actor,
+        session: {
+          ...actor.session,
+          expiresAt: new Date(start + 1000).toISOString(),
+        },
+      }),
+    );
+    await f.owner.load();
+    const next = deferred<unknown>();
+    f.request.mockReturnValueOnce(next.promise);
+    const work = f.owner.revalidate();
+    const rejected = expect(work).rejects.toThrow("Session ownership changed");
+    await Promise.resolve();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(f.owner.getSnapshot().status).toBe("unauthenticated");
+    expect(f.owner.getSnapshot().actor).toBeNull();
+    next.resolve(actor);
+    await rejected;
+    expect(f.owner.getSnapshot().status).toBe("unauthenticated");
+    f.owner.dispose();
+  });
+  it("does not release suspension when a silent request resolves after the tab becomes hidden", async () => {
+    const f = fixture();
+    await f.owner.load();
+    const snapshot = f.owner.getSnapshot();
+    const next = deferred<unknown>();
+    f.request.mockReturnValueOnce(next.promise);
+    const work = f.owner.revalidate();
+    await Promise.resolve();
+    f.owner.suspend();
+    next.resolve(actor);
+    await work;
+    expect(f.owner.getSnapshot()).toBe(snapshot);
+    expect(f.owner.isSuspended()).toBe(true);
+    await f.owner.revalidate();
+    expect(f.owner.isSuspended()).toBe(false);
+    expect(f.owner.getSnapshot()).toBe(snapshot);
     f.owner.dispose();
   });
   it("invalidates synchronously on refresh and shares only the current generation request", async () => {

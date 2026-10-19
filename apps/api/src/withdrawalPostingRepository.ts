@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { siteAccessSchema } from "@entrelacos/contracts";
 import type { DatabaseConnection } from "@entrelacos/database";
@@ -39,6 +38,7 @@ import {
   type WithdrawalDispatchAuthority,
   type WithdrawalPostingRepository,
   type WithdrawalPostingResult,
+  withdrawalCompletedEffectKey,
   withdrawalCorrelation,
   withdrawalInstant,
   withdrawalObject,
@@ -121,21 +121,7 @@ function cents(value: unknown, positive = false): number {
   return value as number;
 }
 function effectKey(original: OriginalWithdrawal): string {
-  const c = original.correlation;
-  return (
-    "withdrawal.completed.v1:" +
-    createHash("sha256")
-      .update(
-        JSON.stringify([
-          c.siteId,
-          c.accountId,
-          c.environment,
-          c.withdrawalId,
-          c.operationId,
-        ]),
-      )
-      .digest("hex")
-  );
+  return withdrawalCompletedEffectKey(original.correlation);
 }
 function identity(value: unknown): { siteId: string; requestId: string } {
   const raw = withdrawalObject(captureWithdrawalValue(value), [
@@ -727,7 +713,7 @@ export function createWithdrawalPostingRepository(
           access.userId !== actor.userId ||
           authority.context.siteId !== key.siteId ||
           authority.context.mode !== c!.mode ||
-          authority.context.isDemo !== u.siteRow!.isDemo ||
+          authority.context.isDemo !== u.siteRow?.isDemo ||
           authority.context.verification !== "verified" ||
           authority.context.accountId !== scope.accountId ||
           authority.context.bankReference !== scope.bankReference ||
@@ -822,6 +808,15 @@ export function createWithdrawalPostingRepository(
       same(retained, stored);
       const at = await u.clock();
       validate(at);
+      const validUntil = [
+        readDatabaseTimestamp(attempt.recentAuth?.expiresAt),
+        new Date(
+          Number(micros(attempt.recentAuth?.authenticatedAt) / 1000n) +
+            c!.maxAuthAgeMs,
+        ),
+        new Date(original.consent.snapshot.preview.expiresAt),
+        new Date(original.snapshot.feeQuote.expiresAt),
+      ].reduce((a, b) => (a.getTime() < b.getTime() ? a : b));
       const leaseToken = withdrawalReference(c!.generateLeaseToken(), 128);
       const fence: DispatchFence = Object.freeze({
         operationId: original.correlation.operationId,
@@ -829,18 +824,9 @@ export function createWithdrawalPostingRepository(
         leaseOwner: c!.leaseOwner,
         leaseToken,
         leaseExpiresAt: new Date(
-          at.getTime() + c!.leaseDurationMs,
+          Math.min(at.getTime() + c!.leaseDurationMs, validUntil.getTime()),
         ).toISOString(),
       });
-      const validUntil = [
-        attempt.recentAuth!.expiresAt!,
-        new Date(
-          Number(micros(attempt.recentAuth!.authenticatedAt) / 1000n) +
-            c!.maxAuthAgeMs,
-        ),
-        new Date(original.consent.snapshot.preview.expiresAt),
-        new Date(original.snapshot.feeQuote.expiresAt),
-      ].reduce((a, b) => (a.getTime() < b.getTime() ? a : b));
       const s = original.correlation;
       await write(
         u,
@@ -917,8 +903,12 @@ export function createWithdrawalPostingRepository(
       raw.verification !== "verified" ||
       raw.bankCompleted !== true ||
       raw.currency !== "BRL" ||
-      cents(raw.totalDebitCents, true) !== original.correlation.amountCents ||
-      cents(raw.feeCents) !== original.correlation.feeCents ||
+      (original.snapshot.feeQuote.feeSemantics === "MAXIMUM"
+        ? cents(raw.totalDebitCents, true) > original.correlation.amountCents ||
+          cents(raw.feeCents) > original.correlation.feeCents
+        : cents(raw.totalDebitCents, true) !==
+            original.correlation.amountCents ||
+          cents(raw.feeCents) !== original.correlation.feeCents) ||
       cents(raw.netCents, true) !== original.correlation.netCents ||
       cents(raw.totalDebitCents, true) !==
         cents(raw.feeCents) + cents(raw.netCents, true) ||
@@ -966,7 +956,7 @@ export function createWithdrawalPostingRepository(
         fence,
         reference,
         at,
-        u.siteRow!.isDemo as boolean,
+        u.siteRow?.isDemo as boolean,
       );
       same(
         captureOriginalHolderBinding(
@@ -1008,12 +998,12 @@ export function createWithdrawalPostingRepository(
           fence,
           reference,
           await u.clock(),
-          u.siteRow!.isDemo as boolean,
+          u.siteRow?.isDemo as boolean,
         ),
         p,
       );
       const debit = {
-        id: "withdrawal-debit:" + key.slice("withdrawal.completed.v1:".length),
+        id: `withdrawal-debit:${key.slice("withdrawal.completed.v1:".length)}`,
         siteId: s.siteId,
         accountId: s.accountId,
         environment: s.environment,
@@ -1021,7 +1011,7 @@ export function createWithdrawalPostingRepository(
         kind: "WITHDRAWAL_COMPLETED",
         direction: "DEBIT",
         currency: "BRL",
-        amountCents: s.amountCents,
+        amountCents: p.totalDebitCents,
         paymentId: null,
         withdrawalIntentId: s.withdrawalId,
         operationId: s.operationId,
@@ -1064,11 +1054,11 @@ export function createWithdrawalPostingRepository(
         fence,
         reference,
         postedAt,
-        u.siteRow!.isDemo as boolean,
+        u.siteRow?.isDemo as boolean,
       );
       await write(
         u,
-        sql`INSERT INTO ${financialLedgerEntry} (id,site_id,account_id,environment,effect_key,kind,direction,currency,amount_cents,payment_id,withdrawal_intent_id,operation_id,event_id,compensates_entry_id,created_at) VALUES (${debit.id},${s.siteId},${s.accountId},${s.environment},${key},'WITHDRAWAL_COMPLETED','DEBIT','BRL',${s.amountCents},NULL,${s.withdrawalId},${s.operationId},NULL,NULL,${withdrawalInstant(postedAt)}::timestamptz) RETURNING id`,
+        sql`INSERT INTO ${financialLedgerEntry} (id,site_id,account_id,environment,effect_key,kind,direction,currency,amount_cents,payment_id,withdrawal_intent_id,operation_id,event_id,compensates_entry_id,created_at) VALUES (${debit.id},${s.siteId},${s.accountId},${s.environment},${key},'WITHDRAWAL_COMPLETED','DEBIT','BRL',${p.totalDebitCents},NULL,${s.withdrawalId},${s.operationId},NULL,NULL,${withdrawalInstant(postedAt)}::timestamptz) RETURNING id`,
         debit.id,
       );
       await u.clock();

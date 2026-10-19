@@ -80,7 +80,7 @@ describe("fresh site access", () => {
     },
   );
 
-  it("allows OWNER operational support without membership or financial authority", async () => {
+  it("allows OWNER support and financial consultation without membership or recipient authority", async () => {
     const { db } = database([
       {
         ...membership,
@@ -103,7 +103,7 @@ describe("fresh site access", () => {
         manageMessages: true,
         manageCatalog: true,
         manageTeam: true,
-        readFinance: false,
+        readFinance: true,
         configureReceiving: false,
         requestWithdrawal: false,
       },
@@ -188,7 +188,29 @@ describe("site capability enforcement", () => {
     ).resolves.toMatchObject({ membershipRole: "SITE_ADMIN" });
   });
 
-  it.each(["readFinance", "configureReceiving", "requestWithdrawal"] as const)(
+  it("allows freshly resolved OWNER financial consultation without membership", async () => {
+    const { db } = database([
+      { ...membership, account_role: "OWNER", membership_id: null },
+    ]);
+    await expect(
+      requireSiteCapability(
+        db,
+        { ...actor, role: "OWNER" },
+        input.siteId,
+        "readFinance",
+      ),
+    ).resolves.toMatchObject({
+      membershipId: null,
+      membershipRole: "OWNER",
+      capabilities: {
+        readFinance: true,
+        configureReceiving: false,
+        requestWithdrawal: false,
+      },
+    });
+  });
+
+  it.each(["configureReceiving", "requestWithdrawal"] as const)(
     "denies OWNER %s without explicit financial authority",
     async (capability) => {
       const { db } = database([

@@ -25,6 +25,7 @@ export interface ReceivingRepositoryOptions {
   applicationEnvironment: "development" | "test" | "production";
   freshnessMs: number;
   now?: () => Date;
+  refresh?: (siteId: string) => Promise<void>;
 }
 
 function receivingEnabled(
@@ -335,6 +336,11 @@ export async function loadReceivingContext(
 ): Promise<GiftQuoteReceivingContext | null> {
   if (!receivingEnabled(options)) return null;
   try {
+    try {
+      await options.refresh?.(siteId);
+    } catch {
+      /* Stored proof freshness still governs eligibility. */
+    }
     return await db.transaction(
       (tx) => loadReceivingContextInTransaction(tx, siteId, options),
       { isolationLevel: "repeatable read", accessMode: "read only" },

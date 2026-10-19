@@ -41,6 +41,7 @@ export interface R2GiftMediaStorageOptions {
   secretAccessKey: string;
   bucketName: string;
   publicOrigin: string;
+  applicationEnvironment?: "development" | "test" | "production";
 }
 export class GiftMediaStorageError extends Error {
   constructor(
@@ -90,6 +91,10 @@ function validEtag(value: unknown): value is string {
 function safeConfig(options: R2GiftMediaStorageOptions): URL {
   try {
     const origin = new URL(options.publicOrigin);
+    const developmentPublicOrigin =
+      (options.applicationEnvironment === "development" ||
+        options.applicationEnvironment === "test") &&
+      /^[a-z0-9-]+\.r2\.dev$/i.test(origin.hostname);
     if (
       !/^[a-f0-9]{32}$/i.test(options.accountId) ||
       !options.accessKeyId.trim() ||
@@ -102,7 +107,8 @@ function safeConfig(options: R2GiftMediaStorageOptions): URL {
       origin.hash ||
       origin.pathname !== "/" ||
       origin.hostname.endsWith(".") ||
-      /(^|\.)(r2\.dev|r2\.cloudflarestorage\.com)$/i.test(origin.hostname)
+      (/(^|\.)r2\.dev$/i.test(origin.hostname) && !developmentPublicOrigin) ||
+      /(^|\.)r2\.cloudflarestorage\.com$/i.test(origin.hostname)
     )
       unavailable();
     return origin;

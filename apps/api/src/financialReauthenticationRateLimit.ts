@@ -9,7 +9,6 @@ import {
 } from "./databaseTimestamp";
 import { FinancialReauthenticationError } from "./financialReauthentication";
 
-const namespace = "financial-password-reauthentication-v1";
 function unavailable(): never {
   throw new FinancialReauthenticationError(503, "REAUTHENTICATION_UNAVAILABLE");
 }
@@ -25,15 +24,27 @@ function timestamp(value: unknown): number {
 // lock and database clock serialize the per-user window across API instances.
 export function createFinancialReauthenticationRateLimit(
   db: Pick<DatabaseConnection["db"], "transaction">,
-  policy: { maxAttempts: number; windowMs: number },
+  policy: {
+    maxAttempts: number;
+    windowMs: number;
+    namespace?:
+      | "financial-password-reauthentication-v1"
+      | "receiving-pix-destination-lookup-v1";
+  },
 ) {
+  const namespace =
+    policy.namespace ?? "financial-password-reauthentication-v1";
   if (
     !Number.isSafeInteger(policy.maxAttempts) ||
     policy.maxAttempts < 1 ||
     policy.maxAttempts > 20 ||
     !Number.isSafeInteger(policy.windowMs) ||
     policy.windowMs < 1000 ||
-    policy.windowMs > 300000
+    policy.windowMs > 300000 ||
+    ![
+      "financial-password-reauthentication-v1",
+      "receiving-pix-destination-lookup-v1",
+    ].includes(namespace)
   )
     unavailable();
   const { maxAttempts, windowMs } = policy;

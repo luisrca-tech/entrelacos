@@ -147,6 +147,41 @@ function serviceFixture() {
   };
 }
 describe("captured private verification service", () => {
+  it.each([true, false])(
+    "keeps session-only selection isolated behind the setup opt-in (%s)",
+    async (enabled) => {
+      const v = serviceFixture();
+      v.observer.acquire.mockReturnValue({
+        ...v.native,
+        result: Promise.resolve(v.candidate),
+      } as never);
+      const service = createReceivingVerification({
+        ...v.options,
+        setupSessionSelection: enabled,
+      });
+      const owner = service.begin({
+        action: "SELECT",
+        scope: v.scope,
+        selectionId: "selection-new",
+        confirmDestinationSelection: true,
+        authorization: {
+          ...v.authorization,
+          recentAuth: {
+            ...v.authorization.recentAuth,
+            proofKind: "SESSION_AUTHENTICATION",
+          },
+        },
+      });
+      expect((await owner.feedback).state).toBe(
+        enabled ? "STORED" : "UNAVAILABLE",
+      );
+      await owner.completion;
+      if (!enabled)
+        expect(v.repository.captureSelection).not.toHaveBeenCalled();
+      await service.close();
+    },
+  );
+
   it.each(["Account 123456789012", "123456789012", "Bank ending 1234"])(
     "unsafe native descriptor %s cannot reach the destination writer",
     async (maskedDescriptor) => {

@@ -9,6 +9,7 @@ import { sql } from "drizzle-orm";
 import {
   type AsaasAccountFeesObservation,
   type AsaasBalanceObservation,
+  type AsaasCheckoutPaymentsObservation,
   type AsaasPaymentObservation,
   createAsaasHttpClient,
 } from "./asaasHttpClient";
@@ -30,6 +31,10 @@ export interface AsaasStoredAccountReaderOptions {
   now(): Date;
 }
 export interface AsaasStoredAccountReader {
+  listCheckoutPayments(
+    binding: FinancialAccountBinding,
+    checkoutReference: string,
+  ): Promise<AsaasCheckoutPaymentsObservation>;
   getAccountFees(
     binding: FinancialAccountBinding,
   ): Promise<AsaasAccountFeesObservation>;
@@ -209,7 +214,7 @@ export function createAsaasStoredAccountReader(
         ? sql`AND EXISTS (SELECT 1 FROM ${financialEventInbox} e WHERE e.id=${claim.eventId}
         AND e.site_id=a.site_id AND e.account_id=a.id AND e.environment=a.environment
         AND e.lease_owner=${claim.leaseOwner} AND e.lease_token=${claim.leaseToken} AND e.attempts=${claim.attempts}
-        AND e.payload->>'paymentId'=${claim.paymentReference} AND e.state='CLAIMED' AND e.event_type='PAYMENT_RECEIVED' AND e.processed_at IS NULL
+        AND e.payload->>'paymentId'=${claim.paymentReference} AND e.state='CLAIMED' AND e.event_type IN ('PAYMENT_RECEIVED','PAYMENT_CONFIRMED','PAYMENT_REFUNDED','PAYMENT_PARTIALLY_REFUNDED','PAYMENT_REFUND_IN_PROGRESS','PAYMENT_CHARGEBACK_REQUESTED','PAYMENT_CHARGEBACK_DISPUTE','PAYMENT_AWAITING_CHARGEBACK_REVERSAL') AND e.processed_at IS NULL
         AND e.authenticated_at<=${observed.toISOString()}::timestamptz AND e.authenticated_at<=clock_timestamp() AND e.received_at<=e.authenticated_at
         AND e.lease_expires_at>=${observed.toISOString()}::timestamptz AND e.lease_expires_at>=clock_timestamp())`
         : sql``;
@@ -270,6 +275,17 @@ export function createAsaasStoredAccountReader(
       });
     }
     return {
+      async listCheckoutPayments(value, checkoutReference) {
+        try {
+          activeMode();
+          const binding = readBinding(value);
+          if (!providerId(checkoutReference)) return unavailable();
+          const client = await loadClient(binding);
+          return await client.listCheckoutPayments(checkoutReference);
+        } catch {
+          return unavailable();
+        }
+      },
       async getAccountFees(
         value: FinancialAccountBinding,
       ): Promise<AsaasAccountFeesObservation> {

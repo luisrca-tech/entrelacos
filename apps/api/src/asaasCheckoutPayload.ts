@@ -13,6 +13,14 @@ export interface AsaasCheckoutPayload {
 }
 
 export interface AsaasCheckoutPayloadOptions {
+  // Selected only after reading the persisted demo site and account in development.
+  sandboxDemoPricing?: {
+    siteId: string;
+    accountReference: string;
+    isDemo: boolean;
+    applicationEnvironment: "development" | "test" | "production";
+  };
+
   environment: "sandbox" | "live";
   platformWalletId: string;
   // Selected from the stored site's registered public origin, never a guest body.
@@ -46,6 +54,14 @@ export function buildAsaasCheckoutPayload(
     const gift = publicGiftItemSchema.parse(snapshot.gift);
     const binding = snapshot.receiving;
     const pricing = snapshot.pricing;
+    const demo = options.sandboxDemoPricing;
+    const localTestPricing =
+      pricing.provenance === "local-test" &&
+      options.environment === "sandbox" &&
+      demo?.applicationEnvironment === "development" &&
+      demo.isDemo === true &&
+      demo.siteId === command.siteId &&
+      demo.accountReference === binding.accountReference;
     if (
       quote.siteId !== command.siteId ||
       gift.siteId !== command.siteId ||
@@ -64,7 +80,7 @@ export function buildAsaasCheckoutPayload(
       options.minutesToExpire < 10 ||
       options.minutesToExpire > 1440 ||
       pricing.verification !== "verified" ||
-      pricing.provenance !== "provider"
+      (pricing.provenance !== "provider" && !localTestPricing)
     )
       unavailable();
     for (const field of [
@@ -90,12 +106,17 @@ export function buildAsaasCheckoutPayload(
       "processingCents",
       "totalCents",
       "policyVersion",
+      "feeAllocation",
     ] as const) {
       if (amounts[field] !== quote[field]) unavailable();
     }
     const origin = new URL(options.publicOrigin);
+    const localSandbox =
+      options.environment === "sandbox" &&
+      origin.protocol === "http:" &&
+      ["localhost", "127.0.0.1", "[::1]"].includes(origin.hostname);
     if (
-      origin.protocol !== "https:" ||
+      (origin.protocol !== "https:" && !localSandbox) ||
       origin.username ||
       origin.password ||
       origin.pathname !== "/" ||
@@ -107,7 +128,7 @@ export function buildAsaasCheckoutPayload(
     for (const field of ["successUrl", "cancelUrl", "expiredUrl"] as const) {
       const url = new URL(options.callbacks[field]);
       if (
-        url.protocol !== "https:" ||
+        (url.protocol !== "https:" && !localSandbox) ||
         url.origin !== origin.origin ||
         url.username ||
         url.password ||

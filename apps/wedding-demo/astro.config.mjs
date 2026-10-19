@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import react from "@astrojs/react";
 import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "astro/config";
+import { loadEnv } from "vite";
 import { astroCliCommand, localPublicEnvPatch } from "./src/localPublicEnv.ts";
 
 const envFiles = [
@@ -26,6 +27,19 @@ Object.assign(
 export default defineConfig({
   integrations: [react()],
   vite: {
+    define: {
+      __APP_ENV__: JSON.stringify(
+        loadEnv(
+          astroCliCommand(process.argv) === "dev"
+            ? "development"
+            : "production",
+          fileURLToPath(new URL(".", import.meta.url)),
+          "",
+        ).APP_ENV === "development"
+          ? "development"
+          : "production",
+      ),
+    },
     plugins: [tailwindcss()],
     ssr: {
       noExternal: ["@entrelacos/ui"],

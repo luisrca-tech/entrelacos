@@ -289,17 +289,26 @@ export function createReceivingAccountProvisioningRepository(
       proof.sessionId !== actor.sessionId ||
       proof.provenance !== "backend" ||
       proof.verification !== "verified" ||
-      !["PASSWORD_REAUTHENTICATION", "MFA_REAUTHENTICATION"].includes(
-        proof.proofKind,
-      ) ||
+      ![
+        "PASSWORD_REAUTHENTICATION",
+        "MFA_REAUTHENTICATION",
+        "SESSION_AUTHENTICATION",
+      ].includes(proof.proofKind) ||
       proofExpiry <= proofAt ||
-      proofExpiry - proofAt > 300000000n
+      (proof.proofKind !== "SESSION_AUTHENTICATION" &&
+        proofExpiry - proofAt > 300000000n)
     )
       return unavailable();
     const checkProof = (value: bigint) => {
       if (
         proofAt > value ||
-        value - proofAt > BigInt(maxAuthAgeMs) * 1000n ||
+        value - proofAt >
+          BigInt(
+            proof.proofKind === "SESSION_AUTHENTICATION"
+              ? ADMIN_ABSOLUTE_TIMEOUT_MS
+              : maxAuthAgeMs,
+          ) *
+            1000n ||
         proofExpiry <= value
       )
         return unavailable();
@@ -331,6 +340,11 @@ export function createReceivingAccountProvisioningRepository(
     const expires = time(currentSession.sessionExpiresAt);
     const lastActive = time(currentSession.lastActiveAt);
     const created = time(currentSession.sessionCreatedAt);
+    if (
+      proof.proofKind === "SESSION_AUTHENTICATION" &&
+      (proofAt !== created || proofExpiry !== expires)
+    )
+      return unavailable();
     const checkSession = (value: bigint) => {
       if (
         expires <= value ||

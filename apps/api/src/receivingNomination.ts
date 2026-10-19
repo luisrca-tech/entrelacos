@@ -5,6 +5,11 @@ import {
   siteAccessSchema,
   siteIdSchema,
 } from "@entrelacos/contracts";
+import { ADMIN_ABSOLUTE_TIMEOUT_MS } from "./authHttp";
+import {
+  databaseTimestampEpochMicroseconds,
+  readDatabaseTimestamp,
+} from "./databaseTimestamp";
 import type {
   FinancialActor,
   RecentFinancialAuthenticationEvidence,
@@ -104,11 +109,20 @@ export function readReceivingNominationConfiguration(
   });
 }
 
+export type ReceivingAuthenticationEvidence = Omit<
+  RecentFinancialAuthenticationEvidence,
+  "proofKind"
+> & {
+  proofKind:
+    | RecentFinancialAuthenticationEvidence["proofKind"]
+    | "SESSION_AUTHENTICATION";
+};
+
 export interface ReceivingNominationAuthenticationAudit {
   readonly userId: string;
   readonly siteId: string;
   readonly sessionId: string;
-  readonly proofKind: "PASSWORD_REAUTHENTICATION" | "MFA_REAUTHENTICATION";
+  readonly proofKind: ReceivingAuthenticationEvidence["proofKind"];
   readonly authenticatedAt: string;
   readonly expiresAt: string;
 }
@@ -167,7 +181,7 @@ export interface ReceivingNominationLockedState {
 
 export interface ReceivingNominationCurrentAuthorization {
   readonly actor: FinancialActor;
-  readonly recentAuth: RecentFinancialAuthenticationEvidence;
+  readonly recentAuth: ReceivingAuthenticationEvidence;
 }
 
 // Transient admission evidence deliberately stays outside the persisted v1 intent.
@@ -360,7 +374,7 @@ export interface ReceivingNominationOptions {
 export interface ReceivingNominationAttempt {
   actor: FinancialActor | null;
   access: unknown;
-  recentAuth: RecentFinancialAuthenticationEvidence | null;
+  recentAuth: ReceivingAuthenticationEvidence | null;
   input: unknown;
 }
 
@@ -504,20 +518,28 @@ function readLegacyReceivingNominationSnapshot(
     const accountId = identifier(raw.accountId);
     const operationId = identifier(raw.operationId);
     const createdAt = instant(raw.createdAt);
-    const authenticatedAt = instant(audit.authenticatedAt);
-    const expiresAt = instant(audit.expiresAt);
     const proofKind = audit.proofKind;
+    const authenticatedAt =
+      proofKind === "SESSION_AUTHENTICATION"
+        ? sessionInstant(readDatabaseTimestamp(audit.authenticatedAt))
+        : instant(audit.authenticatedAt);
+    const expiresAt =
+      proofKind === "SESSION_AUTHENTICATION"
+        ? sessionInstant(readDatabaseTimestamp(audit.expiresAt))
+        : instant(audit.expiresAt);
     if (
       raw.state !== "AWAITING_PROVIDER_VERIFICATION" ||
       (raw.environment !== "sandbox" && raw.environment !== "live") ||
       audit.userId !== operatorUserId ||
       audit.siteId !== siteId ||
       (proofKind !== "PASSWORD_REAUTHENTICATION" &&
-        proofKind !== "MFA_REAUTHENTICATION") ||
+        proofKind !== "MFA_REAUTHENTICATION" &&
+        proofKind !== "SESSION_AUTHENTICATION") ||
       Date.parse(authenticatedAt) < 0 ||
       Date.parse(authenticatedAt) > Date.parse(createdAt) ||
       Date.parse(createdAt) >= Date.parse(expiresAt) ||
-      Date.parse(expiresAt) - Date.parse(authenticatedAt) > 300_000 ||
+      (proofKind !== "SESSION_AUTHENTICATION" &&
+        Date.parse(expiresAt) - Date.parse(authenticatedAt) > 300_000) ||
       raw.requestHash !==
         intentHash(
           siteId,
@@ -779,18 +801,32 @@ function dateTime(value: unknown): number {
   return time;
 }
 
+function sessionInstant(value: unknown): string {
+  const milliseconds = dateTime(value);
+  const microseconds = databaseTimestampEpochMicroseconds(value);
+  const iso = new Date(milliseconds).toISOString();
+  return microseconds % 1000n === 0n
+    ? iso
+    : `${iso.slice(0, 19)}.${(microseconds % 1000000n).toString().padStart(6, "0")}Z`;
+}
+
 function freshProof(
   audit: ReceivingNominationAuthenticationAudit,
   now: number,
   maxAuthAgeMs: number,
 ): void {
+  const maximumAge =
+    audit.proofKind === "SESSION_AUTHENTICATION"
+      ? ADMIN_ABSOLUTE_TIMEOUT_MS
+      : maxAuthAgeMs;
   const authenticated = Date.parse(audit.authenticatedAt);
   const expiry = Date.parse(audit.expiresAt);
   if (
     authenticated > now ||
-    now - authenticated > maxAuthAgeMs ||
+    now - authenticated > maximumAge ||
     expiry <= now ||
-    expiry - authenticated > maxAuthAgeMs
+    (audit.proofKind !== "SESSION_AUTHENTICATION" &&
+      expiry - authenticated > maximumAge)
   )
     throw new ReceivingNominationServiceError(403, "RECENT_AUTH_REQUIRED");
 }
@@ -820,14 +856,21 @@ function captureProof(
       raw.verification !== "verified" ||
       raw.provenance !== "backend" ||
       (proofKind !== "PASSWORD_REAUTHENTICATION" &&
-        proofKind !== "MFA_REAUTHENTICATION")
+        proofKind !== "MFA_REAUTHENTICATION" &&
+        proofKind !== "SESSION_AUTHENTICATION")
     )
       throw new Error();
     const audit = Object.freeze({
       ...actor,
       proofKind,
-      authenticatedAt: new Date(dateTime(raw.authenticatedAt)).toISOString(),
-      expiresAt: new Date(dateTime(raw.expiresAt)).toISOString(),
+      authenticatedAt:
+        proofKind === "SESSION_AUTHENTICATION"
+          ? sessionInstant(raw.authenticatedAt)
+          : new Date(dateTime(raw.authenticatedAt)).toISOString(),
+      expiresAt:
+        proofKind === "SESSION_AUTHENTICATION"
+          ? sessionInstant(raw.expiresAt)
+          : new Date(dateTime(raw.expiresAt)).toISOString(),
     });
     freshProof(audit, now(), maxAuthAgeMs);
     return audit;
@@ -847,8 +890,8 @@ function currentAuthorization(
       proofKind: audit.proofKind,
       verification: "verified",
       provenance: "backend",
-      authenticatedAt: new Date(audit.authenticatedAt),
-      expiresAt: new Date(audit.expiresAt),
+      authenticatedAt: readDatabaseTimestamp(audit.authenticatedAt),
+      expiresAt: readDatabaseTimestamp(audit.expiresAt),
     }),
   });
 }

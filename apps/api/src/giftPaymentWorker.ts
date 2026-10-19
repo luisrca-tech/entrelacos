@@ -26,6 +26,7 @@ export interface GiftPaymentWorkerOptions {
   inbox: GiftPaymentWorkerInboxPort;
   loadCheckout(
     claim: GiftPaymentInboxClaim,
+    observedCheckoutReference?: string,
   ): Promise<StoredGiftPaymentCheckoutBinding | null>;
   reader: {
     getPayment(claim: GiftPaymentInboxClaim): Promise<AsaasPaymentObservation>;
@@ -168,7 +169,7 @@ function readCheckout(
 function readObservation(
   value: unknown,
   claim: GiftPaymentInboxClaim,
-  checkout: StoredGiftPaymentCheckoutBinding,
+  checkout?: StoredGiftPaymentCheckoutBinding,
 ): AsaasPaymentObservation {
   const copy: unknown = structuredClone(value);
   const raw = exactRecord(copy, [
@@ -194,10 +195,14 @@ function readObservation(
     !giftQuoteSchema.shape.expiresAt.safeParse(raw.observedAt.toISOString())
       .success ||
     reference(payment.id) !== claim.paymentReference ||
-    reference(payment.checkoutSession) !== checkout.providerCheckoutReference ||
+    !reference(payment.checkoutSession) ||
+    (checkout !== undefined &&
+      payment.checkoutSession !== checkout.providerCheckoutReference) ||
     (payment.externalReference !== undefined &&
       payment.externalReference !== null &&
-      id(payment.externalReference) !== checkout.attemptId) ||
+      (!id(payment.externalReference) ||
+        (checkout !== undefined &&
+          payment.externalReference !== checkout.attemptId))) ||
     (payment.currency !== undefined && payment.currency !== "BRL")
   )
     return unavailable();
@@ -281,9 +286,10 @@ export function createGiftPaymentWorker(
         } catch {
           return unavailable();
         }
-        let checkout: StoredGiftPaymentCheckoutBinding;
+        let checkout: StoredGiftPaymentCheckoutBinding | null;
         try {
-          checkout = readCheckout(await loadCheckout(claim), claim);
+          const stored = await loadCheckout(claim);
+          checkout = stored === null ? null : readCheckout(stored, claim);
         } catch {
           return defer(claim, "CHECKOUT_BINDING_UNAVAILABLE");
         }
@@ -292,10 +298,30 @@ export function createGiftPaymentWorker(
           observation = readObservation(
             await getPayment(claim),
             claim,
-            checkout,
+            checkout ?? undefined,
           );
         } catch {
           return defer(claim, "PROVIDER_READ_UNAVAILABLE");
+        }
+        if (checkout === null) {
+          // Hosted payments can omit externalReference; recheck the lease and
+          // stored checkout using the session returned by the scoped provider GET.
+          try {
+            checkout = readCheckout(
+              await loadCheckout(
+                claim,
+                reference(observation.payment.checkoutSession),
+              ),
+              claim,
+            );
+          } catch {
+            return defer(claim, "CHECKOUT_BINDING_UNAVAILABLE");
+          }
+          try {
+            observation = readObservation(observation, claim, checkout);
+          } catch {
+            return defer(claim, "PROVIDER_READ_UNAVAILABLE");
+          }
         }
         try {
           return postingOutcome(

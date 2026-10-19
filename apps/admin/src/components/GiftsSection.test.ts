@@ -1,7 +1,7 @@
 import type { ReceivingReadiness } from "@entrelacos/contracts";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { GiftsReadinessView } from "./GiftsSection";
 
 const locked: ReceivingReadiness = {
@@ -65,3 +65,6 @@ describe("gift readiness rendering", () => {
     expect(html).not.toContain("Adicionar presente");
   });
 });
+
+beforeEach(() => vi.stubGlobal("__APP_ENV__", "development"));
+afterEach(() => vi.unstubAllGlobals());

@@ -1,7 +1,7 @@
 import type { ReceivingReadiness, SiteAccess } from "@entrelacos/contracts";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ReceivingStatusCard } from "./ReceivingStatusCard";
 
 const allowedAccess: SiteAccess = {
@@ -64,6 +64,23 @@ function render(
 }
 
 describe("receiving status card", () => {
+  it("shows actual receiving status to a server-authorized read-only OWNER", () => {
+    const html = render({
+      access: {
+        ...allowedAccess,
+        userId: "owner-one",
+        membershipRole: "OWNER",
+        membershipId: null,
+        capabilities: {
+          ...allowedAccess.capabilities,
+          configureReceiving: false,
+          requestWithdrawal: false,
+        },
+      },
+    });
+    expect(html).toContain("Recebimentos verificados");
+    expect(html).not.toMatch(/<form|<input|Solicitar saque|Confirme sua senha/);
+  });
   it("blocks missing, assistant, owner, cross-site, and incapable access", () => {
     const restrictedAccess: Array<SiteAccess | null> = [
       null,
@@ -201,3 +218,21 @@ describe("receiving status card", () => {
     expect(pendingSandbox).not.toContain("Recebimentos verificados");
   });
 });
+
+beforeEach(() => vi.stubGlobal("__APP_ENV__", "development"));
+afterEach(() => vi.unstubAllGlobals());
+
+it.each([
+  ["development", "sandbox", true],
+  ["production", "sandbox", false],
+  ["development", "live", false],
+  ["production", "live", false],
+] as const)(
+  "gates private notices by application and provider mode (%s, %s)",
+  (environment, mode, visible) => {
+    vi.stubGlobal("__APP_ENV__", environment);
+    expect(render({ readiness: { ...ready, mode } }).includes("Sandbox")).toBe(
+      visible,
+    );
+  },
+);

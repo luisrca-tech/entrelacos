@@ -7,7 +7,7 @@ import {
   createGiftMediaComposition,
   startGiftMediaRuntime,
 } from "./giftMediaComposition";
-import type { GiftMediaConfig } from "./giftMediaConfig";
+import { type GiftMediaConfig, readGiftMediaConfig } from "./giftMediaConfig";
 import type {
   GiftMediaStorage,
   R2GiftMediaStorageOptions,
@@ -105,6 +105,44 @@ function runtimeFixture() {
 }
 
 describe("captured gift media composition", () => {
+  it.each(["development", "test"] as const)(
+    "constructs actual R2 storage from %s runtime settings without network access",
+    async (applicationEnvironment) => {
+      const network = vi.spyOn(globalThis, "fetch").mockImplementation(() => {
+        throw new Error("Real network forbidden");
+      });
+      const config = readGiftMediaConfig(
+        {
+          GIFT_MEDIA_MODE: "r2",
+          R2_ACCOUNT_ID: "a".repeat(32),
+          R2_ACCESS_KEY_ID: "synthetic-key",
+          R2_SECRET_ACCESS_KEY: "synthetic-secret",
+          R2_BUCKET_NAME: "existing-development-bucket",
+          R2_PUBLIC_ORIGIN: "https://pub-development.r2.dev",
+        },
+        applicationEnvironment,
+      );
+      let media:
+        | Awaited<ReturnType<typeof createGiftMediaComposition>>
+        | undefined;
+      try {
+        media = await createGiftMediaComposition(config, {
+          createReadAuth: () => ({ $context: Promise.resolve({}) }) as never,
+        });
+        expect(
+          media.ports.storage?.getDerivativeUrl(
+            "gifts/wedding-a/asset-a/processing-a.webp",
+          ),
+        ).toBe(
+          "https://pub-development.r2.dev/gifts/wedding-a/asset-a/processing-a.webp",
+        );
+        expect(network).not.toHaveBeenCalled();
+      } finally {
+        await media?.close();
+        network.mockRestore();
+      }
+    },
+  );
   it("disabled returns before all private config and factory reads", async () => {
     const config = { mode: "disabled" };
     const options = {};

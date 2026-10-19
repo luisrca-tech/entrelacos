@@ -339,6 +339,7 @@ async function fixture() {
     changeOnCommit: false,
     pauseClock: null as Promise<void> | null,
     loseCommit: false,
+    onCommit: null as (() => void) | null,
   };
   const queries: Array<{ sql: string; params: unknown[] }> = [];
   const query = vi.fn(
@@ -348,6 +349,7 @@ async function fixture() {
       expect(text).not.toMatch(/\b(?:INSERT|UPDATE|DELETE)\b/i);
       if (/^begin|^rollback/i.test(text)) return { rows: [] };
       if (/^commit/i.test(text)) {
+        state.onCommit?.();
         if (state.changeOnCommit) state.membershipId = "membership-replaced";
         if (state.loseCommit) throw new Error("fictional-private-driver-cause");
         return { rows: [] };
@@ -371,20 +373,21 @@ async function fixture() {
         };
       if (/FROM "user" u/.test(text))
         return {
-          rows: state.membership
-            ? [
-                {
-                  user_id: "viewer-one",
-                  account_role: state.role,
-                  account_state: "ACTIVE",
-                  site_id: "site-one",
-                  membership_id: state.membershipId,
-                  membership_user_id: "viewer-one",
-                  membership_role: "SITE_ADMIN",
-                  revoked_at: null,
-                },
-              ]
-            : [],
+          rows:
+            state.membership || state.role === "OWNER"
+              ? [
+                  {
+                    user_id: "viewer-one",
+                    account_role: state.role,
+                    account_state: "ACTIVE",
+                    site_id: "site-one",
+                    membership_id: state.membershipId,
+                    membership_user_id: "viewer-one",
+                    membership_role: "SITE_ADMIN",
+                    revoked_at: null,
+                  },
+                ]
+              : [],
         };
       if (/FROM "site" s/.test(text))
         return { rows: [{ id: "site-one", is_demo: false }] };
@@ -522,6 +525,89 @@ function seedIndex(v: Awaited<ReturnType<typeof fixture>>, count: number) {
   }
 }
 describe("bounded historical purchase stored reader", () => {
+  it("preserves recipient-deducted frozen pricing and the actual recipient credit in private history", async () => {
+    const v = await fixture();
+    const stored = v.tables.gift_quote_record[0];
+    const snapshot = stored.snapshot as {
+      quote: Record<string, unknown>;
+      pricing: { policy: Record<string, unknown> };
+    };
+    Object.assign(snapshot.quote, {
+      totalCents: 10000,
+      feeAllocation: "RECIPIENT_DEDUCTED",
+    });
+    snapshot.pricing.policy.feeAllocation = "RECIPIENT_DEDUCTED";
+    stored.total_cents = 10000;
+    Object.assign(v.tables.gift_payment_record[0], {
+      gross_cents: 10000,
+      processing_cents: 99,
+      recipient_net_cents: 9701,
+    });
+    v.tables.financial_ledger_entry[0].amount_cents = 9701;
+    const frozen = structuredClone(snapshot);
+    const page = await v.repository.readPurchasePage(v.scope, null);
+    expect(page.history.items[0].quoted).toEqual({
+      nominalCents: 10000,
+      totalCents: 10000,
+      commissionCents: 200,
+      processingCents: 39,
+      feeAllocation: "RECIPIENT_DEDUCTED",
+    });
+    const detail = await v.repository.readPurchaseDetailPage(
+      v.scope,
+      "order-one",
+      null,
+    );
+    expect(detail.history.originalPurchase.quoted).toEqual(
+      page.history.items[0].quoted,
+    );
+    expect(
+      detail.history.validatedHistoricalReceipts[0].recipientCreditCents,
+    ).toBe(9701);
+    expect(snapshot).toEqual(frozen);
+    await v.repository.close();
+  });
+
+  it("reads index and detail for a native OWNER without membership, preserving public DTOs", async () => {
+    const v = await fixture();
+    v.state.role = "OWNER";
+    v.state.membership = false;
+    const scope = { ...v.scope, membershipId: null };
+    const page = await v.repository.readPurchasePage(scope, null);
+    expect(page.history.items).toHaveLength(1);
+    const detail = await v.repository.readPurchaseDetailPage(
+      scope,
+      "order-one",
+      null,
+    );
+    expect(detail.history.originalPurchase.orderId).toBe("order-one");
+    expect(detail.history.scope).not.toHaveProperty("membershipId");
+    await v.repository.close();
+  });
+
+  it.each([
+    "revoked-session",
+    "demoted-owner",
+    "disabled-membership-owner-claim",
+  ] as const)(
+    "revalidates native OWNER scope after transaction settlement (%s)",
+    async (fault) => {
+      const v = await fixture();
+      v.state.role = "OWNER";
+      v.state.membership = false;
+      v.state.onCommit = () => {
+        if (fault === "revoked-session") v.state.active = false;
+        else
+          v.state.role =
+            fault === "demoted-owner" ? "SITE_ASSISTANT" : "SITE_ADMIN";
+      };
+      await expect(
+        v.repository.readPurchasePage({ ...v.scope, membershipId: null }, null),
+      ).rejects.toThrow("Purchase history unavailable");
+      expect(v.queries.some((query) => /^begin/i.test(query.sql))).toBe(true);
+      await v.repository.close();
+    },
+  );
   it("accepts a receipt event processed after the credit at exact microsecond precision", async () => {
     const v = await fixture();
     v.tables.financial_event_inbox[0].processed_at =
@@ -535,6 +621,90 @@ describe("bounded historical purchase stored reader", () => {
     expect(reply.history.validatedHistoricalReceipts[0].postedAtMicros).toBe(
       "1791824700000123",
     );
+    await v.repository.close();
+  });
+  it.each(["CHECKOUT_CREATED", "CHECKOUT_PAID"])(
+    "retains a canonical received credit beside its authenticated %s event without a native payment ID",
+    async (eventType) => {
+      const v = await fixture();
+      const payload = {
+        checkoutId: "checkout-one",
+        externalReference: "attempt-one",
+      };
+      v.tables.financial_event_inbox.push({
+        ...v.tables.financial_event_inbox[0],
+        id: "checkout-event",
+        event_type: eventType,
+        provider_event_reference: "evt_checkout",
+        payment_id: null,
+        payload,
+        payload_hash: hashAsaasEventIdentity(
+          "evt_checkout",
+          eventType,
+          "provider-account-old",
+          payload,
+        ),
+      });
+      const reply = await v.repository.readPurchaseDetailPage(
+        v.scope,
+        "order-one",
+        null,
+      );
+      expect(reply.history.retainedPayments).toHaveLength(1);
+      expect(reply.history.validatedHistoricalReceipts).toEqual([
+        expect.objectContaining({ recipientCreditCents: 10000 }),
+      ]);
+      expect(reply.history.coverage.receipts).toBe("AVAILABLE");
+      await v.repository.close();
+    },
+  );
+  it.each([
+    "missing-checkout",
+    "malformed-checkout",
+    "unknown-payload-key",
+    "invalid-hash",
+    "missing-authentication",
+    "missing-payment-on-receipt",
+    "unsupported-checkout",
+  ])("rejects invalid correlated event evidence: %s", async (fault) => {
+    const v = await fixture();
+    const eventType =
+      fault === "missing-payment-on-receipt"
+        ? "PAYMENT_RECEIVED"
+        : fault === "unsupported-checkout"
+          ? "CHECKOUT_UNKNOWN"
+          : "CHECKOUT_PAID";
+    const payload: Record<string, string> = {
+      checkoutId: "checkout-one",
+      externalReference: "attempt-one",
+    };
+    if (fault === "missing-checkout") delete payload.checkoutId;
+    if (fault === "malformed-checkout") payload.checkoutId = "not a reference";
+    if (fault === "unknown-payload-key") payload.unexpected = "value";
+    v.tables.financial_event_inbox.push({
+      ...v.tables.financial_event_inbox[0],
+      id: "checkout-event",
+      event_type: eventType,
+      provider_event_reference: "evt_checkout",
+      payment_id: null,
+      authenticated_at:
+        fault === "missing-authentication"
+          ? null
+          : v.tables.financial_event_inbox[0].authenticated_at,
+      payload,
+      payload_hash:
+        fault === "invalid-hash"
+          ? "0".repeat(64)
+          : hashAsaasEventIdentity(
+              "evt_checkout",
+              eventType,
+              "provider-account-old",
+              payload,
+            ),
+    });
+    await expect(
+      v.repository.readPurchaseDetailPage(v.scope, "order-one", null),
+    ).rejects.toThrow("Purchase history unavailable");
     await v.repository.close();
   });
   it("rejects a receipt event processed before the credit by one microsecond", async () => {
@@ -720,6 +890,29 @@ describe("bounded historical purchase stored reader", () => {
       expect(JSON.stringify(reply)).not.toContain(privateValue);
     await v.repository.close();
   });
+
+  it.each([
+    [99, 9940],
+    [0, 10039],
+  ])(
+    "retains the actual provider fee %i and validated recipient credit %i",
+    async (fee, net) => {
+      const v = await fixture();
+      v.tables.gift_payment_record[0].processing_cents = fee;
+      v.tables.gift_payment_record[0].recipient_net_cents = net;
+      v.tables.financial_ledger_entry[0].amount_cents = net;
+      const reply = await v.repository.readPurchaseDetailPage(
+        v.scope,
+        "order-one",
+        null,
+      );
+      expect(reply.history.validatedHistoricalReceipts).toEqual([
+        expect.objectContaining({ recipientCreditCents: net }),
+      ]);
+      expect(reply.history.coverage.receipts).toBe("AVAILABLE");
+      await v.repository.close();
+    },
+  );
   it.each(["session", "membership", "role", "scope"] as const)(
     "current %s denial admits no stored transaction",
     async (fault) => {

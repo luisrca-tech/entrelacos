@@ -412,6 +412,33 @@ function fixture(rawTimestamps = false) {
 }
 
 describe("gift payment receipt posting repository", () => {
+  it("consumes confirmed payments as awaiting release without creating a receipt or ledger credit", async () => {
+    const values = fixture();
+    const event = values.tables.financial_event_inbox[0];
+    event.eventType = "PAYMENT_CONFIRMED";
+    event.payloadHash = hashAsaasEventIdentity(
+      String(event.providerEventReference),
+      "PAYMENT_CONFIRMED",
+      "provider-account-one",
+      event.payload as Record<string, string>,
+    );
+    (values.input.observation.payment as Record<string, unknown>).status =
+      "CONFIRMED";
+    const result = await createGiftPaymentPostingRepository(
+      values.db,
+      values.options,
+    ).postReceivedPayment(values.input);
+    expect(result.outcome).toBe("OBSERVED");
+    expect(values.tables.financial_event_inbox[0]).toMatchObject({
+      state: "PROCESSED",
+    });
+    expect(values.tables.gift_payment_record[0]).toMatchObject({
+      providerStatus: "CONFIRMED",
+      recipientNetCents: 10000,
+    });
+    expect(values.tables.financial_ledger_entry).toEqual([]);
+  });
+
   it("posts and recovers one actual receipt using raw Drizzle timestamp strings", async () => {
     const v = fixture(true);
     const repository = createGiftPaymentPostingRepository(v.db, v.options);
@@ -437,6 +464,72 @@ describe("gift payment receipt posting repository", () => {
     ).rejects.toMatchObject({ code: "PAYMENT_POSTING_UNAVAILABLE" });
     expect(v.tables.financial_ledger_entry).toHaveLength(0);
   });
+  it.each(["CONFIRMED", "RECEIVED"])(
+    "persists actual fee allocation once for %s without changing the buyer quote",
+    async (status) => {
+      const values = fixture();
+      const quote = values.binding.snapshot.quote;
+      Object.assign(quote, {
+        nominalCents: 1000,
+        commissionCents: 20,
+        processingCents: 0,
+        totalCents: 1020,
+      });
+      values.binding.snapshot.gift.nominalCents = 1000;
+      values.binding.snapshot.pricing.policy.processingFixedCents = 0;
+      Object.assign(values.binding, {
+        nominalCents: 1000,
+        commissionCents: 20,
+        processingCents: 0,
+        totalCents: 1020,
+      });
+      const raw = values.input.observation.payment as Record<string, unknown>;
+      Object.assign(raw, { status, value: "10.20", netValue: "9.21" });
+      Object.assign((raw.split as Record<string, unknown>[])[0], {
+        fixedValue: "0.20",
+        totalValue: "0.20",
+      });
+      const event = values.tables.financial_event_inbox[0];
+      event.eventType =
+        status === "RECEIVED" ? "PAYMENT_RECEIVED" : "PAYMENT_CONFIRMED";
+      event.payloadHash = hashAsaasEventIdentity(
+        String(event.providerEventReference),
+        String(event.eventType),
+        "provider-account-one",
+        event.payload as Record<string, string>,
+      );
+      const frozenQuote = structuredClone(quote);
+      const repository = createGiftPaymentPostingRepository(
+        values.db,
+        values.options,
+      );
+      expect((await repository.postReceivedPayment(values.input)).outcome).toBe(
+        status === "RECEIVED" ? "POSTED" : "OBSERVED",
+      );
+      expect(values.tables.gift_payment_record[0]).toMatchObject({
+        grossCents: 1020,
+        processingCents: 99,
+        recipientNetCents: 901,
+        splitFixedCents: 20,
+      });
+      expect(event.state).toBe("PROCESSED");
+      expect((await repository.postReceivedPayment(values.input)).outcome).toBe(
+        "DUPLICATE",
+      );
+      expect(values.tables.financial_ledger_entry).toEqual(
+        status === "RECEIVED"
+          ? [
+              expect.objectContaining({
+                kind: "GIFT_RECEIVED",
+                amountCents: 901,
+              }),
+            ]
+          : [],
+      );
+      expect(values.binding.snapshot.quote).toEqual(frozenQuote);
+    },
+  );
+
   it("posts the actual verified allocation, one receipt and the correlated event atomically", async () => {
     const values = fixture();
     const result = await createGiftPaymentPostingRepository(
@@ -728,7 +821,7 @@ describe("observed allocations remain pending", () => {
     "pending",
     "split-pending",
     "missing-net",
-    "net-divergence",
+    "gross-divergence",
     "fixed-divergence",
     "wallet-divergence",
   ])(
@@ -743,7 +836,7 @@ describe("observed allocations remain pending", () => {
       }
       if (caseName === "split-pending") split.status = "PENDING";
       if (caseName === "missing-net") delete raw.netValue;
-      if (caseName === "net-divergence") raw.netValue = "101.00";
+      if (caseName === "gross-divergence") raw.value = "103.39";
       if (caseName === "fixed-divergence") {
         split.fixedValue = "3.00";
         split.totalValue = "3.00";
@@ -777,10 +870,10 @@ describe("observed allocations remain pending", () => {
         expect(
           values.tables.gift_payment_record[0].recipientNetCents,
         ).toBeNull();
-      if (caseName === "net-divergence")
+      if (caseName === "gross-divergence")
         expect(values.tables.gift_payment_record[0]).toMatchObject({
           processingCents: 139,
-          recipientNetCents: 9_900,
+          recipientNetCents: 10_000,
         });
       if (caseName === "fixed-divergence")
         expect(values.tables.gift_payment_record[0]).toMatchObject({
@@ -893,7 +986,7 @@ describe("observed allocations remain pending", () => {
     expect(values.tables.financial_ledger_entry).toHaveLength(1);
     expect(values.tables.financial_event_inbox[1]).toMatchObject({
       state: "RETRY",
-      lastErrorCode: "ALLOCATION_MISMATCH",
+      lastErrorCode: "PAYMENT_RECEIPT_MISMATCH",
     });
   });
 });
@@ -964,6 +1057,28 @@ describe("stored financial proof and bounded observation input", () => {
     );
     await repository.postReceivedPayment(values.input);
     values.tables.gift_payment_record[0].recipientNetCents = 9_999;
+    await expect(
+      repository.postReceivedPayment(nextEvent(values)),
+    ).rejects.toMatchObject({ code: "PAYMENT_POSTING_UNAVAILABLE" });
+    expect(values.tables.financial_ledger_entry).toHaveLength(1);
+    expect(values.tables.financial_event_inbox[1].state).toBe("CLAIMED");
+  });
+
+  it.each([
+    { processingCents: 40, recipientNetCents: 10_000 },
+    { processingCents: -1, recipientNetCents: 10_040 },
+    { processingCents: 39.5, recipientNetCents: 9_999.5 },
+    { processingCents: 10_039, recipientNetCents: 0 },
+  ])("rejects invalid stored receipt conservation: %j", async (allocation) => {
+    const values = fixture();
+    const repository = createGiftPaymentPostingRepository(
+      values.db,
+      values.options,
+    );
+    await repository.postReceivedPayment(values.input);
+    Object.assign(values.tables.gift_payment_record[0], allocation);
+    values.tables.financial_ledger_entry[0].amountCents =
+      allocation.recipientNetCents;
     await expect(
       repository.postReceivedPayment(nextEvent(values)),
     ).rejects.toMatchObject({ code: "PAYMENT_POSTING_UNAVAILABLE" });

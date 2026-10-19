@@ -126,6 +126,9 @@ describe("private parent account provisioning adapter", () => {
       string,
       RequestInit,
     ];
+    expect(new Headers(request[1].headers).get("User-Agent")).toBe(
+      "Entrelacos/1.0",
+    );
     expect(new Headers(request[1].headers).get("access_token")).toBe(
       "fictional-parent-key",
     );

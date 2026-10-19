@@ -1,5 +1,6 @@
 import {
   type GiftQuote,
+  getGiftCommissionCents,
   giftCentsSchema,
   giftPaymentMethodSchema,
   giftQuoteSchema,
@@ -12,6 +13,8 @@ export interface GiftProcessingPolicy {
   processingBasisPoints: number;
   processingFixedCents: number;
   rounding: "CEILING";
+  feeAllocation?: GiftQuote["feeAllocation"];
+  feeBasis?: "OBSERVED_ESTIMATE";
 }
 
 export interface QuoteGiftAmountsInput {
@@ -27,6 +30,7 @@ export type GiftAmounts = Pick<
   | "processingCents"
   | "totalCents"
   | "policyVersion"
+  | "feeAllocation"
 >;
 
 export class GiftMoneyServiceError extends Error {
@@ -77,7 +81,13 @@ export function quoteGiftAmounts(input: QuoteGiftAmountsInput): GiftAmounts {
     !injected ||
     injected.method !== input.method ||
     injected.commissionBasisPoints !== 200 ||
+    (injected.feeBasis !== undefined &&
+      injected.feeBasis !== "OBSERVED_ESTIMATE") ||
+    (injected.feeBasis === "OBSERVED_ESTIMATE" &&
+      injected.feeAllocation !== "RECIPIENT_DEDUCTED") ||
     injected.rounding !== "CEILING" ||
+    !giftQuoteSchema.shape.feeAllocation.safeParse(injected.feeAllocation)
+      .success ||
     !giftQuoteSchema.shape.policyVersion.safeParse(injected.version).success ||
     !Number.isInteger(injected.processingBasisPoints) ||
     injected.processingBasisPoints < 0 ||
@@ -89,9 +99,21 @@ export function quoteGiftAmounts(input: QuoteGiftAmountsInput): GiftAmounts {
   const nominal = BigInt(nominalResult.data);
   const rate = BigInt(injected.processingBasisPoints);
   const fixed = BigInt(injected.processingFixedCents);
-  const commission =
-    (nominal * BigInt(injected.commissionBasisPoints) + BASIS_POINTS / 2n) /
-    BASIS_POINTS;
+  const commission = BigInt(getGiftCommissionCents(nominalResult.data));
+  if (injected.feeAllocation === "RECIPIENT_DEDUCTED") {
+    const processing = fixed + ceilingDivide(nominal * rate, BASIS_POINTS);
+    if (nominal <= commission + processing) return policyUnavailable();
+    return {
+      nominalCents: nominalResult.data,
+      commissionCents: Number(commission),
+      processingCents: Number(processing),
+      totalCents: nominalResult.data,
+      policyVersion: injected.version,
+      feeAllocation: injected.feeAllocation,
+    };
+  }
+
+  // Unmarked policies retain the arithmetic of immutable historical quotes.
   // T - ceil(T * rate / D) = floor(T * (D - rate) / D).
   const total = ceilingDivide(
     (nominal + commission + fixed) * BASIS_POINTS,
@@ -108,6 +130,9 @@ export function quoteGiftAmounts(input: QuoteGiftAmountsInput): GiftAmounts {
     processingCents: Number(processing),
     totalCents: totalResult.data,
     policyVersion: injected.version,
+    ...(injected.feeAllocation
+      ? { feeAllocation: injected.feeAllocation }
+      : {}),
   };
 }
 

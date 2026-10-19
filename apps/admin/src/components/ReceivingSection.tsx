@@ -1,10 +1,12 @@
 import type { ReceivingReadiness, SiteAccess } from "@entrelacos/contracts";
+import { Button } from "@entrelacos/ui";
 import { useEffect, useState } from "react";
 import { ReceivingStatusCard } from "../features/receiving/ReceivingStatusCard";
 import { FinanceSection } from "./FinanceSection";
 import { loadGiftsReadiness } from "./giftsReadiness";
 import { isCurrentPanelSessionEpoch, panelActorOwner } from "./panelActor";
-import { ReceivingSetup } from "./ReceivingSetup";
+import { ReceivingAccountSetup } from "./ReceivingAccountSetup";
+import { loadReceivingOwnerAccess } from "./receivingOwnerAccess";
 
 type ReceivingSectionResult = {
   siteId: string;
@@ -36,18 +38,52 @@ export function ReceivingSection({
   siteId,
   access,
   sessionEpoch = null,
+  platformOwner = false,
 }: {
   siteId: string;
   access: SiteAccess | null;
   sessionEpoch?: number | null;
+  platformOwner?: boolean;
 }) {
   const [result, setResult] = useState<ReceivingSectionResult | null>(null);
   const [revision, setRevision] = useState(0);
+  const [ownerAccess, setOwnerAccess] = useState<{
+    siteId: string;
+    epoch: number;
+    access: SiteAccess;
+  } | null>(null);
+  const [ownerAccessFailed, setOwnerAccessFailed] = useState(false);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Retry rechecks server-owned selected-site access.
+  useEffect(() => {
+    let active = true;
+    setOwnerAccess(null);
+    setOwnerAccessFailed(false);
+    if (platformOwner && sessionEpoch !== null)
+      void loadReceivingOwnerAccess(siteId, sessionEpoch)
+        .then((resolved) => {
+          if (active && resolved && isCurrentPanelSessionEpoch(sessionEpoch))
+            setOwnerAccess({ siteId, epoch: sessionEpoch, access: resolved });
+        })
+        .catch(() => {
+          if (active && isCurrentPanelSessionEpoch(sessionEpoch))
+            setOwnerAccessFailed(true);
+        });
+    return () => {
+      active = false;
+    };
+  }, [siteId, sessionEpoch, platformOwner, revision]);
+  const selectedAccess = platformOwner
+    ? ownerAccess?.siteId === siteId && ownerAccess.epoch === sessionEpoch
+      ? ownerAccess.access
+      : null
+    : access;
   const eligible =
     sessionEpoch !== null &&
-    access?.siteId === siteId &&
-    access.membershipRole === "SITE_ADMIN" &&
-    access.capabilities.configureReceiving;
+    selectedAccess?.siteId === siteId &&
+    ((selectedAccess.membershipRole === "SITE_ADMIN" &&
+      selectedAccess.capabilities.configureReceiving) ||
+      (selectedAccess.membershipRole === "OWNER" &&
+        selectedAccess.capabilities.readFinance));
   // biome-ignore lint/correctness/useExhaustiveDependencies: Retry repeats this site's status request.
   useEffect(() => {
     let active = true;
@@ -63,10 +99,11 @@ export function ReceivingSection({
   return (
     <ReceivingSectionView
       siteId={siteId}
-      access={access}
+      access={selectedAccess}
+      platformOwner={platformOwner}
       sessionEpoch={sessionEpoch}
       readiness={current?.readiness ?? null}
-      failed={current?.failed ?? false}
+      failed={ownerAccessFailed || (current?.failed ?? false)}
       onRetry={() => setRevision((value) => value + 1)}
     />
   );
@@ -76,6 +113,7 @@ export function ReceivingSectionView({
   siteId,
   access,
   sessionEpoch,
+  platformOwner = false,
   readiness,
   failed,
   onRetry,
@@ -83,6 +121,7 @@ export function ReceivingSectionView({
   siteId: string;
   access: SiteAccess | null;
   sessionEpoch: number | null;
+  platformOwner?: boolean;
   readiness: ReceivingReadiness | null;
   failed: boolean;
   onRetry: () => void;
@@ -91,28 +130,45 @@ export function ReceivingSectionView({
     sessionEpoch !== null && access?.siteId === siteId ? access : null;
   return (
     <div className="grid gap-6">
-      <ReceivingStatusCard
-        siteId={siteId}
-        access={currentAccess}
-        readiness={
-          currentAccess && readiness?.siteId === siteId ? readiness : null
-        }
-        error={!!currentAccess && failed}
-        onRetry={onRetry}
-      />
-      {currentAccess?.membershipRole === "SITE_ADMIN" &&
-        currentAccess.capabilities.configureReceiving && (
-          <ReceivingSetup
-            siteId={siteId}
-            access={currentAccess}
-            sessionEpoch={sessionEpoch}
-          />
-        )}
-      <FinanceSection
-        siteId={siteId}
-        access={currentAccess}
-        sessionEpoch={sessionEpoch}
-      />
+      {platformOwner && !currentAccess ? (
+        <section className="grid gap-3 rounded-xl border border-admin-line bg-admin-surface p-6">
+          <p role={failed ? "alert" : "status"}>
+            {failed
+              ? "Não foi possível consultar o acesso de leitura deste casamento."
+              : "Consultando o acesso de leitura deste casamento…"}
+          </p>
+          <Button onClick={onRetry}>Verificar acesso</Button>
+        </section>
+      ) : (
+        <ReceivingStatusCard
+          siteId={siteId}
+          access={currentAccess}
+          readiness={
+            currentAccess && readiness?.siteId === siteId ? readiness : null
+          }
+          error={!!currentAccess && failed}
+          onRetry={onRetry}
+        />
+      )}
+      {((sessionEpoch !== null && platformOwner) ||
+        currentAccess?.membershipRole === "OWNER" ||
+        (currentAccess?.membershipRole === "SITE_ADMIN" &&
+          currentAccess.capabilities.configureReceiving)) && (
+        <ReceivingAccountSetup
+          siteId={siteId}
+          access={currentAccess}
+          platformOwner={platformOwner}
+          sessionEpoch={sessionEpoch}
+          onReadinessChange={onRetry}
+        />
+      )}
+      {(!platformOwner || !!currentAccess) && (
+        <FinanceSection
+          siteId={siteId}
+          access={currentAccess}
+          sessionEpoch={sessionEpoch}
+        />
+      )}
     </div>
   );
 }

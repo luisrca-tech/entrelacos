@@ -136,7 +136,7 @@ function fixture(
                 e.lease_token === parameter("e", "lease_token") &&
                 e.attempts === parameter("e", "attempts") &&
                 e.state === "CLAIMED" &&
-                e.event_type === "PAYMENT_RECEIVED" &&
+                sql.includes(`'${e.event_type}'`) &&
                 e.processed_at === null &&
                 (e.payload as Row).paymentId === claim.paymentReference &&
                 e.authenticated_at instanceof Date &&
@@ -265,6 +265,13 @@ async function rejectsSafely(
 }
 afterEach(() => vi.useRealTimers());
 describe("server-only stored Asaas account reads", () => {
+  it("reads a payment for an original confirmed event claim with the same stored account and lease", async () => {
+    const values = fixture();
+    values.event.event_type = "PAYMENT_CONFIRMED";
+    const observed = await values.reader.getPayment(values.claim);
+    expect(observed.payment.id).toBe(values.claim.paymentReference);
+    expect(values.fetch).toHaveBeenCalledOnce();
+  });
   it("decrypts the stored sandbox credential and fetches only the original claimed payment", async () => {
     const values = fixture();
     const result = await values.reader.getPayment(values.claim);
@@ -340,6 +347,20 @@ describe("server-only stored Asaas account reads", () => {
       12345,
     );
     expect(values.fetch).toHaveBeenCalledTimes(2);
+  });
+  it.each([
+    "PAYMENT_REFUNDED",
+    "PAYMENT_PARTIALLY_REFUNDED",
+    "PAYMENT_REFUND_IN_PROGRESS",
+    "PAYMENT_CHARGEBACK_REQUESTED",
+    "PAYMENT_CHARGEBACK_DISPUTE",
+    "PAYMENT_AWAITING_CHARGEBACK_REVERSAL",
+  ])("allows an authenticated leased %s native read", async (eventType) => {
+    const values = fixture();
+    values.tables.events[0].event_type = eventType;
+    expect((await values.reader.getPayment(values.claim)).payment.id).toBe(
+      "pay_one",
+    );
   });
   it("reads live only in production using a live envelope, prefix and fixed origin", async () => {
     const values = fixture("live", "production");

@@ -55,6 +55,11 @@ export function Panel({ siteId, area }: { siteId?: string; area?: SiteArea }) {
     panelActorOwner.getSnapshot,
     panelActorOwner.getServerSnapshot,
   );
+  const suspended = useSyncExternalStore(
+    panelActorOwner.subscribeSuspension,
+    panelActorOwner.isSuspended,
+    panelActorOwner.getServerSuspensionSnapshot,
+  );
   const [siteName, setSiteName] = useState<string>();
   const authActions = useRef<ReturnType<
     typeof createPanelAuthenticationActions
@@ -91,17 +96,35 @@ export function Panel({ siteId, area }: { siteId?: string; area?: SiteArea }) {
   }
 
   return (
-    <PanelSessionView
-      snapshot={snapshot}
-      siteId={siteId}
-      area={area}
-      siteName={siteName}
-      onSiteName={setSiteName}
-      onVerify={() => {
-        void panelActorOwner.load(true).catch(() => {});
+    <fieldset
+      className="contents"
+      disabled={suspended}
+      inert={suspended}
+      onSubmitCapture={(event) => {
+        if (panelActorOwner.isSuspended()) {
+          event.preventDefault();
+          event.stopPropagation();
+        }
       }}
-      onLogout={() => void logout()}
-    />
+      onClickCapture={(event) => {
+        if (panelActorOwner.isSuspended()) {
+          event.preventDefault();
+          event.stopPropagation();
+        }
+      }}
+    >
+      <PanelSessionView
+        snapshot={snapshot}
+        siteId={siteId}
+        area={area}
+        siteName={siteName}
+        onSiteName={setSiteName}
+        onVerify={() => {
+          void panelActorOwner.load(true).catch(() => {});
+        }}
+        onLogout={() => void logout()}
+      />
+    </fieldset>
   );
 }
 

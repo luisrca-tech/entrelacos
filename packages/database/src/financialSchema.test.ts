@@ -86,6 +86,13 @@ function checkSql(table: PgTable, name: string): string {
 }
 
 describe("financial receiving account schema", () => {
+  it("retains optional durable webhook registration metadata beside the authentication hash", () => {
+    expect(receivingAccount.webhookRegistration.name).toBe(
+      "webhook_registration",
+    );
+    expect(receivingAccount.webhookRegistration.dataType).toBe("json");
+    expect(receivingAccount.webhookRegistration.notNull).toBe(false);
+  });
   it("starts unapproved without an implicit recipient or remote references", () => {
     expect(receivingAccount.providerAccountState.default).toBe("UNVERIFIED");
     for (const column of [
@@ -268,6 +275,14 @@ describe("versioned receiving evidence and immutable quote identity", () => {
     }
   });
 
+  it("pins recipient-paid allocation to matching quote and policy markers", () => {
+    const allocation = checkSql(giftQuoteRecord, "gift_quote_allocation_check");
+    expect(allocation).toContain("RECIPIENT_DEDUCTED");
+    expect(allocation).toContain("BUYER_GROSS_UP");
+    expect(allocation).toContain("{quote,feeAllocation}");
+    expect(allocation).toContain("{pricing,policy,feeAllocation}");
+    expect(allocation).toMatch(/coalesce/i);
+  });
   it("maps frozen quotes to BRL integer allocations, current destination version and archived gifts", () => {
     expect(giftQuoteRecord.snapshot.getSQLType()).toBe("jsonb");
     expect(giftQuoteRecord.snapshot.notNull).toBe(true);
@@ -500,7 +515,10 @@ describe("durable financial operation metadata", () => {
     ]);
     expect(
       checkSql(financialEventInbox, "financial_event_provider_reference_check"),
-    ).toContain("[ -~]{1,256}");
+    ).toContain("[ -~]+");
+    expect(
+      checkSql(financialEventInbox, "financial_event_provider_reference_check"),
+    ).toContain("BETWEEN 1 AND 256");
     expect(
       checkSql(financialEventInbox, "financial_event_hash_check"),
     ).toContain("64");

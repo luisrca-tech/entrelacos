@@ -50,6 +50,11 @@ import {
   type ReceivingRepositoryOptions,
   readReceivingReadiness,
 } from "./receivingRepository";
+import type { ReceivingSetupService } from "./receivingSetup";
+import {
+  createReceivingSetupHttpRouter,
+  type ReceivingSetupHttpOptions,
+} from "./receivingSetupHttp";
 import { createReportsHttpRouter } from "./reportsHttp";
 import { createRsvpHttpRouter } from "./rsvpHttp";
 import { createSitesHttpRouter } from "./sitesHttp";
@@ -69,6 +74,8 @@ export type ApiOptions = GiftPaymentsHttpOptions &
     asaasWebhook?: AsaasWebhookHttpReceiver;
     financialReauthentication?: FinancialReauthentication;
     receivingNomination?: ReceivingNominationService;
+    receivingSetup?: ReceivingSetupService;
+    receivingVerification?: ReceivingSetupHttpOptions["receivingVerification"];
     giftMediaAuth?: GiftMediaHttpOptions["auth"];
     giftPaymentHistory?: GiftPaymentHistoryHttpOptions["giftPaymentHistory"];
   };
@@ -117,6 +124,20 @@ export function createApp(
       app.on(method, path, (context) => teamRouter.fetch(context.req.raw));
     }
     app.route("/", createReceivingHttpRouter({ ...options, readReadiness }));
+    const receivingSetupRouter = createReceivingSetupHttpRouter(options);
+    for (const [method, path] of [
+      ["GET", "/v1/sites/:siteId/receiving/setup"],
+      ["POST", "/v1/sites/:siteId/receiving/setup"],
+      ["POST", "/v1/sites/:siteId/receiving/holder"],
+      ["POST", "/v1/sites/:siteId/receiving/incoming-verification"],
+      ["POST", "/v1/sites/:siteId/receiving/pix-destination/preview"],
+      ["POST", "/v1/sites/:siteId/receiving/pix-destination/confirm"],
+      ["GET", "/v1/sites/:siteId/receiving/pix-destination"],
+    ]) {
+      app.on(method, path, (context) =>
+        receivingSetupRouter.fetch(context.req.raw),
+      );
+    }
     app.route("/", createFinanceHttpRouter(options));
     app.route("/", createFinancialReauthenticationHttpRouter(options));
     app.route("/", createReceivingNominationHttpRouter(options));

@@ -35,6 +35,31 @@ const access: SiteAccess = {
 };
 
 describe("finance section composition", () => {
+  it("shows OWNER read surfaces while withholding the withdrawal setup entirely", () => {
+    const selected: SiteAccess = {
+      ...access,
+      userId: "owner-one",
+      membershipRole: "OWNER",
+      membershipId: null,
+      capabilities: {
+        ...access.capabilities,
+        configureReceiving: false,
+        requestWithdrawal: false,
+      },
+    };
+    const html = renderToStaticMarkup(
+      createElement(FinanceSection, {
+        siteId: "wedding-a",
+        access: selected,
+        sessionEpoch: 7,
+      }),
+    );
+    expect(html).toContain("Consultando o financeiro");
+    expect(html).toContain("Consultando o histórico de saques");
+    expect(html).not.toMatch(
+      /data-withdrawal-epoch|<form|<input|Solicitar saque|Confirme sua senha/,
+    );
+  });
   it("propagates only a real nullable verified epoch to the withdrawal caller", () => {
     const render = (sessionEpoch: number | null, candidate = access) =>
       renderToStaticMarkup(

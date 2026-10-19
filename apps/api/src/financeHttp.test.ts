@@ -239,6 +239,51 @@ describe("finance HTTP disabled boundary", () => {
     expect(mocks.requireAdminSession).not.toHaveBeenCalled();
     expect(v.service.readContext).not.toHaveBeenCalled();
   });
+  it.each([
+    ["OWNER", 403],
+    ["SITE_ADMIN", 409],
+    ["SIGNED_OUT", 401],
+  ] as const)(
+    "authorizes %s before reporting missing withdrawal discovery service",
+    async (role, expectedStatus) => {
+      const v = discoveryFixture();
+      if (role === "SIGNED_OUT") v.readSession.mockResolvedValue(null as never);
+      else
+        v.readSession.mockResolvedValue({
+          user: { id: v.actor.userId, role },
+          session: { id: v.actor.sessionId },
+        });
+      if (role === "OWNER") {
+        mocks.resolveSiteAccess.mockResolvedValue({
+          ...access(),
+          membershipId: null,
+          membershipRole: "OWNER",
+          capabilities: {
+            ...access().capabilities,
+            configureReceiving: false,
+            requestWithdrawal: false,
+          },
+        });
+      }
+      const api = createFinanceHttpRouter({
+        ...v.options,
+        withdrawalReservation: undefined,
+      });
+      for (const method of ["GET", "HEAD"]) {
+        const response = await api.request(
+          request(`${withdrawalsPath}/context`, { method }),
+        );
+        expect(response.status).toBe(expectedStatus);
+        expect(response.headers.get("set-cookie")).toBeNull();
+      }
+      expect(v.readSession).toHaveBeenCalledTimes(2);
+      expect(mocks.requireAdminSession).not.toHaveBeenCalled();
+      expect(v.service.readContext).not.toHaveBeenCalled();
+      expect(v.readProof).not.toHaveBeenCalled();
+      if (role === "SIGNED_OUT")
+        expect(mocks.resolveSiteAccess).not.toHaveBeenCalled();
+    },
+  );
   it("registers an explicit preview through standard auth without a proof or hold action", async () => {
     const v = discoveryFixture();
     const input = {
@@ -592,6 +637,35 @@ describe("finance HTTP disabled boundary", () => {
       (await router({ readOverview }).request(request(financePath))).status,
     ).toBe(403);
     expect(readOverview).toHaveBeenCalledTimes(1);
+  });
+
+  it("allows native OWNER consultation without granting withdrawal mutations", async () => {
+    const ownerAccess = {
+      ...access(),
+      membershipId: null,
+      membershipRole: "OWNER",
+      capabilities: {
+        ...access().capabilities,
+        configureReceiving: false,
+        requestWithdrawal: false,
+      },
+    };
+    mocks.requireAdminSession.mockResolvedValue({
+      user: { id: "admin-one", role: "OWNER" },
+      session: { id: "session-one" },
+      memberships: [],
+    });
+    mocks.resolveSiteAccess.mockResolvedValue(ownerAccess);
+    const readOverview = vi.fn().mockResolvedValue(overview());
+    const listWithdrawals = vi.fn().mockResolvedValue([]);
+    const api = router({ readOverview, listWithdrawals });
+    expect((await api.request(request(financePath))).status).toBe(200);
+    expect((await api.request(request(withdrawalsPath))).status).toBe(200);
+    expect(
+      (await api.request(routeRequest("POST", withdrawalsPath))).status,
+    ).toBe(403);
+    expect(readOverview).toHaveBeenCalledOnce();
+    expect(listWithdrawals).toHaveBeenCalledOnce();
   });
 
   it.each([

@@ -337,6 +337,7 @@ function original(
       commissionCents: q.commissionCents,
       processingCents: q.processingCents,
       totalCents: q.totalCents,
+      ...(q.feeAllocation ? { feeAllocation: q.feeAllocation } : {}),
     },
   });
   return { purchase, snapshot, account, order, bound };
@@ -452,14 +453,20 @@ function eventPayload(
   )
     return historyUnavailable();
   const payload = object(row.payload);
+  const checkoutEvent = [
+    "CHECKOUT_CREATED",
+    "CHECKOUT_PAID",
+    "CHECKOUT_CANCELED",
+    "CHECKOUT_EXPIRED",
+  ].includes(row.event_type);
   if (
-    !Object.hasOwn(payload, "paymentId") ||
+    !Object.hasOwn(payload, checkoutEvent ? "checkoutId" : "paymentId") ||
     Object.keys(payload).some(
       (key) => !["paymentId", "checkoutId", "externalReference"].includes(key),
     )
   )
     return historyUnavailable();
-  ref(payload.paymentId);
+  if (Object.hasOwn(payload, "paymentId")) ref(payload.paymentId);
   if (Object.hasOwn(payload, "checkoutId")) ref(payload.checkoutId);
   if (Object.hasOwn(payload, "externalReference"))
     id(payload.externalReference);
@@ -609,7 +616,7 @@ export function createGiftPaymentHistoryRepository(
       !row ||
       row.userId !== scope.userId ||
       row.sessionId !== scope.sessionId ||
-      row.role !== "SITE_ADMIN" ||
+      (row.role !== "SITE_ADMIN" && row.role !== "OWNER") ||
       row.state !== "ACTIVE"
     )
       return historyUnavailable();
@@ -627,13 +634,14 @@ export function createGiftPaymentHistoryRepository(
       return historyUnavailable();
     const access = await resolveSiteAccess(database, {
       userId: scope.userId,
-      platformRole: "SITE_ADMIN",
+      platformRole: row.role,
       siteId: scope.siteId,
     });
     assertFinancialReadAccess(access, scope.siteId);
     if (
       !access ||
       access.userId !== scope.userId ||
+      access.membershipRole !== row.role ||
       access.membershipId !== scope.membershipId
     )
       return historyUnavailable();
@@ -945,18 +953,27 @@ export function createGiftPaymentHistoryRepository(
           if (!attempt) return historyUnavailable();
           const operation = operationFor(plan, attempt, data, scope),
             q = plan.snapshot.quote;
+          const actualProcessing = giftCentsSchema.parse(
+            payment.processing_cents,
+          );
+          const recipientNet = giftCentsSchema.parse(
+            payment.recipient_net_cents,
+          );
           if (
             ledger.effect_key !==
               giftReceivedEffectKey(ref(payment.provider_payment_reference)) ||
-            amount !== q.nominalCents ||
+            recipientNet <= 0 ||
+            amount !== recipientNet ||
             operation.state !== "SUCCEEDED" ||
             payment.provider_status !== "RECEIVED" ||
             payment.verification_status !== "VERIFIED" ||
             payment.observed_at === null ||
             payment.gross_cents !== q.totalCents ||
-            payment.processing_cents !== q.processingCents ||
+            BigInt(q.totalCents) !==
+              BigInt(actualProcessing) +
+                BigInt(q.commissionCents) +
+                BigInt(recipientNet) ||
             payment.commission_cents !== q.commissionCents ||
-            payment.recipient_net_cents !== q.nominalCents ||
             payment.split_fixed_cents !== q.commissionCents ||
             (q.commissionCents > 0 && !ref(payment.split_provider_reference))
           )

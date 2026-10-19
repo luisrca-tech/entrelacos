@@ -15,7 +15,14 @@ describe("admin shell navigation", () => {
   it("shows settings only to owners", () => {
     expect(
       getSiteNavigation("OWNER", "site-1").map((item) => item.area),
-    ).toEqual(["invitations", "messages", "gifts", "team", "settings"]);
+    ).toEqual([
+      "invitations",
+      "messages",
+      "gifts",
+      "receiving",
+      "team",
+      "settings",
+    ]);
     expect(
       getSiteNavigation("SITE_ADMIN", "site-1").map((item) => item.area),
     ).toEqual(["invitations", "messages", "gifts", "receiving", "team"]);
@@ -37,7 +44,7 @@ describe("admin shell navigation", () => {
     expect(resolveSiteArea("SITE_ASSISTANT", "settings")).toBe("invitations");
     expect(resolveSiteArea("SITE_ASSISTANT", "team")).toBe("invitations");
     expect(resolveSiteArea("SITE_ASSISTANT", "receiving")).toBe("invitations");
-    expect(resolveSiteArea("OWNER", "receiving")).toBe("invitations");
+    expect(resolveSiteArea("OWNER", "receiving")).toBe("receiving");
   });
 
   it("defaults every site entry to invitations and rejects removed pages", () => {

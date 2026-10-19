@@ -2,6 +2,7 @@ import {
   type CheckoutStatus,
   checkoutStatusSchema,
 } from "@entrelacos/contracts";
+import { showSandboxNotice } from "@entrelacos/ui";
 
 export type GiftRecoveryViewProps = {
   siteId: string;
@@ -23,6 +24,8 @@ function getStatusLabel(status: CheckoutStatus): string {
       return "Pagamento em verificação";
     case "AWAITING_PAYMENT":
       return "Pagamento aguardando conclusão";
+    case "CONFIRMED":
+      return "Pagamento aprovado. Aguardando liberação do valor.";
     case "RECEIVED":
       return "Recebimento confirmado";
     case "CLOSED_UNPAID":
@@ -54,7 +57,7 @@ export function GiftRecoveryView({
       aria-label="Acompanhamento do pagamento"
       className="grid min-w-0 gap-5 text-template-ink"
     >
-      {currentStatus?.mode === "sandbox" && (
+      {showSandboxNotice(currentStatus?.mode) && (
         <p
           role="status"
           className="m-0 border border-template-line px-4 py-3 text-sm"

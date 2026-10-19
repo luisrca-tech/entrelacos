@@ -430,7 +430,9 @@ function validateNative(
             operationState === "REQUESTED" ||
             operationState === "PROCESSING" ||
             operationState === "CLAIMED"
-          : false;
+          : state === "COMPLETED"
+            ? operationState === "SUCCEEDED"
+            : false;
   if (
     !coherent ||
     row.siteId !== siteId ||
@@ -451,9 +453,23 @@ function validateNative(
     row.feeCents !== snapshot.intent.feeCents ||
     row.netCents !== snapshot.intent.netCents ||
     row.currency !== "BRL" ||
-    row.reservationState !== "HELD" ||
-    row.reservedCents !== snapshot.intent.amountCents ||
-    row.resolutionObservedAt !== null ||
+    (state === "COMPLETED"
+      ? row.reservationState !== "CONSUMED" ||
+        row.reservedCents !== 0 ||
+        !row.providerReference ||
+        !row.receiptReference ||
+        row.resolutionObservedAt === null ||
+        compareDatabaseTimestamps(
+          storedTime(row.resolutionObservedAt),
+          originalCreated,
+        ) < 0 ||
+        compareDatabaseTimestamps(
+          storedTime(row.resolutionObservedAt),
+          databaseNow,
+        ) > 0
+      : row.reservationState !== "HELD" ||
+        row.reservedCents !== snapshot.intent.amountCents ||
+        row.resolutionObservedAt !== null) ||
     operation.id !== snapshot.operationId ||
     operation.siteId !== siteId ||
     operation.accountId !== snapshot.accountId ||
@@ -858,6 +874,7 @@ async function currentPresentation(
   if (
     !loaded ||
     loaded.isDemo !== authority.isDemo ||
+    loaded.evidence?.provenance !== "provider" ||
     loaded.providerBinding?.provider !== "ASAAS" ||
     loaded.providerBinding.accountReference !== scope.accountReference ||
     loaded.providerBinding.recipientReference !== consent.recipientReference ||
@@ -1103,6 +1120,7 @@ async function readCurrentPresentation(
   if (
     !loaded ||
     loaded.isDemo !== authority.isDemo ||
+    loaded.evidence?.provenance !== "provider" ||
     loaded.providerBinding?.provider !== "ASAAS" ||
     loaded.providerBinding.accountReference !== scope.accountReference ||
     loaded.providerBinding.recipientReference !== a.recipientReference ||
@@ -1129,6 +1147,7 @@ async function readCurrentPresentation(
   const p = record(raw),
     keys = [
       ...Object.keys(scope),
+      ...(Object.hasOwn(p, "payout") ? ["payout"] : []),
       "source",
       "verification",
       "provenance",
@@ -1152,11 +1171,7 @@ async function readCurrentPresentation(
     Object.entries(scope).some(([key, value]) => p[key] !== value) ||
     p.source !== "stored" ||
     p.verification !== "verified" ||
-    (p.provenance !== "provider" && p.provenance !== "simulation") ||
-    (p.provenance === "simulation" &&
-      (options.mode !== "sandbox" ||
-        !authority.isDemo ||
-        options.applicationEnvironment === "production")) ||
+    p.provenance !== "provider" ||
     p.operatorUserId !== authority.actor.userId ||
     p.recipientReference !== a.recipientReference ||
     p.destinationId !== d.id ||
@@ -2075,6 +2090,7 @@ export function createWithdrawalReservationRepository(
               if (
                 !loaded ||
                 loaded.isDemo !== isDemo ||
+                loaded.evidence?.provenance !== "provider" ||
                 loaded.providerBinding?.provider !== "ASAAS" ||
                 loaded.providerBinding.accountReference !==
                   snapshot.accountReference ||

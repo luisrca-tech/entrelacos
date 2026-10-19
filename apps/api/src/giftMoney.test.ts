@@ -24,6 +24,60 @@ function policy(
 }
 
 describe("gift amount quoting", () => {
+  it.each(["PIX", "CREDIT_CARD"] as const)(
+    "deducts fees from the recipient for %s without increasing buyer total",
+    (method) => {
+      expect(
+        quoteGiftAmounts({
+          nominalCents: 1000,
+          method,
+          policy: policy({
+            method,
+            feeAllocation: "RECIPIENT_DEDUCTED",
+            processingFixedCents: 99,
+          }),
+        }),
+      ).toEqual({
+        nominalCents: 1000,
+        commissionCents: 20,
+        processingCents: 99,
+        totalCents: 1000,
+        policyVersion: "test-policy-v1",
+        feeAllocation: "RECIPIENT_DEDUCTED",
+      });
+    },
+  );
+
+  it("calculates recipient processing on the configured price and rejects nonpositive net", () => {
+    expect(
+      quoteGiftAmounts({
+        nominalCents: 1000,
+        method: "PIX",
+        policy: policy({
+          feeAllocation: "RECIPIENT_DEDUCTED",
+          processingBasisPoints: 250,
+          processingFixedCents: 39,
+        }),
+      }),
+    ).toMatchObject({
+      totalCents: 1000,
+      processingCents: 64,
+      commissionCents: 20,
+    });
+    for (const processingFixedCents of [980, 981]) {
+      expect(() =>
+        quoteGiftAmounts({
+          nominalCents: 1000,
+          method: "PIX",
+          policy: policy({
+            feeAllocation: "RECIPIENT_DEDUCTED",
+            processingFixedCents,
+          }),
+        }),
+      ).toThrow(expect.objectContaining({ code: "POLICY_UNAVAILABLE" }));
+    }
+  });
+
   it("adds the 2% nominal commission independently from processing", () => {
     expect(
       quoteGiftAmounts({
@@ -402,5 +456,33 @@ describe("BRL decimal boundaries", () => {
     ]) {
       expect(parseBrlCents(serializeBrlCents(cents))).toBe(cents);
     }
+  });
+});
+
+describe("observed fee estimate boundary", () => {
+  it("allows estimates only when processing is deducted from recipient proceeds", () => {
+    const policy = {
+      version: "observed-one",
+      method: "PIX" as const,
+      commissionBasisPoints: 200 as const,
+      processingBasisPoints: 0,
+      processingFixedCents: 99,
+      rounding: "CEILING" as const,
+      feeBasis: "OBSERVED_ESTIMATE" as const,
+    };
+    expect(() =>
+      quoteGiftAmounts({ nominalCents: 1000, method: "PIX", policy }),
+    ).toThrow();
+    expect(
+      quoteGiftAmounts({
+        nominalCents: 1000,
+        method: "PIX",
+        policy: { ...policy, feeAllocation: "RECIPIENT_DEDUCTED" },
+      }),
+    ).toMatchObject({
+      totalCents: 1000,
+      commissionCents: 20,
+      processingCents: 99,
+    });
   });
 });

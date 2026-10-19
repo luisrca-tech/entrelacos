@@ -306,6 +306,7 @@ export function createAsaasAccountProvisioningClient(
               redirect: "error",
               headers: {
                 "Content-Type": "application/json",
+                "User-Agent": "Entrelacos/1.0",
                 access_token: parentCredential,
               },
               body: JSON.stringify(canonical),

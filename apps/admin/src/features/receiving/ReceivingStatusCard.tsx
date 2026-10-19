@@ -4,7 +4,7 @@ import {
   type SiteAccess,
   siteAccessSchema,
 } from "@entrelacos/contracts";
-import { Button } from "@entrelacos/ui";
+import { Button, showSandboxNotice } from "@entrelacos/ui";
 import type { ReactNode } from "react";
 
 const reasonMessages: Record<
@@ -54,8 +54,13 @@ export function ReceivingStatusCard({
   const canReadStatus =
     parsedAccess.success &&
     parsedAccess.data.siteId === siteId &&
-    parsedAccess.data.membershipRole === "SITE_ADMIN" &&
-    parsedAccess.data.capabilities.configureReceiving;
+    ((parsedAccess.data.membershipRole === "SITE_ADMIN" &&
+      parsedAccess.data.capabilities.configureReceiving) ||
+      (parsedAccess.data.membershipRole === "OWNER" &&
+        parsedAccess.data.membershipId === null &&
+        parsedAccess.data.capabilities.readFinance &&
+        !parsedAccess.data.capabilities.configureReceiving &&
+        !parsedAccess.data.capabilities.requestWithdrawal));
 
   let title = "Status dos recebimentos";
   let content: ReactNode;
@@ -106,7 +111,7 @@ export function ReceivingStatusCard({
           <p className={bodyClassName}>{activationGuidance}</p>
         </>
       );
-    } else if (current.state === "READY" && current.mode === "sandbox") {
+    } else if (current.state === "READY" && showSandboxNotice(current.mode)) {
       title = "Pronto no ambiente de testes";
       content = (
         <>
@@ -128,7 +133,7 @@ export function ReceivingStatusCard({
       title = "Configuração pendente";
       content = (
         <>
-          {current.mode === "sandbox" && (
+          {showSandboxNotice(current.mode) && (
             <p className={bodyClassName}>
               Sandbox — status apenas para testes, sem movimentação de dinheiro
               real.

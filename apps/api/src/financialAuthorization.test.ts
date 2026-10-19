@@ -82,6 +82,31 @@ function recipientAction(): RecipientFinancialActionInput & {
 }
 
 describe("financial read access", () => {
+  it("allows a freshly resolved OWNER with no membership to read, while recipient actions still deny", () => {
+    const access = {
+      ...adminAccess(),
+      membershipId: null,
+      membershipRole: "OWNER",
+      capabilities: {
+        ...adminAccess().capabilities,
+        configureReceiving: false,
+        requestWithdrawal: false,
+      },
+    };
+    expect(() => assertFinancialReadAccess(access, "site-one")).not.toThrow();
+    for (const action of [
+      "CONFIGURE_RECEIVING",
+      "REQUEST_WITHDRAWAL",
+    ] as const) {
+      expect(() =>
+        assertRecipientFinancialAction({
+          ...recipientAction(),
+          action,
+          access,
+        }),
+      ).toThrow(expect.objectContaining({ code: "MEMBERSHIP_DENIED" }));
+    }
+  });
   it("allows the selected site's resolved admin membership with readFinance", () => {
     expect(() =>
       assertFinancialReadAccess(adminAccess(), "site-one"),
@@ -139,6 +164,15 @@ describe("financial read access", () => {
 });
 
 describe("recipient financial actions", () => {
+  it("rejects initial receiving session evidence for withdrawals", () => {
+    const input = recipientAction();
+    Object.assign(input.recentAuth ?? {}, {
+      proofKind: "SESSION_AUTHENTICATION",
+    });
+    expect(() => assertRecipientFinancialAction(input)).toThrow(
+      expect.objectContaining({ code: "RECENT_AUTH_REQUIRED" }),
+    );
+  });
   it("authorizes a withdrawal from B's false flag only after recipient, proof and READY checks", () => {
     const input = recipientAction();
     expect(input.access.capabilities.requestWithdrawal).toBe(false);

@@ -210,6 +210,7 @@ export function compareWithdrawalObservations(
       (a.withdrawal.id !== b.withdrawal.id ||
         a.withdrawal.createdAt !== b.withdrawal.createdAt ||
         a.withdrawal.feeCents !== b.withdrawal.feeCents ||
+        a.withdrawal.feeSemantics !== b.withdrawal.feeSemantics ||
         a.withdrawal.netCents !== b.withdrawal.netCents))
   )
     return "incomparable";

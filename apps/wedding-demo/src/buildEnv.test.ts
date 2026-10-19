@@ -4,13 +4,17 @@ import { describe, expect, it } from "vitest";
 
 const turbo = JSON.parse(
   readFileSync(resolve(import.meta.dirname, "../../../turbo.json"), "utf8"),
-) as { tasks: { build: { env: string[] } } };
+) as { tasks: { build: { env: string[] }; dev: { env?: string[] } } };
 const astroConfig = readFileSync(
   resolve(import.meta.dirname, "../astro.config.mjs"),
   "utf8",
 );
 
 describe("wedding demo build inputs", () => {
+  it("forwards the explicit application environment to development tasks", () => {
+    expect(turbo.tasks.dev.env).toContain("APP_ENV");
+  });
+
   it("invalidates cached builds when handoff or publication state changes", () => {
     expect(turbo.tasks.build.env).toEqual(
       expect.arrayContaining(["PUBLIC_ADMIN_ORIGIN", "PUBLIC_SITE_INACTIVE"]),

@@ -196,6 +196,14 @@ export function createGiftQuoteService(
       });
       if (!loadedPricing) return policyUnavailable();
       const pricing = structuredClone(loadedPricing);
+      if (
+        pricing.policy.feeBasis === "OBSERVED_ESTIMATE" &&
+        (context.environment !== "development" ||
+          context.mode !== "sandbox" ||
+          context.isDemo !== true)
+      )
+        return policyUnavailable();
+      pricing.policy.feeAllocation = "RECIPIENT_DEDUCTED";
       const { now, nowTime, deadlineTime, createdAt } =
         readQuoteClock(dependencies);
       // An asynchronous pricing read must not extend old receiving evidence.
@@ -274,6 +282,10 @@ export function createGiftQuoteService(
               processingBasisPoints: pricing.policy.processingBasisPoints,
               processingFixedCents: pricing.policy.processingFixedCents,
               rounding: pricing.policy.rounding,
+              ...(pricing.policy.feeBasis
+                ? { feeBasis: pricing.policy.feeBasis }
+                : {}),
+              feeAllocation: pricing.policy.feeAllocation,
             },
             observedAt: pricingObservedAt,
             expiresAt: pricingExpiresAt,

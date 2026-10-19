@@ -1,10 +1,12 @@
 import { createHash } from "node:crypto";
 import { drizzle, type NodePgClient } from "drizzle-orm/node-postgres";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { readDatabaseTimestamp } from "./databaseTimestamp";
 import { encryptProviderCredential } from "./providerCredentials";
 import { deriveReceivingProvisioningContext } from "./receivingAccountProvisioning";
 import { createReceivingAccountProvisioningRepository } from "./receivingAccountProvisioningRepository";
 import {
+  type ReceivingNominationCurrentAuthorization,
   type ReceivingProvisioningRecord,
   readReceivingNominationSnapshot,
 } from "./receivingNomination";
@@ -52,7 +54,7 @@ function fixture() {
       expiresAt: "2026-10-13T00:04:30.000Z",
     },
   });
-  const authorization = {
+  const authorization: ReceivingNominationCurrentAuthorization = {
     actor: {
       userId: "operator-one",
       siteId: "site-one",
@@ -152,6 +154,7 @@ function fixture() {
     active: true,
     role: "SITE_ADMIN",
     session: true,
+    sessionCreatedAt: "2026-10-12T23:00:00.123456Z",
     membership: true,
     policy: true,
     expireDuringPolicy: false,
@@ -214,7 +217,7 @@ function fixture() {
                   sessionId: "session-one",
                   sessionExpiresAt: "2026-10-14T00:00:00.000Z",
                   lastActiveAt: nomination.createdAt,
-                  sessionCreatedAt: nomination.createdAt,
+                  sessionCreatedAt: state.sessionCreatedAt,
                 },
               ]
             : [],
@@ -327,6 +330,29 @@ function fixture() {
   };
 }
 describe("locked original account provisioning repository", () => {
+  it.each([false, true])(
+    "requires exact locked session timestamps for initial session authorization (mismatch %s)",
+    async (mismatch) => {
+      const values = fixture();
+      Object.assign(values.authorization.recentAuth, {
+        proofKind: "SESSION_AUTHENTICATION",
+        authenticatedAt: readDatabaseTimestamp(
+          mismatch
+            ? "2026-10-12T23:00:00.123457Z"
+            : values.state.sessionCreatedAt,
+        ),
+        expiresAt: readDatabaseTimestamp("2026-10-14T00:00:00.000Z"),
+      });
+      const operation = values.repository.claimOriginal(
+        values.claimInput,
+        values.authorization,
+      );
+      if (mismatch) {
+        await expect(operation).rejects.toThrow();
+        expect(values.tables.operations[0].state).toBe("REQUESTED");
+      } else await expect(operation).resolves.toBeTruthy();
+    },
+  );
   it("serial competing transactions cannot claim the same legacy operation twice", async () => {
     const values = fixture();
     const outcomes = await Promise.allSettled([

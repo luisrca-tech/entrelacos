@@ -9,6 +9,27 @@ const settings = {
 };
 
 describe("API runtime configuration", () => {
+  it("composes Sandbox payment configuration and defaults its site origin locally", () => {
+    const config = readRuntimeConfig({
+      ...settings,
+      ASAAS_MODE: "sandbox",
+      ASAAS_API_KEY: "$aact_hmlg_fixture",
+      ASAAS_PLATFORM_ACCOUNT_ID: "platform-account",
+      ASAAS_PLATFORM_WALLET_ID: "platform-wallet",
+      ASAAS_CREDENTIAL_KEY_ID: "local-v1",
+      ASAAS_CREDENTIAL_KEY: Buffer.alloc(32, 1).toString("base64"),
+      ASAAS_WEBHOOK_PUBLIC_ORIGIN: "https://fixture.trycloudflare.com",
+    });
+    expect(config).toMatchObject({
+      giftPayment: {
+        mode: "sandbox",
+        applicationEnvironment: "development",
+        webhookUrl: "https://fixture.trycloudflare.com/v1/webhooks/asaas",
+      },
+      giftPublicOrigin: "http://localhost:4321",
+      giftPaymentHistory: { mode: "sandbox" },
+    });
+  });
   it("selects only the explicitly named database environment", () => {
     expect(readRuntimeConfig(settings)).toMatchObject({
       target: "development",
@@ -104,6 +125,7 @@ describe("API runtime configuration", () => {
     expect(config.target).toBe(APP_ENV);
     expect(config.giftMedia).toEqual({
       mode: "r2",
+      applicationEnvironment: APP_ENV,
       accountId: "a".repeat(32),
       accessKeyId: "fixture-access-key",
       secretAccessKey: "fixture-secret-key",

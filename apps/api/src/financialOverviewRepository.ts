@@ -28,12 +28,22 @@ import type {
   StoredFinancialTotals,
 } from "./financialOverview";
 import { giftReceivedEffectKey } from "./giftPaymentReconciliation";
+import type { ReceivingTransaction } from "./receivingRepository";
+import {
+  type WithdrawalCompletionProof,
+  withdrawalCompletedEffectKey,
+} from "./withdrawalExecution";
 
 export type FinancialOverviewRepositoryDatabase = Pick<
   DatabaseConnection["db"],
   "transaction"
 >;
 export interface FinancialOverviewRepositoryOptions {
+  loadWithdrawalCompletionProofInTransaction?(
+    tx: ReceivingTransaction,
+    withdrawalId: string,
+    reference: string,
+  ): Promise<WithdrawalCompletionProof | null>;
   environment: "sandbox" | "live";
   now(): Date;
 }
@@ -223,7 +233,7 @@ async function loadFacts(
       rows(
         tx,
         sql`SELECT p.id AS "id", p.site_id AS "siteId", p.account_id AS "accountId", p.environment AS "environment", p.order_id AS "orderId", p.attempt_id AS "attemptId", p.provider_payment_reference AS "providerPaymentReference", p.provider_status AS "providerStatus", p.verification_status AS "verificationStatus", p.observed_at AS "observedAt", p.created_at AS "createdAt", p.currency AS "currency", p.gross_cents AS "grossCents", p.processing_cents AS "processingCents", p.commission_cents AS "commissionCents", p.recipient_net_cents AS "recipientNetCents", p.split_provider_reference AS "splitProviderReference", p.split_fixed_cents AS "splitFixedCents",
-      o.id AS "storedOrderId", o.quote_id AS "orderQuoteId", o.created_at AS "orderCreatedAt", q.id AS "quoteId", q.currency AS "quoteCurrency", q.nominal_cents AS "quoteNominalCents", q.commission_basis_points AS "quoteCommissionBasisPoints", q.commission_cents AS "quoteCommissionCents", q.processing_cents AS "quoteProcessingCents", q.total_cents AS "quoteTotalCents", q.snapshot->'receiving'->>'accountReference' AS "quoteAccountReference", q.snapshot->'receiving'->>'siteId' AS "quoteSiteId", q.snapshot->'receiving'->>'environment' AS "quoteEnvironment", q.snapshot->'receiving'->>'provider' AS "quoteProvider",
+      o.id AS "storedOrderId", o.quote_id AS "orderQuoteId", o.created_at AS "orderCreatedAt", q.id AS "quoteId", q.currency AS "quoteCurrency", q.nominal_cents AS "quoteNominalCents", q.commission_basis_points AS "quoteCommissionBasisPoints", q.commission_cents AS "quoteCommissionCents", q.processing_cents AS "quoteProcessingCents", q.total_cents AS "quoteTotalCents", q.snapshot AS "quoteSnapshot", q.snapshot->'receiving'->>'accountReference' AS "quoteAccountReference", q.snapshot->'receiving'->>'siteId' AS "quoteSiteId", q.snapshot->'receiving'->>'environment' AS "quoteEnvironment", q.snapshot->'receiving'->>'provider' AS "quoteProvider",
       a.id AS "storedAttemptId", a.order_id AS "attemptOrderId", a.operation_id AS "attemptOperationId", a.provider_reference AS "providerCheckoutReference", op.id AS "operationId", op.kind AS "operationKind", op.state AS "operationState", op.provider_operation_reference AS "providerOperationReference"
       FROM ${giftPaymentRecord} p
       LEFT JOIN ${giftOrder} o ON o.id = p.order_id AND o.site_id = p.site_id AND o.account_id = p.account_id AND o.environment = p.environment
@@ -412,15 +422,33 @@ function payment(
   const commission = cents(row.quoteCommissionCents);
   const processing = cents(row.quoteProcessingCents);
   const total = cents(row.quoteTotalCents, true);
+  const actualProcessing = cents(row.processingCents);
+  const recipientNet = cents(row.recipientNetCents, true);
+  const snapshot = object(row.quoteSnapshot);
+  const quote = snapshot.quote === undefined ? {} : object(snapshot.quote);
+  const pricing =
+    snapshot.pricing === undefined ? {} : object(snapshot.pricing);
+  const policy = pricing.policy === undefined ? {} : object(pricing.policy);
+  const allocation = giftQuoteSchema.shape.feeAllocation.safeParse(
+    quote.feeAllocation,
+  );
+  if (!allocation.success || quote.feeAllocation !== policy.feeAllocation)
+    unavailable();
+  const quoteAllocated =
+    allocation.data === "RECIPIENT_DEDUCTED"
+      ? total === nominal &&
+        BigInt(total) > BigInt(commission) + BigInt(processing)
+      : BigInt(total) ===
+        BigInt(nominal) + BigInt(commission) + BigInt(processing);
   if (
     row.quoteCommissionBasisPoints !== 200 ||
     BigInt(commission) !== (BigInt(nominal) * 200n + 5000n) / 10000n ||
-    BigInt(total) !==
-      BigInt(nominal) + BigInt(commission) + BigInt(processing) ||
+    !quoteAllocated ||
     cents(row.grossCents, true) !== total ||
-    cents(row.processingCents) !== processing ||
-    cents(row.commissionCents) !== commission ||
-    cents(row.recipientNetCents) !== nominal ||
+    BigInt(total) !==
+      BigInt(actualProcessing) + BigInt(commission) + BigInt(recipientNet) ||
+    (!(row.providerStatus === "CONFIRMED" && row.commissionCents === null) &&
+      cents(row.commissionCents) !== commission) ||
     cents(row.splitFixedCents) !== commission ||
     (commission > 0 && optionalReference(row.splitProviderReference) === null)
   )
@@ -559,6 +587,7 @@ function aggregate(
     bigint
   >;
   const credited = new Set<string>();
+  const completedWithdrawals = new Set<string>();
   for (const op of data.operations.values())
     if (op.kind === "REFUND") return unavailable();
   for (const event of data.events.values())
@@ -568,8 +597,69 @@ function aggregate(
     )
       return unavailable();
   // These are cumulative historical receipt allocations, never a pool balance.
-  // Only a verified actual recipient net matching the purchased nominal counts.
+  // Only a verified actual recipient net matching its conserved allocation counts.
   for (const entry of data.ledgers.values()) {
+    if (entry.kind === "WITHDRAWAL_COMPLETED") {
+      const w = data.withdrawals.get(String(entry.withdrawalIntentId));
+      const op = data.operations.get(String(entry.operationId));
+      const proof = w?.completionProof as WithdrawalCompletionProof | null;
+      const c = proof?.correlation;
+      if (
+        !w ||
+        !op ||
+        !proof ||
+        !c ||
+        completedWithdrawals.has(String(w.id)) ||
+        w.state !== "COMPLETED" ||
+        op.kind !== "WITHDRAWAL" ||
+        op.state !== "SUCCEEDED" ||
+        op.withdrawalIntentId !== w.id ||
+        proof.outcome !== "COMPLETED" ||
+        proof.custody !== "immutable-durable" ||
+        proof.verification !== "verified" ||
+        proof.provenance !== "provider" ||
+        proof.bankCompleted !== true ||
+        proof.currency !== "BRL" ||
+        c.siteId !== w.siteId ||
+        c.accountId !== w.accountId ||
+        c.environment !== w.environment ||
+        c.withdrawalId !== w.id ||
+        c.operationId !== op.id ||
+        c.amountCents !== w.amountCents ||
+        c.feeCents !== w.feeCents ||
+        c.netCents !== w.netCents ||
+        proof.proofReference !== w.receiptReference ||
+        proof.receiptReference !== w.receiptReference ||
+        proof.providerReference !== w.providerReference ||
+        op.providerOperationReference !== w.providerReference ||
+        entry.direction !== "DEBIT" ||
+        entry.currency !== "BRL" ||
+        entry.paymentId !== null ||
+        entry.eventId !== null ||
+        entry.compensatesEntryId !== null ||
+        entry.effectKey !== withdrawalCompletedEffectKey(c) ||
+        cents(entry.amountCents, true) !== cents(proof.totalDebitCents, true) ||
+        proof.totalDebitCents !== proof.netCents + proof.feeCents ||
+        proof.netCents !== w.netCents ||
+        cents(proof.feeCents) > Number(w.feeCents) ||
+        proof.totalDebitCents > Number(w.amountCents)
+      )
+        return unavailable();
+      const completed = storedTime(proof.observedAt, observedAt);
+      const recorded = storedTime(proof.recordedAt, observedAt);
+      after(recorded, completed);
+      after(storedTime(entry.createdAt, observedAt), recorded);
+      if (
+        compareDatabaseTimestamps(
+          completed,
+          storedTime(w.resolutionObservedAt, observedAt),
+        ) !== 0
+      )
+        return unavailable();
+      completedWithdrawals.add(String(w.id));
+      sums.withdrawnCents += BigInt(proof.totalDebitCents);
+      continue;
+    }
     const p = data.payments.get(String(entry.paymentId));
     const e = data.events.get(String(entry.eventId));
     const payload = data.payloads.get(String(entry.eventId));
@@ -622,9 +712,11 @@ function aggregate(
     else if (!pendingPaymentStates.includes(String(p.providerStatus)))
       return unavailable();
   }
-  // No reviewed transfer/refund proof writer exists yet. Nonempty terminal or
-  // compensation facts must fail, rather than manufacture withdrawn/refunded 0.
+  // Terminal withdrawals count only through the reviewed immutable provider proof.
+  // Unproven terminal states and all refund compensation remain unavailable.
   for (const w of data.withdrawals.values()) {
+    if (w.state === "COMPLETED" && completedWithdrawals.has(String(w.id)))
+      continue;
     if (!heldStates.includes(String(w.state))) return unavailable();
     sums.pendingCommitmentsCents += BigInt(cents(w.reservedCents));
   }
@@ -663,6 +755,18 @@ export function createFinancialOverviewRepository(
           const observedAt = await loadBinding(tx, binding);
           if (observedAt === null) return null;
           const facts = await loadFacts(tx, binding);
+          for (const withdrawal of facts.withdrawals) {
+            if (
+              withdrawal.state === "COMPLETED" &&
+              options.loadWithdrawalCompletionProofInTransaction
+            )
+              withdrawal.completionProof =
+                await options.loadWithdrawalCompletionProofInTransaction(
+                  tx,
+                  String(withdrawal.id),
+                  String(withdrawal.receiptReference),
+                );
+          }
           const finishedAt = nativeTime(now());
           after(finishedAt, startedAt);
           after(finishedAt, observedAt);

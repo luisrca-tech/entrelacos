@@ -4,7 +4,7 @@ import {
 } from "@entrelacos/contracts";
 import { createElement, isValidElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { GiftRecoveryView } from "./GiftRecoveryView";
 import {
   createGiftCheckoutState,
@@ -155,6 +155,7 @@ describe("gift recovery view", () => {
     ["CREATING", "Pagamento em verificação"],
     ["OUTCOME_UNKNOWN", "Pagamento em verificação"],
     ["AWAITING_PAYMENT", "Pagamento aguardando conclusão"],
+    ["CONFIRMED", "Pagamento aprovado. Aguardando liberação do valor."],
     ["RECEIVED", "Recebimento confirmado"],
     ["CLOSED_UNPAID", "Pagamento encerrado sem recebimento"],
     ["REFUNDED", "Reembolso confirmado"],
@@ -168,7 +169,7 @@ describe("gift recovery view", () => {
       for (const identifier of identifiers)
         expect(html).not.toContain(identifier);
       expect(html).not.toMatch(
-        /\b(?:R\$|BRL|valor|total|pago|pagamento confirmado)\b/i,
+        /\b(?:R\$|BRL|total|pago|pagamento confirmado)\b/i,
       );
       expect(html).not.toMatch(/token|hash|Asaas|banco|payer|provider key/i);
 
@@ -257,3 +258,6 @@ describe("gift recovery view", () => {
     );
   });
 });
+
+beforeEach(() => vi.stubGlobal("__APP_ENV__", "development"));
+afterEach(() => vi.unstubAllGlobals());

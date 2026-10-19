@@ -165,7 +165,8 @@ export function createAsaasWebhookReceiver(
           typeof event.event !== "string" ||
           event.event.length > 128 ||
           !/^[A-Z][A-Z0-9_]+$/.test(event.event) ||
-          account?.id !== binding.providerAccountReference
+          (event.account !== undefined &&
+            account?.id !== binding.providerAccountReference)
         )
           reject(400, "WEBHOOK_INVALID");
         // Only correlation references are retained; consequential effects re-fetch the provider object.

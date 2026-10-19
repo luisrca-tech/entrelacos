@@ -2098,6 +2098,40 @@ describe("durable withdrawal request lifecycle", () => {
       ),
     ).toBe(databaseTimestampEpochMicroseconds(v.clock.sql));
   });
+  it("withholds withdrawal context for a demo destination carrying simulated evidence", async () => {
+    const v = fixture();
+    v.tables.withdrawal_request.length = 0;
+    v.evidence.provenance = "SIMULATION";
+    Object.assign(v.presentation, { provenance: "simulation" });
+    const context = await createWithdrawalReservationRepository(
+      v.db,
+      v.options,
+    ).readContext?.(requestAttempt(v));
+    expect(context).toMatchObject({
+      newRequestAllowed: false,
+      reason: "DESTINATION_UNAVAILABLE",
+    });
+    expect(
+      v.options.loadVerifiedPresentationInTransaction,
+    ).not.toHaveBeenCalled();
+  });
+  it("rejects simulated evidence again inside the reservation transaction before presentation or hold writes", async () => {
+    const v = fixture();
+    v.evidence.provenance = "SIMULATION";
+    await expect(
+      createWithdrawalReservationRepository(v.db, v.options).reserveWithdrawal(
+        v.snapshot,
+        v.authorize,
+        v.authorization,
+        v.confirmation,
+      ),
+    ).rejects.toMatchObject({ status: 409, code: "DESTINATION_UNVERIFIED" });
+    expect(
+      v.options.loadVerifiedPresentationInTransaction,
+    ).not.toHaveBeenCalled();
+    expect(v.tables.withdrawal_intent).toHaveLength(0);
+    expect(v.tables.financial_operation).toHaveLength(0);
+  });
   it("rejects presentation provenance that disagrees with its selected authenticated evidence", async () => {
     const v = fixture();
     v.tables.withdrawal_request.length = 0;
@@ -2106,7 +2140,10 @@ describe("durable withdrawal request lifecycle", () => {
       createWithdrawalReservationRepository(v.db, v.options).readContext?.(
         requestAttempt(v),
       ),
-    ).rejects.toMatchObject({ code: "WITHDRAWAL_UNAVAILABLE", status: 503 });
+    ).resolves.toMatchObject({
+      newRequestAllowed: false,
+      reason: "DESTINATION_UNAVAILABLE",
+    });
   });
   it("rejects a future sub-millisecond account observation before issuing OPEN", async () => {
     const v = fixture();

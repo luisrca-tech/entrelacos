@@ -1,5 +1,5 @@
 import type { SiteAccess, WithdrawalIntent } from "@entrelacos/contracts";
-import { Button } from "@entrelacos/ui";
+import { Button, showSandboxNotice } from "@entrelacos/ui";
 import { canReadFinancialOverview } from "./financialOverview";
 import type { WithdrawalHistoryResult } from "./withdrawalHistory";
 import { parseWithdrawalHistory } from "./withdrawalHistory";
@@ -34,15 +34,34 @@ function formatDate(value: string): string {
 function WithdrawalRecord({ withdrawal }: { withdrawal: WithdrawalIntent }) {
   return (
     <li className="grid min-w-0 gap-3 rounded-lg border border-admin-line p-4">
-      {withdrawal.mode === "sandbox" && (
+      {showSandboxNotice(withdrawal.mode) && (
         <p className="m-0 text-sm text-admin-muted">
           Sandbox — valores de teste, sem movimentação de dinheiro real.
         </p>
       )}
       <dl className="m-0 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {[
-          ["Valor solicitado", currency.format(withdrawal.amountCents / 100)],
-          ["Taxa", currency.format(withdrawal.feeCents / 100)],
+          [
+            withdrawal.settlement
+              ? "Valor debitado"
+              : withdrawal.feeSemantics === "MAXIMUM"
+                ? "Débito máximo aprovado"
+                : "Valor solicitado",
+            currency.format(
+              (withdrawal.settlement?.totalDebitCents ??
+                withdrawal.amountCents) / 100,
+            ),
+          ],
+          [
+            withdrawal.settlement
+              ? "Taxa efetiva"
+              : withdrawal.feeSemantics === "MAXIMUM"
+                ? "Taxa máxima"
+                : "Taxa",
+            currency.format(
+              (withdrawal.settlement?.feeCents ?? withdrawal.feeCents) / 100,
+            ),
+          ],
           ["Valor líquido", currency.format(withdrawal.netCents / 100)],
           ["Status", stateLabels[withdrawal.state]],
         ].map(([label, value]) => (
@@ -52,6 +71,13 @@ function WithdrawalRecord({ withdrawal }: { withdrawal: WithdrawalIntent }) {
           </div>
         ))}
       </dl>
+      {withdrawal.settlement && (
+        <p className="m-0 text-sm text-admin-muted">
+          Reserva liberada:{" "}
+          {currency.format(withdrawal.settlement.releasedCents / 100)}. O limite
+          aprovado foi {currency.format(withdrawal.amountCents / 100)}.
+        </p>
+      )}
       <p className="m-0 text-sm text-admin-muted">
         Solicitado em{" "}
         <time dateTime={withdrawal.createdAt}>

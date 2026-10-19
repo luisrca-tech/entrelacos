@@ -291,7 +291,9 @@ afterEach(async () => {
   ).IS_REACT_ACT_ENVIRONMENT = false;
 });
 
-async function withdrawalHttpBridge() {
+async function withdrawalHttpBridge(
+  options: { receivingEvidenceProvenance?: "PROVIDER" | "SIMULATION" } = {},
+) {
   vi.stubGlobal("crypto", webcrypto);
   // Node Request rejects jsdom's signal brand; use the actual Node constructors.
   const nativeAbort = transferableAbortController();
@@ -363,7 +365,8 @@ async function withdrawalHttpBridge() {
     bankReference: destination.bankReference,
     verificationStatus: "VERIFIED",
     verificationReference: "fictional-verification",
-    provenance: "SIMULATION",
+    // The happy path represents provider-origin bank facts; checkout simulations are exercised separately.
+    provenance: options.receivingEvidenceProvenance ?? "PROVIDER",
     providerAccountState: "APPROVED",
     bankState: "VERIFIED",
     receivingCapability: true,
@@ -1198,6 +1201,32 @@ async function withdrawalHttpBridge() {
 }
 
 describe("withdrawal setup mounted consumer through actual private HTTP", () => {
+  it("keeps demo SIMULATION receiving evidence unable to expose a withdrawal form or create preview and reservation rows", async () => {
+    const f = await withdrawalHttpBridge({
+      receivingEvidenceProvenance: "SIMULATION",
+    });
+    const context = await f.request("/v1/sites/wedding-a/withdrawals/context");
+    expect(context).toMatchObject({
+      context: { newRequestAllowed: false, reason: "DESTINATION_UNAVAILABLE" },
+    });
+    expect(f.node.querySelector("#withdrawal-amount")).toBeNull();
+    expect(f.node.querySelector('input[type="password"]')).toBeNull();
+    await expect(
+      f.request("/v1/sites/wedding-a/withdrawals/preview", {
+        method: "POST",
+        body: {
+          requestId: "request-simulation-denied",
+          amountCents: 10000,
+          scopeRevision: "0",
+        },
+      }),
+    ).rejects.toMatchObject({ status: 409, code: "DESTINATION_UNVERIFIED" });
+    expect(f.tables.withdrawal_request).toHaveLength(0);
+    expect(f.tables.withdrawal_intent).toHaveLength(0);
+    expect(f.tables.financial_operation).toHaveLength(0);
+    expect(f.tables.financial_ledger_entry).toHaveLength(0);
+    expect(f.evidence.provenance).toBe("SIMULATION");
+  });
   it("loads actual row-backed readiness and read-only withdrawal context through native cookie auth", async () => {
     const f = await withdrawalHttpBridge();
     expect(f.responses).toContainEqual(

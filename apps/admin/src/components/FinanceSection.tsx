@@ -82,6 +82,12 @@ export function FinanceSection({
       : (history ?? { status: "loading" });
   return (
     <div className="grid gap-6">
+      {eligible && access?.membershipRole === "OWNER" && (
+        <p className="m-0 text-admin-muted">
+          Consulta administrativa em modo somente leitura. A confirmação
+          cadastral e os saques permanecem restritos à titular.
+        </p>
+      )}
       <FinancialOverviewCard
         siteId={siteId}
         access={access}
@@ -98,13 +104,15 @@ export function FinanceSection({
         result={historyResult}
         onRefresh={() => setHistoryRevision((value) => value + 1)}
       />
-      {eligible && sessionEpoch !== null && (
-        <WithdrawalSetup
-          siteId={siteId}
-          access={access}
-          sessionEpoch={sessionEpoch}
-        />
-      )}
+      {eligible &&
+        access?.membershipRole === "SITE_ADMIN" &&
+        sessionEpoch !== null && (
+          <WithdrawalSetup
+            siteId={siteId}
+            access={access}
+            sessionEpoch={sessionEpoch}
+          />
+        )}
       <GiftPaymentHistoryView
         siteId={siteId}
         access={access}

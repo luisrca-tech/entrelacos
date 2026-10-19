@@ -1,5 +1,5 @@
 import type { ReceivingReadiness } from "@entrelacos/contracts";
-import { Button } from "@entrelacos/ui";
+import { Button, showSandboxNotice } from "@entrelacos/ui";
 import { type ReactNode, useCallback, useEffect, useState } from "react";
 import { GiftEditor } from "./GiftEditor";
 import { GiftsLocked } from "./GiftsLocked";
@@ -120,7 +120,7 @@ export function GiftsReadinessView({
 
   return (
     <div className="grid gap-4">
-      {current.mode === "sandbox" && (
+      {showSandboxNotice(current.mode) && (
         <p className="m-0 text-sm text-admin-muted">
           Ambiente de testes — sem pagamentos reais.
         </p>

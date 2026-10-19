@@ -282,7 +282,7 @@ async function readEvent(
     !event ||
     !sameScope(event, claim) ||
     event.id !== claim.eventId ||
-    event.eventType !== "PAYMENT_RECEIVED" ||
+    !["PAYMENT_RECEIVED", "PAYMENT_CONFIRMED"].includes(event.eventType) ||
     event.leaseOwner !== claim.leaseOwner ||
     event.leaseToken !== claim.leaseToken ||
     !["CLAIMED", "RETRY", "PROCESSED"].includes(event.state) ||
@@ -333,7 +333,7 @@ async function completeEvent(
   const result =
     await tx.execute(sql`UPDATE ${financialEventInbox} e SET ${completion}, payment_id = ${paymentId}
     WHERE e.id = ${claim.eventId} AND e.site_id = ${claim.siteId} AND e.account_id = ${claim.accountId} AND e.environment = ${claim.environment}
-      AND e.state = 'CLAIMED' AND e.event_type = 'PAYMENT_RECEIVED' AND e.payload_hash = ${event.payloadHash}
+      AND e.state = 'CLAIMED' AND e.event_type = ${event.eventType} AND e.payload_hash = ${event.payloadHash}
       AND e.lease_owner = ${claim.leaseOwner} AND e.lease_token = ${claim.leaseToken}
       AND e.lease_expires_at >= ${clock.toISOString()}::timestamptz AND e.lease_expires_at >= clock_timestamp()
       AND e.authenticated_at <= ${clock.toISOString()}::timestamptz AND (e.payment_id IS NULL OR e.payment_id = ${paymentId}) RETURNING e.id`);
@@ -402,7 +402,9 @@ async function currentReceipt(
     ledger.kind !== "GIFT_RECEIVED" ||
     ledger.direction !== "CREDIT" ||
     ledger.currency !== "BRL" ||
-    ledger.amountCents !== snapshot.quote.nominalCents ||
+    !Number.isSafeInteger(ledger.amountCents) ||
+    ledger.amountCents <= 0 ||
+    ledger.amountCents !== payment.recipientNetCents ||
     ledger.effectKey !==
       giftReceivedEffectKey(payment.providerPaymentReference) ||
     ledger.compensatesEntryId !== null ||
@@ -416,9 +418,15 @@ async function currentReceipt(
       payment.observedAt === null ||
       microseconds(payment.observedAt) < microseconds(binding.orderCreatedAt) ||
       payment.grossCents !== quote.totalCents ||
-      payment.processingCents !== quote.processingCents ||
+      payment.processingCents === null ||
+      !Number.isSafeInteger(payment.processingCents) ||
+      payment.processingCents < 0 ||
       payment.commissionCents !== quote.commissionCents ||
-      payment.recipientNetCents !== quote.nominalCents ||
+      payment.recipientNetCents === null ||
+      BigInt(payment.grossCents) !==
+        BigInt(payment.processingCents) +
+          BigInt(payment.commissionCents) +
+          BigInt(payment.recipientNetCents) ||
       payment.splitFixedCents !== quote.commissionCents ||
       (quote.commissionCents > 0 && !reference(payment.splitProviderReference)))
   )
@@ -645,7 +653,18 @@ export function createGiftPaymentPostingRepository(
               /^(REFUND|CHARGEBACK)|^(CANCELED|CANCELLED|DISPUTED)$/.test(
                 existing.providerStatus,
               );
-            let reason: RetryReason | null = decision.reason;
+            const confirmed =
+              event.eventType === "PAYMENT_CONFIRMED" &&
+              payment.providerStatus === "CONFIRMED" &&
+              payment.recipientNetCents !== null &&
+              payment.recipientNetCents > 0;
+            let reason: RetryReason | null = confirmed ? null : decision.reason;
+            if (
+              decision.effect &&
+              event.eventType !== "PAYMENT_RECEIVED" &&
+              !receipt
+            )
+              reason = "PAYMENT_NOT_RECEIVED";
             if (receipt && (!decision.effect || !matches))
               reason ??= "PAYMENT_RECEIPT_MISMATCH";
             if (!receipt && stale) reason = "PAYMENT_OBSERVATION_STALE";
@@ -674,7 +693,7 @@ export function createGiftPaymentPostingRepository(
               }
               if (
                 reason !== null ||
-                !receipt ||
+                (!receipt && !confirmed) ||
                 !matches ||
                 microseconds(event.processedAt as Date) >
                   microseconds(options.now())
@@ -683,7 +702,7 @@ export function createGiftPaymentPostingRepository(
               return {
                 outcome: "DUPLICATE",
                 paymentId: existing.id,
-                ledgerEntryId: receipt.id,
+                ledgerEntryId: receipt?.id ?? null,
               };
             }
             if (receipt || stale || reversal) {
@@ -709,7 +728,7 @@ export function createGiftPaymentPostingRepository(
               options,
             );
             let ledgerEntryId: string | null = null;
-            if (decision.effect) {
+            if (decision.effect && event.eventType === "PAYMENT_RECEIVED") {
               ledgerEntryId = options.generateId("ledger");
               if (!validId(ledgerEntryId)) return unavailable();
               const effect = decision.effect;
@@ -726,7 +745,7 @@ export function createGiftPaymentPostingRepository(
             }
             await completeEvent(tx, claim, event, paymentId, options, reason);
             return {
-              outcome: decision.effect ? "POSTED" : "OBSERVED",
+              outcome: ledgerEntryId ? "POSTED" : "OBSERVED",
               paymentId,
               ledgerEntryId,
             };

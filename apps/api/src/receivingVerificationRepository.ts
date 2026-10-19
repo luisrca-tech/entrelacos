@@ -54,6 +54,14 @@ export interface ReceivingVerificationRepositoryOptions {
   applicationEnvironment: "test" | "development" | "production";
   maxAuthAgeMs: number;
   now(): Date;
+  // Explicit compatibility for the isolated DEV demo fixture; never native proof.
+  allowSandboxSimulationHistory?: boolean;
+  authorizeSetupSelectionInTransaction?: (
+    tx: Transaction,
+    fence: ReceivingVerificationFence,
+    authorization: ReceivingVerificationAuthorization,
+    candidate: ReceivingVerificationCandidate | null,
+  ) => Promise<boolean>;
   // Approval requires trusted original identity/bank/protocol/current policy; never a browser flag.
   readCurrentPolicy?: (
     action: ReceivingVerificationPolicyAction,
@@ -239,6 +247,7 @@ export function createReceivingVerificationRepository(
   let environment: ReceivingVerificationRepositoryOptions["applicationEnvironment"];
   let maxAge: number;
   let now: () => Date;
+  let setupAuthority: ReceivingVerificationRepositoryOptions["authorizeSetupSelectionInTransaction"];
   let policy: NonNullable<
     ReceivingVerificationRepositoryOptions["readCurrentPolicy"]
   >;
@@ -260,6 +269,8 @@ export function createReceivingVerificationRepository(
       typeof clock !== "function"
     )
       return inactive();
+    setupAuthority =
+      options.authorizeSetupSelectionInTransaction?.bind(options);
     policy = configuredPolicy.bind(options);
     now = clock.bind(options);
   } catch {
@@ -293,7 +304,9 @@ export function createReceivingVerificationRepository(
       result.rows.length !== 1 ||
       result.rows[0].siteId !== scope.siteId ||
       typeof result.rows[0].isDemo !== "boolean" ||
-      (mode === "live" && result.rows[0].isDemo)
+      (mode === "live" && result.rows[0].isDemo) ||
+      (options.allowSandboxSimulationHistory === true &&
+        result.rows[0].isDemo !== true)
     )
       return unavailable();
   }
@@ -401,6 +414,26 @@ export function createReceivingVerificationRepository(
     for (const destination of fence.destinations) {
       const id = verificationIdentifier(destination.id),
         version = Number(destination.version);
+      // Retain the original demo fixture verbatim while selecting a native replacement.
+      const historicalSimulationLabel =
+        options.allowSandboxSimulationHistory === true &&
+        mode === "sandbox" &&
+        environment === "development" &&
+        version === 1 &&
+        destination.bank_reference ===
+          `simulation:demo-checkout:${scope.accountId}` &&
+        destination.masked_descriptor ===
+          "Simulated destination - Sandbox checkout only" &&
+        fence.evidence.some(
+          (row) =>
+            row.provenance === "SIMULATION" &&
+            row.destination_version === version &&
+            row.bank_reference === destination.bank_reference &&
+            typeof row.verification_reference === "string" &&
+            row.verification_reference.startsWith(
+              "simulation:demo-checkout:v1:",
+            ),
+        );
       if (
         !scopeRow(destination, scope) ||
         ids.has(id) ||
@@ -410,6 +443,7 @@ export function createReceivingVerificationRepository(
         version > 2147483647 ||
         typeof destination.is_current !== "boolean" ||
         (destination.masked_descriptor !== null &&
+          !historicalSimulationLabel &&
           !withdrawalPreviewSchema.shape.maskedDestination.safeParse(
             destination.masked_descriptor,
           ).success) ||
@@ -451,6 +485,32 @@ export function createReceivingVerificationRepository(
     )
       return unavailable();
     for (const row of fence.evidence) {
+      if (row.provenance === "SIMULATION") {
+        const destination = fence.destinations.find(
+          (value) => value.version === row.destination_version,
+        );
+        if (
+          options.allowSandboxSimulationHistory !== true ||
+          mode !== "sandbox" ||
+          environment !== "development" ||
+          !scopeRow(row, scope) ||
+          !destination ||
+          row.bank_reference !== destination.bank_reference ||
+          row.account_reference !== scope.accountReference ||
+          row.recipient_reference !== scope.recipientReference ||
+          row.operator_reference !== scope.operatorReference ||
+          row.verification_status !== "VERIFIED" ||
+          typeof row.verification_reference !== "string" ||
+          !row.verification_reference.startsWith(
+            "simulation:demo-checkout:v1:",
+          ) ||
+          micros(row.created_at) > observed ||
+          seen.has(String(row.id))
+        )
+          return unavailable();
+        seen.add(verificationIdentifier(row.id));
+        continue;
+      }
       const prepared = evidenceObservation(row, fence);
       if (seen.has(prepared.evidenceId) || micros(row.created_at) > observed)
         return unavailable();
@@ -502,6 +562,11 @@ export function createReceivingVerificationRepository(
         "authenticatedAt",
         "expiresAt",
       ]);
+    const setupSession =
+      proof.proofKind === "SESSION_AUTHENTICATION" &&
+      mode === "sandbox" &&
+      environment === "development" &&
+      typeof setupAuthority === "function";
     if (
       actor.userId !== scope.operatorUserId ||
       actor.siteId !== scope.siteId ||
@@ -511,7 +576,8 @@ export function createReceivingVerificationRepository(
       proof.provenance !== "backend" ||
       proof.verification !== "verified" ||
       (proof.proofKind !== "PASSWORD_REAUTHENTICATION" &&
-        proof.proofKind !== "MFA_REAUTHENTICATION")
+        proof.proofKind !== "MFA_REAUTHENTICATION" &&
+        !setupSession)
     )
       return unavailable();
     verificationIdentifier(actor.sessionId);
@@ -519,13 +585,14 @@ export function createReceivingVerificationRepository(
       expiresAt = micros(proof.expiresAt);
     if (
       expiresAt <= authenticatedAt ||
-      expiresAt - authenticatedAt > 300000000n
+      (!setupSession && expiresAt - authenticatedAt > 300000000n)
     )
       return unavailable();
     const checkProof = (time: bigint) => {
       if (
         authenticatedAt > time ||
-        time - authenticatedAt > BigInt(maxAge) * 1000n ||
+        time - authenticatedAt >
+          BigInt(setupSession ? ADMIN_ABSOLUTE_TIMEOUT_MS : maxAge) * 1000n ||
         expiresAt <= time
       )
         return unavailable();
@@ -557,6 +624,8 @@ export function createReceivingVerificationRepository(
     const expiry = micros(currentSession.sessionExpiresAt),
       lastActive = micros(currentSession.lastActiveAt),
       created = micros(currentSession.sessionCreatedAt);
+    if (setupSession && (authenticatedAt !== created || expiresAt !== expiry))
+      return unavailable();
     const checkSession = (time: bigint) => {
       if (
         expiry <= time ||
@@ -590,11 +659,18 @@ export function createReceivingVerificationRepository(
       version: number,
       candidate: ReceivingVerificationCandidate | null,
     ): Promise<bigint> => {
+      if (
+        setupSession &&
+        (!setupAuthority ||
+          (await setupAuthority(tx, fence, input, candidate)) !== true)
+      )
+        return unavailable();
       const time = await approve(tx, "SELECT", fence, candidate, input);
       if (time < started) return unavailable();
       checkProof(time);
       checkProof(micros(now()));
       checkSession(time);
+      if (setupSession) return time;
       assertRecipientFinancialAction({
         action: "CONFIGURE_RECEIVING",
         siteId: scope.siteId,
@@ -697,7 +773,9 @@ export function createReceivingVerificationRepository(
       receiving = true,
       withdrawal = true,
       commercial = true;
-    for (const row of fence.evidence) {
+    for (const row of fence.evidence.filter(
+      (value) => value.provenance === "PROVIDER",
+    )) {
       const previous = evidenceObservation(row, fence);
       const accountOrder = BigInt(previous.account.sourceOrder);
       if (accountOrder > accountFloor) {
@@ -923,18 +1001,22 @@ export function createReceivingVerificationRepository(
         if (
           !negativeOnly &&
           ((accountOrder === floor.account &&
-            !actual.evidence.some(
-              (row) =>
-                evidenceObservation(row, actual).account.sourceId ===
-                prepared.account.sourceId,
-            )) ||
+            !actual.evidence
+              .filter((row) => row.provenance === "PROVIDER")
+              .some(
+                (row) =>
+                  evidenceObservation(row, actual).account.sourceId ===
+                  prepared.account.sourceId,
+              )) ||
             (bankOrder !== 0n &&
               bankOrder === floor.bank &&
-              !actual.evidence.some(
-                (row) =>
-                  evidenceObservation(row, actual).bank.sourceId ===
-                  prepared.bank.sourceId,
-              )))
+              !actual.evidence
+                .filter((row) => row.provenance === "PROVIDER")
+                .some(
+                  (row) =>
+                    evidenceObservation(row, actual).bank.sourceId ===
+                    prepared.bank.sourceId,
+                )))
         )
           return unavailable();
         await updateAccount(tx, actual, { observation: prepared }, at);

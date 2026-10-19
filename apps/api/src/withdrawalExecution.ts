@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { isDeepStrictEqual, types } from "node:util";
 import {
   databaseTimestampEpochMicroseconds,
@@ -36,6 +37,24 @@ export interface WithdrawalCorrelation {
   netCents: number;
   currency: "BRL";
   policyVersion: string;
+}
+export function withdrawalCompletedEffectKey(
+  c: Pick<
+    WithdrawalCorrelation,
+    "siteId" | "accountId" | "environment" | "withdrawalId" | "operationId"
+  >,
+): string {
+  return `withdrawal.completed.v1:${createHash("sha256")
+    .update(
+      JSON.stringify([
+        c.siteId,
+        c.accountId,
+        c.environment,
+        c.withdrawalId,
+        c.operationId,
+      ]),
+    )
+    .digest("hex")}`;
 }
 export interface OriginalHolderConsentBinding {
   correlation: WithdrawalCorrelation;
@@ -240,7 +259,7 @@ export function captureWithdrawalValue<T>(value: T): T {
       const values: unknown[] = [];
       for (let index = 0; index < input.length; index++) {
         const item = Object.getOwnPropertyDescriptor(input, String(index));
-        if (!item || !item.enumerable || !Object.hasOwn(item, "value"))
+        if (!item?.enumerable || !Object.hasOwn(item, "value"))
           throw new TypeError("Invalid withdrawal array item");
         values.push(copy(item.value));
       }
@@ -729,9 +748,9 @@ export function createWithdrawalExecutionService(
         proofFresh(attempt, at, c.maxAge);
         if (
           original.correlation.environment !== c.mode ||
-          original.correlation.siteId !== attempt.actor!.siteId ||
+          original.correlation.siteId !== attempt.actor?.siteId ||
           original.correlation.requestId !== attempt.requestId ||
-          original.correlation.operatorUserId !== attempt.actor!.userId ||
+          original.correlation.operatorUserId !== attempt.actor?.userId ||
           databaseTimestampEpochMicroseconds(at) >=
             databaseTimestampEpochMicroseconds(armed.dispatchValidUntil) ||
           databaseTimestampEpochMicroseconds(at) >=

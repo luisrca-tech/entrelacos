@@ -1,3 +1,4 @@
+import type { DatabaseTarget } from "@entrelacos/database";
 import type { R2GiftMediaStorageOptions } from "./giftMediaStorage";
 
 export type GiftMediaConfig =
@@ -15,6 +16,7 @@ function required(value: string | undefined): string {
 
 export function readGiftMediaConfig(
   env: Record<string, string | undefined>,
+  applicationEnvironment?: DatabaseTarget,
 ): GiftMediaConfig {
   const mode = env.GIFT_MEDIA_MODE ?? "disabled";
   if (mode === "disabled") return { mode };
@@ -32,6 +34,10 @@ export function readGiftMediaConfig(
   } catch {
     return invalid();
   }
+  const developmentPublicOrigin =
+    (applicationEnvironment === "development" ||
+      applicationEnvironment === "test") &&
+    /^[a-z0-9-]+\.r2\.dev$/i.test(url.hostname);
   if (
     url.protocol !== "https:" ||
     url.username ||
@@ -40,7 +46,8 @@ export function readGiftMediaConfig(
     url.search ||
     url.hash ||
     url.hostname.endsWith(".") ||
-    /(^|\.)(r2\.dev|r2\.cloudflarestorage\.com)$/i.test(url.hostname)
+    (/(^|\.)r2\.dev$/i.test(url.hostname) && !developmentPublicOrigin) ||
+    /(^|\.)r2\.cloudflarestorage\.com$/i.test(url.hostname)
   )
     invalid();
   return {
@@ -50,5 +57,6 @@ export function readGiftMediaConfig(
     secretAccessKey,
     bucketName,
     publicOrigin: url.origin,
+    ...(applicationEnvironment ? { applicationEnvironment } : {}),
   };
 }

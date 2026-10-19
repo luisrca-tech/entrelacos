@@ -1,5 +1,5 @@
 import { receivingNominationResponseSchema } from "@entrelacos/contracts";
-import { Button, Checkbox } from "@entrelacos/ui";
+import { Button, Checkbox, showSandboxNotice } from "@entrelacos/ui";
 import {
   type FormEvent,
   useId,
@@ -207,7 +207,7 @@ export function ReceivingNominationView({
               Indicação registrada. Verificação do provedor pendente. Ainda não
               confirma a liberação para receber valores.
               {pending?.success &&
-                pending.data.nomination.mode === "sandbox" &&
+                showSandboxNotice(pending.data.nomination.mode) &&
                 " Ambiente de teste."}
             </>
           ) : (

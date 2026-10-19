@@ -1,7 +1,7 @@
 import type { SiteAccess } from "@entrelacos/contracts";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   mountReceivingNominationController,
   ReceivingNominationForm,
@@ -249,3 +249,6 @@ describe("unmounted receiving nomination form", () => {
     nextCleanup();
   });
 });
+
+beforeEach(() => vi.stubGlobal("__APP_ENV__", "development"));
+afterEach(() => vi.unstubAllGlobals());

@@ -77,6 +77,53 @@ afterEach(async () => {
 });
 
 describe("single existing bucket derivative storage", () => {
+  it.each(["development", "test"] as const)(
+    "supports development R2 public delivery with explicit %s scope",
+    async (applicationEnvironment) => {
+      const value = storage({
+        applicationEnvironment,
+        publicOrigin: "https://pub-development.r2.dev",
+      });
+      expect(value.getDerivativeUrl(key)).toBe(
+        `https://pub-development.r2.dev/${key}`,
+      );
+      expect(mocks.send).not.toHaveBeenCalled();
+      await value.close();
+    },
+  );
+  it.each([
+    {
+      applicationEnvironment: "production",
+      publicOrigin: "https://pub-development.r2.dev",
+    },
+    { applicationEnvironment: "development", publicOrigin: "https://r2.dev" },
+    {
+      applicationEnvironment: "development",
+      publicOrigin: "http://pub-development.r2.dev",
+    },
+    {
+      applicationEnvironment: "development",
+      publicOrigin: "https://pub-development.r2.dev.",
+    },
+    {
+      applicationEnvironment: "development",
+      publicOrigin: "https://pub-development.r2.dev/path",
+    },
+    {
+      applicationEnvironment: "development",
+      publicOrigin: "https://account.r2.cloudflarestorage.com",
+    },
+    {
+      applicationEnvironment: "test",
+      publicOrigin: "https://account.r2.cloudflarestorage.com",
+    },
+  ])(
+    "retains delivery origin restrictions for explicit scopes (%j)",
+    (patch) => {
+      expect(() => storage(patch)).toThrow(GiftMediaStorageError);
+      expect(mocks.options).not.toHaveBeenCalled();
+    },
+  );
   it("captures one bucket and original URL before PUT, with no raw signing ports", async () => {
     const mutable = { ...options };
     const value = createR2GiftMediaStorage(mutable);

@@ -82,6 +82,140 @@ function fixture() {
 }
 
 describe("Asaas hosted checkout payload", () => {
+  it.each(["PIX", "CREDIT_CARD"] as const)(
+    "charges only the configured 1000 cents for %s and splits 20 cents",
+    (method) => {
+      const values = fixture();
+      Object.assign(values.snapshot.quote, {
+        method,
+        nominalCents: 1000,
+        totalCents: 1000,
+        commissionCents: 20,
+        processingCents: 99,
+        feeAllocation: "RECIPIENT_DEDUCTED",
+      });
+      values.snapshot.gift.nominalCents = 1000;
+      Object.assign(values.snapshot.pricing.policy, {
+        method,
+        processingFixedCents: 99,
+        feeAllocation: "RECIPIENT_DEDUCTED",
+      });
+      const payload = buildAsaasCheckoutPayload(values.command, values.options);
+      expect(payload.items).toEqual([
+        { name: "Symbolic gift", quantity: 1, value: 10 },
+      ]);
+      expect(payload.splits).toEqual([
+        { walletId: "platform-wallet", fixedValue: 0.2 },
+      ]);
+      delete values.snapshot.pricing.policy.feeAllocation;
+      expect(() =>
+        buildAsaasCheckoutPayload(values.command, values.options),
+      ).toThrow("Checkout payload unavailable");
+    },
+  );
+
+  it("permits local test pricing only with a server-authorized development demo matching the purchase scope", () => {
+    const values = fixture();
+    values.snapshot.pricing.provenance = "local-test";
+    const options = {
+      ...values.options,
+      sandboxDemoPricing: {
+        siteId: "site-one",
+        accountReference: "account-one",
+        isDemo: true,
+        applicationEnvironment: "development" as const,
+      },
+    };
+    expect(
+      buildAsaasCheckoutPayload(values.command, options).items[0].value,
+    ).toBe(102);
+    expect(values.snapshot.pricing.provenance).toBe("local-test");
+  });
+
+  it.each([
+    { isDemo: false },
+    { applicationEnvironment: "production" },
+    { applicationEnvironment: "test" },
+    { siteId: "other" },
+    { accountReference: "other" },
+  ])("rejects unauthorized local test pricing: %j", (change) => {
+    const values = fixture();
+    values.snapshot.pricing.provenance = "local-test";
+    const sandboxDemoPricing = {
+      siteId: "site-one",
+      accountReference: "account-one",
+      isDemo: true,
+      applicationEnvironment: "development",
+      ...change,
+    };
+    expect(() =>
+      buildAsaasCheckoutPayload(values.command, {
+        ...values.options,
+        sandboxDemoPricing,
+      } as never),
+    ).toThrow();
+  });
+
+  it("never permits a demo authorization to enable local test pricing in live mode", () => {
+    const values = fixture();
+    values.snapshot.pricing.provenance = "local-test";
+    values.options.environment = "live";
+    values.snapshot.quote.mode = "live";
+    values.snapshot.receiving.environment = "live";
+    values.snapshot.pricing.environment = "live";
+    expect(() =>
+      buildAsaasCheckoutPayload(values.command, {
+        ...values.options,
+        sandboxDemoPricing: {
+          siteId: "site-one",
+          accountReference: "account-one",
+          isDemo: true,
+          applicationEnvironment: "development",
+        },
+      }),
+    ).toThrow();
+  });
+
+  it.each(["localhost", "127.0.0.1", "[::1]"])(
+    "permits an HTTP loopback callback for sandbox only: %s",
+    (host) => {
+      const values = fixture();
+      const publicOrigin = `http://${host}:4321`;
+      values.options.publicOrigin = publicOrigin;
+      values.options.callbacks = {
+        successUrl: `${publicOrigin}/presentes`,
+        cancelUrl: `${publicOrigin}/presentes`,
+        expiredUrl: `${publicOrigin}/presentes`,
+      };
+      expect(
+        buildAsaasCheckoutPayload(values.command, values.options).callback,
+      ).toEqual(values.options.callbacks);
+      values.options.environment = "live";
+      values.snapshot.quote.mode = "live";
+      values.snapshot.receiving.environment = "live";
+      values.snapshot.pricing.environment = "live";
+      expect(() =>
+        buildAsaasCheckoutPayload(values.command, values.options),
+      ).toThrow();
+    },
+  );
+
+  it.each(["http://wedding.example.test", "http://localhost.evil.test:4321"])(
+    "rejects non-loopback HTTP sandbox origins: %s",
+    (publicOrigin) => {
+      const values = fixture();
+      values.options.publicOrigin = publicOrigin;
+      values.options.callbacks = {
+        successUrl: `${publicOrigin}/presentes`,
+        cancelUrl: `${publicOrigin}/presentes`,
+        expiredUrl: `${publicOrigin}/presentes`,
+      };
+      expect(() =>
+        buildAsaasCheckoutPayload(values.command, values.options),
+      ).toThrow();
+    },
+  );
+
   it("uses one quoted method, detached charge, exact fixed nominal commission and durable external reference", () => {
     const values = fixture();
     const payload = buildAsaasCheckoutPayload(values.command, values.options);

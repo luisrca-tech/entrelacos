@@ -151,6 +151,32 @@ function fixture(
 }
 
 describe("stored receiving context", () => {
+  it("refreshes provider evidence before taking its read-only readiness snapshot", async () => {
+    const v = fixture();
+    const refresh = vi.fn(async (id: string) => {
+      expect(id).toBe(siteId);
+      expect(v.queries).toHaveLength(0);
+    });
+    await readReceivingReadiness(v.db, siteId, { ...options, refresh });
+    expect(refresh).toHaveBeenCalledOnce();
+  });
+  it("a failed refresh never renews the timestamps of stale bank evidence", async () => {
+    const v = fixture();
+    const refresh = vi.fn(async () => {
+      throw new Error("native unavailable");
+    });
+    const result = await readReceivingReadiness(v.db, siteId, {
+      ...options,
+      now: () => new Date(now.getTime() + 60000),
+      refresh,
+    });
+    expect(refresh).toHaveBeenCalledOnce();
+    expect(result).toMatchObject({
+      state: "BLOCKED",
+      reason: "EVIDENCE_STALE",
+    });
+  });
+
   it("keeps the default and disabled modes closed without database reads", async () => {
     const transaction = vi.fn();
     const db = { transaction } as unknown as ReceivingDatabase;

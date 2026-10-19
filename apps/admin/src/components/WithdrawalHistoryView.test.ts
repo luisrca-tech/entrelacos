@@ -1,7 +1,7 @@
 import type { SiteAccess, WithdrawalIntent } from "@entrelacos/contracts";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WithdrawalHistoryView } from "./WithdrawalHistoryView";
 import type { WithdrawalHistoryResult } from "./withdrawalHistory";
 
@@ -203,4 +203,29 @@ describe("withdrawal history view", () => {
       expect(html).not.toContain("R$");
     },
   );
+});
+
+beforeEach(() => vi.stubGlobal("__APP_ENV__", "development"));
+afterEach(() => vi.unstubAllGlobals());
+
+it("shows actual terminal debit and fee with the unused maximum returned", () => {
+  const html = render({
+    status: "ready",
+    withdrawals: [
+      {
+        ...withdrawal,
+        state: "COMPLETED",
+        feeSemantics: "MAXIMUM",
+        settlement: {
+          totalDebitCents: 9800,
+          feeCents: 0,
+          netCents: 9800,
+          releasedCents: 200,
+        },
+      },
+    ],
+  });
+  expect(html).toContain("Valor debitado");
+  expect(html).toContain("Taxa efetiva");
+  expect(html).toContain("Reserva liberada");
 });

@@ -436,6 +436,36 @@ function durableFixture() {
 }
 
 describe("durable withdrawal consent service", () => {
+  it("rejects a simulated destination before issuing withdrawal preview terms", async () => {
+    const v = durableFixture();
+    v.loadPresentation.mockResolvedValueOnce({
+      ...v.presentation,
+      provenance: "simulation",
+    });
+    await rejected(
+      v.service.createPreview({
+        ...v.attempt,
+        input: {
+          requestId: v.input.requestId,
+          amountCents: v.input.amountCents,
+          scopeRevision: "0",
+        },
+      }),
+      "DESTINATION_UNVERIFIED",
+      409,
+    );
+    expect(v.issuePreview).not.toHaveBeenCalled();
+    expect(v.reserveWithdrawal).not.toHaveBeenCalled();
+  });
+  it("rejects a simulated destination before creating a withdrawal reservation", async () => {
+    const v = fixture();
+    v.loadPresentation.mockResolvedValueOnce({
+      ...v.presentation,
+      provenance: "simulation",
+    });
+    await rejected(create(v), "DESTINATION_UNVERIFIED", 409);
+    expect(v.reserveWithdrawal).not.toHaveBeenCalled();
+  });
   it("rejects stale scope before any new fee or presentation read", async () => {
     const v = durableFixture();
     v.setRevision("4");

@@ -123,6 +123,54 @@ function paymentInput(
   };
 }
 
+describe("confirmed payment observations", () => {
+  it("records the provider's matching net allocation awaiting release without a receipt effect", () => {
+    const result = reconcileGiftPaymentObservation(
+      paymentInput({ status: "CONFIRMED" }),
+    );
+    expect(result).toMatchObject({
+      outcome: "NOT_RECEIVED",
+      effect: null,
+      payment: {
+        providerStatus: "CONFIRMED",
+        processingCents: 300,
+        recipientNetCents: 10000,
+        commissionCents: null,
+        splitFixedCents: 200,
+      },
+    });
+  });
+
+  it.each([
+    { split: [] },
+    { value: "106.00" },
+    { deleted: true },
+    { deleted: "true" },
+    {
+      split: [
+        {
+          id: "split-1",
+          walletId: "platform-wallet-1",
+          fixedValue: "2.00",
+          totalValue: "3.00",
+          status: "DONE",
+        },
+      ],
+    },
+  ])(
+    "never projects confirmed allocation with inconsistent or restricted money: %j",
+    (changes) => {
+      const result = reconcileGiftPaymentObservation(
+        paymentInput({ status: "CONFIRMED", ...changes }),
+      );
+      expect(result).toMatchObject({
+        effect: null,
+        payment: { recipientNetCents: null },
+      });
+    },
+  );
+});
+
 const settledSplit = {
   id: "split-1",
   walletId: "platform-wallet-1",
@@ -130,6 +178,123 @@ const settledSplit = {
   totalValue: "2.00",
   status: "DONE",
 };
+
+describe("actual provider fee allocation", () => {
+  it.each(["PIX", "CREDIT_CARD"] as const)(
+    "settles the new 1000-cent %s quote into 99 fee, 20 commission and 881 recipient cents",
+    (method) => {
+      const input = paymentInput({
+        billingType: method,
+        value: "10.00",
+        netValue: "9.01",
+        split: [{ ...settledSplit, fixedValue: "0.20", totalValue: "0.20" }],
+      });
+      Object.assign(input.quoteSnapshot.quote, {
+        method,
+        nominalCents: 1000,
+        totalCents: 1000,
+        commissionCents: 20,
+        processingCents: 0,
+        feeAllocation: "RECIPIENT_DEDUCTED",
+      });
+      Object.assign(input.quoteSnapshot.pricing.policy, {
+        method,
+        feeAllocation: "RECIPIENT_DEDUCTED",
+        processingFixedCents: 0,
+      });
+      input.quoteSnapshot.gift.nominalCents = 1000;
+      const frozen = structuredClone(input.quoteSnapshot);
+      expect(reconcileGiftPaymentObservation(input)).toMatchObject({
+        outcome: "RECEIVED",
+        payment: {
+          grossCents: 1000,
+          processingCents: 99,
+          commissionCents: 20,
+          recipientNetCents: 881,
+          splitFixedCents: 20,
+        },
+        effect: { amountCents: 881 },
+      });
+      expect(input.quoteSnapshot).toEqual(frozen);
+      for (const netValue of ["0.20", "0.19"]) {
+        Object.assign(input.observation.payment as object, { netValue });
+        expect(reconcileGiftPaymentObservation(input)).toMatchObject({
+          outcome: "DIVERGENT",
+          effect: null,
+        });
+      }
+    },
+  );
+
+  it.each(["CONFIRMED", "RECEIVED"])(
+    "keeps the buyer quote and allocates the actual fee to the holder for %s",
+    (status) => {
+      const input = paymentInput({
+        status,
+        value: "10.20",
+        netValue: "9.21",
+        split: [{ ...settledSplit, fixedValue: "0.20", totalValue: "0.20" }],
+      });
+      Object.assign(input.quoteSnapshot.quote, {
+        nominalCents: 1000,
+        commissionCents: 20,
+        processingCents: 0,
+        totalCents: 1020,
+      });
+      const frozenQuote = structuredClone(input.quoteSnapshot.quote);
+      const result = reconcileGiftPaymentObservation(input);
+      expect(result).toMatchObject({
+        outcome: status === "RECEIVED" ? "RECEIVED" : "NOT_RECEIVED",
+        payment: {
+          grossCents: 1020,
+          processingCents: 99,
+          recipientNetCents: 901,
+          splitFixedCents: 20,
+        },
+      });
+      expect(result.effect).toEqual(
+        status === "RECEIVED"
+          ? expect.objectContaining({ amountCents: 901, kind: "GIFT_RECEIVED" })
+          : null,
+      );
+      expect(input.quoteSnapshot.quote).toEqual(frozenQuote);
+    },
+  );
+
+  it.each([
+    ["101.99", 301, 9999],
+    ["102.01", 299, 10001],
+  ] as const)(
+    "conserves the fixed buyer total when observed provider net is %s",
+    (netValue, fee, recipient) => {
+      const input = paymentInput({ netValue });
+      const result = reconcileGiftPaymentObservation(input);
+      expect(result).toMatchObject({
+        outcome: "RECEIVED",
+        payment: {
+          processingCents: fee,
+          recipientNetCents: recipient,
+          commissionCents: 200,
+        },
+        effect: { amountCents: recipient },
+      });
+      expect(input.quoteSnapshot.quote.processingCents).toBe(300);
+    },
+  );
+
+  it.each(["2.00", "1.99"])(
+    "does not post a zero or negative holder allocation: %s",
+    (netValue) => {
+      expect(
+        reconcileGiftPaymentObservation(paymentInput({ netValue })),
+      ).toMatchObject({
+        outcome: "DIVERGENT",
+        reason: "ALLOCATION_MISMATCH",
+        effect: null,
+      });
+    },
+  );
+});
 
 describe("gift payment reconciliation decision", () => {
   it.each([undefined, null])(
@@ -257,15 +422,6 @@ describe("gift payment reconciliation decision", () => {
         processingCents: 301,
         commissionCents: 200,
         recipientNetCents: 10_000,
-      },
-    ],
-    [
-      { netValue: "101.99" },
-      {
-        grossCents: 10_500,
-        processingCents: 301,
-        commissionCents: 200,
-        recipientNetCents: 9_999,
       },
     ],
     [

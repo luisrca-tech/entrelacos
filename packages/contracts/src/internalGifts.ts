@@ -317,6 +317,11 @@ export const giftPaymentMethodSchema = z.enum(["PIX", "CREDIT_CARD"]);
 export const giftQuoteInputSchema = z
   .object({ giftId: id, method: giftPaymentMethodSchema })
   .strict();
+const giftFeeAllocationSchema = z.enum([
+  "BUYER_GROSS_UP",
+  "RECIPIENT_DEDUCTED",
+]);
+
 export const giftQuoteSchema = z
   .object({
     id,
@@ -329,6 +334,7 @@ export const giftQuoteSchema = z
     commissionBasisPoints: z.literal(200),
     commissionCents: giftCentsSchema,
     processingCents: giftCentsSchema,
+    feeAllocation: giftFeeAllocationSchema.optional(),
     totalCents: giftCentsSchema,
     policyVersion: id,
     expiresAt: instant,
@@ -337,8 +343,11 @@ export const giftQuoteSchema = z
   .strict()
   .refine(
     (value) =>
-      value.totalCents ===
-        value.nominalCents + value.commissionCents + value.processingCents &&
+      (value.feeAllocation === "RECIPIENT_DEDUCTED"
+        ? value.totalCents === value.nominalCents &&
+          value.totalCents > value.commissionCents + value.processingCents
+        : value.totalCents ===
+          value.nominalCents + value.commissionCents + value.processingCents) &&
       value.commissionCents === Math.round((value.nominalCents * 200) / 10000),
     "Quote allocation does not match the nominal commission",
   );
@@ -394,6 +403,7 @@ export const checkoutStatusSchema = z
       "CREATING",
       "OUTCOME_UNKNOWN",
       "AWAITING_PAYMENT",
+      "CONFIRMED",
       "RECEIVED",
       "CLOSED_UNPAID",
       "REFUNDED",
@@ -485,6 +495,16 @@ export const withdrawalIntentSchema = z
     siteId: id,
     amountCents: giftFields.nominalCents,
     feeCents: giftCentsSchema,
+    feeSemantics: z.literal("MAXIMUM").optional(),
+    settlement: z
+      .object({
+        totalDebitCents: giftFields.nominalCents,
+        feeCents: giftCentsSchema,
+        netCents: giftFields.nominalCents,
+        releasedCents: giftCentsSchema,
+      })
+      .strict()
+      .optional(),
     netCents: giftFields.nominalCents,
     currency: z.literal("BRL"),
     destinationVersion: z.number().int().positive(),
@@ -495,7 +515,17 @@ export const withdrawalIntentSchema = z
   })
   .strict()
   .refine(
-    (value) => value.netCents + value.feeCents === value.amountCents,
+    (value) =>
+      value.netCents + value.feeCents === value.amountCents &&
+      (!value.settlement ||
+        (value.state === "COMPLETED" &&
+          value.feeSemantics === "MAXIMUM" &&
+          value.settlement.netCents === value.netCents &&
+          value.settlement.feeCents <= value.feeCents &&
+          value.settlement.totalDebitCents ===
+            value.netCents + value.settlement.feeCents &&
+          value.settlement.totalDebitCents + value.settlement.releasedCents ===
+            value.amountCents)),
     "Withdrawal amount must cover fees and recipient net",
   );
 export type WithdrawalIntent = z.infer<typeof withdrawalIntentSchema>;
@@ -576,12 +606,16 @@ export const withdrawalPreviewSchema = z
     currency: z.literal("BRL"),
     amountCents: giftFields.nominalCents,
     feeCents: giftCentsSchema,
+    feeSemantics: z.literal("MAXIMUM").optional(),
+    payoutRecipientName: z.string().min(1).max(120).optional(),
     netCents: giftFields.nominalCents,
     destinationVersion: z.number().int().positive(),
     maskedDestination: z
       .string()
       .max(120)
-      .regex(/^(?:[A-Za-zÀ-ÿ .-]{1,60} )?(?:\*{4}|•{4}) [0-9]{4}$/),
+      .regex(
+        /^(?:(?:[A-Za-zÀ-ÿ .-]{1,60} )?(?:\*{4}|•{4}) [0-9]{4}|Pix (?:CPF|CNPJ|EMAIL|PHONE|EVP): [\x20-\x7e]{0,90}\*{3}[\x20-\x7e]{0,90})$/,
+      ),
     operatorDisplayName: z
       .string()
       .min(1)
@@ -1069,13 +1103,19 @@ export const giftPurchaseHistoryPurchaseSchema = z
         nominalCents: giftCentsSchema.refine((value) => value > 0),
         commissionCents: giftCentsSchema,
         processingCents: giftCentsSchema,
+        feeAllocation: giftFeeAllocationSchema.optional(),
         totalCents: giftCentsSchema.refine((value) => value > 0),
       })
       .strict()
       .refine(
         (value) =>
-          value.totalCents ===
-          value.nominalCents + value.commissionCents + value.processingCents,
+          value.feeAllocation === "RECIPIENT_DEDUCTED"
+            ? value.totalCents === value.nominalCents &&
+              value.totalCents > value.commissionCents + value.processingCents
+            : value.totalCents ===
+              value.nominalCents +
+                value.commissionCents +
+                value.processingCents,
         "Original allocation must be conserved without repricing",
       ),
   })
@@ -1270,7 +1310,9 @@ export const giftPurchaseHistoryDetailPageSchema = z
     return receipts.every((receipt) => {
       if (
         receipt.orderId !== purchase.orderId ||
-        receipt.recipientCreditCents !== purchase.quoted.nominalCents ||
+        BigInt(receipt.recipientCreditCents) +
+          BigInt(purchase.quoted.commissionCents) >
+          BigInt(purchase.quoted.totalCents) ||
         !purchaseHistoryTimeWithin(
           receipt.postedAtMicros,
           purchase.purchasedAtMicros,
@@ -1291,9 +1333,13 @@ export const giftPurchaseHistoryDetailPageSchema = z
         (payment.recordedState === "RECEIVED" &&
           payment.observedAtMicros === receipt.sourceObservedAtMicros &&
           payment.grossCents === purchase.quoted.totalCents &&
-          payment.processingCents === purchase.quoted.processingCents &&
+          payment.processingCents !== null &&
           payment.commissionCents === purchase.quoted.commissionCents &&
-          payment.recipientNetCents === purchase.quoted.nominalCents)
+          payment.recipientNetCents === receipt.recipientCreditCents &&
+          BigInt(payment.grossCents) ===
+            BigInt(payment.processingCents) +
+              BigInt(payment.commissionCents) +
+              BigInt(receipt.recipientCreditCents))
       );
     });
   }, "Historical detail scope, identities, allocation, coverage or times conflict")

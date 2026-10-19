@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { drizzle, type NodePgClient } from "drizzle-orm/node-postgres";
 import { describe, expect, it, vi } from "vitest";
+import { hashAsaasEventIdentity } from "./asaasWebhook";
 import {
   createGiftCheckoutRepository,
   type GiftCheckoutRepositoryOptions,
@@ -421,14 +422,29 @@ function fixture(rawTimestamps = false) {
       }
       if (/FROM "financial_event_inbox" e/i.test(text)) {
         const eventId = text.match(/e\.id = \$(\d+)/);
+        const confirmationRead = /AND \(e\.payment_id =/i.test(text);
+        const correlation = (expression: string) => {
+          const parameter = text.match(new RegExp(`${expression} = \\$(\\d+)`));
+          return parameter ? params[Number(parameter[1]) - 1] : undefined;
+        };
         return {
-          rows: tables.financial_event_inbox.filter(
-            (event) =>
+          rows: tables.financial_event_inbox.filter((event) => {
+            const payload = event.payload as Record<string, string> | undefined;
+            return (
               event.siteId === params[0] &&
               event.accountId === params[1] &&
               event.environment === params[2] &&
-              (!eventId || event.id === params[Number(eventId[1]) - 1]),
-          ),
+              (!eventId || event.id === params[Number(eventId[1]) - 1]) &&
+              (!confirmationRead ||
+                event.paymentId === correlation("e\\.payment_id") ||
+                payload?.paymentId ===
+                  correlation("e\\.payload->>'paymentId'") ||
+                payload?.externalReference ===
+                  correlation("e\\.payload->>'externalReference'") ||
+                payload?.checkoutId ===
+                  correlation("e\\.payload->>'checkoutId'"))
+            );
+          }),
         };
       }
       throw new Error(`Unexpected fixture query: ${text}`);
@@ -550,6 +566,91 @@ function receipt(values: Awaited<ReturnType<typeof reserved>>) {
   });
 }
 
+async function confirmedCard() {
+  const values = fixture();
+  const stored = values.tables.gift_quote_record[0];
+  Object.assign(values.input.quoteSnapshot.quote, {
+    method: "CREDIT_CARD",
+    nominalCents: 1000,
+    totalCents: 1000,
+    commissionCents: 20,
+    processingCents: 68,
+    feeAllocation: "RECIPIENT_DEDUCTED",
+  });
+  values.input.quoteSnapshot.gift.nominalCents = 1000;
+  values.input.quoteSnapshot.pricing.policy.method = "CREDIT_CARD";
+  values.input.quoteSnapshot.pricing.policy.processingFixedCents = 68;
+  values.input.quoteSnapshot.pricing.policy.feeAllocation =
+    "RECIPIENT_DEDUCTED";
+  Object.assign(stored, {
+    method: "CREDIT_CARD",
+    nominalCents: 1000,
+    totalCents: 1000,
+    commissionCents: 20,
+    processingCents: 68,
+  });
+  stored.snapshot = structuredClone(values.input.quoteSnapshot);
+  const repository = createGiftCheckoutRepository(values.db, values.options);
+  await repository.reserve(values.input, () => {});
+  const hosted = outcome();
+  hosted.checkout.method = "CREDIT_CARD";
+  await repository.saveHostedCheckout(hosted);
+  receipt({ ...values, repository });
+  values.tables.financial_ledger_entry.length = 0;
+  Object.assign(values.tables.gift_payment_record[0], {
+    providerStatus: "CONFIRMED",
+    commissionCents: null,
+    grossCents: 1000,
+    processingCents: 68,
+    recipientNetCents: 912,
+    splitFixedCents: 20,
+  });
+  const payload = {
+    paymentId: "provider-payment-one",
+    externalReference: "attempt-one",
+  };
+  Object.assign(values.tables.financial_event_inbox[0], {
+    eventType: "PAYMENT_CONFIRMED",
+    providerEventReference: "evt_confirmed",
+    receivedAt: now,
+    payload,
+    payloadHash: hashAsaasEventIdentity(
+      "evt_confirmed",
+      "PAYMENT_CONFIRMED",
+      "provider-account-one",
+      payload,
+    ),
+  });
+  for (const eventType of ["CHECKOUT_CREATED", "CHECKOUT_PAID"]) {
+    const lifecyclePayload = {
+      checkoutId: hosted.providerReference,
+      externalReference: "attempt-one",
+    };
+    const providerEventReference = `evt_${eventType}`;
+    values.tables.financial_event_inbox.push({
+      id: `event-${eventType}`,
+      siteId: "site-one",
+      accountId: "account-one",
+      environment: "sandbox",
+      eventType,
+      state: "PROCESSED",
+      paymentId: null,
+      providerEventReference,
+      payload: lifecyclePayload,
+      payloadHash: hashAsaasEventIdentity(
+        providerEventReference,
+        eventType,
+        "provider-account-one",
+        lifecyclePayload,
+      ),
+      authenticatedAt: now,
+      receivedAt: now,
+      processedAt: now,
+    });
+  }
+  return { ...values, repository };
+}
+
 // Model a pool with one connection; production advisory locks and unique constraints
 // require separate PostgreSQL acceptance tests, not this deterministic SQL harness.
 class SerializedQueryPool {
@@ -567,6 +668,224 @@ class SerializedQueryPool {
 }
 
 describe("PostgreSQL gift checkout repository", () => {
+  it("projects verified card approval without a ledger credit or another attempt", async () => {
+    const values = await confirmedCard();
+    expect(
+      await values.repository.findByRequest("site-one", "request-one"),
+    ).toMatchObject({
+      state: "CONFIRMED",
+      checkout: null,
+      closedReason: null,
+      evidence: {
+        kind: "PAYMENT_CONFIRMATION",
+        providerPaymentReference: "provider-payment-one",
+        providerEventReference: "evt_confirmed",
+      },
+    });
+    expect(values.tables.financial_ledger_entry).toHaveLength(0);
+    expect(
+      (await values.repository.reserve(values.input, () => {})).created,
+    ).toBe(false);
+    expect(values.tables.gift_checkout_attempt).toHaveLength(1);
+  });
+
+  it("does not treat checkout lifecycle events alone as card approval", async () => {
+    const values = await confirmedCard();
+    values.tables.financial_event_inbox.shift();
+    expect(
+      (await values.repository.findByRequest("site-one", "request-one"))?.state,
+    ).toBe("OUTCOME_UNKNOWN");
+  });
+
+  it("does not let an unrelated processed reversal mask exact card approval", async () => {
+    const values = await confirmedCard();
+    values.tables.financial_event_inbox.push({
+      ...values.tables.financial_event_inbox[0],
+      id: "foreign-refund",
+      paymentId: "foreign-payment",
+      eventType: "PAYMENT_REFUNDED",
+      payload: {
+        paymentId: "foreign-provider-payment",
+        externalReference: "foreign-attempt",
+      },
+    });
+    expect(
+      (await values.repository.findByRequest("site-one", "request-one"))?.state,
+    ).toBe("CONFIRMED");
+  });
+
+  it.each([
+    "unverified",
+    "currency",
+    "gross",
+    "processing",
+    "net",
+    "commission",
+    "split",
+    "split-reference",
+    "missing-event",
+    "unauthenticated",
+    "unprocessed",
+    "wrong-event",
+    "wrong-payment",
+    "wrong-attempt",
+    "wrong-checkout",
+    "payload-hash",
+    "event-link",
+    "event-scope",
+    "future",
+    "processed-before-observed",
+    "duplicate-payment",
+    "duplicate-confirmation",
+    "ledger",
+    "reversal",
+  ])(
+    "keeps incomplete or contradictory card approval unknown: %s",
+    async (variant) => {
+      const values = await confirmedCard();
+      const payment = values.tables.gift_payment_record[0];
+      const event = values.tables.financial_event_inbox[0];
+      if (variant === "unverified") payment.verificationStatus = "UNVERIFIED";
+      if (variant === "currency") payment.currency = "USD";
+      if (variant === "gross") payment.grossCents = 999;
+      if (variant === "processing") payment.processingCents = null;
+      if (variant === "net") payment.recipientNetCents = 911;
+      if (variant === "commission") payment.commissionCents = 199;
+      if (variant === "split") payment.splitFixedCents = 199;
+      if (variant === "split-reference") payment.splitProviderReference = null;
+      if (variant === "missing-event")
+        values.tables.financial_event_inbox.length = 0;
+      if (variant === "unauthenticated") event.authenticatedAt = null;
+      if (variant === "unprocessed") event.state = "RETRY";
+      if (variant === "wrong-event") event.eventType = "PAYMENT_RECEIVED";
+      if (variant === "wrong-payment")
+        (event.payload as Record<string, string>).paymentId = "foreign-payment";
+      if (variant === "wrong-attempt")
+        (event.payload as Record<string, string>).externalReference =
+          "foreign-attempt";
+      if (variant === "wrong-checkout")
+        (event.payload as Record<string, string>).checkoutId =
+          "foreign-checkout";
+      if (
+        [
+          "wrong-event",
+          "wrong-payment",
+          "wrong-attempt",
+          "wrong-checkout",
+        ].includes(variant)
+      )
+        event.payloadHash = hashAsaasEventIdentity(
+          "evt_confirmed",
+          String(event.eventType),
+          "provider-account-one",
+          event.payload as Record<string, string>,
+        );
+      if (variant === "payload-hash") event.payloadHash = "tampered";
+      if (variant === "event-link") event.paymentId = "foreign-payment";
+      if (variant === "event-scope") event.accountId = "foreign-account";
+      if (variant === "future")
+        payment.observedAt = new Date(now.getTime() + 1);
+      if (variant === "processed-before-observed")
+        event.processedAt = new Date(now.getTime() - 1);
+      if (variant === "duplicate-payment")
+        values.tables.gift_payment_record.push({ ...payment, id: "duplicate" });
+      if (variant === "duplicate-confirmation")
+        values.tables.financial_event_inbox.push({ ...event, id: "duplicate" });
+      if (variant === "ledger")
+        values.tables.financial_ledger_entry.push({
+          siteId: "site-one",
+          accountId: "account-one",
+          environment: "sandbox",
+          paymentId: "payment-one",
+        });
+      if (variant === "reversal")
+        values.tables.financial_event_inbox.push({
+          ...event,
+          id: "refund-event",
+          eventType: "PAYMENT_REFUNDED",
+        });
+      expect(
+        (await values.repository.findByRequest("site-one", "request-one"))
+          ?.state,
+      ).toBe("OUTCOME_UNKNOWN");
+    },
+  );
+  it.each(["CANCELED", "EXPIRED"])(
+    "projects verified unpaid %s only from a consumed, authenticated, empty-provider lifecycle observation",
+    async (reason) => {
+      const values = await reserved();
+      await values.repository.saveHostedCheckout(outcome());
+      const payload = {
+        checkoutId: outcome().providerReference,
+        externalReference: "attempt-one",
+      };
+      const eventType = `CHECKOUT_${reason}`;
+      values.tables.financial_event_inbox.push({
+        id: "closed-event",
+        siteId: "site-one",
+        accountId: "account-one",
+        environment: "sandbox",
+        eventType,
+        state: "PROCESSED",
+        providerEventReference: "evt_closed",
+        payload,
+        payloadHash: hashAsaasEventIdentity(
+          "evt_closed",
+          eventType,
+          "provider-account-one",
+          payload,
+        ),
+        authenticatedAt: now,
+        receivedAt: now,
+        processedAt: now,
+        lastErrorCode: `${eventType}_EMPTY`,
+      });
+      expect(
+        await values.repository.findByRequest("site-one", "request-one"),
+      ).toMatchObject({
+        state: "CLOSED_UNPAID",
+        closedReason: reason,
+        evidence: { kind: "CLOSED_UNPAID", noOutstandingPayment: true },
+      });
+      values.tables.financial_event_inbox[0].lastErrorCode = null;
+      expect(
+        (await values.repository.findByRequest("site-one", "request-one"))
+          ?.state,
+      ).not.toBe("CLOSED_UNPAID");
+    },
+  );
+
+  it("stops checkout continuation after a provider-correlated paid journey while settlement is still unknown", async () => {
+    const values = await reserved();
+    await values.repository.saveHostedCheckout(outcome());
+    const payload = {
+      checkoutId: outcome().providerReference,
+      externalReference: "attempt-one",
+    };
+    values.tables.financial_event_inbox.push({
+      id: "paid-event",
+      siteId: "site-one",
+      accountId: "account-one",
+      environment: "sandbox",
+      eventType: "CHECKOUT_PAID",
+      state: "PROCESSED",
+      providerEventReference: "evt_paid",
+      payload,
+      payloadHash: hashAsaasEventIdentity(
+        "evt_paid",
+        "CHECKOUT_PAID",
+        "provider-account-one",
+        payload,
+      ),
+      authenticatedAt: now,
+      receivedAt: now,
+      processedAt: now,
+      lastErrorCode: "CHECKOUT_PAID_OBSERVED",
+    });
+    expect(
+      await values.repository.findByRequest("site-one", "request-one"),
+    ).toMatchObject({ state: "OUTCOME_UNKNOWN", checkout: null });
+  });
   it("normalizes raw Drizzle PostgreSQL timestamps across reservation, hosting and authenticated receipt", async () => {
     const values = fixture(true);
     const repository = createGiftCheckoutRepository(values.db, values.options);
@@ -924,6 +1243,24 @@ describe("PostgreSQL gift checkout repository", () => {
       },
     });
   });
+
+  it.each([
+    [99, 9940],
+    [0, 10039],
+  ])(
+    "projects received with actual provider fee %i and recipient credit %i",
+    async (fee, net) => {
+      const values = await reserved();
+      await values.repository.saveHostedCheckout(outcome());
+      receipt(values);
+      values.tables.gift_payment_record[0].processingCents = fee;
+      values.tables.gift_payment_record[0].recipientNetCents = net;
+      values.tables.financial_ledger_entry[0].amountCents = net;
+      expect(
+        await values.repository.findByRequest("site-one", "request-one"),
+      ).toMatchObject({ state: "RECEIVED", checkout: null });
+    },
+  );
 
   it.each(["RECEIVED", "CLAIMED", "RETRY", "DEAD_LETTER"])(
     "keeps a receipt unknown while correlated event remains %s",

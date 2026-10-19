@@ -262,7 +262,8 @@ export function createReceivingNominationRepository(
                 );
                 const snapshot = await readScope(tx, selected, databaseTime);
                 const finishedAt = timestamp(now());
-                if (finishedAt < startedAt || databaseTime > finishedAt) fail();
+                // Database timestamps are authoritative within their own clock domain.
+                if (finishedAt < startedAt) fail();
                 return snapshot;
               },
               { isolationLevel: "repeatable read", accessMode: "read only" },
@@ -332,8 +333,14 @@ export function createReceivingNominationRepository(
         } catch {
           /* Malformed NEW evidence must not reinterpret known replay. */
         }
-        const proofAt = backendTimestamp(proof.authenticatedAt);
-        const proofExpiry = backendTimestamp(proof.expiresAt);
+        const proofAt =
+          proof.proofKind === "SESSION_AUTHENTICATION"
+            ? timestamp(proof.authenticatedAt)
+            : backendTimestamp(proof.authenticatedAt);
+        const proofExpiry =
+          proof.proofKind === "SESSION_AUTHENTICATION"
+            ? timestamp(proof.expiresAt)
+            : backendTimestamp(proof.expiresAt);
         if (
           snapshot.environment !== mode ||
           (mode === "live" && applicationEnvironment !== "production")
@@ -348,18 +355,27 @@ export function createReceivingNominationRepository(
           proof.provenance !== "backend" ||
           proof.verification !== "verified" ||
           typeof proof.proofKind !== "string" ||
-          !["PASSWORD_REAUTHENTICATION", "MFA_REAUTHENTICATION"].includes(
-            proof.proofKind,
-          ) ||
+          ![
+            "PASSWORD_REAUTHENTICATION",
+            "MFA_REAUTHENTICATION",
+            "SESSION_AUTHENTICATION",
+          ].includes(proof.proofKind) ||
           proofExpiry <= proofAt ||
-          proofExpiry - proofAt > 300000000n ||
+          (proof.proofKind !== "SESSION_AUTHENTICATION" &&
+            proofExpiry - proofAt > 300000000n) ||
           typeof authorize !== "function"
         )
           fail(403, "RECENT_AUTH_REQUIRED");
         const requireProofTime = (clock: bigint) => {
           if (
             proofAt > clock ||
-            clock - proofAt > BigInt(maxAuthAgeMs) * 1000n ||
+            clock - proofAt >
+              BigInt(
+                proof.proofKind === "SESSION_AUTHENTICATION"
+                  ? ADMIN_ABSOLUTE_TIMEOUT_MS
+                  : maxAuthAgeMs,
+              ) *
+                1000n ||
             proofExpiry <= clock
           )
             fail(403, "RECENT_AUTH_REQUIRED");
@@ -477,6 +493,12 @@ export function createReceivingNominationRepository(
                 )
               )
                 fail(403, "MEMBERSHIP_DENIED");
+              if (
+                proof.proofKind === "SESSION_AUTHENTICATION" &&
+                (proofAt !== timestamp(current.sessionCreatedAt) ||
+                  proofExpiry !== timestamp(current.sessionExpiresAt))
+              )
+                fail(403, "RECENT_AUTH_REQUIRED");
               requireSessionTime(databaseTime);
               const membership = await execute(
                 sql`SELECT m.id FROM ${siteMembership} m WHERE m.site_id=${snapshot.siteId} AND m.user_id=${actor.userId} AND m.role='SITE_ADMIN' AND m.revoked_at IS NULL FOR SHARE OF m`,

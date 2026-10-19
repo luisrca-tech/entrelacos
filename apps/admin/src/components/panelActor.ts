@@ -46,7 +46,15 @@ export function createPanelActorOwner(
   let timer: ReturnType<typeof setTimeout> | null = null;
   let disposed = false;
   let authenticating = 0;
+  let hidden = false;
+  let suspended = false;
   const listeners = new Set<() => void>();
+  const suspensionListeners = new Set<() => void>();
+  function setSuspended(value: boolean) {
+    if (suspended === value) return;
+    suspended = value;
+    for (const listener of suspensionListeners) listener();
+  }
   function publish(next: PanelSessionSnapshot) {
     snapshot = Object.freeze(next);
     for (const listener of listeners) listener();
@@ -57,6 +65,7 @@ export function createPanelActorOwner(
     if (timer !== null) clearTimeout(timer);
     timer = null;
     publish(emptySnapshot);
+    setSuspended(hidden);
     if (broadcast) options.broadcast?.();
   }
   function changed(): Error {
@@ -75,7 +84,7 @@ export function createPanelActorOwner(
       Math.min(expiresAt - current, 2147483647),
     );
   }
-  function load(refresh = false): Promise<MeResponse> {
+  function load(refresh = false, silent = false): Promise<MeResponse> {
     if (disposed || authenticating) return Promise.reject(changed());
     if (pending) return pending;
     const reading = now();
@@ -91,9 +100,18 @@ export function createPanelActorOwner(
       Date.parse(snapshot.actor.session.expiresAt) > reading
     )
       return Promise.resolve(snapshot.actor);
+    const retained =
+      silent &&
+      snapshot.status === "verified" &&
+      snapshot.actor &&
+      Date.parse(snapshot.actor.session.expiresAt) > reading
+        ? snapshot
+        : null;
     generation++;
-    if (timer !== null) clearTimeout(timer);
-    timer = null;
+    if (!retained) {
+      if (timer !== null) clearTimeout(timer);
+      timer = null;
+    }
     const currentGeneration = generation;
     const work = Promise.resolve()
       .then(() => {
@@ -112,7 +130,14 @@ export function createPanelActorOwner(
           actor.memberships?.some((access) => access.userId !== actor.user.id)
         )
           throw new Error("Invalid administrative session");
+        if (
+          retained &&
+          JSON.stringify(actor) === JSON.stringify(retained.actor)
+        )
+          return retained.actor!;
         const immutable = immutableActor(actor);
+        if (timer !== null) clearTimeout(timer);
+        timer = null;
         publish({
           status: "verified",
           actor: immutable,
@@ -139,11 +164,14 @@ export function createPanelActorOwner(
       })
       .finally(() => {
         if (pending === work) pending = null;
+        if (!disposed && currentGeneration === generation) setSuspended(hidden);
       });
     pending = work;
     // Reset can detach a request before its caller observes settlement.
     void work.catch(() => {});
-    publish({ status: "loading", actor: null, sessionEpoch: null });
+    if (silent) setSuspended(true);
+    if (!retained)
+      publish({ status: "loading", actor: null, sessionEpoch: null });
     return work;
   }
   return {
@@ -155,7 +183,23 @@ export function createPanelActorOwner(
         listeners.delete(listener);
       };
     },
-    load,
+    load: (refresh = false) => load(refresh),
+    revalidate() {
+      hidden = false;
+      return load(true, true);
+    },
+    suspend() {
+      hidden = true;
+      setSuspended(true);
+    },
+    isSuspended: () => suspended,
+    getServerSuspensionSnapshot: () => false,
+    subscribeSuspension(listener: () => void) {
+      suspensionListeners.add(listener);
+      return () => {
+        suspensionListeners.delete(listener);
+      };
+    },
     invalidate,
     async runAuthentication<T>(operation: () => Promise<T>): Promise<T> {
       if (disposed) throw changed();
@@ -200,6 +244,8 @@ export function createPanelActorOwner(
       if (timer !== null) clearTimeout(timer);
       timer = null;
       listeners.clear();
+      suspensionListeners.clear();
+      suspended = false;
       snapshot = emptySnapshot;
     },
   };
@@ -279,8 +325,8 @@ export function mountPanelSessionLifecycle(
   if (!lifecycle) {
     const resume = () => {
       if (environment.document.visibilityState === "visible")
-        void owner.load(true).catch(() => {});
-      else owner.invalidate(false);
+        void owner.revalidate().catch(() => {});
+      else owner.suspend();
     };
     let channel: Pick<BroadcastChannel, "onmessage" | "close"> | null = null;
     try {
@@ -310,7 +356,11 @@ export function mountPanelSessionLifecycle(
   const retained = lifecycle;
   retained.users++;
   if (environment.document.visibilityState === "visible")
-    void owner.load(true).catch(() => {});
+    void owner.revalidate().catch(() => {});
+  else {
+    owner.suspend();
+    void owner.load().catch(() => {});
+  }
   let released = false;
   return () => {
     if (released) return;

@@ -235,7 +235,8 @@ export function createGiftPreviewFetcher(
           commissionBasisPoints: 200,
           commissionCents,
           processingCents,
-          totalCents: gift.nominalCents + commissionCents + processingCents,
+          totalCents: gift.nominalCents,
+          feeAllocation: "RECIPIENT_DEDUCTED",
           policyVersion: "local-gift-policy-v1",
           expiresAt: new Date(
             now().getTime() +

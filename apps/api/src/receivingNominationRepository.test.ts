@@ -469,6 +469,34 @@ function fixture(rawTimestamps = false) {
   };
 }
 describe("durable initial receiving nomination", () => {
+  it.each([false, true])(
+    "binds session authentication to the locked session (mismatch %s)",
+    async (mismatch) => {
+      const values = fixture();
+      values.state.sessionCreatedAt = new Date(currentTime.getTime() - 3600000);
+      Object.assign(values.authorization.recentAuth, {
+        proofKind: "SESSION_AUTHENTICATION",
+        authenticatedAt: new Date(
+          values.state.sessionCreatedAt.getTime() + (mismatch ? 1 : 0),
+        ),
+        expiresAt: values.state.sessionExpiresAt,
+      });
+      const operation = values.repository.reserveNomination(
+        values.snapshot,
+        values.authorize,
+        values.authorization,
+      );
+      if (mismatch) {
+        await expect(operation).rejects.toMatchObject({
+          code: "RECENT_AUTH_REQUIRED",
+        });
+        expect(values.tables.accounts).toHaveLength(0);
+      } else {
+        await expect(operation).resolves.toBeTruthy();
+        expect(values.tables.accounts).toHaveLength(1);
+      }
+    },
+  );
   it.each(["CLAIMED", "UNKNOWN", "SUCCEEDED"])(
     "keeps private provisioning %s history unavailable to nomination replay",
     async (operationState) => {
@@ -1158,6 +1186,50 @@ describe("authoritative nomination scope recovery", () => {
       v.snapshot,
     );
     expect(v.authorize).not.toHaveBeenCalled();
+  });
+  it.each([-2000, 2000])(
+    "keeps scope reads valid across independent database clock skew (%sms)",
+    async (databaseOffset) => {
+      const values = fixture(true);
+      values.state.clock = new Date(currentTime.getTime() + databaseOffset);
+      const repository = createReceivingNominationRepository(values.db, {
+        ...values.options,
+        now: () => new Date(currentTime),
+      });
+      await expect(
+        repository.readNominationScope(scope(values)),
+      ).resolves.toBeNull();
+      expect(values.tables.accounts).toHaveLength(0);
+      expect(values.tables.operations).toHaveLength(0);
+    },
+  );
+  it("still rejects a persisted intent created after the authoritative database clock", async () => {
+    const values = fixture(true);
+    await values.repository.reserveNomination(
+      values.snapshot,
+      values.authorize,
+      values.authorization,
+    );
+    values.state.clock = new Date(currentTime.getTime() - 1);
+    const repository = createReceivingNominationRepository(values.db, {
+      ...values.options,
+      now: () => new Date(currentTime),
+    });
+    await expect(
+      repository.readNominationScope(scope(values)),
+    ).rejects.toMatchObject({ code: "RECEIVING_NOMINATION_UNAVAILABLE" });
+    expect(values.tables.accounts).toHaveLength(1);
+  });
+  it("still rejects a scope read when the application clock itself moves backward", async () => {
+    const values = fixture(true);
+    let call = 0;
+    const repository = createReceivingNominationRepository(values.db, {
+      ...values.options,
+      now: () => new Date(currentTime.getTime() - call++),
+    });
+    await expect(
+      repository.readNominationScope(scope(values)),
+    ).rejects.toMatchObject({ code: "RECEIVING_NOMINATION_UNAVAILABLE" });
   });
   it("keeps the injected read clock Date-only and copies the scope before awaiting", async () => {
     const v = fixture();

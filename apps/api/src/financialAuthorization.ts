@@ -93,8 +93,18 @@ export function assertFinancialReadAccess(
   access: unknown,
   siteId: string,
 ): asserts access is SiteAccess {
-  const selected = selectedSiteAdmin(access, siteId);
-  if (!selected.capabilities.readFinance) {
+  const parsed = siteAccessSchema.safeParse(access);
+  if (
+    !parsed.success ||
+    parsed.data.siteId !== siteId ||
+    !parsed.data.capabilities.readFinance ||
+    !(
+      (parsed.data.membershipRole === "OWNER" &&
+        parsed.data.membershipId === null) ||
+      (parsed.data.membershipRole === "SITE_ADMIN" &&
+        parsed.data.membershipId !== null)
+    )
+  ) {
     reject("MEMBERSHIP_DENIED", "Financial membership denied");
   }
 }

@@ -90,6 +90,9 @@ export async function createGiftMediaComposition(
       secretAccessKey: config.secretAccessKey,
       bucketName: config.bucketName,
       publicOrigin: config.publicOrigin,
+      ...(config.applicationEnvironment
+        ? { applicationEnvironment: config.applicationEnvironment }
+        : {}),
     };
     storage = (options.createStorage ?? createR2GiftMediaStorage)(captured);
     processing = (options.createProcessing ?? createGiftMediaProcessing)();

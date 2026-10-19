@@ -174,6 +174,48 @@ async function fixture(
 }
 
 describe("private gift payment history", () => {
+  it("admits read-only OWNER history without fabricating a site membership and clears it on session change", async () => {
+    const nativeOwner = createPanelActorOwner({
+      request: async () => ({
+        ...actor,
+        user: { ...actor.user, id: "owner-one", role: "OWNER" },
+        siteId: null,
+        memberships: [],
+      }),
+      now: () => now,
+    });
+    await nativeOwner.load();
+    const selected: SiteAccess = {
+      ...access,
+      userId: "owner-one",
+      membershipRole: "OWNER",
+      membershipId: null,
+      capabilities: {
+        ...access.capabilities,
+        configureReceiving: false,
+        requestWithdrawal: false,
+      },
+    };
+    const request = vi.fn(async () => ({ history: page() }));
+    const controller = createGiftPaymentHistoryController(
+      {
+        siteId: access.siteId,
+        access: selected,
+        sessionEpoch: nativeOwner.getSnapshot().sessionEpoch,
+      },
+      vi.fn(),
+      { owner: nativeOwner, request, now: () => now },
+    );
+    cleanups.push(() => {
+      controller.dispose();
+      nativeOwner.dispose();
+    });
+    expect(await controller.loadFirstIndex()).toBe(true);
+    expect(controller.getState().purchases).toEqual([purchase()]);
+    nativeOwner.invalidate(false);
+    expect(await controller.loadFirstIndex()).toBe(false);
+    expect(controller.getState().purchases).toEqual([]);
+  });
   it("admits an exact C1 page only through a verified current native owner", async () => {
     const f = await fixture();
     expect(await f.controller.loadFirstIndex()).toBe(true);

@@ -46,6 +46,69 @@ function fixture() {
 }
 
 describe("Asaas webhook durable acceptance", () => {
+  it.each([
+    "PAYMENT_REFUNDED",
+    "PAYMENT_PARTIALLY_REFUNDED",
+    "PAYMENT_REFUND_IN_PROGRESS",
+    "PAYMENT_CHARGEBACK_REQUESTED",
+    "PAYMENT_CHARGEBACK_DISPUTE",
+    "PAYMENT_AWAITING_CHARGEBACK_REVERSAL",
+  ])(
+    "retains only authenticated correlation references for %s",
+    async (eventType) => {
+      const values = fixture();
+      await values.receiver.receive(
+        token,
+        JSON.stringify({
+          ...event,
+          event: eventType,
+          payment: {
+            ...event.payment,
+            refunds: [
+              { id: "refund_one", value: 10, privateData: "never-store" },
+            ],
+            chargeback: { privateData: "never-store" },
+          },
+        }),
+      );
+      expect(values.append).toHaveBeenCalledWith(
+        expect.objectContaining({
+          eventType,
+          accountId: "account-one",
+          payload: { paymentId: "pay_one", externalReference: "attempt-one" },
+        }),
+      );
+      expect(JSON.stringify(values.append.mock.calls)).not.toContain(
+        "never-store",
+      );
+    },
+  );
+  it("accepts the documented payment event without an undocumented account field and uses its unique token binding", async () => {
+    const values = fixture();
+    const { account: _account, ...documentedEvent } = event;
+    await expect(
+      values.receiver.receive(token, JSON.stringify(documentedEvent)),
+    ).resolves.toEqual({ accepted: true });
+    expect(values.append).toHaveBeenCalledWith(
+      expect.objectContaining({
+        siteId: values.binding.siteId,
+        accountId: values.binding.accountId,
+        providerAccountReference: values.binding.providerAccountReference,
+      }),
+    );
+  });
+
+  it.each([null, "provider-account", {}, { id: "other-account" }])(
+    "rejects a malformed or contradictory optional account field: %j",
+    async (account) => {
+      const values = fixture();
+      await expect(
+        values.receiver.receive(token, JSON.stringify({ ...event, account })),
+      ).rejects.toMatchObject({ code: "WEBHOOK_INVALID" });
+      expect(values.append).not.toHaveBeenCalled();
+    },
+  );
+
   it("deduplicates equivalent normalized references regardless of source object placement", async () => {
     const values = fixture();
     let savedHash: string | undefined;

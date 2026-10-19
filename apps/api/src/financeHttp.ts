@@ -215,8 +215,7 @@ export function createFinanceHttpRouter(options: FinanceHttpOptions) {
       const requestRead =
         ["GET", "HEAD"].includes(context.req.method) &&
         path === `${WITHDRAWALS_PATH}/*`;
-      if (requestRead && (!readSession || (!readContext && !readRequest)))
-        return providerUnavailable();
+      if (requestRead && !readSession) return providerUnavailable();
       const actor = requestRead
         ? await readSession?.(context.req.raw, options)
         : await requireAdminSession(context.req.raw, options);
@@ -233,9 +232,21 @@ export function createFinanceHttpRouter(options: FinanceHttpOptions) {
         siteId,
       });
       assertFinancialReadAccess(access, siteId);
+      if (
+        access.membershipRole === "OWNER" &&
+        (context.req.method === "POST" || requestRead)
+      ) {
+        return problem(
+          403,
+          "MEMBERSHIP_DENIED",
+          "Financial action access denied",
+        );
+      }
       if (access.userId !== actor.user.id) {
         return problem(403, "MEMBERSHIP_DENIED", "Financial access denied");
       }
+      if (requestRead && !readContext && !readRequest)
+        return providerUnavailable();
       const url = new URL(context.req.url);
       const contextRead =
         requestRead &&

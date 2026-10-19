@@ -36,6 +36,24 @@ const overview = {
 };
 
 describe("financial overview client", () => {
+  it("reads financial data using selected-site OWNER access without recipient capabilities", async () => {
+    const selected: SiteAccess = {
+      ...access,
+      userId: "owner-one",
+      membershipRole: "OWNER",
+      membershipId: null,
+      capabilities: {
+        ...access.capabilities,
+        configureReceiving: false,
+        requestWithdrawal: false,
+      },
+    };
+    const request = vi.fn().mockResolvedValue({ overview });
+    await expect(
+      loadFinancialOverview("wedding-a", selected, request),
+    ).resolves.toEqual(overview);
+    expect(request).toHaveBeenCalledWith("/v1/sites/wedding-a/finance");
+  });
   it("loads only the selected site's strict server projection", async () => {
     const request = vi.fn().mockResolvedValue({ overview });
     await expect(

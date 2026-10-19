@@ -88,6 +88,81 @@ function fixture() {
 }
 
 describe("single-step received payment worker", () => {
+  it("recovers a payment-only webhook from its authenticated provider checkout session", async () => {
+    const values = fixture();
+    values.loadCheckout.mockResolvedValueOnce(null);
+    values.observation.payment.externalReference = null;
+    expect(
+      await createGiftPaymentWorker(
+        values.options,
+      ).processNextReceivedPayment(),
+    ).toEqual({ kind: "POSTED" });
+    expect(values.loadCheckout).toHaveBeenNthCalledWith(1, values.claim);
+    expect(values.loadCheckout).toHaveBeenNthCalledWith(
+      2,
+      values.claim,
+      "checkout-1",
+    );
+    expect(values.getPayment).toHaveBeenCalledExactlyOnceWith(values.claim);
+    expect(values.postReceivedPayment).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    { siteId: "foreign" },
+    { accountReference: "foreign" },
+    { environment: "live" },
+    { payment: { id: "pay_other", checkoutSession: "checkout-1" } },
+  ])(
+    "does not use an unbound provider observation for checkout recovery: %j",
+    async (change) => {
+      const values = fixture();
+      values.loadCheckout.mockResolvedValueOnce(null);
+      values.getPayment.mockResolvedValueOnce({
+        ...values.observation,
+        ...change,
+      });
+      expect(
+        await createGiftPaymentWorker(
+          values.options,
+        ).processNextReceivedPayment(),
+      ).toEqual({ kind: "RETRY" });
+      expect(values.loadCheckout).toHaveBeenCalledOnce();
+      expect(values.postReceivedPayment).not.toHaveBeenCalled();
+      expect(values.deferClaim).toHaveBeenCalledWith(
+        values.claim,
+        "PROVIDER_READ_UNAVAILABLE",
+      );
+    },
+  );
+
+  it("keeps recovery unresolved when the authenticated session has no stored checkout", async () => {
+    const values = fixture();
+    values.loadCheckout.mockResolvedValue(null);
+    expect(
+      await createGiftPaymentWorker(
+        values.options,
+      ).processNextReceivedPayment(),
+    ).toEqual({ kind: "RETRY" });
+    expect(values.loadCheckout).toHaveBeenCalledTimes(2);
+    expect(values.postReceivedPayment).not.toHaveBeenCalled();
+    expect(values.deferClaim).toHaveBeenCalledWith(
+      values.claim,
+      "CHECKOUT_BINDING_UNAVAILABLE",
+    );
+  });
+
+  it("rejects contradictory native external reference after fallback binding", async () => {
+    const values = fixture();
+    values.loadCheckout.mockResolvedValueOnce(null);
+    values.observation.payment.externalReference = "foreign-attempt";
+    expect(
+      await createGiftPaymentWorker(
+        values.options,
+      ).processNextReceivedPayment(),
+    ).toEqual({ kind: "RETRY" });
+    expect(values.postReceivedPayment).not.toHaveBeenCalled();
+  });
+
   it("posts exactly one claimed payment using the stored checkout and authenticated server observation", async () => {
     const values = fixture();
     expect(
@@ -217,7 +292,6 @@ describe("single-step received payment worker", () => {
   );
 
   it.each([
-    null,
     { siteId: "other-site" },
     { accountId: "other-account" },
     { environment: "live" },

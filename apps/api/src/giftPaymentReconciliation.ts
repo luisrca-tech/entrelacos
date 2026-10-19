@@ -283,6 +283,40 @@ export function reconcileGiftPaymentObservation(
       splitProviderReference: null,
       splitFixedCents: null,
     };
+    if (
+      status === "CONFIRMED" &&
+      gross === quote.totalCents &&
+      net !== null &&
+      (raw.deleted == null || raw.deleted === false) &&
+      raw.chargeback == null &&
+      raw.custody == null &&
+      (raw.refunds == null ||
+        (Array.isArray(raw.refunds) && raw.refunds.length === 0)) &&
+      Array.isArray(raw.split)
+    ) {
+      // A configured split can establish an allocation awaiting release, never a settled commission.
+      const split = raw.split.length === 1 ? record(raw.split[0]) : null;
+      const zero = quote.commissionCents === 0 && raw.split.length === 0;
+      const matching =
+        split &&
+        split.walletId === input.platformWalletId &&
+        isReference(split.id) &&
+        split.percentualValue == null &&
+        split.fixedValue != null &&
+        cents(split.fixedValue) === quote.commissionCents &&
+        (split.totalValue == null
+          ? split.status !== "DONE"
+          : cents(split.totalValue) === quote.commissionCents ||
+            (split.status !== "DONE" && cents(split.totalValue) === 0)) &&
+        ["PENDING", "PROCESSING", "AWAITING_CREDIT", "DONE"].includes(
+          String(split.status),
+        );
+      if ((zero || matching) && net > quote.commissionCents) {
+        payment.splitProviderReference = split ? reference(split.id) : null;
+        payment.splitFixedCents = quote.commissionCents;
+        payment.recipientNetCents = net - quote.commissionCents;
+      }
+    }
     if (status !== "RECEIVED")
       return {
         outcome: "NOT_RECEIVED",
@@ -385,10 +419,9 @@ export function reconcileGiftPaymentObservation(
       commissionCents === null ||
       recipientNetCents === null ||
       payment.grossCents !== quote.totalCents ||
-      processingCents !== quote.processingCents ||
       commissionCents !== quote.commissionCents ||
       payment.splitFixedCents !== quote.commissionCents ||
-      recipientNetCents !== quote.nominalCents ||
+      recipientNetCents <= 0 ||
       BigInt(payment.grossCents) !==
         BigInt(processingCents) +
           BigInt(commissionCents) +

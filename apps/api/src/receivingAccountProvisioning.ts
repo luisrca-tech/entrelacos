@@ -218,9 +218,11 @@ function authorizationFor(
     proof.sessionId !== actor.sessionId ||
     proof.provenance !== "backend" ||
     proof.verification !== "verified" ||
-    !["PASSWORD_REAUTHENTICATION", "MFA_REAUTHENTICATION"].includes(
-      proof.proofKind,
-    ) ||
+    ![
+      "PASSWORD_REAUTHENTICATION",
+      "MFA_REAUTHENTICATION",
+      "SESSION_AUTHENTICATION",
+    ].includes(proof.proofKind) ||
     !proof.authenticatedAt ||
     !proof.expiresAt
   )

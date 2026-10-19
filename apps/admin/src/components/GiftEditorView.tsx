@@ -3,7 +3,7 @@ import type {
   GiftItem,
   GiftUpdateInput,
 } from "@entrelacos/contracts";
-import { giftCentsSchema } from "@entrelacos/contracts";
+import { getGiftCommissionCents, giftCentsSchema } from "@entrelacos/contracts";
 import { Button, Input, Textarea } from "@entrelacos/ui";
 import type { FormEvent, ReactNode } from "react";
 import { useId, useState } from "react";
@@ -83,6 +83,83 @@ function formatPrice(cents: number): string {
     style: "currency",
     currency: "BRL",
   }).format(cents / 100);
+}
+
+function GiftPriceField({
+  id,
+  disabled,
+  nominalCents: initialCents,
+}: {
+  id: string;
+  disabled: boolean;
+  nominalCents?: number;
+}) {
+  const [price, setPrice] = useState(() =>
+    initialCents === undefined ? "" : editablePrice(initialCents),
+  );
+  const nominalCents = parseGiftPriceToCents(price);
+  return (
+    <div className="space-y-3">
+      <label htmlFor={id}>
+        Valor do presente (R$)
+        <Input
+          id={id}
+          name="nominalPrice"
+          type="text"
+          inputMode="decimal"
+          autoComplete="off"
+          maxLength={20}
+          placeholder="Ex.: 120,00"
+          required
+          disabled={disabled}
+          value={price}
+          onChange={(event) => setPrice(event.target.value)}
+        />
+      </label>
+      <div
+        aria-live="polite"
+        className="rounded-lg border border-admin-line bg-admin-beige/30 p-3 text-sm"
+      >
+        {nominalCents === null ? (
+          <p className={adminStyles.muted}>
+            Informe um valor válido para visualizar a estimativa de recebimento.
+          </p>
+        ) : (
+          <dl aria-label="Estimativa de recebimento" className="space-y-2">
+            {(
+              [
+                ["Valor do presente", nominalCents],
+                [
+                  "Comissão descontada (2%)",
+                  getGiftCommissionCents(nominalCents),
+                ],
+                [
+                  "Líquido estimado antes das tarifas Asaas",
+                  nominalCents - getGiftCommissionCents(nominalCents),
+                ],
+              ] as const
+            ).map(([label, amount]) => (
+              <div
+                key={label}
+                className="flex flex-wrap justify-between gap-x-3"
+              >
+                <dt>{label}</dt>
+                <dd className="font-medium text-admin-ink">
+                  {formatPrice(amount)}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        )}
+        <p className={`${adminStyles.muted} mt-3`}>
+          O convidado paga o valor cadastrado. A comissão de 2% e as tarifas
+          Asaas são descontadas do recebimento do casal. A estimativa acima
+          ainda não desconta as tarifas Asaas, que dependem da forma de
+          pagamento.
+        </p>
+      </div>
+    </div>
+  );
 }
 
 function statusLabel(state: GiftItem["publicationState"]): string {
@@ -275,20 +352,10 @@ export function GiftEditorView({
               rows={3}
             />
           </label>
-          <label htmlFor={`${idPrefix}-create-price`}>
-            Valor simbólico (R$)
-            <Input
-              id={`${idPrefix}-create-price`}
-              name="nominalPrice"
-              type="text"
-              inputMode="decimal"
-              autoComplete="off"
-              maxLength={20}
-              placeholder="Ex.: 120,00"
-              required
-              disabled={mutationBlocked}
-            />
-          </label>
+          <GiftPriceField
+            id={`${idPrefix}-create-price`}
+            disabled={mutationBlocked}
+          />
           <Button type="submit" disabled={mutationBlocked}>
             Cadastrar presente
           </Button>
@@ -368,20 +435,12 @@ export function GiftEditorView({
                         rows={3}
                       />
                     </label>
-                    <label htmlFor={`${idPrefix}-edit-price-${index}`}>
-                      Valor simbólico (R$)
-                      <Input
-                        id={`${idPrefix}-edit-price-${index}`}
-                        name="nominalPrice"
-                        type="text"
-                        inputMode="decimal"
-                        autoComplete="off"
-                        maxLength={20}
-                        required
-                        defaultValue={editablePrice(gift.nominalCents)}
-                        disabled={mutationBlocked}
-                      />
-                    </label>
+                    <GiftPriceField
+                      key={gift.nominalCents}
+                      id={`${idPrefix}-edit-price-${index}`}
+                      nominalCents={gift.nominalCents}
+                      disabled={mutationBlocked}
+                    />
                     <Button type="submit" disabled={mutationBlocked}>
                       Salvar alterações
                     </Button>

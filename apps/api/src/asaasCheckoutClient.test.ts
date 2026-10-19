@@ -128,6 +128,35 @@ function fixture(mode: "sandbox" | "live" = "sandbox") {
 
 describe("native Asaas hosted checkout creation", () => {
   it.each(["sandbox", "live"] as const)(
+    "keeps bounded local receiving references out of the %s provider payload",
+    async (mode) => {
+      const values = fixture(mode);
+      const references = {
+        operatorReference: "consent:holder.one:1",
+        bankReference: "simulation:demo-checkout:binding.one:1",
+      };
+      Object.assign(values.options.binding, references);
+      Object.assign(values.snapshot.receiving, references);
+      Object.assign(values.snapshot.pricing, references);
+      await createAsaasCheckoutClient(values.options).createHostedCheckout(
+        values.command,
+      );
+      expect(values.fetch).toHaveBeenCalledTimes(1);
+      const body = String(values.fetch.mock.calls[0][1]?.body);
+      for (const value of Object.values(references))
+        expect(body).not.toContain(value);
+    },
+  );
+  it.each(["accountReference", "recipientReference"] as const)(
+    "retains the strict native provider format for %s",
+    (field) => {
+      const values = fixture();
+      values.options.binding[field] = "native:invalid";
+      expect(() => createAsaasCheckoutClient(values.options)).toThrow();
+      expect(values.fetch).not.toHaveBeenCalled();
+    },
+  );
+  it.each(["sandbox", "live"] as const)(
     "dispatches once with the stored %s quote and reconstructs only the documented hosted origin",
     async (mode) => {
       const values = fixture(mode);
@@ -180,6 +209,71 @@ describe("native Asaas hosted checkout creation", () => {
     },
   );
 
+  it.each([
+    [
+      "sandbox",
+      `https://sandbox.asaas.com/000/checkoutSession/show/${providerId}`,
+    ],
+    [
+      "sandbox",
+      `https://sandbox.asaas.com/region-next/checkoutSession/show/${providerId}`,
+    ],
+    ["live", `https://www.asaas.com/001/checkoutSession/show/${providerId}`],
+    ["live", `https://asaas.com/checkoutSession/show?id=${providerId}`],
+  ] as const)(
+    "preserves the complete returned %s link %s",
+    async (mode, link) => {
+      const values = fixture(mode);
+      values.fetch.mockResolvedValue(json({ id: providerId, link }));
+      const result = await createAsaasCheckoutClient(
+        values.options,
+      ).createHostedCheckout(values.command);
+      expect(result.checkout.hostedUrl).toBe(link);
+      expect(values.fetch).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it.each([
+    null,
+    42,
+    "",
+    "https://evil.example/secret",
+    "https://sandbox.asaas.com.evil.example/checkout",
+    "https://asaas.com/checkout",
+    "https://www.asaas.com/checkout",
+    "http://sandbox.asaas.com/checkout",
+    "https://user:password@sandbox.asaas.com/checkout",
+    "https://sandbox.asaas.com:8443/checkout",
+    "https://sandbox.asaas.com/checkout#secret",
+    " https://sandbox.asaas.com/checkout",
+    "https://sandbox.asaas.com/checkout\n",
+    "https://sandbox.asaas.com\\evil.example/checkout",
+  ])("rejects unsafe or wrong-environment supplied links: %j", async (link) => {
+    const values = fixture();
+    values.fetch.mockResolvedValue(json({ id: providerId, link }));
+    await expect(
+      createAsaasCheckoutClient(values.options).createHostedCheckout(
+        values.command,
+      ),
+    ).rejects.toMatchObject(unavailable);
+    expect(values.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects a Sandbox link returned for live checkout creation", async () => {
+    const values = fixture("live");
+    values.fetch.mockResolvedValue(
+      json({
+        id: providerId,
+        link: `https://sandbox.asaas.com/000/checkoutSession/show/${providerId}`,
+      }),
+    );
+    await expect(
+      createAsaasCheckoutClient(values.options).createHostedCheckout(
+        values.command,
+      ),
+    ).rejects.toMatchObject(unavailable);
+  });
+
   it("preserves the quoted card gross-up and nominal fixed split without recalculating commercial terms", async () => {
     const values = fixture();
     values.snapshot.pricing.policy.method = "CREDIT_CARD";
@@ -207,12 +301,12 @@ describe("native Asaas hosted checkout creation", () => {
     expect(result.checkout.method).toBe("CREDIT_CARD");
   });
 
-  it("discards arbitrary links and private response fields", async () => {
+  it("discards private response fields while preserving the native checkout link", async () => {
     const values = fixture();
     values.fetch.mockResolvedValue(
       json({
         id: providerId,
-        link: "https://evil.example/secret",
+        link: `https://sandbox.asaas.com/000/checkoutSession/show/${providerId}`,
         customerData: { cpfCnpj: "private" },
         status: "ACTIVE",
         externalReference: values.command.attemptId,
@@ -228,7 +322,7 @@ describe("native Asaas hosted checkout creation", () => {
       /evil|private|customerData|ACTIVE/,
     );
     expect(result.checkout.hostedUrl).toBe(
-      `https://sandbox.asaas.com/checkoutSession/show/${providerId}`,
+      `https://sandbox.asaas.com/000/checkoutSession/show/${providerId}`,
     );
   });
 
@@ -1003,15 +1097,17 @@ describe("native checkout transport behind the actual durable checkout service",
 
   it("requires the reservation before the POST and records hosting only, with repeat recovery performing no POST", async () => {
     const values = serviceFixture();
+    const link = `https://sandbox.asaas.com/000/checkoutSession/show/${providerId}`;
     values.fetch.mockImplementation(async () => {
       expect(values.readRecord()?.state).toBe("CREATING");
       expect(values.readRecord()?.recoveryTokenHash).toBe(
         createHash("sha256").update(values.input.recoveryToken).digest("hex"),
       );
-      return json();
+      return json({ id: providerId, link });
     });
     const service = createGiftCheckoutService(values.dependencies);
     const result = await service.createCheckout("site-one", values.input);
+    expect(result.hostedUrl).toBe(link);
     expect(values.readRecord()?.state).toBe("AWAITING_PAYMENT");
     expect(values.readRecord()?.evidence?.kind).toBe("HOSTED_CHECKOUT");
     expect(await service.createCheckout("site-one", values.input)).toEqual(

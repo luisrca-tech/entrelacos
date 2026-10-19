@@ -113,8 +113,8 @@ function providerItemName(title: string): string {
 }
 
 // The documented minimal response contains only an ID. Optional response
-// echoes may not contradict our command. Other fields, including link/customer
-// data, are discarded. No creation response is settlement or split evidence.
+// echoes may not contradict our command. Private customer data is discarded.
+// No creation response is settlement or split evidence.
 function checkoutReference(
   raw: Record<string, unknown>,
   payload: AsaasCheckoutPayload,
@@ -179,6 +179,36 @@ function checkoutReference(
   return id;
 }
 
+function hostedCheckoutUrl(
+  value: unknown,
+  mode: "sandbox" | "live",
+  id: string,
+): string {
+  // ID-only responses remain documented. Preserve complete native links when
+  // supplied: Asaas added a variable path segment in September 2026.
+  if (value === undefined)
+    return mode === "sandbox"
+      ? `https://sandbox.asaas.com/checkoutSession/show/${id}`
+      : `https://asaas.com/checkoutSession/show?id=${id}`;
+  if (
+    typeof value !== "string" ||
+    /[\s\\]/.test(value) ||
+    [...value].some(
+      (character) =>
+        character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127,
+    )
+  )
+    return unavailable();
+  const url = new URL(value);
+  const origins =
+    mode === "sandbox"
+      ? ["https://sandbox.asaas.com"]
+      : ["https://asaas.com", "https://www.asaas.com"];
+  if (!origins.includes(url.origin) || url.username || url.password || url.hash)
+    return unavailable();
+  return value;
+}
+
 export function createAsaasCheckoutClient(
   options: AsaasCheckoutClientOptions,
 ): AsaasCheckoutClient {
@@ -224,11 +254,11 @@ export function createAsaasCheckoutClient(
       provider: "ASAAS",
       accountBindingId: localId(suppliedBinding.accountBindingId),
       environment: mode,
-      operatorReference: reference(suppliedBinding.operatorReference),
+      operatorReference: localId(suppliedBinding.operatorReference),
       accountReference: reference(suppliedBinding.accountReference),
       recipientReference: reference(suppliedBinding.recipientReference),
       destinationVersion: Number(suppliedBinding.destinationVersion),
-      bankReference: reference(suppliedBinding.bankReference),
+      bankReference: localId(suppliedBinding.bankReference),
     };
     const payloadOptions = structuredClone(options.payload);
     if (payloadOptions.environment !== mode) return unavailable();
@@ -408,12 +438,7 @@ export function createAsaasCheckoutClient(
           const response = await post(bodyText);
           if (observedAt() < startedAt) return unavailable();
           const id = checkoutReference(response, payload);
-          // Use each documented hosted form, never a provider-supplied arbitrary
-          // link. Browser callbacks and this result grant no financial proof.
-          const hostedUrl =
-            mode === "sandbox"
-              ? `https://sandbox.asaas.com/checkoutSession/show/${id}`
-              : `https://asaas.com/checkoutSession/show?id=${id}`;
+          const hostedUrl = hostedCheckoutUrl(response.link, mode, id);
           return {
             providerReference: id,
             checkout: checkoutResultSchema.parse({

@@ -1,4 +1,5 @@
 import type { GiftQuote } from "@entrelacos/contracts";
+import { showSandboxNotice } from "@entrelacos/ui";
 import { useEffect, useState } from "react";
 import { scheduleGiftQuoteExpiry } from "./giftQuoteExpiry";
 
@@ -94,7 +95,7 @@ export function GiftQuoteView({
         </p>
       </header>
 
-      {quote?.mode === "sandbox" && (
+      {showSandboxNotice(quote?.mode) && (
         <p
           role="status"
           className="m-0 border border-template-line px-4 py-3 text-sm"
@@ -149,26 +150,26 @@ export function GiftQuoteView({
             {quote.title}
           </h3>
           <dl className="m-0 grid min-w-0 gap-3">
-            <div className="flex min-w-0 flex-wrap justify-between gap-x-4 gap-y-1">
-              <dt className="min-w-0 text-template-muted">Valor do presente</dt>
-              <dd className="m-0 shrink-0">
-                {formatCents(quote.nominalCents)}
-              </dd>
-            </div>
-            <div className="flex min-w-0 flex-wrap justify-between gap-x-4 gap-y-1">
-              <dt className="min-w-0 text-template-muted">Taxa de comissão</dt>
-              <dd className="m-0 shrink-0">
-                {formatCents(quote.commissionCents)}
-              </dd>
-            </div>
-            <div className="flex min-w-0 flex-wrap justify-between gap-x-4 gap-y-1">
-              <dt className="min-w-0 text-template-muted">
-                Taxa de processamento
-              </dt>
-              <dd className="m-0 shrink-0">
-                {formatCents(quote.processingCents)}
-              </dd>
-            </div>
+            {quote.feeAllocation !== "RECIPIENT_DEDUCTED" && (
+              <>
+                <div className="flex min-w-0 flex-wrap justify-between gap-x-4 gap-y-1">
+                  <dt className="min-w-0 text-template-muted">
+                    Valor do presente
+                  </dt>
+                  <dd className="m-0 shrink-0">
+                    {formatCents(quote.nominalCents + quote.commissionCents)}
+                  </dd>
+                </div>
+                <div className="flex min-w-0 flex-wrap justify-between gap-x-4 gap-y-1">
+                  <dt className="min-w-0 text-template-muted">
+                    Taxa de processamento
+                  </dt>
+                  <dd className="m-0 shrink-0">
+                    {formatCents(quote.processingCents)}
+                  </dd>
+                </div>
+              </>
+            )}
             <div className="flex min-w-0 flex-wrap justify-between gap-x-4 gap-y-1 border-t border-template-line pt-3 font-bold">
               <dt className="min-w-0">Total a pagar</dt>
               <dd className="m-0 shrink-0">{formatCents(quote.totalCents)}</dd>

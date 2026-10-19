@@ -119,7 +119,26 @@ async function expectDenied(
 }
 
 describe("immutable gift quote creation", () => {
-  it("loads stored values and creates the nominal commission and grossed-up total", async () => {
+  it("persists observed-estimate semantics only for recipient-deducted DEV Sandbox demo quotes", async () => {
+    const v = fixture();
+    makeDemo(v);
+    v.context.environment = "development";
+    v.pricing.policy.feeBasis = "OBSERVED_ESTIMATE";
+    const quote = await createGiftQuoteService(v.dependencies).createQuote(
+      "site-one",
+      body,
+    );
+    expect(quote.feeAllocation).toBe("RECIPIENT_DEDUCTED");
+    expect(v.appended[0].pricing.policy.feeBasis).toBe("OBSERVED_ESTIMATE");
+    expect(v.pricing.policy.feeAllocation).toBeUndefined();
+  });
+  it("does not accept observed fee estimates in production", async () => {
+    const v = fixture();
+    v.pricing.policy.feeBasis = "OBSERVED_ESTIMATE";
+    await expectDenied(v, "POLICY_UNAVAILABLE");
+  });
+
+  it("loads stored values and keeps the configured buyer total and snapshots recipient deductions", async () => {
     const { dependencies, appended, storedGift, pricing } = fixture();
     const result = await createGiftQuoteService(dependencies).createQuote(
       "site-one",
@@ -135,8 +154,9 @@ describe("immutable gift quote creation", () => {
       nominalCents: 10_000,
       commissionBasisPoints: 200,
       commissionCents: 200,
-      processingCents: 302,
-      totalCents: 10_502,
+      processingCents: 289,
+      totalCents: 10_000,
+      feeAllocation: "RECIPIENT_DEDUCTED",
       policyVersion: "verified-test-policy-v1",
       expiresAt: "2026-10-12T12:05:00.000Z",
       mode: "live",
@@ -173,6 +193,7 @@ describe("immutable gift quote creation", () => {
       },
       pricing: {
         ...pricing,
+        policy: { ...pricing.policy, feeAllocation: "RECIPIENT_DEDUCTED" },
         observedAt,
         expiresAt: policyExpiry,
       },
@@ -318,8 +339,9 @@ describe("immutable gift quote creation", () => {
       method: "CREDIT_CARD",
       nominalCents: 10_000,
       commissionCents: 200,
-      processingCents: 588,
-      totalCents: 10_788,
+      processingCents: 548,
+      totalCents: 10_000,
+      feeAllocation: "RECIPIENT_DEDUCTED",
     });
     expect(values.appended[0].pricing.policy.method).toBe("CREDIT_CARD");
   });

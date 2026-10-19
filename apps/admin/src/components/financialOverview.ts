@@ -15,8 +15,12 @@ export function canReadFinancialOverview(
   return (
     parsed.success &&
     parsed.data.siteId === siteId &&
-    parsed.data.membershipRole === "SITE_ADMIN" &&
-    parsed.data.membershipId !== null &&
+    ((parsed.data.membershipRole === "SITE_ADMIN" &&
+      parsed.data.membershipId !== null) ||
+      (parsed.data.membershipRole === "OWNER" &&
+        parsed.data.membershipId === null &&
+        !parsed.data.capabilities.configureReceiving &&
+        !parsed.data.capabilities.requestWithdrawal)) &&
     parsed.data.capabilities.readFinance
   );
 }

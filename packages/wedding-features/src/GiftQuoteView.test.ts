@@ -1,7 +1,7 @@
 import type { GiftQuote } from "@entrelacos/contracts";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { GiftQuoteView } from "./GiftQuoteView";
 
 const quote: GiftQuote = {
@@ -67,11 +67,11 @@ describe("gift quote view", () => {
     expect(html).toContain("Não foi possível atualizar a cotação.");
     expect(html).toContain("Jantar especial");
     expect(html).toContain("Valor do presente");
-    expect(html).toContain("Taxa de comissão");
+    expect(html).not.toMatch(/comissão/i);
     expect(html).toContain("Taxa de processamento");
     expect(html).toContain("Total a pagar");
-    expect(html).toContain("100,00");
-    expect(html).toContain("2,00");
+    expect(html).toMatch(/Valor do presente<\/dt><dd[^>]*>R\$\s*102,00<\/dd>/);
+    expect(html).not.toMatch(/R\$\s*100,00/);
     expect(html).toContain("3,21");
     expect(html).toContain("105,21");
     expect(html).toContain("Ambiente de testes — sem pagamentos reais.");
@@ -83,6 +83,38 @@ describe("gift quote view", () => {
     expect(html).not.toMatch(/token|hash|Asaas|banco|payer|provider key/i);
   });
 
+  it("charges the configured gift price without exposing recipient deductions", () => {
+    const html = renderQuote({
+      quote: {
+        ...quote,
+        nominalCents: 1000,
+        commissionCents: 20,
+        processingCents: 90,
+        totalCents: 1000,
+        feeAllocation: "RECIPIENT_DEDUCTED",
+      },
+    });
+    expect(html).toContain("Total a pagar");
+    expect(html).toMatch(/R\$\s*10,00/);
+    expect(html).not.toMatch(/comissão|taxa de processamento|10,20|11,10/i);
+  });
+
+  it.each([
+    ["development", "sandbox", true],
+    ["production", "sandbox", false],
+    ["development", "live", false],
+    ["production", "live", false],
+  ] as const)(
+    "gates payment notices by application and provider mode (%s, %s)",
+    (environment, mode, visible) => {
+      vi.stubGlobal("__APP_ENV__", environment);
+      expect(
+        renderQuote({ quote: { ...quote, mode } }).includes(
+          "Ambiente de testes",
+        ),
+      ).toBe(visible);
+    },
+  );
   it("keeps confirmation disabled without a matching, current quote", () => {
     const noQuote = renderQuote({ quote: null });
     const wrongMethod = renderQuote({ method: "CREDIT_CARD" });
@@ -127,3 +159,6 @@ describe("gift quote view", () => {
     expect(html).toContain("Aguarde");
   });
 });
+
+beforeEach(() => vi.stubGlobal("__APP_ENV__", "development"));
+afterEach(() => vi.unstubAllGlobals());

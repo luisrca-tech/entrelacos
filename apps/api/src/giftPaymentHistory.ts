@@ -13,6 +13,7 @@ import type { AuthDatabase } from "./auth";
 import { type AuthInstance, readAdministrativeSession } from "./authHttp";
 import { databaseTimestampEpochMicroseconds } from "./databaseTimestamp";
 import { assertFinancialReadAccess } from "./financialAuthorization";
+import { resolveSiteAccess } from "./siteAccess";
 
 export interface GiftPaymentHistoryReadScope {
   readonly siteId: string;
@@ -20,7 +21,7 @@ export interface GiftPaymentHistoryReadScope {
   readonly policy: "SITE_HISTORY";
   readonly userId: string;
   readonly sessionId: string;
-  readonly membershipId: string;
+  readonly membershipId: string | null;
 }
 export interface GiftPaymentHistoryRepository {
   readonly database: AuthDatabase;
@@ -92,7 +93,11 @@ export function readGiftPaymentHistoryScope(
     mode: value.mode,
     policy: value.policy,
   });
-  for (const id of [value.userId, value.sessionId, value.membershipId])
+  for (const id of [
+    value.userId,
+    value.sessionId,
+    ...(value.membershipId === null ? [] : [value.membershipId]),
+  ])
     if (!siteAccessSchema.shape.userId.safeParse(id).success)
       return historyUnavailable();
   return Object.freeze({
@@ -231,14 +236,28 @@ export function createGiftPaymentHistory(
               now: sample,
             });
             sample();
-            if (actor?.user.role !== "SITE_ADMIN") return historyUnavailable();
-            const matches = actor.memberships.filter(
-              (item) => item.siteId === siteId,
-            );
+            if (
+              !actor ||
+              (actor.user.role !== "SITE_ADMIN" && actor.user.role !== "OWNER")
+            )
+              return historyUnavailable();
+            const matches =
+              actor.user.role === "OWNER"
+                ? [
+                    await resolveSiteAccess(db, {
+                      userId: actor.user.id,
+                      platformRole: "OWNER",
+                      siteId,
+                    }),
+                  ]
+                : actor.memberships.filter((item) => item.siteId === siteId);
             if (matches.length !== 1) return historyUnavailable();
             const access = siteAccessSchema.parse(matches[0]);
             assertFinancialReadAccess(access, siteId);
-            if (access.userId !== actor.user.id || !access.membershipId)
+            if (
+              access.userId !== actor.user.id ||
+              access.membershipRole !== actor.user.role
+            )
               return historyUnavailable();
             const scope = readGiftPaymentHistoryScope({
               siteId,

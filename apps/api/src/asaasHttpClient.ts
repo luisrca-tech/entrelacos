@@ -33,8 +33,10 @@ export interface AsaasAccountFees {
       oneInstallmentPercentage?: string | null;
       discountOneInstallmentPercentage?: string | null;
       discountExpiration?: string | null;
+      hasValidDiscount?: boolean | null;
     } | null;
     pix?: {
+      type?: string | null;
       fixedFeeValue?: string | null;
       fixedFeeValueWithDiscount?: string | null;
       percentageFee?: string | null;
@@ -107,12 +109,75 @@ export interface AsaasPaymentObservation
   payment: AsaasPaymentForReconciliation;
 }
 
+export interface AsaasPixTransferCommand {
+  valueCents: number;
+  pixAddressKey: string;
+  pixAddressKeyType: "CPF" | "CNPJ" | "EMAIL" | "PHONE" | "EVP";
+  externalReference: string;
+}
+export interface AsaasTransfer {
+  id: string;
+  status: "PENDING" | "BANK_PROCESSING" | "DONE" | "CANCELLED" | "FAILED";
+  type: string;
+  operationType: "PIX" | "TED" | null;
+  value: string;
+  netValue: string | null;
+  transferFee: string | null;
+  externalReference: string | null;
+  transactionReceiptUrl: string | null;
+  endToEndIdentifier: string | null;
+  effectiveDate: string | null;
+}
+export interface AsaasTransferObservation {
+  source: "provider";
+  provider: "ASAAS";
+  siteId: string;
+  accountBindingId: string;
+  accountReference: string;
+  environment: "sandbox" | "live";
+  observedAt: Date;
+  transfer: AsaasTransfer;
+}
+export interface AsaasTransfersObservation
+  extends Omit<AsaasTransferObservation, "transfer"> {
+  offset: number;
+  totalCount: number;
+  hasMore: boolean;
+  transfers: AsaasTransfer[];
+}
+
 export interface AsaasHttpClient {
+  // A failed POST may have succeeded remotely. These methods never retry.
+  createPixTransfer(
+    command: AsaasPixTransferCommand,
+  ): Promise<AsaasTransferObservation>;
+  getTransfer(providerReference: string): Promise<AsaasTransferObservation>;
+  listTransfers(offset: number): Promise<AsaasTransfersObservation>;
+  listCheckoutPayments(
+    checkoutReference: string,
+  ): Promise<AsaasCheckoutPaymentsObservation>;
   getPayment(
     providerPaymentReference: string,
   ): Promise<AsaasPaymentObservation>;
   getBalance(): Promise<AsaasBalanceObservation>;
   getAccountFees(): Promise<AsaasAccountFeesObservation>;
+}
+
+export interface AsaasCheckoutPaymentsObservation {
+  source: "provider";
+  provider: "ASAAS";
+  siteId: string;
+  accountBindingId: string;
+  accountReference: string;
+  environment: "sandbox" | "live";
+  checkoutReference: string;
+  observedAt: Date;
+  payments: Array<{
+    id: string;
+    checkoutSession: string;
+    status: string;
+    externalReference?: string | null;
+  }>;
 }
 
 export class AsaasHttpClientServiceError extends Error {
@@ -263,7 +328,7 @@ function decodeAccountFees(text: string): AsaasAccountFees {
           ["operationValue"],
           ["oneInstallmentPercentage", "discountOneInstallmentPercentage"],
           [],
-          [],
+          ["hasValidDiscount"],
           ["discountExpiration"],
         );
       if (Object.hasOwn(payment, "pix"))
@@ -278,7 +343,7 @@ function decodeAccountFees(text: string): AsaasAccountFees {
           ["percentageFee"],
           ["monthlyCreditsWithoutFee", "creditsReceivedOfCurrentMonth"],
           [],
-          ["discountExpiration"],
+          ["discountExpiration", "type"],
         );
     }
   }
@@ -521,6 +586,68 @@ function normalizePayment(
   return payment;
 }
 
+// Native transfer amounts are read from original JSON tokens, before Number rounding.
+function decodeTransfers(text: string): unknown {
+  return (
+    JSON.parse as (
+      text: string,
+      revive: (
+        key: string,
+        value: unknown,
+        context: { source?: string },
+      ) => unknown,
+    ) => unknown
+  )(text, (key, value, context) => {
+    if (!["value", "netValue", "transferFee"].includes(key) || value === null)
+      return value;
+    if (typeof value !== "number" || typeof context?.source !== "string")
+      return unavailable();
+    return serializeBrlCents(parseBrlCents(context.source));
+  });
+}
+function normalizeTransfer(value: unknown): AsaasTransfer {
+  const raw = record(value);
+  const optional = (key: string): string | null => {
+    const value = raw[key];
+    if (value === undefined || value === null) return null;
+    if (typeof value !== "string" || !/^[\x21-\x7e]{1,2048}$/.test(value))
+      return unavailable();
+    return value;
+  };
+  const amount = (key: string): string | null =>
+    raw[key] === undefined || raw[key] === null
+      ? null
+      : serializeBrlCents(parseBrlCents(String(raw[key])));
+  const transferValue = amount("value");
+  if (
+    transferValue === null ||
+    !["PENDING", "BANK_PROCESSING", "DONE", "CANCELLED", "FAILED"].includes(
+      String(raw.status),
+    ) ||
+    !["PIX", "TED", "INTERNAL", "BANK_ACCOUNT", "ASAAS_ACCOUNT"].includes(
+      String(raw.type),
+    ) ||
+    (raw.operationType !== undefined &&
+      raw.operationType !== null &&
+      !["PIX", "TED"].includes(String(raw.operationType)))
+  )
+    return unavailable();
+  return {
+    id: reference(raw.id),
+    status: raw.status as AsaasTransfer["status"],
+    type: raw.type as string,
+    operationType: (raw.operationType ??
+      null) as AsaasTransfer["operationType"],
+    value: transferValue,
+    netValue: amount("netValue"),
+    transferFee: amount("transferFee"),
+    externalReference: optional("externalReference"),
+    transactionReceiptUrl: optional("transactionReceiptUrl"),
+    endToEndIdentifier: optional("endToEndIdentifier"),
+    effectiveDate: optional("effectiveDate"),
+  };
+}
+
 export function createAsaasHttpClient(
   options: AsaasHttpClientOptions,
 ): AsaasHttpClient {
@@ -575,7 +702,11 @@ export function createAsaasHttpClient(
         ? "https://api-sandbox.asaas.com/v3"
         : "https://api.asaas.com/v3";
 
-    async function request(path: string): Promise<Record<string, unknown>> {
+    async function request(
+      path: string,
+      payload?: string,
+      decode: (text: string) => unknown = JSON.parse,
+    ): Promise<Record<string, unknown>> {
       const controller = new AbortController();
       let timer: ReturnType<typeof setTimeout> | undefined;
       let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
@@ -625,7 +756,7 @@ export function createAsaasHttpClient(
         }, timeoutMs);
         const url = base + path;
         const response = await fetch(url, {
-          method: "GET",
+          method: payload === undefined ? "GET" : "POST",
           redirect: "error",
           credentials: "omit",
           cache: "no-store",
@@ -633,7 +764,11 @@ export function createAsaasHttpClient(
             access_token: accessToken,
             "User-Agent": "EntreLacos-API",
             Accept: "application/json",
+            ...(payload === undefined
+              ? {}
+              : { "Content-Type": "application/json" }),
           },
+          ...(payload === undefined ? {} : { body: payload }),
           signal: controller.signal,
         });
         body = response.body;
@@ -672,7 +807,7 @@ export function createAsaasHttpClient(
           text += decoder.decode(chunk.value, { stream: true });
         }
         text += decoder.decode();
-        const result = record(JSON.parse(text));
+        const result = record(decode(text));
         assertDeadline();
         return result;
       } catch {
@@ -815,6 +950,161 @@ export function createAsaasHttpClient(
     }
 
     return {
+      async createPixTransfer(command) {
+        try {
+          if (mode !== "sandbox") return unavailable();
+          const raw = exactRecord(command, [
+            "valueCents",
+            "pixAddressKey",
+            "pixAddressKeyType",
+            "externalReference",
+          ]);
+          if (
+            !Number.isSafeInteger(raw.valueCents) ||
+            (raw.valueCents as number) < 1 ||
+            typeof raw.pixAddressKey !== "string" ||
+            !/^[\x21-\x7e]{1,256}$/.test(raw.pixAddressKey) ||
+            !["CPF", "CNPJ", "EMAIL", "PHONE", "EVP"].includes(
+              String(raw.pixAddressKeyType),
+            )
+          )
+            return unavailable();
+          const value = serializeBrlCents(raw.valueCents as number);
+          const externalReference = localId(raw.externalReference);
+          // Insert the canonical decimal token directly; it must stay a JSON number.
+          const fields = JSON.stringify({
+            operationType: "PIX",
+            pixAddressKey: raw.pixAddressKey,
+            pixAddressKeyType: raw.pixAddressKeyType,
+            externalReference,
+          });
+          const payload = `{"value":${value},${fields.slice(1)}`;
+          const response = await request(
+            "/transfers",
+            payload,
+            decodeTransfers,
+          );
+          return {
+            source: "provider",
+            ...binding,
+            observedAt: observedAt(),
+            transfer: normalizeTransfer(response),
+          };
+        } catch {
+          return unavailable();
+        }
+      },
+      async getTransfer(providerReference) {
+        try {
+          const requested = reference(providerReference);
+          const response = await request(
+            `/transfers/${encodeURIComponent(requested)}`,
+            undefined,
+            decodeTransfers,
+          );
+          const transfer = normalizeTransfer(response);
+          if (transfer.id !== requested) return unavailable();
+          return {
+            source: "provider",
+            ...binding,
+            observedAt: observedAt(),
+            transfer,
+          };
+        } catch {
+          return unavailable();
+        }
+      },
+      async listTransfers(offset) {
+        try {
+          if (
+            !Number.isSafeInteger(offset) ||
+            offset < 0 ||
+            offset > 900 ||
+            offset % 100 !== 0
+          )
+            return unavailable();
+          const response = await request(
+            `/transfers?limit=100&offset=${offset}`,
+            undefined,
+            decodeTransfers,
+          );
+          if (
+            typeof response.hasMore !== "boolean" ||
+            !Number.isSafeInteger(response.totalCount) ||
+            (response.totalCount as number) < 0 ||
+            !Array.isArray(response.data) ||
+            response.data.length > 100 ||
+            (response.offset !== undefined && response.offset !== offset) ||
+            (response.limit !== undefined && response.limit !== 100) ||
+            offset + response.data.length > (response.totalCount as number) ||
+            (!response.hasMore &&
+              offset + response.data.length !== response.totalCount)
+          )
+            return unavailable();
+          const transfers = response.data.map(normalizeTransfer);
+          if (
+            new Set(transfers.map((transfer) => transfer.id)).size !==
+            transfers.length
+          )
+            return unavailable();
+          return {
+            source: "provider",
+            ...binding,
+            observedAt: observedAt(),
+            offset,
+            totalCount: response.totalCount as number,
+            hasMore: response.hasMore,
+            transfers,
+          };
+        } catch {
+          return unavailable();
+        }
+      },
+      async listCheckoutPayments(checkoutReference) {
+        try {
+          const requested = reference(checkoutReference);
+          const response = await request(
+            `/payments?checkoutSession=${encodeURIComponent(requested)}&limit=100&offset=0`,
+          );
+          if (
+            response.hasMore !== false ||
+            !Array.isArray(response.data) ||
+            response.data.length > 100 ||
+            response.totalCount !== response.data.length
+          )
+            return unavailable();
+          const seen = new Set<string>();
+          const payments = response.data.map((value) => {
+            const raw = record(value);
+            const id = reference(raw.id);
+            if (seen.has(id) || raw.checkoutSession !== requested)
+              return unavailable();
+            seen.add(id);
+            return {
+              id,
+              checkoutSession: requested,
+              status: status(raw.status, paymentStatuses),
+              ...(raw.externalReference !== undefined
+                ? {
+                    externalReference:
+                      raw.externalReference === null
+                        ? null
+                        : localId(raw.externalReference),
+                  }
+                : {}),
+            };
+          });
+          return {
+            source: "provider",
+            ...binding,
+            checkoutReference: requested,
+            observedAt: observedAt(),
+            payments,
+          };
+        } catch {
+          return unavailable();
+        }
+      },
       async getAccountFees(): Promise<AsaasAccountFeesObservation> {
         try {
           const startedAt = observedAt();

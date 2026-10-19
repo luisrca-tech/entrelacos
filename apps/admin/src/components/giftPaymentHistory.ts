@@ -147,6 +147,21 @@ function authority(
     const membership = actor?.memberships?.find(
       (value) => value.siteId === siteId && value.userId === actor.user.id,
     );
+    const platformOwner =
+      actor?.user.role === "OWNER" &&
+      access?.membershipRole === "OWNER" &&
+      access.membershipId === null &&
+      access.userId === actor.user.id &&
+      access.siteId === siteId &&
+      access.capabilities.readFinance &&
+      !access.capabilities.configureReceiving &&
+      !access.capabilities.requestWithdrawal;
+    const siteAdministrator =
+      actor?.user.role === "SITE_ADMIN" &&
+      membership?.membershipRole === "SITE_ADMIN" &&
+      !!membership.membershipId &&
+      membership.capabilities.readFinance &&
+      key === accessKey(membership);
     const finalReader = owner.getSnapshot;
     const finalPorts = { owner: ports.owner, now: ports.now };
     if (
@@ -155,14 +170,9 @@ function authority(
       !key ||
       snapshot.status !== "verified" ||
       !actor ||
-      actor.user.role !== "SITE_ADMIN" ||
+      !(platformOwner || siteAdministrator) ||
       epoch === null ||
       epoch !== snapshot.sessionEpoch ||
-      !membership ||
-      membership.membershipRole !== "SITE_ADMIN" ||
-      !membership.membershipId ||
-      !membership.capabilities.readFinance ||
-      key !== accessKey(membership) ||
       !Number.isSafeInteger(time) ||
       time < 0 ||
       Date.parse(actor.session.expiresAt) <= time ||

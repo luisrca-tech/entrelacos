@@ -21,6 +21,7 @@ import type { StoredGiftPaymentCheckoutBinding } from "./giftPaymentReconciliati
 export interface GiftPaymentCheckoutLookup {
   loadCheckout(
     claim: GiftPaymentInboxClaim,
+    observedCheckoutReference?: string,
   ): Promise<StoredGiftPaymentCheckoutBinding | null>;
 }
 export type GiftPaymentCheckoutLookupDatabase = Pick<
@@ -68,11 +69,14 @@ export function createGiftPaymentCheckoutLookup(
   return {
     async loadCheckout(
       claim: GiftPaymentInboxClaim,
+      observedCheckoutReference?: string,
     ): Promise<StoredGiftPaymentCheckoutBinding | null> {
       try {
         claim = structuredClone(claim);
         if (
           !claim ||
+          (observedCheckoutReference !== undefined &&
+            !providerId(observedCheckoutReference)) ||
           Object.keys(claim).some(
             (key) =>
               ![
@@ -121,13 +125,13 @@ export function createGiftPaymentCheckoutLookup(
           FROM ${financialEventInbox} e INNER JOIN ${receivingAccount} account ON account.id=e.account_id AND account.site_id=e.site_id AND account.environment=e.environment
           LEFT JOIN ${giftPaymentRecord} p ON p.site_id=e.site_id AND p.account_id=e.account_id AND p.environment=e.environment AND p.provider_payment_reference=e.payload->>'paymentId'
           LEFT JOIN ${giftCheckoutAttempt} a ON a.site_id=e.site_id AND a.account_id=e.account_id AND a.environment=e.environment
-            AND (a.id=e.payload->>'externalReference' OR a.provider_reference=e.payload->>'checkoutId' OR (p.id IS NOT NULL AND a.id=p.attempt_id AND a.order_id=p.order_id))
+            AND (a.id=e.payload->>'externalReference' OR a.provider_reference=e.payload->>'checkoutId' OR a.provider_reference=${observedCheckoutReference ?? null} OR (p.id IS NOT NULL AND a.id=p.attempt_id AND a.order_id=p.order_id))
           LEFT JOIN ${giftOrder} o ON o.id=a.order_id AND o.site_id=a.site_id AND o.account_id=a.account_id AND o.environment=a.environment
           LEFT JOIN ${giftQuoteRecord} q ON q.id=o.quote_id AND q.site_id=o.site_id AND q.account_id=o.account_id AND q.environment=o.environment
           LEFT JOIN ${financialOperation} op ON op.id=a.operation_id AND op.order_id=o.id AND op.kind=a.operation_kind AND op.site_id=a.site_id AND op.account_id=a.account_id AND op.environment=a.environment
           WHERE e.id=${claim.eventId} AND e.site_id=${claim.siteId} AND e.account_id=${claim.accountId} AND e.environment=${claim.environment}
             AND e.lease_owner=${claim.leaseOwner} AND e.lease_token=${claim.leaseToken} AND e.attempts=${claim.attempts}
-            AND e.state='CLAIMED' AND e.event_type='PAYMENT_RECEIVED' AND e.processed_at IS NULL
+            AND e.state='CLAIMED' AND e.event_type IN ('PAYMENT_RECEIVED','PAYMENT_CONFIRMED') AND e.processed_at IS NULL
             AND e.authenticated_at<=clock_timestamp() AND e.received_at<=e.authenticated_at AND e.lease_expires_at>=clock_timestamp()`);
         if (result.rows.length !== 1) return unavailable();
         const row = result.rows[0] as Record<string, unknown>;
@@ -139,7 +143,9 @@ export function createGiftPaymentCheckoutLookup(
           !scope(row, "stored", claim) ||
           row.provider !== "ASAAS" ||
           row.accountReference !== claim.providerAccountReference ||
-          row.eventType !== "PAYMENT_RECEIVED" ||
+          !["PAYMENT_RECEIVED", "PAYMENT_CONFIRMED"].includes(
+            row.eventType as string,
+          ) ||
           row.state !== "CLAIMED" ||
           row.processedAt !== null ||
           row.leaseOwner !== claim.leaseOwner ||
@@ -167,7 +173,7 @@ export function createGiftPaymentCheckoutLookup(
           row.payloadHash !==
             hashAsaasEventIdentity(
               row.providerEventReference,
-              "PAYMENT_RECEIVED",
+              String(row.eventType),
               claim.providerAccountReference,
               identity,
             )
@@ -235,6 +241,8 @@ export function createGiftPaymentCheckoutLookup(
         if (row.operationState !== "SUCCEEDED") return null;
         if (
           !providerId(row.providerCheckoutReference) ||
+          (observedCheckoutReference !== undefined &&
+            observedCheckoutReference !== row.providerCheckoutReference) ||
           row.providerCheckoutReference !== row.providerOperationReference ||
           (identity.checkoutId !== undefined &&
             identity.checkoutId !== row.providerCheckoutReference)
