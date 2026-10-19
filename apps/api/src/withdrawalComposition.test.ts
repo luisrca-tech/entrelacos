@@ -1,5 +1,8 @@
+import type { SQL } from "drizzle-orm";
+import { PgDialect } from "drizzle-orm/pg-core";
 import { describe, expect, it, vi } from "vitest";
 import { createWithdrawalComposition } from "./withdrawalComposition";
+import * as withdrawalRepository from "./withdrawalReservationRepository";
 
 describe("native withdrawal runtime composition", () => {
   it("leaves disabled and production configurations without dispatch services", () => {
@@ -96,9 +99,9 @@ describe("native withdrawal maximum fee quote", () => {
   });
 });
 
-function enabledFixture() {
+function enabledFixture(refreshReceiving?: (siteId: string) => Promise<void>) {
   const clock = { value: new Date("2026-10-19T10:00:00.000Z") };
-  const execute = vi.fn(async () => ({
+  const execute = vi.fn(async (_statement: SQL) => ({
     rows: [] as Record<string, unknown>[],
   }));
   const tx = { execute };
@@ -123,6 +126,7 @@ function enabledFixture() {
     db: db as never,
     fetch,
     now: () => clock.value,
+    ...(refreshReceiving ? { refreshReceiving } : {}),
   });
   const intent = {
     id: "withdrawal-1",
@@ -140,6 +144,40 @@ function enabledFixture() {
   return { clock, execute, db, config, fetch, composition, intent, key };
 }
 describe("composed withdrawal admission and recovery ownership", () => {
+  it("reads stored provider presentation when the runtime supplies receiving refresh", async () => {
+    const factory = vi.spyOn(
+      withdrawalRepository,
+      "createWithdrawalReservationRepository",
+    );
+    const refresh = vi.fn(async (_siteId: string) => {});
+    const f = enabledFixture(refresh);
+    try {
+      const options = factory.mock.calls[0][1];
+      if (options.mode === "disabled")
+        throw new Error("Missing Sandbox options");
+      const loader = options.loadVerifiedPresentationInTransaction;
+      if (!loader) throw new Error("Missing stored presentation loader");
+      await expect(
+        loader({ execute: f.execute } as never, {
+          siteId: "site-1",
+          accountId: "account-1",
+          accountReference: "acct-1",
+          environment: "sandbox",
+          bankReference: "bank-1",
+          destinationVersion: 1,
+        }),
+      ).resolves.toBeNull();
+      expect(f.execute).toHaveBeenCalledTimes(1);
+      expect(
+        new PgDialect().sqlToQuery(f.execute.mock.calls[0][0]).sql,
+      ).toContain("JOIN LATERAL");
+      expect(refresh).not.toHaveBeenCalled();
+      expect(f.fetch).not.toHaveBeenCalled();
+    } finally {
+      await f.composition.close();
+      factory.mockRestore();
+    }
+  });
   it("exposes protected request services without eager database or provider operations", async () => {
     const f = enabledFixture();
     expect(f.composition.service?.confirmNew).toBeTypeOf("function");

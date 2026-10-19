@@ -1,7 +1,8 @@
-import type {
-  WithdrawalIntent,
-  WithdrawalRequestContext,
-  WithdrawalRequestStatus,
+import {
+  type WithdrawalIntent,
+  type WithdrawalRequestContext,
+  type WithdrawalRequestStatus,
+  withdrawalRequestContextSchema,
 } from "@entrelacos/contracts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -552,6 +553,49 @@ describe("withdrawal authoritative ordering", () => {
     };
     expect(compareWithdrawalContexts(context, next)).toBe("same");
   });
+  it.each(["DESTINATION_UNAVAILABLE", "UNRESOLVED_OPERATION"] as const)(
+    "orders newer derived %s admission without a withdrawal revision change",
+    (reason) => {
+      const blocked: WithdrawalRequestContext = {
+        ...context,
+        scopeRevision: "0",
+        observationOrder: { ...context.observationOrder, scopeRevision: "0" },
+        newRequestAllowed: false,
+        reason,
+        openRequest: null,
+        recoverableRequests: [],
+        nextCursor: null,
+      };
+      const ready = {
+        ...blocked,
+        observedAt: "2026-10-12T22:00:01.000Z",
+        newRequestAllowed: true,
+        reason: null,
+      };
+      const blockedAgain = {
+        ...blocked,
+        observedAt: "2026-10-12T22:00:02.000Z",
+      };
+      expect(compareWithdrawalContexts(blocked, ready)).toBe("newer");
+      expect(compareWithdrawalContexts(ready, blocked)).toBe("older");
+      expect(compareWithdrawalContexts(ready, blockedAgain)).toBe("newer");
+      expect(compareWithdrawalContexts(blockedAgain, ready)).toBe("older");
+      const conflicting = { ...ready, observedAt };
+      const changedCursor = { ...ready, nextCursor: "wc1:changed" };
+      expect(
+        withdrawalRequestContextSchema.safeParse(conflicting).success,
+      ).toBe(true);
+      expect(
+        withdrawalRequestContextSchema.safeParse(changedCursor).success,
+      ).toBe(true);
+      expect(compareWithdrawalContexts(blocked, conflicting)).toBe(
+        "incomparable",
+      );
+      expect(compareWithdrawalContexts(blocked, changedCursor)).toBe(
+        "incomparable",
+      );
+    },
+  );
   it("rejects immutable term replacement across newer contexts", () => {
     const next = {
       ...context,

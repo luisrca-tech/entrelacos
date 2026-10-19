@@ -1,5 +1,14 @@
 import { financialReauthenticationResponseSchema } from "@entrelacos/contracts";
-import { Button, PasswordInput } from "@entrelacos/ui";
+import {
+  Button,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+  DialogTrigger,
+  PasswordInput,
+  toast,
+} from "@entrelacos/ui";
 import {
   type FormEvent,
   type Ref,
@@ -20,6 +29,8 @@ import {
 
 export type FinancialReauthenticationHandle = { consumeProof(): string | null };
 type Props = FinancialReauthenticationScope & {
+  dialog?: boolean;
+  feedback?: "toast";
   ref?: Ref<FinancialReauthenticationHandle>;
   guard?: FinancialReauthenticationGuard;
   request?: (
@@ -62,6 +73,7 @@ export function FinancialReauthenticationForm(props: Props) {
       scope={props}
       state={{ status: "denied" }}
       ready={false}
+      feedback={props.feedback}
     />
   );
 }
@@ -72,6 +84,8 @@ function FinancialReauthenticationRuntime(props: Props) {
     status: "idle",
   });
   const [ready, setReady] = useState(false);
+  const [open, setOpen] = useState(false);
+  const [generation, setGeneration] = useState(0);
   const scope = useRef(props).current;
   const controller = useRef<ReturnType<
     typeof createFinancialReauthenticationController
@@ -84,6 +98,7 @@ function FinancialReauthenticationRuntime(props: Props) {
     if (input.current && input.current !== node) input.current.value = "";
     input.current = node;
   }, []);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Cancel recreates the disposed controller while keeping its modal owner mounted.
   useLayoutEffect(() => {
     const dispose = mountFinancialReauthenticationController(
       controller,
@@ -97,25 +112,79 @@ function FinancialReauthenticationRuntime(props: Props) {
       if (input.current) input.current.value = "";
       dispose();
     };
-  }, [scope, updateState, props.guard, props.request, props.now]);
+  }, [scope, updateState, props.guard, props.request, props.now, generation]);
   useImperativeHandle(
     props.ref,
     () => ({ consumeProof: () => controller.current?.consumeProof() ?? null }),
     [],
   );
-  return (
+  function changeOpen(next: boolean) {
+    if (!next) {
+      if (input.current) input.current.value = "";
+      controller.current?.dispose();
+      controller.current = null;
+      setReady(false);
+      setState({ status: "idle" });
+      setGeneration((value) => value + 1);
+    }
+    setOpen(next);
+  }
+  const view = (
     <FinancialReauthenticationView
       scope={props}
       state={state}
       ready={ready}
+      feedback={props.feedback}
+      dialog={props.dialog}
       now={props.now?.()}
       passwordRef={passwordRef}
       onSubmit={(event) => {
         event.preventDefault();
-        if (controller.current)
-          void submitFinancialPassword(controller.current, input.current);
+        event.stopPropagation();
+        const active = controller.current;
+        if (!active || active.getState().status === "loading") return;
+        void submitFinancialPassword(active, input.current).then(() => {
+          if (
+            props.feedback !== "toast" ||
+            controller.current !== active ||
+            !props.guard?.isCurrent()
+          )
+            return;
+          const result = active.getState();
+          if (controller.current !== active || !props.guard?.isCurrent())
+            return;
+          if (result.status === "verified") {
+            if (props.dialog) setOpen(false);
+            toast.success(
+              props.action === "REQUEST_WITHDRAWAL"
+                ? "Senha confirmada. Agora confirme os termos do saque."
+                : "Senha confirmada. Agora confirme o destino Pix.",
+            );
+          } else if (result.status !== "idle" && result.status !== "loading")
+            toast.error(messages[result.status]);
+        });
       }}
     />
+  );
+  if (!props.dialog) return view;
+  return (
+    <Dialog open={open} onOpenChange={changeOpen}>
+      <DialogTrigger
+        render={<Button type="button" variant="outline" disabled={!ready} />}
+      >
+        Confirmar senha
+      </DialogTrigger>
+      <DialogContent>
+        {view}
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => changeOpen(false)}
+        >
+          Cancelar
+        </Button>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -150,6 +219,8 @@ export function FinancialReauthenticationView({
   now = Date.now(),
   onSubmit,
   passwordRef,
+  feedback,
+  dialog,
 }: {
   scope: FinancialReauthenticationScope;
   state: FinancialReauthenticationState;
@@ -157,6 +228,8 @@ export function FinancialReauthenticationView({
   now?: number;
   onSubmit?: (event: FormEvent<HTMLFormElement>) => void;
   passwordRef?: Ref<HTMLInputElement>;
+  feedback?: "toast";
+  dialog?: boolean;
 }) {
   const id = useId();
   const allowed = financialReauthenticationScopeKey(scope) !== null;
@@ -179,29 +252,47 @@ export function FinancialReauthenticationView({
   const disabled = !ready || !onSubmit || current.status === "loading";
   return (
     <section
-      aria-labelledby={`${id}-title`}
+      aria-labelledby={dialog ? undefined : `${id}-title`}
       className="grid gap-4 rounded-xl border border-admin-line bg-admin-surface p-6 sm:p-8"
     >
-      <h2
-        id={`${id}-title`}
-        className="m-0 font-admin-display text-2xl text-admin-graphite"
-      >
-        Confirme sua senha
-      </h2>
+      {dialog ? (
+        <DialogTitle>Confirme sua senha</DialogTitle>
+      ) : (
+        <h2
+          id={`${id}-title`}
+          className="m-0 font-admin-display text-2xl text-admin-graphite"
+        >
+          Confirme sua senha
+        </h2>
+      )}
       {!restricted && (
         <>
-          <p className="m-0 text-admin-muted">
-            {scope.action === "CONFIGURE_RECEIVING"
-              ? "Confirmação para configurar o recebimento."
-              : "Confirmação para solicitar um saque."}
-          </p>
-          <p id={`${id}-hint`} className="m-0 text-sm text-admin-muted">
-            Esta confirmação não altera o responsável financeiro nem movimenta
-            valores.
-          </p>
+          {feedback !== "toast" && (
+            <p className="m-0 text-admin-muted">
+              {scope.action === "CONFIGURE_RECEIVING"
+                ? "Confirmação para configurar o recebimento."
+                : "Confirmação para solicitar um saque."}
+            </p>
+          )}
+          {dialog ? (
+            <DialogDescription>
+              <span id={`${id}-hint`}>
+                {scope.action === "CONFIGURE_RECEIVING"
+                  ? "Confirme sua senha para salvar o destino Pix."
+                  : "Confirme sua senha para continuar com o saque."}{" "}
+                Esta etapa não envia dinheiro.
+              </span>
+            </DialogDescription>
+          ) : (
+            <p id={`${id}-hint`} className="m-0 text-sm text-admin-muted">
+              {feedback === "toast"
+                ? "Confirme sua senha para continuar."
+                : "Esta confirmação não altera o responsável financeiro nem movimenta valores."}
+            </p>
+          )}
         </>
       )}
-      {current.status !== "idle" && (
+      {feedback !== "toast" && current.status !== "idle" && (
         <p
           id={`${id}-status`}
           role={

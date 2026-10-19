@@ -5,7 +5,7 @@ import {
   type WithdrawalRequestContext,
   type WithdrawalRequestStatus,
 } from "@entrelacos/contracts";
-import { Button, showSandboxNotice } from "@entrelacos/ui";
+import { Button, showSandboxNotice, toast } from "@entrelacos/ui";
 import { type FormEvent, useLayoutEffect, useRef, useState } from "react";
 import { ApiError, apiRequest } from "../lib/apiClient";
 import {
@@ -266,6 +266,87 @@ export function createWithdrawalSetupController(
       busy: false,
       proofRevision: state.proofRevision + 1,
     });
+  }
+  function notifyResult(
+    action: Action | "PREVIEW" | "REFRESH",
+    succeeded: boolean,
+    cause?: unknown,
+    expectedRevision = revision,
+  ) {
+    if (!current() || revision !== expectedRevision) return;
+    if (!succeeded) {
+      const errors: Record<string, string> = {
+        RECENT_AUTH_REQUIRED: "Confirme sua senha antes de continuar.",
+        FEE_QUOTE_UNAVAILABLE:
+          "Não foi possível consultar a taxa. Consulte a situação antes de tentar novamente.",
+        PROVIDER_BALANCE_UNAVAILABLE:
+          "Não foi possível verificar o saldo. Consulte a situação novamente.",
+        INSUFFICIENT_FUNDS:
+          "Saldo insuficiente para o valor solicitado e a taxa.",
+        DESTINATION_UNVERIFIED:
+          "Confira o destino em Recebimento antes de solicitar o saque.",
+        FINANCIAL_EVENTS_UNRESOLVED:
+          "Existem movimentações em verificação. Aguarde e consulte a situação.",
+        REQUEST_CONFLICT:
+          "Os termos mudaram. Consulte a solicitação original antes de continuar.",
+      };
+      toast.error(
+        state.status === "storage_unavailable"
+          ? "Não foi possível preservar a referência. As ações estão bloqueadas."
+          : (cause instanceof ApiError && errors[cause.code]) ||
+              (action === "PREVIEW"
+                ? "Não foi possível consultar a prévia. Consulte a situação antes de tentar novamente."
+                : action === "REFRESH"
+                  ? "Não foi possível verificar a situação do saque. Consulte novamente."
+                  : "Não foi possível confirmar o resultado. Consulte a solicitação original antes de tentar novamente."),
+      );
+      return;
+    }
+    if (action === "PREVIEW" && state.request?.state === "OPEN") {
+      toast.success(
+        "Prévia pronta. Confira o destino, os valores e a validade antes de confirmar.",
+      );
+      return;
+    }
+    if (state.request?.state === "SEALED_NOT_CREATED") {
+      toast.success("Solicitação encerrada sem reserva.");
+      return;
+    }
+    const withdrawal =
+      state.acknowledgment ??
+      (state.request?.state === "EXISTING" ? state.request.withdrawal : null);
+    if (
+      withdrawal?.state === "UNKNOWN" ||
+      state.request?.state === "UNRESOLVED"
+    )
+      toast.warning(
+        "Resultado em verificação. Consulte a solicitação original antes de qualquer nova tentativa.",
+      );
+    else if (
+      withdrawal?.state === "FAILED" ||
+      withdrawal?.state === "CANCELLED"
+    )
+      toast.error(
+        "O saque não foi concluído. Consulte a solicitação original.",
+      );
+    else if (withdrawal?.state === "COMPLETED")
+      toast.success("Saque concluído pelo provedor.");
+    else if (withdrawal)
+      toast.success(
+        "Solicitação registrada. A transferência ainda não foi concluída.",
+      );
+    else if (state.request?.state === "OPEN")
+      toast.success("Prévia disponível. Confira os termos antes de confirmar.");
+    else if (state.uncertain)
+      toast.warning(
+        "A referência foi preservada. Consulte a situação antes de qualquer nova tentativa.",
+      );
+    else if (state.context?.newRequestAllowed)
+      toast.success("Situação atualizada. Você pode consultar uma prévia.");
+    else
+      toast.warning(
+        "Saque indisponível. Confira o recebimento e consulte a situação novamente.",
+      );
   }
   function validateContext(next: WithdrawalRequestContext) {
     if (Date.parse(next.observedAt) > now())
@@ -582,11 +663,12 @@ export function createWithdrawalSetupController(
   const unsubscribe = owner.subscribe(() => {
     if (!frame()) invalidate();
   });
-  function refresh(requestId?: string): Promise<void> {
+  function refresh(requestId?: string, feedback = false): Promise<void> {
     if (!current() || busy) return Promise.resolve();
     if (refreshing) return refreshing;
     const active = ++revision;
     validation = null;
+    let failure: unknown;
     const work = Promise.resolve()
       .then(async () => {
         if (!current() || active !== revision) return;
@@ -656,11 +738,14 @@ export function createWithdrawalSetupController(
           }
           publish({ ...state, status: "ready", busy: false });
         } catch (cause) {
+          failure = cause;
           if (active === revision) fail(cause);
         }
       })
       .finally(() => {
         if (refreshing === work) refreshing = null;
+        if (feedback && current() && active === revision)
+          notifyResult("REFRESH", state.status === "ready", failure, active);
       });
     refreshing = work;
     pageAbort?.abort();
@@ -742,6 +827,10 @@ export function createWithdrawalSetupController(
                 "A consulta demorou demais. Consulte novamente após o término da leitura.",
             },
           });
+          if (valid())
+            toast.error(
+              "A consulta demorou demais. Aguarde o término da leitura para consultar novamente.",
+            );
         } else child.abort();
       }, 45000);
       try {
@@ -869,6 +958,10 @@ export function createWithdrawalSetupController(
                 "Não foi possível verificar outras solicitações. Consulte novamente.",
             },
           });
+          if (valid())
+            toast.error(
+              "Não foi possível consultar outras solicitações. Consulte novamente.",
+            );
           return false;
         }
       })
@@ -1017,14 +1110,26 @@ export function createWithdrawalSetupController(
       return false;
     } finally {
       selecting = false;
+      if (current() && active === revision && quarantined)
+        notifyResult("REFRESH", state.status === "ready", undefined, active);
     }
   }
   async function preview(amount: string): Promise<boolean> {
     const amountCents = parseGiftPriceToCents(amount);
-    if (amountCents === null || busy || !canNew()) return false;
+    if (!current() || busy) return false;
+    if (amountCents === null) {
+      toast.error("Informe um valor válido para o saque.");
+      return false;
+    }
+    if (!canNew()) {
+      toast.warning("Consulte a situação antes de solicitar uma nova prévia.");
+      return false;
+    }
     busy = true;
     publish({ ...state, busy: true });
     let dispatched = false;
+    let succeeded = false;
+    let failure: unknown;
     const active = revision;
     try {
       if (
@@ -1084,8 +1189,10 @@ export function createWithdrawalSetupController(
       if (result.state === "OPEN" && result.preview.amountCents !== amountCents)
         throw new Error("Withdrawal amount changed");
       publish({ ...state, status: "ready" });
+      succeeded = true;
       return true;
     } catch (cause) {
+      failure = cause;
       if (current() && revision === active) {
         if (dispatched) publish({ ...state, uncertain: true });
         fail(cause);
@@ -1093,7 +1200,10 @@ export function createWithdrawalSetupController(
       return false;
     } finally {
       busy = false;
-      if (current() && revision === active) publish({ ...state, busy: false });
+      if (current() && revision === active) {
+        publish({ ...state, busy: false });
+        notifyResult("PREVIEW", succeeded, failure, active);
+      }
     }
   }
   async function act(
@@ -1108,11 +1218,20 @@ export function createWithdrawalSetupController(
       !guard.isCurrent() ||
       (action === "CONFIRM_NEW" && !termsCurrent()) ||
       (action === "RECOVER_EXISTING" && state.request?.state !== "EXISTING")
-    )
+    ) {
+      if (current() && !busy)
+        toast.error(
+          action === "CONFIRM_NEW" && !termsCurrent()
+            ? "A prévia expirou. Encerre a solicitação original antes de consultar novos termos."
+            : "Confira os termos e confirme sua senha antes de continuar.",
+        );
       return false;
+    }
     busy = true;
     publish({ ...state, busy: true });
     let dispatched = false;
+    let succeeded = false;
+    let failure: unknown;
     const active = revision;
     try {
       if (
@@ -1134,7 +1253,11 @@ export function createWithdrawalSetupController(
       }
       if (!current() || active !== revision) return false;
       const token = consumeProof();
-      if (!token || !current() || active !== revision) return false;
+      if (!token) {
+        failure = new ApiError(403, "RECENT_AUTH_REQUIRED");
+        return false;
+      }
+      if (!current() || active !== revision) return false;
       publish({
         ...state,
         uncertain: true,
@@ -1213,8 +1336,10 @@ export function createWithdrawalSetupController(
           uncertain: true,
         });
       }
+      succeeded = true;
       return true;
     } catch (cause) {
+      failure = cause;
       if (current() && revision === active) {
         if (dispatched) publish({ ...state, uncertain: true });
         fail(cause);
@@ -1222,7 +1347,10 @@ export function createWithdrawalSetupController(
       return false;
     } finally {
       busy = false;
-      if (current() && active === revision) publish({ ...state, busy: false });
+      if (current() && active === revision) {
+        publish({ ...state, busy: false });
+        notifyResult(action, succeeded, failure, active);
+      }
     }
   }
   if (!frame()) {
@@ -1406,6 +1534,9 @@ function WithdrawalSetupView({
         ? state.request.preview
         : null;
   const current = state.status === "ready" && !state.busy;
+  const withdrawal =
+    state.acknowledgment ??
+    (state.request?.state === "EXISTING" ? state.request.withdrawal : null);
   return (
     <section
       className="grid gap-4 rounded-xl border border-admin-line bg-admin-surface p-6"
@@ -1417,37 +1548,18 @@ function WithdrawalSetupView({
       >
         Solicitação de saque
       </h2>
-      {showSandboxNotice(state.context?.mode) && (
-        <p>Sandbox — valores de teste, sem movimentação de dinheiro real.</p>
+      {(state.request?.mode ?? state.context?.mode) === "live" && (
+        <p>Live — valores reais.</p>
       )}
-      {state.request &&
-        (state.request.mode === "live" ||
-          showSandboxNotice(state.request.mode)) && (
-          <p>
-            Ambiente da solicitação:{" "}
-            {state.request.mode === "sandbox"
-              ? "Sandbox — teste"
-              : "Live — valores reais"}
-            .
-          </p>
-        )}
-      {state.status === "denied" ? (
-        <p role="status">Acesso financeiro restrito.</p>
-      ) : state.status === "storage_unavailable" ? (
-        <p role="alert">
-          Não foi possível preservar a referência da solicitação. As ações estão
-          bloqueadas.
-        </p>
-      ) : state.status === "unavailable" ? (
-        <p role="alert">Não foi possível verificar a situação do saque.</p>
-      ) : state.status === "idle" || state.status === "loading" ? (
-        <p role="status">Consultando a situação do saque…</p>
-      ) : null}
-      {state.uncertain && (
-        <p role="status">
-          A referência original foi preservada. Consulte a situação antes de
-          qualquer nova solicitação.
-        </p>
+      {showSandboxNotice(state.request?.mode ?? state.context?.mode) && (
+        <p>Sandbox — valores de teste.</p>
+      )}
+      {state.status === "denied" && <p>Acesso financeiro restrito.</p>}
+      {state.status === "storage_unavailable" && (
+        <p>Ações bloqueadas: a referência não pôde ser preservada.</p>
+      )}
+      {state.uncertain && !withdrawal && (
+        <p>Resultado em verificação. Consulte a situação.</p>
       )}
       {preview && (
         <dl>
@@ -1520,29 +1632,27 @@ function WithdrawalSetupView({
           ))}
         </dl>
       )}
-      {state.request?.state === "EXISTING" && (
+      {withdrawal && (
         <p>
-          Solicitação original registrada:{" "}
-          {state.request.withdrawal.state === "UNKNOWN"
-            ? "resultado em verificação"
-            : state.request.withdrawal.state === "COMPLETED"
-              ? "conclusão informada pelo provedor; o crédito bancário ainda não está confirmado"
-              : "reserva ou operação em acompanhamento"}
-          .{" "}
-          {state.request.preview === null &&
-            "Os dados do destino original não estão disponíveis para exibição."}
+          {withdrawal.state === "UNKNOWN"
+            ? "Resultado em verificação. Consulte a solicitação original."
+            : withdrawal.state === "COMPLETED"
+              ? "Concluído pelo provedor."
+              : withdrawal.state === "FAILED"
+                ? "Saque não concluído."
+                : withdrawal.state === "CANCELLED"
+                  ? "Saque cancelado."
+                  : "Solicitação original registrada. Transferência em acompanhamento."}
         </p>
       )}
+      {state.request?.state === "EXISTING" &&
+        state.request.preview === null && (
+          <p>Os dados do destino original não estão disponíveis.</p>
+        )}
       {state.request?.state === "SEALED_NOT_CREATED" && (
-        <p>A solicitação original foi encerrada sem criar uma reserva.</p>
+        <p>Solicitação encerrada sem reserva.</p>
       )}
-      {state.acknowledgment && (
-        <p role="status">
-          Resposta da solicitação recebida. Consulte o registro original; a
-          resposta não confirma o crédito bancário.
-        </p>
-      )}
-      {current &&
+      {state.status === "ready" &&
         state.context?.newRequestAllowed &&
         !state.uncertain &&
         state.request?.state !== "OPEN" && (
@@ -1559,12 +1669,15 @@ function WithdrawalSetupView({
               id="withdrawal-amount"
               inputMode="decimal"
               value={amount}
+              disabled={state.busy}
               onChange={(event) => {
                 setAmount(event.target.value);
                 controller?.resetConsent();
               }}
             />
-            <Button type="submit">Consultar prévia do saque</Button>
+            <Button type="submit" disabled={state.busy}>
+              {state.busy ? "Consultando prévia…" : "Consultar prévia do saque"}
+            </Button>
           </form>
         )}
       {state.request && controller?.guard.isCurrent() && (
@@ -1581,9 +1694,13 @@ function WithdrawalSetupView({
           type="button"
           variant="outline"
           disabled={state.busy || state.status === "loading"}
-          onClick={() => void controller?.refresh()}
+          onClick={() => void controller?.refresh(undefined, true)}
         >
-          Consultar situação
+          {state.status === "loading"
+            ? "Consultando…"
+            : state.busy
+              ? "Processando…"
+              : "Consultar situação"}
         </Button>
       )}
       {state.discovery.requests.map((request) => (
@@ -1606,7 +1723,10 @@ function WithdrawalSetupView({
             variant="outline"
             disabled={state.busy}
             onClick={() =>
-              void controller?.refresh(state.context?.openRequest?.requestId)
+              void controller?.refresh(
+                state.context?.openRequest?.requestId,
+                true,
+              )
             }
           >
             Consultar solicitação aberta {state.context.openRequest.requestId}
@@ -1624,18 +1744,12 @@ function WithdrawalSetupView({
             disabled={!current || state.discovery.status === "loading"}
             onClick={() => void controller?.loadMore()}
           >
-            Carregar mais solicitações
+            {state.discovery.status === "loading"
+              ? "Consultando solicitações…"
+              : "Carregar mais solicitações"}
           </Button>
         </div>
       )}
-      {state.discovery.status === "loading" && (
-        <p role="status">Consultando outras solicitações…</p>
-      )}
-      {state.discovery.error && <p role="alert">{state.discovery.error}</p>}
-      <p>
-        A confirmação pode registrar uma reserva. A transferência e o crédito na
-        conta dependem de confirmação posterior.
-      </p>
     </section>
   );
 }
@@ -1651,6 +1765,7 @@ function WithdrawalActions({
   state: WithdrawalSetupState;
 }) {
   const proof = useRef<FinancialReauthenticationHandle | null>(null);
+  const terms = useRef<HTMLFormElement | null>(null);
   const [confirmed, setConfirmed] = useState(false);
   const request = state.request;
   if (!request) return null;
@@ -1664,31 +1779,19 @@ function WithdrawalActions({
       <FinancialReauthenticationForm
         {...scope}
         action="REQUEST_WITHDRAWAL"
+        feedback="toast"
+        dialog
         ref={proof}
         guard={controller.guard}
         request={ports?.request}
         now={ports?.now}
       />
-      <label>
-        <input
-          type="checkbox"
-          checked={confirmed}
-          onChange={(event) => setConfirmed(event.target.checked)}
-        />
-        Confirmo os termos originais exibidos desta solicitação.
-      </label>
-      {expired && (
-        <p role="status">
-          A prévia expirou. Encerre a solicitação original antes de consultar
-          novos termos.
-        </p>
-      )}
-      <Button
-        type="button"
-        disabled={
-          !confirmed || state.busy || expired || request.state === "UNRESOLVED"
-        }
-        onClick={() => {
+      <form
+        ref={terms}
+        className="grid gap-3"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (!event.currentTarget.reportValidity() || !confirmed) return;
           setConfirmed(false);
           void controller.act(
             action,
@@ -1697,27 +1800,52 @@ function WithdrawalActions({
           );
         }}
       >
-        {action === "CONFIRM_NEW"
-          ? "Confirmar solicitação de saque"
-          : "Recuperar solicitação original"}
-      </Button>
-      {request.state === "OPEN" && (
+        <label>
+          <input
+            type="checkbox"
+            required
+            aria-required="true"
+            checked={confirmed}
+            onChange={(event) => setConfirmed(event.target.checked)}
+          />
+          Confirmo os termos originais exibidos desta solicitação.
+        </label>
         <Button
-          type="button"
-          variant="outline"
-          disabled={!confirmed || state.busy}
-          onClick={() => {
-            setConfirmed(false);
-            void controller.act(
-              "SEAL",
-              () => proof.current?.consumeProof() ?? null,
-              confirmed,
-            );
-          }}
+          type="submit"
+          disabled={
+            !confirmed ||
+            state.busy ||
+            expired ||
+            request.state === "UNRESOLVED"
+          }
         >
-          Encerrar solicitação sem reserva
+          {state.busy
+            ? "Processando…"
+            : expired
+              ? "Prévia expirada — encerre a solicitação"
+              : action === "CONFIRM_NEW"
+                ? "Confirmar solicitação de saque"
+                : "Recuperar solicitação original"}
         </Button>
-      )}
+        {request.state === "OPEN" && (
+          <Button
+            type="button"
+            variant="outline"
+            disabled={!confirmed || state.busy}
+            onClick={() => {
+              if (!terms.current?.reportValidity()) return;
+              setConfirmed(false);
+              void controller.act(
+                "SEAL",
+                () => proof.current?.consumeProof() ?? null,
+                confirmed,
+              );
+            }}
+          >
+            {state.busy ? "Encerrando…" : "Encerrar solicitação sem reserva"}
+          </Button>
+        )}
+      </form>
     </div>
   );
 }

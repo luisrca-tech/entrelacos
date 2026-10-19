@@ -9,6 +9,7 @@ import type {
   WithdrawalRequestContext,
   WithdrawalRequestStatus,
 } from "@entrelacos/contracts";
+import { toast } from "@entrelacos/ui";
 import { act, createElement, StrictMode, useLayoutEffect } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -1210,7 +1211,7 @@ describe("withdrawal setup mounted consumer through actual private HTTP", () => 
       context: { newRequestAllowed: false, reason: "DESTINATION_UNAVAILABLE" },
     });
     expect(f.node.querySelector("#withdrawal-amount")).toBeNull();
-    expect(f.node.querySelector('input[type="password"]')).toBeNull();
+    expect(document.querySelector('input[type="password"]')).toBeNull();
     await expect(
       f.request("/v1/sites/wedding-a/withdrawals/preview", {
         method: "POST",
@@ -1345,7 +1346,7 @@ describe("withdrawal setup mounted consumer through actual private HTTP", () => 
       await httpWithdrawalPreview(f);
       expect(f.tables.withdrawal_request).toHaveLength(0);
       expect(f.tables.withdrawal_intent).toHaveLength(0);
-      expect(f.node.querySelector('input[type="password"]')).toBeNull();
+      expect(document.querySelector('input[type="password"]')).toBeNull();
       expect(f.fee).not.toHaveBeenCalled();
     },
   );
@@ -1359,7 +1360,7 @@ describe("withdrawal setup mounted consumer through actual private HTTP", () => 
     f.tables.withdrawal_intent[0].state = "UNKNOWN";
     f.tables.withdrawal_intent[0].updatedAt = new Date(start + 1).toISOString();
     await httpWithdrawalClick(f, "Consultar situação");
-    expect(f.node.textContent).toContain("resultado em verificação");
+    expect(f.node.textContent).toContain("Resultado em verificação");
     expect(f.node.querySelector("#withdrawal-amount")).toBeNull();
     const context = await f.request("/v1/sites/wedding-a/withdrawals/context");
     expect(context).toMatchObject({
@@ -1557,7 +1558,7 @@ describe("withdrawal setup mounted consumer through actual private HTTP", () => 
     older.state = "REQUESTED";
     older.updatedAt = new Date(start + 1).toISOString();
     await httpWithdrawalClick(f, "Consultar solicitação history-099");
-    expect(f.node.textContent).toContain("resultado em verificação");
+    expect(f.node.textContent).toContain("Resultado em verificação");
     const marker = [...f.storage.data.values()];
     f.state.exactNativeOverride = older;
     await httpWithdrawalClick(f, "Consultar solicitação history-099");
@@ -1565,7 +1566,7 @@ describe("withdrawal setup mounted consumer through actual private HTTP", () => 
       path: "/v1/sites/wedding-a/withdrawals/requests/history-099",
       status: 200,
     });
-    expect(f.node.textContent).toContain("resultado em verificação");
+    expect(f.node.textContent).toContain("Resultado em verificação");
     expect(f.node.querySelector("#withdrawal-amount")).toBeNull();
     expect([...f.storage.data.values()]).toEqual(marker);
     expect(f.tables.withdrawal_intent).toHaveLength(101);
@@ -1770,8 +1771,13 @@ async function httpWithdrawalPreview(
 async function httpWithdrawalPassword(
   f: Awaited<ReturnType<typeof withdrawalHttpBridge>>,
 ) {
+  await act(async () =>
+    [...f.node.querySelectorAll("button")]
+      .find((button) => button.textContent === "Confirmar senha")
+      ?.click(),
+  );
   const input = required(
-    f.node.querySelector<HTMLInputElement>('input[type="password"]'),
+    document.querySelector<HTMLInputElement>('input[type="password"]'),
   );
   await act(async () => {
     input.value = "fictional-password";
@@ -1796,10 +1802,194 @@ async function mount(f: Awaited<ReturnType<typeof fixture>>) {
       ),
     );
   });
+  await act(async () =>
+    [...node.querySelectorAll("button")]
+      .find((button) => button.textContent === "Confirmar senha")
+      ?.click(),
+  );
   return { root, node };
 }
 
 describe("withdrawal setup owned source lifecycle", () => {
+  it("keeps automatic reads quiet and reports an explicit successful refresh", async () => {
+    const success = vi.spyOn(toast, "success");
+    const f = await fixture();
+    try {
+      await f.controller.refresh();
+      expect(success).not.toHaveBeenCalled();
+      await f.controller.refresh(undefined, true);
+      expect(success).toHaveBeenCalledWith(
+        "Situação atualizada. Você pode consultar uma prévia.",
+      );
+    } finally {
+      f.cleanup();
+    }
+  });
+  it("reports invalid amounts and only reports a preview after its response", async () => {
+    const success = vi.spyOn(toast, "success");
+    const error = vi.spyOn(toast, "error");
+    const f = await fixture();
+    try {
+      await f.controller.refresh();
+      expect(await f.controller.preview("invalid")).toBe(false);
+      expect(error).toHaveBeenCalledWith(
+        "Informe um valor válido para o saque.",
+      );
+      expect(success).not.toHaveBeenCalled();
+      expect(await f.controller.preview("100")).toBe(true);
+      expect(success).toHaveBeenCalledWith(
+        "Prévia pronta. Confira o destino, os valores e a validade antes de confirmar.",
+      );
+    } finally {
+      f.cleanup();
+    }
+  });
+  it("reports a failed preview fee lookup without announcing success", async () => {
+    const success = vi.spyOn(toast, "success");
+    const error = vi.spyOn(toast, "error");
+    const f = await fixture();
+    try {
+      await f.controller.refresh();
+      const native = required(f.request.getMockImplementation());
+      f.request.mockImplementation((path, options) => {
+        if (path.endsWith("/preview"))
+          throw new ApiError(409, "FEE_QUOTE_UNAVAILABLE");
+        return native(path, options);
+      });
+      expect(await f.controller.preview("100")).toBe(false);
+      expect(error).toHaveBeenCalledWith(
+        "Não foi possível consultar a taxa. Consulte a situação antes de tentar novamente.",
+      );
+      expect(success).not.toHaveBeenCalled();
+    } finally {
+      f.cleanup();
+    }
+  });
+  it("requires password proof before announcing a withdrawal result", async () => {
+    const success = vi.spyOn(toast, "success");
+    const error = vi.spyOn(toast, "error");
+    const f = await fixture(openContext());
+    try {
+      await f.controller.refresh();
+      expect(await f.controller.act("CONFIRM_NEW", () => null, true)).toBe(
+        false,
+      );
+      expect(error).toHaveBeenCalledWith(
+        "Confirme sua senha antes de continuar.",
+      );
+      expect(success).not.toHaveBeenCalled();
+      expect(
+        f.request.mock.calls.every(([, options]) => !options?.method),
+      ).toBe(true);
+    } finally {
+      f.cleanup();
+    }
+  });
+  it.each(["REQUESTED", "UNKNOWN", "COMPLETED"] as const)(
+    "reports the actual %s acknowledgment without inventing bank credit",
+    async (state) => {
+      const success = vi.spyOn(toast, "success");
+      const warning = vi.spyOn(toast, "warning");
+      const f = await fixture(openContext());
+      try {
+        await f.controller.refresh();
+        const native = required(f.request.getMockImplementation());
+        f.request.mockImplementation((path, options) =>
+          path.endsWith("/withdrawals") && options?.method === "POST"
+            ? Promise.resolve({
+                requestId: "request-a",
+                withdrawal: { ...existing().withdrawal, state },
+              })
+            : native(path, options),
+        );
+        expect(
+          await f.controller.act(
+            "CONFIRM_NEW",
+            () => `fr1.cHJvb2Y.${"A".repeat(43)}`,
+            true,
+          ),
+        ).toBe(true);
+        if (state === "UNKNOWN") {
+          expect(warning).toHaveBeenCalledWith(
+            "Resultado em verificação. Consulte a solicitação original antes de qualquer nova tentativa.",
+          );
+          expect(success).not.toHaveBeenCalled();
+        } else
+          expect(success).toHaveBeenCalledWith(
+            state === "COMPLETED"
+              ? "Saque concluído pelo provedor."
+              : "Solicitação registrada. A transferência ainda não foi concluída.",
+          );
+      } finally {
+        f.cleanup();
+      }
+    },
+  );
+  it("does not notify for a delayed preview after its owner is disposed", async () => {
+    const success = vi.spyOn(toast, "success");
+    const error = vi.spyOn(toast, "error");
+    const f = await fixture();
+    const pending = deferred<unknown>();
+    try {
+      await f.controller.refresh();
+      const native = required(f.request.getMockImplementation());
+      f.request.mockImplementation((path, options) =>
+        path.endsWith("/preview") ? pending.promise : native(path, options),
+      );
+      const work = f.controller.preview("100");
+      await vi.advanceTimersByTimeAsync(0);
+      f.controller.dispose();
+      pending.resolve({ request: open() });
+      expect(await work).toBe(false);
+      expect(success).not.toHaveBeenCalled();
+      expect(error).not.toHaveBeenCalled();
+    } finally {
+      f.cleanup();
+    }
+  });
+  it("refreshes newer derived admission without replacing the original withdrawal revision", async () => {
+    const blocked: WithdrawalRequestContext = {
+      ...context(),
+      newRequestAllowed: false,
+      reason: "DESTINATION_UNAVAILABLE",
+    };
+    const f = await fixture(blocked);
+    try {
+      await f.controller.refresh();
+      expect(f.controller.getState().status).toBe("ready");
+      vi.setSystemTime(start + 1000);
+      f.setContext({
+        ...context(),
+        observedAt: new Date(start + 1000).toISOString(),
+      });
+      await f.controller.refresh();
+      expect(f.controller.getState()).toMatchObject({
+        status: "ready",
+        context: { scopeRevision: "0", newRequestAllowed: true, reason: null },
+      });
+      vi.setSystemTime(start + 2000);
+      f.setContext({
+        ...blocked,
+        observedAt: new Date(start + 2000).toISOString(),
+      });
+      await f.controller.refresh();
+      expect(f.controller.getState()).toMatchObject({
+        status: "ready",
+        context: {
+          scopeRevision: "0",
+          newRequestAllowed: false,
+          reason: "DESTINATION_UNAVAILABLE",
+        },
+      });
+      expect(
+        f.request.mock.calls.every(([, options]) => !options?.method),
+      ).toBe(true);
+      expect(f.ports.newRequestId).not.toHaveBeenCalled();
+      expect(f.storage.setItem).not.toHaveBeenCalled();
+    } finally {
+      f.cleanup();
+    }
+  });
   it("keeps denial when a storage getter loses the owner and then throws", async () => {
     const f = await fixture(openContext());
     f.storage.getItem.mockImplementation(() => {
@@ -2386,6 +2576,7 @@ describe("withdrawal setup owned source lifecycle", () => {
     f.cleanup();
   });
   it("recovery preserves an existing old destination even when current eligibility is denied", async () => {
+    const success = vi.spyOn(toast, "success");
     const prior = existing(open(), "UNKNOWN");
     const f = await fixture({
       ...context("2"),
@@ -2408,6 +2599,9 @@ describe("withdrawal setup owned source lifecycle", () => {
       requestId: "request-a",
       reauthenticationToken: `fr1.cHJvb2Y.${"A".repeat(43)}`,
     });
+    expect(success).toHaveBeenCalledWith(
+      "Solicitação registrada. A transferência ainda não foi concluída.",
+    );
     f.cleanup();
   });
   it("SSR has no password/action controls or requests", async () => {
@@ -2423,6 +2617,133 @@ describe("withdrawal setup owned source lifecycle", () => {
 });
 
 describe("actual React withdrawal DOM", () => {
+  it("requires native withdrawal terms before the confirmation form submits", async () => {
+    const f = await fixture(openContext());
+    try {
+      const { node } = await mount(f);
+      const box = node.querySelector<HTMLInputElement>(
+        'input[type="checkbox"]',
+      );
+      expect(box?.required).toBe(true);
+      expect(box?.getAttribute("aria-required")).toBe("true");
+      const form = box?.closest("form");
+      expect(form).toBeTruthy();
+      expect(form?.checkValidity()).toBe(false);
+      const before = f.request.mock.calls.length;
+      await act(async () =>
+        form?.dispatchEvent(
+          new Event("submit", { bubbles: true, cancelable: true }),
+        ),
+      );
+      expect(f.request).toHaveBeenCalledTimes(before);
+      expect(
+        f.request.mock.calls.some(
+          ([path, options]) =>
+            path.endsWith("/withdrawals") && options?.method === "POST",
+        ),
+      ).toBe(false);
+    } finally {
+      f.cleanup();
+    }
+  });
+  it.each(["FAILED", "CANCELLED"] as const)(
+    "shows the actual %s stored result instead of an ongoing transfer",
+    async (state) => {
+      const prior = {
+        ...existing(),
+        withdrawal: { ...existing().withdrawal, state },
+      };
+      const f = await fixture({
+        ...context("2"),
+        recoverableRequests: [prior],
+      });
+      try {
+        f.setRequest(prior);
+        const { writeWithdrawalMarker } = await import("./withdrawalClient");
+        writeWithdrawalMarker(f.storage, {
+          version: 1,
+          siteId: access.siteId,
+          operatorUserId: access.userId,
+          mode: "sandbox",
+          requestId: "request-a",
+        });
+        const { node } = await mount(f);
+        expect(node.textContent).toContain(
+          state === "FAILED" ? "Saque não concluído." : "Saque cancelado.",
+        );
+        expect(node.textContent).not.toContain(
+          "Transferência em acompanhamento",
+        );
+      } finally {
+        f.cleanup();
+      }
+    },
+  );
+  it("reports a rejected password through toast without inline notification blocks", async () => {
+    const error = vi.spyOn(toast, "error");
+    const f = await fixture(openContext());
+    try {
+      const native = required(f.request.getMockImplementation());
+      f.request.mockImplementation((path, options) =>
+        path.endsWith("/financial-reauthentication")
+          ? Promise.reject(new ApiError(403, "RECENT_AUTH_REQUIRED"))
+          : native(path, options),
+      );
+      const { node } = await mount(f);
+      const input = required(
+        document.querySelector<HTMLInputElement>('input[type="password"]'),
+      );
+      input.value = "synthetic-wrong-password";
+      await act(async () =>
+        required(input.closest("form")).dispatchEvent(
+          new Event("submit", { bubbles: true, cancelable: true }),
+        ),
+      );
+      expect(error).toHaveBeenCalledWith(
+        "Não foi possível confirmar a senha. Confira os dados e tente novamente.",
+      );
+      expect(node.querySelector('[role="alert"], [role="status"]')).toBeNull();
+      expect(input.value).toBe("");
+    } finally {
+      f.cleanup();
+    }
+  });
+  it("uses toast feedback and a busy label for an explicit failed situation read", async () => {
+    const error = vi.spyOn(toast, "error");
+    const f = await fixture();
+    const pending = deferred<unknown>();
+    try {
+      const { node } = await mount(f);
+      const native = required(f.request.getMockImplementation());
+      f.request.mockImplementation((path, options) =>
+        path.endsWith("/context") ? pending.promise : native(path, options),
+      );
+      await act(async () =>
+        required(
+          [...node.querySelectorAll("button")].find(
+            (button) => button.textContent === "Consultar situação",
+          ),
+        ).click(),
+      );
+      expect(
+        [...node.querySelectorAll("button")].some(
+          (button) => button.disabled && button.textContent === "Consultando…",
+        ),
+      ).toBe(true);
+      await act(async () => {
+        pending.reject(new ApiError(503, "SERVICE_UNAVAILABLE"));
+      });
+      expect(error).toHaveBeenCalledWith(
+        "Não foi possível verificar a situação do saque. Consulte novamente.",
+      );
+      expect(node.querySelector('[role="alert"], [role="status"]')).toBeNull();
+      expect(node.textContent).not.toContain(
+        "Não foi possível verificar a situação do saque.",
+      );
+    } finally {
+      f.cleanup();
+    }
+  });
   it("updates the actual DOM at quote expiry and retains explicit seal recovery", async () => {
     const f = await fixture(openContext());
     const { node } = await mount(f);
@@ -2430,18 +2751,25 @@ describe("actual React withdrawal DOM", () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(60000);
     });
-    expect(node.textContent).toContain("A prévia expirou");
+    expect(node.textContent).toContain("Prévia expirada");
     const confirm = required(
       [...node.querySelectorAll("button")].find(
-        (value) => value.textContent === "Confirmar solicitação de saque",
+        (value) =>
+          value.textContent === "Prévia expirada — encerre a solicitação",
       ),
     );
     expect(confirm.disabled).toBe(true);
-    expect(node.querySelector('input[type="password"]')).not.toBeNull();
+    expect(document.querySelector('input[type="password"]')).toBeNull();
+    expect(
+      [...node.querySelectorAll("button")].some(
+        (button) => button.textContent === "Confirmar senha",
+      ),
+    ).toBe(true);
     expect(f.request).toHaveBeenCalledTimes(count);
     f.cleanup();
   });
   it("explicitly seals from real password and terms controls without confirmation POST", async () => {
+    const success = vi.spyOn(toast, "success");
     const f = await fixture(openContext());
     const token = `fr1.cHJvb2Y.${"A".repeat(43)}`;
     const native = required(f.request.getMockImplementation());
@@ -2476,7 +2804,7 @@ describe("actual React withdrawal DOM", () => {
           : native(path, options),
     );
     const { node } = await mount(f);
-    const input = node.querySelector(
+    const input = document.querySelector(
       'input[type="password"]',
     ) as HTMLInputElement;
     input.value = "synthetic-password";
@@ -2485,6 +2813,12 @@ describe("actual React withdrawal DOM", () => {
         new Event("submit", { bubbles: true, cancelable: true }),
       );
     });
+    expect(success).toHaveBeenCalledWith(
+      "Senha confirmada. Agora confirme os termos do saque.",
+    );
+    expect(node.textContent).not.toContain(
+      "Senha confirmada para esta finalidade",
+    );
     await act(async () => {
       (
         node.querySelector('input[type="checkbox"]') as HTMLInputElement
@@ -2497,8 +2831,9 @@ describe("actual React withdrawal DOM", () => {
         ),
       ).click();
     });
-    expect(node.textContent).toContain("encerrada sem criar uma reserva");
-    expect(node.querySelector('input[type="password"]')).toBeNull();
+    expect(node.textContent).toContain("Solicitação encerrada sem reserva.");
+    expect(success).toHaveBeenCalledWith("Solicitação encerrada sem reserva.");
+    expect(document.querySelector('input[type="password"]')).toBeNull();
     expect(f.storage.data.size).toBe(0);
     expect(
       f.request.mock.calls.filter(
@@ -2511,6 +2846,7 @@ describe("actual React withdrawal DOM", () => {
     f.cleanup();
   });
   it("actual unmount fences a delayed proof and replacement creates a fresh holder", async () => {
+    const success = vi.spyOn(toast, "success");
     const f = await fixture(openContext());
     const pending = deferred<unknown>();
     const native = required(f.request.getMockImplementation());
@@ -2520,7 +2856,7 @@ describe("actual React withdrawal DOM", () => {
         : native(path, options),
     );
     const first = await mount(f);
-    const input = first.node.querySelector(
+    const input = document.querySelector(
       'input[type="password"]',
     ) as HTMLInputElement;
     input.value = "synthetic-password";
@@ -2545,8 +2881,9 @@ describe("actual React withdrawal DOM", () => {
         expiresAt: new Date(start + 180000).toISOString(),
       });
     });
+    expect(success).not.toHaveBeenCalled();
     expect(f.request).toHaveBeenCalledTimes(calls);
-    expect(second.node.querySelector('input[type="password"]')).not.toBeNull();
+    expect(document.querySelector('input[type="password"]')).not.toBeNull();
     expect(second.node.textContent).not.toContain("Senha confirmada");
     expect(
       f.request.mock.calls.filter(
@@ -2605,7 +2942,7 @@ describe("actual React withdrawal DOM", () => {
           : native(path, options),
     );
     const { node } = await mount(f);
-    const input = node.querySelector(
+    const input = document.querySelector(
       'input[type="password"]',
     ) as HTMLInputElement;
     input.value = "synthetic-password";
@@ -2623,7 +2960,7 @@ describe("actual React withdrawal DOM", () => {
       f.owner.invalidate(false);
       fresh.resolve(actor);
     });
-    expect(node.querySelector('input[type="password"]')).toBeNull();
+    expect(document.querySelector('input[type="password"]')).toBeNull();
     expect(node.innerHTML).not.toContain(response.reauthenticationToken);
     expect([...f.storage.data.values()].join()).not.toContain(
       response.reauthenticationToken,
@@ -2643,7 +2980,7 @@ describe("actual React withdrawal DOM", () => {
         : native(path, options),
     );
     const { node } = await mount(f);
-    const input = node.querySelector(
+    const input = document.querySelector(
       'input[type="password"]',
     ) as HTMLInputElement;
     input.value = "synthetic-password";
@@ -2729,8 +3066,10 @@ describe("actual React withdrawal DOM", () => {
     });
     f.setRequest(pending);
     const { node } = await mount(f);
-    expect(node.textContent).toContain("A referência original foi preservada");
-    expect(node.querySelector('input[type="password"]')).toBeNull();
+    expect(node.textContent).toContain(
+      "Resultado em verificação. Consulte a situação.",
+    );
+    expect(document.querySelector('input[type="password"]')).toBeNull();
     expect(f.request.mock.calls.filter(([, options]) => options)).toHaveLength(
       postCount,
     );
@@ -2760,16 +3099,16 @@ describe("actual React withdrawal DOM", () => {
     expect(node.textContent).not.toMatch(
       /crédito confirmado|beneficiário verificado/i,
     );
-    expect(node.querySelector('input[type="password"]')).not.toBeNull();
+    expect(document.querySelector('input[type="password"]')).not.toBeNull();
     f.cleanup();
   });
   it("owner loss retracts password immediately and stale denial cannot revoke replacement", async () => {
     const f = await fixture(openContext());
-    const { node } = await mount(f);
+    await mount(f);
     await act(async () => {
       f.owner.invalidate(false);
     });
-    expect(node.querySelector('input[type="password"]')).toBeNull();
+    expect(document.querySelector('input[type="password"]')).toBeNull();
     expect(f.request.mock.calls.every(([, options]) => !options)).toBe(true);
     f.cleanup();
   });

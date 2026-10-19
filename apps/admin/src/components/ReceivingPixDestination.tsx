@@ -7,7 +7,7 @@ import {
   receivingPixDestinationSavedResponseSchema,
   receivingPixDestinationSavedSchema,
 } from "@entrelacos/contracts";
-import { Button, Input, showSandboxNotice } from "@entrelacos/ui";
+import { Button, Input, showSandboxNotice, toast } from "@entrelacos/ui";
 import {
   type FormEvent,
   type ReactNode,
@@ -154,13 +154,13 @@ export function createReceivingPixDestinationController(
     getState: () => structuredClone(state),
     isCurrent: current,
     resetReview() {
-      if (busy() || state.status === "unknown") return;
+      if (state.status === "saving" || state.status === "unknown") return;
       revision++;
       clearTimer();
       update({ ...state, status: "idle", review: null });
       notify();
     },
-    async load() {
+    async load(feedback = false) {
       if (!current() || busy()) return;
       const active = ++revision;
       clearTimer();
@@ -191,11 +191,15 @@ export function createReceivingPixDestinationController(
             ? null
             : scopedSaved(response.destination);
         update({ status: "ready", review: null, saved });
+        if (feedback && current() && revision === active)
+          toast.success("Destino Pix consultado.");
       } catch (cause) {
         if (current() && revision === active) {
           report(cause);
           if (current())
             update({ status: "unavailable", review: null, saved: null });
+          if (feedback && current() && revision === active)
+            toast.error("Não foi possível consultar o destino Pix salvo.");
         }
       } finally {
         if (!disposed && revision === active && busy())
@@ -209,6 +213,7 @@ export function createReceivingPixDestinationController(
       if (!input.success) {
         update({ ...state, status: "invalid", review: null });
         notify();
+        if (current()) toast.error("Confira a chave Pix e o tipo selecionado.");
         return;
       }
       const active = ++revision;
@@ -246,6 +251,10 @@ export function createReceivingPixDestinationController(
         )
           throw new Error("Pix review scope mismatch");
         update({ ...state, status: "ready", review });
+        if (current() && revision === active)
+          toast.success(
+            "Destinatário consultado. Confira os dados antes de salvar.",
+          );
         timer = setTimeout(() => {
           if (current() && revision === active) {
             update({ ...state, status: "expired", review: null });
@@ -268,6 +277,14 @@ export function createReceivingPixDestinationController(
                 : "unavailable",
           review: null,
         });
+        if (current() && revision === active)
+          toast.error(
+            state.status === "limited"
+              ? "Limite de consultas atingido. Aguarde antes de tentar novamente."
+              : state.status === "unsupported"
+                ? "Esta chave não está disponível para consulta. Confira o tipo e a chave Pix."
+                : "Não foi possível consultar o destinatário Pix.",
+          );
       } finally {
         if (!disposed && revision === active && busy())
           update({ ...state, status: "idle" });
@@ -290,6 +307,8 @@ export function createReceivingPixDestinationController(
       const reauthenticationToken = consumeProof();
       if (!reauthenticationToken) {
         update({ ...state, status: "authentication_required" });
+        if (current())
+          toast.error("Confirme sua senha para salvar o destino Pix.");
         return;
       }
       if (!guard.isCurrent() || state.review !== review) return;
@@ -332,6 +351,8 @@ export function createReceivingPixDestinationController(
             throw new Error("Saved Pix destination differs from review");
         update({ status: "ready", review: null, saved });
         notify();
+        if (current() && revision === active)
+          toast.success("Destino Pix salvo.");
       } catch (cause) {
         if (!current() || revision !== active) return;
         report(cause);
@@ -345,6 +366,14 @@ export function createReceivingPixDestinationController(
           update({ ...state, status: "expired", review: null });
         else update({ ...state, status: "unknown", review: null });
         notify();
+        if (current() && revision === active)
+          toast.error(
+            state.status === "unknown"
+              ? "Não foi possível confirmar se o destino foi salvo. Consulte o destino salvo antes de alterar novamente."
+              : state.status === "authentication_required"
+                ? "Confirme sua senha para salvar o destino Pix."
+                : "A consulta expirou ou a configuração mudou. Consulte a chave novamente.",
+          );
       } finally {
         if (!disposed && revision === active && busy())
           update({ ...state, status: "unknown", review: null });
@@ -408,7 +437,7 @@ export function ReceivingPixDestination(props: {
       }}
       onReset={() => controller.current?.resetReview()}
       onRefresh={() => {
-        void controller.current?.load();
+        void controller.current?.load(true);
       }}
       onConfirm={(confirmed, thirdParty) => {
         void controller.current?.confirm(
@@ -424,6 +453,8 @@ export function ReceivingPixDestination(props: {
           ref={authentication}
           {...props.scope}
           action="CONFIGURE_RECEIVING"
+          dialog
+          feedback="toast"
           guard={controller.current.guard}
           request={props.ports?.request}
           now={props.ports?.now}
@@ -454,12 +485,19 @@ export function ReceivingPixDestinationView({
   children?: ReactNode;
 }) {
   const id = useId();
+  const [editing, setEditing] = useState(false);
   const [type, setType] = useState<ReceivingPixDestinationInput["type"]>(
       mode === "sandbox" ? "PHONE" : "CPF",
     ),
     [key, setKey] = useState("");
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Only a newly saved destination closes the editor; lookup updates preserve its draft.
+  useLayoutEffect(() => {
+    setEditing(false);
+    setKey("");
+  }, [state.saved?.destinationId, state.saved?.version]);
   const busy = ["loading", "saving"].includes(state.status),
     locked = !enabled || busy || state.status === "unknown";
+  const showEditor = !readOnly && (!state.saved || editing);
   function submit(event: FormEvent) {
     event.preventDefault();
     if (!locked) onLookup?.({ type, key });
@@ -475,7 +513,11 @@ export function ReceivingPixDestinationView({
         documento e o banco retornados pelo Asaas antes de confirmar. Salvar o
         destino não envia dinheiro.
       </p>
-      {showSandboxNotice(mode) && !readOnly && (
+      <p>
+        Cada casamento mantém um destino Pix ativo. Salvar uma alteração
+        substitui o destino anterior.
+      </p>
+      {showSandboxNotice(mode) && showEditor && (
         <p>
           No Sandbox, use um exemplo de teste: tipo Celular, chave 47996515839,
           ou tipo E-mail, chave cliente-a00001@pix.bcb.gov.br. Os dados
@@ -483,19 +525,33 @@ export function ReceivingPixDestinationView({
         </p>
       )}
       {state.saved && (
-        <>
-          <h4>Destino Pix salvo</h4>
+        <section
+          aria-label="Seu destino Pix salvo"
+          className="grid gap-3 rounded-lg border border-admin-line p-4"
+        >
+          <h4>Seu destino Pix salvo</h4>
           <PixRecipientDetails recipient={state.saved} />
-          <p role="status">
-            Configuração salva. Em Financeiro, o titular pode revisar os valores
-            e o destinatário antes de confirmar cada saque.
-          </p>
-        </>
+          {!readOnly && !editing && (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={locked}
+              onClick={() => {
+                onReset?.();
+                setType(state.saved?.keyType ?? type);
+                setKey("");
+                setEditing(true);
+              }}
+            >
+              Alterar destino Pix
+            </Button>
+          )}
+        </section>
       )}
       {readOnly && !state.saved && state.status === "ready" && (
         <p>Nenhum destino Pix foi configurado.</p>
       )}
-      {!readOnly && (
+      {showEditor && (
         <form className="grid gap-3" onSubmit={submit} autoComplete="off">
           <label htmlFor={`${id}-type`}>Tipo de chave Pix</label>
           <select
@@ -522,7 +578,9 @@ export function ReceivingPixDestinationView({
               </option>
             ))}
           </select>
-          <label htmlFor={`${id}-key`}>Chave Pix do destinatário</label>
+          <label htmlFor={`${id}-key`}>
+            {state.saved ? "Nova chave Pix" : "Chave Pix do destinatário"}
+          </label>
           <Input
             id={`${id}-key`}
             type="text"
@@ -540,49 +598,29 @@ export function ReceivingPixDestinationView({
               ? "Consultando destinatário…"
               : "Consultar destinatário Pix"}
           </Button>
+          {state.saved && (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={state.status === "saving" || state.status === "unknown"}
+              onClick={() => {
+                onReset?.();
+                setEditing(false);
+                setKey("");
+              }}
+            >
+              Cancelar alteração
+            </Button>
+          )}
         </form>
       )}
-      {state.status === "invalid" && (
-        <p role="alert">
-          Confira a chave e o tipo selecionado. Use somente números para CPF,
-          CNPJ ou celular com DDD.
-        </p>
-      )}
-      {state.status === "limited" && (
-        <p role="alert">
-          Limite de consultas atingido. Aguarde um minuto antes de tentar
-          novamente.
-        </p>
-      )}
-      {state.status === "unsupported" && (
-        <p role="alert">
-          {showSandboxNotice(mode)
-            ? "Esta chave não está disponível para consulta no Sandbox. Utilize o exemplo de teste indicado."
-            : "Esta chave não está disponível para consulta. Confira o tipo e a chave Pix."}
-        </p>
-      )}
-      {state.status === "unavailable" && (
-        <p role="alert">
-          Não foi possível consultar a configuração Pix. Verifique a situação
-          antes de continuar.
-        </p>
-      )}
-      {state.status === "authentication_required" && (
-        <p role="alert">Confirme sua senha para salvar este destino Pix.</p>
-      )}
-      {state.status === "expired" && (
-        <p role="alert">
-          A consulta expirou ou a configuração mudou. Consulte a chave novamente
-          antes de salvar.
-        </p>
-      )}
       {state.status === "unknown" && (
-        <p role="alert">
-          Não foi possível confirmar se o destino foi salvo. Consulte o destino
-          salvo antes de fazer outra alteração.
+        <p>
+          Confirmação do destino pendente. Consulte o destino salvo antes de
+          alterar novamente.
         </p>
       )}
-      {state.review && (
+      {showEditor && state.review && (
         <>
           <PixRecipientDetails recipient={state.review} />
           <p role="status">
@@ -625,12 +663,22 @@ function PixRecipientDetails({
 }: {
   recipient: Pick<
     ReceivingPixDestinationReview,
-    "ownerName" | "maskedCpfCnpj" | "bankName" | "maskedKey"
+    "ownerName" | "maskedCpfCnpj" | "bankName" | "maskedKey" | "keyType"
   >;
 }) {
   return (
     <dl>
       {[
+        [
+          "Tipo de chave Pix",
+          {
+            CPF: "CPF",
+            CNPJ: "CNPJ",
+            EMAIL: "E-mail",
+            PHONE: "Celular",
+            EVP: "Chave aleatória",
+          }[recipient.keyType],
+        ],
         ["Nome completo do destinatário", recipient.ownerName],
         ["CPF/CNPJ retornado pelo Asaas", recipient.maskedCpfCnpj],
         ["Banco do destinatário", recipient.bankName],
@@ -659,38 +707,56 @@ function PixRecipientConfirmation({
     [thirdParty, setThirdParty] = useState(false);
   return (
     <div className="grid gap-3">
-      <label>
-        <input
-          type="checkbox"
-          checked={confirmed}
-          disabled={!enabled}
-          onChange={(event) => setConfirmed(event.target.checked)}
-        />{" "}
-        Conferi o nome completo, o banco, o documento e a chave consultada e
-        quero configurar este destinatário.
-      </label>
-      {review.identity !== "MATCH" && (
+      {children}
+      <form
+        className="grid gap-3"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (
+            event.currentTarget.reportValidity() &&
+            confirmed &&
+            (review.identity === "MATCH" || thirdParty)
+          )
+            onConfirm(confirmed, thirdParty);
+        }}
+      >
         <label>
           <input
             type="checkbox"
-            checked={thirdParty}
+            required
+            aria-required="true"
+            checked={confirmed}
             disabled={!enabled}
-            onChange={(event) => setThirdParty(event.target.checked)}
+            onChange={(event) => setConfirmed(event.target.checked)}
           />{" "}
-          Estou ciente de que o destino pode pertencer a outra pessoa ou ter
-          identificação incompleta e escolho prosseguir.
+          Conferi o nome completo, o banco, o documento e a chave consultada e
+          quero configurar este destinatário.
         </label>
-      )}
-      {children}
-      <Button
-        type="button"
-        disabled={
-          !enabled || !confirmed || (review.identity !== "MATCH" && !thirdParty)
-        }
-        onClick={() => onConfirm(confirmed, thirdParty)}
-      >
-        Salvar destino Pix
-      </Button>
+        {review.identity !== "MATCH" && (
+          <label>
+            <input
+              type="checkbox"
+              required
+              aria-required="true"
+              checked={thirdParty}
+              disabled={!enabled}
+              onChange={(event) => setThirdParty(event.target.checked)}
+            />{" "}
+            Estou ciente de que o destino pode pertencer a outra pessoa ou ter
+            identificação incompleta e escolho prosseguir.
+          </label>
+        )}
+        <Button
+          type="submit"
+          disabled={
+            !enabled ||
+            !confirmed ||
+            (review.identity !== "MATCH" && !thirdParty)
+          }
+        >
+          Salvar destino Pix
+        </Button>
+      </form>
     </div>
   );
 }

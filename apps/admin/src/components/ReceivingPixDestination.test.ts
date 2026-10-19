@@ -1,4 +1,5 @@
-import { createElement } from "react";
+import { act, createElement } from "react";
+import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -89,6 +90,135 @@ function fixture() {
   };
 }
 describe("Pix destination review", () => {
+  it("separates the one saved destination from the change form", () => {
+    const html = renderToStaticMarkup(
+      createElement(ReceivingPixDestinationView, {
+        mode: "sandbox",
+        state: { status: "ready", review: null, saved },
+        enabled: true,
+        onConfirm: vi.fn(),
+      }),
+    );
+    expect(html).toContain("Seu destino Pix salvo");
+    expect(html).toContain("Alterar destino Pix");
+    expect(html).toContain("um destino Pix ativo");
+    expect(html).toContain("Celular");
+    expect(html).not.toContain("Chave Pix do destinatário");
+    expect(html).not.toContain("Salvar destino Pix");
+  });
+  it("cancels editing without replacing the saved destination or submitting", async () => {
+    (
+      globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
+    ).IS_REACT_ACT_ENVIRONMENT = true;
+    const node = document.createElement("div");
+    document.body.append(node);
+    const root = createRoot(node);
+    const onConfirm = vi.fn(),
+      onLookup = vi.fn(),
+      onReset = vi.fn();
+    try {
+      await act(async () =>
+        root.render(
+          createElement(ReceivingPixDestinationView, {
+            mode: "sandbox",
+            state: { status: "ready", review: null, saved },
+            enabled: true,
+            onConfirm,
+            onLookup,
+            onReset,
+          }),
+        ),
+      );
+      await act(async () =>
+        [...node.querySelectorAll("button")]
+          .find((button) => button.textContent === "Alterar destino Pix")
+          ?.click(),
+      );
+      expect(node.querySelector('input[type="text"]')).not.toBeNull();
+      expect(node.textContent).toContain(saved.maskedKey);
+      await act(async () =>
+        [...node.querySelectorAll("button")]
+          .find((button) => button.textContent === "Cancelar alteração")
+          ?.click(),
+      );
+      expect(node.querySelector('input[type="text"]')).toBeNull();
+      expect(node.textContent).toContain(saved.maskedKey);
+      expect(onConfirm).not.toHaveBeenCalled();
+      expect(onLookup).not.toHaveBeenCalled();
+      expect(onReset).toHaveBeenCalled();
+    } finally {
+      await act(async () => root.unmount());
+      node.remove();
+    }
+  });
+  it.each(["MATCH", "MISMATCH"] as const)(
+    "requires native recipient consent and conditional third-party consent for %s",
+    async (identity) => {
+      (
+        globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
+      ).IS_REACT_ACT_ENVIRONMENT = true;
+      const node = document.createElement("div");
+      document.body.append(node);
+      const root = createRoot(node);
+      const onConfirm = vi.fn();
+      try {
+        await act(async () =>
+          root.render(
+            createElement(ReceivingPixDestinationView, {
+              mode: "sandbox",
+              state: {
+                status: "ready",
+                review: { ...review, identity },
+                saved: null,
+              },
+              enabled: true,
+              onConfirm,
+            }),
+          ),
+        );
+        const button = [...node.querySelectorAll("button")].find(
+          (value) => value.textContent === "Salvar destino Pix",
+        );
+        const form = button?.closest("form");
+        expect(form).toBeTruthy();
+        const boxes = [
+          ...node.querySelectorAll<HTMLInputElement>('input[type="checkbox"]'),
+        ];
+        expect(boxes).toHaveLength(identity === "MATCH" ? 1 : 2);
+        expect(
+          boxes.every(
+            (box) =>
+              box.required && box.getAttribute("aria-required") === "true",
+          ),
+        ).toBe(true);
+        expect(form?.checkValidity()).toBe(false);
+        await act(async () =>
+          form?.dispatchEvent(
+            new Event("submit", { bubbles: true, cancelable: true }),
+          ),
+        );
+        expect(onConfirm).not.toHaveBeenCalled();
+        await act(async () =>
+          boxes.forEach((box) => {
+            box.click();
+          }),
+        );
+        expect(form?.checkValidity()).toBe(true);
+        await act(async () =>
+          form?.dispatchEvent(
+            new Event("submit", { bubbles: true, cancelable: true }),
+          ),
+        );
+        expect(onConfirm).toHaveBeenCalledExactlyOnceWith(
+          true,
+          identity !== "MATCH",
+        );
+      } finally {
+        await act(async () => root.unmount());
+        node.remove();
+      }
+    },
+  );
   it("requires a new lookup when a review expires while Chrome is hidden", async () => {
     const v = fixture();
     await v.controller.lookup({ type: "PHONE", key: "47996515839" });
@@ -130,7 +260,7 @@ describe("Pix destination review", () => {
       }),
     );
     expect(html).toContain("Fictional Holder");
-    expect(html).toContain("Configuração salva");
+    expect(html).toContain("Seu destino Pix salvo");
     expect(html).not.toContain("<form");
     expect(html).not.toContain("Salvar destino Pix");
   });
@@ -314,3 +444,4 @@ describe("Pix destination review", () => {
     v.controller.dispose();
   });
 });
+// @vitest-environment jsdom

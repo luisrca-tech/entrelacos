@@ -1,9 +1,12 @@
 import type { SiteAccess } from "@entrelacos/contracts";
-import { createElement } from "react";
+import { toast } from "@entrelacos/ui";
+import { act, createElement, createRef } from "react";
+import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import {
   FinancialReauthenticationForm,
+  type FinancialReauthenticationHandle,
   FinancialReauthenticationView,
   mountFinancialReauthenticationController,
   submitFinancialPassword,
@@ -52,6 +55,207 @@ function render(state: FinancialReauthenticationState, candidate = scope) {
   );
 }
 describe("financial password confirmation form", () => {
+  it.each(["CONFIGURE_RECEIVING", "REQUEST_WITHDRAWAL"] as const)(
+    "keeps %s proof after the password modal closes and stops parent form submission",
+    async (action) => {
+      (
+        globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
+      ).IS_REACT_ACT_ENVIRONMENT = true;
+      const node = document.createElement("div");
+      document.body.append(node);
+      const root = createRoot(node);
+      const ref = createRef<FinancialReauthenticationHandle>();
+      const parentSubmit = vi.fn();
+      const request = vi.fn(async () => ({
+        reauthenticationToken: `fr1.cHJvb2Y.${"A".repeat(43)}`,
+        expiresAt: new Date(now + 180000).toISOString(),
+      }));
+      try {
+        await act(async () =>
+          root.render(
+            createElement(
+              "form",
+              { onSubmit: parentSubmit },
+              createElement(FinancialReauthenticationForm, {
+                ...scope,
+                action,
+                guard,
+                request,
+                now: () => now,
+                ref,
+                dialog: true,
+                feedback: "toast",
+              }),
+            ),
+          ),
+        );
+        expect(document.querySelector('input[type="password"]')).toBeNull();
+        await act(async () =>
+          node.querySelector<HTMLButtonElement>("button")?.click(),
+        );
+        const dialog = document.querySelector('[role="dialog"]');
+        expect(dialog).not.toBeNull();
+        expect(dialog?.getAttribute("aria-labelledby")).toBeTruthy();
+        expect(dialog?.getAttribute("aria-describedby")).toBeTruthy();
+        expect(
+          document.getElementById(dialog?.getAttribute("aria-labelledby") ?? "")
+            ?.textContent,
+        ).toBe("Confirme sua senha");
+        expect(
+          document.getElementById(
+            dialog?.getAttribute("aria-describedby") ?? "",
+          )?.textContent,
+        ).toContain(action === "CONFIGURE_RECEIVING" ? "destino Pix" : "saque");
+        const input = dialog?.querySelector<HTMLInputElement>(
+          'input[type="password"]',
+        );
+        expect(input).toBeTruthy();
+        if (!input) throw Error("Missing password dialog");
+        expect(document.activeElement).toBe(input);
+        input.value = "synthetic-password";
+        await act(async () =>
+          input
+            .closest("form")
+            ?.dispatchEvent(
+              new Event("submit", { bubbles: true, cancelable: true }),
+            ),
+        );
+        expect(parentSubmit).not.toHaveBeenCalled();
+        expect(request).toHaveBeenCalledTimes(1);
+        expect(document.querySelector('[role="dialog"]')).toBeNull();
+        await act(async () => {
+          expect(ref.current?.consumeProof()).toBe(
+            `fr1.cHJvb2Y.${"A".repeat(43)}`,
+          );
+          expect(ref.current?.consumeProof()).toBeNull();
+        });
+      } finally {
+        await act(async () => root.unmount());
+        node.remove();
+      }
+    },
+  );
+  it("cancels a pending password modal without retaining late proof or sending a financial action", async () => {
+    (
+      globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
+    ).IS_REACT_ACT_ENVIRONMENT = true;
+    const node = document.createElement("div");
+    document.body.append(node);
+    const root = createRoot(node);
+    const ref = createRef<FinancialReauthenticationHandle>();
+    let resolve!: (value: unknown) => void;
+    const request = vi.fn(
+      () =>
+        new Promise((resolveValue) => {
+          resolve = resolveValue;
+        }),
+    );
+    const success = vi.spyOn(toast, "success");
+    try {
+      await act(async () =>
+        root.render(
+          createElement(FinancialReauthenticationForm, {
+            ...scope,
+            guard,
+            request,
+            now: () => now,
+            ref,
+            dialog: true,
+            feedback: "toast",
+          }),
+        ),
+      );
+      await act(async () =>
+        node.querySelector<HTMLButtonElement>("button")?.click(),
+      );
+      const input = document.querySelector<HTMLInputElement>(
+        'input[type="password"]',
+      );
+      if (!input) throw Error("Missing password dialog");
+      input.value = "synthetic-password";
+      await act(async () =>
+        input
+          .closest("form")
+          ?.dispatchEvent(
+            new Event("submit", { bubbles: true, cancelable: true }),
+          ),
+      );
+      await act(async () =>
+        [...document.querySelectorAll("button")]
+          .find((button) => button.textContent === "Cancelar")
+          ?.click(),
+      );
+      await act(async () =>
+        resolve({
+          reauthenticationToken: `fr1.cHJvb2Y.${"A".repeat(43)}`,
+          expiresAt: new Date(now + 180000).toISOString(),
+        }),
+      );
+      expect(ref.current?.consumeProof()).toBeNull();
+      expect(success).not.toHaveBeenCalled();
+      expect(request).toHaveBeenCalledTimes(1);
+      await act(async () =>
+        node.querySelector<HTMLButtonElement>("button")?.click(),
+      );
+      expect(
+        document.querySelector<HTMLInputElement>('input[type="password"]')
+          ?.value,
+      ).toBe("");
+    } finally {
+      await act(async () => root.unmount());
+      node.remove();
+      success.mockRestore();
+    }
+  });
+  it("closes on Escape, clears the password and returns focus to its trigger", async () => {
+    (
+      globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
+    ).IS_REACT_ACT_ENVIRONMENT = true;
+    const node = document.createElement("div");
+    document.body.append(node);
+    const root = createRoot(node);
+    const ref = createRef<FinancialReauthenticationHandle>();
+    const request = vi.fn();
+    try {
+      await act(async () =>
+        root.render(
+          createElement(FinancialReauthenticationForm, {
+            ...scope,
+            guard,
+            request,
+            now: () => now,
+            ref,
+            dialog: true,
+            feedback: "toast",
+          }),
+        ),
+      );
+      const trigger = node.querySelector<HTMLButtonElement>("button");
+      await act(async () => trigger?.click());
+      const input = document.querySelector<HTMLInputElement>(
+        'input[type="password"]',
+      );
+      if (!input) throw Error("Missing password dialog");
+      input.value = "discard-this-password";
+      await act(async () =>
+        input.dispatchEvent(
+          new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+        ),
+      );
+      expect(document.querySelector('[role="dialog"]')).toBeNull();
+      expect(document.activeElement).toBe(trigger);
+      expect(ref.current?.consumeProof()).toBeNull();
+      expect(request).not.toHaveBeenCalled();
+      await act(async () => trigger?.click());
+      expect(
+        document.querySelector<HTMLInputElement>('input[type="password"]')
+          ?.value,
+      ).toBe("");
+    } finally {
+      await act(async () => root.unmount());
+      node.remove();
+    }
+  });
   it("does not mount a password action without the reviewed context guard", () => {
     const html = renderToStaticMarkup(
       createElement(FinancialReauthenticationForm, scope),
@@ -237,3 +441,4 @@ describe("financial password confirmation form", () => {
     await pending;
   });
 });
+// @vitest-environment jsdom

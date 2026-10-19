@@ -216,7 +216,12 @@ export function createWithdrawalComposition(
     maxResponseBytes: 262144,
     now,
   });
-  const basePresentation = createWithdrawalStoredPresentationLoader(receiving);
+  const basePresentation = createWithdrawalStoredPresentationLoader({
+    mode,
+    applicationEnvironment,
+    freshnessMs: receiving.freshnessMs,
+    now,
+  });
   async function account(
     tx: ReceivingTransaction,
     scope: { siteId: string; accountId?: string; accountReference?: string },

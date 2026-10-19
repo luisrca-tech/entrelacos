@@ -331,11 +331,20 @@ export function compareWithdrawalContexts(
         observedAt: null,
       })),
     });
-    return equal(stable(a), stable(b))
-      ? timeOrder === "older"
-        ? "older"
-        : "same"
-      : "incomparable";
+    const beforeState = stable(a);
+    const afterState = stable(b);
+    if (equal(beforeState, afterState))
+      return timeOrder === "older" ? "older" : "same";
+    // Receiving readiness can change without advancing withdrawal request revisions.
+    if (
+      timeOrder !== "same" &&
+      equal(
+        { ...beforeState, newRequestAllowed: null, reason: null },
+        { ...afterState, newRequestAllowed: null, reason: null },
+      )
+    )
+      return timeOrder;
+    return "incomparable";
   }
   if (
     (order === "newer" && timeOrder === "older") ||
