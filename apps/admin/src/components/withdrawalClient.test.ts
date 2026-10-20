@@ -727,6 +727,52 @@ describe("withdrawal authoritative ordering", () => {
 });
 
 describe("minimal withdrawal correlation marker", () => {
+  it("retains a strict original preview body without upgrading or downgrading markers", () => {
+    const storage = memoryStorage();
+    const resumable = {
+      ...marker,
+      version: 2 as const,
+      previewInput: { requestId, amountCents: 10000, scopeRevision: "0" },
+    };
+    writeWithdrawalMarker(storage, resumable);
+    expect(
+      readWithdrawalMarker(storage, siteId, marker.operatorUserId),
+    ).toEqual(resumable);
+    expect(() => writeWithdrawalMarker(storage, marker)).toThrow();
+    expect(() =>
+      writeWithdrawalMarker(storage, {
+        ...resumable,
+        previewInput: { ...resumable.previewInput, amountCents: 20000 },
+      }),
+    ).toThrow();
+    expect(removeWithdrawalMarker(storage, resumable)).toBe(true);
+    writeWithdrawalMarker(storage, marker);
+    expect(() => writeWithdrawalMarker(storage, resumable)).toThrow();
+  });
+  it.each([
+    { requestId: "other", amountCents: 10000, scopeRevision: "0" },
+    { requestId, amountCents: 0, scopeRevision: "0" },
+    { requestId, amountCents: 10000, scopeRevision: "-1" },
+    {
+      requestId,
+      amountCents: 10000,
+      scopeRevision: "0",
+      reauthenticationToken: token,
+    },
+  ])("rejects invalid original preview bodies %j", (previewInput) => {
+    const storage = memoryStorage();
+    storage.setItem(
+      withdrawalMarkerKey(siteId, marker.operatorUserId),
+      JSON.stringify({
+        ...marker,
+        version: 2,
+        previewInput,
+      }),
+    );
+    expect(() =>
+      readWithdrawalMarker(storage, siteId, marker.operatorUserId),
+    ).toThrow();
+  });
   it("propagates write/remove denial while preserving the retained correlation", () => {
     const storage = memoryStorage();
     vi.mocked(storage.setItem).mockImplementation(() => {

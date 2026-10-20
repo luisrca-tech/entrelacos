@@ -86,7 +86,9 @@ export function readWithdrawalPayoutBinding(
       unavailable();
   }
   if (!(raw.maskedKey as string).includes("***")) unavailable();
-  return Object.freeze({ ...raw }) as unknown as WithdrawalPayoutBinding;
+  return Object.freeze(
+    Object.fromEntries(keys.map((key) => [key, raw[key]])),
+  ) as unknown as WithdrawalPayoutBinding;
 }
 export function sameWithdrawalPayout(
   left: WithdrawalPayoutBinding | undefined,

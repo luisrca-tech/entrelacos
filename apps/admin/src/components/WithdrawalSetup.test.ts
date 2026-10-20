@@ -131,6 +131,25 @@ function open(
     },
   };
 }
+function unresolved(
+  revision = "0",
+): WithdrawalRequestStatus & { state: "UNRESOLVED" } {
+  return {
+    siteId: access.siteId,
+    requestId: "request-a",
+    mode: "sandbox",
+    state: "UNRESOLVED",
+    scopeRevision: revision,
+    requestRevision: null,
+    observedAt: new Date(start).toISOString(),
+    observationOrder: {
+      scopeRevision: revision,
+      requestRevision: null,
+      recordUpdatedAtMicroseconds: null,
+    },
+    command: null,
+  };
+}
 function openContext(value = open()): WithdrawalRequestContext {
   return {
     ...context("1"),
@@ -1811,6 +1830,349 @@ async function mount(f: Awaited<ReturnType<typeof fixture>>) {
 }
 
 describe("withdrawal setup owned source lifecycle", () => {
+  async function failedPreview() {
+    const f = await fixture();
+    const native = required(f.request.getMockImplementation());
+    f.request.mockImplementation((path, options) => {
+      if (path.endsWith("/preview"))
+        throw new ApiError(503, "WITHDRAWAL_UNAVAILABLE");
+      return native(path, options);
+    });
+    await f.controller.refresh();
+    expect(await f.controller.preview("100")).toBe(false);
+    f.setRequest(unresolved());
+    await f.controller.refresh();
+    expect(f.controller.canResumePreview()).toBe(true);
+    return { ...f, native };
+  }
+  it.each(["legacy", "scope", "command", "record", "mode", "blocked", "clock"])(
+    "does not resume an unverifiable %s preview",
+    async (scenario) => {
+      const f = await failedPreview();
+      const before = required([...f.storage.data.values()][0]);
+      if (scenario === "legacy") {
+        const marker = JSON.parse(before);
+        delete marker.previewInput;
+        marker.version = 1;
+        f.storage.data.set(
+          required([...f.storage.data.keys()][0]),
+          JSON.stringify(marker),
+        );
+      }
+      if (scenario === "scope") {
+        f.setContext(context("1"));
+        f.setRequest(unresolved("1"));
+      }
+      if (scenario === "command")
+        f.setRequest({
+          ...unresolved(),
+          command: {
+            requestId: "request-a",
+            amountCents: 10000,
+            destinationVersion: 3,
+          },
+        });
+      if (scenario === "record")
+        f.setRequest({
+          ...unresolved(),
+          observationOrder: {
+            ...unresolved().observationOrder,
+            recordUpdatedAtMicroseconds: String(BigInt(start) * 1000n),
+          },
+        });
+      if (scenario === "mode") f.setContext({ ...context(), mode: "live" });
+      if (scenario === "blocked")
+        f.setContext({
+          ...context(),
+          newRequestAllowed: false,
+          reason: "DESTINATION_UNAVAILABLE",
+        });
+      if (scenario === "clock") vi.setSystemTime(start - 1);
+      await f.controller.refresh();
+      expect(f.controller.canResumePreview()).toBe(false);
+      expect(await f.controller.resumePreview()).toBe(false);
+      expect(
+        f.request.mock.calls.filter(([, options]) => options),
+      ).toHaveLength(1);
+      expect(f.storage.removeItem).not.toHaveBeenCalled();
+      expect(f.ports.newRequestId).toHaveBeenCalledTimes(1);
+      f.cleanup();
+    },
+  );
+  it.each(["error", "amount", "site", "older", "future"])(
+    "keeps the original correlation after a resumed preview %s",
+    async (scenario) => {
+      const f = await failedPreview();
+      const marker = required([...f.storage.data.values()][0]);
+      f.request.mockImplementation((path, options) => {
+        if (!path.endsWith("/preview")) return f.native(path, options);
+        if (scenario === "error")
+          throw new ApiError(503, "WITHDRAWAL_UNAVAILABLE");
+        const value = open();
+        if (scenario === "amount") {
+          value.preview.amountCents = 20000;
+          value.preview.netCents = 19750;
+        }
+        if (scenario === "site") {
+          value.siteId = "another";
+          value.preview.siteId = "another";
+        }
+        if (scenario === "older") {
+          value.scopeRevision = "0";
+          value.observationOrder.scopeRevision = "0";
+        }
+        if (scenario === "future")
+          value.observedAt = new Date(start + 1).toISOString();
+        return Promise.resolve({ request: value });
+      });
+      expect(await f.controller.resumePreview()).toBe(false);
+      expect(f.controller.getState().uncertain).toBe(true);
+      expect(f.controller.getState().request?.state).toBe("UNRESOLVED");
+      expect([...f.storage.data.values()]).toEqual([marker]);
+      expect(f.ports.newRequestId).toHaveBeenCalledTimes(1);
+      f.cleanup();
+    },
+  );
+  it("consults an already registered preview without replay and preserves v2 through confirmation", async () => {
+    const f = await failedPreview();
+    const marker = required([...f.storage.data.values()][0]);
+    f.request.mockImplementation(f.native);
+    f.setContext(openContext());
+    f.setRequest(open());
+    await f.controller.refresh();
+    expect(await f.controller.resumePreview()).toBe(false);
+    const consume = vi.fn(() => `fr1.cHJvb2Y.${"A".repeat(43)}`);
+    expect(await f.controller.act("CONFIRM_NEW", consume, true)).toBe(true);
+    expect(consume).toHaveBeenCalledTimes(1);
+    expect([...f.storage.data.values()]).toEqual([marker]);
+    expect(
+      f.request.mock.calls.filter(([path]) => path.endsWith("/preview")),
+    ).toHaveLength(1);
+    f.cleanup();
+  });
+  it("keeps v2 through explicit sealing and retires only that exact marker", async () => {
+    const f = await failedPreview();
+    f.setContext(openContext());
+    f.setRequest(open());
+    await f.controller.refresh();
+    f.request.mockImplementation((path, options) =>
+      path.endsWith("/seal")
+        ? Promise.resolve({
+            request: {
+              ...unresolved("2"),
+              state: "SEALED_NOT_CREATED",
+              requestRevision: "2",
+              observationOrder: {
+                scopeRevision: "2",
+                requestRevision: "2",
+                recordUpdatedAtMicroseconds: String(BigInt(start) * 1000n),
+              },
+              command: {
+                requestId: "request-a",
+                amountCents: 10000,
+                destinationVersion: 3,
+              },
+              sealedAt: new Date(start).toISOString(),
+            },
+          })
+        : f.native(path, options),
+    );
+    expect(
+      await f.controller.act(
+        "SEAL",
+        () => `fr1.cHJvb2Y.${"A".repeat(43)}`,
+        true,
+      ),
+    ).toBe(true);
+    expect(f.storage.data.size).toBe(0);
+    f.cleanup();
+  });
+  it("waits for an outstanding page before admitting a resumed preview", async () => {
+    const f = await failedPreview();
+    f.setContext({ ...context(), nextCursor: "next-page" });
+    await f.controller.refresh();
+    const page = deferred<unknown>();
+    f.request.mockImplementation((path, options) =>
+      path.includes("?cursor=") ? page.promise : f.native(path, options),
+    );
+    const work = f.controller.loadMore();
+    expect(await f.controller.resumePreview()).toBe(false);
+    expect(f.request.mock.calls.filter(([, options]) => options)).toHaveLength(
+      1,
+    );
+    page.resolve({ context: context() });
+    await work;
+    f.cleanup();
+  });
+  it("rechecks the original scope immediately before a resumed dispatch", async () => {
+    const f = await failedPreview();
+    f.setContext(context("1"));
+    f.setRequest(unresolved("1"));
+    expect(await f.controller.resumePreview()).toBe(false);
+    expect(f.request.mock.calls.filter(([, options]) => options)).toHaveLength(
+      1,
+    );
+    expect(f.storage.data.size).toBe(1);
+    f.cleanup();
+  });
+  it("requires a fresh read after repeated preview failure and keeps proof unavailable", async () => {
+    const f = await failedPreview();
+    const error = vi.spyOn(toast, "error");
+    const before = required([...f.storage.data.values()][0]);
+    expect(await f.controller.resumePreview()).toBe(false);
+    expect(error).toHaveBeenCalledWith(
+      "Não foi possível consultar a prévia. Consulte a situação antes de tentar novamente.",
+    );
+    expect(f.controller.canResumePreview()).toBe(false);
+    expect(f.controller.guard.isCurrent()).toBe(false);
+    await f.controller.refresh();
+    expect(f.controller.canResumePreview()).toBe(true);
+    expect([...f.storage.data.values()]).toEqual([before]);
+    f.cleanup();
+  });
+  it("does not resume across a marker replacement during fresh reads", async () => {
+    const f = await failedPreview();
+    const key = required([...f.storage.data.keys()][0]);
+    const changed = JSON.stringify({
+      ...JSON.parse(required(f.storage.data.get(key))),
+      requestId: "other",
+      previewInput: {
+        requestId: "other",
+        amountCents: 20000,
+        scopeRevision: "0",
+      },
+    });
+    f.request.mockImplementation((path, options) => {
+      if (path.includes("/requests/")) f.storage.data.set(key, changed);
+      return f.native(path, options);
+    });
+    expect(await f.controller.resumePreview()).toBe(false);
+    expect(f.request.mock.calls.filter(([, options]) => options)).toHaveLength(
+      1,
+    );
+    expect(f.storage.data.get(key)).toBe(changed);
+    f.cleanup();
+  });
+  it("does not dispatch when the final retained-marker read invalidates the owner", async () => {
+    const f = await failedPreview();
+    const proofRevision = f.controller.getState().proofRevision;
+    f.changed.mockImplementation((state) => {
+      if (state.busy && state.proofRevision > proofRevision) {
+        f.storage.getItem.mockImplementation((key) => {
+          f.owner.invalidate(false);
+          return f.storage.data.get(key) ?? null;
+        });
+      }
+    });
+    expect(await f.controller.resumePreview()).toBe(false);
+    expect(f.request.mock.calls.filter(([, options]) => options)).toHaveLength(
+      1,
+    );
+    expect(f.controller.getState().status).toBe("denied");
+    f.cleanup();
+  });
+  it("does not publish a resumed response after owner invalidation", async () => {
+    const f = await failedPreview();
+    const pending = deferred<unknown>();
+    f.request.mockImplementation((path, options) =>
+      path.endsWith("/preview") ? pending.promise : f.native(path, options),
+    );
+    const work = f.controller.resumePreview();
+    await vi.waitFor(() =>
+      expect(
+        f.request.mock.calls.filter(([path]) => path.endsWith("/preview")),
+      ).toHaveLength(2),
+    );
+    f.owner.invalidate(false);
+    pending.resolve({ request: open() });
+    expect(await work).toBe(false);
+    expect(f.controller.getState().status).toBe("denied");
+    expect(f.storage.data.size).toBe(1);
+    f.cleanup();
+  });
+  it("resumes only the preserved preview after a failed dispatch and actual remount", async () => {
+    const f = await fixture();
+    const native = required(f.request.getMockImplementation());
+    const pending = deferred<unknown>();
+    let previews = 0;
+    f.request.mockImplementation((path, options) => {
+      if (path.endsWith("/preview")) {
+        previews++;
+        if (previews === 1) throw new ApiError(503, "WITHDRAWAL_UNAVAILABLE");
+        return pending.promise;
+      }
+      return native(path, options);
+    });
+    await f.controller.refresh();
+    expect(await f.controller.preview("100")).toBe(false);
+    const body = {
+      requestId: "request-a",
+      amountCents: 10000,
+      scopeRevision: "0",
+    };
+    const marker = JSON.parse(required([...f.storage.data.values()][0]));
+    expect(marker).toEqual({
+      version: 2,
+      siteId: access.siteId,
+      operatorUserId: access.userId,
+      mode: "sandbox",
+      requestId: "request-a",
+      previewInput: body,
+    });
+    f.setRequest({
+      siteId: access.siteId,
+      requestId: "request-a",
+      mode: "sandbox",
+      state: "UNRESOLVED",
+      scopeRevision: "0",
+      requestRevision: null,
+      observedAt: new Date(start).toISOString(),
+      observationOrder: {
+        scopeRevision: "0",
+        requestRevision: null,
+        recordUpdatedAtMicroseconds: null,
+      },
+      command: null,
+    });
+    f.controller.dispose();
+    const success = vi.spyOn(toast, "success");
+    const { node } = await mount(f);
+    expect(previews).toBe(1);
+    const resume = required(
+      [...node.querySelectorAll("button")].find(
+        (button) => button.textContent === "Retomar prévia",
+      ),
+    );
+    expect(node.querySelector("#withdrawal-amount")).toBeNull();
+    expect(document.querySelector('input[type="password"]')).toBeNull();
+    await act(async () => resume.click());
+    expect(resume.disabled).toBe(true);
+    expect(node.textContent).toContain("Retomando prévia…");
+    await act(async () => resume.click());
+    expect(previews).toBe(2);
+    expect(
+      f.request.mock.calls
+        .filter(([path]) => path.endsWith("/preview"))
+        .map(([, options]) => options?.body),
+    ).toEqual([body, body]);
+    await act(async () => pending.resolve({ request: open() }));
+    expect(success).toHaveBeenCalledWith(
+      "Prévia pronta. Confira o destino, os valores e a validade antes de confirmar.",
+    );
+    expect(node.textContent).toContain("100,00");
+    expect(f.ports.newRequestId).toHaveBeenCalledTimes(1);
+    expect(
+      f.request.mock.calls
+        .filter(([, options]) => options)
+        .every(([path]) => path.endsWith("/preview")),
+    ).toBe(true);
+    expect(JSON.parse(required([...f.storage.data.values()][0]))).toEqual(
+      marker,
+    );
+    await act(async () => vi.advanceTimersByTimeAsync(60000));
+    expect(node.textContent).toContain("Prévia expirada");
+    f.cleanup();
+  });
   it("keeps automatic reads quiet and reports an explicit successful refresh", async () => {
     const success = vi.spyOn(toast, "success");
     const f = await fixture();
@@ -2482,11 +2844,16 @@ describe("withdrawal setup owned source lifecycle", () => {
     expect(f.storage.setItem).toHaveBeenCalledTimes(1);
     const stored = [...f.storage.data.values()][0];
     expect(JSON.parse(stored)).toEqual({
-      version: 1,
+      version: 2,
       siteId: access.siteId,
       operatorUserId: access.userId,
       mode: "sandbox",
       requestId: "request-a",
+      previewInput: {
+        requestId: "request-a",
+        amountCents: 10000,
+        scopeRevision: "0",
+      },
     });
     expect(f.request.mock.calls.find(([, options]) => options)?.[1]).toEqual({
       method: "POST",

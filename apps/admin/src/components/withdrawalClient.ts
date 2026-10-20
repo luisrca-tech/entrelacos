@@ -354,13 +354,14 @@ export function compareWithdrawalContexts(
   return order;
 }
 
-export type WithdrawalMarker = {
-  version: 1;
+type WithdrawalMarkerScope = {
   siteId: string;
   operatorUserId: string;
   mode: "sandbox" | "live";
   requestId: string;
 };
+export type WithdrawalMarker = WithdrawalMarkerScope &
+  ({ version: 1 } | { version: 2; previewInput: WithdrawalPreviewInput });
 export type WithdrawalStorage = Pick<
   Storage,
   "getItem" | "setItem" | "removeItem"
@@ -371,15 +372,15 @@ function parseMarker(value: unknown): WithdrawalMarker {
     throw new Error("Invalid withdrawal correlation");
   const record = value as Record<string, unknown>;
   const keys = ["version", "siteId", "operatorUserId", "mode", "requestId"];
+  if (record.version === 2) keys.push("previewInput");
   if (
     Object.keys(record).length !== keys.length ||
     !keys.every((key) => Object.hasOwn(record, key)) ||
-    record.version !== 1 ||
+    (record.version !== 1 && record.version !== 2) ||
     (record.mode !== "sandbox" && record.mode !== "live")
   )
     throw new Error("Invalid withdrawal correlation");
-  return {
-    version: 1,
+  const scope: WithdrawalMarkerScope = {
     siteId: siteIdSchema.parse(record.siteId),
     operatorUserId: meResponseSchema.shape.user.shape.id.parse(
       record.operatorUserId,
@@ -389,6 +390,11 @@ function parseMarker(value: unknown): WithdrawalMarker {
       record.requestId,
     ),
   };
+  if (record.version === 1) return { version: 1, ...scope };
+  const previewInput = withdrawalPreviewInputSchema.parse(record.previewInput);
+  if (previewInput.requestId !== scope.requestId)
+    throw new Error("Unexpected withdrawal preview correlation");
+  return { version: 2, ...scope, previewInput };
 }
 
 export function withdrawalMarkerKey(

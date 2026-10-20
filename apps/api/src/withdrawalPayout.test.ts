@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import {
   createWithdrawalPayoutBinding,
@@ -53,6 +54,28 @@ function fixture() {
   };
 }
 describe("immutable external payout consent binding", () => {
+  it("keeps the original producer serialization when stored payout keys are reordered", () => {
+    const payout = {
+      destinationId: "payout-1",
+      destinationVersion: 2,
+      configurationHash: "a".repeat(64),
+      reviewId: "review-1",
+      holderId: "holder-record-1",
+      holderConsentId: "holder-consent-1",
+      acceptThirdParty: true,
+      keyType: "EMAIL",
+      maskedKey: "c***@p***",
+      ownerName: "Sandbox Recipient",
+    };
+    const reordered = Object.fromEntries(Object.entries(payout).reverse());
+    const restored = readWithdrawalPayoutBinding(reordered);
+    expect(JSON.stringify(restored)).toBe(JSON.stringify(payout));
+    expect(Object.isFrozen(restored)).toBe(true);
+    expect(
+      createHash("sha256").update(JSON.stringify(restored)).digest("hex"),
+    ).toBe("c3bc03de9aeaeb0090070403132397250a4b434e95958d0671e95beaadb3e873");
+  });
+
   it("freezes reviewed destination and holder acknowledgement without plaintext keys", () => {
     const f = fixture();
     const bound = createWithdrawalPayoutBinding(

@@ -32,6 +32,20 @@ function camel(value: string) {
   );
 }
 
+function jsonbRoundTrip(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(jsonbRoundTrip);
+  if (!value || typeof value !== "object") return value;
+  return Object.fromEntries(
+    Object.entries(value)
+      .sort(
+        ([left], [right]) =>
+          left.length - right.length ||
+          (left < right ? -1 : left > right ? 1 : 0),
+      )
+      .map(([key, child]) => [key, jsonbRoundTrip(child)]),
+  );
+}
+
 function fixture() {
   const snapshot: WithdrawalReservationSnapshot = {
     intent: {
@@ -264,6 +278,7 @@ function fixture() {
     failInsert: "",
     commitAfterApplied: false,
     callbackClock: "",
+    jsonbRoundTrip: false,
     onQuery: null as ((text: string) => void) | null,
   };
   let before: typeof tables | null = null;
@@ -636,6 +651,8 @@ function fixture() {
           row.requestSnapshot = JSON.parse(row.requestSnapshot);
         if (typeof row.previewSnapshot === "string")
           row.previewSnapshot = JSON.parse(row.previewSnapshot);
+        if (faults.jsonbRoundTrip && row.previewSnapshot)
+          row.previewSnapshot = jsonbRoundTrip(row.previewSnapshot);
         tables[insert[1]].push(row);
         return { rows: [{ id: row.id }] };
       }
@@ -1915,6 +1932,167 @@ async function addRetainedWithdrawal(
   return { intent, operation };
 }
 describe("durable withdrawal request lifecycle", () => {
+  it("rereads an issued payout consent after PostgreSQL JSONB reorders nested keys without changing its hash", async () => {
+    const v = fixture();
+    v.tables.withdrawal_request.length = 0;
+    v.faults.jsonbRoundTrip = true;
+    const payout = {
+      destinationId: "payout-1",
+      destinationVersion: 2,
+      configurationHash: "a".repeat(64),
+      reviewId: "review-1",
+      holderId: "holder-record-1",
+      holderConsentId: "holder-consent-1",
+      acceptThirdParty: true,
+      keyType: "EMAIL" as const,
+      maskedKey: "c***@p***",
+      ownerName: "Sandbox Recipient",
+    };
+    const maskedDestination = `Pix ${payout.keyType}: ${payout.maskedKey}`;
+    Object.assign(v.presentation, { payout, maskedDestination });
+    const consent = readWithdrawalConsentSnapshot({
+      ...v.consentSnapshot,
+      preview: {
+        ...v.consentSnapshot.preview,
+        maskedDestination,
+        payoutRecipientName: payout.ownerName,
+      },
+      presentation: {
+        ...v.consentSnapshot.presentation,
+        payout,
+        maskedDestination,
+      },
+    });
+    const originalHash = hashWithdrawalConsentSnapshot(consent);
+    const repo = createWithdrawalReservationRepository(v.db, v.options);
+    expect(
+      await repo.issuePreview?.(consent, "0", requestAttempt(v)),
+    ).toMatchObject({ state: "OPEN", preview: consent.preview });
+    const reread = await repo.findConsent?.(requestAttempt(v));
+    expect(reread?.previewHash).toBe(originalHash);
+    expect(reread?.snapshot).toEqual(consent);
+    const stored = v.tables.withdrawal_request[0];
+    expect(
+      Object.keys(
+        (stored.previewSnapshot as typeof consent).presentation.payout ?? {},
+      ),
+    ).not.toEqual(Object.keys(payout));
+    expect(stored.previewHash).toBe(originalHash);
+    expect(v.tables.withdrawal_intent).toHaveLength(0);
+    expect(v.tables.financial_operation).toHaveLength(0);
+    const storedPayout = (stored.previewSnapshot as typeof consent).presentation
+      .payout;
+    if (!storedPayout) throw new Error("Missing stored payout");
+    storedPayout.configurationHash = "b".repeat(64);
+    await expect(repo.findConsent?.(requestAttempt(v))).rejects.toMatchObject({
+      code: "WITHDRAWAL_UNAVAILABLE",
+      status: 503,
+    });
+  });
+
+  it.each(["readRequest", "readContext"] as const)(
+    "keeps %s available after a local wall-clock correction while SQL time remains valid",
+    async (method) => {
+      const v = fixture();
+      v.tables.withdrawal_request.length = 0;
+      v.faults.onQuery = (text) => {
+        if (text.includes('FROM "site" st'))
+          v.clock.app = new Date(now.getTime() - 434);
+      };
+      const repo = createWithdrawalReservationRepository(v.db, v.options);
+      const result = await repo[method]?.(requestAttempt(v));
+      expect(result).toMatchObject(
+        method === "readRequest"
+          ? { state: "UNRESOLVED", command: null }
+          : { newRequestAllowed: true, reason: null },
+      );
+      expect(v.queries.some((query) => /^commit/i.test(query.sql))).toBe(true);
+      expect(
+        v.queries.some((query) => /^(INSERT|UPDATE|DELETE)/i.test(query.sql)),
+      ).toBe(false);
+    },
+  );
+
+  it("still rejects a regressing SQL clock during a read after local wall-clock correction", async () => {
+    const v = fixture();
+    v.tables.withdrawal_request.length = 0;
+    v.faults.onQuery = (text) => {
+      if (text.includes('FROM "site" st')) {
+        v.clock.app = new Date(now.getTime() - 434);
+        v.clock.sql = "2026-10-12 19:59:59.999999+00";
+      }
+    };
+    await expect(
+      createWithdrawalReservationRepository(v.db, v.options).readRequest?.(
+        requestAttempt(v),
+      ),
+    ).rejects.toMatchObject({ code: "WITHDRAWAL_UNAVAILABLE", status: 503 });
+  });
+
+  it("still checks SQL session expiry after a local wall-clock correction", async () => {
+    const v = fixture();
+    v.tables.withdrawal_request.length = 0;
+    v.faults.onQuery = (text) => {
+      if (text.includes('FROM "site" st'))
+        v.clock.app = new Date(now.getTime() - 434);
+      if (text.includes("SUM(r.request_revision)"))
+        v.clock.sql = v.storedSession.sessionExpiresAt;
+    };
+    await expect(
+      createWithdrawalReservationRepository(v.db, v.options).readRequest?.(
+        requestAttempt(v),
+      ),
+    ).rejects.toMatchObject({ code: "MEMBERSHIP_DENIED", status: 403 });
+  });
+
+  it("does not let a local rewind revive a session expired at the earlier local high-water mark", async () => {
+    const v = fixture();
+    v.tables.withdrawal_request.length = 0;
+    v.faults.onQuery = (text) => {
+      if (text.includes('FROM "site" st'))
+        v.clock.app = new Date(now.getTime() + 86_400_000);
+      if (text.includes('FROM "session" se')) v.clock.app = new Date(now);
+    };
+    await expect(
+      createWithdrawalReservationRepository(v.db, v.options).readRequest?.(
+        requestAttempt(v),
+      ),
+    ).rejects.toMatchObject({ code: "MEMBERSHIP_DENIED", status: 403 });
+  });
+
+  it("still rejects a local wall-clock regression before mutating preview issuance", async () => {
+    const v = fixture();
+    v.tables.withdrawal_request.length = 0;
+    v.faults.onQuery = (text) => {
+      if (text.includes('FROM "site" st'))
+        v.clock.app = new Date(now.getTime() - 434);
+    };
+    await expect(
+      createWithdrawalReservationRepository(v.db, v.options).issuePreview?.(
+        v.consentSnapshot,
+        "0",
+        requestAttempt(v),
+      ),
+    ).rejects.toMatchObject({ code: "WITHDRAWAL_UNAVAILABLE", status: 503 });
+    expect(v.tables.withdrawal_request).toHaveLength(0);
+    expect(v.tables.withdrawal_intent).toHaveLength(0);
+    expect(v.tables.financial_operation).toHaveLength(0);
+  });
+
+  it.each([new Date(Number.NaN), "2026-10-12 20:00:00+00"])(
+    "still rejects an invalid or non-Date local read clock %#",
+    async (value) => {
+      const v = fixture();
+      Object.assign(v.options, { now: () => value });
+      await expect(
+        createWithdrawalReservationRepository(v.db, v.options).readRequest?.(
+          requestAttempt(v),
+        ),
+      ).rejects.toMatchObject({ code: "WITHDRAWAL_UNAVAILABLE", status: 503 });
+      expect(v.query).not.toHaveBeenCalled();
+    },
+  );
+
   it.each(["historical-account", "account-1"])(
     "blocks a NEW hold for the same operator's UNKNOWN intent in %s even when its operation is REQUESTED",
     async (accountId) => {

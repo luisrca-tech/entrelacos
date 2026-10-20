@@ -1,6 +1,7 @@
+import type { WithdrawalRequestContext } from "@entrelacos/contracts";
 import type { SQL } from "drizzle-orm";
 import { PgDialect } from "drizzle-orm/pg-core";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createWithdrawalComposition } from "./withdrawalComposition";
 import * as withdrawalRepository from "./withdrawalReservationRepository";
 
@@ -231,4 +232,259 @@ describe("composed withdrawal admission and recovery ownership", () => {
     ).rejects.toThrow();
     await f.composition.close();
   });
+});
+
+describe("composed withdrawal context refresh", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  const attempt = {
+    actor: { userId: "user-1", siteId: "site-1", sessionId: "session-1" },
+    access: {
+      siteId: "site-1",
+      userId: "user-1",
+      membershipId: "membership-1",
+      membershipRole: "SITE_ADMIN" as const,
+      capabilities: {
+        manageInvitations: true,
+        manageMessages: true,
+        manageCatalog: true,
+        manageTeam: true,
+        readFinance: true,
+        configureReceiving: true,
+        requestWithdrawal: false,
+      },
+    },
+  };
+  function context(
+    reason: WithdrawalRequestContext["reason"],
+  ): WithdrawalRequestContext {
+    return {
+      siteId: "site-1",
+      mode: "sandbox",
+      scopeRevision: "0",
+      observedAt: "2026-10-19T10:00:00.000Z",
+      observationOrder: {
+        scopeRevision: "0",
+        requestRevision: null,
+        recordUpdatedAtMicroseconds: null,
+      },
+      newRequestAllowed: reason === null,
+      reason,
+      openRequest: null,
+      recoverableRequests: [],
+      nextCursor: null,
+    };
+  }
+  function contextFixture(
+    refreshReceiving?: (siteId: string) => Promise<void>,
+  ) {
+    const createRepository =
+      withdrawalRepository.createWithdrawalReservationRepository;
+    const readContext = vi.fn(async () => context("DESTINATION_UNAVAILABLE"));
+    vi.spyOn(
+      withdrawalRepository,
+      "createWithdrawalReservationRepository",
+    ).mockImplementation((db, options) => ({
+      ...createRepository(db, options),
+      readContext,
+    }));
+    return { ...enabledFixture(refreshReceiving), readContext };
+  }
+
+  it("refreshes an unavailable destination after authorization and rereads its context", async () => {
+    const calls: string[] = [];
+    const refresh = vi.fn(async (siteId: string) => {
+      calls.push(`refresh:${siteId}`);
+    });
+    const f = contextFixture(refresh);
+    f.readContext
+      .mockImplementationOnce(async () => {
+        calls.push("authorized read");
+        return context("DESTINATION_UNAVAILABLE");
+      })
+      .mockImplementationOnce(async () => {
+        calls.push("authorized reread");
+        return context(null);
+      });
+    try {
+      expect(await f.composition.service?.readContext(attempt)).toEqual(
+        context(null),
+      );
+      expect(calls).toEqual([
+        "authorized read",
+        "refresh:site-1",
+        "authorized reread",
+      ]);
+      expect(refresh).toHaveBeenCalledOnce();
+      expect(f.fetch).not.toHaveBeenCalled();
+    } finally {
+      await f.composition.close();
+    }
+  });
+
+  it("does not repeat refresh when the destination remains unavailable", async () => {
+    const refresh = vi.fn(async (_siteId: string) => {});
+    const f = contextFixture(refresh);
+    try {
+      expect(await f.composition.service?.readContext(attempt)).toEqual(
+        context("DESTINATION_UNAVAILABLE"),
+      );
+      expect(refresh).toHaveBeenCalledOnce();
+      expect(f.readContext).toHaveBeenCalledTimes(2);
+    } finally {
+      await f.composition.close();
+    }
+  });
+
+  it("preserves an unavailable context when no refresh port is configured", async () => {
+    const f = contextFixture();
+    try {
+      expect(await f.composition.service?.readContext(attempt)).toEqual(
+        context("DESTINATION_UNAVAILABLE"),
+      );
+      expect(f.readContext).toHaveBeenCalledOnce();
+    } finally {
+      await f.composition.close();
+    }
+  });
+
+  it.each([null, "NOT_CONFIGURED", "RECIPIENT_REQUIRED"] as const)(
+    "does not refresh an authorized context with reason %s",
+    async (reason) => {
+      const refresh = vi.fn(async (_siteId: string) => {});
+      const f = contextFixture(refresh);
+      f.readContext.mockResolvedValue(context(reason));
+      try {
+        expect(await f.composition.service?.readContext(attempt)).toEqual(
+          context(reason),
+        );
+        expect(refresh).not.toHaveBeenCalled();
+        expect(f.readContext).toHaveBeenCalledOnce();
+      } finally {
+        await f.composition.close();
+      }
+    },
+  );
+
+  it("preserves unresolved obligations and their existing request history", async () => {
+    const refresh = vi.fn(async (_siteId: string) => {});
+    const f = contextFixture(refresh);
+    const existing = {
+      ...context("UNRESOLVED_OPERATION"),
+      recoverableRequests: [
+        {
+          siteId: "site-1",
+          mode: "sandbox" as const,
+          requestId: "request-1",
+          requestRevision: null,
+          scopeRevision: "0",
+          observedAt: f.clock.value.toISOString(),
+          observationOrder: {
+            scopeRevision: "0",
+            requestRevision: null,
+            recordUpdatedAtMicroseconds: (
+              BigInt(+f.clock.value) * 1000n
+            ).toString(),
+          },
+          state: "EXISTING" as const,
+          command: {
+            requestId: "request-1",
+            amountCents: f.intent.amountCents,
+            destinationVersion: f.intent.destinationVersion,
+          },
+          withdrawal: f.intent,
+          preview: null,
+        },
+      ],
+    };
+    f.readContext.mockResolvedValue(existing);
+    try {
+      expect(await f.composition.service?.readContext(attempt)).toEqual(
+        existing,
+      );
+      expect(refresh).not.toHaveBeenCalled();
+      expect(f.readContext).toHaveBeenCalledOnce();
+    } finally {
+      await f.composition.close();
+    }
+  });
+
+  it("sanitizes a receiving refresh failure without rereading or inventing readiness", async () => {
+    const refresh = vi.fn(async (_siteId: string) => {
+      throw new Error("private-provider-refresh-detail");
+    });
+    const f = contextFixture(refresh);
+    try {
+      const error = await f.composition.service
+        ?.readContext(attempt)
+        .catch((error: unknown) => error);
+      expect(error).toMatchObject({
+        status: 503,
+        code: "WITHDRAWAL_UNAVAILABLE",
+      });
+      expect(error).not.toHaveProperty("cause");
+      expect(String(error)).not.toContain("private-provider-refresh-detail");
+      expect(refresh).toHaveBeenCalledOnce();
+      expect(f.readContext).toHaveBeenCalledOnce();
+    } finally {
+      await f.composition.close();
+    }
+  });
+
+  it.each(["signed-out", "owner", "cross-site"])(
+    "does not refresh before the real service and repository reject %s access",
+    async (kind) => {
+      const refresh = vi.fn(async (_siteId: string) => {});
+      const f = enabledFixture(refresh);
+      f.execute.mockImplementation(async (statement) => {
+        const text = new PgDialect().sqlToQuery(statement).sql;
+        if (text.includes('AS "currentTime"'))
+          return { rows: [{ currentTime: f.clock.value }] };
+        if (text.includes('FROM "site" st'))
+          return { rows: [{ siteId: "site-1", isDemo: true }] };
+        if (text.includes('FROM "user" u'))
+          return {
+            rows: [
+              {
+                userId: "user-1",
+                role: "OWNER",
+                state: "ACTIVE",
+                operatorDisplayName: "Owner",
+                operatorProfileUpdatedAt: f.clock.value,
+              },
+            ],
+          };
+        throw new Error("Unexpected authorization query");
+      });
+      const selected =
+        kind === "signed-out"
+          ? { ...attempt, actor: null }
+          : kind === "owner"
+            ? {
+                ...attempt,
+                access: {
+                  ...attempt.access,
+                  membershipId: null,
+                  membershipRole: "OWNER" as const,
+                  capabilities: {
+                    ...attempt.access.capabilities,
+                    configureReceiving: false,
+                  },
+                },
+              }
+            : {
+                ...attempt,
+                actor: { ...attempt.actor, siteId: "site-other" },
+              };
+      try {
+        await expect(
+          f.composition.service?.readContext(selected),
+        ).rejects.toMatchObject({ code: "MEMBERSHIP_DENIED" });
+        expect(refresh).not.toHaveBeenCalled();
+        expect(f.fetch).not.toHaveBeenCalled();
+      } finally {
+        await f.composition.close();
+      }
+    },
+  );
 });

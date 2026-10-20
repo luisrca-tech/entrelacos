@@ -634,9 +634,10 @@ async function requestAuthority(
   };
   const local = () => {
     const at = clockTime(options.now());
-    if (at < lastLocal) fail();
-    lastLocal = at;
-    check(at);
+    if (mutating && at < lastLocal) fail();
+    // Read-only authorization keeps its time fence when the host wall clock adjusts backward.
+    lastLocal = at > lastLocal ? at : lastLocal;
+    check(lastLocal);
   };
   const execute = async (statement: SQL) => {
     local();

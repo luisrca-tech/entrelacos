@@ -766,7 +766,21 @@ export function createWithdrawalComposition(
   }
   const service: WithdrawalReservationService = {
     ...reservation,
-    readContext: (attempt) => own(() => reservation.readContext(attempt)),
+    readContext: (attempt) =>
+      own(async () => {
+        const context = await reservation.readContext(attempt);
+        if (
+          context.reason !== "DESTINATION_UNAVAILABLE" ||
+          !options.refreshReceiving
+        )
+          return context;
+        try {
+          await options.refreshReceiving(context.siteId);
+        } catch {
+          unavailable();
+        }
+        return reservation.readContext(attempt);
+      }),
     createPreview: (attempt) => own(() => reservation.createPreview(attempt)),
     createWithdrawal: (attempt) =>
       own(() => reservation.createWithdrawal(attempt)),

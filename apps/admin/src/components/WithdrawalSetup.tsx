@@ -2,6 +2,7 @@ import {
   meResponseSchema,
   type SiteAccess,
   type WithdrawalIntent,
+  type WithdrawalPreviewInput,
   type WithdrawalRequestContext,
   type WithdrawalRequestStatus,
 } from "@entrelacos/contracts";
@@ -545,8 +546,12 @@ export function createWithdrawalSetupController(
       requestId,
     };
   }
-  function persist(requestId: string) {
-    const next = scopedMarker(requestId);
+  function persist(requestId: string, previewInput?: WithdrawalPreviewInput) {
+    const next: WithdrawalMarker = previewInput
+      ? { ...scopedMarker(requestId), version: 2, previewInput }
+      : marker?.requestId === requestId
+        ? marker
+        : scopedMarker(requestId);
     writeWithdrawalMarker(storage(), next);
     marker = next;
     storageReady = true;
@@ -1161,8 +1166,13 @@ export function createWithdrawalSetupController(
           throw new Error("Retained withdrawal cannot retire");
         marker = null;
       }
+      const input = {
+        requestId,
+        amountCents,
+        scopeRevision: context.scopeRevision,
+      };
       try {
-        persist(requestId);
+        persist(requestId, input);
       } catch {
         storageFailure();
         return false;
@@ -1181,7 +1191,7 @@ export function createWithdrawalSetupController(
       dispatched = true;
       const result = await previewWithdrawal(
         scope.siteId,
-        { requestId, amountCents, scopeRevision: context.scopeRevision },
+        input,
         ports.request,
       );
       if (!current() || active !== revision) return false;
@@ -1201,6 +1211,132 @@ export function createWithdrawalSetupController(
     } finally {
       busy = false;
       if (current() && revision === active) {
+        publish({ ...state, busy: false });
+        notifyResult("PREVIEW", succeeded, failure, active);
+      }
+    }
+  }
+  function canResumePreview(ownsBusy = false) {
+    const request = state.request;
+    return (
+      frame() &&
+      storageReady &&
+      (!busy || ownsBusy) &&
+      !refreshing &&
+      !validation &&
+      !selecting &&
+      !pageSlot.pending &&
+      state.status === "ready" &&
+      state.uncertain &&
+      marker?.version === 2 &&
+      marker.mode === mode &&
+      marker.requestId === selectedId &&
+      request?.requestId === selectedId &&
+      request.state === "UNRESOLVED" &&
+      request.command === null &&
+      request.requestRevision === null &&
+      request.observationOrder.recordUpdatedAtMicroseconds === null &&
+      !knownRequests.has(request.requestId) &&
+      state.context?.newRequestAllowed === true &&
+      state.context.scopeRevision === marker.previewInput.scopeRevision &&
+      request.scopeRevision === state.context.scopeRevision
+    );
+  }
+  async function resumePreview(): Promise<boolean> {
+    if (!current() || !canResumePreview() || marker?.version !== 2)
+      return false;
+    const retained = structuredClone(marker);
+    const serialized = JSON.stringify(retained);
+    const active = revision;
+    busy = true;
+    publish({ ...state, busy: true });
+    let succeeded = false;
+    let failure: unknown;
+    try {
+      if (!(await compareServer()) || !current() || active !== revision)
+        return false;
+      if (!canResumePreview(true) || !current() || active !== revision)
+        return false;
+      const stored = readWithdrawalMarker(
+        storage(),
+        scope.siteId,
+        captured.actor?.user.id ?? "",
+      );
+      if (!current() || active !== revision) return false;
+      const native = owner.getSnapshot();
+      const actualOwner = ports.owner ?? panelActorOwner;
+      const finalMarker = readWithdrawalMarker(
+        storage(),
+        scope.siteId,
+        captured.actor?.user.id ?? "",
+      );
+      if (
+        disposed ||
+        invalidated ||
+        actualOwner !== owner ||
+        native !== captured ||
+        active !== revision ||
+        JSON.stringify(stored) !== serialized ||
+        JSON.stringify(finalMarker) !== serialized ||
+        JSON.stringify(marker) !== serialized
+      ) {
+        storageFailure();
+        return false;
+      }
+      discard();
+      publish({
+        ...state,
+        acknowledgment: null,
+        proofRevision: state.proofRevision + 1,
+      });
+      if (!current() || active !== revision) return false;
+      if (
+        JSON.stringify(
+          readWithdrawalMarker(
+            storage(),
+            scope.siteId,
+            captured.actor?.user.id ?? "",
+          ),
+        ) !== serialized ||
+        disposed ||
+        invalidated ||
+        active !== revision
+      ) {
+        storageFailure();
+        return false;
+      }
+      const result = await previewWithdrawal(
+        scope.siteId,
+        retained.previewInput,
+        capturedPorts.request,
+      );
+      if (!current() || active !== revision) return false;
+      if (
+        JSON.stringify(
+          readWithdrawalMarker(
+            storage(),
+            scope.siteId,
+            captured.actor?.user.id ?? "",
+          ),
+        ) !== serialized ||
+        disposed ||
+        invalidated ||
+        active !== revision
+      ) {
+        storageFailure();
+        return false;
+      }
+      installRequest(result);
+      publish({ ...state, status: "ready" });
+      succeeded = true;
+      return true;
+    } catch (cause) {
+      failure = cause;
+      if (current() && active === revision) fail(cause);
+      return false;
+    } finally {
+      busy = false;
+      if (current() && active === revision) {
         publish({ ...state, busy: false });
         notifyResult("PREVIEW", succeeded, failure, active);
       }
@@ -1388,6 +1524,8 @@ export function createWithdrawalSetupController(
     selectDiscoveredRequest,
     refresh,
     preview,
+    canResumePreview: () => canResumePreview(),
+    resumePreview,
     act,
     resetConsent() {
       if (!current()) return;
@@ -1680,6 +1818,16 @@ function WithdrawalSetupView({
             </Button>
           </form>
         )}
+      {(controller?.canResumePreview() ||
+        (state.busy && state.request?.state === "UNRESOLVED")) && (
+        <Button
+          type="button"
+          disabled={state.busy}
+          onClick={() => void controller?.resumePreview()}
+        >
+          {state.busy ? "Retomando prévia…" : "Retomar prévia"}
+        </Button>
+      )}
       {state.request && controller?.guard.isCurrent() && (
         <WithdrawalActions
           key={state.proofRevision}
