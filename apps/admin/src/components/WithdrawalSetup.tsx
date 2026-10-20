@@ -80,6 +80,7 @@ export function createWithdrawalSetupController(
   onState: (state: WithdrawalSetupState) => void,
   ports: WithdrawalSetupPorts = {},
   pageSlot: PageReadSlot = { pending: null },
+  onFinancialChange?: () => void,
 ) {
   const capturedPorts = {
     owner: ports.owner,
@@ -275,6 +276,14 @@ export function createWithdrawalSetupController(
     expectedRevision = revision,
   ) {
     if (!current() || revision !== expectedRevision) return;
+    if (succeeded && action !== "PREVIEW") {
+      try {
+        onFinancialChange?.();
+      } catch {
+        // Read invalidation cannot change the acknowledged financial outcome.
+      }
+      if (!current() || revision !== expectedRevision) return;
+    }
     if (!succeeded) {
       const errors: Record<string, string> = {
         RECENT_AUTH_REQUIRED: "Confirme sua senha antes de continuar.",
@@ -1563,7 +1572,10 @@ const money = new Intl.NumberFormat("pt-BR", {
   currency: "BRL",
 });
 export function WithdrawalSetup(
-  props: WithdrawalSetupScope & { ports?: WithdrawalSetupPorts },
+  props: WithdrawalSetupScope & {
+    ports?: WithdrawalSetupPorts;
+    onFinancialChange?: () => void;
+  },
 ) {
   const pageSlot = useRef<PageReadSlot>({ pending: null });
   const key = financialReauthenticationScopeKey({
@@ -1595,9 +1607,11 @@ function WithdrawalSetupRuntime({
   sessionEpoch,
   ports,
   pageSlot,
+  onFinancialChange,
 }: WithdrawalSetupScope & {
   ports?: WithdrawalSetupPorts;
   pageSlot: PageReadSlot;
+  onFinancialChange?: () => void;
 }) {
   const defaultPorts = useRef<WithdrawalSetupPorts>({});
   const activePorts = ports ?? defaultPorts.current;
@@ -1620,6 +1634,7 @@ function WithdrawalSetupRuntime({
       setState,
       activePorts,
       pageSlot,
+      onFinancialChange,
     );
     controller.current = next;
     setState(next.getState());
@@ -1628,7 +1643,7 @@ function WithdrawalSetupRuntime({
       next.dispose();
       if (controller.current === next) controller.current = null;
     };
-  }, [siteId, access, sessionEpoch, activePorts, pageSlot]);
+  }, [siteId, access, sessionEpoch, activePorts, pageSlot, onFinancialChange]);
   const bound = controller.current?.isBoundTo(
     { siteId, access, sessionEpoch },
     activePorts,

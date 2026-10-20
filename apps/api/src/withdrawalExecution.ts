@@ -8,6 +8,7 @@ import type {
   FinancialActor,
   RecentFinancialAuthenticationEvidence,
 } from "./financialAuthorization";
+import { logWithdrawalFailure } from "./withdrawalDiagnostics";
 import {
   readWithdrawalConsentRecord,
   readWithdrawalReservationSnapshot,
@@ -348,6 +349,55 @@ export function captureOriginalHolderBinding(
     withdrawalReference(raw[key], 128);
   return raw as unknown as OriginalHolderConsentBinding;
 }
+function hasAcceptedMaximumWithdrawalConsent(
+  snapshot: WithdrawalReservationSnapshot,
+  consent: WithdrawalConsentRecord,
+): boolean {
+  const acceptedAt = databaseTimestampEpochMicroseconds(
+    snapshot.intent.createdAt,
+  );
+  return (
+    snapshot.environment === "sandbox" &&
+    consent.state === "COMMITTED" &&
+    consent.requestRevision === "2" &&
+    snapshot.feeQuote.provenance === "provider" &&
+    snapshot.feeQuote.feeSemantics === "MAXIMUM" &&
+    consent.snapshot.feeQuote.provenance === "provider" &&
+    consent.snapshot.feeQuote.feeSemantics === "MAXIMUM" &&
+    consent.snapshot.presentation.payout !== undefined &&
+    acceptedAt >=
+      databaseTimestampEpochMicroseconds(consent.snapshot.preview.issuedAt) &&
+    acceptedAt <
+      databaseTimestampEpochMicroseconds(consent.snapshot.preview.expiresAt) &&
+    acceptedAt < databaseTimestampEpochMicroseconds(snapshot.feeQuote.expiresAt)
+  );
+}
+function matchesRefreshedMaximumWithdrawalQuote(
+  snapshot: WithdrawalReservationSnapshot,
+  consent: WithdrawalConsentRecord,
+): boolean {
+  if (!hasAcceptedMaximumWithdrawalConsent(snapshot, consent)) return false;
+  const frozen = consent.snapshot.feeQuote;
+  const refreshed = snapshot.feeQuote;
+  const frozenAt = databaseTimestampEpochMicroseconds(frozen.observedAt);
+  const refreshedAt = databaseTimestampEpochMicroseconds(refreshed.observedAt);
+  // Confirmation observes the same approved terms again; it does not renew consent.
+  return (
+    isDeepStrictEqual(
+      {
+        ...refreshed,
+        observedAt: frozen.observedAt,
+        expiresAt: frozen.expiresAt,
+      },
+      frozen,
+    ) &&
+    refreshedAt >= frozenAt &&
+    refreshedAt <=
+      databaseTimestampEpochMicroseconds(snapshot.intent.createdAt) &&
+    databaseTimestampEpochMicroseconds(refreshed.expiresAt) - refreshedAt ===
+      databaseTimestampEpochMicroseconds(frozen.expiresAt) - frozenAt
+  );
+}
 export function captureOriginalWithdrawal(value: unknown): OriginalWithdrawal {
   const raw = withdrawalObject(captureWithdrawalValue(value), [
     "snapshot",
@@ -366,7 +416,8 @@ export function captureOriginalWithdrawal(value: unknown): OriginalWithdrawal {
       snapshot,
       consent.snapshot.presentation,
     ) ||
-    !isDeepStrictEqual(consent.snapshot.feeQuote, snapshot.feeQuote) ||
+    (!isDeepStrictEqual(consent.snapshot.feeQuote, snapshot.feeQuote) &&
+      !matchesRefreshedMaximumWithdrawalQuote(snapshot, consent)) ||
     !isDeepStrictEqual(raw.correlation, correlation)
   )
     throw new TypeError("Invalid original withdrawal consent");
@@ -381,6 +432,21 @@ export function captureOriginalWithdrawal(value: unknown): OriginalWithdrawal {
       consent.previewHash,
     ),
   });
+}
+// Accepted maximum budgets keep their original acceptance deadline in custody.
+export function usesAcceptedMaximumWithdrawalDispatch(
+  originalInput: OriginalWithdrawal,
+  applicationEnvironment: "development" | "test" | "production",
+): boolean {
+  try {
+    const original = captureOriginalWithdrawal(originalInput);
+    return (
+      ["development", "test"].includes(applicationEnvironment) &&
+      hasAcceptedMaximumWithdrawalConsent(original.snapshot, original.consent)
+    );
+  } catch {
+    return false;
+  }
 }
 export function captureDispatchFence(
   value: unknown,
@@ -615,6 +681,7 @@ export function createWithdrawalExecutionService(
   let configured: {
     mode: "sandbox" | "live";
     maxAge: number;
+    applicationEnvironment: "development" | "test" | "production";
     now: () => Date;
     arm: WithdrawalPostingRepository["armExisting"];
     read: WithdrawalPostingRepository["readExisting"];
@@ -644,6 +711,7 @@ export function createWithdrawalExecutionService(
       configured = {
         mode,
         maxAge: maxAuthAgeMs,
+        applicationEnvironment,
         now: captureWithdrawalCallable(options, "now", false),
         arm: captureWithdrawalCallable(repository, "armExisting", false),
         read: captureWithdrawalCallable(repository, "readExisting", false),
@@ -661,7 +729,8 @@ export function createWithdrawalExecutionService(
         lookup: captureWithdrawalCallable(fields.lookup?.value, "lookup", true),
       };
     }
-  } catch {
+  } catch (error) {
+    logWithdrawalFailure(error);
     configured = null;
   }
   const c = configured;
@@ -684,7 +753,8 @@ export function createWithdrawalExecutionService(
           fence,
         }),
       );
-    } catch {
+    } catch (error) {
+      logWithdrawalFailure(error);
       /* An unacknowledged observation never permits another dispatch. */
     }
     return { outcome: "UNRESOLVED" };
@@ -697,7 +767,8 @@ export function createWithdrawalExecutionService(
     let observation: WithdrawalDispatchObservation;
     try {
       observation = captureWithdrawalObservation(raw, original, fence, clock());
-    } catch {
+    } catch (error) {
+      logWithdrawalFailure(error);
       return uncertain(original, fence);
     }
     try {
@@ -711,7 +782,8 @@ export function createWithdrawalExecutionService(
           c!.post(original, fence, observation.proofReference),
         );
       return { outcome: "PROCESSING", stored };
-    } catch {
+    } catch (error) {
+      logWithdrawalFailure(error);
       return { outcome: "UNRESOLVED" };
     }
   }
@@ -728,7 +800,8 @@ export function createWithdrawalExecutionService(
         armed = await genuineWithdrawalPromise(
           c.arm(captureWithdrawalValue(attempt)),
         );
-      } catch {
+      } catch (error) {
+        logWithdrawalFailure(error);
         return { outcome: "DENIED" };
       }
       if (armed.outcome !== "ARMED")
@@ -740,7 +813,8 @@ export function createWithdrawalExecutionService(
       try {
         original = captureOriginalWithdrawal(armed.original);
         fence = captureDispatchFence(armed.fence, original);
-      } catch {
+      } catch (error) {
+        logWithdrawalFailure(error);
         return { outcome: "UNRESOLVED" };
       }
       try {
@@ -755,10 +829,18 @@ export function createWithdrawalExecutionService(
             databaseTimestampEpochMicroseconds(armed.dispatchValidUntil) ||
           databaseTimestampEpochMicroseconds(at) >=
             databaseTimestampEpochMicroseconds(fence.leaseExpiresAt) ||
-          databaseTimestampEpochMicroseconds(at) >=
-            databaseTimestampEpochMicroseconds(
-              original.consent.snapshot.preview.expiresAt,
-            )
+          (!usesAcceptedMaximumWithdrawalDispatch(
+            original,
+            c.applicationEnvironment,
+          ) &&
+            (databaseTimestampEpochMicroseconds(at) >=
+              databaseTimestampEpochMicroseconds(
+                original.consent.snapshot.preview.expiresAt,
+              ) ||
+              databaseTimestampEpochMicroseconds(at) >=
+                databaseTimestampEpochMicroseconds(
+                  original.snapshot.feeQuote.expiresAt,
+                )))
         )
           throw new TypeError("Dispatch authority expired or foreign");
         return await observe(
@@ -766,7 +848,8 @@ export function createWithdrawalExecutionService(
           fence,
           await genuineWithdrawalPromise(c.dispatch(original, fence)),
         );
-      } catch {
+      } catch (error) {
+        logWithdrawalFailure(error);
         return uncertain(original, fence);
       }
     },
@@ -810,7 +893,8 @@ export function createWithdrawalExecutionService(
           );
         if (!stored.fence) return { outcome: "EXISTING", stored };
         fence = captureDispatchFence(stored.fence, original);
-      } catch {
+      } catch (error) {
+        logWithdrawalFailure(error);
         return { outcome: "UNRESOLVED" };
       }
       try {
@@ -827,7 +911,8 @@ export function createWithdrawalExecutionService(
         }
         withdrawalObject(found, ["outcome"]);
         return uncertain(original, fence);
-      } catch {
+      } catch (error) {
+        logWithdrawalFailure(error);
         return uncertain(original, fence);
       }
     },

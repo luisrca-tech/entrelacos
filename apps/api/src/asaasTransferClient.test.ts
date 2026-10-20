@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { AsaasTransferObservation } from "./asaasHttpClient";
 import { createAsaasWithdrawalTransferAdapter } from "./asaasTransferClient";
 import { createAsaasWithdrawalCustody } from "./asaasWithdrawalCustody";
+import * as diagnostics from "./withdrawalDiagnostics";
 import type { DispatchFence, OriginalWithdrawal } from "./withdrawalExecution";
 import {
   hashWithdrawalConsentSnapshot,
@@ -375,6 +376,8 @@ function custodyFixture() {
   const execute = vi.fn(
     async (query: Parameters<PgDialect["sqlToQuery"]>[0]) => {
       const { sql, params } = dialect.sqlToQuery(query);
+      if (sql.startsWith("SELECT clock_timestamp()"))
+        return { rows: [{ currentTime: f.time.toISOString() }] };
       if (sql.includes('FROM "financial_operation"'))
         return { rows: [operation] };
       if (sql.startsWith('INSERT INTO "withdrawal_provider_observation"')) {
@@ -393,7 +396,11 @@ function custodyFixture() {
           };
         return { rows: [] };
       }
-      return { rows: retained ? [structuredClone(retained)] : [] };
+      return {
+        rows: retained
+          ? [{ ...structuredClone(retained), readAt: f.time.toISOString() }]
+          : [],
+      };
     },
   );
   const tx = { execute };
@@ -620,3 +627,34 @@ it("dispatches the fixed recipient net under an approved maximum fee without pro
   expect(f.original.snapshot.intent.amountCents).toBe(10000);
   expect(f.original.snapshot.intent.feeCents).toBe(200);
 });
+
+it.each(["destination", "custody", "lookup"])(
+  "reports the original %s failure without creating another transfer or changing unresolved semantics",
+  async (stage) => {
+    const diagnostic = vi
+      .spyOn(diagnostics, "logWithdrawalFailure")
+      .mockImplementation(() => {});
+    try {
+      const f = adapterFixture();
+      const failure = new Error("synthetic private provider failure");
+      if (stage === "destination") f.loadDestination.mockRejectedValue(failure);
+      if (stage === "custody") f.custody.record.mockRejectedValue(failure);
+      if (stage === "lookup") f.client.getTransfer.mockRejectedValue(failure);
+      const result =
+        stage === "lookup"
+          ? await f.adapter.lookup(f.original, f.fence, "transfer-1")
+          : await f.adapter.dispatch(f.original, f.fence);
+      expect(result.outcome).toBe("UNRESOLVED");
+      expect(diagnostic).toHaveBeenCalledWith(failure);
+      expect(f.client.createPixTransfer).toHaveBeenCalledTimes(
+        stage === "custody" ? 1 : 0,
+      );
+      if (stage === "destination")
+        expect(f.custody.record).not.toHaveBeenCalled();
+      if (stage === "lookup")
+        expect(f.client.getTransfer).toHaveBeenCalledOnce();
+    } finally {
+      diagnostic.mockRestore();
+    }
+  },
+);

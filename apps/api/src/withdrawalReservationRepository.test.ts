@@ -2045,22 +2045,27 @@ describe("durable withdrawal request lifecycle", () => {
     ).rejects.toMatchObject({ code: "MEMBERSHIP_DENIED", status: 403 });
   });
 
-  it("does not let a local rewind revive a session expired at the earlier local high-water mark", async () => {
-    const v = fixture();
-    v.tables.withdrawal_request.length = 0;
-    v.faults.onQuery = (text) => {
-      if (text.includes('FROM "site" st'))
-        v.clock.app = new Date(now.getTime() + 86_400_000);
-      if (text.includes('FROM "session" se')) v.clock.app = new Date(now);
-    };
-    await expect(
-      createWithdrawalReservationRepository(v.db, v.options).readRequest?.(
-        requestAttempt(v),
-      ),
-    ).rejects.toMatchObject({ code: "MEMBERSHIP_DENIED", status: 403 });
-  });
+  it.each(["readRequest", "issuePreview"] as const)(
+    "does not let %s revive a session expired at the earlier local high-water mark",
+    async (method) => {
+      const v = fixture();
+      v.tables.withdrawal_request.length = 0;
+      v.faults.onQuery = (text) => {
+        if (text.includes('FROM "site" st'))
+          v.clock.app = new Date(now.getTime() + 86_400_000);
+        if (text.includes('FROM "session" se')) v.clock.app = new Date(now);
+      };
+      const repo = createWithdrawalReservationRepository(v.db, v.options);
+      await expect(
+        method === "readRequest"
+          ? repo.readRequest?.(requestAttempt(v))
+          : repo.issuePreview?.(v.consentSnapshot, "0", requestAttempt(v)),
+      ).rejects.toMatchObject({ code: "MEMBERSHIP_DENIED", status: 403 });
+      expect(v.tables.withdrawal_request).toHaveLength(0);
+    },
+  );
 
-  it("still rejects a local wall-clock regression before mutating preview issuance", async () => {
+  it("issues a preview after local wall-clock correction while retaining SQL authorization checks", async () => {
     const v = fixture();
     v.tables.withdrawal_request.length = 0;
     v.faults.onQuery = (text) => {
@@ -2073,8 +2078,111 @@ describe("durable withdrawal request lifecycle", () => {
         "0",
         requestAttempt(v),
       ),
-    ).rejects.toMatchObject({ code: "WITHDRAWAL_UNAVAILABLE", status: 503 });
-    expect(v.tables.withdrawal_request).toHaveLength(0);
+    ).resolves.toMatchObject({ state: "OPEN" });
+    expect(v.tables.withdrawal_request).toHaveLength(1);
+    expect(v.tables.withdrawal_intent).toHaveLength(0);
+    expect(v.tables.financial_operation).toHaveLength(0);
+  });
+
+  it("reserves the original consent after local wall-clock correction without changing its identity or terms", async () => {
+    const v = fixture();
+    v.faults.onQuery = (text) => {
+      if (text.includes('FROM "site" st'))
+        v.clock.app = new Date(now.getTime() - 434);
+    };
+    const originalHash = v.snapshot.requestHash;
+    const result = await createWithdrawalReservationRepository(
+      v.db,
+      v.options,
+    ).reserveWithdrawal(
+      v.snapshot,
+      v.authorize,
+      v.authorization,
+      v.confirmation,
+    );
+    expect(result.snapshot).toEqual(v.snapshot);
+    expect(result.snapshot.requestHash).toBe(originalHash);
+    expect(v.tables.withdrawal_request[0].state).toBe("COMMITTED");
+    expect(v.tables.withdrawal_intent).toHaveLength(1);
+    expect(v.tables.financial_operation).toHaveLength(1);
+  });
+
+  it.each([
+    ["proof", "2026-10-12T20:04:30.000001Z", "RECENT_AUTH_REQUIRED", 403],
+    ["session", "2026-10-12T20:00:01.000000Z", "MEMBERSHIP_DENIED", 403],
+    ["fee", "2026-10-12T20:01:00.000001Z", "FEE_QUOTE_UNAVAILABLE", 409],
+  ] as const)(
+    "does not revive an expired %s when local time recedes and SQL time advances",
+    async (kind, sqlTime, code, status) => {
+      const v = fixture();
+      v.faults.onQuery = (text) => {
+        if (text.includes('FROM "site" st'))
+          v.clock.app = new Date(now.getTime() - 434);
+      };
+      if (kind === "session")
+        v.storedSession.sessionExpiresAt = "2026-10-12T20:00:01.000000Z";
+      v.faults.callbackClock = sqlTime;
+      await expect(
+        createWithdrawalReservationRepository(
+          v.db,
+          v.options,
+        ).reserveWithdrawal(
+          v.snapshot,
+          v.authorize,
+          v.authorization,
+          v.confirmation,
+        ),
+      ).rejects.toMatchObject({ code, status });
+      expect(v.tables.withdrawal_request[0].state).toBe("OPEN");
+      expect(v.tables.withdrawal_intent).toHaveLength(0);
+      expect(v.tables.financial_operation).toHaveLength(0);
+    },
+  );
+
+  it.each(["issuePreview", "reserveWithdrawal"] as const)(
+    "still rejects a regressing SQL clock during %s after local correction",
+    async (method) => {
+      const v = fixture();
+      let clockReads = 0;
+      v.faults.onQuery = (text) => {
+        if (text.includes('FROM "site" st'))
+          v.clock.app = new Date(now.getTime() - 434);
+        if (text.includes("SELECT clock_timestamp()") && ++clockReads === 2)
+          v.clock.sql = "2026-10-12T19:59:59.999999Z";
+      };
+      const repo = createWithdrawalReservationRepository(v.db, v.options);
+      if (method === "issuePreview") v.tables.withdrawal_request.length = 0;
+      await expect(
+        method === "issuePreview"
+          ? repo.issuePreview?.(v.consentSnapshot, "0", requestAttempt(v))
+          : repo.reserveWithdrawal(
+              v.snapshot,
+              v.authorize,
+              v.authorization,
+              v.confirmation,
+            ),
+      ).rejects.toMatchObject({ code: "WITHDRAWAL_UNAVAILABLE", status: 503 });
+      expect(v.tables.withdrawal_intent).toHaveLength(0);
+      expect(v.tables.financial_operation).toHaveLength(0);
+    },
+  );
+
+  it("still rejects proof in the future of SQL time when the local clock is valid and later recedes", async () => {
+    const v = fixture();
+    v.authorization.recentAuth.authenticatedAt = new Date(now.getTime() - 500);
+    v.clock.sql = "2026-10-12T19:59:59.000000Z";
+    v.faults.onQuery = (text) => {
+      if (text.includes('FROM "site" st'))
+        v.clock.app = new Date(now.getTime() - 434);
+    };
+    await expect(
+      createWithdrawalReservationRepository(v.db, v.options).reserveWithdrawal(
+        v.snapshot,
+        v.authorize,
+        v.authorization,
+        v.confirmation,
+      ),
+    ).rejects.toMatchObject({ code: "RECENT_AUTH_REQUIRED", status: 403 });
     expect(v.tables.withdrawal_intent).toHaveLength(0);
     expect(v.tables.financial_operation).toHaveLength(0);
   });

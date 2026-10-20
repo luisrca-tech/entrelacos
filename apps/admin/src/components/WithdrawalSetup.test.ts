@@ -219,7 +219,7 @@ function memory() {
     data,
   };
 }
-async function fixture(initial = context()) {
+async function fixture(initial = context(), onFinancialChange?: () => void) {
   const owner = createPanelActorOwner({
     request: async () => actor,
     now: () => Date.now(),
@@ -259,9 +259,16 @@ async function fixture(initial = context()) {
     now: () => Date.now(),
     newRequestId: vi.fn(() => "request-a"),
   };
-  const controller = createWithdrawalSetupController(scope, changed, ports);
+  const controller = createWithdrawalSetupController(
+    scope,
+    changed,
+    ports,
+    undefined,
+    onFinancialChange,
+  );
   return {
     controller,
+    onFinancialChange,
     scope,
     ports,
     owner,
@@ -1817,7 +1824,11 @@ async function mount(f: Awaited<ReturnType<typeof fixture>>) {
       createElement(
         StrictMode,
         null,
-        createElement(WithdrawalSetup, { ...f.scope, ports: f.ports }),
+        createElement(WithdrawalSetup, {
+          ...f.scope,
+          ports: f.ports,
+          onFinancialChange: f.onFinancialChange,
+        }),
       ),
     );
   });
@@ -1830,6 +1841,157 @@ async function mount(f: Awaited<ReturnType<typeof fixture>>) {
 }
 
 describe("withdrawal setup owned source lifecycle", () => {
+  it("notifies financial readers after confirmation and explicit consultation, never automatic reads or previews", async () => {
+    const changed = vi.fn();
+    const f = await fixture(context(), changed);
+    try {
+      await f.controller.refresh();
+      expect(changed).not.toHaveBeenCalled();
+      expect(await f.controller.preview("100")).toBe(true);
+      expect(changed).not.toHaveBeenCalled();
+      expect(
+        await f.controller.act(
+          "CONFIRM_NEW",
+          () => `fr1.cHJvb2Y.${"A".repeat(43)}`,
+          true,
+        ),
+      ).toBe(true);
+      expect(changed).toHaveBeenCalledTimes(1);
+      const value = existing();
+      f.setRequest(value);
+      f.setContext({ ...context("2"), recoverableRequests: [value] });
+      await f.controller.refresh();
+      expect(changed).toHaveBeenCalledTimes(1);
+      await f.controller.refresh(undefined, true);
+      expect(changed).toHaveBeenCalledTimes(2);
+    } finally {
+      f.cleanup();
+    }
+  });
+  it("does not notify financial readers when confirmation or explicit consultation fails", async () => {
+    const changed = vi.fn();
+    const f = await fixture(openContext(), changed);
+    try {
+      await f.controller.refresh();
+      const native = required(f.request.getMockImplementation());
+      f.request.mockImplementation((path, options) =>
+        options
+          ? Promise.reject(new ApiError(503, "WITHDRAWAL_UNAVAILABLE"))
+          : native(path, options),
+      );
+      expect(
+        await f.controller.act(
+          "CONFIRM_NEW",
+          () => `fr1.cHJvb2Y.${"A".repeat(43)}`,
+          true,
+        ),
+      ).toBe(false);
+      expect(changed).not.toHaveBeenCalled();
+      f.request.mockRejectedValueOnce(
+        new ApiError(503, "WITHDRAWAL_UNAVAILABLE"),
+      );
+      await f.controller.refresh(undefined, true);
+      expect(changed).not.toHaveBeenCalled();
+    } finally {
+      f.cleanup();
+    }
+  });
+  it("propagates only a successful explicit mounted status consultation", async () => {
+    const changed = vi.fn();
+    const f = await fixture(context(), changed);
+    try {
+      const { node } = await mount(f);
+      expect(changed).not.toHaveBeenCalled();
+      const button = required(
+        [...node.querySelectorAll("button")].find(
+          (button) => button.textContent === "Consultar situação",
+        ),
+      );
+      await act(async () => button.click());
+      expect(changed).toHaveBeenCalledTimes(1);
+      expect(f.request.mock.calls.every(([, options]) => !options)).toBe(true);
+    } finally {
+      f.cleanup();
+    }
+  });
+  it("notifies after existing-only recovery without generating a new request", async () => {
+    const changed = vi.fn();
+    const value = existing();
+    const f = await fixture(
+      { ...context("2"), recoverableRequests: [value] },
+      changed,
+    );
+    try {
+      f.setRequest(value);
+      await f.controller.refresh("request-a");
+      expect(
+        await f.controller.act(
+          "RECOVER_EXISTING",
+          () => `fr1.cHJvb2Y.${"A".repeat(43)}`,
+          true,
+        ),
+      ).toBe(true);
+      expect(changed).toHaveBeenCalledTimes(1);
+      expect(f.ports.newRequestId).not.toHaveBeenCalled();
+    } finally {
+      f.cleanup();
+    }
+  });
+  it("keeps an acknowledged result and Sonner feedback when read invalidation throws", async () => {
+    const changed = vi.fn(() => {
+      throw new Error("read-only invalidation failed");
+    });
+    const success = vi.spyOn(toast, "success");
+    const f = await fixture(openContext(), changed);
+    try {
+      await f.controller.refresh();
+      expect(
+        await f.controller.act(
+          "CONFIRM_NEW",
+          () => `fr1.cHJvb2Y.${"A".repeat(43)}`,
+          true,
+        ),
+      ).toBe(true);
+      expect(f.controller.getState().acknowledgment?.state).toBe("REQUESTED");
+      expect(changed).toHaveBeenCalledTimes(1);
+      expect(success).toHaveBeenCalledWith(
+        "Solicitação registrada. A transferência ainda não foi concluída.",
+      );
+    } finally {
+      f.cleanup();
+    }
+  });
+  it("does not notify another actor after ownership changes during confirmation", async () => {
+    const changed = vi.fn();
+    const f = await fixture(openContext(), changed);
+    const pending = deferred<unknown>();
+    const native = required(f.request.getMockImplementation());
+    try {
+      await f.controller.refresh();
+      f.request.mockImplementation((path, options) =>
+        options ? pending.promise : native(path, options),
+      );
+      const work = f.controller.act(
+        "CONFIRM_NEW",
+        () => `fr1.cHJvb2Y.${"A".repeat(43)}`,
+        true,
+      );
+      await vi.waitFor(() =>
+        expect(
+          f.request.mock.calls.filter(([, options]) => options),
+        ).toHaveLength(1),
+      );
+      f.owner.invalidate(false);
+      pending.resolve({
+        requestId: "request-a",
+        withdrawal: existing().withdrawal,
+      });
+      expect(await work).toBe(false);
+      expect(changed).not.toHaveBeenCalled();
+    } finally {
+      f.cleanup();
+    }
+  });
   async function failedPreview() {
     const f = await fixture();
     const native = required(f.request.getMockImplementation());
@@ -2974,7 +3136,11 @@ describe("withdrawal setup owned source lifecycle", () => {
   it("SSR has no password/action controls or requests", async () => {
     const f = await fixture();
     const html = renderToStaticMarkup(
-      createElement(WithdrawalSetup, { ...f.scope, ports: f.ports }),
+      createElement(WithdrawalSetup, {
+        ...f.scope,
+        ports: f.ports,
+        onFinancialChange: f.onFinancialChange,
+      }),
     );
     expect(html).not.toContain('type="password"');
     expect(html).not.toContain("<form");
@@ -3137,7 +3303,8 @@ describe("actual React withdrawal DOM", () => {
   });
   it("explicitly seals from real password and terms controls without confirmation POST", async () => {
     const success = vi.spyOn(toast, "success");
-    const f = await fixture(openContext());
+    const changed = vi.fn();
+    const f = await fixture(openContext(), changed);
     const token = `fr1.cHJvb2Y.${"A".repeat(43)}`;
     const native = required(f.request.getMockImplementation());
     const sealed: WithdrawalRequestStatus = {
@@ -3210,6 +3377,7 @@ describe("actual React withdrawal DOM", () => {
     expect(
       f.request.mock.calls.find(([path]) => path.endsWith("/seal"))?.[1]?.body,
     ).toEqual({ reauthenticationToken: token });
+    expect(changed).toHaveBeenCalledTimes(1);
     f.cleanup();
   });
   it("actual unmount fences a delayed proof and replacement creates a fresh holder", async () => {
@@ -3335,7 +3503,8 @@ describe("actual React withdrawal DOM", () => {
     f.cleanup();
   });
   it("requires actual terms consent and sends one proof-only confirmation", async () => {
-    const f = await fixture(openContext());
+    const changed = vi.fn();
+    const f = await fixture(openContext(), changed);
     const token = `fr1.cHJvb2Y.${"A".repeat(43)}`;
     const native = required(f.request.getMockImplementation());
     f.request.mockImplementation(async (path, options) =>
@@ -3388,6 +3557,7 @@ describe("actual React withdrawal DOM", () => {
         },
       ],
     ]);
+    expect(changed).toHaveBeenCalledTimes(1);
     expect(node.innerHTML).not.toContain(token);
     expect([...f.storage.data.values()].join()).not.toMatch(
       /synthetic-password|fr1\./,
@@ -4393,7 +4563,11 @@ describe("deliberate withdrawal discovery paging", () => {
           createElement(
             StrictMode,
             null,
-            createElement(WithdrawalSetup, { ...f.scope, ports: f.ports }),
+            createElement(WithdrawalSetup, {
+              ...f.scope,
+              ports: f.ports,
+              onFinancialChange: f.onFinancialChange,
+            }),
           ),
         );
       });

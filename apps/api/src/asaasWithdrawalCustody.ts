@@ -11,6 +11,7 @@ import {
   type AsaasWithdrawalCustody,
   captureAsaasWithdrawalTransfer,
 } from "./asaasTransferClient";
+import { databaseTimestampEpochMicroseconds } from "./databaseTimestamp";
 import type { ReceivingTransaction } from "./receivingRepository";
 import {
   captureDispatchFence,
@@ -56,6 +57,44 @@ function hash(value: unknown): string {
   return createHash("sha256").update(canonical(value)).digest("hex");
 }
 
+async function waitForObservationClock(
+  tx: ReceivingTransaction,
+  observedAt: Date,
+): Promise<void> {
+  const observed = databaseTimestampEpochMicroseconds(observedAt);
+  const started = performance.now();
+  if (!Number.isFinite(started)) unavailable();
+  let previousElapsed = 0;
+  let previousSql: bigint | null = null;
+  const elapsed = () => {
+    const value = performance.now() - started;
+    if (!Number.isFinite(value) || value < previousElapsed || value > 1250)
+      unavailable();
+    previousElapsed = value;
+    return value;
+  };
+  for (let sample = 0; sample < 3; sample++) {
+    const result = await tx.execute(
+      sql`SELECT clock_timestamp()::text AS "currentTime"`,
+    );
+    const spent = elapsed();
+    if (result.rows.length !== 1) unavailable();
+    const current = databaseTimestampEpochMicroseconds(
+      (result.rows[0] as { currentTime: unknown }).currentTime,
+    );
+    if (previousSql !== null && current <= previousSql) unavailable();
+    const lag = observed - current;
+    if (lag <= 0n) return;
+    if (lag > 1_000_000n || sample === 2) unavailable();
+    const delay = Number((lag + 999n) / 1000n) + 10;
+    if (spent + delay > 1250) unavailable();
+    previousSql = current;
+    // Wait for the authoritative SQL clock; never relabel provider evidence.
+    await new Promise<void>((resolve) => setTimeout(resolve, delay));
+    elapsed();
+  }
+}
+
 export function createAsaasWithdrawalCustody(
   db: CustodyDatabase,
   options: AsaasWithdrawalCustodyOptions,
@@ -93,7 +132,7 @@ export function createAsaasWithdrawalCustody(
     if (!/^asaas-transfer:[a-f0-9]{64}$/.test(reference)) unavailable();
     const c = original.correlation;
     const result = await tx.execute(
-      sql`SELECT id,site_id AS "siteId",account_id AS "accountId",environment,operation_id AS "operationId",provider_reference AS "providerReference",payload_hash AS "payloadHash",payload,observed_at AS "observedAt",recorded_at AS "recordedAt" FROM ${withdrawalProviderObservation} WHERE id=${reference} AND site_id=${c.siteId} AND account_id=${c.accountId} AND environment=${c.environment} AND operation_id=${c.operationId}`,
+      sql`SELECT id,site_id AS "siteId",account_id AS "accountId",environment,operation_id AS "operationId",provider_reference AS "providerReference",payload_hash AS "payloadHash",payload,observed_at AS "observedAt",recorded_at::text AS "recordedAt",clock_timestamp()::text AS "readAt" FROM ${withdrawalProviderObservation} WHERE id=${reference} AND site_id=${c.siteId} AND account_id=${c.accountId} AND environment=${c.environment} AND operation_id=${c.operationId}`,
     );
     if (result.rows.length !== 1) return null;
     const row = captureWithdrawalValue(result.rows[0]) as Record<
@@ -129,9 +168,12 @@ export function createAsaasWithdrawalCustody(
       row.providerReference !== observation.transfer.id ||
       withdrawalInstant(row.observedAt) !==
         withdrawalInstant(observation.observedAt) ||
-      new Date(withdrawalInstant(row.recordedAt)).getTime() <
-        new Date(withdrawalInstant(row.observedAt)).getTime() ||
-      new Date(withdrawalInstant(row.recordedAt)).getTime() > now().getTime()
+      databaseTimestampEpochMicroseconds(row.recordedAt) <
+        databaseTimestampEpochMicroseconds(row.observedAt) ||
+      databaseTimestampEpochMicroseconds(row.recordedAt) >
+        databaseTimestampEpochMicroseconds(row.readAt) ||
+      databaseTimestampEpochMicroseconds(row.recordedAt) >
+        databaseTimestampEpochMicroseconds(now())
     )
       unavailable();
     return { row, observation };
@@ -170,8 +212,10 @@ export function createAsaasWithdrawalCustody(
             op.providerReference !== observation.transfer.id)
         )
           unavailable();
+        await waitForObservationClock(tx, observation.observedAt);
+        captureAsaasWithdrawalTransfer(original, observation, now());
         await tx.execute(
-          sql`INSERT INTO ${withdrawalProviderObservation} (id,site_id,account_id,environment,operation_id,provider_reference,payload_hash,payload,observed_at) VALUES (${reference},${c.siteId},${c.accountId},${c.environment},${c.operationId},${observation.transfer.id},${payloadHash},${JSON.stringify(body)}::jsonb,${withdrawalInstant(observation.observedAt)}::timestamptz) ON CONFLICT (id) DO NOTHING`,
+          sql`INSERT INTO ${withdrawalProviderObservation} (id,site_id,account_id,environment,operation_id,provider_reference,payload_hash,payload,observed_at,recorded_at) VALUES (${reference},${c.siteId},${c.accountId},${c.environment},${c.operationId},${observation.transfer.id},${payloadHash},${JSON.stringify(body)}::jsonb,${withdrawalInstant(observation.observedAt)}::timestamptz,clock_timestamp()) ON CONFLICT (id) DO NOTHING`,
         );
         const retained = await read(tx, original, fence, reference);
         if (

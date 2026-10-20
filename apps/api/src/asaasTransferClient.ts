@@ -2,6 +2,7 @@ import type {
   AsaasHttpClient,
   AsaasTransferObservation,
 } from "./asaasHttpClient";
+import { logWithdrawalFailure } from "./withdrawalDiagnostics";
 import {
   captureDispatchFence,
   captureOriginalWithdrawal,
@@ -215,7 +216,8 @@ export function createAsaasWithdrawalTransferAdapter(
           externalReference: c.operationId,
         });
         return await observe(original, fence, observation);
-      } catch {
+      } catch (error) {
+        logWithdrawalFailure(error);
         return unresolved;
       }
     },
@@ -282,7 +284,8 @@ export function createAsaasWithdrawalTransferAdapter(
           outcome: "FOUND",
           observation: await observe(original, fence, found),
         };
-      } catch {
+      } catch (error) {
+        logWithdrawalFailure(error);
         return { outcome: "UNRESOLVED" };
       }
     },

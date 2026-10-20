@@ -1,8 +1,10 @@
 import { createHash } from "node:crypto";
-import { isDeepStrictEqual } from "node:util";
+import { isDeepStrictEqual, types } from "node:util";
 import type { SQL } from "drizzle-orm";
 import { PgDialect } from "drizzle-orm/pg-core";
+import { PgRaw } from "drizzle-orm/pg-core/query-builders/raw";
 import { describe, expect, it, vi } from "vitest";
+import { ADMIN_ABSOLUTE_TIMEOUT_MS, ADMIN_IDLE_TIMEOUT_MS } from "./authHttp";
 import { databaseTimestampEpochMicroseconds } from "./databaseTimestamp";
 import {
   createWithdrawalExecutionService,
@@ -20,7 +22,7 @@ import {
   readWithdrawalConsentSnapshot,
 } from "./withdrawalReservations";
 
-function fixture(maximum = false) {
+function fixture(maximum = false, reviewedPayout = false) {
   const time = new Date("2026-10-14T04:00:00.000Z");
   const sqlClock = { value: time.toISOString() };
   const actor = {
@@ -89,6 +91,22 @@ function fixture(maximum = false) {
   };
   const presentation = {
     ...scope,
+    ...(reviewedPayout
+      ? {
+          payout: {
+            destinationId: "pix-destination-1",
+            destinationVersion: 1,
+            configurationHash: "c".repeat(64),
+            reviewId: "review-1",
+            holderId: "bride-1",
+            holderConsentId: "holder-consent-1",
+            acceptThirdParty: false,
+            keyType: "EVP" as const,
+            maskedKey: "***1234",
+            ownerName: "Original Operator",
+          },
+        }
+      : {}),
     source: "stored" as const,
     verification: "verified" as const,
     provenance: "provider" as const,
@@ -100,7 +118,7 @@ function fixture(maximum = false) {
     evidenceObservedAt: new Date(time),
     bankObservedAt: new Date(time),
     operatorProfileUpdatedAt: new Date(time),
-    maskedDestination: "Bank **** 1234",
+    maskedDestination: reviewedPayout ? "Pix EVP: ***1234" : "Bank **** 1234",
     operatorDisplayName: "Original Operator",
   };
   const consentSnapshot = readWithdrawalConsentSnapshot({
@@ -116,6 +134,7 @@ function fixture(maximum = false) {
       destinationVersion: 3,
       maskedDestination: presentation.maskedDestination,
       operatorDisplayName: presentation.operatorDisplayName,
+      ...(reviewedPayout ? { payoutRecipientName: "Original Operator" } : {}),
       policyVersion: feeQuote.policyVersion,
       issuedAt: time.toISOString(),
       expiresAt: feeQuote.expiresAt,
@@ -603,6 +622,325 @@ function fixture(maximum = false) {
 }
 
 describe("private withdrawal posting repository", () => {
+  function acceptedRecoveryFixture() {
+    const f = fixture(true, true);
+    f.time.setTime(+f.time + 360000);
+    f.sqlClock.value = f.time.toISOString();
+    f.attempt.recentAuth.authenticatedAt = new Date(+f.time - 1000);
+    f.attempt.recentAuth.expiresAt = new Date(+f.time + 270000);
+    f.tables.session[0].lastActiveAt = f.time.toISOString();
+    f.authority.context.readiness.observedAt = f.time.toISOString();
+    f.authority.presentation.evidenceObservedAt = new Date(f.time);
+    f.authority.presentation.bankObservedAt = new Date(f.time);
+    f.authority.presentation.evidenceId = "evidence-refreshed";
+    f.authority.presentation.verificationReference = "verification-refreshed";
+    return f;
+  }
+  it("recovers a timely accepted reviewed maximum after preview expiry without renewing frozen consent", async () => {
+    const f = acceptedRecoveryFixture();
+    const original = structuredClone(f.original);
+    const request = structuredClone(f.tables.withdrawal_request);
+    const armed = await f.repository.armExisting(f.attempt);
+    expect(armed.outcome).toBe("ARMED");
+    if (armed.outcome !== "ARMED") throw new Error("Expected recovered arm");
+    expect(armed.original).toEqual(original);
+    expect(f.tables.withdrawal_request).toEqual(request);
+    expect(f.tables.financial_operation[0]).toMatchObject({
+      state: "PROCESSING",
+      attempts: 1,
+    });
+    expect(armed.fence.leaseExpiresAt).toBe(
+      new Date(+f.time + 60000).toISOString(),
+    );
+    expect(f.tables.withdrawal_intent[0].reservedCents).toBe(10000);
+  });
+  it.each([
+    "session",
+    "idle",
+    "absolute",
+    "readiness",
+    "evidence",
+    "bank",
+    "proof",
+  ])(
+    "bounds recovered dispatch authority by current %s deadline",
+    async (kind) => {
+      const f = acceptedRecoveryFixture();
+      const deadline = +f.time + 12000;
+      if (kind === "session")
+        f.tables.session[0].sessionExpiresAt = new Date(deadline).toISOString();
+      if (kind === "idle") {
+        f.tables.session[0].lastActiveAt = new Date(
+          deadline - ADMIN_IDLE_TIMEOUT_MS,
+        ).toISOString();
+        f.tables.session[0].sessionCreatedAt = new Date(
+          deadline - ADMIN_IDLE_TIMEOUT_MS - 3600000,
+        ).toISOString();
+      }
+      if (kind === "absolute")
+        f.tables.session[0].sessionCreatedAt = new Date(
+          deadline - ADMIN_ABSOLUTE_TIMEOUT_MS,
+        ).toISOString();
+      if (kind === "readiness")
+        f.authority.context.readiness.observedAt = new Date(
+          deadline - 300000,
+        ).toISOString();
+      if (kind === "evidence")
+        f.authority.presentation.evidenceObservedAt = new Date(
+          deadline - 300000,
+        );
+      if (kind === "bank")
+        f.authority.presentation.bankObservedAt = new Date(deadline - 300000);
+      if (kind === "proof") f.attempt.recentAuth.expiresAt = new Date(deadline);
+      const armed = await f.repository.armExisting(f.attempt);
+      expect(armed.outcome).toBe("ARMED");
+      if (armed.outcome !== "ARMED") throw new Error("Expected bounded arm");
+      expect(armed.dispatchValidUntil).toBe(new Date(deadline).toISOString());
+      expect(armed.fence.leaseExpiresAt).toBe(new Date(deadline).toISOString());
+    },
+  );
+  it.each([
+    "profile",
+    "profileTime",
+    "payout",
+    "destination",
+    "holder",
+    "proof",
+    "session",
+    "staleEvidence",
+    "futureEvidence",
+    "staleReadiness",
+    "authorityMissing",
+  ])(
+    "denies accepted recovery with changed or expired %s without changing the hold",
+    async (kind) => {
+      const f = acceptedRecoveryFixture();
+      if (kind === "profile")
+        f.authority.presentation.operatorDisplayName = "Changed Operator";
+      if (kind === "profileTime")
+        f.authority.presentation.operatorProfileUpdatedAt = new Date(f.time);
+      if (kind === "payout")
+        f.authority.presentation.payout!.reviewId = "changed-review";
+      if (kind === "destination")
+        f.authority.presentation.destinationId = "changed-destination";
+      if (kind === "holder")
+        vi.mocked(
+          f.ports.loadOriginalHolderConsentInTransaction,
+        ).mockResolvedValue({
+          ...structuredClone(f.holderBinding),
+          holderUserId: "changed-holder",
+        });
+      if (kind === "proof") f.attempt.recentAuth.expiresAt = new Date(f.time);
+      if (kind === "session")
+        f.tables.session[0].sessionExpiresAt = f.time.toISOString();
+      if (kind === "staleEvidence")
+        f.authority.presentation.bankObservedAt = new Date(+f.time - 300001);
+      if (kind === "futureEvidence")
+        f.authority.presentation.evidenceObservedAt = new Date(+f.time + 1);
+      if (kind === "staleReadiness")
+        f.authority.context.readiness.observedAt = new Date(
+          +f.time - 300001,
+        ).toISOString();
+      if (kind === "authorityMissing")
+        vi.mocked(f.ports.loadDispatchAuthorityInTransaction).mockResolvedValue(
+          null,
+        );
+      const before = structuredClone(f.tables);
+      expect((await f.repository.armExisting(f.attempt)).outcome).toBe(
+        "DENIED",
+      );
+      expect(f.tables).toEqual(before);
+      expect(f.queries.some((q) => /^UPDATE/.test(q.text))).toBe(false);
+    },
+  );
+  it("keeps a 434ms local recoil at its observed high water while SQL remains authoritative", async () => {
+    const f = acceptedRecoveryFixture();
+    f.faults.onQuery = (text) => {
+      if (text.includes('FROM "session"')) f.time.setTime(+f.time - 434);
+    };
+    expect((await f.repository.armExisting(f.attempt)).outcome).toBe("ARMED");
+  });
+  it.each(["exact", "unreviewedMaximum"])(
+    "keeps the original expiry strict for %s withdrawals",
+    async (kind) => {
+      const f = fixture(kind === "unreviewedMaximum", kind === "exact");
+      f.time.setTime(+f.time + 60001);
+      f.sqlClock.value = f.time.toISOString();
+      expect((await f.repository.armExisting(f.attempt)).outcome).toBe(
+        "DENIED",
+      );
+      expect(f.tables.financial_operation[0].attempts).toBe(0);
+      expect(f.queries.some((q) => /^UPDATE/.test(q.text))).toBe(false);
+    },
+  );
+  it("does not revive an already admitted maximum after its authority expires", async () => {
+    const f = acceptedRecoveryFixture();
+    const armed = await f.repository.armExisting(f.attempt);
+    expect(armed.outcome).toBe("ARMED");
+    const before = structuredClone(f.tables);
+    f.time.setTime(+f.time + 3600000);
+    f.sqlClock.value = f.time.toISOString();
+    expect((await f.repository.armExisting(f.attempt)).outcome).toBe(
+      "EXISTING",
+    );
+    expect(f.tables).toEqual(before);
+    expect(f.ports.loadDispatchAuthorityInTransaction).toHaveBeenCalledTimes(1);
+  });
+  it("never rounds a microsecond session deadline forward when minting a millisecond lease", async () => {
+    const f = acceptedRecoveryFixture();
+    f.tables.session[0].sessionExpiresAt = "2026-10-14T04:06:12.000999Z";
+    const armed = await f.repository.armExisting(f.attempt);
+    expect(armed.outcome).toBe("ARMED");
+    if (armed.outcome !== "ARMED") throw new Error("Expected precise arm");
+    expect(armed.fence.leaseExpiresAt).toBe("2026-10-14T04:06:12.000Z");
+    expect(
+      databaseTimestampEpochMicroseconds(armed.fence.leaseExpiresAt),
+    ).toBeLessThan(
+      databaseTimestampEpochMicroseconds(f.tables.session[0].sessionExpiresAt),
+    );
+  });
+  it.each(["proof", "session", "sqlBackward", "invalidLocal"])(
+    "rolls back recovery when %s fails despite a local recoil",
+    async (kind) => {
+      const f = acceptedRecoveryFixture();
+      if (kind === "session")
+        f.tables.session[0].sessionExpiresAt = new Date(
+          +f.time + 1000,
+        ).toISOString();
+      const before = structuredClone(f.tables);
+      f.faults.onQuery = (text) => {
+        if (text.startsWith('UPDATE "withdrawal_intent"')) {
+          f.time.setTime(+f.time - 434);
+          if (kind === "proof")
+            f.sqlClock.value = f.attempt.recentAuth.expiresAt.toISOString();
+          if (kind === "session")
+            f.sqlClock.value = f.tables.session[0].sessionExpiresAt;
+          if (kind === "sqlBackward")
+            f.sqlClock.value = new Date(+f.time - 1).toISOString();
+          if (kind === "invalidLocal") f.time.setTime(Number.NaN);
+        }
+      };
+      expect((await f.repository.armExisting(f.attempt)).outcome).toBe(
+        "DENIED",
+      );
+      expect(f.tables).toEqual(before);
+    },
+  );
+  it("admits and posts through the actual Drizzle PgRaw executor without changing frozen originals", async () => {
+    const f = fixture();
+    const transaction = f.db.transaction.bind(f.db);
+    const dialect = new PgDialect();
+    let rawQueries = 0;
+    const database = {
+      ...f.db,
+      transaction: (callback: (tx: any) => Promise<any>, options: any) =>
+        transaction(
+          async (tx) =>
+            callback({
+              execute: (statement: SQL) => {
+                const pending = new PgRaw(
+                  () => tx.execute(statement),
+                  statement,
+                  dialect.sqlToQuery(statement),
+                  (result) => result,
+                );
+                expect(types.isPromise(pending)).toBe(false);
+                rawQueries++;
+                return pending;
+              },
+            }),
+          options,
+        ),
+    } as unknown as WithdrawalPostingDatabase;
+    const repository = createWithdrawalPostingRepository(database, f.options);
+    const originalTables = structuredClone(f.tables);
+    f.faults.onQuery = (text) => {
+      if (text.startsWith('UPDATE "financial_operation"'))
+        throw new Error("Database write failed");
+    };
+    expect((await repository.armExisting(f.attempt)).outcome).toBe(
+      "UNRESOLVED",
+    );
+    expect(f.tables).toEqual(originalTables);
+    f.faults.onQuery = null;
+    const armed = await repository.armExisting(f.attempt);
+    expect(armed.outcome).toBe("ARMED");
+    if (armed.outcome !== "ARMED") throw new Error("Expected Drizzle arm");
+    const stored = await repository.readExisting({
+      siteId: "site-1",
+      requestId: "request-1",
+    });
+    expect(stored?.original).toEqual(f.original);
+    expect(armed.original).toEqual(f.original);
+    expect(f.tables.financial_operation[0]).toMatchObject({
+      state: "PROCESSING",
+      attempts: 1,
+    });
+    f.makeProof(armed);
+    expect(
+      (
+        await repository.postCompleted(
+          armed.original,
+          armed.fence,
+          "bank-receipt-1",
+        )
+      ).outcome,
+    ).toBe("COMPLETED");
+    expect(rawQueries).toBeGreaterThan(10);
+    expect(rawQueries).toBe(f.queries.length);
+    expect(f.tables.financial_ledger_entry).toHaveLength(1);
+  });
+  it.each([
+    "thenable",
+    "rawExecuteAccessor",
+    "rawExecuteThenable",
+    "rawSubclass",
+    "rawProxy",
+  ])(
+    "does not evaluate an untrusted SQL %s while adapting Drizzle queries",
+    async (kind) => {
+      const f = fixture();
+      const unsafe = vi.fn(() => {
+        throw new Error("Untrusted query metadata");
+      });
+      // biome-ignore lint/suspicious/noThenProperty: Hostile SQL thenables must be rejected without evaluation.
+      const thenable = Object.defineProperty({}, "then", { get: unsafe });
+      const raw = new PgRaw(
+        async () => ({ rows: [] }),
+        {} as SQL,
+        { sql: "", params: [] },
+        (result) => result,
+      );
+      let pending: unknown = thenable;
+      if (kind === "rawExecuteAccessor")
+        pending = Object.defineProperty(raw, "execute", { get: unsafe });
+      if (kind === "rawExecuteThenable")
+        pending = Object.defineProperty(raw, "execute", {
+          value: () => thenable,
+        });
+      if (kind === "rawSubclass") {
+        class RawSubclass extends PgRaw<unknown> {}
+        pending = new RawSubclass(
+          unsafe,
+          {} as SQL,
+          { sql: "", params: [] },
+          (r) => r,
+        );
+      }
+      if (kind === "rawProxy")
+        pending = new Proxy(raw, { getPrototypeOf: unsafe });
+      const database = {
+        ...f.db,
+        transaction: async (callback: (tx: any) => Promise<any>) =>
+          callback({ execute: () => pending }),
+      } as unknown as WithdrawalPostingDatabase;
+      const repository = createWithdrawalPostingRepository(database, f.options);
+      expect((await repository.armExisting(f.attempt)).outcome).toBe("DENIED");
+      expect(unsafe).not.toHaveBeenCalled();
+      expect(f.queries).toHaveLength(0);
+      expect(f.tables.financial_operation[0].attempts).toBe(0);
+    },
+  );
   it("loads only exact existing rows with bounded parameterized queries and durable original holder custody", async () => {
     const f = fixture();
     const stored = await f.repository.readExisting({

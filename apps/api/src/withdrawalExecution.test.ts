@@ -1,10 +1,13 @@
 import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
+import * as diagnostics from "./withdrawalDiagnostics";
 import {
+  captureOriginalWithdrawal,
   createWithdrawalExecutionService,
   type DispatchFence,
   type OriginalWithdrawal,
   type StoredWithdrawalExecution,
+  usesAcceptedMaximumWithdrawalDispatch,
   type WithdrawalDispatchObservation,
   type WithdrawalExecutionOptions,
   type WithdrawalPostingRepository,
@@ -14,7 +17,7 @@ import {
   readWithdrawalConsentSnapshot,
 } from "./withdrawalReservations";
 
-function fixture() {
+function fixture(maximum = false, environment: "sandbox" | "live" = "sandbox") {
   const time = new Date("2026-10-14T04:00:00.000Z");
   const actor = {
     siteId: "site-1",
@@ -26,16 +29,18 @@ function fixture() {
     siteId: actor.siteId,
     amountCents: 10000,
     feeCents: 500,
+    ...(maximum ? { feeSemantics: "MAXIMUM" as const } : {}),
     netCents: 9500,
     currency: "BRL" as const,
     destinationVersion: 3,
     state: "REQUESTED" as const,
-    mode: "sandbox" as const,
+    mode: environment,
     createdAt: time.toISOString(),
     updatedAt: time.toISOString(),
   };
   const feeQuote = {
     feeCents: 500,
+    ...(maximum ? { feeSemantics: "MAXIMUM" as const } : {}),
     policyVersion: "fee-v1",
     provenance: "provider" as const,
     observedAt: time.toISOString(),
@@ -49,7 +54,7 @@ function fixture() {
     accountReference: "acct-1",
     recipientReference: "recipient-1",
     bankReference: "bank-1",
-    environment: "sandbox" as const,
+    environment,
     operationId: "operation-1",
     requestHash: createHash("sha256")
       .update(
@@ -58,7 +63,7 @@ function fixture() {
           actor.siteId,
           "request-1",
           actor.userId,
-          "sandbox",
+          environment,
           10000,
           3,
         ]),
@@ -78,7 +83,20 @@ function fixture() {
     amountCents: 10000,
     currency: "BRL" as const,
   };
+  const payout = {
+    destinationId: "pix-1",
+    destinationVersion: 1,
+    configurationHash: "c".repeat(64),
+    reviewId: "review-1",
+    holderId: "holder-1",
+    holderConsentId: "holder-consent-1",
+    acceptThirdParty: false,
+    keyType: "EMAIL" as const,
+    maskedKey: "o***@example.test",
+    ownerName: "Original Operator",
+  };
   const presentation = {
+    ...(maximum ? { payout } : {}),
     ...scope,
     source: "stored",
     verification: "verified",
@@ -91,16 +109,24 @@ function fixture() {
     evidenceObservedAt: time.toISOString(),
     bankObservedAt: time.toISOString(),
     operatorProfileUpdatedAt: time.toISOString(),
-    maskedDestination: "Bank **** 1234",
+    maskedDestination: maximum
+      ? "Pix EMAIL: o***@example.test"
+      : "Bank **** 1234",
     operatorDisplayName: "Original Operator",
   };
   const consentSnapshot = readWithdrawalConsentSnapshot({
     preview: {
       siteId: actor.siteId,
       requestId: snapshot.requestId,
-      mode: "sandbox",
+      mode: environment,
       amountCents: 10000,
       feeCents: 500,
+      ...(maximum
+        ? {
+            feeSemantics: "MAXIMUM" as const,
+            payoutRecipientName: payout.ownerName,
+          }
+        : {}),
       netCents: 9500,
       currency: "BRL",
       destinationVersion: 3,
@@ -224,8 +250,8 @@ function fixture() {
     lookup: vi.fn(async () => ({ outcome: "NOT_FOUND" as const })),
   };
   const options: WithdrawalExecutionOptions = {
-    mode: "sandbox",
-    applicationEnvironment: "test",
+    mode: environment,
+    applicationEnvironment: environment === "live" ? "production" : "test",
     maxAuthAgeMs: 300000,
     now: () => new Date(time),
     repository,
@@ -815,4 +841,266 @@ describe("withdrawal configuration capture amendment", () => {
     expect(f.repository.armExisting).toHaveBeenCalledTimes(1);
     expect(f.dispatch.dispatch).not.toHaveBeenCalled();
   });
+});
+
+describe("accepted maximum withdrawal dispatch authority", () => {
+  it("recognizes only validated accepted provider maximum Sandbox consent", () => {
+    const f = fixture(true);
+    expect(usesAcceptedMaximumWithdrawalDispatch(f.original, "test")).toBe(
+      true,
+    );
+    expect(
+      usesAcceptedMaximumWithdrawalDispatch(f.original, "development"),
+    ).toBe(true);
+    expect(
+      usesAcceptedMaximumWithdrawalDispatch(f.original, "production"),
+    ).toBe(false);
+    expect(
+      usesAcceptedMaximumWithdrawalDispatch(fixture().original, "test"),
+    ).toBe(false);
+  });
+  it.each([
+    "revision",
+    "state",
+    "payout",
+    "provenance",
+    "acceptance",
+    "issuedAt",
+  ])("denies invalid renewal qualification: %s", (kind) => {
+    const f = fixture(true);
+    const original = structuredClone(f.original) as any;
+    if (kind === "revision") original.consent.requestRevision = "1";
+    if (kind === "state") original.consent.state = "OPEN";
+    if (kind === "payout") delete original.consent.snapshot.presentation.payout;
+    if (kind === "provenance")
+      original.snapshot.feeQuote.provenance = "simulation";
+    if (kind === "acceptance")
+      original.snapshot.intent.createdAt = original.snapshot.feeQuote.expiresAt;
+    if (kind === "issuedAt")
+      original.consent.snapshot.preview.issuedAt = new Date(
+        +f.time + 1,
+      ).toISOString();
+    expect(usesAcceptedMaximumWithdrawalDispatch(original, "test")).toBe(false);
+  });
+  it("dispatches an accepted expired maximum preview under a fresh short authority without changing consent", async () => {
+    const f = fixture(true);
+    const now = new Date(+f.time + 61_000);
+    const validUntil = new Date(+now + 30_000).toISOString();
+    f.attempt.recentAuth.authenticatedAt = now;
+    f.attempt.recentAuth.expiresAt = new Date(validUntil);
+    f.fence.leaseExpiresAt = validUntil;
+    vi.mocked(f.repository.armExisting).mockResolvedValue({
+      outcome: "ARMED",
+      original: f.original,
+      fence: f.fence,
+      dispatchValidUntil: validUntil,
+    });
+    const original = structuredClone(f.original);
+    const service = createWithdrawalExecutionService({
+      ...f.options,
+      now: () => now,
+    });
+    expect((await service.executeExisting(f.attempt)).outcome).toBe(
+      "PROCESSING",
+    );
+    expect(f.dispatch.dispatch).toHaveBeenCalledOnce();
+    expect(f.original).toEqual(original);
+  });
+  it("keeps expired exact-fee previews unable to dispatch even with fresh authentication", async () => {
+    const f = fixture();
+    const now = new Date(+f.time + 61_000);
+    const validUntil = new Date(+now + 30_000).toISOString();
+    f.attempt.recentAuth.authenticatedAt = now;
+    f.attempt.recentAuth.expiresAt = new Date(validUntil);
+    f.fence.leaseExpiresAt = validUntil;
+    vi.mocked(f.repository.armExisting).mockResolvedValue({
+      outcome: "ARMED",
+      original: f.original,
+      fence: f.fence,
+      dispatchValidUntil: validUntil,
+    });
+    expect(
+      (
+        await createWithdrawalExecutionService({
+          ...f.options,
+          now: () => now,
+        }).executeExisting(f.attempt)
+      ).outcome,
+    ).toBe("UNRESOLVED");
+    expect(f.dispatch.dispatch).not.toHaveBeenCalled();
+  });
+  it.each(["proof", "authority", "lease"])(
+    "never renews expired current %s authority from accepted consent",
+    async (kind) => {
+      const f = fixture(true);
+      const now = new Date(+f.time + 61_000);
+      const later = new Date(+now + 30_000).toISOString();
+      f.attempt.recentAuth.authenticatedAt = now;
+      f.attempt.recentAuth.expiresAt = kind === "proof" ? now : new Date(later);
+      f.fence.leaseExpiresAt = kind === "lease" ? now.toISOString() : later;
+      vi.mocked(f.repository.armExisting).mockResolvedValue({
+        outcome: "ARMED",
+        original: f.original,
+        fence: f.fence,
+        dispatchValidUntil: kind === "authority" ? now.toISOString() : later,
+      });
+      await createWithdrawalExecutionService({
+        ...f.options,
+        now: () => now,
+      }).executeExisting(f.attempt);
+      expect(f.dispatch.dispatch).not.toHaveBeenCalled();
+    },
+  );
+});
+
+it("reports a caught arm failure through existing safe diagnostics without changing denial", async () => {
+  const diagnostic = vi
+    .spyOn(diagnostics, "logWithdrawalFailure")
+    .mockImplementation(() => {});
+  try {
+    const f = fixture();
+    const failure = new Error("synthetic private failure");
+    vi.mocked(f.repository.armExisting).mockRejectedValue(failure);
+    expect(
+      await createWithdrawalExecutionService(f.options).executeExisting(
+        f.attempt,
+      ),
+    ).toEqual({ outcome: "DENIED" });
+    expect(diagnostic).toHaveBeenCalledWith(failure);
+    expect(f.dispatch.dispatch).not.toHaveBeenCalled();
+  } finally {
+    diagnostic.mockRestore();
+  }
+});
+
+function confirmationWithFreshQuote(
+  maximum = true,
+  environment: "sandbox" | "live" = "sandbox",
+) {
+  const f = fixture(maximum, environment);
+  return {
+    fixture: f,
+    original: {
+      ...f.original,
+      snapshot: {
+        ...f.original.snapshot,
+        intent: {
+          ...f.original.snapshot.intent,
+          createdAt: new Date(+f.time + 2000).toISOString(),
+          updatedAt: new Date(+f.time + 2000).toISOString(),
+        },
+        feeQuote: {
+          ...f.original.snapshot.feeQuote,
+          observedAt: new Date(+f.time + 1000).toISOString(),
+          expiresAt: new Date(+f.time + 61000).toISOString(),
+        },
+      },
+    },
+  };
+}
+
+it("captures accepted reviewed maximum consent when confirmation independently refreshed only native quote times", () => {
+  const { original } = confirmationWithFreshQuote();
+  const frozen = structuredClone(original);
+  expect(() => captureOriginalWithdrawal(original)).not.toThrow();
+  expect(usesAcceptedMaximumWithdrawalDispatch(original, "test")).toBe(true);
+  expect(original).toEqual(frozen);
+});
+
+it("retains strict fee quote timestamp equality for exact-fee consent", () => {
+  const { original } = confirmationWithFreshQuote(false);
+  expect(() => captureOriginalWithdrawal(original)).toThrow(
+    "Invalid original withdrawal consent",
+  );
+});
+
+it.each([
+  "fee",
+  "policy",
+  "provenance",
+  "semantics",
+  "future",
+  "rollback",
+  "extendedLifetime",
+  "shortenedLifetime",
+  "frozenDeadline",
+  "freshDeadline",
+])("rejects changed or invalid refreshed confirmation quote: %s", (kind) => {
+  const { original, fixture: f } = confirmationWithFreshQuote();
+  if (kind === "fee") {
+    original.snapshot.feeQuote.feeCents += 1;
+    original.snapshot.intent.feeCents += 1;
+    original.snapshot.intent.netCents -= 1;
+  }
+  if (kind === "policy")
+    original.snapshot.feeQuote.policyVersion = "changed-policy";
+  if (kind === "provenance")
+    original.snapshot.feeQuote.provenance = "simulation";
+  if (kind === "semantics") delete original.snapshot.feeQuote.feeSemantics;
+  if (kind === "future") {
+    original.snapshot.feeQuote.observedAt = new Date(
+      +f.time + 2001,
+    ).toISOString();
+    original.snapshot.feeQuote.expiresAt = new Date(
+      +f.time + 62001,
+    ).toISOString();
+  }
+  if (kind === "rollback") {
+    original.snapshot.feeQuote.observedAt = new Date(+f.time - 1).toISOString();
+    original.snapshot.feeQuote.expiresAt = new Date(
+      +f.time + 59999,
+    ).toISOString();
+  }
+  if (kind === "extendedLifetime")
+    original.snapshot.feeQuote.expiresAt = new Date(
+      +f.time + 61001,
+    ).toISOString();
+  if (kind === "shortenedLifetime")
+    original.snapshot.feeQuote.expiresAt = new Date(
+      +f.time + 60999,
+    ).toISOString();
+  if (kind === "frozenDeadline") {
+    original.snapshot.intent.createdAt =
+      original.consent.snapshot.preview.expiresAt;
+    original.snapshot.intent.updatedAt = original.snapshot.intent.createdAt;
+  }
+  if (kind === "freshDeadline") {
+    original.snapshot.intent.createdAt = original.snapshot.feeQuote.expiresAt;
+    original.snapshot.intent.updatedAt = original.snapshot.intent.createdAt;
+  }
+  expect(() => captureOriginalWithdrawal(original)).toThrow();
+});
+
+it("does not infer reviewed maximum acceptance without frozen payout custody", () => {
+  const { original } = confirmationWithFreshQuote();
+  const presentation = { ...original.consent.snapshot.presentation };
+  delete presentation.payout;
+  const consentSnapshot = readWithdrawalConsentSnapshot({
+    ...original.consent.snapshot,
+    preview: {
+      ...original.consent.snapshot.preview,
+      maskedDestination: "Bank **** 1234",
+      payoutRecipientName: undefined,
+    },
+    presentation: { ...presentation, maskedDestination: "Bank **** 1234" },
+  });
+  const previewHash = hashWithdrawalConsentSnapshot(consentSnapshot);
+  const withoutPayout = {
+    ...original,
+    consent: { ...original.consent, snapshot: consentSnapshot, previewHash },
+    holderBinding: { ...original.holderBinding, consentHash: previewHash },
+  };
+  expect(() => captureOriginalWithdrawal(withoutPayout)).toThrow(
+    "Invalid original withdrawal consent",
+  );
+});
+
+it("retains strict fee quote timestamp equality for otherwise valid live maximum consent", () => {
+  expect(() =>
+    captureOriginalWithdrawal(fixture(true, "live").original),
+  ).not.toThrow();
+  const { original } = confirmationWithFreshQuote(true, "live");
+  expect(() => captureOriginalWithdrawal(original)).toThrow(
+    "Invalid original withdrawal consent",
+  );
 });

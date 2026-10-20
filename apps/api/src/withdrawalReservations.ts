@@ -32,6 +32,7 @@ import {
   type RecentFinancialAuthenticationEvidence,
 } from "./financialAuthorization";
 import { ReceivingReadinessServiceError } from "./receivingReadiness";
+import { logWithdrawalFailure } from "./withdrawalDiagnostics";
 
 import {
   readWithdrawalPayoutBinding,
@@ -501,6 +502,7 @@ export class WithdrawalReservationServiceError extends Error {
   ) {
     super("Withdrawal reservation is unavailable");
     this.name = "WithdrawalReservationServiceError";
+    logWithdrawalFailure(this);
   }
 }
 
@@ -1165,6 +1167,7 @@ export function createWithdrawalReservationService(
       };
     };
     const safe = (error: unknown): never => {
+      logWithdrawalFailure(error);
       if (error instanceof WithdrawalReservationServiceError)
         return deny(error.code, error.status);
       if (error instanceof FinancialAuthorizationError)
@@ -1252,9 +1255,8 @@ export function createWithdrawalReservationService(
           let last = time(now());
           const clock = () => {
             const current = time(now());
-            if (current < last) return deny("WITHDRAWAL_UNAVAILABLE");
-            last = current;
-            return current;
+            last = Math.max(last, current);
+            return last;
           };
           const context = contextScope(
             await loadContext(selected.actor.siteId),
@@ -1440,9 +1442,8 @@ export function createWithdrawalReservationService(
           let lastClock = -1;
           const clock = () => {
             const current = time(now());
-            if (current < lastClock) return deny("WITHDRAWAL_UNAVAILABLE");
-            lastClock = current;
-            return current;
+            lastClock = Math.max(lastClock, current);
+            return lastClock;
           };
           const proof = captureProof(
             attempt.recentAuth,

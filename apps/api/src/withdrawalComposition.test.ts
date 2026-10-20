@@ -1,9 +1,22 @@
-import type { WithdrawalRequestContext } from "@entrelacos/contracts";
+import {
+  receivingSetupConsentVersion,
+  type WithdrawalRequestContext,
+} from "@entrelacos/contracts";
 import type { SQL } from "drizzle-orm";
 import { PgDialect } from "drizzle-orm/pg-core";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createWithdrawalComposition } from "./withdrawalComposition";
+import * as asaasHttpModule from "./asaasHttpClient";
+import * as transferModule from "./asaasTransferClient";
+import * as credentialModule from "./providerCredentials";
+import {
+  createWithdrawalComposition,
+  verifyAsaasWithdrawalDispatchBudget,
+} from "./withdrawalComposition";
+import * as executionModule from "./withdrawalExecution";
+import * as payoutModule from "./withdrawalPayout";
+import * as postingModule from "./withdrawalPostingRepository";
 import * as withdrawalRepository from "./withdrawalReservationRepository";
+import * as reservationModule from "./withdrawalReservations";
 
 describe("native withdrawal runtime composition", () => {
   it("leaves disabled and production configurations without dispatch services", () => {
@@ -62,6 +75,20 @@ describe("native withdrawal maximum fee quote", () => {
       provenance: "provider",
       verification: "verified",
     });
+  });
+  it("gives a new maximum fee quote two minutes from its observation without renewing that observation", async () => {
+    const { quoteAsaasWithdrawalMaximumFee } = await import(
+      "./withdrawalComposition"
+    );
+    const observed = observation();
+    const quote = quoteAsaasWithdrawalMaximumFee(
+      scope,
+      observed,
+      new Date(+now + 30_000),
+    );
+    expect(quote.observedAt).toEqual(now);
+    expect(quote.expiresAt).toEqual(new Date(+now + 120_000));
+    expect(observed.observedAt).toEqual(now);
   });
   it.each([
     "siteId",
@@ -481,6 +508,537 @@ describe("composed withdrawal context refresh", () => {
           f.composition.service?.readContext(selected),
         ).rejects.toMatchObject({ code: "MEMBERSHIP_DENIED" });
         expect(refresh).not.toHaveBeenCalled();
+        expect(f.fetch).not.toHaveBeenCalled();
+      } finally {
+        await f.composition.close();
+      }
+    },
+  );
+});
+
+describe("protected existing withdrawal refresh", () => {
+  afterEach(() => vi.restoreAllMocks());
+  it.each(["success", "denied", "refreshFailure"])(
+    "refreshes only after successful existing recovery and before arming: %s",
+    async (outcome) => {
+      const calls: string[] = [];
+      const refresh = vi.fn(async (_siteId: string) => {
+        calls.push("refresh");
+        if (outcome === "refreshFailure") throw new Error("unavailable");
+      });
+      const recoverExisting = vi.fn(async () => {
+        calls.push("authorized recovery");
+        if (outcome === "denied") throw new Error("denied");
+        return { siteId: "site-1", state: "REQUESTED" };
+      });
+      const executeExisting = vi.fn(async () => {
+        calls.push("arm");
+        return { outcome: "DENIED" };
+      });
+      vi.spyOn(
+        reservationModule,
+        "createWithdrawalReservationService",
+      ).mockReturnValue({ recoverExisting } as never);
+      vi.spyOn(
+        executionModule,
+        "createWithdrawalExecutionService",
+      ).mockReturnValue({ executeExisting } as never);
+      const createRepository =
+        withdrawalRepository.createWithdrawalReservationRepository;
+      vi.spyOn(
+        withdrawalRepository,
+        "createWithdrawalReservationRepository",
+      ).mockImplementation((db, options) => ({
+        ...createRepository(db, options),
+        findByRequest: vi.fn(async () => null),
+      }));
+      const f = enabledFixture(refresh);
+      try {
+        const attempt = {
+          actor: { siteId: "site-1" },
+          requestId: "request-1",
+        } as never;
+        if (outcome === "success") {
+          await f.composition.service?.recoverExisting(attempt);
+          expect(calls).toEqual(["authorized recovery", "refresh", "arm"]);
+        } else {
+          await expect(
+            f.composition.service?.recoverExisting(attempt),
+          ).rejects.toThrow();
+          expect(calls).toEqual(
+            outcome === "denied"
+              ? ["authorized recovery"]
+              : ["authorized recovery", "refresh"],
+          );
+          expect(executeExisting).not.toHaveBeenCalled();
+        }
+        expect(f.fetch).not.toHaveBeenCalled();
+      } finally {
+        await f.composition.close();
+      }
+    },
+  );
+});
+
+it.each(["PROCESSING", "UNKNOWN", "COMPLETED"])(
+  "preserves attempted or settled %s recovery without refreshing current receiving",
+  async (state) => {
+    const refresh = vi.fn(async (_siteId: string) => {
+      throw new Error("current receiving unavailable");
+    });
+    const recoverExisting = vi.fn(async () => ({ siteId: "site-1", state }));
+    const executeExisting = vi.fn(async () => ({ outcome: "DENIED" }));
+    const reservationSpy = vi
+      .spyOn(reservationModule, "createWithdrawalReservationService")
+      .mockReturnValue({ recoverExisting } as never);
+    const executionSpy = vi
+      .spyOn(executionModule, "createWithdrawalExecutionService")
+      .mockReturnValue({ executeExisting } as never);
+    const createRepository =
+      withdrawalRepository.createWithdrawalReservationRepository;
+    const repositorySpy = vi
+      .spyOn(withdrawalRepository, "createWithdrawalReservationRepository")
+      .mockImplementation((db, options) => ({
+        ...createRepository(db, options),
+        findByRequest: vi.fn(async () => null),
+      }));
+    const f = enabledFixture(refresh);
+    try {
+      await expect(
+        f.composition.service?.recoverExisting({
+          actor: { siteId: "site-1" },
+          requestId: "request-1",
+        } as never),
+      ).resolves.toEqual({ siteId: "site-1", state });
+      expect(refresh).not.toHaveBeenCalled();
+      expect(executeExisting).toHaveBeenCalledOnce();
+      expect(f.fetch).not.toHaveBeenCalled();
+    } finally {
+      await f.composition.close();
+      reservationSpy.mockRestore();
+      executionSpy.mockRestore();
+      repositorySpy.mockRestore();
+    }
+  },
+);
+
+describe("current native withdrawal budget", () => {
+  const now = new Date("2026-10-19T10:00:00.000Z");
+  function budget() {
+    const correlation = {
+      siteId: "site-1",
+      accountId: "account-1",
+      accountReference: "acct-1",
+      environment: "sandbox",
+      bankReference: "bank-1",
+      destinationVersion: 1,
+      amountCents: 300,
+      feeCents: 200,
+      netCents: 100,
+      currency: "BRL",
+    };
+    const binding = {
+      source: "provider" as const,
+      provider: "ASAAS" as const,
+      siteId: "site-1",
+      accountBindingId: "account-1",
+      accountReference: "acct-1",
+      environment: "sandbox" as const,
+      currency: "BRL" as const,
+      observedAt: new Date(now),
+    };
+    return {
+      original: { correlation } as executionModule.OriginalWithdrawal,
+      fees: {
+        ...binding,
+        completedAt: new Date(now),
+        fees: { transfer: { pix: { feeValue: "2.00" } } },
+      },
+      balance: { ...binding, balanceCents: 350 },
+    };
+  }
+  it("requires the full approved own budget plus other held commitments exactly once", () => {
+    const f = budget();
+    expect(() =>
+      verifyAsaasWithdrawalDispatchBudget(
+        f.original,
+        f.fees,
+        f.balance,
+        50n,
+        now,
+      ),
+    ).not.toThrow();
+    expect(() =>
+      verifyAsaasWithdrawalDispatchBudget(
+        f.original,
+        f.fees,
+        f.balance,
+        51n,
+        now,
+      ),
+    ).toThrow();
+    f.fees.fees.transfer.pix.feeValue = "0.00";
+    f.balance.balanceCents = 299;
+    expect(() =>
+      verifyAsaasWithdrawalDispatchBudget(
+        f.original,
+        f.fees,
+        f.balance,
+        0n,
+        now,
+      ),
+    ).toThrow();
+  });
+  it.each([
+    "siteId",
+    "accountBindingId",
+    "accountReference",
+    "environment",
+    "source",
+    "provider",
+    "currency",
+  ])("rejects foreign %s in either native observation", (field) => {
+    for (const source of ["fees", "balance"] as const) {
+      const f = budget();
+      (f[source] as Record<string, unknown>)[field] = "foreign";
+      expect(() =>
+        verifyAsaasWithdrawalDispatchBudget(
+          f.original,
+          f.fees,
+          f.balance,
+          0n,
+          now,
+        ),
+      ).toThrow();
+    }
+  });
+  it.each([
+    "overFee",
+    "malformedFee",
+    "staleFees",
+    "futureFees",
+    "futureBalance",
+    "staleBalance",
+    "fractionalBalance",
+    "negativeHolds",
+  ])("rejects unusable current budget: %s", (kind) => {
+    const f = budget();
+    let held = 0n;
+    if (kind === "overFee") f.fees.fees.transfer.pix.feeValue = "2.01";
+    if (kind === "malformedFee") f.fees.fees.transfer.pix.feeValue = "NaN";
+    if (kind === "staleFees") f.fees.observedAt = new Date(+now - 60_001);
+    if (kind === "futureFees") f.fees.completedAt = new Date(+now + 1);
+    if (kind === "futureBalance") f.balance.observedAt = new Date(+now + 1);
+    if (kind === "staleBalance") f.balance.observedAt = new Date(+now - 60_001);
+    if (kind === "fractionalBalance") f.balance.balanceCents = 350.5;
+    if (kind === "negativeHolds") held = -1n;
+    expect(() =>
+      verifyAsaasWithdrawalDispatchBudget(
+        f.original,
+        f.fees,
+        f.balance,
+        held,
+        now,
+      ),
+    ).toThrow();
+  });
+});
+
+describe("composed native dispatch budget boundaries", () => {
+  afterEach(() => vi.restoreAllMocks());
+  function nativeFixture() {
+    const adapterFactory = vi.spyOn(
+      transferModule,
+      "createAsaasWithdrawalTransferAdapter",
+    );
+    const postingFactory = vi.spyOn(
+      postingModule,
+      "createWithdrawalPostingRepository",
+    );
+    vi.spyOn(
+      executionModule,
+      "usesAcceptedMaximumWithdrawalDispatch",
+    ).mockReturnValue(true);
+    const binding = {
+      destinationId: "pix-1",
+      destinationVersion: 1,
+      configurationHash: "a".repeat(64),
+      reviewId: "review-1",
+      holderId: "holder-1",
+      holderConsentId: "holder-consent-1",
+      acceptThirdParty: false,
+      keyType: "EMAIL" as const,
+      maskedKey: "j***@example.test",
+      ownerName: "Joao Silva",
+    };
+    vi.spyOn(payoutModule, "createWithdrawalPayoutBinding").mockReturnValue(
+      binding,
+    );
+    vi.spyOn(credentialModule, "decryptProviderCredential").mockImplementation(
+      (envelope) =>
+        (envelope as { ciphertext?: string }).ciphertext === "destination"
+          ? JSON.stringify({
+              purpose: "receiving-pix-key.v1",
+              type: "EMAIL",
+              key: "joao@example.test",
+            })
+          : "$aact_hmlg_offline-test-token",
+    );
+    const observed = {
+      source: "provider" as const,
+      provider: "ASAAS" as const,
+      siteId: "site-1",
+      accountBindingId: "account-1",
+      accountReference: "acct-1",
+      environment: "sandbox" as const,
+      currency: "BRL" as const,
+    };
+    const fees = vi.fn(async () => ({
+      ...observed,
+      observedAt: f.clock.value,
+      completedAt: f.clock.value,
+      fees: { transfer: { pix: { feeValue: "2.00" } } },
+    }));
+    const balance = vi.fn(async () => ({
+      ...observed,
+      observedAt: f.clock.value,
+      balanceCents: 350,
+    }));
+    const post = vi.fn(async () => ({ provider: "ASAAS" }));
+    vi.spyOn(asaasHttpModule, "createAsaasHttpClient").mockReturnValue({
+      getAccountFees: fees,
+      getBalance: balance,
+      createPixTransfer: post,
+      getTransfer: vi.fn(),
+      listTransfers: vi.fn(),
+    } as never);
+    const f = enabledFixture();
+    const correlation = {
+      siteId: "site-1",
+      requestId: "request-1",
+      requestHash: "b".repeat(64),
+      withdrawalId: "withdrawal-1",
+      operationId: "operation-1",
+      accountId: "account-1",
+      accountReference: "acct-1",
+      recipientReference: "recipient-1",
+      bankReference: "bank-1",
+      operatorUserId: "user-1",
+      environment: "sandbox" as const,
+      destinationVersion: 1,
+      amountCents: 300,
+      feeCents: 200,
+      netCents: 100,
+      currency: "BRL" as const,
+      policyVersion: "fee-v1",
+    };
+    const original = {
+      correlation,
+      snapshot: {
+        intent: { siteId: "site-1", id: "withdrawal-1" },
+        operatorUserId: "user-1",
+        feeQuote: { expiresAt: new Date(+f.clock.value - 1).toISOString() },
+      },
+      consent: {
+        snapshot: {
+          scope: correlation,
+          presentation: { payout: binding },
+          preview: { expiresAt: new Date(+f.clock.value - 1).toISOString() },
+        },
+      },
+    } as unknown as executionModule.OriginalWithdrawal;
+    const fence: executionModule.DispatchFence = {
+      operationId: "operation-1",
+      attempts: 1,
+      leaseOwner: "worker-1",
+      leaseToken: "lease-1",
+      leaseExpiresAt: new Date(+f.clock.value + 60_000).toISOString(),
+    };
+    const faults = { sqlLeaseValid: true, otherHeldCents: "50" };
+    const queries: { sql: string; params: unknown[] }[] = [];
+    f.execute.mockImplementation(async (statement) => {
+      const query = new PgDialect().sqlToQuery(statement);
+      queries.push(query);
+      if (query.sql.startsWith("SELECT a.*"))
+        return {
+          rows: [
+            {
+              id: "account-1",
+              site_id: "site-1",
+              environment: "sandbox",
+              provider: "ASAAS",
+              isDemo: true,
+              is_current: true,
+              account_reference: "acct-1",
+              recipient_reference: "recipient-1",
+              operator_user_id: "user-1",
+              credential_ciphertext: "credential",
+            },
+          ],
+        };
+      if (query.sql.includes('request_hash AS "requestHash"'))
+        return {
+          rows: [
+            {
+              requestHash: correlation.requestHash,
+              requestSnapshot: structuredClone(original.snapshot),
+              state: "PROCESSING",
+              attempts: 1,
+              leaseToken: fence.leaseToken,
+              leaseOwner: fence.leaseOwner,
+              leaseExpiresAt: fence.leaseExpiresAt,
+            },
+          ],
+        };
+      if (query.sql.includes("FROM receiving_setup_holder"))
+        return {
+          rows: [
+            {
+              id: "holder-1",
+              holderUserId: "user-1",
+              consentId: "holder-consent-1",
+              consentVersion: receivingSetupConsentVersion,
+              consentAt: f.clock.value,
+            },
+          ],
+        };
+      if (query.sql.includes("FROM receiving_pix_destination"))
+        return {
+          rows: [
+            {
+              id: "pix-1",
+              version: 1,
+              state: "PENDING",
+              isCurrent: true,
+              configuration: { key: { ciphertext: "destination" } },
+            },
+          ],
+        };
+      if (query.sql.includes('AS "otherHeldCents"'))
+        return { rows: [{ otherHeldCents: faults.otherHeldCents }] };
+      if (query.sql.includes("AS valid FROM financial_operation"))
+        return { rows: [{ valid: faults.sqlLeaseValid }] };
+      return { rows: [{ id: "site-1" }] };
+    });
+    const options = adapterFactory.mock.calls[0][0];
+    const posting = postingFactory.mock.calls[0][1];
+    if (posting.mode === "disabled" || !posting.ports)
+      throw new Error("Missing posting ports");
+    const command = {
+      valueCents: 100,
+      externalReference: "operation-1",
+      pixAddressKey: "joao@example.test",
+      pixAddressKeyType: "EMAIL" as const,
+    };
+    return {
+      ...f,
+      original,
+      fence,
+      options,
+      posting: posting.ports,
+      command,
+      fees,
+      balance,
+      post,
+      faults,
+      queries,
+    };
+  }
+  it("checks native fees and balance before returning pre-arm authority", async () => {
+    const f = nativeFixture();
+    f.balance.mockResolvedValue({ ...(await f.balance()), balanceCents: 349 });
+    f.balance.mockClear();
+    try {
+      await expect(
+        f.posting.loadDispatchAuthorityInTransaction(
+          { execute: f.execute } as never,
+          f.original,
+          {
+            actor: {
+              siteId: "site-1",
+              userId: "user-1",
+              sessionId: "session-1",
+            },
+          } as never,
+          f.clock.value,
+        ),
+      ).rejects.toThrow();
+      expect(f.fees).toHaveBeenCalledOnce();
+      expect(f.balance).toHaveBeenCalledOnce();
+      expect(f.post).not.toHaveBeenCalled();
+      const holds = f.queries.find((q) =>
+        q.sql.includes('AS "otherHeldCents"'),
+      );
+      expect(holds?.sql).toContain("w.id<>");
+      expect(holds?.params).toContain("withdrawal-1");
+    } finally {
+      await f.composition.close();
+    }
+  });
+  it.each([
+    "success",
+    "fee",
+    "balance",
+    "sqlLease",
+    "clockLease",
+    "malformedHolds",
+    "command",
+  ])(
+    "rechecks budget and current lease under the dispatch transaction: %s",
+    async (kind) => {
+      const f = nativeFixture();
+      if (kind === "fee")
+        f.fees.mockResolvedValue({
+          ...(await f.fees()),
+          fees: { transfer: { pix: { feeValue: "2.01" } } },
+        });
+      if (kind === "balance")
+        f.balance.mockResolvedValue({
+          ...(await f.balance()),
+          balanceCents: 349,
+        });
+      if (kind === "sqlLease") f.faults.sqlLeaseValid = false;
+      if (kind === "malformedHolds") f.faults.otherHeldCents = "1.5";
+      if (kind === "command") f.command.valueCents = 101;
+      if (kind === "clockLease")
+        f.balance.mockImplementation(async () => {
+          f.clock.value = new Date(f.fence.leaseExpiresAt);
+          return {
+            source: "provider",
+            provider: "ASAAS",
+            siteId: "site-1",
+            accountBindingId: "account-1",
+            accountReference: "acct-1",
+            environment: "sandbox",
+            currency: "BRL",
+            observedAt: f.clock.value,
+            balanceCents: 350,
+          };
+        });
+      f.fees.mockClear();
+      f.balance.mockClear();
+      try {
+        const client = await f.options.loadClient(f.original, f.fence);
+        if (kind === "success") {
+          await client.createPixTransfer(f.command);
+          expect(f.post).toHaveBeenCalledOnce();
+          const holds = f.queries.find((q) =>
+            q.sql.includes('AS "otherHeldCents"'),
+          );
+          expect(holds?.sql).toContain("w.id<>");
+          expect(holds?.params).toContain("withdrawal-1");
+          expect(f.fees).toHaveBeenCalledOnce();
+          expect(f.balance).toHaveBeenCalledOnce();
+          const leaseIndex = f.queries.findIndex((q) =>
+            q.sql.includes("AS valid FROM financial_operation"),
+          );
+          expect(leaseIndex).toBeGreaterThan(
+            f.queries.findIndex((q) => q.sql.includes('AS "otherHeldCents"')),
+          );
+        } else {
+          await expect(client.createPixTransfer(f.command)).rejects.toThrow();
+          expect(f.post).not.toHaveBeenCalled();
+        }
         expect(f.fetch).not.toHaveBeenCalled();
       } finally {
         await f.composition.close();

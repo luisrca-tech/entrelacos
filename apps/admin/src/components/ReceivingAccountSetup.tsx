@@ -589,6 +589,30 @@ export function ReceivingAccountSetupView({
             Conta criada no Asaas. A criação não confirma liberação para receber
             ou sacar.
           </p>
+          <section
+            aria-label="Ativação e acesso ao Asaas"
+            className="grid gap-2"
+          >
+            <h3 className="font-admin-display text-xl">
+              Ativação e acesso ao Asaas
+            </h3>
+            <p>
+              A ativação de acesso e o envio ou recebimento de e-mail não são
+              consultados por este painel. O botão Verificar situação atualiza
+              as verificações cadastrais do Asaas.
+            </p>
+            <p>
+              Se o Asaas exigir ativação por e-mail, confira o e-mail informado
+              no cadastro e siga as instruções recebidas. Em modalidades BaaS,
+              conclua o onboarding fornecido pelo Asaas, quando exigido.
+            </p>
+            {showSandboxNotice(setup.mode) && (
+              <p>
+                No Sandbox, confira o e-mail da conta principal do Asaas: as
+                comunicações de teste são redirecionadas para ele.
+              </p>
+            )}
+          </section>
           {showSandboxNotice(setup.mode) && (
             <>
               <p>

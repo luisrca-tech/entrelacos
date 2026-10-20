@@ -49,6 +49,7 @@ import {
   type ReceivingTransaction,
 } from "./receivingRepository";
 import { resolveSiteAccess, SiteAccessDeniedError } from "./siteAccess";
+import { logWithdrawalFailure } from "./withdrawalDiagnostics";
 import {
   captureWithdrawalPresentation,
   hashWithdrawalConsentSnapshot,
@@ -337,6 +338,7 @@ function safeCount(value: unknown): number {
   return Number(integer);
 }
 function safeError(error: unknown): never {
+  logWithdrawalFailure(error);
   if (
     error instanceof WithdrawalReservationServiceError &&
     [400, 403, 409, 503].includes(error.status) &&
@@ -634,8 +636,7 @@ async function requestAuthority(
   };
   const local = () => {
     const at = clockTime(options.now());
-    if (mutating && at < lastLocal) fail();
-    // Read-only authorization keeps its time fence when the host wall clock adjusts backward.
+    // Keep the local time fence across wall-clock corrections; SQL independently enforces expiry.
     lastLocal = at > lastLocal ? at : lastLocal;
     check(lastLocal);
   };
@@ -1743,9 +1744,8 @@ export function createWithdrawalReservationRepository(
           };
           const localCheck = () => {
             const at = clockTime(now());
-            if (at < lastLocal) fail();
-            lastLocal = at;
-            requireTime(at);
+            lastLocal = at > lastLocal ? at : lastLocal;
+            requireTime(lastLocal);
           };
           localCheck();
           const result = await db.transaction(async (tx) => {

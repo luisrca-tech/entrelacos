@@ -376,6 +376,87 @@ describe("receiving account setup", () => {
     expect(html).not.toContain("Pronto para receber");
     values.controller.dispose();
   });
+  it("keeps access activation unconfirmed even when all registration checks are approved", async () => {
+    const values = fixture({
+      ...createdSetup,
+      providerStatus: {
+        commercialInfo: "APPROVED",
+        bankAccountInfo: "APPROVED",
+        documentation: "APPROVED",
+        general: "APPROVED",
+        commercialInfoExpired: false,
+        observedAt: "2026-10-16T12:00:00.000Z",
+      },
+    });
+    await values.controller.refresh();
+    const html = renderToStaticMarkup(
+      createElement(ReceivingAccountSetupView, {
+        scope: values.scope,
+        state: values.controller.getState(),
+      }),
+    );
+    expect(html).toContain("Ativação e acesso ao Asaas");
+    expect(html).toContain(
+      "A ativação de acesso e o envio ou recebimento de e-mail não são consultados por este painel.",
+    );
+    expect(html).toContain("Se o Asaas exigir ativação por e-mail");
+    expect(html).toContain("Em modalidades BaaS");
+    expect(html).toContain("atualiza as verificações cadastrais do Asaas");
+    expect(html).not.toMatch(/Reenviar|Ativação concluída|E-mail enviado/);
+    expect(values.request).toHaveBeenCalledTimes(1);
+    expect(values.request.mock.calls[0]?.[1]?.method).not.toBe("POST");
+    values.controller.dispose();
+  });
+  it.each([
+    ["development", "sandbox", true],
+    ["production", "sandbox", false],
+    ["development", "live", false],
+    ["production", "live", false],
+    ["test", "sandbox", false],
+    [undefined, "sandbox", false],
+  ] as const)(
+    "limits redirected test-email guidance to development Sandbox (%s, %s)",
+    (environment, mode, visible) => {
+      vi.stubGlobal("__APP_ENV__", environment);
+      const values = fixture();
+      const html = renderToStaticMarkup(
+        createElement(ReceivingAccountSetupView, {
+          scope: values.scope,
+          state: {
+            status: "ready",
+            setup: { ...createdSetup, mode },
+            message: null,
+          },
+        }),
+      );
+      expect(html).toContain("Ativação e acesso ao Asaas");
+      expect(html.includes("comunicações de teste são redirecionadas")).toBe(
+        visible,
+      );
+      expect(html).toContain("Não foi possível consultar as verificações");
+      expect(html).not.toContain("E-mail não enviado");
+      expect(values.request).not.toHaveBeenCalled();
+      values.controller.dispose();
+    },
+  );
+  it.each(["NOT_CREATED", "PENDING", "UNKNOWN"] as const)(
+    "does not imply an existing account can be activated while creation is %s",
+    (accountState) => {
+      const values = fixture();
+      const html = renderToStaticMarkup(
+        createElement(ReceivingAccountSetupView, {
+          scope: values.scope,
+          state: {
+            status: "ready",
+            setup: { ...setup, accountState },
+            message: null,
+          },
+        }),
+      );
+      expect(html).not.toContain("Ativação e acesso ao Asaas");
+      values.controller.dispose();
+    },
+  );
   it("hides registration after an uncertain original dispatch", () => {
     const values = fixture();
     const html = renderToStaticMarkup(

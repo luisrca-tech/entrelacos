@@ -436,6 +436,83 @@ function durableFixture() {
 }
 
 describe("durable withdrawal consent service", () => {
+  it("issues preview terms after a local wall-clock correction without replacing their fee or identity", async () => {
+    const v = durableFixture();
+    let current = now.getTime();
+    const service = createWithdrawalReservationService({
+      ...v.options,
+      now: () => new Date(current),
+    });
+    v.loadContext.mockImplementationOnce(async () => {
+      current -= 434;
+      return v.context;
+    });
+    const result = await service.createPreview({
+      ...v.attempt,
+      input: {
+        requestId: v.input.requestId,
+        amountCents: v.input.amountCents,
+        scopeRevision: "0",
+      },
+    });
+    expect(result).toMatchObject({
+      state: "OPEN",
+      preview: {
+        requestId: v.input.requestId,
+        amountCents: v.input.amountCents,
+        feeCents: v.fee.feeCents,
+        issuedAt: now.toISOString(),
+        expiresAt: v.fee.expiresAt.toISOString(),
+      },
+    });
+  });
+
+  it("does not revive expired preview fees when local time recedes below its earlier high-water mark", async () => {
+    const v = durableFixture();
+    let current = now.getTime() + 60001;
+    if (!v.context.readiness) throw new Error("Missing receiving readiness");
+    v.context.readiness.observedAt = new Date(current).toISOString();
+    const service = createWithdrawalReservationService({
+      ...v.options,
+      now: () => new Date(current),
+    });
+    v.loadContext.mockImplementationOnce(async () => {
+      current = now.getTime();
+      return v.context;
+    });
+    await rejected(
+      service.createPreview({
+        ...v.attempt,
+        input: {
+          requestId: v.input.requestId,
+          amountCents: v.input.amountCents,
+          scopeRevision: "0",
+        },
+      }),
+      "FEE_QUOTE_UNAVAILABLE",
+      409,
+    );
+    expect(v.issuePreview).not.toHaveBeenCalled();
+    expect(v.reserveWithdrawal).not.toHaveBeenCalled();
+  });
+
+  it("creates the accepted reservation after a local wall-clock correction during its original lookup", async () => {
+    const v = fixture();
+    let current = now.getTime();
+    v.options.now = () => new Date(current);
+    v.findByRequest.mockImplementationOnce(async () => {
+      current -= 434;
+      return null;
+    });
+    expect(await create(v)).toMatchObject({
+      state: "REQUESTED",
+      amountCents: v.input.amountCents,
+      feeCents: v.fee.feeCents,
+      createdAt: now.toISOString(),
+    });
+    expect(v.reserveWithdrawal).toHaveBeenCalledOnce();
+  });
+
   it("rejects a simulated destination before issuing withdrawal preview terms", async () => {
     const v = durableFixture();
     v.loadPresentation.mockResolvedValueOnce({

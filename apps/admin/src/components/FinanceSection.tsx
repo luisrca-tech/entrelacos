@@ -3,7 +3,7 @@ import type {
   SiteAccess,
   WithdrawalIntent,
 } from "@entrelacos/contracts";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { FinancialOverviewCard } from "../features/finance/FinancialOverviewCard";
 import {
   canReadFinancialOverview,
@@ -23,6 +23,10 @@ import {
   type WithdrawalHistoryResult,
 } from "./withdrawalHistory";
 
+type SessionFinancialRead<T> = ScopedFinancialRead<T> & {
+  sessionEpoch: number | null;
+};
+
 export function FinanceSection({
   siteId,
   access,
@@ -35,13 +39,27 @@ export function FinanceSection({
   historyPorts?: HistoryPorts;
 }) {
   const [overviewRead, setOverviewRead] =
-    useState<ScopedFinancialRead<FinancialOverview> | null>(null);
-  const [historyRead, setHistoryRead] = useState<ScopedFinancialRead<
+    useState<SessionFinancialRead<FinancialOverview> | null>(null);
+  const [historyRead, setHistoryRead] = useState<SessionFinancialRead<
     WithdrawalIntent[]
   > | null>(null);
   const [overviewRevision, setOverviewRevision] = useState(0);
   const [historyRevision, setHistoryRevision] = useState(0);
   const eligible = canReadFinancialOverview(siteId, access);
+  const liveScope = useRef({ siteId, access, sessionEpoch, eligible });
+  liveScope.current = { siteId, access, sessionEpoch, eligible };
+  const onFinancialChange = useCallback(() => {
+    const live = liveScope.current;
+    if (
+      !live.eligible ||
+      live.siteId !== siteId ||
+      live.access !== access ||
+      live.sessionEpoch !== sessionEpoch
+    )
+      return;
+    setOverviewRevision((value) => value + 1);
+    setHistoryRevision((value) => value + 1);
+  }, [siteId, access, sessionEpoch]);
   useEffect(() => {
     if (!eligible) {
       setOverviewRead(null);
@@ -50,9 +68,15 @@ export function FinanceSection({
     return observeFinancialRead(
       () => loadFinancialOverview(siteId, access),
       (result) =>
-        setOverviewRead({ siteId, access, revision: overviewRevision, result }),
+        setOverviewRead({
+          siteId,
+          access,
+          sessionEpoch,
+          revision: overviewRevision,
+          result,
+        }),
     );
-  }, [siteId, access, eligible, overviewRevision]);
+  }, [siteId, access, eligible, sessionEpoch, overviewRevision]);
   useEffect(() => {
     if (!eligible) {
       setHistoryRead(null);
@@ -61,17 +85,23 @@ export function FinanceSection({
     return observeFinancialRead(
       () => loadWithdrawalHistory(siteId, access),
       (result) =>
-        setHistoryRead({ siteId, access, revision: historyRevision, result }),
+        setHistoryRead({
+          siteId,
+          access,
+          sessionEpoch,
+          revision: historyRevision,
+          result,
+        }),
     );
-  }, [siteId, access, eligible, historyRevision]);
+  }, [siteId, access, eligible, sessionEpoch, historyRevision]);
   const overview = currentFinancialRead(
-    overviewRead,
+    overviewRead?.sessionEpoch === sessionEpoch ? overviewRead : null,
     siteId,
     access,
     overviewRevision,
   );
   const history = currentFinancialRead(
-    historyRead,
+    historyRead?.sessionEpoch === sessionEpoch ? historyRead : null,
     siteId,
     access,
     historyRevision,
@@ -111,6 +141,7 @@ export function FinanceSection({
             siteId={siteId}
             access={access}
             sessionEpoch={sessionEpoch}
+            onFinancialChange={onFinancialChange}
           />
         )}
       <GiftPaymentHistoryView

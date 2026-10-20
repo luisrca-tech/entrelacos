@@ -9,6 +9,7 @@ import type { DatabaseConnection } from "@entrelacos/database";
 import { sql } from "drizzle-orm";
 import {
   type AsaasAccountFeesObservation,
+  type AsaasBalanceObservation,
   createAsaasHttpClient,
 } from "./asaasHttpClient";
 import { createAsaasStoredAccountReader } from "./asaasStoredAccountReader";
@@ -27,7 +28,9 @@ import { resolveSiteAccess } from "./siteAccess";
 import {
   createWithdrawalExecutionService,
   type DispatchFence,
+  genuineWithdrawalPromise,
   type OriginalWithdrawal,
+  usesAcceptedMaximumWithdrawalDispatch,
   type WithdrawalCompletionProof,
   withdrawalCorrelation,
   withdrawalInstant,
@@ -121,8 +124,40 @@ export function quoteAsaasWithdrawalMaximumFee(
     provenance: "provider",
     verification: "verified",
     observedAt: new Date(observation.observedAt),
-    expiresAt: new Date(observation.observedAt.getTime() + 60000),
+    expiresAt: new Date(observation.observedAt.getTime() + 120000),
   };
+}
+
+export function verifyAsaasWithdrawalDispatchBudget(
+  original: OriginalWithdrawal,
+  fees: AsaasAccountFeesObservation,
+  balance: AsaasBalanceObservation,
+  otherHeldCents: bigint,
+  at: Date,
+): void {
+  const c = original.correlation;
+  const quote = quoteAsaasWithdrawalMaximumFee(c, fees, at);
+  if (
+    quote.feeCents > c.feeCents ||
+    c.netCents + quote.feeCents > c.amountCents ||
+    typeof otherHeldCents !== "bigint" ||
+    otherHeldCents < 0n ||
+    balance.source !== "provider" ||
+    balance.provider !== "ASAAS" ||
+    balance.currency !== "BRL" ||
+    balance.environment !== c.environment ||
+    balance.siteId !== c.siteId ||
+    balance.accountBindingId !== c.accountId ||
+    balance.accountReference !== c.accountReference ||
+    !(balance.observedAt instanceof Date) ||
+    !Number.isFinite(balance.observedAt.getTime()) ||
+    balance.observedAt.getTime() > at.getTime() ||
+    at.getTime() - balance.observedAt.getTime() > 60_000 ||
+    !Number.isSafeInteger(balance.balanceCents) ||
+    balance.balanceCents < 0 ||
+    BigInt(balance.balanceCents) < BigInt(c.amountCents) + otherHeldCents
+  )
+    unavailable();
 }
 
 interface StoredWithdrawalAccount {
@@ -475,6 +510,14 @@ export function createWithdrawalComposition(
       async loadDispatchAuthorityInTransaction(tx, original, attempt) {
         const actor = attempt.actor;
         if (!actor) return null;
+        if (
+          usesAcceptedMaximumWithdrawalDispatch(
+            original,
+            applicationEnvironment,
+          )
+        ) {
+          await checkNativeBudget(tx, original);
+        }
         const access = await resolveSiteAccess(tx, {
           userId: actor.userId,
           platformRole: "SITE_ADMIN",
@@ -570,8 +613,13 @@ export function createWithdrawalComposition(
     if (
       a.operator_user_id !== c.operatorUserId ||
       !original.consent.snapshot.presentation.payout ||
-      now().getTime() >= Date.parse(original.snapshot.feeQuote.expiresAt) ||
-      now().getTime() >= Date.parse(original.consent.snapshot.preview.expiresAt)
+      (!usesAcceptedMaximumWithdrawalDispatch(
+        original,
+        applicationEnvironment,
+      ) &&
+        (now().getTime() >= Date.parse(original.snapshot.feeQuote.expiresAt) ||
+          now().getTime() >=
+            Date.parse(original.consent.snapshot.preview.expiresAt)))
     )
       unavailable();
     await originalHolder(tx, original.snapshot, original.consent);
@@ -582,22 +630,11 @@ export function createWithdrawalComposition(
     );
     return { selected, key: decryptKey(selected) };
   }
-  async function loadClient(
+  function nativeClient(
+    a: StoredWithdrawalAccount,
     original: OriginalWithdrawal,
-    fence: DispatchFence,
   ) {
     const c = original.correlation;
-    const a = await db.transaction((tx) =>
-      account(
-        tx,
-        {
-          siteId: c.siteId,
-          accountId: c.accountId,
-          accountReference: c.accountReference,
-        },
-        false,
-      ),
-    );
     const credentialContext = {
       provider: "ASAAS" as const,
       siteId: c.siteId,
@@ -615,7 +652,7 @@ export function createWithdrawalComposition(
       credentialContext,
       keyring,
     );
-    const client = createAsaasHttpClient({
+    return createAsaasHttpClient({
       mode,
       binding: { ...credentialContext, accountReference: c.accountReference },
       credentials: { context: credentialContext, accessToken },
@@ -624,6 +661,42 @@ export function createWithdrawalComposition(
       maxResponseBytes: 262144,
       now,
     });
+  }
+  async function checkNativeBudget(
+    tx: ReceivingTransaction,
+    original: OriginalWithdrawal,
+    client?: ReturnType<typeof nativeClient>,
+  ) {
+    const c = original.correlation;
+    const activeClient =
+      client ?? nativeClient(await account(tx, c, true), original);
+    const held = one<{ otherHeldCents: string }>(
+      await tx.execute(
+        sql`SELECT COALESCE(SUM(w.reserved_cents),0)::text AS "otherHeldCents" FROM withdrawal_intent w WHERE w.site_id=${c.siteId} AND w.account_id=${c.accountId} AND w.environment=${c.environment} AND w.reservation_state='HELD' AND w.id<>${c.withdrawalId}`,
+      ),
+    );
+    if (
+      typeof held.otherHeldCents !== "string" ||
+      !/^(0|[1-9]\d*)$/.test(held.otherHeldCents)
+    )
+      unavailable();
+    const fees = await activeClient.getAccountFees();
+    const balance = await activeClient.getBalance();
+    verifyAsaasWithdrawalDispatchBudget(
+      original,
+      fees,
+      balance,
+      BigInt(held.otherHeldCents),
+      now(),
+    );
+  }
+  async function loadClient(
+    original: OriginalWithdrawal,
+    fence: DispatchFence,
+  ) {
+    const c = original.correlation;
+    const a = await db.transaction((tx) => account(tx, c, false));
+    const client = nativeClient(a, original);
     return {
       getTransfer: client.getTransfer,
       listTransfers: client.listTransfers,
@@ -633,11 +706,30 @@ export function createWithdrawalComposition(
         // Retain the account lock through dispatch so reviewed payout changes cannot race the POST.
         return db.transaction(async (tx) => {
           const checked = await dispatchCheck(tx, original, fence);
-          const freshFees = await client.getAccountFees();
-          const feeValue = freshFees.fees.transfer?.pix?.feeValue;
           if (
-            typeof feeValue !== "string" ||
-            parseBrlCents(feeValue) > c.feeCents ||
+            usesAcceptedMaximumWithdrawalDispatch(
+              original,
+              applicationEnvironment,
+            )
+          ) {
+            await checkNativeBudget(tx, original, client);
+          } else {
+            const freshFees = await client.getAccountFees();
+            const feeValue = freshFees.fees.transfer?.pix?.feeValue;
+            if (
+              typeof feeValue !== "string" ||
+              parseBrlCents(feeValue) > c.feeCents
+            )
+              unavailable();
+          }
+          // Provider GETs can outlive the fresh SQL dispatch authority.
+          const current = one<{ valid: boolean }>(
+            await tx.execute(
+              sql`SELECT lease_expires_at>clock_timestamp() AS valid FROM financial_operation WHERE id=${c.operationId} AND site_id=${c.siteId} AND account_id=${c.accountId} AND environment=${c.environment} AND state='PROCESSING' AND attempts=1 AND lease_owner=${fence.leaseOwner} AND lease_token=${fence.leaseToken} AND lease_expires_at=${fence.leaseExpiresAt}::timestamptz`,
+            ),
+          );
+          if (
+            current.valid !== true ||
             now().getTime() >= Date.parse(fence.leaseExpiresAt)
           )
             unavailable();
@@ -745,6 +837,9 @@ export function createWithdrawalComposition(
     const initial = confirm
       ? await reservation.confirmNew(attempt)
       : await reservation.recoverExisting(attempt);
+    if (!confirm && initial.state === "REQUESTED" && options.refreshReceiving) {
+      await genuineWithdrawalPromise(options.refreshReceiving(initial.siteId));
+    }
     let result = await execution.executeExisting(attempt);
     if (result.outcome === "EXISTING")
       result = await execution.reconcileExisting({

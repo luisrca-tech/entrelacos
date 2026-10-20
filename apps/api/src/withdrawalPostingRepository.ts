@@ -1,4 +1,4 @@
-import { isDeepStrictEqual } from "node:util";
+import { isDeepStrictEqual, types } from "node:util";
 import { siteAccessSchema } from "@entrelacos/contracts";
 import type { DatabaseConnection } from "@entrelacos/database";
 import {
@@ -14,6 +14,7 @@ import {
   withdrawalRequest,
 } from "@entrelacos/database/schema";
 import { type SQL, sql } from "drizzle-orm";
+import { PgRaw } from "drizzle-orm/pg-core/query-builders/raw";
 import { ADMIN_ABSOLUTE_TIMEOUT_MS, ADMIN_IDLE_TIMEOUT_MS } from "./authHttp";
 import {
   databaseTimestampEpochMicroseconds,
@@ -21,6 +22,7 @@ import {
 } from "./databaseTimestamp";
 import { assertRecipientFinancialAction } from "./financialAuthorization";
 import type { ReceivingTransaction } from "./receivingRepository";
+import { logWithdrawalFailure } from "./withdrawalDiagnostics";
 import {
   captureDispatchFence,
   captureOriginalHolderBinding,
@@ -33,6 +35,7 @@ import {
   type OriginalHolderConsentBinding,
   type OriginalWithdrawal,
   type StoredWithdrawalExecution,
+  usesAcceptedMaximumWithdrawalDispatch,
   type WithdrawalArmResult,
   type WithdrawalCompletionProof,
   type WithdrawalDispatchAuthority,
@@ -230,18 +233,32 @@ export function createWithdrawalPostingRepository(
       false,
     );
     let previous: bigint | null = null;
-    let previousLocal: bigint | null = null;
+    let previousLocal: Date | null = null;
     const guard = () => {
-      const at = local();
-      const value = micros(at);
-      if (previousLocal !== null && value < previousLocal) deny();
-      previousLocal = value;
+      const observed = local();
+      const at =
+        previousLocal !== null && micros(observed) < micros(previousLocal)
+          ? readDatabaseTimestamp(previousLocal)
+          : observed;
+      previousLocal = at;
       check?.();
       return at;
     };
     const execute: Execute = async (statement) => {
       guard();
-      const result = await genuineWithdrawalPromise(nativeExecute(statement));
+      const pending = nativeExecute(statement);
+      if (types.isProxy(pending)) return deny();
+      let settlement = pending;
+      if (Object.getPrototypeOf(pending) === PgRaw.prototype) {
+        const descriptor = Object.getOwnPropertyDescriptor(pending, "execute");
+        if (!descriptor || !Object.hasOwn(descriptor, "value")) return deny();
+        settlement = captureWithdrawalCallable<() => ReturnType<Execute>>(
+          pending,
+          "execute",
+          false,
+        )();
+      }
+      const result = await genuineWithdrawalPromise(settlement);
       guard();
       if (!result || !Array.isArray(result.rows)) return deny();
       return result;
@@ -674,6 +691,10 @@ export function createWithdrawalPostingRepository(
       )
         deny();
       const original = stored.original;
+      const acceptedMaximum = usesAcceptedMaximumWithdrawalDispatch(
+        original,
+        c!.applicationEnvironment,
+      );
       const scope = original.consent.snapshot.scope;
       const destination = one(
         await u.execute(
@@ -701,6 +722,27 @@ export function createWithdrawalPostingRepository(
       );
       if (!authority) return deny();
       const after = await u.clock();
+      const freshnessMicros = BigInt(c!.freshnessMs) * 1000n;
+      const deadlines = [
+        micros(attempt.recentAuth?.expiresAt),
+        micros(attempt.recentAuth?.authenticatedAt) +
+          BigInt(c!.maxAuthAgeMs) * 1000n,
+        micros(activeSession.sessionExpiresAt),
+        micros(activeSession.lastActiveAt) +
+          BigInt(ADMIN_IDLE_TIMEOUT_MS) * 1000n,
+        micros(activeSession.sessionCreatedAt) +
+          BigInt(ADMIN_ABSOLUTE_TIMEOUT_MS) * 1000n,
+        micros(authority.context.readiness?.observedAt) + freshnessMicros,
+        micros(authority.presentation.evidenceObservedAt) + freshnessMicros,
+        micros(authority.presentation.bankObservedAt) + freshnessMicros,
+        ...(!acceptedMaximum
+          ? [
+              micros(original.consent.snapshot.preview.expiresAt),
+              micros(original.snapshot.feeQuote.expiresAt),
+            ]
+          : []),
+      ];
+      const authorityDeadline = deadlines.reduce((a, b) => (a < b ? a : b));
       const validate = (at: Date) => {
         checkAttempt(attempt, at);
         same(authority.actor, actor);
@@ -755,8 +797,7 @@ export function createWithdrawalPostingRepository(
           current >= expiry ||
           current - last >= BigInt(ADMIN_IDLE_TIMEOUT_MS) * 1000n ||
           current - created >= BigInt(ADMIN_ABSOLUTE_TIMEOUT_MS) * 1000n ||
-          current >= micros(original.consent.snapshot.preview.expiresAt) ||
-          current >= micros(original.snapshot.feeQuote.expiresAt)
+          current >= authorityDeadline
         )
           deny();
         const presentation = captureWithdrawalPresentation(
@@ -775,7 +816,19 @@ export function createWithdrawalPostingRepository(
             presentation,
           ) ||
           !isDeepStrictEqual(
-            presentation,
+            acceptedMaximum
+              ? {
+                  ...presentation,
+                  evidenceId: original.consent.snapshot.presentation.evidenceId,
+                  verificationReference:
+                    original.consent.snapshot.presentation
+                      .verificationReference,
+                  evidenceObservedAt:
+                    original.consent.snapshot.presentation.evidenceObservedAt,
+                  bankObservedAt:
+                    original.consent.snapshot.presentation.bankObservedAt,
+                }
+              : presentation,
             original.consent.snapshot.presentation,
           )
         )
@@ -808,15 +861,8 @@ export function createWithdrawalPostingRepository(
       same(retained, stored);
       const at = await u.clock();
       validate(at);
-      const validUntil = [
-        readDatabaseTimestamp(attempt.recentAuth?.expiresAt),
-        new Date(
-          Number(micros(attempt.recentAuth?.authenticatedAt) / 1000n) +
-            c!.maxAuthAgeMs,
-        ),
-        new Date(original.consent.snapshot.preview.expiresAt),
-        new Date(original.snapshot.feeQuote.expiresAt),
-      ].reduce((a, b) => (a.getTime() < b.getTime() ? a : b));
+      const validUntil = new Date(Number(authorityDeadline / 1000n));
+      if (micros(validUntil) <= micros(at)) return deny();
       const leaseToken = withdrawalReference(c!.generateLeaseToken(), 128);
       const fence: DispatchFence = Object.freeze({
         operationId: original.correlation.operationId,
@@ -1107,6 +1153,7 @@ export function createWithdrawalPostingRepository(
         const attempt = captureWithdrawalValue(input);
         return await arm(attempt);
       } catch (error) {
+        logWithdrawalFailure(error);
         return {
           outcome:
             error instanceof Denied ||
