@@ -493,6 +493,7 @@ export class WithdrawalReservationServiceError extends Error {
       | "RECIPIENT_REQUIRED"
       | "DESTINATION_UNVERIFIED"
       | "REQUEST_CONFLICT"
+      | "PREVIEW_EXPIRED"
       | "PROVIDER_MODE_UNAVAILABLE"
       | "FEE_QUOTE_UNAVAILABLE"
       | "PROVIDER_BALANCE_UNAVAILABLE"
@@ -1515,10 +1516,11 @@ export function createWithdrawalReservationService(
               consent.snapshot.preview.mode !== mode ||
               consent.snapshot.preview.amountCents !== input.amountCents ||
               consent.snapshot.preview.destinationVersion !==
-                input.destinationVersion ||
-              Date.parse(consent.snapshot.preview.expiresAt) <= clock()
+                input.destinationVersion
             )
               return deny("REQUEST_CONFLICT", 409);
+            if (Date.parse(consent.snapshot.preview.expiresAt) <= clock())
+              return deny("PREVIEW_EXPIRED", 409);
             const context = contextScope(
               await loadContext(currentActor.siteId),
               currentActor.siteId,
@@ -1617,10 +1619,11 @@ export function createWithdrawalReservationService(
                 consent.snapshot,
                 snapshot,
                 presentation,
-              ) ||
-              Date.parse(consent.snapshot.preview.expiresAt) <= clock()
+              )
             )
               return deny("REQUEST_CONFLICT", 409);
+            if (Date.parse(consent.snapshot.preview.expiresAt) <= clock())
+              return deny("PREVIEW_EXPIRED", 409);
           }
           const candidate = snapshot;
           let authorizedRecord: WithdrawalReservationRecord | null = null;

@@ -349,6 +349,7 @@ function safeError(error: unknown): never {
       "RECIPIENT_REQUIRED",
       "DESTINATION_UNVERIFIED",
       "REQUEST_CONFLICT",
+      "PREVIEW_EXPIRED",
       "PROVIDER_MODE_UNAVAILABLE",
       "FEE_QUOTE_UNAVAILABLE",
       "PROVIDER_BALANCE_UNAVAILABLE",
@@ -1975,10 +1976,6 @@ export function createWithdrawalReservationRepository(
                 confirmation.requestRevision !== "1" ||
                 Object.keys(confirmation).sort().join(",") !==
                   "previewHash,requestId,requestRevision" ||
-                compareDatabaseTimestamps(
-                  new Date(association.consent.snapshot.preview.expiresAt),
-                  at,
-                ) <= 0 ||
                 !sameWithdrawalConsentTerms(
                   association.consent.snapshot,
                   snapshot,
@@ -1986,6 +1983,13 @@ export function createWithdrawalReservationRepository(
                 )
               )
                 fail("REQUEST_CONFLICT", 409);
+              if (
+                compareDatabaseTimestamps(
+                  new Date(association.consent.snapshot.preview.expiresAt),
+                  at,
+                ) <= 0
+              )
+                fail("PREVIEW_EXPIRED", 409);
             };
             const freshSnapshot = (at: Date) => {
               const current = databaseTimestampEpochMicroseconds(at);
@@ -2293,8 +2297,10 @@ export function createWithdrawalReservationRepository(
             if (
               committedRequest.rows.length !== 1 ||
               committedRequest.rows[0].id !== association.row.id
-            )
+            ) {
+              requireConsent(await databaseClock());
               return fail("REQUEST_CONFLICT", 409);
+            }
             databaseNow = await databaseClock();
             const persisted = await find(
               tx,

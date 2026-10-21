@@ -58,6 +58,8 @@ import {
 } from "./withdrawalReservations";
 import { createWithdrawalStoredPresentationLoader } from "./withdrawalStoredPresentation";
 
+const withdrawalFreshnessMs = 300_000;
+
 export interface WithdrawalCompositionOptions {
   db: DatabaseConnection["db"];
   now?(): Date;
@@ -124,7 +126,9 @@ export function quoteAsaasWithdrawalMaximumFee(
     provenance: "provider",
     verification: "verified",
     observedAt: new Date(observation.observedAt),
-    expiresAt: new Date(observation.observedAt.getTime() + 120000),
+    expiresAt: new Date(
+      observation.observedAt.getTime() + withdrawalFreshnessMs,
+    ),
   };
 }
 
@@ -238,7 +242,7 @@ export function createWithdrawalComposition(
   const receiving = {
     mode,
     applicationEnvironment,
-    freshnessMs: 300000,
+    freshnessMs: withdrawalFreshnessMs,
     now,
     ...(options.refreshReceiving ? { refresh: options.refreshReceiving } : {}),
   };
@@ -404,7 +408,7 @@ export function createWithdrawalComposition(
     mode,
     applicationEnvironment,
     maxAuthAgeMs: 300000,
-    freshnessMs: 300000,
+    freshnessMs: withdrawalFreshnessMs,
     now,
     loadVerifiedPresentationInTransaction: loadPresentation,
   });
@@ -412,7 +416,7 @@ export function createWithdrawalComposition(
     mode,
     applicationEnvironment,
     maxAuthAgeMs: 300000,
-    freshnessMs: 300000,
+    freshnessMs: withdrawalFreshnessMs,
     now,
     generateId: () => randomUUID(),
     async loadContext(siteId) {
@@ -498,7 +502,7 @@ export function createWithdrawalComposition(
     mode,
     applicationEnvironment,
     maxAuthAgeMs: 300000,
-    freshnessMs: 300000,
+    freshnessMs: withdrawalFreshnessMs,
     leaseOwner: `withdrawal-${randomUUID()}`,
     leaseDurationMs: 60000,
     now,

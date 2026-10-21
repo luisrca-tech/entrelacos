@@ -1575,6 +1575,23 @@ describe("finance HTTP disabled boundary", () => {
     expect(await response.text()).not.toMatch(/private-bank|fr1|synthetic-key/);
   });
 
+  it("returns original preview expiry as 409 without another fee read or hold", async () => {
+    const v = await actionFixture();
+    v.setTime(new Date("2026-10-12T21:01:00.000Z"));
+    const response = await v.send();
+    expect(response.status).toBe(409);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(await response.json()).toEqual({
+      type: "about:blank",
+      title: "Financial action unavailable",
+      status: 409,
+      code: "PREVIEW_EXPIRED",
+    });
+    expect(v.fee).not.toHaveBeenCalled();
+    expect(v.repository.reserveWithdrawal).not.toHaveBeenCalled();
+    expect(v.getStored()).toBeNull();
+  });
+
   it("sanitizes typed reservation errors while retaining precise status and code", async () => {
     const v = await actionFixture();
     const error = new WithdrawalReservationServiceError(

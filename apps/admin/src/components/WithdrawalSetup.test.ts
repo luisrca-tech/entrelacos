@@ -2389,6 +2389,48 @@ describe("withdrawal setup owned source lifecycle", () => {
       f.cleanup();
     }
   });
+  it.each([
+    [
+      "PREVIEW_EXPIRED",
+      "A prévia expirou. Encerre a solicitação sem reserva e consulte uma nova prévia.",
+    ],
+    [
+      "REQUEST_CONFLICT",
+      "Os termos mudaram. Consulte a solicitação original antes de continuar.",
+    ],
+  ])(
+    "reports %s confirmation failures without replacing the original request",
+    async (code, message) => {
+      const error = vi.spyOn(toast, "error");
+      const f = await fixture(openContext());
+      try {
+        await f.controller.refresh();
+        const native = required(f.request.getMockImplementation());
+        f.request.mockImplementation((path, options) => {
+          if (options?.method === "POST" && path.endsWith("/withdrawals"))
+            throw new ApiError(409, code);
+          return native(path, options);
+        });
+        expect(
+          await f.controller.act(
+            "CONFIRM_NEW",
+            () => `fr1.cHJvb2Y.${"A".repeat(43)}`,
+            true,
+          ),
+        ).toBe(false);
+        expect(error).toHaveBeenCalledWith(message);
+        expect(f.controller.getState().request?.requestId).toBe("request-a");
+        expect(f.ports.newRequestId).not.toHaveBeenCalled();
+        expect(
+          f.request.mock.calls.filter(
+            ([, options]) => options?.method === "POST",
+          ),
+        ).toHaveLength(1);
+      } finally {
+        f.cleanup();
+      }
+    },
+  );
   it("requires password proof before announcing a withdrawal result", async () => {
     const success = vi.spyOn(toast, "success");
     const error = vi.spyOn(toast, "error");

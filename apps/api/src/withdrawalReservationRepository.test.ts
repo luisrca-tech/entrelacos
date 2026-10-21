@@ -1373,6 +1373,63 @@ describe("durable withdrawal reservation repository", () => {
     expect(values.tables.withdrawal_intent).toHaveLength(0);
   });
 
+  it.each([
+    [60_000, "before", 0],
+    [60_000, "before", 1],
+    [60_000, "after", 0],
+    [60_000, "after", 1],
+    [60_000, "during commit after", 0],
+    [60_000, "during commit after", 1],
+    [120_000, "before", 0],
+    [120_000, "before", 1],
+    [120_000, "after", 0],
+    [120_000, "after", 1],
+    [120_000, "during commit after", 0],
+    [120_000, "during commit after", 1],
+  ] as const)(
+    "does not renew an original %ims preview %s authorization at SQL expiry plus %i microseconds",
+    async (lifetime, phase, microseconds) => {
+      const v = fixture();
+      v.options.freshnessMs = 300_000;
+      const expiresAt = new Date(now.getTime() + lifetime).toISOString();
+      const original = readWithdrawalConsentSnapshot({
+        ...v.consentSnapshot,
+        preview: { ...v.consentSnapshot.preview, expiresAt },
+        feeQuote: { ...v.consentSnapshot.feeQuote, expiresAt },
+      });
+      const previewHash = hashWithdrawalConsentSnapshot(original);
+      Object.assign(v.tables.withdrawal_request[0], {
+        previewSnapshot: original,
+        previewHash,
+        expiresAt,
+      });
+      v.confirmation.previewHash = previewHash;
+      v.snapshot = {
+        ...v.snapshot,
+        feeQuote: {
+          ...v.snapshot.feeQuote,
+          expiresAt: new Date(now.getTime() + 300_000).toISOString(),
+        },
+      };
+      const sqlTime = expiresAt.replace(".000Z", `.00000${microseconds}Z`);
+      if (phase === "before") v.clock.sql = sqlTime;
+      else if (phase === "after") v.faults.callbackClock = sqlTime;
+      else
+        v.faults.onQuery = (text) => {
+          if (/UPDATE "withdrawal_request" r/.test(text)) v.clock.sql = sqlTime;
+        };
+      await denied(v, "PREVIEW_EXPIRED", 409);
+      expect(v.tables.withdrawal_request[0]).toMatchObject({
+        state: "OPEN",
+        previewHash,
+        expiresAt,
+        previewSnapshot: original,
+      });
+      expect(v.tables.financial_operation).toHaveLength(0);
+      expect(v.tables.financial_ledger_entry).toHaveLength(0);
+    },
+  );
+
   it("checks current proof expiry after awaiting authorization independently of the old audit hash", async () => {
     const values = fixture();
     values.faults.callbackClock = "2026-10-12T20:04:30.000001Z";

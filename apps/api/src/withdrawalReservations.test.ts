@@ -709,7 +709,7 @@ describe("durable withdrawal consent service", () => {
     expect(v.quoteWithdrawal).not.toHaveBeenCalled();
     expect(v.getBalance).not.toHaveBeenCalled();
   });
-  it.each(["fee", "policy", "mask", "profile"])(
+  it.each(["fee", "policy", "mask", "profile", "profile timestamp", "payout"])(
     "rejects changed accepted %s terms before any hold",
     async (field) => {
       const v = durableFixture();
@@ -725,6 +725,23 @@ describe("durable withdrawal consent service", () => {
       else if (field === "policy") v.fee.policyVersion = "provider-fee-v2";
       else if (field === "mask")
         v.presentation.maskedDestination = "Bank **** 9999";
+      else if (field === "profile timestamp")
+        v.presentation.operatorProfileUpdatedAt = new Date(now.getTime() - 1);
+      else if (field === "payout")
+        Object.assign(v.presentation, {
+          payout: {
+            destinationId: "pix-1",
+            destinationVersion: 1,
+            configurationHash: "b".repeat(64),
+            reviewId: "review-1",
+            holderId: "holder-1",
+            holderConsentId: "holder-consent-1",
+            acceptThirdParty: true,
+            keyType: "EMAIL",
+            maskedKey: "j***@example.test",
+            ownerName: "Reviewed Recipient",
+          },
+        });
       else v.presentation.operatorDisplayName = "New Operator";
       await rejected(
         v.service.confirmNew({ ...v.attempt, recentAuth: v.recentAuth }),
@@ -735,9 +752,46 @@ describe("durable withdrawal consent service", () => {
       expect(v.getConsent()?.state).toBe("OPEN");
     },
   );
-  it("rejects expired OPEN without extending its original preview", async () => {
+  it.each([60_000, 120_000])(
+    "reports an expired %ims OPEN without extending its original preview",
+    async (lifetime) => {
+      const v = durableFixture();
+      v.options.freshnessMs = 300_000;
+      v.fee.expiresAt = new Date(now.getTime() + lifetime);
+      const initialService = createWithdrawalReservationService(v.options);
+      await initialService.createPreview({
+        ...v.attempt,
+        input: {
+          requestId: v.input.requestId,
+          amountCents: v.input.amountCents,
+          scopeRevision: "0",
+        },
+      });
+      v.fee.expiresAt = new Date(now.getTime() + 300_000);
+      v.options.now = () => new Date(now.getTime() + lifetime);
+      const service = createWithdrawalReservationService(v.options);
+      await rejected(
+        service.confirmNew({ ...v.attempt, recentAuth: v.recentAuth }),
+        "PREVIEW_EXPIRED",
+        409,
+      );
+      expect((await service.readRequest(v.attempt)).state).toBe("OPEN");
+      expect(v.reserveWithdrawal).not.toHaveBeenCalled();
+      expect(v.getConsent()?.snapshot.preview.expiresAt).toBe(
+        new Date(now.getTime() + lifetime).toISOString(),
+      );
+      expect(v.quoteWithdrawal).toHaveBeenCalledOnce();
+    },
+  );
+  it("reports original preview expiry during confirmation reads without reserving or replacing its terms", async () => {
     const v = durableFixture();
-    await v.service.createPreview({
+    v.options.freshnessMs = 300_000;
+    let current = now.getTime();
+    const service = createWithdrawalReservationService({
+      ...v.options,
+      now: () => new Date(current),
+    });
+    await service.createPreview({
       ...v.attempt,
       input: {
         requestId: v.input.requestId,
@@ -745,18 +799,21 @@ describe("durable withdrawal consent service", () => {
         scopeRevision: "0",
       },
     });
-    v.options.now = () => new Date(now.getTime() + 60_000);
-    const service = createWithdrawalReservationService(v.options);
+    const original = v.getConsent();
+    current += 30_000;
+    v.fee.observedAt = new Date(current);
+    v.fee.expiresAt = new Date(current + 300_000);
+    v.loadPresentation.mockImplementationOnce(async () => {
+      current = now.getTime() + 60_000;
+      return v.presentation;
+    });
     await rejected(
       service.confirmNew({ ...v.attempt, recentAuth: v.recentAuth }),
-      "REQUEST_CONFLICT",
+      "PREVIEW_EXPIRED",
       409,
     );
-    expect((await service.readRequest(v.attempt)).state).toBe("OPEN");
     expect(v.reserveWithdrawal).not.toHaveBeenCalled();
-    expect(v.getConsent()?.snapshot.preview.expiresAt).toBe(
-      v.fee.expiresAt.toISOString(),
-    );
+    expect(v.getConsent()).toEqual(original);
   });
   it.each(["confirmNew", "recoverExisting", "sealUncreatedRequest"] as const)(
     "requires real recent proof for %s before any repository mutation",

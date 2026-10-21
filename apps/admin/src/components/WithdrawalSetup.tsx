@@ -299,6 +299,8 @@ export function createWithdrawalSetupController(
           "Existem movimentações em verificação. Aguarde e consulte a situação.",
         REQUEST_CONFLICT:
           "Os termos mudaram. Consulte a solicitação original antes de continuar.",
+        PREVIEW_EXPIRED:
+          "A prévia expirou. Encerre a solicitação sem reserva e consulte uma nova prévia.",
       };
       toast.error(
         state.status === "storage_unavailable"

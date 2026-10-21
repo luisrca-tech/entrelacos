@@ -77,20 +77,23 @@ describe("native withdrawal maximum fee quote", () => {
       verification: "verified",
     });
   });
-  it("gives a new maximum fee quote two minutes from its observation without renewing that observation", async () => {
-    const { quoteAsaasWithdrawalMaximumFee } = await import(
-      "./withdrawalComposition"
-    );
-    const observed = observation();
-    const quote = quoteAsaasWithdrawalMaximumFee(
-      scope,
-      observed,
-      new Date(+now + 30_000),
-    );
-    expect(quote.observedAt).toEqual(now);
-    expect(quote.expiresAt).toEqual(new Date(+now + 120_000));
-    expect(observed.observedAt).toEqual(now);
-  });
+  it.each([0, 30_000, 60_000])(
+    "gives a new maximum fee quote five minutes from its observation after %ims without renewing that observation",
+    async (elapsed) => {
+      const { quoteAsaasWithdrawalMaximumFee } = await import(
+        "./withdrawalComposition"
+      );
+      const observed = observation();
+      const quote = quoteAsaasWithdrawalMaximumFee(
+        scope,
+        observed,
+        new Date(+now + elapsed),
+      );
+      expect(quote.observedAt).toEqual(now);
+      expect(quote.expiresAt).toEqual(new Date(+now + 300_000));
+      expect(observed.observedAt).toEqual(now);
+    },
+  );
   it.each([
     "siteId",
     "accountBindingId",
