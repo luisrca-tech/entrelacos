@@ -399,8 +399,14 @@ describe("receiving account setup", () => {
     expect(html).toContain(
       "A ativação de acesso e o envio ou recebimento de e-mail não são consultados por este painel.",
     );
-    expect(html).toContain("Se o Asaas exigir ativação por e-mail");
-    expect(html).toContain("Em modalidades BaaS");
+    expect(html).toContain("Para contas com acesso direto ao Asaas");
+    expect(html).toContain(
+      "o e-mail de ativação é enviado automaticamente na criação da conta",
+    );
+    expect(html).toContain(
+      "defina sua senha de primeiro acesso no próprio Asaas",
+    );
+    expect(html).toContain("Se o Asaas fornecer uma jornada de cadastro");
     expect(html).toContain("atualiza as verificações cadastrais do Asaas");
     expect(html).not.toMatch(/Reenviar|Ativação concluída|E-mail enviado/);
     expect(values.request).toHaveBeenCalledTimes(1);
@@ -433,6 +439,14 @@ describe("receiving account setup", () => {
       expect(html.includes("comunicações de teste são redirecionadas")).toBe(
         visible,
       );
+      expect(html.includes("link de definição de senha e as demais")).toBe(
+        visible,
+      );
+      expect(
+        html.includes(
+          "entre no Asaas Sandbox com o e-mail cadastrado para o recebedor",
+        ),
+      ).toBe(visible);
       expect(html).toContain("Não foi possível consultar as verificações");
       expect(html).not.toContain("E-mail não enviado");
       expect(values.request).not.toHaveBeenCalled();

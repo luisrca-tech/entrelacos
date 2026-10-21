@@ -602,14 +602,17 @@ export function ReceivingAccountSetupView({
               as verificações cadastrais do Asaas.
             </p>
             <p>
-              Se o Asaas exigir ativação por e-mail, confira o e-mail informado
-              no cadastro e siga as instruções recebidas. Em modalidades BaaS,
-              conclua o onboarding fornecido pelo Asaas, quando exigido.
+              Para contas com acesso direto ao Asaas, o e-mail de ativação é
+              enviado automaticamente na criação da conta. Abra o link e defina
+              sua senha de primeiro acesso no próprio Asaas. Se o Asaas fornecer
+              uma jornada de cadastro, conclua as etapas indicadas.
             </p>
             {showSandboxNotice(setup.mode) && (
               <p>
-                No Sandbox, confira o e-mail da conta principal do Asaas: as
-                comunicações de teste são redirecionadas para ele.
+                No Sandbox, o link de definição de senha e as demais
+                comunicações de teste são redirecionadas para o e-mail da conta
+                principal do Asaas. Depois de definir a senha, entre no Asaas
+                Sandbox com o e-mail cadastrado para o recebedor.
               </p>
             )}
           </section>
