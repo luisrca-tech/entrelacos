@@ -1726,6 +1726,73 @@ describe("native Asaas Pix transfer transport", () => {
     endToEndIdentifier: "E123",
     effectiveDate: "2026-10-12",
   });
+  it.each(["get", "list"] as const)(
+    "preserves a completed native datetime exactly through %s",
+    async (method) => {
+      const effectiveDate = "2026-10-20 21:22:33";
+      const native = { ...transfer(), effectiveDate };
+      const f = fixture(
+        json(
+          method === "get"
+            ? native
+            : { hasMore: false, totalCount: 1, offset: 0, data: [native] },
+        ),
+      );
+      const client = createAsaasHttpClient(f.options);
+      const observed =
+        method === "get"
+          ? (await client.getTransfer("transfer-1")).transfer
+          : (await client.listTransfers(0)).transfers[0];
+      expect(observed).toEqual({
+        ...native,
+        value: "95.00",
+        netValue: "95.00",
+        transferFee: "0.00",
+      });
+      expect(f.fetch).toHaveBeenCalledOnce();
+      expect(f.fetch.mock.calls[0][1]?.method).toBe("GET");
+    },
+  );
+  it.each([
+    "2026-02-29",
+    "2026-04-31",
+    "2026-00-01",
+    "2026-13-01",
+    "2026-10-00",
+    "2026-02-29 21:22:33",
+    "2026-10-20 24:00:00",
+    "2026-10-20 21:60:00",
+    "2026-10-20 21:22:60",
+    "2026-10-20 21:22",
+    "2026-10-20T21:22:33Z",
+    "2026-10-20 21:22:33.000",
+    "2026-10-20 21:22:33Z",
+    "2026-10-20 21:22:33 garbage",
+    "2026-10-20\n21:22:33",
+    "2026-10-20 21:22:33\n",
+    " 2026-10-20",
+    "",
+    1792531353,
+  ])("rejects an invalid native effective date %j", async (effectiveDate) => {
+    const f = fixture(json({ ...transfer(), effectiveDate }));
+    await rejected(createAsaasHttpClient(f.options).getTransfer("transfer-1"));
+  });
+  it("preserves a leap-day date without adding a time or zone", async () => {
+    const f = fixture(json({ ...transfer(), effectiveDate: "2024-02-29" }));
+    expect(
+      (await createAsaasHttpClient(f.options).getTransfer("transfer-1"))
+        .transfer.effectiveDate,
+    ).toBe("2024-02-29");
+  });
+  it.each(["externalReference", "transactionReceiptUrl", "endToEndIdentifier"])(
+    "still rejects spaces in optional transfer field %s",
+    async (field) => {
+      const f = fixture(json({ ...transfer(), [field]: "invalid value" }));
+      await rejected(
+        createAsaasHttpClient(f.options).getTransfer("transfer-1"),
+      );
+    },
+  );
   it("sends only native Pix fields, with the exact transferred amount", async () => {
     const f = fixture(json(transfer()));
     const result = await createAsaasHttpClient(f.options).createPixTransfer({

@@ -201,6 +201,9 @@ function fixture(lagMs = 335) {
     latencyMs: 0,
     nodeOffsetMs: 0,
     insertClockOffsetMs: 0,
+    readLatencyMs: 0,
+    nodeRate: 1,
+    nodeInvalidAfterMs: Number.POSITIVE_INFINITY,
   };
   let retained: Record<string, unknown> | null = null;
   const inserts: { sql: string; params: unknown[] }[] = [];
@@ -258,12 +261,14 @@ function fixture(lagMs = 335) {
       };
       return { rows: [] };
     }
-    if (query.sql.includes('FROM "withdrawal_provider_observation"'))
+    if (query.sql.includes('FROM "withdrawal_provider_observation"')) {
+      if (faults.readLatencyMs) vi.advanceTimersByTime(faults.readLatencyMs);
       return {
         rows: retained
           ? [{ ...structuredClone(retained), readAt: sqlNow().toISOString() }]
           : [],
       };
+    }
     throw new Error("Unexpected SQL in custody test");
   });
   const tx = { execute };
@@ -284,7 +289,12 @@ function fixture(lagMs = 335) {
   const custody = createAsaasWithdrawalCustody(db as never, {
     mode: "sandbox",
     applicationEnvironment: "test",
-    now: () => new Date(epoch + elapsed() + faults.nodeOffsetMs),
+    now: () =>
+      new Date(
+        elapsed() >= faults.nodeInvalidAfterMs
+          ? Number.NaN
+          : epoch + elapsed() * faults.nodeRate + faults.nodeOffsetMs,
+      ),
   });
   return {
     original,
@@ -482,5 +492,180 @@ it("retains the same durable evidence and reference on a duplicate observation",
     await settle(f.custody.record(f.original, f.fence, f.observation)),
   ).toEqual(first);
   expect(f.retained()).toEqual(retained);
+  expect(f.inserts).toHaveLength(2);
+});
+
+it("waits for Node to reach a fixed SQL record 400ms ahead without changing evidence or replaying dispatch", async () => {
+  const f = fixture(-400);
+  const frozen = structuredClone({
+    original: f.original,
+    fence: f.fence,
+    observation: f.observation,
+  });
+  const expectedBody = JSON.parse(canonical({ version: 1, ...frozen }));
+  const expectedHash = createHash("sha256")
+    .update(canonical(expectedBody))
+    .digest("hex");
+  const result = await settle(
+    f.custody.record(f.original, f.fence, f.observation),
+  );
+  expect(result).toEqual({ value: `asaas-transfer:${expectedHash}` });
+  expect(f.inserts).toHaveLength(1);
+  expect(f.retained()).toMatchObject({
+    payload: expectedBody,
+    payloadHash: expectedHash,
+    recordedAt: new Date(epoch + 400).toISOString(),
+  });
+  expect(f.elapsed()).toBeGreaterThanOrEqual(400);
+  expect(f.elapsed()).toBeLessThanOrEqual(1250);
+  expect({
+    original: f.original,
+    fence: f.fence,
+    observation: f.observation,
+  }).toEqual(frozen);
+  expect(f.db.transaction).toHaveBeenCalledOnce();
+  expect(
+    f.execute.mock.calls.filter(([statement]) =>
+      new PgDialect()
+        .sqlToQuery(statement)
+        .sql.startsWith("SELECT clock_timestamp()"),
+    ),
+  ).toHaveLength(1);
+});
+
+it("loads a SQL-valid recent proof after Node catches up to its fixed recordedAt", async () => {
+  const f = fixture(-400);
+  f.faults.nodeOffsetMs = 400;
+  const recorded = await settle(
+    f.custody.record(f.original, f.fence, f.observation),
+  );
+  expect(recorded).toHaveProperty("value");
+  if (!("value" in recorded)) return;
+  f.faults.nodeOffsetMs = 0;
+  const retained = structuredClone(f.retained());
+  const proof = await settle(
+    f.custody.loadCompletionProofInTransaction(
+      f.tx as never,
+      f.original,
+      f.fence,
+      recorded.value,
+    ),
+  );
+  expect(proof).toMatchObject({
+    value: {
+      outcome: "COMPLETED",
+      recordedAt: new Date(epoch + 400).toISOString(),
+    },
+  });
+  expect(f.retained()).toEqual(retained);
+  expect(f.inserts).toHaveLength(1);
+});
+
+it.each([
+  "excessAhead",
+  "noProgress",
+  "regression",
+  "invalidNode",
+  "readBudget",
+  "sharedBudget",
+])("fails closed after INSERT for %s", async (kind) => {
+  const f = fixture(kind === "excessAhead" ? -1001 : -400);
+  if (kind === "noProgress") f.faults.nodeRate = 0;
+  if (kind === "regression") f.faults.nodeRate = -1;
+  if (kind === "invalidNode") f.faults.nodeInvalidAfterMs = 400;
+  if (kind === "readBudget") f.faults.readLatencyMs = 1251;
+  if (kind === "sharedBudget") {
+    f.faults.samples = [
+      new Date(epoch - 335).toISOString(),
+      new Date(epoch + 10).toISOString(),
+    ];
+    f.faults.latencyMs = 300;
+    f.faults.readLatencyMs = 100;
+  }
+  expect(
+    await settle(f.custody.record(f.original, f.fence, f.observation)),
+  ).toHaveProperty("error");
+  expect(f.inserts).toHaveLength(1);
+  expect(f.retained()).toBeNull();
+  if (["noProgress", "regression", "invalidNode"].includes(kind))
+    expect(f.elapsed()).toBeGreaterThanOrEqual(400);
+  expect(f.elapsed()).toBeLessThanOrEqual(kind === "readBudget" ? 1251 : 1250);
+});
+
+it("rejects a SQL record one microsecond beyond SQL read time before waiting for Node", async () => {
+  const f = fixture(-400);
+  f.faults.nodeOffsetMs = 400;
+  const recorded = await settle(
+    f.custody.record(f.original, f.fence, f.observation),
+  );
+  expect(recorded).toHaveProperty("value");
+  if (!("value" in recorded)) return;
+  const retained = f.retained();
+  if (!retained) throw new Error("Expected retained custody");
+  retained.recordedAt = "2026-10-20T02:00:00.400001Z";
+  f.faults.nodeOffsetMs = 0;
+  const started = f.elapsed();
+  expect(
+    await settle(
+      f.custody.loadCompletionProofInTransaction(
+        f.tx as never,
+        f.original,
+        f.fence,
+        recorded.value,
+      ),
+    ),
+  ).toEqual({ value: null });
+  expect(f.elapsed()).toBe(started);
+});
+
+it.each(["invalid", "regressed", "expired"])(
+  "rejects a %s performance clock during the Node catch-up wait",
+  async (kind) => {
+    const f = fixture(-400);
+    const monotonicNow = performance.now.bind(performance);
+    let offset = 0;
+    const clock = vi
+      .spyOn(performance, "now")
+      .mockImplementation(() => monotonicNow() + offset);
+    try {
+      const result = f.custody.record(f.original, f.fence, f.observation).then(
+        (value) => ({ value }),
+        (error) => ({ error }),
+      );
+      await vi.advanceTimersByTimeAsync(0);
+      expect(f.inserts).toHaveLength(1);
+      offset =
+        kind === "invalid" ? Number.NaN : kind === "regressed" ? -500 : 1251;
+      await vi.runAllTimersAsync();
+      expect(await result).toHaveProperty("error");
+      expect(f.retained()).toBeNull();
+    } finally {
+      clock.mockRestore();
+    }
+  },
+);
+
+it("rejects an invalid observation before entering a transaction", async () => {
+  const f = fixture(-400);
+  f.observation.observedAt = new Date(Number.NaN);
+  await expect(
+    f.custody.record(f.original, f.fence, f.observation),
+  ).rejects.toThrow();
+  expect(f.db.transaction).not.toHaveBeenCalled();
+});
+
+it("retains the original SQL-ahead evidence and reference on duplicate acceptance", async () => {
+  const f = fixture(-400);
+  const first = await settle(
+    f.custody.record(f.original, f.fence, f.observation),
+  );
+  expect(first).toHaveProperty("value");
+  const retained = structuredClone(f.retained());
+  const elapsed = f.elapsed();
+  expect(
+    await settle(f.custody.record(f.original, f.fence, f.observation)),
+  ).toEqual(first);
+  expect(f.retained()).toEqual(retained);
+  expect(f.elapsed()).toBe(elapsed);
   expect(f.inserts).toHaveLength(2);
 });

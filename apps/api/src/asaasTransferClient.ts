@@ -1,6 +1,7 @@
-import type {
-  AsaasHttpClient,
-  AsaasTransferObservation,
+import {
+  type AsaasHttpClient,
+  type AsaasTransferObservation,
+  readAsaasTransferEffectiveDate,
 } from "./asaasHttpClient";
 import { logWithdrawalFailure } from "./withdrawalDiagnostics";
 import {
@@ -109,8 +110,7 @@ export function captureAsaasWithdrawalTransfer(
       !/^https:\/\//.test(t.transactionReceiptUrl) ||
       !t.endToEndIdentifier ||
       !/^[\x21-\x7e]{1,256}$/.test(t.endToEndIdentifier) ||
-      !t.effectiveDate ||
-      !/^\d{4}-\d{2}-\d{2}$/.test(t.effectiveDate))
+      !readAsaasTransferEffectiveDate(t.effectiveDate))
   )
     unavailable();
   return observation;

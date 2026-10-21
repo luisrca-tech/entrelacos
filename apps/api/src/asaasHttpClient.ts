@@ -605,6 +605,44 @@ function decodeTransfers(text: string): unknown {
     return serializeBrlCents(parseBrlCents(context.source));
   });
 }
+// Native effective dates have no timezone; validate without converting the provider value.
+export function readAsaasTransferEffectiveDate(value: unknown): string | null {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== "string") return unavailable();
+  const match = /^(\d{4})-(\d{2})-(\d{2})(?: (\d{2}):(\d{2}):(\d{2}))?$/.exec(
+    value,
+  );
+  if (!match || match[0] !== value) return unavailable();
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const leapYear = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+  const daysInMonth = [
+    31,
+    leapYear ? 29 : 28,
+    31,
+    30,
+    31,
+    30,
+    31,
+    31,
+    30,
+    31,
+    30,
+    31,
+  ];
+  if (
+    year < 1 ||
+    month < 1 ||
+    month > 12 ||
+    day < 1 ||
+    day > daysInMonth[month - 1] ||
+    (match[4] !== undefined &&
+      (Number(match[4]) > 23 || Number(match[5]) > 59 || Number(match[6]) > 59))
+  )
+    return unavailable();
+  return value;
+}
 function normalizeTransfer(value: unknown): AsaasTransfer {
   const raw = record(value);
   const optional = (key: string): string | null => {
@@ -644,7 +682,7 @@ function normalizeTransfer(value: unknown): AsaasTransfer {
     externalReference: optional("externalReference"),
     transactionReceiptUrl: optional("transactionReceiptUrl"),
     endToEndIdentifier: optional("endToEndIdentifier"),
-    effectiveDate: optional("effectiveDate"),
+    effectiveDate: readAsaasTransferEffectiveDate(raw.effectiveDate),
   };
 }
 

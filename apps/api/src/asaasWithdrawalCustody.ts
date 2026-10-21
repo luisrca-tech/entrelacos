@@ -57,27 +57,42 @@ function hash(value: unknown): string {
   return createHash("sha256").update(canonical(value)).digest("hex");
 }
 
-async function waitForObservationClock(
-  tx: ReceivingTransaction,
-  observedAt: Date,
-): Promise<void> {
-  const observed = databaseTimestampEpochMicroseconds(observedAt);
+function acceptanceClock(now: () => Date) {
   const started = performance.now();
   if (!Number.isFinite(started)) unavailable();
   let previousElapsed = 0;
-  let previousSql: bigint | null = null;
-  const elapsed = () => {
-    const value = performance.now() - started;
-    if (!Number.isFinite(value) || value < previousElapsed || value > 1250)
-      unavailable();
-    previousElapsed = value;
-    return value;
+  let previousNode: bigint | null = null;
+  return {
+    elapsed() {
+      const value = performance.now() - started;
+      if (!Number.isFinite(value) || value < previousElapsed || value > 1250)
+        unavailable();
+      previousElapsed = value;
+      return value;
+    },
+    nodeNow() {
+      const value = now();
+      const current = databaseTimestampEpochMicroseconds(value);
+      if (previousNode !== null && current < previousNode) unavailable();
+      previousNode = current;
+      return value;
+    },
   };
+}
+type AcceptanceClock = ReturnType<typeof acceptanceClock>;
+
+async function waitForObservationClock(
+  tx: ReceivingTransaction,
+  observedAt: Date,
+  clock: AcceptanceClock,
+): Promise<void> {
+  const observed = databaseTimestampEpochMicroseconds(observedAt);
+  let previousSql: bigint | null = null;
   for (let sample = 0; sample < 3; sample++) {
     const result = await tx.execute(
       sql`SELECT clock_timestamp()::text AS "currentTime"`,
     );
-    const spent = elapsed();
+    const spent = clock.elapsed();
     if (result.rows.length !== 1) unavailable();
     const current = databaseTimestampEpochMicroseconds(
       (result.rows[0] as { currentTime: unknown }).currentTime,
@@ -91,7 +106,28 @@ async function waitForObservationClock(
     previousSql = current;
     // Wait for the authoritative SQL clock; never relabel provider evidence.
     await new Promise<void>((resolve) => setTimeout(resolve, delay));
-    elapsed();
+    clock.elapsed();
+    clock.nodeNow();
+  }
+}
+
+async function waitForRecordedClock(
+  recorded: bigint,
+  clock: AcceptanceClock,
+): Promise<void> {
+  let previousNode: bigint | null = null;
+  for (let sample = 0; sample < 3; sample++) {
+    const spent = clock.elapsed();
+    const current = databaseTimestampEpochMicroseconds(clock.nodeNow());
+    if (previousNode !== null && current <= previousNode) unavailable();
+    const lag = recorded - current;
+    if (lag <= 0n) return;
+    if (lag > 1_000_000n || sample === 2) unavailable();
+    const delay = Number((lag + 999n) / 1000n) + 10;
+    if (spent + delay > 1250) unavailable();
+    previousNode = current;
+    // Catch up to the fixed SQL record, not the advancing SQL clock.
+    await new Promise<void>((resolve) => setTimeout(resolve, delay));
   }
 }
 
@@ -128,12 +164,14 @@ export function createAsaasWithdrawalCustody(
     original: OriginalWithdrawal,
     fence: DispatchFence,
     reference: string,
+    clock = acceptanceClock(now),
   ) {
     if (!/^asaas-transfer:[a-f0-9]{64}$/.test(reference)) unavailable();
     const c = original.correlation;
     const result = await tx.execute(
       sql`SELECT id,site_id AS "siteId",account_id AS "accountId",environment,operation_id AS "operationId",provider_reference AS "providerReference",payload_hash AS "payloadHash",payload,observed_at AS "observedAt",recorded_at::text AS "recordedAt",clock_timestamp()::text AS "readAt" FROM ${withdrawalProviderObservation} WHERE id=${reference} AND site_id=${c.siteId} AND account_id=${c.accountId} AND environment=${c.environment} AND operation_id=${c.operationId}`,
     );
+    clock.elapsed();
     if (result.rows.length !== 1) return null;
     const row = captureWithdrawalValue(result.rows[0]) as Record<
       string,
@@ -161,7 +199,7 @@ export function createAsaasWithdrawalCustody(
     const observation = captureAsaasWithdrawalTransfer(
       original,
       body.observation,
-      now(),
+      clock.nodeNow(),
     );
     if (
       !isDeepStrictEqual(body, payload(original, fence, observation)) ||
@@ -171,20 +209,23 @@ export function createAsaasWithdrawalCustody(
       databaseTimestampEpochMicroseconds(row.recordedAt) <
         databaseTimestampEpochMicroseconds(row.observedAt) ||
       databaseTimestampEpochMicroseconds(row.recordedAt) >
-        databaseTimestampEpochMicroseconds(row.readAt) ||
-      databaseTimestampEpochMicroseconds(row.recordedAt) >
-        databaseTimestampEpochMicroseconds(now())
+        databaseTimestampEpochMicroseconds(row.readAt)
     )
       unavailable();
+    await waitForRecordedClock(
+      databaseTimestampEpochMicroseconds(row.recordedAt),
+      clock,
+    );
     return { row, observation };
   }
   return {
     async record(originalInput, fenceInput, observationInput) {
       const { original, fence } = inputs(originalInput, fenceInput);
+      const clock = acceptanceClock(now);
       const observation = captureAsaasWithdrawalTransfer(
         original,
         observationInput,
-        now(),
+        clock.nodeNow(),
       );
       const body = payload(original, fence, observation);
       const payloadHash = hash(body);
@@ -212,12 +253,12 @@ export function createAsaasWithdrawalCustody(
             op.providerReference !== observation.transfer.id)
         )
           unavailable();
-        await waitForObservationClock(tx, observation.observedAt);
-        captureAsaasWithdrawalTransfer(original, observation, now());
+        await waitForObservationClock(tx, observation.observedAt, clock);
+        captureAsaasWithdrawalTransfer(original, observation, clock.nodeNow());
         await tx.execute(
           sql`INSERT INTO ${withdrawalProviderObservation} (id,site_id,account_id,environment,operation_id,provider_reference,payload_hash,payload,observed_at,recorded_at) VALUES (${reference},${c.siteId},${c.accountId},${c.environment},${c.operationId},${observation.transfer.id},${payloadHash},${JSON.stringify(body)}::jsonb,${withdrawalInstant(observation.observedAt)}::timestamptz,clock_timestamp()) ON CONFLICT (id) DO NOTHING`,
         );
-        const retained = await read(tx, original, fence, reference);
+        const retained = await read(tx, original, fence, reference, clock);
         if (
           !retained ||
           canonical(retained.observation) !== canonical(observation)

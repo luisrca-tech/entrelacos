@@ -233,6 +233,52 @@ function adapterFixture(maximum = false) {
   };
 }
 describe("Sandbox native withdrawal transfer adapter", () => {
+  it.each([null, "transfer-1"])(
+    "retains the exact completed native datetime during lookup (%s)",
+    async (providerReference) => {
+      const f = adapterFixture();
+      f.observation.transfer.effectiveDate = "2026-10-20 21:22:33";
+      const result = await f.adapter.lookup(
+        f.original,
+        f.fence,
+        providerReference,
+      );
+      expect(result).toMatchObject({
+        outcome: "FOUND",
+        observation: {
+          providerReference: "transfer-1",
+          proofReference: `asaas-transfer:${"a".repeat(64)}`,
+        },
+      });
+      expect(f.custody.record).toHaveBeenCalledExactlyOnceWith(
+        f.original,
+        f.fence,
+        f.observation,
+      );
+      expect(f.client.createPixTransfer).not.toHaveBeenCalled();
+    },
+  );
+  it.each([
+    "2026-02-29",
+    "2026-04-31 21:22:33",
+    "2026-10-20 24:00:00",
+    "2026-10-20 21:60:00",
+    "2026-10-20 21:22:60",
+    "2026-10-20 21:22:33\n",
+  ])(
+    "rejects invalid completion dates before custody (%j)",
+    async (effectiveDate) => {
+      const f = adapterFixture();
+      f.observation.transfer.effectiveDate = effectiveDate;
+      expect(await f.adapter.lookup(f.original, f.fence, "transfer-1")).toEqual(
+        {
+          outcome: "UNRESOLVED",
+        },
+      );
+      expect(f.custody.record).not.toHaveBeenCalled();
+      expect(f.client.createPixTransfer).not.toHaveBeenCalled();
+    },
+  );
   it("sends the frozen net amount once and records completed provider custody", async () => {
     const f = adapterFixture();
     const result = await f.adapter.dispatch(f.original, f.fence);
