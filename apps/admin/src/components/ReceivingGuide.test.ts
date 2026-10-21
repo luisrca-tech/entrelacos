@@ -80,7 +80,7 @@ describe("receiving guide environment boundaries", () => {
       expect(html).toContain("Voltar para Recebimentos");
     },
   );
-  it("explains activation, Pix destinations, manual approvals and optional official apps", () => {
+  it("explains activation, Pix destinations and optional official apps", () => {
     const html = render();
     expect(html).toContain("enviado automaticamente");
     expect(html).toContain("aprovação cadastral não confirma");
@@ -92,5 +92,23 @@ describe("receiving guide environment boundaries", () => {
     expect(html).toContain("id=asaas.asaas");
     expect(html).toContain("id1421133076");
     expect(html).toContain("/sites/wedding-1/receiving");
+  });
+  it("explains conditional integrated authorization without promising transfer completion", () => {
+    const html = render();
+    expect(html).toContain("consentimento e confirme sua senha do Entrelacos");
+    expect(html).toContain(
+      "autorização integrada de segurança estiver habilitada",
+    );
+    expect(html).toContain("configuração do Asaas permitir");
+    expect(html).toContain(
+      "o pedido pode ser autorizado pelo próprio Entrelacos",
+    );
+    expect(html).not.toContain("webhook");
+    expect(html).toContain(
+      "não estiver habilitada ou houver autorização manual",
+    );
+    expect(html).toContain("SMS ou Token App");
+    expect(html).toContain("A autorização não confirma a conclusão do saque");
+    expect(html).not.toContain("não aprova automaticamente essa autorização");
   });
 });

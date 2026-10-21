@@ -11,6 +11,7 @@ import {
   type PgTableExtraConfigValue,
   pgEnum,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   unique,
@@ -1249,6 +1250,96 @@ export const withdrawalProviderObservation = pgTable(
     check(
       "withdrawal_observation_provider_check",
       sql`${table.providerReference} ~ '^[A-Za-z0-9_-]{1,128}$'`,
+    ),
+  ],
+);
+
+// The callback authorizes an existing native transfer; neither table is monetary state.
+export const withdrawalAuthorizationCandidate = pgTable(
+  "withdrawal_authorization_candidate",
+  {
+    environment: financialEnvironment("environment").notNull(),
+    providerReference: text("provider_reference").notNull(),
+    siteId: text("site_id").notNull(),
+    accountId: text("account_id").notNull(),
+    operationId: text("operation_id").notNull(),
+    payloadHash: text("payload_hash").notNull(),
+    payload: jsonb("payload").$type<Record<string, unknown>>().notNull(),
+    recordedAt: timestamp("recorded_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.environment, table.providerReference] }),
+    unique("withdrawal_authorization_operation_unique").on(
+      table.environment,
+      table.operationId,
+    ),
+    foreignKey({
+      name: "withdrawal_authorization_operation_fk",
+      columns: [
+        table.siteId,
+        table.accountId,
+        table.environment,
+        table.operationId,
+      ],
+      foreignColumns: [
+        financialOperation.siteId,
+        financialOperation.accountId,
+        financialOperation.environment,
+        financialOperation.id,
+      ],
+    })
+      .onDelete("restrict")
+      .onUpdate("restrict"),
+    check(
+      "withdrawal_authorization_candidate_environment_check",
+      sql`${table.environment} = 'sandbox'`,
+    ),
+    check(
+      "withdrawal_authorization_candidate_hash_check",
+      sql`${table.payloadHash} ~ '^[a-f0-9]{64}$'`,
+    ),
+    check(
+      "withdrawal_authorization_candidate_provider_check",
+      sql`${table.providerReference} ~ '^[A-Za-z0-9_-]{1,128}$'`,
+    ),
+    check(
+      "withdrawal_authorization_candidate_payload_check",
+      sql`jsonb_typeof(${table.payload}) = 'object' AND octet_length(${table.payload}::text) <= 32768`,
+    ),
+  ],
+);
+export const withdrawalAuthorizationDecision = pgTable(
+  "withdrawal_authorization_decision",
+  {
+    environment: financialEnvironment("environment").notNull(),
+    providerReference: text("provider_reference").notNull(),
+    payloadHash: text("payload_hash").notNull(),
+    status: text("status").notNull(),
+    recordedAt: timestamp("recorded_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.environment, table.providerReference] }),
+    foreignKey({
+      name: "withdrawal_authorization_candidate_fk",
+      columns: [table.environment, table.providerReference],
+      foreignColumns: [
+        withdrawalAuthorizationCandidate.environment,
+        withdrawalAuthorizationCandidate.providerReference,
+      ],
+    })
+      .onDelete("restrict")
+      .onUpdate("restrict"),
+    check(
+      "withdrawal_authorization_decision_hash_check",
+      sql`${table.payloadHash} ~ '^[a-f0-9]{64}$'`,
+    ),
+    check(
+      "withdrawal_authorization_decision_status_check",
+      sql`${table.status} = 'APPROVED'`,
     ),
   ],
 );

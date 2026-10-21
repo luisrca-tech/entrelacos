@@ -7,6 +7,7 @@ import { PgDialect } from "drizzle-orm/pg-core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import * as asaasHttpModule from "./asaasHttpClient";
 import * as transferModule from "./asaasTransferClient";
+import * as authorizationModule from "./asaasWithdrawalAuthorization";
 import * as custodyModule from "./asaasWithdrawalCustody";
 import * as credentialModule from "./providerCredentials";
 import {
@@ -131,7 +132,10 @@ describe("native withdrawal maximum fee quote", () => {
   });
 });
 
-function enabledFixture(refreshReceiving?: (siteId: string) => Promise<void>) {
+function enabledFixture(
+  refreshReceiving?: (siteId: string) => Promise<void>,
+  authorization = false,
+) {
   const clock = { value: new Date("2026-10-19T10:00:00.000Z") };
   const execute = vi.fn(async (_statement: SQL) => ({
     rows: [] as Record<string, unknown>[],
@@ -152,6 +156,14 @@ function enabledFixture(refreshReceiving?: (siteId: string) => Promise<void>) {
     credentialKeyring: new Map([["key-1", key]]),
     webhookPublicOrigin: "https://webhook.example.test",
     webhookUrl: "https://webhook.example.test/v1/webhooks/asaas",
+    ...(authorization
+      ? {
+          withdrawalAuthorization: {
+            token: "offline-authorization-token-123456789",
+            url: "https://webhook.example.test/v1/webhooks/asaas/withdrawal-authorization",
+          },
+        }
+      : {}),
   };
   const fetch = vi.fn<typeof globalThis.fetch>();
   const composition = createWithdrawalComposition(config, {
@@ -863,7 +875,7 @@ describe("current native withdrawal budget", () => {
 
 describe("composed native dispatch budget boundaries", () => {
   afterEach(() => vi.restoreAllMocks());
-  function nativeFixture() {
+  function nativeFixture(authorization = false) {
     const adapterFactory = vi.spyOn(
       transferModule,
       "createAsaasWithdrawalTransferAdapter",
@@ -929,7 +941,7 @@ describe("composed native dispatch budget boundaries", () => {
       getTransfer: vi.fn(),
       listTransfers: vi.fn(),
     } as never);
-    const f = enabledFixture();
+    const f = enabledFixture(undefined, authorization);
     const correlation = {
       siteId: "site-1",
       requestId: "request-1",
@@ -1027,7 +1039,10 @@ describe("composed native dispatch budget boundaries", () => {
               version: 1,
               state: "PENDING",
               isCurrent: true,
-              configuration: { key: { ciphertext: "destination" } },
+              configuration: {
+                key: { ciphertext: "destination" },
+                review: { maskedCpfCnpj: "***.456.789-**" },
+              },
             },
           ],
         };
@@ -1061,6 +1076,70 @@ describe("composed native dispatch budget boundaries", () => {
       queries,
     };
   }
+  it.each(["success", "candidateFailure"] as const)(
+    "publishes native authorization evidence in the same dispatch transaction: %s",
+    async (kind) => {
+      const events: string[] = [];
+      const record = vi.fn(async () => {
+        events.push("candidate");
+        if (kind === "candidateFailure")
+          throw new Error("candidate persistence failed");
+      });
+      vi.spyOn(
+        authorizationModule,
+        "createAsaasWithdrawalAuthorization",
+      ).mockReturnValue({
+        recordCandidateInTransaction: record,
+        receive: vi.fn(async () => ({ status: "REFUSED" as const })),
+      });
+      const f = nativeFixture(true);
+      f.db.transaction.mockImplementation(async (work) => {
+        events.push("begin");
+        try {
+          const result = await work({ execute: f.execute });
+          events.push("commit");
+          return result;
+        } catch (error) {
+          events.push("rollback");
+          throw error;
+        }
+      });
+      f.post.mockImplementation(async () => {
+        events.push("native");
+        return { provider: "ASAAS" };
+      });
+      try {
+        const client = await f.options.loadClient(f.original, f.fence);
+        events.length = 0;
+        if (kind === "success") await client.createPixTransfer(f.command);
+        else
+          await expect(client.createPixTransfer(f.command)).rejects.toThrow(
+            "candidate persistence failed",
+          );
+        expect(events).toEqual([
+          "begin",
+          "native",
+          "candidate",
+          kind === "success" ? "commit" : "rollback",
+        ]);
+        expect(f.post).toHaveBeenCalledOnce();
+        expect(record).toHaveBeenCalledOnce();
+        expect(record.mock.calls[0]).toEqual([
+          { execute: f.execute },
+          f.original,
+          f.fence,
+          { provider: "ASAAS" },
+          {
+            key: f.command.pixAddressKey,
+            type: "EMAIL",
+            reviewedMaskedCpfCnpj: "***.456.789-**",
+          },
+        ]);
+      } finally {
+        await f.composition.close();
+      }
+    },
+  );
   it("checks native fees and balance before returning pre-arm authority", async () => {
     const f = nativeFixture();
     f.balance.mockResolvedValue({ ...(await f.balance()), balanceCents: 349 });
@@ -1156,6 +1235,84 @@ describe("composed native dispatch budget boundaries", () => {
           await expect(client.createPixTransfer(f.command)).rejects.toThrow();
           expect(f.post).not.toHaveBeenCalled();
         }
+        expect(f.fetch).not.toHaveBeenCalled();
+      } finally {
+        await f.composition.close();
+      }
+    },
+  );
+});
+
+describe("withdrawal callback current holder access", () => {
+  afterEach(() => vi.restoreAllMocks());
+  it.each(["revoked", "inactive"] as const)(
+    "denies %s access before checking or locking monetary rows",
+    async (kind) => {
+      const factory = vi.spyOn(
+        authorizationModule,
+        "createAsaasWithdrawalAuthorization",
+      );
+      const f = enabledFixture(undefined, true);
+      const statements: string[] = [];
+      f.execute.mockImplementation(async (statement) => {
+        const query = new PgDialect().sqlToQuery(statement);
+        statements.push(query.sql);
+        if (query.sql.startsWith("SELECT a.*"))
+          return {
+            rows: [
+              {
+                id: "account-1",
+                site_id: "site-1",
+                environment: "sandbox",
+                provider: "ASAAS",
+                isDemo: true,
+                is_current: true,
+                account_reference: "acct-1",
+                recipient_reference: "recipient-1",
+                operator_user_id: "user-1",
+              },
+            ],
+          };
+        if (query.sql.includes('FROM "user" u'))
+          return {
+            rows: [
+              {
+                user_id: "user-1",
+                account_role: "SITE_ADMIN",
+                account_state: kind === "inactive" ? "INACTIVE" : "ACTIVE",
+                site_id: "site-1",
+                membership_id: "membership-1",
+                membership_user_id: "user-1",
+                membership_role: "SITE_ADMIN",
+                revoked_at: kind === "revoked" ? f.clock.value : null,
+              },
+            ],
+          };
+        if (query.sql.includes("FROM site"))
+          return { rows: [{ id: "site-1" }] };
+        return { rows: [] };
+      });
+      try {
+        const verify = factory.mock.calls[0][1].verifyConsentInTransaction;
+        await expect(
+          verify(
+            { execute: f.execute } as never,
+            {
+              correlation: {
+                siteId: "site-1",
+                accountId: "account-1",
+                accountReference: "acct-1",
+                operatorUserId: "user-1",
+              },
+            } as never,
+          ),
+        ).rejects.toThrow();
+        expect(statements[0]).toContain("FROM site");
+        expect(statements[0]).toContain("FOR UPDATE");
+        expect(statements.some((s) => s.includes('FROM "user" u'))).toBe(true);
+        expect(
+          statements.some((s) => s.includes("FROM financial_operation")),
+        ).toBe(false);
         expect(f.fetch).not.toHaveBeenCalled();
       } finally {
         await f.composition.close();

@@ -233,6 +233,41 @@ function adapterFixture(maximum = false) {
   };
 }
 describe("Sandbox native withdrawal transfer adapter", () => {
+  it.each(["dispatch", "get", "list"] as const)(
+    "keeps native recipient PII out of durable completion custody during %s",
+    async (path) => {
+      const f = adapterFixture();
+      f.observation.transfer.bankAccount = {
+        bank: { ispb: "12345678" },
+        ownerName: "Original Operator",
+        cpfCnpj: "12345678901",
+        agency: "0001",
+        account: "12345",
+        accountDigit: "6",
+        pixAddressKey: "private@example.test",
+      };
+      const result =
+        path === "dispatch"
+          ? await f.adapter.dispatch(f.original, f.fence)
+          : await f.adapter.lookup(
+              f.original,
+              f.fence,
+              path === "get" ? "transfer-1" : null,
+            );
+      expect(result.outcome).toBe(path === "dispatch" ? "ACCEPTED" : "FOUND");
+      const recorded = f.custody.record.mock.calls[0] as unknown as [
+        unknown,
+        unknown,
+        AsaasTransferObservation,
+      ];
+      expect(recorded[2].transfer).not.toHaveProperty("bankAccount");
+      expect(JSON.stringify(recorded)).not.toContain("private@example.test");
+      expect(JSON.stringify(recorded)).not.toContain("12345678901");
+      expect(f.observation.transfer.bankAccount.pixAddressKey).toBe(
+        "private@example.test",
+      );
+    },
+  );
   it.each([null, "transfer-1"])(
     "retains the exact completed native datetime during lookup (%s)",
     async (providerReference) => {

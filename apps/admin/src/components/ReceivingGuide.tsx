@@ -98,7 +98,7 @@ export function ReceivingGuide({
             <p className="mt-2 mb-0">
               Confira o e-mail e o spam. Se o acesso ainda não funcionar, use a
               recuperação de senha ou o suporte do Asaas. O Entrelacos não
-              define sua senha nem recebe seus códigos de segurança.
+              define sua senha do Asaas nem recebe seus códigos de segurança.
             </p>
             <p className="mt-2 mb-0">
               <OfficialLink href="https://docs.asaas.com/docs/criacao-de-subcontas">
@@ -146,15 +146,19 @@ export function ReceivingGuide({
             </h3>
             <p className="m-0">
               No Entrelacos, confira o saldo disponível, o destino e as taxas na
-              prévia. Confirme o pedido e acompanhe o histórico. No fluxo atual,
-              o Asaas pode exigir autorização manual pelo titular. Solicitar o
-              saque não confirma sua conclusão; o Entrelacos não aprova
-              automaticamente essa autorização.
+              prévia. Revise o consentimento e confirme sua senha do Entrelacos
+              para solicitar o saque. Depois, acompanhe o histórico.
             </p>
             <p className="mt-2 mb-0">
-              Conclua as confirmações solicitadas pelo Asaas, como SMS ou Token
-              App. A liberação e a transferência final dependem do Asaas e da
-              instituição de destino.
+              Quando a autorização integrada de segurança estiver habilitada e a
+              configuração do Asaas permitir, o pedido pode ser autorizado pelo
+              próprio Entrelacos. Se a integração não estiver habilitada ou
+              houver autorização manual exigida pelo Asaas, o titular deve
+              concluir as confirmações no Asaas, como SMS ou Token App.
+            </p>
+            <p className="mt-2 mb-0">
+              A autorização não confirma a conclusão do saque. A liberação e a
+              transferência final dependem do Asaas e da instituição de destino.
             </p>
             <p className="mt-2 mb-0">
               <OfficialLink href="https://central.ajuda.asaas.com/hc/pt-br/articles/32059472076059-Como-solicitar-uma-transfer%C3%AAncia">
@@ -176,7 +180,9 @@ export function ReceivingGuide({
             <li>Presentes registrados e situação dos recebimentos.</li>
             <li>Cadastro e confirmação do destino externo para saque.</li>
             <li>Prévia do destinatário, dos valores e das taxas.</li>
-            <li>Pedido de saque e acompanhamento do histórico.</li>
+            <li>
+              Consentimento, pedido de saque e acompanhamento do histórico.
+            </li>
           </ul>
         </section>
         <section
@@ -189,7 +195,7 @@ export function ReceivingGuide({
           <ul className="m-0 grid list-disc gap-2 pl-5">
             <li>Ativação, senha e recuperação do acesso.</li>
             <li>Documentos e aprovação cadastral da conta.</li>
-            <li>Dispositivo seguro, SMS, Token App e autorizações.</li>
+            <li>Dispositivo seguro, SMS, Token App e confirmações exigidas.</li>
             <li>Processamento e liberação da transferência ao banco.</li>
           </ul>
         </section>

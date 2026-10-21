@@ -146,7 +146,10 @@ export function createAsaasWithdrawalTransferAdapter(
     fence: DispatchFence,
     input: AsaasTransferObservation,
   ): Promise<WithdrawalDispatchObservation> {
-    const observation = captureAsaasWithdrawalTransfer(original, input, now());
+    const captured = captureAsaasWithdrawalTransfer(original, input, now());
+    // Authorization fingerprints native routing; completion custody never retains its plaintext.
+    const { bankAccount: _bankAccount, ...transfer } = captured.transfer;
+    const observation = { ...captured, transfer };
     const reference = await record(original, fence, observation);
     if (!/^asaas-transfer:[a-f0-9]{64}$/.test(reference)) unavailable();
     const identity = {

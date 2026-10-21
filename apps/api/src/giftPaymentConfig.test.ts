@@ -12,6 +12,58 @@ const configured = {
 };
 
 describe("gift payment runtime configuration", () => {
+  it("enables a separate Sandbox withdrawal authorization endpoint only with its own token", () => {
+    const authorizationToken = "fixture-withdrawal-authorization-secret";
+    const result = readGiftPaymentConfig(
+      {
+        ...configured,
+        ASAAS_WITHDRAWAL_AUTHORIZATION_TOKEN: authorizationToken,
+      },
+      "development",
+    );
+    expect(result).toMatchObject({
+      withdrawalAuthorization: {
+        token: authorizationToken,
+        url: "https://webhook.example.test/v1/webhooks/asaas/withdrawal-authorization",
+      },
+    });
+    expect(readGiftPaymentConfig(configured, "development")).not.toHaveProperty(
+      "withdrawalAuthorization",
+    );
+  });
+
+  it.each([
+    "",
+    "short",
+    "x".repeat(256),
+    `${"x".repeat(32)} y`,
+    `${"x".repeat(32)}\n`,
+  ])(
+    "rejects malformed withdrawal authorization secrets without echoing them (%#)",
+    (token) => {
+      expect(() =>
+        readGiftPaymentConfig(
+          { ...configured, ASAAS_WITHDRAWAL_AUTHORIZATION_TOKEN: token },
+          "development",
+        ),
+      ).toThrow("Gift payment configuration is invalid");
+    },
+  );
+
+  it("does not enable the Sandbox withdrawal callback in live mode", () => {
+    expect(() =>
+      readGiftPaymentConfig(
+        {
+          ...configured,
+          ASAAS_MODE: "live",
+          ASAAS_WITHDRAWAL_AUTHORIZATION_TOKEN:
+            "fixture-withdrawal-authorization-secret",
+        },
+        "production",
+      ),
+    ).toThrow("Gift payment configuration is invalid");
+  });
+
   it("defaults to disabled without reading unused secrets", () => {
     const env: Record<string, string | undefined> = {};
     for (const key of Object.keys(configured).filter(

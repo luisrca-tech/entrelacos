@@ -115,6 +115,17 @@ export interface AsaasPixTransferCommand {
   pixAddressKeyType: "CPF" | "CNPJ" | "EMAIL" | "PHONE" | "EVP";
   externalReference: string;
 }
+export interface AsaasTransferBankAccount {
+  bank: { ispb: string };
+  ownerName: string;
+  cpfCnpj: string;
+  agency: string;
+  account: string;
+  accountDigit: string | null;
+  pixAddressKey: string | null;
+  agencyDigit?: string | null;
+  type?: string | null;
+}
 export interface AsaasTransfer {
   id: string;
   status: "PENDING" | "BANK_PROCESSING" | "DONE" | "CANCELLED" | "FAILED";
@@ -127,6 +138,7 @@ export interface AsaasTransfer {
   transactionReceiptUrl: string | null;
   endToEndIdentifier: string | null;
   effectiveDate: string | null;
+  bankAccount?: AsaasTransferBankAccount;
 }
 export interface AsaasTransferObservation {
   source: "provider";
@@ -643,6 +655,47 @@ export function readAsaasTransferEffectiveDate(value: unknown): string | null {
     return unavailable();
   return value;
 }
+// Preserve exact native routing strings; authorization compares the complete snapshot.
+export function readAsaasTransferBankAccount(
+  value: unknown,
+): AsaasTransferBankAccount {
+  const raw = record(value);
+  const bank = record(raw.bank);
+  function text(value: unknown, max = 256): string {
+    if (
+      typeof value !== "string" ||
+      !value.trim() ||
+      value.length > max ||
+      [...value].some(
+        (character) =>
+          character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127,
+      )
+    )
+      unavailable();
+    return value;
+  }
+  const ispb = text(bank.ispb, 8);
+  if (!/^\d{8}$/.test(ispb)) unavailable();
+  return {
+    bank: { ispb },
+    ownerName: text(raw.ownerName),
+    cpfCnpj: text(raw.cpfCnpj, 32),
+    agency: text(raw.agency, 32),
+    account: text(raw.account, 32),
+    accountDigit: raw.accountDigit === null ? null : text(raw.accountDigit, 8),
+    pixAddressKey: raw.pixAddressKey === null ? null : text(raw.pixAddressKey),
+    ...(raw.agencyDigit === undefined
+      ? {}
+      : {
+          agencyDigit:
+            raw.agencyDigit === null ? null : text(raw.agencyDigit, 8),
+        }),
+    ...(raw.type === undefined
+      ? {}
+      : { type: raw.type === null ? null : text(raw.type, 32) }),
+  };
+}
+
 function normalizeTransfer(value: unknown): AsaasTransfer {
   const raw = record(value);
   const optional = (key: string): string | null => {
@@ -683,6 +736,9 @@ function normalizeTransfer(value: unknown): AsaasTransfer {
     transactionReceiptUrl: optional("transactionReceiptUrl"),
     endToEndIdentifier: optional("endToEndIdentifier"),
     effectiveDate: readAsaasTransferEffectiveDate(raw.effectiveDate),
+    ...(raw.bankAccount === undefined || raw.bankAccount === null
+      ? {}
+      : { bankAccount: readAsaasTransferBankAccount(raw.bankAccount) }),
   };
 }
 

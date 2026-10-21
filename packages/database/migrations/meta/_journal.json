@@ -148,6 +148,13 @@
       "when": 1792416622866,
       "tag": "0020_withdrawal_provider_observation",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1792548212541,
+      "tag": "0021_withdrawal_authorization",
+      "breakpoints": true
     }
   ]
 }

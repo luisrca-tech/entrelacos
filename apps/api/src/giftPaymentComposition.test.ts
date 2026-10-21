@@ -519,6 +519,39 @@ describe("gift payment composition", () => {
     expect(values.loop.stop).not.toHaveBeenCalled();
   });
 
+  it("composes an independent opt-in withdrawal authorization receiver and owns its lifecycle", async () => {
+    const values = fixture();
+    const authorizationToken = "fixture-withdrawal-authorization-secret";
+    const config = configuration();
+    if (config.mode === "disabled") throw new Error("Expected enabled fixture");
+    const composition = createGiftPaymentComposition(
+      {
+        ...config,
+        withdrawalAuthorization: {
+          token: authorizationToken,
+          url: "https://webhook.example.test/v1/webhooks/asaas/withdrawal-authorization",
+        },
+      },
+      values,
+    );
+    expect(composition.ports.asaasWithdrawalAuthorization).toBeDefined();
+    expect(values.fetch).not.toHaveBeenCalled();
+    await expect(
+      composition.ports.asaasWithdrawalAuthorization?.receive(
+        "different-fixture-authorization-token",
+        "{}",
+      ),
+    ).resolves.toEqual({ status: "REFUSED" });
+    expect(values.fetch).not.toHaveBeenCalled();
+    await composition.close();
+    await expect(
+      composition.ports.asaasWithdrawalAuthorization?.receive(
+        authorizationToken,
+        "{}",
+      ),
+    ).rejects.toThrow("Gift payment composition unavailable");
+  });
+
   it("starts one owned worker and waits for its actual stop before finishing close", async () => {
     const values = fixture();
     const composition = createGiftPaymentComposition(configuration(), values);

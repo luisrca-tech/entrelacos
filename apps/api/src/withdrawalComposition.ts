@@ -14,6 +14,10 @@ import {
 } from "./asaasHttpClient";
 import { createAsaasStoredAccountReader } from "./asaasStoredAccountReader";
 import { createAsaasWithdrawalTransferAdapter } from "./asaasTransferClient";
+import {
+  type AsaasWithdrawalAuthorizationReceiver,
+  createAsaasWithdrawalAuthorization,
+} from "./asaasWithdrawalAuthorization";
 import { createAsaasWithdrawalCustody } from "./asaasWithdrawalCustody";
 import { parseBrlCents } from "./giftMoney";
 import type { GiftPaymentConfig } from "./giftPaymentConfig";
@@ -67,6 +71,7 @@ export interface WithdrawalCompositionOptions {
   refreshReceiving?(siteId: string): Promise<void>;
 }
 export interface WithdrawalComposition {
+  authorization?: AsaasWithdrawalAuthorizationReceiver;
   service?: WithdrawalReservationService;
   reconcilePending(): Promise<void>;
   decorateIntent(intent: WithdrawalIntent): Promise<WithdrawalIntent>;
@@ -578,6 +583,73 @@ export function createWithdrawalComposition(
     if (input.type !== selected.binding.keyType) unavailable();
     return input;
   }
+  const authorization = config.withdrawalAuthorization
+    ? createAsaasWithdrawalAuthorization(db, {
+        mode,
+        applicationEnvironment,
+        token: config.withdrawalAuthorization.token,
+        now,
+        async verifyConsentInTransaction(tx, original) {
+          const c = original.correlation;
+          one(
+            await tx.execute(
+              sql`SELECT id FROM site WHERE id=${c.siteId} FOR UPDATE`,
+            ),
+          );
+          // Serialize with dispatch, receiving writers, and reconciliation before monetary locks.
+          await account(tx, c, true, true);
+          const access = await resolveSiteAccess(tx, {
+            userId: c.operatorUserId,
+            platformRole: "SITE_ADMIN",
+            siteId: c.siteId,
+          });
+          if (
+            access?.membershipRole !== "SITE_ADMIN" ||
+            !access.membershipId ||
+            !access.capabilities.readFinance
+          )
+            unavailable();
+          const eligible = one<{ id: string }>(
+            await tx.execute(
+              sql`SELECT u.id FROM "user" u INNER JOIN site_membership m ON m.user_id=u.id AND m.site_id=${c.siteId} WHERE u.id=${c.operatorUserId} AND u.role='SITE_ADMIN' AND u.state='ACTIVE' AND m.role='SITE_ADMIN' AND m.revoked_at IS NULL FOR UPDATE OF u,m`,
+            ),
+          );
+          if (eligible.id !== c.operatorUserId) unavailable();
+          const current = await context(tx, c.siteId);
+          if (
+            current.isDemo !== true ||
+            current.mode !== "sandbox" ||
+            current.verification !== "verified" ||
+            current.accountId !== c.accountId ||
+            current.bankReference !== c.bankReference ||
+            current.readiness?.state !== "READY" ||
+            current.readiness.mode !== "sandbox" ||
+            current.readiness.destinationVersion !== c.destinationVersion ||
+            !isDeepStrictEqual(current.recipientBinding, {
+              siteId: c.siteId,
+              operatorUserId: c.operatorUserId,
+              environment: c.environment,
+              accountReference: c.accountReference,
+              recipientReference: c.recipientReference,
+              destinationVersion: c.destinationVersion,
+            })
+          )
+            unavailable();
+          const binding = await originalHolder(
+            tx,
+            original.snapshot,
+            original.consent,
+          );
+          if (!isDeepStrictEqual(binding, original.holderBinding))
+            unavailable();
+          await payout(
+            tx,
+            original.consent.snapshot.scope,
+            original.consent.snapshot.presentation.payout,
+          );
+        },
+      })
+    : undefined;
   async function dispatchCheck(
     tx: ReceivingTransaction,
     original: OriginalWithdrawal,
@@ -744,7 +816,22 @@ export function createWithdrawalComposition(
             command.pixAddressKeyType !== checked.key.type
           )
             unavailable();
-          return client.createPixTransfer(command);
+          const observation = await client.createPixTransfer(command);
+          if (authorization) {
+            // Publish authorization evidence with the POST response, before releasing dispatch locks.
+            await authorization.recordCandidateInTransaction(
+              tx,
+              original,
+              fence,
+              observation,
+              {
+                ...checked.key,
+                reviewedMaskedCpfCnpj:
+                  checked.selected.configuration.review.maskedCpfCnpj,
+              },
+            );
+          }
+          return observation;
         });
       },
     };
@@ -910,6 +997,14 @@ export function createWithdrawalComposition(
   };
   return {
     service,
+    ...(authorization
+      ? {
+          authorization: {
+            receive: (token: string, rawBody: string) =>
+              own(() => authorization.receive(token, rawBody)),
+          },
+        }
+      : {}),
     decorateIntent: (intent) => own(() => decorateIntent(intent)),
     loadCompletionProofInTransaction: loadProof,
     async reconcilePending() {

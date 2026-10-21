@@ -1726,6 +1726,31 @@ describe("native Asaas Pix transfer transport", () => {
     endToEndIdentifier: "E123",
     effectiveDate: "2026-10-12",
   });
+  it("retains the native Pix recipient fields for immutable withdrawal authorization", async () => {
+    const bankAccount = {
+      bank: { ispb: "12345678", name: "Synthetic Bank" },
+      ownerName: "Original Operator",
+      cpfCnpj: "12345678901",
+      agency: "0001",
+      account: "12345",
+      accountDigit: "6",
+      pixAddressKey: "original@example.test",
+      ignored: "metadata",
+    };
+    const f = fixture(json({ ...transfer(), bankAccount }));
+    expect(
+      (await createAsaasHttpClient(f.options).getTransfer("transfer-1"))
+        .transfer.bankAccount,
+    ).toEqual({
+      bank: { ispb: "12345678" },
+      ownerName: bankAccount.ownerName,
+      cpfCnpj: bankAccount.cpfCnpj,
+      agency: bankAccount.agency,
+      account: bankAccount.account,
+      accountDigit: bankAccount.accountDigit,
+      pixAddressKey: bankAccount.pixAddressKey,
+    });
+  });
   it.each(["get", "list"] as const)(
     "preserves a completed native datetime exactly through %s",
     async (method) => {

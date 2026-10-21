@@ -14,6 +14,10 @@ export type GiftPaymentConfig =
       readonly credentialKeyring: ProviderCredentialKeyring;
       readonly webhookPublicOrigin: string;
       readonly webhookUrl: string;
+      readonly withdrawalAuthorization?: {
+        readonly token: string;
+        readonly url: string;
+      };
     };
 
 function invalid(): never {
@@ -85,6 +89,12 @@ export function readGiftPaymentConfig(
   const key = Buffer.from(encodedKey, "base64");
   if (key.length !== 32 || key.toString("base64") !== encodedKey) invalid();
   const webhookPublicOrigin = webhookOrigin(env.ASAAS_WEBHOOK_PUBLIC_ORIGIN);
+  const authorizationToken = env.ASAAS_WITHDRAWAL_AUTHORIZATION_TOKEN;
+  if (
+    authorizationToken !== undefined &&
+    (mode !== "sandbox" || !/^[\x21-\x7e]{32,255}$/.test(authorizationToken))
+  )
+    invalid();
   return {
     mode,
     applicationEnvironment,
@@ -95,5 +105,13 @@ export function readGiftPaymentConfig(
     credentialKeyring: new Map([[credentialKeyId, key]]),
     webhookPublicOrigin,
     webhookUrl: `${webhookPublicOrigin}/v1/webhooks/asaas`,
+    ...(authorizationToken !== undefined
+      ? {
+          withdrawalAuthorization: {
+            token: authorizationToken,
+            url: `${webhookPublicOrigin}/v1/webhooks/asaas/withdrawal-authorization`,
+          },
+        }
+      : {}),
   };
 }

@@ -54,6 +54,7 @@ type PaymentPorts = Pick<
   | "receiving"
   | "giftPayments"
   | "asaasWebhook"
+  | "asaasWithdrawalAuthorization"
   | "finance"
   | "withdrawalReservation"
 >;
@@ -417,6 +418,7 @@ export function createGiftPaymentComposition(
     mode: environment,
   });
   let closing: Promise<void> | undefined;
+  const withdrawalAuthorization = withdrawals.authorization;
   let stopped = false;
   let started = false;
   let run: Promise<void> | undefined;
@@ -437,6 +439,14 @@ export function createGiftPaymentComposition(
       receiving,
       ...(withdrawals.service
         ? { withdrawalReservation: withdrawals.service }
+        : {}),
+      ...(withdrawalAuthorization
+        ? {
+            asaasWithdrawalAuthorization: {
+              receive: (token: string, rawBody: string) =>
+                own(() => withdrawalAuthorization.receive(token, rawBody)),
+            },
+          }
         : {}),
       giftPayments: {
         createQuote: (siteId: unknown, input: unknown) =>

@@ -9,6 +9,10 @@ import {
   type AsaasWebhookHttpReceiver,
   createAsaasWebhookHttpRouter,
 } from "./asaasWebhookHttp";
+import {
+  type AsaasWithdrawalAuthorizationHttpReceiver,
+  createAsaasWithdrawalAuthorizationHttpRouter,
+} from "./asaasWithdrawalAuthorizationHttp";
 import { createAuthHttpRouter } from "./authHttp";
 import { createDemoResetHttpRouter } from "./demoResetHttp";
 import {
@@ -72,6 +76,7 @@ export type ApiOptions = GiftPaymentsHttpOptions &
   > & {
     receiving?: ReceivingRepositoryOptions;
     asaasWebhook?: AsaasWebhookHttpReceiver;
+    asaasWithdrawalAuthorization?: AsaasWithdrawalAuthorizationHttpReceiver;
     financialReauthentication?: FinancialReauthentication;
     receivingNomination?: ReceivingNominationService;
     receivingSetup?: ReceivingSetupService;
@@ -104,6 +109,12 @@ export function createApp(
   }
 
   if (options) {
+    app.route(
+      "/",
+      createAsaasWithdrawalAuthorizationHttpRouter(
+        options.asaasWithdrawalAuthorization,
+      ),
+    );
     app.route("/", createAsaasWebhookHttpRouter(options.asaasWebhook));
     const readReadiness = (siteId: string) =>
       readReceivingReadiness(options.db, siteId, options.receiving);
