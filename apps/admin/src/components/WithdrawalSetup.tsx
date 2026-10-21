@@ -1843,15 +1843,17 @@ function WithdrawalSetupView({
           {state.busy ? "Retomando prévia…" : "Retomar prévia"}
         </Button>
       )}
-      {state.request && controller?.guard.isCurrent() && (
-        <WithdrawalActions
-          key={state.proofRevision}
-          controller={controller}
-          scope={scope}
-          ports={ports}
-          state={state}
-        />
-      )}
+      {state.request &&
+        withdrawal?.state !== "COMPLETED" &&
+        controller?.guard.isCurrent() && (
+          <WithdrawalActions
+            key={state.proofRevision}
+            controller={controller}
+            scope={scope}
+            ports={ports}
+            state={state}
+          />
+        )}
       {!!scope.sessionEpoch && state.status !== "denied" && (
         <Button
           type="button"

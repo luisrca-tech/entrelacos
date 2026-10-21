@@ -3150,6 +3150,73 @@ describe("withdrawal setup owned source lifecycle", () => {
 });
 
 describe("actual React withdrawal DOM", () => {
+  it.each(["COMPLETED", "REQUESTED", "UNKNOWN"] as const)(
+    "keeps %s withdrawal consultation separate from available financial actions",
+    async (state) => {
+      const prior = {
+        ...existing(),
+        withdrawal: { ...existing().withdrawal, state },
+      };
+      const f = await fixture({
+        ...context("2"),
+        newRequestAllowed: state !== "UNKNOWN",
+        reason: state === "UNKNOWN" ? "UNRESOLVED_OPERATION" : null,
+        recoverableRequests: [prior],
+      });
+      try {
+        f.setRequest(prior);
+        const { writeWithdrawalMarker } = await import("./withdrawalClient");
+        writeWithdrawalMarker(f.storage, {
+          version: 1,
+          siteId: access.siteId,
+          operatorUserId: access.userId,
+          mode: "sandbox",
+          requestId: prior.requestId,
+        });
+        const { node } = await mount(f);
+        const buttons = () => [...node.querySelectorAll("button")];
+        const consult = required(
+          buttons().find(
+            (button) => button.textContent === "Consultar situação",
+          ),
+        );
+        expect(consult.disabled).toBe(false);
+        if (state === "COMPLETED") {
+          expect(node.textContent).toContain("Concluído pelo provedor.");
+          expect(node.querySelector("#withdrawal-amount")).not.toBeNull();
+          expect(
+            buttons().some(
+              (button) => button.textContent === "Consultar prévia do saque",
+            ),
+          ).toBe(true);
+          expect(
+            buttons().some(
+              (button) => button.textContent === "Confirmar senha",
+            ),
+          ).toBe(false);
+          expect(node.querySelector('input[type="checkbox"]')).toBeNull();
+          expect(node.textContent).not.toContain(
+            "Recuperar solicitação original",
+          );
+          expect(document.querySelector('input[type="password"]')).toBeNull();
+        } else {
+          expect(node.querySelector('input[type="checkbox"]')).not.toBeNull();
+          expect(node.textContent).toContain("Recuperar solicitação original");
+          expect(
+            document.querySelector('input[type="password"]'),
+          ).not.toBeNull();
+        }
+        const reads = f.request.mock.calls.length;
+        await act(async () => consult.click());
+        expect(f.request.mock.calls.length).toBeGreaterThan(reads);
+        expect(
+          f.request.mock.calls.every(([, options]) => !options?.method),
+        ).toBe(true);
+      } finally {
+        f.cleanup();
+      }
+    },
+  );
   it("requires native withdrawal terms before the confirmation form submits", async () => {
     const f = await fixture(openContext());
     try {
