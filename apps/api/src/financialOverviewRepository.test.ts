@@ -1221,14 +1221,14 @@ describe("stored balance consistency after the provider GET", () => {
   });
 });
 
-it("counts an immutable provider-proven withdrawal actual debit and releases its unused maximum", async () => {
+function completedWithdrawal(receiptReference: string) {
   const f = fixture();
   const w = hold(f, "COMPLETED");
   Object.assign(w, {
     reservation_state: "CONSUMED",
     reserved_cents: 0,
     provider_reference: "transfer-1",
-    receipt_reference: "proof-1",
+    receipt_reference: receiptReference,
     resolution_observed_at: new Date("2026-10-12T18:58:00.000Z"),
   });
   f.tables.operations.push({
@@ -1271,8 +1271,8 @@ it("counts an immutable provider-proven withdrawal actual debit and releases its
     provenance: "provider",
     bankCompleted: true,
     currency: "BRL",
-    proofReference: "proof-1",
-    receiptReference: "proof-1",
+    proofReference: receiptReference,
+    receiptReference,
     providerReference: "transfer-1",
     totalDebitCents: 4900,
     feeCents: 0,
@@ -1294,8 +1294,46 @@ it("counts an immutable provider-proven withdrawal actual debit and releases its
     ...f.options,
     loadWithdrawalCompletionProofInTransaction: async () => proof as never,
   });
-  expect((await repository.loadStoredTotals(f.binding))?.totals).toMatchObject({
-    withdrawnCents: 4900,
-    pendingCommitmentsCents: 0,
+  return { f, w, proof, repository };
+}
+
+it.each(["proof-1", `asaas-transfer:${"a".repeat(64)}`])(
+  "counts an immutable provider-proven withdrawal actual debit and releases its unused maximum with receipt %s",
+  async (receiptReference) => {
+    const { f, repository } = completedWithdrawal(receiptReference);
+    expect(
+      (await repository.loadStoredTotals(f.binding))?.totals,
+    ).toMatchObject({
+      withdrawnCents: 4900,
+      pendingCommitmentsCents: 0,
+    });
+  },
+);
+
+it.each([
+  `foreign-transfer:${"a".repeat(64)}`,
+  `asaas-transfer:${"a".repeat(63)}`,
+  `asaas-transfer:${"a".repeat(65)}`,
+  `asaas-transfer:${"A".repeat(64)}`,
+  `asaas-transfer:${"g".repeat(64)}`,
+  `asaas-transfer:${"a".repeat(64)}\n`,
+  `asaas-transfer:${"a".repeat(64)}\u0000`,
+])("rejects a malformed custody receipt %j", async (receiptReference) => {
+  const { f, repository } = completedWithdrawal(receiptReference);
+  await expect(repository.loadStoredTotals(f.binding)).rejects.toMatchObject({
+    code: "FINANCIAL_OVERVIEW_REPOSITORY_UNAVAILABLE",
   });
 });
+
+it.each(["proofReference", "receiptReference", "providerReference"] as const)(
+  "rejects a native custody proof with a foreign %s",
+  async (field) => {
+    const { f, proof, repository } = completedWithdrawal(
+      `asaas-transfer:${"a".repeat(64)}`,
+    );
+    proof[field] = "foreign-reference";
+    await expect(repository.loadStoredTotals(f.binding)).rejects.toMatchObject({
+      code: "FINANCIAL_OVERVIEW_REPOSITORY_UNAVAILABLE",
+    });
+  },
+);

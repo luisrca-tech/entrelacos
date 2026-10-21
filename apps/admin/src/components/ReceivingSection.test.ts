@@ -5,7 +5,32 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError, apiRequest } from "../lib/apiClient";
 import { loadGiftsReadiness } from "./giftsReadiness";
 import { panelActorOwner } from "./panelActor";
-import { ReceivingSectionView, readReceivingSection } from "./ReceivingSection";
+import {
+  ReceivingSection,
+  ReceivingSectionView,
+  readReceivingSection,
+} from "./ReceivingSection";
+
+vi.mock("@tanstack/react-router", () => ({
+  Link: ({
+    to,
+    params,
+    children,
+    ...props
+  }: {
+    to: string;
+    params: { siteId: string };
+    children: React.ReactNode;
+  }) =>
+    createElement(
+      "a",
+      {
+        ...props,
+        href: to.replace("$siteId", encodeURIComponent(params.siteId)),
+      },
+      children,
+    ),
+}));
 
 vi.mock("./ReceivingAccountSetup", () => ({
   ReceivingAccountSetup: ({ sessionEpoch }: { sessionEpoch: number | null }) =>
@@ -156,6 +181,24 @@ describe("receiving asynchronous session ownership", () => {
   });
 });
 describe("receiving session boundary", () => {
+  it("opens a dedicated guide without mounting finance or account mutations", () => {
+    const html = renderToStaticMarkup(
+      createElement(ReceivingSection, {
+        siteId: "wedding-1",
+        access,
+        sessionEpoch: 9,
+        guide: true,
+      }),
+    );
+    expect(html).toContain("Do cadastro ao saque");
+    expect(html).not.toContain("data-setup-epoch");
+    expect(html).not.toContain("data-finance-access");
+    expect(html).not.toContain("/login/auth");
+    expect(loadGiftsReadiness).not.toHaveBeenCalled();
+  });
+  it("links Recebimentos to the guide for the selected site", () => {
+    expect(render(9)).toContain('href="/sites/wedding-1/receiving-guide"');
+  });
   it("withholds OWNER financial surfaces until selected-site access is returned by the server", () => {
     const html = renderToStaticMarkup(
       createElement(ReceivingSectionView, {

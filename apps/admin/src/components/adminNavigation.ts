@@ -5,6 +5,7 @@ export const siteAreas = [
   "messages",
   "gifts",
   "receiving",
+  "receiving-guide",
   "team",
   "settings",
 ] as const;
@@ -23,6 +24,7 @@ const labels: Record<SiteArea, string> = {
   messages: "Mensagens",
   gifts: "Presentes",
   receiving: "Recebimentos",
+  "receiving-guide": "Guia do recebedor",
   team: "Equipe",
   settings: "Configurações",
 };
@@ -60,7 +62,10 @@ export function resolveSiteArea(
     return "invitations";
   }
   if (requestedArea === "settings" && role !== "OWNER") return "invitations";
-  if (requestedArea === "receiving" && role === "SITE_ASSISTANT")
+  if (
+    (requestedArea === "receiving" || requestedArea === "receiving-guide") &&
+    role === "SITE_ASSISTANT"
+  )
     return "invitations";
   if (requestedArea === "team" && role === "SITE_ASSISTANT")
     return "invitations";

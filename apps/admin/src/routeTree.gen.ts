@@ -21,6 +21,7 @@ import { Route as SitesSiteIdGiftsRouteImport } from './routes/sites.$siteId.gif
 import { Route as SitesSiteIdInvitationsRouteImport } from './routes/sites.$siteId.invitations'
 import { Route as SitesSiteIdMessagesRouteImport } from './routes/sites.$siteId.messages'
 import { Route as SitesSiteIdReceivingRouteImport } from './routes/sites.$siteId.receiving'
+import { Route as SitesSiteIdReceivingGuideRouteImport } from './routes/sites.$siteId.receiving-guide'
 import { Route as SitesSiteIdSettingsRouteImport } from './routes/sites.$siteId.settings'
 import { Route as SitesSiteIdTeamRouteImport } from './routes/sites.$siteId.team'
 
@@ -84,6 +85,12 @@ const SitesSiteIdReceivingRoute = SitesSiteIdReceivingRouteImport.update({
   path: '/receiving',
   getParentRoute: () => SitesSiteIdRoute,
 } as any)
+const SitesSiteIdReceivingGuideRoute =
+  SitesSiteIdReceivingGuideRouteImport.update({
+    id: '/receiving-guide',
+    path: '/receiving-guide',
+    getParentRoute: () => SitesSiteIdRoute,
+  } as any)
 const SitesSiteIdSettingsRoute = SitesSiteIdSettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
@@ -108,6 +115,7 @@ export interface FileRoutesByFullPath {
   '/sites/$siteId/invitations': typeof SitesSiteIdInvitationsRoute
   '/sites/$siteId/messages': typeof SitesSiteIdMessagesRoute
   '/sites/$siteId/receiving': typeof SitesSiteIdReceivingRoute
+  '/sites/$siteId/receiving-guide': typeof SitesSiteIdReceivingGuideRoute
   '/sites/$siteId/settings': typeof SitesSiteIdSettingsRoute
   '/sites/$siteId/team': typeof SitesSiteIdTeamRoute
 }
@@ -124,6 +132,7 @@ export interface FileRoutesByTo {
   '/sites/$siteId/invitations': typeof SitesSiteIdInvitationsRoute
   '/sites/$siteId/messages': typeof SitesSiteIdMessagesRoute
   '/sites/$siteId/receiving': typeof SitesSiteIdReceivingRoute
+  '/sites/$siteId/receiving-guide': typeof SitesSiteIdReceivingGuideRoute
   '/sites/$siteId/settings': typeof SitesSiteIdSettingsRoute
   '/sites/$siteId/team': typeof SitesSiteIdTeamRoute
 }
@@ -141,6 +150,7 @@ export interface FileRoutesById {
   '/sites/$siteId/invitations': typeof SitesSiteIdInvitationsRoute
   '/sites/$siteId/messages': typeof SitesSiteIdMessagesRoute
   '/sites/$siteId/receiving': typeof SitesSiteIdReceivingRoute
+  '/sites/$siteId/receiving-guide': typeof SitesSiteIdReceivingGuideRoute
   '/sites/$siteId/settings': typeof SitesSiteIdSettingsRoute
   '/sites/$siteId/team': typeof SitesSiteIdTeamRoute
 }
@@ -159,6 +169,7 @@ export interface FileRouteTypes {
     | '/sites/$siteId/invitations'
     | '/sites/$siteId/messages'
     | '/sites/$siteId/receiving'
+    | '/sites/$siteId/receiving-guide'
     | '/sites/$siteId/settings'
     | '/sites/$siteId/team'
   fileRoutesByTo: FileRoutesByTo
@@ -175,6 +186,7 @@ export interface FileRouteTypes {
     | '/sites/$siteId/invitations'
     | '/sites/$siteId/messages'
     | '/sites/$siteId/receiving'
+    | '/sites/$siteId/receiving-guide'
     | '/sites/$siteId/settings'
     | '/sites/$siteId/team'
   id:
@@ -191,6 +203,7 @@ export interface FileRouteTypes {
     | '/sites/$siteId/invitations'
     | '/sites/$siteId/messages'
     | '/sites/$siteId/receiving'
+    | '/sites/$siteId/receiving-guide'
     | '/sites/$siteId/settings'
     | '/sites/$siteId/team'
   fileRoutesById: FileRoutesById
@@ -292,6 +305,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SitesSiteIdReceivingRouteImport
       parentRoute: typeof SitesSiteIdRoute
     }
+    '/sites/$siteId/receiving-guide': {
+      id: '/sites/$siteId/receiving-guide'
+      path: '/receiving-guide'
+      fullPath: '/sites/$siteId/receiving-guide'
+      preLoaderRoute: typeof SitesSiteIdReceivingGuideRouteImport
+      parentRoute: typeof SitesSiteIdRoute
+    }
     '/sites/$siteId/settings': {
       id: '/sites/$siteId/settings'
       path: '/settings'
@@ -314,6 +334,7 @@ interface SitesSiteIdRouteChildren {
   SitesSiteIdInvitationsRoute: typeof SitesSiteIdInvitationsRoute
   SitesSiteIdMessagesRoute: typeof SitesSiteIdMessagesRoute
   SitesSiteIdReceivingRoute: typeof SitesSiteIdReceivingRoute
+  SitesSiteIdReceivingGuideRoute: typeof SitesSiteIdReceivingGuideRoute
   SitesSiteIdSettingsRoute: typeof SitesSiteIdSettingsRoute
   SitesSiteIdTeamRoute: typeof SitesSiteIdTeamRoute
 }
@@ -323,6 +344,7 @@ const SitesSiteIdRouteChildren: SitesSiteIdRouteChildren = {
   SitesSiteIdInvitationsRoute: SitesSiteIdInvitationsRoute,
   SitesSiteIdMessagesRoute: SitesSiteIdMessagesRoute,
   SitesSiteIdReceivingRoute: SitesSiteIdReceivingRoute,
+  SitesSiteIdReceivingGuideRoute: SitesSiteIdReceivingGuideRoute,
   SitesSiteIdSettingsRoute: SitesSiteIdSettingsRoute,
   SitesSiteIdTeamRoute: SitesSiteIdTeamRoute,
 }

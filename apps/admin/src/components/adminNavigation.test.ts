@@ -47,6 +47,19 @@ describe("admin shell navigation", () => {
     expect(resolveSiteArea("OWNER", "receiving")).toBe("receiving");
   });
 
+  it("protects the receiving guide with the same roles as receiving", () => {
+    expect(resolveSiteArea("SITE_ADMIN", "receiving-guide")).toBe(
+      "receiving-guide",
+    );
+    expect(resolveSiteArea("OWNER", "receiving-guide")).toBe("receiving-guide");
+    expect(resolveSiteArea("SITE_ASSISTANT", "receiving-guide")).toBe(
+      "invitations",
+    );
+    expect(
+      getSiteNavigation("SITE_ADMIN", "site-1").map((item) => item.area),
+    ).not.toContain("receiving-guide");
+  });
+
   it("defaults every site entry to invitations and rejects removed pages", () => {
     expect(resolveSiteArea("SITE_ADMIN", undefined)).toBe("invitations");
     expect(resolveSiteArea("SITE_ADMIN", "settings")).toBe("invitations");

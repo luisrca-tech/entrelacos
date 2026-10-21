@@ -270,6 +270,12 @@ export function compareWithdrawalObservations(
   const older = order === "newer" ? a : b;
   const newer = order === "newer" ? b : a;
   if (
+    (older.state === "EXISTING" &&
+      older.withdrawal.state === "COMPLETED" &&
+      (newer.state !== "EXISTING" ||
+        newer.withdrawal.state !== "COMPLETED" ||
+        (older.withdrawal.settlement &&
+          !equal(older.withdrawal.settlement, newer.withdrawal.settlement)))) ||
     (originalPreview(older) && newer.state === "EXISTING" && !newer.preview) ||
     (older.state === "SEALED_NOT_CREATED" && newer.state !== older.state) ||
     (older.state === "EXISTING" &&
@@ -315,6 +321,7 @@ export function compareWithdrawalContexts(
       requestOrder === "incomparable" ||
       (order === "newer" && requestOrder === "older") ||
       (order === "older" && requestOrder === "newer") ||
+      (order === "same" && timeOrder === "older" && requestOrder === "newer") ||
       (order === "same" && timeOrder !== "older" && requestOrder === "older")
     )
       return "incomparable";
@@ -335,12 +342,28 @@ export function compareWithdrawalContexts(
     const afterState = stable(b);
     if (equal(beforeState, afterState))
       return timeOrder === "older" ? "older" : "same";
-    // Receiving readiness can change without advancing withdrawal request revisions.
+    // Provider settlement and receiving readiness do not advance request revisions.
     if (
       timeOrder !== "same" &&
       equal(
-        { ...beforeState, newRequestAllowed: null, reason: null },
-        { ...afterState, newRequestAllowed: null, reason: null },
+        {
+          ...beforeState,
+          newRequestAllowed: null,
+          reason: null,
+          openRequest: a.openRequest?.requestId ?? null,
+          recoverableRequests: a.recoverableRequests.map(
+            (row) => row.requestId,
+          ),
+        },
+        {
+          ...afterState,
+          newRequestAllowed: null,
+          reason: null,
+          openRequest: b.openRequest?.requestId ?? null,
+          recoverableRequests: b.recoverableRequests.map(
+            (row) => row.requestId,
+          ),
+        },
       )
     )
       return timeOrder;

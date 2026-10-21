@@ -1,11 +1,13 @@
 import type { ReceivingReadiness, SiteAccess } from "@entrelacos/contracts";
 import { Button } from "@entrelacos/ui";
+import { Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { ReceivingStatusCard } from "../features/receiving/ReceivingStatusCard";
 import { FinanceSection } from "./FinanceSection";
 import { loadGiftsReadiness } from "./giftsReadiness";
 import { isCurrentPanelSessionEpoch, panelActorOwner } from "./panelActor";
 import { ReceivingAccountSetup } from "./ReceivingAccountSetup";
+import { ReceivingGuide } from "./ReceivingGuide";
 import { loadReceivingOwnerAccess } from "./receivingOwnerAccess";
 
 type ReceivingSectionResult = {
@@ -39,11 +41,13 @@ export function ReceivingSection({
   access,
   sessionEpoch = null,
   platformOwner = false,
+  guide = false,
 }: {
   siteId: string;
   access: SiteAccess | null;
   sessionEpoch?: number | null;
   platformOwner?: boolean;
+  guide?: boolean;
 }) {
   const [result, setResult] = useState<ReceivingSectionResult | null>(null);
   const [revision, setRevision] = useState(0);
@@ -96,6 +100,11 @@ export function ReceivingSection({
   }, [siteId, eligible, revision, sessionEpoch]);
   const current =
     result?.siteId === siteId && result.epoch === sessionEpoch ? result : null;
+  if (guide) {
+    return (
+      <ReceivingGuide siteId={siteId} mode={current?.readiness?.mode ?? null} />
+    );
+  }
   return (
     <ReceivingSectionView
       siteId={siteId}
@@ -130,6 +139,13 @@ export function ReceivingSectionView({
     sessionEpoch !== null && access?.siteId === siteId ? access : null;
   return (
     <div className="grid gap-6">
+      <Link
+        className="w-fit font-semibold text-admin-terracotta-deep underline underline-offset-4"
+        to="/sites/$siteId/receiving-guide"
+        params={{ siteId }}
+      >
+        Como ativar sua conta Asaas e receber os presentes
+      </Link>
       {platformOwner && !currentAccess ? (
         <section className="grid gap-3 rounded-xl border border-admin-line bg-admin-surface p-6">
           <p role={failed ? "alert" : "status"}>

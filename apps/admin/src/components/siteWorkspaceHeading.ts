@@ -6,6 +6,7 @@ const areaTitle: Record<SiteArea, string> = {
   messages: "Mensagens",
   gifts: "Presentes",
   receiving: "Recebimentos",
+  "receiving-guide": "Guia do recebedor",
   team: "Equipe",
   settings: "Configurações",
 };

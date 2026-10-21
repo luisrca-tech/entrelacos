@@ -863,18 +863,31 @@ export function createWithdrawalComposition(
     ...reservation,
     readContext: (attempt) =>
       own(async () => {
-        const context = await reservation.readContext(attempt);
+        let context = await reservation.readContext(attempt);
         if (
-          context.reason !== "DESTINATION_UNAVAILABLE" ||
-          !options.refreshReceiving
-        )
-          return context;
-        try {
-          await options.refreshReceiving(context.siteId);
-        } catch {
-          unavailable();
+          context.reason === "DESTINATION_UNAVAILABLE" &&
+          options.refreshReceiving
+        ) {
+          try {
+            await options.refreshReceiving(context.siteId);
+          } catch {
+            unavailable();
+          }
+          context = await reservation.readContext(attempt);
         }
-        return reservation.readContext(attempt);
+        return {
+          ...context,
+          recoverableRequests: await Promise.all(
+            context.recoverableRequests.map(async (request) =>
+              request.state === "EXISTING"
+                ? {
+                    ...request,
+                    withdrawal: await decorateIntent(request.withdrawal),
+                  }
+                : request,
+            ),
+          ),
+        };
       }),
     createPreview: (attempt) => own(() => reservation.createPreview(attempt)),
     createWithdrawal: (attempt) =>

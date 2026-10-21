@@ -7,6 +7,7 @@ import { PgDialect } from "drizzle-orm/pg-core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import * as asaasHttpModule from "./asaasHttpClient";
 import * as transferModule from "./asaasTransferClient";
+import * as custodyModule from "./asaasWithdrawalCustody";
 import * as credentialModule from "./providerCredentials";
 import {
   createWithdrawalComposition,
@@ -425,6 +426,7 @@ describe("composed withdrawal context refresh", () => {
       ],
     };
     f.readContext.mockResolvedValue(existing);
+    f.execute.mockResolvedValue({ rows: [{ reference: null, snapshot: {} }] });
     try {
       expect(await f.composition.service?.readContext(attempt)).toEqual(
         existing,
@@ -435,6 +437,118 @@ describe("composed withdrawal context refresh", () => {
       await f.composition.close();
     }
   });
+
+  it.each(["valid", "missing", "foreign"] as const)(
+    "reads completed context settlements through immutable custody proof: %s",
+    async (kind) => {
+      const createCustody = custodyModule.createAsaasWithdrawalCustody;
+      const proof = vi.fn(async () =>
+        kind !== "missing"
+          ? {
+              correlation: {
+                siteId: kind === "foreign" ? "other-site" : "site-1",
+              },
+              totalDebitCents: 800,
+              feeCents: 0,
+              netCents: 800,
+            }
+          : null,
+      );
+      vi.spyOn(
+        custodyModule,
+        "createAsaasWithdrawalCustody",
+      ).mockImplementation((db, options) => ({
+        ...createCustody(db, options),
+        loadCompletionProofInTransaction: proof as never,
+      }));
+      const f = contextFixture();
+      const withdrawal = {
+        ...f.intent,
+        state: "COMPLETED" as const,
+        feeSemantics: "MAXIMUM" as const,
+      };
+      const row = {
+        siteId: "site-1",
+        mode: "sandbox" as const,
+        requestId: "request-1",
+        requestRevision: null,
+        scopeRevision: "0",
+        observedAt: f.clock.value.toISOString(),
+        observationOrder: {
+          scopeRevision: "0",
+          requestRevision: null,
+          recordUpdatedAtMicroseconds: (
+            BigInt(+f.clock.value) * 1000n
+          ).toString(),
+        },
+        state: "EXISTING" as const,
+        command: {
+          requestId: "request-1",
+          amountCents: withdrawal.amountCents,
+          destinationVersion: withdrawal.destinationVersion,
+        },
+        withdrawal,
+        preview: null,
+      };
+      const raw = { ...context(null), recoverableRequests: [row] };
+      f.readContext.mockResolvedValue(raw);
+      f.execute.mockImplementation(async (statement) => {
+        const text = new PgDialect().sqlToQuery(statement).sql;
+        if (text.includes("SELECT w.receipt_reference"))
+          return {
+            rows: [
+              {
+                reference: "receipt-1",
+                snapshot: { feeQuote: { feeSemantics: "MAXIMUM" } },
+              },
+            ],
+          };
+        if (
+          text.includes("SELECT payload FROM withdrawal_provider_observation")
+        )
+          return {
+            rows: [
+              {
+                payload: {
+                  original: { correlation: { withdrawalId: withdrawal.id } },
+                  fence: {},
+                },
+              },
+            ],
+          };
+        throw new Error("Unexpected settlement query");
+      });
+      try {
+        if (kind === "valid") {
+          expect(await f.composition.service?.readContext(attempt)).toEqual({
+            ...raw,
+            recoverableRequests: [
+              {
+                ...row,
+                withdrawal: {
+                  ...withdrawal,
+                  settlement: {
+                    totalDebitCents: 800,
+                    feeCents: 0,
+                    netCents: 800,
+                    releasedCents: 200,
+                  },
+                },
+              },
+            ],
+          });
+        } else {
+          await expect(
+            f.composition.service?.readContext(attempt),
+          ).rejects.toMatchObject({ code: "WITHDRAWAL_UNAVAILABLE" });
+        }
+        expect(proof).toHaveBeenCalledOnce();
+        expect(f.fetch).not.toHaveBeenCalled();
+      } finally {
+        await f.composition.close();
+      }
+    },
+  );
 
   it("sanitizes a receiving refresh failure without rereading or inventing readiness", async () => {
     const refresh = vi.fn(async (_siteId: string) => {

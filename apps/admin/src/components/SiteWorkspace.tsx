@@ -531,12 +531,13 @@ export function SiteWorkspace({
           }
         />
       )}
-      {area === "receiving" && (
+      {(area === "receiving" || area === "receiving-guide") && (
         <ReceivingSection
           key={`${site.id}:${sessionEpoch}`}
           siteId={site.id}
           access={access}
           platformOwner={owner}
+          guide={area === "receiving-guide"}
           sessionEpoch={sessionEpoch}
         />
       )}

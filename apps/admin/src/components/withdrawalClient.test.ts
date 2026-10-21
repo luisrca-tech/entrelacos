@@ -596,6 +596,66 @@ describe("withdrawal authoritative ordering", () => {
       );
     },
   );
+  it.each(["REQUESTED", "UNKNOWN"] as const)(
+    "orders provider completion from %s without a withdrawal scope revision change",
+    (state) => {
+      const before: WithdrawalRequestContext = {
+        ...context,
+        scopeRevision: existing.scopeRevision,
+        observationOrder: {
+          ...context.observationOrder,
+          scopeRevision: existing.scopeRevision,
+        },
+        newRequestAllowed: state !== "UNKNOWN",
+        reason: state === "UNKNOWN" ? "UNRESOLVED_OPERATION" : null,
+        openRequest: null,
+        recoverableRequests: [
+          { ...existing, withdrawal: { ...withdrawal, state } },
+        ],
+      };
+      const completedAt = "2026-10-12T22:00:01.000Z";
+      const completed: WithdrawalRequestStatus = {
+        ...existing,
+        observedAt: completedAt,
+        observationOrder: {
+          ...existing.observationOrder,
+          recordUpdatedAtMicroseconds: String(BigInt(micros) + 1000000n),
+        },
+        withdrawal: {
+          ...withdrawal,
+          state: "COMPLETED",
+          updatedAt: completedAt,
+        },
+      };
+      const after: WithdrawalRequestContext = {
+        ...before,
+        observedAt: completedAt,
+        newRequestAllowed: true,
+        reason: null,
+        recoverableRequests: [completed],
+      };
+      expect(withdrawalRequestContextSchema.safeParse(before).success).toBe(
+        true,
+      );
+      expect(withdrawalRequestContextSchema.safeParse(after).success).toBe(
+        true,
+      );
+      expect(compareWithdrawalContexts(before, after)).toBe("newer");
+      expect(compareWithdrawalContexts(after, before)).toBe("older");
+      expect(
+        compareWithdrawalContexts(before, {
+          ...after,
+          nextCursor: "wc1:changed",
+        }),
+      ).toBe("incomparable");
+      expect(
+        compareWithdrawalContexts(after, {
+          ...before,
+          observedAt: "2026-10-12T22:00:02.000Z",
+        }),
+      ).toBe("incomparable");
+    },
+  );
   it("rejects immutable term replacement across newer contexts", () => {
     const next = {
       ...context,
@@ -673,6 +733,136 @@ describe("withdrawal authoritative ordering", () => {
       withdrawal: { ...withdrawal, state: "UNKNOWN" as const },
     };
     expect(compareWithdrawalObservations(existing, next)).toBe("incomparable");
+  });
+  it("rejects missing or contradictory settlement at the same authoritative record time", () => {
+    const settled: WithdrawalRequestStatus = {
+      ...existing,
+      withdrawal: {
+        ...withdrawal,
+        state: "COMPLETED",
+        feeSemantics: "MAXIMUM",
+        settlement: {
+          totalDebitCents: 9800,
+          feeCents: 0,
+          netCents: 9800,
+          releasedCents: 200,
+        },
+      },
+    };
+    const { settlement: _settlement, ...withoutSettlement } =
+      settled.withdrawal;
+    const missing = { ...settled, withdrawal: withoutSettlement };
+    const contradictory = {
+      ...settled,
+      withdrawal: {
+        ...settled.withdrawal,
+        settlement: {
+          totalDebitCents: 9900,
+          feeCents: 100,
+          netCents: 9800,
+          releasedCents: 100,
+        },
+      },
+    };
+    expect(compareWithdrawalObservations(settled, missing)).toBe(
+      "incomparable",
+    );
+    expect(compareWithdrawalObservations(missing, settled)).toBe(
+      "incomparable",
+    );
+    expect(compareWithdrawalObservations(settled, contradictory)).toBe(
+      "incomparable",
+    );
+  });
+  it.each(["rewrite", "remove", "regress"] as const)(
+    "rejects completed settlement %s even with a later authoritative record",
+    (change) => {
+      const settled: WithdrawalRequestStatus & { state: "EXISTING" } = {
+        ...existing,
+        withdrawal: {
+          ...withdrawal,
+          state: "COMPLETED",
+          feeSemantics: "MAXIMUM",
+          settlement: {
+            totalDebitCents: 9800,
+            feeCents: 0,
+            netCents: 9800,
+            releasedCents: 200,
+          },
+        },
+      };
+      const { settlement: _settlement, ...withoutSettlement } =
+        settled.withdrawal;
+      const later: WithdrawalRequestStatus = {
+        ...settled,
+        observedAt: "2026-10-12T22:00:01.000Z",
+        observationOrder: {
+          ...settled.observationOrder,
+          recordUpdatedAtMicroseconds: String(BigInt(micros) + 1000000n),
+        },
+        withdrawal:
+          change === "rewrite"
+            ? {
+                ...settled.withdrawal,
+                settlement: {
+                  totalDebitCents: 9900,
+                  feeCents: 100,
+                  netCents: 9800,
+                  releasedCents: 100,
+                },
+              }
+            : {
+                ...withoutSettlement,
+                state: change === "regress" ? "REQUESTED" : "COMPLETED",
+              },
+      };
+      const discovery = (
+        request: WithdrawalRequestStatus,
+      ): WithdrawalRequestContext => ({
+        ...context,
+        scopeRevision: request.scopeRevision,
+        observedAt: request.observedAt,
+        observationOrder: {
+          ...context.observationOrder,
+          scopeRevision: request.scopeRevision,
+        },
+        newRequestAllowed: true,
+        reason: null,
+        openRequest: null,
+        recoverableRequests: [request],
+      });
+      expect(
+        withdrawalRequestContextSchema.safeParse(discovery(later)).success,
+      ).toBe(true);
+      expect(compareWithdrawalObservations(settled, later)).toBe(
+        "incomparable",
+      );
+      expect(compareWithdrawalObservations(later, settled)).toBe(
+        "incomparable",
+      );
+      expect(
+        compareWithdrawalContexts(discovery(settled), discovery(later)),
+      ).toBe("incomparable");
+      expect(
+        compareWithdrawalContexts(discovery(later), discovery(settled)),
+      ).toBe("incomparable");
+    },
+  );
+  it("rejects completed terminal regression without requiring settlement evidence", () => {
+    const terminal: WithdrawalRequestStatus = {
+      ...existing,
+      withdrawal: { ...withdrawal, state: "COMPLETED" },
+    };
+    const later: WithdrawalRequestStatus = {
+      ...existing,
+      observedAt: "2026-10-12T22:00:01.000Z",
+      observationOrder: {
+        ...existing.observationOrder,
+        recordUpdatedAtMicroseconds: String(BigInt(micros) + 1000000n),
+      },
+    };
+    expect(compareWithdrawalObservations(terminal, later)).toBe("incomparable");
+    expect(compareWithdrawalObservations(later, terminal)).toBe("incomparable");
   });
   it("retains unknown legacy dimensions without treating null as zero", () => {
     const unresolved: WithdrawalRequestStatus = {

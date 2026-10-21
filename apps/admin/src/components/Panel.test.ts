@@ -26,13 +26,19 @@ vi.mock("./SiteWorkspace", () => ({
   SiteWorkspace: ({
     sessionEpoch,
     access,
+    area,
   }: {
     sessionEpoch: number;
     access: unknown;
+    area: string;
   }) =>
     createElement(
       "div",
-      { "data-epoch": sessionEpoch, "data-access": !!access },
+      {
+        "data-epoch": sessionEpoch,
+        "data-access": !!access,
+        "data-area": area,
+      },
       "workspace",
     ),
 }));
@@ -69,6 +75,44 @@ function render(
   );
 }
 describe("panel session boundary", () => {
+  it.each(["OWNER", "SITE_ADMIN", "SITE_ASSISTANT"] as const)(
+    "protects the dedicated receiving guide for %s",
+    (role) => {
+      const access = {
+        siteId: "wedding-1",
+        userId: "admin-1",
+        membershipId: "membership-1",
+        membershipRole: role,
+        capabilities: {
+          manageInvitations: true,
+          manageMessages: true,
+          manageCatalog: true,
+          manageTeam: true,
+          readFinance: true,
+          configureReceiving: role === "SITE_ADMIN",
+          requestWithdrawal: false,
+        },
+      };
+      const candidate: MeResponse = {
+        ...actor,
+        user: { ...actor.user, role },
+        memberships: role === "OWNER" ? [] : [access],
+      };
+      const html = renderToStaticMarkup(
+        createElement(PanelSessionView, {
+          siteId: "wedding-1",
+          area: "receiving-guide",
+          snapshot: { status: "verified", actor: candidate, sessionEpoch: 7 },
+          onVerify: vi.fn(),
+          onLogout: vi.fn(),
+        }),
+      );
+      expect(html.includes('data-area="receiving-guide"')).toBe(
+        role !== "SITE_ASSISTANT",
+      );
+      if (role === "SITE_ASSISTANT") expect(html).toContain("Redirecionando");
+    },
+  );
   it("does not dispatch workspace actions before a verified session", async () => {
     const { mutateWorkspaceSession, issueWorkspaceAccess } =
       await vi.importActual<typeof import("./SiteWorkspace")>(

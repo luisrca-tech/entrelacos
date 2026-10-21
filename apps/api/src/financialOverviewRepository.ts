@@ -366,7 +366,11 @@ function withdrawal(row: Row, observedAt: Date): void {
   const created = storedTime(row.createdAt, observedAt);
   after(storedTime(row.updatedAt, observedAt), created);
   optionalReference(row.providerReference);
-  optionalReference(row.receiptReference);
+  if (
+    typeof row.receiptReference !== "string" ||
+    !/^asaas-transfer:[a-f0-9]{64}$/.test(row.receiptReference)
+  )
+    optionalReference(row.receiptReference);
   if (heldStates.includes(String(row.state))) {
     if (
       row.reservationState !== "HELD" ||

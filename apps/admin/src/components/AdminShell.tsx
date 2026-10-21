@@ -37,6 +37,7 @@ export function AdminShell({
 }: AdminShellProps) {
   const role = (siteAccess?.membershipRole ?? actor.user.role) as AdminRole;
   const navigation = siteId ? getSiteNavigation(role, siteId) : [];
+  const navigationArea = area === "receiving-guide" ? "receiving" : area;
   const initials = getInitials(actor.user.name);
   const [expanded, setExpanded] = useState(true);
 
@@ -155,7 +156,7 @@ export function AdminShell({
             aria-label="Navegação do casamento"
           >
             <AdminNavigation
-              area={area}
+              area={navigationArea}
               collapsed={!expanded}
               items={navigation}
             />
@@ -217,7 +218,7 @@ export function AdminShell({
           className="fixed right-0 bottom-0 left-0 z-[8] hidden border-t border-admin-line bg-[rgb(255_253_249_/_96%)] px-2.5 pt-2 pb-[calc(8px+env(safe-area-inset-bottom))] shadow-[0_-8px_24px_rgb(68_49_36_/_8%)] [@media(max-width:760px)]:block"
           aria-label="Navegação do casamento"
         >
-          <AdminNavigation area={area} items={navigation} mobile />
+          <AdminNavigation area={navigationArea} items={navigation} mobile />
         </nav>
       )}
     </div>
