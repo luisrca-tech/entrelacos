@@ -83,6 +83,17 @@ async function click(label: string) {
 }
 
 describe("owner settings overview", () => {
+  it("offers explicit approval when an active legacy wedding has no term", async () => {
+    props.site.termStartsOn = null;
+    props.site.termEndsOn = null;
+    await render();
+    await click("Aprovar e iniciar vigência");
+    expect(props.onLifecycleAction).toHaveBeenCalledExactlyOnceWith(
+      "review/approve",
+    );
+    expect(props.onEditRecord).not.toHaveBeenCalled();
+  });
+
   it("shows useful core values and leaves administrative details collapsed", async () => {
     await render();
     expect(container.textContent).toContain("Dados do casamento");

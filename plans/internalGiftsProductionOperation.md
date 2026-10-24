@@ -11,7 +11,11 @@ The user explicitly selected the existing production `demo-wedding` as the publi
 
 The authorized pilot is one R$10.00 Pix gift payment followed by one withdrawal with a maximum R$3.00 debit to the user's own reviewed Pix destination. The recipient enters identity information and the destination through the production panel. Amount authorization does not replace the original holder consent, recent password confirmation, or the specific frozen withdrawal preview.
 
-Production schema migration is complete: all 23 journal hashes match the repository, the existing site count was preserved, and receiving accounts, ledger entries and financial operations remained zero immediately after migration. The final combined local regression passed 8,078 tests across 292 files; lint, all workspace typechecks and production frontend builds passed. PostgreSQL integration passed 120 tests in the initial run, followed by all five tests in the two affected files after source stabilization and a deterministic guest-order fixture correction. API/frontend publication, real onboarding and financial acceptance are still pending at this checkpoint.
+Production schema migration is complete: all 23 journal hashes match the repository, the existing site count was preserved, and receiving accounts, ledger entries and financial operations remained zero immediately after migration. The release regression passed 8,078 tests across 292 files; lint, all workspace typechecks and production frontend builds passed. PostgreSQL integration passed 120 tests in the initial run, followed by all five tests in the two affected files after source stabilization and a deterministic guest-order fixture correction. PR #34 merged as `dca3574a8f86b8971cfdab19e162e18dbbcf6af4`, its main CI passed, and the API, panel and public showcase were published. Real onboarding and financial acceptance remain pending.
+
+Independent read-only production QA confirmed private BFF responses use `no-store`, signed-out requests and wrong origins are denied, payment/security callbacks refuse unauthenticated requests, and the visible showcase contains no Sandbox or no-real-charge notice. It also reproduced a legacy lifecycle defect twice: the active showcase has no term and its owner menu offers no approval path. Focused failing regressions preceded the repair; 22 focused unit tests and seven isolated TEST PostgreSQL cases then passed. The repair still requires publication and an explicit owner approval in production. Receiving remains unconfigured and the public catalog truthfully returns `RECEIVING_NOT_READY`.
+
+The native parent-account fee endpoint reports `childAccount.creationFeeValue=12.90`. This creation cost is separate from the authorized R$10.00 gift and maximum R$3.00 withdrawal. Obtain the user's specific decision before provisioning the first production receiving subaccount; do not infer consent to this fee from the pilot amounts.
 
 ## Verified targets and recovery
 
@@ -63,6 +67,8 @@ The main production account was observed as CNPJ/MEI with approved commercial in
 Historical open legal, media-rights, support, retention and continuous recovery decisions in `docs/block7LaunchGates.md` remain separate from technical and financial acceptance. Do not turn a successful deploy into a claim that those decisions were completed.
 
 ## Listening
+
+The pre-existing active showcase lacked a term because it predates the owner approval lifecycle. Approval now permits an active site only when its term is missing, through the same explicit OWNER action and confirmation used by review approval. It creates the term under the existing site lock while preserving publication, demo identity and existing data. Repeated or concurrent approval preserves the first term, including an expired term; it never silently renews it. Deactivating the showcase, inserting a fixture term directly or weakening public eligibility was rejected. Production QA must verify the repaired action and the ordinary approval result after deployment.
 
 The user selected the existing production showcase instead of a separate pilot site. An exact-site live opt-in preserves its identity and presentation while retaining real financial authority and permanently protecting live custody from reset. Renaming the demo marker, enabling all demo sites or allowing simulated evidence in live was rejected.
 

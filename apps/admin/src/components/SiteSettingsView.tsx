@@ -97,7 +97,10 @@ export function SiteSettingsView({
             <OverflowMenu
               label="Ações da situação do casamento"
               disabled={pending}
-              items={siteLifecycleMenuActions(site.lifecycle)}
+              items={siteLifecycleMenuActions(
+                site.lifecycle,
+                Boolean(site.termStartsOn || site.termEndsOn),
+              )}
               onSelect={(action) =>
                 onLifecycleAction(action as LifecycleAction)
               }

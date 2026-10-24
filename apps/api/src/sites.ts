@@ -468,8 +468,12 @@ export async function approveReview(
   return db.transaction(async (tx) => {
     const current = await lockSite(tx, siteId);
     if (!current) notFound();
-    if (current.row.lifecycle === "ACTIVE") return ownerRecord(current);
-    if (current.row.lifecycle !== "IN_REVIEW")
+    if (current.row.lifecycle === "ACTIVE" && current.term)
+      return ownerRecord(current);
+    if (
+      current.row.lifecycle !== "IN_REVIEW" &&
+      current.row.lifecycle !== "ACTIVE"
+    )
       conflict("INVALID_LIFECYCLE_TRANSITION");
     const dates = current.term
       ? { startsOn: current.term.startsOn, endsOn: current.term.endsOn }

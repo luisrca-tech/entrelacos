@@ -132,6 +132,35 @@ describe("site lifecycle PostgreSQL integration", () => {
     expect(repeated.reviewApprovedAt).toBe(approved.reviewApprovedAt);
   });
 
+  it("starts one term for an active legacy site without changing its publication or demo identity", async () => {
+    const created = await createFixture("legacy-approval");
+    await connection.db
+      .update(site)
+      .set({ lifecycle: "ACTIVE", publicationState: "PUBLISHED", isDemo: true })
+      .where(eq(site.id, created.id));
+
+    const approvals = await Promise.all([
+      approveReview(connection.db, created.id, {}, fixedNow),
+      approveReview(connection.db, created.id, {}, fixedNow),
+    ]);
+    expect(approvals[0]).toMatchObject({
+      lifecycle: "ACTIVE",
+      publicationState: "PUBLISHED",
+      isDemo: true,
+      reviewApprovedAt: "2028-02-29T12:00:00.000Z",
+      termStartsOn: "2028-02-29",
+      termEndsOn: "2029-02-28",
+    });
+    expect(approvals[1]).toEqual(approvals[0]);
+    const repeated = await approveReview(
+      connection.db,
+      created.id,
+      {},
+      new Date("2030-03-01T12:00:00.000Z"),
+    );
+    expect(repeated).toEqual(approvals[0]);
+  });
+
   it("deactivates and reactivates without overwriting site data or term", async () => {
     const created = await createFixture("reactivate");
     await startReview(connection.db, created.id, {}, fixedNow);

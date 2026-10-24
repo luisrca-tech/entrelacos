@@ -5,6 +5,15 @@ import {
 } from "./siteLifecyclePresentation";
 
 describe("site lifecycle presentation", () => {
+  it("offers approval only when an active wedding has no existing term", () => {
+    expect(
+      siteLifecycleMenuActions("ACTIVE", false).map((action) => action.id),
+    ).toEqual(["review/approve", "deactivate"]);
+    expect(
+      siteLifecycleMenuActions("ACTIVE", true).map((action) => action.id),
+    ).toEqual(["deactivate"]);
+  });
+
   it.each([
     ["DRAFT", ["review/start", "deactivate"]],
     ["IN_REVIEW", ["review/approve", "deactivate"]],

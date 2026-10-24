@@ -39,6 +39,7 @@ export const lifecycleConfirmation: Record<
 
 export function siteLifecycleMenuActions(
   lifecycle: SiteRecord["lifecycle"],
+  hasTerm = true,
 ): Array<OverflowMenuItem & { id: LifecycleAction }> {
   if (lifecycle === "INACTIVE") {
     return [{ id: "reactivate", label: "Reativar casamento" }];
@@ -47,7 +48,7 @@ export function siteLifecycleMenuActions(
   if (lifecycle === "DRAFT") {
     next.push({ id: "review/start", label: "Enviar para revisão" });
   }
-  if (lifecycle === "IN_REVIEW") {
+  if (lifecycle === "IN_REVIEW" || (lifecycle === "ACTIVE" && !hasTerm)) {
     next.push({ id: "review/approve", label: "Aprovar e iniciar vigência" });
   }
   return [
