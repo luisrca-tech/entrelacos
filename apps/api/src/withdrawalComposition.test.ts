@@ -6,6 +6,7 @@ import type { SQL } from "drizzle-orm";
 import { PgDialect } from "drizzle-orm/pg-core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import * as asaasHttpModule from "./asaasHttpClient";
+import * as storedAccountModule from "./asaasStoredAccountReader";
 import * as transferModule from "./asaasTransferClient";
 import * as authorizationModule from "./asaasWithdrawalAuthorization";
 import * as custodyModule from "./asaasWithdrawalCustody";
@@ -1350,9 +1351,13 @@ it("propagates the exact showcase policy to every withdrawal factory without cha
     "createWithdrawalReservationRepository",
   );
   const posting = vi.spyOn(postingModule, "createWithdrawalPostingRepository");
+  const reader = vi.spyOn(
+    storedAccountModule,
+    "createAsaasStoredAccountReader",
+  );
   const f = enabledFixture(undefined, false, true);
   try {
-    for (const factory of [service, reservation, posting])
+    for (const factory of [service, reservation, posting, reader])
       expect(
         factory.mock.calls.at(-1)?.[factory === service ? 0 : 1],
       ).toMatchObject({
@@ -1367,5 +1372,6 @@ it("propagates the exact showcase policy to every withdrawal factory without cha
     service.mockRestore();
     reservation.mockRestore();
     posting.mockRestore();
+    reader.mockRestore();
   }
 });

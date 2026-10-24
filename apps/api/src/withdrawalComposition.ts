@@ -269,6 +269,7 @@ export function createWithdrawalComposition(
   const reader = createAsaasStoredAccountReader(db, {
     mode,
     applicationEnvironment,
+    liveDemoSiteId,
     keyring,
     fetch,
     timeoutMs: 15000,
