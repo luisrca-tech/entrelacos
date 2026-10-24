@@ -1194,9 +1194,12 @@ describe("receiving setup mounted consumer through actual private HTTP", () => {
       state: "REQUESTED",
       accountId: f.tables.accounts[0].id,
     });
-    expect(f.container.textContent).toContain(
-      "Verificação do provedor pendente",
-    );
+    await vi.waitFor(async () => {
+      await f.settle();
+      expect(f.container.textContent).toContain(
+        "Verificação do provedor pendente",
+      );
+    });
     expect(f.container.querySelector('input[name="password"]')).toBeNull();
     const body = f.request.mock.calls.find(
       ([path, options]) =>
