@@ -347,6 +347,8 @@ export function createReceivingSetupComposition(
         own(() => nomination.receivingNominationContext.readContext(...args)),
     },
     receivingSetup: {
+      readPixDestinationSnapshot: (...args) =>
+        own(() => setup.readPixDestinationSnapshot(...args)),
       readPixDestination: (...args) =>
         own(() => setup.readPixDestination(...args)),
       confirmPixDestination: (...args) =>

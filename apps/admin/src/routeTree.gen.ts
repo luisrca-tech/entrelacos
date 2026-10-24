@@ -18,12 +18,15 @@ import { Route as RecoverRouteImport } from './routes/recover'
 import { Route as ApiSplatRouteImport } from './routes/api.$'
 import { Route as SitesSiteIdRouteImport } from './routes/sites.$siteId'
 import { Route as SitesSiteIdGiftsRouteImport } from './routes/sites.$siteId.gifts'
+import { Route as SitesSiteIdHomeRouteImport } from './routes/sites.$siteId.home'
 import { Route as SitesSiteIdInvitationsRouteImport } from './routes/sites.$siteId.invitations'
 import { Route as SitesSiteIdMessagesRouteImport } from './routes/sites.$siteId.messages'
 import { Route as SitesSiteIdReceivingRouteImport } from './routes/sites.$siteId.receiving'
 import { Route as SitesSiteIdReceivingGuideRouteImport } from './routes/sites.$siteId.receiving-guide'
 import { Route as SitesSiteIdSettingsRouteImport } from './routes/sites.$siteId.settings'
 import { Route as SitesSiteIdTeamRouteImport } from './routes/sites.$siteId.team'
+import { Route as SitesSiteIdReceivingIndexRouteImport } from './routes/sites.$siteId.receiving.index'
+import { Route as SitesSiteIdReceivingPageRouteImport } from './routes/sites.$siteId.receiving.$page'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -70,6 +73,11 @@ const SitesSiteIdGiftsRoute = SitesSiteIdGiftsRouteImport.update({
   path: '/gifts',
   getParentRoute: () => SitesSiteIdRoute,
 } as any)
+const SitesSiteIdHomeRoute = SitesSiteIdHomeRouteImport.update({
+  id: '/home',
+  path: '/home',
+  getParentRoute: () => SitesSiteIdRoute,
+} as any)
 const SitesSiteIdInvitationsRoute = SitesSiteIdInvitationsRouteImport.update({
   id: '/invitations',
   path: '/invitations',
@@ -101,6 +109,18 @@ const SitesSiteIdTeamRoute = SitesSiteIdTeamRouteImport.update({
   path: '/team',
   getParentRoute: () => SitesSiteIdRoute,
 } as any)
+const SitesSiteIdReceivingIndexRoute =
+  SitesSiteIdReceivingIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => SitesSiteIdReceivingRoute,
+  } as any)
+const SitesSiteIdReceivingPageRoute =
+  SitesSiteIdReceivingPageRouteImport.update({
+    id: '/$page',
+    path: '/$page',
+    getParentRoute: () => SitesSiteIdReceivingRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -112,12 +132,15 @@ export interface FileRoutesByFullPath {
   '/api/$': typeof ApiSplatRoute
   '/sites/$siteId': typeof SitesSiteIdRouteWithChildren
   '/sites/$siteId/gifts': typeof SitesSiteIdGiftsRoute
+  '/sites/$siteId/home': typeof SitesSiteIdHomeRoute
   '/sites/$siteId/invitations': typeof SitesSiteIdInvitationsRoute
   '/sites/$siteId/messages': typeof SitesSiteIdMessagesRoute
-  '/sites/$siteId/receiving': typeof SitesSiteIdReceivingRoute
+  '/sites/$siteId/receiving': typeof SitesSiteIdReceivingRouteWithChildren
   '/sites/$siteId/receiving-guide': typeof SitesSiteIdReceivingGuideRoute
   '/sites/$siteId/settings': typeof SitesSiteIdSettingsRoute
   '/sites/$siteId/team': typeof SitesSiteIdTeamRoute
+  '/sites/$siteId/receiving/$page': typeof SitesSiteIdReceivingPageRoute
+  '/sites/$siteId/receiving/': typeof SitesSiteIdReceivingIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -129,12 +152,14 @@ export interface FileRoutesByTo {
   '/api/$': typeof ApiSplatRoute
   '/sites/$siteId': typeof SitesSiteIdRouteWithChildren
   '/sites/$siteId/gifts': typeof SitesSiteIdGiftsRoute
+  '/sites/$siteId/home': typeof SitesSiteIdHomeRoute
   '/sites/$siteId/invitations': typeof SitesSiteIdInvitationsRoute
   '/sites/$siteId/messages': typeof SitesSiteIdMessagesRoute
-  '/sites/$siteId/receiving': typeof SitesSiteIdReceivingRoute
   '/sites/$siteId/receiving-guide': typeof SitesSiteIdReceivingGuideRoute
   '/sites/$siteId/settings': typeof SitesSiteIdSettingsRoute
   '/sites/$siteId/team': typeof SitesSiteIdTeamRoute
+  '/sites/$siteId/receiving/$page': typeof SitesSiteIdReceivingPageRoute
+  '/sites/$siteId/receiving': typeof SitesSiteIdReceivingIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -147,12 +172,15 @@ export interface FileRoutesById {
   '/api/$': typeof ApiSplatRoute
   '/sites/$siteId': typeof SitesSiteIdRouteWithChildren
   '/sites/$siteId/gifts': typeof SitesSiteIdGiftsRoute
+  '/sites/$siteId/home': typeof SitesSiteIdHomeRoute
   '/sites/$siteId/invitations': typeof SitesSiteIdInvitationsRoute
   '/sites/$siteId/messages': typeof SitesSiteIdMessagesRoute
-  '/sites/$siteId/receiving': typeof SitesSiteIdReceivingRoute
+  '/sites/$siteId/receiving': typeof SitesSiteIdReceivingRouteWithChildren
   '/sites/$siteId/receiving-guide': typeof SitesSiteIdReceivingGuideRoute
   '/sites/$siteId/settings': typeof SitesSiteIdSettingsRoute
   '/sites/$siteId/team': typeof SitesSiteIdTeamRoute
+  '/sites/$siteId/receiving/$page': typeof SitesSiteIdReceivingPageRoute
+  '/sites/$siteId/receiving/': typeof SitesSiteIdReceivingIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -166,12 +194,15 @@ export interface FileRouteTypes {
     | '/api/$'
     | '/sites/$siteId'
     | '/sites/$siteId/gifts'
+    | '/sites/$siteId/home'
     | '/sites/$siteId/invitations'
     | '/sites/$siteId/messages'
     | '/sites/$siteId/receiving'
     | '/sites/$siteId/receiving-guide'
     | '/sites/$siteId/settings'
     | '/sites/$siteId/team'
+    | '/sites/$siteId/receiving/$page'
+    | '/sites/$siteId/receiving/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -183,12 +214,14 @@ export interface FileRouteTypes {
     | '/api/$'
     | '/sites/$siteId'
     | '/sites/$siteId/gifts'
+    | '/sites/$siteId/home'
     | '/sites/$siteId/invitations'
     | '/sites/$siteId/messages'
-    | '/sites/$siteId/receiving'
     | '/sites/$siteId/receiving-guide'
     | '/sites/$siteId/settings'
     | '/sites/$siteId/team'
+    | '/sites/$siteId/receiving/$page'
+    | '/sites/$siteId/receiving'
   id:
     | '__root__'
     | '/'
@@ -200,12 +233,15 @@ export interface FileRouteTypes {
     | '/api/$'
     | '/sites/$siteId'
     | '/sites/$siteId/gifts'
+    | '/sites/$siteId/home'
     | '/sites/$siteId/invitations'
     | '/sites/$siteId/messages'
     | '/sites/$siteId/receiving'
     | '/sites/$siteId/receiving-guide'
     | '/sites/$siteId/settings'
     | '/sites/$siteId/team'
+    | '/sites/$siteId/receiving/$page'
+    | '/sites/$siteId/receiving/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -284,6 +320,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SitesSiteIdGiftsRouteImport
       parentRoute: typeof SitesSiteIdRoute
     }
+    '/sites/$siteId/home': {
+      id: '/sites/$siteId/home'
+      path: '/home'
+      fullPath: '/sites/$siteId/home'
+      preLoaderRoute: typeof SitesSiteIdHomeRouteImport
+      parentRoute: typeof SitesSiteIdRoute
+    }
     '/sites/$siteId/invitations': {
       id: '/sites/$siteId/invitations'
       path: '/invitations'
@@ -326,14 +369,42 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SitesSiteIdTeamRouteImport
       parentRoute: typeof SitesSiteIdRoute
     }
+    '/sites/$siteId/receiving/': {
+      id: '/sites/$siteId/receiving/'
+      path: '/'
+      fullPath: '/sites/$siteId/receiving/'
+      preLoaderRoute: typeof SitesSiteIdReceivingIndexRouteImport
+      parentRoute: typeof SitesSiteIdReceivingRoute
+    }
+    '/sites/$siteId/receiving/$page': {
+      id: '/sites/$siteId/receiving/$page'
+      path: '/$page'
+      fullPath: '/sites/$siteId/receiving/$page'
+      preLoaderRoute: typeof SitesSiteIdReceivingPageRouteImport
+      parentRoute: typeof SitesSiteIdReceivingRoute
+    }
   }
 }
 
+interface SitesSiteIdReceivingRouteChildren {
+  SitesSiteIdReceivingPageRoute: typeof SitesSiteIdReceivingPageRoute
+  SitesSiteIdReceivingIndexRoute: typeof SitesSiteIdReceivingIndexRoute
+}
+
+const SitesSiteIdReceivingRouteChildren: SitesSiteIdReceivingRouteChildren = {
+  SitesSiteIdReceivingPageRoute: SitesSiteIdReceivingPageRoute,
+  SitesSiteIdReceivingIndexRoute: SitesSiteIdReceivingIndexRoute,
+}
+
+const SitesSiteIdReceivingRouteWithChildren =
+  SitesSiteIdReceivingRoute._addFileChildren(SitesSiteIdReceivingRouteChildren)
+
 interface SitesSiteIdRouteChildren {
   SitesSiteIdGiftsRoute: typeof SitesSiteIdGiftsRoute
+  SitesSiteIdHomeRoute: typeof SitesSiteIdHomeRoute
   SitesSiteIdInvitationsRoute: typeof SitesSiteIdInvitationsRoute
   SitesSiteIdMessagesRoute: typeof SitesSiteIdMessagesRoute
-  SitesSiteIdReceivingRoute: typeof SitesSiteIdReceivingRoute
+  SitesSiteIdReceivingRoute: typeof SitesSiteIdReceivingRouteWithChildren
   SitesSiteIdReceivingGuideRoute: typeof SitesSiteIdReceivingGuideRoute
   SitesSiteIdSettingsRoute: typeof SitesSiteIdSettingsRoute
   SitesSiteIdTeamRoute: typeof SitesSiteIdTeamRoute
@@ -341,9 +412,10 @@ interface SitesSiteIdRouteChildren {
 
 const SitesSiteIdRouteChildren: SitesSiteIdRouteChildren = {
   SitesSiteIdGiftsRoute: SitesSiteIdGiftsRoute,
+  SitesSiteIdHomeRoute: SitesSiteIdHomeRoute,
   SitesSiteIdInvitationsRoute: SitesSiteIdInvitationsRoute,
   SitesSiteIdMessagesRoute: SitesSiteIdMessagesRoute,
-  SitesSiteIdReceivingRoute: SitesSiteIdReceivingRoute,
+  SitesSiteIdReceivingRoute: SitesSiteIdReceivingRouteWithChildren,
   SitesSiteIdReceivingGuideRoute: SitesSiteIdReceivingGuideRoute,
   SitesSiteIdSettingsRoute: SitesSiteIdSettingsRoute,
   SitesSiteIdTeamRoute: SitesSiteIdTeamRoute,

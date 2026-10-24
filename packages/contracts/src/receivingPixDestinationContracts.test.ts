@@ -2,10 +2,69 @@ import { describe, expect, it } from "vitest";
 import {
   receivingPixDestinationConfirmationInputSchema,
   receivingPixDestinationInputSchema,
+  receivingPixDestinationRecentSchema,
   receivingPixDestinationReviewSchema,
+  receivingPixDestinationSavedResponseSchema,
 } from "./receivingPixDestinationContracts";
 
 describe("receiving Pix destination contracts", () => {
+  const recent = {
+    siteId: "site-one",
+    mode: "sandbox",
+    keyType: "PHONE",
+    maskedKey: "***5839",
+    ownerName: "Fictional Recipient",
+    maskedCpfCnpj: "***.456.789-**",
+    bankName: "Test Bank",
+    identity: "INCOMPLETE",
+    destinationId: "destination-one",
+    version: 1,
+    savedAt: "2026-10-16T22:00:00.000Z",
+  };
+  it("defaults older saved-destination responses to an empty recent list", () => {
+    expect(
+      receivingPixDestinationSavedResponseSchema.parse({ destination: null }),
+    ).toEqual({
+      destination: null,
+      recentDestinations: [],
+    });
+  });
+  it("accepts at most five masked recent destinations without changing the current destination", () => {
+    expect(receivingPixDestinationRecentSchema.parse(recent)).toEqual(recent);
+    const response = {
+      destination: null,
+      recentDestinations: Array.from({ length: 5 }, () => recent),
+    };
+    expect(receivingPixDestinationSavedResponseSchema.parse(response)).toEqual(
+      response,
+    );
+    expect(
+      receivingPixDestinationSavedResponseSchema.safeParse({
+        ...response,
+        recentDestinations: [...response.recentDestinations, recent],
+      }).success,
+    ).toBe(false);
+  });
+  it.each([
+    { key: "47996515839" },
+    { key: { ciphertext: "secret" } },
+    { reviewToken: "secret" },
+    { authenticatedAt: "2026-10-16T22:00:00.000Z" },
+    { reauthenticationToken: "secret" },
+    { state: "PENDING" },
+    { maskedKey: "47996515839" },
+    { maskedCpfCnpj: "12345678909" },
+    { withdrawalEnabled: true },
+    { savedAt: "invalid" },
+  ])(
+    "rejects sensitive fields and invalid recent destination facts %j",
+    (extra) => {
+      expect(
+        receivingPixDestinationRecentSchema.safeParse({ ...recent, ...extra })
+          .success,
+      ).toBe(false);
+    },
+  );
   it("requires an opaque reviewed destination and explicit confirmation, never a replacement key or name", () => {
     const body = {
       reviewToken: "opaque-review-token-for-testing",

@@ -364,10 +364,23 @@ describe("panel session boundary", () => {
   it("passes the verified generation into the selected workspace", () => {
     expect(render("verified")).toContain('data-epoch="7"');
   });
+  it("opens the selected wedding at home when no area is requested", () => {
+    expect(render("verified")).toContain('data-area="home"');
+  });
   it.each(["loading", "unverified", "denied", "unavailable"] as const)(
     "does not expose a workspace for %s even if a stale actor is supplied",
     (status) => {
       expect(render(status)).not.toContain("workspace");
+    },
+  );
+  it.each(["loading", "unverified"] as const)(
+    "uses a neutral loading state without session-recovery actions for %s",
+    (status) => {
+      const html = render(status);
+      expect(html).not.toContain("Verificar sessão");
+      expect(html).not.toContain("Verifique sua sessão");
+      expect(html).not.toContain("Verificando sessão");
+      expect(html).toContain('aria-busy="true"');
     },
   );
   it("rejects verified without an epoch", () => {

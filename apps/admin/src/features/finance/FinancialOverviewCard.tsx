@@ -83,9 +83,6 @@ export function FinancialOverviewCard({
           <dl className="m-0 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {[
               ["Presentes recebidos", money(current.nominalReceivedCents)],
-              ["Valor líquido recebido", money(current.netReceivedCents)],
-              ["Custos de processamento", money(current.processingCents)],
-              ["Comissão da plataforma", money(current.commissionCents)],
               ["Aguardando liberação", money(current.awaitingReleaseCents)],
               [
                 "Saldo disponível",
@@ -93,9 +90,6 @@ export function FinancialOverviewCard({
                   ? "Ainda não confirmado"
                   : money(current.availableCents),
               ],
-              ["Saques pendentes", money(current.pendingCommitmentsCents)],
-              ["Saques concluídos", money(current.withdrawnCents)],
-              ["Valores reembolsados", money(current.refundedCents)],
             ].map(([label, value]) => (
               <div
                 key={label}
@@ -108,6 +102,28 @@ export function FinancialOverviewCard({
               </div>
             ))}
           </dl>
+          <details className="rounded-lg border border-admin-line px-4 py-3">
+            <summary className="cursor-pointer text-sm font-semibold text-admin-graphite">
+              Taxas e movimentações
+            </summary>
+            <dl className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {[
+                ["Valor líquido recebido", money(current.netReceivedCents)],
+                ["Custos de processamento", money(current.processingCents)],
+                ["Comissão da plataforma", money(current.commissionCents)],
+                ["Saques pendentes", money(current.pendingCommitmentsCents)],
+                ["Saques concluídos", money(current.withdrawnCents)],
+                ["Valores reembolsados", money(current.refundedCents)],
+              ].map(([label, value]) => (
+                <div key={label}>
+                  <dt className="text-sm text-admin-muted">{label}</dt>
+                  <dd className="m-0 font-semibold text-admin-graphite">
+                    {value}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          </details>
           {current.availability === "STALE" && (
             <p role="status" className="m-0 text-admin-muted">
               Saldo desatualizado. Aguarde uma nova confirmação para solicitar
@@ -126,8 +142,7 @@ export function FinancialOverviewCard({
             </p>
           )}
           <p className="m-0 text-sm text-admin-muted">
-            Os valores recebidos e os valores disponíveis para saque podem ser
-            diferentes. O saldo disponível depende da confirmação do provedor.
+            O saldo disponível para saque depende da confirmação do Asaas.
           </p>
         </>
       ) : (

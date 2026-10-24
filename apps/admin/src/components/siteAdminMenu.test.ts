@@ -43,8 +43,12 @@ describe("site admin overflow actions", () => {
   });
 
   it("renders administrator actions through the overflow menu", () => {
-    expect(workspaceSource).toContain("OverflowMenu");
-    expect(workspaceSource).toContain("siteAdminMenuActions");
+    const settingsSource = readFileSync(
+      resolve(import.meta.dirname, "SiteSettingsView.tsx"),
+      "utf8",
+    );
+    expect(settingsSource).toContain("OverflowMenu");
+    expect(settingsSource).toContain("siteAdminMenuActions");
     expect(workspaceSource).not.toContain("Gerar link de ativação");
   });
 });

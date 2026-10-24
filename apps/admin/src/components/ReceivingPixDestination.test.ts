@@ -90,6 +90,58 @@ function fixture() {
   };
 }
 describe("Pix destination review", () => {
+  it("loads only same-site masked recent destinations and keeps the saved account separate", async () => {
+    const v = fixture();
+    const { state: _state, withdrawalEnabled: _enabled, ...fields } = saved;
+    const recent = { ...fields, savedAt: "2026-10-16T17:00:00Z" };
+    v.request.mockResolvedValueOnce({
+      destination: saved,
+      recentDestinations: [recent],
+    });
+    await v.controller.load();
+    expect(v.controller.getState()).toMatchObject({
+      saved,
+      recentDestinations: [recent],
+    });
+    const html = renderToStaticMarkup(
+      createElement(ReceivingPixDestinationView, {
+        mode: "sandbox",
+        enabled: true,
+        state: v.controller.getState(),
+      }),
+    );
+    expect(html).toContain("Últimos destinos salvos");
+    expect(html).toContain("Atual");
+    expect(html).not.toContain("Usar este destino");
+    expect(html).not.toContain("47996515839");
+    v.controller.dispose();
+    expect(v.controller.getState().recentDestinations ?? []).toEqual([]);
+  });
+  it.each(["site", "mode"])(
+    "rejects a recent destination from another %s",
+    async (mismatch) => {
+      const v = fixture();
+      const { state: _state, withdrawalEnabled: _enabled, ...fields } = saved;
+      const recent = {
+        ...fields,
+        ...(mismatch === "site"
+          ? { siteId: "another-site" }
+          : { mode: "live" }),
+        savedAt: "2026-10-16T17:00:00Z",
+      };
+      v.request.mockResolvedValueOnce({
+        destination: saved,
+        recentDestinations: [recent],
+      });
+      await v.controller.load();
+      expect(v.controller.getState()).toMatchObject({
+        status: "unavailable",
+        saved: null,
+      });
+      expect(v.controller.getState().recentDestinations ?? []).toEqual([]);
+      v.controller.dispose();
+    },
+  );
   it("separates the one saved destination from the change form", () => {
     const html = renderToStaticMarkup(
       createElement(ReceivingPixDestinationView, {

@@ -31,7 +31,13 @@ export interface ReceivingSetupServiceOptions {
   pixDestinationSetup?: Pick<
     ReturnType<typeof createReceivingPixDestinationSetup>,
     "read" | "confirm"
-  >;
+  > &
+    Partial<
+      Pick<
+        ReturnType<typeof createReceivingPixDestinationSetup>,
+        "readWithRecent"
+      >
+    >;
   repository: Pick<
     ReceivingSetupRepository,
     | "mode"
@@ -63,6 +69,16 @@ export function createReceivingSetupService(
       if (!options.pixDestinationSetup)
         throw new ReceivingPixDestinationError();
       return options.pixDestinationSetup.read(actor);
+    },
+    async readPixDestinationSnapshot(actor: FinancialActor) {
+      if (!options.pixDestinationSetup)
+        throw new ReceivingPixDestinationError();
+      return options.pixDestinationSetup.readWithRecent
+        ? options.pixDestinationSetup.readWithRecent(actor)
+        : {
+            destination: await options.pixDestinationSetup.read(actor),
+            recentDestinations: [],
+          };
     },
     async confirmPixDestination(
       actor: FinancialActor,

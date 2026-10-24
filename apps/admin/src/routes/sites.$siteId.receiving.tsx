@@ -1,10 +1,5 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { Panel } from "../components/Panel";
+import { createFileRoute, Outlet } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/sites/$siteId/receiving")({
-  component: SiteReceivingRoute,
+  component: Outlet,
 });
-function SiteReceivingRoute() {
-  const { siteId } = Route.useParams();
-  return <Panel key={siteId} siteId={siteId} area="receiving" />;
-}

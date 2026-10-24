@@ -108,7 +108,7 @@ export function GiftsReadinessView({
             Tentar novamente
           </Button>
         </div>
-        <GiftsLocked />
+        <GiftsLocked receivingAction={receivingAction} />
       </div>
     );
   if (!current)
@@ -137,14 +137,14 @@ export function GiftsReadinessView({
           </section>
         ))
       ) : (
-        <>
-          <p role="status" className="m-0 text-admin-muted">
-            {current.reason
+        <GiftsLocked
+          receivingAction={receivingAction}
+          reason={
+            current.reason
               ? pendingReasons[current.reason]
-              : "Os recebimentos precisam ser verificados."}
-          </p>
-          <GiftsLocked receivingAction={receivingAction} />
-        </>
+              : "Os recebimentos precisam ser verificados."
+          }
+        />
       )}
     </div>
   );

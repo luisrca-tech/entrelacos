@@ -21,7 +21,7 @@ const access = {
   membershipId: "membership-one",
   capabilities: { configureReceiving: true, readFinance: true },
 };
-function fixture() {
+function fixture(snapshot?: unknown) {
   const designate = vi.fn(async () => {}),
     read = vi.fn(),
     lookupPixDestination = vi.fn(async () => ({
@@ -54,6 +54,7 @@ function fixture() {
       withdrawalEnabled: false,
     })),
     readPixDestination = vi.fn(async () => null),
+    readPixDestinationSnapshot = vi.fn(async () => snapshot),
     readProof = vi.fn(() => ({ proofKind: "PASSWORD_REAUTHENTICATION" })),
     submit = vi.fn(async () => ({ state: "STORED" }));
   const verifyIncoming = vi.fn(async () => ({
@@ -76,6 +77,7 @@ function fixture() {
       lookupPixDestination,
       confirmPixDestination,
       readPixDestination,
+      ...(snapshot === undefined ? {} : { readPixDestinationSnapshot }),
     } as never,
     financialReauthentication: { readProof } as never,
     receivingVerification: { verify: verifyIncoming },
@@ -89,6 +91,7 @@ function fixture() {
     lookupPixDestination,
     confirmPixDestination,
     readPixDestination,
+    readPixDestinationSnapshot,
     readProof,
   };
 }
@@ -184,7 +187,10 @@ describe("receiving setup HTTP boundary", () => {
     const v = fixture();
     const response = await v.router.request(request("pix-destination"));
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ destination: null });
+    expect(await response.json()).toEqual({
+      destination: null,
+      recentDestinations: [],
+    });
     expect(response.headers.get("cache-control")).toBe("no-store");
     expect(v.readPixDestination).toHaveBeenCalledExactlyOnceWith({
       userId: "bride-one",
@@ -192,6 +198,103 @@ describe("receiving setup HTTP boundary", () => {
       sessionId: "session-one",
     });
   });
+  it("returns recent masked destinations with the current destination unchanged", async () => {
+    const recent = {
+      siteId: "site-one",
+      mode: "sandbox",
+      keyType: "PHONE",
+      maskedKey: "***5839",
+      ownerName: "Fictional Holder",
+      maskedCpfCnpj: "***.456.789-**",
+      bankName: "Test Bank",
+      identity: "INCOMPLETE",
+      destinationId: "destination-one",
+      version: 1,
+      savedAt: "2026-10-16T18:00:00Z",
+    };
+    const destination = {
+      ...recent,
+      savedAt: undefined,
+      state: "PENDING",
+      withdrawalEnabled: false,
+    };
+    delete destination.savedAt;
+    const snapshot = { destination, recentDestinations: [recent] };
+    const v = fixture(snapshot);
+    const response = await v.router.request(request("pix-destination"));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual(snapshot);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(v.readPixDestinationSnapshot).toHaveBeenCalledExactlyOnceWith({
+      userId: "bride-one",
+      siteId: "site-one",
+      sessionId: "session-one",
+    });
+    expect(v.readPixDestination).not.toHaveBeenCalled();
+  });
+  it.each(["wrong-site", "secret"])(
+    "rejects a recent destination %s projection",
+    async (change) => {
+      const recent = {
+        siteId: change === "wrong-site" ? "other-site" : "site-one",
+        mode: "sandbox",
+        keyType: "PHONE",
+        maskedKey: "***5839",
+        ownerName: "Fictional Holder",
+        maskedCpfCnpj: "***.456.789-**",
+        bankName: "Test Bank",
+        identity: "INCOMPLETE",
+        destinationId: "destination-one",
+        version: 1,
+        savedAt: "2026-10-16T18:00:00Z",
+        ...(change === "secret" ? { key: "secret-native-key" } : {}),
+      };
+      const v = fixture({ destination: null, recentDestinations: [recent] });
+      const response = await v.router.request(request("pix-destination"));
+      expect(response.status).toBe(503);
+      expect(await response.text()).not.toContain("secret-native-key");
+    },
+  );
+  it("permits read-only platform owner access without requesting password proof", async () => {
+    const v = fixture({ destination: null, recentDestinations: [] });
+    mocks.requireAdminSession.mockResolvedValueOnce({
+      user: { id: "bride-one", role: "OWNER" },
+      session: { id: "session-one" },
+    });
+    mocks.resolveSiteAccess.mockResolvedValueOnce({
+      ...access,
+      membershipRole: "OWNER",
+      membershipId: null,
+      capabilities: { configureReceiving: false, readFinance: true },
+    });
+    expect((await v.router.request(request("pix-destination"))).status).toBe(
+      200,
+    );
+    expect(v.readPixDestinationSnapshot).toHaveBeenCalledTimes(1);
+    expect(v.readProof).not.toHaveBeenCalled();
+  });
+  it.each(["site", "user", "role"])(
+    "denies recent-destination reads with wrong %s access",
+    async (change) => {
+      const v = fixture({ destination: null, recentDestinations: [] });
+      if (change === "role")
+        mocks.requireAdminSession.mockResolvedValueOnce({
+          user: { id: "bride-one", role: "SITE_ASSISTANT" },
+          session: { id: "session-one" },
+        });
+      else
+        mocks.resolveSiteAccess.mockResolvedValueOnce({
+          ...access,
+          ...(change === "site"
+            ? { siteId: "other-site" }
+            : { userId: "other-user" }),
+        });
+      expect((await v.router.request(request("pix-destination"))).status).toBe(
+        403,
+      );
+      expect(v.readPixDestinationSnapshot).not.toHaveBeenCalled();
+    },
+  );
   it.each(["OWNER", "SITE_ASSISTANT"])(
     "never lets %s save a Pix destination",
     async (role) => {

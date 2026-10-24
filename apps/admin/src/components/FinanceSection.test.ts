@@ -65,6 +65,7 @@ describe("finance section composition", () => {
     };
     const html = renderToStaticMarkup(
       createElement(FinanceSection, {
+        page: "withdrawals",
         siteId: "wedding-a",
         access: selected,
         sessionEpoch: 7,
@@ -80,6 +81,7 @@ describe("finance section composition", () => {
     const render = (sessionEpoch: number | null, candidate = access) =>
       renderToStaticMarkup(
         createElement(FinanceSection, {
+          page: "withdrawals",
           siteId: "wedding-a",
           access: candidate,
           sessionEpoch,
@@ -96,7 +98,11 @@ describe("finance section composition", () => {
   });
   it("loads overview and history separately without guessed zero values or actions", () => {
     const html = renderToStaticMarkup(
-      createElement(FinanceSection, { siteId: "wedding-a", access }),
+      createElement(FinanceSection, {
+        page: "withdrawals",
+        siteId: "wedding-a",
+        access,
+      }),
     );
     expect(html).toContain("Consultando o financeiro");
     expect(html).toContain("Consultando o histórico de saques");
@@ -116,6 +122,7 @@ describe("finance section composition", () => {
     (candidate) => {
       const html = renderToStaticMarkup(
         createElement(FinanceSection, {
+          page: "withdrawals",
           siteId: "wedding-a",
           access: candidate as SiteAccess | null,
         }),
@@ -207,6 +214,7 @@ describe("gift history finance integration", () => {
             StrictMode,
             null,
             createElement(FinanceSection, {
+              page: "payments",
               siteId: access.siteId,
               access,
               sessionEpoch: owner.getSnapshot().sessionEpoch,
@@ -216,14 +224,7 @@ describe("gift history finance integration", () => {
         ),
       );
       expect(node.textContent).toContain("Presente preservado");
-      const withdrawal = node.querySelector(
-        "[data-withdrawal-epoch]",
-      ) as HTMLElement;
-      expect(withdrawal).toBeTruthy();
-      withdrawal.dataset.proof = "same-proof";
-      withdrawal.dataset.deadline = "unchanged-deadline";
-      withdrawal.dataset.marker = "same-marker";
-      withdrawal.dataset.busy = "owned";
+      expect(node.querySelector("[data-withdrawal-epoch]")).toBeNull();
       const click = async (label: string) => {
         const button = [...node.querySelectorAll("button")].find(
           (value) => value.textContent === label,
@@ -234,18 +235,12 @@ describe("gift history finance integration", () => {
       reply = { history: detail };
       await click("Ver histórico desta compra");
       request.mockRejectedValueOnce(new Error("unavailable"));
-      await click("Reiniciar navegação do detalhe");
+      await click("Consultar histórico novamente");
       await click("Tentar consulta novamente");
       await click("Fechar detalhe");
       reply = { history: page };
-      await click("Reiniciar navegação das compras");
-      expect(node.querySelector("[data-withdrawal-epoch]")).toBe(withdrawal);
-      expect(withdrawal.dataset).toMatchObject({
-        proof: "same-proof",
-        deadline: "unchanged-deadline",
-        marker: "same-marker",
-        busy: "owned",
-      });
+      await click("Consultar compras");
+      expect(node.querySelector("[data-withdrawal-epoch]")).toBeNull();
       expect(writes).not.toHaveBeenCalled();
       expect(
         request.mock.calls.every(([path]) =>
@@ -317,6 +312,7 @@ describe("withdrawal settlement read invalidation", () => {
       act(async () =>
         root.render(
           createElement(FinanceSection, {
+            page: "withdrawals",
             siteId: access.siteId,
             access,
             sessionEpoch: 7,
@@ -439,4 +435,49 @@ describe("withdrawal settlement read invalidation", () => {
       await f.cleanup();
     }
   });
+});
+
+describe("receiving page read isolation", () => {
+  it.each(["overview", "payments", "withdrawals"] as const)(
+    "loads only the financial reads required by %s",
+    async (page) => {
+      vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+      const overviewRead = vi
+        .spyOn(financialOverview, "loadFinancialOverview")
+        .mockResolvedValue(null as never);
+      const historyRead = vi
+        .spyOn(withdrawalHistory, "loadWithdrawalHistory")
+        .mockResolvedValue([]);
+      const node = document.createElement("div");
+      document.body.append(node);
+      const root = createRoot(node);
+      try {
+        await act(async () =>
+          root.render(
+            createElement(FinanceSection, {
+              siteId: access.siteId,
+              access,
+              sessionEpoch: 7,
+              page,
+            }),
+          ),
+        );
+        expect(overviewRead).toHaveBeenCalledTimes(page === "payments" ? 0 : 1);
+        expect(historyRead).toHaveBeenCalledTimes(
+          page === "withdrawals" ? 1 : 0,
+        );
+        expect(!!node.querySelector("[data-withdrawal-epoch]")).toBe(
+          page === "withdrawals",
+        );
+        expect(!!node.querySelector("#gift-payment-history-title")).toBe(
+          page === "payments",
+        );
+      } finally {
+        await act(async () => root.unmount());
+        node.remove();
+        vi.restoreAllMocks();
+        vi.unstubAllGlobals();
+      }
+    },
+  );
 });

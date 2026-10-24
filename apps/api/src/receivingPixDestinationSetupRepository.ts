@@ -1,6 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
-import { receivingSetupConsentVersion } from "@entrelacos/contracts";
+import {
+  receivingPixDestinationRecentSchema,
+  receivingSetupConsentVersion,
+} from "@entrelacos/contracts";
 import type { DatabaseConnection } from "@entrelacos/database";
 import { sql } from "drizzle-orm";
 import { ADMIN_ABSOLUTE_TIMEOUT_MS, ADMIN_IDLE_TIMEOUT_MS } from "./authHttp";
@@ -170,7 +173,21 @@ export function createReceivingPixDestinationSetupRepository(
         !row.configuration)
     )
       return deny();
+    // History reads project masked facts in SQL; encrypted keys and authentication evidence stay in storage.
+    const recentDestinations = readOnly
+      ? (
+          await tx.execute(
+            sql`SELECT id AS "destinationId",site_id AS "siteId",environment AS mode,version,pix_configuration->'review'->>'keyType' AS "keyType",pix_configuration->'review'->>'maskedKey' AS "maskedKey",pix_configuration->'review'->>'ownerName' AS "ownerName",pix_configuration->'review'->>'maskedCpfCnpj' AS "maskedCpfCnpj",pix_configuration->'review'->>'bankName' AS "bankName",pix_configuration->'review'->>'identity' AS identity,created_at AS "savedAt" FROM receiving_pix_destination WHERE site_id=${actor.siteId} AND account_id=${account.accountId} AND environment=${mode} AND state='PENDING' AND pix_configuration->>'confirmRecipient'='true' ORDER BY version DESC LIMIT 5`,
+          )
+        ).rows.map((entry) =>
+          receivingPixDestinationRecentSchema.parse({
+            ...entry,
+            savedAt: readDatabaseTimestamp(entry.savedAt).toISOString(),
+          }),
+        )
+      : undefined;
     const snapshot: ReceivingPixDestinationSnapshot = {
+      ...(recentDestinations ? { recentDestinations } : {}),
       scope: {
         provider: "ASAAS",
         siteId: actor.siteId,

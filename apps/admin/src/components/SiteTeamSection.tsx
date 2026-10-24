@@ -408,6 +408,7 @@ function SiteTeamRuntime({
     owner: typeof panelActorOwner;
   } | null>(null);
   const [state, setState] = useState<SiteTeamState>(emptyTeamState);
+  const [inviteOpen, setInviteOpen] = useState(false);
   useEffect(() => {
     const controller = createSiteTeamController(
       { siteId, canManage },
@@ -457,26 +458,13 @@ function SiteTeamRuntime({
       (isCurrent) => {
         const reset = form.reset;
         if (isCurrent()) reset.call(form);
+        if (isCurrent()) setInviteOpen(false);
       },
     );
   }
 
   return (
     <div className="grid min-w-0 gap-5">
-      <SiteTeamView
-        team={team}
-        canManage={authorized}
-        pending={pending}
-        error={error}
-        onInvite={invite}
-        onRetry={() => void controller?.refresh()}
-        onRevokeMember={(id) =>
-          controller?.selectTarget({ kind: "members", id })
-        }
-        onRevokeInvitation={(id) =>
-          controller?.selectTarget({ kind: "invitations", id })
-        }
-      />
       {authorized && link && (
         <section className="grid min-w-0 gap-3 rounded-xl border border-admin-line bg-admin-surface p-5">
           <label htmlFor="team-invite-link" className="text-sm font-semibold">
@@ -503,6 +491,22 @@ function SiteTeamRuntime({
           </div>
         </section>
       )}
+      <SiteTeamView
+        team={team}
+        canManage={authorized}
+        pending={pending}
+        error={error}
+        inviteOpen={inviteOpen}
+        onInviteOpenChange={setInviteOpen}
+        onInvite={invite}
+        onRetry={() => void controller?.refresh()}
+        onRevokeMember={(id) =>
+          controller?.selectTarget({ kind: "members", id })
+        }
+        onRevokeInvitation={(id) =>
+          controller?.selectTarget({ kind: "invitations", id })
+        }
+      />
       <AlertDialog
         open={target !== null}
         onOpenChange={(open) => {

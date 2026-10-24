@@ -1,10 +1,12 @@
 // @vitest-environment jsdom
+
 import type {
   GiftPurchaseHistoryDetailPage,
   GiftPurchaseHistoryPage,
   MeResponse,
   SiteAccess,
 } from "@entrelacos/contracts";
+import { toast } from "@entrelacos/ui";
 import {
   act,
   createElement,
@@ -198,6 +200,12 @@ async function click(node: HTMLElement, label: string) {
   await act(async () => button?.click());
 }
 describe("mounted gift history", () => {
+  it("does not announce an API failure during a successful initial mount", async () => {
+    const error = vi.spyOn(toast, "error");
+    const f = await mounted(true);
+    expect(f.node.textContent).toContain("Lua de mel privada");
+    expect(error).not.toHaveBeenCalled();
+  });
   it("denies SSR private data and props-only authority", () => {
     const html = renderToStaticMarkup(
       createElement(GiftPaymentHistoryView, {
@@ -245,7 +253,7 @@ describe("mounted gift history", () => {
     await click(f.node, "Ver histórico desta compra");
     expect(f.node.textContent).toContain("Crédito histórico");
     f.request.mockRejectedValueOnce(new Error("private upstream secret"));
-    await click(f.node, "Reiniciar navegação do detalhe");
+    await click(f.node, "Consultar histórico novamente");
     expect(f.node.textContent).toContain("Crédito histórico");
     expect(f.node.textContent).not.toContain("private upstream");
     await click(f.node, "Tentar consulta novamente");
@@ -273,7 +281,7 @@ describe("mounted gift history", () => {
     f.ports.request = vi.fn(async () => ({ history: { ...page, items: [] } }));
     await f.render();
     expect(f.node.textContent).toContain("Lua de mel privada");
-    await click(f.node, "Reiniciar navegação das compras");
+    await click(f.node, "Consultar compras");
     expect(f.node.textContent).toContain("Lua de mel privada");
     expect(f.ports.request).toHaveBeenCalledTimes(1);
     expect(f.node.textContent).toContain("2 de 64");
@@ -310,7 +318,7 @@ describe("mounted gift history", () => {
   it("does not traverse empty fresh cursors automatically", async () => {
     const f = await mounted();
     f.setReply({ history: { ...page, items: [], nextCursor: "gh1.next" } });
-    await click(f.node, "Reiniciar navegação das compras");
+    await click(f.node, "Consultar compras");
     expect(f.request).toHaveBeenCalledTimes(2);
     expect(f.node.textContent).toContain("Esta consulta não retornou compras");
     expect(f.node.textContent).toContain("Carregar mais compras");

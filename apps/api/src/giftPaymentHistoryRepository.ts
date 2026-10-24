@@ -647,12 +647,12 @@ export function createGiftPaymentHistoryRepository(
       return historyUnavailable();
     return {
       checked,
+      active,
       frame: {
         sessionId: scope.sessionId,
         userId: scope.userId,
         expires: expires.toString(),
         created: created.toString(),
-        active: active.toString(),
         access: structuredClone(access),
       },
     };
@@ -686,6 +686,8 @@ export function createGiftPaymentHistoryRepository(
         if (
           closing ||
           current.checked < original.checked ||
+          // Concurrent session heartbeats may advance activity, never authority.
+          current.active < original.active ||
           !isDeepStrictEqual(current.frame, original.frame)
         )
           return historyUnavailable();

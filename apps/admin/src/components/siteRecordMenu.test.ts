@@ -14,7 +14,7 @@ describe("site record overflow actions", () => {
 
   it("renders record actions through the overflow menu", () => {
     const source = readFileSync(
-      resolve(import.meta.dirname, "SiteWorkspace.tsx"),
+      resolve(import.meta.dirname, "SiteSettingsView.tsx"),
       "utf8",
     );
     expect(source).toContain("siteRecordMenuActions");

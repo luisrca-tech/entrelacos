@@ -109,7 +109,7 @@ describe("observable administrative session ownership", () => {
       f.owner.dispose();
     }
   });
-  it("attaches real entry/resume/hint listeners and cleans up its final owner", async () => {
+  it("attaches real entry/resume/hint listeners and detaches its final consumer", async () => {
     const f = fixture();
     const target = new EventTarget();
     const document = Object.assign(new EventTarget(), {
@@ -147,11 +147,43 @@ describe("observable administrative session ownership", () => {
     target.dispatchEvent(new Event("focus"));
     await f.owner.load();
     expect(f.request).toHaveBeenCalledTimes(3);
+    const verified = f.owner.getSnapshot();
     cleanup();
     expect(channel.close).toHaveBeenCalledTimes(1);
-    expect(f.owner.getSnapshot().sessionEpoch).toBeNull();
+    expect(f.owner.getSnapshot()).toBe(verified);
     target.dispatchEvent(new Event("focus"));
     expect(f.request).toHaveBeenCalledTimes(3);
+    f.owner.dispose();
+  });
+  it("rechecks a valid cross-tab invalidation without waiting for another focus event", async () => {
+    const f = fixture();
+    const channel = {
+      onmessage: null as BroadcastChannel["onmessage"],
+      close: vi.fn(),
+    };
+    const cleanup = mountPanelSessionLifecycle(
+      {
+        target: new EventTarget(),
+        document: Object.assign(new EventTarget(), {
+          visibilityState: "visible" as DocumentVisibilityState,
+        }),
+        createChannel: () => channel,
+      },
+      f.owner,
+    );
+    await f.owner.load();
+    channel.onmessage?.call(
+      {} as BroadcastChannel,
+      new MessageEvent("message", {
+        data: { type: "ADMIN_SESSION_INVALIDATED" },
+      }),
+    );
+    expect(f.owner.getSnapshot().actor).toBeNull();
+    await Promise.resolve();
+    expect(f.request).toHaveBeenCalledTimes(2);
+    await f.owner.load();
+    expect(f.owner.getSnapshot().status).toBe("verified");
+    cleanup();
     f.owner.dispose();
   });
   it("keeps concurrent lifecycle consumers until the last cleanup", async () => {
@@ -224,6 +256,139 @@ describe("observable administrative session ownership", () => {
     expect(f.owner.getSnapshot()).toBe(snapshot);
     f.owner.dispose();
   });
+  it("keeps a verified visible panel interactive during a pending background identity read", async () => {
+    const f = fixture();
+    await f.owner.load();
+    const snapshot = f.owner.getSnapshot();
+    const next = deferred<unknown>();
+    f.request.mockReturnValueOnce(next.promise);
+    f.owner.suspend();
+    expect(f.owner.isSuspended()).toBe(true);
+    const work = f.owner.revalidate();
+    expect(f.owner.getSnapshot()).toBe(snapshot);
+    expect(f.owner.isSuspended()).toBe(false);
+    next.resolve(actor);
+    await work;
+    expect(f.owner.getSnapshot()).toBe(snapshot);
+    f.owner.dispose();
+  });
+  it("retains verified identity across route lifecycle cleanup and reattachment", async () => {
+    const f = fixture();
+    const target = new EventTarget();
+    const document = Object.assign(new EventTarget(), {
+      visibilityState: "visible" as DocumentVisibilityState,
+    });
+    const cleanup = mountPanelSessionLifecycle({ target, document }, f.owner);
+    await f.owner.load();
+    const snapshot = f.owner.getSnapshot();
+    cleanup();
+    expect(f.owner.getSnapshot()).toBe(snapshot);
+    const next = deferred<unknown>();
+    f.request.mockReturnValueOnce(next.promise);
+    const detach = mountPanelSessionLifecycle({ target, document }, f.owner);
+    expect(f.owner.getSnapshot()).toBe(snapshot);
+    expect(f.owner.isSuspended()).toBe(false);
+    next.resolve(actor);
+    await f.owner.load();
+    expect(f.owner.getSnapshot()).toBe(snapshot);
+    detach();
+    f.owner.dispose();
+  });
+  it("expires cached identity after its route lifecycle has detached", async () => {
+    const f = fixture(
+      vi.fn().mockResolvedValue({
+        ...actor,
+        session: {
+          ...actor.session,
+          expiresAt: new Date(start + 1000).toISOString(),
+        },
+      }),
+    );
+    const cleanup = mountPanelSessionLifecycle(
+      {
+        target: new EventTarget(),
+        document: Object.assign(new EventTarget(), {
+          visibilityState: "visible" as DocumentVisibilityState,
+        }),
+      },
+      f.owner,
+    );
+    await f.owner.load();
+    cleanup();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(f.owner.getSnapshot().status).toBe("unauthenticated");
+    expect(f.owner.getSnapshot().actor).toBeNull();
+    f.owner.dispose();
+  });
+  it("requires login when a failed background read reaches the cached session deadline", async () => {
+    const f = fixture(
+      vi.fn().mockResolvedValue({
+        ...actor,
+        session: {
+          ...actor.session,
+          expiresAt: new Date(start + 1000).toISOString(),
+        },
+      }),
+    );
+    await f.owner.load();
+    const next = deferred<unknown>();
+    f.request.mockReturnValueOnce(next.promise);
+    const work = f.owner.revalidate();
+    const rejected = expect(work).rejects.toThrow();
+    await Promise.resolve();
+    vi.setSystemTime(start + 1000);
+    next.reject(new TypeError("Network unavailable"));
+    await rejected;
+    expect(f.owner.getSnapshot().status).toBe("unauthenticated");
+    expect(f.owner.getSnapshot().actor).toBeNull();
+    f.owner.dispose();
+  });
+  it("revokes a retained identity when the background response is malformed", async () => {
+    const f = fixture();
+    await f.owner.load();
+    f.request.mockResolvedValueOnce({ ...actor, memberships: "invalid" });
+    await expect(f.owner.revalidate()).rejects.toThrow();
+    expect(f.owner.getSnapshot().status).toBe("unavailable");
+    expect(f.owner.getSnapshot().actor).toBeNull();
+    f.owner.dispose();
+  });
+  it.each([new TypeError("Network unavailable"), 503])(
+    "retains an unexpired verified identity after a transient background failure %s",
+    async (failure) => {
+      const f = fixture();
+      await f.owner.load();
+      const snapshot = f.owner.getSnapshot();
+      const { ApiError } = await import("../lib/apiClient");
+      f.request.mockRejectedValueOnce(
+        typeof failure === "number"
+          ? new ApiError(failure, "UPSTREAM_UNAVAILABLE")
+          : failure,
+      );
+      await expect(f.owner.revalidate()).rejects.toThrow();
+      expect(f.owner.getSnapshot()).toBe(snapshot);
+      expect(f.owner.isSuspended()).toBe(false);
+      await vi.advanceTimersByTimeAsync(
+        Date.parse(actor.session.expiresAt) - start,
+      );
+      expect(f.owner.getSnapshot().status).toBe("unauthenticated");
+      f.owner.dispose();
+    },
+  );
+  it.each([401, 403])(
+    "revokes a retained background identity on an authoritative denial %s",
+    async (status) => {
+      const f = fixture();
+      await f.owner.load();
+      const { ApiError } = await import("../lib/apiClient");
+      f.request.mockRejectedValueOnce(new ApiError(status, "DENIED"));
+      await expect(f.owner.revalidate()).rejects.toThrow();
+      expect(f.owner.getSnapshot().status).toBe(
+        status === 401 ? "unauthenticated" : "denied",
+      );
+      expect(f.owner.getSnapshot().actor).toBeNull();
+      f.owner.dispose();
+    },
+  );
   it("invalidates synchronously on refresh and shares only the current generation request", async () => {
     const f = fixture();
     await f.owner.load();

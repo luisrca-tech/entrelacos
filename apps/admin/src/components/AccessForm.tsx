@@ -70,12 +70,14 @@ export function AccessForm({
             {purpose === "activation" ? "Primeiro acesso" : "Recuperar acesso"}
           </p>
           <h1 className="m-0 max-w-[780px] font-admin-display text-[clamp(2.4rem,5vw,4rem)] font-normal leading-[1.04] tracking-[-0.025em]">
-            {email ? "Senha definida." : "Defina sua senha."}
+            {email ? "Sua senha está pronta." : "Defina sua senha."}
           </h1>
           <CardDescription>
             {email
               ? "Agora entre com seu e-mail e a nova senha."
-              : "Crie uma senha segura para acessar o painel."}
+              : purpose === "activation"
+                ? "Escolha uma senha para começar a organizar o casamento."
+                : "Escolha uma nova senha para voltar ao painel."}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -85,7 +87,7 @@ export function AccessForm({
               to="/login"
               search={{ email, next: "/" }}
             >
-              Ir para o login
+              Entrar no painel
             </Link>
           ) : !ready ? (
             <p className="leading-[1.6]" role="status">
@@ -98,7 +100,7 @@ export function AccessForm({
           ) : (
             <>
               <p className="m-0 mb-5 leading-[1.6] text-admin-muted">
-                O link vale por 24 horas e pode ser usado uma vez.
+                Este link é pessoal, vale por 24 horas e pode ser usado uma vez.
               </p>
               <form className={adminStyles.authForm} onSubmit={submit}>
                 <div className="grid gap-2 text-[0.88rem] font-semibold text-admin-graphite">

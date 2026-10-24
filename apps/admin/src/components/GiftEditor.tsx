@@ -686,6 +686,16 @@ export function GiftEditor({
       onUpdate={controller.update}
       onPublication={controller.publication}
       onReorder={controller.reorder}
+      renderPreview={(gift) => {
+        const preview = state.previews[gift.id];
+        return preview ? (
+          <img
+            src={preview.url}
+            alt={gift.altText}
+            className="h-full w-full object-cover"
+          />
+        ) : null;
+      }}
       renderMedia={(gift, blocked) => (
         <GiftImageField
           key={JSON.stringify([

@@ -7,6 +7,7 @@ import {
   siteIdSchema,
 } from "@entrelacos/contracts";
 import { ApiError, apiRequest } from "../lib/apiClient";
+import { panelActorOwner } from "./panelActor";
 
 export type FinancialReauthenticationAction =
   typeof financialReauthenticationActionSchema._output;
@@ -95,12 +96,16 @@ export async function requestFinancialReauthentication(
   if (
     !Number.isSafeInteger(current) ||
     current < 0 ||
-    expires - current > 300000
+    expires - current > 301000
   )
     throw new Error("Invalid financial proof lifetime");
   if (expires <= current)
     throw new ExpiredFinancialProofError("Financial proof expired");
-  return proof;
+  // Bound small server clock lead without extending the server or local lifetime.
+  return {
+    ...proof,
+    expiresAt: new Date(Math.min(expires, current + 300000)).toISOString(),
+  };
 }
 
 export function createFinancialReauthenticationController(
@@ -110,10 +115,13 @@ export function createFinancialReauthenticationController(
     request?: Request;
     now?: () => number;
     guard?: FinancialReauthenticationGuard;
+    owner?: typeof panelActorOwner;
   } = {},
 ) {
   const scopeKey = financialReauthenticationScopeKey(scope);
   const now = options.now ?? (() => Date.now());
+  const owner = options.owner ?? panelActorOwner;
+  const capturedOwner = owner.getSnapshot();
   let state: FinancialReauthenticationState = {
     status: scopeKey ? "idle" : "denied",
   };
@@ -222,6 +230,23 @@ export function createFinancialReauthenticationController(
       } catch (error) {
         if (!current() || revision !== requestRevision) return;
         clearProof();
+        if (
+          error instanceof ApiError &&
+          error.status === 401 &&
+          error.code === "UNAUTHORIZED" &&
+          owner.getSnapshot() === capturedOwner &&
+          capturedOwner.status === "verified" &&
+          capturedOwner.sessionEpoch === scope.sessionEpoch &&
+          capturedOwner.actor?.user.id === scope.access?.userId &&
+          JSON.stringify(
+            capturedOwner.actor?.memberships?.find(
+              (access) => access.siteId === scope.siteId,
+            ),
+          ) === JSON.stringify(scope.access)
+        ) {
+          owner.reportFailure(error, scope.sessionEpoch);
+          if (!current() || revision !== requestRevision) return;
+        }
         publish({
           status:
             error instanceof ExpiredFinancialProofError

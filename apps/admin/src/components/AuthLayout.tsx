@@ -23,11 +23,11 @@ export function AuthLayout({ children }: { children: ReactNode }) {
               E
             </span>
             <p className="m-0 max-w-[11ch] font-admin-display text-[clamp(2.2rem,4vw,3.8rem)] leading-[1.05] [@media(max-width:760px)]:mt-3.5 [@media(max-width:760px)]:max-w-[24ch] [@media(max-width:760px)]:text-[1.65rem]">
-              O seu dia, guardado com carinho.
+              Seu casamento, mais simples de organizar.
             </p>
           </div>
           <span className="text-[0.78rem] text-[#c9b9ad] [@media(max-width:760px)]:hidden">
-            Painel administrativo
+            Seu painel do casamento
           </span>
         </aside>
         <section className="grid items-center p-12 [@media(max-width:760px)]:px-[22px] [@media(max-width:760px)]:py-9">

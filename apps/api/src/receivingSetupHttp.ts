@@ -211,6 +211,8 @@ export function createReceivingSetupHttpRouter(
     });
     if (
       !access ||
+      access.siteId !== siteId ||
+      access.userId !== current.user.id ||
       !access.capabilities.readFinance ||
       (current.user.role !== "OWNER" &&
         (current.user.role !== "SITE_ADMIN" ||
@@ -219,14 +221,24 @@ export function createReceivingSetupHttpRouter(
       return problem(403, "MEMBERSHIP_DENIED");
     if (!options.receivingSetup)
       return problem(503, "PIX_DESTINATION_UNAVAILABLE");
-    const output = receivingPixDestinationSavedResponseSchema.parse({
-      destination: await options.receivingSetup.readPixDestination({
-        userId: current.user.id,
-        siteId,
-        sessionId: current.session.id,
-      }),
-    });
-    if (output.destination && output.destination.siteId !== siteId)
+    const actor = {
+      userId: current.user.id,
+      siteId,
+      sessionId: current.session.id,
+    };
+    const output = receivingPixDestinationSavedResponseSchema.parse(
+      options.receivingSetup.readPixDestinationSnapshot
+        ? await options.receivingSetup.readPixDestinationSnapshot(actor)
+        : {
+            destination: await options.receivingSetup.readPixDestination(actor),
+          },
+    );
+    if (
+      (output.destination && output.destination.siteId !== siteId) ||
+      output.recentDestinations.some(
+        (destination) => destination.siteId !== siteId,
+      )
+    )
       return problem(503, "PIX_DESTINATION_UNAVAILABLE");
     return context.json(output, 200, { "Cache-Control": "no-store" });
   });

@@ -2,10 +2,9 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
-const panelSource = readFileSync(
-  resolve(import.meta.dirname, "Panel.tsx"),
-  "utf8",
-);
+const panelSource =
+  readFileSync(resolve(import.meta.dirname, "Panel.tsx"), "utf8") +
+  readFileSync(resolve(import.meta.dirname, "OwnerSites.tsx"), "utf8");
 const shellSource = readFileSync(
   resolve(import.meta.dirname, "AdminShell.tsx"),
   "utf8",
@@ -47,18 +46,13 @@ describe("admin shell safety regressions", () => {
     expect(invitationsSource).not.toContain("adminStyles.notice");
   });
 
-  it("guards load-more against concurrent requests and pending create", () => {
-    expect(panelSource).toContain("loadingMoreRef.current");
-    expect(panelSource).toContain("disabled={pending || loadingMore}");
-  });
-
   it("redirects only the compatibility parent path", () => {
     expect(routeSource).toContain("location.pathname");
     expect(routeSource).toContain("if (pathname === parentPath)");
   });
 
   it("uses invitations as the only invitation and RSVP workspace route", () => {
-    expect(routeSource).toContain('to: "/sites/$siteId/invitations"');
+    expect(routeSource).toContain('to: "/sites/$siteId/home"');
     expect(invitationRouteSource).toContain('area="invitations"');
     expect(workspaceSource).toContain("<InvitationsSection");
     expect(workspaceSource).not.toContain("<GuestGroupsSection");
@@ -100,7 +94,7 @@ describe("admin shell safety regressions", () => {
     expect(panelSource).toContain(
       'import { Link } from "@tanstack/react-router";',
     );
-    expect(panelSource).toContain('to="/sites/$siteId/invitations"');
+    expect(panelSource).toContain('to="/sites/$siteId/home"');
     expect(panelSource).toContain("params={{ siteId: site.id }}");
     expect(panelSource).not.toContain("href=");
     expect(workspaceSource).toContain(

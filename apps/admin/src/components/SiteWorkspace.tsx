@@ -16,8 +16,6 @@ import {
   Badge,
   Button,
   Card,
-  CardAction,
-  CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
@@ -34,12 +32,6 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
   Textarea,
   toast,
 } from "@entrelacos/ui";
@@ -55,13 +47,13 @@ import {
 import { adminStyles, displayHeading } from "../lib/adminStyles";
 import { ApiError, apiRequest } from "../lib/apiClient";
 import type { SiteArea } from "./adminNavigation";
-import { formatBrazilianDate } from "./brazilianDate";
 import { GiftsSection } from "./GiftsSection";
 import { InvitationsSection } from "./InvitationsSection";
 import { MessagesSection } from "./MessagesSection";
-import { OverflowMenu } from "./OverflowMenu";
 import { isCurrentPanelSessionEpoch, panelActorOwner } from "./panelActor";
 import { ReceivingSection } from "./ReceivingSection";
+import { SiteHome } from "./SiteHome";
+import { SiteSettingsView } from "./SiteSettingsView";
 import { SiteTeamSection } from "./SiteTeamSection";
 import {
   adminAccessLink,
@@ -69,10 +61,12 @@ import {
   adminAccessLinkCopyFailedMessage,
   adminAccessLinkRevokedMessage,
   copyAdminAccessLink,
-  siteAdminMenuActions,
 } from "./siteAdminMenu";
+import {
+  type LifecycleAction,
+  lifecycleConfirmation,
+} from "./siteLifecyclePresentation";
 import { publicSiteHandoffUrl, subscribeToPanelOrigin } from "./sitePublicUrl";
-import { siteRecordMenuActions } from "./siteRecordMenu";
 import { getWorkspaceHeading } from "./siteWorkspaceHeading";
 
 export type { SiteArea } from "./adminNavigation";
@@ -101,11 +95,6 @@ type SiteView = Omit<SiteRecord, InternalField> &
   Partial<Pick<SiteRecord, InternalField>>;
 type Admin = typeof adminSummarySchema._output;
 type Domain = typeof siteDomainRecordSchema._output;
-type LifecycleAction =
-  | "review/start"
-  | "review/approve"
-  | "reactivate"
-  | "deactivate";
 
 type WorkspaceSessionCallbacks = {
   isActive: () => boolean;
@@ -183,7 +172,7 @@ export async function issueWorkspaceAccess(
 export function SiteWorkspace({
   siteId,
   owner,
-  area = "invitations",
+  area = "home",
   onSiteName,
   access = null,
   sessionEpoch = null,
@@ -443,14 +432,9 @@ export function SiteWorkspace({
     owner,
     lifecycle: site.lifecycle,
   });
-  const lifecycleLabel = lifecycleAction
-    ? {
-        "review/start": "Enviar este casamento para revisão?",
-        "review/approve": "Aprovar este casamento e iniciar a vigência?",
-        reactivate: "Reativar este casamento?",
-        deactivate: "Inativar este casamento?",
-      }[lifecycleAction]
-    : "";
+  const confirmation = lifecycleAction
+    ? lifecycleConfirmation[lifecycleAction]
+    : null;
 
   return (
     <>
@@ -503,6 +487,14 @@ export function SiteWorkspace({
         </p>
       )}
 
+      {area === "home" && (
+        <SiteHome
+          site={site}
+          access={access}
+          owner={owner}
+          sessionEpoch={sessionEpoch}
+        />
+      )}
       {area === "invitations" && (
         <InvitationsSection siteId={site.id} lifecycle={site.lifecycle} />
       )}
@@ -554,230 +546,24 @@ export function SiteWorkspace({
       {area === "settings" &&
         (owner ? (
           <section className="grid gap-6" data-area="settings">
-            <dl
-              className="grid gap-2.5 sm:grid-cols-3"
-              aria-label="Status e datas"
-            >
-              {(
-                [
-                  ["Casamento", formatBrazilianDate(site.eventDate)],
-                  [
-                    "Vigência",
-                    site.termStartsOn
-                      ? `${formatBrazilianDate(site.termStartsOn)} a ${formatBrazilianDate(site.termEndsOn ?? "")}`
-                      : "Aguardando aprovação",
-                  ],
-                  ["Publicação", labels[site.publicationState]],
-                ] as const
-              ).map(([label, value]) => (
-                <div
-                  key={label}
-                  className="rounded-xl border border-admin-line bg-admin-canvas p-4"
-                >
-                  <dt className="text-xs text-admin-muted">{label}</dt>
-                  <dd className="m-0 mt-1 text-base font-semibold text-admin-ink">
-                    {value}
-                  </dd>
-                </div>
-              ))}
-            </dl>
-            <Card className={adminStyles.surface}>
-              <CardHeader>
-                <CardTitle>Ciclo de vida</CardTitle>
-                <CardDescription>
-                  A aprovação inicia um ano de vigência. O vencimento não
-                  inativa o casamento automaticamente.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className={adminStyles.inline}>
-                {site.lifecycle === "DRAFT" && (
-                  <Button
-                    disabled={pending}
-                    type="button"
-                    onClick={() => setLifecycleAction("review/start")}
-                  >
-                    Enviar para revisão
-                  </Button>
-                )}
-                {site.lifecycle === "IN_REVIEW" && (
-                  <Button
-                    disabled={pending}
-                    type="button"
-                    onClick={() => setLifecycleAction("review/approve")}
-                  >
-                    Aprovar e iniciar vigência
-                  </Button>
-                )}
-                {site.lifecycle === "INACTIVE" ? (
-                  <Button
-                    disabled={pending}
-                    type="button"
-                    onClick={() => setLifecycleAction("reactivate")}
-                  >
-                    Reativar casamento
-                  </Button>
-                ) : (
-                  <Button
-                    disabled={pending}
-                    type="button"
-                    variant="destructive"
-                    onClick={() => setLifecycleAction("deactivate")}
-                  >
-                    Inativar casamento
-                  </Button>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card className={adminStyles.surface}>
-              <CardHeader className="flex w-full flex-row items-start justify-between">
-                <div>
-                  <CardTitle>Cadastro, datas e publicação</CardTitle>
-                  <CardDescription>
-                    Edite cada informação em uma janela dedicada.
-                  </CardDescription>
-                </div>
-                <CardAction>
-                  <OverflowMenu
-                    label="Ações de cadastro, datas e publicação"
-                    items={siteRecordMenuActions}
-                    onSelect={(action) => {
-                      if (action === "publication") {
-                        setPublicationState(site.publicationState);
-                      }
-                      if (
-                        action === "profile" ||
-                        action === "dates" ||
-                        action === "publication"
-                      ) {
-                        setSettingsDialog(action);
-                      }
-                    }}
-                  />
-                </CardAction>
-              </CardHeader>
-            </Card>
-
-            <Card className={adminStyles.surface}>
-              <CardHeader className="flex w-full flex-row items-start justify-between">
-                <div>
-                  <CardTitle>Administradores</CardTitle>
-                  <CardDescription>
-                    Gerencie acessos e sessões do casamento.
-                  </CardDescription>
-                </div>
-                <CardAction>
-                  <Button
-                    type="button"
-                    onClick={() => setSettingsDialog("admin")}
-                  >
-                    Adicionar administrador
-                  </Button>
-                </CardAction>
-              </CardHeader>
-              <CardContent>
-                <Table className="w-full">
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Nome</TableHead>
-                      <TableHead>E-mail</TableHead>
-                      <TableHead>Estado</TableHead>
-                      <TableHead>Ações</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {admins.map((admin) => (
-                      <TableRow
-                        className="border-b border-admin-line py-[18px]"
-                        key={admin.userId}
-                      >
-                        <TableCell>{admin.name}</TableCell>
-                        <TableCell>{admin.email}</TableCell>
-                        <TableCell>
-                          <Badge variant="outline">{labels[admin.state]}</Badge>
-                        </TableCell>
-                        <TableCell>
-                          <OverflowMenu
-                            label={`Ações de ${admin.name}`}
-                            disabled={pending}
-                            items={siteAdminMenuActions(admin.state)}
-                            onSelect={(action) =>
-                              handleAdminMenuAction(action, admin)
-                            }
-                          />
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
-
-            <Card className={adminStyles.surface}>
-              <CardHeader className="flex w-full flex-row items-start justify-between">
-                <div>
-                  <CardTitle>Domínios</CardTitle>
-                  <CardDescription>
-                    DNS, hospedagem e renovação continuam sendo operações
-                    manuais.
-                  </CardDescription>
-                </div>
-                <CardAction>
-                  <Button
-                    type="button"
-                    onClick={() => setSettingsDialog("domain")}
-                  >
-                    Registrar domínio
-                  </Button>
-                </CardAction>
-              </CardHeader>
-              <CardContent>
-                <Table className="w-full">
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Domínio</TableHead>
-                      <TableHead>Estado</TableHead>
-                      <TableHead>Renovação</TableHead>
-                      <TableHead>Principal</TableHead>
-                      <TableHead>Ações</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {domains.map((domain) => (
-                      <TableRow
-                        className="border-b border-admin-line py-[18px]"
-                        key={`${domain.id}-${domain.updatedAt}`}
-                      >
-                        <TableCell>{domain.hostname}</TableCell>
-                        <TableCell>
-                          <Badge variant="outline">
-                            {labels[domain.state]}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          {domain.expiresOn
-                            ? formatBrazilianDate(domain.expiresOn)
-                            : "—"}
-                        </TableCell>
-                        <TableCell>
-                          {domain.isPrimary ? "Sim" : "Não"}
-                        </TableCell>
-                        <TableCell>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            type="button"
-                            onClick={() => openDomainEdit(domain)}
-                          >
-                            Editar
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
+            <SiteSettingsView
+              site={site}
+              admins={admins}
+              domains={domains}
+              labels={labels}
+              pending={pending}
+              onEditRecord={(action) => {
+                if (action === "publication") {
+                  setPublicationState(site.publicationState);
+                }
+                setSettingsDialog(action);
+              }}
+              onLifecycleAction={setLifecycleAction}
+              onAddAdmin={() => setSettingsDialog("admin")}
+              onAdminAction={handleAdminMenuAction}
+              onAddDomain={() => setSettingsDialog("domain")}
+              onEditDomain={openDomainEdit}
+            />
 
             <Dialog
               open={settingsDialog === "profile"}
@@ -786,7 +572,7 @@ export function SiteWorkspace({
               <DialogContent className={`${adminStyles.dialog} max-w-2xl`}>
                 <DialogTitle>Editar cadastro</DialogTitle>
                 <DialogDescription>
-                  Atualize identificação pública e origens autorizadas.
+                  Atualize os nomes e o endereço público do casamento.
                 </DialogDescription>
                 <form
                   className={adminStyles.formGrid}
@@ -818,7 +604,7 @@ export function SiteWorkspace({
                     />
                   </label>
                   <label htmlFor="site-couple-first">
-                    Nome do noivo
+                    Nome da primeira pessoa
                     <Input
                       id="site-couple-first"
                       name="first"
@@ -828,7 +614,7 @@ export function SiteWorkspace({
                     />
                   </label>
                   <label htmlFor="site-couple-second">
-                    Nome da noiva
+                    Nome da segunda pessoa
                     <Input
                       id="site-couple-second"
                       name="second"
@@ -846,16 +632,25 @@ export function SiteWorkspace({
                       defaultValue={site.publicUrl ?? ""}
                     />
                   </label>
-                  <label htmlFor="site-trusted-origins">
-                    Origens autorizadas (uma por linha)
-                    <Textarea
-                      id="site-trusted-origins"
-                      name="origins"
-                      rows={3}
-                      defaultValue={site.trustedOrigins?.join("\n") ?? ""}
-                      placeholder="https://casamento.exemplo.com"
-                    />
-                  </label>
+                  <details className="col-span-full rounded-xl border border-admin-line p-4">
+                    <summary className="cursor-pointer text-sm font-semibold text-admin-ink">
+                      Configuração avançada de endereços
+                    </summary>
+                    <p className="text-sm leading-relaxed text-admin-muted">
+                      Informe os endereços completos autorizados a enviar
+                      confirmações e mensagens pelo site. Use um por linha.
+                    </p>
+                    <label htmlFor="site-trusted-origins">
+                      Endereços autorizados
+                      <Textarea
+                        id="site-trusted-origins"
+                        name="origins"
+                        rows={3}
+                        defaultValue={site.trustedOrigins?.join("\n") ?? ""}
+                        placeholder="https://casamento.exemplo.com"
+                      />
+                    </label>
+                  </details>
                   <div className={adminStyles.inline}>
                     <Button disabled={pending} type="submit">
                       Salvar cadastro
@@ -1007,7 +802,8 @@ export function SiteWorkspace({
               <DialogContent>
                 <DialogTitle>Adicionar administrador</DialogTitle>
                 <DialogDescription>
-                  O link de ativação será exibido apenas nesta sessão.
+                  Após adicionar, gere e copie o link de ativação nas ações
+                  dessa pessoa.
                 </DialogDescription>
                 <form
                   className={adminStyles.form}
@@ -1073,7 +869,9 @@ export function SiteWorkspace({
                   {domainToEdit ? "Editar domínio" : "Registrar domínio"}
                 </DialogTitle>
                 <DialogDescription>
-                  O registro não executa DNS, hospedagem ou renovação.
+                  Registre os endereços do casamento para acompanhar sua
+                  situação. A configuração e a renovação são feitas
+                  separadamente.
                 </DialogDescription>
                 {domainToEdit ? (
                   <form className={adminStyles.form} onSubmit={saveDomainEdit}>
@@ -1081,7 +879,7 @@ export function SiteWorkspace({
                       <strong>{domainToEdit.hostname}</strong>
                     </p>
                     <label htmlFor="domain-state">
-                      Estado
+                      Situação
                       <Select
                         value={domainState}
                         onValueChange={(value) =>
@@ -1218,9 +1016,9 @@ export function SiteWorkspace({
             >
               <AlertDialogContent>
                 <AlertDialogHeader>
-                  <AlertDialogTitle>{lifecycleLabel}</AlertDialogTitle>
+                  <AlertDialogTitle>{confirmation?.title}</AlertDialogTitle>
                   <AlertDialogDescription>
-                    O servidor continua sendo a autoridade para esta transição.
+                    {confirmation?.description}
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
@@ -1235,7 +1033,7 @@ export function SiteWorkspace({
                       setLifecycleAction(null);
                     }}
                   >
-                    Confirmar
+                    {confirmation?.confirmLabel}
                   </AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>

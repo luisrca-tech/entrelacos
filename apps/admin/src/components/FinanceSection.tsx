@@ -32,11 +32,13 @@ export function FinanceSection({
   access,
   sessionEpoch = null,
   historyPorts,
+  page = "overview",
 }: {
   siteId: string;
   access: SiteAccess | null;
   sessionEpoch?: number | null;
   historyPorts?: HistoryPorts;
+  page?: "overview" | "payments" | "withdrawals";
 }) {
   const [overviewRead, setOverviewRead] =
     useState<SessionFinancialRead<FinancialOverview> | null>(null);
@@ -61,7 +63,7 @@ export function FinanceSection({
     setHistoryRevision((value) => value + 1);
   }, [siteId, access, sessionEpoch]);
   useEffect(() => {
-    if (!eligible) {
+    if (!eligible || page === "payments") {
       setOverviewRead(null);
       return;
     }
@@ -76,9 +78,9 @@ export function FinanceSection({
           result,
         }),
     );
-  }, [siteId, access, eligible, sessionEpoch, overviewRevision]);
+  }, [siteId, access, eligible, sessionEpoch, overviewRevision, page]);
   useEffect(() => {
-    if (!eligible) {
+    if (!eligible || page !== "withdrawals") {
       setHistoryRead(null);
       return;
     }
@@ -93,7 +95,7 @@ export function FinanceSection({
           result,
         }),
     );
-  }, [siteId, access, eligible, sessionEpoch, historyRevision]);
+  }, [siteId, access, eligible, sessionEpoch, historyRevision, page]);
   const overview = currentFinancialRead(
     overviewRead?.sessionEpoch === sessionEpoch ? overviewRead : null,
     siteId,
@@ -118,23 +120,20 @@ export function FinanceSection({
           cadastral e os saques permanecem restritos à titular.
         </p>
       )}
-      <FinancialOverviewCard
-        siteId={siteId}
-        access={access}
-        overview={overview?.status === "ready" ? overview.value : null}
-        loading={eligible && (!overview || overview.status === "loading")}
-        error={
-          overview?.status === "error" || overview?.status === "unavailable"
-        }
-        onRetry={() => setOverviewRevision((value) => value + 1)}
-      />
-      <WithdrawalHistoryView
-        siteId={siteId}
-        access={access}
-        result={historyResult}
-        onRefresh={() => setHistoryRevision((value) => value + 1)}
-      />
-      {eligible &&
+      {page !== "payments" && (
+        <FinancialOverviewCard
+          siteId={siteId}
+          access={access}
+          overview={overview?.status === "ready" ? overview.value : null}
+          loading={eligible && (!overview || overview.status === "loading")}
+          error={
+            overview?.status === "error" || overview?.status === "unavailable"
+          }
+          onRetry={() => setOverviewRevision((value) => value + 1)}
+        />
+      )}
+      {page === "withdrawals" &&
+        eligible &&
         access?.membershipRole === "SITE_ADMIN" &&
         sessionEpoch !== null && (
           <WithdrawalSetup
@@ -144,12 +143,22 @@ export function FinanceSection({
             onFinancialChange={onFinancialChange}
           />
         )}
-      <GiftPaymentHistoryView
-        siteId={siteId}
-        access={access}
-        sessionEpoch={sessionEpoch}
-        ports={historyPorts}
-      />
+      {page === "withdrawals" && (
+        <WithdrawalHistoryView
+          siteId={siteId}
+          access={access}
+          result={historyResult}
+          onRefresh={() => setHistoryRevision((value) => value + 1)}
+        />
+      )}
+      {page === "payments" && (
+        <GiftPaymentHistoryView
+          siteId={siteId}
+          access={access}
+          sessionEpoch={sessionEpoch}
+          ports={historyPorts}
+        />
+      )}
     </div>
   );
 }

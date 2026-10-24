@@ -2,8 +2,10 @@ import { hkdfSync, randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import {
   type ReceivingPixDestinationInput,
+  type ReceivingPixDestinationRecent,
   type ReceivingPixDestinationReview,
   receivingPixDestinationInputSchema,
+  receivingPixDestinationSavedResponseSchema,
 } from "@entrelacos/contracts";
 import type {
   FinancialActor,
@@ -53,6 +55,7 @@ export interface ReceivingPixDestinationRecord {
 export interface ReceivingPixDestinationSnapshot {
   scope: ReceivingPixDestinationScope;
   current: ReceivingPixDestinationRecord | null;
+  recentDestinations?: ReceivingPixDestinationRecent[];
 }
 export interface ReceivingPixDestinationSave {
   actor: FinancialActor;
@@ -338,6 +341,27 @@ export function createReceivingPixDestinationSetup(options: {
       const output = saved(record);
       if (!output) return reject();
       return output;
+    },
+    async readWithRecent(actor: FinancialActor) {
+      const snapshot = await options.repository.snapshot(actor, true);
+      if (
+        snapshot.scope.siteId !== actor.siteId ||
+        snapshot.scope.environment !== options.mode
+      )
+        return reject();
+      const recentDestinations = snapshot.recentDestinations ?? [];
+      if (
+        recentDestinations.some(
+          (destination) =>
+            destination.siteId !== actor.siteId ||
+            destination.mode !== options.mode,
+        )
+      )
+        return reject();
+      return receivingPixDestinationSavedResponseSchema.parse({
+        destination: snapshot.current ? saved(snapshot.current) : null,
+        recentDestinations,
+      });
     },
     async read(actor: FinancialActor) {
       return saved(

@@ -1,6 +1,7 @@
 export type AdminRole = "OWNER" | "SITE_ADMIN" | "SITE_ASSISTANT";
 
 export const siteAreas = [
+  "home",
   "invitations",
   "messages",
   "gifts",
@@ -20,6 +21,7 @@ export type SiteNavigationItem = {
 };
 
 const labels: Record<SiteArea, string> = {
+  home: "Início",
   invitations: "Convites",
   messages: "Mensagens",
   gifts: "Presentes",
@@ -42,7 +44,7 @@ export function getSiteNavigation(
   siteId: string,
 ): SiteNavigationItem[] {
   const encodedSiteId = encodeURIComponent(siteId);
-  const areas: SiteArea[] = ["invitations", "messages", "gifts"];
+  const areas: SiteArea[] = ["home", "invitations", "messages", "gifts"];
   if (role === "SITE_ADMIN" || role === "OWNER") areas.push("receiving");
   if (role !== "SITE_ASSISTANT") areas.push("team");
   if (role === "OWNER") areas.push("settings");
@@ -59,17 +61,30 @@ export function resolveSiteArea(
   requestedArea: string | undefined,
 ): SiteArea {
   if (!requestedArea || !siteAreas.includes(requestedArea as SiteArea)) {
-    return "invitations";
+    return "home";
   }
-  if (requestedArea === "settings" && role !== "OWNER") return "invitations";
+  if (requestedArea === "settings" && role !== "OWNER") return "home";
   if (
     (requestedArea === "receiving" || requestedArea === "receiving-guide") &&
     role === "SITE_ASSISTANT"
   )
-    return "invitations";
-  if (requestedArea === "team" && role === "SITE_ASSISTANT")
-    return "invitations";
+    return "home";
+  if (requestedArea === "team" && role === "SITE_ASSISTANT") return "home";
   return requestedArea as SiteArea;
+}
+
+export function getMobileNavigation(items: SiteNavigationItem[]) {
+  if (items.length <= 5) return { primary: items, more: [] };
+  const primaryAreas = new Set<SiteArea>([
+    "home",
+    "invitations",
+    "gifts",
+    "receiving",
+  ]);
+  return {
+    primary: items.filter((item) => primaryAreas.has(item.area)),
+    more: items.filter((item) => !primaryAreas.has(item.area)),
+  };
 }
 
 export const initialsFromName = getInitials;

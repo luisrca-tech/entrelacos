@@ -28,8 +28,6 @@ const reasonMessages: Record<
     "Os recebimentos estão bloqueados. Entre em contato com o suporte.",
 };
 
-const activationGuidance =
-  "Para ativar, o recebedor e a conta de destino precisam ser verificados no fluxo do Asaas. A ativação ainda depende da habilitação dos recebimentos.";
 const cardClassName =
   "grid gap-4 rounded-xl border border-admin-line bg-admin-surface p-6 sm:p-8";
 const eyebrowClassName =
@@ -43,12 +41,14 @@ export function ReceivingStatusCard({
   access,
   error = false,
   onRetry,
+  action,
 }: {
   siteId: string;
   readiness: ReceivingReadiness | null;
   access: SiteAccess | null;
   error?: boolean;
   onRetry: () => void;
+  action?: ReactNode;
 }) {
   const parsedAccess = siteAccessSchema.safeParse(access);
   const canReadStatus =
@@ -103,24 +103,18 @@ export function ReceivingStatusCard({
     if (!current) {
       title = "Status dos recebimentos indisponível";
       content = (
-        <>
-          <p role="status" className={bodyClassName}>
-            Não foi possível confirmar o status dos recebimentos. A configuração
-            permanece pendente.
-          </p>
-          <p className={bodyClassName}>{activationGuidance}</p>
-        </>
+        <p role="status" className={bodyClassName}>
+          Não foi possível confirmar o status dos recebimentos. A configuração
+          permanece pendente.
+        </p>
       );
     } else if (current.state === "READY" && showSandboxNotice(current.mode)) {
       title = "Pronto no ambiente de testes";
       content = (
-        <>
-          <p role="status" className={bodyClassName}>
-            Sandbox — status válido apenas para testes, sem movimentação de
-            dinheiro real.
-          </p>
-          <p className={bodyClassName}>{activationGuidance}</p>
-        </>
+        <p role="status" className={bodyClassName}>
+          Sandbox — status válido apenas para testes, sem movimentação de
+          dinheiro real.
+        </p>
       );
     } else if (current.state === "READY") {
       title = "Recebimentos verificados";
@@ -144,7 +138,9 @@ export function ReceivingStatusCard({
               ? reasonMessages[current.reason]
               : "Os recebimentos precisam ser verificados."}
           </p>
-          <p className={bodyClassName}>{activationGuidance}</p>
+          <p className="m-0 text-sm text-admin-muted">
+            Acompanhe a etapa pendente em Ativação.
+          </p>
         </>
       );
     }
@@ -157,6 +153,7 @@ export function ReceivingStatusCard({
         {title}
       </h2>
       {content}
+      {canReadStatus && !error && readiness && action}
     </section>
   );
 }

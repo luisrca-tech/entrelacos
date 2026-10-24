@@ -179,8 +179,17 @@ async function mount(f: Awaited<ReturnType<typeof fixture>>, strict = false) {
   });
   return entry;
 }
-function fill(container: HTMLElement) {
-  const form = container.querySelector<HTMLFormElement>("form");
+async function fill(container: HTMLElement) {
+  if (!document.querySelector("form")) {
+    const invite = [
+      ...container.querySelectorAll<HTMLButtonElement>("button"),
+    ].find((button) => button.textContent === "Convidar assessor");
+    await act(async () => {
+      invite?.click();
+      await flush();
+    });
+  }
+  const form = document.querySelector<HTMLFormElement>("form");
   if (!form) throw new Error("Expected real team invitation form");
   const name = form.querySelector<HTMLInputElement>('[name="name"]');
   const email = form.querySelector<HTMLInputElement>('[name="email"]');
@@ -698,10 +707,45 @@ describe("team manager current owner and attempts", () => {
 });
 
 describe("team manager actual React DOM lifetime", () => {
+  it("opens a focused invitation dialog only after the administrator chooses to invite", async () => {
+    const f = await fixture();
+    const entry = await mount(f);
+    expect(document.querySelector("form")).toBeNull();
+    const invite = [
+      ...entry.container.querySelectorAll<HTMLButtonElement>("button"),
+    ].find((button) => button.textContent === "Convidar assessor");
+    expect(invite).toBeDefined();
+    await act(async () => {
+      invite?.click();
+      await flush();
+    });
+    const dialog = document.querySelector('[role="dialog"]');
+    if (!dialog) throw new Error("Expected invitation dialog");
+    expect(dialog?.textContent).toContain("Convidar assessor");
+    expect(
+      dialog?.querySelector('[name="name"][required][maxlength="160"]'),
+    ).not.toBeNull();
+    expect(
+      dialog?.querySelector(
+        '[name="email"][type="email"][required][maxlength="254"]',
+      ),
+    ).not.toBeNull();
+    const cancel = [
+      ...dialog.querySelectorAll<HTMLButtonElement>("button"),
+    ].find((button) => button.textContent === "Cancelar");
+    await act(async () => {
+      cancel?.click();
+      await flush();
+    });
+    expect(document.querySelector("form")).toBeNull();
+    expect(
+      f.request.mock.calls.every(([, options]) => options === undefined),
+    ).toBe(true);
+  });
   it("rechecks a real form reset getter before invoking its returned method", async () => {
     const f = await fixture();
     const entry = await mount(f);
-    const form = fill(entry.container);
+    const form = await fill(entry.container);
     const reset = vi.fn();
     Object.defineProperty(form, "reset", {
       get() {
@@ -748,7 +792,7 @@ describe("team manager actual React DOM lifetime", () => {
         );
         await flush();
       });
-      await submit(fill(container));
+      await submit(await fill(container));
       expect(container.querySelector("#team-invite-link")).not.toBeNull();
       if (replacement === "same ports") f.ports.owner = next.owner;
       await act(async () => {
@@ -777,7 +821,8 @@ describe("team manager actual React DOM lifetime", () => {
   it("StrictMode performs GET-only entry with a current real invite form", async () => {
     const f = await fixture();
     const entry = await mount(f, true);
-    expect(entry.container.querySelector("form")).not.toBeNull();
+    expect(entry.container.querySelector("form")).toBeNull();
+    expect(await fill(entry.container)).not.toBeNull();
     expect(entry.container.textContent).toContain("Ana Assistente");
     expect(
       f.request.mock.calls.every(
@@ -790,7 +835,7 @@ describe("team manager actual React DOM lifetime", () => {
   it("submits the real invitation form, copies a fragment link and resets only its current form", async () => {
     const f = await fixture();
     const entry = await mount(f);
-    const form = fill(entry.container);
+    const form = await fill(entry.container);
     const reset = vi.spyOn(form, "reset");
     await submit(form);
     expect(reset).toHaveBeenCalledTimes(1);
@@ -819,7 +864,7 @@ describe("team manager actual React DOM lifetime", () => {
             ? wait.promise
             : team,
       );
-      const form = fill(entry.container);
+      const form = await fill(entry.container);
       const reset = vi.spyOn(form, "reset");
       await submit(form);
       await act(async () => {
@@ -850,7 +895,7 @@ describe("team manager actual React DOM lifetime", () => {
   it("clears already published private link synchronously on owner scope loss", async () => {
     const f = await fixture();
     const entry = await mount(f);
-    await submit(fill(entry.container));
+    await submit(await fill(entry.container));
     expect(entry.container.querySelector("#team-invite-link")).not.toBeNull();
     await act(async () => {
       f.owner.invalidate(false);
@@ -863,7 +908,7 @@ describe("team manager actual React DOM lifetime", () => {
     const old = await mount(f);
     const copied = deferred<void>();
     f.clipboard.writeText.mockImplementationOnce(() => copied.promise);
-    const form = fill(old.container);
+    const form = await fill(old.container);
     const reset = vi.spyOn(form, "reset");
     await submit(form);
     await act(async () => {
@@ -871,7 +916,7 @@ describe("team manager actual React DOM lifetime", () => {
       old.active = false;
     });
     const fresh = await mount(f);
-    const freshForm = fill(fresh.container);
+    const freshForm = await fill(fresh.container);
     const freshReset = vi.spyOn(freshForm, "reset");
     const before = f.request.mock.calls.length;
     await act(async () => {

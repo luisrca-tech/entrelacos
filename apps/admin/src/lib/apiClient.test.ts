@@ -57,7 +57,28 @@ describe("panel API boundary", () => {
       ),
     ).resolves.toBeUndefined();
   });
+  it.each(["activation", "account", "payments", "withdrawals"])(
+    "preserves the receiving %s page after login",
+    (page) => {
+      const destination = `/sites/demo/receiving/${page}?filter=pending`;
+      expect(safePanelReturn(destination)).toBe(destination);
+    },
+  );
+  it.each([
+    "/sites/demo/receiving/unknown",
+    "/sites/demo/receiving/activation/extra",
+    "/sites/demo/receiving/../payments",
+    "/sites/demo/receiving/payments#secret",
+    "//outside.test/sites/demo/receiving/payments",
+    "/sites/demo/receiving-guide/extra",
+  ])("rejects invalid nested login destinations %s", (destination) => {
+    expect(safePanelReturn(destination)).toBe("/");
+  });
   it("limits login return destinations to the panel or handoff page", () => {
+    expect(safePanelReturn("/sites/demo/home")).toBe("/sites/demo/home");
+    expect(safePanelReturn("/sites/demo/receiving-guide")).toBe(
+      "/sites/demo/receiving-guide",
+    );
     expect(safePanelReturn("/handoff?siteId=one&challenge=abc")).toBe(
       "/handoff?siteId=one&challenge=abc",
     );

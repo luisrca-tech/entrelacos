@@ -333,6 +333,12 @@ async function fixture() {
   const state = {
     clock: "2026-10-13T14:00:00.000123Z",
     active: true,
+    lastActiveAt: "2026-10-13T13:59:00Z",
+    expiresAt: "2026-10-13T15:00:00Z",
+    createdAt: "2026-10-13T13:59:00Z",
+    userId: "viewer-one",
+    sessionId: "session-one",
+    userState: "ACTIVE",
     membership: true,
     role: "SITE_ADMIN",
     membershipId: "membership-one",
@@ -359,13 +365,13 @@ async function fixture() {
           rows: state.active
             ? [
                 {
-                  userId: "viewer-one",
-                  sessionId: "session-one",
+                  userId: state.userId,
+                  sessionId: state.sessionId,
                   role: state.role,
-                  state: "ACTIVE",
-                  expiresAt: "2026-10-13T15:00:00Z",
-                  createdAt: "2026-10-13T13:59:00Z",
-                  lastActiveAt: "2026-10-13T13:59:00Z",
+                  state: state.userState,
+                  expiresAt: state.expiresAt,
+                  createdAt: state.createdAt,
+                  lastActiveAt: state.lastActiveAt,
                   checkedAt: state.clock,
                 },
               ]
@@ -525,6 +531,88 @@ function seedIndex(v: Awaited<ReturnType<typeof fixture>>, count: number) {
   }
 }
 describe("bounded historical purchase stored reader", () => {
+  it.each(["index", "detail"] as const)(
+    "keeps the %s read valid when concurrent session activity advances without changing authority",
+    async (kind) => {
+      const v = await fixture();
+      v.state.onCommit = () => {
+        v.state.lastActiveAt = "2026-10-13T13:59:30Z";
+      };
+      try {
+        if (kind === "index") {
+          const page = await v.repository.readPurchasePage(v.scope, null);
+          expect(page.history.items).toHaveLength(1);
+          expect(page.history.items[0].orderId).toBe("order-one");
+        } else {
+          const detail = await v.repository.readPurchaseDetailPage(
+            v.scope,
+            "order-one",
+            null,
+          );
+          expect(detail.history.validatedHistoricalReceipts).toHaveLength(1);
+          expect(detail.history.retainedPayments).toHaveLength(1);
+        }
+        expect(
+          v.queries.filter((query) => /FROM "session" se/.test(query.sql)),
+        ).toHaveLength(2);
+        expect(
+          v.queries.every(
+            (query) => !/\b(?:INSERT|UPDATE|DELETE)\b/i.test(query.sql),
+          ),
+        ).toBe(true);
+      } finally {
+        await v.repository.close();
+      }
+    },
+  );
+  it.each([
+    "rewound-activity",
+    "expired",
+    "idle-timeout",
+    "absolute-timeout",
+    "user",
+    "session",
+    "disabled",
+    "revoked",
+    "membership",
+    "created",
+    "expiry-changed",
+  ] as const)(
+    "still rejects changed or invalid authority after settlement: %s",
+    async (fault) => {
+      const v = await fixture();
+      v.state.lastActiveAt = "2026-10-13T13:59:30Z";
+      if (fault === "idle-timeout") v.state.expiresAt = "2026-10-17T15:00:00Z";
+      if (fault === "absolute-timeout")
+        v.state.expiresAt = "2026-10-22T15:00:00Z";
+      v.state.onCommit = () => {
+        if (fault === "rewound-activity")
+          v.state.lastActiveAt = "2026-10-13T13:59:10Z";
+        if (fault === "expired") v.state.expiresAt = "2026-10-13T14:00:00Z";
+        if (fault === "idle-timeout") v.state.clock = "2026-10-14T14:00:00Z";
+        if (fault === "absolute-timeout") {
+          v.state.clock = "2026-10-20T14:00:00Z";
+          v.state.lastActiveAt = "2026-10-20T13:59:59Z";
+        }
+        if (fault === "user") v.state.userId = "viewer-two";
+        if (fault === "session") v.state.sessionId = "session-two";
+        if (fault === "disabled") v.state.userState = "DISABLED";
+        if (fault === "revoked") v.state.active = false;
+        if (fault === "membership")
+          v.state.membershipId = "membership-replaced";
+        if (fault === "created") v.state.createdAt = "2026-10-13T13:58:00Z";
+        if (fault === "expiry-changed")
+          v.state.expiresAt = "2026-10-13T16:00:00Z";
+      };
+      try {
+        await expect(
+          v.repository.readPurchasePage(v.scope, null),
+        ).rejects.toThrow("Purchase history unavailable");
+      } finally {
+        await v.repository.close();
+      }
+    },
+  );
   it("preserves recipient-deducted frozen pricing and the actual recipient credit in private history", async () => {
     const v = await fixture();
     const stored = v.tables.gift_quote_record[0];

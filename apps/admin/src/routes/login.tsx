@@ -97,10 +97,10 @@ function LoginPage() {
             className="m-0 max-w-[780px] font-admin-display text-[clamp(2.4rem,5vw,4rem)] font-normal leading-[1.04] tracking-[-0.025em]"
             id="login-title"
           >
-            Bem-vindo de volta.
+            Entre no seu painel.
           </h1>
           <CardDescription>
-            Entre com o acesso recebido do responsável pelo seu casamento.
+            Use seu e-mail e sua senha para cuidar dos detalhes do casamento.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -144,8 +144,8 @@ function LoginPage() {
             </Button>
           </form>
           <p className="text-[0.87rem] leading-[1.6] text-admin-muted">
-            Esqueceu a senha? Solicite ao responsável um link de recuperação.
-            Não há cadastro público.
+            Primeiro acesso ou esqueceu a senha? Peça um link de acesso ao
+            responsável pelo casamento.
           </p>
         </CardContent>
       </Card>

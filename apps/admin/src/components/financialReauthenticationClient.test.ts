@@ -1,4 +1,4 @@
-import type { SiteAccess } from "@entrelacos/contracts";
+import type { MeResponse, SiteAccess } from "@entrelacos/contracts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError, apiRequest } from "../lib/apiClient";
 import {
@@ -7,6 +7,7 @@ import {
   financialReauthenticationScopeKey,
   requestFinancialReauthentication,
 } from "./financialReauthenticationClient";
+import { createPanelActorOwner } from "./panelActor";
 
 const access: SiteAccess = {
   siteId: "wedding-a",
@@ -41,6 +42,115 @@ afterEach(() => {
 });
 
 describe("purpose-bound financial reauthentication client", () => {
+  it("revokes the matching active panel session when the password endpoint returns UNAUTHORIZED", async () => {
+    const actor: MeResponse = {
+      user: {
+        id: access.userId,
+        name: "Admin",
+        email: "admin@example.test",
+        role: "SITE_ADMIN",
+      },
+      session: {
+        id: "session-a",
+        expiresAt: new Date(start + 600000).toISOString(),
+      },
+      siteId: scope.siteId,
+      memberships: [access],
+    };
+    const owner = createPanelActorOwner({
+      request: async () => actor,
+      now: () => start,
+    });
+    await owner.load();
+    const controller = createFinancialReauthenticationController(
+      { ...scope, sessionEpoch: owner.getSnapshot().sessionEpoch },
+      vi.fn(),
+      {
+        owner,
+        now: () => start,
+        request: vi.fn().mockRejectedValue(new ApiError(401, "UNAUTHORIZED")),
+      },
+    );
+    try {
+      await controller.submit(password);
+      expect(owner.getSnapshot().status).toBe("unauthenticated");
+      expect(controller.consumeProof()).toBeNull();
+    } finally {
+      controller.dispose();
+      owner.dispose();
+    }
+  });
+  it.each([
+    "epoch",
+    "site",
+    "user",
+    "membership",
+    "replacement",
+    "wrong-password",
+  ])(
+    "does not revoke another session or a valid session for %s",
+    async (scenario) => {
+      const actor: MeResponse = {
+        user: {
+          id: access.userId,
+          name: "Admin",
+          email: "admin@example.test",
+          role: "SITE_ADMIN",
+        },
+        session: {
+          id: "session-a",
+          expiresAt: new Date(start + 600000).toISOString(),
+        },
+        siteId: scope.siteId,
+        memberships: [access],
+      };
+      const owner = createPanelActorOwner({
+        request: async () => actor,
+        now: () => start,
+      });
+      await owner.load();
+      const candidate = {
+        ...scope,
+        sessionEpoch: owner.getSnapshot().sessionEpoch,
+      };
+      if (scenario === "epoch")
+        candidate.sessionEpoch = (candidate.sessionEpoch ?? 0) + 1;
+      if (scenario === "site") {
+        candidate.siteId = "wedding-b";
+        candidate.access = { ...access, siteId: "wedding-b" };
+      }
+      if (scenario === "user")
+        candidate.access = { ...access, userId: "admin-b" };
+      if (scenario === "membership")
+        candidate.access = { ...access, membershipId: "member-b" };
+      const controller = createFinancialReauthenticationController(
+        candidate,
+        vi.fn(),
+        {
+          owner,
+          now: () => start,
+          request: vi
+            .fn()
+            .mockRejectedValue(
+              scenario === "wrong-password"
+                ? new ApiError(403, "RECENT_AUTH_REQUIRED")
+                : new ApiError(401, "UNAUTHORIZED"),
+            ),
+        },
+      );
+      try {
+        if (scenario === "replacement") await owner.load(true);
+        const snapshot = owner.getSnapshot();
+        await controller.submit(password);
+        expect(owner.getSnapshot()).toBe(snapshot);
+        expect(owner.getSnapshot().status).toBe("verified");
+        expect(controller.consumeProof()).toBeNull();
+      } finally {
+        controller.dispose();
+        owner.dispose();
+      }
+    },
+  );
   it("does not dispatch password after a loading subscriber disposes its controller", async () => {
     const request = vi.fn().mockResolvedValue(proof);
     let controller!: ReturnType<
@@ -277,6 +387,38 @@ describe("purpose-bound financial reauthentication client", () => {
       ).rejects.toThrow();
     },
   );
+  it.each([1, 250, 1000])(
+    "accepts a five-minute server proof with %ims clock lead without extending its local lifetime",
+    async (lead) => {
+      const response = {
+        ...proof,
+        expiresAt: new Date(start + 300000 + lead).toISOString(),
+      };
+      const request = vi.fn().mockResolvedValue(response);
+      const accepted = await requestFinancialReauthentication(
+        scope,
+        password,
+        request,
+        () => start,
+      );
+      expect(accepted.reauthenticationToken).toBe(proof.reauthenticationToken);
+      expect(Date.parse(accepted.expiresAt)).toBe(start + 300000);
+      expect(Date.parse(accepted.expiresAt)).toBeLessThanOrEqual(
+        Date.parse(response.expiresAt),
+      );
+      expect(request).toHaveBeenCalledTimes(1);
+    },
+  );
+  it("rejects a server proof with more than one second of clock lead without retrying the password", async () => {
+    const request = vi.fn().mockResolvedValue({
+      ...proof,
+      expiresAt: new Date(start + 301001).toISOString(),
+    });
+    await expect(
+      requestFinancialReauthentication(scope, password, request, () => start),
+    ).rejects.toThrow("Invalid financial proof lifetime");
+    expect(request).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("transient financial password proof lifecycle", () => {

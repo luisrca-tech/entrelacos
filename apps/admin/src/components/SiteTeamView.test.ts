@@ -56,6 +56,8 @@ const team: SiteTeamResponse = {
 const observedNow = new Date("2026-10-12T12:00:00.000Z");
 
 const callbacks = () => ({
+  inviteOpen: false,
+  onInviteOpenChange: vi.fn(),
   onInvite: vi.fn(),
   onRevokeMember: vi.fn(),
   onRevokeInvitation: vi.fn(),
@@ -110,28 +112,8 @@ describe("site team view", () => {
     expect(errorMarkup).not.toContain("provider secret");
   });
 
-  it("renders required bounded invite fields and disables them while pending", () => {
+  it("keeps invitation fields in a focused dialog and shows one invite action", () => {
     const html = renderToStaticMarkup(
-      createElement(SiteTeamView, {
-        team,
-        canManage: true,
-        pending: true,
-        now: observedNow,
-        ...callbacks(),
-      }),
-    );
-
-    expect(html).toContain("<form");
-    expect(html).toContain('name="name"');
-    expect(html).toContain('name="email"');
-    expect(html).toContain('maxLength="160"');
-    expect(html).toContain('maxLength="254"');
-    expect(html).toContain('required=""');
-    expect(html).toContain("Convidar assessor</h2>");
-    expect(html).toContain("Atualizando equipe");
-    expect(html).toContain('disabled=""');
-
-    const idleHtml = renderToStaticMarkup(
       createElement(SiteTeamView, {
         team,
         canManage: true,
@@ -140,8 +122,10 @@ describe("site team view", () => {
         ...callbacks(),
       }),
     );
-    expect(idleHtml).toMatch(/>Convidar assessor<\/button>/);
-    expect(idleHtml).not.toContain("Convidar assessora");
+    expect(html).not.toContain("<form");
+    expect(html).toMatch(/>Convidar assessor<\/button>/);
+    expect(html).toContain("Assessores com acesso");
+    expect(html).toContain("Convites da equipe");
   });
 
   it("offers revoke actions only for active members and pending invitations", () => {

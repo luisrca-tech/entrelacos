@@ -1525,16 +1525,16 @@ describe("withdrawal setup mounted consumer through actual private HTTP", () => 
     ).toEqual([
       "/v1/sites/wedding-a/withdrawals/context?cursor=wc1%3Ahistory-099",
     ]);
-    await httpWithdrawalClick(f, "Consultar solicitação history-099");
+    await httpWithdrawalSelect(f, "history-099");
     expect(
       f.request.mock.calls.some(([path]) =>
         path.endsWith("/requests/history-099"),
       ),
     ).toBe(true);
-    expect(f.node.textContent).toContain("history-099");
-    expect(f.node.textContent).toContain(
-      "Consultar solicitação aberta zz-open-original",
-    );
+    expect(
+      f.node.querySelector('[data-request-id="history-099"]'),
+    ).not.toBeNull();
+    expect(f.node.textContent).toContain("Retomar solicitação em andamento");
     expect(
       f.queries.filter(
         (value) =>
@@ -1627,11 +1627,11 @@ describe("withdrawal setup mounted consumer through actual private HTTP", () => 
     const older = structuredClone(intent);
     older.state = "REQUESTED";
     older.updatedAt = new Date(start + 1).toISOString();
-    await httpWithdrawalClick(f, "Consultar solicitação history-099");
+    await httpWithdrawalSelect(f, "history-099");
     expect(f.node.textContent).toContain("Resultado em verificação");
     const marker = [...f.storage.data.values()];
     f.state.exactNativeOverride = older;
-    await httpWithdrawalClick(f, "Consultar solicitação history-099");
+    await httpWithdrawalSelect(f, "history-099");
     expect(f.responses.at(-1)).toMatchObject({
       path: "/v1/sites/wedding-a/withdrawals/requests/history-099",
       status: 200,
@@ -1703,6 +1703,19 @@ async function httpWithdrawalClick(
   );
   await act(async () => button.click());
   await f.settle();
+}
+async function httpWithdrawalSelect(
+  f: Awaited<ReturnType<typeof withdrawalHttpBridge>>,
+  requestId: string,
+) {
+  const row = required(
+    f.node.querySelector(`[data-request-id="${requestId}"]`),
+  );
+  const select = row.querySelector<HTMLButtonElement>("button");
+  if (select) {
+    await act(async () => select.click());
+    await f.settle();
+  } else await httpWithdrawalClick(f, "Consultar situação");
 }
 async function httpWithdrawalReserved() {
   const f = await withdrawalHttpBridge();
@@ -3592,6 +3605,79 @@ describe("withdrawal setup owned source lifecycle", () => {
 });
 
 describe("actual React withdrawal DOM", () => {
+  it("keeps the first successful password proof across context validation with a small server clock lead", async () => {
+    const f = await fixture(openContext());
+    const token = `fr1.cHJvb2Y.${"A".repeat(43)}`;
+    const native = required(f.request.getMockImplementation());
+    f.request.mockImplementation(async (path, options) =>
+      path.endsWith("/financial-reauthentication")
+        ? {
+            reauthenticationToken: token,
+            expiresAt: new Date(start + 300250).toISOString(),
+          }
+        : native(path, options),
+    );
+    try {
+      const { node } = await mount(f);
+      const input = required(
+        document.querySelector<HTMLInputElement>('input[type="password"]'),
+      );
+      input.value = "synthetic-password";
+      await act(async () =>
+        required(input.closest("form")).dispatchEvent(
+          new Event("submit", { bubbles: true, cancelable: true }),
+        ),
+      );
+      expect(document.querySelector('[role="dialog"]')).toBeNull();
+      expect(
+        f.request.mock.calls.filter(([path]) =>
+          path.endsWith("/financial-reauthentication"),
+        ),
+      ).toHaveLength(1);
+      expect(f.request.mock.calls.some(([path]) => path === "/v1/me")).toBe(
+        true,
+      );
+      await act(async () =>
+        required(
+          node.querySelector<HTMLInputElement>('input[type="checkbox"]'),
+        ).click(),
+      );
+      await act(async () =>
+        required(
+          [...node.querySelectorAll("button")].find(
+            (button) => button.textContent === "Confirmar solicitação de saque",
+          ),
+        ).click(),
+      );
+      expect(
+        f.request.mock.calls.filter(
+          ([path, options]) =>
+            path.endsWith("/withdrawals") && options?.method === "POST",
+        ),
+      ).toEqual([
+        [
+          "/v1/sites/wedding-a/withdrawals",
+          {
+            method: "POST",
+            body: {
+              action: "CONFIRM_NEW",
+              requestId: "request-a",
+              reauthenticationToken: token,
+            },
+          },
+        ],
+      ]);
+      expect(
+        f.request.mock.calls.filter(([path]) =>
+          path.endsWith("/financial-reauthentication"),
+        ),
+      ).toHaveLength(1);
+      expect(node.innerHTML).not.toContain(token);
+      expect([...f.storage.data.values()].join()).not.toContain(token);
+    } finally {
+      f.cleanup();
+    }
+  });
   it.each(["COMPLETED", "REQUESTED", "UNKNOWN"] as const)(
     "keeps %s withdrawal consultation separate from available financial actions",
     async (state) => {
@@ -4529,7 +4615,9 @@ describe("deliberate withdrawal discovery paging", () => {
         button?.click();
         await flush();
       });
-      expect(node.textContent).toContain("request-b");
+      expect(
+        node.querySelector('[data-request-id="request-b"]'),
+      ).not.toBeNull();
       expect(
         f.request.mock.calls.filter(([path]) => path.includes("?cursor=")),
       ).toHaveLength(1);
@@ -5044,7 +5132,11 @@ describe("deliberate withdrawal discovery paging", () => {
       });
       const count = f.request.mock.calls.length;
       await act(async () => {
-        button("Consultar solicitação request-b")?.click();
+        node
+          .querySelector<HTMLButtonElement>(
+            '[data-request-id="request-b"] button',
+          )
+          ?.click();
         await flush();
       });
       expect(f.request.mock.calls.slice(count).map(([path]) => path)).toEqual([
@@ -5064,7 +5156,9 @@ describe("deliberate withdrawal discovery paging", () => {
     try {
       f.controller.dispose();
       const { root, node } = await mount(f);
-      expect(node.textContent).toContain("request-a");
+      expect(
+        node.querySelector('[data-request-id="request-a"]'),
+      ).not.toBeNull();
       f.ports.owner = replacement.owner;
       const count = replacement.request.mock.calls.length;
       await act(async () => {
@@ -5252,7 +5346,7 @@ describe("deliberate withdrawal discovery paging", () => {
       const beforeEffects: string[] = [];
       function Probe() {
         useLayoutEffect(() => {
-          if (inspect) beforeEffects.push(node.textContent ?? "");
+          if (inspect) beforeEffects.push(node.innerHTML);
         });
         return null;
       }
@@ -5272,7 +5366,9 @@ describe("deliberate withdrawal discovery paging", () => {
         await act(async () => {
           root.render(render(f.ports));
         });
-        expect(node.textContent).toContain("request-a");
+        expect(
+          node.querySelector('[data-request-id="request-a"]'),
+        ).not.toBeNull();
         const next = { ...f.ports };
         if (kind === "owner") next.owner = replacement.owner;
         if (kind === "request") next.request = replacement.request;

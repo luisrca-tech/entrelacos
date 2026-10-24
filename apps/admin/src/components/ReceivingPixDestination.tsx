@@ -1,5 +1,6 @@
 import {
   type ReceivingPixDestinationInput,
+  type ReceivingPixDestinationRecent,
   type ReceivingPixDestinationReview,
   type ReceivingPixDestinationSaved,
   receivingPixDestinationInputSchema,
@@ -7,7 +8,19 @@ import {
   receivingPixDestinationSavedResponseSchema,
   receivingPixDestinationSavedSchema,
 } from "@entrelacos/contracts";
-import { Button, Input, showSandboxNotice, toast } from "@entrelacos/ui";
+import {
+  Badge,
+  Button,
+  Input,
+  showSandboxNotice,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+  toast,
+} from "@entrelacos/ui";
 import {
   type FormEvent,
   type ReactNode,
@@ -44,6 +57,7 @@ export type ReceivingPixDestinationState = {
     | "expired";
   review: ReceivingPixDestinationReview | null;
   saved: ReceivingPixDestinationSaved | null;
+  recentDestinations?: ReceivingPixDestinationRecent[];
 };
 export function createReceivingPixDestinationController(
   siteId: string,
@@ -190,7 +204,19 @@ export function createReceivingPixDestinationController(
           response.destination === null
             ? null
             : scopedSaved(response.destination);
-        update({ status: "ready", review: null, saved });
+        if (
+          response.recentDestinations.some(
+            (destination) =>
+              destination.siteId !== siteId || destination.mode !== mode,
+          )
+        )
+          throw new Error("Recent Pix destination scope mismatch");
+        update({
+          status: "ready",
+          review: null,
+          saved,
+          recentDestinations: response.recentDestinations,
+        });
         if (feedback && current() && revision === active)
           toast.success("Destino Pix consultado.");
       } catch (cause) {
@@ -349,7 +375,7 @@ export function createReceivingPixDestinationController(
         ] as const)
           if (saved[field] !== review[field])
             throw new Error("Saved Pix destination differs from review");
-        update({ status: "ready", review: null, saved });
+        update({ ...state, status: "ready", review: null, saved });
         notify();
         if (current() && revision === active)
           toast.success("Destino Pix salvo.");
@@ -440,11 +466,25 @@ export function ReceivingPixDestination(props: {
         void controller.current?.load(true);
       }}
       onConfirm={(confirmed, thirdParty) => {
-        void controller.current?.confirm(
-          confirmed,
-          thirdParty,
-          () => authentication.current?.consumeProof() ?? null,
-        );
+        const instance = controller.current;
+        if (!instance) return;
+        const previous = instance.getState().saved?.destinationId;
+        void instance
+          .confirm(
+            confirmed,
+            thirdParty,
+            () => authentication.current?.consumeProof() ?? null,
+          )
+          .then(() => {
+            const latest = instance.getState();
+            if (
+              controller.current === instance &&
+              latest.status === "ready" &&
+              latest.saved &&
+              latest.saved.destinationId !== previous
+            )
+              void instance.load();
+          });
       }}
     >
       {props.scope && state.review && controller.current?.guard.isCurrent() && (
@@ -508,15 +548,19 @@ export function ReceivingPixDestinationView({
       className="grid gap-4 rounded-xl border border-admin-line bg-admin-surface p-6"
     >
       <h3 className="font-admin-display text-xl">Destino Pix para saques</h3>
-      <p>
-        O destino pode pertencer a outra pessoa. Confira o nome completo, o
-        documento e o banco retornados pelo Asaas antes de confirmar. Salvar o
-        destino não envia dinheiro.
-      </p>
-      <p>
-        Cada casamento mantém um destino Pix ativo. Salvar uma alteração
-        substitui o destino anterior.
-      </p>
+      {showEditor && (
+        <p className="m-0 text-sm text-admin-muted">
+          O destino pode pertencer a outra pessoa. Confira o nome completo, o
+          documento e o banco retornados pelo Asaas antes de confirmar. Salvar o
+          destino não envia dinheiro.
+        </p>
+      )}
+      {showEditor && (
+        <p className="m-0 text-sm text-admin-muted">
+          Cada casamento mantém um destino Pix ativo. Salvar uma alteração
+          substitui o destino anterior.
+        </p>
+      )}
       {showSandboxNotice(mode) && showEditor && (
         <p>
           No Sandbox, use um exemplo de teste: tipo Celular, chave 47996515839,
@@ -529,7 +573,13 @@ export function ReceivingPixDestinationView({
           aria-label="Seu destino Pix salvo"
           className="grid gap-3 rounded-lg border border-admin-line p-4"
         >
-          <h4>Seu destino Pix salvo</h4>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h4 className="m-0 font-semibold">Seu destino Pix salvo</h4>
+            <Badge variant="outline">Atual</Badge>
+          </div>
+          <p className="m-0 text-xs text-admin-muted">
+            Este casamento mantém um destino Pix ativo.
+          </p>
           <PixRecipientDetails recipient={state.saved} />
           {!readOnly && !editing && (
             <Button
@@ -644,6 +694,50 @@ export function ReceivingPixDestinationView({
             </PixRecipientConfirmation>
           )}
         </>
+      )}
+      {!!state.recentDestinations?.length && (
+        <div className="grid gap-3">
+          <h3 className="m-0 font-admin-display text-xl">
+            Últimos destinos salvos
+          </h3>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Chave Pix</TableHead>
+                <TableHead>Destinatário</TableHead>
+                <TableHead>Salvo em</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {state.recentDestinations.map((destination) => (
+                <TableRow key={destination.destinationId}>
+                  <TableCell>
+                    <span className="font-medium">{destination.maskedKey}</span>
+                    {destination.destinationId ===
+                      state.saved?.destinationId && (
+                      <Badge variant="outline" className="ml-2">
+                        Atual
+                      </Badge>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    <span>{destination.ownerName}</span>
+                    <span className="mt-1 block text-xs text-admin-muted">
+                      {destination.bankName}
+                    </span>
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap text-sm">
+                    {new Date(destination.savedAt).toLocaleString("pt-BR", {
+                      timeZone: "America/Sao_Paulo",
+                      dateStyle: "short",
+                      timeStyle: "short",
+                    })}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
       )}
       {onRefresh && (
         <Button

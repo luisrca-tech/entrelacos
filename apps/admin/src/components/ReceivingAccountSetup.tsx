@@ -7,9 +7,10 @@ import {
   receivingSetupResponseSchema,
   receivingSetupResultSchema,
 } from "@entrelacos/contracts";
-import { Button, Input, showSandboxNotice } from "@entrelacos/ui";
+import { Badge, Button, Input, showSandboxNotice, toast } from "@entrelacos/ui";
 import {
   type FormEvent,
+  useEffect,
   useId,
   useLayoutEffect,
   useRef,
@@ -26,6 +27,7 @@ import type {
   ReceivingSetupPorts,
   ReceivingSetupScope,
 } from "./ReceivingSetup";
+import { receivingPageHref } from "./receivingNavigation";
 
 export type ReceivingAccountSetupState = {
   status: "loading" | "ready" | "submitting" | "denied" | "unavailable";
@@ -348,6 +350,8 @@ export function ReceivingAccountSetup(
     ports?: ReceivingSetupPorts;
     platformOwner?: boolean;
     onReadinessChange?: () => void;
+    section?: "activation" | "account";
+    readiness?: ReceivingReadiness | null;
   },
 ) {
   const { siteId, access, sessionEpoch, ports } = props;
@@ -374,9 +378,21 @@ export function ReceivingAccountSetup(
       controller.current = null;
     };
   }, [siteId, access, sessionEpoch, ports]);
+  useEffect(() => {
+    if (!state.message) return;
+    if (state.status === "unavailable") toast.error(state.message);
+    else if (
+      state.message.startsWith("Cadastro enviado") ||
+      state.message.startsWith("Conta consultada")
+    )
+      toast.success(state.message);
+    else toast.warning(state.message);
+  }, [state.message, state.status]);
   return (
     <ReceivingAccountSetupView
       scope={props}
+      section={props.section}
+      readiness={props.readiness}
       platformOwner={props.platformOwner}
       state={state}
       guard={controller.current?.guard}
@@ -447,6 +463,8 @@ export function ReceivingAccountSetupView({
   onDesignate,
   onVerifyIncoming,
   form,
+  section = "activation",
+  readiness,
 }: {
   scope: ReceivingSetupScope;
   platformOwner?: boolean;
@@ -460,6 +478,8 @@ export function ReceivingAccountSetupView({
   onDesignate?: (holderUserId: string) => void;
   onVerifyIncoming?: () => void;
   form?: React.RefObject<HTMLFormElement | null>;
+  section?: "activation" | "account";
+  readiness?: ReceivingReadiness | null;
 }) {
   const id = useId(),
     setup = state.setup;
@@ -470,6 +490,14 @@ export function ReceivingAccountSetupView({
     !!setup?.isHolder &&
     ["NOT_CREATED", "PENDING"].includes(setup.accountState) &&
     guard?.isCurrent();
+  const parsedReadiness = receivingReadinessResponseSchema.safeParse({
+    readiness,
+  });
+  const receivingReady =
+    parsedReadiness.success &&
+    parsedReadiness.data.readiness.siteId === scope.siteId &&
+    parsedReadiness.data.readiness.mode === setup?.mode &&
+    parsedReadiness.data.readiness.state === "READY";
   const rejected =
     setup?.providerStatus &&
     [
@@ -478,20 +506,123 @@ export function ReceivingAccountSetupView({
       setup.providerStatus.documentation,
       setup.providerStatus.general,
     ].includes("REJECTED");
+  if (section === "account")
+    return (
+      <div className="grid gap-4">
+        <div>
+          <h2 className="m-0 font-admin-display text-2xl text-admin-graphite">
+            Conta para saque
+          </h2>
+          <p className="mt-2 text-sm text-admin-muted">
+            Escolha a conta Pix de destino e confira os dados antes de
+            confirmar.
+          </p>
+        </div>
+        {setup &&
+        (owner || setup.isHolder) &&
+        setup.accountState === "CREATED" &&
+        state.status === "ready" ? (
+          <ReceivingPixDestination
+            siteId={scope.siteId}
+            mode={setup.mode}
+            guard={pixGuard}
+            ports={ports}
+            scope={scope}
+            readOnly={owner}
+          />
+        ) : (
+          <section className="grid gap-3 rounded-xl border border-admin-line bg-admin-surface p-6">
+            <p role="status" className="m-0 text-admin-muted">
+              {busy
+                ? "Consultando a conta de recebimento…"
+                : state.status === "unavailable"
+                  ? "Não foi possível consultar a conta."
+                  : setup?.holder && !setup.isHolder && !owner
+                    ? `Somente ${setup.holder.name} pode configurar a conta para saque.`
+                    : "Conclua a criação da conta em Ativação para configurar o destino Pix."}
+            </p>
+            {setup?.accountState !== "CREATED" &&
+              !busy &&
+              state.status !== "unavailable" && (
+                <a
+                  href={receivingPageHref(scope.siteId, "activation")}
+                  className="w-fit text-sm font-semibold text-admin-terracotta-deep underline underline-offset-4"
+                >
+                  Ir para Ativação
+                </a>
+              )}
+            {state.status === "unavailable" && (
+              <Button variant="outline" onClick={onRetry}>
+                Tentar novamente
+              </Button>
+            )}
+          </section>
+        )}
+      </div>
+    );
   return (
     <section
       aria-label="Cadastro de recebimento Asaas"
       className="grid gap-4 rounded-xl border border-admin-line bg-admin-surface p-6 sm:p-8"
     >
       <h2 className="m-0 font-admin-display text-2xl text-admin-graphite">
-        Configurar recebimentos
+        Ativação dos recebimentos
       </h2>
+      {setup && (
+        <ol
+          aria-label="Etapas de ativação"
+          className="m-0 grid list-none gap-3 p-0 sm:grid-cols-2 lg:grid-cols-4"
+        >
+          {[
+            ["Titular", setup.holder ? "Concluído" : "Aguardando plataforma"],
+            [
+              "Cadastro",
+              setup.accountState === "CREATED"
+                ? "Concluído"
+                : setup.accountState === "UNKNOWN"
+                  ? "Em verificação"
+                  : setup.accountState === "PENDING"
+                    ? "Em andamento"
+                    : "Pendente",
+            ],
+            [
+              "Verificações",
+              rejected
+                ? "Ação necessária"
+                : setup.providerStatus?.general === "APPROVED"
+                  ? "Aprovado"
+                  : setup.accountState === "CREATED"
+                    ? setup.providerStatus
+                      ? "Em análise"
+                      : "Não consultado"
+                    : "Aguardando cadastro",
+            ],
+            [
+              "Recebimentos",
+              receivingReady ? "Liberados" : "Aguardando liberação",
+            ],
+          ].map(([label, status], index) => (
+            <li
+              key={label}
+              className="grid content-start gap-2 rounded-lg border border-admin-line p-3"
+            >
+              <span className="text-xs font-semibold text-admin-muted">
+                Etapa {index + 1}
+              </span>
+              <span className="font-semibold text-admin-graphite">{label}</span>
+              <Badge variant="outline" className="w-fit">
+                {status}
+              </Badge>
+            </li>
+          ))}
+        </ol>
+      )}
       {showSandboxNotice(setup?.mode) && (
         <p>
           Sandbox Asaas: ambiente de teste, sem movimentação de dinheiro real.
         </p>
       )}
-      {state.message && <p role="status">{state.message}</p>}
+
       {state.status === "loading" && (
         <p role="status">Verificando o titular e o cadastro…</p>
       )}
@@ -570,7 +701,7 @@ export function ReceivingAccountSetupView({
           Titular dos recebimentos: <strong>{setup.holder.name}</strong>.
         </p>
       )}
-      {setup?.holder && !setup.isHolder && (
+      {setup?.holder && !setup.isHolder && setup.accountState !== "CREATED" && (
         <p>
           Somente o titular designado pode consentir e enviar o cadastro ao
           Asaas. Administrar o casamento não autoriza abrir uma conta em nome de
@@ -585,17 +716,15 @@ export function ReceivingAccountSetupView({
       )}
       {setup?.accountState === "CREATED" && (
         <>
-          <p>
-            Conta criada no Asaas. A criação não confirma liberação para receber
-            ou sacar.
+          <p role="status" className="m-0 text-sm text-admin-muted">
+            {receivingReady
+              ? "Recebimentos liberados. Você pode acompanhar os pagamentos e consultar a disponibilidade de saque."
+              : "Conta criada no Asaas. A criação não confirma liberação para receber ou sacar."}
           </p>
-          <section
-            aria-label="Ativação e acesso ao Asaas"
-            className="grid gap-2"
-          >
-            <h3 className="font-admin-display text-xl">
+          <details className="rounded-lg border border-admin-line p-4">
+            <summary className="cursor-pointer text-sm font-semibold">
               Ativação e acesso ao Asaas
-            </h3>
+            </summary>
             <p>
               A ativação de acesso e o envio ou recebimento de e-mail não são
               consultados por este painel. O botão Verificar situação atualiza
@@ -615,27 +744,21 @@ export function ReceivingAccountSetupView({
                 Sandbox com o e-mail cadastrado para o recebedor.
               </p>
             )}
-          </section>
-          {showSandboxNotice(setup.mode) && (
-            <>
-              <p>
-                O titular deve consultar e confirmar a conta Asaas criada em seu
-                nome para receber os presentes. A liberação depende das
-                verificações do Asaas.
-              </p>
-              {!owner &&
-                setup.isHolder &&
-                setup.consentRecorded &&
-                incomingGuard?.isCurrent() && (
-                  <Button
-                    disabled={busy || !onVerifyIncoming}
-                    onClick={onVerifyIncoming}
-                  >
-                    Confirmar minha conta de recebimento
-                  </Button>
-                )}
-            </>
-          )}
+          </details>
+          {showSandboxNotice(setup.mode) &&
+            !receivingReady &&
+            !owner &&
+            setup.isHolder &&
+            setup.consentRecorded &&
+            incomingGuard?.isCurrent() && (
+              <Button
+                className="w-fit"
+                disabled={busy || !onVerifyIncoming}
+                onClick={onVerifyIncoming}
+              >
+                Confirmar minha conta de recebimento
+              </Button>
+            )}
           {!setup.providerStatus && (
             <p>
               Não foi possível consultar as verificações do Asaas. Verifique a
@@ -644,16 +767,19 @@ export function ReceivingAccountSetupView({
           )}
           {setup.providerStatus && (
             <>
-              <dl className="grid gap-2">
+              <dl className="grid gap-3 sm:grid-cols-2">
                 {[
                   ["Dados cadastrais", setup.providerStatus.commercialInfo],
                   ["Dados bancários", setup.providerStatus.bankAccountInfo],
                   ["Documentação", setup.providerStatus.documentation],
                   ["Aprovação geral", setup.providerStatus.general],
                 ].map(([label, value]) => (
-                  <div key={label}>
-                    <dt>{label}</dt>
-                    <dd>
+                  <div
+                    key={label}
+                    className="flex items-center justify-between gap-3 rounded-lg border border-admin-line p-3"
+                  >
+                    <dt className="text-sm text-admin-muted">{label}</dt>
+                    <dd className="m-0 text-sm font-semibold">
                       {
                         {
                           PENDING: "Pendente",
@@ -678,27 +804,16 @@ export function ReceivingAccountSetupView({
                   dados com o Asaas.
                 </p>
               )}
-              <p>
-                As aprovações cadastrais não substituem a validação do destino
-                bancário e da habilitação para este serviço.
-              </p>
+              {!receivingReady && (
+                <p className="m-0 text-sm text-admin-muted">
+                  As aprovações cadastrais não substituem a validação do destino
+                  bancário e da habilitação para este serviço.
+                </p>
+              )}
             </>
           )}
         </>
       )}
-      {setup &&
-        (owner || setup.isHolder) &&
-        setup.accountState === "CREATED" &&
-        state.status === "ready" && (
-          <ReceivingPixDestination
-            siteId={scope.siteId}
-            mode={setup.mode}
-            guard={pixGuard}
-            ports={ports}
-            scope={scope}
-            readOnly={owner}
-          />
-        )}
       {canSubmit && (
         <>
           <p>{setup.disclosure.text}</p>
@@ -736,8 +851,13 @@ export function ReceivingAccountSetupView({
           </form>
         </>
       )}
-      {state.status !== "denied" && (
-        <Button disabled={busy || !onRetry} onClick={onRetry}>
+      {state.status !== "denied" && !canSubmit && (
+        <Button
+          variant="outline"
+          className="w-fit"
+          disabled={busy || !onRetry}
+          onClick={onRetry}
+        >
           Verificar situação
         </Button>
       )}

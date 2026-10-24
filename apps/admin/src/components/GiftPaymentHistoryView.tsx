@@ -1,5 +1,24 @@
-import { Button, showSandboxNotice } from "@entrelacos/ui";
-import { useLayoutEffect, useReducer, useRef } from "react";
+import {
+  Badge,
+  Button,
+  Input,
+  showSandboxNotice,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+  toast,
+} from "@entrelacos/ui";
+import {
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useReducer,
+  useRef,
+  useState,
+} from "react";
 import {
   createGiftPaymentHistoryController,
   createGiftPaymentHistorySession,
@@ -7,6 +26,11 @@ import {
   type HistoryPorts,
   type HistoryViewerScope,
 } from "./giftPaymentHistory";
+
+import {
+  filterLoadedGiftPurchases,
+  type GiftPurchaseMethodFilter,
+} from "./giftPurchaseFilters";
 
 const money = new Intl.NumberFormat("pt-BR", {
   style: "currency",
@@ -121,6 +145,19 @@ export function GiftPaymentHistoryView(
   const limited = state.admissions >= 64;
   const disabled = !active || state.busy || limited;
   const detail = state.detail;
+  const filterId = useId();
+  const [search, setSearch] = useState("");
+  const [method, setMethod] = useState<GiftPurchaseMethodFilter>("ALL");
+  const purchases = filterLoadedGiftPurchases(state.purchases, search, method);
+  useEffect(() => {
+    if (!bound) return;
+    if (state.status === "unavailable")
+      toast.error("Não foi possível consultar os pagamentos. Tente novamente.");
+    else if (state.status === "conflict")
+      toast.warning(
+        "A consulta retornou informações conflitantes. O histórico anterior foi preservado.",
+      );
+  }, [bound, state.status]);
   return (
     <section
       aria-labelledby="gift-payment-history-title"
@@ -139,66 +176,157 @@ export function GiftPaymentHistoryView(
         </p>
       ) : (
         <>
-          <p>
-            Situação financeira atual não confirmada. Consultas separadas não
-            comprovam saldo, estornos ou crédito bancário.
-          </p>
-          <p role="status">
-            {state.status === "loading"
-              ? "Consultando o histórico de presentes…"
-              : state.status === "local_limit" || limited
-                ? "Limite local de consultas atingido. O histórico retido permanece disponível."
-                : state.status === "local_code"
-                  ? "Esta identidade exige compatibilidade de consulta ainda indisponível."
-                  : state.status === "conflict"
-                    ? "A consulta apresentou informações conflitantes. O histórico anterior foi preservado."
-                    : state.status === "unavailable"
-                      ? "Histórico de presentes indisponível nesta consulta. O histórico anterior foi preservado."
-                      : "Cada consulta representa uma observação independente."}
-          </p>
-          <p className="text-sm text-admin-muted">
-            Consultas deste contexto: {state.admissions} de 64.
-          </p>
+          <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_12rem_auto] sm:items-end">
+            <div className="grid gap-1.5">
+              <label
+                className="text-sm font-medium"
+                htmlFor={`${filterId}-search`}
+              >
+                Buscar presente
+              </label>
+              <Input
+                id={`${filterId}-search`}
+                type="search"
+                placeholder="Nome do presente"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+              />
+            </div>
+            <div className="grid gap-1.5">
+              <label
+                className="text-sm font-medium"
+                htmlFor={`${filterId}-method`}
+              >
+                Forma de pagamento
+              </label>
+              <select
+                id={`${filterId}-method`}
+                value={method}
+                onChange={(event) =>
+                  setMethod(event.target.value as GiftPurchaseMethodFilter)
+                }
+                className="h-11 rounded-lg border border-admin-line bg-admin-surface px-3 text-sm"
+              >
+                <option value="ALL">Todas</option>
+                <option value="PIX">Pix</option>
+                <option value="CREDIT_CARD">Cartão</option>
+              </select>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={disabled}
+              onClick={() => void active?.restartIndex()}
+            >
+              Consultar compras
+            </Button>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 text-sm text-admin-muted">
+            <span>
+              {purchases.length} de {state.purchases.length} compras carregadas
+            </span>
+            <Badge variant="outline">Histórico por consulta</Badge>
+          </div>
+          {state.status === "loading" && (
+            <p role="status" className="text-sm text-admin-muted">
+              Consultando o histórico de presentes…
+            </p>
+          )}
+          {(state.status === "local_limit" || limited) && (
+            <p role="status" className="text-sm text-admin-muted">
+              Limite local de consultas atingido. O histórico retido permanece
+              disponível.
+            </p>
+          )}
+          {(state.status === "unavailable" || state.status === "conflict") && (
+            <p role="status" className="text-sm text-admin-muted">
+              {state.status === "unavailable"
+                ? "Histórico de presentes indisponível nesta consulta. O histórico anterior foi preservado."
+                : "A consulta apresentou informações conflitantes. O histórico anterior foi preservado."}
+            </p>
+          )}
+          {state.status === "local_code" && (
+            <p role="status" className="text-sm text-admin-muted">
+              Esta identidade exige compatibilidade de consulta ainda
+              indisponível.
+            </p>
+          )}
+          <details className="rounded-lg border border-admin-line px-4 py-3 text-sm text-admin-muted">
+            <summary className="cursor-pointer font-medium">
+              Sobre os dados deste histórico
+            </summary>
+            <p className="mt-3">
+              Situação financeira atual não confirmada. Consultas separadas não
+              comprovam saldo, estornos ou crédito bancário. Os filtros
+              consideram somente as compras carregadas nesta consulta.
+            </p>
+            <p className="mt-2">
+              Consultas deste contexto: {state.admissions} de 64.
+            </p>
+          </details>
           {state.status === "ready" && state.indexReadCount === 0 && (
             <p>
               Esta consulta não retornou compras. Isso não confirma histórico
               completo.
             </p>
           )}
-          <ul className="m-0 grid min-w-0 list-none gap-3 p-0">
-            {state.purchases.map((purchase) => (
-              <li
-                key={purchase.orderId}
-                className="grid min-w-0 gap-2 rounded-lg border border-admin-line p-4"
-              >
-                <h3 className="m-0">{purchase.titleSnapshot}</h3>
-                {showSandboxNotice(purchase.mode) && (
-                  <p>
-                    Sandbox — valores de teste, sem movimentação de dinheiro
-                    real.
-                  </p>
-                )}
-                <p>
-                  Compra original em {instant(purchase.purchasedAtMicros)} ·{" "}
-                  {purchase.method === "PIX" ? "Pix" : "Cartão"}
-                </p>
-                <p>
-                  Valor original da cotação:{" "}
-                  {amount(purchase.quoted.totalCents)}
-                </p>
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={disabled}
-                  onClick={() => {
-                    void active?.openPurchase(purchase.orderId);
-                  }}
-                >
-                  Ver histórico desta compra
-                </Button>
-              </li>
-            ))}
-          </ul>
+          {purchases.length > 0 ? (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Presente</TableHead>
+                  <TableHead>Pagamento</TableHead>
+                  <TableHead>Compra</TableHead>
+                  <TableHead className="text-right">Valor da cotação</TableHead>
+                  <TableHead>
+                    <span className="sr-only">Ações</span>
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {purchases.map((purchase) => (
+                  <TableRow key={purchase.orderId}>
+                    <TableCell className="font-medium">
+                      <span>{purchase.titleSnapshot}</span>
+                      {showSandboxNotice(purchase.mode) && (
+                        <Badge variant="outline" className="ml-2">
+                          Sandbox
+                        </Badge>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {purchase.method === "PIX" ? "Pix" : "Cartão"}
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap">
+                      {instant(purchase.purchasedAtMicros)}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {amount(purchase.quoted.totalCents)}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={disabled}
+                        onClick={() =>
+                          void active?.openPurchase(purchase.orderId)
+                        }
+                      >
+                        Ver histórico desta compra
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          ) : (
+            state.purchases.length > 0 && (
+              <p className="py-6 text-center text-sm text-admin-muted">
+                Nenhuma compra carregada corresponde aos filtros.
+              </p>
+            )
+          )}
           {state.nextIndexCursor && (
             <Button
               type="button"
@@ -211,16 +339,6 @@ export function GiftPaymentHistoryView(
               Carregar mais compras
             </Button>
           )}
-          <Button
-            type="button"
-            variant="outline"
-            disabled={disabled}
-            onClick={() => {
-              void active?.restartIndex();
-            }}
-          >
-            Reiniciar navegação das compras
-          </Button>
           {(state.status === "unavailable" || state.status === "conflict") && (
             <Button
               type="button"
@@ -340,7 +458,7 @@ export function GiftPaymentHistoryView(
                   void active?.restartDetail(detail.purchase.orderId);
                 }}
               >
-                Reiniciar navegação do detalhe
+                Consultar histórico novamente
               </Button>
               <Button
                 type="button"

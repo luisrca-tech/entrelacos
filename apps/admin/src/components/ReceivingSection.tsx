@@ -1,13 +1,18 @@
 import type { ReceivingReadiness, SiteAccess } from "@entrelacos/contracts";
 import { Button } from "@entrelacos/ui";
 import { Link } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useContext, useEffect, useState } from "react";
 import { ReceivingStatusCard } from "../features/receiving/ReceivingStatusCard";
 import { FinanceSection } from "./FinanceSection";
 import { loadGiftsReadiness } from "./giftsReadiness";
 import { isCurrentPanelSessionEpoch, panelActorOwner } from "./panelActor";
 import { ReceivingAccountSetup } from "./ReceivingAccountSetup";
 import { ReceivingGuide } from "./ReceivingGuide";
+import {
+  type ReceivingPage,
+  ReceivingPageContext,
+  receivingPages,
+} from "./receivingNavigation";
 import { loadReceivingOwnerAccess } from "./receivingOwnerAccess";
 
 type ReceivingSectionResult = {
@@ -49,6 +54,7 @@ export function ReceivingSection({
   platformOwner?: boolean;
   guide?: boolean;
 }) {
+  const page = useContext(ReceivingPageContext);
   const [result, setResult] = useState<ReceivingSectionResult | null>(null);
   const [revision, setRevision] = useState(0);
   const [ownerAccess, setOwnerAccess] = useState<{
@@ -107,6 +113,7 @@ export function ReceivingSection({
   }
   return (
     <ReceivingSectionView
+      page={page}
       siteId={siteId}
       access={selectedAccess}
       platformOwner={platformOwner}
@@ -126,6 +133,7 @@ export function ReceivingSectionView({
   readiness,
   failed,
   onRetry,
+  page = "overview",
 }: {
   siteId: string;
   access: SiteAccess | null;
@@ -134,18 +142,63 @@ export function ReceivingSectionView({
   readiness: ReceivingReadiness | null;
   failed: boolean;
   onRetry: () => void;
+  page?: ReceivingPage;
 }) {
   const currentAccess =
     sessionEpoch !== null && access?.siteId === siteId ? access : null;
   return (
     <div className="grid gap-6">
-      <Link
-        className="w-fit font-semibold text-admin-terracotta-deep underline underline-offset-4"
-        to="/sites/$siteId/receiving-guide"
-        params={{ siteId }}
+      <nav
+        aria-label="Páginas de recebimentos"
+        className="flex min-w-0 gap-1 overflow-x-auto rounded-xl border border-admin-line bg-admin-surface p-1.5"
       >
-        Como ativar sua conta Asaas e receber os presentes
-      </Link>
+        {receivingPages.map((item) => (
+          <Link
+            key={item.id}
+            activeOptions={{ exact: true }}
+            to={
+              item.id === "overview"
+                ? "/sites/$siteId/receiving"
+                : "/sites/$siteId/receiving/$page"
+            }
+            params={{ siteId, page: item.id }}
+            aria-current={page === item.id ? "page" : undefined}
+            className={`inline-flex min-h-11 shrink-0 items-center justify-center whitespace-nowrap rounded-lg px-4 py-2 text-sm font-semibold no-underline transition-colors ${page === item.id ? "bg-admin-graphite text-white" : "text-admin-muted hover:bg-admin-paper hover:text-admin-graphite"}`}
+          >
+            {item.label}
+          </Link>
+        ))}
+      </nav>
+      {page === "activation" && (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="m-0 text-sm text-admin-muted">
+            {readiness?.state === "READY"
+              ? "Consulte o cadastro e as verificações dos recebimentos."
+              : "Conclua o cadastro e acompanhe a liberação dos recebimentos."}
+          </p>
+          <Link
+            className="text-sm font-semibold text-admin-terracotta-deep underline underline-offset-4"
+            to="/sites/$siteId/receiving-guide"
+            params={{ siteId }}
+          >
+            Ajuda com a ativação
+          </Link>
+        </div>
+      )}
+      {page === "overview" && (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="m-0 text-sm text-admin-muted">
+            Acompanhe seus presentes e encontre o próximo passo.
+          </p>
+          <Link
+            className="text-sm font-semibold text-admin-terracotta-deep underline underline-offset-4"
+            to="/sites/$siteId/receiving-guide"
+            params={{ siteId }}
+          >
+            Como funciona
+          </Link>
+        </div>
+      )}
       {platformOwner && !currentAccess ? (
         <section className="grid gap-3 rounded-xl border border-admin-line bg-admin-surface p-6">
           <p role={failed ? "alert" : "status"}>
@@ -155,7 +208,7 @@ export function ReceivingSectionView({
           </p>
           <Button onClick={onRetry}>Verificar acesso</Button>
         </section>
-      ) : (
+      ) : page === "overview" ? (
         <ReceivingStatusCard
           siteId={siteId}
           access={currentAccess}
@@ -164,27 +217,60 @@ export function ReceivingSectionView({
           }
           error={!!currentAccess && failed}
           onRetry={onRetry}
+          action={
+            <Button
+              className="w-fit"
+              nativeButton={false}
+              render={
+                <Link
+                  to="/sites/$siteId/receiving/$page"
+                  params={{
+                    siteId,
+                    page:
+                      readiness?.state === "READY"
+                        ? "withdrawals"
+                        : "activation",
+                  }}
+                />
+              }
+            >
+              {readiness?.state === "READY"
+                ? "Ver saques"
+                : "Acompanhar ativação"}
+            </Button>
+          }
         />
-      )}
-      {((sessionEpoch !== null && platformOwner) ||
-        currentAccess?.membershipRole === "OWNER" ||
-        (currentAccess?.membershipRole === "SITE_ADMIN" &&
-          currentAccess.capabilities.configureReceiving)) && (
-        <ReceivingAccountSetup
-          siteId={siteId}
-          access={currentAccess}
-          platformOwner={platformOwner}
-          sessionEpoch={sessionEpoch}
-          onReadinessChange={onRetry}
-        />
-      )}
-      {(!platformOwner || !!currentAccess) && (
-        <FinanceSection
-          siteId={siteId}
-          access={currentAccess}
-          sessionEpoch={sessionEpoch}
-        />
-      )}
+      ) : null}
+      {(page === "activation" || page === "account") &&
+        ((sessionEpoch !== null && platformOwner) ||
+          currentAccess?.membershipRole === "OWNER" ||
+          (currentAccess?.membershipRole === "SITE_ADMIN" &&
+            currentAccess.capabilities.configureReceiving)) && (
+          <ReceivingAccountSetup
+            siteId={siteId}
+            access={currentAccess}
+            platformOwner={platformOwner}
+            sessionEpoch={sessionEpoch}
+            onReadinessChange={onRetry}
+            section={page === "account" ? "account" : "activation"}
+            readiness={readiness}
+          />
+        )}
+      {(page === "overview" || page === "payments" || page === "withdrawals") &&
+        (!platformOwner || !!currentAccess) && (
+          <FinanceSection
+            page={
+              page === "payments"
+                ? "payments"
+                : page === "withdrawals"
+                  ? "withdrawals"
+                  : "overview"
+            }
+            siteId={siteId}
+            access={currentAccess}
+            sessionEpoch={sessionEpoch}
+          />
+        )}
     </div>
   );
 }

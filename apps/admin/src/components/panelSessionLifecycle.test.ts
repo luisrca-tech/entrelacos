@@ -114,6 +114,7 @@ describe("panel session resume with a mounted receiving form", () => {
     async (outcome) => {
       await act(async () => root.unmount());
       root = createRoot(container);
+      panelActorOwner.invalidate(false);
       const replace = vi.fn();
       const pathname = "/sites/site-one/receiving";
       const search = "?tab=setup";
@@ -167,6 +168,7 @@ describe("panel session resume with a mounted receiving form", () => {
   it("loads identity in an initially hidden tab while keeping its form suspended", async () => {
     await act(async () => root.unmount());
     root = createRoot(container);
+    panelActorOwner.invalidate(false);
     vi.mocked(apiRequest).mockClear();
     visibility("hidden");
     await act(async () => {
@@ -181,17 +183,45 @@ describe("panel session resume with a mounted receiving form", () => {
       container.querySelector<HTMLInputElement>('input[name="name"]');
     const form = name?.form;
     if (!name || !form) throw new Error("Missing receiving setup form");
-    expect(name.matches(":disabled")).toBe(true);
+    expect(name.matches(":disabled")).toBe(false);
+    const reachedForm = vi.fn();
+    const reachedButton = vi.fn();
+    const submit = form.querySelector<HTMLButtonElement>(
+      'button[type="submit"]',
+    );
+    if (!submit) throw new Error("Missing receiving submit button");
+    form.addEventListener("submit", reachedForm);
+    submit.addEventListener("click", reachedButton);
     await act(async () => {
+      submit.click();
       form.dispatchEvent(
         new Event("submit", { bubbles: true, cancelable: true }),
       );
     });
+    expect(reachedForm).not.toHaveBeenCalled();
+    expect(reachedButton).not.toHaveBeenCalled();
     expect(
       vi
         .mocked(apiRequest)
         .mock.calls.some(([, options]) => options?.method === "POST"),
     ).toBe(false);
+  });
+
+  it("keeps visible controls enabled in the first resume event before React commits", async () => {
+    const fieldset = container.querySelector("fieldset");
+    const input =
+      container.querySelector<HTMLInputElement>('input[name="name"]');
+    if (!fieldset || !input)
+      throw new Error("Missing panel receiving controls");
+    await act(async () => visibility("hidden"));
+    expect(panelActorOwner.isSuspended()).toBe(true);
+    await act(async () => {
+      visibility("visible");
+      expect(panelActorOwner.isSuspended()).toBe(false);
+      expect(fieldset.disabled).toBe(false);
+      expect(fieldset.hasAttribute("inert")).toBe(false);
+      expect(input.matches(":disabled")).toBe(false);
+    });
   });
 
   it("preserves real input nodes and values while hidden, pending and revalidated", async () => {
@@ -218,18 +248,8 @@ describe("panel session resume with a mounted receiving form", () => {
       window.dispatchEvent(new Event("focus"));
     });
     expect(container.querySelector('input[name="name"]')).toBe(name);
-    expect(name.matches(":disabled")).toBe(true);
+    expect(name.matches(":disabled")).toBe(false);
     expect(container.textContent).not.toContain("Verificando sessão");
-    await act(async () => {
-      name.form!.dispatchEvent(
-        new Event("submit", { bubbles: true, cancelable: true }),
-      );
-    });
-    expect(
-      vi
-        .mocked(apiRequest)
-        .mock.calls.some(([, options]) => options?.method === "POST"),
-    ).toBe(false);
     await act(async () => resolve(structuredClone(actor)));
     await flush();
     expect(panelActorOwner.getSnapshot()).toBe(snapshot);
@@ -237,6 +257,66 @@ describe("panel session resume with a mounted receiving form", () => {
     expect(name.value).toBe("Filled holder");
     expect(address.value).toBe("Test Street");
     expect(name.matches(":disabled")).toBe(false);
+  });
+
+  it("accepts the first visible submit while background identity revalidation is pending", async () => {
+    const values = {
+      name: "Fictional Person",
+      email: "person@example.test",
+      cpfCnpj: "12345678909",
+      mobilePhone: "11999999999",
+      incomeValue: "1000",
+      address: "Fictional Road",
+      addressNumber: "1",
+      province: "District",
+      postalCode: "12345678",
+      birthDate: "1990-01-01",
+    };
+    for (const [key, value] of Object.entries(values)) {
+      const input = container.querySelector<HTMLInputElement>(
+        `input[name="${key}"]`,
+      );
+      if (!input) throw new Error(`Missing receiving field ${key}`);
+      input.value = value;
+    }
+    const consent = container.querySelector<HTMLInputElement>(
+      'input[name="consent"]',
+    );
+    if (!consent) throw new Error("Missing receiving consent");
+    consent.checked = true;
+    let resolve!: (value: MeResponse) => void;
+    vi.mocked(apiRequest).mockImplementation(async (path, options) => {
+      if (path === "/v1/me") return actor as never;
+      if (options?.method === "POST") return { state: "STORED" } as never;
+      return { setup } as never;
+    });
+    vi.mocked(apiRequest).mockImplementationOnce(
+      () =>
+        new Promise((yes) => {
+          resolve = yes as never;
+        }),
+    );
+    await act(async () => visibility("hidden"));
+    const form = container.querySelector("form");
+    const name = container.querySelector('input[name="name"]');
+    if (!form || !name) throw new Error("Missing receiving setup form");
+    const submit = form.querySelector<HTMLButtonElement>(
+      'button[type="submit"]',
+    );
+    if (!submit) throw new Error("Missing receiving submit button");
+    await act(async () => {
+      visibility("visible");
+      expect(name.matches(":disabled")).toBe(false);
+      expect(form.checkValidity()).toBe(true);
+      expect(submit.disabled).toBe(false);
+      submit.click();
+    });
+    await act(async () => resolve(structuredClone(actor)));
+    expect(
+      vi
+        .mocked(apiRequest)
+        .mock.calls.filter(([, options]) => options?.method === "POST"),
+    ).toHaveLength(1);
   });
 
   it.each([401, 403, "membership", "session", "expiry"])(

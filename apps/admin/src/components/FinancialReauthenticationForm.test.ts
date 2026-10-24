@@ -1,6 +1,6 @@
 import type { SiteAccess } from "@entrelacos/contracts";
 import { toast } from "@entrelacos/ui";
-import { act, createElement, createRef } from "react";
+import { act, createElement, createRef, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
@@ -55,6 +55,135 @@ function render(state: FinancialReauthenticationState, candidate = scope) {
   );
 }
 describe("financial password confirmation form", () => {
+  it("retains the verified proof when fresh context validation rerenders its parent", async () => {
+    (
+      globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
+    ).IS_REACT_ACT_ENVIRONMENT = true;
+    const node = document.createElement("div");
+    document.body.append(node);
+    const root = createRoot(node);
+    const ref = createRef<FinancialReauthenticationHandle>();
+    const clock = () => now;
+    const token = `fr1.cHJvb2Y.${"A".repeat(43)}`;
+    const request = vi.fn(async () => ({
+      reauthenticationToken: token,
+      expiresAt: new Date(now + 180000).toISOString(),
+    }));
+    function Parent() {
+      const [revision, setRevision] = useState(0);
+      const reviewed = useRef({
+        ...guard,
+        async validate() {
+          setRevision((value) => value + 1);
+          await Promise.resolve();
+          return true;
+        },
+      }).current;
+      return createElement(
+        "div",
+        { "data-context-revision": revision },
+        createElement(FinancialReauthenticationForm, {
+          ...scope,
+          action: "REQUEST_WITHDRAWAL",
+          guard: reviewed,
+          request,
+          now: clock,
+          ref,
+          dialog: true,
+          feedback: "toast",
+        }),
+      );
+    }
+    try {
+      await act(async () => root.render(createElement(Parent)));
+      await act(async () =>
+        node.querySelector<HTMLButtonElement>("button")?.click(),
+      );
+      const input = document.querySelector<HTMLInputElement>(
+        'input[type="password"]',
+      );
+      if (!input) throw Error("Missing password dialog");
+      input.value = "synthetic-password";
+      await act(async () =>
+        input
+          .closest("form")
+          ?.dispatchEvent(
+            new Event("submit", { bubbles: true, cancelable: true }),
+          ),
+      );
+      expect(node.querySelector('[data-context-revision="1"]')).not.toBeNull();
+      expect(document.querySelector('[role="dialog"]')).toBeNull();
+      await act(async () => root.render(createElement(Parent)));
+      await act(async () => {
+        expect(ref.current?.consumeProof()).toBe(token);
+        expect(ref.current?.consumeProof()).toBeNull();
+      });
+      expect(request).toHaveBeenCalledTimes(1);
+    } finally {
+      await act(async () => root.unmount());
+      node.remove();
+    }
+  });
+  it("accepts the first password confirmation when the server clock is slightly ahead", async () => {
+    (
+      globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
+    ).IS_REACT_ACT_ENVIRONMENT = true;
+    const node = document.createElement("div");
+    document.body.append(node);
+    const root = createRoot(node);
+    const ref = createRef<FinancialReauthenticationHandle>();
+    const request = vi.fn(async () => ({
+      reauthenticationToken: `fr1.cHJvb2Y.${"A".repeat(43)}`,
+      expiresAt: new Date(now + 300250).toISOString(),
+    }));
+    const success = vi.spyOn(toast, "success");
+    try {
+      await act(async () =>
+        root.render(
+          createElement(FinancialReauthenticationForm, {
+            ...scope,
+            action: "REQUEST_WITHDRAWAL",
+            guard,
+            request,
+            now: () => now,
+            ref,
+            dialog: true,
+            feedback: "toast",
+          }),
+        ),
+      );
+      await act(async () =>
+        node.querySelector<HTMLButtonElement>("button")?.click(),
+      );
+      const input = document.querySelector<HTMLInputElement>(
+        'input[type="password"]',
+      );
+      if (!input) throw Error("Missing password dialog");
+      input.value = "synthetic-password";
+      await act(async () =>
+        input
+          .closest("form")
+          ?.dispatchEvent(
+            new Event("submit", { bubbles: true, cancelable: true }),
+          ),
+      );
+      expect(request).toHaveBeenCalledTimes(1);
+      expect(document.querySelector('[role="dialog"]')).toBeNull();
+      expect(success).toHaveBeenCalledWith(
+        "Senha confirmada. Agora confirme os termos do saque.",
+      );
+      await act(async () => {
+        expect(ref.current?.consumeProof()).toBe(
+          `fr1.cHJvb2Y.${"A".repeat(43)}`,
+        );
+        expect(ref.current?.consumeProof()).toBeNull();
+      });
+    } finally {
+      await act(async () => root.unmount());
+      node.remove();
+      success.mockRestore();
+    }
+  });
   it.each(["CONFIGURE_RECEIVING", "REQUEST_WITHDRAWAL"] as const)(
     "keeps %s proof after the password modal closes and stops parent form submission",
     async (action) => {

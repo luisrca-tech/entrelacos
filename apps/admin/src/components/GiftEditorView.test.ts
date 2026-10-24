@@ -140,7 +140,7 @@ describe("gift editor view", () => {
     ).toBeNull();
   });
 
-  it("projects publication history and edit fields without exposing record IDs", () => {
+  it("projects active gifts with publication controls and keeps editors out of the catalog", () => {
     const html = renderToStaticMarkup(
       createElement(GiftEditorView, { gifts, ...callbacks() }),
     );
@@ -148,22 +148,19 @@ describe("gift editor view", () => {
     for (const text of [
       "Jantar especial",
       "Passeio a dois",
-      "Presente antigo",
       "Rascunho",
       "Publicado",
-      "Arquivado",
+      "Arquivados",
       "Publicar",
       "Despublicar",
-      "Arquivar",
-      "Presentes arquivados",
       "contribuição simbólica para o casal",
     ]) {
       expect(html).toContain(text);
     }
-    expect(html).toContain('name="title"');
-    expect(html).toContain('name="description"');
-    expect(html).toContain('name="nominalPrice"');
-    expect(html).toContain('value="123,45"');
+    expect(html).not.toContain("<form");
+    expect(html).not.toContain("Presente antigo");
+    expect(html).toContain("Editar presente");
+    expect(html).toContain("Adicionar presente");
     expect(html).not.toContain("gift-draft-private-id");
     expect(html).not.toContain("gift-published-private-id");
     expect(html).not.toContain("gift-archived-private-id");

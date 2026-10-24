@@ -3,7 +3,7 @@ import {
   type GiftMediaPublicAsset,
   giftMediaUploadInputSchema,
 } from "@entrelacos/contracts";
-import { Button, Input } from "@entrelacos/ui";
+import { Button, Input, toast } from "@entrelacos/ui";
 import { useId, useLayoutEffect, useRef, useState } from "react";
 import type { GiftMediaClientState } from "./giftMediaClient";
 
@@ -92,7 +92,7 @@ export function GiftImageField(props: Props) {
       await action(revision);
     } catch {
       if (current(revision))
-        setError(
+        toast.error(
           "Não foi possível atualizar a imagem. Consulte o envio antes de tentar novamente.",
         );
     } finally {
@@ -152,16 +152,20 @@ export function GiftImageField(props: Props) {
   return (
     <fieldset
       aria-labelledby={`${id}-heading`}
-      className="grid min-w-0 gap-3 rounded-lg border border-admin-line p-4"
+      className="grid min-w-0 gap-4 rounded-2xl border border-admin-line bg-admin-surface p-5"
     >
       <legend id={`${id}-heading`} className="m-0 font-semibold">
         Imagem do presente
       </legend>
+      <p className="m-0 text-sm leading-relaxed text-admin-muted">
+        Escolha uma foto que represente este presente. JPEG, PNG ou WebP, até 5
+        MB.
+      </p>
       {preview?.id === gift.mediaAssetId && preview.siteId === gift.siteId ? (
         <img
           src={preview.url}
           alt={gift.altText}
-          className="max-h-48 w-full rounded object-contain"
+          className="aspect-[16/9] w-full rounded-xl bg-admin-beige/40 object-contain"
         />
       ) : (
         gift.mediaAssetId && (
@@ -176,7 +180,7 @@ export function GiftImageField(props: Props) {
         </p>
       )}
       <label htmlFor={`${id}-file`} className="grid gap-1 text-sm">
-        Escolher imagem (até 5 MB)
+        {gift.mediaAssetId ? "Trocar imagem" : "Escolher imagem"}
         <Input
           ref={fileInput}
           id={`${id}-file`}
@@ -191,10 +195,14 @@ export function GiftImageField(props: Props) {
       </label>
       <label htmlFor={`${id}-alt`} className="grid gap-1 text-sm">
         Descrição da imagem
+        <span className="font-normal leading-relaxed text-admin-muted">
+          Descreva a foto para quem usa leitor de tela.
+        </span>
         <Input
           id={`${id}-alt`}
           value={alt}
           maxLength={240}
+          placeholder="Ex.: Mesa de jantar à luz de velas"
           disabled={blocked}
           onChange={(event) => {
             if (!blocked && !inFlight.current && validOwner())

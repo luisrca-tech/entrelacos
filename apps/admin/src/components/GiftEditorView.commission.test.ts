@@ -47,6 +47,13 @@ async function mount(gifts: GiftItem[] = []) {
     );
   };
   await render();
+  const open = [...container.querySelectorAll("button")].find((button) =>
+    button.textContent?.includes(
+      gifts.length ? "Editar presente" : "Adicionar presente",
+    ),
+  );
+  if (!open) throw new Error("Missing gift editor action");
+  await act(async () => open.click());
   return { container, callbacks, render };
 }
 async function enter(input: HTMLInputElement, value: string) {

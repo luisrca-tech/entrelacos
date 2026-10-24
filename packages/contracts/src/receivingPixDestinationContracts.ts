@@ -87,8 +87,26 @@ export const receivingPixDestinationSavedSchema =
       state: z.literal("PENDING"),
     })
     .strict();
+export const receivingPixDestinationRecentSchema =
+  receivingPixDestinationSavedSchema
+    .omit({ state: true, withdrawalEnabled: true })
+    .extend({
+      maskedKey: text.refine((value) => value.includes("*")),
+      maskedCpfCnpj: text.refine((value) => value.includes("*")),
+      savedAt: z.iso.datetime(),
+    })
+    .strict();
+export type ReceivingPixDestinationRecent = z.infer<
+  typeof receivingPixDestinationRecentSchema
+>;
 export const receivingPixDestinationSavedResponseSchema = z
-  .object({ destination: receivingPixDestinationSavedSchema.nullable() })
+  .object({
+    destination: receivingPixDestinationSavedSchema.nullable(),
+    recentDestinations: z
+      .array(receivingPixDestinationRecentSchema)
+      .max(5)
+      .default([]),
+  })
   .strict();
 export type ReceivingPixDestinationSaved = z.infer<
   typeof receivingPixDestinationSavedSchema

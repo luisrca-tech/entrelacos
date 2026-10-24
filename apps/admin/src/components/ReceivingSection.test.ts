@@ -16,17 +16,21 @@ vi.mock("@tanstack/react-router", () => ({
     to,
     params,
     children,
+    activeOptions: _activeOptions,
     ...props
   }: {
     to: string;
-    params: { siteId: string };
+    params: { siteId: string; page?: string };
     children: React.ReactNode;
+    activeOptions?: { exact: boolean };
   }) =>
     createElement(
       "a",
       {
         ...props,
-        href: to.replace("$siteId", encodeURIComponent(params.siteId)),
+        href: to
+          .replace("$siteId", encodeURIComponent(params.siteId))
+          .replace("$page", params.page ?? ""),
       },
       children,
     ),
@@ -225,25 +229,43 @@ describe("receiving session boundary", () => {
         readFinance: false,
       },
     };
-    expect(render(9, ownerAccess)).toContain('data-setup-epoch="9"');
+    expect(render(9, ownerAccess, "activation")).toContain(
+      'data-setup-epoch="9"',
+    );
   });
   it("mounts onboarding only for a verified same-site configuring administrator", () => {
-    expect(render(null)).not.toContain("data-setup-epoch");
-    expect(render(9)).toContain('data-setup-epoch="9"');
+    expect(render(null, access, "activation")).not.toContain(
+      "data-setup-epoch",
+    );
+    expect(render(9, access, "activation")).toContain('data-setup-epoch="9"');
     expect(
-      render(9, { ...access, membershipRole: "SITE_ASSISTANT" }),
+      render(9, { ...access, membershipRole: "SITE_ASSISTANT" }, "activation"),
     ).not.toContain("data-setup-epoch");
     expect(
-      render(9, {
-        ...access,
-        capabilities: { ...access.capabilities, configureReceiving: false },
-      }),
+      render(
+        9,
+        {
+          ...access,
+          capabilities: { ...access.capabilities, configureReceiving: false },
+        },
+        "activation",
+      ),
     ).not.toContain("data-setup-epoch");
   });
-  function render(sessionEpoch: number | null, candidate = access) {
+  function render(
+    sessionEpoch: number | null,
+    candidate = access,
+    page:
+      | "overview"
+      | "activation"
+      | "account"
+      | "payments"
+      | "withdrawals" = "overview",
+  ) {
     return renderToStaticMarkup(
       createElement(ReceivingSectionView, {
         siteId: "wedding-1",
+        page,
         access: candidate,
         sessionEpoch,
         readiness: null,
@@ -260,6 +282,17 @@ describe("receiving session boundary", () => {
     expect(render(9)).toContain('data-finance-epoch="9"');
     expect(render(9)).toContain('data-finance-access="true"');
     expect(render(9)).toContain('data-receiving-access="true"');
+  });
+  it("keeps account and finance tasks off the overview and provides direct navigation", () => {
+    const html = render(9);
+    expect(html).not.toContain("data-setup-epoch");
+    for (const page of ["activation", "account", "payments", "withdrawals"])
+      expect(html).toContain(`href="/sites/wedding-1/receiving/${page}"`);
+    expect(html).toContain('aria-current="page"');
+    expect(render(9, access, "activation")).not.toContain(
+      "data-finance-access",
+    );
+    expect(render(9, access, "payments")).not.toContain("data-setup-epoch");
   });
   it("denies a different-site membership", () => {
     expect(render(9, { ...access, siteId: "other" })).toContain(

@@ -100,6 +100,64 @@ function fixture(identity: "MATCH" | "MISMATCH" | "INCOMPLETE" = "MISMATCH") {
   };
 }
 describe("reviewed Pix destination configuration", () => {
+  it("reads current and recent destinations from one authorized snapshot", async () => {
+    const v = fixture();
+    const recent = {
+      siteId: actor.siteId,
+      mode: "sandbox",
+      keyType: "PHONE",
+      maskedKey: "***5839",
+      ownerName: "Fictional Recipient",
+      maskedCpfCnpj: "***.123.456-**",
+      bankName: "Test Bank",
+      identity: "INCOMPLETE",
+      destinationId: "previous-one",
+      version: 1,
+      savedAt: at.toISOString(),
+    };
+    v.snapshot.mockResolvedValueOnce({
+      ...v.state,
+      recentDestinations: [recent],
+    } as never);
+    expect(await v.service.readWithRecent(actor)).toEqual({
+      destination: null,
+      recentDestinations: [recent],
+    });
+    expect(v.snapshot).toHaveBeenCalledExactlyOnceWith(actor, true);
+    expect(v.save).not.toHaveBeenCalled();
+  });
+  it("keeps legacy repository fixtures compatible with an empty recent list", async () => {
+    const v = fixture();
+    expect(await v.service.readWithRecent(actor)).toEqual({
+      destination: null,
+      recentDestinations: [],
+    });
+  });
+  it.each(["site", "environment"])(
+    "rejects a cross-%s recent projection at the service boundary",
+    async (change) => {
+      const v = fixture();
+      v.snapshot.mockResolvedValueOnce({
+        ...v.state,
+        recentDestinations: [
+          {
+            siteId: change === "site" ? "other-site" : actor.siteId,
+            mode: change === "environment" ? "live" : "sandbox",
+            keyType: "PHONE",
+            maskedKey: "***5839",
+            ownerName: "Fictional Recipient",
+            maskedCpfCnpj: "***.123.456-**",
+            bankName: "Test Bank",
+            identity: "INCOMPLETE",
+            destinationId: "previous-one",
+            version: 1,
+            savedAt: at.toISOString(),
+          },
+        ],
+      } as never);
+      await expect(v.service.readWithRecent(actor)).rejects.toThrow();
+    },
+  );
   it("saves an explicitly accepted third-party recipient as pending without exposing its key", async () => {
     const v = fixture();
     const issued = await v.service.issueReview(

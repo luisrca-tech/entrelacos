@@ -152,9 +152,21 @@ export function createPanelActorOwner(
       })
       .catch((cause) => {
         if (disposed || currentGeneration !== generation) throw changed();
+        // A transport outage does not revoke an unexpired, server-verified session.
+        if (
+          retained?.actor &&
+          Date.parse(retained.actor.session.expiresAt) > now() &&
+          (cause instanceof TypeError ||
+            (cause instanceof ApiError &&
+              cause.status >= 500 &&
+              cause.status < 600))
+        )
+          throw cause;
         publish({
           status:
-            cause instanceof ApiError && cause.status === 401
+            (retained?.actor &&
+              Date.parse(retained.actor.session.expiresAt) <= now()) ||
+            (cause instanceof ApiError && cause.status === 401)
               ? "unauthenticated"
               : cause instanceof ApiError && cause.status === 403
                 ? "denied"
@@ -171,7 +183,6 @@ export function createPanelActorOwner(
     pending = work;
     // Reset can detach a request before its caller observes settlement.
     void work.catch(() => {});
-    if (silent) setSuspended(true);
     if (!retained)
       publish({ status: "loading", actor: null, sessionEpoch: null });
     return work;
@@ -188,6 +199,7 @@ export function createPanelActorOwner(
     load: (refresh = false) => load(refresh),
     revalidate() {
       hidden = false;
+      setSuspended(false);
       return load(true, true);
     },
     suspend() {
@@ -221,8 +233,11 @@ export function createPanelActorOwner(
         Object.keys(value).length === 1 &&
         "type" in value &&
         value.type === hint.type
-      )
+      ) {
         invalidate(false);
+        return true;
+      }
+      return false;
     },
     reportFailure(cause: unknown, epoch: number | null) {
       if (
@@ -337,12 +352,16 @@ export function mountPanelSessionLifecycle(
         : typeof BroadcastChannel === "undefined"
           ? null
           : new BroadcastChannel(channelName);
-      if (channel) channel.onmessage = (event) => owner.receiveHint(event.data);
+      if (channel)
+        channel.onmessage = (event) => {
+          if (owner.receiveHint(event.data)) void owner.load().catch(() => {});
+        };
     } catch {}
     environment.target.addEventListener("focus", resume);
     environment.document.addEventListener("visibilitychange", resume);
     lifecycle = {
       users: 0,
+      // Route changes release listeners; authentication events and expiry revoke identity.
       cleanup() {
         environment.target.removeEventListener("focus", resume);
         environment.document.removeEventListener("visibilitychange", resume);
@@ -350,7 +369,6 @@ export function mountPanelSessionLifecycle(
           channel.onmessage = null;
           channel.close();
         }
-        owner.invalidate(false);
       },
     };
     lifecycles.set(owner, lifecycle);

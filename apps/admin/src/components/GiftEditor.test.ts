@@ -275,6 +275,11 @@ describe("gift editor immutable scope and acknowledged attachment", () => {
       return original(path, options);
     });
     const dom = await mountEditor(f);
+    const edit = [...dom.container.querySelectorAll("button")].find((button) =>
+      button.textContent?.includes("Editar presente"),
+    );
+    if (!edit) throw new Error("Missing gift editor action");
+    await act(async () => edit.click());
     const input =
       dom.container.querySelector<HTMLInputElement>('input[type="file"]');
     if (!input) throw new Error("Missing file input");
@@ -410,6 +415,11 @@ describe("gift editor immutable scope and acknowledged attachment", () => {
       return waiting.promise;
     });
     const dom = await mountEditor(f);
+    const edit = [...dom.container.querySelectorAll("button")].find((button) =>
+      button.textContent?.includes("Editar presente"),
+    );
+    if (!edit) throw new Error("Missing gift editor action");
+    await act(async () => edit.click());
     const input =
       dom.container.querySelector<HTMLInputElement>('input[type="file"]');
     if (!input) throw new Error("Missing file input");

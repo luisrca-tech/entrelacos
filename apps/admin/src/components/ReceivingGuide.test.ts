@@ -11,14 +11,16 @@ vi.mock("@tanstack/react-router", () => ({
     ...props
   }: {
     to: string;
-    params: { siteId: string };
+    params: { siteId: string; page?: string };
     children: React.ReactNode;
   }) =>
     createElement(
       "a",
       {
         ...props,
-        href: to.replace("$siteId", encodeURIComponent(params.siteId)),
+        href: to
+          .replace("$siteId", encodeURIComponent(params.siteId))
+          .replace("$page", params.page ?? ""),
       },
       children,
     ),
@@ -31,6 +33,16 @@ function render(mode: string | null = "live") {
 }
 
 describe("receiving guide environment boundaries", () => {
+  it("puts account access first and links the exact Entrelacos task", () => {
+    const html = render();
+    expect(html.indexOf("Acesse o Asaas com segurança")).toBeLessThan(
+      html.indexOf("Do cadastro ao saque"),
+    );
+    expect(html).toContain('href="/sites/wedding-1/receiving/activation"');
+    expect(html).toContain('href="/sites/wedding-1/receiving/account"');
+    expect(html).toContain('href="/sites/wedding-1/receiving/withdrawals"');
+    expect(html).toContain('href="https://central.ajuda.asaas.com/hc/pt-br"');
+  });
   it.each([
     ["development", "sandbox", true],
     ["production", "sandbox", false],

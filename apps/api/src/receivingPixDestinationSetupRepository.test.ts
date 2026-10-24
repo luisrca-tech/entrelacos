@@ -76,6 +76,8 @@ function fixture() {
     expireAfterDeactivate: false,
     expireAfterInsert: false,
     expireAfterRead: false,
+    expireAfterRecentRead: false,
+    recentDestinations: [] as Array<Record<string, unknown>>,
     holder: true,
     accountId: scope.accountId,
     clock: at,
@@ -163,6 +165,14 @@ function fixture() {
             },
           ],
         };
+      if (
+        text.includes('AS "savedAt"') &&
+        text.includes("FROM receiving_pix_destination")
+      ) {
+        if (state.expireAfterRecentRead)
+          state.clock = new Date(at.getTime() + 3600000);
+        return { rows: state.recentDestinations };
+      }
       if (text.includes("FROM receiving_pix_destination")) {
         if (state.expireAfterRead)
           state.clock = new Date(at.getTime() + 3600000);
@@ -225,6 +235,75 @@ function fixture() {
   return { repository, state, command, queries, transaction };
 }
 describe("locked Pix destination configuration", () => {
+  it("returns an empty recent list without changing the independently loaded current destination", async () => {
+    const v = fixture();
+    const current = await v.repository.snapshot(actor, true);
+    expect(current.recentDestinations).toEqual([]);
+    expect(current.current).toMatchObject({
+      id: "destination-one",
+      version: 1,
+    });
+  });
+  it("loads only five recent masked projections scoped to the authorized site, account and environment", async () => {
+    const v = fixture();
+    v.state.recentDestinations = [5, 4, 3, 2, 1].map((version) => ({
+      destinationId: `destination-${version}`,
+      siteId: actor.siteId,
+      mode: "sandbox",
+      version,
+      keyType: "PHONE",
+      maskedKey: `***000${version}`,
+      ownerName: "Fictional Recipient",
+      maskedCpfCnpj: "***.123.456-**",
+      bankName: "Test Bank",
+      identity: "MISMATCH",
+      savedAt: at,
+    }));
+    const snapshot = await v.repository.snapshot(actor, true);
+    expect(snapshot.recentDestinations?.map((entry) => entry.version)).toEqual([
+      5, 4, 3, 2, 1,
+    ]);
+    expect(snapshot.recentDestinations?.[0].savedAt).toBe(at.toISOString());
+    const recent = v.queries.find((query) =>
+      query.sql.includes('AS "savedAt"'),
+    );
+    expect(recent?.sql).toContain("ORDER BY version DESC LIMIT 5");
+    expect(recent?.sql).toContain(
+      "site_id=$1 AND account_id=$2 AND environment=$3",
+    );
+    expect(recent?.params).toEqual([actor.siteId, "account-one", "sandbox"]);
+    expect(recent?.sql).not.toContain("AS configuration");
+    expect(recent?.sql).not.toContain("SELECT *");
+    expect(JSON.stringify(snapshot.recentDestinations)).not.toMatch(
+      /ciphertext|nonce|authenticatedAt|proofKind|reviewToken|reviewId/,
+    );
+    expect(snapshot.current?.version).toBe(1);
+    expect(v.queries.some((query) => /^(UPDATE|INSERT)/.test(query.sql))).toBe(
+      false,
+    );
+  });
+  it("rechecks the current session after reading historical destinations", async () => {
+    const v = fixture();
+    v.state.expireAfterRecentRead = true;
+    await expect(v.repository.snapshot(actor, true)).rejects.toMatchObject({
+      code: "MEMBERSHIP_DENIED",
+    });
+  });
+  it.each(["SITE_ASSISTANT", "INACTIVE", "OTHER_SITE"])(
+    "denies recent-destination reads to %s before returning data",
+    async (role) => {
+      const v = fixture();
+      if (role === "INACTIVE") v.state.active = false;
+      else if (role === "OTHER_SITE") v.state.membership = false;
+      else v.state.role = role;
+      await expect(v.repository.snapshot(actor, true)).rejects.toMatchObject({
+        code: "MEMBERSHIP_DENIED",
+      });
+      expect(
+        v.queries.some((query) => query.sql.includes('AS "savedAt"')),
+      ).toBe(false);
+    },
+  );
   it("stores payout configuration without writing any receiving-readiness destination", async () => {
     const v = fixture();
     await v.repository.save(v.command);

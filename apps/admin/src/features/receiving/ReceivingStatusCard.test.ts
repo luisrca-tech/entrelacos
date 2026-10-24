@@ -123,12 +123,7 @@ describe("receiving status card", () => {
   it("keeps the disabled state pending and explains how to activate receiving", () => {
     const html = render({ readiness: readiness({}) });
     expect(html).toContain("Os recebimentos ainda não foram configurados");
-    expect(html).toContain(
-      "Para ativar, o recebedor e a conta de destino precisam ser verificados no fluxo do Asaas.",
-    );
-    expect(html).toContain(
-      "A ativação ainda depende da habilitação dos recebimentos.",
-    );
+    expect(html).toContain("Acompanhe a etapa pendente em Ativação.");
     expect(html).not.toContain("fluxo aprovado");
     expect(html).not.toContain("este cartão");
     expect(html).not.toContain("Configurar recebimentos");

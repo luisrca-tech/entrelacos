@@ -141,7 +141,17 @@ describe("receiving account setup", () => {
         expect(button).not.toMatch(/\sdisabled(?:\s|=|>)/);
       }
       expect(html).toContain("Conta criada no Asaas");
-      expect(html).toContain("Destino Pix para saques");
+      expect(html).not.toContain("Destino Pix para saques");
+      const accountHtml = renderToStaticMarkup(
+        createElement(ReceivingAccountSetupView, {
+          scope: values.scope,
+          state: values.controller.getState(),
+          section: "account",
+          pixGuard: values.controller.pixGuard,
+        }),
+      );
+      expect(accountHtml).toContain("Destino Pix para saques");
+      expect(accountHtml).not.toContain("Etapas de ativação");
       await values.controller.verifyIncoming();
       expect(
         values.request.mock.calls.filter(
@@ -346,6 +356,29 @@ describe("receiving account setup", () => {
     expect(
       values.request.mock.calls.every((call) => call[1]?.method !== "POST"),
     ).toBe(true);
+    values.controller.dispose();
+  });
+  it("shows activation complete only for current authoritative readiness", () => {
+    const values = fixture(createdSetup);
+    const render = (current: unknown) =>
+      renderToStaticMarkup(
+        createElement(ReceivingAccountSetupView, {
+          scope: values.scope,
+          state: { status: "ready", setup: createdSetup, message: null },
+          readiness: current as typeof readiness,
+          incomingGuard: values.controller.incomingGuard,
+        }),
+      );
+    const html = render(readiness);
+    expect(html).toContain("Recebimentos liberados");
+    expect(html).not.toContain("Confirmar minha conta de recebimento");
+    expect(html).not.toContain("A criação não confirma liberação");
+    for (const other of [
+      null,
+      { ...readiness, siteId: "another-site" },
+      { ...readiness, mode: "live" },
+    ])
+      expect(render(other)).not.toContain("Recebimentos liberados");
     values.controller.dispose();
   });
   it("shows native rejected and expired status as actionable without claiming readiness", () => {

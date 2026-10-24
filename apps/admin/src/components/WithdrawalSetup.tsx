@@ -6,7 +6,19 @@ import {
   type WithdrawalRequestContext,
   type WithdrawalRequestStatus,
 } from "@entrelacos/contracts";
-import { Button, showSandboxNotice, toast } from "@entrelacos/ui";
+import {
+  Badge,
+  Button,
+  Input,
+  showSandboxNotice,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+  toast,
+} from "@entrelacos/ui";
 import { type FormEvent, useLayoutEffect, useRef, useState } from "react";
 import { ApiError, apiRequest } from "../lib/apiClient";
 import {
@@ -34,6 +46,7 @@ import {
   type WithdrawalTransport,
   writeWithdrawalMarker,
 } from "./withdrawalClient";
+import { isActionableWithdrawalRequest } from "./withdrawalPresentation";
 
 export type WithdrawalSetupScope = {
   siteId: string;
@@ -1777,6 +1790,22 @@ function WithdrawalSetupView({
   const withdrawal =
     state.acknowledgment ??
     (state.request?.state === "EXISTING" ? state.request.withdrawal : null);
+  const pendingRequests = state.discovery.requests.filter(
+    isActionableWithdrawalRequest,
+  );
+  const blockedReason = state.context?.reason;
+  const blocker =
+    blockedReason === "RECIPIENT_REQUIRED"
+      ? "Somente o titular dos recebimentos pode solicitar saques."
+      : blockedReason === "DESTINATION_UNAVAILABLE"
+        ? "Configure e verifique a conta para saque antes de continuar."
+        : blockedReason === "NOT_CONFIGURED"
+          ? "Conclua a ativação dos recebimentos antes de solicitar um saque."
+          : blockedReason === "CONTEXT_UNAVAILABLE"
+            ? "Não foi possível confirmar a disponibilidade para saque. Consulte a situação novamente."
+            : blockedReason === "UNRESOLVED_OPERATION"
+              ? "Há uma operação em verificação. Acompanhe a solicitação existente antes de iniciar outra."
+              : null;
   return (
     <section
       className="grid gap-4 rounded-xl border border-admin-line bg-admin-surface p-6"
@@ -1794,6 +1823,14 @@ function WithdrawalSetupView({
       {showSandboxNotice(state.request?.mode ?? state.context?.mode) && (
         <p>Sandbox — valores de teste.</p>
       )}
+      {blocker && (
+        <p
+          role="status"
+          className="m-0 rounded-lg border border-admin-line bg-admin-paper p-3 text-sm text-admin-muted"
+        >
+          {blocker}
+        </p>
+      )}
       {state.status === "denied" && <p>Acesso financeiro restrito.</p>}
       {state.status === "storage_unavailable" && (
         <p>Ações bloqueadas: a referência não pôde ser preservada.</p>
@@ -1802,7 +1839,7 @@ function WithdrawalSetupView({
         <p>Resultado em verificação. Consulte a situação.</p>
       )}
       {preview && (
-        <dl>
+        <dl className="grid gap-4 rounded-lg border border-admin-line bg-admin-paper p-4 sm:grid-cols-2 lg:grid-cols-3">
           {[
             [
               preview.feeSemantics === "MAXIMUM"
@@ -1823,8 +1860,8 @@ function WithdrawalSetupView({
             ["Validade da prévia", preview.expiresAt],
           ].map(([label, value]) => (
             <div key={label}>
-              <dt>{label}</dt>
-              <dd>{value}</dd>
+              <dt className="text-sm text-admin-muted">{label}</dt>
+              <dd className="m-0 font-semibold text-admin-graphite">{value}</dd>
             </div>
           ))}
         </dl>
@@ -1836,7 +1873,7 @@ function WithdrawalSetupView({
         </p>
       )}
       {!preview && state.request?.state === "EXISTING" && (
-        <dl>
+        <dl className="grid gap-4 rounded-lg border border-admin-line bg-admin-paper p-4 sm:grid-cols-2 lg:grid-cols-3">
           {[
             [
               state.request.withdrawal.settlement
@@ -1866,8 +1903,8 @@ function WithdrawalSetupView({
             ],
           ].map(([label, value]) => (
             <div key={label}>
-              <dt>{label}</dt>
-              <dd>{value}</dd>
+              <dt className="text-sm text-admin-muted">{label}</dt>
+              <dd className="m-0 font-semibold text-admin-graphite">{value}</dd>
             </div>
           ))}
         </dl>
@@ -1897,24 +1934,30 @@ function WithdrawalSetupView({
         !state.uncertain &&
         state.request?.state !== "OPEN" && (
           <form
+            className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end"
             onSubmit={(event: FormEvent) => {
               event.preventDefault();
               void controller?.preview(amount);
             }}
           >
-            <label htmlFor="withdrawal-amount">
-              Valor total solicitado, incluindo a taxa
-            </label>
-            <input
-              id="withdrawal-amount"
-              inputMode="decimal"
-              value={amount}
-              disabled={state.busy}
-              onChange={(event) => {
-                setAmount(event.target.value);
-                controller?.resetConsent();
-              }}
-            />
+            <div className="grid gap-1.5">
+              <label
+                className="text-sm font-medium"
+                htmlFor="withdrawal-amount"
+              >
+                Valor total solicitado, incluindo a taxa
+              </label>
+              <Input
+                id="withdrawal-amount"
+                inputMode="decimal"
+                value={amount}
+                disabled={state.busy}
+                onChange={(event) => {
+                  setAmount(event.target.value);
+                  controller?.resetConsent();
+                }}
+              />
+            </div>
             <Button type="submit" disabled={state.busy}>
               {state.busy ? "Consultando prévia…" : "Consultar prévia do saque"}
             </Button>
@@ -1955,19 +1998,85 @@ function WithdrawalSetupView({
               : "Consultar situação"}
         </Button>
       )}
-      {state.discovery.requests.map((request) => (
-        <Button
-          key={request.requestId}
-          type="button"
-          variant="outline"
-          disabled={state.busy}
-          onClick={() =>
-            void controller?.selectDiscoveredRequest(request.requestId)
-          }
-        >
-          Consultar solicitação {request.requestId}
-        </Button>
-      ))}
+      {pendingRequests.length > 0 && (
+        <div className="grid gap-3">
+          <h3 className="m-0 font-admin-display text-xl">
+            Solicitações para acompanhar
+          </h3>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Situação</TableHead>
+                <TableHead>Valor</TableHead>
+                <TableHead>
+                  <span className="sr-only">Ações</span>
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {pendingRequests.map((request) => (
+                <TableRow
+                  key={request.requestId}
+                  data-request-id={request.requestId}
+                >
+                  <TableCell>
+                    <Badge variant="outline">
+                      {request.state === "OPEN"
+                        ? "Prévia em andamento"
+                        : request.state === "UNRESOLVED"
+                          ? "Resultado em verificação"
+                          : request.state === "EXISTING" &&
+                              request.withdrawal.state === "UNKNOWN"
+                            ? "Resultado em verificação"
+                            : "Em acompanhamento"}
+                    </Badge>
+                    {request.state === "EXISTING" && (
+                      <p className="mt-1 text-xs text-admin-muted">
+                        {new Date(request.withdrawal.createdAt).toLocaleString(
+                          "pt-BR",
+                          {
+                            timeZone: "America/Sao_Paulo",
+                            dateStyle: "short",
+                            timeStyle: "short",
+                          },
+                        )}
+                      </p>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {request.state === "EXISTING"
+                      ? money.format(request.withdrawal.amountCents / 100)
+                      : request.state === "OPEN"
+                        ? money.format(request.preview.amountCents / 100)
+                        : "Em verificação"}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {request.requestId === state.request?.requestId ? (
+                      <span className="text-sm text-admin-muted">
+                        Selecionada
+                      </span>
+                    ) : (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={state.busy}
+                        onClick={() =>
+                          void controller?.selectDiscoveredRequest(
+                            request.requestId,
+                          )
+                        }
+                      >
+                        Acompanhar
+                      </Button>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
       {state.context?.openRequest &&
         state.context.openRequest.requestId !== state.request?.requestId && (
           <Button
@@ -1981,7 +2090,7 @@ function WithdrawalSetupView({
               )
             }
           >
-            Consultar solicitação aberta {state.context.openRequest.requestId}
+            Retomar solicitação em andamento
           </Button>
         )}
       {state.discovery.nextCursor !== null && (
