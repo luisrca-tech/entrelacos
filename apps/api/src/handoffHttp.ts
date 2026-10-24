@@ -6,6 +6,7 @@ import {
 import { siteOrigin } from "@entrelacos/database/schema";
 import { and, eq } from "drizzle-orm";
 import { Hono } from "hono";
+import { trustedAdminOrigin } from "./adminOrigin";
 import { type AuthHttpOptions, getAdministrativeSession } from "./authHttp";
 import { issueHandoff, recognizeSite, redeemHandoff } from "./handoff";
 import { allowsLocalPublicOrigin } from "./localPublicOrigin";
@@ -54,7 +55,7 @@ export function createHandoffHttpRouter(options: AuthHttpOptions) {
     return rows.length === 1;
   }
   router.post("/v1/handoff", async (context) => {
-    if (context.req.header("Origin") !== options.adminOrigin)
+    if (!trustedAdminOrigin(context.req.header("Origin"), options.adminOrigin))
       return problem(403, "FORBIDDEN");
     const actor = await getAdministrativeSession(context.req.raw, options);
     if (!actor) return problem(401, "UNAUTHORIZED");

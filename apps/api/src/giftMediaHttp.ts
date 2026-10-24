@@ -8,6 +8,7 @@ import {
 } from "@entrelacos/contracts";
 import { type Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
+import { trustedAdminOrigin } from "./adminOrigin";
 import {
   AdminSessionRequiredError,
   type AuthHttpOptions,
@@ -125,7 +126,7 @@ export function createGiftMediaHttpRouter(options: GiftMediaHttpOptions) {
     return problem(context, 503, "SERVICE_UNAVAILABLE");
   });
   router.use("/v1/sites/:siteId/gift-media/*", async (context, next) => {
-    if (context.req.header("origin") !== options.adminOrigin)
+    if (!trustedAdminOrigin(context.req.header("origin"), options.adminOrigin))
       return problem(context, 403, "FORBIDDEN");
     if (!siteIdSchema.safeParse(context.req.param("siteId")).success)
       return problem(context, 400, "VALIDATION_ERROR");

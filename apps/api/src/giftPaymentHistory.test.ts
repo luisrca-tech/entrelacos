@@ -12,6 +12,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllEnvs();
   vi.useRealTimers();
 });
 function deferred<T>() {
@@ -184,6 +185,22 @@ async function fixture() {
   };
 }
 describe("native owned private purchase history service", () => {
+  it("retains signed session ownership while admitting another localhost port in development", async () => {
+    vi.stubEnv("APP_ENV", "development");
+    vi.stubEnv("NODE_ENV", "development");
+    const v = await fixture();
+    expect(v.service.available).toBe(true);
+    const request = v.request();
+    request.headers.set("origin", "http://localhost:3001");
+    const owner = v.service.readPurchasePage({ request, siteId: "site-one" });
+    await expect(owner.result).resolves.toEqual(v.page);
+    await owner.completion;
+    expect(v.native).toHaveBeenCalledTimes(2);
+    for (const write of [v.db.insert, v.db.update, v.db.delete, v.deletes]) {
+      expect(write).not.toHaveBeenCalled();
+    }
+    await v.service.close();
+  });
   it("reads for a freshly verified OWNER without fabricating a site membership", async () => {
     const v = await fixture();
     v.user.role = "OWNER";

@@ -1,14 +1,24 @@
 import {
+  allowsDevelopmentLocalhost,
   apiProblemSchema,
   giftPurchaseHistoryLimits,
   giftPurchaseHistoryPageResponseSchema,
   giftPurchaseHistoryPurchaseSchema,
+  isTrustedAdminOrigin,
   siteIdSchema,
 } from "@entrelacos/contracts";
 
 export interface ApiProxyOptions {
   apiBaseUrl: string;
   adminOrigin: string;
+}
+
+function trustedProxyOrigin(origin: string, configuredOrigin: string): boolean {
+  return isTrustedAdminOrigin(
+    origin,
+    configuredOrigin,
+    allowsDevelopmentLocalhost(process.env),
+  );
 }
 
 let binaryInFlight = false;
@@ -327,10 +337,10 @@ function resolveHistoryTarget(
   }
   const suppliedOrigin = request.headers.get("origin");
   if (
-    url.origin !== origin ||
+    !trustedProxyOrigin(url.origin, origin) ||
     request.headers.get("sec-fetch-site")?.toLowerCase() === "cross-site" ||
-    (suppliedOrigin !== null && suppliedOrigin !== origin) ||
-    (method !== "GET" && method !== "HEAD" && suppliedOrigin !== origin)
+    (suppliedOrigin !== null && suppliedOrigin !== url.origin) ||
+    (method !== "GET" && method !== "HEAD" && suppliedOrigin !== url.origin)
   )
     return denied(403, "FORBIDDEN", "Forbidden");
   if (method !== "GET" && method !== "HEAD")
@@ -563,10 +573,13 @@ function resolveTarget(
   try {
     requestUrl = new URL(request.url);
     adminOriginUrl = new URL(options.adminOrigin);
+    if (adminOriginUrl.origin !== options.adminOrigin) {
+      throw new Error("Invalid proxy configuration");
+    }
   } catch {
     return problem(500, "CONFIGURATION_ERROR", "API proxy is unavailable");
   }
-  if (requestUrl.origin !== adminOriginUrl.origin) {
+  if (!trustedProxyOrigin(requestUrl.origin, adminOriginUrl.origin)) {
     return problem(403, "FORBIDDEN", "Forbidden");
   }
 
@@ -577,13 +590,10 @@ function resolveTarget(
     return problem(403, "FORBIDDEN", "Forbidden");
   }
   if (method === "GET" || method === "HEAD") {
-    if (
-      (requestOrigin && requestOrigin !== options.adminOrigin) ||
-      (!requestOrigin && requestUrl.origin !== adminOriginUrl.origin)
-    ) {
+    if (requestOrigin !== null && requestOrigin !== requestUrl.origin) {
       return problem(403, "FORBIDDEN", "Forbidden");
     }
-  } else if (requestOrigin !== options.adminOrigin) {
+  } else if (requestOrigin !== requestUrl.origin) {
     return problem(403, "FORBIDDEN", "Forbidden");
   }
 

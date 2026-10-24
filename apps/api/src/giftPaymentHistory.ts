@@ -9,6 +9,7 @@ import {
   siteIdSchema,
 } from "@entrelacos/contracts";
 import type { BetterAuthOptions } from "better-auth";
+import { hasTrustedAdminOrigins, trustedAdminOrigin } from "./adminOrigin";
 import type { AuthDatabase } from "./auth";
 import { type AuthInstance, readAdministrativeSession } from "./authHttp";
 import { databaseTimestampEpochMicroseconds } from "./databaseTimestamp";
@@ -156,9 +157,10 @@ export function createGiftPaymentHistory(
       repository.policy !== "SITE_HISTORY" ||
       (authentication.auth.options.session as BetterAuthOptions["session"])
         ?.deferSessionRefresh !== true ||
-      !Array.isArray(authentication.auth.options.trustedOrigins) ||
-      authentication.auth.options.trustedOrigins.length !== 1 ||
-      authentication.auth.options.trustedOrigins[0] !== origin
+      !hasTrustedAdminOrigins(
+        authentication.auth.options.trustedOrigins,
+        origin,
+      )
     )
       return inactive;
     const auth = authentication.auth,
@@ -210,7 +212,7 @@ export function createGiftPaymentHistory(
             Object.keys(input).some((key) => !keys.includes(key)) ||
             !(input.request instanceof Request) ||
             !["GET", "HEAD"].includes(input.request.method) ||
-            input.request.headers.get("origin") !== origin
+            !trustedAdminOrigin(input.request.headers.get("origin"), origin)
           )
             return historyUnavailable();
           request = new Request(input.request.url, {

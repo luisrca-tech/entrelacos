@@ -14,6 +14,7 @@ import {
   siteIdSchema,
 } from "@entrelacos/contracts";
 import { Hono } from "hono";
+import { trustedAdminOrigin } from "./adminOrigin";
 import {
   AdminSessionRequiredError,
   type AuthHttpOptions,
@@ -107,7 +108,7 @@ export function createReceivingSetupHttpRouter(
     return problem(503, "RECEIVING_SETUP_UNAVAILABLE");
   });
   router.use("/v1/sites/:siteId/receiving/*", async (context, next) => {
-    if (context.req.header("origin") !== options.adminOrigin)
+    if (!trustedAdminOrigin(context.req.header("origin"), options.adminOrigin))
       return problem(403, "FORBIDDEN");
     if (
       !siteIdSchema.safeParse(context.req.param("siteId")).success ||

@@ -3,6 +3,7 @@ import { session, user } from "@entrelacos/database/schema";
 import type { BetterAuthOptions } from "better-auth";
 import { eq } from "drizzle-orm";
 import { Hono } from "hono";
+import { trustedAdminOrigin } from "./adminOrigin";
 import type { AuthDatabase, createAuth } from "./auth";
 import { withCredentialAdvisoryLock } from "./credentialLock";
 import type {
@@ -86,7 +87,7 @@ function problem(status: number, code: string, title: string): Response {
 }
 
 function isTrustedOrigin(request: Request, adminOrigin: string): boolean {
-  return request.headers.get("origin") === adminOrigin;
+  return trustedAdminOrigin(request.headers.get("origin"), adminOrigin);
 }
 
 function copyResponseHeaders(source: Headers): Headers {

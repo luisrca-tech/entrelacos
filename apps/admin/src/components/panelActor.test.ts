@@ -315,12 +315,8 @@ describe("observable administrative session ownership", () => {
       ...actor,
       session: { ...actor.session, expiresAt: "2026-02-30T00:00:00.000Z" },
     },
-    {
-      ...actor,
-      session: { ...actor.session, expiresAt: "2026-10-12T17:59:59.999Z" },
-    },
     { ...actor, sessionToken: "private" },
-  ])("rejects malformed/expired/private me projections %j", async (value) => {
+  ])("rejects malformed/private me projections %j", async (value) => {
     const f = fixture(vi.fn().mockResolvedValue(value));
     await expect(f.owner.load()).rejects.toThrow();
     expect(f.owner.getSnapshot()).toEqual({
@@ -330,6 +326,75 @@ describe("observable administrative session ownership", () => {
     });
     f.owner.dispose();
   });
+  it.each([start - 1, start])(
+    "requires login when an identity read returns an expired session at %i",
+    async (expiresAt) => {
+      const f = fixture();
+      await f.owner.load();
+      const previousEpoch = f.owner.getSnapshot().sessionEpoch;
+      f.request.mockResolvedValueOnce({
+        ...actor,
+        session: {
+          ...actor.session,
+          expiresAt: new Date(expiresAt).toISOString(),
+        },
+      });
+      await expect(f.owner.revalidate()).rejects.toThrow();
+      expect(previousEpoch).not.toBeNull();
+      expect(f.owner.getSnapshot()).toEqual({
+        status: "unauthenticated",
+        actor: null,
+        sessionEpoch: null,
+      });
+      expect(f.owner.isSuspended()).toBe(false);
+      f.owner.dispose();
+    },
+  );
+  it.each([
+    ["", true],
+    [".1", false],
+    [".12", false],
+    [".123", true],
+    [".123456", false],
+  ] as const)(
+    "preserves the instant contract for future and expired precision %s",
+    async (fraction, supported) => {
+      for (const [day, status] of [
+        ["13", "verified"],
+        ["11", "unauthenticated"],
+      ]) {
+        const f = fixture(
+          vi.fn().mockResolvedValue({
+            ...actor,
+            session: {
+              ...actor.session,
+              expiresAt: `2026-10-${day}T00:00:00${fraction}Z`,
+            },
+          }),
+        );
+        if (supported && status === "verified") await f.owner.load();
+        else await expect(f.owner.load()).rejects.toThrow();
+        expect(f.owner.getSnapshot().status).toBe(
+          supported ? status : "unavailable",
+        );
+        f.owner.dispose();
+      }
+    },
+  );
+  it.each(["2026-10-13T24:00:00Z", "2026-10-11T24:00:00Z"])(
+    "rejects a normalized clock overflow %s before classifying expiry",
+    async (expiresAt) => {
+      const f = fixture(
+        vi.fn().mockResolvedValue({
+          ...actor,
+          session: { ...actor.session, expiresAt },
+        }),
+      );
+      await expect(f.owner.load()).rejects.toThrow();
+      expect(f.owner.getSnapshot().status).toBe("unavailable");
+      f.owner.dispose();
+    },
+  );
   it.each([401, 403, 503])(
     "clears every actor/epoch on current identity failure %i",
     async (status) => {

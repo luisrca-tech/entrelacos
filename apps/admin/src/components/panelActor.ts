@@ -126,10 +126,12 @@ export function createPanelActorOwner(
         if (
           !Number.isSafeInteger(current) ||
           current < 0 ||
-          expiresAt <= current ||
+          new Date(expiresAt).toISOString().replace(".000Z", "Z") !==
+            actor.session.expiresAt.replace(".000Z", "Z") ||
           actor.memberships?.some((access) => access.userId !== actor.user.id)
         )
           throw new Error("Invalid administrative session");
+        if (expiresAt <= current) throw new ApiError(401, "UNAUTHORIZED");
         if (
           retained &&
           JSON.stringify(actor) === JSON.stringify(retained.actor)

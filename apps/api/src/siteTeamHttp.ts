@@ -11,6 +11,7 @@ import {
   siteTeamRevokeInputSchema,
 } from "@entrelacos/contracts";
 import { Hono } from "hono";
+import { trustedAdminOrigin } from "./adminOrigin";
 import {
   AdminSessionRequiredError,
   type AuthHttpOptions,
@@ -67,7 +68,7 @@ export function createSiteTeamHttpRouter(options: AuthHttpOptions) {
     return problem(503, "SERVICE_UNAVAILABLE", "Team service unavailable");
   });
   router.use("*", async (context, next) => {
-    if (context.req.header("origin") !== options.adminOrigin)
+    if (!trustedAdminOrigin(context.req.header("origin"), options.adminOrigin))
       return problem(403, "FORBIDDEN", "Forbidden");
     context.header("Cache-Control", "no-store");
     await next();

@@ -3,6 +3,7 @@ import {
   demoResetResponseSchema,
 } from "@entrelacos/contracts";
 import { Hono } from "hono";
+import { trustedAdminOrigin as allowsAdminOrigin } from "./adminOrigin";
 import {
   AdminSessionRequiredError,
   type AuthHttpOptions,
@@ -28,7 +29,7 @@ function problem(status: number, code: string, title: string): Response {
 }
 
 function trustedAdminOrigin(request: Request, adminOrigin: string): boolean {
-  return request.headers.get("origin") === adminOrigin;
+  return allowsAdminOrigin(request.headers.get("origin"), adminOrigin);
 }
 
 async function readResetBody(request: Request): Promise<unknown> {

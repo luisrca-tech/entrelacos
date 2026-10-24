@@ -2,6 +2,7 @@ import parsePhoneNumber, { AsYouType } from "libphonenumber-js";
 import { z } from "zod";
 import { siteAccessSchema } from "./internalGifts";
 
+export * from "./adminOrigin";
 export * from "./giftCommission";
 export * from "./internalGifts";
 

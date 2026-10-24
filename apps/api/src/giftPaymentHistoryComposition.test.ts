@@ -31,6 +31,7 @@ afterEach(async () => {
   for (const release of releases.splice(0)) release();
   await flush();
   vi.restoreAllMocks();
+  vi.unstubAllEnvs();
 });
 function deferred<T>(cleanup: T) {
   let resolve!: (value: T) => void;
@@ -149,6 +150,24 @@ async function fixture() {
 }
 
 describe("private purchase history composition", () => {
+  it("preserves the actual SDK composition with the exact development localhost trust list", async () => {
+    vi.stubEnv("APP_ENV", "development");
+    vi.stubEnv("NODE_ENV", "development");
+    const v = await fixture();
+    const composition = await createGiftPaymentHistoryComposition(
+      configuration,
+      {
+        ...v.options,
+        createReadAuth: undefined,
+        createRepository: undefined,
+        createService: undefined,
+      },
+    );
+    expect(composition.ports.giftPaymentHistory?.available).toBe(true);
+    await composition.close();
+    for (const method of Object.values(v.db))
+      expect(method).not.toHaveBeenCalled();
+  });
   it("returns frozen disabled ports before any private getter or factory", async () => {
     const get = vi.fn(() => {
       throw new Error("private option was accessed");

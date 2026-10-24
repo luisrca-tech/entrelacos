@@ -3,6 +3,7 @@ import {
   siteIdSchema,
 } from "@entrelacos/contracts";
 import { Hono } from "hono";
+import { trustedAdminOrigin as allowsAdminOrigin } from "./adminOrigin";
 import type { AuthHttpOptions } from "./authHttp";
 import { AdminSessionRequiredError, requireAdminSession } from "./authHttp";
 import {
@@ -27,7 +28,7 @@ function problem(status: number, code: string, title: string): Response {
 }
 
 function trustedAdminOrigin(request: Request, adminOrigin: string): boolean {
-  return request.headers.get("origin") === adminOrigin;
+  return allowsAdminOrigin(request.headers.get("origin"), adminOrigin);
 }
 
 function queryObject(request: Request): Record<string, string> {

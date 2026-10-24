@@ -323,27 +323,60 @@ describe("team invitation acceptance entry and strict native identity", () => {
 
   it.each([
     { ...actor, secret: token },
-    {
-      ...actor,
-      session: { ...actor.session, expiresAt: "2026-10-12T03:00:00.000Z" },
-    },
     { ...actor, memberships: [{ ...member, userId: "foreign-user" }] },
     {
       user: actor.user,
       session: { id: "", expiresAt: actor.session.expiresAt },
     },
-  ])(
-    "rejects malformed, expired or foreign membership entry %j",
-    async (value) => {
-      const f = fixture();
-      f.request.mockResolvedValue(value);
-      const c = makeController(f);
-      await c.controller.start();
-      expect(c.controller.getState().sessionUnavailable).toBe(true);
-      await c.controller.accept({ mode: "signedIn" });
-      expect(posts(f.request)).toHaveLength(0);
-    },
-  );
+  ])("rejects malformed or foreign membership entry %j", async (value) => {
+    const f = fixture();
+    f.request.mockResolvedValue(value);
+    const c = makeController(f);
+    await c.controller.start();
+    expect(c.controller.getState().sessionUnavailable).toBe(true);
+    await c.controller.accept({ mode: "signedIn" });
+    expect(posts(f.request)).toHaveLength(0);
+  });
+
+  it("requires sign-in recovery after an expired identity without accepting as signed in", async () => {
+    const f = fixture();
+    f.request.mockResolvedValueOnce({
+      ...actor,
+      session: { ...actor.session, expiresAt: "2026-10-12T03:00:00.000Z" },
+    });
+    const c = makeController(f);
+    await c.controller.start();
+    expect(c.controller.getState()).toMatchObject({
+      ready: true,
+      pending: false,
+      sessionUnavailable: false,
+      actor: null,
+      mode: null,
+      completed: null,
+    });
+    expect(f.owner.getSnapshot()).toEqual({
+      status: "unauthenticated",
+      actor: null,
+      sessionEpoch: null,
+    });
+    await c.controller.accept({ mode: "signedIn" });
+    expect(posts(f.request)).toHaveLength(0);
+    expect(posts(f.request, signInPath)).toHaveLength(0);
+
+    c.controller.setMode("existing");
+    await c.controller.accept({
+      mode: "existing",
+      email: actor.user.email,
+      password: "current-password",
+    });
+    expect(posts(f.request, signInPath)).toHaveLength(1);
+    expect(posts(f.request)).toHaveLength(1);
+    expect(c.controller.getState().completed).toEqual({
+      siteId: "wedding-a",
+      signedIn: true,
+    });
+    assertPrivate(c.controller.getState());
+  });
 
   it.each(["short", "", "a".repeat(42), "a".repeat(44), "/".repeat(43)])(
     "never dispatches with invalid invitation capability %s",

@@ -4,6 +4,7 @@ import {
   siteIdSchema,
 } from "@entrelacos/contracts";
 import { Hono } from "hono";
+import { trustedAdminOrigin } from "./adminOrigin";
 import { type AuthHttpOptions, requireAdminSession } from "./authHttp";
 import { createDefaultReceivingReadiness } from "./receivingReadiness";
 import { resolveSiteAccess } from "./siteAccess";
@@ -31,7 +32,9 @@ export function createReceivingHttpRouter(options: ReceivingHttpOptions): Hono {
     problem(503, "SERVICE_UNAVAILABLE", "Receiving status unavailable"),
   );
   router.get("/v1/sites/:siteId/receiving/readiness", async (context) => {
-    if (context.req.header("origin") !== options.adminOrigin) {
+    if (
+      !trustedAdminOrigin(context.req.header("origin"), options.adminOrigin)
+    ) {
       return problem(403, "FORBIDDEN", "Forbidden");
     }
     const siteId = siteIdSchema.safeParse(context.req.param("siteId"));

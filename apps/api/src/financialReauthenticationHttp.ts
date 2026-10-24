@@ -5,6 +5,7 @@ import {
   siteIdSchema,
 } from "@entrelacos/contracts";
 import { Hono } from "hono";
+import { trustedAdminOrigin } from "./adminOrigin";
 import {
   AdminSessionRequiredError,
   type AuthHttpOptions,
@@ -84,7 +85,9 @@ export function createFinancialReauthenticationHttpRouter(
   router.post(
     "/v1/sites/:siteId/financial-reauthentication",
     async (context) => {
-      if (context.req.header("origin") !== options.adminOrigin)
+      if (
+        !trustedAdminOrigin(context.req.header("origin"), options.adminOrigin)
+      )
         return problem(403, "FORBIDDEN", "Forbidden");
       const actor = await requireAdminSession(context.req.raw, options);
       const siteId = siteIdSchema.safeParse(context.req.param("siteId"));

@@ -8,6 +8,7 @@ import {
 import { type BetterAuthOptions, betterAuth } from "better-auth";
 import { eq } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
+import { trustedAdminOrigins } from "./adminOrigin";
 
 export const AUTH_BASE_PATH = "/v1/auth";
 export const ADMIN_SESSION_EXPIRES_IN = 60 * 60 * 24 * 7;
@@ -43,7 +44,7 @@ function authConfiguration(options: AuthFactoryOptions) {
     secret,
     baseURL,
     basePath: AUTH_BASE_PATH,
-    trustedOrigins: [adminOrigin],
+    trustedOrigins: trustedAdminOrigins(adminOrigin),
     emailAndPassword: {
       enabled: true,
       disableSignUp: true,

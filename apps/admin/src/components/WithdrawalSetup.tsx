@@ -546,6 +546,81 @@ export function createWithdrawalSetupController(
       }
     }
   }
+  function waitForCommandObservation(
+    next: WithdrawalRequestStatus,
+    active: number,
+  ): Promise<void> | null {
+    if (!current() || active !== revision) return null;
+    const time = now();
+    if (!clockCurrent(time)) {
+      invalidate();
+      return null;
+    }
+    const ahead = Date.parse(next.observedAt) - time;
+    if (ahead <= 0) return null;
+    if (ahead > 1000) throw new Error("Future withdrawal observation");
+    const started = performance.now();
+    if (!Number.isFinite(started) || started < 0)
+      throw new Error("Withdrawal observation clock unavailable");
+    // Wait for this fixed observation without changing either clock or repeating the command.
+    return new Promise<void>((resolve) => setTimeout(resolve, ahead)).then(
+      () => {
+        const elapsed = performance.now() - started;
+        if (!Number.isFinite(elapsed) || elapsed <= 0 || elapsed > 1250)
+          throw new Error("Withdrawal observation wait expired");
+      },
+    );
+  }
+  function installCommandRequest(
+    next: WithdrawalRequestStatus,
+    active: number,
+    retained: string,
+  ): boolean {
+    if (!current() || active !== revision) return false;
+    if (next.requestId !== selectedId || next.mode !== mode)
+      throw new Error("Withdrawal request changed");
+    validateObservation(next);
+    try {
+      const stored = readWithdrawalMarker(
+        storage(),
+        scope.siteId,
+        captured.actor?.user.id ?? "",
+      );
+      if (!current() || active !== revision) return false;
+      const finalMarker = readWithdrawalMarker(
+        storage(),
+        scope.siteId,
+        captured.actor?.user.id ?? "",
+      );
+      if (!frame(false)) {
+        invalidate();
+        return false;
+      }
+      const native = owner.getSnapshot();
+      const actualOwner = ports.owner ?? panelActorOwner;
+      if (
+        disposed ||
+        invalidated ||
+        active !== revision ||
+        native !== captured ||
+        actualOwner !== owner
+      )
+        return false;
+      if (
+        JSON.stringify(stored) !== retained ||
+        JSON.stringify(finalMarker) !== retained ||
+        JSON.stringify(marker) !== retained
+      ) {
+        storageFailure();
+        return false;
+      }
+    } catch {
+      storageFailure();
+      return false;
+    }
+    installRequest(next, true);
+    return true;
+  }
   function scopedMarker(requestId: string): WithdrawalMarker {
     if (!mode || !captured.actor)
       throw new Error("Withdrawal scope unavailable");
@@ -1206,7 +1281,10 @@ export function createWithdrawalSetupController(
         ports.request,
       );
       if (!current() || active !== revision) return false;
-      installRequest(result);
+      const retainedMarker = JSON.stringify(marker);
+      const wait = waitForCommandObservation(result, active);
+      if (wait) await wait;
+      if (!installCommandRequest(result, active, retainedMarker)) return false;
       if (result.state === "OPEN" && result.preview.amountCents !== amountCents)
         throw new Error("Withdrawal amount changed");
       publish({ ...state, status: "ready" });
@@ -1337,7 +1415,10 @@ export function createWithdrawalSetupController(
         storageFailure();
         return false;
       }
-      installRequest(result);
+      const retainedMarker = JSON.stringify(marker);
+      const wait = waitForCommandObservation(result, active);
+      if (wait) await wait;
+      if (!installCommandRequest(result, active, retainedMarker)) return false;
       publish({ ...state, status: "ready" });
       succeeded = true;
       return true;
@@ -1435,7 +1516,11 @@ export function createWithdrawalSetupController(
           ports.request,
         );
         if (!current() || active !== revision) return false;
-        installRequest(result);
+        const retainedMarker = JSON.stringify(marker);
+        const wait = waitForCommandObservation(result, active);
+        if (wait) await wait;
+        if (!installCommandRequest(result, active, retainedMarker))
+          return false;
         if (result.state === "SEALED_NOT_CREATED") {
           if (!marker || !removeWithdrawalMarker(storage(), marker))
             throw new Error("Withdrawal marker changed");

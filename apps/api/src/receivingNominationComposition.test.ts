@@ -30,6 +30,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllEnvs();
   vi.useRealTimers();
 });
 
@@ -432,6 +433,20 @@ async function fixture(
 }
 
 describe("optional nomination composition with the installed native session SDK", () => {
+  it("preserves private GET session ownership for another localhost port in development", async () => {
+    vi.stubEnv("APP_ENV", "development");
+    vi.stubEnv("NODE_ENV", "development");
+    const v = await fixture();
+    const headers = new Headers(v.headers);
+    headers.set("Origin", "http://localhost:3001");
+    const response = await v.get("site-one", headers);
+    expect(response.status).toBe(200);
+    expect((await response.json()).context.state).toBe("AVAILABLE");
+    expect(response.headers.get("set-cookie")).toBeNull();
+    expect(v.findSession).toHaveBeenCalledExactlyOnceWith(sessionToken);
+    expect(v.standardGetSession).not.toHaveBeenCalled();
+    v.assertNoWrites();
+  });
   it("preserves explicit clock, site-reader and ID-generator receivers through context and first nomination", async () => {
     const v = await fixture();
     const { admission, readAuthority } = independentAdmissionReader();

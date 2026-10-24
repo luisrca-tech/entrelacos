@@ -11,6 +11,7 @@ import {
   withdrawalSealInputSchema,
 } from "@entrelacos/contracts";
 import { Hono } from "hono";
+import { trustedAdminOrigin } from "./adminOrigin";
 import {
   type AdministrativeActor,
   AdminSessionRequiredError,
@@ -210,7 +211,9 @@ export function createFinanceHttpRouter(options: FinanceHttpOptions) {
         await next();
         return;
       }
-      if (context.req.header("origin") !== options.adminOrigin) {
+      if (
+        !trustedAdminOrigin(context.req.header("origin"), options.adminOrigin)
+      ) {
         return problem(403, "FORBIDDEN", "Forbidden");
       }
       const requestRead =

@@ -219,10 +219,14 @@ function memory() {
     data,
   };
 }
-async function fixture(initial = context(), onFinancialChange?: () => void) {
+async function fixture(
+  initial = context(),
+  onFinancialChange?: () => void,
+  now = () => Date.now(),
+) {
   const owner = createPanelActorOwner({
     request: async () => actor,
-    now: () => Date.now(),
+    now,
   });
   await owner.load();
   const storage = memory();
@@ -256,7 +260,7 @@ async function fixture(initial = context(), onFinancialChange?: () => void) {
     owner,
     storage,
     request,
-    now: () => Date.now(),
+    now,
     newRequestId: vi.fn(() => "request-a"),
   };
   const controller = createWithdrawalSetupController(
@@ -319,7 +323,10 @@ afterEach(async () => {
 });
 
 async function withdrawalHttpBridge(
-  options: { receivingEvidenceProvenance?: "PROVIDER" | "SIMULATION" } = {},
+  options: {
+    receivingEvidenceProvenance?: "PROVIDER" | "SIMULATION";
+    sqlNow?: () => Date;
+  } = {},
 ) {
   vi.stubGlobal("crypto", webcrypto);
   // Node Request rejects jsdom's signal brand; use the actual Node constructors.
@@ -485,7 +492,7 @@ async function withdrawalHttpBridge(
     }
     if (/pg_advisory_xact_lock/i.test(sql)) return { rows: [] };
     if (/SELECT clock_timestamp\(\)/i.test(sql))
-      return { rows: [{ currentTime: clock() }] };
+      return { rows: [{ currentTime: (options.sqlNow ?? clock)() }] };
     if (/^select .*from "session" inner join "user"/i.test(sql))
       return {
         rows:
@@ -1228,6 +1235,43 @@ async function withdrawalHttpBridge(
 }
 
 describe("withdrawal setup mounted consumer through actual private HTTP", () => {
+  it("installs one successful preview after the browser reaches the unchanged SQL observation instant", async () => {
+    let sqlAheadMs = 0;
+    const success = vi.spyOn(toast, "success");
+    const f = await withdrawalHttpBridge({
+      sqlNow: () => new Date(Date.now() + sqlAheadMs),
+    });
+    const insert = f.block(/^INSERT INTO "withdrawal_request"/i);
+    const work = httpWithdrawalPreview(f);
+    await insert.entered.promise;
+    sqlAheadMs = 250;
+    insert.release.resolve();
+    await work;
+    expect(
+      f.responses.filter((value) => value.path.endsWith("/preview")),
+    ).toEqual([expect.objectContaining({ method: "POST", status: 200 })]);
+    expect(f.tables.withdrawal_request).toHaveLength(1);
+    expect(f.tables.withdrawal_request[0]).toMatchObject({
+      requestId: "request-bridge-a",
+      state: "OPEN",
+    });
+    const calls = f.request.mock.calls.length;
+    expect(success).not.toHaveBeenCalled();
+    expect(f.node.textContent).not.toContain("Banco **** 1234");
+    await act(async () => vi.advanceTimersByTimeAsync(249));
+    expect(success).not.toHaveBeenCalled();
+    expect(f.node.textContent).not.toContain("Banco **** 1234");
+    await act(async () => vi.advanceTimersByTimeAsync(1));
+    expect(f.node.textContent).toContain("Banco **** 1234");
+    expect(f.node.textContent).not.toContain("Resultado em verificação");
+    expect(success).toHaveBeenCalledWith(
+      "Prévia pronta. Confira o destino, os valores e a validade antes de confirmar.",
+    );
+    expect(f.request).toHaveBeenCalledTimes(calls);
+    expect(f.tables.withdrawal_intent).toHaveLength(0);
+    expect(f.tables.financial_operation).toHaveLength(0);
+    expect(f.tables.financial_ledger_entry).toHaveLength(0);
+  });
   it("keeps demo SIMULATION receiving evidence unable to expose a withdrawal form or create preview and reservation rows", async () => {
     const f = await withdrawalHttpBridge({
       receivingEvidenceProvenance: "SIMULATION",
@@ -2007,6 +2051,362 @@ describe("withdrawal setup owned source lifecycle", () => {
     expect(f.controller.canResumePreview()).toBe(true);
     return { ...f, native };
   }
+  async function futureCommand(
+    command: "preview" | "resume" | "seal",
+    aheadMs = 250,
+    now?: () => number,
+    beforeCommand?: (f: Awaited<ReturnType<typeof fixture>>) => void,
+  ) {
+    const f =
+      command === "resume"
+        ? await failedPreview()
+        : await fixture(
+            command === "seal" ? openContext() : context(),
+            undefined,
+            now,
+          );
+    if (command !== "resume") await f.controller.refresh();
+    const next: WithdrawalRequestStatus =
+      command === "seal"
+        ? {
+            ...unresolved("2"),
+            state: "SEALED_NOT_CREATED",
+            scopeRevision: "2",
+            requestRevision: "2",
+            observationOrder: {
+              scopeRevision: "2",
+              requestRevision: "2",
+              recordUpdatedAtMicroseconds: String(BigInt(start) * 1000n + 1n),
+            },
+            command: {
+              requestId: "request-a",
+              amountCents: 10000,
+              destinationVersion: 3,
+            },
+            sealedAt: new Date(start).toISOString(),
+          }
+        : open();
+    next.observedAt = new Date(start + aheadMs).toISOString();
+    const native = required(f.request.getMockImplementation());
+    f.request.mockImplementation((path, options) =>
+      path.endsWith(command === "seal" ? "/seal" : "/preview")
+        ? Promise.resolve({ request: structuredClone(next) })
+        : native(path, options),
+    );
+    beforeCommand?.(f);
+    const work =
+      command === "seal"
+        ? f.controller.act("SEAL", () => `fr1.cHJvb2Y.${"A".repeat(43)}`, true)
+        : command === "resume"
+          ? f.controller.resumePreview()
+          : f.controller.preview("100");
+    await vi.advanceTimersByTimeAsync(0);
+    return { ...f, next, work };
+  }
+  it.each(["preview", "resume", "seal"] as const)(
+    "waits once for a fixed %s response without changing its observation or repeating transport",
+    async (command) => {
+      const success = vi.spyOn(toast, "success");
+      const f = await futureCommand(command);
+      try {
+        const marker = [...f.storage.data.values()];
+        const calls = f.request.mock.calls.length;
+        expect(f.controller.getState().busy).toBe(true);
+        expect(f.controller.getState().uncertain).toBe(true);
+        expect(success).not.toHaveBeenCalled();
+        await vi.advanceTimersByTimeAsync(249);
+        expect(f.controller.getState().busy).toBe(true);
+        expect([...f.storage.data.values()]).toEqual(marker);
+        await vi.advanceTimersByTimeAsync(1);
+        expect(await f.work).toBe(true);
+        expect(f.controller.getState().request).toEqual(f.next);
+        expect(f.controller.getState().uncertain).toBe(false);
+        expect(f.request).toHaveBeenCalledTimes(calls);
+        expect(f.ports.newRequestId).toHaveBeenCalledTimes(
+          command === "seal" ? 0 : 1,
+        );
+        expect([...f.storage.data.values()]).toEqual(
+          command === "seal" ? [] : marker,
+        );
+      } finally {
+        f.cleanup();
+      }
+    },
+  );
+  it.each([
+    "owner",
+    "scope",
+    "session",
+    "dispose",
+    "clock port",
+    "transport port",
+  ])(
+    "does not install a command response when %s changes during its wait",
+    async (change) => {
+      const success = vi.spyOn(toast, "success");
+      const f = await futureCommand("preview");
+      try {
+        const marker = [...f.storage.data.values()];
+        const calls = f.request.mock.calls.length;
+        expect(f.controller.getState().busy).toBe(true);
+        if (change === "owner") f.owner.invalidate(false);
+        if (change === "scope") f.scope.siteId = "another-site";
+        if (change === "session")
+          vi.setSystemTime(Date.parse(actor.session.expiresAt));
+        if (change === "dispose") f.controller.dispose();
+        if (change === "clock port") f.ports.now = () => Date.now();
+        if (change === "transport port") f.ports.request = vi.fn();
+        await vi.advanceTimersByTimeAsync(250);
+        expect(await f.work).toBe(false);
+        expect(f.controller.getState().request).toBeNull();
+        expect(success).not.toHaveBeenCalled();
+        expect(f.request).toHaveBeenCalledTimes(calls);
+        expect([...f.storage.data.values()]).toEqual(marker);
+      } finally {
+        f.cleanup();
+      }
+    },
+  );
+  it.each(["replaced", "removed", "unreadable"])(
+    "preserves a %s retained marker and rejects the response after waiting",
+    async (change) => {
+      const success = vi.spyOn(toast, "success");
+      const f = await futureCommand("preview");
+      try {
+        expect(f.controller.getState().busy).toBe(true);
+        const key = required([...f.storage.data.keys()][0]);
+        if (change === "replaced")
+          f.storage.data.set(
+            key,
+            JSON.stringify({
+              ...JSON.parse(required(f.storage.data.get(key))),
+              requestId: "other",
+            }),
+          );
+        if (change === "removed") f.storage.data.delete(key);
+        if (change === "unreadable")
+          f.storage.getItem.mockImplementation(() => {
+            throw new Error("Storage unavailable");
+          });
+        const marker = [...f.storage.data.values()];
+        await vi.advanceTimersByTimeAsync(250);
+        expect(await f.work).toBe(false);
+        expect(f.controller.getState().request).toBeNull();
+        expect(f.controller.getState().status).toBe("storage_unavailable");
+        expect(success).not.toHaveBeenCalled();
+        expect([...f.storage.data.values()]).toEqual(marker);
+        expect(f.storage.removeItem).not.toHaveBeenCalled();
+      } finally {
+        f.cleanup();
+      }
+    },
+  );
+  it.each([
+    "frozen",
+    "backward",
+    "overslept",
+    "monotonic frozen",
+    "monotonic backward",
+    "monotonic invalid",
+  ])(
+    "rejects a %s clock after waiting without accepting future authority",
+    async (scenario) => {
+      let wall = start;
+      let monotonic = 100;
+      if (scenario.startsWith("monotonic") || scenario === "overslept")
+        vi.spyOn(performance, "now").mockImplementation(() => monotonic);
+      const f = await futureCommand("preview", 250, () => wall);
+      try {
+        expect(f.controller.getState().busy).toBe(true);
+        const calls = f.request.mock.calls.length;
+        if (scenario === "backward") wall = start - 1;
+        if (scenario === "overslept") {
+          wall = start + 250;
+          monotonic += 1251;
+        }
+        if (scenario === "monotonic backward") {
+          wall = start + 250;
+          monotonic -= 1;
+        }
+        if (scenario === "monotonic frozen") wall = start + 250;
+        if (scenario === "monotonic invalid") {
+          wall = start + 250;
+          monotonic = Number.NaN;
+        }
+        await vi.advanceTimersByTimeAsync(250);
+        expect(await f.work).toBe(false);
+        expect(f.controller.getState().request).toBeNull();
+        expect(f.controller.guard.isCurrent()).toBe(false);
+        expect(f.request).toHaveBeenCalledTimes(calls);
+        expect(f.storage.data.size).toBe(1);
+      } finally {
+        f.cleanup();
+      }
+    },
+  );
+  it("rejects excessive command clock lead without scheduling a wait", async () => {
+    const f = await futureCommand("preview", 1001);
+    try {
+      expect(await f.work).toBe(false);
+      expect(f.controller.getState().request).toBeNull();
+      expect(f.controller.getState().uncertain).toBe(true);
+      const calls = f.request.mock.calls.length;
+      await vi.advanceTimersByTimeAsync(1250);
+      expect(f.controller.getState().request).toBeNull();
+      expect(f.request).toHaveBeenCalledTimes(calls);
+    } finally {
+      f.cleanup();
+    }
+  });
+  it("accepts the bounded maximum command clock lead only once the browser reaches it", async () => {
+    const f = await futureCommand("preview", 1000);
+    try {
+      expect(f.controller.getState().busy).toBe(true);
+      await vi.advanceTimersByTimeAsync(999);
+      expect(f.controller.getState().request).toBeNull();
+      await vi.advanceTimersByTimeAsync(1);
+      expect(await f.work).toBe(true);
+      expect(f.controller.getState().request).toEqual(f.next);
+    } finally {
+      f.cleanup();
+    }
+  });
+  it("keeps an OPEN that expires during its wait recoverable without authorizing confirmation", async () => {
+    let wall = start;
+    const f = await futureCommand("preview", 250, () => wall);
+    try {
+      expect(f.controller.getState().busy).toBe(true);
+      wall = start + 60000;
+      await vi.advanceTimersByTimeAsync(250);
+      expect(await f.work).toBe(true);
+      expect(f.controller.getState().request).toEqual(f.next);
+      expect(f.controller.guard.isCurrent()).toBe(true);
+      const calls = f.request.mock.calls.length;
+      const proof = vi.fn(() => `fr1.cHJvb2Y.${"A".repeat(43)}`);
+      expect(await f.controller.act("CONFIRM_NEW", proof, true)).toBe(false);
+      expect(proof).not.toHaveBeenCalled();
+      expect(f.request).toHaveBeenCalledTimes(calls);
+      expect(f.storage.data.size).toBe(1);
+    } finally {
+      f.cleanup();
+    }
+  });
+  it("rechecks the exact marker after final clock callbacks during command admission", async () => {
+    let afterRead = false;
+    let replace = () => {};
+    const f = await futureCommand("preview", 250, () => {
+      if (afterRead) replace();
+      return Date.now();
+    });
+    try {
+      expect(f.controller.getState().busy).toBe(true);
+      const key = required([...f.storage.data.keys()][0]);
+      const replacement = JSON.stringify({
+        ...JSON.parse(required(f.storage.data.get(key))),
+        requestId: "other",
+      });
+      replace = () => f.storage.data.set(key, replacement);
+      f.storage.getItem.mockImplementation((selected) => {
+        const value = f.storage.data.get(selected) ?? null;
+        afterRead = true;
+        return value;
+      });
+      await vi.advanceTimersByTimeAsync(250);
+      expect(await f.work).toBe(false);
+      expect(f.controller.getState().request).toBeNull();
+      expect(f.storage.data.get(key)).toBe(replacement);
+      expect(f.storage.removeItem).not.toHaveBeenCalled();
+    } finally {
+      f.cleanup();
+    }
+  });
+  it.each([
+    ["preview", 0, "replaced"],
+    ["preview", 0, "removed"],
+    ["preview", 250, "replaced"],
+    ["preview", 250, "removed"],
+    ["seal", 0, "replaced"],
+    ["seal", 0, "removed"],
+    ["seal", 250, "replaced"],
+    ["seal", 250, "removed"],
+  ] as const)(
+    "rejects %s with %sms lead when its marker is %s before synchronous publication",
+    async (command, aheadMs, change) => {
+      const success = vi.spyOn(toast, "success");
+      let expected: string | null = null;
+      const f = await futureCommand(command, aheadMs, undefined, (f) => {
+        const mutate = () => {
+          const key = required([...f.storage.data.keys()][0]);
+          if (change === "removed") f.storage.data.delete(key);
+          else {
+            expected = JSON.stringify({
+              ...JSON.parse(required(f.storage.data.get(key))),
+              requestId: "other",
+            });
+            f.storage.data.set(key, expected);
+          }
+        };
+        if (aheadMs) {
+          let samples = 0;
+          vi.spyOn(performance, "now").mockImplementation(() => {
+            if (++samples === 2) queueMicrotask(mutate);
+            return Date.now() - start;
+          });
+        } else {
+          const native = required(f.request.getMockImplementation());
+          f.request.mockImplementation(async (path, options) => {
+            const response = await native(path, options);
+            if (options?.method === "POST") queueMicrotask(mutate);
+            return response;
+          });
+        }
+      });
+      try {
+        await vi.advanceTimersByTimeAsync(aheadMs);
+        expect(await f.work).toBe(false);
+        expect(f.controller.getState().request?.state).not.toBe(
+          command === "seal" ? "SEALED_NOT_CREATED" : "OPEN",
+        );
+        expect(f.controller.getState().uncertain).toBe(true);
+        expect(success).not.toHaveBeenCalled();
+        expect([...f.storage.data.values()]).toEqual(
+          expected ? [expected] : [],
+        );
+        expect(f.storage.removeItem).not.toHaveBeenCalled();
+      } finally {
+        f.cleanup();
+      }
+    },
+  );
+  it.each(["transport", "clock", "storage", "scope", "session epoch"])(
+    "rejects a %s change in the final marker-read callback before command publication",
+    async (change) => {
+      const success = vi.spyOn(toast, "success");
+      const f = await futureCommand("preview");
+      try {
+        let reads = 0;
+        f.storage.getItem.mockImplementation((key) => {
+          const value = f.storage.data.get(key) ?? null;
+          if (++reads === 2) {
+            if (change === "transport") f.ports.request = vi.fn();
+            if (change === "clock") f.ports.now = () => Date.now();
+            if (change === "storage") f.ports.storage = memory();
+            if (change === "scope") f.scope.siteId = "another-site";
+            if (change === "session epoch")
+              f.scope.sessionEpoch = required(f.scope.sessionEpoch) + 1;
+          }
+          return value;
+        });
+        await vi.advanceTimersByTimeAsync(250);
+        expect(await f.work).toBe(false);
+        expect(f.controller.getState().request).toBeNull();
+        expect(success).not.toHaveBeenCalled();
+        expect(f.storage.data.size).toBe(1);
+      } finally {
+        f.cleanup();
+      }
+    },
+  );
   it.each(["legacy", "scope", "command", "record", "mode", "blocked", "clock"])(
     "does not resume an unverifiable %s preview",
     async (scenario) => {
@@ -2061,7 +2461,7 @@ describe("withdrawal setup owned source lifecycle", () => {
       f.cleanup();
     },
   );
-  it.each(["error", "amount", "site", "older", "future"])(
+  it.each(["error", "amount", "site", "older", "excessive future"])(
     "keeps the original correlation after a resumed preview %s",
     async (scenario) => {
       const f = await failedPreview();
@@ -2083,8 +2483,8 @@ describe("withdrawal setup owned source lifecycle", () => {
           value.scopeRevision = "0";
           value.observationOrder.scopeRevision = "0";
         }
-        if (scenario === "future")
-          value.observedAt = new Date(start + 1).toISOString();
+        if (scenario === "excessive future")
+          value.observedAt = new Date(start + 1001).toISOString();
         return Promise.resolve({ request: value });
       });
       expect(await f.controller.resumePreview()).toBe(false);

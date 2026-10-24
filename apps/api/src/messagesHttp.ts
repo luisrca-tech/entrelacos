@@ -13,6 +13,7 @@ import { site, siteOrigin } from "@entrelacos/database/schema";
 import { getConnInfo } from "@hono/node-server/conninfo";
 import { eq } from "drizzle-orm";
 import { type Context, Hono } from "hono";
+import { trustedAdminOrigin } from "./adminOrigin";
 import type { AuthHttpOptions } from "./authHttp";
 import { AdminSessionRequiredError, requireAdminSession } from "./authHttp";
 import { forwardedClientIp } from "./guestVerificationHttp";
@@ -247,7 +248,7 @@ async function requireAdminActor(
 ): Promise<
   Response | { userId: string; role: "OWNER" | "SITE_ADMIN" | "SITE_ASSISTANT" }
 > {
-  if (request.headers.get("origin") !== options.adminOrigin)
+  if (!trustedAdminOrigin(request.headers.get("origin"), options.adminOrigin))
     return problem(403, "FORBIDDEN", "Forbidden");
   try {
     const actor = await requireAdminSession(request, options);

@@ -15,6 +15,7 @@ import { siteOrigin } from "@entrelacos/database/schema";
 import { and, eq } from "drizzle-orm";
 import { type Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
+import { trustedAdminOrigin } from "./adminOrigin";
 import {
   AdminSessionRequiredError,
   type AuthHttpOptions,
@@ -126,7 +127,7 @@ export function createGiftsHttpRouter(options: GiftsHttpOptions) {
     );
   });
   router.use("/v1/sites/:siteId/*", async (context, next) => {
-    if (context.req.header("origin") !== options.adminOrigin)
+    if (!trustedAdminOrigin(context.req.header("origin"), options.adminOrigin))
       return problem(context, 403, "FORBIDDEN", "Forbidden");
     if (!siteIdSchema.safeParse(context.req.param("siteId")).success)
       return problem(

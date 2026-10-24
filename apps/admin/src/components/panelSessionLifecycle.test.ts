@@ -6,7 +6,7 @@ import {
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ApiError, apiRequest } from "../lib/apiClient";
+import { ApiError, apiRequest, safePanelReturn } from "../lib/apiClient";
 import { Panel } from "./Panel";
 import { panelActorOwner } from "./panelActor";
 import { ReceivingAccountSetup } from "./ReceivingAccountSetup";
@@ -103,11 +103,67 @@ afterEach(async () => {
   await act(async () => root.unmount());
   container.remove();
   panelActorOwner.invalidate(false);
+  vi.unstubAllGlobals();
   vi.resetAllMocks();
   vi.useRealTimers();
 });
 
 describe("panel session resume with a mounted receiving form", () => {
+  it.each([401, "expired", 403, 503] as const)(
+    "redirects only an unauthenticated identity response %s to login with a safe return",
+    async (outcome) => {
+      await act(async () => root.unmount());
+      root = createRoot(container);
+      const replace = vi.fn();
+      const pathname = "/sites/site-one/receiving";
+      const search = "?tab=setup";
+      vi.stubGlobal(
+        "window",
+        new Proxy(window, {
+          get(target, key) {
+            if (key === "location") return { pathname, search, replace };
+            const value = Reflect.get(target, key, target);
+            return ["addEventListener", "removeEventListener"].includes(
+              String(key),
+            )
+              ? value.bind(target)
+              : value;
+          },
+        }),
+      );
+      if (outcome === "expired")
+        vi.mocked(apiRequest).mockResolvedValueOnce({
+          ...actor,
+          session: {
+            ...actor.session,
+            expiresAt: new Date(Date.now() - 1).toISOString(),
+          },
+        });
+      else
+        vi.mocked(apiRequest).mockRejectedValueOnce(
+          new ApiError(outcome, outcome === 401 ? "UNAUTHORIZED" : "FORBIDDEN"),
+        );
+      await act(async () => {
+        root.render(
+          createElement(Panel, { siteId: "site-one", area: "receiving" }),
+        );
+      });
+      expect(panelActorOwner.getSnapshot().actor).toBeNull();
+      expect(panelActorOwner.getSnapshot().sessionEpoch).toBeNull();
+      expect(container.querySelector("form")).toBeNull();
+      if (outcome === 401 || outcome === "expired") {
+        expect(replace).toHaveBeenCalledExactlyOnceWith(
+          `/login?next=${encodeURIComponent(pathname + search)}`,
+        );
+        const next = new URL(
+          replace.mock.calls[0][0],
+          "https://admin.example.test",
+        ).searchParams.get("next");
+        expect(safePanelReturn(next)).toBe(pathname + search);
+      } else expect(replace).not.toHaveBeenCalled();
+    },
+  );
+
   it("loads identity in an initially hidden tab while keeping its form suspended", async () => {
     await act(async () => root.unmount());
     root = createRoot(container);

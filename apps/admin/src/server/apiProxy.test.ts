@@ -14,7 +14,195 @@ const config = {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
   vi.useRealTimers();
+});
+
+describe("development localhost proxy origins", () => {
+  const localConfig = { ...config, adminOrigin: "http://localhost:3001" };
+
+  it("keeps configured non-local origins available in development", async () => {
+    vi.stubEnv("APP_ENV", "development");
+    vi.stubEnv("NODE_ENV", "development");
+    const upstream = vi
+      .fn()
+      .mockImplementation(async () => Response.json({ ok: true }));
+    vi.stubGlobal("fetch", upstream);
+    expect(
+      (await proxyApiRequest(proxyRequest("/api/v1/me"), config)).status,
+    ).toBe(200);
+    expect(upstream).toHaveBeenCalledOnce();
+  });
+
+  it.each(["/api/v1/me", "/api/v1/sites/site-a/finance/purchases"])(
+    "allows missing Origin only for safe same-page reads and rejects cross-site metadata at %s",
+    async (path) => {
+      vi.stubEnv("APP_ENV", "development");
+      vi.stubEnv("NODE_ENV", "development");
+      const upstream = vi
+        .fn()
+        .mockImplementation(async () => Response.json({ ok: true }));
+      vi.stubGlobal("fetch", upstream);
+      const response = await proxyApiRequest(
+        new Request(`http://localhost:3000${path}`),
+        localConfig,
+      );
+      expect(response.status).not.toBe(403);
+      expect(upstream).toHaveBeenCalledOnce();
+      upstream.mockClear();
+      for (const init of [
+        { method: "POST" },
+        {
+          headers: {
+            Origin: "http://localhost:3000",
+            "Sec-Fetch-Site": "cross-site",
+          },
+        },
+      ]) {
+        expect(
+          (
+            await proxyApiRequest(
+              new Request(`http://localhost:3000${path}`, init),
+              localConfig,
+            )
+          ).status,
+        ).toBe(403);
+      }
+      expect(upstream).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    "http://localhost:3000",
+    "http://localhost:3001",
+    "https://localhost:4242",
+  ])(
+    "admits its own page origin %s and forwards only configured API authority",
+    async (origin) => {
+      vi.stubEnv("APP_ENV", "development");
+      vi.stubEnv("NODE_ENV", "development");
+      const upstream = vi
+        .fn()
+        .mockImplementation(async () => Response.json({ ok: true }));
+      vi.stubGlobal("fetch", upstream);
+      for (const [path, method] of [
+        ["/api/v1/me", "GET"],
+        ["/api/v1/auth/sign-out", "POST"],
+      ]) {
+        const response = await proxyApiRequest(
+          new Request(`${origin}${path}`, {
+            method,
+            headers: {
+              Origin: origin,
+              Cookie: "better-auth.session_token=opaque",
+              "X-Forwarded-Host": "evil.example.test",
+              "X-Forwarded-Proto": "http",
+            },
+            ...(method === "POST" ? { body: "{}" } : {}),
+          }),
+          localConfig,
+        );
+        expect(response.status).toBe(200);
+      }
+      expect(upstream).toHaveBeenCalledTimes(2);
+      for (const [, init] of upstream.mock.calls) {
+        expect(init.headers.get("origin")).toBe(localConfig.adminOrigin);
+        expect(init.headers.get("cookie")).toBe(
+          "better-auth.session_token=opaque",
+        );
+        expect(init.headers.has("x-forwarded-host")).toBe(false);
+        expect(init.headers.has("x-forwarded-proto")).toBe(false);
+      }
+    },
+  );
+
+  it("uses the localhost rule on the isolated history proxy path", async () => {
+    vi.stubEnv("APP_ENV", "development");
+    vi.stubEnv("NODE_ENV", "development");
+    const upstream = vi.fn().mockImplementation(async () =>
+      Response.json(
+        {
+          type: "about:blank",
+          title: "Unavailable",
+          status: 503,
+          code: "GIFT_PAYMENT_HISTORY_UNAVAILABLE",
+        },
+        { status: 503 },
+      ),
+    );
+    vi.stubGlobal("fetch", upstream);
+    const response = await proxyApiRequest(
+      new Request(
+        "http://localhost:3000/api/v1/sites/site-a/finance/purchases",
+        {
+          headers: { Origin: "http://localhost:3000" },
+        },
+      ),
+      localConfig,
+    );
+    expect(response.status).toBe(503);
+    expect(upstream).toHaveBeenCalledOnce();
+    expect(upstream.mock.calls[0][1].headers.get("origin")).toBe(
+      localConfig.adminOrigin,
+    );
+  });
+
+  it.each([
+    ["http://localhost:3000", "http://localhost:3001"],
+    ["http://localhost.evil:3000", "http://localhost.evil:3000"],
+    ["http://localhostevil:3000", "http://localhostevil:3000"],
+    ["http://localhost:3000", "http://user@localhost:3000"],
+    ["http://localhost:3000", "null"],
+  ])(
+    "rejects foreign page %s or origin %s before forwarding cookies",
+    async (page, origin) => {
+      vi.stubEnv("APP_ENV", "development");
+      vi.stubEnv("NODE_ENV", "development");
+      const upstream = vi.fn();
+      vi.stubGlobal("fetch", upstream);
+      for (const path of [
+        "/api/v1/me",
+        "/api/v1/sites/site-a/finance/purchases",
+      ]) {
+        const response = await proxyApiRequest(
+          new Request(`${page}${path}`, {
+            headers: {
+              Origin: origin,
+              Cookie: "better-auth.session_token=opaque",
+            },
+          }),
+          localConfig,
+        );
+        expect(response.status).toBe(403);
+      }
+      expect(upstream).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ["production", "development"],
+    ["development", "production"],
+    [undefined, "development"],
+  ])(
+    "does not broaden proxy authority for APP_ENV=%s and NODE_ENV=%s",
+    async (appEnv, nodeEnv) => {
+      vi.stubEnv("APP_ENV", appEnv);
+      vi.stubEnv("NODE_ENV", nodeEnv);
+      const upstream = vi.fn();
+      vi.stubGlobal("fetch", upstream);
+      expect(
+        (
+          await proxyApiRequest(
+            new Request("http://localhost:3000/api/v1/me", {
+              headers: { Origin: "http://localhost:3000" },
+            }),
+            localConfig,
+          )
+        ).status,
+      ).toBe(403);
+      expect(upstream).not.toHaveBeenCalled();
+    },
+  );
 });
 
 function proxyRequest(path: string, init: RequestInit = {}) {

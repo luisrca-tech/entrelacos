@@ -6,6 +6,7 @@ import {
   siteIdSchema,
 } from "@entrelacos/contracts";
 import { Hono } from "hono";
+import { trustedAdminOrigin } from "./adminOrigin";
 import {
   type AdministrativeActor,
   AdminSessionRequiredError,
@@ -140,7 +141,9 @@ export function createReceivingNominationHttpRouter(
   router.get(
     "/v1/sites/:siteId/receiving/nomination-context",
     async (context) => {
-      if (context.req.header("origin") !== options.adminOrigin)
+      if (
+        !trustedAdminOrigin(context.req.header("origin"), options.adminOrigin)
+      )
         return problem(403, "FORBIDDEN");
       const site = siteIdSchema.safeParse(context.req.param("siteId"));
       const request = context.req.raw;
@@ -215,7 +218,7 @@ export function createReceivingNominationHttpRouter(
     },
   );
   router.post("/v1/sites/:siteId/receiving/nomination", async (context) => {
-    if (context.req.header("origin") !== options.adminOrigin)
+    if (!trustedAdminOrigin(context.req.header("origin"), options.adminOrigin))
       return problem(403, "FORBIDDEN");
     const current = await requireAdminSession(context.req.raw, options);
     const siteId = siteIdSchema.safeParse(context.req.param("siteId"));

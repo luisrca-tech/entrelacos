@@ -1,4 +1,5 @@
 import type { BetterAuthOptions } from "better-auth";
+import { hasTrustedAdminOrigins, trustedAdminOrigin } from "./adminOrigin";
 import type { ApiOptions } from "./app";
 import { type AuthFactoryOptions, createSessionReadAuth } from "./auth";
 import { type AuthInstance, readAdministrativeSession } from "./authHttp";
@@ -64,9 +65,10 @@ export function createReceivingNominationComposition(
       sessionOptions?.deferSessionRefresh === true ||
       standardAuth.options.secret !== authentication.secret ||
       standardAuth.options.baseURL !== authentication.baseURL ||
-      !Array.isArray(standardAuth.options.trustedOrigins) ||
-      standardAuth.options.trustedOrigins.length !== 1 ||
-      standardAuth.options.trustedOrigins[0] !== authentication.adminOrigin
+      !hasTrustedAdminOrigins(
+        standardAuth.options.trustedOrigins,
+        authentication.adminOrigin,
+      )
     )
       return unavailable();
     const now = suppliedClock.bind(options);
@@ -123,7 +125,10 @@ export function createReceivingNominationComposition(
           requestOptions.auth !== standardAuth ||
           requestOptions.db !== authentication.db ||
           requestOptions.now !== now ||
-          request.headers.get("origin") !== authentication.adminOrigin
+          !trustedAdminOrigin(
+            request.headers.get("origin"),
+            authentication.adminOrigin,
+          )
         )
           return unavailable();
         return readAdministrativeSession(request, {

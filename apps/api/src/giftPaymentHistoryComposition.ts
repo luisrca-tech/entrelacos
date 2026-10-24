@@ -1,5 +1,6 @@
 import { isPromise } from "node:util/types";
 import type { BetterAuthOptions } from "better-auth";
+import { hasTrustedAdminOrigins } from "./adminOrigin";
 import { type ApiOptions, createApp } from "./app";
 import { type AuthFactoryOptions, createSessionReadAuth } from "./auth";
 import type { AuthInstance } from "./authHttp";
@@ -87,9 +88,7 @@ function matchesAuth(auth: AuthInstance, configuration: AuthFactoryOptions) {
   return (
     options.secret === configuration.secret &&
     options.baseURL === configuration.baseURL &&
-    Array.isArray(options.trustedOrigins) &&
-    options.trustedOrigins.length === 1 &&
-    options.trustedOrigins[0] === configuration.adminOrigin
+    hasTrustedAdminOrigins(options.trustedOrigins, configuration.adminOrigin)
   );
 }
 

@@ -8,6 +8,7 @@ import {
   siteIdSchema,
 } from "@entrelacos/contracts";
 import { type Context, Hono } from "hono";
+import { trustedAdminOrigin } from "./adminOrigin";
 import {
   type GiftPaymentHistoryService,
   historyUnavailable,
@@ -160,7 +161,7 @@ export function createGiftPaymentHistoryHttpRouter(
     csv: boolean,
   ): Promise<Response> {
     if (closing || !configured) return unavailable();
-    if (context.req.header("origin") !== configured.origin)
+    if (!trustedAdminOrigin(context.req.header("origin"), configured.origin))
       return problem(403, "FORBIDDEN");
     const parsed = input(context, detail);
     if (!parsed) return problem(400, "VALIDATION_ERROR");
