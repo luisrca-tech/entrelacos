@@ -61,20 +61,48 @@ export function prepareAsaasReceivingVerification(
     return unavailable();
   const { status: commercialStatus, ...commercial } = facts.commercialInfo;
   const input = readAccountProvisioningInput(commercial);
-  const identity = deriveReceivingProvisioningContext(
-    original.nomination,
-    original.provision.parentAccountReference,
-    original.provision.fingerprintKeyId,
-    input,
-    keyring,
+  // Asaas can uppercase the legal name after KYC. Legacy fingerprints retain
+  // the submitted case; every other field must still match the original HMAC.
+  const lower = input.name.toLocaleLowerCase("pt-BR");
+  const title = lower.replace(/(^|\s)(\p{L})/gu, (letter) =>
+    letter.toLocaleUpperCase("pt-BR"),
   );
-  if (
-    !timingSafeEqual(
-      Buffer.from(identity.inputFingerprint, "hex"),
-      Buffer.from(original.provision.inputFingerprint, "hex"),
-    )
-  )
-    return unavailable();
+  const names = new Set([
+    input.name,
+    input.name.toLocaleUpperCase("pt-BR"),
+    lower,
+    title,
+    title.replace(/\b(Da|Das|De|Do|Dos|E)\b/g, (word) =>
+      word.toLocaleLowerCase("pt-BR"),
+    ),
+  ]);
+  let identity:
+    | ReturnType<typeof deriveReceivingProvisioningContext>
+    | undefined;
+  for (const name of names) {
+    let candidate: ReturnType<typeof deriveReceivingProvisioningContext>;
+    try {
+      candidate = deriveReceivingProvisioningContext(
+        original.nomination,
+        original.provision.parentAccountReference,
+        original.provision.fingerprintKeyId,
+        { ...input, name },
+        keyring,
+      );
+    } catch {
+      continue;
+    }
+    if (
+      timingSafeEqual(
+        Buffer.from(candidate.inputFingerprint, "hex"),
+        Buffer.from(original.provision.inputFingerprint, "hex"),
+      )
+    ) {
+      identity = candidate;
+      break;
+    }
+  }
+  if (!identity) return unavailable();
   const bank = facts.accountNumber;
   for (const field of [bank.agency, bank.account, bank.accountDigit])
     if (typeof field !== "string" || !/^[0-9]{1,20}$/.test(field))
@@ -103,10 +131,11 @@ export function prepareAsaasReceivingVerification(
   );
   if (!current) return { candidate, observation: null };
   const approved =
-    (
-      ["commercialInfo", "bankAccountInfo", "documentation", "general"] as const
-    ).every((key) => observed.status[key] === "APPROVED") &&
+    (["commercialInfo", "documentation", "general"] as const).every(
+      (key) => observed.status[key] === "APPROVED",
+    ) &&
     commercialStatus === "APPROVED" &&
+    observed.status.bankAccountInfo !== "REJECTED" &&
     observed.commercialInfoExpired !== true;
   const rejected = Object.values(observed.status).includes("REJECTED");
   const order = String(BigInt(Date.parse(observed.observedAt)) * 1000n);
@@ -132,12 +161,11 @@ export function prepareAsaasReceivingVerification(
     bank: {
       sourceId: `${source}:bank`,
       sourceOrder: order,
-      state:
-        observed.status.bankAccountInfo === "APPROVED"
-          ? "VERIFIED"
-          : observed.status.bankAccountInfo === "REJECTED"
-            ? "REJECTED"
-            : "PENDING",
+      state: approved
+        ? "VERIFIED"
+        : observed.status.bankAccountInfo === "REJECTED"
+          ? "REJECTED"
+          : "PENDING",
       observedAt: observed.observedAt,
     },
   };

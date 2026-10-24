@@ -20,6 +20,15 @@ const holder = {
   consentAt: at,
   consentSessionId: "session-one",
   consentAuthenticatedAt: at,
+  pixConsent: {
+    id: "pix-consent-one",
+    version: "asaas-incoming-pix-v1",
+    accountId: "account-one",
+    userId: "bride-one",
+    sessionId: "session-one",
+    authenticatedAt: at.toISOString(),
+    acceptedAt: at.toISOString(),
+  },
 };
 function fixture(
   rows: Record<string, unknown>[][],
@@ -106,6 +115,7 @@ describe("receiving holder and consent custody", () => {
   it.each([
     "revoked-session",
     "missing-consent",
+    "missing-pix-consent",
     "foreign-wallet",
     "foreign-site",
   ])("refuses incoming Pix dispatch for %s", async (reason) => {
@@ -114,6 +124,8 @@ describe("receiving holder and consent custody", () => {
     if (reason === "missing-consent")
       rows[4] = [{ ...holder, consentId: null }] as never;
     if (reason === "foreign-wallet") rows[5] = [];
+    if (reason === "missing-pix-consent")
+      rows[4] = [{ ...holder, pixConsent: null }] as never;
     const v = fixture(rows);
     await expect(
       v.repository.armIncomingPix(
@@ -130,6 +142,28 @@ describe("receiving holder and consent custody", () => {
           .sql.includes("INSERT INTO receiving_pix_preparation"),
       ),
     ).toBe(false);
+  });
+  it("records specific Pix consent without replacing the original account-opening consent", async () => {
+    const rows = pixAuthority();
+    rows[4] = [{ ...holder, pixConsent: null }] as never;
+    const v = fixture([...rows, [{ id: holder.id }]]);
+    await v.repository.consentIncomingPix(
+      actor,
+      "account-one",
+      "asaas-incoming-pix-v1",
+    );
+    const call = v.execute.mock.calls.at(-1);
+    if (!call) throw new Error("Missing consent write");
+    const query = new PgDialect().sqlToQuery(call[0]);
+    expect(query.sql).toContain("pix_preparation_consent");
+    expect(query.sql).not.toContain("SET consent_id");
+    expect(
+      query.params.some(
+        (value) =>
+          typeof value === "string" &&
+          value.includes('"version":"asaas-incoming-pix-v1"'),
+      ),
+    ).toBe(true);
   });
   it.each(["site-one", "other-site"])(
     "retains actual holder authentication for exact production showcase (%s)",

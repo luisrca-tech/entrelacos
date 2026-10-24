@@ -169,6 +169,13 @@
       "when": 1792875278219,
       "tag": "0023_receiving_pix_preparation",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1792877474709,
+      "tag": "0024_incoming_pix_consent",
+      "breakpoints": true
     }
   ]
 }

@@ -105,6 +105,20 @@ function request(path = "setup", body?: unknown, suppliedOrigin = origin) {
     },
   );
 }
+it("passes the specific Pix consent version only from an explicit holder command", async () => {
+  const v = fixture();
+  const response = await v.router.fetch(
+    request("incoming-verification", {
+      confirmIncomingAccount: true,
+      pixConsentVersion: "asaas-incoming-pix-v1",
+    }),
+  );
+  expect(response.status).toBe(200);
+  expect(v.verifyIncoming).toHaveBeenCalledExactlyOnceWith(
+    { userId: "bride-one", siteId: "site-one", sessionId: "session-one" },
+    "asaas-incoming-pix-v1",
+  );
+});
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.requireAdminSession.mockResolvedValue({

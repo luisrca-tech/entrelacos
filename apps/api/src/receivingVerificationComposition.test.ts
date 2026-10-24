@@ -12,12 +12,14 @@ vi.mock("./receivingVerification", async (original) => ({
   }),
 }));
 
+import { encryptProviderCredential } from "./providerCredentials";
 import { createReceivingVerificationComposition } from "./receivingVerificationComposition";
 
 function fixture(
   native = false,
   mode: "sandbox" | "live" = "sandbox",
   liveDemoSiteId?: string,
+  actualPreparation = false,
 ) {
   const row = {
     siteId: "site-one",
@@ -34,6 +36,29 @@ function fixture(
     requireHolder: vi.fn(async () => ({ holderUserId: "holder-one" })),
     readSessionAuthentication: vi.fn(async () => proof),
     readCurrentProvisioningPolicy: vi.fn(async () => true),
+    readAccount: vi.fn(async () => ({
+      accountId: row.accountId,
+      operatorUserId: row.operatorUserId,
+      state: "SUCCEEDED",
+      record: { provision: { parentAccountReference: "parent-one" } },
+      result: {
+        accountReference: row.accountReference,
+        recipientReference: row.recipientReference,
+        credential: encryptProviderCredential(
+          "child-private-key",
+          {
+            provider: "ASAAS",
+            siteId: row.siteId,
+            accountBindingId: row.accountId,
+            environment: mode,
+          },
+          new Map([["key-one", new Uint8Array(32)]]),
+          "key-one",
+        ),
+      },
+    })),
+    armIncomingPix: vi.fn(async () => "attempt-one"),
+    settleIncomingPix: vi.fn(async () => {}),
   };
   const actor = {
     siteId: "site-one",
@@ -49,6 +74,39 @@ function fixture(
     expiresAt: new Date("2026-10-19T12:04:00Z"),
   };
   const now = () => new Date("2026-10-19T12:00:00Z");
+  let activeKey = false;
+  const fetch = vi.fn(
+    async (url: string | URL | Request, init?: RequestInit) => {
+      const path = new URL(String(url)).pathname;
+      if (path.endsWith("/wallets/"))
+        return Response.json({
+          data: [{ id: row.recipientReference }],
+          hasMore: false,
+        });
+      if (path.endsWith("/myAccount/status/"))
+        return Response.json({
+          id: "status-one",
+          commercialInfo: "APPROVED",
+          bankAccountInfo: "PENDING",
+          documentation: "APPROVED",
+          general: "APPROVED",
+        });
+      if (path.endsWith("/myAccount/commercialInfo/"))
+        return Response.json({
+          commercialInfoExpiration: { isExpired: false },
+        });
+      if (path.endsWith("/pix/addressKeys")) {
+        if (init?.method === "POST") activeKey = true;
+        const key = { id: "key-one", type: "EVP", status: "ACTIVE" };
+        return Response.json(
+          init?.method === "POST"
+            ? key
+            : { hasMore: false, data: activeKey ? [key] : [] },
+        );
+      }
+      throw new Error("Unexpected native route");
+    },
+  );
   const prepareIncoming = vi.fn(
     async (): Promise<"READY" | "PENDING" | "REVIEW_REQUIRED"> => "READY",
   );
@@ -67,9 +125,9 @@ function fixture(
     platformAccountReference: "parent-one",
     keyring: new Map([["key-one", new Uint8Array(32)]]),
     repository: repository as never,
-    fetch: vi.fn(),
+    fetch,
     now,
-    prepareIncoming,
+    ...(actualPreparation ? {} : { prepareIncoming }),
     readReadiness: async () => ({
       siteId: "site-one",
       mode,
@@ -88,9 +146,25 @@ function fixture(
     execute,
     repository,
     prepareIncoming,
+    fetch,
   };
 }
 describe("native receiving verification composition", () => {
+  it("decrypts the saved credential using only its exact security context before native preparation", async () => {
+    const v = fixture(false, "live", undefined, true);
+    expect(await v.composition.verify(v.actor)).toMatchObject({
+      state: "READY",
+      mode: "live",
+    });
+    expect(v.repository.armIncomingPix).toHaveBeenCalledOnce();
+    expect(
+      v.fetch.mock.calls.filter(([, init]) => init?.method === "POST"),
+    ).toHaveLength(1);
+    expect(
+      new Headers(v.fetch.mock.calls[0][1]?.headers).get("access_token"),
+    ).toBe("child-private-key");
+    await v.composition.close();
+  });
   it.each(["PENDING", "REVIEW_REQUIRED"] as const)(
     "keeps incoming readiness blocked while preparation is %s",
     async (state) => {

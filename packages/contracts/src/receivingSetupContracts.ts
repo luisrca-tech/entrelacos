@@ -15,6 +15,24 @@ const text = (maximum: number) =>
         ),
     );
 export const receivingSetupConsentVersion = "asaas-receiving-v1";
+export const receivingIncomingPixDisclosure = {
+  version: "asaas-incoming-pix-v1",
+  text: "Autorizo o EntreLaços a criar automaticamente uma chave Pix aleatória na minha conta Asaas para receber os presentes. Minha chave bancária será usada apenas como destino de saque e não será transferida para o Asaas.",
+} as const;
+export const receivingIncomingPixConsentSchema = z
+  .object({
+    id: identifier,
+    version: z.literal(receivingIncomingPixDisclosure.version),
+    accountId: identifier,
+    userId: identifier,
+    sessionId: identifier,
+    authenticatedAt: z.iso.datetime(),
+    acceptedAt: z.iso.datetime(),
+  })
+  .strict();
+export type ReceivingIncomingPixConsent = z.infer<
+  typeof receivingIncomingPixConsentSchema
+>;
 export const receivingSetupDisclosure = {
   id: "entrelacos-asaas-receiving",
   version: receivingSetupConsentVersion,
@@ -51,6 +69,9 @@ export const receivingSetupInputSchema = z
     consentVersion: z.literal(receivingSetupConsentVersion),
     confirmHolder: z.literal(true),
     consentToAsaas: z.literal(true),
+    pixConsentVersion: z
+      .literal(receivingIncomingPixDisclosure.version)
+      .optional(),
     account: receivingSetupAccountSchema,
   })
   .strict();
@@ -85,6 +106,7 @@ export const receivingSetupContextSchema = z
       .optional(),
     isHolder: z.boolean(),
     consentRecorded: z.boolean(),
+    pixConsentRecorded: z.boolean().optional(),
     disclosure: z
       .object({
         id: z.literal(receivingSetupDisclosure.id),
@@ -128,5 +150,8 @@ export type ReceivingSetupInput = z.infer<typeof receivingSetupInputSchema>;
 export const receivingIncomingVerificationInputSchema = z
   .object({
     confirmIncomingAccount: z.literal(true),
+    pixConsentVersion: z
+      .literal(receivingIncomingPixDisclosure.version)
+      .optional(),
   })
   .strict();

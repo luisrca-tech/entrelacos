@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import {
   check,
+  jsonb,
   pgTable,
   text,
   timestamp,
@@ -33,6 +34,7 @@ export const receivingSetupHolder = pgTable(
     consentAuthenticatedAt: timestamp("consent_authenticated_at", {
       withTimezone: true,
     }),
+    pixPreparationConsent: jsonb("pix_preparation_consent"),
   },
   (table) => [
     uniqueIndex("receiving_setup_holder_site_environment_idx").on(
@@ -42,6 +44,10 @@ export const receivingSetupHolder = pgTable(
     check(
       "receiving_setup_holder_environment_check",
       sql`${table.environment} IN ('sandbox', 'live')`,
+    ),
+    check(
+      "receiving_setup_holder_pix_consent_check",
+      sql`${table.pixPreparationConsent} IS NULL OR COALESCE((jsonb_typeof(${table.pixPreparationConsent})='object' AND ${table.pixPreparationConsent}->>'version'='asaas-incoming-pix-v1' AND ${table.pixPreparationConsent}->>'userId'=${table.holderUserId} AND ${table.pixPreparationConsent} ?& ARRAY['id','version','accountId','userId','sessionId','authenticatedAt','acceptedAt']),false)`,
     ),
     check(
       "receiving_setup_holder_consent_check",

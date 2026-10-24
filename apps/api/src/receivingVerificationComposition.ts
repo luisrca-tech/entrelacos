@@ -41,6 +41,7 @@ export function createReceivingVerificationComposition(options: {
     | "readAccount"
     | "armIncomingPix"
     | "settleIncomingPix"
+    | "consentIncomingPix"
   >;
   fetch: typeof globalThis.fetch;
   now(): Date;
@@ -98,7 +99,12 @@ export function createReceivingVerificationComposition(options: {
       binding,
       decryptProviderCredential(
         account.result.credential,
-        binding,
+        {
+          provider: binding.provider,
+          siteId: binding.siteId,
+          accountBindingId: binding.accountBindingId,
+          environment: binding.environment,
+        },
         options.keyring,
       ),
     );
@@ -184,7 +190,10 @@ export function createReceivingVerificationComposition(options: {
     refreshed.set(siteId, options.now().getTime());
   }
   return Object.freeze({
-    async verify(actor: FinancialActor): Promise<ReceivingReadiness> {
+    async verify(
+      actor: FinancialActor,
+      pixConsentVersion?: string,
+    ): Promise<ReceivingReadiness> {
       if (!supported || closed)
         throw new ReceivingSetupError(
           503,
@@ -202,6 +211,12 @@ export function createReceivingVerificationComposition(options: {
       const selected = await current(actor.siteId);
       if (selected.scope.operatorUserId !== actor.userId)
         throw new ReceivingSetupError(403, "RECEIVING_HOLDER_REQUIRED");
+      if (pixConsentVersion)
+        await options.repository.consentIncomingPix(
+          actor,
+          selected.scope.accountId,
+          pixConsentVersion,
+        );
       const preparation = await (options.prepareIncoming ?? prepareIncoming)(
         actor,
         selected.scope,

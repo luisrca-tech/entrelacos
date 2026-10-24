@@ -47,6 +47,7 @@ export interface ReceivingSetupServiceOptions {
     | "readSessionAuthentication"
     | "readAccount"
     | "consent"
+    | "consentIncomingPix"
     | "designate"
     | "listHolderCandidates"
   >;
@@ -136,6 +137,10 @@ export function createReceivingSetupService(
         consentRecorded:
           !!holder?.consentId &&
           holder.consentVersion === receivingSetupDisclosure.version,
+        pixConsentRecorded:
+          !!holder?.pixConsent &&
+          holder.pixConsent.accountId === account?.accountId &&
+          holder.pixConsent.userId === holder.holderUserId,
         ...(platformRole === "OWNER"
           ? {
               holderCandidates: await repository.listHolderCandidates(
@@ -175,7 +180,15 @@ export function createReceivingSetupService(
       const previous = await repository.readAccount(actor.siteId);
       if (previous && previous.operatorUserId !== actor.userId)
         throw new ReceivingSetupError(403, "RECEIVING_HOLDER_REQUIRED");
-      if (previous?.state === "SUCCEEDED") return { state: "STORED" };
+      if (previous?.state === "SUCCEEDED") {
+        if (input.pixConsentVersion)
+          await repository.consentIncomingPix(
+            actor,
+            previous.accountId,
+            input.pixConsentVersion,
+          );
+        return { state: "STORED" };
+      }
       if (previous && previous.state !== "REQUESTED")
         return { state: "UNKNOWN" };
       const nomination =
@@ -194,10 +207,19 @@ export function createReceivingSetupService(
             confirmSelfAsRecipient: true,
           },
         }));
+      if (input.pixConsentVersion)
+        await repository.consentIncomingPix(
+          actor,
+          nomination.accountId,
+          input.pixConsentVersion,
+        );
       const owner = options.provisioning.begin({
         action: "CREATE",
         nomination,
-        input: input.account,
+        input: {
+          ...input.account,
+          name: input.account.name.toLocaleUpperCase("pt-BR"),
+        },
         authorization: { actor, recentAuth },
         confirmNativeCreation: true,
       });

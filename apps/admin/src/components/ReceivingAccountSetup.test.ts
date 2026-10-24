@@ -96,6 +96,7 @@ describe("receiving account setup", () => {
     ...setup,
     accountState: "CREATED",
     consentRecorded: true,
+    pixConsentRecorded: true,
   };
   const readiness = {
     siteId: "site-one",
@@ -114,6 +115,85 @@ describe("receiving account setup", () => {
     commercialInfoExpired: false,
     observedAt: "2026-10-16T12:00:00.000Z",
   } as const;
+  it("sends and records the specific Pix authorization only after its explicit action", async () => {
+    vi.stubGlobal("__APP_ENV__", "production");
+    const legacy = {
+      ...createdSetup,
+      mode: "live" as const,
+      pixConsentRecorded: false,
+      providerStatus: approved,
+    };
+    const v = fixture(legacy);
+    const original = v.request.getMockImplementation();
+    assert(original);
+    v.request.mockImplementation(async (path, options) => {
+      if (path.endsWith("/incoming-verification")) {
+        legacy.pixConsentRecorded = true;
+        return { readiness: { ...readiness, mode: "live" } };
+      }
+      return original(path, options);
+    });
+    await v.controller.refresh();
+    await v.controller.verifyIncoming(true);
+    expect(v.request).toHaveBeenCalledWith(
+      "/v1/sites/site-one/receiving/incoming-verification",
+      {
+        method: "POST",
+        body: {
+          confirmIncomingAccount: true,
+          pixConsentVersion: "asaas-incoming-pix-v1",
+        },
+      },
+    );
+    expect(v.controller.getState().setup?.pixConsentRecorded).toBe(true);
+    v.controller.dispose();
+  });
+  it("requires specific Pix authorization for legacy accounts before automatic preparation", async () => {
+    vi.stubGlobal("__APP_ENV__", "production");
+    const v = fixture({
+      ...createdSetup,
+      mode: "live",
+      pixConsentRecorded: false,
+      providerStatus: approved,
+    });
+    await v.controller.refresh();
+    expect(
+      v.request.mock.calls.some(([path]) =>
+        path.endsWith("/incoming-verification"),
+      ),
+    ).toBe(false);
+    const html = renderToStaticMarkup(
+      createElement(ReceivingAccountSetupView, {
+        scope: v.scope,
+        state: v.controller.getState(),
+        incomingGuard: v.controller.incomingGuard,
+        onAuthorizePix: vi.fn(),
+      }),
+    );
+    expect(html).toContain(
+      "Autorizo o EntreLaços a criar automaticamente uma chave Pix aleatória",
+    );
+    expect(html).toContain("Autorizar preparação automática do Pix");
+    v.controller.dispose();
+  });
+  it("keeps production registration free of Sandbox copy and includes specific Pix consent", async () => {
+    vi.stubGlobal("__APP_ENV__", "production");
+    const v = fixture({ ...setup, mode: "live" });
+    await v.controller.refresh();
+    const html = renderToStaticMarkup(
+      createElement(ReceivingAccountSetupView, {
+        scope: v.scope,
+        state: v.controller.getState(),
+        guard: v.controller.guard,
+      }),
+    );
+    expect(html).not.toContain("Sandbox");
+    expect(html).not.toContain("operações são de teste");
+    expect(html).toContain(
+      "Autorizo o EntreLaços a criar automaticamente uma chave Pix aleatória",
+    );
+    v.controller.dispose();
+  });
   it("automatically prepares an approved holder account after loading, without requiring a second setup action", async () => {
     vi.stubGlobal("__APP_ENV__", "production");
     const v = fixture({
@@ -814,6 +894,7 @@ describe("receiving account setup", () => {
           account,
           policyVersion: "policy-v1",
           consentVersion: receivingSetupDisclosure.version,
+          pixConsentVersion: "asaas-incoming-pix-v1",
           confirmHolder: true,
           consentToAsaas: true,
         },

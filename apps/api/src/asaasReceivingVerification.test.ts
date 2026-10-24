@@ -15,10 +15,13 @@ import {
   readReceivingVerificationCandidate,
 } from "./receivingVerification";
 
-function fixture(environment: "sandbox" | "live" = "sandbox") {
+function fixture(
+  environment: "sandbox" | "live" = "sandbox",
+  declaredName = "Fictional Holder",
+) {
   const keyring = new Map([["key-one", new Uint8Array(32).fill(12)]]);
   const input = {
-    name: "Fictional Holder",
+    name: declaredName,
     email: "holder@example.test",
     cpfCnpj: "12345678909",
     mobilePhone: "11999999999",
@@ -125,6 +128,78 @@ function fixture(environment: "sandbox" | "live" = "sandbox") {
 }
 
 describe("authenticated native incoming Asaas verification", () => {
+  it("verifies the own incoming bank from approved KYC, account number and active key while Asaas bank registration is pending", () => {
+    const v = fixture("live");
+    v.observed.status.bankAccountInfo = "PENDING";
+    const first = prepareAsaasReceivingVerification(
+      v.fence,
+      v.observed,
+      v.keyring,
+    );
+    const selected = {
+      ...v.fence,
+      destinations: [
+        {
+          id: "native-bank",
+          version: 1,
+          bank_reference: first.candidate.bankReference,
+          is_current: true,
+        },
+      ],
+    };
+    expect(
+      prepareAsaasReceivingVerification(selected, v.observed, v.keyring)
+        .observation,
+    ).toMatchObject({
+      account: { state: "APPROVED" },
+      bank: { state: "VERIFIED" },
+    });
+  });
+  it.each([
+    "Fictional Holder",
+    "fictional holder",
+    "FICTITIOUS HOLDER",
+    "José da Silva",
+  ])(
+    "verifies the original full profile when Asaas changes only name capitalization (%s)",
+    (name) => {
+      const v = fixture("live", name);
+      if (!v.observed.verificationFacts)
+        throw new Error("Missing fixture facts");
+      v.observed.verificationFacts.commercialInfo.name =
+        name.toLocaleUpperCase("pt-BR");
+      expect(
+        prepareAsaasReceivingVerification(v.fence, v.observed, v.keyring)
+          .candidate.scope,
+      ).toEqual(v.fence.scope);
+    },
+  );
+  it.each([
+    ["cpfCnpj", "98765432100"],
+    ["email", "other@example.test"],
+    ["mobilePhone", "11888888888"],
+    ["incomeValue", 2000],
+    ["address", "Other Street"],
+    ["addressNumber", "2"],
+    ["province", "Other District"],
+    ["postalCode", "87654321"],
+    ["birthDate", "1991-01-01"],
+    ["name", "Another Holder"],
+  ])(
+    "still rejects a changed valid %s while comparing name case variants",
+    (field, value) => {
+      const v = fixture("live");
+      if (!v.observed.verificationFacts)
+        throw new Error("Missing fixture facts");
+      Object.assign(v.observed.verificationFacts.commercialInfo, {
+        name: "FICTIONAL HOLDER",
+        [field]: value,
+      });
+      expect(() =>
+        prepareAsaasReceivingVerification(v.fence, v.observed, v.keyring),
+      ).toThrow();
+    },
+  );
   it.each(["sandbox", "live"] as const)(
     "binds %s incoming account and original holder without exposing profile or bank numbers",
     (environment) => {

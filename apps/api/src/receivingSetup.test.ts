@@ -32,6 +32,7 @@ function fixture() {
     requireHolder: vi.fn(async () => holder),
     readAccount: vi.fn(async () => null),
     consent: vi.fn(async () => {}),
+    consentIncomingPix: vi.fn(async () => {}),
     designate: vi.fn(async () => {}),
     readSessionAuthentication: vi.fn(async () => sessionAuthentication),
   };
@@ -80,6 +81,21 @@ const authorization = { actor } as Parameters<
   ReturnType<typeof createReceivingSetupService>["submit"]
 >[1];
 describe("receiving setup orchestration", () => {
+  it("records the explicitly accepted Pix disclosure before original provider creation", async () => {
+    const v = fixture();
+    await v.service.submit(
+      { ...input, pixConsentVersion: "asaas-incoming-pix-v1" },
+      authorization,
+    );
+    expect(v.repository.consentIncomingPix).toHaveBeenCalledExactlyOnceWith(
+      actor,
+      "binding-one",
+      "asaas-incoming-pix-v1",
+    );
+    expect(
+      v.repository.consentIncomingPix.mock.invocationCallOrder[0],
+    ).toBeLessThan(v.begin.mock.invocationCallOrder[0]);
+  });
   it("shows a designation as distinct from consent and account creation", async () => {
     const values = fixture();
     expect(await values.service.read(actor)).toMatchObject({
@@ -123,7 +139,7 @@ describe("receiving setup orchestration", () => {
       expect.objectContaining({
         action: "CREATE",
         confirmNativeCreation: true,
-        input: input.account,
+        input: { ...input.account, name: "FICTIONAL PERSON" },
       }),
     );
     expect(

@@ -2,6 +2,7 @@ import {
   meResponseSchema,
   type ReceivingReadiness,
   type ReceivingSetupContext,
+  receivingIncomingPixDisclosure,
   receivingReadinessResponseSchema,
   receivingSetupAccountSchema,
   receivingSetupResponseSchema,
@@ -155,6 +156,7 @@ export function createReceivingAccountSetupController(
           setup.isHolder &&
           !ownerView &&
           setup.consentRecorded &&
+          setup.pixConsentRecorded === true &&
           setup.accountState === "CREATED" &&
           setup.providerStatus?.commercialInfoExpired !== true &&
           (["commercialInfo", "documentation", "general"] as const).every(
@@ -234,7 +236,9 @@ export function createReceivingAccountSetupController(
   const guard = createGuard(["NOT_CREATED", "PENDING"]);
   const pixGuard = createGuard(["CREATED"], true);
   const incomingGuard = createGuard(["CREATED"]);
-  async function verifyIncoming(): Promise<ReceivingReadiness | undefined> {
+  async function verifyIncoming(
+    authorizePix = false,
+  ): Promise<ReceivingReadiness | undefined> {
     if (
       incomingInFlight ||
       !supportsIncomingVerification(state.setup?.mode) ||
@@ -261,7 +265,15 @@ export function createReceivingAccountSetupController(
       const { readiness } = receivingReadinessResponseSchema.parse(
         await request(
           `/v1/sites/${encodeURIComponent(scope.siteId)}/receiving/incoming-verification`,
-          { method: "POST", body: { confirmIncomingAccount: true } },
+          {
+            method: "POST",
+            body: {
+              confirmIncomingAccount: true,
+              ...(authorizePix
+                ? { pixConsentVersion: receivingIncomingPixDisclosure.version }
+                : {}),
+            },
+          },
         ),
       );
       if (!current() || active !== revision) return;
@@ -286,6 +298,8 @@ export function createReceivingAccountSetupController(
           "RECEIVING_PIX_PREPARATION_REVIEW_REQUIRED",
         ].includes(cause.code)
       ) {
+        await refresh(false);
+        if (!current() || state.status !== "ready") return;
         update({
           ...state,
           status: "ready",
@@ -342,6 +356,7 @@ export function createReceivingAccountSetupController(
                 consentVersion: setup.disclosure.version,
                 confirmHolder: true,
                 consentToAsaas: true,
+                pixConsentVersion: receivingIncomingPixDisclosure.version,
               },
             },
           ),
@@ -463,6 +478,11 @@ export function ReceivingAccountSetup(
           if (readiness) props.onReadinessChange?.();
         });
       }}
+      onAuthorizePix={() => {
+        void controller.current?.verifyIncoming(true).then((readiness) => {
+          if (readiness) props.onReadinessChange?.();
+        });
+      }}
       onDesignate={(id) => {
         void controller.current?.designate(id);
       }}
@@ -517,6 +537,7 @@ export function ReceivingAccountSetupView({
   onSubmit,
   onDesignate,
   onVerifyIncoming,
+  onAuthorizePix,
   form,
   section = "activation",
   readiness,
@@ -532,6 +553,7 @@ export function ReceivingAccountSetupView({
   onSubmit?: (event: FormEvent<HTMLFormElement>) => void;
   onDesignate?: (holderUserId: string) => void;
   onVerifyIncoming?: () => void;
+  onAuthorizePix?: () => void;
   form?: React.RefObject<HTMLFormElement | null>;
   section?: "activation" | "account";
   readiness?: ReceivingReadiness | null;
@@ -862,6 +884,7 @@ export function ReceivingAccountSetupView({
             !owner &&
             setup.isHolder &&
             setup.consentRecorded &&
+            setup.pixConsentRecorded === true &&
             incomingGuard?.isCurrent() && (
               <Button
                 className="w-fit"
@@ -870,6 +893,29 @@ export function ReceivingAccountSetupView({
               >
                 Atualizar liberação dos recebimentos
               </Button>
+            )}
+          {supportsIncomingVerification(setup.mode) &&
+            !receivingReady &&
+            !owner &&
+            setup.isHolder &&
+            setup.consentRecorded &&
+            !setup.pixConsentRecorded &&
+            incomingGuard?.isCurrent() && (
+              <section
+                aria-label="Autorização para preparar o Pix"
+                className="grid gap-3 rounded-lg border border-admin-line p-4"
+              >
+                <p className="m-0 text-sm">
+                  {receivingIncomingPixDisclosure.text}
+                </p>
+                <Button
+                  className="w-fit"
+                  disabled={busy || !onAuthorizePix}
+                  onClick={onAuthorizePix}
+                >
+                  Autorizar preparação automática do Pix
+                </Button>
+              </section>
             )}
           {!setup.providerStatus && (
             <p>
@@ -882,7 +928,10 @@ export function ReceivingAccountSetupView({
               <dl className="grid gap-3 sm:grid-cols-2">
                 {[
                   ["Dados cadastrais", setup.providerStatus.commercialInfo],
-                  ["Dados bancários", setup.providerStatus.bankAccountInfo],
+                  [
+                    "Cadastro bancário no Asaas",
+                    setup.providerStatus.bankAccountInfo,
+                  ],
                   ["Documentação", setup.providerStatus.documentation],
                   ["Aprovação geral", setup.providerStatus.general],
                 ].map(([label, value]) => (
@@ -904,6 +953,13 @@ export function ReceivingAccountSetupView({
                   </div>
                 ))}
               </dl>
+              {setup.providerStatus.bankAccountInfo === "PENDING" &&
+                setup.providerStatus.general === "APPROVED" && (
+                  <p className="m-0 text-sm text-admin-muted">
+                    O cadastro bancário exibido é do Asaas. Sua chave de saque é
+                    configurada separadamente em Conta para saque.
+                  </p>
+                )}
               {rejected && (
                 <p role="alert">
                   Há dados rejeitados pelo Asaas. O titular precisa corrigir as
@@ -955,7 +1011,12 @@ export function ReceivingAccountSetupView({
                 </p>
               </aside>
             )}
-          <p>{setup.disclosure.text}</p>
+          <p>
+            {showSandboxNotice(setup.mode)
+              ? setup.disclosure.text
+              : setup.disclosure.text.split(" Em Sandbox,")[0]}
+          </p>
+          <p>{receivingIncomingPixDisclosure.text}</p>
           <p>
             Preencha os dados do titular e confirme o consentimento antes de
             enviar.
@@ -982,7 +1043,8 @@ export function ReceivingAccountSetupView({
             <label className="flex gap-2 sm:col-span-2">
               <input type="checkbox" name="consent" required disabled={busy} />
               Confirmo que sou o titular designado e autorizo o cadastro e a
-              verificação no Asaas descritos acima.
+              verificação no Asaas e a preparação automática do Pix descritos
+              acima.
             </label>
             <Button type="submit" disabled={busy || !onSubmit}>
               Enviar cadastro ao Asaas

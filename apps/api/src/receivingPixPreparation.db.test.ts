@@ -49,7 +49,7 @@ afterAll(async () => {
   }
   await connection.close();
 });
-async function fixture() {
+async function fixture(authorizePix = true) {
   const siteId = randomUUID(),
     userId = randomUUID(),
     sessionId = randomUUID(),
@@ -141,6 +141,12 @@ async function fixture() {
   };
   const repository = () =>
     createReceivingSetupRepository(connection.db, options);
+  if (authorizePix)
+    await repository().consentIncomingPix(
+      actor,
+      accountId,
+      "asaas-incoming-pix-v1",
+    );
   return {
     actor,
     binding,
@@ -151,6 +157,51 @@ async function fixture() {
   };
 }
 describe("incoming Pix dispatch fence in PostgreSQL", () => {
+  it("requires a distinct, replay-safe Pix authorization while preserving the opening consent", async () => {
+    const f = await fixture(false);
+    const [before] = await connection.db
+      .select()
+      .from(receivingSetupHolder)
+      .where(eq(receivingSetupHolder.siteId, f.actor.siteId));
+    await expect(
+      f.repository().armIncomingPix(f.actor, f.binding),
+    ).rejects.toMatchObject({ code: "PIX_PREPARATION_CONSENT_REQUIRED" });
+    await f
+      .repository()
+      .consentIncomingPix(
+        f.actor,
+        f.binding.accountBindingId,
+        "asaas-incoming-pix-v1",
+      );
+    const [accepted] = await connection.db
+      .select()
+      .from(receivingSetupHolder)
+      .where(eq(receivingSetupHolder.siteId, f.actor.siteId));
+    await f
+      .repository()
+      .consentIncomingPix(
+        f.actor,
+        f.binding.accountBindingId,
+        "asaas-incoming-pix-v1",
+      );
+    const [replayed] = await connection.db
+      .select()
+      .from(receivingSetupHolder)
+      .where(eq(receivingSetupHolder.siteId, f.actor.siteId));
+    expect(accepted.consentId).toBe(before.consentId);
+    expect(accepted.consentVersion).toBe(before.consentVersion);
+    expect(accepted.pixPreparationConsent).toEqual(
+      replayed.pixPreparationConsent,
+    );
+    expect(accepted.pixPreparationConsent).toMatchObject({
+      version: "asaas-incoming-pix-v1",
+      accountId: f.binding.accountBindingId,
+      userId: f.actor.userId,
+    });
+    expect(await f.repository().armIncomingPix(f.actor, f.binding)).toBeTypeOf(
+      "string",
+    );
+  });
   it("claims once across independent concurrent instances and survives a restart before dispatch", async () => {
     const f = await fixture();
     const results = await Promise.all([

@@ -143,9 +143,9 @@ export function ReceivingGuide({
             </h3>
             <p className="m-0">
               Em Recebimentos, confirme o titular designado, os dados e o
-              e-mail. O próprio titular deve consentir com a abertura da conta.
-              Use a conta criada por este fluxo; não abra outra conta Asaas para
-              tentar vinculá-la ao casamento.
+              e-mail. O próprio titular deve consentir com a abertura da conta e
+              a preparação automática do Pix. Use a conta criada por este fluxo;
+              não abra outra conta Asaas para tentar vinculá-la ao casamento.
             </p>
             <p className="mt-2 mb-0">
               <Link

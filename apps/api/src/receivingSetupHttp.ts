@@ -37,6 +37,7 @@ export type ReceivingSetupHttpOptions = AuthHttpOptions & {
   receivingVerification?: {
     verify(
       actor: import("./financialAuthorization").FinancialActor,
+      pixConsentVersion?: string,
     ): Promise<ReceivingReadiness>;
   };
 };
@@ -313,7 +314,12 @@ export function createReceivingSetupHttpRouter(
         sessionId: current.session.id,
       };
       const readiness = receivingReadinessSchema.parse(
-        await options.receivingVerification.verify(actor),
+        input.data.pixConsentVersion === undefined
+          ? await options.receivingVerification.verify(actor)
+          : await options.receivingVerification.verify(
+              actor,
+              input.data.pixConsentVersion,
+            ),
       );
       if (readiness.siteId !== siteId)
         return problem(503, "RECEIVING_VERIFICATION_UNAVAILABLE");
