@@ -101,7 +101,7 @@ function status(value: unknown): ReceivingSetupAsaasStatus {
     return unavailable();
   return value as ReceivingSetupAsaasStatus;
 }
-async function readBoundedJson(
+export async function readReceivingSetupBoundedJson(
   response: Response,
   signal: AbortSignal,
 ): Promise<unknown> {
@@ -182,7 +182,7 @@ export function createReceivingSetupAsaasObserver(
       await response.body?.cancel().catch(() => {});
       return unavailable();
     }
-    return object(await readBoundedJson(response, signal));
+    return object(await readReceivingSetupBoundedJson(response, signal));
   }
   return Object.freeze({
     readStatus(signal?: AbortSignal): Promise<ReceivingSetupAsaasObservation> {

@@ -189,10 +189,9 @@ export function ReceivingGuide({
               aprovação da conta.
             </p>
             <p className="mt-2 mb-0">
-              Após a aprovação, cadastre uma chave Pix de entrada no Asaas.
-              Volte a Recebimentos no Entrelacos, use Verificar situação para
-              atualizar o status e depois Confirmar minha conta de recebimento
-              para conferir a liberação. A aprovação cadastral não confirma a
+              Após a aprovação, o EntreLaços prepara automaticamente o
+              recebimento por Pix. Volte a Recebimentos e use Verificar situação
+              para acompanhar a liberação. A aprovação cadastral não confirma a
               ativação do seu acesso: a senha e as etapas de segurança são
               tratadas no Asaas.
             </p>
@@ -207,11 +206,12 @@ export function ReceivingGuide({
               Configure o destino do saque no Entrelacos
             </h3>
             <p className="m-0">
-              A chave Pix de entrada cadastrada no Asaas serve para receber
-              valores naquela conta. O destino do saque é a sua conta externa:
-              cadastre e confirme a chave de destino na área de Recebimentos do
-              Entrelacos. Essa chave não precisa ser criada no Asaas. Cadastrar
-              uma chave de entrada não configura o destino do saque.
+              O EntreLaços prepara os recebimentos com uma chave aleatória na
+              sua conta Asaas, sem alterar as chaves do seu banco. Você
+              configura apenas o destino do saque: cadastre e confirme a chave
+              Pix da sua própria conta bancária na área de Recebimentos. Essa
+              chave não precisa ser criada no Asaas e não é transferida para
+              ele.
             </p>
             <p className="mt-2 mb-0">
               <OfficialLink href="https://central.ajuda.asaas.com/hc/pt-br/articles/32012176043931-Como-cadastrar-chaves-Pix-no-Asaas">

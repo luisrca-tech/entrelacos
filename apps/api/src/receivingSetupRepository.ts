@@ -27,6 +27,10 @@ import {
   readReceivingProvisioningRecord,
   readReceivingProvisioningResult,
 } from "./receivingNomination";
+import type {
+  IncomingPixBinding,
+  IncomingPixOutcome,
+} from "./receivingPixPreparation";
 
 type Database = Pick<DatabaseConnection["db"], "execute" | "transaction">;
 type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
@@ -305,6 +309,46 @@ export function createReceivingSetupRepository(
     admission,
     readHolder,
     requireHolder,
+    async armIncomingPix(
+      actor: FinancialActor,
+      binding: IncomingPixBinding,
+    ): Promise<string | null> {
+      if (
+        actor.siteId !== binding.siteId ||
+        binding.environment !== mode ||
+        binding.provider !== "ASAAS"
+      )
+        return deny("MEMBERSHIP_DENIED", 403);
+      return db.transaction(async (tx) => {
+        await currentSite(tx, actor.siteId);
+        await currentActor(tx, actor, false);
+        const holder = requireConsent(await requireHolder(actor, tx, true));
+        const account = await tx.execute(
+          sql`SELECT a.id FROM receiving_account a WHERE a.id=${binding.accountBindingId} AND a.site_id=${actor.siteId} AND a.environment=${mode} AND a.provider='ASAAS' AND a.is_current=true AND a.operator_user_id=${actor.userId} AND a.account_reference=${binding.accountReference} AND a.recipient_reference=${binding.recipientReference} AND a.credential_version=1 AND EXISTS(SELECT 1 FROM financial_operation op WHERE op.account_id=a.id AND op.site_id=a.site_id AND op.environment=a.environment AND op.kind='ACCOUNT_CREATE' AND op.state='SUCCEEDED') FOR UPDATE OF a`,
+        );
+        if (
+          account.rows.length !== 1 ||
+          account.rows[0].id !== binding.accountBindingId
+        )
+          return deny("RECEIVING_ACCOUNT_REQUIRED", 409);
+        const time = clock(),
+          attemptId = randomUUID();
+        const result = await tx.execute(
+          sql`INSERT INTO receiving_pix_preparation (account_id,site_id,environment,attempt_id,actor_user_id,session_id,consent_id,state,attempts,attempted_at,updated_at) VALUES (${binding.accountBindingId},${actor.siteId},${mode},${attemptId},${actor.userId},${actor.sessionId},${holder.consentId},'ARMED',1,${time},${time}) ON CONFLICT (account_id) DO UPDATE SET attempt_id=EXCLUDED.attempt_id,actor_user_id=EXCLUDED.actor_user_id,session_id=EXCLUDED.session_id,consent_id=EXCLUDED.consent_id,state='ARMED',attempts=receiving_pix_preparation.attempts+1,attempted_at=EXCLUDED.attempted_at,updated_at=EXCLUDED.updated_at WHERE receiving_pix_preparation.site_id=EXCLUDED.site_id AND receiving_pix_preparation.environment=EXCLUDED.environment AND receiving_pix_preparation.state='REJECTED' AND receiving_pix_preparation.attempted_at<=${new Date(time.getTime() - 60000)} RETURNING attempt_id AS "attemptId"`,
+        );
+        return result.rows.length === 1 &&
+          typeof result.rows[0].attemptId === "string"
+          ? result.rows[0].attemptId
+          : null;
+      });
+    },
+    async settleIncomingPix(attemptId: string, outcome: IncomingPixOutcome) {
+      if (!["SUBMITTED", "REJECTED", "UNKNOWN"].includes(outcome))
+        return deny();
+      await db.execute(
+        sql`UPDATE receiving_pix_preparation SET state=${outcome},updated_at=${clock()} WHERE attempt_id=${attemptId} AND environment=${mode} AND state='ARMED'`,
+      );
+    },
     async readSessionAuthentication(
       actor: FinancialActor,
     ): Promise<ReceivingAuthenticationEvidence> {

@@ -41,9 +41,8 @@ describe("receiving guide environment boundaries", () => {
       "código recebido por SMS",
       "Envie os documentos",
       "aguarde a análise",
-      "cadastre uma chave Pix de entrada",
+      "prepara automaticamente",
       "Verificar situação",
-      "Confirmar minha conta de recebimento",
     ];
     const positions = steps.map((step) => html.indexOf(step));
     expect(positions.every((position) => position >= 0)).toBe(true);
@@ -119,7 +118,8 @@ describe("receiving guide environment boundaries", () => {
     const html = render();
     expect(html).toContain("enviado automaticamente");
     expect(html).toContain("aprovação cadastral não confirma");
-    expect(html).toContain("chave Pix de entrada");
+    expect(html).toContain("chave aleatória na sua conta Asaas");
+    expect(html).not.toContain("cadastre uma chave Pix de entrada");
     expect(html).toContain("não precisa ser criada no Asaas");
     expect(html).toContain("autorização manual");
     expect(html).toContain("Android");

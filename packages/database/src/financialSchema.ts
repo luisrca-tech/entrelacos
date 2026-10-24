@@ -1343,3 +1343,44 @@ export const withdrawalAuthorizationDecision = pgTable(
     ),
   ],
 );
+
+// A committed dispatch fence survives process crashes and uncertain provider responses.
+export const receivingPixPreparation = pgTable(
+  "receiving_pix_preparation",
+  {
+    accountId: text("account_id").primaryKey(),
+    siteId: text("site_id").notNull(),
+    environment: financialEnvironment("environment").notNull(),
+    attemptId: text("attempt_id").notNull().unique(),
+    actorUserId: text("actor_user_id")
+      .notNull()
+      .references(() => user.id),
+    sessionId: text("session_id").notNull(),
+    consentId: text("consent_id").notNull(),
+    state: text("state").notNull(),
+    attempts: integer("attempts").notNull(),
+    attemptedAt: timestamp("attempted_at", { withTimezone: true }).notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    foreignKey({
+      name: "receiving_pix_preparation_account_fk",
+      columns: [table.siteId, table.accountId, table.environment],
+      foreignColumns: [
+        receivingAccount.siteId,
+        receivingAccount.id,
+        receivingAccount.environment,
+      ],
+    })
+      .onDelete("restrict")
+      .onUpdate("restrict"),
+    check(
+      "receiving_pix_preparation_state_check",
+      sql`${table.state} IN ('ARMED','SUBMITTED','REJECTED','UNKNOWN')`,
+    ),
+    check(
+      "receiving_pix_preparation_attempt_check",
+      sql`${table.attempts} > 0 AND ${table.updatedAt} >= ${table.attemptedAt}`,
+    ),
+  ],
+);
