@@ -307,6 +307,19 @@ export function createReceivingAccountSetupController(
             ? "A preparação dos recebimentos está em verificação. Não é necessário cadastrar outra chave. Se a situação persistir, entre em contato com o suporte."
             : "A preparação dos recebimentos aguarda a liberação do Asaas. Conclua as pendências da conta e use Verificar situação para acompanhar.",
         });
+      } else if (
+        revision === active &&
+        current() &&
+        cause instanceof ApiError &&
+        cause.status === 503 &&
+        state.setup
+      ) {
+        update({
+          ...state,
+          status: "ready",
+          message:
+            "Não foi possível atualizar a verificação no Asaas agora. Sua configuração está salva. Use Verificar situação para acompanhar.",
+        });
       } else if (revision === active) fail(cause);
     } finally {
       incomingInFlight = false;
@@ -427,6 +440,7 @@ export function ReceivingAccountSetup(
   > | null>(null);
   const form = useRef<HTMLFormElement | null>(null);
   const readinessChanged = useRef(props.onReadinessChange);
+  const automaticAttempts = useRef(new Set<string>());
   useLayoutEffect(() => {
     readinessChanged.current = props.onReadinessChange;
   }, [props.onReadinessChange]);
@@ -437,15 +451,52 @@ export function ReceivingAccountSetup(
       ports,
     );
     controller.current = current;
-    void current.refresh().then((readiness) => {
-      if (readiness) readinessChanged.current?.();
-    });
+    void current.refresh(false);
     return () => {
       form.current?.reset();
       current.dispose();
       controller.current = null;
     };
   }, [siteId, access, sessionEpoch, ports]);
+  useEffect(() => {
+    const setup = state.setup;
+    const readiness = receivingReadinessResponseSchema.safeParse({
+      readiness: props.readiness,
+    });
+    if (
+      !readiness.success ||
+      readiness.data.readiness.siteId !== siteId ||
+      readiness.data.readiness.state === "READY" ||
+      state.status !== "ready" ||
+      !setup ||
+      readiness.data.readiness.mode !== setup.mode ||
+      !setup.isHolder ||
+      !setup.consentRecorded ||
+      !setup.pixConsentRecorded ||
+      setup.accountState !== "CREATED" ||
+      setup.providerStatus?.commercialInfoExpired === true ||
+      !(["commercialInfo", "documentation", "general"] as const).every(
+        (key) => setup.providerStatus?.[key] === "APPROVED",
+      )
+    )
+      return;
+    const key = JSON.stringify([
+      siteId,
+      sessionEpoch,
+      setup.holder?.userId,
+      setup.mode,
+    ]);
+    const current = controller.current;
+    if (!current || automaticAttempts.current.has(key)) return;
+    automaticAttempts.current.add(key);
+    void current.verifyIncoming().then(() => {
+      if (
+        controller.current === current &&
+        current.getState().status === "ready"
+      )
+        readinessChanged.current?.();
+    });
+  }, [props.readiness, state.setup, state.status, siteId, sessionEpoch]);
   useEffect(() => {
     if (!state.message) return;
     if (state.status === "unavailable") toast.error(state.message);
@@ -469,18 +520,33 @@ export function ReceivingAccountSetup(
       ports={ports}
       form={form}
       onRetry={() => {
-        void controller.current?.refresh().then((readiness) => {
-          if (readiness) props.onReadinessChange?.();
+        const current = controller.current;
+        void current?.refresh(props.readiness?.state !== "READY").then(() => {
+          if (
+            controller.current === current &&
+            current.getState().status === "ready"
+          )
+            props.onReadinessChange?.();
         });
       }}
       onVerifyIncoming={() => {
-        void controller.current?.verifyIncoming().then((readiness) => {
-          if (readiness) props.onReadinessChange?.();
+        const current = controller.current;
+        void current?.verifyIncoming().then(() => {
+          if (
+            controller.current === current &&
+            current.getState().status === "ready"
+          )
+            props.onReadinessChange?.();
         });
       }}
       onAuthorizePix={() => {
-        void controller.current?.verifyIncoming(true).then((readiness) => {
-          if (readiness) props.onReadinessChange?.();
+        const current = controller.current;
+        void current?.verifyIncoming(true).then(() => {
+          if (
+            controller.current === current &&
+            current.getState().status === "ready"
+          )
+            props.onReadinessChange?.();
         });
       }}
       onDesignate={(id) => {

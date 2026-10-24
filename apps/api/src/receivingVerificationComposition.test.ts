@@ -150,6 +150,27 @@ function fixture(
   };
 }
 describe("native receiving verification composition", () => {
+  it("shares one in-flight observation between public refresh and holder verification", async () => {
+    const v = fixture(true, "live");
+    let release = (_value: { state: string }) => {};
+    const feedback = new Promise<{ state: string }>((resolve) => {
+      release = resolve;
+    });
+    mocks.begin.mockClear();
+    mocks.begin.mockImplementation(() => ({
+      feedback,
+      completion: Promise.resolve(),
+    }));
+    const publicRead = v.composition.refresh("site-one");
+    await vi.waitFor(() => expect(mocks.begin).toHaveBeenCalledOnce());
+    const holderRead = v.composition.verify(v.actor);
+    await vi.waitFor(() => expect(v.prepareIncoming).toHaveBeenCalledOnce());
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    release({ state: "STORED" });
+    await Promise.all([publicRead, holderRead]);
+    expect(mocks.begin).toHaveBeenCalledOnce();
+    await v.composition.close();
+  });
   it("decrypts the saved credential using only its exact security context before native preparation", async () => {
     const v = fixture(false, "live", undefined, true);
     expect(await v.composition.verify(v.actor)).toMatchObject({

@@ -115,6 +115,56 @@ describe("receiving account setup", () => {
     commercialInfoExpired: false,
     observedAt: "2026-10-16T12:00:00.000Z",
   } as const;
+  it("retains the known account after a temporary incoming verification failure", async () => {
+    const v = fixture(createdSetup);
+    await v.controller.refresh();
+    const original = v.request.getMockImplementation();
+    assert(original);
+    v.request.mockImplementation(async (path, options) => {
+      if (path.endsWith("/incoming-verification"))
+        throw new ApiError(503, "RECEIVING_VERIFICATION_UNAVAILABLE");
+      return original(path, options);
+    });
+    await v.controller.verifyIncoming();
+    expect(v.controller.getState()).toMatchObject({
+      status: "ready",
+      setup: { accountState: "CREATED", consentRecorded: true },
+    });
+    expect(v.controller.getState().message).toContain(
+      "configuração está salva",
+    );
+    v.controller.dispose();
+  });
+  it("still clears the account if the actor changes before a temporary failure returns", async () => {
+    const v = fixture(createdSetup);
+    await v.controller.refresh();
+    const original = v.request.getMockImplementation();
+    assert(original);
+    let reject = (_error: Error) => {};
+    v.request.mockImplementation((path, options) =>
+      path.endsWith("/incoming-verification")
+        ? new Promise((_resolve, no) => {
+            reject = no;
+          })
+        : original(path, options),
+    );
+    const pending = v.controller.verifyIncoming();
+    await vi.waitFor(() =>
+      expect(
+        v.request.mock.calls.some(([path]) =>
+          path.endsWith("/incoming-verification"),
+        ),
+      ).toBe(true),
+    );
+    v.expire();
+    reject(new ApiError(503, "RECEIVING_VERIFICATION_UNAVAILABLE"));
+    await pending;
+    expect(v.controller.getState()).toMatchObject({
+      status: "denied",
+      setup: null,
+    });
+    v.controller.dispose();
+  });
   it("sends and records the specific Pix authorization only after its explicit action", async () => {
     vi.stubGlobal("__APP_ENV__", "production");
     const legacy = {

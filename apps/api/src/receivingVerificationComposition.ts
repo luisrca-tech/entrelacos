@@ -189,6 +189,17 @@ export function createReceivingVerificationComposition(options: {
     await settle({ action: "OBSERVE", scope: selected.scope });
     refreshed.set(siteId, options.now().getTime());
   }
+  async function observeOnce(siteId: string) {
+    const existing = pending.get(siteId);
+    if (existing) return existing;
+    const work = observe(siteId);
+    pending.set(siteId, work);
+    try {
+      await work;
+    } finally {
+      if (pending.get(siteId) === work) pending.delete(siteId);
+    }
+  }
   return Object.freeze({
     async verify(
       actor: FinancialActor,
@@ -234,7 +245,7 @@ export function createReceivingVerificationComposition(options: {
           authorization: { actor, recentAuth: proof },
           confirmDestinationSelection: true,
         });
-      await observe(actor.siteId);
+      await observeOnce(actor.siteId);
       return (
         options.readReadiness ??
         ((siteId) =>
@@ -254,15 +265,7 @@ export function createReceivingVerificationComposition(options: {
       const last = refreshed.get(siteId);
       const at = options.now().getTime();
       if (last !== undefined && at >= last && at - last < 60000) return;
-      const existing = pending.get(siteId);
-      if (existing) return existing;
-      const work = observe(siteId);
-      pending.set(siteId, work);
-      try {
-        await work;
-      } finally {
-        pending.delete(siteId);
-      }
+      await observeOnce(siteId);
     },
     async close() {
       closed = true;
