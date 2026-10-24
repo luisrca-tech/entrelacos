@@ -8,6 +8,7 @@ import {
   invitationUpdateInputSchema,
 } from "@entrelacos/contracts";
 import { Hono } from "hono";
+import { trustedAdminOrigin } from "./adminOrigin";
 import type { AuthHttpOptions } from "./authHttp";
 import { AdminSessionRequiredError, requireAdminSession } from "./authHttp";
 import {
@@ -35,7 +36,7 @@ function problem(status: number, code: string, title: string): Response {
 }
 
 function trustedOrigin(request: Request, adminOrigin: string): boolean {
-  return request.headers.get("origin") === adminOrigin;
+  return trustedAdminOrigin(request.headers.get("origin"), adminOrigin);
 }
 
 async function readObject(request: Request): Promise<unknown> {

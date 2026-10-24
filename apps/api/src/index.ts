@@ -2,40 +2,37 @@ import {
   createDatabaseConnection,
   verifyDatabaseConnection,
 } from "@entrelacos/database";
-import { serve } from "@hono/node-server";
-import { createApp } from "./app";
-import { createAuth } from "./auth";
+import { createAuth, createSessionReadAuth } from "./auth";
+import { createGiftApplication } from "./giftApplication";
+import {
+  createGiftMediaComposition,
+  startGiftMediaRuntime,
+} from "./giftMediaComposition";
 import { readRuntimeConfig } from "./runtimeConfig";
 
 async function start() {
   const config = readRuntimeConfig(process.env);
   const connection = createDatabaseConnection({ target: config.target });
-  try {
-    await verifyDatabaseConnection(connection);
-    const auth = createAuth({ db: connection.db, ...config });
-    const app = createApp({
-      auth,
-      db: connection.db,
-      adminOrigin: config.adminOrigin,
-      guestFingerprintSecret: config.fingerprintSecret,
-      guestTrustProxyHeaders: config.trustProxyHeaders,
-      authForDatabase: (db) => createAuth({ db, ...config }),
-    });
-    const server = serve({ fetch: app.fetch, port: config.port });
-    let stopping = false;
-    const stop = () => {
-      if (stopping) return;
-      stopping = true;
-      server.close(() => {
-        void connection.close();
-      });
-    };
-    process.once("SIGTERM", stop);
-    process.once("SIGINT", stop);
-  } catch (error) {
-    await connection.close();
-    throw error;
-  }
+  const runtime = startGiftMediaRuntime({
+    initialize: async () => {
+      await verifyDatabaseConnection(connection);
+      return createAuth({ db: connection.db, ...config });
+    },
+    createMedia: () =>
+      createGiftMediaComposition(config.giftMedia, {
+        createReadAuth: () =>
+          createSessionReadAuth({ db: connection.db, ...config }),
+      }),
+    createApplication: (media, auth) =>
+      createGiftApplication(config, connection, auth, media),
+    port: config.port,
+    closeDatabase: () => connection.close(),
+    onError: () => {
+      console.error("API shutdown failed");
+      process.exitCode = 1;
+    },
+  });
+  await runtime.ready;
 }
 
 start().catch(() => {

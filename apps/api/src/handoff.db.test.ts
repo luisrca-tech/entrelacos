@@ -4,7 +4,7 @@ import {
   type DatabaseConnection,
   verifyDatabaseConnection,
 } from "@entrelacos/database";
-import { session, user, verification } from "@entrelacos/database/schema";
+import { session, site, user, verification } from "@entrelacos/database/schema";
 import { and, eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
@@ -36,6 +36,16 @@ describe("handoff PostgreSQL integration", () => {
   beforeAll(async () => {
     connection = createDatabaseConnection({ target: "test" });
     await verifyDatabaseConnection(connection);
+
+    await connection.db.insert(site).values({
+      id: fixtureSiteId,
+      repositorySlug: fixtureSiteId,
+      provisioningKey: `${fixtureSiteId}:provision`,
+      displayName: "Handoff fixture wedding",
+      partnerOneName: "Ana",
+      partnerTwoName: "Caio",
+      eventDate: "2027-05-22",
+    });
 
     await connection.db.insert(user).values({
       id: fixtureUserId,
@@ -79,6 +89,7 @@ describe("handoff PostgreSQL integration", () => {
     }
     await connection.db.delete(session).where(eq(session.id, fixtureSessionId));
     await connection.db.delete(user).where(eq(user.id, fixtureUserId));
+    await connection.db.delete(site).where(eq(site.id, fixtureSiteId));
     await connection.close();
   });
 

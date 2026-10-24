@@ -4,13 +4,17 @@ import { describe, expect, it } from "vitest";
 
 const turbo = JSON.parse(
   readFileSync(resolve(import.meta.dirname, "../../../turbo.json"), "utf8"),
-) as { tasks: { build: { env: string[] } } };
+) as { tasks: { build: { env: string[] }; dev: { env?: string[] } } };
 const astroConfig = readFileSync(
   resolve(import.meta.dirname, "../astro.config.mjs"),
   "utf8",
 );
 
 describe("wedding demo build inputs", () => {
+  it("forwards the explicit application environment to development tasks", () => {
+    expect(turbo.tasks.dev.env).toContain("APP_ENV");
+  });
+
   it("invalidates cached builds when handoff or publication state changes", () => {
     expect(turbo.tasks.build.env).toEqual(
       expect.arrayContaining(["PUBLIC_ADMIN_ORIGIN", "PUBLIC_SITE_INACTIVE"]),
@@ -25,6 +29,17 @@ describe("wedding demo build inputs", () => {
 });
 
 describe("progressive enhancement", () => {
+  it("composes runtime gifts in the template seam without enabling live demo payments", () => {
+    const source = readFileSync(
+      resolve(import.meta.dirname, "pages/index.astro"),
+      "utf8",
+    );
+    expect(source).toContain("<GiftSection");
+    expect(source).toContain("<GiftRegistry");
+    expect(source).toContain("demo={true}");
+    expect(source).not.toContain("gift-quotes");
+    expect(source).not.toContain("R2_SECRET");
+  });
   it("transforms the workspace UI package during SSR development", () => {
     expect(astroConfig).toContain('noExternal: ["@entrelacos/ui"]');
   });

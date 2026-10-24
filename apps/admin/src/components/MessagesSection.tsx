@@ -36,6 +36,9 @@ export function MessagesSection({ siteId, lifecycle }: Props) {
   const [muralEnabled, setMuralEnabled] = useState(false);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [muralLoaded, setMuralLoaded] = useState(false);
+  const [retryCursor, setRetryCursor] = useState<string | undefined>();
   const [pending, setPending] = useState("");
   const [error, setError] = useState("");
   const [searchInput, setSearchInput] = useState("");
@@ -50,6 +53,7 @@ export function MessagesSection({ siteId, lifecycle }: Props) {
     async (cursor: string | undefined, search: string) => {
       const requestVersionForLoad = ++requestVersion.current;
       if (!cursor) setLoading(true);
+      setLoadingMore(Boolean(cursor));
       setError("");
       try {
         const [response, mural] = await Promise.all([
@@ -65,12 +69,19 @@ export function MessagesSection({ siteId, lifecycle }: Props) {
           mergeSiteMessages(current, response.messages, Boolean(cursor)),
         );
         setNextCursor(response.nextCursor);
-        if (mural) setMuralEnabled(mural.enabled);
-      } catch (cause) {
+        if (mural) {
+          setMuralEnabled(mural.enabled);
+          setMuralLoaded(true);
+        }
+      } catch {
         if (requestVersionForLoad !== requestVersion.current) return;
-        setError(messageAdminError(cause));
+        setRetryCursor(cursor);
+        setError("Não foi possível carregar as mensagens. Tente novamente.");
       } finally {
-        if (requestVersionForLoad === requestVersion.current) setLoading(false);
+        if (requestVersionForLoad === requestVersion.current) {
+          setLoading(false);
+          setLoadingMore(false);
+        }
       }
     },
     [base],
@@ -81,7 +92,10 @@ export function MessagesSection({ siteId, lifecycle }: Props) {
       () => void load(undefined, searchInput),
       searchInput ? 250 : 0,
     );
-    return () => clearTimeout(timeout);
+    return () => {
+      clearTimeout(timeout);
+      requestVersion.current += 1;
+    };
   }, [load, searchInput]);
 
   async function mutate(
@@ -114,82 +128,113 @@ export function MessagesSection({ siteId, lifecycle }: Props) {
           estiver inativo.
         </p>
       )}
-      {error && (
-        <p className={adminStyles.alert} role="alert">
-          {error}
-        </p>
-      )}
-
-      <label
-        className="relative block w-full max-w-xl"
-        htmlFor="message-author-search"
+      <div
+        className={`${adminStyles.surface} flex flex-wrap items-center justify-between gap-4 p-5`}
       >
-        <Search
-          aria-hidden="true"
-          className="absolute left-3 top-3.5 size-4 text-admin-muted"
-        />
-        <span className="sr-only">Buscar pelo nome de quem publicou</span>
-        <Input
-          id="message-author-search"
-          type="search"
-          value={searchInput}
-          onChange={(event) => {
-            requestVersion.current += 1;
-            const value = event.target.value;
-            searchInputRef.current = value;
-            setSearchInput(value);
-            setMessages([]);
-            setNextCursor(null);
-            setLoading(true);
-            setError("");
-          }}
-          placeholder="Buscar pelo nome de quem publicou"
-          className="min-h-11 border-admin-line bg-admin-surface pl-10"
-        />
-      </label>
+        <div>
+          <h2 className="m-0 font-admin-display text-xl text-admin-graphite">
+            Mural de mensagens
+          </h2>
+          <p className="mb-0 mt-1 text-sm text-admin-muted">
+            {loading
+              ? "Carregando mural…"
+              : !muralLoaded
+                ? "Configuração indisponível"
+                : muralEnabled
+                  ? "Visitantes podem enviar mensagens pelo site."
+                  : "Novos envios pausados. As mensagens continuam no site."}
+          </p>
+        </div>
+        <label
+          className="flex items-center gap-2.5 text-sm"
+          htmlFor="mural-enabled"
+        >
+          <Checkbox
+            id="mural-enabled"
+            checked={muralEnabled}
+            disabled={
+              !mutable ||
+              !muralLoaded ||
+              loading ||
+              Boolean(error) ||
+              Boolean(pending)
+            }
+            onCheckedChange={(checked) => {
+              const enabled = checked === true;
+              void mutate(
+                "mural",
+                `${base}/mural`,
+                "PATCH",
+                { enabled },
+                enabled
+                  ? "Mural ativado. Visitantes podem publicar novas mensagens."
+                  : "Mural desativado para novos envios. As mensagens existentes continuam visíveis.",
+              );
+            }}
+          />
+          Receber mensagens
+        </label>
+      </div>
 
       <div className={`${adminStyles.surface} overflow-hidden`}>
-        <div className="flex flex-wrap items-start justify-between gap-4 border-b border-admin-line p-5 [@media(max-width:760px)]:grid">
-          <div className="min-w-0">
-            <h2 className="m-0 font-admin-display text-[1.35rem] text-admin-graphite">
-              Mural de mensagens
-            </h2>
-            <p className="mb-0 mt-1 max-w-[62ch] text-sm leading-[1.6] text-admin-muted">
-              Controle a publicação do mural e remova mensagens inadequadas. O
-              texto enviado não pode ser editado no painel.
-            </p>
-          </div>
-          <label className="flex items-center gap-2.5" htmlFor="mural-enabled">
-            <Checkbox
-              id="mural-enabled"
-              checked={muralEnabled}
-              disabled={!mutable || Boolean(pending)}
-              onCheckedChange={(checked) => {
-                const enabled = checked === true;
-                void mutate(
-                  "mural",
-                  `${base}/mural`,
-                  "PATCH",
-                  { enabled },
-                  enabled
-                    ? "Mural ativado. Visitantes podem publicar novas mensagens."
-                    : "Mural desativado para novos envios. As mensagens existentes continuam visíveis.",
-                );
-              }}
+        <div className="grid gap-3 border-b border-admin-line p-5 sm:flex sm:items-center sm:justify-between">
+          <h2 className="m-0 shrink-0 font-admin-display text-xl text-admin-graphite">
+            Mensagens recebidas
+          </h2>
+          <label
+            className="relative block w-full sm:max-w-sm"
+            htmlFor="message-author-search"
+          >
+            <Search
+              aria-hidden="true"
+              className="absolute left-3 top-3.5 size-4 text-admin-muted"
             />
-            Mural público ativo
+            <span className="sr-only">Buscar pelo nome de quem publicou</span>
+            <Input
+              id="message-author-search"
+              type="search"
+              value={searchInput}
+              onChange={(event) => {
+                requestVersion.current += 1;
+                const value = event.target.value;
+                searchInputRef.current = value;
+                setSearchInput(value);
+                setMessages([]);
+                setNextCursor(null);
+                setLoading(true);
+                setError("");
+              }}
+              placeholder="Buscar por nome"
+              className="min-h-11 border-admin-line bg-admin-surface pl-10"
+            />
           </label>
         </div>
 
+        {error && (
+          <div className="grid gap-3 border-b border-admin-line p-5">
+            <p className="m-0 text-sm text-admin-muted" role="alert">
+              {error}
+            </p>
+            <Button
+              className="w-fit"
+              type="button"
+              variant="outline"
+              disabled={loading || loadingMore}
+              onClick={() => void load(retryCursor, searchInput)}
+            >
+              Tentar novamente
+            </Button>
+          </div>
+        )}
         {loading ? (
           <p className="m-0 p-5 leading-[1.6] text-admin-muted" role="status">
             Carregando mensagens…
           </p>
-        ) : messages.length === 0 ? (
+        ) : messages.length === 0 && !error ? (
           <p className="m-0 p-5 leading-[1.6] text-admin-muted">
             {searchInput.trim()
               ? "Nenhuma mensagem encontrada para esse nome."
-              : "Nenhuma mensagem publicada."}
+              : "As mensagens dos visitantes aparecerão aqui."}
           </p>
         ) : (
           messages.map((message) => (
@@ -205,7 +250,8 @@ export function MessagesSection({ siteId, lifecycle }: Props) {
                   type="button"
                   size="sm"
                   variant="destructive"
-                  disabled={!mutable || Boolean(pending)}
+                  disabled={!mutable || loading || Boolean(pending)}
+                  aria-label={`Remover mensagem de ${message.authorName}`}
                   onClick={() => setRemoveTarget(message)}
                 >
                   {pending === `delete:${message.id}`
@@ -249,7 +295,6 @@ export function MessagesSection({ siteId, lifecycle }: Props) {
               Cancelar
             </AlertDialogCancel>
             <AlertDialogAction
-              className="justify-self-start border-admin-terracotta-deep bg-transparent text-admin-terracotta-deep"
               disabled={Boolean(pending)}
               onClick={() => {
                 if (removeTarget)
@@ -273,10 +318,11 @@ export function MessagesSection({ siteId, lifecycle }: Props) {
         <Button
           type="button"
           variant="outline"
-          disabled={loading || Boolean(pending)}
+          className="justify-self-center"
+          disabled={loading || loadingMore || Boolean(pending)}
           onClick={() => void load(nextCursor, searchInput)}
         >
-          Ver mais mensagens
+          {loadingMore ? "Carregando mais…" : "Ver mais mensagens"}
         </Button>
       )}
     </section>

@@ -1,0 +1,2 @@
+ALTER TABLE "withdrawal_authorization_candidate" DROP CONSTRAINT "withdrawal_authorization_candidate_environment_check";--> statement-breakpoint
+ALTER TABLE "withdrawal_authorization_candidate" ADD CONSTRAINT "withdrawal_authorization_candidate_environment_check" CHECK ("withdrawal_authorization_candidate"."environment" IN ('sandbox', 'live'));

@@ -1,4 +1,4 @@
-import type { MeResponse } from "@entrelacos/contracts";
+import type { MeResponse, SiteAccess } from "@entrelacos/contracts";
 import {
   Button,
   cn,
@@ -7,11 +7,24 @@ import {
   PopoverTrigger,
 } from "@entrelacos/ui";
 import { Link } from "@tanstack/react-router";
-import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import {
+  BookOpen,
+  Gift,
+  House,
+  Mail,
+  MessageCircle,
+  MoreHorizontal,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Settings2,
+  Users,
+  Wallet,
+} from "lucide-react";
 import { type ReactNode, useState } from "react";
 import {
   type AdminRole,
   getInitials,
+  getMobileNavigation,
   getSiteNavigation,
   type SiteArea,
 } from "./adminNavigation";
@@ -19,22 +32,25 @@ import {
 type AdminShellProps = {
   actor: MeResponse;
   siteId?: string;
+  siteAccess?: SiteAccess;
   siteName?: string;
   area?: SiteArea;
   onLogout: () => void;
-  children: ReactNode;
+  children?: ReactNode;
 };
 
 export function AdminShell({
   actor,
   siteId,
+  siteAccess,
   siteName,
   area,
   onLogout,
   children,
 }: AdminShellProps) {
-  const role = actor.user.role as AdminRole;
+  const role = (siteAccess?.membershipRole ?? actor.user.role) as AdminRole;
   const navigation = siteId ? getSiteNavigation(role, siteId) : [];
+  const navigationArea = area === "receiving-guide" ? "receiving" : area;
   const initials = getInitials(actor.user.name);
   const [expanded, setExpanded] = useState(true);
 
@@ -153,7 +169,7 @@ export function AdminShell({
             aria-label="Navegação do casamento"
           >
             <AdminNavigation
-              area={area}
+              area={navigationArea}
               collapsed={!expanded}
               items={navigation}
             />
@@ -199,7 +215,12 @@ export function AdminShell({
               {role === "OWNER" ? "Conta proprietária" : "Acesso de equipe"}
             </span>
           </div>
-          <AccountMenu actor={actor} initials={initials} onLogout={onLogout} />
+          <AccountMenu
+            actor={actor}
+            role={role}
+            initials={initials}
+            onLogout={onLogout}
+          />
         </header>
         <main className="mx-auto w-full max-w-[1700px] px-[42px] pt-6 pb-6 [@media(max-width:760px)]:px-5 [@media(max-width:760px)]:pt-5 [@media(max-width:760px)]:pb-6 [@media(min-width:761px)_and_(max-width:1060px)]:px-7">
           {children}
@@ -213,9 +234,9 @@ export function AdminShell({
       {siteId && (
         <nav
           className="fixed right-0 bottom-0 left-0 z-[8] hidden border-t border-admin-line bg-[rgb(255_253_249_/_96%)] px-2.5 pt-2 pb-[calc(8px+env(safe-area-inset-bottom))] shadow-[0_-8px_24px_rgb(68_49_36_/_8%)] [@media(max-width:760px)]:block"
-          aria-label="Navegação do casamento"
+          aria-label="Navegação do casamento no celular"
         >
-          <AdminNavigation area={area} items={navigation} mobile />
+          <MobileNavigation area={navigationArea} items={navigation} />
         </nav>
       )}
     </div>
@@ -239,6 +260,7 @@ function AdminNavigation({
         <Link
           className={navigationLinkClass(item.area === area, collapsed, mobile)}
           to={item.href}
+          activeOptions={{ exact: item.area !== "receiving" }}
           aria-current={item.area === area ? "page" : undefined}
           title={collapsed && !mobile ? item.label : undefined}
           key={item.area}
@@ -252,7 +274,7 @@ function AdminNavigation({
           >
             {navigationIcon(item.area)}
           </span>
-          <NavigationLabel collapsed={collapsed && !mobile}>
+          <NavigationLabel collapsed={collapsed && !mobile} mobile={mobile}>
             {item.label}
           </NavigationLabel>
         </Link>
@@ -281,14 +303,18 @@ function navigationLinkClass(
 function NavigationLabel({
   children,
   collapsed,
+  mobile = false,
 }: {
   children: string;
   collapsed: boolean;
+  mobile?: boolean;
 }) {
   return (
     <span
       className={cn(
         "overflow-hidden whitespace-nowrap transition-[max-width,opacity] duration-200 ease-out motion-reduce:transition-none",
+        mobile &&
+          "min-w-0 max-w-full whitespace-normal break-words leading-tight",
         collapsed ? "max-w-0 opacity-0" : "max-w-40 opacity-100",
       )}
     >
@@ -298,22 +324,91 @@ function NavigationLabel({
 }
 
 function navigationIcon(area: SiteArea) {
-  switch (area) {
-    case "invitations":
-      return "○";
-    case "messages":
-      return "□";
-    case "settings":
-      return "⚙";
-  }
+  const icons = {
+    home: House,
+    invitations: Mail,
+    messages: MessageCircle,
+    gifts: Gift,
+    receiving: Wallet,
+    "receiving-guide": BookOpen,
+    team: Users,
+    settings: Settings2,
+  };
+  const Icon = icons[area];
+  return <Icon aria-hidden="true" className="size-[18px]" />;
+}
+
+function MobileNavigation({
+  items,
+  area,
+}: {
+  items: ReturnType<typeof getSiteNavigation>;
+  area?: SiteArea;
+}) {
+  const [open, setOpen] = useState(false);
+  const { primary, more } = getMobileNavigation(items);
+  const selected = more.some((item) => item.area === area);
+  return (
+    <div className="flex items-stretch gap-0.5">
+      <div className="min-w-0 flex-1">
+        <AdminNavigation items={primary} area={area} mobile />
+      </div>
+      {more.length > 0 && (
+        <Popover open={open} onOpenChange={setOpen}>
+          <PopoverTrigger
+            aria-label="Mais páginas"
+            aria-current={selected ? "page" : undefined}
+            render={<button type="button" />}
+            className={cn(
+              navigationLinkClass(selected, false, true),
+              "max-w-[20%] min-w-[54px]",
+            )}
+          >
+            <MoreHorizontal className="size-5" aria-hidden="true" />
+            <span>Mais</span>
+          </PopoverTrigger>
+          <PopoverContent
+            side="top"
+            align="end"
+            className="z-20 w-[min(260px,calc(100vw-24px))] rounded-xl border border-admin-line bg-admin-surface p-2 shadow-admin"
+          >
+            <nav
+              aria-label="Outras páginas do casamento"
+              className="grid gap-1"
+            >
+              {more.map((item) => (
+                <Link
+                  key={item.area}
+                  to={item.href}
+                  activeOptions={{ exact: true }}
+                  aria-current={item.area === area ? "page" : undefined}
+                  className={navigationLinkClass(
+                    item.area === area,
+                    false,
+                    false,
+                  )}
+                  onClick={() => setOpen(false)}
+                >
+                  {navigationIcon(item.area)}
+                  <span>{item.label}</span>
+                </Link>
+              ))}
+            </nav>
+          </PopoverContent>
+        </Popover>
+      )}
+    </div>
+  );
 }
 
 function AccountMenu({
   actor,
+  role,
   initials,
   onLogout,
 }: {
   actor: MeResponse;
+  role: AdminRole;
   initials: string;
   onLogout: () => void;
 }) {
@@ -345,9 +440,11 @@ function AccountMenu({
           </div>
         </div>
         <div className="my-4 border-t border-admin-line pt-3.5 text-[0.78rem] text-admin-muted">
-          {actor.user.role === "OWNER"
+          {role === "OWNER"
             ? "Proprietário"
-            : "Administrador do casamento"}
+            : role === "SITE_ASSISTANT"
+              ? "Assessor do casamento"
+              : "Administrador do casamento"}
         </div>
         <button
           className="min-h-[38px] w-full rounded-lg border border-admin-line bg-transparent px-3 py-2 text-left text-admin-terracotta-deep hover:bg-admin-terracotta-wash"

@@ -1,0 +1,1 @@
+ALTER TABLE "receiving_account" ADD COLUMN "webhook_registration" jsonb;

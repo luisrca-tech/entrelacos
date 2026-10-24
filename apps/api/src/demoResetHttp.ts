@@ -3,12 +3,14 @@ import {
   demoResetResponseSchema,
 } from "@entrelacos/contracts";
 import { Hono } from "hono";
+import { trustedAdminOrigin as allowsAdminOrigin } from "./adminOrigin";
 import {
   AdminSessionRequiredError,
   type AuthHttpOptions,
   requireAdminSession,
 } from "./authHttp";
 import { DemoResetServiceError, resetDemoSite } from "./demoReset";
+import type { LiveSitePolicy } from "./liveSitePolicy";
 import type {
   ObservabilityEvent,
   ObservabilityVariables,
@@ -28,7 +30,7 @@ function problem(status: number, code: string, title: string): Response {
 }
 
 function trustedAdminOrigin(request: Request, adminOrigin: string): boolean {
-  return request.headers.get("origin") === adminOrigin;
+  return allowsAdminOrigin(request.headers.get("origin"), adminOrigin);
 }
 
 async function readResetBody(request: Request): Promise<unknown> {
@@ -65,7 +67,7 @@ function serviceProblem(error: unknown): Response | undefined {
 }
 
 export function createDemoResetHttpRouter(
-  options: AuthHttpOptions,
+  options: AuthHttpOptions & LiveSitePolicy,
 ): Hono<{ Variables: ObservabilityVariables }> {
   const router = new Hono<{ Variables: ObservabilityVariables }>();
 
@@ -163,7 +165,12 @@ export function createDemoResetHttpRouter(
           options.db,
           { userId: actor.user.id, role: "OWNER" },
           siteId,
-          { clock: { now: () => options.now?.() ?? new Date() } },
+          {
+            clock: { now: () => options.now?.() ?? new Date() },
+            ...(options.liveDemoSiteId === undefined
+              ? {}
+              : { liveDemoSiteId: options.liveDemoSiteId }),
+          },
         ),
       );
       emitResetEvent(context, {

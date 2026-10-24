@@ -67,6 +67,7 @@ export {
   FieldTitle,
 } from "./components/field";
 export { Input } from "./components/input";
+export { PasswordInput } from "./components/password-input";
 export {
   Popover,
   PopoverClose,
@@ -100,5 +101,6 @@ export {
 } from "./components/table";
 export { Textarea } from "./components/textarea";
 export { Toaster, toast } from "./components/toaster";
+export { showSandboxNotice } from "./lib/applicationEnvironment";
 export { type DateOnly, formatDateOnly, parseDateOnly } from "./lib/date";
 export { cn, cnState } from "./lib/utils";

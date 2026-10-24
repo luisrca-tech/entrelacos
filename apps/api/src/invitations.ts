@@ -20,13 +20,13 @@ import {
   rsvpRequestReceipt,
   rsvpRequestReceiptInvitation,
   site,
-  siteMembership,
 } from "@entrelacos/database/schema";
 import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
+import { resolveSiteAccess } from "./siteAccess";
 
 export type InvitationDatabase = NodePgDatabase<Record<string, never>>;
-export type InvitationRole = "OWNER" | "SITE_ADMIN";
+export type InvitationRole = "OWNER" | "SITE_ADMIN" | "SITE_ASSISTANT";
 
 export interface InvitationActor {
   userId: string;
@@ -114,25 +114,17 @@ async function siteForActor(
   actor: InvitationActor,
   siteId: string,
 ): Promise<SiteAccess> {
-  const rows =
-    actor.role === "OWNER"
-      ? await db
-          .select({ id: site.id, lifecycle: site.lifecycle })
-          .from(site)
-          .where(eq(site.id, siteId))
-          .limit(1)
-      : await db
-          .select({ id: site.id, lifecycle: site.lifecycle })
-          .from(site)
-          .innerJoin(
-            siteMembership,
-            and(
-              eq(siteMembership.siteId, site.id),
-              eq(siteMembership.userId, actor.userId),
-            ),
-          )
-          .where(eq(site.id, siteId))
-          .limit(1);
+  const access = await resolveSiteAccess(db, {
+    userId: actor.userId,
+    platformRole: actor.role,
+    siteId,
+  });
+  if (!access?.capabilities.manageInvitations) notFound();
+  const rows = await db
+    .select({ id: site.id, lifecycle: site.lifecycle })
+    .from(site)
+    .where(eq(site.id, siteId))
+    .limit(1);
   const record = rows[0];
   if (!record) notFound();
   return record;
@@ -146,6 +138,7 @@ async function lockSiteForActor(
 ): Promise<SiteAccess> {
   await siteForActor(db, actor, siteId);
   await db.execute(sql`SELECT id FROM "site" WHERE id = ${siteId} FOR UPDATE`);
+  await siteForActor(db, actor, siteId);
   const [current] = await db
     .select({ id: site.id, lifecycle: site.lifecycle })
     .from(site)

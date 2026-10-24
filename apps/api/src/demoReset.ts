@@ -21,6 +21,7 @@ import {
 import { and, eq, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { normalizeInvitationName } from "./invitations";
+import type { LiveSitePolicy } from "./liveSitePolicy";
 
 export const DEMO_RESET_DATASET_VERSION = "block7-demo-v2" as const;
 export type DemoResetDatabase = NodePgDatabase<Record<string, never>>;
@@ -234,11 +235,52 @@ async function seedOperationalRows(
   };
 }
 
+// Caller holds the site row lock before checking immutable live custody.
+export async function assertDemoResetAllowed(
+  tx: Parameters<Parameters<DemoResetDatabase["transaction"]>[0]>[0],
+  siteId: string,
+  policy: LiveSitePolicy = {},
+): Promise<void> {
+  const protectedSite = () =>
+    reject(
+      409,
+      "DEMO_REAL_ACTIVITY_PROTECTED",
+      "A site with real receiving activity cannot be reset",
+    );
+  if (policy.liveDemoSiteId === siteId) return protectedSite();
+  const relations = await tx.execute(
+    sql`SELECT to_regclass('public.receiving_setup_holder') IS NOT NULL AS holders,to_regclass('public.receiving_account') IS NOT NULL AS accounts`,
+  );
+  const present = relations.rows[0];
+  if (
+    relations.rows.length !== 1 ||
+    typeof present.holders !== "boolean" ||
+    typeof present.accounts !== "boolean"
+  )
+    reject(503, "DEMO_RESET_UNAVAILABLE", "Demo reset unavailable");
+  for (const [exists, query] of [
+    [
+      present.holders,
+      sql`SELECT EXISTS(SELECT 1 FROM receiving_setup_holder WHERE site_id=${siteId} AND environment='live') AS present`,
+    ],
+    [
+      present.accounts,
+      sql`SELECT EXISTS(SELECT 1 FROM receiving_account WHERE site_id=${siteId} AND environment='live') AS present`,
+    ],
+  ] as const) {
+    if (!exists) continue;
+    const result = await tx.execute(query);
+    if (result.rows.length !== 1 || typeof result.rows[0].present !== "boolean")
+      reject(503, "DEMO_RESET_UNAVAILABLE", "Demo reset unavailable");
+    if (result.rows[0].present) return protectedSite();
+  }
+}
+
 export async function resetDemoSite(
   db: DemoResetDatabase,
   actor: DemoResetActor,
   siteIdInput: string,
-  options: { clock?: DemoResetClock } = {},
+  options: LiveSitePolicy & { clock?: DemoResetClock } = {},
 ): Promise<DemoResetResponse> {
   if (actor.role !== "OWNER") {
     reject(403, "FORBIDDEN", "Only the owner can reset the demo site");
@@ -265,6 +307,7 @@ export async function resetDemoSite(
       reject(404, "DEMO_SITE_NOT_FOUND", "Demo site was not found");
     }
 
+    await assertDemoResetAllowed(tx, siteId, options);
     const now = currentTime(options.clock?.now() ?? new Date());
     await deleteOperationalRows(tx, siteId);
     await tx

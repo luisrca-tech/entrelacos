@@ -23,6 +23,16 @@
 | Demo venue | The illustrative demo ceremony/reception venue is Casablanca Eventos, Av Ipanema 747, Jardim Atlantico, Goiania, GO 74343-010, with `https://casablancaeventosgoiania.com.br/contato` as the approved location link. | Accepted |
 | Scope exclusions | Gifts, checkout, payments, uploads/object storage, integrated outbound messaging, individual guest accounts, secret links, self-service CMS, automatic provider/domain operations, and a permanent demo environment/database are out of MVP. Copying a PIN through WhatsApp does not integrate WhatsApp. | Accepted |
 
+## Internal gifts release amendment — 2026-10-12
+
+The user authorized a separate local internal-gifts release on one branch with two coordinated feature owners. Its [PRD](../plans/prd-internal-gifts.md), [implementation phases](../plans/internal-gifts-implementation.md), [shared integration contract](../plans/internalGiftsIntegrationContract.md) and [financial/security plan](../plans/entrelacos-internal-gifts-release-plan.md) supersede the original MVP gift/payment/upload exclusion for this release only. Existing PIN/RSVP/mural behavior and deployment ownership remain the baseline.
+
+Accepted product direction: readiness-first receiving, site-scoped assessor assistance without private finances or money authority, an imaged symbolic catalog, anonymous Pix/card hosted checkout, a private financial area and recipient-requested withdrawals. Initial commission proposal is 2% of nominal gift value, added with processing to the guest's total; exact live fees and commercial viability remain pending. One approved individual recipient account holds its own funds; pooled platform redistribution and a platform wallet are excluded.
+
+Executable C1 uses `nominalCents`, selected `membershipRole` and an explicit boolean capability object. Existing admins are not assigned recipient authority automatically. Readiness/destination evidence comes from the server and is independently rechecked for catalog/checkout/withdrawal; provider account approval alone does not verify an external bank destination. The local readiness HTTP seam remains disabled until actual evidence loading and provider enablement are implemented.
+
+PF/BaaS acceptance, provider account-specific fees, bank validation, ongoing credential operation and withdrawal approvals remain unresolved production gates. No one-cent transfer with an assumed automatic refund is adopted. Local code, injected deterministic tests and shared schema metadata are authorized; migrations against shared databases, live provider resources/money, Git publication and deployment retain explicit authorization boundaries.
+
 ## Confirmed technical boundaries
 
 - Public sites use Astro static builds on Cloudflare Workers Static Assets.
@@ -117,7 +127,7 @@ The 20-wedding by 500-guest run is evidence only for its recorded local endpoint
 ## Superseded historical details
 
 - Historical notes that made the group name optional are superseded. Current rule: group name required.
-- Historical discovery material suggesting possible self-service, broader CMS, gifts, checkout, uploads, WhatsApp, or other future capabilities is not current scope.
+- Historical discovery material suggesting possible self-service, broader CMS, gifts, checkout, uploads, WhatsApp, or other future capabilities is not current original-MVP scope. The separate 2026-10-12 internal-gifts amendment authorizes only its stated local release work.
 - Historical notes treating the entire ivory/dark-olive direction, motion setup, or fictional demo photos/video as unapproved are superseded by the local Block 6 baseline and the 2026-09-14 media record. Final brand, logo/favicon/monogram, real-client media rights, and launch approval remain pending.
 
 ## Open decisions and release gates
@@ -133,6 +143,8 @@ The 20-wedding by 500-guest run is evidence only for its recorded local endpoint
 Open items must be marked pending or blocked in implementation evidence. A mock provider, placeholder media, owner-entered status, or local health response cannot be reported as proof that the corresponding external capability is live.
 
 ## Listening
+
+The 2026-10-12 amendment separates new release scope from historical MVP claims. Boolean operational capabilities and selected-site membership avoid conflicting parallel contracts; designated-recipient, recent-auth and provider evidence remain additional financial checks. Simulated readiness and successful local tests do not substitute for contractual approval or bank receipt.
 
 The package-manager migration authorized on 2026-09-09 replaces the earlier package-manager choice with Bun 1.3.14 for all workspaces and CI. Node.js 24, Turborepo, Vitest, dependency version pins, and application boundaries remain unchanged. Isolated installs retain explicit workspace dependency boundaries and package-local CLI paths; a runtime or test-framework migration is outside this change.
 

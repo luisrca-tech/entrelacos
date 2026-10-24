@@ -1,0 +1,769 @@
+import { isDeepStrictEqual } from "node:util";
+import { siteAccessSchema } from "@entrelacos/contracts";
+import type { DatabaseConnection } from "@entrelacos/database";
+import {
+  financialOperation,
+  receivingAccount,
+  session,
+  site,
+  siteMembership,
+  user,
+} from "@entrelacos/database/schema";
+import { sql } from "drizzle-orm";
+import { ADMIN_ABSOLUTE_TIMEOUT_MS, ADMIN_IDLE_TIMEOUT_MS } from "./authHttp";
+import {
+  databaseTimestampEpochMicroseconds,
+  readDatabaseTimestamp,
+} from "./databaseTimestamp";
+import { allowsLiveSite, type LiveSitePolicy } from "./liveSitePolicy";
+import {
+  captureDataProperties,
+  captureReceivingNominationAdmissionAuthority,
+  captureReceivingNominationAdmissionContext,
+  captureReceivingNominationAdmissionPolicy,
+  deriveReceivingNominationRequestId,
+  observeNominationSettlement,
+  type ReceivingNominationAdmissionAuthority,
+  type ReceivingNominationAdmissionContext,
+  type ReceivingNominationAdmissionFrame,
+  type ReceivingNominationAdmissionPolicy,
+  type ReceivingNominationCurrentAuthorization,
+  type ReceivingNominationRepository,
+  type ReceivingNominationScope,
+  ReceivingNominationServiceError,
+  type ReceivingNominationSnapshot,
+  readReceivingNominationSnapshot,
+  requireReceivingNominationAdmissionTime,
+} from "./receivingNomination";
+import { resolveSiteAccess } from "./siteAccess";
+
+type Database = Pick<DatabaseConnection["db"], "execute" | "transaction">;
+type Reader = Pick<Database, "execute">;
+type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
+interface AdmissionCustody extends ReceivingNominationAdmissionPolicy {
+  // Trusted adapters must lock independent custody in this actual transaction.
+  // The native transaction owns that lock through COMMIT/ROLLBACK settlement.
+  lockAuthority(
+    transaction: Transaction,
+    context: ReceivingNominationAdmissionContext,
+    original: ReceivingNominationAdmissionAuthority,
+  ): Promise<unknown>;
+}
+interface Options extends LiveSitePolicy {
+  mode: "sandbox" | "live";
+  applicationEnvironment: "test" | "development" | "production";
+  maxAuthAgeMs: number;
+  now(): Date;
+  admission?: AdmissionCustody;
+}
+function fail(
+  status: 403 | 409 | 503 = 503,
+  code: ReceivingNominationServiceError["code"] = "RECEIVING_NOMINATION_UNAVAILABLE",
+): never {
+  throw new ReceivingNominationServiceError(status, code);
+}
+function timestamp(value: unknown): bigint {
+  if (!(value instanceof Date) || !Number.isSafeInteger(value.getTime()))
+    fail();
+  return databaseTimestampEpochMicroseconds(value);
+}
+
+function backendTimestamp(value: unknown): bigint {
+  if (!(value instanceof Date)) fail();
+  const time = Date.prototype.getTime.call(value);
+  if (!Number.isSafeInteger(time) || time < 0) fail();
+  return BigInt(time) * 1000n;
+}
+
+async function find(
+  reader: Reader,
+  siteId: string,
+  requestId: string,
+  lock = false,
+): Promise<ReceivingNominationSnapshot | null> {
+  const result =
+    await reader.execute(sql`SELECT op.id,op.site_id AS "siteId",op.account_id AS "accountId",op.environment,op.kind,op.state,op.request_id AS "requestId",op.request_hash AS "requestHash",op.request_snapshot AS "requestSnapshot",
+    a.operator_user_id AS "accountOperatorUserId",a.site_id AS "accountSiteId",a.environment AS "accountEnvironment",a.provider AS "accountProvider"
+    FROM ${financialOperation} op INNER JOIN ${receivingAccount} a ON a.id=op.account_id AND a.site_id=op.site_id AND a.environment=op.environment
+    WHERE op.site_id=${siteId} AND op.kind='ACCOUNT_CREATE' AND op.request_id=${requestId} ${lock ? sql`FOR UPDATE OF op,a` : sql``}`);
+  if (result.rows.length === 0) return null;
+  if (result.rows.length !== 1) fail();
+  const row = result.rows[0];
+  const snapshot = readReceivingNominationSnapshot(row.requestSnapshot);
+  if (
+    row.id !== snapshot.operationId ||
+    row.accountId !== snapshot.accountId ||
+    row.siteId !== siteId ||
+    row.requestId !== requestId ||
+    snapshot.siteId !== siteId ||
+    snapshot.requestId !== requestId ||
+    row.kind !== "ACCOUNT_CREATE" ||
+    row.environment !== snapshot.environment ||
+    row.requestHash !== snapshot.requestHash ||
+    row.accountOperatorUserId !== snapshot.operatorUserId ||
+    row.accountSiteId !== siteId ||
+    row.accountEnvironment !== snapshot.environment ||
+    row.accountProvider !== "ASAAS"
+  )
+    fail();
+  if (row.state !== "REQUESTED") fail(409, "RECEIVING_BINDING_EXISTS");
+  return snapshot;
+}
+
+async function readScope(
+  reader: Reader,
+  selected: ReceivingNominationScope,
+  databaseTime: bigint,
+): Promise<ReceivingNominationSnapshot | null> {
+  // Inspect both sides before filtering operator/current/kind. An orphan or
+  // historical row must never become permission to create a new recipient.
+  const result = await reader.execute(sql`SELECT
+    (a.operator_reference IS NOT NULL OR a.webhook_token_hash IS NOT NULL OR a.account_reference IS NOT NULL OR a.recipient_reference IS NOT NULL
+     OR a.credential_version IS NOT NULL OR a.credential_key_id IS NOT NULL OR a.credential_nonce IS NOT NULL OR a.credential_ciphertext IS NOT NULL OR a.credential_tag IS NOT NULL
+     OR a.provider_account_state<>'UNVERIFIED' OR a.receiving_capability OR a.withdrawal_capability OR a.commercial_enabled OR a.observed_at IS NOT NULL) AS "hasProviderBinding",
+    a.id AS "accountId",a.site_id AS "accountSiteId",a.environment AS "accountEnvironment",a.provider AS "accountProvider",a.operator_user_id AS "operatorUserId",a.is_current AS "isCurrent",a.created_at AS "accountCreatedAt",a.updated_at AS "accountUpdatedAt",
+    op.id AS "operationId",op.site_id AS "operationSiteId",op.account_id AS "operationAccountId",op.environment AS "operationEnvironment",op.kind AS "kind",op.state AS "state",op.request_id AS "requestId",op.request_hash AS "requestHash",op.request_snapshot AS "requestSnapshot",
+    op.order_id AS "orderId",op.payment_id AS "paymentId",op.withdrawal_intent_id AS "withdrawalIntentId",op.provider_operation_reference AS "providerOperationReference",op.lease_owner AS "leaseOwner",op.lease_token AS "leaseToken",op.lease_expires_at AS "leaseExpiresAt",op.attempts AS "attempts",op.last_error_code AS "lastErrorCode",op.next_attempt_at AS "nextAttemptAt",op.created_at AS "operationCreatedAt",op.updated_at AS "operationUpdatedAt"
+    FROM ${receivingAccount} a FULL OUTER JOIN ${financialOperation} op ON op.account_id=a.id AND op.site_id=a.site_id AND op.environment=a.environment
+    WHERE (a.site_id=${selected.siteId} AND a.environment=${selected.environment}) OR (op.site_id=${selected.siteId} AND op.environment=${selected.environment})
+    ORDER BY a.id,op.id LIMIT 2`);
+  if (result.rows.length === 0) return null;
+  if (result.rows.length !== 1) fail(409, "RECEIVING_BINDING_EXISTS");
+  const row = result.rows[0];
+  if (
+    row.accountId === null ||
+    row.operationId === null ||
+    row.accountSiteId !== selected.siteId ||
+    row.accountEnvironment !== selected.environment ||
+    row.accountProvider !== "ASAAS" ||
+    typeof row.hasProviderBinding !== "boolean" ||
+    typeof row.isCurrent !== "boolean"
+  )
+    fail();
+  if (row.hasProviderBinding || !row.isCurrent)
+    fail(409, "RECEIVING_BINDING_EXISTS");
+  if (row.operatorUserId !== selected.operatorUserId)
+    fail(409, "RECIPIENT_CONFLICT");
+  const snapshot = readReceivingNominationSnapshot(row.requestSnapshot);
+  if (row.kind !== "ACCOUNT_CREATE" || row.state !== "REQUESTED")
+    fail(409, "RECEIVING_BINDING_EXISTS");
+  if (
+    snapshot.siteId !== selected.siteId ||
+    snapshot.operatorUserId !== selected.operatorUserId ||
+    snapshot.environment !== selected.environment ||
+    row.accountId !== snapshot.accountId ||
+    row.operationId !== snapshot.operationId ||
+    row.operationSiteId !== selected.siteId ||
+    row.operationAccountId !== snapshot.accountId ||
+    row.operationEnvironment !== selected.environment ||
+    row.requestId !== snapshot.requestId ||
+    row.requestHash !== snapshot.requestHash ||
+    row.orderId !== null ||
+    row.paymentId !== null ||
+    row.withdrawalIntentId !== null ||
+    row.providerOperationReference !== null ||
+    row.leaseOwner !== null ||
+    row.leaseToken !== null ||
+    row.leaseExpiresAt !== null ||
+    row.attempts !== 0 ||
+    row.lastErrorCode !== null
+  )
+    fail();
+  const originalTime = timestamp(new Date(snapshot.createdAt));
+  if (originalTime > databaseTime) fail();
+  // An untouched local REQUESTED intent has one immutable creation timestamp.
+  // Compare driver dates at full precision rather than their public ISO millis.
+  for (const field of [
+    "accountCreatedAt",
+    "accountUpdatedAt",
+    "operationCreatedAt",
+    "operationUpdatedAt",
+    "nextAttemptAt",
+  ]) {
+    if (timestamp(readDatabaseTimestamp(row[field])) !== originalTime) fail();
+  }
+  return snapshot;
+}
+
+export function createReceivingNominationRepository(
+  db: Database,
+  options: Options,
+): ReceivingNominationRepository {
+  const liveDemoSiteId = options.liveDemoSiteId;
+  const raw = captureDataProperties(options, [
+    "mode",
+    "applicationEnvironment",
+    "maxAuthAgeMs",
+    "now",
+  ]);
+  const mode = raw.mode as Options["mode"];
+  const applicationEnvironment =
+    raw.applicationEnvironment as Options["applicationEnvironment"];
+  const maxAuthAgeMs = raw.maxAuthAgeMs as number;
+  const now = raw.now as Options["now"];
+  let admissionPolicy: ReceivingNominationAdmissionPolicy | null = null;
+  let lockAuthority: AdmissionCustody["lockAuthority"] | null = null;
+  try {
+    const descriptor = Object.getOwnPropertyDescriptor(options, "admission");
+    if (descriptor && "value" in descriptor && descriptor.value !== undefined) {
+      const policy = captureReceivingNominationAdmissionPolicy(
+        descriptor.value,
+      );
+      const lock = captureDataProperties(descriptor.value, [
+        "lockAuthority",
+      ]).lockAuthority;
+      if (typeof lock !== "function") fail();
+      admissionPolicy = policy;
+      lockAuthority = lock as AdmissionCustody["lockAuthority"];
+    }
+  } catch {
+    // Missing private NEW custody must not reinterpret known replay.
+  }
+  const transaction = Function.prototype.bind.call(
+    db.transaction,
+    db,
+  ) as Database["transaction"];
+  if (
+    !["sandbox", "live"].includes(mode) ||
+    !["test", "development", "production"].includes(applicationEnvironment) ||
+    !Number.isSafeInteger(maxAuthAgeMs) ||
+    maxAuthAgeMs < 1 ||
+    maxAuthAgeMs > 300000 ||
+    typeof now !== "function"
+  )
+    fail();
+  return {
+    async readNominationScope(input) {
+      try {
+        deriveReceivingNominationRequestId(input);
+        const selected = { ...input };
+        if (
+          selected.environment !== mode ||
+          (mode === "live" && applicationEnvironment !== "production")
+        )
+          fail(409, "PROVIDER_MODE_UNAVAILABLE");
+        const startedAt = timestamp(now());
+        return (
+          await observeNominationSettlement(
+            transaction(
+              async (tx) => {
+                const sites = await tx.execute(
+                  sql`SELECT st.id AS "siteId",st.is_demo AS "isDemo",clock_timestamp() AS "currentTime" FROM ${site} st WHERE st.id=${selected.siteId}`,
+                );
+                const storedSite = sites.rows[0];
+                if (
+                  sites.rows.length !== 1 ||
+                  storedSite.siteId !== selected.siteId ||
+                  typeof storedSite.isDemo !== "boolean"
+                )
+                  fail();
+                if (
+                  mode === "live" &&
+                  !allowsLiveSite({
+                    siteId: selected.siteId,
+                    isDemo: storedSite.isDemo,
+                    mode,
+                    applicationEnvironment,
+                    liveDemoSiteId: liveDemoSiteId,
+                  })
+                )
+                  fail(409, "PROVIDER_MODE_UNAVAILABLE");
+                const databaseTime = timestamp(
+                  readDatabaseTimestamp(storedSite.currentTime),
+                );
+                const snapshot = await readScope(tx, selected, databaseTime);
+                const finishedAt = timestamp(now());
+                // Database timestamps are authoritative within their own clock domain.
+                if (finishedAt < startedAt) fail();
+                return snapshot;
+              },
+              { isolationLevel: "repeatable read", accessMode: "read only" },
+            ),
+          )
+        ).value;
+      } catch (error) {
+        if (error instanceof ReceivingNominationServiceError) throw error;
+        return fail();
+      }
+    },
+    async findByRequest(siteId, requestId) {
+      try {
+        return (await observeNominationSettlement(find(db, siteId, requestId)))
+          .value;
+      } catch (e) {
+        if (e instanceof ReceivingNominationServiceError) throw e;
+        return fail();
+      }
+    },
+    async reserveNomination(
+      input,
+      authorize,
+      currentAuthorization,
+      admissionFrame,
+    ) {
+      try {
+        const snapshot = readReceivingNominationSnapshot(input);
+        const authorization = captureDataProperties(currentAuthorization, [
+          "actor",
+          "recentAuth",
+        ]);
+        const actor = Object.freeze(
+          captureDataProperties(authorization.actor, [
+            "userId",
+            "siteId",
+            "sessionId",
+          ]),
+        ) as unknown as ReceivingNominationCurrentAuthorization["actor"];
+        const proof = captureDataProperties(authorization.recentAuth, [
+          "userId",
+          "siteId",
+          "sessionId",
+          "proofKind",
+          "provenance",
+          "verification",
+          "authenticatedAt",
+          "expiresAt",
+        ]);
+        let capturedAdmission: ReceivingNominationAdmissionFrame | null = null;
+        try {
+          if (admissionPolicy && admissionFrame !== undefined) {
+            const frame = captureDataProperties(admissionFrame, [
+              "context",
+              "authority",
+            ]);
+            const context = captureReceivingNominationAdmissionContext(
+              frame.context,
+            );
+            const authority = captureReceivingNominationAdmissionAuthority(
+              frame.authority,
+              context,
+              admissionPolicy,
+            );
+            capturedAdmission = Object.freeze({ context, authority });
+          }
+        } catch {
+          /* Malformed NEW evidence must not reinterpret known replay. */
+        }
+        const proofAt =
+          proof.proofKind === "SESSION_AUTHENTICATION"
+            ? timestamp(proof.authenticatedAt)
+            : backendTimestamp(proof.authenticatedAt);
+        const proofExpiry =
+          proof.proofKind === "SESSION_AUTHENTICATION"
+            ? timestamp(proof.expiresAt)
+            : backendTimestamp(proof.expiresAt);
+        if (
+          snapshot.environment !== mode ||
+          (mode === "live" && applicationEnvironment !== "production")
+        )
+          fail(409, "PROVIDER_MODE_UNAVAILABLE");
+        if (
+          actor.siteId !== snapshot.siteId ||
+          actor.userId !== snapshot.operatorUserId ||
+          proof.siteId !== actor.siteId ||
+          proof.userId !== actor.userId ||
+          proof.sessionId !== actor.sessionId ||
+          proof.provenance !== "backend" ||
+          proof.verification !== "verified" ||
+          typeof proof.proofKind !== "string" ||
+          ![
+            "PASSWORD_REAUTHENTICATION",
+            "MFA_REAUTHENTICATION",
+            "SESSION_AUTHENTICATION",
+          ].includes(proof.proofKind) ||
+          proofExpiry <= proofAt ||
+          (proof.proofKind !== "SESSION_AUTHENTICATION" &&
+            proofExpiry - proofAt > 300000000n) ||
+          typeof authorize !== "function"
+        )
+          fail(403, "RECENT_AUTH_REQUIRED");
+        const requireProofTime = (clock: bigint) => {
+          if (
+            proofAt > clock ||
+            clock - proofAt >
+              BigInt(
+                proof.proofKind === "SESSION_AUTHENTICATION"
+                  ? ADMIN_ABSOLUTE_TIMEOUT_MS
+                  : maxAuthAgeMs,
+              ) *
+                1000n ||
+            proofExpiry <= clock
+          )
+            fail(403, "RECENT_AUTH_REQUIRED");
+        };
+        let lastApplicationTime: bigint | null = null;
+        const applicationClock = () => {
+          const current = backendTimestamp(now());
+          if (lastApplicationTime !== null && current < lastApplicationTime)
+            fail();
+          lastApplicationTime = current;
+          requireProofTime(current);
+          return current;
+        };
+        applicationClock();
+        let admittedAuthority: ReceivingNominationAdmissionAuthority | null =
+          null;
+        const { value: reserved } = await observeNominationSettlement(
+          transaction(
+            async (tx) => {
+              const execute = Function.prototype.bind.call(
+                tx.execute,
+                tx,
+              ) as Transaction["execute"];
+              const insert = Function.prototype.bind.call(
+                tx.insert,
+                tx,
+              ) as Transaction["insert"];
+              // Native COMMIT/ROLLBACK must retain the same actual transaction callable.
+              Object.defineProperties(tx, {
+                execute: {
+                  value: execute,
+                  writable: false,
+                  configurable: false,
+                },
+                insert: { value: insert, writable: false, configurable: false },
+              });
+              const lockedSite = await execute(
+                sql`SELECT st.id AS "siteId",st.is_demo AS "isDemo" FROM ${site} st WHERE st.id=${snapshot.siteId} FOR UPDATE OF st`,
+              );
+              if (
+                lockedSite.rows.length !== 1 ||
+                lockedSite.rows[0].siteId !== snapshot.siteId ||
+                typeof lockedSite.rows[0].isDemo !== "boolean"
+              )
+                fail();
+              if (
+                mode === "live" &&
+                !allowsLiveSite({
+                  siteId: snapshot.siteId,
+                  isDemo: lockedSite.rows[0].isDemo as boolean,
+                  mode,
+                  applicationEnvironment,
+                  liveDemoSiteId: liveDemoSiteId,
+                })
+              )
+                fail(409, "PROVIDER_MODE_UNAVAILABLE");
+              const clock = await execute(
+                sql`SELECT clock_timestamp() AS "currentTime"`,
+              );
+              if (clock.rows.length !== 1) fail();
+              const databaseTime = timestamp(
+                readDatabaseTimestamp(clock.rows[0].currentTime),
+              );
+              requireProofTime(databaseTime);
+              // Account revocation locks user before deleting sessions. Keep the
+              // same explicit order rather than relying on joined row marks.
+              const users = await execute(
+                sql`SELECT u.id AS "userId",u.role,u.state FROM ${user} u WHERE u.id=${actor.userId} AND u.state='ACTIVE' FOR SHARE OF u`,
+              );
+              const currentUser = users.rows[0];
+              if (
+                users.rows.length !== 1 ||
+                currentUser.userId !== actor.userId ||
+                currentUser.state !== "ACTIVE" ||
+                currentUser.role === "OWNER" ||
+                !["SITE_ADMIN", "SITE_ASSISTANT"].includes(
+                  currentUser.role as string,
+                )
+              )
+                fail(403, "MEMBERSHIP_DENIED");
+              const sessions =
+                await execute(sql`SELECT se.user_id AS "userId",se.id AS "sessionId",se.expires_at AS "sessionExpiresAt",se.last_active_at AS "lastActiveAt",se.created_at AS "sessionCreatedAt"
+              FROM ${session} se WHERE se.id=${actor.sessionId} AND se.user_id=${actor.userId} FOR SHARE OF se`);
+              const rawSession = sessions.rows[0];
+              const current = rawSession
+                ? {
+                    userId: rawSession.userId,
+                    sessionId: rawSession.sessionId,
+                    state: currentUser.state,
+                    role: currentUser.role,
+                    sessionExpiresAt: readDatabaseTimestamp(
+                      rawSession.sessionExpiresAt,
+                    ),
+                    lastActiveAt: readDatabaseTimestamp(
+                      rawSession.lastActiveAt,
+                    ),
+                    sessionCreatedAt: readDatabaseTimestamp(
+                      rawSession.sessionCreatedAt,
+                    ),
+                  }
+                : null;
+              const requireSessionTime = (clock: bigint) => {
+                if (
+                  !current ||
+                  timestamp(current.sessionExpiresAt) <= clock ||
+                  timestamp(current.lastActiveAt) > clock ||
+                  clock - timestamp(current.lastActiveAt) >=
+                    BigInt(ADMIN_IDLE_TIMEOUT_MS) * 1000n ||
+                  timestamp(current.sessionCreatedAt) > clock ||
+                  clock - timestamp(current.sessionCreatedAt) >=
+                    BigInt(ADMIN_ABSOLUTE_TIMEOUT_MS) * 1000n
+                )
+                  fail(403, "MEMBERSHIP_DENIED");
+              };
+              if (
+                sessions.rows.length !== 1 ||
+                current === null ||
+                current.userId !== actor.userId ||
+                current.sessionId !== actor.sessionId ||
+                current.state !== "ACTIVE" ||
+                current.role === "OWNER" ||
+                !["SITE_ADMIN", "SITE_ASSISTANT"].includes(
+                  current.role as string,
+                )
+              )
+                fail(403, "MEMBERSHIP_DENIED");
+              if (
+                proof.proofKind === "SESSION_AUTHENTICATION" &&
+                (proofAt !== timestamp(current.sessionCreatedAt) ||
+                  proofExpiry !== timestamp(current.sessionExpiresAt))
+              )
+                fail(403, "RECENT_AUTH_REQUIRED");
+              requireSessionTime(databaseTime);
+              const membership = await execute(
+                sql`SELECT m.id FROM ${siteMembership} m WHERE m.site_id=${snapshot.siteId} AND m.user_id=${actor.userId} AND m.role='SITE_ADMIN' AND m.revoked_at IS NULL FOR SHARE OF m`,
+              );
+              if (membership.rows.length !== 1) fail(403, "MEMBERSHIP_DENIED");
+              const access = siteAccessSchema.safeParse(
+                await resolveSiteAccess(tx, {
+                  userId: actor.userId,
+                  platformRole: current.role as "SITE_ADMIN" | "SITE_ASSISTANT",
+                  siteId: snapshot.siteId,
+                }),
+              );
+              if (
+                !access.success ||
+                access.data.siteId !== snapshot.siteId ||
+                access.data.userId !== actor.userId ||
+                access.data.membershipRole !== "SITE_ADMIN" ||
+                access.data.membershipId !== membership.rows[0].id ||
+                !access.data.capabilities.configureReceiving
+              )
+                fail(403, "MEMBERSHIP_DENIED");
+              const accounts =
+                await execute(sql`SELECT a.id,a.site_id AS "siteId",a.environment,a.provider,a.operator_user_id AS "operatorUserId",a.is_current AS "isCurrent",
+      (a.operator_reference IS NOT NULL OR a.webhook_token_hash IS NOT NULL OR a.account_reference IS NOT NULL OR a.recipient_reference IS NOT NULL OR a.credential_version IS NOT NULL OR a.provider_account_state<>'UNVERIFIED'
+       OR a.receiving_capability OR a.withdrawal_capability OR a.commercial_enabled OR a.observed_at IS NOT NULL) AS "hasProviderBinding"
+      FROM ${receivingAccount} a WHERE a.site_id=${snapshot.siteId} AND a.environment=${mode} ORDER BY a.id LIMIT 2 FOR UPDATE OF a`);
+              if (accounts.rows.length > 1)
+                fail(409, "RECEIVING_BINDING_EXISTS");
+              const account = accounts.rows[0];
+              if (
+                account &&
+                (account.siteId !== snapshot.siteId ||
+                  account.environment !== mode ||
+                  account.provider !== "ASAAS" ||
+                  typeof account.hasProviderBinding !== "boolean")
+              )
+                fail();
+              if (account?.hasProviderBinding)
+                fail(409, "RECEIVING_BINDING_EXISTS");
+              if (account && account.operatorUserId !== actor.userId)
+                fail(409, "RECIPIENT_CONFLICT");
+              const previous = await find(
+                { execute },
+                snapshot.siteId,
+                snapshot.requestId,
+                true,
+              );
+              if (previous && !isDeepStrictEqual(previous, snapshot))
+                fail(409, "REQUEST_CONFLICT");
+              if (
+                account &&
+                (!previous ||
+                  account.id !== snapshot.accountId ||
+                  account.isCurrent !== true)
+              )
+                fail(409, "RECIPIENT_CONFLICT");
+              if (previous && !account) fail();
+              if (
+                (
+                  await observeNominationSettlement(
+                    authorize({
+                      access: access.data,
+                      currentSession: actor,
+                      designatedOperatorUserId: account
+                        ? (account.operatorUserId as string)
+                        : null,
+                      hasProviderBinding: account?.hasProviderBinding === true,
+                    }),
+                  )
+                ).value !== undefined
+              )
+                fail();
+              const final = await execute(
+                sql`SELECT clock_timestamp() AS "currentTime"`,
+              );
+              if (final.rows.length !== 1) fail();
+              const finalTime = timestamp(
+                readDatabaseTimestamp(final.rows[0].currentTime),
+              );
+              if (finalTime < databaseTime) fail();
+              requireProofTime(finalTime);
+              applicationClock();
+              requireSessionTime(finalTime);
+              if (previous) return previous;
+              if (
+                !account &&
+                snapshot.requestId !==
+                  deriveReceivingNominationRequestId({
+                    siteId: snapshot.siteId,
+                    operatorUserId: snapshot.operatorUserId,
+                    environment: snapshot.environment,
+                  })
+              )
+                fail(409, "REQUEST_CONFLICT");
+              if (BigInt(Date.parse(snapshot.createdAt)) * 1000n > finalTime)
+                fail();
+              if (
+                !capturedAdmission ||
+                !admissionPolicy ||
+                typeof lockAuthority !== "function"
+              )
+                fail();
+              const context = captureReceivingNominationAdmissionContext({
+                draft: snapshot,
+                input: {
+                  requestId: snapshot.requestId,
+                  confirmSelfAsRecipient: true,
+                  policyVersion: snapshot.policyVersion,
+                },
+                actor,
+                applicationEnvironment,
+              });
+              if (!isDeepStrictEqual(capturedAdmission.context, context))
+                fail();
+              const originalAuthority = capturedAdmission.authority;
+              const requireAuthorityTime = (clock: bigint) =>
+                requireReceivingNominationAdmissionTime(
+                  originalAuthority,
+                  Number(clock / 1000n),
+                  maxAuthAgeMs,
+                );
+              requireAuthorityTime(finalTime);
+              requireAuthorityTime(applicationClock());
+              const lockedAuthority =
+                captureReceivingNominationAdmissionAuthority(
+                  (
+                    await observeNominationSettlement(
+                      lockAuthority(tx, context, originalAuthority),
+                    )
+                  ).value,
+                  context,
+                  admissionPolicy,
+                );
+              if (!isDeepStrictEqual(lockedAuthority, originalAuthority))
+                fail();
+              admittedAuthority = originalAuthority;
+              requireAuthorityTime(applicationClock());
+              const admissionClock = await execute(
+                sql`SELECT clock_timestamp() AS "currentTime"`,
+              );
+              if (admissionClock.rows.length !== 1) fail();
+              const admissionTime = timestamp(
+                readDatabaseTimestamp(admissionClock.rows[0].currentTime),
+              );
+              if (admissionTime < finalTime) fail();
+              requireProofTime(admissionTime);
+              requireSessionTime(admissionTime);
+              requireAuthorityTime(admissionTime);
+              requireAuthorityTime(applicationClock());
+              const createdAt = new Date(snapshot.createdAt);
+              const savedAccount = await insert(receivingAccount)
+                .values({
+                  id: snapshot.accountId,
+                  siteId: snapshot.siteId,
+                  environment: mode,
+                  provider: "ASAAS",
+                  operatorUserId: actor.userId,
+                  operatorReference: null,
+                  accountReference: null,
+                  recipientReference: null,
+                  providerAccountState: "UNVERIFIED",
+                  receivingCapability: false,
+                  withdrawalCapability: false,
+                  commercialEnabled: false,
+                  isCurrent: true,
+                  credentialVersion: null,
+                  credentialKeyId: null,
+                  credentialNonce: null,
+                  credentialCiphertext: null,
+                  credentialTag: null,
+                  webhookTokenHash: null,
+                  observedAt: null,
+                  createdAt,
+                  updatedAt: createdAt,
+                })
+                .returning({ id: receivingAccount.id });
+              if (
+                savedAccount.length !== 1 ||
+                savedAccount[0].id !== snapshot.accountId
+              )
+                fail();
+              requireAuthorityTime(applicationClock());
+              const savedOperation = await insert(financialOperation)
+                .values({
+                  id: snapshot.operationId,
+                  siteId: snapshot.siteId,
+                  accountId: snapshot.accountId,
+                  environment: mode,
+                  kind: "ACCOUNT_CREATE",
+                  state: "REQUESTED",
+                  requestId: snapshot.requestId,
+                  requestHash: snapshot.requestHash,
+                  requestSnapshot: snapshot as unknown as Record<
+                    string,
+                    unknown
+                  >,
+                  orderId: null,
+                  withdrawalIntentId: null,
+                  paymentId: null,
+                  providerOperationReference: null,
+                  leaseOwner: null,
+                  leaseToken: null,
+                  leaseExpiresAt: null,
+                  attempts: 0,
+                  nextAttemptAt: createdAt,
+                  lastErrorCode: null,
+                  createdAt,
+                  updatedAt: createdAt,
+                })
+                .returning({ id: financialOperation.id });
+              if (
+                savedOperation.length !== 1 ||
+                savedOperation[0].id !== snapshot.operationId
+              )
+                fail();
+              requireAuthorityTime(applicationClock());
+              const committedClock = await execute(
+                sql`SELECT clock_timestamp() AS "currentTime"`,
+              );
+              if (committedClock.rows.length !== 1) fail();
+              const committedTime = timestamp(
+                readDatabaseTimestamp(committedClock.rows[0].currentTime),
+              );
+              if (committedTime < admissionTime) fail();
+              requireProofTime(committedTime);
+              requireAuthorityTime(applicationClock());
+              requireAuthorityTime(committedTime);
+              requireSessionTime(committedTime);
+              return snapshot;
+            },
+            { isolationLevel: "read committed" },
+          ),
+        );
+        // A settled COMMIT may be durable despite an unavailable acknowledgment.
+        if (admittedAuthority)
+          requireReceivingNominationAdmissionTime(
+            admittedAuthority,
+            Number(applicationClock() / 1000n),
+            maxAuthAgeMs,
+          );
+        return reserved;
+      } catch (e) {
+        if (e instanceof ReceivingNominationServiceError) throw e;
+        return fail();
+      }
+    },
+  };
+}

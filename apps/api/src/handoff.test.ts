@@ -5,6 +5,8 @@ import {
   user,
   verification,
 } from "@entrelacos/database/schema";
+import type { SQL } from "drizzle-orm";
+import { PgDialect } from "drizzle-orm/pg-core";
 import { describe, expect, it, vi } from "vitest";
 import {
   ADMIN_ABSOLUTE_TTL_MS,
@@ -45,10 +47,34 @@ function createFakeDatabase() {
   const users: Array<{
     id: string;
     state: "PENDING" | "ACTIVE" | "DISABLED";
-  }> = [{ id: "owner-1", state: "ACTIVE" }];
+    role: "OWNER" | "SITE_ADMIN" | "SITE_ASSISTANT";
+  }> = [{ id: "owner-1", state: "ACTIVE", role: "OWNER" }];
+  const memberships = [
+    { siteId, role: "SITE_ASSISTANT", revokedAt: null as Date | null },
+  ];
   let allowDelete = true;
 
   const db = {
+    execute: vi.fn(async (value: SQL) => {
+      const [requestedSite] = new PgDialect().sqlToQuery(value).params;
+      const member = memberships.find(
+        (entry) => entry.siteId === requestedSite,
+      );
+      return {
+        rows: [
+          {
+            user_id: users[0]?.id,
+            account_role: users[0]?.role,
+            account_state: users[0]?.state,
+            site_id: requestedSite,
+            membership_id: member ? "member-1" : null,
+            membership_user_id: member ? "owner-1" : null,
+            membership_role: member?.role ?? null,
+            revoked_at: member?.revokedAt ?? null,
+          },
+        ],
+      };
+    }),
     transaction: vi.fn(async (callback: (tx: unknown) => Promise<unknown>) =>
       callback(db),
     ),
@@ -86,6 +112,7 @@ function createFakeDatabase() {
     verificationRows,
     sessions,
     users,
+    memberships,
     preventDelete: () => {
       allowDelete = false;
     },
@@ -93,6 +120,72 @@ function createFakeDatabase() {
 }
 
 describe("handoff core", () => {
+  it("rejects new handoff and redemption after site membership revocation", async () => {
+    const fixture = createFakeDatabase();
+    fixture.users[0].role = "SITE_ASSISTANT";
+    const issued = await issueHandoff(fixture.db, {
+      siteId,
+      origin,
+      parentSessionId,
+      challenge: sha256(verifier),
+      now,
+    });
+    fixture.memberships[0].revokedAt = now;
+    await expect(
+      issueHandoff(fixture.db, {
+        siteId,
+        origin,
+        parentSessionId,
+        challenge: sha256(verifier),
+        now,
+      }),
+    ).rejects.toThrow();
+    await expect(
+      redeemHandoff(fixture.db, {
+        siteId,
+        origin,
+        code: issued.code,
+        verifier,
+        now,
+      }),
+    ).rejects.toThrow();
+  });
+
+  it("invalidates existing recognition when its site membership is revoked", async () => {
+    const fixture = createFakeDatabase();
+    fixture.users[0].role = "SITE_ASSISTANT";
+    const issued = await issueHandoff(fixture.db, {
+      siteId,
+      origin,
+      parentSessionId,
+      challenge: sha256(verifier),
+      now,
+    });
+    const redeemed = await redeemHandoff(fixture.db, {
+      siteId,
+      origin,
+      code: issued.code,
+      verifier,
+      now,
+    });
+    await expect(
+      recognizeSite(fixture.db, {
+        siteId,
+        origin,
+        recognitionToken: redeemed.recognitionToken,
+        now,
+      }),
+    ).resolves.toBe(true);
+    fixture.memberships[0].revokedAt = now;
+    await expect(
+      recognizeSite(fixture.db, {
+        siteId,
+        origin,
+        recognitionToken: redeemed.recognitionToken,
+        now,
+      }),
+    ).resolves.toBe(false);
+  });
   it("enforces active, idle, and absolute administrative session boundaries", () => {
     const snapshot = {
       accountState: "ACTIVE" as const,

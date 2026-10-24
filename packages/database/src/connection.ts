@@ -28,6 +28,7 @@ export interface DatabaseConfig {
 
 export interface DatabaseEnvironment extends NodeJS.ProcessEnv {
   DATABASE_URL?: string;
+  DATABASE_DIRECT_URL?: string;
   DATABASE_URL_TEST?: string;
   DATABASE_URL_PRODUCTION?: string;
   DATABASE_TEST_BRANCH_ID?: string;
@@ -285,5 +286,42 @@ export async function verifyDatabaseConnection(
 export function resolveMigrationConnectionUrl(
   env: DatabaseEnvironment = process.env,
 ): string {
-  return normalizeDatabaseUrl(requiredEnvironmentValue(env, "DATABASE_URL"));
+  const directUrl = requiredEnvironmentValue(env, "DATABASE_DIRECT_URL");
+  const url = parseDatabaseUrl(directUrl);
+  if (
+    url.hostname.toLowerCase().endsWith(".neon.tech") &&
+    /-pooler$/i.test(url.hostname.split(".")[0])
+  ) {
+    throw new Error("Migration connection must use a direct Neon endpoint");
+  }
+
+  const runtimeUrl = env.DATABASE_URL?.trim();
+  let databaseName: string;
+  let runtimeDatabaseName: string | undefined;
+  try {
+    if (!url.hostname) throw new Error();
+    databaseName = databaseNameFromUrl(directUrl);
+    if (runtimeUrl) {
+      if (!parseDatabaseUrl(runtimeUrl).hostname) throw new Error();
+      runtimeDatabaseName = databaseNameFromUrl(runtimeUrl);
+    }
+  } catch {
+    throw new Error("Invalid database connection URL");
+  }
+
+  if (runtimeUrl) {
+    if (
+      normalizeNeonEndpoint(directUrl) !== normalizeNeonEndpoint(runtimeUrl)
+    ) {
+      throw new Error(
+        "Migration connection must match the development endpoint",
+      );
+    }
+    if (databaseName !== runtimeDatabaseName) {
+      throw new Error(
+        "Migration connection must match the development database",
+      );
+    }
+  }
+  return normalizeDatabaseUrl(directUrl);
 }

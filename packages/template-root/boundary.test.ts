@@ -152,14 +152,6 @@ describe("template-root public boundary", () => {
       existsSync(
         resolve(
           repoRoot,
-          "apps/wedding-demo/public/marina-caio-attire-palette.webp",
-        ),
-      ),
-    ).toBe(true);
-    expect(
-      existsSync(
-        resolve(
-          repoRoot,
           "apps/wedding-demo/public/marina-caio-attire-palette-swatches.webp",
         ),
       ),

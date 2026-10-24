@@ -31,7 +31,10 @@ import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { hashInvitationSessionToken } from "./guestVerification";
 
 export type RsvpDatabase = NodePgDatabase<Record<string, never>>;
-export type RsvpAdminActor = { userId: string; role: "OWNER" | "SITE_ADMIN" };
+export type RsvpAdminActor = {
+  userId: string;
+  role: "OWNER" | "SITE_ADMIN" | "SITE_ASSISTANT";
+};
 
 export class RsvpServiceError extends Error {
   constructor(
@@ -430,25 +433,22 @@ async function adminContext(
   lock: "share" | "update" | null,
   mutation: boolean,
 ): Promise<AdminContext> {
+  if (lock)
+    await db.execute(
+      sql`SELECT id FROM site WHERE id = ${siteId} ${lock === "update" ? sql`FOR UPDATE` : sql`FOR SHARE`}`,
+    );
   const membership =
     actor.role === "OWNER"
       ? sql``
       : sql`INNER JOIN site_membership sm
-          ON sm.site_id = s.id AND sm.user_id = u.id`;
-  const lockSql =
-    lock === "update"
-      ? sql`FOR UPDATE OF s`
-      : lock === "share"
-        ? sql`FOR SHARE OF s`
-        : sql``;
+          ON sm.site_id = s.id AND sm.user_id = u.id AND sm.revoked_at IS NULL AND sm.role IN ('SITE_ADMIN', 'SITE_ASSISTANT')`;
   const result = await db.execute(sql`
     SELECT s.id AS site_id, s.lifecycle, s.rsvp_deadline_at,
       s.rsvp_deadline_timezone, u.name AS actor_display_name
     FROM site s
-    INNER JOIN "user" u ON u.id = ${actor.userId} AND u.state = 'ACTIVE'
+    INNER JOIN "user" u ON u.id = ${actor.userId} AND u.state = 'ACTIVE' AND u.role = ${actor.role}
     ${membership}
     WHERE s.id = ${siteId}
-    ${lockSql}
   `);
   const row = result.rows[0] as
     | {

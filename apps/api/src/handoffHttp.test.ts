@@ -42,6 +42,7 @@ beforeEach(() => {
   mocks.actor.mockResolvedValue({
     user: { role: "SITE_ADMIN", id: "admin" },
     siteId: "one",
+    memberships: [{ siteId: "one", userId: "admin" }],
     session: { id: "session" },
   });
   mocks.issue.mockResolvedValue({

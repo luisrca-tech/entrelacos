@@ -15,6 +15,8 @@ const testUrl =
   "postgresql://user:test-secret@ep-testing-pooler.example.neon.tech/neondb?sslmode=require";
 const productionUrl =
   "postgresql://user:production-secret@ep-production-pooler.example.neon.tech/neondb?sslmode=require";
+const migrationUrl =
+  "postgresql://migration-role:migration-secret@ep-development.example.neon.tech/neondb?sslmode=require";
 
 const expectedEnvironment = {
   DATABASE_URL: developmentUrl,
@@ -225,24 +227,134 @@ describe("database connection guards", () => {
 });
 
 describe("migration connection url", () => {
-  it("uses DATABASE_URL without environment identity variables", () => {
+  it("uses the direct URL and permits a different role on the same destination", () => {
     expect(
       resolveMigrationConnectionUrl({
         DATABASE_URL: developmentUrl,
+        DATABASE_DIRECT_URL: migrationUrl,
       }),
-    ).toBe(normalizeDatabaseUrl(developmentUrl));
+    ).toBe(normalizeDatabaseUrl(migrationUrl));
   });
 
-  it("ignores DATABASE_URL_TEST", () => {
+  it("supports direct-only migration configuration and ignores TEST identity", () => {
     expect(
       resolveMigrationConnectionUrl({
-        DATABASE_URL: developmentUrl,
+        DATABASE_DIRECT_URL: migrationUrl,
         DATABASE_URL_TEST: testUrl,
       }),
-    ).toBe(normalizeDatabaseUrl(developmentUrl));
+    ).toBe(normalizeDatabaseUrl(migrationUrl));
   });
 
-  it("requires DATABASE_URL", () => {
-    expect(() => resolveMigrationConnectionUrl({})).toThrow("DATABASE_URL");
+  it.each([undefined, "", "   "])(
+    "requires a nonempty DIRECT URL without falling back to runtime (%s)",
+    (directUrl) => {
+      expect(() =>
+        resolveMigrationConnectionUrl({
+          DATABASE_URL: developmentUrl,
+          DATABASE_DIRECT_URL: directUrl,
+        }),
+      ).toThrow(
+        "Missing required database environment variable: DATABASE_DIRECT_URL",
+      );
+    },
+  );
+
+  it("requires DIRECT even when no runtime URL exists", () => {
+    expect(() => resolveMigrationConnectionUrl({})).toThrow(
+      "DATABASE_DIRECT_URL",
+    );
+  });
+
+  it.each([
+    developmentUrl,
+    developmentUrl.replace("ep-development-pooler", "EP-DEVELOPMENT-POOLER"),
+  ])("rejects pooled Neon migration connections (%s)", (directUrl) => {
+    expect(() =>
+      resolveMigrationConnectionUrl({ DATABASE_DIRECT_URL: directUrl }),
+    ).toThrow("Migration connection must use a direct Neon endpoint");
+  });
+
+  it.each([
+    [migrationUrl.replace("ep-development", "ep-other"), "endpoint"],
+    [migrationUrl.replace("/neondb", "/otherdb"), "database"],
+  ])("rejects a different development destination (%s)", (directUrl, part) => {
+    expect(() =>
+      resolveMigrationConnectionUrl({
+        DATABASE_URL: developmentUrl,
+        DATABASE_DIRECT_URL: directUrl,
+      }),
+    ).toThrow(`Migration connection must match the development ${part}`);
+  });
+
+  it("compares decoded database names and normalized Neon endpoints", () => {
+    const directUrl = migrationUrl
+      .replace("ep-development", "EP-DEVELOPMENT")
+      .replace("/neondb", "/neon%64b");
+    expect(
+      resolveMigrationConnectionUrl({
+        DATABASE_URL: developmentUrl,
+        DATABASE_DIRECT_URL: ` ${directUrl} `,
+      }),
+    ).toBe(normalizeDatabaseUrl(directUrl));
+  });
+
+  it("rejects the divergent last-loaded DIRECT assignment", () => {
+    const env = {
+      DATABASE_URL: developmentUrl,
+      DATABASE_DIRECT_URL: migrationUrl,
+    };
+    Object.assign(env, {
+      DATABASE_DIRECT_URL: migrationUrl.replace("ep-development", "ep-other"),
+    });
+    expect(() => resolveMigrationConnectionUrl(env)).toThrow(
+      "Migration connection must match the development endpoint",
+    );
+  });
+
+  it.each([
+    "invalid-private-password",
+    "https://user:private-password@ep-development.example.neon.tech/neondb",
+    "postgresql:///neondb",
+    "postgresql://user:private-password@ep-development.example.neon.tech/",
+    "postgresql://user:private-password@ep-development.example.neon.tech/%FF",
+  ])("sanitizes malformed DIRECT configuration (%s)", (directUrl) => {
+    let caught: unknown;
+    try {
+      resolveMigrationConnectionUrl({ DATABASE_DIRECT_URL: directUrl });
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    expect((caught as Error).message).toBe("Invalid database connection URL");
+    expect(String(caught)).not.toContain("private-password");
+    expect(JSON.stringify(caught)).not.toContain(directUrl);
+  });
+
+  it.each([
+    "invalid-runtime-private-password",
+    "postgresql://user:runtime-private-password@ep-development.example.neon.tech/%FF",
+  ])("sanitizes malformed runtime comparison (%s)", (runtimeUrl) => {
+    expect(() =>
+      resolveMigrationConnectionUrl({
+        DATABASE_URL: runtimeUrl,
+        DATABASE_DIRECT_URL: migrationUrl,
+      }),
+    ).toThrow("Invalid database connection URL");
+  });
+
+  it("keeps runtime and TEST selection independent of DIRECT", () => {
+    const env = {
+      ...expectedEnvironment,
+      DATABASE_DIRECT_URL: "invalid-unused-direct-private-password",
+    };
+    expect(resolveDatabaseConfig("development", env).url).toBe(
+      normalizeDatabaseUrl(developmentUrl),
+    );
+    expect(resolveDatabaseConfig("production", env).url).toBe(
+      normalizeDatabaseUrl(developmentUrl),
+    );
+    expect(resolveDatabaseConfig("test", env).url).toBe(
+      normalizeDatabaseUrl(testUrl),
+    );
   });
 });

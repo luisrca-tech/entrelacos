@@ -6,14 +6,21 @@
       "dependsOn": ["^build"],
       "outputs": ["dist/**", ".output/**"],
       "env": [
+        "APP_ENV",
         "PUBLIC_API_URL",
         "PUBLIC_SITE_ID",
+        "PUBLIC_LIVE_DEMO_SITE_ID",
         "PUBLIC_ADMIN_ORIGIN",
         "PUBLIC_SITE_INACTIVE",
         "VITE_API_URL"
       ]
     },
     "typecheck": { "dependsOn": ["^build"], "outputs": [] },
-    "dev": { "dependsOn": ["^build"], "cache": false, "persistent": true }
+    "dev": {
+      "dependsOn": ["^build"],
+      "cache": false,
+      "persistent": true,
+      "env": ["APP_ENV"]
+    }
   }
 }

@@ -1,0 +1,1 @@
+export { withdrawalProviderObservation } from "./financialSchema";

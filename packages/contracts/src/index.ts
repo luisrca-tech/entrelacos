@@ -1,5 +1,10 @@
 import parsePhoneNumber, { AsYouType } from "libphonenumber-js";
 import { z } from "zod";
+import { siteAccessSchema } from "./internalGifts";
+
+export * from "./adminOrigin";
+export * from "./giftCommission";
+export * from "./internalGifts";
 
 const strictObject = <T extends z.ZodRawShape>(shape: T) =>
   z.object(shape).strict();
@@ -35,7 +40,11 @@ export const provisioningKeySchema = z
   .max(160)
   .regex(/^[A-Za-z0-9][A-Za-z0-9._:/-]*$/);
 
-export const adminRoleSchema = z.enum(["OWNER", "SITE_ADMIN"]);
+export const adminRoleSchema = z.enum([
+  "OWNER",
+  "SITE_ADMIN",
+  "SITE_ASSISTANT",
+]);
 export const accountStateSchema = z.enum(["PENDING", "ACTIVE", "DISABLED"]);
 export const siteLifecycleSchema = z.enum([
   "DRAFT",
@@ -465,6 +474,7 @@ export const safeActorSchema = strictObject({
     expiresAt: instantSchema,
   }),
   siteId: siteIdSchema.nullable().optional(),
+  memberships: z.array(siteAccessSchema).optional(),
 });
 
 export const meResponseSchema = safeActorSchema;
@@ -1056,3 +1066,5 @@ export const block7EndpointPaths = {
 
 export type Block7EndpointPath =
   (typeof block7EndpointPaths)[keyof typeof block7EndpointPaths];
+export * from "./receivingPixDestinationContracts";
+export * from "./receivingSetupContracts";

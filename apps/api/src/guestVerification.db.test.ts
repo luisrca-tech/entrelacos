@@ -7,6 +7,7 @@ import {
   invitationRateLimitEvent,
   site,
   siteOrigin,
+  user,
 } from "@entrelacos/database/schema";
 import { eq, like } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -28,7 +29,7 @@ import { approveReview, createSite, startReview } from "./sites";
 const prefix = `invitation-access-${process.pid}`;
 const now = new Date("2028-02-29T12:00:00.000Z");
 const secret = "invitation-access-test-secret-with-at-least-32-characters";
-const actor = { userId: "owner", role: "OWNER" as const };
+const actor = { userId: `${prefix}-owner`, role: "OWNER" as const };
 const phone = "+5511999999999";
 let connection: DatabaseConnection;
 const siteIds: string[] = [];
@@ -93,6 +94,13 @@ describe("public invitation access PostgreSQL boundary", () => {
   beforeAll(async () => {
     connection = createDatabaseConnection({ target: "test" });
     await verifyDatabaseConnection(connection);
+    await connection.db.insert(user).values({
+      id: actor.userId,
+      name: "Invitation access owner fixture",
+      email: `${prefix}-owner@example.test`,
+      role: "OWNER",
+      state: "ACTIVE",
+    });
     await connection.db
       .delete(site)
       .where(like(site.repositorySlug, `${prefix}%`));
@@ -102,6 +110,7 @@ describe("public invitation access PostgreSQL boundary", () => {
     for (const siteId of siteIds) {
       await connection.db.delete(site).where(eq(site.id, siteId));
     }
+    await connection.db.delete(user).where(eq(user.id, actor.userId));
     await connection.close();
   });
 

@@ -16,7 +16,31 @@ import {
   uniqueIndex,
 } from "drizzle-orm/pg-core";
 
-export const adminRole = pgEnum("admin_role", ["OWNER", "SITE_ADMIN"]);
+export const adminRole = pgEnum("admin_role", [
+  "OWNER",
+  "SITE_ADMIN",
+  "SITE_ASSISTANT",
+]);
+export const siteMembershipRole = pgEnum("site_membership_role", [
+  "SITE_ADMIN",
+  "SITE_ASSISTANT",
+]);
+export const giftPublicationState = pgEnum("gift_publication_state", [
+  "DRAFT",
+  "PUBLISHED",
+  "ARCHIVED",
+]);
+export const giftMediaState = pgEnum("gift_media_state", [
+  "PENDING",
+  "PROCESSING",
+  "FINALIZED",
+  "EXPIRED",
+  "FAILED",
+]);
+export const giftMediaPublicationIntentState = pgEnum(
+  "gift_media_publication_intent_state",
+  ["REQUESTED", "PUBLISHED", "ASSOCIATED", "UNKNOWN", "ORPHANED", "CLEANED"],
+);
 export const accountState = pgEnum("account_state", [
   "PENDING",
   "ACTIVE",
@@ -730,6 +754,11 @@ export const siteMembership = pgTable(
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
+    role: siteMembershipRole("role").notNull().default("SITE_ADMIN"),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    invitedByUserId: text("invited_by_user_id").references(() => user.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -738,11 +767,229 @@ export const siteMembership = pgTable(
       .defaultNow(),
   },
   (table) => [
-    uniqueIndex("site_membership_user_id_idx").on(table.userId),
     uniqueIndex("site_membership_site_id_user_id_idx").on(
       table.siteId,
       table.userId,
     ),
+  ],
+);
+
+export const siteAssessorInvitation = pgTable(
+  "site_assessor_invitation",
+  {
+    id: text("id").primaryKey(),
+    siteId: text("site_id")
+      .notNull()
+      .references(() => site.id, { onDelete: "cascade" }),
+    email: text("email").notNull(),
+    inviteeName: text("invitee_name").notNull(),
+    role: siteMembershipRole("role").notNull().default("SITE_ASSISTANT"),
+    tokenHash: text("token_hash").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    consumedAt: timestamp("consumed_at", { withTimezone: true }),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    invitedByUserId: text("invited_by_user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "restrict" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("site_assessor_invitation_token_hash_idx").on(table.tokenHash),
+    index("site_assessor_invitation_site_email_idx").on(
+      table.siteId,
+      table.email,
+    ),
+    check(
+      "site_assessor_invitation_role_check",
+      sql`${table.role} = 'SITE_ASSISTANT'`,
+    ),
+    check(
+      "site_assessor_invitation_name_check",
+      sql`length(trim(${table.inviteeName})) BETWEEN 1 AND 160`,
+    ),
+    check(
+      "site_assessor_invitation_email_check",
+      sql`${table.email} = lower(trim(${table.email})) AND length(${table.email}) > 0`,
+    ),
+    check(
+      "site_assessor_invitation_expiry_check",
+      sql`${table.expiresAt} > ${table.createdAt}`,
+    ),
+    check(
+      "site_assessor_invitation_token_hash_check",
+      sql`${table.tokenHash} ~ '^[a-f0-9]{64}$'`,
+    ),
+  ],
+);
+
+export const giftMediaAsset = pgTable(
+  "gift_media_asset",
+  {
+    id: text("id").primaryKey(),
+    siteId: text("site_id")
+      .notNull()
+      .references(() => site.id, { onDelete: "restrict" }),
+    stagingKey: text("staging_key").notNull(),
+    declaredContentType: text("declared_content_type"),
+    declaredByteLength: integer("declared_byte_length"),
+    processingId: text("processing_id"),
+    processingExpiresAt: timestamp("processing_expires_at", {
+      withTimezone: true,
+    }),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    stableObjectVersion: text("stable_object_version"),
+    state: giftMediaState("state").notNull().default("PENDING"),
+    derivativeKey: text("derivative_key"),
+    publicUrl: text("public_url"),
+    contentType: text("content_type"),
+    byteLength: integer("byte_length"),
+    width: integer("width"),
+    height: integer("height"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("gift_media_asset_site_id_id_idx").on(table.siteId, table.id),
+    uniqueIndex("gift_media_asset_staging_key_idx").on(table.stagingKey),
+    uniqueIndex("gift_media_asset_processing_id_idx").on(table.processingId),
+    uniqueIndex("gift_media_asset_derivative_key_idx").on(table.derivativeKey),
+    check(
+      "gift_media_asset_expiry_check",
+      sql`${table.expiresAt} > ${table.createdAt}`,
+    ),
+    check(
+      "gift_media_asset_declared_content_check",
+      sql`(${table.declaredContentType} IS NULL AND ${table.declaredByteLength} IS NULL) OR (${table.declaredContentType} IS NOT NULL AND ${table.declaredByteLength} IS NOT NULL AND ${table.declaredContentType} IN ('image/jpeg', 'image/png', 'image/webp') AND ${table.declaredByteLength} BETWEEN 1 AND 5242880)`,
+    ),
+    check(
+      "gift_media_asset_processing_pair_check",
+      sql`(${table.processingId} IS NULL AND ${table.processingExpiresAt} IS NULL) OR (${table.processingId} IS NOT NULL AND ${table.processingExpiresAt} IS NOT NULL AND ${table.processingExpiresAt} > ${table.createdAt})`,
+    ),
+    check(
+      "gift_media_asset_processing_claim_check",
+      sql`${table.state}::text <> 'PROCESSING' OR (${table.processingId} IS NOT NULL AND ${table.processingExpiresAt} IS NOT NULL AND ${table.declaredContentType} IS NOT NULL AND ${table.declaredByteLength} IS NOT NULL)`,
+    ),
+    check(
+      "gift_media_asset_dimensions_check",
+      sql`(${table.width} IS NULL OR ${table.width} > 0) AND (${table.height} IS NULL OR ${table.height} > 0) AND (${table.byteLength} IS NULL OR ${table.byteLength} > 0)`,
+    ),
+    check(
+      "gift_media_asset_finalized_check",
+      sql`${table.state} <> 'FINALIZED' OR (${table.stableObjectVersion} IS NOT NULL AND ${table.derivativeKey} IS NOT NULL AND ${table.derivativeKey} <> ${table.stagingKey} AND ${table.publicUrl} IS NOT NULL AND ${table.contentType} IS NOT NULL AND ${table.width} IS NOT NULL AND ${table.height} IS NOT NULL AND ${table.byteLength} IS NOT NULL)`,
+    ),
+  ],
+);
+
+// One row per immutable publication claim survives asset takeover and uncertain acknowledgments.
+export const giftMediaPublicationIntent = pgTable(
+  "gift_media_publication_intent",
+  {
+    id: text("id").primaryKey(),
+    siteId: text("site_id")
+      .notNull()
+      .references(() => site.id, { onDelete: "restrict" }),
+    assetId: text("asset_id").notNull(),
+    processingId: text("processing_id").notNull(),
+    storageNamespace: text("storage_namespace").notNull(),
+    derivativeKey: text("derivative_key").notNull(),
+    state: giftMediaPublicationIntentState("state")
+      .notNull()
+      .default("REQUESTED"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    observedAt: timestamp("observed_at", { withTimezone: true }),
+  },
+  (table) => [
+    unique("gift_media_publication_claim_key").on(
+      table.siteId,
+      table.assetId,
+      table.processingId,
+    ),
+    unique("gift_media_publication_object_key").on(
+      table.storageNamespace,
+      table.derivativeKey,
+    ),
+    foreignKey({
+      columns: [table.siteId, table.assetId],
+      foreignColumns: [giftMediaAsset.siteId, giftMediaAsset.id],
+      name: "gift_media_publication_asset_fk",
+    })
+      .onDelete("restrict")
+      .onUpdate("restrict"),
+    check(
+      "gift_media_publication_claim_check",
+      sql`length(trim(${table.processingId})) BETWEEN 1 AND 128`,
+    ),
+    check(
+      "gift_media_publication_namespace_check",
+      sql`${table.storageNamespace} ~ '^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$'`,
+    ),
+    check(
+      "gift_media_publication_key_check",
+      sql`${table.derivativeKey} = 'gifts/' || ${table.siteId} || '/' || ${table.assetId} || '/' || ${table.processingId} || '.webp' AND length(${table.derivativeKey}) <= 512 AND ${table.processingId} ~ '^[A-Za-z0-9_-]+$'`,
+    ),
+    check(
+      "gift_media_publication_observation_check",
+      sql`(${table.observedAt} IS NULL OR ${table.observedAt} >= ${table.createdAt}) AND (${table.state} = 'REQUESTED' OR ${table.observedAt} IS NOT NULL)`,
+    ),
+  ],
+);
+
+export const giftItem = pgTable(
+  "gift_item",
+  {
+    id: text("id").primaryKey(),
+    siteId: text("site_id")
+      .notNull()
+      .references(() => site.id, { onDelete: "restrict" }),
+    title: text("title").notNull(),
+    description: text("description").notNull().default(""),
+    nominalCents: integer("nominal_cents").notNull(),
+    currency: text("currency").notNull().default("BRL"),
+    mediaAssetId: text("media_asset_id"),
+    altText: text("alt_text").notNull().default(""),
+    sortOrder: integer("sort_order").notNull().default(0),
+    publicationState: giftPublicationState("publication_state")
+      .notNull()
+      .default("DRAFT"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("gift_item_site_id_id_idx").on(table.siteId, table.id),
+    index("gift_item_site_state_order_idx").on(
+      table.siteId,
+      table.publicationState,
+      table.sortOrder,
+    ),
+    foreignKey({
+      columns: [table.siteId, table.mediaAssetId],
+      foreignColumns: [giftMediaAsset.siteId, giftMediaAsset.id],
+      name: "gift_item_site_media_fk",
+    }).onDelete("restrict"),
+    check("gift_item_nominal_cents_check", sql`${table.nominalCents} > 0`),
+    check("gift_item_currency_check", sql`${table.currency} = 'BRL'`),
+    check(
+      "gift_item_title_check",
+      sql`length(trim(${table.title})) BETWEEN 1 AND 120`,
+    ),
+    check(
+      "gift_item_description_check",
+      sql`length(${table.description}) <= 2000`,
+    ),
+    check("gift_item_alt_text_check", sql`length(${table.altText}) <= 240`),
+    check("gift_item_sort_order_check", sql`${table.sortOrder} >= 0`),
   ],
 );
 
@@ -1023,3 +1270,7 @@ export const adminAccessTokenRelations = relations(
     }),
   }),
 );
+
+export * from "./financialSchema";
+
+export { receivingSetupHolder } from "./receivingSetupSchema";

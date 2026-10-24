@@ -9,6 +9,27 @@ const settings = {
 };
 
 describe("API runtime configuration", () => {
+  it("composes Sandbox payment configuration and defaults its site origin locally", () => {
+    const config = readRuntimeConfig({
+      ...settings,
+      ASAAS_MODE: "sandbox",
+      ASAAS_API_KEY: "$aact_hmlg_fixture",
+      ASAAS_PLATFORM_ACCOUNT_ID: "platform-account",
+      ASAAS_PLATFORM_WALLET_ID: "platform-wallet",
+      ASAAS_CREDENTIAL_KEY_ID: "local-v1",
+      ASAAS_CREDENTIAL_KEY: Buffer.alloc(32, 1).toString("base64"),
+      ASAAS_WEBHOOK_PUBLIC_ORIGIN: "https://fixture.trycloudflare.com",
+    });
+    expect(config).toMatchObject({
+      giftPayment: {
+        mode: "sandbox",
+        applicationEnvironment: "development",
+        webhookUrl: "https://fixture.trycloudflare.com/v1/webhooks/asaas",
+      },
+      giftPublicOrigin: "http://localhost:4321",
+      giftPaymentHistory: { mode: "sandbox" },
+    });
+  });
   it("selects only the explicitly named database environment", () => {
     expect(readRuntimeConfig(settings)).toMatchObject({
       target: "development",
@@ -77,6 +98,42 @@ describe("API runtime configuration", () => {
     expect(config).not.toHaveProperty("exposeSimulationCode");
   });
 
+  it("keeps media disabled by default and validates explicit storage configuration", () => {
+    expect(readRuntimeConfig(settings)).toHaveProperty("giftMedia", {
+      mode: "disabled",
+    });
+    expect(() =>
+      readRuntimeConfig({ ...settings, GIFT_MEDIA_MODE: "r2" }),
+    ).toThrow("Gift media configuration is invalid");
+  });
+
+  it.each([
+    ["development", "fixture-development"],
+    ["test", "fixture-development"],
+    ["production", "fixture-production"],
+  ])("uses only the supplied existing bucket for %s", (APP_ENV, bucketName) => {
+    const config = readRuntimeConfig({
+      ...settings,
+      APP_ENV,
+      GIFT_MEDIA_MODE: "r2",
+      R2_ACCOUNT_ID: "a".repeat(32),
+      R2_ACCESS_KEY_ID: "fixture-access-key",
+      R2_SECRET_ACCESS_KEY: "fixture-secret-key",
+      R2_BUCKET_NAME: bucketName,
+      R2_PUBLIC_ORIGIN: "https://images.example.test",
+    });
+    expect(config.target).toBe(APP_ENV);
+    expect(config.giftMedia).toEqual({
+      mode: "r2",
+      applicationEnvironment: APP_ENV,
+      accountId: "a".repeat(32),
+      accessKeyId: "fixture-access-key",
+      secretAccessKey: "fixture-secret-key",
+      bucketName,
+      publicOrigin: "https://images.example.test",
+    });
+  });
+
   it("preserves proxy trust and fingerprint configuration", () => {
     expect(
       readRuntimeConfig({
@@ -105,5 +162,83 @@ describe("API runtime configuration", () => {
     }
     expect(error).toBeInstanceOf(Error);
     expect((error as Error).message).not.toContain(ADMIN_ORIGIN);
+  });
+});
+
+describe("server-selected purchase history configuration", () => {
+  it.each([undefined, "", "   "])(
+    "defaults %j to disabled without inferring mode from production",
+    (GIFT_PAYMENT_HISTORY_MODE) => {
+      expect(
+        readRuntimeConfig({
+          ...settings,
+          APP_ENV: "production",
+          GIFT_PAYMENT_HISTORY_MODE,
+        }),
+      ).toHaveProperty("giftPaymentHistory", {
+        mode: "disabled",
+        applicationEnvironment: "production",
+        policy: "SITE_HISTORY",
+      });
+    },
+  );
+  for (const APP_ENV of ["development", "test", "production"])
+    it.each(["disabled", "sandbox", "live"])(
+      `captures explicit %s independently of ${APP_ENV}`,
+      (mode) => {
+        const config = readRuntimeConfig({
+          ...settings,
+          APP_ENV,
+          GIFT_PAYMENT_HISTORY_MODE: ` ${mode} `,
+        });
+        expect(config).toHaveProperty("giftPaymentHistory", {
+          mode,
+          applicationEnvironment: APP_ENV,
+          policy: "SITE_HISTORY",
+        });
+      },
+    );
+  it.each([
+    "SANDBOX",
+    "true",
+    "READY",
+    "test",
+    "sandbox/live",
+    "private-invalid-value",
+  ])(
+    "rejects unsupported selector %s with a fixed error",
+    (GIFT_PAYMENT_HISTORY_MODE) => {
+      expect(() =>
+        readRuntimeConfig({ ...settings, GIFT_PAYMENT_HISTORY_MODE }),
+      ).toThrow(/^Gift payment history configuration is invalid$/);
+    },
+  );
+  it("rejects an invalid selector before reading remaining private settings", () => {
+    const input = {
+      ...settings,
+      GIFT_PAYMENT_HISTORY_MODE: "unsupported",
+      get BETTER_AUTH_SECRET(): string {
+        throw new Error("private setting read");
+      },
+    };
+    expect(() => readRuntimeConfig(input)).toThrow(
+      /^Gift payment history configuration is invalid$/,
+    );
+  });
+  it("preserves every pre-existing config value and needs no new provider setting", () => {
+    const before = readRuntimeConfig(settings);
+    const after = readRuntimeConfig({
+      ...settings,
+      GIFT_PAYMENT_HISTORY_MODE: "sandbox",
+    });
+    const { giftPaymentHistory: beforeHistory, ...oldBefore } = before;
+    const { giftPaymentHistory: afterHistory, ...oldAfter } = after;
+    expect(oldAfter).toEqual(oldBefore);
+    expect(beforeHistory).toEqual({
+      mode: "disabled",
+      applicationEnvironment: "development",
+      policy: "SITE_HISTORY",
+    });
+    expect(afterHistory).toEqual({ ...beforeHistory, mode: "sandbox" });
   });
 });

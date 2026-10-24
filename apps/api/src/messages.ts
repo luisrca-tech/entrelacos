@@ -25,7 +25,7 @@ import { allowsLocalPublicOrigin } from "./localPublicOrigin";
 export type MessagesDatabase = NodePgDatabase<Record<string, never>>;
 export type MessagesAdminActor = {
   userId: string;
-  role: "OWNER" | "SITE_ADMIN";
+  role: "OWNER" | "SITE_ADMIN" | "SITE_ASSISTANT";
 };
 
 export class MessagesServiceError extends Error {
@@ -382,11 +382,12 @@ async function adminSiteContext(
   mutation: boolean,
   lock: boolean,
 ): Promise<{ id: string; lifecycle: string; muralEnabled: boolean }> {
+  if (lock)
+    await db.execute(sql`SELECT id FROM site WHERE id = ${siteId} FOR UPDATE`);
   const authorization =
     actor.role === "OWNER"
       ? sql`TRUE`
-      : sql`EXISTS (SELECT 1 FROM site_membership sm WHERE sm.site_id = s.id AND sm.user_id = ${actor.userId})`;
-  const lockSql = lock ? sql`FOR UPDATE OF s` : sql``;
+      : sql`EXISTS (SELECT 1 FROM site_membership sm WHERE sm.site_id = s.id AND sm.user_id = ${actor.userId} AND sm.revoked_at IS NULL AND sm.role IN ('SITE_ADMIN', 'SITE_ASSISTANT'))`;
   const result = await db.execute(sql`
     SELECT s.id, s.lifecycle, s.mural_enabled
     FROM site s
@@ -395,7 +396,6 @@ async function adminSiteContext(
       AND u.state = 'ACTIVE'
       AND u.role = ${actor.role}
     WHERE s.id = ${siteId} AND ${authorization}
-    ${lockSql}
   `);
   const row = result.rows[0] as
     | { id: string; lifecycle: string; mural_enabled: boolean }

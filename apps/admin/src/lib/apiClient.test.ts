@@ -57,7 +57,28 @@ describe("panel API boundary", () => {
       ),
     ).resolves.toBeUndefined();
   });
+  it.each(["activation", "account", "payments", "withdrawals"])(
+    "preserves the receiving %s page after login",
+    (page) => {
+      const destination = `/sites/demo/receiving/${page}?filter=pending`;
+      expect(safePanelReturn(destination)).toBe(destination);
+    },
+  );
+  it.each([
+    "/sites/demo/receiving/unknown",
+    "/sites/demo/receiving/activation/extra",
+    "/sites/demo/receiving/../payments",
+    "/sites/demo/receiving/payments#secret",
+    "//outside.test/sites/demo/receiving/payments",
+    "/sites/demo/receiving-guide/extra",
+  ])("rejects invalid nested login destinations %s", (destination) => {
+    expect(safePanelReturn(destination)).toBe("/");
+  });
   it("limits login return destinations to the panel or handoff page", () => {
+    expect(safePanelReturn("/sites/demo/home")).toBe("/sites/demo/home");
+    expect(safePanelReturn("/sites/demo/receiving-guide")).toBe(
+      "/sites/demo/receiving-guide",
+    );
     expect(safePanelReturn("/handoff?siteId=one&challenge=abc")).toBe(
       "/handoff?siteId=one&challenge=abc",
     );
@@ -66,6 +87,11 @@ describe("panel API boundary", () => {
     );
     expect(safePanelReturn("/sites/demo/settings?tab=domain")).toBe(
       "/sites/demo/settings?tab=domain",
+    );
+    expect(safePanelReturn("/sites/demo/gifts")).toBe("/sites/demo/gifts");
+    expect(safePanelReturn("/sites/demo/team")).toBe("/sites/demo/team");
+    expect(safePanelReturn("/sites/demo/receiving")).toBe(
+      "/sites/demo/receiving",
     );
     for (const value of [
       "//evil.test",

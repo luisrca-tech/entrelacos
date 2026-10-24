@@ -1,0 +1,2 @@
+ALTER TABLE "financial_event_inbox" DROP CONSTRAINT "financial_event_provider_reference_check";--> statement-breakpoint
+ALTER TABLE "financial_event_inbox" ADD CONSTRAINT "financial_event_provider_reference_check" CHECK ("financial_event_inbox"."provider_event_reference" IS NULL OR ("financial_event_inbox"."provider_event_reference" ~ '^[ -~]+$' AND length("financial_event_inbox"."provider_event_reference") BETWEEN 1 AND 256 AND length(trim("financial_event_inbox"."provider_event_reference")) > 0));

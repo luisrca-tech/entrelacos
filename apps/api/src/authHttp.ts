@@ -1,12 +1,16 @@
-import { session, siteMembership, user } from "@entrelacos/database/schema";
+import type { SiteAccess } from "@entrelacos/contracts";
+import { session, user } from "@entrelacos/database/schema";
+import type { BetterAuthOptions } from "better-auth";
 import { eq } from "drizzle-orm";
 import { Hono } from "hono";
+import { trustedAdminOrigin } from "./adminOrigin";
 import type { AuthDatabase, createAuth } from "./auth";
 import { withCredentialAdvisoryLock } from "./credentialLock";
 import type {
   GuestChallengeIdGenerator,
   GuestSessionTokenGenerator,
 } from "./guestVerification";
+import { getAdministrativeMemberships } from "./siteAccess";
 
 export const ADMIN_IDLE_TIMEOUT_MS = 24 * 60 * 60 * 1000;
 export const ADMIN_ABSOLUTE_TIMEOUT_MS = 7 * 24 * 60 * 60 * 1000;
@@ -31,13 +35,14 @@ export interface AdministrativeActor {
     id: string;
     name: string;
     email: string;
-    role: "OWNER" | "SITE_ADMIN";
+    role: "OWNER" | "SITE_ADMIN" | "SITE_ASSISTANT";
   };
   session: {
     id: string;
     expiresAt: Date;
   };
   siteId: string | null;
+  memberships: SiteAccess[];
 }
 
 export class AdminSessionRequiredError extends Error {
@@ -58,7 +63,7 @@ type SessionLookup = {
   lastActiveAt: Date;
   userName: string;
   userEmail: string;
-  userRole: "OWNER" | "SITE_ADMIN";
+  userRole: "OWNER" | "SITE_ADMIN" | "SITE_ASSISTANT";
   userState: "PENDING" | "ACTIVE" | "DISABLED";
   siteId: string | null;
 };
@@ -82,7 +87,7 @@ function problem(status: number, code: string, title: string): Response {
 }
 
 function isTrustedOrigin(request: Request, adminOrigin: string): boolean {
-  return request.headers.get("origin") === adminOrigin;
+  return trustedAdminOrigin(request.headers.get("origin"), adminOrigin);
 }
 
 function copyResponseHeaders(source: Headers): Headers {
@@ -180,13 +185,22 @@ async function handleNativeAuth(
 
 async function lookupSession(
   request: Request,
-  options: AuthHttpOptions,
+  options: Pick<AuthHttpOptions, "auth" | "db">,
 ): Promise<SessionLookup | null> {
+  // Body-only lookup discards the SDK's internal expiry-cookie instructions.
   const current = await options.auth.api.getSession({
     headers: request.headers,
+    method: "GET",
+    asResponse: false,
     query: { disableCookieCache: true, disableRefresh: true },
   });
-  if (!current) return null;
+  if (
+    !current ||
+    typeof current.session?.id !== "string" ||
+    !current.session.id
+  ) {
+    return null;
+  }
 
   const [sessionRecord] = await options.db
     .select({
@@ -205,25 +219,90 @@ async function lookupSession(
     .where(eq(session.id, current.session.id))
     .limit(1);
 
-  if (!sessionRecord) return null;
-  const record: SessionLookup = { ...sessionRecord, siteId: null };
-  if (record.userRole === "OWNER") return record;
+  if (!sessionRecord || sessionRecord.sessionId !== current.session.id)
+    return null;
+  return { ...sessionRecord, siteId: null };
+}
 
-  const [membership] = await options.db
-    .select({ siteId: siteMembership.siteId })
-    .from(siteMembership)
-    .where(eq(siteMembership.userId, record.userId))
-    .limit(1);
-  if (!membership) return null;
-  record.siteId = membership.siteId;
-  return record;
+async function administrativeActor(
+  record: SessionLookup,
+  db: AuthDatabase,
+): Promise<AdministrativeActor> {
+  const memberships =
+    record.userRole === "OWNER"
+      ? []
+      : await getAdministrativeMemberships(db, record.userId);
+
+  return {
+    user: {
+      id: record.userId,
+      name: record.userName,
+      email: record.userEmail,
+      role: record.userRole,
+    },
+    session: {
+      id: record.sessionId,
+      expiresAt: record.sessionExpiresAt,
+    },
+    siteId: memberships.length === 1 ? memberships[0].siteId : null,
+    memberships,
+  };
+}
+
+function finiteDateTime(value: unknown): number | null {
+  if (!(value instanceof Date)) return null;
+  try {
+    const time = Date.prototype.getTime.call(value);
+    return Number.isFinite(time) ? time : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function readAdministrativeSession(
+  request: Request,
+  options: Pick<AuthHttpOptions, "auth" | "db" | "now">,
+): Promise<AdministrativeActor | null> {
+  const authContext = await options.auth.$context;
+  const sessionOptions: BetterAuthOptions["session"] =
+    authContext?.options?.session;
+  // Better Auth otherwise deletes expired sessions before honoring disableRefresh.
+  if (sessionOptions?.deferSessionRefresh !== true) return null;
+
+  const record = await lookupSession(request, options);
+  if (!record) return null;
+
+  const nowMs = finiteDateTime((options.now ?? (() => new Date()))());
+  const createdMs = finiteDateTime(record.sessionCreatedAt);
+  const expiresMs = finiteDateTime(record.sessionExpiresAt);
+  const activeMs = finiteDateTime(record.lastActiveAt);
+  if (
+    record.userState !== "ACTIVE" ||
+    (record.userRole !== "OWNER" &&
+      record.userRole !== "SITE_ADMIN" &&
+      record.userRole !== "SITE_ASSISTANT") ||
+    nowMs === null ||
+    createdMs === null ||
+    expiresMs === null ||
+    activeMs === null ||
+    createdMs > nowMs ||
+    activeMs > nowMs ||
+    activeMs < createdMs ||
+    nowMs >= expiresMs ||
+    nowMs - createdMs >= ADMIN_ABSOLUTE_TIMEOUT_MS ||
+    nowMs - activeMs >= ADMIN_IDLE_TIMEOUT_MS
+  ) {
+    return null;
+  }
+
+  return administrativeActor(record, options.db);
 }
 
 export async function getAdministrativeSession(
   request: Request,
   options: Pick<AuthHttpOptions, "auth" | "db" | "now">,
 ): Promise<AdministrativeActor | null> {
-  const record = await lookupSession(request, options as AuthHttpOptions);
+  const record = await lookupSession(request, options);
   if (!record) return null;
 
   const now = (options.now ?? (() => new Date()))();
@@ -237,24 +316,14 @@ export async function getAdministrativeSession(
     return null;
   }
 
+  const actor = await administrativeActor(record, options.db);
+
   await options.db
     .update(session)
     .set({ lastActiveAt: now, updatedAt: now })
     .where(eq(session.id, record.sessionId));
 
-  return {
-    user: {
-      id: record.userId,
-      name: record.userName,
-      email: record.userEmail,
-      role: record.userRole,
-    },
-    session: {
-      id: record.sessionId,
-      expiresAt: record.sessionExpiresAt,
-    },
-    siteId: record.siteId,
-  };
+  return actor;
 }
 
 export async function requireAdminSession(

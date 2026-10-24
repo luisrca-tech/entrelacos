@@ -31,3 +31,11 @@ import { TemplateSection, WeddingLayout } from "@entrelacos/template-root/v1";
 The public layout has a deliberately small slot surface: `head`, `header-addon`, `before-main`, `after-main`, `admin-access`, and `footer-addon`. Routes and local sections remain Astro files in the host app; this package is not a CMS, page builder, registry, or router.
 
 Only `/v1` is public. Layout and section source files remain internal implementation details used by that entrypoint.
+
+## Gift presentation seam
+
+`GiftSection` accepts validated host-owned `SectionContent` and a runtime slot. It starts hidden and exposes `data-gift-section`; the composed `GiftRegistry` from `@entrelacos/wedding-features` reveals that nearest surface only after an eligible public catalog is returned. The template does not fetch data, evaluate receiving readiness, create payments or hold secrets. Hosts mount the runtime with `client:only="react"` inside the `after-main` slot. Catalog errors or ineligibility keep the surface hidden; pending checkout recovery may remain visible without claiming payment receipt.
+
+## Listening
+
+The new seam preserves the presentation/runtime split. A hidden initial surface avoids showing an empty gift section before server eligibility is known. Static host content and template tokens remain editable independently of the operational catalog.

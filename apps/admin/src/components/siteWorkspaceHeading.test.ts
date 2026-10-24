@@ -52,6 +52,16 @@ describe("site workspace heading", () => {
     ).toBe(false);
   });
 
+  it("names the gifts workspace before catalog activation", () => {
+    expect(
+      getWorkspaceHeading({
+        area: "gifts",
+        owner: false,
+        lifecycle: "ACTIVE",
+      }).title,
+    ).toBe("Presentes");
+  });
+
   it("always shows lifecycle status to owners", () => {
     expect(
       getWorkspaceHeading({
@@ -126,10 +136,12 @@ describe("site workspace markup", () => {
 
   it("keeps status, dates, and publication in owner settings", () => {
     expect(workspaceSource).toContain('data-area="settings"');
-    expect(workspaceSource).toContain('aria-label="Status e datas"');
-    expect(workspaceSource).toContain(
-      '["Publicação", labels[site.publicationState]]',
+    const settingsSource = readFileSync(
+      resolve(import.meta.dirname, "SiteSettingsView.tsx"),
+      "utf8",
     );
+    expect(settingsSource).toContain('aria-label="Status e datas"');
+    expect(settingsSource).toContain("{labels[site.publicationState]}");
     expect(workspaceSource).not.toContain('data-area="overview"');
   });
 

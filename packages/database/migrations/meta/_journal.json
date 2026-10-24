@@ -85,6 +85,83 @@
       "when": 1790220584145,
       "tag": "0011_rainy_archangel",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1791827856153,
+      "tag": "0012_internal_gifts_foundation",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1791835610582,
+      "tag": "0013_internal_gifts_financial_media",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1791859440962,
+      "tag": "0014_internal_gifts_withdrawal_consent",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1792180623951,
+      "tag": "0015_receiving_setup_holder",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1792181636542,
+      "tag": "0016_sandbox_webhook_registration",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1792187801027,
+      "tag": "0017_receiving_pix_destination",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1792192854179,
+      "tag": "0018_financial_webhook_reference",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1792416160065,
+      "tag": "0019_gift_quote_fee_allocation",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1792416622866,
+      "tag": "0020_withdrawal_provider_observation",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1792548212541,
+      "tag": "0021_withdrawal_authorization",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1792865932169,
+      "tag": "0022_withdrawal_authorization_live",
+      "breakpoints": true
     }
   ]
 }
