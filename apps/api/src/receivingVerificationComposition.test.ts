@@ -49,6 +49,9 @@ function fixture(
     expiresAt: new Date("2026-10-19T12:04:00Z"),
   };
   const now = () => new Date("2026-10-19T12:00:00Z");
+  const prepareIncoming = vi.fn(
+    async (): Promise<"READY" | "PENDING" | "REVIEW_REQUIRED"> => "READY",
+  );
   mocks.begin.mockImplementation((command) => {
     if (command.action === "SELECT") row.nativeDestination = true;
     return {
@@ -66,6 +69,7 @@ function fixture(
     repository: repository as never,
     fetch: vi.fn(),
     now,
+    prepareIncoming,
     readReadiness: async () => ({
       siteId: "site-one",
       mode,
@@ -76,9 +80,35 @@ function fixture(
       observedAt: now().toISOString(),
     }),
   });
-  return { composition, actor, proof, row, execute, repository };
+  return {
+    composition,
+    actor,
+    proof,
+    row,
+    execute,
+    repository,
+    prepareIncoming,
+  };
 }
 describe("native receiving verification composition", () => {
+  it.each(["PENDING", "REVIEW_REQUIRED"] as const)(
+    "keeps incoming readiness blocked while preparation is %s",
+    async (state) => {
+      const v = fixture(false, "live");
+      v.prepareIncoming.mockResolvedValue(state);
+      mocks.begin.mockClear();
+      await expect(v.composition.verify(v.actor)).rejects.toMatchObject({
+        status: 409,
+        code: `RECEIVING_PIX_PREPARATION_${state}`,
+      });
+      expect(v.prepareIncoming).toHaveBeenCalledWith(
+        v.actor,
+        expect.objectContaining({ accountId: "account-one" }),
+      );
+      expect(mocks.begin).not.toHaveBeenCalled();
+      await v.composition.close();
+    },
+  );
   it.each(["sandbox", "live"] as const)(
     "never selects %s incoming bank while refreshing a simulated or missing destination",
     async (mode) => {
@@ -86,6 +116,7 @@ describe("native receiving verification composition", () => {
       mocks.begin.mockClear();
       await v.composition.refresh("site-one");
       expect(mocks.begin).not.toHaveBeenCalled();
+      expect(v.prepareIncoming).not.toHaveBeenCalled();
       await v.composition.close();
     },
   );

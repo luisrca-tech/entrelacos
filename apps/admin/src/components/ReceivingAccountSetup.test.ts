@@ -1,3 +1,4 @@
+import assert from "node:assert/strict";
 import {
   meResponseSchema,
   type ReceivingSetupContext,
@@ -7,6 +8,7 @@ import {
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { ApiError } from "../lib/apiClient";
 import {
   createReceivingAccountSetupController,
   ReceivingAccountSetupView,
@@ -104,6 +106,91 @@ describe("receiving account setup", () => {
     catalogEligible: true,
     mode: "sandbox",
   } as const;
+  const approved = {
+    commercialInfo: "APPROVED",
+    bankAccountInfo: "PENDING",
+    documentation: "APPROVED",
+    general: "APPROVED",
+    commercialInfoExpired: false,
+    observedAt: "2026-10-16T12:00:00.000Z",
+  } as const;
+  it("automatically prepares an approved holder account after loading, without requiring a second setup action", async () => {
+    vi.stubGlobal("__APP_ENV__", "production");
+    const v = fixture({
+      ...createdSetup,
+      mode: "live",
+      providerStatus: approved,
+    });
+    const original = v.request.getMockImplementation();
+    assert(original);
+    v.request.mockImplementation(async (path, options) =>
+      path.endsWith("/incoming-verification")
+        ? { readiness: { ...readiness, mode: "live" } }
+        : original(path, options),
+    );
+    await v.controller.refresh();
+    expect(
+      v.request.mock.calls.filter(([path]) =>
+        path.endsWith("/incoming-verification"),
+      ),
+    ).toEqual([
+      [
+        "/v1/sites/site-one/receiving/incoming-verification",
+        { method: "POST", body: { confirmIncomingAccount: true } },
+      ],
+    ]);
+    expect(v.controller.getState().status).toBe("ready");
+    v.controller.dispose();
+  });
+  it.each(["PENDING", "REVIEW_REQUIRED"])(
+    "keeps activation usable and explains preparation %s without repeating its POST",
+    async (state) => {
+      vi.stubGlobal("__APP_ENV__", "production");
+      const v = fixture({
+        ...createdSetup,
+        mode: "live",
+        providerStatus: approved,
+      });
+      const original = v.request.getMockImplementation();
+      assert(original);
+      v.request.mockImplementation(async (path, options) => {
+        if (path.endsWith("/incoming-verification"))
+          throw new ApiError(409, `RECEIVING_PIX_PREPARATION_${state}`);
+        return original(path, options);
+      });
+      await v.controller.refresh();
+      expect(v.controller.getState()).toMatchObject({
+        status: "ready",
+        setup: { accountState: "CREATED" },
+      });
+      expect(v.controller.getState().message).toContain(
+        state === "PENDING" ? "liberação do Asaas" : "em verificação",
+      );
+      expect(
+        v.request.mock.calls.filter(([path]) =>
+          path.endsWith("/incoming-verification"),
+        ),
+      ).toHaveLength(1);
+      v.controller.dispose();
+    },
+  );
+  it("explains automatic Pix preparation while leaving only the withdrawal key for the holder to configure", () => {
+    vi.stubGlobal("__APP_ENV__", "production");
+    const v = fixture();
+    const html = renderToStaticMarkup(
+      createElement(ReceivingAccountSetupView, {
+        scope: v.scope,
+        state: {
+          status: "ready",
+          setup: { ...createdSetup, mode: "live", providerStatus: approved },
+          message: null,
+        },
+      }),
+    );
+    expect(html).toContain("prepara automaticamente");
+    expect(html).not.toContain("cadastre uma chave Pix de entrada");
+    expect(html).not.toContain("Confirmar minha conta de recebimento");
+  });
   it("shows the live holder a visible provider activation link and explains where to enter SMS codes", () => {
     vi.stubGlobal("__APP_ENV__", "production");
     const values = fixture();
@@ -139,9 +226,9 @@ describe("receiving account setup", () => {
       "código por SMS",
       "Envie os documentos",
       "Aguarde a análise",
-      "chave Pix de entrada",
-      "Verificar situação",
-      "Confirmar minha conta de recebimento",
+      "prepara automaticamente",
+      "Volte ao EntreLaços",
+      "chave de saque",
     ];
     const positions = steps.map((step) => guidance.indexOf(step));
     expect(positions.every((position) => position >= 0)).toBe(true);
@@ -215,12 +302,12 @@ describe("receiving account setup", () => {
           onVerifyIncoming: vi.fn(),
         }),
       );
-      expect(html.includes("Confirmar minha conta de recebimento")).toBe(
+      expect(html.includes("Atualizar liberação dos recebimentos")).toBe(
         allowed,
       );
       if (allowed) {
         const button = html.match(
-          /<button[^>]*>Confirmar minha conta de recebimento<\/button>/,
+          /<button[^>]*>Atualizar liberação dos recebimentos<\/button>/,
         )?.[0];
         expect(button).toBeDefined();
         expect(button).not.toMatch(/\sdisabled(?:\s|=|>)/);
@@ -351,7 +438,7 @@ describe("receiving account setup", () => {
     const holderHtml = renderToStaticMarkup(
       createElement(ReceivingAccountSetupView, props),
     );
-    expect(holderHtml).toContain("Confirmar minha conta de recebimento");
+    expect(holderHtml).toContain("Atualizar liberação dos recebimentos");
     expect(holderHtml).not.toMatch(/type="password"|reauthenticationToken/);
     for (const overrides of [
       { platformOwner: true },
@@ -368,7 +455,7 @@ describe("receiving account setup", () => {
       const html = renderToStaticMarkup(
         createElement(ReceivingAccountSetupView, { ...props, ...overrides }),
       );
-      expect(html).not.toContain("Confirmar minha conta de recebimento");
+      expect(html).not.toContain("Atualizar liberação dos recebimentos");
     }
     values.controller.dispose();
   });
@@ -486,7 +573,7 @@ describe("receiving account setup", () => {
       );
     const html = render(readiness);
     expect(html).toContain("Recebimentos liberados");
-    expect(html).not.toContain("Confirmar minha conta de recebimento");
+    expect(html).not.toContain("Atualizar liberação dos recebimentos");
     expect(html).not.toContain("A criação não confirma liberação");
     for (const other of [
       null,
@@ -568,7 +655,7 @@ describe("receiving account setup", () => {
         observedAt: "2026-10-16T12:00:00.000Z",
       },
     });
-    await values.controller.refresh();
+    await values.controller.refresh(false);
     const html = renderToStaticMarkup(
       createElement(ReceivingAccountSetupView, {
         scope: values.scope,

@@ -60,6 +60,77 @@ const recentAuth = {
   expiresAt: new Date(at.getTime() + 300000),
 };
 describe("receiving holder and consent custody", () => {
+  const pixBinding = {
+    provider: "ASAAS" as const,
+    siteId: "site-one",
+    accountBindingId: "account-one",
+    environment: "sandbox" as const,
+    accountReference: "native-account",
+    recipientReference: "native-wallet",
+  };
+  const pixAuthority = () => [
+    [{ id: "site-one", isDemo: true }],
+    [{ role: "SITE_ADMIN" }],
+    [
+      {
+        id: actor.sessionId,
+        createdAt: at,
+        expiresAt: new Date(at.getTime() + 3600000),
+      },
+    ],
+    [{ id: "membership-one" }],
+    [holder],
+    [{ id: "account-one" }],
+  ];
+  it("commits the incoming Pix dispatch claim only after current session, membership, holder, consent and native account locks", async () => {
+    const v = fixture([...pixAuthority(), [{ attemptId: "attempt-one" }]]);
+    await expect(v.repository.armIncomingPix(actor, pixBinding)).resolves.toBe(
+      "attempt-one",
+    );
+    const queries = v.execute.mock.calls.map(([q]) =>
+      new PgDialect().sqlToQuery(q),
+    );
+    expect(queries.at(-1)?.sql).toContain("ON CONFLICT");
+    expect(queries.at(-1)?.sql).toContain("state='REJECTED'");
+    expect(queries.at(-1)?.sql).toContain("attempted_at");
+    expect(queries.at(-2)?.params).toContain("native-account");
+    expect(queries.at(-2)?.params).toContain("native-wallet");
+    expect(v.transaction).toHaveBeenCalledOnce();
+  });
+  it("does not claim again when an attempt is armed, uncertain, submitted or in the rejection cooldown", async () => {
+    const v = fixture([...pixAuthority(), []]);
+    await expect(
+      v.repository.armIncomingPix(actor, pixBinding),
+    ).resolves.toBeNull();
+  });
+  it.each([
+    "revoked-session",
+    "missing-consent",
+    "foreign-wallet",
+    "foreign-site",
+  ])("refuses incoming Pix dispatch for %s", async (reason) => {
+    const rows = pixAuthority();
+    if (reason === "revoked-session") rows[2] = [];
+    if (reason === "missing-consent")
+      rows[4] = [{ ...holder, consentId: null }] as never;
+    if (reason === "foreign-wallet") rows[5] = [];
+    const v = fixture(rows);
+    await expect(
+      v.repository.armIncomingPix(
+        actor,
+        reason === "foreign-site"
+          ? { ...pixBinding, siteId: "other" }
+          : pixBinding,
+      ),
+    ).rejects.toThrow();
+    expect(
+      v.execute.mock.calls.some(([q]) =>
+        new PgDialect()
+          .sqlToQuery(q)
+          .sql.includes("INSERT INTO receiving_pix_preparation"),
+      ),
+    ).toBe(false);
+  });
   it.each(["site-one", "other-site"])(
     "retains actual holder authentication for exact production showcase (%s)",
     async (liveDemoSiteId) => {

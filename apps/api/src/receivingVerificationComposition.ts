@@ -5,8 +5,15 @@ import { sql } from "drizzle-orm";
 import { createAsaasReceivingVerification } from "./asaasReceivingVerification";
 import type { FinancialActor } from "./financialAuthorization";
 import { allowsLiveSite } from "./liveSitePolicy";
-import type { ProviderCredentialKeyring } from "./providerCredentials";
+import {
+  decryptProviderCredential,
+  type ProviderCredentialKeyring,
+} from "./providerCredentials";
 import { readReceivingProvisioningRecord } from "./receivingNomination";
+import {
+  createReceivingPixPreparation,
+  type IncomingPixPreparation,
+} from "./receivingPixPreparation";
 import { readReceivingReadiness } from "./receivingRepository";
 import {
   ReceivingSetupError,
@@ -14,6 +21,7 @@ import {
 } from "./receivingSetupRepository";
 import {
   createReceivingVerification,
+  type ReceivingVerificationScope,
   readReceivingVerificationScope,
 } from "./receivingVerification";
 import { createReceivingVerificationRepository } from "./receivingVerificationRepository";
@@ -30,10 +38,17 @@ export function createReceivingVerificationComposition(options: {
     | "requireHolder"
     | "readSessionAuthentication"
     | "readCurrentProvisioningPolicy"
+    | "readAccount"
+    | "armIncomingPix"
+    | "settleIncomingPix"
   >;
   fetch: typeof globalThis.fetch;
   now(): Date;
   readReadiness?: (siteId: string) => Promise<ReceivingReadiness>;
+  prepareIncoming?: (
+    actor: FinancialActor,
+    scope: ReceivingVerificationScope,
+  ) => Promise<IncomingPixPreparation>;
 }) {
   const liveDemoSiteId = options.liveDemoSiteId;
   const sandboxSimulation =
@@ -44,6 +59,50 @@ export function createReceivingVerificationComposition(options: {
     (options.mode === "live" &&
       options.applicationEnvironment === "production");
   const native = createAsaasReceivingVerification(options);
+  const pix = createReceivingPixPreparation({
+    repository: {
+      arm: (...args) => options.repository.armIncomingPix(...args),
+      settle: (...args) => options.repository.settleIncomingPix(...args),
+    },
+    fetch: options.fetch,
+    now: options.now,
+  });
+  async function prepareIncoming(
+    actor: FinancialActor,
+    scope: ReceivingVerificationScope,
+  ) {
+    const account = await options.repository.readAccount(actor.siteId);
+    if (
+      !account?.result ||
+      !account.record ||
+      account.state !== "SUCCEEDED" ||
+      account.accountId !== scope.accountId ||
+      account.operatorUserId !== actor.userId ||
+      account.result.accountReference !== scope.accountReference ||
+      account.result.recipientReference !== scope.recipientReference ||
+      scope.accountReference === options.platformAccountReference ||
+      account.record.provision.parentAccountReference !==
+        options.platformAccountReference
+    )
+      throw new ReceivingSetupError(409, "RECEIVING_ACCOUNT_REQUIRED");
+    const binding = {
+      provider: "ASAAS" as const,
+      siteId: scope.siteId,
+      accountBindingId: scope.accountId,
+      environment: options.mode,
+      accountReference: scope.accountReference,
+      recipientReference: scope.recipientReference,
+    };
+    return pix.prepare(
+      actor,
+      binding,
+      decryptProviderCredential(
+        account.result.credential,
+        binding,
+        options.keyring,
+      ),
+    );
+  }
   const verification = createReceivingVerification({
     profile: "rv1",
     setupSessionSelection: supported,
@@ -143,6 +202,15 @@ export function createReceivingVerificationComposition(options: {
       const selected = await current(actor.siteId);
       if (selected.scope.operatorUserId !== actor.userId)
         throw new ReceivingSetupError(403, "RECEIVING_HOLDER_REQUIRED");
+      const preparation = await (options.prepareIncoming ?? prepareIncoming)(
+        actor,
+        selected.scope,
+      );
+      if (preparation !== "READY")
+        throw new ReceivingSetupError(
+          409,
+          `RECEIVING_PIX_PREPARATION_${preparation}`,
+        );
       if (!selected.nativeDestination)
         await settle({
           action: "SELECT",
@@ -183,7 +251,11 @@ export function createReceivingVerificationComposition(options: {
     },
     async close() {
       closed = true;
-      await Promise.all([verification.close(), native.observer.close()]);
+      await Promise.all([
+        verification.close(),
+        native.observer.close(),
+        pix.close(),
+      ]);
       await Promise.allSettled(pending.values());
       pending.clear();
       refreshed.clear();

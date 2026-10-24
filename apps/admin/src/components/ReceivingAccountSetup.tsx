@@ -16,7 +16,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { apiRequest } from "../lib/apiClient";
+import { ApiError, apiRequest } from "../lib/apiClient";
 import {
   type FinancialReauthenticationGuard,
   financialReauthenticationScopeKey,
@@ -136,7 +136,9 @@ export function createReceivingAccountSetupController(
       throw new Error("Receiving holder context mismatch");
     return response;
   }
-  async function refresh() {
+  async function refresh(
+    automatic = true,
+  ): Promise<ReceivingReadiness | undefined> {
     if (!current()) {
       invalidate();
       return;
@@ -146,8 +148,21 @@ export function createReceivingAccountSetupController(
     notify();
     try {
       const setup = await load();
-      if (current() && revision === active)
+      if (current() && revision === active) {
         update({ status: "ready", setup, message: null });
+        if (
+          automatic &&
+          setup.isHolder &&
+          !ownerView &&
+          setup.consentRecorded &&
+          setup.accountState === "CREATED" &&
+          setup.providerStatus?.commercialInfoExpired !== true &&
+          (["commercialInfo", "documentation", "general"] as const).every(
+            (key) => setup.providerStatus?.[key] === "APPROVED",
+          )
+        )
+          return await verifyIncoming();
+      }
     } catch (cause) {
       if (revision === active) fail(cause);
     }
@@ -219,6 +234,70 @@ export function createReceivingAccountSetupController(
   const guard = createGuard(["NOT_CREATED", "PENDING"]);
   const pixGuard = createGuard(["CREATED"], true);
   const incomingGuard = createGuard(["CREATED"]);
+  async function verifyIncoming(): Promise<ReceivingReadiness | undefined> {
+    if (
+      incomingInFlight ||
+      !supportsIncomingVerification(state.setup?.mode) ||
+      !state.setup?.consentRecorded ||
+      owner.isSuspended?.() ||
+      !incomingGuard.isCurrent()
+    )
+      return;
+    incomingInFlight = true;
+    let active = revision;
+    try {
+      if (!(await incomingGuard.validate())) return;
+      const setup = state.setup;
+      if (
+        !setup?.consentRecorded ||
+        !supportsIncomingVerification(setup.mode) ||
+        !incomingGuard.isCurrent() ||
+        owner.isSuspended?.()
+      )
+        return;
+      active = ++revision;
+      update({ ...state, status: "submitting", message: null });
+      notify();
+      const { readiness } = receivingReadinessResponseSchema.parse(
+        await request(
+          `/v1/sites/${encodeURIComponent(scope.siteId)}/receiving/incoming-verification`,
+          { method: "POST", body: { confirmIncomingAccount: true } },
+        ),
+      );
+      if (!current() || active !== revision) return;
+      if (readiness.siteId !== scope.siteId || readiness.mode !== setup.mode)
+        throw new Error("Unexpected incoming receiving readiness");
+      await refresh(false);
+      if (!current() || state.status !== "ready") return;
+      update({
+        ...state,
+        message:
+          "Conta consultada no Asaas. Confira a situação atual dos recebimentos.",
+      });
+      return readiness;
+    } catch (cause) {
+      if (
+        revision === active &&
+        current() &&
+        cause instanceof ApiError &&
+        cause.status === 409 &&
+        [
+          "RECEIVING_PIX_PREPARATION_PENDING",
+          "RECEIVING_PIX_PREPARATION_REVIEW_REQUIRED",
+        ].includes(cause.code)
+      ) {
+        update({
+          ...state,
+          status: "ready",
+          message: cause.code.endsWith("REVIEW_REQUIRED")
+            ? "A preparação dos recebimentos está em verificação. Não é necessário cadastrar outra chave. Se a situação persistir, entre em contato com o suporte."
+            : "A preparação dos recebimentos aguarda a liberação do Asaas. Conclua as pendências da conta e use Verificar situação para acompanhar.",
+        });
+      } else if (revision === active) fail(cause);
+    } finally {
+      incomingInFlight = false;
+    }
+  }
   const unsubscribe = owner.subscribe(() => {
     if (!current()) invalidate();
   });
@@ -228,53 +307,7 @@ export function createReceivingAccountSetupController(
     incomingGuard,
     refresh,
     getState: () => structuredClone(state),
-    async verifyIncoming(): Promise<ReceivingReadiness | undefined> {
-      if (
-        incomingInFlight ||
-        !supportsIncomingVerification(state.setup?.mode) ||
-        !state.setup?.consentRecorded ||
-        owner.isSuspended?.() ||
-        !incomingGuard.isCurrent()
-      )
-        return;
-      incomingInFlight = true;
-      let active = revision;
-      try {
-        if (!(await incomingGuard.validate())) return;
-        const setup = state.setup;
-        if (
-          !setup?.consentRecorded ||
-          !supportsIncomingVerification(setup.mode) ||
-          !incomingGuard.isCurrent() ||
-          owner.isSuspended?.()
-        )
-          return;
-        active = ++revision;
-        update({ ...state, status: "submitting", message: null });
-        notify();
-        const { readiness } = receivingReadinessResponseSchema.parse(
-          await request(
-            `/v1/sites/${encodeURIComponent(scope.siteId)}/receiving/incoming-verification`,
-            { method: "POST", body: { confirmIncomingAccount: true } },
-          ),
-        );
-        if (!current() || active !== revision) return;
-        if (readiness.siteId !== scope.siteId || readiness.mode !== setup.mode)
-          throw new Error("Unexpected incoming receiving readiness");
-        await refresh();
-        if (!current() || state.status !== "ready") return;
-        update({
-          ...state,
-          message:
-            "Conta consultada no Asaas. Confira a situação atual dos recebimentos.",
-        });
-        return readiness;
-      } catch (cause) {
-        if (revision === active) fail(cause);
-      } finally {
-        incomingInFlight = false;
-      }
-    },
+    verifyIncoming,
     async submit(account: unknown, confirmed: boolean) {
       if (!confirmed || owner.isSuspended?.() || !(await guard.validate()))
         return;
@@ -378,6 +411,10 @@ export function ReceivingAccountSetup(
     typeof createReceivingAccountSetupController
   > | null>(null);
   const form = useRef<HTMLFormElement | null>(null);
+  const readinessChanged = useRef(props.onReadinessChange);
+  useLayoutEffect(() => {
+    readinessChanged.current = props.onReadinessChange;
+  }, [props.onReadinessChange]);
   useLayoutEffect(() => {
     const current = createReceivingAccountSetupController(
       { siteId, access, sessionEpoch },
@@ -385,7 +422,9 @@ export function ReceivingAccountSetup(
       ports,
     );
     controller.current = current;
-    void current.refresh();
+    void current.refresh().then((readiness) => {
+      if (readiness) readinessChanged.current?.();
+    });
     return () => {
       form.current?.reset();
       current.dispose();
@@ -415,7 +454,9 @@ export function ReceivingAccountSetup(
       ports={ports}
       form={form}
       onRetry={() => {
-        void controller.current?.refresh();
+        void controller.current?.refresh().then((readiness) => {
+          if (readiness) props.onReadinessChange?.();
+        });
       }}
       onVerifyIncoming={() => {
         void controller.current?.verifyIncoming().then((readiness) => {
@@ -643,7 +684,11 @@ export function ReceivingAccountSetupView({
         <p role="status">Verificando o titular e o cadastro…</p>
       )}
       {state.status === "submitting" && (
-        <p role="status">Atualizando a configuração de recebimento…</p>
+        <p role="status">
+          {setup?.accountState === "CREATED"
+            ? "Preparando sua conta para receber por Pix…"
+            : "Atualizando a configuração de recebimento…"}
+        </p>
       )}
       {state.status === "denied" && (
         <p role="alert">
@@ -769,13 +814,12 @@ export function ReceivingAccountSetupView({
                     solicitado, no próprio Asaas.
                   </li>
                   <li>
-                    Aguarde a análise e a aprovação da conta. Depois, cadastre
-                    uma chave Pix de entrada no Asaas.
+                    Aguarde a análise e a aprovação da conta. O EntreLaços
+                    prepara automaticamente o recebimento por Pix.
                   </li>
                   <li>
-                    Volte ao EntreLaços, use Verificar situação e depois
-                    Confirmar minha conta de recebimento para conferir a
-                    liberação.
+                    Volte ao EntreLaços para acompanhar a liberação. Aqui, você
+                    precisa configurar apenas sua chave de saque.
                   </li>
                 </ol>
                 <a
@@ -824,7 +868,7 @@ export function ReceivingAccountSetupView({
                 disabled={busy || !onVerifyIncoming}
                 onClick={onVerifyIncoming}
               >
-                Confirmar minha conta de recebimento
+                Atualizar liberação dos recebimentos
               </Button>
             )}
           {!setup.providerStatus && (
@@ -904,7 +948,10 @@ export function ReceivingAccountSetupView({
                 </p>
                 <p className="m-0 text-sm text-admin-muted">
                   A liberação depende da aprovação e das validações da conta.
-                  Você poderá acompanhar a situação neste painel.
+                  Após a aprovação, o EntreLaços prepara automaticamente o
+                  recebimento por Pix. No painel, você configura apenas a chave
+                  da sua conta bancária para sacar. Você poderá acompanhar a
+                  situação neste painel.
                 </p>
               </aside>
             )}
