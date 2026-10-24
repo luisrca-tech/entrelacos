@@ -902,21 +902,27 @@ describe("explicit initial receiving nomination", () => {
     expect(values.reserveNomination).not.toHaveBeenCalled();
   });
 
-  it("permits only an initial awaiting-verification live intent for a non-demo production site", async () => {
-    const values = fixture();
-    values.options.mode = "live";
-    values.options.applicationEnvironment = "production";
-    values.loadSite.mockResolvedValueOnce({ siteId: "site-1", isDemo: false });
-    values.input.requestId = deriveReceivingNominationRequestId({
-      siteId: values.actor.siteId,
-      operatorUserId: values.actor.userId,
-      environment: "live",
-    });
-    expect(await nominate(values)).toMatchObject({
-      environment: "live",
-      state: "AWAITING_PROVIDER_VERIFICATION",
-    });
-  });
+  it.each([false, true])(
+    "permits an initial native live intent for an authorized production site (demo=%s)",
+    async (isDemo) => {
+      const values = fixture();
+      values.options.mode = "live";
+      values.options.applicationEnvironment = "production";
+      Object.assign(values.options, {
+        liveDemoSiteId: isDemo ? "site-1" : undefined,
+      });
+      values.loadSite.mockResolvedValueOnce({ siteId: "site-1", isDemo });
+      values.input.requestId = deriveReceivingNominationRequestId({
+        siteId: values.actor.siteId,
+        operatorUserId: values.actor.userId,
+        environment: "live",
+      });
+      expect(await nominate(values)).toMatchObject({
+        environment: "live",
+        state: "AWAITING_PROVIDER_VERIFICATION",
+      });
+    },
+  );
 
   it.each([
     [

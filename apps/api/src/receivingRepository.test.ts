@@ -151,6 +151,32 @@ function fixture(
 }
 
 describe("stored receiving context", () => {
+  it("retains the showcase marker while forwarding its private native live policy", async () => {
+    const v = fixture({ site: [{ id: siteId, isDemo: true }] });
+    const context = await loadReceivingContext(v.db, siteId, {
+      ...options,
+      liveDemoSiteId: siteId,
+    });
+    expect(context).toMatchObject({
+      isDemo: true,
+      liveDemoSiteId: siteId,
+      mode: "live",
+      environment: "production",
+    });
+    await expect(
+      readReceivingReadiness(v.db, siteId, {
+        ...options,
+        liveDemoSiteId: siteId,
+      }),
+    ).resolves.toMatchObject({ state: "READY", mode: "live" });
+    await expect(
+      readReceivingReadiness(v.db, siteId, {
+        ...options,
+        liveDemoSiteId: "other-site",
+      }),
+    ).resolves.toMatchObject({ state: "BLOCKED" });
+  });
+
   it("refreshes provider evidence before taking its read-only readiness snapshot", async () => {
     const v = fixture();
     const refresh = vi.fn(async (id: string) => {

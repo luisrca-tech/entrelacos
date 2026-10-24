@@ -117,12 +117,8 @@
           "name": "account_user_id_user_id_fk",
           "tableFrom": "account",
           "tableTo": "user",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -268,12 +264,8 @@
           "name": "admin_access_token_user_id_user_id_fk",
           "tableFrom": "admin_access_token",
           "tableTo": "user",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -281,14 +273,8 @@
           "name": "admin_access_token_site_membership_fk",
           "tableFrom": "admin_access_token",
           "tableTo": "site_membership",
-          "columnsFrom": [
-            "site_id",
-            "user_id"
-          ],
-          "columnsTo": [
-            "site_id",
-            "user_id"
-          ],
+          "columnsFrom": ["site_id", "user_id"],
+          "columnsTo": ["site_id", "user_id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -448,12 +434,8 @@
           "name": "gift_item_site_id_site_id_fk",
           "tableFrom": "gift_item",
           "tableTo": "site",
-          "columnsFrom": [
-            "site_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["site_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
@@ -461,14 +443,8 @@
           "name": "gift_item_site_media_fk",
           "tableFrom": "gift_item",
           "tableTo": "gift_media_asset",
-          "columnsFrom": [
-            "site_id",
-            "media_asset_id"
-          ],
-          "columnsTo": [
-            "site_id",
-            "id"
-          ],
+          "columnsFrom": ["site_id", "media_asset_id"],
+          "columnsTo": ["site_id", "id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         }
@@ -694,12 +670,8 @@
           "name": "gift_media_asset_site_id_site_id_fk",
           "tableFrom": "gift_media_asset",
           "tableTo": "site",
-          "columnsFrom": [
-            "site_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["site_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         }
@@ -803,12 +775,8 @@
           "name": "gift_media_publication_intent_site_id_site_id_fk",
           "tableFrom": "gift_media_publication_intent",
           "tableTo": "site",
-          "columnsFrom": [
-            "site_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["site_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
@@ -816,14 +784,8 @@
           "name": "gift_media_publication_asset_fk",
           "tableFrom": "gift_media_publication_intent",
           "tableTo": "gift_media_asset",
-          "columnsFrom": [
-            "site_id",
-            "asset_id"
-          ],
-          "columnsTo": [
-            "site_id",
-            "id"
-          ],
+          "columnsFrom": ["site_id", "asset_id"],
+          "columnsTo": ["site_id", "id"],
           "onDelete": "restrict",
           "onUpdate": "restrict"
         }
@@ -833,19 +795,12 @@
         "gift_media_publication_claim_key": {
           "name": "gift_media_publication_claim_key",
           "nullsNotDistinct": false,
-          "columns": [
-            "site_id",
-            "asset_id",
-            "processing_id"
-          ]
+          "columns": ["site_id", "asset_id", "processing_id"]
         },
         "gift_media_publication_object_key": {
           "name": "gift_media_publication_object_key",
           "nullsNotDistinct": false,
-          "columns": [
-            "storage_namespace",
-            "derivative_key"
-          ]
+          "columns": ["storage_namespace", "derivative_key"]
         }
       },
       "policies": {},
@@ -995,12 +950,8 @@
           "name": "invitation_site_id_site_id_fk",
           "tableFrom": "invitation",
           "tableTo": "site",
-          "columnsFrom": [
-            "site_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["site_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1180,14 +1131,8 @@
           "name": "invitation_access_challenge_site_invitation_fk",
           "tableFrom": "invitation_access_challenge",
           "tableTo": "invitation",
-          "columnsFrom": [
-            "site_id",
-            "invitation_id"
-          ],
-          "columnsTo": [
-            "site_id",
-            "id"
-          ],
+          "columnsFrom": ["site_id", "invitation_id"],
+          "columnsTo": ["site_id", "id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1346,14 +1291,8 @@
           "name": "invitation_guest_site_invitation_fk",
           "tableFrom": "invitation_guest",
           "tableTo": "invitation",
-          "columnsFrom": [
-            "site_id",
-            "invitation_id"
-          ],
-          "columnsTo": [
-            "site_id",
-            "id"
-          ],
+          "columnsFrom": ["site_id", "invitation_id"],
+          "columnsTo": ["site_id", "id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1504,14 +1443,8 @@
           "name": "invitation_rate_limit_event_site_invitation_fk",
           "tableFrom": "invitation_rate_limit_event",
           "tableTo": "invitation",
-          "columnsFrom": [
-            "site_id",
-            "invitation_id"
-          ],
-          "columnsTo": [
-            "site_id",
-            "id"
-          ],
+          "columnsFrom": ["site_id", "invitation_id"],
+          "columnsTo": ["site_id", "id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1645,14 +1578,8 @@
           "name": "invitation_session_site_invitation_fk",
           "tableFrom": "invitation_session",
           "tableTo": "invitation",
-          "columnsFrom": [
-            "site_id",
-            "invitation_id"
-          ],
-          "columnsTo": [
-            "site_id",
-            "id"
-          ],
+          "columnsFrom": ["site_id", "invitation_id"],
+          "columnsTo": ["site_id", "id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1742,12 +1669,8 @@
           "name": "mural_message_site_id_site_id_fk",
           "tableFrom": "mural_message",
           "tableTo": "site",
-          "columnsFrom": [
-            "site_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["site_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1858,12 +1781,8 @@
           "name": "mural_message_rate_limit_event_site_id_site_id_fk",
           "tableFrom": "mural_message_rate_limit_event",
           "tableTo": "site",
-          "columnsFrom": [
-            "site_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["site_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1949,12 +1868,8 @@
           "name": "mural_message_request_receipt_site_id_site_id_fk",
           "tableFrom": "mural_message_request_receipt",
           "tableTo": "site",
-          "columnsFrom": [
-            "site_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["site_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -2070,12 +1985,8 @@
           "name": "receiving_setup_holder_site_id_site_id_fk",
           "tableFrom": "receiving_setup_holder",
           "tableTo": "site",
-          "columnsFrom": [
-            "site_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["site_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -2083,12 +1994,8 @@
           "name": "receiving_setup_holder_holder_user_id_user_id_fk",
           "tableFrom": "receiving_setup_holder",
           "tableTo": "user",
-          "columnsFrom": [
-            "holder_user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["holder_user_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -2096,12 +2003,8 @@
           "name": "receiving_setup_holder_designated_by_user_id_user_id_fk",
           "tableFrom": "receiving_setup_holder",
           "tableTo": "user",
-          "columnsFrom": [
-            "designated_by_user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["designated_by_user_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -2278,14 +2181,8 @@
           "name": "rsvp_history_site_invitation_fk",
           "tableFrom": "rsvp_history",
           "tableTo": "invitation",
-          "columnsFrom": [
-            "site_id",
-            "invitation_id"
-          ],
-          "columnsTo": [
-            "site_id",
-            "id"
-          ],
+          "columnsFrom": ["site_id", "invitation_id"],
+          "columnsTo": ["site_id", "id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -2293,16 +2190,8 @@
           "name": "rsvp_history_site_invitation_guest_fk",
           "tableFrom": "rsvp_history",
           "tableTo": "invitation_guest",
-          "columnsFrom": [
-            "site_id",
-            "invitation_id",
-            "guest_id"
-          ],
-          "columnsTo": [
-            "site_id",
-            "invitation_id",
-            "id"
-          ],
+          "columnsFrom": ["site_id", "invitation_id", "guest_id"],
+          "columnsTo": ["site_id", "invitation_id", "id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -2465,12 +2354,8 @@
           "name": "rsvp_request_receipt_site_id_site_id_fk",
           "tableFrom": "rsvp_request_receipt",
           "tableTo": "site",
-          "columnsFrom": [
-            "site_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["site_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -2478,14 +2363,8 @@
           "name": "rsvp_request_receipt_site_invitation_fk",
           "tableFrom": "rsvp_request_receipt",
           "tableTo": "invitation",
-          "columnsFrom": [
-            "site_id",
-            "invitation_id"
-          ],
-          "columnsTo": [
-            "site_id",
-            "id"
-          ],
+          "columnsFrom": ["site_id", "invitation_id"],
+          "columnsTo": ["site_id", "id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -2495,10 +2374,7 @@
         "rsvp_request_receipt_site_id_key": {
           "name": "rsvp_request_receipt_site_id_key",
           "nullsNotDistinct": false,
-          "columns": [
-            "site_id",
-            "id"
-          ]
+          "columns": ["site_id", "id"]
         }
       },
       "policies": {},
@@ -2575,14 +2451,8 @@
           "name": "rsvp_request_receipt_invitation_receipt_fk",
           "tableFrom": "rsvp_request_receipt_invitation",
           "tableTo": "rsvp_request_receipt",
-          "columnsFrom": [
-            "site_id",
-            "receipt_id"
-          ],
-          "columnsTo": [
-            "site_id",
-            "id"
-          ],
+          "columnsFrom": ["site_id", "receipt_id"],
+          "columnsTo": ["site_id", "id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -2590,14 +2460,8 @@
           "name": "rsvp_request_receipt_invitation_site_invitation_fk",
           "tableFrom": "rsvp_request_receipt_invitation",
           "tableTo": "invitation",
-          "columnsFrom": [
-            "site_id",
-            "invitation_id"
-          ],
-          "columnsTo": [
-            "site_id",
-            "id"
-          ],
+          "columnsFrom": ["site_id", "invitation_id"],
+          "columnsTo": ["site_id", "id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -2605,11 +2469,7 @@
       "compositePrimaryKeys": {
         "rsvp_request_receipt_invitation_pk": {
           "name": "rsvp_request_receipt_invitation_pk",
-          "columns": [
-            "site_id",
-            "receipt_id",
-            "invitation_id"
-          ]
+          "columns": ["site_id", "receipt_id", "invitation_id"]
         }
       },
       "uniqueConstraints": {},
@@ -2685,12 +2545,8 @@
           "name": "session_user_id_user_id_fk",
           "tableFrom": "session",
           "tableTo": "user",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -2700,9 +2556,7 @@
         "session_token_unique": {
           "name": "session_token_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "token"
-          ]
+          "columns": ["token"]
         }
       },
       "policies": {},
@@ -3015,12 +2869,8 @@
           "name": "site_assessor_invitation_site_id_site_id_fk",
           "tableFrom": "site_assessor_invitation",
           "tableTo": "site",
-          "columnsFrom": [
-            "site_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["site_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -3028,12 +2878,8 @@
           "name": "site_assessor_invitation_invited_by_user_id_user_id_fk",
           "tableFrom": "site_assessor_invitation",
           "tableTo": "user",
-          "columnsFrom": [
-            "invited_by_user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["invited_by_user_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         }
@@ -3182,12 +3028,8 @@
           "name": "site_domain_site_id_site_id_fk",
           "tableFrom": "site_domain",
           "tableTo": "site",
-          "columnsFrom": [
-            "site_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["site_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -3283,12 +3125,8 @@
           "name": "site_membership_site_id_site_id_fk",
           "tableFrom": "site_membership",
           "tableTo": "site",
-          "columnsFrom": [
-            "site_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["site_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -3296,12 +3134,8 @@
           "name": "site_membership_user_id_user_id_fk",
           "tableFrom": "site_membership",
           "tableTo": "user",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -3309,12 +3143,8 @@
           "name": "site_membership_invited_by_user_id_user_id_fk",
           "tableFrom": "site_membership",
           "tableTo": "user",
-          "columnsFrom": [
-            "invited_by_user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["invited_by_user_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -3398,12 +3228,8 @@
           "name": "site_origin_site_id_site_id_fk",
           "tableFrom": "site_origin",
           "tableTo": "site",
-          "columnsFrom": [
-            "site_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["site_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -3485,12 +3311,8 @@
           "name": "site_term_site_id_site_id_fk",
           "tableFrom": "site_term",
           "tableTo": "site",
-          "columnsFrom": [
-            "site_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["site_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -3579,9 +3401,7 @@
         "user_email_unique": {
           "name": "user_email_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "email"
-          ]
+          "columns": ["email"]
         }
       },
       "policies": {},
@@ -3805,12 +3625,8 @@
           "name": "financial_event_inbox_site_id_site_id_fk",
           "tableFrom": "financial_event_inbox",
           "tableTo": "site",
-          "columnsFrom": [
-            "site_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["site_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
@@ -3818,16 +3634,8 @@
           "name": "financial_event_account_fk",
           "tableFrom": "financial_event_inbox",
           "tableTo": "receiving_account",
-          "columnsFrom": [
-            "site_id",
-            "account_id",
-            "environment"
-          ],
-          "columnsTo": [
-            "site_id",
-            "id",
-            "environment"
-          ],
+          "columnsFrom": ["site_id", "account_id", "environment"],
+          "columnsTo": ["site_id", "id", "environment"],
           "onDelete": "restrict",
           "onUpdate": "restrict"
         },
@@ -3835,18 +3643,8 @@
           "name": "financial_event_payment_fk",
           "tableFrom": "financial_event_inbox",
           "tableTo": "gift_payment_record",
-          "columnsFrom": [
-            "site_id",
-            "account_id",
-            "environment",
-            "payment_id"
-          ],
-          "columnsTo": [
-            "site_id",
-            "account_id",
-            "environment",
-            "id"
-          ],
+          "columnsFrom": ["site_id", "account_id", "environment", "payment_id"],
+          "columnsTo": ["site_id", "account_id", "environment", "id"],
           "onDelete": "restrict",
           "onUpdate": "restrict"
         }
@@ -3856,22 +3654,12 @@
         "financial_event_scope_key": {
           "name": "financial_event_scope_key",
           "nullsNotDistinct": false,
-          "columns": [
-            "site_id",
-            "account_id",
-            "environment",
-            "id"
-          ]
+          "columns": ["site_id", "account_id", "environment", "id"]
         },
         "financial_event_delivery_key": {
           "name": "financial_event_delivery_key",
           "nullsNotDistinct": false,
-          "columns": [
-            "site_id",
-            "account_id",
-            "environment",
-            "delivery_id"
-          ]
+          "columns": ["site_id", "account_id", "environment", "delivery_id"]
         },
         "financial_event_provider_key": {
           "name": "financial_event_provider_key",
@@ -4026,12 +3814,8 @@
           "name": "financial_ledger_entry_site_id_site_id_fk",
           "tableFrom": "financial_ledger_entry",
           "tableTo": "site",
-          "columnsFrom": [
-            "site_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["site_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
@@ -4039,16 +3823,8 @@
           "name": "financial_ledger_account_fk",
           "tableFrom": "financial_ledger_entry",
           "tableTo": "receiving_account",
-          "columnsFrom": [
-            "site_id",
-            "account_id",
-            "environment"
-          ],
-          "columnsTo": [
-            "site_id",
-            "id",
-            "environment"
-          ],
+          "columnsFrom": ["site_id", "account_id", "environment"],
+          "columnsTo": ["site_id", "id", "environment"],
           "onDelete": "restrict",
           "onUpdate": "restrict"
         },
@@ -4056,18 +3832,8 @@
           "name": "financial_ledger_payment_fk",
           "tableFrom": "financial_ledger_entry",
           "tableTo": "gift_payment_record",
-          "columnsFrom": [
-            "site_id",
-            "account_id",
-            "environment",
-            "payment_id"
-          ],
-          "columnsTo": [
-            "site_id",
-            "account_id",
-            "environment",
-            "id"
-          ],
+          "columnsFrom": ["site_id", "account_id", "environment", "payment_id"],
+          "columnsTo": ["site_id", "account_id", "environment", "id"],
           "onDelete": "restrict",
           "onUpdate": "restrict"
         },
@@ -4081,12 +3847,7 @@
             "environment",
             "withdrawal_intent_id"
           ],
-          "columnsTo": [
-            "site_id",
-            "account_id",
-            "environment",
-            "id"
-          ],
+          "columnsTo": ["site_id", "account_id", "environment", "id"],
           "onDelete": "restrict",
           "onUpdate": "restrict"
         },
@@ -4100,12 +3861,7 @@
             "environment",
             "operation_id"
           ],
-          "columnsTo": [
-            "site_id",
-            "account_id",
-            "environment",
-            "id"
-          ],
+          "columnsTo": ["site_id", "account_id", "environment", "id"],
           "onDelete": "restrict",
           "onUpdate": "restrict"
         },
@@ -4113,18 +3869,8 @@
           "name": "financial_ledger_event_fk",
           "tableFrom": "financial_ledger_entry",
           "tableTo": "financial_event_inbox",
-          "columnsFrom": [
-            "site_id",
-            "account_id",
-            "environment",
-            "event_id"
-          ],
-          "columnsTo": [
-            "site_id",
-            "account_id",
-            "environment",
-            "id"
-          ],
+          "columnsFrom": ["site_id", "account_id", "environment", "event_id"],
+          "columnsTo": ["site_id", "account_id", "environment", "id"],
           "onDelete": "restrict",
           "onUpdate": "restrict"
         },
@@ -4138,12 +3884,7 @@
             "environment",
             "compensates_entry_id"
           ],
-          "columnsTo": [
-            "site_id",
-            "account_id",
-            "environment",
-            "id"
-          ],
+          "columnsTo": ["site_id", "account_id", "environment", "id"],
           "onDelete": "restrict",
           "onUpdate": "restrict"
         }
@@ -4153,22 +3894,12 @@
         "financial_ledger_scope_key": {
           "name": "financial_ledger_scope_key",
           "nullsNotDistinct": false,
-          "columns": [
-            "site_id",
-            "account_id",
-            "environment",
-            "id"
-          ]
+          "columns": ["site_id", "account_id", "environment", "id"]
         },
         "financial_ledger_effect_key": {
           "name": "financial_ledger_effect_key",
           "nullsNotDistinct": false,
-          "columns": [
-            "site_id",
-            "account_id",
-            "environment",
-            "effect_key"
-          ]
+          "columns": ["site_id", "account_id", "environment", "effect_key"]
         }
       },
       "policies": {},
@@ -4363,12 +4094,8 @@
           "name": "financial_operation_site_id_site_id_fk",
           "tableFrom": "financial_operation",
           "tableTo": "site",
-          "columnsFrom": [
-            "site_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["site_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
@@ -4376,16 +4103,8 @@
           "name": "financial_operation_account_fk",
           "tableFrom": "financial_operation",
           "tableTo": "receiving_account",
-          "columnsFrom": [
-            "site_id",
-            "account_id",
-            "environment"
-          ],
-          "columnsTo": [
-            "site_id",
-            "id",
-            "environment"
-          ],
+          "columnsFrom": ["site_id", "account_id", "environment"],
+          "columnsTo": ["site_id", "id", "environment"],
           "onDelete": "restrict",
           "onUpdate": "restrict"
         },
@@ -4393,18 +4112,8 @@
           "name": "financial_operation_order_fk",
           "tableFrom": "financial_operation",
           "tableTo": "gift_order",
-          "columnsFrom": [
-            "site_id",
-            "account_id",
-            "environment",
-            "order_id"
-          ],
-          "columnsTo": [
-            "site_id",
-            "account_id",
-            "environment",
-            "id"
-          ],
+          "columnsFrom": ["site_id", "account_id", "environment", "order_id"],
+          "columnsTo": ["site_id", "account_id", "environment", "id"],
           "onDelete": "restrict",
           "onUpdate": "restrict"
         },
@@ -4418,12 +4127,7 @@
             "environment",
             "withdrawal_intent_id"
           ],
-          "columnsTo": [
-            "site_id",
-            "account_id",
-            "environment",
-            "id"
-          ],
+          "columnsTo": ["site_id", "account_id", "environment", "id"],
           "onDelete": "restrict",
           "onUpdate": "restrict"
         },
@@ -4454,12 +4158,7 @@
         "financial_operation_scope_key": {
           "name": "financial_operation_scope_key",
           "nullsNotDistinct": false,
-          "columns": [
-            "site_id",
-            "account_id",
-            "environment",
-            "id"
-          ]
+          "columns": ["site_id", "account_id", "environment", "id"]
         },
         "financial_operation_order_key": {
           "name": "financial_operation_order_key",
@@ -4476,11 +4175,7 @@
         "financial_operation_request_key": {
           "name": "financial_operation_request_key",
           "nullsNotDistinct": false,
-          "columns": [
-            "site_id",
-            "kind",
-            "request_id"
-          ]
+          "columns": ["site_id", "kind", "request_id"]
         },
         "financial_operation_provider_key": {
           "name": "financial_operation_provider_key",
@@ -4609,12 +4304,8 @@
           "name": "gift_checkout_attempt_site_id_site_id_fk",
           "tableFrom": "gift_checkout_attempt",
           "tableTo": "site",
-          "columnsFrom": [
-            "site_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["site_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
@@ -4622,16 +4313,8 @@
           "name": "gift_checkout_attempt_account_fk",
           "tableFrom": "gift_checkout_attempt",
           "tableTo": "receiving_account",
-          "columnsFrom": [
-            "site_id",
-            "account_id",
-            "environment"
-          ],
-          "columnsTo": [
-            "site_id",
-            "id",
-            "environment"
-          ],
+          "columnsFrom": ["site_id", "account_id", "environment"],
+          "columnsTo": ["site_id", "id", "environment"],
           "onDelete": "restrict",
           "onUpdate": "restrict"
         },
@@ -4639,18 +4322,8 @@
           "name": "gift_checkout_attempt_order_fk",
           "tableFrom": "gift_checkout_attempt",
           "tableTo": "gift_order",
-          "columnsFrom": [
-            "site_id",
-            "account_id",
-            "environment",
-            "order_id"
-          ],
-          "columnsTo": [
-            "site_id",
-            "account_id",
-            "environment",
-            "id"
-          ],
+          "columnsFrom": ["site_id", "account_id", "environment", "order_id"],
+          "columnsTo": ["site_id", "account_id", "environment", "id"],
           "onDelete": "restrict",
           "onUpdate": "restrict"
         },
@@ -4683,23 +4356,12 @@
         "gift_checkout_attempt_scope_key": {
           "name": "gift_checkout_attempt_scope_key",
           "nullsNotDistinct": false,
-          "columns": [
-            "site_id",
-            "account_id",
-            "environment",
-            "id"
-          ]
+          "columns": ["site_id", "account_id", "environment", "id"]
         },
         "gift_checkout_attempt_order_key": {
           "name": "gift_checkout_attempt_order_key",
           "nullsNotDistinct": false,
-          "columns": [
-            "site_id",
-            "account_id",
-            "environment",
-            "id",
-            "order_id"
-          ]
+          "columns": ["site_id", "account_id", "environment", "id", "order_id"]
         },
         "gift_checkout_attempt_number_key": {
           "name": "gift_checkout_attempt_number_key",
@@ -4715,12 +4377,7 @@
         "gift_checkout_attempt_operation_key": {
           "name": "gift_checkout_attempt_operation_key",
           "nullsNotDistinct": false,
-          "columns": [
-            "site_id",
-            "account_id",
-            "environment",
-            "operation_id"
-          ]
+          "columns": ["site_id", "account_id", "environment", "operation_id"]
         },
         "gift_checkout_attempt_provider_key": {
           "name": "gift_checkout_attempt_provider_key",
@@ -4813,12 +4470,8 @@
           "name": "gift_order_site_id_site_id_fk",
           "tableFrom": "gift_order",
           "tableTo": "site",
-          "columnsFrom": [
-            "site_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["site_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
@@ -4826,16 +4479,8 @@
           "name": "gift_order_account_fk",
           "tableFrom": "gift_order",
           "tableTo": "receiving_account",
-          "columnsFrom": [
-            "site_id",
-            "account_id",
-            "environment"
-          ],
-          "columnsTo": [
-            "site_id",
-            "id",
-            "environment"
-          ],
+          "columnsFrom": ["site_id", "account_id", "environment"],
+          "columnsTo": ["site_id", "id", "environment"],
           "onDelete": "restrict",
           "onUpdate": "restrict"
         },
@@ -4843,18 +4488,8 @@
           "name": "gift_order_quote_fk",
           "tableFrom": "gift_order",
           "tableTo": "gift_quote_record",
-          "columnsFrom": [
-            "site_id",
-            "account_id",
-            "environment",
-            "quote_id"
-          ],
-          "columnsTo": [
-            "site_id",
-            "account_id",
-            "environment",
-            "id"
-          ],
+          "columnsFrom": ["site_id", "account_id", "environment", "quote_id"],
+          "columnsTo": ["site_id", "account_id", "environment", "id"],
           "onDelete": "restrict",
           "onUpdate": "restrict"
         }
@@ -4864,30 +4499,17 @@
         "gift_order_scope_key": {
           "name": "gift_order_scope_key",
           "nullsNotDistinct": false,
-          "columns": [
-            "site_id",
-            "account_id",
-            "environment",
-            "id"
-          ]
+          "columns": ["site_id", "account_id", "environment", "id"]
         },
         "gift_order_quote_key": {
           "name": "gift_order_quote_key",
           "nullsNotDistinct": false,
-          "columns": [
-            "site_id",
-            "account_id",
-            "environment",
-            "quote_id"
-          ]
+          "columns": ["site_id", "account_id", "environment", "quote_id"]
         },
         "gift_order_request_key": {
           "name": "gift_order_request_key",
           "nullsNotDistinct": false,
-          "columns": [
-            "site_id",
-            "request_id"
-          ]
+          "columns": ["site_id", "request_id"]
         }
       },
       "policies": {},
@@ -5031,12 +4653,8 @@
           "name": "gift_payment_record_site_id_site_id_fk",
           "tableFrom": "gift_payment_record",
           "tableTo": "site",
-          "columnsFrom": [
-            "site_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["site_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
@@ -5044,16 +4662,8 @@
           "name": "gift_payment_account_fk",
           "tableFrom": "gift_payment_record",
           "tableTo": "receiving_account",
-          "columnsFrom": [
-            "site_id",
-            "account_id",
-            "environment"
-          ],
-          "columnsTo": [
-            "site_id",
-            "id",
-            "environment"
-          ],
+          "columnsFrom": ["site_id", "account_id", "environment"],
+          "columnsTo": ["site_id", "id", "environment"],
           "onDelete": "restrict",
           "onUpdate": "restrict"
         },
@@ -5084,23 +4694,12 @@
         "gift_payment_scope_key": {
           "name": "gift_payment_scope_key",
           "nullsNotDistinct": false,
-          "columns": [
-            "site_id",
-            "account_id",
-            "environment",
-            "id"
-          ]
+          "columns": ["site_id", "account_id", "environment", "id"]
         },
         "gift_payment_order_key": {
           "name": "gift_payment_order_key",
           "nullsNotDistinct": false,
-          "columns": [
-            "site_id",
-            "account_id",
-            "environment",
-            "id",
-            "order_id"
-          ]
+          "columns": ["site_id", "account_id", "environment", "id", "order_id"]
         },
         "gift_payment_provider_key": {
           "name": "gift_payment_provider_key",
@@ -5256,12 +4855,8 @@
           "name": "gift_quote_record_site_id_site_id_fk",
           "tableFrom": "gift_quote_record",
           "tableTo": "site",
-          "columnsFrom": [
-            "site_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["site_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
@@ -5269,16 +4864,8 @@
           "name": "gift_quote_account_fk",
           "tableFrom": "gift_quote_record",
           "tableTo": "receiving_account",
-          "columnsFrom": [
-            "site_id",
-            "account_id",
-            "environment"
-          ],
-          "columnsTo": [
-            "site_id",
-            "id",
-            "environment"
-          ],
+          "columnsFrom": ["site_id", "account_id", "environment"],
+          "columnsTo": ["site_id", "id", "environment"],
           "onDelete": "restrict",
           "onUpdate": "restrict"
         },
@@ -5292,12 +4879,7 @@
             "environment",
             "destination_version"
           ],
-          "columnsTo": [
-            "site_id",
-            "account_id",
-            "environment",
-            "version"
-          ],
+          "columnsTo": ["site_id", "account_id", "environment", "version"],
           "onDelete": "restrict",
           "onUpdate": "restrict"
         },
@@ -5305,14 +4887,8 @@
           "name": "gift_quote_gift_fk",
           "tableFrom": "gift_quote_record",
           "tableTo": "gift_item",
-          "columnsFrom": [
-            "site_id",
-            "gift_id"
-          ],
-          "columnsTo": [
-            "site_id",
-            "id"
-          ],
+          "columnsFrom": ["site_id", "gift_id"],
+          "columnsTo": ["site_id", "id"],
           "onDelete": "restrict",
           "onUpdate": "restrict"
         }
@@ -5322,12 +4898,7 @@
         "gift_quote_scope_key": {
           "name": "gift_quote_scope_key",
           "nullsNotDistinct": false,
-          "columns": [
-            "site_id",
-            "account_id",
-            "environment",
-            "id"
-          ]
+          "columns": ["site_id", "account_id", "environment", "id"]
         }
       },
       "policies": {},
@@ -5544,12 +5115,8 @@
           "name": "receiving_account_site_id_site_id_fk",
           "tableFrom": "receiving_account",
           "tableTo": "site",
-          "columnsFrom": [
-            "site_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["site_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
@@ -5557,12 +5124,8 @@
           "name": "receiving_account_operator_user_id_user_id_fk",
           "tableFrom": "receiving_account",
           "tableTo": "user",
-          "columnsFrom": [
-            "operator_user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["operator_user_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         }
@@ -5572,27 +5135,17 @@
         "receiving_account_scope_key": {
           "name": "receiving_account_scope_key",
           "nullsNotDistinct": false,
-          "columns": [
-            "site_id",
-            "id",
-            "environment"
-          ]
+          "columns": ["site_id", "id", "environment"]
         },
         "receiving_account_provider_key": {
           "name": "receiving_account_provider_key",
           "nullsNotDistinct": false,
-          "columns": [
-            "provider",
-            "environment",
-            "account_reference"
-          ]
+          "columns": ["provider", "environment", "account_reference"]
         },
         "receiving_account_webhook_hash_key": {
           "name": "receiving_account_webhook_hash_key",
           "nullsNotDistinct": false,
-          "columns": [
-            "webhook_token_hash"
-          ]
+          "columns": ["webhook_token_hash"]
         }
       },
       "policies": {},
@@ -5721,12 +5274,8 @@
           "name": "receiving_destination_site_id_site_id_fk",
           "tableFrom": "receiving_destination",
           "tableTo": "site",
-          "columnsFrom": [
-            "site_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["site_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
@@ -5734,16 +5283,8 @@
           "name": "receiving_destination_account_fk",
           "tableFrom": "receiving_destination",
           "tableTo": "receiving_account",
-          "columnsFrom": [
-            "site_id",
-            "account_id",
-            "environment"
-          ],
-          "columnsTo": [
-            "site_id",
-            "id",
-            "environment"
-          ],
+          "columnsFrom": ["site_id", "account_id", "environment"],
+          "columnsTo": ["site_id", "id", "environment"],
           "onDelete": "restrict",
           "onUpdate": "restrict"
         }
@@ -5753,22 +5294,12 @@
         "receiving_destination_scope_key": {
           "name": "receiving_destination_scope_key",
           "nullsNotDistinct": false,
-          "columns": [
-            "site_id",
-            "account_id",
-            "environment",
-            "id"
-          ]
+          "columns": ["site_id", "account_id", "environment", "id"]
         },
         "receiving_destination_version_key": {
           "name": "receiving_destination_version_key",
           "nullsNotDistinct": false,
-          "columns": [
-            "site_id",
-            "account_id",
-            "environment",
-            "version"
-          ]
+          "columns": ["site_id", "account_id", "environment", "version"]
         }
       },
       "policies": {},
@@ -5893,12 +5424,8 @@
           "name": "receiving_pix_destination_site_id_site_id_fk",
           "tableFrom": "receiving_pix_destination",
           "tableTo": "site",
-          "columnsFrom": [
-            "site_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["site_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
@@ -5906,16 +5433,8 @@
           "name": "receiving_pix_destination_account_fk",
           "tableFrom": "receiving_pix_destination",
           "tableTo": "receiving_account",
-          "columnsFrom": [
-            "site_id",
-            "account_id",
-            "environment"
-          ],
-          "columnsTo": [
-            "site_id",
-            "id",
-            "environment"
-          ],
+          "columnsFrom": ["site_id", "account_id", "environment"],
+          "columnsTo": ["site_id", "id", "environment"],
           "onDelete": "restrict",
           "onUpdate": "restrict"
         }
@@ -5925,12 +5444,7 @@
         "receiving_pix_destination_version_key": {
           "name": "receiving_pix_destination_version_key",
           "nullsNotDistinct": false,
-          "columns": [
-            "site_id",
-            "account_id",
-            "environment",
-            "version"
-          ]
+          "columns": ["site_id", "account_id", "environment", "version"]
         }
       },
       "policies": {},
@@ -6089,12 +5603,8 @@
           "name": "receiving_verification_evidence_site_id_site_id_fk",
           "tableFrom": "receiving_verification_evidence",
           "tableTo": "site",
-          "columnsFrom": [
-            "site_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["site_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
@@ -6102,16 +5612,8 @@
           "name": "receiving_evidence_account_fk",
           "tableFrom": "receiving_verification_evidence",
           "tableTo": "receiving_account",
-          "columnsFrom": [
-            "site_id",
-            "account_id",
-            "environment"
-          ],
-          "columnsTo": [
-            "site_id",
-            "id",
-            "environment"
-          ],
+          "columnsFrom": ["site_id", "account_id", "environment"],
+          "columnsTo": ["site_id", "id", "environment"],
           "onDelete": "restrict",
           "onUpdate": "restrict"
         },
@@ -6125,12 +5627,7 @@
             "environment",
             "destination_version"
           ],
-          "columnsTo": [
-            "site_id",
-            "account_id",
-            "environment",
-            "version"
-          ],
+          "columnsTo": ["site_id", "account_id", "environment", "version"],
           "onDelete": "restrict",
           "onUpdate": "restrict"
         }
@@ -6140,12 +5637,7 @@
         "receiving_evidence_scope_key": {
           "name": "receiving_evidence_scope_key",
           "nullsNotDistinct": false,
-          "columns": [
-            "site_id",
-            "account_id",
-            "environment",
-            "id"
-          ]
+          "columns": ["site_id", "account_id", "environment", "id"]
         }
       },
       "policies": {},
@@ -6236,12 +5728,7 @@
             "environment",
             "operation_id"
           ],
-          "columnsTo": [
-            "site_id",
-            "account_id",
-            "environment",
-            "id"
-          ],
+          "columnsTo": ["site_id", "account_id", "environment", "id"],
           "onDelete": "restrict",
           "onUpdate": "restrict"
         }
@@ -6249,20 +5736,14 @@
       "compositePrimaryKeys": {
         "withdrawal_authorization_candidate_environment_provider_reference_pk": {
           "name": "withdrawal_authorization_candidate_environment_provider_reference_pk",
-          "columns": [
-            "environment",
-            "provider_reference"
-          ]
+          "columns": ["environment", "provider_reference"]
         }
       },
       "uniqueConstraints": {
         "withdrawal_authorization_operation_unique": {
           "name": "withdrawal_authorization_operation_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "environment",
-            "operation_id"
-          ]
+          "columns": ["environment", "operation_id"]
         }
       },
       "policies": {},
@@ -6329,14 +5810,8 @@
           "name": "withdrawal_authorization_candidate_fk",
           "tableFrom": "withdrawal_authorization_decision",
           "tableTo": "withdrawal_authorization_candidate",
-          "columnsFrom": [
-            "environment",
-            "provider_reference"
-          ],
-          "columnsTo": [
-            "environment",
-            "provider_reference"
-          ],
+          "columnsFrom": ["environment", "provider_reference"],
+          "columnsTo": ["environment", "provider_reference"],
           "onDelete": "restrict",
           "onUpdate": "restrict"
         }
@@ -6344,10 +5819,7 @@
       "compositePrimaryKeys": {
         "withdrawal_authorization_decision_environment_provider_reference_pk": {
           "name": "withdrawal_authorization_decision_environment_provider_reference_pk",
-          "columns": [
-            "environment",
-            "provider_reference"
-          ]
+          "columns": ["environment", "provider_reference"]
         }
       },
       "uniqueConstraints": {},
@@ -6515,12 +5987,8 @@
           "name": "withdrawal_intent_site_id_site_id_fk",
           "tableFrom": "withdrawal_intent",
           "tableTo": "site",
-          "columnsFrom": [
-            "site_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["site_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
@@ -6528,12 +5996,8 @@
           "name": "withdrawal_intent_operator_user_id_user_id_fk",
           "tableFrom": "withdrawal_intent",
           "tableTo": "user",
-          "columnsFrom": [
-            "operator_user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["operator_user_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
@@ -6541,16 +6005,8 @@
           "name": "withdrawal_intent_account_fk",
           "tableFrom": "withdrawal_intent",
           "tableTo": "receiving_account",
-          "columnsFrom": [
-            "site_id",
-            "account_id",
-            "environment"
-          ],
-          "columnsTo": [
-            "site_id",
-            "id",
-            "environment"
-          ],
+          "columnsFrom": ["site_id", "account_id", "environment"],
+          "columnsTo": ["site_id", "id", "environment"],
           "onDelete": "restrict",
           "onUpdate": "restrict"
         },
@@ -6564,12 +6020,7 @@
             "environment",
             "destination_version"
           ],
-          "columnsTo": [
-            "site_id",
-            "account_id",
-            "environment",
-            "version"
-          ],
+          "columnsTo": ["site_id", "account_id", "environment", "version"],
           "onDelete": "restrict",
           "onUpdate": "restrict"
         }
@@ -6579,20 +6030,12 @@
         "withdrawal_intent_scope_key": {
           "name": "withdrawal_intent_scope_key",
           "nullsNotDistinct": false,
-          "columns": [
-            "site_id",
-            "account_id",
-            "environment",
-            "id"
-          ]
+          "columns": ["site_id", "account_id", "environment", "id"]
         },
         "withdrawal_intent_request_key": {
           "name": "withdrawal_intent_request_key",
           "nullsNotDistinct": false,
-          "columns": [
-            "site_id",
-            "request_id"
-          ]
+          "columns": ["site_id", "request_id"]
         },
         "withdrawal_intent_consent_key": {
           "name": "withdrawal_intent_consent_key",
@@ -6730,12 +6173,7 @@
             "environment",
             "operation_id"
           ],
-          "columnsTo": [
-            "site_id",
-            "account_id",
-            "environment",
-            "id"
-          ],
+          "columnsTo": ["site_id", "account_id", "environment", "id"],
           "onDelete": "restrict",
           "onUpdate": "restrict"
         }
@@ -6941,12 +6379,8 @@
           "name": "withdrawal_request_site_id_site_id_fk",
           "tableFrom": "withdrawal_request",
           "tableTo": "site",
-          "columnsFrom": [
-            "site_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["site_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
@@ -6954,12 +6388,8 @@
           "name": "withdrawal_request_operator_user_id_user_id_fk",
           "tableFrom": "withdrawal_request",
           "tableTo": "user",
-          "columnsFrom": [
-            "operator_user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["operator_user_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
@@ -6967,16 +6397,8 @@
           "name": "withdrawal_request_account_fk",
           "tableFrom": "withdrawal_request",
           "tableTo": "receiving_account",
-          "columnsFrom": [
-            "site_id",
-            "account_id",
-            "environment"
-          ],
-          "columnsTo": [
-            "site_id",
-            "id",
-            "environment"
-          ],
+          "columnsFrom": ["site_id", "account_id", "environment"],
+          "columnsTo": ["site_id", "id", "environment"],
           "onDelete": "restrict",
           "onUpdate": "restrict"
         },
@@ -6990,12 +6412,7 @@
             "environment",
             "destination_version"
           ],
-          "columnsTo": [
-            "site_id",
-            "account_id",
-            "environment",
-            "version"
-          ],
+          "columnsTo": ["site_id", "account_id", "environment", "version"],
           "onDelete": "restrict",
           "onUpdate": "restrict"
         },
@@ -7030,10 +6447,7 @@
         "withdrawal_request_identity_key": {
           "name": "withdrawal_request_identity_key",
           "nullsNotDistinct": false,
-          "columns": [
-            "site_id",
-            "request_id"
-          ]
+          "columns": ["site_id", "request_id"]
         }
       },
       "policies": {},
@@ -7062,28 +6476,17 @@
     "public.account_state": {
       "name": "account_state",
       "schema": "public",
-      "values": [
-        "PENDING",
-        "ACTIVE",
-        "DISABLED"
-      ]
+      "values": ["PENDING", "ACTIVE", "DISABLED"]
     },
     "public.admin_access_purpose": {
       "name": "admin_access_purpose",
       "schema": "public",
-      "values": [
-        "ACTIVATION",
-        "RECOVERY"
-      ]
+      "values": ["ACTIVATION", "RECOVERY"]
     },
     "public.admin_role": {
       "name": "admin_role",
       "schema": "public",
-      "values": [
-        "OWNER",
-        "SITE_ADMIN",
-        "SITE_ASSISTANT"
-      ]
+      "values": ["OWNER", "SITE_ADMIN", "SITE_ASSISTANT"]
     },
     "public.gift_media_publication_intent_state": {
       "name": "gift_media_publication_intent_state",
@@ -7100,156 +6503,87 @@
     "public.gift_media_state": {
       "name": "gift_media_state",
       "schema": "public",
-      "values": [
-        "PENDING",
-        "PROCESSING",
-        "FINALIZED",
-        "EXPIRED",
-        "FAILED"
-      ]
+      "values": ["PENDING", "PROCESSING", "FINALIZED", "EXPIRED", "FAILED"]
     },
     "public.gift_publication_state": {
       "name": "gift_publication_state",
       "schema": "public",
-      "values": [
-        "DRAFT",
-        "PUBLISHED",
-        "ARCHIVED"
-      ]
+      "values": ["DRAFT", "PUBLISHED", "ARCHIVED"]
     },
     "public.invitation_access_challenge_status": {
       "name": "invitation_access_challenge_status",
       "schema": "public",
-      "values": [
-        "PENDING",
-        "VERIFIED",
-        "EXPIRED",
-        "LOCKED",
-        "REVOKED"
-      ]
+      "values": ["PENDING", "VERIFIED", "EXPIRED", "LOCKED", "REVOKED"]
     },
     "public.invitation_guest_type": {
       "name": "invitation_guest_type",
       "schema": "public",
-      "values": [
-        "ADULT",
-        "CHILD"
-      ]
+      "values": ["ADULT", "CHILD"]
     },
     "public.invitation_rate_limit_action": {
       "name": "invitation_rate_limit_action",
       "schema": "public",
-      "values": [
-        "LOOKUP",
-        "PIN_VERIFY"
-      ]
+      "values": ["LOOKUP", "PIN_VERIFY"]
     },
     "public.rsvp_actor_type": {
       "name": "rsvp_actor_type",
       "schema": "public",
-      "values": [
-        "ADMIN",
-        "INVITATION"
-      ]
+      "values": ["ADMIN", "INVITATION"]
     },
     "public.rsvp_request_scope": {
       "name": "rsvp_request_scope",
       "schema": "public",
-      "values": [
-        "PUBLIC",
-        "ADMIN"
-      ]
+      "values": ["PUBLIC", "ADMIN"]
     },
     "public.rsvp_state": {
       "name": "rsvp_state",
       "schema": "public",
-      "values": [
-        "PENDING",
-        "CONFIRMED",
-        "DECLINED"
-      ]
+      "values": ["PENDING", "CONFIRMED", "DECLINED"]
     },
     "public.site_domain_state": {
       "name": "site_domain_state",
       "schema": "public",
-      "values": [
-        "NONE",
-        "PENDING",
-        "ACTIVE",
-        "INACTIVE"
-      ]
+      "values": ["NONE", "PENDING", "ACTIVE", "INACTIVE"]
     },
     "public.site_lifecycle": {
       "name": "site_lifecycle",
       "schema": "public",
-      "values": [
-        "DRAFT",
-        "IN_REVIEW",
-        "ACTIVE",
-        "INACTIVE"
-      ]
+      "values": ["DRAFT", "IN_REVIEW", "ACTIVE", "INACTIVE"]
     },
     "public.site_membership_role": {
       "name": "site_membership_role",
       "schema": "public",
-      "values": [
-        "SITE_ADMIN",
-        "SITE_ASSISTANT"
-      ]
+      "values": ["SITE_ADMIN", "SITE_ASSISTANT"]
     },
     "public.site_publication_state": {
       "name": "site_publication_state",
       "schema": "public",
-      "values": [
-        "UNPUBLISHED",
-        "PUBLISHED",
-        "PLACEHOLDER"
-      ]
+      "values": ["UNPUBLISHED", "PUBLISHED", "PLACEHOLDER"]
     },
     "public.financial_environment": {
       "name": "financial_environment",
       "schema": "public",
-      "values": [
-        "sandbox",
-        "live"
-      ]
+      "values": ["sandbox", "live"]
     },
     "public.financial_evidence_provenance": {
       "name": "financial_evidence_provenance",
       "schema": "public",
-      "values": [
-        "PROVIDER",
-        "SIMULATION"
-      ]
+      "values": ["PROVIDER", "SIMULATION"]
     },
     "public.financial_inbox_state": {
       "name": "financial_inbox_state",
       "schema": "public",
-      "values": [
-        "RECEIVED",
-        "CLAIMED",
-        "PROCESSED",
-        "RETRY",
-        "DEAD_LETTER"
-      ]
+      "values": ["RECEIVED", "CLAIMED", "PROCESSED", "RETRY", "DEAD_LETTER"]
     },
     "public.financial_ledger_direction": {
       "name": "financial_ledger_direction",
       "schema": "public",
-      "values": [
-        "CREDIT",
-        "DEBIT"
-      ]
+      "values": ["CREDIT", "DEBIT"]
     },
     "public.financial_operation_kind": {
       "name": "financial_operation_kind",
       "schema": "public",
-      "values": [
-        "ACCOUNT_CREATE",
-        "CHECKOUT_CREATE",
-        "WITHDRAWAL",
-        "REFUND"
-      ]
+      "values": ["ACCOUNT_CREATE", "CHECKOUT_CREATE", "WITHDRAWAL", "REFUND"]
     },
     "public.financial_operation_state": {
       "name": "financial_operation_state",
@@ -7267,28 +6601,17 @@
     "public.financial_verification_status": {
       "name": "financial_verification_status",
       "schema": "public",
-      "values": [
-        "UNVERIFIED",
-        "VERIFIED"
-      ]
+      "values": ["UNVERIFIED", "VERIFIED"]
     },
     "public.gift_payment_method": {
       "name": "gift_payment_method",
       "schema": "public",
-      "values": [
-        "PIX",
-        "CREDIT_CARD"
-      ]
+      "values": ["PIX", "CREDIT_CARD"]
     },
     "public.receiving_bank_state": {
       "name": "receiving_bank_state",
       "schema": "public",
-      "values": [
-        "UNVERIFIED",
-        "PENDING",
-        "VERIFIED",
-        "REJECTED"
-      ]
+      "values": ["UNVERIFIED", "PENDING", "VERIFIED", "REJECTED"]
     },
     "public.receiving_provider_account_state": {
       "name": "receiving_provider_account_state",
@@ -7318,11 +6641,7 @@
     "public.withdrawal_reservation_state": {
       "name": "withdrawal_reservation_state",
       "schema": "public",
-      "values": [
-        "HELD",
-        "RELEASED",
-        "CONSUMED"
-      ]
+      "values": ["HELD", "RELEASED", "CONSUMED"]
     }
   },
   "schemas": {},

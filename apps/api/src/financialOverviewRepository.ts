@@ -28,9 +28,11 @@ import type {
   StoredFinancialTotals,
 } from "./financialOverview";
 import { giftReceivedEffectKey } from "./giftPaymentReconciliation";
+import { allowsLiveSite, type LiveSitePolicy } from "./liveSitePolicy";
 import type { ReceivingTransaction } from "./receivingRepository";
 import {
   type WithdrawalCompletionProof,
+  type WithdrawalTerminalFailureProof,
   withdrawalCompletedEffectKey,
 } from "./withdrawalExecution";
 
@@ -38,7 +40,13 @@ export type FinancialOverviewRepositoryDatabase = Pick<
   DatabaseConnection["db"],
   "transaction"
 >;
-export interface FinancialOverviewRepositoryOptions {
+export interface FinancialOverviewRepositoryOptions extends LiveSitePolicy {
+  applicationEnvironment?: "development" | "test" | "production";
+  loadWithdrawalTerminalFailureInTransaction?(
+    tx: ReceivingTransaction,
+    withdrawalId: string,
+    reference: string,
+  ): Promise<WithdrawalTerminalFailureProof | null>;
   loadWithdrawalCompletionProofInTransaction?(
     tx: ReceivingTransaction,
     withdrawalId: string,
@@ -202,6 +210,7 @@ async function rows(
 async function loadBinding(
   tx: Transaction,
   binding: FinancialAccountBinding,
+  policy: FinancialOverviewRepositoryOptions,
 ): Promise<Date | null> {
   const loaded = await rows(
     tx,
@@ -219,7 +228,15 @@ async function loadBinding(
     row.environment !== binding.environment ||
     row.accountReference !== binding.accountReference ||
     typeof row.isDemo !== "boolean" ||
-    (binding.environment === "live" && row.isDemo)
+    (binding.environment === "live" &&
+      row.isDemo &&
+      !allowsLiveSite({
+        siteId: binding.siteId,
+        isDemo: row.isDemo,
+        mode: binding.environment,
+        applicationEnvironment: policy.applicationEnvironment ?? "test",
+        liveDemoSiteId: policy.liveDemoSiteId,
+      }))
   )
     return unavailable();
   return readDatabaseTimestamp(row.observedAt);
@@ -644,7 +661,10 @@ function aggregate(
         entry.effectKey !== withdrawalCompletedEffectKey(c) ||
         cents(entry.amountCents, true) !== cents(proof.totalDebitCents, true) ||
         proof.totalDebitCents !== proof.netCents + proof.feeCents ||
-        proof.netCents !== w.netCents ||
+        (c.environment === "live" &&
+        c.policyVersion === `asaas-pix-gross-max-v1-${c.feeCents}`
+          ? proof.netCents < Number(w.netCents)
+          : proof.netCents !== w.netCents) ||
         cents(proof.feeCents) > Number(w.feeCents) ||
         proof.totalDebitCents > Number(w.amountCents)
       )
@@ -721,6 +741,47 @@ function aggregate(
   for (const w of data.withdrawals.values()) {
     if (w.state === "COMPLETED" && completedWithdrawals.has(String(w.id)))
       continue;
+    if (["FAILED", "CANCELLED"].includes(String(w.state))) {
+      const proof = w.failureProof as WithdrawalTerminalFailureProof | null;
+      const c = proof?.correlation;
+      const op = c ? data.operations.get(c.operationId) : null;
+      if (
+        !proof ||
+        !c ||
+        !op ||
+        proof.outcome !== w.state ||
+        proof.feeCents !== 0 ||
+        proof.custody !== "immutable-durable" ||
+        proof.verification !== "verified" ||
+        proof.provenance !== "provider" ||
+        c.siteId !== w.siteId ||
+        c.accountId !== w.accountId ||
+        c.environment !== w.environment ||
+        c.withdrawalId !== w.id ||
+        c.amountCents !== w.amountCents ||
+        c.feeCents !== w.feeCents ||
+        c.netCents !== w.netCents ||
+        proof.proofReference !== w.receiptReference ||
+        proof.providerReference !== w.providerReference ||
+        op.kind !== "WITHDRAWAL" ||
+        op.state !== w.state ||
+        op.withdrawalIntentId !== w.id ||
+        op.providerOperationReference !== w.providerReference
+      )
+        return unavailable();
+      const observed = storedTime(proof.observedAt, observedAt);
+      const recorded = storedTime(proof.recordedAt, observedAt);
+      after(recorded, observed);
+      after(observed, storedTime(w.createdAt, observedAt));
+      if (
+        compareDatabaseTimestamps(
+          observed,
+          storedTime(w.resolutionObservedAt, observedAt),
+        ) !== 0
+      )
+        return unavailable();
+      continue;
+    }
     if (!heldStates.includes(String(w.state))) return unavailable();
     sums.pendingCommitmentsCents += BigInt(cents(w.reservedCents));
   }
@@ -735,6 +796,7 @@ export function createFinancialOverviewRepository(
   db: FinancialOverviewRepositoryDatabase,
   options: FinancialOverviewRepositoryOptions,
 ): FinancialOverviewRepository {
+  options = Object.freeze({ ...options });
   const environment = options.environment;
   const now = options.now;
   const transaction = db.transaction.bind(db);
@@ -756,7 +818,7 @@ export function createFinancialOverviewRepository(
       const startedAt = nativeTime(now());
       return await transaction(
         async (tx) => {
-          const observedAt = await loadBinding(tx, binding);
+          const observedAt = await loadBinding(tx, binding, options);
           if (observedAt === null) return null;
           const facts = await loadFacts(tx, binding);
           for (const withdrawal of facts.withdrawals) {
@@ -766,6 +828,18 @@ export function createFinancialOverviewRepository(
             )
               withdrawal.completionProof =
                 await options.loadWithdrawalCompletionProofInTransaction(
+                  tx,
+                  String(withdrawal.id),
+                  String(withdrawal.receiptReference),
+                );
+          }
+          for (const withdrawal of facts.withdrawals) {
+            if (
+              ["FAILED", "CANCELLED"].includes(String(withdrawal.state)) &&
+              options.loadWithdrawalTerminalFailureInTransaction
+            )
+              withdrawal.failureProof =
+                await options.loadWithdrawalTerminalFailureInTransaction(
                   tx,
                   String(withdrawal.id),
                   String(withdrawal.receiptReference),

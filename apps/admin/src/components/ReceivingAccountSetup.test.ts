@@ -106,12 +106,13 @@ describe("receiving account setup", () => {
   } as const;
   it.each([
     ["development", "sandbox", true],
+    ["production", "live", true],
     ["production", "sandbox", false],
     ["development", "live", false],
     [undefined, "sandbox", false],
     ["staging", "sandbox", false],
   ] as const)(
-    "limits incoming confirmation visibility and dispatch to development Sandbox (%s, %s)",
+    "limits incoming confirmation to supported matching application and provider environments (%s, %s)",
     async (environment, mode, allowed) => {
       vi.stubGlobal("__APP_ENV__", environment);
       const values = fixture({ ...createdSetup, mode });

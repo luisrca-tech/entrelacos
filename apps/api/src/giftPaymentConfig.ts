@@ -1,4 +1,5 @@
 import { isIP } from "node:net";
+import { siteIdSchema } from "@entrelacos/contracts";
 import type { DatabaseTarget } from "@entrelacos/database";
 import type { ProviderCredentialKeyring } from "./providerCredentials";
 
@@ -7,6 +8,7 @@ export type GiftPaymentConfig =
   | {
       readonly mode: "sandbox" | "live";
       readonly applicationEnvironment: DatabaseTarget;
+      readonly liveDemoSiteId?: string;
       readonly platformApiKey: string;
       readonly platformAccountId: string;
       readonly platformWalletId: string;
@@ -72,6 +74,14 @@ export function readGiftPaymentConfig(
   applicationEnvironment: DatabaseTarget,
 ): GiftPaymentConfig {
   const mode = env.ASAAS_MODE ?? "disabled";
+  const liveDemoSiteId = env.ASAAS_LIVE_DEMO_SITE_ID;
+  if (
+    liveDemoSiteId !== undefined &&
+    (mode !== "live" ||
+      applicationEnvironment !== "production" ||
+      !siteIdSchema.safeParse(liveDemoSiteId).success)
+  )
+    invalid();
   if (mode === "disabled") return { mode };
   if (
     (mode !== "sandbox" && mode !== "live") ||
@@ -92,12 +102,13 @@ export function readGiftPaymentConfig(
   const authorizationToken = env.ASAAS_WITHDRAWAL_AUTHORIZATION_TOKEN;
   if (
     authorizationToken !== undefined &&
-    (mode !== "sandbox" || !/^[\x21-\x7e]{32,255}$/.test(authorizationToken))
+    !/^[\x21-\x7e]{32,255}$/.test(authorizationToken)
   )
     invalid();
   return {
     mode,
     applicationEnvironment,
+    ...(liveDemoSiteId === undefined ? {} : { liveDemoSiteId }),
     platformApiKey,
     platformAccountId,
     platformWalletId,

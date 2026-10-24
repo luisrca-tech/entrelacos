@@ -229,3 +229,32 @@ it("shows actual terminal debit and fee with the unused maximum returned", () =>
   expect(html).toContain("Taxa efetiva");
   expect(html).toContain("Reserva liberada");
 });
+
+it("shows the actual higher live net after settlement without changing the consent minimum", () => {
+  const html = render({
+    status: "ready",
+    withdrawals: [
+      {
+        ...withdrawal,
+        state: "COMPLETED",
+        feeSemantics: "MAXIMUM_WITH_MINIMUM_NET",
+        settlement: {
+          totalDebitCents: 10000,
+          feeCents: 100,
+          netCents: 9900,
+          releasedCents: 0,
+        },
+      },
+    ],
+  });
+  expect(html).toContain("99,00");
+  expect(html).not.toContain("98,00");
+});
+it("labels the live pre-settlement net as a minimum", () => {
+  const html = render({
+    status: "ready",
+    withdrawals: [{ ...withdrawal, feeSemantics: "MAXIMUM_WITH_MINIMUM_NET" }],
+  });
+  expect(html).toContain("Líquido mínimo");
+  expect(html).toContain("Taxa máxima");
+});

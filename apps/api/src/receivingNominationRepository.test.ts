@@ -556,6 +556,31 @@ describe("durable initial receiving nomination", () => {
       expect(values.tables.operations).toHaveLength(1);
     },
   );
+  it.each(["site-one", "other-site"])(
+    "reads a production showcase scope only under exact policy (%s)",
+    async (liveDemoSiteId) => {
+      const v = fixture();
+      v.state.isDemo = true;
+      const repository = createReceivingNominationRepository(v.db, {
+        ...v.options,
+        mode: "live",
+        applicationEnvironment: "production",
+        liveDemoSiteId,
+      });
+      const read = repository.readNominationScope({
+        siteId: "site-one",
+        operatorUserId: "user-one",
+        environment: "live",
+      });
+      if (liveDemoSiteId === "site-one") await expect(read).resolves.toBeNull();
+      else
+        await expect(read).rejects.toMatchObject({
+          code: "PROVIDER_MODE_UNAVAILABLE",
+        });
+      expect(v.tables.accounts).toHaveLength(0);
+    },
+  );
+
   it("rejects a noncanonical first request inside the empty locked scope without writes", async () => {
     const v = fixture();
     const legacy = withRequest(v.snapshot, "request-one");

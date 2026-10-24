@@ -21,6 +21,7 @@ import {
   readDatabaseTimestamp,
 } from "./databaseTimestamp";
 import { assertRecipientFinancialAction } from "./financialAuthorization";
+import { allowsLiveSite } from "./liveSitePolicy";
 import type { ReceivingTransaction } from "./receivingRepository";
 import { logWithdrawalFailure } from "./withdrawalDiagnostics";
 import {
@@ -41,6 +42,7 @@ import {
   type WithdrawalDispatchAuthority,
   type WithdrawalPostingRepository,
   type WithdrawalPostingResult,
+  type WithdrawalTerminalFailureProof,
   withdrawalCompletedEffectKey,
   withdrawalCorrelation,
   withdrawalInstant,
@@ -62,6 +64,12 @@ export type WithdrawalPostingDatabase = Pick<
   "execute" | "transaction"
 >;
 export interface WithdrawalPostingPorts {
+  loadTerminalFailureInTransaction?(
+    tx: ReceivingTransaction,
+    original: OriginalWithdrawal,
+    fence: DispatchFence,
+    reference: string,
+  ): Promise<WithdrawalTerminalFailureProof | null>;
   loadOriginalHolderConsentInTransaction(
     tx: ReceivingTransaction,
     snapshot: WithdrawalReservationSnapshot,
@@ -85,6 +93,7 @@ export type WithdrawalPostingRepositoryOptions =
   | {
       mode: "sandbox" | "live";
       applicationEnvironment: "development" | "test" | "production";
+      liveDemoSiteId?: string;
       maxAuthAgeMs: number;
       freshnessMs: number;
       leaseOwner: string;
@@ -166,6 +175,7 @@ export function createWithdrawalPostingRepository(
     const mode: unknown = fields.mode?.value;
     const applicationEnvironment: unknown =
       fields.applicationEnvironment?.value;
+    const liveDemoSiteId: unknown = fields.liveDemoSiteId?.value;
     const maxAuthAgeMs: unknown = fields.maxAuthAgeMs?.value;
     const freshnessMs: unknown = fields.freshnessMs?.value;
     const leaseOwner: unknown = fields.leaseOwner?.value;
@@ -175,6 +185,7 @@ export function createWithdrawalPostingRepository(
         (mode === "sandbox" &&
           (applicationEnvironment === "development" ||
             applicationEnvironment === "test"))) &&
+      (liveDemoSiteId === undefined || typeof liveDemoSiteId === "string") &&
       typeof maxAuthAgeMs === "number" &&
       typeof freshnessMs === "number" &&
       typeof leaseDurationMs === "number" &&
@@ -187,6 +198,7 @@ export function createWithdrawalPostingRepository(
       configuration = {
         mode,
         applicationEnvironment,
+        liveDemoSiteId,
         maxAuthAgeMs,
         freshnessMs,
         leaseOwner: owner,
@@ -199,6 +211,18 @@ export function createWithdrawalPostingRepository(
         ),
         transaction: captureWithdrawalCallable(db, "transaction", false),
         ports: {
+          ...(Object.getOwnPropertyDescriptor(
+            ports,
+            "loadTerminalFailureInTransaction",
+          )
+            ? {
+                loadTerminalFailureInTransaction: captureWithdrawalCallable<
+                  NonNullable<
+                    WithdrawalPostingPorts["loadTerminalFailureInTransaction"]
+                  >
+                >(ports, "loadTerminalFailureInTransaction", true),
+              }
+            : {}),
           loadOriginalHolderConsentInTransaction: captureWithdrawalCallable(
             ports,
             "loadOriginalHolderConsentInTransaction",
@@ -510,6 +534,18 @@ export function createWithdrawalPostingRepository(
           micros(resolutionObservedAt) > micros(current)
         )
           deny();
+      } else if (["FAILED", "CANCELLED"].includes(String(row.state))) {
+        if (
+          operation.state !== row.state ||
+          row.reservationState !== "RELEASED" ||
+          row.reservedCents !== 0 ||
+          !providerReference ||
+          !receiptReference ||
+          resolutionObservedAt === null ||
+          micros(resolutionObservedAt) < micros(snapshot.intent.createdAt) ||
+          micros(resolutionObservedAt) > micros(current)
+        )
+          deny();
       } else if (
         !(
           (row.state === "PROCESSING" && operation.state === "PROCESSING") ||
@@ -522,7 +558,7 @@ export function createWithdrawalPostingRepository(
         deny();
     }
     if (
-      row.state !== "COMPLETED" &&
+      !["COMPLETED", "FAILED", "CANCELLED"].includes(String(row.state)) &&
       (row.reservationState !== "HELD" ||
         row.reservedCents !== snapshot.intent.amountCents)
     )
@@ -759,7 +795,14 @@ export function createWithdrawalPostingRepository(
           authority.context.verification !== "verified" ||
           authority.context.accountId !== scope.accountId ||
           authority.context.bankReference !== scope.bankReference ||
-          (c!.mode === "live" && authority.context.isDemo)
+          (c!.mode === "live" &&
+            !allowsLiveSite({
+              siteId: key.siteId,
+              isDemo: authority.context.isDemo,
+              mode: c!.mode,
+              applicationEnvironment: c!.applicationEnvironment,
+              liveDemoSiteId: c!.liveDemoSiteId,
+            }))
         )
           deny();
         same(authority.recentAuth, attempt.recentAuth);
@@ -949,13 +992,17 @@ export function createWithdrawalPostingRepository(
       raw.verification !== "verified" ||
       raw.bankCompleted !== true ||
       raw.currency !== "BRL" ||
-      (original.snapshot.feeQuote.feeSemantics === "MAXIMUM"
+      (["MAXIMUM", "MAXIMUM_WITH_MINIMUM_NET"].includes(
+        original.snapshot.feeQuote.feeSemantics ?? "",
+      )
         ? cents(raw.totalDebitCents, true) > original.correlation.amountCents ||
           cents(raw.feeCents) > original.correlation.feeCents
         : cents(raw.totalDebitCents, true) !==
             original.correlation.amountCents ||
           cents(raw.feeCents) !== original.correlation.feeCents) ||
-      cents(raw.netCents, true) !== original.correlation.netCents ||
+      (original.snapshot.feeQuote.feeSemantics === "MAXIMUM_WITH_MINIMUM_NET"
+        ? cents(raw.netCents, true) < original.correlation.netCents
+        : cents(raw.netCents, true) !== original.correlation.netCents) ||
       cents(raw.totalDebitCents, true) !==
         cents(raw.feeCents) + cents(raw.netCents, true) ||
       !["provider", "simulation"].includes(String(raw.provenance)) ||
@@ -1185,8 +1232,9 @@ export function createWithdrawalPostingRepository(
             await u.clock(),
           );
           const provider =
-            observation.outcome === "ACCEPTED"
-              ? observation.providerReference
+            observation.outcome === "ACCEPTED" ||
+            (observation.outcome === "REJECTED" && observation.proofReference)
+              ? (observation.providerReference ?? null)
               : stored.providerReference;
           if (
             stored.providerReference !== null &&
@@ -1197,6 +1245,71 @@ export function createWithdrawalPostingRepository(
             await noReferenceCollision(u, original, provider);
           if (stored.state === "COMPLETED") return stored;
           const s = original.correlation;
+          if (
+            observation.outcome === "REJECTED" &&
+            observation.proofReference
+          ) {
+            const loader = c!.ports.loadTerminalFailureInTransaction;
+            if (!loader) deny();
+            const retained = captureWithdrawalValue(
+              await genuineWithdrawalPromise(
+                loader(u.tx, original, fence, observation.proofReference),
+              ),
+            );
+            if (
+              !retained ||
+              !["FAILED", "CANCELLED"].includes(retained.outcome) ||
+              observation.reason !== `ASAAS_TRANSFER_${retained.outcome}` ||
+              retained.providerReference !== provider ||
+              retained.proofReference !== observation.proofReference ||
+              retained.observedAt !== observation.observedAt ||
+              retained.custody !== "immutable-durable" ||
+              retained.verification !== "verified" ||
+              retained.provenance !== "provider" ||
+              retained.feeCents !== 0 ||
+              micros(retained.observedAt) <
+                micros(original.snapshot.intent.createdAt) ||
+              micros(retained.recordedAt) < micros(retained.observedAt) ||
+              micros(retained.recordedAt) > micros(await u.clock())
+            )
+              deny();
+            same(retained.correlation, original.correlation);
+            same(retained.holderBinding, original.holderBinding);
+            same(retained.fence, fence);
+            if (["FAILED", "CANCELLED"].includes(stored.state)) {
+              if (
+                stored.state !== retained.outcome ||
+                stored.receiptReference !== retained.proofReference ||
+                stored.resolutionObservedAt !== retained.observedAt
+              )
+                deny();
+              return stored;
+            }
+            const at = await u.clock();
+            await write(
+              u,
+              sql`UPDATE ${withdrawalIntent} w SET state=${retained.outcome},reservation_state='RELEASED',reserved_cents=0,provider_reference=${provider},receipt_reference=${retained.proofReference},resolution_observed_at=${retained.observedAt}::timestamptz,updated_at=${withdrawalInstant(at)}::timestamptz WHERE w.id=${s.withdrawalId} AND w.site_id=${s.siteId} AND w.account_id=${s.accountId} AND w.environment=${s.environment} AND w.request_hash=${s.requestHash} AND w.state IN ('PROCESSING','UNKNOWN') AND w.reservation_state='HELD' AND w.reserved_cents=${s.amountCents} AND w.receipt_reference IS NULL AND w.resolution_observed_at IS NULL RETURNING id`,
+              s.withdrawalId,
+            );
+            await write(
+              u,
+              sql`UPDATE ${financialOperation} op SET state=${retained.outcome},provider_operation_reference=${provider},last_error_code=${observation.reason},updated_at=${withdrawalInstant(at)}::timestamptz WHERE op.id=${s.operationId} AND op.site_id=${s.siteId} AND op.account_id=${s.accountId} AND op.environment=${s.environment} AND op.state IN ('PROCESSING','UNKNOWN') AND op.attempts=1 AND op.lease_owner=${fence.leaseOwner} AND op.lease_token=${fence.leaseToken} AND op.lease_expires_at=${fence.leaseExpiresAt}::timestamptz RETURNING id`,
+              s.operationId,
+            );
+            const result = await load(
+              u,
+              identity({ siteId: s.siteId, requestId: s.requestId }),
+              true,
+            );
+            if (
+              !result ||
+              result.state !== retained.outcome ||
+              result.reservedCents !== 0
+            )
+              deny();
+            return result;
+          }
+          if (["FAILED", "CANCELLED"].includes(stored.state)) return stored;
           const state =
             observation.outcome === "ACCEPTED" && stored.state !== "UNKNOWN"
               ? "PROCESSING"

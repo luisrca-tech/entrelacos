@@ -29,6 +29,17 @@ import type {
 } from "./ReceivingSetup";
 import { receivingPageHref } from "./receivingNavigation";
 
+function supportsIncomingVerification(
+  mode: string | null | undefined,
+): boolean {
+  return (
+    showSandboxNotice(mode) ||
+    (typeof __APP_ENV__ !== "undefined" &&
+      __APP_ENV__ === "production" &&
+      mode === "live")
+  );
+}
+
 export type ReceivingAccountSetupState = {
   status: "loading" | "ready" | "submitting" | "denied" | "unavailable";
   setup: ReceivingSetupContext | null;
@@ -217,7 +228,7 @@ export function createReceivingAccountSetupController(
     async verifyIncoming(): Promise<ReceivingReadiness | undefined> {
       if (
         incomingInFlight ||
-        !showSandboxNotice(state.setup?.mode) ||
+        !supportsIncomingVerification(state.setup?.mode) ||
         !state.setup?.consentRecorded ||
         owner.isSuspended?.() ||
         !incomingGuard.isCurrent()
@@ -230,7 +241,7 @@ export function createReceivingAccountSetupController(
         const setup = state.setup;
         if (
           !setup?.consentRecorded ||
-          !showSandboxNotice(setup.mode) ||
+          !supportsIncomingVerification(setup.mode) ||
           !incomingGuard.isCurrent() ||
           owner.isSuspended?.()
         )
@@ -745,7 +756,7 @@ export function ReceivingAccountSetupView({
               </p>
             )}
           </details>
-          {showSandboxNotice(setup.mode) &&
+          {supportsIncomingVerification(setup.mode) &&
             !receivingReady &&
             !owner &&
             setup.isHolder &&

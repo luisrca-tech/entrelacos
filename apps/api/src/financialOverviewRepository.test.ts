@@ -21,13 +21,13 @@ const zeros = {
   withdrawnCents: 0,
   refundedCents: 0,
 };
-function fixture() {
+function fixture(live = false) {
   const binding: FinancialAccountBinding = {
     provider: "ASAAS",
     siteId: "site-one",
     accountBindingId: "account-one",
     accountReference: "remote_one",
-    environment: "sandbox",
+    environment: live ? "live" : "sandbox",
   };
   const scope = {
     site_id: binding.siteId,
@@ -204,7 +204,7 @@ function fixture() {
   );
   const db = drizzle({ query } as unknown as NodePgClient);
   const options = {
-    environment: "sandbox" as "sandbox" | "live",
+    environment: binding.environment,
     now: () => new Date(clock.value),
   };
   return {
@@ -368,6 +368,21 @@ async function denied(values: ReturnType<typeof fixture>) {
     message: "Stored financial totals are unavailable",
   });
 }
+it.each([undefined, "foreign-site", "site-one"])(
+  "reads live showcase totals only with the same production site opt-in (%s)",
+  async (liveDemoSiteId) => {
+    const v = fixture(true);
+    v.site.is_demo = true;
+    const repository = createFinancialOverviewRepository(v.db, {
+      ...v.options,
+      applicationEnvironment: "production",
+      liveDemoSiteId,
+    });
+    if (liveDemoSiteId === v.binding.siteId)
+      expect(await repository.loadStoredTotals(v.binding)).not.toBeNull();
+    else await expect(repository.loadStoredTotals(v.binding)).rejects.toThrow();
+  },
+);
 describe("authoritative stored financial overview totals", () => {
   it.each([
     [99, 9940],
@@ -1221,8 +1236,8 @@ describe("stored balance consistency after the provider GET", () => {
   });
 });
 
-function completedWithdrawal(receiptReference: string) {
-  const f = fixture();
+function completedWithdrawal(receiptReference: string, live = false) {
+  const f = fixture(live);
   const w = hold(f, "COMPLETED");
   Object.assign(w, {
     reservation_state: "CONSUMED",
@@ -1332,6 +1347,46 @@ it.each(["proofReference", "receiptReference", "providerReference"] as const)(
       `asaas-transfer:${"a".repeat(64)}`,
     );
     proof[field] = "foreign-reference";
+    await expect(repository.loadStoredTotals(f.binding)).rejects.toMatchObject({
+      code: "FINANCIAL_OVERVIEW_REPOSITORY_UNAVAILABLE",
+    });
+  },
+);
+
+it("counts a live gross-budget debit with the native net above the frozen minimum", async () => {
+  const { f, proof, repository } = completedWithdrawal(
+    `asaas-transfer:${"a".repeat(64)}`,
+    true,
+  );
+  Object.assign(proof, { totalDebitCents: 5000, netCents: 5000 });
+  Object.assign(proof.correlation, {
+    policyVersion: "asaas-pix-gross-max-v1-100",
+  });
+  f.tables.ledgers[0].amount_cents = 5000;
+  expect((await repository.loadStoredTotals(f.binding))?.totals).toMatchObject({
+    withdrawnCents: 5000,
+    pendingCommitmentsCents: 0,
+  });
+});
+it.each(["FAILED", "CANCELLED"])(
+  "excludes only a custody-proven zero-fee %s released reserve",
+  async (state) => {
+    const { f, w, proof } = completedWithdrawal(
+      `asaas-transfer:${"a".repeat(64)}`,
+    );
+    w.state = state;
+    w.reservation_state = "RELEASED";
+    f.tables.operations[0].state = state;
+    f.tables.ledgers = [];
+    const failure = { ...proof, outcome: state };
+    const repository = createFinancialOverviewRepository(f.db, {
+      ...f.options,
+      loadWithdrawalTerminalFailureInTransaction: async () => failure as never,
+    });
+    expect(
+      (await repository.loadStoredTotals(f.binding))?.totals,
+    ).toMatchObject({ withdrawnCents: 0, pendingCommitmentsCents: 0 });
+    failure.providerReference = "foreign-transfer";
     await expect(repository.loadStoredTotals(f.binding)).rejects.toMatchObject({
       code: "FINANCIAL_OVERVIEW_REPOSITORY_UNAVAILABLE",
     });

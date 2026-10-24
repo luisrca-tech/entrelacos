@@ -15,13 +15,14 @@ import {
 } from "./asaasHttpClient";
 import type { FinancialAccountBinding } from "./financialOverview";
 import type { GiftPaymentInboxClaim } from "./giftPaymentInboxRepository";
+import { allowsLiveSite, type LiveSitePolicy } from "./liveSitePolicy";
 import {
   decryptProviderCredential,
   type ProviderCredentialContext,
   type ProviderCredentialKeyring,
 } from "./providerCredentials";
 
-export interface AsaasStoredAccountReaderOptions {
+export interface AsaasStoredAccountReaderOptions extends LiveSitePolicy {
   mode: "disabled" | "sandbox" | "live";
   applicationEnvironment: "development" | "test" | "production";
   keyring: ProviderCredentialKeyring;
@@ -111,6 +112,7 @@ export function createAsaasStoredAccountReader(
     const {
       mode,
       applicationEnvironment,
+      liveDemoSiteId,
       fetch,
       timeoutMs,
       maxResponseBytes,
@@ -234,7 +236,15 @@ export function createAsaasStoredAccountReader(
         row.provider !== "ASAAS" ||
         row.accountReference !== binding.accountReference ||
         typeof row.isDemo !== "boolean" ||
-        (mode === "live" && row.isDemo) ||
+        (mode === "live" &&
+          row.isDemo &&
+          !allowsLiveSite({
+            siteId: binding.siteId,
+            isDemo: row.isDemo,
+            mode,
+            applicationEnvironment,
+            liveDemoSiteId,
+          })) ||
         row.credentialVersion !== 1 ||
         !localId(row.credentialKeyId) ||
         !keyring.has(row.credentialKeyId) ||

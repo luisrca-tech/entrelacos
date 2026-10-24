@@ -287,7 +287,7 @@ const guestAccess = {
     <Fragment slot="admin-access">{access.siteId && access.apiOrigin && access.panelOrigin && <AdminRecognition {...access} client:load />}</Fragment>
     <Fragment slot="after-main">
       <GiftSection content={{id:"gifts",eyebrow:"Presentes",title:"Um carinho para nossa nova história.",description:"Escolha um presente simbólico para celebrar este novo capítulo com a gente."}}>
-        <GiftRegistry {...guestAccess} demo={true} client:only="react" />
+        <GiftRegistry {...guestAccess} demo={true} liveDemoSiteId={import.meta.env.PUBLIC_LIVE_DEMO_SITE_ID} client:only="react" />
       </GiftSection>
       <section
         id="guest-access"

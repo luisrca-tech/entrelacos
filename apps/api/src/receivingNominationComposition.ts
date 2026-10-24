@@ -7,6 +7,7 @@ import {
   createFinancialReauthentication,
   type FinancialReauthenticationOptions,
 } from "./financialReauthentication";
+import type { LiveSitePolicy } from "./liveSitePolicy";
 import {
   createReceivingNominationService,
   type ReceivingNominationConfiguration,
@@ -16,7 +17,7 @@ import {
 } from "./receivingNomination";
 import { createReceivingNominationContext } from "./receivingNominationContext";
 
-export interface ReceivingNominationCompositionOptions {
+export interface ReceivingNominationCompositionOptions extends LiveSitePolicy {
   standardAuth: AuthInstance;
   authentication: AuthFactoryOptions;
   configuration: ReceivingNominationConfiguration;
@@ -95,7 +96,12 @@ export function createReceivingNominationComposition(
     const proofOptions = { ...options.reauthentication, now };
     const financialReauthentication =
       createFinancialReauthentication(proofOptions);
+    const liveSitePolicy =
+      options.liveDemoSiteId === undefined
+        ? {}
+        : { liveDemoSiteId: options.liveDemoSiteId };
     const receivingNomination = createReceivingNominationService({
+      ...liveSitePolicy,
       mode: configuration.mode,
       applicationEnvironment: configuration.applicationEnvironment,
       policyVersion: configuration.policyVersion,
@@ -107,6 +113,7 @@ export function createReceivingNominationComposition(
       admission,
     });
     const receivingNominationContext = createReceivingNominationContext({
+      ...liveSitePolicy,
       configuration,
       repository,
       loadSite,

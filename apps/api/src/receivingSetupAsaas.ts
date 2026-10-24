@@ -223,7 +223,6 @@ export function createReceivingSetupAsaasObserver(
             return unavailable();
           let verificationFacts: ReceivingSetupAsaasObservation["verificationFacts"];
           if (options.includeVerificationFacts === true) {
-            if (binding.environment !== "sandbox") return unavailable();
             const accountNumber = await get(
               "/myAccount/accountNumber",
               abort.signal,

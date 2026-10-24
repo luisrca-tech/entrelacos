@@ -50,7 +50,9 @@ function WithdrawalRecord({ withdrawal }: { withdrawal: WithdrawalIntent }) {
         </time>
       </TableCell>
       <TableCell className="whitespace-nowrap font-semibold">
-        {currency.format(withdrawal.netCents / 100)}
+        {currency.format(
+          (withdrawal.settlement?.netCents ?? withdrawal.netCents) / 100,
+        )}
       </TableCell>
       <TableCell>
         <Badge variant="outline">{stateLabels[withdrawal.state]}</Badge>
@@ -71,7 +73,7 @@ function WithdrawalRecord({ withdrawal }: { withdrawal: WithdrawalIntent }) {
                 [
                   withdrawal.settlement
                     ? "Valor debitado"
-                    : withdrawal.feeSemantics === "MAXIMUM"
+                    : withdrawal.feeSemantics !== undefined
                       ? "Débito máximo aprovado"
                       : "Valor solicitado",
                   currency.format(
@@ -82,7 +84,7 @@ function WithdrawalRecord({ withdrawal }: { withdrawal: WithdrawalIntent }) {
                 [
                   withdrawal.settlement
                     ? "Taxa efetiva"
-                    : withdrawal.feeSemantics === "MAXIMUM"
+                    : withdrawal.feeSemantics !== undefined
                       ? "Taxa máxima"
                       : "Taxa",
                   currency.format(
@@ -90,7 +92,16 @@ function WithdrawalRecord({ withdrawal }: { withdrawal: WithdrawalIntent }) {
                       100,
                   ),
                 ],
-                ["Valor líquido", currency.format(withdrawal.netCents / 100)],
+                [
+                  withdrawal.feeSemantics === "MAXIMUM_WITH_MINIMUM_NET" &&
+                  !withdrawal.settlement
+                    ? "Líquido mínimo"
+                    : "Valor líquido",
+                  currency.format(
+                    (withdrawal.settlement?.netCents ?? withdrawal.netCents) /
+                      100,
+                  ),
+                ],
                 ["Status", stateLabels[withdrawal.state]],
               ].map(([label, value]) => (
                 <div key={label} className="grid gap-1">

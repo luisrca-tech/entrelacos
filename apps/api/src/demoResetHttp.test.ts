@@ -88,6 +88,21 @@ describe("demo reset HTTP boundary", () => {
     );
   });
 
+  it("passes the server showcase policy to reset protection without browser overrides", async () => {
+    const response = await createDemoResetHttpRouter({
+      auth: {} as never,
+      db,
+      adminOrigin,
+      liveDemoSiteId: "site-demo",
+    }).request(request());
+    expect(response.status).toBe(200);
+    expect(mocks.resetDemoSite).toHaveBeenCalledWith(
+      db,
+      { userId: "owner-1", role: "OWNER" },
+      "site-demo",
+      expect.objectContaining({ liveDemoSiteId: "site-demo" }),
+    );
+  });
   it("passes the configured clock without evaluating it before the reset lock", async () => {
     const now = vi.fn(() => new Date("2028-04-01T12:00:00.000Z"));
     const response = await createDemoResetHttpRouter({

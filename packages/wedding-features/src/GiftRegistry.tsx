@@ -58,6 +58,7 @@ export function GiftRegistry(props: GiftRegistryProps) {
         props.apiOrigin,
         props.siteId,
         props.demo === true,
+        props.liveDemoSiteId ?? null,
         fetcherIdentity(props.fetcher),
       ])}
       {...props}
@@ -84,15 +85,22 @@ function GiftRegistryRuntime({
   apiOrigin,
   fetcher,
   demo = false,
+  liveDemoSiteId,
   catalogOwner,
 }: GiftRegistryProps & { catalogOwner: { current: CatalogOwner } }) {
   const api = useMemo(() => {
     try {
-      return new WeddingGiftsApi({ siteId, apiOrigin, fetcher, demo });
+      return new WeddingGiftsApi({
+        siteId,
+        apiOrigin,
+        fetcher,
+        demo,
+        liveDemoSiteId,
+      });
     } catch {
       return null;
     }
-  }, [siteId, apiOrigin, fetcher, demo]);
+  }, [siteId, apiOrigin, fetcher, demo, liveDemoSiteId]);
   const root = useRef<HTMLDivElement>(null);
   const inFlight = useRef(false);
   const recoveryInFlight = useRef(false);

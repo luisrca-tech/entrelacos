@@ -1294,7 +1294,7 @@ export const withdrawalAuthorizationCandidate = pgTable(
       .onUpdate("restrict"),
     check(
       "withdrawal_authorization_candidate_environment_check",
-      sql`${table.environment} = 'sandbox'`,
+      sql`${table.environment} IN ('sandbox', 'live')`,
     ),
     check(
       "withdrawal_authorization_candidate_hash_check",

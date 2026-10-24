@@ -36,6 +36,7 @@ import { createGiftPaymentWorkerLoop } from "./giftPaymentWorkerLoop";
 import { findPublishedGiftForQuote } from "./giftQuoteLookup";
 import { createGiftQuoteRepository } from "./giftQuoteRepository";
 import { createGiftQuoteService } from "./giftQuotes";
+import { allowsLiveSite } from "./liveSitePolicy";
 import {
   decryptProviderCredential,
   type ProviderCredentialContext,
@@ -45,7 +46,10 @@ import {
   loadReceivingContextInTransaction,
   readReceivingReadiness,
 } from "./receivingRepository";
-import { loadSandboxDemoPricing } from "./sandboxDemoPricing";
+import {
+  loadLiveReceivingPricing,
+  loadSandboxDemoPricing,
+} from "./sandboxDemoPricing";
 import { createWithdrawalComposition } from "./withdrawalComposition";
 import { createWithdrawalHistoryRepository } from "./withdrawalHistoryRepository";
 
@@ -97,6 +101,10 @@ export function createGiftPaymentComposition(
   )
     return unavailable();
   const environment = config.mode;
+  const liveSitePolicy = Object.freeze({
+    applicationEnvironment: config.applicationEnvironment,
+    liveDemoSiteId: config.liveDemoSiteId,
+  });
   const keyring = new Map(
     [...config.credentialKeyring].map(([id, key]) => [id, new Uint8Array(key)]),
   );
@@ -108,14 +116,14 @@ export function createGiftPaymentComposition(
   const instanceId = randomUUID();
   const receiving = Object.freeze({
     mode: environment,
-    applicationEnvironment: config.applicationEnvironment,
+    ...liveSitePolicy,
     freshnessMs: 300_000,
     ...(options.refreshReceiving ? { refresh: options.refreshReceiving } : {}),
     now,
   });
   const reader = createAsaasStoredAccountReader(db, {
     mode: environment,
-    applicationEnvironment: config.applicationEnvironment,
+    ...liveSitePolicy,
     keyring,
     fetch,
     timeoutMs: 15_000,
@@ -142,6 +150,7 @@ export function createGiftPaymentComposition(
     loadReceivingContext(db, siteId, receiving);
   const gift = (siteId: string, giftId: string) =>
     findPublishedGiftForQuote(db, siteId, giftId, {
+      ...liveSitePolicy,
       now,
       readReadiness: (id) => readReceivingReadiness(db, id, receiving),
     });
@@ -177,6 +186,34 @@ export function createGiftPaymentComposition(
             { readAccountFees: reader.getAccountFees, now },
           );
         }
+      }
+      if (
+        environment === "live" &&
+        config.applicationEnvironment === "production"
+      ) {
+        const selected = await storedAccount(
+          scope.siteId,
+          scope.accountReference,
+        );
+        if (
+          selected.account.operatorReference !== scope.operatorReference ||
+          selected.account.recipientReference !== scope.recipientReference
+        )
+          return null;
+        return loadLiveReceivingPricing(
+          scope,
+          {
+            provider: "ASAAS",
+            siteId: scope.siteId,
+            accountBindingId: selected.account.id,
+            accountReference: scope.accountReference,
+            environment: "live",
+            isDemo: selected.isDemo,
+            applicationEnvironment: "production",
+            liveDemoSiteId: liveSitePolicy.liveDemoSiteId,
+          },
+          { readAccountFees: reader.getAccountFees, now },
+        );
       }
       return fees.loadPricingPolicy(scope);
     },
@@ -226,7 +263,14 @@ export function createGiftPaymentComposition(
       row.account.provider !== "ASAAS" ||
       row.account.isCurrent !== true ||
       typeof row.isDemo !== "boolean" ||
-      (environment === "live" && row.isDemo) ||
+      (environment === "live" &&
+        row.isDemo &&
+        !allowsLiveSite({
+          siteId,
+          isDemo: row.isDemo,
+          mode: environment,
+          ...liveSitePolicy,
+        })) ||
       !row.account.accountReference ||
       (accountReference !== undefined &&
         row.account.accountReference !== accountReference)
@@ -245,13 +289,25 @@ export function createGiftPaymentComposition(
       command.siteId,
       binding.accountReference,
     );
+    const developmentDemo =
+      config.applicationEnvironment === "development" &&
+      environment === "sandbox" &&
+      isDemo;
+    const liveRecipient = allowsLiveSite({
+      siteId: command.siteId,
+      isDemo,
+      mode: environment,
+      ...liveSitePolicy,
+    });
     if (
-      (command.quoteSnapshot.pricing.provenance === "local-test" ||
-        command.quoteSnapshot.pricing.policy.feeBasis ===
-          "OBSERVED_ESTIMATE") &&
-      (config.applicationEnvironment !== "development" ||
-        environment !== "sandbox" ||
-        !isDemo)
+      (command.quoteSnapshot.pricing.provenance === "local-test" &&
+        !developmentDemo) ||
+      (command.quoteSnapshot.pricing.policy.feeBasis === "OBSERVED_ESTIMATE" &&
+        !developmentDemo &&
+        !(
+          liveRecipient &&
+          command.quoteSnapshot.pricing.provenance === "provider"
+        ))
     )
       return unavailable();
     if (
@@ -337,13 +393,14 @@ export function createGiftPaymentComposition(
   const webhookRepository = createAsaasWebhookRepository(db, environment);
   const webhook = createAsaasWebhookReceiver({
     mode: environment,
-    applicationEnvironment: config.applicationEnvironment,
+    ...liveSitePolicy,
     resolveBinding: webhookRepository.resolveBinding,
     repository: webhookRepository,
     now,
     generateId: () => randomUUID(),
   });
   const inbox = createGiftPaymentInboxRepository(db, {
+    ...liveSitePolicy,
     environment,
     instanceId,
     leaseMs: 60_000,
@@ -366,6 +423,7 @@ export function createGiftPaymentComposition(
     }),
   });
   const lifecycle = createGiftCheckoutLifecycleWorker({
+    ...liveSitePolicy,
     db,
     environment,
     instanceId,
@@ -373,6 +431,7 @@ export function createGiftPaymentComposition(
     now,
   });
   const restrictions = createGiftPaymentRestrictionWorker({
+    ...liveSitePolicy,
     db,
     environment,
     instanceId,
@@ -405,8 +464,15 @@ export function createGiftPaymentComposition(
     maxRetryDelayMs: 30_000,
   });
   const financeRepository = createFinancialOverviewRepository(db, {
+    ...liveSitePolicy,
     environment,
     now,
+    ...(withdrawals.loadTerminalFailureInTransaction
+      ? {
+          loadWithdrawalTerminalFailureInTransaction:
+            withdrawals.loadTerminalFailureInTransaction,
+        }
+      : {}),
     ...(withdrawals.loadCompletionProofInTransaction
       ? {
           loadWithdrawalCompletionProofInTransaction:
@@ -415,6 +481,7 @@ export function createGiftPaymentComposition(
       : {}),
   });
   const withdrawalHistory = createWithdrawalHistoryRepository(db, {
+    ...liveSitePolicy,
     mode: environment,
   });
   let closing: Promise<void> | undefined;

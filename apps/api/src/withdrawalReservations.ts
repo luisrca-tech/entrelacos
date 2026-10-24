@@ -31,6 +31,7 @@ import {
   type FinancialRecipientBinding,
   type RecentFinancialAuthenticationEvidence,
 } from "./financialAuthorization";
+import { allowsLiveSite } from "./liveSitePolicy";
 import { ReceivingReadinessServiceError } from "./receivingReadiness";
 import { logWithdrawalFailure } from "./withdrawalDiagnostics";
 
@@ -72,7 +73,7 @@ export type WithdrawalPresentationScope = Omit<
 
 export interface WithdrawalFeeQuote extends WithdrawalFeeScope {
   feeCents: number;
-  feeSemantics?: "MAXIMUM";
+  feeSemantics?: "MAXIMUM" | "MAXIMUM_WITH_MINIMUM_NET";
   policyVersion: string;
   provenance: "provider" | "simulation";
   verification: "verified" | "unverified";
@@ -94,7 +95,7 @@ export interface WithdrawalReservationSnapshot {
   readonly authenticationAuditHash: string;
   readonly feeQuote: {
     readonly feeCents: number;
-    readonly feeSemantics?: "MAXIMUM";
+    readonly feeSemantics?: "MAXIMUM" | "MAXIMUM_WITH_MINIMUM_NET";
     readonly policyVersion: string;
     readonly provenance: "provider" | "simulation";
     readonly observedAt: string;
@@ -350,8 +351,13 @@ export function readWithdrawalConsentSnapshot(
     ]);
     const feeQuote: WithdrawalConsentSnapshot["feeQuote"] = {
       feeCents: cents(f.feeCents),
-      ...(f.feeSemantics === "MAXIMUM"
-        ? { feeSemantics: "MAXIMUM" as const }
+      ...(f.feeSemantics === "MAXIMUM" ||
+      f.feeSemantics === "MAXIMUM_WITH_MINIMUM_NET"
+        ? {
+            feeSemantics: f.feeSemantics as
+              | "MAXIMUM"
+              | "MAXIMUM_WITH_MINIMUM_NET",
+          }
         : {}),
       policyVersion: id(f.policyVersion),
       provenance: f.provenance as "provider" | "simulation",
@@ -362,7 +368,9 @@ export function readWithdrawalConsentSnapshot(
     if (
       feeQuote.feeCents !== preview.feeCents ||
       feeQuote.feeSemantics !== preview.feeSemantics ||
-      (f.feeSemantics !== undefined && f.feeSemantics !== "MAXIMUM") ||
+      (f.feeSemantics !== undefined &&
+        f.feeSemantics !== "MAXIMUM" &&
+        f.feeSemantics !== "MAXIMUM_WITH_MINIMUM_NET") ||
       (presentation.payout !== undefined &&
         (preview.payoutRecipientName !== presentation.payout.ownerName ||
           preview.maskedDestination !==
@@ -433,6 +441,7 @@ export type WithdrawalReservationOptions =
   | {
       mode: Environment;
       applicationEnvironment: "development" | "test" | "production";
+      liveDemoSiteId?: string;
       maxAuthAgeMs: number;
       freshnessMs: number;
       now(): Date;
@@ -647,7 +656,9 @@ export function readWithdrawalReservationSnapshot(
       (raw.environment !== "sandbox" && raw.environment !== "live") ||
       intent.mode !== raw.environment ||
       feeCents !== intent.feeCents ||
-      (fee.feeSemantics !== undefined && fee.feeSemantics !== "MAXIMUM") ||
+      (fee.feeSemantics !== undefined &&
+        fee.feeSemantics !== "MAXIMUM" &&
+        fee.feeSemantics !== "MAXIMUM_WITH_MINIMUM_NET") ||
       fee.feeSemantics !== intent.feeSemantics ||
       BigInt(intent.feeCents) + BigInt(intent.netCents) !==
         BigInt(intent.amountCents) ||
@@ -678,8 +689,13 @@ export function readWithdrawalReservationSnapshot(
       authenticationAuditHash: raw.authenticationAuditHash,
       feeQuote: Object.freeze({
         feeCents,
-        ...(fee.feeSemantics === "MAXIMUM"
-          ? { feeSemantics: "MAXIMUM" as const }
+        ...(fee.feeSemantics === "MAXIMUM" ||
+        fee.feeSemantics === "MAXIMUM_WITH_MINIMUM_NET"
+          ? {
+              feeSemantics: fee.feeSemantics as
+                | "MAXIMUM"
+                | "MAXIMUM_WITH_MINIMUM_NET",
+            }
           : {}),
         policyVersion: id(fee.policyVersion),
         provenance: fee.provenance,
@@ -800,6 +816,8 @@ function contextScope(
   value: unknown,
   siteId: string,
   mode: Environment,
+  applicationEnvironment: "development" | "test" | "production",
+  liveDemoSiteId?: string,
 ): WithdrawalReservationContext {
   const raw = record(value);
   if (
@@ -809,7 +827,16 @@ function contextScope(
     (raw.verification !== "verified" && raw.verification !== "unverified")
   )
     return deny("WITHDRAWAL_UNAVAILABLE");
-  if (mode === "live" && raw.isDemo)
+  if (
+    mode === "live" &&
+    !allowsLiveSite({
+      siteId,
+      isDemo: raw.isDemo,
+      mode,
+      applicationEnvironment,
+      liveDemoSiteId,
+    })
+  )
     return deny("PROVIDER_MODE_UNAVAILABLE", 409);
   const binding =
     raw.recipientBinding === null ? null : record(raw.recipientBinding);
@@ -909,7 +936,9 @@ function feeObservation(
     if (
       Object.entries(scope).some(([key, expected]) => raw[key] !== expected) ||
       raw.verification !== "verified" ||
-      (raw.feeSemantics !== undefined && raw.feeSemantics !== "MAXIMUM") ||
+      (raw.feeSemantics !== undefined &&
+        raw.feeSemantics !== "MAXIMUM" &&
+        raw.feeSemantics !== "MAXIMUM_WITH_MINIMUM_NET") ||
       (raw.provenance !== "provider" && raw.provenance !== "simulation") ||
       (raw.provenance === "simulation" &&
         (scope.environment !== "sandbox" ||
@@ -930,8 +959,13 @@ function feeObservation(
     return Object.freeze({
       feeCents,
       policyVersion: id(raw.policyVersion),
-      ...(raw.feeSemantics === "MAXIMUM"
-        ? { feeSemantics: "MAXIMUM" as const }
+      ...(raw.feeSemantics === "MAXIMUM" ||
+      raw.feeSemantics === "MAXIMUM_WITH_MINIMUM_NET"
+        ? {
+            feeSemantics: raw.feeSemantics as
+              | "MAXIMUM"
+              | "MAXIMUM_WITH_MINIMUM_NET",
+          }
         : {}),
       provenance: raw.provenance,
       observedAt: new Date(observed).toISOString(),
@@ -1093,6 +1127,7 @@ export function createWithdrawalReservationService(
       };
     const mode = options.mode;
     const applicationEnvironment = options.applicationEnvironment;
+    const liveDemoSiteId = options.liveDemoSiteId;
     if (
       (mode !== "sandbox" && mode !== "live") ||
       (mode === "live" && applicationEnvironment !== "production")
@@ -1263,6 +1298,8 @@ export function createWithdrawalReservationService(
             await loadContext(selected.actor.siteId),
             selected.actor.siteId,
             mode,
+            applicationEnvironment,
+            liveDemoSiteId,
           );
           const at = clock();
           const binding = context.recipientBinding;
@@ -1525,6 +1562,8 @@ export function createWithdrawalReservationService(
               await loadContext(currentActor.siteId),
               currentActor.siteId,
               mode,
+              applicationEnvironment,
+              liveDemoSiteId,
             );
             const scope = receivingScope(
               context,
@@ -1659,6 +1698,8 @@ export function createWithdrawalReservationService(
                 locked.context,
                 currentActor.siteId,
                 mode,
+                applicationEnvironment,
+                liveDemoSiteId,
               );
               const scope = receivingScope(
                 lockedContext,

@@ -299,8 +299,6 @@ export function readGiftQuoteSnapshot(
     !pricing ||
     !pricing.policy ||
     quote.data.feeAllocation !== pricing.policy.feeAllocation ||
-    (pricing.policy.feeBasis === "OBSERVED_ESTIMATE" &&
-      binding.environment !== "sandbox") ||
     !sameBinding(binding, pricing) ||
     pricing.verification !== "verified" ||
     !["provider", "local-test"].includes(pricing.provenance) ||

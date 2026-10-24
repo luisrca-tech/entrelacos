@@ -35,7 +35,10 @@ import { allowsLocalPublicOrigin } from "./localPublicOrigin";
 import { type SiteAccessActor, SiteAccessDeniedError } from "./siteAccess";
 
 export type GiftsHttpOptions = AuthHttpOptions &
-  Pick<GiftServiceOptions, "readReadiness">;
+  Pick<
+    GiftServiceOptions,
+    "readReadiness" | "applicationEnvironment" | "liveDemoSiteId"
+  >;
 
 function problem(
   context: Context,
@@ -100,6 +103,8 @@ export function createGiftsHttpRouter(options: GiftsHttpOptions) {
   const router = new Hono<{ Variables: { actor: SiteAccessActor } }>();
   const services: GiftServiceOptions = {
     readReadiness: options.readReadiness,
+    applicationEnvironment: options.applicationEnvironment,
+    liveDemoSiteId: options.liveDemoSiteId,
     now: options.now,
   };
   router.onError((error, context) => {

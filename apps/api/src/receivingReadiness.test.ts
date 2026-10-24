@@ -70,6 +70,21 @@ describe("receiving readiness", () => {
     });
   });
 
+  it("allows native live evidence only for the exact opted-in production showcase", () => {
+    const input = { ...readyInput(), isDemo: true, liveDemoSiteId: "site-one" };
+    expect(evaluateReceivingReadiness(input).state).toBe("READY");
+    expect(
+      evaluateReceivingReadiness({ ...input, liveDemoSiteId: "other-site" })
+        .state,
+    ).toBe("BLOCKED");
+    expect(
+      evaluateReceivingReadiness({
+        ...input,
+        evidence: { ...input.evidence, provenance: "simulation" },
+      }).state,
+    ).toBe("BLOCKED");
+    expect(input.isDemo).toBe(true);
+  });
   it("keeps an absent provider binding unconfigured", () => {
     expect(
       evaluateReceivingReadiness({ ...readyInput(), providerBinding: null }),

@@ -6,14 +6,19 @@ import {
   giftPaymentRestrictionEvents,
 } from "./giftPaymentRestrictions";
 
-function fixture(eventType = "PAYMENT_REFUNDED") {
+function fixture(
+  eventType = "PAYMENT_REFUNDED",
+  overrides: Partial<
+    Parameters<typeof createGiftPaymentRestrictionWorker>[0]
+  > = {},
+) {
   const now = new Date("2026-10-19T12:00:00.000Z");
   const payload = { paymentId: "pay_one", externalReference: "attempt-one" };
   const row = {
     eventId: "event-one",
     siteId: "site-one",
     accountId: "account-one",
-    environment: "sandbox",
+    environment: overrides.environment ?? "sandbox",
     eventType,
     payload,
     payloadHash: hashAsaasEventIdentity(
@@ -58,7 +63,7 @@ function fixture(eventType = "PAYMENT_REFUNDED") {
     provider: "ASAAS",
     siteId: row.siteId,
     accountReference: row.accountReference,
-    environment: "sandbox",
+    environment: overrides.environment ?? "sandbox",
     currency: "BRL",
     observedAt: now,
     payment: {
@@ -74,10 +79,11 @@ function fixture(eventType = "PAYMENT_REFUNDED") {
   const read = vi.fn().mockResolvedValue(observation);
   const worker = createGiftPaymentRestrictionWorker({
     db: drizzle({ query } as unknown as NodePgClient),
-    environment: "sandbox",
+    environment: overrides.environment ?? "sandbox",
     instanceId: "worker-one",
     reader: { getPayment: read },
     now: () => now,
+    ...overrides,
   });
   return {
     worker,
@@ -157,7 +163,7 @@ describe("payment restriction safety observations", () => {
     "rejects conflicting native %s",
     async (field) => {
       const values = fixture();
-      values.observation[field] = "other";
+      Object.assign(values.observation, { [field]: "other" });
       expect(await values.worker.processNextReceivedPayment()).toEqual({
         kind: "RETRY",
       });
@@ -199,3 +205,23 @@ describe("payment restriction safety observations", () => {
     await expect(values.worker.processNextReceivedPayment()).rejects.toThrow();
   });
 });
+
+it.each([undefined, "foreign-site", "site-one"])(
+  "processes only the designated live showcase event (%s)",
+  async (liveDemoSiteId) => {
+    const v = fixture("PAYMENT_REFUNDED", {
+      environment: "live",
+      applicationEnvironment: "production",
+      liveDemoSiteId,
+    });
+    if (liveDemoSiteId === "site-one") {
+      expect(await v.worker.processNextReceivedPayment()).toMatchObject({
+        kind: "DEAD_LETTER",
+      });
+      expect(v.read).toHaveBeenCalled();
+    } else {
+      await expect(v.worker.processNextReceivedPayment()).rejects.toThrow();
+      expect(v.read).not.toHaveBeenCalled();
+    }
+  },
+);

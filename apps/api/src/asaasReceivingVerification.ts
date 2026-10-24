@@ -45,8 +45,8 @@ export function prepareAsaasReceivingVerification(
     fence.operation.request_snapshot,
   );
   if (
-    scope.environment !== "sandbox" ||
-    observed.environment !== "sandbox" ||
+    !["sandbox", "live"].includes(scope.environment) ||
+    observed.environment !== scope.environment ||
     observed.siteId !== scope.siteId ||
     observed.accountBindingId !== scope.accountId ||
     observed.accountReference !== scope.accountReference ||
@@ -154,8 +154,10 @@ export function createAsaasReceivingVerification(options: {
   now(): Date;
 }) {
   const enabled =
-    options.mode === "sandbox" &&
-    options.applicationEnvironment === "development";
+    (options.mode === "sandbox" &&
+      options.applicationEnvironment === "development") ||
+    (options.mode === "live" &&
+      options.applicationEnvironment === "production");
   const proofs = new Map<
     string,
     {
@@ -172,7 +174,7 @@ export function createAsaasReceivingVerification(options: {
     return (
       enabled &&
       !closed &&
-      scope.environment === "sandbox" &&
+      scope.environment === options.mode &&
       scope.accountReference !== options.platformAccountReference
     );
   }
@@ -199,7 +201,7 @@ export function createAsaasReceivingVerification(options: {
           provider: "ASAAS" as const,
           siteId: scope.siteId,
           accountBindingId: scope.accountId,
-          environment: "sandbox" as const,
+          environment: options.mode,
         };
         const client = createReceivingSetupAsaasObserver({
           binding: {
@@ -265,7 +267,7 @@ export function createAsaasReceivingVerification(options: {
   > = async (_action, fence, tx, value) => {
     if (!active(fence.scope)) return false;
     const holder = await tx.execute(
-      sql`SELECT holder_user_id AS "holderUserId",consent_id AS "consentId",consent_version AS "consentVersion",consent_at AS "consentAt" FROM receiving_setup_holder WHERE site_id=${fence.scope.siteId} AND environment='sandbox' FOR UPDATE`,
+      sql`SELECT holder_user_id AS "holderUserId",consent_id AS "consentId",consent_version AS "consentVersion",consent_at AS "consentAt" FROM receiving_setup_holder WHERE site_id=${fence.scope.siteId} AND environment=${options.mode} FOR UPDATE`,
     );
     const row = holder.rows[0];
     if (

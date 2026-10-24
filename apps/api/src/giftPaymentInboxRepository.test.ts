@@ -97,6 +97,49 @@ function fixture(rawTimestamps = false) {
   };
 }
 describe("durable received-payment inbox claims", () => {
+  it.each([
+    ["production", "demo-wedding", "demo-wedding"],
+    ["production", "another-site", "another-site"],
+    ["production", undefined, null],
+    ["development", "demo-wedding", null],
+    ["test", "demo-wedding", null],
+    [undefined, "demo-wedding", null],
+    ["production", "demo-wedding,another-site", null],
+    ["production", " demo-wedding", null],
+    ["production", "demo-wedding/other", null],
+  ] as const)(
+    "binds only the configured production showcase in native claim SQL (%s, %s)",
+    async (applicationEnvironment, liveDemoSiteId, expectedSiteId) => {
+      const queries: Array<{ sql: string; params: unknown[] }> = [];
+      const db = drizzle({
+        query: async (
+          statement: string | { text: string },
+          params: unknown[] = [],
+        ) => {
+          queries.push({
+            sql: typeof statement === "string" ? statement : statement.text,
+            params,
+          });
+          return { rows: [] };
+        },
+      } as unknown as NodePgClient);
+      const repository = createGiftPaymentInboxRepository(db, {
+        ...fixture().options,
+        environment: "live",
+        applicationEnvironment,
+        liveDemoSiteId,
+      });
+      expect(await repository.claimNextReceivedPayment()).toBeNull();
+      const selection = queries.find(({ sql }) => sql.startsWith("SELECT"));
+      if (!selection) throw new Error("Expected the native claim selection");
+      const parameter = /OR st\.id=\$(\d+)/.exec(selection.sql);
+      expect(parameter).not.toBeNull();
+      expect(selection.params[Number(parameter?.[1]) - 1]).toBe(expectedSiteId);
+      expect(selection.sql).toContain("st.is_demo=false OR st.id=");
+      expect(selection.sql).toContain("FOR UPDATE OF e SKIP LOCKED");
+      expect(queries.some(({ sql }) => /^UPDATE/i.test(sql))).toBe(false);
+    },
+  );
   it("also selects confirmed events for an observation without granting settlement authority", async () => {
     const values = fixture();
     await values.repository.claimNextReceivedPayment();

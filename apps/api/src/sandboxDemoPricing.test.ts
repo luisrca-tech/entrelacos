@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import type { AsaasAccountFeesObservation } from "./asaasHttpClient";
-import { loadSandboxDemoPricing } from "./sandboxDemoPricing";
+import {
+  loadLiveReceivingPricing,
+  loadSandboxDemoPricing,
+} from "./sandboxDemoPricing";
 
 function fixture() {
   const at = new Date("2026-10-16T16:00:00.000Z");
@@ -308,4 +311,99 @@ describe("observed Sandbox promotional estimates", () => {
       ).toBeNull();
     },
   );
+});
+
+describe("live recipient-deducted pricing from bound account observations", () => {
+  function liveFixture() {
+    const v = fixture();
+    return {
+      ...v,
+      scope: { ...v.scope, environment: "live" as const },
+      authorization: {
+        ...v.authorization,
+        environment: "live" as const,
+        isDemo: false,
+        applicationEnvironment: "production" as const,
+      },
+      readAccountFees: vi.fn(async () => ({
+        ...v.observation,
+        environment: "live" as const,
+      })),
+    };
+  }
+  it("uses native live fees for the expressly designated showcase without changing its demo marker", async () => {
+    const v = liveFixture();
+    const authorization = {
+      ...v.authorization,
+      isDemo: true,
+      liveDemoSiteId: v.scope.siteId,
+    };
+    expect(
+      await loadLiveReceivingPricing(v.scope, authorization, v),
+    ).toMatchObject({
+      provenance: "provider",
+      environment: "live",
+      policy: { feeAllocation: "RECIPIENT_DEDUCTED" },
+    });
+    expect(authorization.isDemo).toBe(true);
+  });
+  it.each(["PIX", "CREDIT_CARD"] as const)(
+    "prices %s from production observations without fabricating a contractual guarantee",
+    async (method) => {
+      const v = liveFixture();
+      const result = await loadLiveReceivingPricing(
+        { ...v.scope, method },
+        v.authorization,
+        v,
+      );
+      expect(result).toMatchObject({
+        environment: "live",
+        provenance: "provider",
+        verification: "verified",
+        policy: {
+          method,
+          feeAllocation: "RECIPIENT_DEDUCTED",
+          feeBasis: "OBSERVED_ESTIMATE",
+          commissionBasisPoints: 200,
+        },
+      });
+      expect(result?.policy.version).toMatch(
+        /^asaas-live-observed\.[a-f0-9]{64}$/,
+      );
+      expect(v.readAccountFees).toHaveBeenCalledWith(
+        expect.objectContaining({
+          environment: "live",
+          accountBindingId: "binding-one",
+        }),
+      );
+    },
+  );
+  it.each([
+    { isDemo: true },
+    { applicationEnvironment: "development" },
+    { applicationEnvironment: "test" },
+    { environment: "sandbox" },
+    { accountReference: "foreign" },
+    { siteId: "foreign" },
+  ])(
+    "rejects unsupported live authority before reading fees %j",
+    async (change) => {
+      const v = liveFixture();
+      Object.assign(v.authorization, change);
+      expect(
+        await loadLiveReceivingPricing(v.scope, v.authorization, v),
+      ).toBeNull();
+      expect(v.readAccountFees).not.toHaveBeenCalled();
+    },
+  );
+  it("rejects sandbox observations for a live receiving account", async () => {
+    const v = liveFixture();
+    v.readAccountFees.mockResolvedValue({
+      ...v.observation,
+      environment: "sandbox",
+    } as never);
+    expect(
+      await loadLiveReceivingPricing(v.scope, v.authorization, v),
+    ).toBeNull();
+  });
 });

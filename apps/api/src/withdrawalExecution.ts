@@ -89,9 +89,17 @@ export interface StoredWithdrawalExecution {
     | "AWAITING_AUTHORIZATION"
     | "PROCESSING"
     | "UNKNOWN"
-    | "COMPLETED";
-  operationState: "REQUESTED" | "PROCESSING" | "UNKNOWN" | "SUCCEEDED";
-  reservationState: "HELD" | "CONSUMED";
+    | "COMPLETED"
+    | "FAILED"
+    | "CANCELLED";
+  operationState:
+    | "REQUESTED"
+    | "PROCESSING"
+    | "UNKNOWN"
+    | "SUCCEEDED"
+    | "FAILED"
+    | "CANCELLED";
+  reservationState: "HELD" | "CONSUMED" | "RELEASED";
   reservedCents: number;
   fence: DispatchFence | null;
   providerReference: string | null;
@@ -111,7 +119,13 @@ export type WithdrawalDispatchObservation = ObservationIdentity &
         observedAt: string;
         proofReference: string | null;
       }
-    | { outcome: "REJECTED"; reason: string }
+    | {
+        outcome: "REJECTED";
+        reason: string;
+        proofReference?: string;
+        providerReference?: string;
+        observedAt?: string;
+      }
     | { outcome: "UNRESOLVED" }
   );
 export type WithdrawalLookupObservation =
@@ -130,6 +144,17 @@ export interface WithdrawalCompletionProof extends ObservationIdentity {
   custody: "immutable-durable";
   verification: "verified";
   provenance: "provider" | "simulation";
+  observedAt: string;
+  recordedAt: string;
+}
+export interface WithdrawalTerminalFailureProof extends ObservationIdentity {
+  feeCents: 0;
+  outcome: "FAILED" | "CANCELLED";
+  proofReference: string;
+  providerReference: string;
+  custody: "immutable-durable";
+  verification: "verified";
+  provenance: "provider";
   observedAt: string;
   recordedAt: string;
 }
@@ -357,13 +382,15 @@ function hasAcceptedMaximumWithdrawalConsent(
     snapshot.intent.createdAt,
   );
   return (
-    snapshot.environment === "sandbox" &&
+    ((snapshot.environment === "sandbox" &&
+      snapshot.feeQuote.feeSemantics === "MAXIMUM") ||
+      (snapshot.environment === "live" &&
+        snapshot.feeQuote.feeSemantics === "MAXIMUM_WITH_MINIMUM_NET")) &&
     consent.state === "COMMITTED" &&
     consent.requestRevision === "2" &&
     snapshot.feeQuote.provenance === "provider" &&
-    snapshot.feeQuote.feeSemantics === "MAXIMUM" &&
     consent.snapshot.feeQuote.provenance === "provider" &&
-    consent.snapshot.feeQuote.feeSemantics === "MAXIMUM" &&
+    consent.snapshot.feeQuote.feeSemantics === snapshot.feeQuote.feeSemantics &&
     consent.snapshot.presentation.payout !== undefined &&
     acceptedAt >=
       databaseTimestampEpochMicroseconds(consent.snapshot.preview.issuedAt) &&
@@ -441,7 +468,10 @@ export function usesAcceptedMaximumWithdrawalDispatch(
   try {
     const original = captureOriginalWithdrawal(originalInput);
     return (
-      ["development", "test"].includes(applicationEnvironment) &&
+      ((original.correlation.environment === "sandbox" &&
+        ["development", "test"].includes(applicationEnvironment)) ||
+        (original.correlation.environment === "live" &&
+          applicationEnvironment === "production")) &&
       hasAcceptedMaximumWithdrawalConsent(original.snapshot, original.consent)
     );
   } catch {
@@ -482,8 +512,11 @@ export function captureWithdrawalObservation(
   const keys = ["outcome", "correlation", "holderBinding", "fence"];
   if (raw.outcome === "ACCEPTED")
     keys.push("providerReference", "observedAt", "proofReference");
-  else if (raw.outcome === "REJECTED") keys.push("reason");
-  else if (raw.outcome !== "UNRESOLVED")
+  else if (raw.outcome === "REJECTED") {
+    keys.push("reason");
+    if (Object.hasOwn(raw, "proofReference"))
+      keys.push("proofReference", "providerReference", "observedAt");
+  } else if (raw.outcome !== "UNRESOLVED")
     throw new TypeError("Unsupported withdrawal observation");
   withdrawalObject(raw, keys);
   if (
@@ -532,6 +565,13 @@ export function captureWithdrawalObservation(
       holderBinding: original.holderBinding,
       fence,
       reason: raw.reason,
+      ...(Object.hasOwn(raw, "proofReference")
+        ? {
+            proofReference: withdrawalReference(raw.proofReference),
+            providerReference: withdrawalReference(raw.providerReference),
+            observedAt: withdrawalInstant(raw.observedAt),
+          }
+        : {}),
     });
   }
   return Object.freeze({
@@ -776,6 +816,8 @@ export function createWithdrawalExecutionService(
         c!.record(original, fence, observation),
       );
       if (stored.state === "COMPLETED") return { outcome: "COMPLETED", stored };
+      if (["FAILED", "CANCELLED"].includes(stored.state))
+        return { outcome: "EXISTING", stored };
       if (observation.outcome !== "ACCEPTED") return { outcome: "UNRESOLVED" };
       if (observation.proofReference !== null)
         return await genuineWithdrawalPromise(
@@ -891,7 +933,8 @@ export function createWithdrawalExecutionService(
               withdrawalReference(stored.receiptReference),
             ),
           );
-        if (!stored.fence) return { outcome: "EXISTING", stored };
+        if (["FAILED", "CANCELLED"].includes(stored.state) || !stored.fence)
+          return { outcome: "EXISTING", stored };
         fence = captureDispatchFence(stored.fence, original);
       } catch (error) {
         logWithdrawalFailure(error);

@@ -46,7 +46,9 @@ function jsonbRoundTrip(value: unknown): unknown {
   );
 }
 
-function fixture() {
+function fixture(live = false) {
+  const mode = live ? ("live" as const) : ("sandbox" as const);
+  const scope = { siteId: "site-1", accountId: "account-1", environment: mode };
   const snapshot: WithdrawalReservationSnapshot = {
     intent: {
       id: "withdrawal-1",
@@ -59,7 +61,7 @@ function fixture() {
       state: "REQUESTED",
       createdAt: now.toISOString(),
       updatedAt: now.toISOString(),
-      mode: "sandbox",
+      mode,
     },
     requestId: "request-1",
     accountId: "account-1",
@@ -67,7 +69,7 @@ function fixture() {
     accountReference: "acct_1",
     recipientReference: "wallet_1",
     bankReference: "bank-1",
-    environment: "sandbox",
+    environment: mode,
     operationId: "operation-1",
     requestHash: createHash("sha256")
       .update(
@@ -76,7 +78,7 @@ function fixture() {
           "site-1",
           "request-1",
           "user:operator.1",
-          "sandbox",
+          mode,
           10_000,
           3,
         ]),
@@ -111,7 +113,7 @@ function fixture() {
   const account = {
     id: "account-1",
     siteId: "site-1",
-    environment: "sandbox",
+    environment: mode,
     provider: "ASAAS",
     operatorUserId: actor.userId,
     operatorReference: "operator-remote-1",
@@ -191,7 +193,7 @@ function fixture() {
     destinationVersion: 3,
     amountCents: 10000,
     currency: "BRL" as const,
-    environment: "sandbox" as const,
+    environment: mode,
     source: "stored" as const,
     verification: "verified" as const,
     provenance: "provider" as const,
@@ -210,7 +212,7 @@ function fixture() {
     preview: {
       siteId: actor.siteId,
       requestId: snapshot.requestId,
-      mode: "sandbox",
+      mode,
       currency: "BRL",
       amountCents: 10000,
       feeCents: 500,
@@ -661,8 +663,8 @@ function fixture() {
   );
   const db = drizzle({ query } as unknown as NodePgClient);
   const options = {
-    mode: "sandbox" as const,
-    applicationEnvironment: "test" as const,
+    mode,
+    applicationEnvironment: live ? ("production" as const) : ("test" as const),
     maxAuthAgeMs: 300_000,
     freshnessMs: 60_000,
     now: () => new Date(clock.app),
@@ -3178,4 +3180,66 @@ describe("durable withdrawal request lifecycle", () => {
       }),
     ).toMatchObject({ state: "EXISTING", withdrawal: v.snapshot.intent });
   });
+});
+
+it.each(["FAILED", "CANCELLED"])(
+  "reads a coherently released native %s without granting another reservation",
+  async (state) => {
+    const f = fixture();
+    const repository = createWithdrawalReservationRepository(f.db, f.options);
+    await repository.reserveWithdrawal(
+      f.snapshot,
+      f.authorize,
+      f.authorization,
+      f.confirmation,
+    );
+    Object.assign(f.tables.withdrawal_intent[0], {
+      state,
+      reservationState: "RELEASED",
+      reservedCents: 0,
+      providerReference: "transfer-1",
+      receiptReference: `asaas-transfer:${"a".repeat(64)}`,
+      resolutionObservedAt: now.toISOString(),
+    });
+    Object.assign(f.tables.financial_operation[0], {
+      state,
+      attempts: 1,
+      providerOperationReference: "transfer-1",
+      leaseOwner: "worker-1",
+      leaseToken: "lease-1",
+      leaseExpiresAt: new Date(+now + 60000).toISOString(),
+    });
+    expect(
+      (await repository.findByRequest("site-1", "request-1"))?.intent.state,
+    ).toBe(state);
+  },
+);
+
+describe("live showcase transactional withdrawal reservation", () => {
+  it.each([undefined, "site-other", "site-1"])(
+    "reserves only a provider-backed enabled showcase %s",
+    async (liveDemoSiteId) => {
+      const f = fixture(true);
+      const repository = createWithdrawalReservationRepository(f.db, {
+        ...f.options,
+        liveDemoSiteId,
+      });
+      const operation = repository.reserveWithdrawal(
+        f.snapshot,
+        f.authorize,
+        f.authorization,
+        f.confirmation,
+      );
+      if (liveDemoSiteId === "site-1") {
+        expect((await operation).intent.mode).toBe("live");
+        expect(f.site.isDemo).toBe(true);
+        expect(await repository.readContext?.(requestAttempt(f))).toMatchObject(
+          { mode: "live" },
+        );
+      } else
+        await expect(operation).rejects.toMatchObject({
+          code: "PROVIDER_MODE_UNAVAILABLE",
+        });
+    },
+  );
 });

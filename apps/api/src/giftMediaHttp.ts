@@ -23,6 +23,7 @@ import {
   issueGiftMediaUpload,
   recoverGiftMediaUpload,
 } from "./giftMedia";
+import { GiftMediaStorageError } from "./giftMediaStorage";
 import { GiftServiceError } from "./gifts";
 import { type SiteAccessActor, SiteAccessDeniedError } from "./siteAccess";
 
@@ -104,8 +105,26 @@ async function body(request: Request, signal: AbortSignal): Promise<unknown> {
     reader.releaseLock();
   }
 }
+function matchesDerivativeEtag(
+  condition: string | undefined,
+  etag: string,
+): boolean {
+  const value = condition?.trim();
+  if (value === "*") return true;
+  if (
+    !value ||
+    !/^(?:W\/)?"[^"\\\r\n]*"(?:[ \t]*,[ \t]*(?:W\/)?"[^"\\\r\n]*")*$/.test(
+      value,
+    )
+  )
+    return false;
+  return [...value.matchAll(/(?:W\/)?"[^"\\\r\n]*"/g)].some(
+    ([tag]) => tag === etag || tag === `W/${etag}`,
+  );
+}
 export function createGiftMediaHttpRouter(options: GiftMediaHttpOptions) {
   const processing = options.processing;
+  let activePublicReads = 0;
   const router = new Hono<{
     Variables: {
       actor: SiteAccessActor;
@@ -124,6 +143,88 @@ export function createGiftMediaHttpRouter(options: GiftMediaHttpOptions) {
     )
       return problem(context, error.status, error.code);
     return problem(context, 503, "SERVICE_UNAVAILABLE");
+  });
+  router.all("/gifts/*", async (context) => {
+    const request = context.req.raw;
+    const method = request.method;
+    const failure = (status: number, code = "GIFT_MEDIA_UNAVAILABLE") => {
+      const response = problem(context, status, code);
+      return method === "HEAD"
+        ? new Response(null, { status, headers: response.headers })
+        : response;
+    };
+    if (method !== "GET" && method !== "HEAD") {
+      const response = failure(405, "METHOD_NOT_ALLOWED");
+      response.headers.set("Allow", "GET, HEAD");
+      return response;
+    }
+    const path = new URL(request.url).pathname;
+    if (
+      !/^\/gifts\/[A-Za-z0-9][A-Za-z0-9._:-]{0,127}\/[A-Za-z0-9][A-Za-z0-9._:-]{0,127}\/[A-Za-z0-9_-]{1,128}\.webp$/.test(
+        path,
+      )
+    )
+      return failure(404, "GIFT_MEDIA_NOT_FOUND");
+    const storage = options.storage;
+    if (!storage || !processing) return failure(503);
+    try {
+      return await processing.track(async (signal) => {
+        if (activePublicReads >= 8) return failure(503);
+        activePublicReads++;
+        try {
+          current(signal);
+          const key = path.slice(1);
+          const head = await storage.headDerivative(key, signal);
+          current(signal);
+          if (
+            head.contentType !== "image/webp" ||
+            !Number.isSafeInteger(head.byteLength) ||
+            head.byteLength <= 0 ||
+            head.byteLength > 5_242_880 ||
+            !/^"[^"\\\r\n]{1,128}"$/.test(head.etag)
+          )
+            throw new Error("Gift image metadata unavailable");
+          const headers = new Headers({
+            "Content-Type": "image/webp",
+            "Cache-Control": "public, max-age=31536000, immutable",
+            ETag: head.etag,
+            "X-Content-Type-Options": "nosniff",
+          });
+          if (
+            matchesDerivativeEtag(
+              context.req.header("If-None-Match"),
+              head.etag,
+            )
+          )
+            return new Response(null, { status: 304, headers });
+          headers.set("Content-Length", String(head.byteLength));
+          if (method === "HEAD")
+            return new Response(null, { status: 200, headers });
+          const bytes = await storage.readDerivative(
+            key,
+            head.etag,
+            head.byteLength,
+            signal,
+          );
+          current(signal);
+          if (
+            !(bytes instanceof Uint8Array) ||
+            bytes.byteLength !== head.byteLength
+          )
+            throw new Error("Gift image body unavailable");
+          return new Response(Buffer.from(bytes), { status: 200, headers });
+        } catch (error) {
+          current(signal);
+          return error instanceof GiftMediaStorageError && error.status === 404
+            ? failure(404, "GIFT_MEDIA_NOT_FOUND")
+            : failure(503);
+        } finally {
+          activePublicReads--;
+        }
+      }, request.signal);
+    } catch {
+      return failure(503);
+    }
   });
   router.use("/v1/sites/:siteId/gift-media/*", async (context, next) => {
     if (!trustedAdminOrigin(context.req.header("origin"), options.adminOrigin))
@@ -145,6 +246,8 @@ export function createGiftMediaHttpRouter(options: GiftMediaHttpOptions) {
         processing,
         decode: options.decode,
         readReadiness: options.readReadiness,
+        applicationEnvironment: options.applicationEnvironment,
+        liveDemoSiteId: options.liveDemoSiteId,
         now: options.now,
         generateId: options.generateId,
         authorize: async (db = options.db) => {

@@ -8,6 +8,7 @@ import {
 } from "@entrelacos/database/schema";
 import { and, desc, eq } from "drizzle-orm";
 import type { GiftQuoteReceivingContext } from "./giftQuotes";
+import type { LiveSitePolicy } from "./liveSitePolicy";
 import {
   createDefaultReceivingReadiness,
   evaluateReceivingReadiness,
@@ -20,7 +21,7 @@ export type ReceivingTransaction = Parameters<
 >[0];
 
 // Configuration and stored evidence are supplied only by the server.
-export interface ReceivingRepositoryOptions {
+export interface ReceivingRepositoryOptions extends LiveSitePolicy {
   mode: "disabled" | "sandbox" | "live";
   applicationEnvironment: "development" | "test" | "production";
   freshnessMs: number;
@@ -119,7 +120,13 @@ export async function loadReceivingContextInTransaction(
   options?: ReceivingRepositoryOptions,
 ): Promise<GiftQuoteReceivingContext | null> {
   if (!receivingEnabled(options)) return null;
-  const { mode, applicationEnvironment, freshnessMs, now: clock } = options;
+  const {
+    mode,
+    applicationEnvironment,
+    freshnessMs,
+    now: clock,
+    liveDemoSiteId,
+  } = options;
   try {
     const [storedSite] = await tx
       .select({ id: site.id, isDemo: site.isDemo })
@@ -134,6 +141,9 @@ export async function loadReceivingContextInTransaction(
       return null;
     const context: GiftQuoteReceivingContext = {
       isDemo: storedSite.isDemo,
+      ...(liveDemoSiteId === undefined
+        ? {}
+        : { liveDemoSiteId: liveDemoSiteId }),
       environment: applicationEnvironment,
       mode,
       freshnessMs,

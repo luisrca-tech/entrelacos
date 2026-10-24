@@ -24,7 +24,11 @@ const canonical = (value: unknown): string => {
     )
     .join(",")}}`;
 };
-function fixture(lagMs = 335) {
+function fixture(lagMs = 335, live = false) {
+  const mode = live ? ("live" as const) : ("sandbox" as const);
+  const semantics = live
+    ? ("MAXIMUM_WITH_MINIMUM_NET" as const)
+    : ("MAXIMUM" as const);
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance"] });
   const initialPerformance = performance.now();
   const elapsed = () => performance.now() - initialPerformance;
@@ -33,7 +37,7 @@ function fixture(lagMs = 335) {
     siteId: "site-1",
     accountId: "account-1",
     accountReference: "acct-1",
-    environment: "sandbox" as const,
+    environment: mode,
     bankReference: "bank-1",
     destinationVersion: 1,
     amountCents: 300,
@@ -41,7 +45,7 @@ function fixture(lagMs = 335) {
   };
   const feeQuote = {
     feeCents: 200,
-    feeSemantics: "MAXIMUM" as const,
+    feeSemantics: semantics,
     policyVersion: "fee-v1",
     provenance: "provider" as const,
     observedAt: iso(-60_000),
@@ -52,12 +56,12 @@ function fixture(lagMs = 335) {
     siteId: scope.siteId,
     amountCents: 300,
     feeCents: 200,
-    feeSemantics: "MAXIMUM" as const,
+    feeSemantics: semantics,
     netCents: 100,
     currency: "BRL" as const,
     destinationVersion: 1,
     state: "REQUESTED" as const,
-    mode: "sandbox" as const,
+    mode,
     createdAt: iso(-30_000),
     updatedAt: iso(-30_000),
   };
@@ -80,7 +84,7 @@ function fixture(lagMs = 335) {
           scope.siteId,
           requestId,
           operatorUserId,
-          "sandbox",
+          mode,
           300,
           1,
         ]),
@@ -123,10 +127,10 @@ function fixture(lagMs = 335) {
     preview: {
       siteId: scope.siteId,
       requestId,
-      mode: "sandbox",
+      mode,
       amountCents: 300,
       feeCents: 200,
-      feeSemantics: "MAXIMUM",
+      feeSemantics: semantics,
       netCents: 100,
       currency: "BRL",
       destinationVersion: 1,
@@ -180,7 +184,7 @@ function fixture(lagMs = 335) {
     siteId: scope.siteId,
     accountBindingId: scope.accountId,
     accountReference: scope.accountReference,
-    environment: "sandbox",
+    environment: mode,
     observedAt: new Date(epoch),
     transfer: {
       id: "transfer-1",
@@ -287,8 +291,8 @@ function fixture(lagMs = 335) {
     ),
   };
   const custody = createAsaasWithdrawalCustody(db as never, {
-    mode: "sandbox",
-    applicationEnvironment: "test",
+    mode,
+    applicationEnvironment: live ? "production" : "test",
     now: () =>
       new Date(
         elapsed() >= faults.nodeInvalidAfterMs
@@ -669,3 +673,69 @@ it("retains the original SQL-ahead evidence and reference on duplicate acceptanc
   expect(f.elapsed()).toBe(elapsed);
   expect(f.inserts).toHaveLength(2);
 });
+
+describe("live withdrawal completion custody", () => {
+  it.each([0, 100, 200])(
+    "retains the actual native %i-cent fee and net after immutable readback",
+    async (fee) => {
+      const f = fixture(0, true);
+      f.observation.transfer.value = "3.00";
+      f.observation.transfer.netValue = ((300 - fee) / 100).toFixed(2);
+      f.observation.transfer.transferFee = (fee / 100).toFixed(2);
+      const recorded = await settle(
+        f.custody.record(f.original, f.fence, f.observation),
+      );
+      expect(recorded).toHaveProperty("value");
+      if (!("value" in recorded)) throw recorded.error;
+      const loaded = await settle(
+        f.custody.loadCompletionProofInTransaction(
+          f.tx as never,
+          f.original,
+          f.fence,
+          recorded.value,
+        ),
+      );
+      expect(loaded).toMatchObject({
+        value: { totalDebitCents: 300, feeCents: fee, netCents: 300 - fee },
+      });
+    },
+  );
+});
+
+it.each(["FAILED", "CANCELLED"] as const)(
+  "loads only a retained native %s zero-fee proof without completing it",
+  async (state) => {
+    const f = fixture(0);
+    f.observation.transfer.status = state;
+    const recorded = await settle(
+      f.custody.record(f.original, f.fence, f.observation),
+    );
+    if (!("value" in recorded)) throw recorded.error;
+    expect(
+      await settle(
+        f.custody.loadTerminalFailureInTransaction(
+          f.tx as never,
+          f.original,
+          f.fence,
+          recorded.value,
+        ),
+      ),
+    ).toMatchObject({
+      value: {
+        outcome: state,
+        providerReference: "transfer-1",
+        custody: "immutable-durable",
+      },
+    });
+    expect(
+      await settle(
+        f.custody.loadCompletionProofInTransaction(
+          f.tx as never,
+          f.original,
+          f.fence,
+          recorded.value,
+        ),
+      ),
+    ).toEqual({ value: null });
+  },
+);

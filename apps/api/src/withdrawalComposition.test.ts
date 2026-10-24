@@ -78,6 +78,22 @@ describe("native withdrawal maximum fee quote", () => {
       verification: "verified",
     });
   });
+  it("quotes an account-bound live gross budget with a minimum net", async () => {
+    const { quoteAsaasWithdrawalMaximumFee } = await import(
+      "./withdrawalComposition"
+    );
+    expect(
+      quoteAsaasWithdrawalMaximumFee(
+        { ...scope, environment: "live" },
+        { ...observation(), environment: "live" },
+        now,
+      ),
+    ).toMatchObject({
+      feeCents: 200,
+      feeSemantics: "MAXIMUM_WITH_MINIMUM_NET",
+      environment: "live",
+    });
+  });
   it.each([0, 30_000, 60_000])(
     "gives a new maximum fee quote five minutes from its observation after %ims without renewing that observation",
     async (elapsed) => {
@@ -135,6 +151,7 @@ describe("native withdrawal maximum fee quote", () => {
 function enabledFixture(
   refreshReceiving?: (siteId: string) => Promise<void>,
   authorization = false,
+  live = false,
 ) {
   const clock = { value: new Date("2026-10-19T10:00:00.000Z") };
   const execute = vi.fn(async (_statement: SQL) => ({
@@ -147,8 +164,9 @@ function enabledFixture(
   };
   const key = new Uint8Array(32).fill(7);
   const config = {
-    mode: "sandbox" as const,
-    applicationEnvironment: "test" as const,
+    mode: live ? ("live" as const) : ("sandbox" as const),
+    applicationEnvironment: live ? ("production" as const) : ("test" as const),
+    ...(live ? { liveDemoSiteId: "demo-wedding" } : {}),
     platformApiKey: "$aact_hmlg_offline-platform-token",
     platformAccountId: "platform-1",
     platformWalletId: "wallet-platform-1",
@@ -460,6 +478,7 @@ describe("composed withdrawal context refresh", () => {
       const proof = vi.fn(async () =>
         kind !== "missing"
           ? {
+              outcome: "COMPLETED",
               correlation: {
                 siteId: kind === "foreign" ? "other-site" : "site-1",
               },
@@ -1319,4 +1338,34 @@ describe("withdrawal callback current holder access", () => {
       }
     },
   );
+});
+
+it("propagates the exact showcase policy to every withdrawal factory without changing provider mode", async () => {
+  const service = vi.spyOn(
+    reservationModule,
+    "createWithdrawalReservationService",
+  );
+  const reservation = vi.spyOn(
+    withdrawalRepository,
+    "createWithdrawalReservationRepository",
+  );
+  const posting = vi.spyOn(postingModule, "createWithdrawalPostingRepository");
+  const f = enabledFixture(undefined, false, true);
+  try {
+    for (const factory of [service, reservation, posting])
+      expect(
+        factory.mock.calls.at(-1)?.[factory === service ? 0 : 1],
+      ).toMatchObject({
+        mode: "live",
+        applicationEnvironment: "production",
+        liveDemoSiteId: "demo-wedding",
+      });
+    expect(f.execute).not.toHaveBeenCalled();
+    expect(f.fetch).not.toHaveBeenCalled();
+  } finally {
+    await f.composition.close();
+    service.mockRestore();
+    reservation.mockRestore();
+    posting.mockRestore();
+  }
 });

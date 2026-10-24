@@ -945,6 +945,8 @@ async function lockEligibility(
     }),
   );
   const gift = await findPublishedGiftForQuote(tx, row.siteId, row.giftId, {
+    applicationEnvironment: receivingContext.environment,
+    liveDemoSiteId: receivingContext.liveDemoSiteId,
     now: options.now,
     readReadiness: async () =>
       evaluateReceivingReadiness({

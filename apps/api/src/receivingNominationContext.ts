@@ -5,6 +5,7 @@ import {
   siteAccessSchema,
   siteIdSchema,
 } from "@entrelacos/contracts";
+import { allowsLiveSite, type LiveSitePolicy } from "./liveSitePolicy";
 import {
   deriveReceivingNominationRequestId,
   type ReceivingNominationConfiguration,
@@ -14,7 +15,7 @@ import {
   readReceivingNominationSnapshot,
 } from "./receivingNomination";
 
-export interface ReceivingNominationContextOptions {
+export interface ReceivingNominationContextOptions extends LiveSitePolicy {
   configuration: ReceivingNominationConfiguration;
   repository: Pick<ReceivingNominationRepository, "readNominationScope">;
   loadSite(siteId: string): Promise<{ siteId: string; isDemo: boolean } | null>;
@@ -38,6 +39,7 @@ export function createReceivingNominationContext(
   options: ReceivingNominationContextOptions,
 ): ReceivingNominationContextService {
   try {
+    const liveDemoSiteId = options.liveDemoSiteId;
     const configuration = readReceivingNominationConfiguration(
       options.configuration,
     );
@@ -124,7 +126,16 @@ export function createReceivingNominationContext(
             typeof storedSite.isDemo !== "boolean"
           )
             return unavailable();
-          if (configuration.mode === "live" && storedSite.isDemo)
+          if (
+            configuration.mode === "live" &&
+            !allowsLiveSite({
+              siteId: scope.siteId,
+              isDemo: storedSite.isDemo,
+              mode: configuration.mode,
+              applicationEnvironment: configuration.applicationEnvironment,
+              liveDemoSiteId: liveDemoSiteId,
+            })
+          )
             throw new ReceivingNominationServiceError(
               409,
               "PROVIDER_MODE_UNAVAILABLE",

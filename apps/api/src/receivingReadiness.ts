@@ -2,6 +2,7 @@ import {
   type ReceivingReadiness,
   receivingReadinessSchema,
 } from "@entrelacos/contracts";
+import { allowsLiveSite, type LiveSitePolicy } from "./liveSitePolicy";
 
 export interface ReceivingProviderBinding {
   siteId: string;
@@ -31,7 +32,7 @@ export interface ReceivingEvidence extends ReceivingProviderBinding {
 }
 
 // Only server-loaded bindings and evidence may reach this evaluation boundary.
-export interface ReceivingReadinessInput {
+export interface ReceivingReadinessInput extends LiveSitePolicy {
   siteId: string;
   isDemo: boolean;
   environment: "development" | "test" | "production";
@@ -98,7 +99,10 @@ export function evaluateReceivingReadiness(
   if (projection.mode === "disabled") {
     return deny("BLOCKED", "PROVIDER_DISABLED");
   }
-  if (input.isDemo && projection.mode === "live") {
+  if (
+    projection.mode === "live" &&
+    !allowsLiveSite({ ...input, applicationEnvironment: input.environment })
+  ) {
     return deny("BLOCKED", "ENVIRONMENT_MISMATCH");
   }
   if (!providerBinding) {

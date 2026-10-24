@@ -116,6 +116,10 @@ export function createApp(
       ),
     );
     app.route("/", createAsaasWebhookHttpRouter(options.asaasWebhook));
+    const liveSitePolicy = {
+      applicationEnvironment: options.receiving?.applicationEnvironment,
+      liveDemoSiteId: options.receiving?.liveDemoSiteId,
+    };
     const readReadiness = (siteId: string) =>
       readReceivingReadiness(options.db, siteId, options.receiving);
     app.route("/", createAuthHttpRouter(options));
@@ -155,8 +159,10 @@ export function createApp(
     const mediaRouter = createGiftMediaHttpRouter({
       ...options,
       auth: options.giftMediaAuth ?? options.auth,
+      ...liveSitePolicy,
       readReadiness,
     });
+    app.all("/gifts/*", (context) => mediaRouter.fetch(context.req.raw));
     for (const endpoint of [
       internalGiftsEndpointPaths.mediaUpload,
       internalGiftsEndpointPaths.mediaFinalize,
@@ -164,7 +170,11 @@ export function createApp(
       const [method, path] = endpoint.split(" ");
       app.on(method, path, (context) => mediaRouter.fetch(context.req.raw));
     }
-    const giftsRouter = createGiftsHttpRouter({ ...options, readReadiness });
+    const giftsRouter = createGiftsHttpRouter({
+      ...options,
+      ...liveSitePolicy,
+      readReadiness,
+    });
     for (const endpoint of [
       internalGiftsEndpointPaths.giftsRead,
       internalGiftsEndpointPaths.giftsCreate,
@@ -189,7 +199,10 @@ export function createApp(
       );
     }
     app.route("/", createInvitationsHttpRouter(options));
-    app.route("/", createDemoResetHttpRouter(options));
+    app.route(
+      "/",
+      createDemoResetHttpRouter({ ...options, ...liveSitePolicy }),
+    );
     app.route("/", createGuestVerificationHttpRouter(options));
     app.route("/", createRsvpHttpRouter(options));
     app.route("/", createReportsHttpRouter(options));

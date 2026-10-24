@@ -13,6 +13,7 @@ import {
   readDatabaseTimestamp,
 } from "./databaseTimestamp";
 import type { FinancialActor } from "./financialAuthorization";
+import { allowsLiveSite, type LiveSitePolicy } from "./liveSitePolicy";
 import type {
   ReceivingAuthenticationEvidence,
   ReceivingProvisioningRecord,
@@ -72,7 +73,7 @@ export interface ReceivingSetupAccountRecord {
   record: ReceivingProvisioningRecord | null;
   result: ReceivingProvisioningResult | null;
 }
-export interface ReceivingSetupRepositoryOptions {
+export interface ReceivingSetupRepositoryOptions extends LiveSitePolicy {
   mode: "sandbox" | "live";
   applicationEnvironment: "development" | "test" | "production";
   policyVersion: string;
@@ -93,6 +94,7 @@ export function createReceivingSetupRepository(
     maxAuthAgeMs > 300000
   )
     return deny();
+  const liveDemoSiteId = options.liveDemoSiteId;
   const now = options.now.bind(options);
   function clock() {
     const value = now();
@@ -203,7 +205,14 @@ export function createReceivingSetupRepository(
     if (
       result.rows.length !== 1 ||
       result.rows[0].id !== siteId ||
-      (mode === "live" && result.rows[0].isDemo !== false)
+      (mode === "live" &&
+        !allowsLiveSite({
+          siteId,
+          isDemo: result.rows[0].isDemo as boolean,
+          mode,
+          applicationEnvironment,
+          liveDemoSiteId: liveDemoSiteId,
+        }))
     )
       return deny("PROVIDER_MODE_UNAVAILABLE", 409);
   }

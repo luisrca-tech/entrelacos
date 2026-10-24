@@ -74,6 +74,10 @@ export function createReceivingSetupComposition(
   )
     return unavailable();
   const mode = config.mode;
+  const liveSitePolicy =
+    config.liveDemoSiteId === undefined
+      ? {}
+      : { liveDemoSiteId: config.liveDemoSiteId };
   const {
     applicationEnvironment,
     credentialKeyId,
@@ -89,6 +93,7 @@ export function createReceivingSetupComposition(
     [...config.credentialKeyring].map(([id, key]) => [id, new Uint8Array(key)]),
   );
   const setupRepository = createReceivingSetupRepository(db, {
+    ...liveSitePolicy,
     mode,
     applicationEnvironment,
     policyVersion,
@@ -96,6 +101,7 @@ export function createReceivingSetupComposition(
     now,
   });
   const verification = createReceivingVerificationComposition({
+    ...liveSitePolicy,
     db,
     mode,
     applicationEnvironment,
@@ -106,6 +112,7 @@ export function createReceivingSetupComposition(
     now,
   });
   const repository = createReceivingNominationRepository(db, {
+    ...liveSitePolicy,
     mode,
     applicationEnvironment,
     maxAuthAgeMs,
@@ -122,6 +129,7 @@ export function createReceivingSetupComposition(
     ),
   );
   const nomination = createReceivingNominationComposition({
+    ...liveSitePolicy,
     standardAuth: options.standardAuth,
     authentication: {
       db,
@@ -163,6 +171,7 @@ export function createReceivingSetupComposition(
   proofKey.fill(0);
   const provisioning = createReceivingAccountProvisioning({
     repository: createReceivingAccountProvisioningRepository(db, {
+      ...liveSitePolicy,
       mode,
       applicationEnvironment,
       maxAuthAgeMs,
@@ -208,6 +217,7 @@ export function createReceivingSetupComposition(
   });
   const pixDestinationSetup = createReceivingPixDestinationSetup({
     repository: createReceivingPixDestinationSetupRepository(db, {
+      ...liveSitePolicy,
       mode,
       applicationEnvironment,
       now,
@@ -318,7 +328,8 @@ export function createReceivingSetupComposition(
   }
   const ports: ReceivingSetupComposition["ports"] = {
     ...nomination,
-    ...(mode === "sandbox" && applicationEnvironment === "development"
+    ...((mode === "sandbox" && applicationEnvironment === "development") ||
+    (mode === "live" && applicationEnvironment === "production")
       ? {
           receivingVerification: {
             verify: (...args: Parameters<typeof verification.verify>) =>

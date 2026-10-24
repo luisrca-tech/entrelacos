@@ -14,9 +14,12 @@ import {
   compareDatabaseTimestamps,
   readDatabaseTimestamp,
 } from "./databaseTimestamp";
+import { allowsLiveSite } from "./liveSitePolicy";
 
 export interface WithdrawalHistoryOptions {
   mode: "disabled" | "sandbox" | "live";
+  applicationEnvironment?: "development" | "test" | "production";
+  liveDemoSiteId?: string;
 }
 export interface WithdrawalHistoryRepository {
   listWithdrawals(siteId: string): Promise<WithdrawalIntent[]>;
@@ -69,6 +72,16 @@ export function createWithdrawalHistoryRepository(
 ): WithdrawalHistoryRepository {
   const mode = options.mode;
   if (!["disabled", "sandbox", "live"].includes(mode)) return unavailable();
+  const liveDemoSiteId = options.liveDemoSiteId;
+  const approvedDemoSiteId = allowsLiveSite({
+    siteId: liveDemoSiteId ?? "",
+    isDemo: true,
+    mode,
+    applicationEnvironment: options.applicationEnvironment ?? "test",
+    liveDemoSiteId,
+  })
+    ? liveDemoSiteId
+    : null;
   return {
     async listWithdrawals(siteId: string): Promise<WithdrawalIntent[]> {
       if (mode === "disabled") throw new WithdrawalHistoryRepositoryError(409);
@@ -81,7 +94,7 @@ export function createWithdrawalHistoryRepository(
           w.created_at AS "createdAt", w.updated_at AS "updatedAt", w.environment AS "mode", a.id IS NOT NULL AS "accountMatches"
           FROM ${site} st LEFT JOIN ${withdrawalIntent} w ON w.site_id=st.id AND w.environment=${mode}
           LEFT JOIN ${receivingAccount} a ON a.id=w.account_id AND a.site_id=w.site_id AND a.environment=w.environment AND a.provider='ASAAS'
-          WHERE st.id=${siteId} AND (${mode}<>'live' OR st.is_demo=false)
+          WHERE st.id=${siteId} AND (${mode}<>'live' OR st.is_demo=false OR st.id=${approvedDemoSiteId})
           ORDER BY date_trunc('milliseconds', w.created_at) DESC, w.id COLLATE "C" ASC LIMIT 1001`);
         if (selected.rows.length === 0 || selected.rows.length > 1000)
           return unavailable();

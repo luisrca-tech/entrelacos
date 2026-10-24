@@ -111,32 +111,48 @@ describe("native Asaas receiving setup", () => {
       "Receiving setup provider unavailable",
     );
   });
-  it("reads own bank and active Pix identity only for internal verification", async () => {
-    const values = fixture({ includeVerificationFacts: true });
-    values.responses.push(
-      { agency: "0001", account: "123456", accountDigit: "7" },
-      {
-        hasMore: false,
-        data: [
-          {
-            id: "key-one",
-            status: "ACTIVE",
-            type: "EVP",
-            key: "private-key-value",
-          },
-        ],
-      },
-    );
-    const result = await values.observer.readStatus();
-    expect(result.verificationFacts).toMatchObject({
-      accountNumber: { agency: "0001", account: "123456", accountDigit: "7" },
-      activePixKey: { id: "key-one", status: "ACTIVE" },
-    });
-    expect(JSON.stringify(result.verificationFacts)).not.toContain(
-      "private-key-value",
-    );
-    await values.observer.close();
-  });
+  it.each(["sandbox", "live"] as const)(
+    "reads %s own bank and active Pix identity only for internal verification",
+    async (environment) => {
+      const values = fixture({
+        includeVerificationFacts: true,
+        binding: { ...binding, environment },
+      });
+      values.responses.push(
+        { agency: "0001", account: "123456", accountDigit: "7" },
+        {
+          hasMore: false,
+          data: [
+            {
+              id: "key-one",
+              status: "ACTIVE",
+              type: "EVP",
+              key: "private-key-value",
+            },
+          ],
+        },
+      );
+      const result = await values.observer.readStatus();
+      expect(result.environment).toBe(environment);
+      expect(
+        values.fetch.mock.calls.every(([url]) =>
+          String(url).startsWith(
+            environment === "live"
+              ? "https://api.asaas.com/"
+              : "https://api-sandbox.asaas.com/",
+          ),
+        ),
+      ).toBe(true);
+      expect(result.verificationFacts).toMatchObject({
+        accountNumber: { agency: "0001", account: "123456", accountDigit: "7" },
+        activePixKey: { id: "key-one", status: "ACTIVE" },
+      });
+      expect(JSON.stringify(result.verificationFacts)).not.toContain(
+        "private-key-value",
+      );
+      await values.observer.close();
+    },
+  );
   it("cannot observe statuses using a credential for a different wallet", async () => {
     const values = fixture();
     values.responses[0] = { data: [{ id: "other-wallet" }], hasMore: false };

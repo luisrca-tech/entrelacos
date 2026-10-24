@@ -130,6 +130,46 @@ function fixture() {
 }
 
 describe("receiving setup composition", () => {
+  it("propagates the private showcase policy without adding it to nomination configuration", async () => {
+    const v = fixture();
+    const composition = createReceivingSetupComposition(
+      {
+        ...v.config,
+        mode: "live",
+        applicationEnvironment: "production",
+        liveDemoSiteId: "site-one",
+      },
+      v.options,
+    );
+    expect(mocks.setupRepository.mock.calls[0][1]).toMatchObject({
+      liveDemoSiteId: "site-one",
+      mode: "live",
+    });
+    expect(mocks.nomination.mock.calls[0][0]).toMatchObject({
+      liveDemoSiteId: "site-one",
+    });
+    expect(
+      Object.keys(mocks.nomination.mock.calls[0][0].configuration),
+    ).toHaveLength(4);
+    expect(v.fetch).not.toHaveBeenCalled();
+    expect(v.db.execute).not.toHaveBeenCalled();
+    v.drain.resolve();
+    await composition.close();
+  });
+  it("mounts native receiving verification in live production without provider writes", async () => {
+    const values = fixture();
+    const composition = createReceivingSetupComposition(
+      { ...values.config, mode: "live", applicationEnvironment: "production" },
+      values.options,
+    );
+    expect(composition.ports.receivingVerification?.verify).toBeTypeOf(
+      "function",
+    );
+    expect(values.fetch).not.toHaveBeenCalled();
+    expect(values.db.execute).not.toHaveBeenCalled();
+    values.drain.resolve();
+    await composition.close();
+  });
   it("constructs the actual authority and provisioning services with isolated authentication without I/O", async () => {
     const values = fixture();
     const { createAuth } = await import("./auth");

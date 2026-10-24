@@ -24,7 +24,7 @@ export interface AsaasWithdrawalAuthorizationReceiver {
   ): Promise<{ status: "APPROVED" | "REFUSED" }>;
 }
 interface AuthorizationOptions {
-  mode: "disabled" | "sandbox";
+  mode: "disabled" | "sandbox" | "live";
   applicationEnvironment: "development" | "test" | "production";
   token: string;
   now(): Date;
@@ -136,7 +136,8 @@ function decode(text: string): unknown {
   return result;
 }
 interface CandidatePayload {
-  version: 1;
+  version: 1 | 2;
+  allocation?: { value: number; netValue: number; transferFee: number };
   original: OriginalWithdrawal;
   fence: DispatchFence;
   pixKeyHash: string;
@@ -148,9 +149,11 @@ function captureCandidate(row: Record<string, unknown>): CandidatePayload {
   const fence = captureDispatchFence(raw.fence, original);
   const c = original.correlation;
   if (
-    raw.version !== 1 ||
-    row.environment !== "sandbox" ||
-    c.environment !== "sandbox" ||
+    ![1, 2].includes(Number(raw.version)) ||
+    row.environment !== c.environment ||
+    (raw.version === 1
+      ? c.environment !== "sandbox"
+      : c.environment !== "live") ||
     row.siteId !== c.siteId ||
     row.accountId !== c.accountId ||
     row.operationId !== c.operationId ||
@@ -163,7 +166,10 @@ function captureCandidate(row: Record<string, unknown>): CandidatePayload {
   )
     unavailable();
   const result = {
-    version: 1 as const,
+    version: raw.version as 1 | 2,
+    ...(raw.version === 2
+      ? { allocation: object(raw.allocation) as CandidatePayload["allocation"] }
+      : {}),
     original,
     fence,
     pixKeyHash: raw.pixKeyHash,
@@ -189,9 +195,12 @@ export function createAsaasWithdrawalAuthorization(
   ): Promise<void>;
 } {
   const expectedToken = createHash("sha256").update(options.token).digest();
+  const mode = options.mode;
+  const environment = sql.raw(mode === "live" ? "'live'" : "'sandbox'");
   const enabled =
-    options.mode === "sandbox" &&
-    ["development", "test"].includes(options.applicationEnvironment) &&
+    ((mode === "sandbox" &&
+      ["development", "test"].includes(options.applicationEnvironment)) ||
+      (mode === "live" && options.applicationEnvironment === "production")) &&
     /^[\x21-\x7e]{32,255}$/.test(options.token);
   async function readCandidate(
     tx: ReceivingTransaction,
@@ -199,7 +208,7 @@ export function createAsaasWithdrawalAuthorization(
     lock = false,
   ) {
     const result = await tx.execute(
-      sql`SELECT environment,provider_reference AS "providerReference",site_id AS "siteId",account_id AS "accountId",operation_id AS "operationId",payload_hash AS "payloadHash",payload FROM withdrawal_authorization_candidate WHERE environment='sandbox' AND provider_reference=${reference} ${lock ? sql`FOR UPDATE` : sql``}`,
+      sql`SELECT environment,provider_reference AS "providerReference",site_id AS "siteId",account_id AS "accountId",operation_id AS "operationId",payload_hash AS "payloadHash",payload FROM withdrawal_authorization_candidate WHERE environment=${environment} AND provider_reference=${reference} ${lock ? sql`FOR UPDATE` : sql``}`,
     );
     if (result.rows.length !== 1) unavailable();
     const row = object(result.rows[0]);
@@ -223,6 +232,7 @@ export function createAsaasWithdrawalAuthorization(
         options.now(),
       );
       const c = original.correlation;
+      if (c.environment !== mode) unavailable();
       const bank = readAsaasTransferBankAccount(
         observation.transfer.bankAccount,
       );
@@ -246,7 +256,18 @@ export function createAsaasWithdrawalAuthorization(
       )
         unavailable();
       const payload: CandidatePayload = {
-        version: 1,
+        version: mode === "live" ? 2 : 1,
+        ...(mode === "live"
+          ? {
+              allocation: {
+                value: parseBrlCents(observation.transfer.value),
+                netValue: parseBrlCents(observation.transfer.netValue ?? ""),
+                transferFee: parseBrlCents(
+                  observation.transfer.transferFee ?? "",
+                ),
+              },
+            }
+          : {}),
         original,
         fence,
         pixKeyHash: keyHash(key.key),
@@ -254,7 +275,7 @@ export function createAsaasWithdrawalAuthorization(
       };
       const payloadHash = hash(payload);
       await tx.execute(
-        sql`INSERT INTO withdrawal_authorization_candidate (environment,provider_reference,site_id,account_id,operation_id,payload_hash,payload) VALUES ('sandbox',${observation.transfer.id},${c.siteId},${c.accountId},${c.operationId},${payloadHash},${JSON.stringify(payload)}::jsonb) ON CONFLICT DO NOTHING`,
+        sql`INSERT INTO withdrawal_authorization_candidate (environment,provider_reference,site_id,account_id,operation_id,payload_hash,payload) VALUES (${environment},${observation.transfer.id},${c.siteId},${c.accountId},${c.operationId},${payloadHash},${JSON.stringify(payload)}::jsonb) ON CONFLICT DO NOTHING`,
       );
       const retained = await readCandidate(tx, observation.transfer.id);
       if (retained.row.payloadHash !== payloadHash) unavailable();
@@ -301,9 +322,20 @@ export function createAsaasWithdrawalAuthorization(
           const { original, fence } = candidate;
           const c = original.correlation;
           if (
-            transfer.value !== c.netCents ||
-            transfer.netValue !== c.netCents ||
-            transfer.transferFee !== 0 ||
+            c.environment !== mode ||
+            (candidate.version === 2
+              ? !candidate.allocation ||
+                transfer.value !== candidate.allocation.value ||
+                transfer.netValue !== candidate.allocation.netValue ||
+                transfer.transferFee !== candidate.allocation.transferFee ||
+                transfer.value !== c.amountCents ||
+                Number(transfer.netValue) < c.netCents ||
+                Number(transfer.transferFee) > c.feeCents ||
+                Number(transfer.value) !==
+                  Number(transfer.netValue) + Number(transfer.transferFee)
+              : transfer.value !== c.netCents ||
+                transfer.netValue !== c.netCents ||
+                transfer.transferFee !== 0) ||
             c.netCents > c.amountCents ||
             candidate.pixKeyHash !== keyHash(bank.pixAddressKey as string) ||
             candidate.bankAccountHash !== hash(bank) ||
@@ -323,7 +355,7 @@ export function createAsaasWithdrawalAuthorization(
             bankAccountHash: hash(bank),
           });
           const existing = await tx.execute(
-            sql`SELECT payload_hash AS "payloadHash",status FROM withdrawal_authorization_decision WHERE environment='sandbox' AND provider_reference=${transfer.id}`,
+            sql`SELECT payload_hash AS "payloadHash",status FROM withdrawal_authorization_decision WHERE environment=${environment} AND provider_reference=${transfer.id}`,
           );
           if (existing.rows.length !== 0) {
             const prior = object(existing.rows[0]);
@@ -337,7 +369,7 @@ export function createAsaasWithdrawalAuthorization(
           }
           await options.verifyConsentInTransaction(tx, original);
           const operation = await tx.execute(
-            sql`SELECT op.request_hash AS "requestHash",op.request_snapshot AS "requestSnapshot",op.state,op.attempts,op.lease_owner AS "leaseOwner",op.lease_token AS "leaseToken",op.lease_expires_at AS "leaseExpiresAt",op.provider_operation_reference AS "providerReference",w.provider_reference AS "withdrawalProviderReference",w.state AS "withdrawalState",w.reservation_state AS "reservationState",w.reserved_cents AS "reservedCents",r.id AS "consentId",r.preview_snapshot AS "consentSnapshot",r.preview_hash AS "consentHash",r.state AS "consentState",r.request_revision::text AS "requestRevision",r.sealed_at AS "sealedAt" FROM financial_operation op JOIN withdrawal_intent w ON w.id=op.withdrawal_intent_id AND w.site_id=op.site_id AND w.account_id=op.account_id AND w.environment=op.environment JOIN withdrawal_request r ON r.id=${original.associationId} AND r.withdrawal_intent_id=w.id AND r.site_id=w.site_id AND r.account_id=w.account_id AND r.environment=w.environment AND r.request_id=op.request_id WHERE op.id=${c.operationId} AND op.site_id=${c.siteId} AND op.account_id=${c.accountId} AND op.environment='sandbox' AND op.kind='WITHDRAWAL' AND op.withdrawal_intent_id=${c.withdrawalId} AND op.request_id=${c.requestId} AND w.request_id=${c.requestId} AND w.request_hash=${c.requestHash} AND w.operator_user_id=${c.operatorUserId} AND w.destination_version=${c.destinationVersion} AND w.amount_cents=${c.amountCents} AND w.fee_cents=${c.feeCents} AND w.net_cents=${c.netCents} AND w.currency='BRL' AND w.authorization_reference=${original.snapshot.authenticationAuditHash} AND w.policy_version=${c.policyVersion} AND r.operator_user_id=${c.operatorUserId} AND r.destination_version=${c.destinationVersion} FOR UPDATE OF op,w,r`,
+            sql`SELECT op.request_hash AS "requestHash",op.request_snapshot AS "requestSnapshot",op.state,op.attempts,op.lease_owner AS "leaseOwner",op.lease_token AS "leaseToken",op.lease_expires_at AS "leaseExpiresAt",op.provider_operation_reference AS "providerReference",w.provider_reference AS "withdrawalProviderReference",w.state AS "withdrawalState",w.reservation_state AS "reservationState",w.reserved_cents AS "reservedCents",r.id AS "consentId",r.preview_snapshot AS "consentSnapshot",r.preview_hash AS "consentHash",r.state AS "consentState",r.request_revision::text AS "requestRevision",r.sealed_at AS "sealedAt" FROM financial_operation op JOIN withdrawal_intent w ON w.id=op.withdrawal_intent_id AND w.site_id=op.site_id AND w.account_id=op.account_id AND w.environment=op.environment JOIN withdrawal_request r ON r.id=${original.associationId} AND r.withdrawal_intent_id=w.id AND r.site_id=w.site_id AND r.account_id=w.account_id AND r.environment=w.environment AND r.request_id=op.request_id WHERE op.id=${c.operationId} AND op.site_id=${c.siteId} AND op.account_id=${c.accountId} AND op.environment=${environment} AND op.kind='WITHDRAWAL' AND op.withdrawal_intent_id=${c.withdrawalId} AND op.request_id=${c.requestId} AND w.request_id=${c.requestId} AND w.request_hash=${c.requestHash} AND w.operator_user_id=${c.operatorUserId} AND w.destination_version=${c.destinationVersion} AND w.amount_cents=${c.amountCents} AND w.fee_cents=${c.feeCents} AND w.net_cents=${c.netCents} AND w.currency='BRL' AND w.authorization_reference=${original.snapshot.authenticationAuditHash} AND w.policy_version=${c.policyVersion} AND r.operator_user_id=${c.operatorUserId} AND r.destination_version=${c.destinationVersion} FOR UPDATE OF op,w,r`,
           );
           if (operation.rows.length !== 1) unavailable();
           const op = object(operation.rows[0]);
@@ -370,7 +402,7 @@ export function createAsaasWithdrawalAuthorization(
           )
             unavailable();
           await tx.execute(
-            sql`INSERT INTO withdrawal_authorization_decision (environment,provider_reference,payload_hash,status) VALUES ('sandbox',${transfer.id},${payloadHash},'APPROVED')`,
+            sql`INSERT INTO withdrawal_authorization_decision (environment,provider_reference,payload_hash,status) VALUES (${environment},${transfer.id},${payloadHash},'APPROVED')`,
           );
           return { status: "APPROVED" as const };
         });

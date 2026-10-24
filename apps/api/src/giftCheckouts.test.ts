@@ -255,6 +255,29 @@ function fixture() {
 }
 
 describe("quote fee allocation compatibility", () => {
+  it("reads a live provider-observed recipient-deducted snapshot without changing its gift total", () => {
+    const { snapshot } = fixture();
+    snapshot.quote.mode = "live";
+    snapshot.receiving.environment = "live";
+    snapshot.pricing.environment = "live";
+    Object.assign(snapshot.quote, {
+      feeAllocation: "RECIPIENT_DEDUCTED",
+      totalCents: 10000,
+    });
+    Object.assign(snapshot.pricing.policy, {
+      feeAllocation: "RECIPIENT_DEDUCTED",
+      feeBasis: "OBSERVED_ESTIMATE",
+    });
+    expect(readGiftQuoteSnapshot(snapshot)).toEqual(snapshot);
+    const fabricated = structuredClone(snapshot);
+    fabricated.pricing.provenance = "local-test";
+    expect(() => readGiftQuoteSnapshot(fabricated)).toThrow();
+    const surcharge = structuredClone(snapshot);
+    delete surcharge.quote.feeAllocation;
+    delete surcharge.pricing.policy.feeAllocation;
+    surcharge.quote.totalCents = 10200;
+    expect(() => readGiftQuoteSnapshot(surcharge)).toThrow();
+  });
   it("preserves historical unmarked snapshots without adding a new policy", () => {
     const { snapshot } = fixture();
     expect(readGiftQuoteSnapshot(snapshot)).toEqual(snapshot);

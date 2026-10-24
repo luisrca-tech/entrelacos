@@ -19,6 +19,7 @@ import {
 } from "./databaseTimestamp";
 import type { GiftPaymentInboxClaim } from "./giftPaymentInboxRepository";
 import type { GiftPaymentWorker } from "./giftPaymentWorker";
+import { allowsLiveSite, type LiveSitePolicy } from "./liveSitePolicy";
 
 export const giftPaymentRestrictionEvents = Object.freeze([
   "PAYMENT_REFUNDED",
@@ -29,7 +30,8 @@ export const giftPaymentRestrictionEvents = Object.freeze([
   "PAYMENT_AWAITING_CHARGEBACK_REVERSAL",
 ] as const);
 
-interface Options {
+interface Options extends LiveSitePolicy {
+  applicationEnvironment?: "development" | "test" | "production";
   db: Pick<DatabaseConnection["db"], "transaction">;
   environment: "sandbox" | "live";
   instanceId: string;
@@ -66,6 +68,15 @@ export function createGiftPaymentRestrictionWorker(
   options: Options,
 ): GiftPaymentWorker {
   const { db, environment, instanceId, reader, now } = options;
+  const liveDemoSiteId = allowsLiveSite({
+    siteId: options.liveDemoSiteId ?? "",
+    isDemo: true,
+    mode: environment,
+    applicationEnvironment: options.applicationEnvironment ?? "test",
+    liveDemoSiteId: options.liveDemoSiteId,
+  })
+    ? options.liveDemoSiteId
+    : null;
   if (
     !["sandbox", "live"].includes(environment) ||
     !id(instanceId) ||
@@ -83,7 +94,7 @@ export function createGiftPaymentRestrictionWorker(
         e.lease_expires_at AS "leaseExpiresAt", e.processed_at AS "processedAt", a.provider, a.account_reference AS "accountReference", st.is_demo AS "isDemo"
         FROM ${financialEventInbox} e INNER JOIN ${receivingAccount} a ON a.id=e.account_id AND a.site_id=e.site_id AND a.environment=e.environment
         INNER JOIN ${site} st ON st.id=e.site_id
-        WHERE e.environment=${environment} AND a.provider='ASAAS' AND (${environment}<>'live' OR st.is_demo=false)
+        WHERE e.environment=${environment} AND a.provider='ASAAS' AND (${environment}<>'live' OR st.is_demo=false OR st.id=${liveDemoSiteId})
           AND e.event_type IN ('PAYMENT_REFUNDED','PAYMENT_PARTIALLY_REFUNDED','PAYMENT_REFUND_IN_PROGRESS','PAYMENT_CHARGEBACK_REQUESTED','PAYMENT_CHARGEBACK_DISPUTE','PAYMENT_AWAITING_CHARGEBACK_REVERSAL')
           AND e.authenticated_at IS NOT NULL AND e.processed_at IS NULL
           AND ((e.state IN ('RECEIVED','RETRY') AND e.next_attempt_at<=${started.toISOString()}::timestamptz AND e.next_attempt_at<=clock_timestamp())
@@ -99,7 +110,9 @@ export function createGiftPaymentRestrictionWorker(
         row.environment !== environment ||
         row.provider !== "ASAAS" ||
         typeof row.isDemo !== "boolean" ||
-        (environment === "live" && row.isDemo) ||
+        (environment === "live" &&
+          row.isDemo &&
+          row.siteId !== liveDemoSiteId) ||
         !reference(row.accountReference) ||
         !giftPaymentRestrictionEvents.includes(
           row.eventType as (typeof giftPaymentRestrictionEvents)[number],

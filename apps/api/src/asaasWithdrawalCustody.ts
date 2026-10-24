@@ -12,6 +12,7 @@ import {
   captureAsaasWithdrawalTransfer,
 } from "./asaasTransferClient";
 import { databaseTimestampEpochMicroseconds } from "./databaseTimestamp";
+import { parseBrlCents } from "./giftMoney";
 import type { ReceivingTransaction } from "./receivingRepository";
 import {
   captureDispatchFence,
@@ -20,11 +21,12 @@ import {
   type DispatchFence,
   type OriginalWithdrawal,
   type WithdrawalCompletionProof,
+  type WithdrawalTerminalFailureProof,
   withdrawalInstant,
 } from "./withdrawalExecution";
 
 export interface AsaasWithdrawalCustodyOptions {
-  mode: "disabled" | "sandbox";
+  mode: "disabled" | "sandbox" | "live";
   applicationEnvironment: "development" | "test" | "production";
   now(): Date;
 }
@@ -135,6 +137,12 @@ export function createAsaasWithdrawalCustody(
   db: CustodyDatabase,
   options: AsaasWithdrawalCustodyOptions,
 ): AsaasWithdrawalCustody & {
+  loadTerminalFailureInTransaction(
+    tx: ReceivingTransaction,
+    original: OriginalWithdrawal,
+    fence: DispatchFence,
+    reference: string,
+  ): Promise<WithdrawalTerminalFailureProof | null>;
   loadCompletionProofInTransaction(
     tx: ReceivingTransaction,
     original: OriginalWithdrawal,
@@ -152,9 +160,12 @@ export function createAsaasWithdrawalCustody(
     const original = captureOriginalWithdrawal(originalInput);
     const fence = captureDispatchFence(fenceInput, original);
     if (
-      mode !== "sandbox" ||
-      !["development", "test"].includes(applicationEnvironment) ||
-      original.correlation.environment !== "sandbox"
+      !(
+        (mode === "sandbox" &&
+          ["development", "test"].includes(applicationEnvironment)) ||
+        (mode === "live" && applicationEnvironment === "production")
+      ) ||
+      original.correlation.environment !== mode
     )
       unavailable();
     return { original, fence };
@@ -267,6 +278,40 @@ export function createAsaasWithdrawalCustody(
         return reference;
       });
     },
+    async loadTerminalFailureInTransaction(
+      tx,
+      originalInput,
+      fenceInput,
+      reference,
+    ) {
+      try {
+        const { original, fence } = inputs(originalInput, fenceInput);
+        const stored = await read(tx, original, fence, reference);
+        const status = stored?.observation.transfer.status;
+        if (
+          !stored ||
+          (status !== "FAILED" && status !== "CANCELLED") ||
+          parseBrlCents(stored.observation.transfer.transferFee ?? "") !== 0
+        )
+          return null;
+        return {
+          outcome: status,
+          feeCents: 0,
+          correlation: original.correlation,
+          holderBinding: original.holderBinding,
+          fence,
+          proofReference: reference,
+          providerReference: stored.observation.transfer.id,
+          custody: "immutable-durable",
+          verification: "verified",
+          provenance: "provider",
+          observedAt: withdrawalInstant(stored.observation.observedAt),
+          recordedAt: withdrawalInstant(stored.row.recordedAt),
+        };
+      } catch {
+        return null;
+      }
+    },
     async loadCompletionProofInTransaction(
       tx,
       originalInput,
@@ -285,9 +330,11 @@ export function createAsaasWithdrawalCustody(
           proofReference: reference,
           receiptReference: reference,
           providerReference: stored.observation.transfer.id,
-          totalDebitCents: original.correlation.netCents,
-          feeCents: 0,
-          netCents: original.correlation.netCents,
+          totalDebitCents: parseBrlCents(stored.observation.transfer.value),
+          feeCents: parseBrlCents(
+            stored.observation.transfer.transferFee ?? "",
+          ),
+          netCents: parseBrlCents(stored.observation.transfer.netValue ?? ""),
           currency: "BRL",
           bankCompleted: true,
           custody: "immutable-durable",

@@ -1023,6 +1023,39 @@ describe("PostgreSQL gift checkout repository", () => {
     expect(values.tables.gift_checkout_attempt[0].expiresAt).toBeNull();
   });
 
+  it("passes the locked showcase production policy to its independent catalog revalidation", async () => {
+    const values = fixture();
+    Object.assign(values.context, {
+      isDemo: true,
+      environment: "production",
+      mode: "live",
+      liveDemoSiteId: "site-one",
+    });
+    values.input.quoteSnapshot.quote.mode = "live";
+    values.input.quoteSnapshot.receiving.environment = "live";
+    values.input.quoteSnapshot.pricing.environment = "live";
+    Object.assign(values.context.providerBinding!, { environment: "live" });
+    Object.assign(values.context.evidence!, {
+      environment: "live",
+      provenance: "provider",
+    });
+    values.tables.gift_quote_record[0].environment = "live";
+    values.tables.gift_quote_record[0].snapshot = structuredClone(
+      values.input.quoteSnapshot,
+    );
+    const repository = createGiftCheckoutRepository(values.db, values.options);
+    await repository.reserve(values.input, () => {});
+    expect(findPublishedGiftForQuote).toHaveBeenCalledWith(
+      expect.anything(),
+      "site-one",
+      "gift-one",
+      expect.objectContaining({
+        applicationEnvironment: "production",
+        liveDemoSiteId: "site-one",
+      }),
+    );
+    expect(values.context.isDemo).toBe(true);
+  });
   it("recovers the winning immutable identity before any current eligibility checks", async () => {
     const values = await reserved();
     values.clock.value = new Date("2026-10-12T18:00:00.000Z");

@@ -22,13 +22,17 @@ const bankAccount = () => ({
   accountDigit: "6",
   pixAddressKey: "original@example.test",
 });
-function fixture() {
+function fixture(live = false, fee = 200) {
+  const mode = live ? ("live" as const) : ("sandbox" as const);
+  const semantics = live
+    ? ("MAXIMUM_WITH_MINIMUM_NET" as const)
+    : ("MAXIMUM" as const);
   const iso = (offset = 0) => new Date(epoch + offset).toISOString();
   const scope = {
     siteId: "site-1",
     accountId: "account-1",
     accountReference: "acct-1",
-    environment: "sandbox" as const,
+    environment: mode,
     bankReference: "bank-1",
     destinationVersion: 1,
     amountCents: 300,
@@ -36,7 +40,7 @@ function fixture() {
   };
   const feeQuote = {
     feeCents: 200,
-    feeSemantics: "MAXIMUM" as const,
+    feeSemantics: semantics,
     policyVersion: "fee-v1",
     provenance: "provider" as const,
     observedAt: iso(-60_000),
@@ -47,12 +51,12 @@ function fixture() {
     siteId: scope.siteId,
     amountCents: 300,
     feeCents: 200,
-    feeSemantics: "MAXIMUM" as const,
+    feeSemantics: semantics,
     netCents: 100,
     currency: "BRL" as const,
     destinationVersion: 1,
     state: "REQUESTED" as const,
-    mode: "sandbox" as const,
+    mode,
     createdAt: iso(-30_000),
     updatedAt: iso(-30_000),
   };
@@ -75,7 +79,7 @@ function fixture() {
           scope.siteId,
           requestId,
           operatorUserId,
-          "sandbox",
+          mode,
           300,
           1,
         ]),
@@ -118,10 +122,10 @@ function fixture() {
     preview: {
       siteId: scope.siteId,
       requestId,
-      mode: "sandbox",
+      mode,
       amountCents: 300,
       feeCents: 200,
-      feeSemantics: "MAXIMUM",
+      feeSemantics: semantics,
       netCents: 100,
       currency: "BRL",
       destinationVersion: 1,
@@ -175,7 +179,7 @@ function fixture() {
     siteId: scope.siteId,
     accountBindingId: scope.accountId,
     accountReference: scope.accountReference,
-    environment: "sandbox",
+    environment: mode,
     observedAt: new Date(epoch),
     transfer: {
       id: "transfer-1",
@@ -183,9 +187,9 @@ function fixture() {
       type: "PIX",
       operationType: "PIX",
       status: "PENDING",
-      value: "1.00",
-      netValue: "1.00",
-      transferFee: "0.00",
+      value: live ? "3.00" : "1.00",
+      netValue: live ? ((300 - fee) / 100).toFixed(2) : "1.00",
+      transferFee: live ? (fee / 100).toFixed(2) : "0.00",
       transactionReceiptUrl: "https://example.test/receipt",
       endToEndIdentifier: "E123",
       effectiveDate: "2026-10-20",
@@ -220,7 +224,7 @@ function fixture() {
     statements.push(q.sql);
     if (q.sql.includes("INSERT INTO withdrawal_authorization_candidate")) {
       candidate ??= {
-        environment: "sandbox",
+        environment: mode,
         providerReference: q.params[0],
         siteId: q.params[1],
         accountId: q.params[2],
@@ -263,8 +267,8 @@ function fixture() {
   };
   const verifyConsent = vi.fn(async () => {});
   const service = createAsaasWithdrawalAuthorization(db as never, {
-    mode: "sandbox",
-    applicationEnvironment: "test",
+    mode,
+    applicationEnvironment: live ? "production" : "test",
     token,
     now: () => new Date(epoch),
     verifyConsentInTransaction: verifyConsent,
@@ -278,9 +282,9 @@ function fixture() {
         status: "PENDING",
         type: "BANK_ACCOUNT",
         operationType: "PIX",
-        value: 1,
-        netValue: 1,
-        transferFee: 0,
+        value: live ? 3 : 1,
+        netValue: live ? (300 - fee) / 100 : 1,
+        transferFee: live ? fee / 100 : 0,
         bankAccount: bankAccount(),
       },
     });
@@ -574,5 +578,30 @@ describe("Asaas withdrawal security authorization", () => {
     delete f.observation.transfer.bankAccount;
     await expect(f.record()).rejects.toThrow();
     expect(f.candidate()).toBeNull();
+  });
+});
+
+describe("live native withdrawal authorization", () => {
+  it.each([0, 100, 200])(
+    "approves only the retained native allocation with an observed %i-cent fee",
+    async (fee) => {
+      const f = fixture(true, fee);
+      await f.record();
+      expect(await f.service.receive(token, f.body())).toEqual({
+        status: "APPROVED",
+      });
+      expect(f.verifyConsent).toHaveBeenCalledOnce();
+    },
+  );
+  it("rejects changed fee allocation even when it remains inside the approved ceilings", async () => {
+    const f = fixture(true, 100);
+    await f.record();
+    const body = JSON.parse(f.body());
+    body.transfer.netValue = 1;
+    body.transfer.transferFee = 2;
+    expect(await f.service.receive(token, JSON.stringify(body))).toEqual({
+      status: "REFUSED",
+    });
+    expect(f.decision()).toBeNull();
   });
 });

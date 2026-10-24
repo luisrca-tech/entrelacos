@@ -1842,16 +1842,21 @@ function WithdrawalSetupView({
         <dl className="grid gap-4 rounded-lg border border-admin-line bg-admin-paper p-4 sm:grid-cols-2 lg:grid-cols-3">
           {[
             [
-              preview.feeSemantics === "MAXIMUM"
+              preview.feeSemantics !== undefined
                 ? "Débito máximo aprovado"
                 : "Valor solicitado",
               money.format(preview.amountCents / 100),
             ],
             [
-              preview.feeSemantics === "MAXIMUM" ? "Taxa máxima" : "Taxa",
+              preview.feeSemantics !== undefined ? "Taxa máxima" : "Taxa",
               money.format(preview.feeCents / 100),
             ],
-            ["Valor líquido", money.format(preview.netCents / 100)],
+            [
+              preview.feeSemantics === "MAXIMUM_WITH_MINIMUM_NET"
+                ? "Líquido mínimo"
+                : "Valor líquido",
+              money.format(preview.netCents / 100),
+            ],
             ["Destino verificado", preview.maskedDestination],
             ...(preview.payoutRecipientName
               ? [["Recebedor Pix", preview.payoutRecipientName]]
@@ -1872,13 +1877,19 @@ function WithdrawalSetupView({
           reserva não utilizada volta ao saldo após a confirmação.
         </p>
       )}
+      {preview?.feeSemantics === "MAXIMUM_WITH_MINIMUM_NET" && (
+        <p>
+          O débito não ultrapassa o limite aprovado. O valor líquido é o mínimo;
+          uma taxa efetiva menor aumenta o valor enviado ao recebedor.
+        </p>
+      )}
       {!preview && state.request?.state === "EXISTING" && (
         <dl className="grid gap-4 rounded-lg border border-admin-line bg-admin-paper p-4 sm:grid-cols-2 lg:grid-cols-3">
           {[
             [
               state.request.withdrawal.settlement
                 ? "Valor debitado"
-                : state.request.withdrawal.feeSemantics === "MAXIMUM"
+                : state.request.withdrawal.feeSemantics !== undefined
                   ? "Débito máximo aprovado"
                   : "Valor solicitado",
               money.format(
@@ -1889,7 +1900,7 @@ function WithdrawalSetupView({
             [
               state.request.withdrawal.settlement
                 ? "Taxa efetiva"
-                : state.request.withdrawal.feeSemantics === "MAXIMUM"
+                : state.request.withdrawal.feeSemantics !== undefined
                   ? "Taxa máxima"
                   : "Taxa",
               money.format(
@@ -1898,8 +1909,15 @@ function WithdrawalSetupView({
               ),
             ],
             [
-              "Valor líquido",
-              money.format(state.request.withdrawal.netCents / 100),
+              state.request.withdrawal.feeSemantics ===
+                "MAXIMUM_WITH_MINIMUM_NET" &&
+              !state.request.withdrawal.settlement
+                ? "Líquido mínimo"
+                : "Valor líquido",
+              money.format(
+                (state.request.withdrawal.settlement?.netCents ??
+                  state.request.withdrawal.netCents) / 100,
+              ),
             ],
           ].map(([label, value]) => (
             <div key={label}>

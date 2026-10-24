@@ -35,9 +35,7 @@ export default defineConfig({
             : "production",
           fileURLToPath(new URL(".", import.meta.url)),
           "",
-        ).APP_ENV === "development"
-          ? "development"
-          : "production",
+        ).APP_ENV ?? "",
       ),
     },
     plugins: [tailwindcss()],

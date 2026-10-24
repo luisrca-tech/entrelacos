@@ -21,7 +21,10 @@ const holder = {
   consentSessionId: "session-one",
   consentAuthenticatedAt: at,
 };
-function fixture(rows: Record<string, unknown>[][]) {
+function fixture(
+  rows: Record<string, unknown>[][],
+  overrides: Partial<Parameters<typeof createReceivingSetupRepository>[1]> = {},
+) {
   const execute = vi.fn(
     async (_query: Parameters<PgDialect["sqlToQuery"]>[0]) => ({
       rows: rows.shift() ?? [],
@@ -39,6 +42,7 @@ function fixture(rows: Record<string, unknown>[][]) {
     policyVersion: "policy-v1",
     maxAuthAgeMs: 300000,
     now: () => at,
+    ...overrides,
   });
   return { execute, transaction, repository };
 }
@@ -56,6 +60,31 @@ const recentAuth = {
   expiresAt: new Date(at.getTime() + 300000),
 };
 describe("receiving holder and consent custody", () => {
+  it.each(["site-one", "other-site"])(
+    "retains actual holder authentication for exact production showcase (%s)",
+    async (liveDemoSiteId) => {
+      const createdAt = new Date(at.getTime() - 3600000),
+        expiresAt = new Date(at.getTime() + 3600000);
+      const v = fixture(
+        [
+          [{ id: "site-one", isDemo: true }],
+          [{ role: "SITE_ADMIN" }],
+          [{ id: actor.sessionId, createdAt, expiresAt }],
+          [{ id: "membership-one" }],
+          [{ ...holder, environment: "live" }],
+        ],
+        { mode: "live", applicationEnvironment: "production", liveDemoSiteId },
+      );
+      const read = v.repository.readSessionAuthentication(actor);
+      if (liveDemoSiteId === "site-one")
+        await expect(read).resolves.toMatchObject({
+          proofKind: "SESSION_AUTHENTICATION",
+          userId: actor.userId,
+        });
+      else await expect(read).rejects.toThrow();
+    },
+  );
+
   it("loads initial setup authentication from the actual current holder session timestamp", async () => {
     const createdAt = new Date(at.getTime() - 3_600_000);
     const expiresAt = new Date(createdAt.getTime() + 7 * 86400000);

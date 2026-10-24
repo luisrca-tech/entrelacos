@@ -11,6 +11,7 @@ import {
   databaseTimestampEpochMicroseconds,
   readDatabaseTimestamp,
 } from "./databaseTimestamp";
+import { allowsLiveSite } from "./liveSitePolicy";
 import { evaluateReceivingReadiness } from "./receivingReadiness";
 import type { ReceivingTransaction } from "./receivingRepository";
 import type { WithdrawalStoredPresentationLoader } from "./withdrawalReservationRepository";
@@ -26,6 +27,7 @@ export type WithdrawalStoredPresentationOptions =
   | {
       mode: "sandbox" | "live";
       applicationEnvironment: "development" | "test" | "production";
+      liveDemoSiteId?: string;
       freshnessMs: number;
       now(): Date;
     };
@@ -213,9 +215,19 @@ export function createWithdrawalStoredPresentationLoader(
   try {
     const configured = data(options);
     if (configured.mode === "disabled") return async () => null;
-    data(configured, ["mode", "applicationEnvironment", "freshnessMs", "now"]);
+    data(configured, [
+      "mode",
+      "applicationEnvironment",
+      "freshnessMs",
+      "now",
+      ...(Object.hasOwn(configured, "liveDemoSiteId")
+        ? ["liveDemoSiteId"]
+        : []),
+    ]);
     if (
       (configured.mode !== "sandbox" && configured.mode !== "live") ||
+      (configured.liveDemoSiteId !== undefined &&
+        typeof configured.liveDemoSiteId !== "string") ||
       typeof configured.applicationEnvironment !== "string" ||
       !["development", "test", "production"].includes(
         configured.applicationEnvironment,
@@ -232,6 +244,7 @@ export function createWithdrawalStoredPresentationLoader(
       | "development"
       | "test"
       | "production";
+    const liveDemoSiteId = configured.liveDemoSiteId as string | undefined;
     const freshnessMs = Number(configured.freshnessMs);
     const now = configured.now.bind(Object.freeze(configured));
 
@@ -316,7 +329,14 @@ export function createWithdrawalStoredPresentationLoader(
           row.destinationVersion !== scope.destinationVersion ||
           row.provider !== "ASAAS" ||
           typeof row.isDemo !== "boolean" ||
-          (mode === "live" && row.isDemo) ||
+          (mode === "live" &&
+            !allowsLiveSite({
+              siteId: scope.siteId,
+              isDemo: row.isDemo,
+              mode,
+              applicationEnvironment,
+              liveDemoSiteId,
+            })) ||
           row.accountIsCurrent !== true ||
           row.destinationIsCurrent !== true ||
           row.accountState !== "APPROVED" ||
@@ -389,6 +409,7 @@ export function createWithdrawalStoredPresentationLoader(
           siteId: scope.siteId,
           isDemo: row.isDemo,
           environment: applicationEnvironment,
+          liveDemoSiteId,
           mode,
           providerBinding: binding,
           evidence: {

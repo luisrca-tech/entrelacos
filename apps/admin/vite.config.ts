@@ -6,11 +6,7 @@ import { defineConfig, loadEnv } from "vite";
 
 export default defineConfig(({ mode }) => ({
   define: {
-    __APP_ENV__: JSON.stringify(
-      loadEnv(mode, process.cwd(), "").APP_ENV === "development"
-        ? "development"
-        : "production",
-    ),
+    __APP_ENV__: JSON.stringify(loadEnv(mode, process.cwd(), "").APP_ENV ?? ""),
   },
   server: {
     port: 3000,

@@ -29,11 +29,13 @@ import {
 import { and, eq, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { readDatabaseTimestamp } from "./databaseTimestamp";
+import { allowsLiveSite, type LiveSitePolicy } from "./liveSitePolicy";
 import { createDefaultReceivingReadiness } from "./receivingReadiness";
 import { requireSiteCapability, type SiteAccessActor } from "./siteAccess";
 
 export type GiftDatabase = NodePgDatabase<Record<string, never>>;
-export interface GiftServiceOptions {
+export interface GiftServiceOptions extends LiveSitePolicy {
+  applicationEnvironment?: "development" | "test" | "production";
   readReadiness?: (siteId: string) => Promise<ReceivingReadiness>;
   now?: () => Date;
 }
@@ -150,8 +152,23 @@ function weddingDate(now: Date): string {
   }).format(now);
 }
 
-function assertMode(context: SiteContext, readiness: ReceivingReadiness): void {
-  if (context.isDemo && readiness.mode === "live") receivingNotReady();
+function assertMode(
+  context: SiteContext,
+  readiness: ReceivingReadiness,
+  options: GiftServiceOptions,
+): void {
+  if (
+    context.isDemo &&
+    readiness.mode === "live" &&
+    !allowsLiveSite({
+      siteId: context.id,
+      isDemo: context.isDemo,
+      mode: readiness.mode,
+      applicationEnvironment: options.applicationEnvironment ?? "test",
+      liveDemoSiteId: options.liveDemoSiteId,
+    })
+  )
+    receivingNotReady();
 }
 
 function assertMutationSite(context: SiteContext, now: Date): void {
@@ -200,7 +217,7 @@ export async function withGiftCatalogMutation<T>(
       assertMutationSite(context, now);
       await requireSiteCapability(tx, actor, siteId, "manageCatalog");
       const readiness = await readReady(siteId, options);
-      assertMode(context, readiness);
+      assertMode(context, readiness, options);
       const executionTime = currentTime(options);
       assertMutationSite(context, executionTime);
       return operation(tx, executionTime);
@@ -383,7 +400,7 @@ export async function listSiteGifts(
   validIds(siteId);
   await requireSiteCapability(db, actor, siteId, "manageCatalog");
   const readiness = await readReady(siteId, options);
-  assertMode(await readSiteContext(db, siteId), readiness);
+  assertMode(await readSiteContext(db, siteId), readiness, options);
   return { gifts: (await readGiftRows(db, siteId)).map(giftRecord) };
 }
 
@@ -526,7 +543,7 @@ async function publicContext(
   currentTime(options);
   const readiness = await readReady(siteId, options);
   const context = await readSiteContext(db, siteId);
-  assertMode(context, readiness);
+  assertMode(context, readiness, options);
   assertPublicSite(context, currentTime(options));
   return readiness;
 }

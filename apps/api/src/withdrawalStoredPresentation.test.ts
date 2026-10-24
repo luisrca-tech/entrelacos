@@ -551,3 +551,42 @@ describe("stored withdrawal presentation", () => {
     expect(f.execute).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("live showcase stored withdrawal presentation", () => {
+  it("retains actual demo identity while accepting fresh native facts for the exact configured site", async () => {
+    const f = fixture();
+    f.row.isDemo = true;
+    const loader = createWithdrawalStoredPresentationLoader({
+      ...f.options,
+      liveDemoSiteId: scope.siteId,
+    });
+    expect(await loader(f.tx, scope)).toMatchObject({
+      siteId: scope.siteId,
+      provenance: "provider",
+    });
+    expect(f.row.isDemo).toBe(true);
+  });
+  it.each([undefined, "other-site"])(
+    "denies a demo live presentation with opt-in %s",
+    async (liveDemoSiteId) => {
+      const f = fixture();
+      f.row.isDemo = true;
+      const loader = createWithdrawalStoredPresentationLoader({
+        ...f.options,
+        liveDemoSiteId,
+      });
+      expect(await loader(f.tx, scope)).toBeNull();
+    },
+  );
+  it("never accepts simulated live evidence after showcase authorization", async () => {
+    const f = fixture();
+    f.row.isDemo = true;
+    f.row.evidenceProvenance = "SIMULATION";
+    expect(
+      await createWithdrawalStoredPresentationLoader({
+        ...f.options,
+        liveDemoSiteId: scope.siteId,
+      })(f.tx, scope),
+    ).toBeNull();
+  });
+});

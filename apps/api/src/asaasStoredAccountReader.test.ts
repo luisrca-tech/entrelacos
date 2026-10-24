@@ -12,17 +12,35 @@ import {
 } from "./providerCredentials";
 
 type Row = Record<string, unknown>;
+it.each([undefined, "foreign-site", "site-one"])(
+  "reads a live showcase native account only for its exact production opt-in (%s)",
+  async (liveDemoSiteId) => {
+    const v = fixture("live", "production", "site-one");
+    v.site.is_demo = true;
+    const reader = createAsaasStoredAccountReader(v.db, {
+      ...v.options,
+      liveDemoSiteId,
+    });
+    if (liveDemoSiteId === v.binding.siteId)
+      expect((await reader.getBalance(v.binding)).environment).toBe("live");
+    else {
+      await expect(reader.getBalance(v.binding)).rejects.toThrow();
+      expect(v.fetch).not.toHaveBeenCalled();
+    }
+  },
+);
 const instant = new Date("2026-10-12T18:30:00.000Z");
 const syntheticSandboxToken = "$aact_hmlg_offline-stored-account-token";
 const syntheticLiveToken = "$aact_prod_offline-stored-account-token";
 function fixture(
   mode: "disabled" | "sandbox" | "live" = "sandbox",
   applicationEnvironment: "development" | "test" | "production" = "test",
+  siteId = "site:one",
 ) {
   const environment = mode === "live" ? "live" : "sandbox";
   const binding: FinancialAccountBinding = {
     provider: "ASAAS",
-    siteId: "site:one",
+    siteId,
     accountBindingId: "account.one",
     accountReference: "remote_account_one",
     environment,

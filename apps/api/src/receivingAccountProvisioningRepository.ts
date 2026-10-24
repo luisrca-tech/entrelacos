@@ -15,6 +15,7 @@ import {
   databaseTimestampEpochMicroseconds,
   readDatabaseTimestamp,
 } from "./databaseTimestamp";
+import { allowsLiveSite, type LiveSitePolicy } from "./liveSitePolicy";
 import {
   ReceivingAccountProvisioningError,
   type ReceivingAccountProvisioningRepository,
@@ -34,7 +35,7 @@ import { resolveSiteAccess } from "./siteAccess";
 type Database = Pick<DatabaseConnection["db"], "execute" | "transaction">;
 type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
 type Row = Record<string, unknown>;
-interface Options {
+interface Options extends LiveSitePolicy {
   mode: "sandbox" | "live";
   applicationEnvironment: "test" | "development" | "production";
   maxAuthAgeMs: number;
@@ -127,6 +128,7 @@ export function createReceivingAccountProvisioningRepository(
     return unavailable();
   const { mode, applicationEnvironment, maxAuthAgeMs, now, readCurrentPolicy } =
     options;
+  const liveDemoSiteId = options.liveDemoSiteId;
   async function clock(tx: Transaction): Promise<bigint> {
     const value = await tx.execute(
       sql`SELECT clock_timestamp() AS "currentTime"`,
@@ -149,7 +151,13 @@ export function createReceivingAccountProvisioningRepository(
       typeof locked.rows[0].isDemo !== "boolean" ||
       (currentAuthority &&
         mode === "live" &&
-        (applicationEnvironment !== "production" || locked.rows[0].isDemo))
+        !allowsLiveSite({
+          siteId: nomination.siteId,
+          isDemo: locked.rows[0].isDemo as boolean,
+          mode,
+          applicationEnvironment,
+          liveDemoSiteId: liveDemoSiteId,
+        }))
     )
       return unavailable();
   }

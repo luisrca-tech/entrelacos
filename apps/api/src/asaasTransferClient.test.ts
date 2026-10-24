@@ -11,7 +11,11 @@ import {
   readWithdrawalConsentSnapshot,
 } from "./withdrawalReservations";
 
-function fixture(maximum = false) {
+function fixture(maximum = false, live = false) {
+  const mode = live ? ("live" as const) : ("sandbox" as const);
+  const semantics = live
+    ? ("MAXIMUM_WITH_MINIMUM_NET" as const)
+    : ("MAXIMUM" as const);
   const time = new Date("2026-10-14T04:00:00.000Z");
   const actor = {
     siteId: "site-1",
@@ -23,18 +27,18 @@ function fixture(maximum = false) {
     siteId: actor.siteId,
     amountCents: 10000,
     feeCents: maximum ? 200 : 0,
-    ...(maximum ? { feeSemantics: "MAXIMUM" as const } : {}),
+    ...(maximum ? { feeSemantics: semantics } : {}),
     netCents: maximum ? 9800 : 10000,
     currency: "BRL" as const,
     destinationVersion: 3,
     state: "REQUESTED" as const,
-    mode: "sandbox" as const,
+    mode: mode,
     createdAt: time.toISOString(),
     updatedAt: time.toISOString(),
   };
   const feeQuote = {
     feeCents: maximum ? 200 : 0,
-    ...(maximum ? { feeSemantics: "MAXIMUM" as const } : {}),
+    ...(maximum ? { feeSemantics: semantics } : {}),
     policyVersion: "fee-v1",
     provenance: "provider" as const,
     observedAt: time.toISOString(),
@@ -48,7 +52,7 @@ function fixture(maximum = false) {
     accountReference: "acct-1",
     recipientReference: "recipient-1",
     bankReference: "bank-1",
-    environment: "sandbox" as const,
+    environment: mode,
     operationId: "operation-1",
     requestHash: createHash("sha256")
       .update(
@@ -57,7 +61,7 @@ function fixture(maximum = false) {
           actor.siteId,
           "request-1",
           actor.userId,
-          "sandbox",
+          mode,
           10000,
           3,
         ]),
@@ -97,10 +101,10 @@ function fixture(maximum = false) {
     preview: {
       siteId: actor.siteId,
       requestId: snapshot.requestId,
-      mode: "sandbox",
+      mode: mode,
       amountCents: 10000,
       feeCents: maximum ? 200 : 0,
-      ...(maximum ? { feeSemantics: "MAXIMUM" as const } : {}),
+      ...(maximum ? { feeSemantics: semantics } : {}),
       netCents: maximum ? 9800 : 10000,
       currency: "BRL",
       destinationVersion: 3,
@@ -162,13 +166,14 @@ function fixture(maximum = false) {
   return { original, fence, time };
 }
 
-function adapterFixture(maximum = false) {
-  const f = fixture(maximum);
+function adapterFixture(maximum = false, live = false) {
+  const f = fixture(maximum, live);
+  const mode = live ? ("live" as const) : ("sandbox" as const);
   const destination = {
     siteId: "site-1",
     accountId: "account-1",
     accountReference: "acct-1",
-    environment: "sandbox" as const,
+    environment: mode,
     recipientReference: "recipient-1",
     bankReference: "bank-1",
     destinationVersion: 3,
@@ -183,7 +188,7 @@ function adapterFixture(maximum = false) {
     siteId: "site-1",
     accountBindingId: "account-1",
     accountReference: "acct-1",
-    environment: "sandbox",
+    environment: mode,
     observedAt: f.time,
     transfer: {
       id: "transfer-1",
@@ -215,8 +220,8 @@ function adapterFixture(maximum = false) {
   };
   const loadDestination = vi.fn(async () => structuredClone(destination));
   const adapter = createAsaasWithdrawalTransferAdapter({
-    mode: "sandbox",
-    applicationEnvironment: "test",
+    mode,
+    applicationEnvironment: live ? "production" : "test",
     now: () => f.time,
     loadDestination,
     loadClient: vi.fn(async () => client),
@@ -739,3 +744,34 @@ it.each(["destination", "custody", "lookup"])(
     }
   },
 );
+
+describe("production withdrawal budgets", () => {
+  it.each([0, 100, 200])(
+    "dispatches the approved gross budget and preserves an observed %i-cent fee",
+    async (fee) => {
+      const f = adapterFixture(true, true);
+      f.observation.transfer.value = "100.00";
+      f.observation.transfer.netValue = ((10000 - fee) / 100).toFixed(2);
+      f.observation.transfer.transferFee = (fee / 100).toFixed(2);
+      expect(await f.adapter.dispatch(f.original, f.fence)).toMatchObject({
+        outcome: "ACCEPTED",
+      });
+      expect(f.client.createPixTransfer).toHaveBeenCalledWith(
+        expect.objectContaining({ valueCents: 10000 }),
+      );
+      expect(f.custody.record).toHaveBeenCalledOnce();
+    },
+  );
+  it.each([
+    { value: "100.01", netValue: "98.01", transferFee: "2.00" },
+    { value: "100.00", netValue: "97.99", transferFee: "2.01" },
+    { value: "100.00", netValue: "98.00", transferFee: "1.00" },
+  ])("rejects an unproved production allocation %j", async (allocation) => {
+    const f = adapterFixture(true, true);
+    Object.assign(f.observation.transfer, allocation);
+    expect(await f.adapter.dispatch(f.original, f.fence)).toMatchObject({
+      outcome: "UNRESOLVED",
+    });
+    expect(f.custody.record).not.toHaveBeenCalled();
+  });
+});

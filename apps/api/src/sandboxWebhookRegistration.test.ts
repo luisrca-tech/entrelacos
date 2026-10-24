@@ -5,17 +5,18 @@ import { describe, expect, it, vi } from "vitest";
 import type { GiftPaymentConfig } from "./giftPaymentConfig";
 import { encryptProviderCredential } from "./providerCredentials";
 import {
+  registerAsaasWebhook,
   registerSandboxWebhook,
   sandboxWebhookEvents,
 } from "./sandboxWebhookRegistration";
 
-function fixture() {
+function fixture(mode: "sandbox" | "live" = "sandbox") {
   const keyring = new Map([["sandbox-v1", Buffer.alloc(32, 19)]]);
   const context = {
     provider: "ASAAS" as const,
     siteId: "site-one",
     accountBindingId: "account-one",
-    environment: "sandbox" as const,
+    environment: mode,
   };
   const credential = encryptProviderCredential(
     "private-subaccount-key",
@@ -24,8 +25,8 @@ function fixture() {
     "sandbox-v1",
   );
   const config: GiftPaymentConfig = {
-    mode: "sandbox",
-    applicationEnvironment: "development",
+    mode,
+    applicationEnvironment: mode === "live" ? "production" : "development",
     platformApiKey: "private-platform-key",
     platformAccountId: "platform-account",
     platformWalletId: "platform-wallet",
@@ -43,9 +44,9 @@ function fixture() {
     id: "account-one",
     siteId: "site-one",
     provider: "ASAAS",
-    environment: "sandbox",
+    environment: mode,
     isCurrent: true,
-    isDemo: true,
+    isDemo: mode === "sandbox",
     accountReference: "child-account",
     recipientReference: "child-wallet",
     credentialVersion: 1,
@@ -530,4 +531,118 @@ describe("Sandbox webhook registration operation", () => {
 
   it("retains the twelve-event registration contract", () =>
     expect(sandboxWebhookEvents).toHaveLength(12));
+});
+
+describe("explicit production Asaas webhook registration", () => {
+  it("registers live account credentials on production host and keeps every database fence live", async () => {
+    const v = fixture("live");
+    await expect(
+      registerAsaasWebhook(v.db, v.config, v.input, { fetch: v.fetch }),
+    ).resolves.toEqual({
+      state: "REGISTERED",
+      providerWebhookId: "webhook-one",
+    });
+    expect(
+      v.fetch.mock.calls.every(
+        ([url]) => new URL(String(url)).origin === "https://api.asaas.com",
+      ),
+    ).toBe(true);
+    expect(v.row.webhookRegistration?.name).toMatch(/^entrelacos-live-/);
+    expect(v.row.webhookTokenHash).toMatch(/^[a-f0-9]{64}$/);
+    const dialect = new PgDialect();
+    for (const [query] of v.execute.mock.calls) {
+      const { sql, params } = dialect.sqlToQuery(query);
+      expect(sql).not.toContain("environment='sandbox'");
+      expect(params).toContain("live");
+    }
+    const post = v.fetch.mock.calls.find(
+      ([, request]) => request?.method === "POST",
+    );
+    const body = JSON.parse(post?.[1]?.body as string);
+    expect(JSON.stringify(v.row.webhookRegistration)).not.toContain(
+      body.authToken,
+    );
+    expect(body.events).toEqual(sandboxWebhookEvents);
+  });
+  it.each([undefined, "foreign-site", "site-one"])(
+    "registers a showcase live webhook only for the designated production site (%s)",
+    async (liveDemoSiteId) => {
+      const v = fixture("live");
+      v.row.isDemo = true;
+      const config = { ...v.config, liveDemoSiteId };
+      if (liveDemoSiteId === "site-one")
+        expect(
+          await registerAsaasWebhook(v.db, config, v.input, { fetch: v.fetch }),
+        ).toMatchObject({ state: "REGISTERED" });
+      else {
+        await expect(
+          registerAsaasWebhook(v.db, config, v.input, { fetch: v.fetch }),
+        ).rejects.toThrow();
+        expect(v.fetch).not.toHaveBeenCalled();
+      }
+    },
+  );
+  it("rejects live demo accounts before private provider access", async () => {
+    const v = fixture("live");
+    v.row.isDemo = true;
+    await expect(
+      registerAsaasWebhook(v.db, v.config, v.input, { fetch: v.fetch }),
+    ).rejects.toThrow();
+    expect(v.fetch).not.toHaveBeenCalled();
+  });
+  it.each(["development", "test"] as const)(
+    "rejects live %s configuration before database access",
+    async (applicationEnvironment) => {
+      const v = fixture("live");
+      await expect(
+        registerAsaasWebhook(
+          v.db,
+          { ...v.config, applicationEnvironment },
+          v.input,
+          { fetch: v.fetch },
+        ),
+      ).rejects.toThrow();
+      expect(v.execute).not.toHaveBeenCalled();
+      expect(v.fetch).not.toHaveBeenCalled();
+    },
+  );
+  it.each([true, false])(
+    "never repeats an uncertain live POST while reconciling (remote exists=%s)",
+    async (created) => {
+      const v = fixture("live");
+      const original = v.fetch.getMockImplementation();
+      if (!original) throw new Error("Missing provider fixture");
+      v.fetch.mockImplementation(async (...args) => {
+        if (args[1]?.method === "POST") {
+          if (created) await original(...args);
+          throw new Error("Synthetic uncertain POST");
+        }
+        return original(...args);
+      });
+      await expect(
+        registerAsaasWebhook(v.db, v.config, v.input, { fetch: v.fetch }),
+      ).resolves.toMatchObject({ state: "UNKNOWN" });
+      const hash = v.row.webhookTokenHash;
+      await expect(
+        registerAsaasWebhook(v.db, v.config, v.input, { fetch: v.fetch }),
+      ).resolves.toMatchObject({ state: created ? "REGISTERED" : "UNKNOWN" });
+      expect(v.row.webhookTokenHash).toBe(hash);
+      expect(
+        v.fetch.mock.calls.filter(([, request]) => request?.method === "POST"),
+      ).toHaveLength(1);
+    },
+  );
+  it("preserves historical Sandbox registration names and reconciliation through the generic operation", async () => {
+    const v = fixture();
+    await registerSandboxWebhook(v.db, v.config, v.input, { fetch: v.fetch });
+    const originalName = v.row.webhookRegistration?.name;
+    const originalHash = v.row.webhookTokenHash;
+    await registerAsaasWebhook(v.db, v.config, v.input, { fetch: v.fetch });
+    expect(v.row.webhookRegistration?.name).toBe(originalName);
+    expect(originalName).toMatch(/^entrelacos-sandbox-/);
+    expect(v.row.webhookTokenHash).toBe(originalHash);
+    expect(
+      v.fetch.mock.calls.filter(([, request]) => request?.method === "POST"),
+    ).toHaveLength(1);
+  });
 });

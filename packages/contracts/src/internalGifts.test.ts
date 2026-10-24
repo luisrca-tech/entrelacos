@@ -72,6 +72,46 @@ describe("durable withdrawal consent and discovery", () => {
     amountCents: 10000,
     destinationVersion: 1,
   };
+  it("rejects a changed fee meaning between the original live preview and its withdrawal", () => {
+    const request = {
+      ...envelope,
+      mode: "live",
+      state: "EXISTING",
+      requestRevision: "2",
+      observationOrder: { ...envelope.observationOrder, requestRevision: "2" },
+      command,
+      preview: {
+        ...preview,
+        mode: "live",
+        feeSemantics: "MAXIMUM_WITH_MINIMUM_NET",
+      },
+      withdrawal: {
+        id: "withdrawal-live",
+        siteId: preview.siteId,
+        mode: "live",
+        state: "PROCESSING",
+        amountCents: 10000,
+        feeCents: 500,
+        netCents: 9500,
+        currency: "BRL",
+        destinationVersion: 1,
+        createdAt: observedAt,
+        updatedAt: observedAt,
+        feeSemantics: "MAXIMUM_WITH_MINIMUM_NET",
+      },
+    };
+    expect(
+      withdrawalRequestStatusResponseSchema.safeParse({ request }).success,
+    ).toBe(true);
+    expect(
+      withdrawalRequestStatusResponseSchema.safeParse({
+        request: {
+          ...request,
+          withdrawal: { ...request.withdrawal, feeSemantics: "MAXIMUM" },
+        },
+      }).success,
+    ).toBe(false);
+  });
   it("requires an explicit new-lifecycle ID and exact decimal scope revision", () => {
     const input = {
       requestId: "request-one",
@@ -2300,5 +2340,63 @@ describe("additive public catalog page C1", () => {
       }
       expect(accepted).toBe(size === 524288);
     }
+  });
+});
+
+describe("explicit live withdrawal minimum-net consent", () => {
+  const withdrawal = {
+    id: "withdrawal-live",
+    siteId: "site-one",
+    mode: "live",
+    state: "COMPLETED",
+    amountCents: 10000,
+    feeCents: 200,
+    netCents: 9800,
+    feeSemantics: "MAXIMUM_WITH_MINIMUM_NET",
+    currency: "BRL",
+    destinationVersion: 1,
+    createdAt: observedAt,
+    updatedAt: observedAt,
+    settlement: {
+      totalDebitCents: 10000,
+      feeCents: 100,
+      netCents: 9900,
+      releasedCents: 0,
+    },
+  };
+  it("retains frozen minimum net while exposing the higher native amount", () => {
+    expect(
+      withdrawalResponseSchema.safeParse({
+        requestId: "request-live",
+        withdrawal,
+      }).success,
+    ).toBe(true);
+  });
+  it.each([
+    { mode: "sandbox" },
+    {
+      settlement: {
+        totalDebitCents: 10000,
+        feeCents: 201,
+        netCents: 9799,
+        releasedCents: 0,
+      },
+    },
+    { feeSemantics: "MAXIMUM" },
+    {
+      settlement: {
+        totalDebitCents: 10000,
+        feeCents: 100,
+        netCents: 9901,
+        releasedCents: 0,
+      },
+    },
+  ])("rejects foreign or unbalanced minimum-net evidence %j", (change) => {
+    expect(
+      withdrawalResponseSchema.safeParse({
+        requestId: "request-live",
+        withdrawal: { ...withdrawal, ...change },
+      }).success,
+    ).toBe(false);
   });
 });

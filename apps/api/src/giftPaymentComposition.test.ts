@@ -238,7 +238,7 @@ describe("gift payment composition", () => {
       ).resolves.toEqual([]);
       expect(execute).toHaveBeenCalledTimes(1);
       const query = new PgDialect().sqlToQuery(execute.mock.calls[0][0]);
-      expect(query.params).toEqual([mode, "site-one", mode]);
+      expect(query.params).toEqual([mode, "site-one", mode, null]);
       expect(values.db.select).not.toHaveBeenCalled();
       expect(values.fetch).not.toHaveBeenCalled();
       await composition.close();
@@ -408,6 +408,200 @@ describe("gift payment composition", () => {
     await composition.close();
   });
 
+  it("prices a production recipient from bound native fees without an unimplemented fee-profile service", async () => {
+    const values = checkoutFixture();
+    const config = {
+      ...values.config,
+      mode: "live",
+      applicationEnvironment: "production",
+    } as const;
+    if (config.credentialKeyring === undefined)
+      throw new Error("Missing test keyring");
+    const envelope = encryptProviderCredential(
+      "$aact_prod_private-live-account-key",
+      {
+        provider: "ASAAS",
+        siteId: "site-one",
+        accountBindingId: "receiving-one",
+        environment: "live",
+      },
+      config.credentialKeyring,
+      config.credentialKeyId,
+    );
+    Object.assign(values.account, {
+      environment: "live",
+      credentialNonce: envelope.nonce,
+      credentialCiphertext: envelope.ciphertext,
+      credentialTag: envelope.tag,
+    });
+    values.rows[0] = [{ account: values.account, isDemo: false }];
+    values.db.execute = vi.fn(async () => ({
+      rows: [
+        {
+          ...values.account,
+          accountBindingId: values.account.id,
+          isDemo: false,
+        },
+      ],
+    })) as never;
+    values.fetch.mockResolvedValue(
+      Response.json({
+        payment: {
+          pix: {
+            type: "FIXED",
+            fixedFeeValue: 1.99,
+            percentageFee: null,
+            minimumFeeValue: null,
+            maximumFeeValue: null,
+            monthlyCreditsWithoutFee: 0,
+          },
+        },
+      }),
+    );
+    const composition = createGiftPaymentComposition(config, values);
+    const result = await composition.ports.giftPayments?.createQuote(
+      "site-one",
+      { ...values.snapshot.receiving, environment: "live", method: "PIX" },
+    );
+    expect(result).toMatchObject({
+      provenance: "provider",
+      environment: "live",
+      policy: {
+        feeAllocation: "RECIPIENT_DEDUCTED",
+        feeBasis: "OBSERVED_ESTIMATE",
+        processingFixedCents: 199,
+        processingBasisPoints: 0,
+      },
+    });
+    expect(String(values.fetch.mock.calls[0][0])).toBe(
+      "https://api.asaas.com/v3/myAccount/fees/",
+    );
+    await composition.close();
+  });
+
+  it("creates a live observed-price checkout for exactly the configured gift value", async () => {
+    const values = checkoutFixture();
+    values.publicOrigin = "https://wedding.example.test";
+    values.rows[1] = [{ origin: values.publicOrigin }];
+    const config = {
+      ...values.config,
+      mode: "live",
+      applicationEnvironment: "production",
+    } as const;
+    if (config.credentialKeyring === undefined)
+      throw new Error("Missing test keyring");
+    const envelope = encryptProviderCredential(
+      "$aact_prod_private-live-account-key",
+      {
+        provider: "ASAAS",
+        siteId: "site-one",
+        accountBindingId: "receiving-one",
+        environment: "live",
+      },
+      config.credentialKeyring,
+      config.credentialKeyId,
+    );
+    Object.assign(values.account, {
+      environment: "live",
+      credentialNonce: envelope.nonce,
+      credentialCiphertext: envelope.ciphertext,
+      credentialTag: envelope.tag,
+    });
+    values.rows[0] = [{ account: values.account, isDemo: false }];
+    values.snapshot.receiving.environment = "live" as never;
+    values.snapshot.pricing.environment = "live" as never;
+    values.snapshot.quote.mode = "live";
+    Object.assign(values.snapshot.pricing.policy, {
+      feeAllocation: "RECIPIENT_DEDUCTED",
+      feeBasis: "OBSERVED_ESTIMATE",
+    });
+    Object.assign(values.snapshot.quote, {
+      feeAllocation: "RECIPIENT_DEDUCTED",
+      totalCents: 10000,
+    });
+    const composition = createGiftPaymentComposition(config, values);
+    expect(
+      await composition.ports.giftPayments?.createCheckout(
+        "site-one",
+        values.command,
+      ),
+    ).toMatchObject({
+      hostedUrl: "https://asaas.com/checkoutSession/show?id=checkout-one",
+    });
+    const payload = JSON.parse(String(values.fetch.mock.calls[0][1]?.body));
+    expect(payload.items).toEqual([
+      { name: "Symbolic gift", quantity: 1, value: 100 },
+    ]);
+    expect(payload.splits).toEqual([
+      { walletId: "platform-wallet", fixedValue: 2 },
+    ]);
+    expect(String(values.fetch.mock.calls[0][0])).toBe(
+      "https://api.asaas.com/v3/checkouts",
+    );
+    await composition.close();
+  });
+  it("creates the exact-price real checkout for an opted-in production showcase", async () => {
+    const values = checkoutFixture();
+    values.publicOrigin = "https://wedding.example.test";
+    values.rows[1] = [{ origin: values.publicOrigin }];
+    const config = {
+      ...values.config,
+      mode: "live",
+      applicationEnvironment: "production",
+      liveDemoSiteId: "site-one",
+    } as const;
+    if (config.credentialKeyring === undefined)
+      throw new Error("Missing test keyring");
+    const envelope = encryptProviderCredential(
+      "$aact_prod_private-live-account-key",
+      {
+        provider: "ASAAS",
+        siteId: "site-one",
+        accountBindingId: "receiving-one",
+        environment: "live",
+      },
+      config.credentialKeyring,
+      config.credentialKeyId,
+    );
+    Object.assign(values.account, {
+      environment: "live",
+      credentialNonce: envelope.nonce,
+      credentialCiphertext: envelope.ciphertext,
+      credentialTag: envelope.tag,
+    });
+    values.rows[0] = [{ account: values.account, isDemo: true }];
+    values.snapshot.receiving.environment = "live" as never;
+    values.snapshot.pricing.environment = "live" as never;
+    values.snapshot.quote.mode = "live";
+    Object.assign(values.snapshot.pricing.policy, {
+      feeAllocation: "RECIPIENT_DEDUCTED",
+      feeBasis: "OBSERVED_ESTIMATE",
+    });
+    Object.assign(values.snapshot.quote, {
+      feeAllocation: "RECIPIENT_DEDUCTED",
+      totalCents: 10000,
+    });
+    const composition = createGiftPaymentComposition(config, values);
+    expect(
+      await composition.ports.giftPayments?.createCheckout(
+        "site-one",
+        values.command,
+      ),
+    ).toMatchObject({
+      hostedUrl: "https://asaas.com/checkoutSession/show?id=checkout-one",
+    });
+    const payload = JSON.parse(String(values.fetch.mock.calls[0][1]?.body));
+    expect(payload.items).toEqual([
+      { name: "Symbolic gift", quantity: 1, value: 100 },
+    ]);
+    expect(payload.splits).toEqual([
+      { walletId: "platform-wallet", fixedValue: 2 },
+    ]);
+    expect(String(values.fetch.mock.calls[0][0])).toBe(
+      "https://api.asaas.com/v3/checkouts",
+    );
+    await composition.close();
+  });
   it("does not give non-demo Sandbox accounts a demo pricing policy", async () => {
     const values = checkoutFixture();
     values.rows[0] = [{ account: values.account, isDemo: false }];

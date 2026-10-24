@@ -143,7 +143,7 @@ describe("canonical RSVP PostgreSQL service", () => {
           state: "PENDING",
           revision: 0,
         },
-      ],
+      ].sort((left, right) => left.id.localeCompare(right.id)),
     });
 
     const input = {

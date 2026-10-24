@@ -36,6 +36,7 @@ import {
   type OriginalWithdrawal,
   usesAcceptedMaximumWithdrawalDispatch,
   type WithdrawalCompletionProof,
+  type WithdrawalTerminalFailureProof,
   withdrawalCorrelation,
   withdrawalInstant,
 } from "./withdrawalExecution";
@@ -75,6 +76,11 @@ export interface WithdrawalComposition {
   service?: WithdrawalReservationService;
   reconcilePending(): Promise<void>;
   decorateIntent(intent: WithdrawalIntent): Promise<WithdrawalIntent>;
+  loadTerminalFailureInTransaction?(
+    tx: ReceivingTransaction,
+    withdrawalId: string,
+    reference: string,
+  ): Promise<WithdrawalTerminalFailureProof | null>;
   loadCompletionProofInTransaction?(
     tx: ReceivingTransaction,
     withdrawalId: string,
@@ -100,8 +106,8 @@ export function quoteAsaasWithdrawalMaximumFee(
     observation.source !== "provider" ||
     observation.provider !== "ASAAS" ||
     observation.currency !== "BRL" ||
-    observation.environment !== "sandbox" ||
-    scope.environment !== "sandbox" ||
+    observation.environment !== scope.environment ||
+    !["sandbox", "live"].includes(scope.environment) ||
     observation.siteId !== scope.siteId ||
     observation.accountBindingId !== scope.accountId ||
     observation.accountReference !== scope.accountReference ||
@@ -126,8 +132,12 @@ export function quoteAsaasWithdrawalMaximumFee(
   return {
     ...scope,
     feeCents,
-    feeSemantics: "MAXIMUM",
-    policyVersion: `asaas-pix-max-v1-${feeCents}`,
+    feeSemantics:
+      scope.environment === "live" ? "MAXIMUM_WITH_MINIMUM_NET" : "MAXIMUM",
+    policyVersion:
+      scope.environment === "live"
+        ? `asaas-pix-gross-max-v1-${feeCents}`
+        : `asaas-pix-max-v1-${feeCents}`,
     provenance: "provider",
     verification: "verified",
     observedAt: new Date(observation.observedAt),
@@ -197,8 +207,11 @@ export function createWithdrawalComposition(
   options: WithdrawalCompositionOptions,
 ): WithdrawalComposition {
   if (
-    config.mode !== "sandbox" ||
-    config.applicationEnvironment === "production"
+    config.mode === "disabled" ||
+    (config.mode === "live" &&
+      config.applicationEnvironment !== "production") ||
+    (config.mode === "sandbox" &&
+      config.applicationEnvironment === "production")
   )
     return {
       async reconcilePending() {},
@@ -209,8 +222,9 @@ export function createWithdrawalComposition(
     };
   const db = options.db;
   const platformAccountId = config.platformAccountId;
-  const mode = "sandbox" as const;
+  const mode = config.mode;
   const applicationEnvironment = config.applicationEnvironment;
+  const liveDemoSiteId = config.liveDemoSiteId;
   const now = options.now ?? (() => new Date());
   const fetch = options.fetch ?? globalThis.fetch;
   const keyring = new Map(
@@ -247,6 +261,7 @@ export function createWithdrawalComposition(
   const receiving = {
     mode,
     applicationEnvironment,
+    liveDemoSiteId,
     freshnessMs: withdrawalFreshnessMs,
     now,
     ...(options.refreshReceiving ? { refresh: options.refreshReceiving } : {}),
@@ -263,6 +278,7 @@ export function createWithdrawalComposition(
   const basePresentation = createWithdrawalStoredPresentationLoader({
     mode,
     applicationEnvironment,
+    liveDemoSiteId,
     freshnessMs: receiving.freshnessMs,
     now,
   });
@@ -273,14 +289,14 @@ export function createWithdrawalComposition(
     lock = false,
   ) {
     const result = await tx.execute(
-      sql`SELECT a.*,st.is_demo AS "isDemo" FROM receiving_account a JOIN site st ON st.id=a.site_id WHERE a.site_id=${scope.siteId} AND a.environment='sandbox' AND a.provider='ASAAS' ${scope.accountId ? sql`AND a.id=${scope.accountId}` : sql``} ${scope.accountReference ? sql`AND a.account_reference=${scope.accountReference}` : sql``} ${current ? sql`AND a.is_current=true` : sql``} LIMIT 2 ${lock ? sql`FOR UPDATE OF a` : sql``}`,
+      sql`SELECT a.*,st.is_demo AS "isDemo" FROM receiving_account a JOIN site st ON st.id=a.site_id WHERE a.site_id=${scope.siteId} AND a.environment=${mode} AND a.provider='ASAAS' ${scope.accountId ? sql`AND a.id=${scope.accountId}` : sql``} ${scope.accountReference ? sql`AND a.account_reference=${scope.accountReference}` : sql``} ${current ? sql`AND a.is_current=true` : sql``} LIMIT 2 ${lock ? sql`FOR UPDATE OF a` : sql``}`,
     );
     const row = one<StoredWithdrawalAccount>(result);
     if (
       row.site_id !== scope.siteId ||
       row.environment !== mode ||
       row.provider !== "ASAAS" ||
-      row.isDemo !== true ||
+      (mode === "sandbox" && row.isDemo !== true) ||
       !row.account_reference ||
       !row.recipient_reference ||
       !row.operator_user_id ||
@@ -293,7 +309,7 @@ export function createWithdrawalComposition(
   async function holder(tx: ReceivingTransaction, a: StoredWithdrawalAccount) {
     const h = one<StoredWithdrawalHolder>(
       await tx.execute(
-        sql`SELECT id,holder_user_id AS "holderUserId",consent_id AS "consentId",consent_version AS "consentVersion",consent_at AS "consentAt" FROM receiving_setup_holder WHERE site_id=${a.site_id} AND environment='sandbox'`,
+        sql`SELECT id,holder_user_id AS "holderUserId",consent_id AS "consentId",consent_version AS "consentVersion",consent_at AS "consentAt" FROM receiving_setup_holder WHERE site_id=${a.site_id} AND environment=${mode}`,
       ),
     );
     if (
@@ -321,7 +337,7 @@ export function createWithdrawalComposition(
       configuration: ReceivingPixConfiguration;
     }>(
       await tx.execute(
-        sql`SELECT id,version,state,is_current AS "isCurrent",pix_configuration AS configuration FROM receiving_pix_destination WHERE site_id=${scope.siteId} AND account_id=${scope.accountId} AND environment='sandbox' AND is_current=true LIMIT 2`,
+        sql`SELECT id,version,state,is_current AS "isCurrent",pix_configuration AS configuration FROM receiving_pix_destination WHERE site_id=${scope.siteId} AND account_id=${scope.accountId} AND environment=${mode} AND is_current=true LIMIT 2`,
       ),
     );
     if (row.isCurrent !== true || row.state !== "PENDING" || !row.configuration)
@@ -406,12 +422,18 @@ export function createWithdrawalComposition(
         recipientReference: b.recipientReference,
         destinationVersion: b.destinationVersion,
       },
-      readiness: evaluateReceivingReadiness({ ...loaded, siteId, now: now() }),
+      readiness: evaluateReceivingReadiness({
+        ...loaded,
+        liveDemoSiteId,
+        siteId,
+        now: now(),
+      }),
     };
   }
   const reservationRepository = createWithdrawalReservationRepository(db, {
     mode,
     applicationEnvironment,
+    liveDemoSiteId,
     maxAuthAgeMs: 300000,
     freshnessMs: withdrawalFreshnessMs,
     now,
@@ -420,6 +442,7 @@ export function createWithdrawalComposition(
   const reservation = createWithdrawalReservationService({
     mode,
     applicationEnvironment,
+    liveDemoSiteId,
     maxAuthAgeMs: 300000,
     freshnessMs: withdrawalFreshnessMs,
     now,
@@ -506,6 +529,7 @@ export function createWithdrawalComposition(
   const posting = createWithdrawalPostingRepository(db, {
     mode,
     applicationEnvironment,
+    liveDemoSiteId,
     maxAuthAgeMs: 300000,
     freshnessMs: withdrawalFreshnessMs,
     leaseOwner: `withdrawal-${randomUUID()}`,
@@ -516,6 +540,8 @@ export function createWithdrawalComposition(
       loadOriginalHolderConsentInTransaction: originalHolder,
       loadCompletionProofInTransaction:
         custody.loadCompletionProofInTransaction,
+      loadTerminalFailureInTransaction:
+        custody.loadTerminalFailureInTransaction,
       async loadDispatchAuthorityInTransaction(tx, original, attempt) {
         const actor = attempt.actor;
         if (!actor) return null;
@@ -617,13 +643,13 @@ export function createWithdrawalComposition(
           if (eligible.id !== c.operatorUserId) unavailable();
           const current = await context(tx, c.siteId);
           if (
-            current.isDemo !== true ||
-            current.mode !== "sandbox" ||
+            (mode === "sandbox" && current.isDemo !== true) ||
+            current.mode !== mode ||
             current.verification !== "verified" ||
             current.accountId !== c.accountId ||
             current.bankReference !== c.bankReference ||
             current.readiness?.state !== "READY" ||
-            current.readiness.mode !== "sandbox" ||
+            current.readiness.mode !== mode ||
             current.readiness.destinationVersion !== c.destinationVersion ||
             !isDeepStrictEqual(current.recipientBinding, {
               siteId: c.siteId,
@@ -669,7 +695,7 @@ export function createWithdrawalComposition(
     );
     const op = one(
       await tx.execute(
-        sql`SELECT request_hash AS "requestHash",request_snapshot AS "requestSnapshot",state,attempts,lease_token AS "leaseToken",lease_owner AS "leaseOwner",lease_expires_at AS "leaseExpiresAt" FROM financial_operation WHERE id=${c.operationId} AND site_id=${c.siteId} AND account_id=${c.accountId} AND environment='sandbox' AND kind='WITHDRAWAL' AND withdrawal_intent_id=${c.withdrawalId} FOR UPDATE`,
+        sql`SELECT request_hash AS "requestHash",request_snapshot AS "requestSnapshot",state,attempts,lease_token AS "leaseToken",lease_owner AS "leaseOwner",lease_expires_at AS "leaseExpiresAt" FROM financial_operation WHERE id=${c.operationId} AND site_id=${c.siteId} AND account_id=${c.accountId} AND environment=${mode} AND kind='WITHDRAWAL' AND withdrawal_intent_id=${c.withdrawalId} FOR UPDATE`,
       ),
     );
     if (
@@ -810,7 +836,11 @@ export function createWithdrawalComposition(
           )
             unavailable();
           if (
-            command.valueCents !== c.netCents ||
+            command.valueCents !==
+              (original.snapshot.feeQuote.feeSemantics ===
+              "MAXIMUM_WITH_MINIMUM_NET"
+                ? c.amountCents
+                : c.netCents) ||
             command.externalReference !== c.operationId ||
             command.pixAddressKey !== checked.key.key ||
             command.pixAddressKeyType !== checked.key.type
@@ -876,21 +906,21 @@ export function createWithdrawalComposition(
     tx: ReceivingTransaction,
     withdrawalId: string,
     reference: string,
+    failure = false,
   ) {
     const selected = await tx.execute(
-      sql`SELECT payload FROM withdrawal_provider_observation WHERE id=${reference} AND environment='sandbox' AND payload->'original'->'correlation'->>'withdrawalId'=${withdrawalId} LIMIT 2`,
+      sql`SELECT payload FROM withdrawal_provider_observation WHERE id=${reference} AND environment=${mode} AND payload->'original'->'correlation'->>'withdrawalId'=${withdrawalId} LIMIT 2`,
     );
     if (selected.rows.length !== 1) return null;
     const body = one<{
       payload: { original: OriginalWithdrawal; fence: DispatchFence };
     }>(selected).payload;
     if (!body?.original || !body?.fence) return null;
-    return custody.loadCompletionProofInTransaction(
-      tx,
-      body.original,
-      body.fence,
-      reference,
-    );
+    return (
+      failure
+        ? custody.loadTerminalFailureInTransaction
+        : custody.loadCompletionProofInTransaction
+    )(tx, body.original, body.fence, reference);
   }
   async function decorateIntent(
     intent: WithdrawalIntent,
@@ -901,17 +931,27 @@ export function createWithdrawalComposition(
         snapshot: WithdrawalReservationSnapshot;
       }>(
         await tx.execute(
-          sql`SELECT w.receipt_reference AS reference,op.request_snapshot AS snapshot FROM withdrawal_intent w JOIN financial_operation op ON op.withdrawal_intent_id=w.id AND op.site_id=w.site_id AND op.account_id=w.account_id AND op.environment=w.environment AND op.kind='WITHDRAWAL' WHERE w.id=${intent.id} AND w.site_id=${intent.siteId} AND w.environment='sandbox'`,
+          sql`SELECT w.receipt_reference AS reference,op.request_snapshot AS snapshot FROM withdrawal_intent w JOIN financial_operation op ON op.withdrawal_intent_id=w.id AND op.site_id=w.site_id AND op.account_id=w.account_id AND op.environment=w.environment AND op.kind='WITHDRAWAL' WHERE w.id=${intent.id} AND w.site_id=${intent.siteId} AND w.environment=${mode}`,
         ),
       );
-      if (row.snapshot?.feeQuote?.feeSemantics !== "MAXIMUM") return intent;
+      if (
+        !["MAXIMUM", "MAXIMUM_WITH_MINIMUM_NET"].includes(
+          row.snapshot?.feeQuote?.feeSemantics ?? "",
+        )
+      )
+        return intent;
       if (intent.state !== "COMPLETED")
-        return { ...intent, feeSemantics: "MAXIMUM" };
+        return { ...intent, feeSemantics: row.snapshot.feeQuote.feeSemantics };
       const proof = await loadProof(tx, intent.id, row.reference);
-      if (!proof || proof.correlation.siteId !== intent.siteId) unavailable();
+      if (
+        !proof ||
+        proof.outcome !== "COMPLETED" ||
+        proof.correlation.siteId !== intent.siteId
+      )
+        unavailable();
       return {
         ...intent,
-        feeSemantics: "MAXIMUM",
+        feeSemantics: row.snapshot.feeQuote.feeSemantics,
         settlement: {
           totalDebitCents: proof.totalDebitCents,
           feeCents: proof.feeCents,
@@ -1006,13 +1046,21 @@ export function createWithdrawalComposition(
         }
       : {}),
     decorateIntent: (intent) => own(() => decorateIntent(intent)),
-    loadCompletionProofInTransaction: loadProof,
+    loadCompletionProofInTransaction: (tx, id, reference) =>
+      loadProof(tx, id, reference) as Promise<WithdrawalCompletionProof | null>,
+    loadTerminalFailureInTransaction: (tx, id, reference) =>
+      loadProof(
+        tx,
+        id,
+        reference,
+        true,
+      ) as Promise<WithdrawalTerminalFailureProof | null>,
     async reconcilePending() {
       if (now().getTime() < nextRecoveryAt) return;
       nextRecoveryAt = now().getTime() + 30000;
       return own(async () => {
         const rows = await db.execute(
-          sql`SELECT w.site_id AS "siteId",w.request_id AS "requestId" FROM withdrawal_intent w JOIN financial_operation op ON op.withdrawal_intent_id=w.id AND op.site_id=w.site_id AND op.account_id=w.account_id AND op.environment=w.environment AND op.kind='WITHDRAWAL' WHERE w.environment='sandbox' AND w.state IN ('PROCESSING','UNKNOWN') AND op.attempts=1 ORDER BY w.updated_at LIMIT 20`,
+          sql`SELECT w.site_id AS "siteId",w.request_id AS "requestId" FROM withdrawal_intent w JOIN financial_operation op ON op.withdrawal_intent_id=w.id AND op.site_id=w.site_id AND op.account_id=w.account_id AND op.environment=w.environment AND op.kind='WITHDRAWAL' WHERE w.environment=${mode} AND w.state IN ('PROCESSING','UNKNOWN') AND op.attempts=1 ORDER BY w.updated_at LIMIT 20`,
         );
         for (const row of rows.rows)
           await execution.reconcileExisting({

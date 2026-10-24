@@ -7,6 +7,7 @@ import {
   publicGiftItemSchema,
 } from "@entrelacos/contracts";
 import { type GiftProcessingPolicy, quoteGiftAmounts } from "./giftMoney";
+import { allowsLiveSite } from "./liveSitePolicy";
 import {
   assertReceivingReady,
   evaluateReceivingReadiness,
@@ -198,9 +199,21 @@ export function createGiftQuoteService(
       const pricing = structuredClone(loadedPricing);
       if (
         pricing.policy.feeBasis === "OBSERVED_ESTIMATE" &&
-        (context.environment !== "development" ||
-          context.mode !== "sandbox" ||
-          context.isDemo !== true)
+        !(
+          (context.environment === "development" &&
+            context.mode === "sandbox" &&
+            context.isDemo === true) ||
+          (context.environment === "production" &&
+            context.mode === "live" &&
+            allowsLiveSite({
+              siteId: site.data,
+              isDemo: context.isDemo,
+              mode: context.mode,
+              applicationEnvironment: context.environment,
+              liveDemoSiteId: context.liveDemoSiteId,
+            }) &&
+            pricing.provenance === "provider")
+        )
       )
         return policyUnavailable();
       pricing.policy.feeAllocation = "RECIPIENT_DEDUCTED";

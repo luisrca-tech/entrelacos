@@ -3,6 +3,7 @@ import type { DatabaseConnection } from "@entrelacos/database";
 import { sql } from "drizzle-orm";
 import type { GiftPaymentConfig } from "./giftPaymentConfig";
 import { giftPaymentRestrictionEvents } from "./giftPaymentRestrictions";
+import { allowsLiveSite } from "./liveSitePolicy";
 import {
   decryptProviderCredential,
   encryptProviderCredential,
@@ -10,7 +11,7 @@ import {
   type ProviderCredentialEnvelope,
 } from "./providerCredentials";
 
-export const sandboxWebhookEvents = Object.freeze([
+export const asaasWebhookEvents = Object.freeze([
   "CHECKOUT_CREATED",
   "CHECKOUT_PAID",
   "CHECKOUT_CANCELED",
@@ -19,6 +20,7 @@ export const sandboxWebhookEvents = Object.freeze([
   "PAYMENT_RECEIVED",
   ...giftPaymentRestrictionEvents,
 ] as const);
+export const sandboxWebhookEvents = asaasWebhookEvents;
 type Database = Pick<DatabaseConnection["db"], "execute" | "transaction">;
 type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
 interface Registration {
@@ -30,17 +32,20 @@ interface Registration {
   token: ProviderCredentialEnvelope;
   providerWebhookId: string | null;
 }
-export interface SandboxWebhookRegistrationInput {
+export interface AsaasWebhookRegistrationInput {
   siteId: string;
   accountId: string;
   notificationEmail: string;
 }
-export interface SandboxWebhookRegistrationResult {
+export interface AsaasWebhookRegistrationResult {
   state: "REGISTERED" | "UNKNOWN";
   providerWebhookId: string | null;
 }
+export type SandboxWebhookRegistrationInput = AsaasWebhookRegistrationInput;
+export type SandboxWebhookRegistrationResult = AsaasWebhookRegistrationResult;
+
 function unavailable(): never {
-  throw new Error("Sandbox webhook registration unavailable");
+  throw new Error("Asaas webhook registration unavailable");
 }
 function object(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value))
@@ -74,20 +79,28 @@ function validWebhookUrl(value: unknown): value is string {
   }
 }
 
-// This development-only operation prepares a durable secret before dispatch.
+// This operator-only operation prepares a durable secret before dispatch.
 // An armed operation may only reconcile remote state; absence never permits another POST.
-export async function registerSandboxWebhook(
+export async function registerAsaasWebhook(
   db: Database,
   config: GiftPaymentConfig,
-  input: SandboxWebhookRegistrationInput,
+  input: AsaasWebhookRegistrationInput,
   options: { fetch?: typeof globalThis.fetch } = {},
-): Promise<SandboxWebhookRegistrationResult> {
+): Promise<AsaasWebhookRegistrationResult> {
   try {
     if (
-      config.mode !== "sandbox" ||
-      config.applicationEnvironment !== "development"
+      config.mode === "disabled" ||
+      !(
+        (config.mode === "sandbox" &&
+          config.applicationEnvironment === "development") ||
+        (config.mode === "live" &&
+          config.applicationEnvironment === "production")
+      )
     )
       return unavailable();
+    const mode = config.mode;
+    const applicationEnvironment = config.applicationEnvironment;
+    const liveDemoSiteId = config.liveDemoSiteId;
     const origin = new URL(config.webhookPublicOrigin);
     if (
       origin.protocol !== "https:" ||
@@ -111,11 +124,11 @@ export async function registerSandboxWebhook(
       provider: "ASAAS",
       siteId,
       accountBindingId: accountId,
-      environment: "sandbox",
+      environment: mode,
     };
     async function load(tx: Pick<Transaction, "execute">) {
       const result = await tx.execute(
-        sql`SELECT a.id,a.site_id AS "siteId",a.provider,a.environment,a.is_current AS "isCurrent",s.is_demo AS "isDemo",a.account_reference AS "accountReference",a.recipient_reference AS "recipientReference",a.credential_version AS "credentialVersion",a.credential_key_id AS "credentialKeyId",a.credential_nonce AS "credentialNonce",a.credential_ciphertext AS "credentialCiphertext",a.credential_tag AS "credentialTag",a.webhook_token_hash AS "webhookTokenHash",a.webhook_registration AS "webhookRegistration" FROM receiving_account a INNER JOIN site s ON s.id=a.site_id WHERE a.id=${accountId} AND a.site_id=${siteId} AND a.provider='ASAAS' AND a.environment='sandbox' AND a.is_current=true FOR UPDATE OF a`,
+        sql`SELECT a.id,a.site_id AS "siteId",a.provider,a.environment,a.is_current AS "isCurrent",s.is_demo AS "isDemo",a.account_reference AS "accountReference",a.recipient_reference AS "recipientReference",a.credential_version AS "credentialVersion",a.credential_key_id AS "credentialKeyId",a.credential_nonce AS "credentialNonce",a.credential_ciphertext AS "credentialCiphertext",a.credential_tag AS "credentialTag",a.webhook_token_hash AS "webhookTokenHash",a.webhook_registration AS "webhookRegistration" FROM receiving_account a INNER JOIN site s ON s.id=a.site_id WHERE a.id=${accountId} AND a.site_id=${siteId} AND a.provider='ASAAS' AND a.environment=${mode} AND a.is_current=true FOR UPDATE OF a`,
       );
       const row = result.rows[0];
       if (
@@ -124,9 +137,17 @@ export async function registerSandboxWebhook(
         row.id !== accountId ||
         row.siteId !== siteId ||
         row.provider !== "ASAAS" ||
-        row.environment !== "sandbox" ||
+        row.environment !== mode ||
         row.isCurrent !== true ||
-        row.isDemo !== true ||
+        (mode === "sandbox"
+          ? row.isDemo !== true
+          : !allowsLiveSite({
+              siteId,
+              isDemo: row.isDemo as boolean,
+              mode,
+              applicationEnvironment,
+              liveDemoSiteId,
+            })) ||
         !reference(row.accountReference) ||
         row.accountReference === platformAccountId ||
         !reference(row.recipientReference)
@@ -161,7 +182,7 @@ export async function registerSandboxWebhook(
       controller.signal.addEventListener("abort", cancel, { once: true });
       try {
         const response = await fetch(
-          `https://api-sandbox.asaas.com/v3${path}`,
+          `${mode === "live" ? "https://api.asaas.com" : "https://api-sandbox.asaas.com"}/v3${path}`,
           {
             method,
             redirect: "error",
@@ -239,7 +260,7 @@ export async function registerSandboxWebhook(
       if (
         !/^[A-Za-z0-9_-]{32,255}$/.test(token) ||
         row.webhookTokenHash !== hash(token) ||
-        raw.name !== `entrelacos-sandbox-${hash(token).slice(0, 24)}`
+        raw.name !== `entrelacos-${mode}-${hash(token).slice(0, 24)}`
       )
         return unavailable();
       return raw as unknown as Registration;
@@ -250,7 +271,7 @@ export async function registerSandboxWebhook(
       tokenHash: string,
     ) {
       const saved = await tx.execute(
-        sql`UPDATE receiving_account SET webhook_token_hash=${tokenHash},webhook_registration=${JSON.stringify(registration)}::jsonb,updated_at=clock_timestamp() WHERE id=${accountId} AND site_id=${siteId} AND provider='ASAAS' AND environment='sandbox' AND account_reference=${account.accountReference} AND is_current=true RETURNING id`,
+        sql`UPDATE receiving_account SET webhook_token_hash=${tokenHash},webhook_registration=${JSON.stringify(registration)}::jsonb,updated_at=clock_timestamp() WHERE id=${accountId} AND site_id=${siteId} AND provider='ASAAS' AND environment=${mode} AND account_reference=${account.accountReference} AND is_current=true RETURNING id`,
       );
       if (saved.rows.length !== 1 || saved.rows[0].id !== accountId)
         return unavailable();
@@ -268,7 +289,7 @@ export async function registerSandboxWebhook(
       const registration: Registration = {
         version: 1,
         state: "PREPARED",
-        name: `entrelacos-sandbox-${hash(token).slice(0, 24)}`,
+        name: `entrelacos-${mode}-${hash(token).slice(0, 24)}`,
         url,
         email: notificationEmail,
         token: encryptProviderCredential(token, context, keys, credentialKeyId),
@@ -288,7 +309,7 @@ export async function registerSandboxWebhook(
       apiVersion: 3,
       authToken: token,
       sendType: "SEQUENTIALLY",
-      events: sandboxWebhookEvents,
+      events: asaasWebhookEvents,
     };
     function remoteMatches(raw: Record<string, unknown>) {
       return (
@@ -302,8 +323,8 @@ export async function registerSandboxWebhook(
         raw.apiVersion === 3 &&
         raw.sendType === "SEQUENTIALLY" &&
         Array.isArray(raw.events) &&
-        raw.events.length === sandboxWebhookEvents.length &&
-        sandboxWebhookEvents.every(
+        raw.events.length === asaasWebhookEvents.length &&
+        asaasWebhookEvents.every(
           (event) => Array.isArray(raw.events) && raw.events.includes(event),
         ) &&
         (raw.authToken === undefined || raw.authToken === token)
@@ -406,5 +427,23 @@ export async function registerSandboxWebhook(
     }
   } catch {
     return unavailable();
+  }
+}
+
+export async function registerSandboxWebhook(
+  db: Database,
+  config: GiftPaymentConfig,
+  input: SandboxWebhookRegistrationInput,
+  options: { fetch?: typeof globalThis.fetch } = {},
+): Promise<SandboxWebhookRegistrationResult> {
+  try {
+    if (
+      config.mode !== "sandbox" ||
+      config.applicationEnvironment !== "development"
+    )
+      throw new Error("Unsupported Sandbox registration environment");
+    return await registerAsaasWebhook(db, config, input, options);
+  } catch {
+    throw new Error("Sandbox webhook registration unavailable");
   }
 }

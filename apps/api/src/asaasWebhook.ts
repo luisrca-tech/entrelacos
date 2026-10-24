@@ -1,4 +1,5 @@
 import { createHash, timingSafeEqual } from "node:crypto";
+import { allowsLiveSite, type LiveSitePolicy } from "./liveSitePolicy";
 
 export interface AsaasWebhookBinding {
   siteId: string;
@@ -24,7 +25,7 @@ export interface AsaasInboxEvent {
   receivedAt: string;
 }
 
-export interface AsaasWebhookDependencies {
+export interface AsaasWebhookDependencies extends LiveSitePolicy {
   mode: "disabled" | "sandbox" | "live";
   applicationEnvironment: "development" | "test" | "production";
   resolveBinding(tokenHash: string): Promise<AsaasWebhookBinding | null>;
@@ -110,6 +111,7 @@ export function createAsaasWebhookReceiver(
 ) {
   const mode = dependencies.mode;
   const environment = dependencies.applicationEnvironment;
+  const liveDemoSiteId = dependencies.liveDemoSiteId;
   return {
     async receive(
       token: unknown,
@@ -141,7 +143,15 @@ export function createAsaasWebhookReceiver(
           !reference(binding.accountId, 128) ||
           !reference(binding.providerAccountReference, 128) ||
           typeof binding.isDemo !== "boolean" ||
-          (binding.isDemo && mode === "live")
+          (binding.isDemo &&
+            mode === "live" &&
+            !allowsLiveSite({
+              siteId: binding.siteId,
+              isDemo: binding.isDemo,
+              mode,
+              applicationEnvironment: environment,
+              liveDemoSiteId,
+            }))
         ) {
           reject(401, "WEBHOOK_AUTH_DENIED");
         }

@@ -6,9 +6,11 @@ import type {
   GiftPricingEvidence,
   GiftQuoteServiceDependencies,
 } from "./giftQuotes";
+import { allowsLiveSite, type LiveSitePolicy } from "./liveSitePolicy";
 
 export interface SandboxDemoPricingAuthorization
-  extends FinancialAccountBinding {
+  extends FinancialAccountBinding,
+    LiveSitePolicy {
   isDemo: boolean;
   applicationEnvironment: "development" | "test" | "production";
 }
@@ -78,6 +80,44 @@ function count(value: unknown): number {
 // Authorization comes from persisted site/account facts. This policy describes an
 // observed fee schedule for a demo, never holder consent or a future tariff guarantee.
 export async function loadSandboxDemoPricing(
+  scope: Scope,
+  authorization: SandboxDemoPricingAuthorization,
+  options: Options,
+): Promise<GiftPricingEvidence | null> {
+  if (
+    authorization.isDemo !== true ||
+    authorization.applicationEnvironment !== "development" ||
+    authorization.environment !== "sandbox" ||
+    scope.environment !== "sandbox"
+  )
+    return null;
+  return loadObservedPricing(scope, authorization, options);
+}
+
+// Live estimates use the recipient's scoped native schedule. Only settlement
+// observations establish actual fees; the guest always pays the gift amount.
+export async function loadLiveReceivingPricing(
+  scope: Scope,
+  authorization: SandboxDemoPricingAuthorization,
+  options: Options,
+): Promise<GiftPricingEvidence | null> {
+  if (
+    !allowsLiveSite({
+      siteId: scope.siteId,
+      isDemo: authorization.isDemo,
+      mode: scope.environment,
+      applicationEnvironment: authorization.applicationEnvironment,
+      liveDemoSiteId: authorization.liveDemoSiteId,
+    }) ||
+    authorization.applicationEnvironment !== "production" ||
+    authorization.environment !== "live" ||
+    scope.environment !== "live"
+  )
+    return null;
+  return loadObservedPricing(scope, authorization, options);
+}
+
+async function loadObservedPricing(
   originalScope: Scope,
   originalAuthorization: SandboxDemoPricingAuthorization,
   options: Options,
@@ -86,10 +126,7 @@ export async function loadSandboxDemoPricing(
     const scope = structuredClone(originalScope);
     const authorization = { ...originalAuthorization };
     if (
-      authorization.isDemo !== true ||
-      authorization.applicationEnvironment !== "development" ||
-      authorization.environment !== "sandbox" ||
-      scope.environment !== "sandbox" ||
+      authorization.environment !== scope.environment ||
       scope.provider !== "ASAAS" ||
       authorization.provider !== "ASAAS" ||
       authorization.siteId !== scope.siteId ||
@@ -103,7 +140,7 @@ export async function loadSandboxDemoPricing(
       siteId: scope.siteId,
       accountBindingId: authorization.accountBindingId,
       accountReference: scope.accountReference,
-      environment: "sandbox",
+      environment: authorization.environment,
     };
     const started = time(options.now());
     const observation = structuredClone(await options.readAccountFees(binding));
@@ -165,8 +202,8 @@ export async function loadSandboxDemoPricing(
         if (!fixedType) return null;
         const used = count(pix.creditsReceivedOfCurrentMonth);
         if (used < monthly) {
-          // Another Sandbox charge can consume the last slot. Settlement still
-          // reconciles actual amounts and cannot credit a divergent estimate.
+          // Another charge can consume the last free slot. Settlement uses
+          // observed actual fees rather than promising this estimate.
           fixed = 0;
           rate = 0;
           const parts = localParts(new Date(started));
@@ -206,7 +243,9 @@ export async function loadSandboxDemoPricing(
       }
     }
     if (rate >= 10_000) return null;
-    const version = `sandbox-demo.${createHash("sha256")
+    const version = `${authorization.environment === "live" ? "asaas-live-observed" : "sandbox-demo"}.${createHash(
+      "sha256",
+    )
       .update(
         JSON.stringify([
           scope,

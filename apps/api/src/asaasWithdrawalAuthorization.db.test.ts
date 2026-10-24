@@ -266,6 +266,15 @@ beforeAll(async () => {
       `"${scratchSchema}"."withdrawal_authorization_candidate"`,
     );
   await query(migration);
+  await query(
+    readFileSync(
+      new URL(
+        "../../../packages/database/migrations/0022_withdrawal_authorization_live.sql",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+  );
 });
 afterAll(async () => {
   if (connection) {
@@ -624,6 +633,45 @@ describe("PostgreSQL withdrawal security authorization", () => {
       query(
         "INSERT INTO withdrawal_authorization_candidate VALUES ('live','live-transfer','site-1','account-1','operation-live',repeat('a',64),'{}',now())",
       ),
-    ).rejects.toThrow(/check constraint/);
+    ).rejects.toThrow(/foreign key/);
   });
+});
+
+it("accepts and preserves live authorization custody only with its exact live operation foreign key", async () => {
+  const f = await databaseFixture();
+  await transaction(f.record);
+  await query(
+    "INSERT INTO financial_operation (id,site_id,account_id,environment,kind) VALUES ('operation-live','site-1','account-1','live','WITHDRAWAL')",
+  );
+  await query(
+    "INSERT INTO withdrawal_authorization_candidate VALUES ('live','live-transfer','site-1','account-1','operation-live',repeat('a',64),'{}',now())",
+  );
+  await query(
+    "INSERT INTO withdrawal_authorization_decision VALUES ('live','live-transfer',repeat('a',64),'APPROVED',now())",
+  );
+  expect(
+    (
+      await query(
+        "SELECT count(*)::int AS count FROM withdrawal_authorization_decision WHERE environment='live'",
+      )
+    ).rows,
+  ).toEqual([{ count: 1 }]);
+  await expect(
+    query(
+      "INSERT INTO withdrawal_authorization_decision VALUES ('sandbox','live-transfer',repeat('a',64),'APPROVED',now())",
+    ),
+  ).rejects.toThrow(/foreign key/);
+  for (const table of [
+    "withdrawal_authorization_candidate",
+    "withdrawal_authorization_decision",
+  ]) {
+    await expect(
+      query(
+        `UPDATE ${table} SET payload_hash=repeat('b',64) WHERE environment='live'`,
+      ),
+    ).rejects.toThrow("Withdrawal authorization custody is immutable");
+    await expect(
+      query(`DELETE FROM ${table} WHERE environment='live'`),
+    ).rejects.toThrow("Withdrawal authorization custody is immutable");
+  }
 });

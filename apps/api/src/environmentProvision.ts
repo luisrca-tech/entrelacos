@@ -9,7 +9,12 @@ import {
 import { and, eq, inArray, or, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { type BootstrapOwnerInput, bootstrapOwner } from "./bootstrapOwner";
-import { DEMO_RESET_DATASET_IDS, resetDemoSite } from "./demoReset";
+import {
+  assertDemoResetAllowed,
+  DEMO_RESET_DATASET_IDS,
+  resetDemoSite,
+} from "./demoReset";
+import type { LiveSitePolicy } from "./liveSitePolicy";
 
 export const DEMO_SITE_ID = "demo-wedding" as const;
 export const DEMO_REPOSITORY_SLUG = "demo-wedding" as const;
@@ -18,7 +23,7 @@ export const DEMO_EVENT_DATE = "2027-09-18" as const;
 
 type ProvisionDatabase = NodePgDatabase<Record<string, never>>;
 
-export interface EnvironmentProvisionInput {
+export interface EnvironmentProvisionInput extends LiveSitePolicy {
   target: "development" | "production";
   runtimeEnvironment: string;
   productionAuthorized: boolean;
@@ -73,6 +78,10 @@ async function ensureDemoSite(
       sql`SELECT pg_advisory_xact_lock(hashtextextended('entrelacos:environment:provision:demo-wedding', 0))`,
     );
 
+    await tx.execute(
+      sql`SELECT id FROM site WHERE id=${DEMO_SITE_ID} FOR UPDATE`,
+    );
+    await assertDemoResetAllowed(tx, DEMO_SITE_ID, input);
     const [existing] = await tx
       .select()
       .from(site)
@@ -204,6 +213,10 @@ export async function provisionDemoEnvironment(
       "Explicit production provisioning authorization is required",
     );
   }
+  if (input.liveDemoSiteId === DEMO_SITE_ID)
+    throw new Error(
+      "A production showcase with real receiving cannot be reprovisioned",
+    );
   validatePublicUrl(input.target, input.publicUrl);
   const ensured = await ensureDemoSite(db, input);
 

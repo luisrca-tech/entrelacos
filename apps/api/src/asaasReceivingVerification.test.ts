@@ -15,7 +15,7 @@ import {
   readReceivingVerificationCandidate,
 } from "./receivingVerification";
 
-function fixture() {
+function fixture(environment: "sandbox" | "live" = "sandbox") {
   const keyring = new Map([["key-one", new Uint8Array(32).fill(12)]]);
   const input = {
     name: "Fictional Holder",
@@ -34,7 +34,7 @@ function fixture() {
     siteId: "site-one",
     requestId: "request-one",
     operatorUserId: "holder-one",
-    environment: "sandbox",
+    environment,
     policyVersion: "policy-one",
     accountId: "account-one",
     operationId: "operation-one",
@@ -46,7 +46,7 @@ function fixture() {
           "site-one",
           "request-one",
           "holder-one",
-          "sandbox",
+          environment,
           "policy-one",
           true,
         ]),
@@ -73,7 +73,7 @@ function fixture() {
     siteId: "site-one",
     accountId: "account-one",
     operatorUserId: "holder-one",
-    environment: "sandbox" as const,
+    environment,
     operatorReference: "simulation-local-correlation",
     accountReference: "native-one",
     recipientReference: "wallet-one",
@@ -103,7 +103,7 @@ function fixture() {
   const observed: ReceivingSetupAsaasObservation = {
     siteId: scope.siteId,
     accountBindingId: scope.accountId,
-    environment: "sandbox",
+    environment,
     accountReference: scope.accountReference,
     recipientReference: scope.recipientReference,
     observedAt: "2026-10-19T12:00:00.000Z",
@@ -125,56 +125,61 @@ function fixture() {
 }
 
 describe("authenticated native incoming Asaas verification", () => {
-  it("binds own incoming account and original holder without exposing profile or bank numbers", () => {
-    const v = fixture();
-    const facts = prepareAsaasReceivingVerification(
-      v.fence,
-      v.observed,
-      v.keyring,
-    );
-    expect(readReceivingVerificationCandidate(facts.candidate)).toEqual(
-      facts.candidate,
-    );
-    expect(facts.candidate.bankReference).toMatch(/^asaas-bank-[a-f0-9]{64}$/);
-    expect(facts.candidate.scope.operatorReference).toBe(
-      v.fence.scope.operatorReference,
-    );
-    expect(JSON.stringify(facts)).not.toMatch(
-      /12345678909|holder@example|Fictional Holder|123456/,
-    );
-    expect(facts.observation).toBeNull();
-    const selected = {
-      ...v.fence,
-      destinations: [
-        {
-          id: "destination-two",
-          version: 2,
-          bank_reference: facts.candidate.bankReference,
-          is_current: true,
+  it.each(["sandbox", "live"] as const)(
+    "binds %s incoming account and original holder without exposing profile or bank numbers",
+    (environment) => {
+      const v = fixture(environment);
+      const facts = prepareAsaasReceivingVerification(
+        v.fence,
+        v.observed,
+        v.keyring,
+      );
+      expect(readReceivingVerificationCandidate(facts.candidate)).toEqual(
+        facts.candidate,
+      );
+      expect(facts.candidate.bankReference).toMatch(
+        /^asaas-bank-[a-f0-9]{64}$/,
+      );
+      expect(facts.candidate.scope.operatorReference).toBe(
+        v.fence.scope.operatorReference,
+      );
+      expect(JSON.stringify(facts)).not.toMatch(
+        /12345678909|holder@example|Fictional Holder|123456/,
+      );
+      expect(facts.observation).toBeNull();
+      const selected = {
+        ...v.fence,
+        destinations: [
+          {
+            id: "destination-two",
+            version: 2,
+            bank_reference: facts.candidate.bankReference,
+            is_current: true,
+          },
+        ],
+      };
+      const observation = prepareAsaasReceivingVerification(
+        selected,
+        v.observed,
+        v.keyring,
+      ).observation;
+      if (!observation) throw new Error("Missing selected native observation");
+      expect(
+        prepareReceivingVerificationObservation(observation)
+          .verificationReference.length,
+      ).toBeLessThanOrEqual(256);
+      expect(observation).toMatchObject({
+        destination: { id: "destination-two", version: 2 },
+        account: {
+          state: "APPROVED",
+          receiving: true,
+          withdrawal: true,
+          commercial: true,
         },
-      ],
-    };
-    const observation = prepareAsaasReceivingVerification(
-      selected,
-      v.observed,
-      v.keyring,
-    ).observation;
-    if (!observation) throw new Error("Missing selected native observation");
-    expect(
-      prepareReceivingVerificationObservation(observation).verificationReference
-        .length,
-    ).toBeLessThanOrEqual(256);
-    expect(observation).toMatchObject({
-      destination: { id: "destination-two", version: 2 },
-      account: {
-        state: "APPROVED",
-        receiving: true,
-        withdrawal: true,
-        commercial: true,
-      },
-      bank: { state: "VERIFIED" },
-    });
-  });
+        bank: { state: "VERIFIED" },
+      });
+    },
+  );
   it.each(["name", "cpfCnpj", "email", "address"])(
     "rejects changed accepted profile field %s",
     (field) => {
@@ -187,22 +192,46 @@ describe("authenticated native incoming Asaas verification", () => {
       ).toThrow();
     },
   );
-  it("cannot certify approval from status alone or a foreign wallet", () => {
-    const v = fixture();
-    delete v.observed.verificationFacts;
+  it.each(["sandbox", "live"] as const)(
+    "requires an active %s Pix key before selecting the native incoming bank",
+    (environment) => {
+      const v = fixture(environment);
+      if (!v.observed.verificationFacts)
+        throw new Error("Missing fixture facts");
+      Object.assign(v.observed.verificationFacts.activePixKey, {
+        status: "AWAITING_ACTIVATION",
+      });
+      expect(() =>
+        prepareAsaasReceivingVerification(v.fence, v.observed, v.keyring),
+      ).toThrow();
+    },
+  );
+  it("rejects cross-environment observations", () => {
+    const v = fixture("live");
+    v.observed.environment = "sandbox";
     expect(() =>
       prepareAsaasReceivingVerification(v.fence, v.observed, v.keyring),
     ).toThrow();
-    const other = fixture();
-    other.observed.recipientReference = "foreign-wallet";
-    expect(() =>
-      prepareAsaasReceivingVerification(
-        other.fence,
-        other.observed,
-        other.keyring,
-      ),
-    ).toThrow();
   });
+  it.each(["sandbox", "live"] as const)(
+    "cannot certify %s approval from status alone or a foreign wallet",
+    (environment) => {
+      const v = fixture(environment);
+      delete v.observed.verificationFacts;
+      expect(() =>
+        prepareAsaasReceivingVerification(v.fence, v.observed, v.keyring),
+      ).toThrow();
+      const other = fixture(environment);
+      other.observed.recipientReference = "foreign-wallet";
+      expect(() =>
+        prepareAsaasReceivingVerification(
+          other.fence,
+          other.observed,
+          other.keyring,
+        ),
+      ).toThrow();
+    },
+  );
   it("does not match a simulated or external payout destination to its incoming bank", () => {
     const v = fixture();
     v.fence = {
@@ -224,126 +253,175 @@ describe("authenticated native incoming Asaas verification", () => {
 });
 
 describe("native verification transport and retained authority", () => {
-  it("accepts only internally observed own-account facts and does not trust mutated caller receipts", async () => {
-    const v = fixture();
-    const context = {
-      provider: "ASAAS" as const,
-      siteId: v.fence.scope.siteId,
-      accountBindingId: v.fence.scope.accountId,
-      environment: "sandbox" as const,
-    };
-    const envelope = encryptProviderCredential(
-      "synthetic-subaccount-token",
-      context,
-      v.keyring,
-      "key-one",
-    );
-    v.fence = {
-      ...v.fence,
-      account: {
-        credential_version: envelope.version,
-        credential_key_id: envelope.keyId,
-        credential_nonce: envelope.nonce,
-        credential_ciphertext: envelope.ciphertext,
-        credential_tag: envelope.tag,
-      },
-    };
-    const facts = v.observed.verificationFacts;
-    if (!facts) throw new Error("Missing fixture facts");
-    const fetch = vi.fn(
-      async (url: string | URL | Request, request?: RequestInit) => {
-        expect(request?.method).toBe("GET");
-        expect(request?.body).toBeUndefined();
-        expect(new Headers(request?.headers).get("access_token")).toBe(
-          "synthetic-subaccount-token",
-        );
-        const path = new URL(String(url)).pathname;
-        if (path === "/v3/wallets/")
-          return Response.json({
-            data: [{ id: v.fence.scope.recipientReference }],
-            hasMore: false,
-          });
-        if (path === "/v3/myAccount/status/")
-          return Response.json(v.observed.status);
-        if (path === "/v3/myAccount/commercialInfo/")
-          return Response.json({
-            ...facts.commercialInfo,
-            commercialInfoExpiration: null,
-          });
-        if (path === "/v3/myAccount/accountNumber")
-          return Response.json(facts.accountNumber);
-        if (path === "/v3/pix/addressKeys")
-          return Response.json({ data: [facts.activePixKey], hasMore: false });
-        throw new Error("Unexpected provider path");
-      },
-    );
-    const native = createAsaasReceivingVerification({
-      mode: "sandbox",
-      applicationEnvironment: "development",
-      platformAccountReference: "parent-one",
-      keyring: v.keyring,
-      fetch: fetch as typeof globalThis.fetch,
-      now: () => new Date(v.observed.observedAt),
-    });
-    const owner = native.observer.acquire(
-      "SELECT",
-      v.fence,
-      new AbortController().signal,
-    );
-    const candidate = await owner.result;
-    await owner.completion;
-    expect(fetch).toHaveBeenCalledTimes(5);
-    const tx = {
-      execute: vi.fn(async () => ({
-        rows: [
+  it.each([
+    ["live", "development"],
+    ["sandbox", "production"],
+    ["sandbox", "test"],
+  ] as const)(
+    "rejects mismatched or unsupported %s/%s verification before network access",
+    async (mode, applicationEnvironment) => {
+      const v = fixture(mode);
+      const fetch = vi.fn();
+      const native = createAsaasReceivingVerification({
+        mode,
+        applicationEnvironment,
+        platformAccountReference: "parent-one",
+        keyring: v.keyring,
+        fetch,
+        now: () => new Date(v.observed.observedAt),
+      });
+      const owner = native.observer.acquire(
+        "SELECT",
+        v.fence,
+        new AbortController().signal,
+      );
+      await expect(owner.result).rejects.toThrow();
+      await owner.completion;
+      expect(fetch).not.toHaveBeenCalled();
+      await native.observer.close();
+    },
+  );
+  it.each(["sandbox", "live"] as const)(
+    "accepts only internally observed %s own-account facts and does not trust mutated caller receipts",
+    async (environment) => {
+      const v = fixture(environment);
+      const context = {
+        provider: "ASAAS" as const,
+        siteId: v.fence.scope.siteId,
+        accountBindingId: v.fence.scope.accountId,
+        environment,
+      };
+      const envelope = encryptProviderCredential(
+        "synthetic-subaccount-token",
+        context,
+        v.keyring,
+        "key-one",
+      );
+      v.fence = {
+        ...v.fence,
+        account: {
+          credential_version: envelope.version,
+          credential_key_id: envelope.keyId,
+          credential_nonce: envelope.nonce,
+          credential_ciphertext: envelope.ciphertext,
+          credential_tag: envelope.tag,
+        },
+      };
+      const facts = v.observed.verificationFacts;
+      if (!facts) throw new Error("Missing fixture facts");
+      const fetch = vi.fn(
+        async (url: string | URL | Request, request?: RequestInit) => {
+          expect(request?.method).toBe("GET");
+          expect(request?.body).toBeUndefined();
+          expect(new Headers(request?.headers).get("access_token")).toBe(
+            "synthetic-subaccount-token",
+          );
+          const providerUrl = new URL(String(url));
+          expect(providerUrl.origin).toBe(
+            environment === "live"
+              ? "https://api.asaas.com"
+              : "https://api-sandbox.asaas.com",
+          );
+          const path = providerUrl.pathname;
+          if (path === "/v3/wallets/")
+            return Response.json({
+              data: [{ id: v.fence.scope.recipientReference }],
+              hasMore: false,
+            });
+          if (path === "/v3/myAccount/status/")
+            return Response.json(v.observed.status);
+          if (path === "/v3/myAccount/commercialInfo/")
+            return Response.json({
+              ...facts.commercialInfo,
+              commercialInfoExpiration: null,
+            });
+          if (path === "/v3/myAccount/accountNumber")
+            return Response.json(facts.accountNumber);
+          if (path === "/v3/pix/addressKeys")
+            return Response.json({
+              data: [facts.activePixKey],
+              hasMore: false,
+            });
+          throw new Error("Unexpected provider path");
+        },
+      );
+      const native = createAsaasReceivingVerification({
+        mode: environment,
+        applicationEnvironment:
+          environment === "live" ? "production" : "development",
+        platformAccountReference: "parent-one",
+        keyring: v.keyring,
+        fetch: fetch as typeof globalThis.fetch,
+        now: () => new Date(v.observed.observedAt),
+      });
+      const owner = native.observer.acquire(
+        "SELECT",
+        v.fence,
+        new AbortController().signal,
+      );
+      const candidate = await owner.result;
+      await owner.completion;
+      expect(fetch).toHaveBeenCalledTimes(5);
+      const tx = {
+        execute: vi.fn(async () => ({
+          rows: [
+            {
+              holderUserId: "holder-one",
+              consentId: "consent-one",
+              consentVersion: receivingSetupConsentVersion,
+              consentAt: new Date("2026-10-13T00:00:00Z"),
+            },
+          ],
+        })),
+      } as never;
+      expect(
+        await native.readCurrentPolicy(
+          "SELECT",
+          v.fence,
+          tx,
+          candidate as never,
+        ),
+      ).toBe(true);
+      const forged = { ...candidate, bankReference: "client-replacement-bank" };
+      expect(
+        await native.readCurrentPolicy("SELECT", v.fence, tx, forged as never),
+      ).toBe(false);
+      await native.observer.close();
+      expect(await native.readObserverPolicy(v.fence.scope)).toBe(false);
+    },
+  );
+  it.each(["sandbox", "live"] as const)(
+    "requires all four %s approvals alongside the original account facts",
+    (environment) => {
+      const v = fixture(environment);
+      const first = prepareAsaasReceivingVerification(
+        v.fence,
+        v.observed,
+        v.keyring,
+      );
+      v.fence = {
+        ...v.fence,
+        destinations: [
           {
-            holderUserId: "holder-one",
-            consentId: "consent-one",
-            consentVersion: receivingSetupConsentVersion,
-            consentAt: new Date("2026-10-13T00:00:00Z"),
+            id: "destination-one",
+            version: 1,
+            bank_reference: first.candidate.bankReference,
+            is_current: true,
           },
         ],
-      })),
-    } as never;
-    expect(
-      await native.readCurrentPolicy("SELECT", v.fence, tx, candidate as never),
-    ).toBe(true);
-    const forged = { ...candidate, bankReference: "client-replacement-bank" };
-    expect(
-      await native.readCurrentPolicy("SELECT", v.fence, tx, forged as never),
-    ).toBe(false);
-    await native.observer.close();
-    expect(await native.readObserverPolicy(v.fence.scope)).toBe(false);
-  });
-  it("requires all four approvals alongside the original account facts", () => {
-    const v = fixture();
-    const first = prepareAsaasReceivingVerification(
-      v.fence,
-      v.observed,
-      v.keyring,
-    );
-    v.fence = {
-      ...v.fence,
-      destinations: [
-        {
-          id: "destination-one",
-          version: 1,
-          bank_reference: first.candidate.bankReference,
-          is_current: true,
+      };
+      v.observed.status.documentation = "PENDING";
+      expect(
+        prepareAsaasReceivingVerification(v.fence, v.observed, v.keyring)
+          .observation,
+      ).toMatchObject({
+        account: {
+          state: "UNDER_REVIEW",
+          receiving: false,
+          withdrawal: false,
+          commercial: false,
         },
-      ],
-    };
-    v.observed.status.documentation = "PENDING";
-    expect(
-      prepareAsaasReceivingVerification(v.fence, v.observed, v.keyring)
-        .observation,
-    ).toMatchObject({
-      account: {
-        state: "UNDER_REVIEW",
-        receiving: false,
-        withdrawal: false,
-        commercial: false,
-      },
-    });
-  });
+      });
+    },
+  );
 });

@@ -4,6 +4,7 @@ import type { DatabaseConnection } from "@entrelacos/database";
 import { sql } from "drizzle-orm";
 import { createAsaasReceivingVerification } from "./asaasReceivingVerification";
 import type { FinancialActor } from "./financialAuthorization";
+import { allowsLiveSite } from "./liveSitePolicy";
 import type { ProviderCredentialKeyring } from "./providerCredentials";
 import { readReceivingProvisioningRecord } from "./receivingNomination";
 import { readReceivingReadiness } from "./receivingRepository";
@@ -18,6 +19,7 @@ import {
 import { createReceivingVerificationRepository } from "./receivingVerificationRepository";
 
 export function createReceivingVerificationComposition(options: {
+  liveDemoSiteId?: string;
   db: DatabaseConnection["db"];
   mode: "sandbox" | "live";
   applicationEnvironment: "development" | "test" | "production";
@@ -33,9 +35,14 @@ export function createReceivingVerificationComposition(options: {
   now(): Date;
   readReadiness?: (siteId: string) => Promise<ReceivingReadiness>;
 }) {
-  const supported =
+  const liveDemoSiteId = options.liveDemoSiteId;
+  const sandboxSimulation =
     options.mode === "sandbox" &&
     options.applicationEnvironment === "development";
+  const supported =
+    sandboxSimulation ||
+    (options.mode === "live" &&
+      options.applicationEnvironment === "production");
   const native = createAsaasReceivingVerification(options);
   const verification = createReceivingVerification({
     profile: "rv1",
@@ -43,10 +50,13 @@ export function createReceivingVerificationComposition(options: {
     ...native,
     repository: createReceivingVerificationRepository(options.db, {
       mode: options.mode,
+      ...(liveDemoSiteId === undefined
+        ? {}
+        : { liveDemoSiteId: liveDemoSiteId }),
       applicationEnvironment: options.applicationEnvironment,
       maxAuthAgeMs: 300000,
       now: options.now,
-      allowSandboxSimulationHistory: supported,
+      allowSandboxSimulationHistory: sandboxSimulation,
       readCurrentPolicy: native.readCurrentPolicy,
       authorizeSetupSelectionInTransaction: async (
         tx,
@@ -72,21 +82,30 @@ export function createReceivingVerificationComposition(options: {
     if (!supported || closed)
       throw new ReceivingSetupError(503, "RECEIVING_VERIFICATION_UNAVAILABLE");
     const result = await options.db.execute(
-      sql`SELECT a.site_id AS "siteId",a.id AS "accountId",a.operator_user_id AS "operatorUserId",a.operator_reference AS "operatorReference",a.account_reference AS "accountReference",a.recipient_reference AS "recipientReference",EXISTS(SELECT 1 FROM receiving_destination d WHERE d.site_id=a.site_id AND d.account_id=a.id AND d.environment=a.environment AND d.is_current=true AND starts_with(d.bank_reference,'asaas-bank-')) AS "nativeDestination" FROM receiving_account a JOIN site st ON st.id=a.site_id WHERE a.site_id=${siteId} AND a.environment='sandbox' AND a.provider='ASAAS' AND a.is_current=true AND st.is_demo=true LIMIT 2`,
+      sql`SELECT st.is_demo AS "isDemo",a.site_id AS "siteId",a.id AS "accountId",a.operator_user_id AS "operatorUserId",a.operator_reference AS "operatorReference",a.account_reference AS "accountReference",a.recipient_reference AS "recipientReference",EXISTS(SELECT 1 FROM receiving_destination d WHERE d.site_id=a.site_id AND d.account_id=a.id AND d.environment=a.environment AND d.is_current=true AND starts_with(d.bank_reference,'asaas-bank-')) AS "nativeDestination" FROM receiving_account a JOIN site st ON st.id=a.site_id WHERE a.site_id=${siteId} AND a.environment=${options.mode} AND a.provider='ASAAS' AND a.is_current=true AND (st.is_demo=${sandboxSimulation} OR (${options.mode}='live' AND st.id=${liveDemoSiteId ?? null})) LIMIT 2`,
     );
     const row = result.rows[0];
     if (
       result.rows.length !== 1 ||
       row.siteId !== siteId ||
+      (options.mode === "sandbox"
+        ? row.isDemo !== sandboxSimulation
+        : !allowsLiveSite({
+            siteId,
+            isDemo: row.isDemo as boolean,
+            mode: options.mode,
+            applicationEnvironment: options.applicationEnvironment,
+            liveDemoSiteId: liveDemoSiteId,
+          })) ||
       typeof row.nativeDestination !== "boolean"
     )
       throw new ReceivingSetupError(409, "RECEIVING_ACCOUNT_REQUIRED");
-    const { nativeDestination, ...scope } = row;
+    const { nativeDestination, isDemo: _isDemo, ...scope } = row;
     return {
       scope: readReceivingVerificationScope({
         ...scope,
         provider: "ASAAS",
-        environment: "sandbox",
+        environment: options.mode,
       }),
       nativeDestination,
     };
@@ -138,6 +157,9 @@ export function createReceivingVerificationComposition(options: {
         ((siteId) =>
           readReceivingReadiness(options.db, siteId, {
             mode: options.mode,
+            ...(liveDemoSiteId === undefined
+              ? {}
+              : { liveDemoSiteId: liveDemoSiteId }),
             applicationEnvironment: options.applicationEnvironment,
             freshnessMs: 300000,
             now: options.now,

@@ -10,6 +10,7 @@ import {
   requireAdminSession,
 } from "./authHttp";
 import { DemoResetServiceError, resetDemoSite } from "./demoReset";
+import type { LiveSitePolicy } from "./liveSitePolicy";
 import type {
   ObservabilityEvent,
   ObservabilityVariables,
@@ -66,7 +67,7 @@ function serviceProblem(error: unknown): Response | undefined {
 }
 
 export function createDemoResetHttpRouter(
-  options: AuthHttpOptions,
+  options: AuthHttpOptions & LiveSitePolicy,
 ): Hono<{ Variables: ObservabilityVariables }> {
   const router = new Hono<{ Variables: ObservabilityVariables }>();
 
@@ -164,7 +165,12 @@ export function createDemoResetHttpRouter(
           options.db,
           { userId: actor.user.id, role: "OWNER" },
           siteId,
-          { clock: { now: () => options.now?.() ?? new Date() } },
+          {
+            clock: { now: () => options.now?.() ?? new Date() },
+            ...(options.liveDemoSiteId === undefined
+              ? {}
+              : { liveDemoSiteId: options.liveDemoSiteId }),
+          },
         ),
       );
       emitResetEvent(context, {

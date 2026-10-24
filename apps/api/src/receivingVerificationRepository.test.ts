@@ -14,12 +14,12 @@ import {
 } from "./receivingVerification";
 import { createReceivingVerificationRepository } from "./receivingVerificationRepository";
 
-function fixture() {
+function fixture(mode: "sandbox" | "live" = "sandbox") {
   const createdAt = "2026-10-13T00:00:00.000Z";
   const immutable = {
     siteId: "site-one",
     operatorUserId: "operator-one",
-    environment: "sandbox" as const,
+    environment: mode,
     policyVersion: "policy-one",
     requestId: "request-one",
   };
@@ -92,7 +92,7 @@ function fixture() {
       {
         id: "account-one",
         site_id: "site-one",
-        environment: "sandbox",
+        environment: mode,
         provider: "ASAAS",
         operator_user_id: "operator-one",
         operator_reference: null,
@@ -119,7 +119,7 @@ function fixture() {
         id: "operation-one",
         site_id: "site-one",
         account_id: "account-one",
-        environment: "sandbox",
+        environment: mode,
         kind: "ACCOUNT_CREATE",
         state: "SUCCEEDED",
         request_id: "request-one",
@@ -308,8 +308,9 @@ function fixture() {
   );
   const db = drizzle({ query } as unknown as NodePgClient);
   const options = {
-    mode: "sandbox" as const,
-    applicationEnvironment: "test" as const,
+    mode,
+    applicationEnvironment:
+      mode === "live" ? ("production" as const) : ("test" as const),
     maxAuthAgeMs: 300000,
     now: () => new Date(state.clock),
     readCurrentPolicy: vi.fn(async (action: string) => {
@@ -341,7 +342,7 @@ function fixture() {
     siteId: "site-one",
     accountId: "account-one",
     operatorUserId: "operator-one",
-    environment: "sandbox",
+    environment: mode,
     operatorReference: tables.accounts[0].operator_reference as string | null,
     accountReference: "native-account",
     recipientReference: "native-wallet",
@@ -471,6 +472,69 @@ describe("locked immutable receiving verification repository", () => {
       await expect(
         v.repository.captureSelection(v.scope(), authorization),
       ).rejects.toThrow();
+    },
+  );
+  it.each([true, false])(
+    "production setup session selection requires current locked provisioning authority (approved=%s)",
+    async (approved) => {
+      const v = fixture("live");
+      const authorization = {
+        ...v.authorization,
+        recentAuth: {
+          ...v.authorization.recentAuth,
+          proofKind: "SESSION_AUTHENTICATION" as const,
+          authenticatedAt: new Date("2026-10-13T00:00:00Z"),
+          expiresAt: new Date("2026-10-14T00:00:00Z"),
+        },
+      };
+      const authorizeSetupSelectionInTransaction = vi.fn(async () => approved);
+      const repository = createReceivingVerificationRepository(v.db, {
+        ...v.options,
+        authorizeSetupSelectionInTransaction,
+      });
+      if (approved) {
+        const fence = await repository.captureSelection(
+          v.scope(),
+          authorization,
+        );
+        await repository.selectDestination(
+          fence,
+          "live-selection",
+          v.candidate(),
+          authorization,
+        );
+        expect(v.tables.destinations).toHaveLength(1);
+        expect(v.tables.destinations[0].environment).toBe("live");
+      } else
+        await expect(
+          repository.captureSelection(v.scope(), authorization),
+        ).rejects.toThrow();
+      expect(authorizeSetupSelectionInTransaction).toHaveBeenCalled();
+      await expect(
+        v.repository.captureSelection(v.scope(), authorization),
+      ).rejects.toThrow();
+    },
+  );
+  it.each(["site-one", "other-site"])(
+    "locks native production showcase verification under exact policy (%s)",
+    async (liveDemoSiteId) => {
+      const v = fixture("live");
+      v.state.demo = true;
+      const repository = createReceivingVerificationRepository(v.db, {
+        ...v.options,
+        liveDemoSiteId,
+      });
+      const capture = repository.captureSelection(v.scope(), v.authorization);
+      if (liveDemoSiteId === "site-one") {
+        const fence = await capture;
+        await repository.selectDestination(
+          fence,
+          "live-demo-selection",
+          v.candidate(),
+          v.authorization,
+        );
+        expect(v.tables.destinations).toHaveLength(1);
+      } else await expect(capture).rejects.toThrow();
     },
   );
   it("rejects a forged setup attestation with timestamps different from the actual locked session", async () => {

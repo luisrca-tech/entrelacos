@@ -14,6 +14,7 @@ import type {
   FinancialActor,
   RecentFinancialAuthenticationEvidence,
 } from "./financialAuthorization";
+import { allowsLiveSite, type LiveSitePolicy } from "./liveSitePolicy";
 import type { ProviderCredentialEnvelope } from "./providerCredentials";
 
 const NominationPromise = Promise;
@@ -358,7 +359,7 @@ export interface ReceivingNominationRepository {
   ): Promise<ReceivingNominationSnapshot>;
 }
 
-export interface ReceivingNominationOptions {
+export interface ReceivingNominationOptions extends LiveSitePolicy {
   mode: "sandbox" | "live";
   applicationEnvironment: "test" | "development" | "production";
   // This is a server-selected intent version, not provider or legal consent.
@@ -900,6 +901,7 @@ export function createReceivingNominationService(
   options: ReceivingNominationOptions,
 ): ReceivingNominationService {
   try {
+    const liveDemoSiteId = options.liveDemoSiteId;
     const raw = captureDataProperties(options, [
       "mode",
       "applicationEnvironment",
@@ -1028,7 +1030,16 @@ export function createReceivingNominationService(
           freshProof(audit, clock(), maxAuthAgeMs);
           if (site.siteId !== actor.siteId || typeof site.isDemo !== "boolean")
             return unavailable();
-          if (mode === "live" && site.isDemo)
+          if (
+            mode === "live" &&
+            !allowsLiveSite({
+              siteId: actor.siteId,
+              isDemo: site.isDemo,
+              mode,
+              applicationEnvironment,
+              liveDemoSiteId: liveDemoSiteId,
+            })
+          )
             throw new ReceivingNominationServiceError(
               409,
               "PROVIDER_MODE_UNAVAILABLE",

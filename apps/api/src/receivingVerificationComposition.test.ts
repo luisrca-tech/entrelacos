@@ -14,7 +14,11 @@ vi.mock("./receivingVerification", async (original) => ({
 
 import { createReceivingVerificationComposition } from "./receivingVerificationComposition";
 
-function fixture(native = false) {
+function fixture(
+  native = false,
+  mode: "sandbox" | "live" = "sandbox",
+  liveDemoSiteId?: string,
+) {
   const row = {
     siteId: "site-one",
     accountId: "account-one",
@@ -23,6 +27,7 @@ function fixture(native = false) {
     accountReference: "native-account",
     recipientReference: "native-wallet",
     nativeDestination: native,
+    isDemo: mode === "sandbox",
   };
   const execute = vi.fn(async () => ({ rows: [row] }));
   const repository = {
@@ -53,8 +58,9 @@ function fixture(native = false) {
   });
   const composition = createReceivingVerificationComposition({
     db: { execute } as never,
-    mode: "sandbox",
-    applicationEnvironment: "development",
+    liveDemoSiteId,
+    mode,
+    applicationEnvironment: mode === "live" ? "production" : "development",
     platformAccountReference: "parent-one",
     keyring: new Map([["key-one", new Uint8Array(32)]]),
     repository: repository as never,
@@ -62,7 +68,7 @@ function fixture(native = false) {
     now,
     readReadiness: async () => ({
       siteId: "site-one",
-      mode: "sandbox",
+      mode,
       state: "READY",
       reason: null,
       catalogEligible: true,
@@ -73,23 +79,53 @@ function fixture(native = false) {
   return { composition, actor, proof, row, execute, repository };
 }
 describe("native receiving verification composition", () => {
-  it("never selects an incoming bank while refreshing a simulated or missing destination", async () => {
-    const v = fixture();
+  it.each(["sandbox", "live"] as const)(
+    "never selects %s incoming bank while refreshing a simulated or missing destination",
+    async (mode) => {
+      const v = fixture(false, mode);
+      mocks.begin.mockClear();
+      await v.composition.refresh("site-one");
+      expect(mocks.begin).not.toHaveBeenCalled();
+      await v.composition.close();
+    },
+  );
+  it.each(["sandbox", "live"] as const)(
+    "selects %s only with explicit real holder authentication, then observes the selected bank",
+    async (mode) => {
+      const v = fixture(false, mode);
+      mocks.begin.mockClear();
+      expect((await v.composition.verify(v.actor)).state).toBe("READY");
+      expect(mocks.begin.mock.calls.map(([command]) => command.action)).toEqual(
+        ["SELECT", "OBSERVE"],
+      );
+      expect(v.repository.requireHolder).toHaveBeenCalledWith(v.actor);
+      expect(mocks.begin.mock.calls[0][0].authorization.recentAuth).toBe(
+        v.proof,
+      );
+      await v.composition.close();
+    },
+  );
+  it("verifies only the explicitly opted-in native production showcase", async () => {
+    const v = fixture(false, "live", "site-one");
+    v.row.isDemo = true;
     mocks.begin.mockClear();
-    await v.composition.refresh("site-one");
-    expect(mocks.begin).not.toHaveBeenCalled();
-    await v.composition.close();
-  });
-  it("selects only with explicit real holder authentication, then observes the selected bank", async () => {
-    const v = fixture();
-    mocks.begin.mockClear();
-    expect((await v.composition.verify(v.actor)).state).toBe("READY");
+    await expect(v.composition.verify(v.actor)).resolves.toMatchObject({
+      mode: "live",
+      state: "READY",
+    });
+    expect(v.row.isDemo).toBe(true);
     expect(mocks.begin.mock.calls.map(([command]) => command.action)).toEqual([
       "SELECT",
       "OBSERVE",
     ]);
-    expect(v.repository.requireHolder).toHaveBeenCalledWith(v.actor);
-    expect(mocks.begin.mock.calls[0][0].authorization.recentAuth).toBe(v.proof);
+    await v.composition.close();
+  });
+  it("rejects production demo rows before selecting or observing", async () => {
+    const v = fixture(false, "live");
+    v.row.isDemo = true;
+    mocks.begin.mockClear();
+    await expect(v.composition.verify(v.actor)).rejects.toThrow();
+    expect(mocks.begin).not.toHaveBeenCalled();
     await v.composition.close();
   });
   it("cannot select using expired or foreign authentication", async () => {
@@ -102,14 +138,17 @@ describe("native receiving verification composition", () => {
     expect(mocks.begin).not.toHaveBeenCalled();
     await v.composition.close();
   });
-  it("refreshes an explicitly selected native destination without changing its version", async () => {
-    const v = fixture(true);
-    mocks.begin.mockClear();
-    await v.composition.refresh("site-one");
-    await v.composition.refresh("site-one");
-    expect(mocks.begin.mock.calls.map(([command]) => command.action)).toEqual([
-      "OBSERVE",
-    ]);
-    await v.composition.close();
-  });
+  it.each(["sandbox", "live"] as const)(
+    "refreshes %s explicitly selected native destination without changing its version",
+    async (mode) => {
+      const v = fixture(true, mode);
+      mocks.begin.mockClear();
+      await v.composition.refresh("site-one");
+      await v.composition.refresh("site-one");
+      expect(mocks.begin.mock.calls.map(([command]) => command.action)).toEqual(
+        ["OBSERVE"],
+      );
+      await v.composition.close();
+    },
+  );
 });

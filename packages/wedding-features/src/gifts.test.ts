@@ -1,5 +1,5 @@
 import { giftQuoteSchema, publicGiftItemSchema } from "@entrelacos/contracts";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { recoverGiftCheckout } from "./giftCheckoutRecovery";
 import {
   createGiftCheckoutState,
@@ -55,6 +55,7 @@ const api = (fetcher: typeof fetch) =>
   });
 
 const recoveryToken = "A".repeat(43);
+afterEach(() => vi.unstubAllGlobals());
 const catalogPage = (gifts: Array<typeof gift>, mode = "sandbox") => ({
   siteId: "wedding-a",
   gifts,
@@ -67,6 +68,155 @@ const catalogPage = (gifts: Array<typeof gift>, mode = "sandbox") => ({
   hasNext: gifts.length > 20,
 });
 describe("public gifts API boundary", () => {
+  it("rejects Sandbox at every boundary of the selected production showcase", async () => {
+    vi.stubGlobal("__APP_ENV__", "production");
+    const fetcher = vi.fn<typeof fetch>(async (url) =>
+      Response.json(
+        String(url).endsWith("/gift-quotes") ? { quote } : catalogPage([gift]),
+      ),
+    );
+    const client = new WeddingGiftsApi({
+      apiOrigin: "https://api.example.test",
+      siteId: "wedding-a",
+      demo: true,
+      liveDemoSiteId: "wedding-a",
+      fetcher,
+    });
+    const denied = { code: "PROVIDER_MODE_UNAVAILABLE" };
+    await expect(client.getCatalog()).rejects.toMatchObject(denied);
+    await expect(
+      client.quoteGift({ giftId: "gift-a", method: "PIX" }),
+    ).rejects.toMatchObject(denied);
+    const calls = fetcher.mock.calls.length;
+    const expected = {
+      id: "quote-a",
+      siteId: "wedding-a",
+      method: "PIX",
+      mode: "sandbox",
+    } as const;
+    await expect(
+      client.createCheckout(
+        { quoteId: "quote-a", requestId: "request-a", recoveryToken },
+        expected,
+      ),
+    ).rejects.toMatchObject(denied);
+    await expect(
+      client.getCheckoutStatus(
+        { quoteId: "quote-a", requestId: "request-a", recoveryToken },
+        expected,
+      ),
+    ).rejects.toMatchObject(denied);
+    expect(fetcher).toHaveBeenCalledTimes(calls);
+    fetcher.mockResolvedValue(Response.json(catalogPage([gift], "unknown")));
+    await expect(client.getCatalog()).rejects.toMatchObject({
+      code: "INVALID_API_RESPONSE",
+    });
+  });
+  it("admits every live payment boundary only for the explicitly selected production showcase", async () => {
+    vi.stubGlobal("__APP_ENV__", "production");
+    const liveQuote = {
+      ...quote,
+      mode: "live",
+      totalCents: 10000,
+      feeAllocation: "RECIPIENT_DEDUCTED",
+    };
+    const liveCheckout = {
+      ...checkout,
+      mode: "live",
+      hostedUrl: "https://asaas.com/checkoutSession/show/checkout-a",
+    };
+    const status = {
+      siteId: "wedding-a",
+      quoteId: "quote-a",
+      requestId: "request-a",
+      orderId: "order-a",
+      attemptId: "attempt-a",
+      method: "PIX",
+      mode: "live",
+      state: "OUTCOME_UNKNOWN",
+      observedAt: null,
+      closedReason: null,
+      mayStartNewAttempt: false,
+      checkout: null,
+    };
+    const fetcher = vi.fn<typeof fetch>(async (url) => {
+      const path = new URL(String(url)).pathname;
+      if (path.endsWith("/gift-checkouts/status"))
+        return Response.json({ status });
+      if (path.endsWith("/gift-checkouts"))
+        return Response.json({ checkout: liveCheckout });
+      if (path.endsWith("/gift-quotes"))
+        return Response.json({ quote: liveQuote });
+      return Response.json(catalogPage([gift], "live"));
+    });
+    const client = new WeddingGiftsApi({
+      apiOrigin: "https://api.example.test",
+      siteId: "wedding-a",
+      demo: true,
+      liveDemoSiteId: "wedding-a",
+      fetcher,
+    });
+    await expect(client.getCatalog()).resolves.toMatchObject({ mode: "live" });
+    await expect(
+      client.quoteGift({ giftId: "gift-a", method: "PIX" }),
+    ).resolves.toMatchObject({ mode: "live", totalCents: 10000 });
+    const expected = {
+      id: "quote-a",
+      siteId: "wedding-a",
+      method: "PIX",
+      mode: "live",
+    } as const;
+    await expect(
+      client.createCheckout(
+        { quoteId: "quote-a", requestId: "request-a", recoveryToken },
+        expected,
+      ),
+    ).resolves.toMatchObject({ mode: "live" });
+    await expect(
+      client.getCheckoutStatus(
+        { quoteId: "quote-a", requestId: "request-a", recoveryToken },
+        expected,
+      ),
+    ).resolves.toMatchObject({ mode: "live", state: "OUTCOME_UNKNOWN" });
+    expect(fetcher).toHaveBeenCalledTimes(4);
+    expect(
+      fetcher.mock.calls.every(
+        ([, options]) => options?.credentials === "omit",
+      ),
+    ).toBe(true);
+  });
+  it.each([
+    ["production", undefined],
+    ["production", "wedding-b"],
+    ["development", "wedding-a"],
+    ["test", "wedding-a"],
+    [undefined, "wedding-a"],
+  ])(
+    "rejects a live demo without matching production opt-in (%s, %s)",
+    async (environment, liveDemoSiteId) => {
+      vi.stubGlobal("__APP_ENV__", environment);
+      const fetcher = vi.fn<typeof fetch>(async () =>
+        Response.json(catalogPage([gift], "live")),
+      );
+      const client = new WeddingGiftsApi({
+        apiOrigin: "https://api.example.test",
+        siteId: "wedding-a",
+        demo: true,
+        liveDemoSiteId,
+        fetcher,
+      });
+      await expect(
+        client.createCheckout(
+          { quoteId: "quote-a", requestId: "request-a", recoveryToken },
+          { id: "quote-a", siteId: "wedding-a", method: "PIX", mode: "live" },
+        ),
+      ).rejects.toMatchObject({ code: "LIVE_DEMO_FORBIDDEN" });
+      expect(fetcher).not.toHaveBeenCalled();
+      await expect(client.getCatalog()).rejects.toMatchObject({
+        code: "LIVE_DEMO_FORBIDDEN",
+      });
+    },
+  );
   it("calls the browser fetch function without binding it to the API instance", async () => {
     const browserFetch = function (
       this: unknown,

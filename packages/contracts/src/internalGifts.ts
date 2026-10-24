@@ -495,7 +495,7 @@ export const withdrawalIntentSchema = z
     siteId: id,
     amountCents: giftFields.nominalCents,
     feeCents: giftCentsSchema,
-    feeSemantics: z.literal("MAXIMUM").optional(),
+    feeSemantics: z.enum(["MAXIMUM", "MAXIMUM_WITH_MINIMUM_NET"]).optional(),
     settlement: z
       .object({
         totalDebitCents: giftFields.nominalCents,
@@ -517,13 +517,19 @@ export const withdrawalIntentSchema = z
   .refine(
     (value) =>
       value.netCents + value.feeCents === value.amountCents &&
+      (value.feeSemantics !== "MAXIMUM_WITH_MINIMUM_NET" ||
+        value.mode === "live") &&
       (!value.settlement ||
         (value.state === "COMPLETED" &&
-          value.feeSemantics === "MAXIMUM" &&
-          value.settlement.netCents === value.netCents &&
+          (value.feeSemantics === "MAXIMUM" ||
+            value.feeSemantics === "MAXIMUM_WITH_MINIMUM_NET") &&
+          (value.feeSemantics === "MAXIMUM_WITH_MINIMUM_NET"
+            ? value.mode === "live" &&
+              value.settlement.netCents >= value.netCents
+            : value.settlement.netCents === value.netCents) &&
           value.settlement.feeCents <= value.feeCents &&
           value.settlement.totalDebitCents ===
-            value.netCents + value.settlement.feeCents &&
+            value.settlement.netCents + value.settlement.feeCents &&
           value.settlement.totalDebitCents + value.settlement.releasedCents ===
             value.amountCents)),
     "Withdrawal amount must cover fees and recipient net",
@@ -606,7 +612,7 @@ export const withdrawalPreviewSchema = z
     currency: z.literal("BRL"),
     amountCents: giftFields.nominalCents,
     feeCents: giftCentsSchema,
-    feeSemantics: z.literal("MAXIMUM").optional(),
+    feeSemantics: z.enum(["MAXIMUM", "MAXIMUM_WITH_MINIMUM_NET"]).optional(),
     payoutRecipientName: z.string().min(1).max(120).optional(),
     netCents: giftFields.nominalCents,
     destinationVersion: z.number().int().positive(),
@@ -635,6 +641,8 @@ export const withdrawalPreviewSchema = z
   .strict()
   .refine(
     (value) =>
+      (value.feeSemantics !== "MAXIMUM_WITH_MINIMUM_NET" ||
+        value.mode === "live") &&
       [value.feeCents, value.netCents, value.amountCents].every(
         Number.isSafeInteger,
       ) &&
@@ -799,6 +807,7 @@ export const withdrawalRequestStatusSchema = z
           preview.mode !== value.mode ||
           preview.amountCents !== withdrawal.amountCents ||
           preview.feeCents !== withdrawal.feeCents ||
+          preview.feeSemantics !== withdrawal.feeSemantics ||
           preview.netCents !== withdrawal.netCents ||
           preview.destinationVersion !== withdrawal.destinationVersion)
       )

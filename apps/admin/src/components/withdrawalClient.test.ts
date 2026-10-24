@@ -737,6 +737,7 @@ describe("withdrawal authoritative ordering", () => {
   it("rejects missing or contradictory settlement at the same authoritative record time", () => {
     const settled: WithdrawalRequestStatus = {
       ...existing,
+      preview: { ...preview, feeSemantics: "MAXIMUM" },
       withdrawal: {
         ...withdrawal,
         state: "COMPLETED",
@@ -779,6 +780,7 @@ describe("withdrawal authoritative ordering", () => {
     (change) => {
       const settled: WithdrawalRequestStatus & { state: "EXISTING" } = {
         ...existing,
+        preview: { ...preview, feeSemantics: "MAXIMUM" },
         withdrawal: {
           ...withdrawal,
           state: "COMPLETED",

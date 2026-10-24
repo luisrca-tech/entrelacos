@@ -4,6 +4,7 @@ import { provisionDemoEnvironment } from "./environmentProvision";
 const mocks = vi.hoisted(() => ({
   bootstrapOwner: vi.fn(),
   resetDemoSite: vi.fn(),
+  assertDemoResetAllowed: vi.fn(),
   datasetIds: {
     invitationIds: [
       "b7-invitation-pending",
@@ -34,6 +35,7 @@ vi.mock("./bootstrapOwner", () => ({
 vi.mock("./demoReset", () => ({
   DEMO_RESET_DATASET_IDS: mocks.datasetIds,
   resetDemoSite: mocks.resetDemoSite,
+  assertDemoResetAllowed: mocks.assertDemoResetAllowed,
 }));
 
 function fakeDatabase(selectResults: unknown[][] = []) {
@@ -81,6 +83,51 @@ function completeDatasetResults(): unknown[][] {
 describe("demo environment provisioning", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it("never seeds or bootstraps an opted-in production showcase", async () => {
+    const v = fakeDatabase();
+    await expect(
+      provisionDemoEnvironment(v.db as never, {
+        target: "production",
+        runtimeEnvironment: "production",
+        productionAuthorized: true,
+        resetAuthorized: true,
+        liveDemoSiteId: "demo-wedding",
+        publicUrl: "https://demo.entrelacos.workers.dev/",
+        owner: {
+          email: "owner@example.test",
+          name: "Owner",
+          password: "fixture-password",
+        },
+      }),
+    ).rejects.toThrow();
+    expect(v.inserted).toHaveLength(0);
+    expect(mocks.bootstrapOwner).not.toHaveBeenCalled();
+    expect(mocks.resetDemoSite).not.toHaveBeenCalled();
+  });
+  it("honors durable live custody protection before provisioning even without a flag", async () => {
+    const v = fakeDatabase();
+    mocks.assertDemoResetAllowed.mockRejectedValueOnce(
+      new Error("Protected live custody"),
+    );
+    await expect(
+      provisionDemoEnvironment(v.db as never, {
+        target: "development",
+        runtimeEnvironment: "development",
+        productionAuthorized: false,
+        resetAuthorized: true,
+        publicUrl: "https://demo-dev.entrelacos.workers.dev/",
+        owner: {
+          email: "owner@example.test",
+          name: "Owner",
+          password: "fixture-password",
+        },
+      }),
+    ).rejects.toThrow();
+    expect(v.inserted).toHaveLength(0);
+    expect(mocks.bootstrapOwner).not.toHaveBeenCalled();
+    expect(mocks.resetDemoSite).not.toHaveBeenCalled();
   });
 
   it("creates the deterministic site, resets it, and re-enables the mural", async () => {

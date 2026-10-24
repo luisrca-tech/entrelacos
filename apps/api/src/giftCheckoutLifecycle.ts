@@ -18,8 +18,10 @@ import {
   readDatabaseTimestamp,
 } from "./databaseTimestamp";
 import type { GiftPaymentWorker } from "./giftPaymentWorker";
+import { allowsLiveSite, type LiveSitePolicy } from "./liveSitePolicy";
 
-interface Options {
+interface Options extends LiveSitePolicy {
+  applicationEnvironment?: "development" | "test" | "production";
   db: Pick<DatabaseConnection["db"], "transaction">;
   environment: "sandbox" | "live";
   instanceId: string;
@@ -71,6 +73,15 @@ export function createGiftCheckoutLifecycleWorker(
   options: Options,
 ): GiftPaymentWorker {
   const { db, environment, instanceId, reader, now } = options;
+  const liveDemoSiteId = allowsLiveSite({
+    siteId: options.liveDemoSiteId ?? "",
+    isDemo: true,
+    mode: environment,
+    applicationEnvironment: options.applicationEnvironment ?? "test",
+    liveDemoSiteId: options.liveDemoSiteId,
+  })
+    ? options.liveDemoSiteId
+    : null;
   if (
     !["sandbox", "live"].includes(environment) ||
     !id(instanceId) ||
@@ -97,7 +108,7 @@ export function createGiftCheckoutLifecycleWorker(
         INNER JOIN ${giftQuoteRecord} q ON q.id=o.quote_id AND q.site_id=o.site_id AND q.account_id=o.account_id AND q.environment=o.environment
         INNER JOIN ${financialOperation} op ON op.id=a.operation_id AND op.site_id=a.site_id AND op.account_id=a.account_id AND op.environment=a.environment
           AND op.order_id=a.order_id AND op.kind=a.operation_kind AND op.kind='CHECKOUT_CREATE'
-        WHERE e.environment=${environment} AND account.provider='ASAAS' AND (${environment}<>'live' OR st.is_demo=false)
+        WHERE e.environment=${environment} AND account.provider='ASAAS' AND (${environment}<>'live' OR st.is_demo=false OR st.id=${liveDemoSiteId})
           AND e.event_type IN ('CHECKOUT_CREATED','CHECKOUT_PAID','CHECKOUT_CANCELED','CHECKOUT_EXPIRED') AND e.authenticated_at IS NOT NULL
           AND ((e.state IN ('RECEIVED','RETRY') AND e.next_attempt_at<=${started.toISOString()}::timestamptz AND e.next_attempt_at<=clock_timestamp())
             OR (e.state='CLAIMED' AND e.lease_expires_at<=${started.toISOString()}::timestamptz AND e.lease_expires_at<=clock_timestamp()))
@@ -117,7 +128,9 @@ export function createGiftCheckoutLifecycleWorker(
         row.environment !== environment ||
         row.provider !== "ASAAS" ||
         typeof row.isDemo !== "boolean" ||
-        (environment === "live" && row.isDemo) ||
+        (environment === "live" &&
+          row.isDemo &&
+          row.siteId !== liveDemoSiteId) ||
         !reference(row.accountReference) ||
         !reference(row.checkoutReference) ||
         row.operationState !== "SUCCEEDED" ||

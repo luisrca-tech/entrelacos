@@ -77,8 +77,15 @@ function fixture(
       const siteId = params[Number(requestedSite[1]) - 1];
       const env = params[Number(environment[1]) - 1];
       const sources: Array<{ st: Row; w: Row | null; a: Row | null }> = [];
+      const sitePredicates = [...sql.matchAll(/st\.id\s*=\s*\$(\d+)/g)];
+      const approvedDemo =
+        sitePredicates.length > 1
+          ? params[Number(sitePredicates.at(-1)?.[1]) - 1]
+          : null;
       for (const st of tables.sites.filter(
-        (row) => row.id === siteId && (env !== "live" || row.is_demo === false),
+        (row) =>
+          row.id === siteId &&
+          (env !== "live" || row.is_demo === false || row.id === approvedDemo),
       )) {
         const withdrawals = tables.withdrawals.filter(
           (w) => w.site_id === st.id && w.environment === env,
@@ -451,6 +458,39 @@ describe("stored withdrawal history", () => {
         values.repository.listWithdrawals(siteId as string),
       ).rejects.toMatchObject({ code: "WITHDRAWAL_HISTORY_UNAVAILABLE" });
       expect(values.queries).toHaveLength(0);
+    },
+  );
+});
+
+describe("live showcase withdrawal history", () => {
+  it.each([undefined, "site-other", "demo-wedding"])(
+    "reads only the configured live demo scope %s",
+    async (liveDemoSiteId) => {
+      const f = fixture("live");
+      f.site.id = "demo-wedding";
+      f.site.is_demo = true;
+      for (const account of f.tables.accounts) {
+        account.site_id = "demo-wedding";
+        account.environment = "live";
+      }
+      for (const withdrawal of f.tables.withdrawals) {
+        withdrawal.site_id = "demo-wedding";
+        withdrawal.environment = "live";
+      }
+      const repository = createWithdrawalHistoryRepository(f.db, {
+        mode: "live",
+        applicationEnvironment: "production",
+        liveDemoSiteId,
+      });
+      if (liveDemoSiteId === "demo-wedding")
+        expect(await repository.listWithdrawals("demo-wedding")).toHaveLength(
+          2,
+        );
+      else
+        await expect(
+          repository.listWithdrawals("demo-wedding"),
+        ).rejects.toMatchObject({ code: "WITHDRAWAL_HISTORY_UNAVAILABLE" });
+      expect(f.site.is_demo).toBe(true);
     },
   );
 });

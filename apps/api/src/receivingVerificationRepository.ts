@@ -18,6 +18,7 @@ import {
   readDatabaseTimestamp,
 } from "./databaseTimestamp";
 import { assertRecipientFinancialAction } from "./financialAuthorization";
+import { allowsLiveSite, type LiveSitePolicy } from "./liveSitePolicy";
 import {
   readReceivingProvisioningRecord,
   readReceivingProvisioningResult,
@@ -49,7 +50,7 @@ export type ReceivingVerificationPolicyAction =
   | "ACCOUNT_RELEASE"
   | "BANK_RELEASE"
   | "CAPABILITY_RELEASE";
-export interface ReceivingVerificationRepositoryOptions {
+export interface ReceivingVerificationRepositoryOptions extends LiveSitePolicy {
   mode: "sandbox" | "live";
   applicationEnvironment: "test" | "development" | "production";
   maxAuthAgeMs: number;
@@ -244,6 +245,7 @@ export function createReceivingVerificationRepository(
       consultObservation: deny,
     });
   let mode: "sandbox" | "live";
+  let liveDemoSiteId: string | undefined;
   let environment: ReceivingVerificationRepositoryOptions["applicationEnvironment"];
   let maxAge: number;
   let now: () => Date;
@@ -252,6 +254,7 @@ export function createReceivingVerificationRepository(
     ReceivingVerificationRepositoryOptions["readCurrentPolicy"]
   >;
   try {
+    liveDemoSiteId = options.liveDemoSiteId;
     const configuredPolicy = options.readCurrentPolicy;
     if (typeof configuredPolicy !== "function") return inactive();
     mode = options.mode;
@@ -304,7 +307,14 @@ export function createReceivingVerificationRepository(
       result.rows.length !== 1 ||
       result.rows[0].siteId !== scope.siteId ||
       typeof result.rows[0].isDemo !== "boolean" ||
-      (mode === "live" && result.rows[0].isDemo) ||
+      (mode === "live" &&
+        !allowsLiveSite({
+          siteId: scope.siteId,
+          isDemo: result.rows[0].isDemo as boolean,
+          mode,
+          applicationEnvironment: environment,
+          liveDemoSiteId: liveDemoSiteId,
+        })) ||
       (options.allowSandboxSimulationHistory === true &&
         result.rows[0].isDemo !== true)
     )
@@ -564,8 +574,6 @@ export function createReceivingVerificationRepository(
       ]);
     const setupSession =
       proof.proofKind === "SESSION_AUTHENTICATION" &&
-      mode === "sandbox" &&
-      environment === "development" &&
       typeof setupAuthority === "function";
     if (
       actor.userId !== scope.operatorUserId ||

@@ -64,8 +64,7 @@ export interface GiftMediaProcessing {
   ): Promise<T>;
   close(): Promise<void>;
 }
-export interface GiftMediaServiceOptions
-  extends Pick<GiftServiceOptions, "readReadiness" | "now"> {
+export interface GiftMediaServiceOptions extends GiftServiceOptions {
   storage?: GiftMediaStorage;
   storageNamespace?: string;
   processing?: GiftMediaProcessing;

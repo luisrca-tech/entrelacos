@@ -11,6 +11,7 @@ import {
   readDatabaseTimestamp,
 } from "./databaseTimestamp";
 import type { GiftPaymentPostingClaim } from "./giftPaymentPostingRepository";
+import { allowsLiveSite, type LiveSitePolicy } from "./liveSitePolicy";
 
 export interface GiftPaymentInboxClaim extends GiftPaymentPostingClaim {
   paymentReference: string;
@@ -32,7 +33,8 @@ export type GiftPaymentInboxDeferReason =
 export interface GiftPaymentInboxDeferResult {
   kind: "RETRY" | "DEAD_LETTER";
 }
-export interface GiftPaymentInboxOptions {
+export interface GiftPaymentInboxOptions extends LiveSitePolicy {
+  applicationEnvironment?: "development" | "test" | "production";
   environment: "sandbox" | "live";
   instanceId: string;
   leaseMs: number;
@@ -128,6 +130,15 @@ export function createGiftPaymentInboxRepository(
   )
     unavailable();
   options = Object.freeze({ ...options });
+  const liveDemoSiteId = allowsLiveSite({
+    siteId: options.liveDemoSiteId ?? "",
+    isDemo: true,
+    mode: options.environment,
+    applicationEnvironment: options.applicationEnvironment ?? "test",
+    liveDemoSiteId: options.liveDemoSiteId,
+  })
+    ? options.liveDemoSiteId
+    : null;
   return {
     async deferClaim(
       claim: GiftPaymentInboxClaim,
@@ -270,7 +281,7 @@ export function createGiftPaymentInboxRepository(
           FROM ${financialEventInbox} e INNER JOIN ${receivingAccount} a ON a.site_id=e.site_id AND a.id=e.account_id AND a.environment=e.environment
           INNER JOIN ${site} st ON st.id=e.site_id
           WHERE e.environment=${options.environment} AND a.provider='ASAAS' AND a.account_reference IS NOT NULL AND length(trim(a.account_reference))>0
-            AND (${options.environment}<>'live' OR st.is_demo=false) AND e.authenticated_at IS NOT NULL AND e.event_type IN ('PAYMENT_RECEIVED','PAYMENT_CONFIRMED')
+            AND (${options.environment}<>'live' OR st.is_demo=false OR st.id=${liveDemoSiteId}) AND e.authenticated_at IS NOT NULL AND e.event_type IN ('PAYMENT_RECEIVED','PAYMENT_CONFIRMED')
             AND ((e.state IN ('RECEIVED','RETRY') AND e.next_attempt_at<=${clock.toISOString()}::timestamptz AND e.next_attempt_at<=clock_timestamp())
               OR (e.state='CLAIMED' AND e.lease_expires_at<=${clock.toISOString()}::timestamptz AND e.lease_expires_at<=clock_timestamp()))
           ORDER BY e.next_attempt_at,e.id LIMIT 1 FOR UPDATE OF e SKIP LOCKED`);

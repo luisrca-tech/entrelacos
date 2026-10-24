@@ -1906,3 +1906,49 @@ describe("withdrawal reservations", () => {
     ).toThrowError(expect.objectContaining({ code: "WITHDRAWAL_UNAVAILABLE" }));
   });
 });
+
+describe("explicit live showcase withdrawal authority", () => {
+  function liveDemo() {
+    const f = fixture();
+    f.options.mode = "live";
+    f.options.applicationEnvironment = "production";
+    for (const context of [f.context, required(f.locked.context)]) {
+      context.mode = "live";
+      required(context.recipientBinding).environment = "live";
+      required(context.readiness).mode = "live";
+    }
+    f.fee.environment = "live";
+    f.balance.environment = "live";
+    return f;
+  }
+  it("accepts provider-backed withdrawal consent only for the configured showcase without changing isDemo", async () => {
+    const f = liveDemo();
+    Object.assign(f.options, { liveDemoSiteId: f.actor.siteId });
+    registerAcceptedConsent(f);
+    await expect(create(f)).resolves.toMatchObject({
+      mode: "live",
+      state: "REQUESTED",
+    });
+    expect(f.context.isDemo).toBe(true);
+    expect(f.locked.context?.isDemo).toBe(true);
+  });
+  it.each([undefined, "site-other"])(
+    "denies an unmatched showcase opt-in %s before provider reads",
+    async (liveDemoSiteId) => {
+      const f = liveDemo();
+      Object.assign(f.options, { liveDemoSiteId });
+      registerAcceptedConsent(f);
+      await rejected(create(f), "PROVIDER_MODE_UNAVAILABLE", 409);
+      expect(f.quoteWithdrawal).not.toHaveBeenCalled();
+      expect(f.getBalance).not.toHaveBeenCalled();
+    },
+  );
+  it("keeps simulated live fee authority forbidden even with an exact showcase opt-in", async () => {
+    const f = liveDemo();
+    Object.assign(f.options, { liveDemoSiteId: f.actor.siteId });
+    registerAcceptedConsent(f);
+    f.fee.provenance = "simulation";
+    await rejected(create(f), "FEE_QUOTE_UNAVAILABLE", 409);
+    expect(f.reserveWithdrawal).not.toHaveBeenCalled();
+  });
+});

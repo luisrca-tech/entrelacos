@@ -15,6 +15,7 @@ import {
   databaseTimestampEpochMicroseconds,
   readDatabaseTimestamp,
 } from "./databaseTimestamp";
+import { allowsLiveSite, type LiveSitePolicy } from "./liveSitePolicy";
 import {
   captureDataProperties,
   captureReceivingNominationAdmissionAuthority,
@@ -48,7 +49,7 @@ interface AdmissionCustody extends ReceivingNominationAdmissionPolicy {
     original: ReceivingNominationAdmissionAuthority,
   ): Promise<unknown>;
 }
-interface Options {
+interface Options extends LiveSitePolicy {
   mode: "sandbox" | "live";
   applicationEnvironment: "test" | "development" | "production";
   maxAuthAgeMs: number;
@@ -188,6 +189,7 @@ export function createReceivingNominationRepository(
   db: Database,
   options: Options,
 ): ReceivingNominationRepository {
+  const liveDemoSiteId = options.liveDemoSiteId;
   const raw = captureDataProperties(options, [
     "mode",
     "applicationEnvironment",
@@ -255,7 +257,16 @@ export function createReceivingNominationRepository(
                   typeof storedSite.isDemo !== "boolean"
                 )
                   fail();
-                if (mode === "live" && storedSite.isDemo)
+                if (
+                  mode === "live" &&
+                  !allowsLiveSite({
+                    siteId: selected.siteId,
+                    isDemo: storedSite.isDemo,
+                    mode,
+                    applicationEnvironment,
+                    liveDemoSiteId: liveDemoSiteId,
+                  })
+                )
                   fail(409, "PROVIDER_MODE_UNAVAILABLE");
                 const databaseTime = timestamp(
                   readDatabaseTimestamp(storedSite.currentTime),
@@ -421,7 +432,16 @@ export function createReceivingNominationRepository(
                 typeof lockedSite.rows[0].isDemo !== "boolean"
               )
                 fail();
-              if (mode === "live" && lockedSite.rows[0].isDemo)
+              if (
+                mode === "live" &&
+                !allowsLiveSite({
+                  siteId: snapshot.siteId,
+                  isDemo: lockedSite.rows[0].isDemo as boolean,
+                  mode,
+                  applicationEnvironment,
+                  liveDemoSiteId: liveDemoSiteId,
+                })
+              )
                 fail(409, "PROVIDER_MODE_UNAVAILABLE");
               const clock = await execute(
                 sql`SELECT clock_timestamp() AS "currentTime"`,

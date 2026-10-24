@@ -132,9 +132,44 @@ describe("immutable gift quote creation", () => {
     expect(v.appended[0].pricing.policy.feeBasis).toBe("OBSERVED_ESTIMATE");
     expect(v.pricing.policy.feeAllocation).toBeUndefined();
   });
-  it("does not accept observed fee estimates in production", async () => {
+  it("keeps a real showcase quote provider-bound and exactly nominal under the opt-in", async () => {
+    const v = fixture();
+    v.context.isDemo = true;
+    Object.assign(v.context, { liveDemoSiteId: "site-one" });
+    v.pricing.policy.feeBasis = "OBSERVED_ESTIMATE";
+    expect(
+      await createGiftQuoteService(v.dependencies).createQuote(
+        "site-one",
+        body,
+      ),
+    ).toMatchObject({
+      mode: "live",
+      totalCents: 10000,
+      feeAllocation: "RECIPIENT_DEDUCTED",
+    });
+    expect(v.context.isDemo).toBe(true);
+  });
+  it("keeps the exact guest price with live provider-observed recipient deductions", async () => {
     const v = fixture();
     v.pricing.policy.feeBasis = "OBSERVED_ESTIMATE";
+    const quote = await createGiftQuoteService(v.dependencies).createQuote(
+      "site-one",
+      body,
+    );
+    expect(quote).toMatchObject({
+      nominalCents: 10000,
+      totalCents: 10000,
+      commissionCents: 200,
+      processingCents: 289,
+      feeAllocation: "RECIPIENT_DEDUCTED",
+      mode: "live",
+    });
+    expect(v.appended[0].pricing.policy.feeBasis).toBe("OBSERVED_ESTIMATE");
+  });
+  it("rejects production observed estimates with local-test provenance", async () => {
+    const v = fixture();
+    v.pricing.policy.feeBasis = "OBSERVED_ESTIMATE";
+    v.pricing.provenance = "local-test";
     await expectDenied(v, "POLICY_UNAVAILABLE");
   });
 

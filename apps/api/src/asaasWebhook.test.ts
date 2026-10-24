@@ -45,6 +45,32 @@ function fixture() {
   };
 }
 
+it.each([undefined, "foreign-site", "site-one"])(
+  "admits a live showcase webhook only for the designated site (%s)",
+  async (liveDemoSiteId) => {
+    const v = fixture();
+    Object.assign(v.binding, { environment: "live", isDemo: true });
+    const receiver = createAsaasWebhookReceiver({
+      ...v.dependencies,
+      mode: "live",
+      applicationEnvironment: "production",
+      liveDemoSiteId,
+    });
+    if (liveDemoSiteId === "site-one") {
+      await expect(
+        receiver.receive(token, JSON.stringify(event)),
+      ).resolves.toEqual({ accepted: true });
+      expect(v.append).toHaveBeenCalledWith(
+        expect.objectContaining({ siteId: "site-one", environment: "live" }),
+      );
+    } else {
+      await expect(
+        receiver.receive(token, JSON.stringify(event)),
+      ).rejects.toMatchObject({ code: "WEBHOOK_AUTH_DENIED" });
+      expect(v.append).not.toHaveBeenCalled();
+    }
+  },
+);
 describe("Asaas webhook durable acceptance", () => {
   it.each([
     "PAYMENT_REFUNDED",

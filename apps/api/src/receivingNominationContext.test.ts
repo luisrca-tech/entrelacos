@@ -225,6 +225,35 @@ describe("read-only canonical receiving nomination context", () => {
     Object.assign(v.options.configuration, change);
     expect(() => createReceivingNominationContext(v.options)).toThrow();
   });
+  it.each(["site-one", "other-site"])(
+    "opens live showcase nomination context only with matching server policy (%s)",
+    async (liveDemoSiteId) => {
+      const v = fixture();
+      Object.assign(v.options.configuration, {
+        mode: "live",
+        applicationEnvironment: "production",
+      });
+      v.options.loadSite.mockResolvedValue({
+        siteId: "site-one",
+        isDemo: true,
+      });
+      const service = createReceivingNominationContext({
+        ...v.options,
+        liveDemoSiteId,
+      });
+      const result = service.readContext({ actor: v.actor, access: v.access });
+      if (liveDemoSiteId === "site-one") {
+        await expect(result).resolves.toMatchObject({
+          state: "AVAILABLE",
+          mode: "live",
+        });
+        expect(Object.keys(service.configuration)).toHaveLength(4);
+      } else
+        await expect(result).rejects.toMatchObject({
+          code: "PROVIDER_MODE_UNAVAILABLE",
+        });
+    },
+  );
   it("denies live demo context and invalid clocks before allocating any identity", async () => {
     const v = fixture();
     Object.assign(v.options.configuration, {

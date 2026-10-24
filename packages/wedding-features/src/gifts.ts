@@ -16,11 +16,14 @@ import {
   siteIdSchema,
 } from "@entrelacos/contracts";
 
+declare const __APP_ENV__: string | undefined;
+
 export type WeddingGiftsApiOptions = {
   apiOrigin: string;
   siteId: string;
   fetcher?: typeof fetch;
   demo?: boolean;
+  liveDemoSiteId?: string;
 };
 
 export class WeddingGiftsApiError extends Error {
@@ -38,19 +41,29 @@ export class WeddingGiftsApi {
   private readonly siteId: string;
   private readonly fetcher: typeof fetch;
   private readonly demo: boolean;
+  private readonly liveDemoSiteId: string | undefined;
   constructor({
     apiOrigin,
     siteId,
     fetcher = fetch,
     demo = false,
+    liveDemoSiteId,
   }: WeddingGiftsApiOptions) {
     this.apiOrigin = originSchema.parse(apiOrigin);
     this.siteId = siteIdSchema.parse(siteId);
     this.fetcher = (input, init) => fetcher(input, init);
     this.demo = demo;
+    this.liveDemoSiteId = liveDemoSiteId;
   }
   private enforceDemoMode(mode: string) {
-    if (this.demo && mode === "live")
+    const liveShowcase =
+      this.demo &&
+      typeof __APP_ENV__ !== "undefined" &&
+      __APP_ENV__ === "production" &&
+      this.liveDemoSiteId === this.siteId;
+    if (liveShowcase && mode === "sandbox")
+      throw new WeddingGiftsApiError(502, "PROVIDER_MODE_UNAVAILABLE");
+    if (this.demo && mode === "live" && !liveShowcase)
       throw new WeddingGiftsApiError(502, "LIVE_DEMO_FORBIDDEN");
   }
   async getCatalog(

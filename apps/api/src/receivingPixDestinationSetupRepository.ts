@@ -13,6 +13,7 @@ import {
   assertRecipientFinancialAction,
   type FinancialActor,
 } from "./financialAuthorization";
+import { allowsLiveSite } from "./liveSitePolicy";
 import {
   assertReceivingPixSetupProof,
   type ReceivingPixDestinationRecord,
@@ -34,6 +35,7 @@ function deny(
 export function createReceivingPixDestinationSetupRepository(
   db: Database,
   options: {
+    liveDemoSiteId?: string;
     mode: "sandbox" | "live";
     applicationEnvironment: "development" | "test" | "production";
     now(): Date;
@@ -51,6 +53,7 @@ export function createReceivingPixDestinationSetupRepository(
     maxAge > 300000
   )
     return deny();
+  const liveDemoSiteId = options.liveDemoSiteId;
   const now = options.now.bind(options),
     generateId = options.generateId ?? randomUUID;
   async function clock(tx: Transaction) {
@@ -71,7 +74,14 @@ export function createReceivingPixDestinationSetupRepository(
     if (
       sites.rows.length !== 1 ||
       sites.rows[0].id !== actor.siteId ||
-      (mode === "live" && sites.rows[0].isDemo !== false)
+      (mode === "live" &&
+        !allowsLiveSite({
+          siteId: actor.siteId,
+          isDemo: sites.rows[0].isDemo as boolean,
+          mode,
+          applicationEnvironment,
+          liveDemoSiteId: liveDemoSiteId,
+        }))
     )
       return deny();
     const users = await tx.execute(

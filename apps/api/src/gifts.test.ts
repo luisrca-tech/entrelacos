@@ -892,6 +892,34 @@ describe("catalog receiving and authorization gates", () => {
     );
   });
 
+  it.each([undefined, "foreign-site", siteId])(
+    "admits a live showcase catalog only under exact production opt-in (%s)",
+    async (liveDemoSiteId) => {
+      const v = fixture({
+        site: { ...site, isDemo: true },
+        readiness: { ...ready, mode: "live" },
+      });
+      const options = {
+        ...v.options,
+        applicationEnvironment: "production" as const,
+        liveDemoSiteId,
+      };
+      if (liveDemoSiteId === siteId) {
+        expect(
+          (await createSiteGift(v.db, actor, siteId, input, options)).gift
+            .nominalCents,
+        ).toBe(input.nominalCents);
+        expect((await readPublicGifts(v.db, siteId, options)).mode).toBe(
+          "live",
+        );
+      } else {
+        await expect(
+          createSiteGift(v.db, actor, siteId, input, options),
+        ).rejects.toMatchObject({ code: "RECEIVING_NOT_READY" });
+        expect(v.writes).toEqual([]);
+      }
+    },
+  );
   it("never accepts live readiness on a demo site", async () => {
     const { db, options, writes } = fixture({
       site: { ...site, isDemo: true },

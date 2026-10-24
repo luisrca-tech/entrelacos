@@ -557,3 +557,251 @@ describe("gift media HTTP boundary", () => {
     ).toBe(503);
   });
 });
+
+function deliveryFixture() {
+  const processing = createGiftMediaProcessing();
+  processors.push(processing);
+  const bytes = Buffer.from("RIFF0000WEBPpublic-derivative");
+  const head = {
+    etag: '"immutable-etag"',
+    byteLength: bytes.length,
+    contentType: "image/webp" as const,
+  };
+  const storage = {
+    storageNamespace: "gifts-existing",
+    getDerivativeUrl: vi.fn((key: string) => `https://api.example.test/${key}`),
+    headDerivative: vi.fn(async (_key: string, _signal?: AbortSignal) => ({
+      ...head,
+    })),
+    readDerivative: vi.fn(
+      async (
+        _key: string,
+        _etag: string,
+        _size: number,
+        _signal?: AbortSignal,
+      ) => bytes,
+    ),
+    publishDerivative: vi.fn(),
+    close: vi.fn(async () => {}),
+  };
+  const api = createGiftMediaHttpRouter({
+    db: {} as never,
+    auth: {} as never,
+    adminOrigin: origin,
+    processing,
+    storage,
+  });
+  const path = "/gifts/wedding-a/asset-a/processing-a.webp";
+  return { api, path, bytes, head, storage, processing };
+}
+
+describe("public immutable gift derivative delivery", () => {
+  it("serves only the exact derivative without a session, origin, or database read", async () => {
+    const f = deliveryFixture();
+    const result = await f.api.request(f.path);
+    expect(result.status).toBe(200);
+    expect(Buffer.from(await result.arrayBuffer())).toEqual(f.bytes);
+    expect(result.headers.get("Content-Type")).toBe("image/webp");
+    expect(result.headers.get("Content-Length")).toBe(String(f.bytes.length));
+    expect(result.headers.get("ETag")).toBe(f.head.etag);
+    expect(result.headers.get("Cache-Control")).toBe(
+      "public, max-age=31536000, immutable",
+    );
+    expect(result.headers.get("X-Content-Type-Options")).toBe("nosniff");
+    expect(f.storage.headDerivative).toHaveBeenCalledWith(
+      f.path.slice(1),
+      expect.any(AbortSignal),
+    );
+    expect(f.storage.readDerivative).toHaveBeenCalledWith(
+      f.path.slice(1),
+      f.head.etag,
+      f.head.byteLength,
+      expect.any(AbortSignal),
+    );
+    expect(mocks.actor).not.toHaveBeenCalled();
+    expect(mocks.reader).not.toHaveBeenCalled();
+    expect(f.storage.publishDerivative).not.toHaveBeenCalled();
+  });
+  it("serves HEAD metadata without taking an object body", async () => {
+    const f = deliveryFixture();
+    const response = await f.api.request(f.path, { method: "HEAD" });
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe("");
+    expect(response.headers.get("Content-Length")).toBe(String(f.bytes.length));
+    expect(response.headers.get("ETag")).toBe(f.head.etag);
+    expect(f.storage.headDerivative).toHaveBeenCalledOnce();
+    expect(f.storage.readDerivative).not.toHaveBeenCalled();
+  });
+  it.each([
+    '"immutable-etag"',
+    'W/"immutable-etag"',
+    '"another", W/"immutable-etag"',
+    "*",
+  ])("returns conditional 304 for %s without reading bytes", async (value) => {
+    const f = deliveryFixture();
+    const response = await f.api.request(f.path, {
+      headers: { "If-None-Match": value },
+    });
+    expect(response.status).toBe(304);
+    expect(await response.text()).toBe("");
+    expect(response.headers.get("ETag")).toBe(f.head.etag);
+    expect(response.headers.get("Cache-Control")).toContain("immutable");
+    expect(f.storage.readDerivative).not.toHaveBeenCalled();
+  });
+  it.each(['"different"', 'junk"immutable-etag"', '"immutable-etag" trailing'])(
+    "ignores unmatched or malformed validator %s",
+    async (value) => {
+      const f = deliveryFixture();
+      const response = await f.api.request(f.path, {
+        headers: { "If-None-Match": value },
+      });
+      expect(response.status).toBe(200);
+      expect(f.storage.readDerivative).toHaveBeenCalledOnce();
+    },
+  );
+  it.each(["POST", "PUT", "PATCH", "DELETE", "OPTIONS"])(
+    "refuses %s without storage access",
+    async (method) => {
+      const f = deliveryFixture();
+      const response = await f.api.request(f.path, { method });
+      expect(response.status).toBe(405);
+      expect(response.headers.get("Allow")).toBe("GET, HEAD");
+      expect(response.headers.get("Cache-Control")).toBe("no-store");
+      expect(f.storage.headDerivative).not.toHaveBeenCalled();
+      expect(f.storage.readDerivative).not.toHaveBeenCalled();
+    },
+  );
+  it.each([
+    "/gifts",
+    "/gifts/",
+    "/gifts/wedding-a/",
+    "/gifts/wedding-a/asset-a/processing-a.png",
+    "/gifts/wedding-a/asset-a/nested/processing.webp",
+    "/gifts/wedding-a/asset-a/processing.webp/extra",
+    "/gifts/wedding-a%2Fforeign/asset-a/processing.webp",
+    "/gifts/wedding-a/asset%2Fa/processing.webp",
+    "/gifts/wedding-a/asset-a/%2e%2e%2fprivate.webp",
+    "/gifts/wedding-a/asset-a/%5Cprivate.webp",
+    "/gifts/wedding-a/%61sset-a/processing.webp",
+    "/gifts/wedding-a/asset-a/processing%00.webp",
+  ])(
+    "rejects noncanonical or escaped key %s without storage access",
+    async (path) => {
+      const f = deliveryFixture();
+      const response = await f.api.request(path);
+      expect(response.status).toBe(404);
+      expect(response.headers.get("Cache-Control")).toBe("no-store");
+      expect(f.storage.headDerivative).not.toHaveBeenCalled();
+    },
+  );
+  it.each([
+    { contentType: "text/html" },
+    { byteLength: 0 },
+    { byteLength: 5_242_881 },
+    { etag: "unquoted" },
+    { etag: '"injected\\etag"' },
+  ])("keeps malformed object metadata unavailable %j", async (change) => {
+    const f = deliveryFixture();
+    f.storage.headDerivative.mockResolvedValueOnce({
+      ...f.head,
+      ...change,
+    } as never);
+    const response = await f.api.request(f.path);
+    expect(response.status).toBe(503);
+    expect(response.headers.get("Cache-Control")).toBe("no-store");
+    expect(f.storage.readDerivative).not.toHaveBeenCalled();
+  });
+  it("rejects a body that differs from verified Content-Length", async () => {
+    const f = deliveryFixture();
+    f.storage.readDerivative.mockResolvedValueOnce(Buffer.from("wrong-length"));
+    const response = await f.api.request(f.path);
+    expect(response.status).toBe(503);
+    expect(response.headers.get("Cache-Control")).toBe("no-store");
+    expect(await response.text()).not.toContain("wrong-length");
+  });
+  it("sanitizes storage errors and never caches an unknown result", async () => {
+    const f = deliveryFixture();
+    f.storage.headDerivative.mockRejectedValueOnce(
+      new Error("secret-account bucket token"),
+    );
+    const response = await f.api.request(f.path);
+    expect(response.status).toBe(503);
+    expect(response.headers.get("Cache-Control")).toBe("no-store");
+    expect(await response.text()).not.toMatch(/secret-account|bucket|token/);
+  });
+  it("owns an aborted native body until actual completion and drains it before close", async () => {
+    const f = deliveryFixture();
+    let release!: (bytes: typeof f.bytes) => void;
+    let entered!: () => void;
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    let signal: AbortSignal | undefined;
+    f.storage.readDerivative.mockImplementationOnce(
+      (_key, _etag, _size, input) => {
+        signal = input;
+        entered();
+        return new Promise<typeof f.bytes>((resolve) => {
+          release = resolve;
+        });
+      },
+    );
+    const controller = new AbortController();
+    const pending = f.api.request(
+      new Request(`https://api.example.test${f.path}`, {
+        signal: controller.signal,
+      }),
+    );
+    await started;
+    controller.abort();
+    let closed = false;
+    const closing = f.processing.close().then(() => {
+      closed = true;
+    });
+    await Promise.resolve();
+    expect(signal?.aborted).toBe(true);
+    expect(closed).toBe(false);
+    release(f.bytes);
+    expect((await pending).status).toBe(503);
+    await closing;
+    expect(closed).toBe(true);
+  });
+});
+
+it("bounds public native reads to eight and releases slots only after their actual settlement", async () => {
+  const f = deliveryFixture();
+  let release!: (value: typeof f.bytes) => void;
+  const held = new Promise<typeof f.bytes>((resolve) => {
+    release = resolve;
+  });
+  let started!: () => void;
+  const ready = new Promise<void>((resolve) => {
+    started = resolve;
+  });
+  f.storage.readDerivative.mockImplementation(async () => {
+    if (f.storage.readDerivative.mock.calls.length === 8) started();
+    return held;
+  });
+  const active = Array.from({ length: 8 }, () => f.api.request(f.path));
+  await ready;
+  const overloaded = f.api.request(f.path);
+  try {
+    await Promise.resolve();
+    expect(f.storage.headDerivative).toHaveBeenCalledTimes(8);
+    expect(f.storage.readDerivative).toHaveBeenCalledTimes(8);
+  } finally {
+    release(f.bytes);
+    await Promise.all([...active, overloaded]);
+  }
+  const response = await overloaded;
+  expect(response.status).toBe(503);
+  expect(response.headers.get("Cache-Control")).toBe("no-store");
+  expect((await f.api.request(f.path)).status).toBe(200);
+});
+it("does not leak public read slots after storage failures", async () => {
+  const f = deliveryFixture();
+  f.storage.headDerivative.mockRejectedValue(new Error("native failure"));
+  for (let attempt = 0; attempt < 9; attempt++)
+    expect((await f.api.request(f.path)).status).toBe(503);
+  expect(f.storage.headDerivative).toHaveBeenCalledTimes(9);
+});

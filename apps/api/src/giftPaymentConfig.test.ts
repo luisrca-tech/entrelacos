@@ -50,8 +50,8 @@ describe("gift payment runtime configuration", () => {
     },
   );
 
-  it("does not enable the Sandbox withdrawal callback in live mode", () => {
-    expect(() =>
+  it("enables the distinct authenticated withdrawal callback in live production", () => {
+    expect(
       readGiftPaymentConfig(
         {
           ...configured,
@@ -61,9 +61,64 @@ describe("gift payment runtime configuration", () => {
         },
         "production",
       ),
-    ).toThrow("Gift payment configuration is invalid");
+    ).toMatchObject({
+      mode: "live",
+      withdrawalAuthorization: {
+        token: "fixture-withdrawal-authorization-secret",
+        url: "https://webhook.example.test/v1/webhooks/asaas/withdrawal-authorization",
+      },
+    });
   });
 
+  it("loads an exact production live showcase opt-in without changing default config shape", () => {
+    const config = readGiftPaymentConfig(
+      {
+        ...configured,
+        ASAAS_MODE: "live",
+        ASAAS_LIVE_DEMO_SITE_ID: "demo-wedding",
+      },
+      "production",
+    );
+    expect(config).toMatchObject({
+      mode: "live",
+      applicationEnvironment: "production",
+      liveDemoSiteId: "demo-wedding",
+    });
+    expect(
+      readGiftPaymentConfig(
+        { ...configured, ASAAS_MODE: "live" },
+        "production",
+      ),
+    ).not.toHaveProperty("liveDemoSiteId");
+  });
+  it.each(["", " demo-wedding", "demo-wedding/other", "demo-wedding,other"])(
+    "rejects invalid showcase IDs (%#)",
+    (ASAAS_LIVE_DEMO_SITE_ID) => {
+      expect(() =>
+        readGiftPaymentConfig(
+          { ...configured, ASAAS_MODE: "live", ASAAS_LIVE_DEMO_SITE_ID },
+          "production",
+        ),
+      ).toThrow("Gift payment configuration is invalid");
+    },
+  );
+  it.each(["development", "test"] as const)(
+    "rejects showcase opt-in outside live production (%s)",
+    (target) => {
+      expect(() =>
+        readGiftPaymentConfig(
+          { ...configured, ASAAS_LIVE_DEMO_SITE_ID: "demo-wedding" },
+          target,
+        ),
+      ).toThrow();
+      expect(() =>
+        readGiftPaymentConfig(
+          { ASAAS_MODE: "disabled", ASAAS_LIVE_DEMO_SITE_ID: "demo-wedding" },
+          target,
+        ),
+      ).toThrow();
+    },
+  );
   it("defaults to disabled without reading unused secrets", () => {
     const env: Record<string, string | undefined> = {};
     for (const key of Object.keys(configured).filter(

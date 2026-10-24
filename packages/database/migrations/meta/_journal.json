@@ -155,6 +155,13 @@
       "when": 1792548212541,
       "tag": "0021_withdrawal_authorization",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1792865932169,
+      "tag": "0022_withdrawal_authorization_live",
+      "breakpoints": true
     }
   ]
 }

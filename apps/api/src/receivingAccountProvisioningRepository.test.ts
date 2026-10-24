@@ -20,13 +20,13 @@ beforeEach(() => {
   nonceState.value = 0;
 });
 
-function fixture() {
+function fixture(mode: "sandbox" | "live" = "sandbox") {
   const now = "2026-10-13T00:00:00.000123Z";
   const nomination = readReceivingNominationSnapshot({
     state: "AWAITING_PROVIDER_VERIFICATION",
     siteId: "site-one",
     operatorUserId: "operator-one",
-    environment: "sandbox",
+    environment: mode,
     requestId: "request-one",
     policyVersion: "policy-one",
     accountId: "account-one",
@@ -39,7 +39,7 @@ function fixture() {
           "site-one",
           "request-one",
           "operator-one",
-          "sandbox",
+          mode,
           "policy-one",
           true,
         ]),
@@ -101,7 +101,7 @@ function fixture() {
       {
         id: "account-one",
         site_id: "site-one",
-        environment: "sandbox",
+        environment: mode,
         provider: "ASAAS",
         operator_user_id: "operator-one",
         is_current: true,
@@ -128,7 +128,7 @@ function fixture() {
         id: "operation-one",
         site_id: "site-one",
         account_id: "account-one",
-        environment: "sandbox",
+        environment: mode,
         kind: "ACCOUNT_CREATE",
         state: "REQUESTED",
         request_id: "request-one",
@@ -150,6 +150,7 @@ function fixture() {
     ] as Array<Record<string, unknown>>,
   };
   const state = {
+    demo: false,
     clock: now,
     active: true,
     role: "SITE_ADMIN",
@@ -201,7 +202,7 @@ function fixture() {
       if (/clock_timestamp/.test(text))
         return { rows: [{ currentTime: state.clock }] };
       if (/FOR UPDATE OF st/.test(text))
-        return { rows: [{ siteId: "site-one", isDemo: false }] };
+        return { rows: [{ siteId: "site-one", isDemo: state.demo }] };
       if (/FOR SHARE OF u/.test(text))
         return {
           rows: state.active
@@ -272,8 +273,9 @@ function fixture() {
   );
   const db = drizzle({ query } as unknown as NodePgClient);
   const options = {
-    mode: "sandbox" as const,
-    applicationEnvironment: "test" as const,
+    mode,
+    applicationEnvironment:
+      mode === "live" ? ("production" as const) : ("test" as const),
     maxAuthAgeMs: 300000,
     now: () => new Date(state.clock),
     readCurrentPolicy: vi.fn(async () => {
@@ -292,7 +294,7 @@ function fixture() {
         provider: "ASAAS",
         siteId: nomination.siteId,
         accountBindingId: nomination.accountId,
-        environment: "sandbox",
+        environment: mode,
       },
       new Map([["credential-v1", new Uint8Array(32).fill(21)]]),
       "credential-v1",
@@ -353,6 +355,25 @@ describe("locked original account provisioning repository", () => {
       } else await expect(operation).resolves.toBeTruthy();
     },
   );
+  it.each(["site-one", "other-site"])(
+    "claims original live showcase provisioning only under exact policy (%s)",
+    async (liveDemoSiteId) => {
+      const v = fixture("live");
+      v.state.demo = true;
+      const repository = createReceivingAccountProvisioningRepository(v.db, {
+        ...v.options,
+        liveDemoSiteId,
+      });
+      const claim = repository.claimOriginal(v.claimInput, v.authorization);
+      if (liveDemoSiteId === "site-one")
+        await expect(claim).resolves.toMatchObject({
+          nomination: { environment: "live" },
+        });
+      else await expect(claim).rejects.toThrow();
+      expect(v.tables.accounts).toHaveLength(1);
+    },
+  );
+
   it("serial competing transactions cannot claim the same legacy operation twice", async () => {
     const values = fixture();
     const outcomes = await Promise.allSettled([

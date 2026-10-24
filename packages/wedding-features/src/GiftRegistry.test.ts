@@ -24,6 +24,9 @@ describe("runtime gift registry initial render", () => {
     expect(GiftRegistry({ ...props, demo: true }).props.runtimeKey).not.toBe(
       first,
     );
+    expect(
+      GiftRegistry({ ...props, liveDemoSiteId: "wedding-a" }).props.runtimeKey,
+    ).not.toBe(first);
   });
   it("does not fetch or expose a catalog/price on server rendering", () => {
     const fetcher = vi.fn();
@@ -122,12 +125,17 @@ describe("mounted server catalog runtime", () => {
     mounts.length = 0;
     window.sessionStorage.clear();
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
     vi.useRealTimers();
     (
       globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
     ).IS_REACT_ACT_ENVIRONMENT = false;
   });
-  async function mount(fetcher: typeof fetch, siteId = "wedding-a") {
+  async function mount(
+    fetcher: typeof fetch,
+    siteId = "wedding-a",
+    policy: { demo?: boolean; liveDemoSiteId?: string } = {},
+  ) {
     const surface = document.createElement("section");
     surface.dataset.giftSection = "";
     surface.hidden = true;
@@ -141,6 +149,7 @@ describe("mounted server catalog runtime", () => {
           siteId,
           apiOrigin: "https://api.example.test",
           fetcher,
+          ...policy,
         }),
       );
       await flush();
@@ -250,6 +259,38 @@ describe("mounted server catalog runtime", () => {
       resolve(reply(page("wedding-a", 2)));
       await act(flush);
     }
+  });
+  it("renders the live production showcase without test notices and revokes it when opt-in changes", async () => {
+    vi.stubGlobal("__APP_ENV__", "production");
+    const fetcher = vi.fn<typeof fetch>(async () =>
+      reply({ ...page(), mode: "live" }),
+    );
+    const m = await mount(fetcher, "wedding-a", {
+      demo: true,
+      liveDemoSiteId: "wedding-a",
+    });
+    expect(m.surface.hidden).toBe(false);
+    expect(m.surface.textContent).toContain("Dinner 0");
+    await click(m.surface, "Escolher presente");
+    expect(m.surface.textContent).not.toMatch(
+      /Sandbox|sem pagamentos reais|fictício|ambiente de testes/i,
+    );
+    await act(async () => {
+      m.root.render(
+        createElement(GiftRegistry, {
+          siteId: "wedding-a",
+          apiOrigin: "https://api.example.test",
+          fetcher,
+          demo: true,
+          liveDemoSiteId: "wedding-b",
+        }),
+      );
+      await flush();
+    });
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(m.surface.hidden).toBe(true);
+    expect(m.surface.textContent).not.toContain("Dinner 0");
+    expect(m.surface.querySelector("dialog")?.open).not.toBe(true);
   });
   it("retains one actual job across site replacement and publishes only the replacement scope", async () => {
     let resolve!: (r: Response) => void;

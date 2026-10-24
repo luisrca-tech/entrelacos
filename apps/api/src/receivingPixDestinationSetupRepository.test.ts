@@ -9,7 +9,10 @@ const actor = {
   siteId: "site-one",
   sessionId: "session-one",
 };
-function fixture() {
+function fixture(
+  mode: "sandbox" | "live" = "sandbox",
+  liveDemoSiteId?: string,
+) {
   const scope = {
     provider: "ASAAS" as const,
     siteId: actor.siteId,
@@ -17,7 +20,7 @@ function fixture() {
     accountReference: "provider-one",
     recipientReference: "wallet-one",
     operatorUserId: actor.userId,
-    environment: "sandbox" as const,
+    environment: mode,
     destinationVersion: 1,
     membershipId: "membership-one",
     holderId: "holder-custody-one",
@@ -35,7 +38,7 @@ function fixture() {
     },
     review: {
       siteId: actor.siteId,
-      mode: "sandbox" as const,
+      mode,
       keyType: "PHONE" as const,
       maskedKey: "***5839",
       ownerName: "External Recipient",
@@ -226,8 +229,9 @@ function fixture() {
   const repository = createReceivingPixDestinationSetupRepository(
     { execute, transaction } as never,
     {
-      mode: "sandbox",
-      applicationEnvironment: "development",
+      mode,
+      applicationEnvironment: mode === "live" ? "production" : "development",
+      liveDemoSiteId,
       now: () => at,
       generateId: () => "destination-two",
     },
@@ -235,6 +239,19 @@ function fixture() {
   return { repository, state, command, queries, transaction };
 }
 describe("locked Pix destination configuration", () => {
+  it.each(["site-one", "other-site"])(
+    "reads real Pix destination for exact production showcase (%s)",
+    async (liveDemoSiteId) => {
+      const v = fixture("live", liveDemoSiteId);
+      const read = v.repository.snapshot(actor, true);
+      if (liveDemoSiteId === "site-one")
+        await expect(read).resolves.toMatchObject({
+          current: { id: "destination-one" },
+        });
+      else await expect(read).rejects.toThrow();
+    },
+  );
+
   it("returns an empty recent list without changing the independently loaded current destination", async () => {
     const v = fixture();
     const current = await v.repository.snapshot(actor, true);

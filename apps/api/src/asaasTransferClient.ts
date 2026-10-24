@@ -3,6 +3,7 @@ import {
   type AsaasTransferObservation,
   readAsaasTransferEffectiveDate,
 } from "./asaasHttpClient";
+import { parseBrlCents } from "./giftMoney";
 import { logWithdrawalFailure } from "./withdrawalDiagnostics";
 import {
   captureDispatchFence,
@@ -25,7 +26,7 @@ export interface AsaasWithdrawalDestination {
   siteId: string;
   accountId: string;
   accountReference: string;
-  environment: "sandbox";
+  environment: "sandbox" | "live";
   recipientReference: string;
   bankReference: string;
   destinationVersion: number;
@@ -46,7 +47,7 @@ export type AsaasWithdrawalTransferClient = Pick<
   "createPixTransfer" | "getTransfer" | "listTransfers"
 >;
 export interface AsaasWithdrawalTransferAdapterOptions {
-  mode: "disabled" | "sandbox";
+  mode: "disabled" | "sandbox" | "live";
   applicationEnvironment: "development" | "test" | "production";
   now(): Date;
   // The composition must load the reviewed external Pix destination under the
@@ -65,8 +66,7 @@ function unavailable(): never {
   throw new TypeError("Native withdrawal transfer unavailable");
 }
 
-// This first native Sandbox contract deliberately supports zero fees only.
-// Nonzero fees require observed provider debit semantics before extending it.
+// Live gross-budget consent uses the provider net amount after its observed transfer fee.
 export function captureAsaasWithdrawalTransfer(
   original: OriginalWithdrawal,
   input: AsaasTransferObservation,
@@ -76,24 +76,35 @@ export function captureAsaasWithdrawalTransfer(
   const observation = captureWithdrawalValue(input);
   const c = original.correlation;
   const t = observation.transfer;
+  if (typeof t.netValue !== "string" || typeof t.transferFee !== "string")
+    unavailable();
+  const minimumNet =
+    original.snapshot.feeQuote.feeSemantics === "MAXIMUM_WITH_MINIMUM_NET";
+  const value = parseBrlCents(t.value);
+  const net = parseBrlCents(t.netValue);
+  const fee = parseBrlCents(t.transferFee);
   if (
     observation.source !== "provider" ||
     observation.provider !== "ASAAS" ||
     observation.siteId !== c.siteId ||
     observation.accountBindingId !== c.accountId ||
     observation.accountReference !== c.accountReference ||
-    observation.environment !== "sandbox" ||
-    c.environment !== "sandbox" ||
-    (original.snapshot.feeQuote.feeSemantics !== "MAXIMUM" &&
+    observation.environment !== c.environment ||
+    !["sandbox", "live"].includes(c.environment) ||
+    (minimumNet && c.environment !== "live") ||
+    (!minimumNet &&
+      original.snapshot.feeQuote.feeSemantics !== "MAXIMUM" &&
       c.feeCents !== 0) ||
     c.amountCents !== c.netCents + c.feeCents ||
     t.externalReference !== c.operationId ||
     t.operationType !== "PIX" ||
     !["PIX", "BANK_ACCOUNT"].includes(t.type) ||
-    t.value !==
-      `${Math.floor(c.netCents / 100)}.${String(c.netCents % 100).padStart(2, "0")}` ||
-    t.netValue !== t.value ||
-    t.transferFee !== "0.00" ||
+    (minimumNet
+      ? value !== c.amountCents ||
+        net < c.netCents ||
+        fee > c.feeCents ||
+        value !== net + fee
+      : value !== c.netCents || net !== value || fee !== 0) ||
     !/^[A-Za-z0-9_-]{1,128}$/.test(t.id) ||
     !["PENDING", "BANK_PROCESSING", "DONE", "FAILED", "CANCELLED"].includes(
       t.status,
@@ -132,11 +143,15 @@ export function createAsaasWithdrawalTransferAdapter(
     const original = captureOriginalWithdrawal(originalInput);
     const fence = captureDispatchFence(fenceInput, original);
     if (
-      mode !== "sandbox" ||
-      !["development", "test"].includes(applicationEnvironment) ||
-      original.correlation.environment !== "sandbox" ||
+      !(
+        (mode === "sandbox" &&
+          ["development", "test"].includes(applicationEnvironment)) ||
+        (mode === "live" && applicationEnvironment === "production")
+      ) ||
+      original.correlation.environment !== mode ||
       (original.correlation.feeCents !== 0 &&
-        original.snapshot.feeQuote.feeSemantics !== "MAXIMUM")
+        original.snapshot.feeQuote.feeSemantics !== "MAXIMUM" &&
+        original.snapshot.feeQuote.feeSemantics !== "MAXIMUM_WITH_MINIMUM_NET")
     )
       unavailable();
     return { original, fence };
@@ -162,6 +177,9 @@ export function createAsaasWithdrawalTransferAdapter(
         ...identity,
         outcome: "REJECTED",
         reason: `ASAAS_TRANSFER_${observation.transfer.status}`,
+        proofReference: reference,
+        providerReference: observation.transfer.id,
+        observedAt: withdrawalInstant(observation.observedAt),
       };
     return {
       ...identity,
@@ -213,7 +231,11 @@ export function createAsaasWithdrawalTransferAdapter(
         if (new Date(fence.leaseExpiresAt).getTime() <= now().getTime())
           unavailable();
         const observation = await client.createPixTransfer({
-          valueCents: c.netCents,
+          valueCents:
+            original.snapshot.feeQuote.feeSemantics ===
+            "MAXIMUM_WITH_MINIMUM_NET"
+              ? c.amountCents
+              : c.netCents,
           pixAddressKey: destination.pixAddressKey,
           pixAddressKeyType: destination.pixAddressKeyType,
           externalReference: c.operationId,

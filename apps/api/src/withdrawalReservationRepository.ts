@@ -40,6 +40,7 @@ import {
   FinancialAuthorizationError,
   type RecentFinancialAuthenticationEvidence,
 } from "./financialAuthorization";
+import { allowsLiveSite } from "./liveSitePolicy";
 import {
   evaluateReceivingReadiness,
   ReceivingReadinessServiceError,
@@ -80,6 +81,7 @@ export type WithdrawalReservationRepositoryOptions =
   | {
       mode: "sandbox" | "live";
       applicationEnvironment: "development" | "test" | "production";
+      liveDemoSiteId?: string;
       maxAuthAgeMs: number;
       freshnessMs: number;
       now(): Date;
@@ -435,7 +437,8 @@ function validateNative(
             operationState === "CLAIMED"
           : state === "COMPLETED"
             ? operationState === "SUCCEEDED"
-            : false;
+            : (state === "FAILED" || state === "CANCELLED") &&
+              operationState === state;
   if (
     !coherent ||
     row.siteId !== siteId ||
@@ -456,8 +459,9 @@ function validateNative(
     row.feeCents !== snapshot.intent.feeCents ||
     row.netCents !== snapshot.intent.netCents ||
     row.currency !== "BRL" ||
-    (state === "COMPLETED"
-      ? row.reservationState !== "CONSUMED" ||
+    (["COMPLETED", "FAILED", "CANCELLED"].includes(String(state))
+      ? row.reservationState !==
+          (state === "COMPLETED" ? "CONSUMED" : "RELEASED") ||
         row.reservedCents !== 0 ||
         !row.providerReference ||
         !row.receiptReference ||
@@ -676,7 +680,16 @@ async function requestAuthority(
     typeof sites.rows[0].isDemo !== "boolean"
   )
     return fail();
-  if (options.mode === "live" && sites.rows[0].isDemo)
+  if (
+    options.mode === "live" &&
+    !allowsLiveSite({
+      siteId: actor.siteId,
+      isDemo: sites.rows[0].isDemo as boolean,
+      mode: options.mode,
+      applicationEnvironment: options.applicationEnvironment,
+      liveDemoSiteId: options.liveDemoSiteId,
+    })
+  )
     return fail("PROVIDER_MODE_UNAVAILABLE", 409);
   const users = await execute(
     sql`SELECT u.id AS "userId",u.role,u.state,u.name AS "operatorDisplayName",u.updated_at AS "operatorProfileUpdatedAt" FROM ${user} u WHERE u.id=${actor.userId} AND u.state='ACTIVE' ${mutating ? sql`FOR SHARE OF u` : sql``}`,
@@ -887,6 +900,7 @@ async function currentPresentation(
     return fail("DESTINATION_UNVERIFIED", 409);
   const readiness = evaluateReceivingReadiness({
     ...loaded,
+    liveDemoSiteId: options.liveDemoSiteId,
     siteId: scope.siteId,
     now: new Date(at.getTime()),
   });
@@ -1117,6 +1131,7 @@ async function readCurrentPresentation(
   const loaded = await loadReceivingContextInTransaction(tx, scope.siteId, {
     mode: options.mode,
     applicationEnvironment: options.applicationEnvironment,
+    liveDemoSiteId: options.liveDemoSiteId,
     freshnessMs: options.freshnessMs,
     now: () => new Date(at.getTime()),
   });
@@ -1131,6 +1146,7 @@ async function readCurrentPresentation(
     loaded.providerBinding.destinationVersion !== scope.destinationVersion ||
     evaluateReceivingReadiness({
       ...loaded,
+      liveDemoSiteId: options.liveDemoSiteId,
       siteId: scope.siteId,
       now: new Date(at.getTime()),
     }).state !== "READY" ||
@@ -1259,7 +1275,13 @@ export function createWithdrawalReservationRepository(
           return fail("PROVIDER_MODE_UNAVAILABLE", 409);
         },
       };
-    const { mode, applicationEnvironment, maxAuthAgeMs, freshnessMs } = options;
+    const {
+      mode,
+      applicationEnvironment,
+      maxAuthAgeMs,
+      freshnessMs,
+      liveDemoSiteId,
+    } = options;
     if (
       !["sandbox", "live"].includes(mode) ||
       !["test", "development", "production"].includes(applicationEnvironment) ||
@@ -1279,6 +1301,7 @@ export function createWithdrawalReservationRepository(
     const requestOptions: EnabledOptions = Object.freeze({
       mode,
       applicationEnvironment,
+      liveDemoSiteId,
       maxAuthAgeMs,
       freshnessMs,
       now,
@@ -1785,7 +1808,16 @@ export function createWithdrawalReservationRepository(
             )
               return fail();
             const isDemo = sites.rows[0].isDemo;
-            if (mode === "live" && isDemo)
+            if (
+              mode === "live" &&
+              !allowsLiveSite({
+                siteId: actor.siteId,
+                isDemo,
+                mode,
+                applicationEnvironment,
+                liveDemoSiteId,
+              })
+            )
               return fail("PROVIDER_MODE_UNAVAILABLE", 409);
             let databaseNow = await databaseClock();
             // Revocation locks user before deleting sessions. Acquire explicitly.
@@ -2086,6 +2118,7 @@ export function createWithdrawalReservationRepository(
                 {
                   mode,
                   applicationEnvironment,
+                  liveDemoSiteId,
                   freshnessMs,
                   now: () => new Date(databaseNow.getTime()),
                 },
@@ -2111,6 +2144,7 @@ export function createWithdrawalReservationRepository(
                 return fail("DESTINATION_UNVERIFIED", 409);
               const readiness = evaluateReceivingReadiness({
                 ...loaded,
+                liveDemoSiteId,
                 siteId: actor.siteId,
                 now: new Date(databaseNow.getTime()),
               });
@@ -2200,6 +2234,7 @@ export function createWithdrawalReservationRepository(
                 requireReceivingTimes(at);
                 const currentReadiness = evaluateReceivingReadiness({
                   ...loaded,
+                  liveDemoSiteId,
                   siteId: actor.siteId,
                   now: new Date(at.getTime()),
                 });

@@ -22,7 +22,11 @@ import {
   readWithdrawalConsentSnapshot,
 } from "./withdrawalReservations";
 
-function fixture(maximum = false, reviewedPayout = false) {
+function fixture(maximum = false, reviewedPayout = false, live = false) {
+  const mode = live ? ("live" as const) : ("sandbox" as const);
+  const semantics = live
+    ? ("MAXIMUM_WITH_MINIMUM_NET" as const)
+    : ("MAXIMUM" as const);
   const time = new Date("2026-10-14T04:00:00.000Z");
   const sqlClock = { value: time.toISOString() };
   const actor = {
@@ -35,19 +39,19 @@ function fixture(maximum = false, reviewedPayout = false) {
     siteId: actor.siteId,
     amountCents: 10000,
     feeCents: 500,
-    ...(maximum ? { feeSemantics: "MAXIMUM" as const } : {}),
+    ...(maximum ? { feeSemantics: semantics } : {}),
     netCents: 9500,
     currency: "BRL" as const,
     destinationVersion: 3,
     state: "REQUESTED" as const,
-    mode: "sandbox" as const,
+    mode: mode,
     createdAt: time.toISOString(),
     updatedAt: time.toISOString(),
   };
   const feeQuote = {
     feeCents: 500,
-    ...(maximum ? { feeSemantics: "MAXIMUM" as const } : {}),
-    policyVersion: "fee-v1",
+    ...(maximum ? { feeSemantics: semantics } : {}),
+    policyVersion: live ? "asaas-pix-gross-max-v1-500" : "fee-v1",
     provenance: "provider" as const,
     observedAt: time.toISOString(),
     expiresAt: new Date(+time + 60000).toISOString(),
@@ -60,7 +64,7 @@ function fixture(maximum = false, reviewedPayout = false) {
     accountReference: "acct-1",
     recipientReference: "recipient-1",
     bankReference: "bank-1",
-    environment: "sandbox" as const,
+    environment: mode,
     operationId: "operation-1",
     requestHash: createHash("sha256")
       .update(
@@ -69,7 +73,7 @@ function fixture(maximum = false, reviewedPayout = false) {
           actor.siteId,
           "request-1",
           actor.userId,
-          "sandbox",
+          mode,
           10000,
           3,
         ]),
@@ -125,10 +129,10 @@ function fixture(maximum = false, reviewedPayout = false) {
     preview: {
       siteId: actor.siteId,
       requestId: snapshot.requestId,
-      mode: "sandbox",
+      mode,
       amountCents: 10000,
       feeCents: 500,
-      ...(maximum ? { feeSemantics: "MAXIMUM" as const } : {}),
+      ...(maximum ? { feeSemantics: semantics } : {}),
       netCents: 9500,
       currency: "BRL",
       destinationVersion: 3,
@@ -211,8 +215,8 @@ function fixture(maximum = false, reviewedPayout = false) {
   };
   const context = {
     siteId: actor.siteId,
-    isDemo: true,
-    mode: "sandbox" as const,
+    isDemo: !live,
+    mode: mode,
     verification: "verified" as const,
     accountId: "account-1",
     bankReference: "bank-1",
@@ -221,7 +225,7 @@ function fixture(maximum = false, reviewedPayout = false) {
       operatorUserId: actor.userId,
       accountReference: "acct-1",
       recipientReference: "recipient-1",
-      environment: "sandbox" as const,
+      environment: mode,
       destinationVersion: 3,
     },
     readiness: {
@@ -231,7 +235,7 @@ function fixture(maximum = false, reviewedPayout = false) {
       observedAt: time.toISOString(),
       destinationVersion: 3,
       catalogEligible: true,
-      mode: "sandbox" as const,
+      mode: mode,
     },
   };
   const authority = {
@@ -244,7 +248,7 @@ function fixture(maximum = false, reviewedPayout = false) {
   };
   const attempt = { actor, access, requestId: snapshot.requestId, recentAuth };
   const tables: Record<string, any[]> = {
-    site: [{ siteId: actor.siteId, isDemo: true }],
+    site: [{ siteId: actor.siteId, isDemo: !live }],
     user: [{ userId: actor.userId, state: "ACTIVE", role: "SITE_ADMIN" }],
     session: [
       {
@@ -268,7 +272,7 @@ function fixture(maximum = false, reviewedPayout = false) {
       {
         id: "account-1",
         siteId: actor.siteId,
-        environment: "sandbox",
+        environment: mode,
         provider: "ASAAS",
         operatorUserId: actor.userId,
         accountReference: "acct-1",
@@ -281,7 +285,7 @@ function fixture(maximum = false, reviewedPayout = false) {
         id: "destination-3",
         siteId: actor.siteId,
         accountId: "account-1",
-        environment: "sandbox",
+        environment: mode,
         version: 3,
         bankReference: "bank-1",
         bankState: "VERIFIED",
@@ -293,7 +297,7 @@ function fixture(maximum = false, reviewedPayout = false) {
         id: intent.id,
         siteId: actor.siteId,
         accountId: "account-1",
-        environment: "sandbox",
+        environment: mode,
         operatorUserId: actor.userId,
         destinationVersion: 3,
         requestId: snapshot.requestId,
@@ -319,7 +323,7 @@ function fixture(maximum = false, reviewedPayout = false) {
         id: snapshot.operationId,
         siteId: actor.siteId,
         accountId: "account-1",
-        environment: "sandbox",
+        environment: mode,
         kind: "WITHDRAWAL",
         state: "REQUESTED",
         requestId: snapshot.requestId,
@@ -344,7 +348,7 @@ function fixture(maximum = false, reviewedPayout = false) {
         id: original.associationId,
         siteId: actor.siteId,
         accountId: "account-1",
-        environment: "sandbox",
+        environment: mode,
         operatorUserId: actor.userId,
         destinationVersion: 3,
         requestId: snapshot.requestId,
@@ -546,6 +550,7 @@ function fixture(maximum = false, reviewedPayout = false) {
     }),
   } as unknown as WithdrawalPostingDatabase;
   let proof: WithdrawalCompletionProof | null = null;
+  let terminalProof: unknown = null;
   const ports: WithdrawalPostingPorts = {
     loadOriginalHolderConsentInTransaction: vi.fn(async () =>
       structuredClone(holderBinding),
@@ -554,10 +559,13 @@ function fixture(maximum = false, reviewedPayout = false) {
       structuredClone(authority),
     ),
     loadCompletionProofInTransaction: vi.fn(async () => structuredClone(proof)),
+    loadTerminalFailureInTransaction: vi.fn(async () =>
+      structuredClone(terminalProof),
+    ) as never,
   };
   const options: WithdrawalPostingRepositoryOptions = {
-    mode: "sandbox",
-    applicationEnvironment: "test",
+    mode,
+    applicationEnvironment: live ? "production" : "test",
     maxAuthAgeMs: 300000,
     freshnessMs: 300000,
     leaseOwner: "worker-1",
@@ -612,6 +620,9 @@ function fixture(maximum = false, reviewedPayout = false) {
     holderBinding,
     arm,
     makeProof,
+    set terminalProof(value: unknown) {
+      terminalProof = value;
+    },
     get proof() {
       return proof;
     },
@@ -2001,4 +2012,236 @@ it("never gives dispatch a lease beyond the accepted recent-auth validity", asyn
   f.attempt.recentAuth.expiresAt = new Date(+f.time + 1000);
   const armed = await f.arm();
   expect(Date.parse(armed.fence.leaseExpiresAt)).toBe(+f.time + 1000);
+});
+
+describe("production immutable withdrawal settlement", () => {
+  it.each([0, 250, 500])(
+    "posts a %i-cent native fee with the authorized minimum net and no repeated debit",
+    async (fee) => {
+      const f = fixture(true, true, true);
+      const armed = await f.arm();
+      const proof = f.makeProof(armed);
+      proof.feeCents = fee;
+      proof.netCents = 10000 - fee;
+      expect(
+        (
+          await f.repository.postCompleted(
+            armed.original,
+            armed.fence,
+            proof.proofReference,
+          )
+        ).outcome,
+      ).toBe("COMPLETED");
+      expect(
+        (
+          await f.repository.postCompleted(
+            armed.original,
+            armed.fence,
+            proof.proofReference,
+          )
+        ).outcome,
+      ).toBe("DUPLICATE");
+      expect(f.tables.financial_ledger_entry).toHaveLength(1);
+      expect(f.tables.financial_ledger_entry[0].amountCents).toBe(10000);
+    },
+  );
+});
+
+describe("immutable native terminal failure release", () => {
+  it.each(["FAILED", "CANCELLED"] as const)(
+    "releases only verified %s once without a debit or redispatch",
+    async (state) => {
+      const f = fixture(true, true);
+      const armed = await f.arm();
+      const reference = `asaas-transfer:${"a".repeat(64)}`;
+      f.terminalProof = {
+        outcome: state,
+        feeCents: 0,
+        correlation: armed.original.correlation,
+        holderBinding: armed.original.holderBinding,
+        fence: armed.fence,
+        proofReference: reference,
+        providerReference: "transfer-1",
+        custody: "immutable-durable",
+        verification: "verified",
+        provenance: "provider",
+        observedAt: f.time.toISOString(),
+        recordedAt: f.time.toISOString(),
+      };
+      const observation = {
+        outcome: "REJECTED" as const,
+        correlation: armed.original.correlation,
+        holderBinding: armed.original.holderBinding,
+        fence: armed.fence,
+        reason: `ASAAS_TRANSFER_${state}`,
+        proofReference: reference,
+        providerReference: "transfer-1",
+        observedAt: f.time.toISOString(),
+      };
+      const result = await f.repository.recordObservation(
+        armed.original,
+        armed.fence,
+        observation,
+      );
+      expect(result).toMatchObject({
+        state,
+        reservationState: "RELEASED",
+        reservedCents: 0,
+      });
+      expect(
+        (
+          await f.repository.recordObservation(
+            armed.original,
+            armed.fence,
+            observation,
+          )
+        ).state,
+      ).toBe(state);
+      expect((await f.repository.armExisting(f.attempt)).outcome).toBe(
+        "EXISTING",
+      );
+      expect(f.tables.financial_ledger_entry).toHaveLength(0);
+      expect(f.tables.financial_operation[0].attempts).toBe(1);
+    },
+  );
+  it("retains the reserve when a terminal rejection lacks durable proof", async () => {
+    const f = fixture(true, true);
+    const armed = await f.arm();
+    const result = await f.repository.recordObservation(
+      armed.original,
+      armed.fence,
+      {
+        outcome: "REJECTED",
+        correlation: armed.original.correlation,
+        holderBinding: armed.original.holderBinding,
+        fence: armed.fence,
+        reason: "ASAAS_TRANSFER_FAILED",
+      },
+    );
+    expect(result).toMatchObject({
+      state: "UNKNOWN",
+      reservationState: "HELD",
+      reservedCents: 10000,
+    });
+  });
+});
+
+it("renews only dispatch authority for timely accepted live minimum-net consent", async () => {
+  const f = fixture(true, true, true);
+  f.time.setTime(+f.time + 360000);
+  f.sqlClock.value = f.time.toISOString();
+  f.attempt.recentAuth.authenticatedAt = new Date(+f.time - 1000);
+  f.attempt.recentAuth.expiresAt = new Date(+f.time + 270000);
+  f.tables.session[0].lastActiveAt = f.time.toISOString();
+  f.authority.context.readiness.observedAt = f.time.toISOString();
+  f.authority.presentation.evidenceObservedAt = new Date(f.time);
+  f.authority.presentation.bankObservedAt = new Date(f.time);
+  const armed = await f.arm();
+  expect(armed.original.consent).toEqual(f.original.consent);
+});
+
+it.each([
+  "foreign-provider",
+  "foreign-holder",
+  "charged-fee",
+  "future-record",
+  "partial-write",
+])(
+  "preserves the complete hold when terminal failure proof is invalid: %s",
+  async (fault) => {
+    const f = fixture(true, true);
+    const armed = await f.arm();
+    const reference = `asaas-transfer:${"a".repeat(64)}`;
+    const proof = {
+      outcome: "FAILED",
+      feeCents: 0,
+      correlation: armed.original.correlation,
+      holderBinding: structuredClone(armed.original.holderBinding),
+      fence: armed.fence,
+      proofReference: reference,
+      providerReference: "transfer-1",
+      custody: "immutable-durable",
+      verification: "verified",
+      provenance: "provider",
+      observedAt: f.time.toISOString(),
+      recordedAt: f.time.toISOString(),
+    };
+    if (fault === "foreign-provider")
+      proof.providerReference = "foreign-transfer";
+    if (fault === "foreign-holder")
+      proof.holderBinding.holderUserId = "foreign-holder";
+    if (fault === "charged-fee") proof.feeCents = 1;
+    if (fault === "future-record")
+      proof.recordedAt = new Date(+f.time + 1).toISOString();
+    if (fault === "partial-write") f.faults.failWrite = f.faults.writes + 2;
+    f.terminalProof = proof;
+    await expect(
+      f.repository.recordObservation(armed.original, armed.fence, {
+        outcome: "REJECTED",
+        correlation: armed.original.correlation,
+        holderBinding: armed.original.holderBinding,
+        fence: armed.fence,
+        reason: "ASAAS_TRANSFER_FAILED",
+        proofReference: reference,
+        providerReference: "transfer-1",
+        observedAt: f.time.toISOString(),
+      }),
+    ).rejects.toThrow("Withdrawal observation unresolved");
+    expect(f.tables.withdrawal_intent[0]).toMatchObject({
+      state: "PROCESSING",
+      reservationState: "HELD",
+      reservedCents: 10000,
+    });
+    expect(f.tables.financial_operation[0]).toMatchObject({
+      state: "PROCESSING",
+      attempts: 1,
+    });
+    expect(f.tables.financial_ledger_entry).toHaveLength(0);
+  },
+);
+
+describe("live showcase single-attempt dispatch", () => {
+  it.each([undefined, "site-other", "site-1"])(
+    "admits only the exact server-authorized showcase %s",
+    async (liveDemoSiteId) => {
+      const f = fixture(true, true, true);
+      f.tables.site[0].isDemo = true;
+      f.authority.context.isDemo = true;
+      const repository = createWithdrawalPostingRepository(f.db, {
+        ...f.options,
+        liveDemoSiteId,
+      });
+      const armed = await repository.armExisting(f.attempt);
+      expect(armed.outcome).toBe(
+        liveDemoSiteId === "site-1" ? "ARMED" : "DENIED",
+      );
+      expect(f.tables.site[0].isDemo).toBe(true);
+      expect(f.authority.context.isDemo).toBe(true);
+    },
+  );
+  it("keeps simulated completion forbidden for the explicitly enabled showcase", async () => {
+    const f = fixture(true, true, true);
+    f.tables.site[0].isDemo = true;
+    f.authority.context.isDemo = true;
+    const repository = createWithdrawalPostingRepository(f.db, {
+      ...f.options,
+      liveDemoSiteId: "site-1",
+    });
+    const armed = await repository.armExisting(f.attempt);
+    expect(armed.outcome).toBe("ARMED");
+    if (armed.outcome !== "ARMED") throw new Error("Expected showcase arm");
+    const proof = f.makeProof(armed);
+    proof.provenance = "simulation";
+    expect(
+      (
+        await repository.postCompleted(
+          armed.original,
+          armed.fence,
+          proof.proofReference,
+        )
+      ).outcome,
+    ).toBe("DENIED");
+    expect(f.tables.financial_ledger_entry).toHaveLength(0);
+    expect(f.tables.withdrawal_intent[0].reservedCents).toBe(10000);
+  });
 });
