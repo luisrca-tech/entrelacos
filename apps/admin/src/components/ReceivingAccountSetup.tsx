@@ -29,6 +29,9 @@ import type {
 } from "./ReceivingSetup";
 import { receivingPageHref } from "./receivingNavigation";
 
+const liveActivationRequirement =
+  "Para liberar os recebimentos no EntreLaços, é obrigatório ativar a conta e concluir a verificação de identidade no Asaas.";
+
 function supportsIncomingVerification(
   mode: string | null | undefined,
 ): boolean {
@@ -746,6 +749,9 @@ export function ReceivingAccountSetupView({
                 <h3 className="m-0 font-semibold text-admin-graphite">
                   Conclua a ativação no Asaas
                 </h3>
+                <p className="m-0 text-sm text-admin-muted">
+                  {liveActivationRequirement}
+                </p>
                 <ol className="m-0 grid list-decimal gap-2 pl-5 text-sm text-admin-muted">
                   <li>
                     Abra o e-mail de ativação e defina sua senha de acesso ao
@@ -878,6 +884,30 @@ export function ReceivingAccountSetupView({
       )}
       {canSubmit && (
         <>
+          {setup.mode === "live" &&
+            supportsIncomingVerification(setup.mode) && (
+              <aside
+                aria-label="Requisitos para ativar os recebimentos"
+                className="grid gap-3 rounded-lg border border-admin-line bg-admin-canvas p-4"
+              >
+                <strong className="text-admin-graphite">
+                  Antes de começar
+                </strong>
+                <p className="m-0 text-sm text-admin-muted">
+                  {liveActivationRequirement}
+                </p>
+                <p className="m-0 text-sm text-admin-muted">
+                  Depois do cadastro, conclua o primeiro acesso pelo e-mail,
+                  confirme seu celular por SMS e envie os documentos e a selfie,
+                  quando solicitado, no próprio Asaas. Essas etapas confirmam a
+                  identidade do titular e ajudam a proteger seus recebimentos.
+                </p>
+                <p className="m-0 text-sm text-admin-muted">
+                  A liberação depende da aprovação e das validações da conta.
+                  Você poderá acompanhar a situação neste painel.
+                </p>
+              </aside>
+            )}
           <p>{setup.disclosure.text}</p>
           <p>
             Preencha os dados do titular e confirme o consentimento antes de

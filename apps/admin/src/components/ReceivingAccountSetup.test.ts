@@ -127,6 +127,9 @@ describe("receiving account setup", () => {
     expect(visible).toContain("código por SMS");
     expect(visible).toContain("tela de ativação do Asaas");
     expect(visible).toContain("Minha conta");
+    expect(visible).toContain(
+      "é obrigatório ativar a conta e concluir a verificação de identidade no Asaas",
+    );
     const guidance = visible.slice(
       visible.indexOf('aria-label="Próximo passo da ativação"'),
     );
@@ -383,6 +386,36 @@ describe("receiving account setup", () => {
     expect(html).toContain("E-mail do titular");
     expect(html).toContain("sou o titular designado");
     expect(html).not.toContain("da noiva");
+    values.controller.dispose();
+  });
+  it("explains mandatory live account activation and documents before the first registration submit", async () => {
+    vi.stubGlobal("__APP_ENV__", "production");
+    const values = fixture({ ...setup, mode: "live" });
+    await values.controller.refresh();
+    const html = renderToStaticMarkup(
+      createElement(ReceivingAccountSetupView, {
+        scope: values.scope,
+        state: values.controller.getState(),
+        guard: values.controller.guard,
+        onSubmit: vi.fn(),
+      }),
+    );
+    const beforeForm = html.slice(0, html.indexOf("<form"));
+    expect(beforeForm).toContain(
+      "é obrigatório ativar a conta e concluir a verificação de identidade no Asaas",
+    );
+    expect(beforeForm).toContain("documentos");
+    expect(beforeForm).toContain("selfie, quando solicitado");
+    expect(beforeForm).toContain("e-mail");
+    expect(beforeForm).toContain("SMS");
+    expect(beforeForm).toContain("no próprio Asaas");
+    expect(beforeForm).toContain("proteger seus recebimentos");
+    expect(html).toContain("Enviar cadastro ao Asaas");
+    expect(
+      values.request.mock.calls.some(
+        ([, options]) => options?.method === "POST",
+      ),
+    ).toBe(false);
     values.controller.dispose();
   });
   it("loads authoritative holder context and hides form from a planner", async () => {
