@@ -104,6 +104,87 @@ describe("receiving account setup", () => {
     catalogEligible: true,
     mode: "sandbox",
   } as const;
+  it("shows the live holder a visible provider activation link and explains where to enter SMS codes", () => {
+    vi.stubGlobal("__APP_ENV__", "production");
+    const values = fixture();
+    const html = renderToStaticMarkup(
+      createElement(ReceivingAccountSetupView, {
+        scope: values.scope,
+        state: {
+          status: "ready",
+          setup: { ...createdSetup, mode: "live" },
+          message: null,
+        },
+      }),
+    );
+    const visible = html.slice(0, html.indexOf("<details"));
+    expect(visible).toContain("Continuar ativação no Asaas");
+    expect(visible).toContain(
+      'href="https://www.asaas.com/login/auth?customerSignUpOriginChannel=HOME"',
+    );
+    expect(visible).toContain('target="_blank"');
+    expect(visible).toContain('rel="noopener noreferrer"');
+    expect(visible).toContain("código por SMS");
+    expect(visible).toContain("tela de ativação do Asaas");
+    expect(visible).toContain("Minha conta");
+    const guidance = visible.slice(
+      visible.indexOf('aria-label="Próximo passo da ativação"'),
+    );
+    const steps = [
+      "e-mail de ativação",
+      "Entre no Asaas",
+      "código por SMS",
+      "Envie os documentos",
+      "Aguarde a análise",
+      "chave Pix de entrada",
+      "Verificar situação",
+      "Confirmar minha conta de recebimento",
+    ];
+    const positions = steps.map((step) => guidance.indexOf(step));
+    expect(positions.every((position) => position >= 0)).toBe(true);
+    expect(
+      positions.every(
+        (position, index) => index === 0 || position > positions[index - 1],
+      ),
+    ).toBe(true);
+    expect(guidance).toContain("selfie, quando solicitado");
+    expect(html).not.toContain('autocomplete="one-time-code"');
+    expect(html).not.toContain("Sandbox");
+    expect(values.request).not.toHaveBeenCalled();
+    values.controller.dispose();
+  });
+
+  it.each(["owner", "other-holder", "ready", "uncreated", "development"])(
+    "does not offer the live activation action for %s",
+    (scenario) => {
+      vi.stubGlobal(
+        "__APP_ENV__",
+        scenario === "development" ? "development" : "production",
+      );
+      const values = fixture();
+      const html = renderToStaticMarkup(
+        createElement(ReceivingAccountSetupView, {
+          scope: values.scope,
+          platformOwner: scenario === "owner",
+          state: {
+            status: "ready",
+            setup: {
+              ...createdSetup,
+              mode: "live",
+              isHolder: scenario !== "other-holder",
+              accountState:
+                scenario === "uncreated" ? "NOT_CREATED" : "CREATED",
+            },
+            message: null,
+          },
+          readiness:
+            scenario === "ready" ? { ...readiness, mode: "live" } : null,
+        }),
+      );
+      expect(html).not.toContain("Continuar ativação no Asaas");
+      values.controller.dispose();
+    },
+  );
   it.each([
     ["development", "sandbox", true],
     ["production", "live", true],
@@ -410,6 +491,38 @@ describe("receiving account setup", () => {
     expect(html).not.toContain("Pronto para receber");
     values.controller.dispose();
   });
+  it.each([
+    ["PENDING", "Pendente"],
+    ["AWAITING_APPROVAL", "Em análise"],
+  ] as const)(
+    "shows %s without implying an unsubmitted account is under review",
+    (general, label) => {
+      const values = fixture();
+      const html = renderToStaticMarkup(
+        createElement(ReceivingAccountSetupView, {
+          scope: values.scope,
+          state: {
+            status: "ready",
+            setup: {
+              ...createdSetup,
+              providerStatus: {
+                commercialInfo: "APPROVED",
+                bankAccountInfo: "PENDING",
+                documentation: "PENDING",
+                general,
+                commercialInfoExpired: false,
+                observedAt: "2026-10-16T12:00:00.000Z",
+              },
+            },
+            message: null,
+          },
+        }),
+      );
+      expect(html).toContain(`>${label}</span>`);
+      if (general === "PENDING") expect(html).not.toContain("Em análise");
+      values.controller.dispose();
+    },
+  );
   it("keeps access activation unconfirmed even when all registration checks are approved", async () => {
     const values = fixture({
       ...createdSetup,

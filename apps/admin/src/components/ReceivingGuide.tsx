@@ -183,11 +183,18 @@ export function ReceivingGuide({
               Conclua as verificações da conta
             </h3>
             <p className="m-0">
-              Siga as solicitações do Asaas para documentos, identificação e
-              dados bancários. A aprovação cadastral não confirma a ativação do
-              seu acesso: a senha e as etapas de segurança são tratadas no
-              Asaas. Depois, volte a Recebimentos e use Verificar situação para
-              atualizar o status.
+              No Asaas, em Minha conta, confirme seu celular com o código
+              recebido por SMS. Envie os documentos solicitados e faça a selfie,
+              quando solicitado, no próprio Asaas. Depois, aguarde a análise e a
+              aprovação da conta.
+            </p>
+            <p className="mt-2 mb-0">
+              Após a aprovação, cadastre uma chave Pix de entrada no Asaas.
+              Volte a Recebimentos no Entrelacos, use Verificar situação para
+              atualizar o status e depois Confirmar minha conta de recebimento
+              para conferir a liberação. A aprovação cadastral não confirma a
+              ativação do seu acesso: a senha e as etapas de segurança são
+              tratadas no Asaas.
             </p>
             <p className="mt-2 mb-0">
               <OfficialLink href="https://docs.asaas.com/docs/aprova%C3%A7%C3%A3o-de-contas">

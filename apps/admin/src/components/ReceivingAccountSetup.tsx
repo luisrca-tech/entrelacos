@@ -603,9 +603,11 @@ export function ReceivingAccountSetupView({
                 : setup.providerStatus?.general === "APPROVED"
                   ? "Aprovado"
                   : setup.accountState === "CREATED"
-                    ? setup.providerStatus
+                    ? setup.providerStatus?.general === "AWAITING_APPROVAL"
                       ? "Em análise"
-                      : "Não consultado"
+                      : setup.providerStatus
+                        ? "Pendente"
+                        : "Não consultado"
                     : "Aguardando cadastro",
             ],
             [
@@ -732,6 +734,55 @@ export function ReceivingAccountSetupView({
               ? "Recebimentos liberados. Você pode acompanhar os pagamentos e consultar a disponibilidade de saque."
               : "Conta criada no Asaas. A criação não confirma liberação para receber ou sacar."}
           </p>
+          {setup.mode === "live" &&
+            supportsIncomingVerification(setup.mode) &&
+            setup.isHolder &&
+            !owner &&
+            !receivingReady && (
+              <section
+                aria-label="Próximo passo da ativação"
+                className="grid gap-3 rounded-lg border border-admin-line bg-admin-canvas p-4"
+              >
+                <h3 className="m-0 font-semibold text-admin-graphite">
+                  Conclua a ativação no Asaas
+                </h3>
+                <ol className="m-0 grid list-decimal gap-2 pl-5 text-sm text-admin-muted">
+                  <li>
+                    Abra o e-mail de ativação e defina sua senha de acesso ao
+                    Asaas.
+                  </li>
+                  <li>
+                    Entre no Asaas com o e-mail cadastrado para o recebedor.
+                  </li>
+                  <li>
+                    Confirme seu celular usando o código por SMS na tela de
+                    ativação do Asaas, em Minha conta.
+                  </li>
+                  <li>
+                    Envie os documentos solicitados e faça a selfie, quando
+                    solicitado, no próprio Asaas.
+                  </li>
+                  <li>
+                    Aguarde a análise e a aprovação da conta. Depois, cadastre
+                    uma chave Pix de entrada no Asaas.
+                  </li>
+                  <li>
+                    Volte ao EntreLaços, use Verificar situação e depois
+                    Confirmar minha conta de recebimento para conferir a
+                    liberação.
+                  </li>
+                </ol>
+                <a
+                  className="w-fit font-semibold text-admin-terracotta-deep underline underline-offset-4"
+                  href="https://www.asaas.com/login/auth?customerSignUpOriginChannel=HOME"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Continuar ativação no Asaas
+                  <span className="sr-only"> (abre em outra aba)</span>
+                </a>
+              </section>
+            )}
           <details className="rounded-lg border border-admin-line p-4">
             <summary className="cursor-pointer text-sm font-semibold">
               Ativação e acesso ao Asaas

@@ -33,6 +33,29 @@ function render(mode: string | null = "live") {
 }
 
 describe("receiving guide environment boundaries", () => {
+  it("explains provider phone confirmation, document review and the final receiving verification in order", () => {
+    vi.stubGlobal("__APP_ENV__", "production");
+    const html = render("live");
+    const steps = [
+      "defina sua senha no próprio Asaas",
+      "código recebido por SMS",
+      "Envie os documentos",
+      "aguarde a análise",
+      "cadastre uma chave Pix de entrada",
+      "Verificar situação",
+      "Confirmar minha conta de recebimento",
+    ];
+    const positions = steps.map((step) => html.indexOf(step));
+    expect(positions.every((position) => position >= 0)).toBe(true);
+    expect(
+      positions.every(
+        (position, index) => index === 0 || position > positions[index - 1],
+      ),
+    ).toBe(true);
+    expect(html).toContain("selfie, quando solicitado");
+    expect(html).not.toContain('autocomplete="one-time-code"');
+  });
+
   it("puts account access first and links the exact Entrelacos task", () => {
     const html = render();
     expect(html.indexOf("Acesse o Asaas com segurança")).toBeLessThan(
