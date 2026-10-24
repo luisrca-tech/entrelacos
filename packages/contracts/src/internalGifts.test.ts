@@ -1190,7 +1190,8 @@ describe("internal gifts C1 contracts", () => {
     expect(withdrawalReservationInputSchema.safeParse(wire).success).toBe(
       false,
     );
-    expect(withdrawalSealInputSchema.shape.reauthenticationToken).toBe(
+    expect(withdrawalSealInputSchema.parse({})).toEqual({});
+    expect(withdrawalSealInputSchema.shape.reauthenticationToken.unwrap()).toBe(
       financialReauthenticationResponseSchema.shape.reauthenticationToken,
     );
     for (const extra of [

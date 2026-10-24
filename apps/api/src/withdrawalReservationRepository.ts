@@ -1614,7 +1614,6 @@ export function createWithdrawalReservationRepository(
               requestOptions,
               true,
               requestId,
-              attempt.recentAuth ?? null,
             );
             let pair = await requestPair(tx, authority, requestId, mode, true);
             let revision = await scopeRevision(

@@ -2574,11 +2574,7 @@ describe("durable withdrawal request lifecycle", () => {
           v.authorization,
           v.confirmation,
         );
-      const seal = () =>
-        repo.sealUncreatedRequest?.({
-          ...requestAttempt(v),
-          recentAuth: v.authorization.recentAuth,
-        });
+      const seal = () => repo.sealUncreatedRequest?.(requestAttempt(v));
       const results = await Promise.allSettled(
         order === "seal-first" ? [seal(), confirm()] : [confirm(), seal()],
       );
@@ -2987,15 +2983,12 @@ describe("durable withdrawal request lifecycle", () => {
     ).rejects.toMatchObject({ code: "WITHDRAWAL_UNAVAILABLE", status: 503 });
     expect(v.tables.withdrawal_request[0].state).toBe("OPEN");
   });
-  it.each(["revoked", "proofExpired", "wrongSession"])(
-    "requires current protected authority for seal/recovery: %s",
+  it.each(["revoked", "wrongSession"])(
+    "requires current session authority for seal/recovery: %s",
     async (kind) => {
       const v = fixture();
       if (kind === "revoked") v.membership.revokedAt = now as unknown as null;
-      else if (kind === "proofExpired") {
-        v.clock.sql = "2026-10-12 20:04:30.000000+00";
-        v.clock.app = new Date(now.getTime() + 270000);
-      } else v.storedSession.sessionId = "other-session";
+      else v.storedSession.sessionId = "other-session";
       const repo = createWithdrawalReservationRepository(v.db, v.options);
       for (const action of [repo.sealUncreatedRequest, repo.recoverWithdrawal])
         await expect(
@@ -3008,6 +3001,24 @@ describe("durable withdrawal request lifecycle", () => {
       expect(v.tables.withdrawal_intent).toHaveLength(0);
     },
   );
+  it("ignores an expired legacy proof only for closing while recovery still requires fresh proof", async () => {
+    const v = fixture();
+    v.clock.sql = "2026-10-12 20:04:30.000000+00";
+    v.clock.app = new Date(now.getTime() + 270000);
+    const repo = createWithdrawalReservationRepository(v.db, v.options);
+    const attempt = {
+      ...requestAttempt(v),
+      recentAuth: v.authorization.recentAuth,
+    };
+    await expect(repo.recoverWithdrawal?.(attempt)).rejects.toMatchObject({
+      status: 403,
+    });
+    expect(await repo.sealUncreatedRequest?.(attempt)).toMatchObject({
+      state: "SEALED_NOT_CREATED",
+    });
+    expect(v.tables.withdrawal_intent).toHaveLength(0);
+    expect(v.tables.financial_operation).toHaveLength(0);
+  });
   it("allows an empty context only from amount-less exact stored presentation evidence", async () => {
     const v = fixture();
     v.tables.withdrawal_request.length = 0;
@@ -3119,20 +3130,23 @@ describe("durable withdrawal request lifecycle", () => {
     expect(v.tables.withdrawal_intent).toHaveLength(0);
     expect(v.tables.financial_operation).toHaveLength(0);
   });
-  it("seals an owned OPEN without a financial row and permanently denies late first confirmation", async () => {
+  it("seals an expired owned OPEN without proof or financial effects and permanently denies late confirmation", async () => {
     const v = fixture();
     const repo = createWithdrawalReservationRepository(v.db, v.options);
-    const protectedAttempt = {
-      ...requestAttempt(v),
-      recentAuth: v.authorization.recentAuth,
-    };
-    const sealed = await repo.sealUncreatedRequest?.(protectedAttempt);
+    v.clock.sql = "2026-10-12 20:04:30.000000+00";
+    v.clock.app = new Date(now.getTime() + 270000);
+    const attempt = requestAttempt(v);
+    const sealed = await repo.sealUncreatedRequest?.(attempt);
     expect(sealed).toMatchObject({
       state: "SEALED_NOT_CREATED",
       requestRevision: "2",
       scopeRevision: "2",
     });
-    expect(await repo.sealUncreatedRequest?.(protectedAttempt)).toEqual(sealed);
+    expect(await repo.sealUncreatedRequest?.(attempt)).toEqual(sealed);
+    Object.assign(v.authorization.recentAuth, {
+      authenticatedAt: new Date(v.clock.app.getTime() - 1000),
+      expiresAt: new Date(v.clock.app.getTime() + 299000),
+    });
     await expect(
       repo.reserveWithdrawal(
         v.snapshot,

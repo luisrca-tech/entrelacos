@@ -669,7 +669,7 @@ describe("durable withdrawal consent service", () => {
     expect(v.getBalance).not.toHaveBeenCalled();
     expect(v.loadPresentation).not.toHaveBeenCalled();
   });
-  it("seals without hold/release and preserves that state on retry", async () => {
+  it("seals without recent proof or hold/release and preserves that state on retry", async () => {
     const v = durableFixture();
     await v.service.createPreview({
       ...v.attempt,
@@ -680,16 +680,14 @@ describe("durable withdrawal consent service", () => {
       },
     });
     const protectedAttempt = { ...v.attempt, recentAuth: v.recentAuth };
-    const sealed = await v.service.sealUncreatedRequest(protectedAttempt);
+    const sealed = await v.service.sealUncreatedRequest(v.attempt);
     expect(sealed).toMatchObject({
       state: "SEALED_NOT_CREATED",
       requestRevision: "2",
       scopeRevision: "2",
       command: v.input,
     });
-    expect(await v.service.sealUncreatedRequest(protectedAttempt)).toEqual(
-      sealed,
-    );
+    expect(await v.service.sealUncreatedRequest(v.attempt)).toEqual(sealed);
     await rejected(
       v.service.confirmNew(protectedAttempt),
       "REQUEST_CONFLICT",
@@ -815,7 +813,7 @@ describe("durable withdrawal consent service", () => {
     expect(v.reserveWithdrawal).not.toHaveBeenCalled();
     expect(v.getConsent()).toEqual(original);
   });
-  it.each(["confirmNew", "recoverExisting", "sealUncreatedRequest"] as const)(
+  it.each(["confirmNew", "recoverExisting"] as const)(
     "requires real recent proof for %s before any repository mutation",
     async (method) => {
       const v = durableFixture();

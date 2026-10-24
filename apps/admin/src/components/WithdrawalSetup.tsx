@@ -19,7 +19,13 @@ import {
   TableRow,
   toast,
 } from "@entrelacos/ui";
-import { type FormEvent, useLayoutEffect, useRef, useState } from "react";
+import {
+  type FormEvent,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { ApiError, apiRequest } from "../lib/apiClient";
 import {
   FinancialReauthenticationForm,
@@ -1453,24 +1459,36 @@ export function createWithdrawalSetupController(
       }
     }
   }
+  function canSeal() {
+    return (
+      frame() &&
+      storageReady &&
+      state.status === "ready" &&
+      state.request?.state === "OPEN" &&
+      !state.uncertain
+    );
+  }
   async function act(
     action: Action,
     consumeProof: () => string | null,
     confirmed: boolean,
   ): Promise<boolean> {
+    const sealing = action === "SEAL";
     if (
-      !confirmed ||
+      (!sealing && !confirmed) ||
       busy ||
       !current() ||
-      !guard.isCurrent() ||
+      (sealing ? !canSeal() : !guard.isCurrent()) ||
       (action === "CONFIRM_NEW" && !termsCurrent()) ||
       (action === "RECOVER_EXISTING" && state.request?.state !== "EXISTING")
     ) {
       if (current() && !busy)
         toast.error(
-          action === "CONFIRM_NEW" && !termsCurrent()
-            ? "A prévia expirou. Encerre a solicitação original antes de consultar novos termos."
-            : "Confira os termos e confirme sua senha antes de continuar.",
+          sealing
+            ? "Não foi possível encerrar esta solicitação. Consulte a situação novamente."
+            : action === "CONFIRM_NEW" && !termsCurrent()
+              ? "A prévia expirou. Encerre a solicitação original antes de consultar novos termos."
+              : "Confira os termos e confirme sua senha antes de continuar.",
         );
       return false;
     }
@@ -1482,10 +1500,11 @@ export function createWithdrawalSetupController(
     const active = revision;
     try {
       if (
-        !(await guard.validate()) ||
+        !(await (sealing ? compareServer() : guard.validate())) ||
         !current() ||
         active !== revision ||
         !state.request ||
+        (sealing && state.request.state !== "OPEN") ||
         (action === "CONFIRM_NEW" &&
           (!termsCurrent() || state.request.state !== "OPEN")) ||
         (action === "RECOVER_EXISTING" && state.request.state !== "EXISTING")
@@ -1499,8 +1518,8 @@ export function createWithdrawalSetupController(
         return false;
       }
       if (!current() || active !== revision) return false;
-      const token = consumeProof();
-      if (!token) {
+      const token = sealing ? null : consumeProof();
+      if (!sealing && !token) {
         failure = new ApiError(403, "RECENT_AUTH_REQUIRED");
         return false;
       }
@@ -1531,7 +1550,6 @@ export function createWithdrawalSetupController(
         const result = await sealWithdrawalRequest(
           scope.siteId,
           retained.requestId,
-          token,
           ports.request,
         );
         if (!current() || active !== revision) return false;
@@ -1548,6 +1566,7 @@ export function createWithdrawalSetupController(
         if (!current() || active !== revision) return false;
         publish({ ...state, status: "ready" });
       } else {
+        if (!token) throw new ApiError(403, "RECENT_AUTH_REQUIRED");
         const withdrawal = await postWithdrawalAction(
           scope.siteId,
           {
@@ -1640,6 +1659,7 @@ export function createWithdrawalSetupController(
     refresh,
     preview,
     canResumePreview: () => canResumePreview(),
+    canSeal,
     resumePreview,
     act,
     resetConsent() {
@@ -1999,7 +2019,7 @@ function WithdrawalSetupView({
       )}
       {state.request &&
         withdrawal?.state !== "COMPLETED" &&
-        controller?.guard.isCurrent() && (
+        (controller?.guard.isCurrent() || controller?.canSeal()) && (
           <WithdrawalActions
             key={state.proofRevision}
             controller={controller}
@@ -2150,33 +2170,73 @@ function WithdrawalActions({
   state: WithdrawalSetupState;
 }) {
   const proof = useRef<FinancialReauthenticationHandle | null>(null);
-  const terms = useRef<HTMLFormElement | null>(null);
   const [confirmed, setConfirmed] = useState(false);
   const request = state.request;
+  const deadline =
+    request?.state === "OPEN" ? Date.parse(request.preview.expiresAt) : null;
+  const now = ports?.now ?? Date.now;
+  const [observedNow, setObservedNow] = useState(() => now());
+  useEffect(() => {
+    if (deadline === null) return;
+    setObservedNow(now());
+    if (now() >= deadline) return;
+    const interval = setInterval(() => {
+      const time = now();
+      setObservedNow(time);
+      if (time >= deadline) clearInterval(interval);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [deadline, now]);
   if (!request) return null;
   const action: Action =
     request.state === "OPEN" ? "CONFIRM_NEW" : "RECOVER_EXISTING";
-  const expired =
-    request.state === "OPEN" &&
-    (ports?.now?.() ?? Date.now()) >= Date.parse(request.preview.expiresAt);
+  const remainingSeconds =
+    deadline === null
+      ? null
+      : Math.max(0, Math.ceil((deadline - observedNow) / 1000));
+  const expired = remainingSeconds === 0;
+  const countdown =
+    remainingSeconds === null
+      ? null
+      : `${String(Math.floor(remainingSeconds / 60)).padStart(2, "0")}:${String(remainingSeconds % 60).padStart(2, "0")}`;
   return (
     <div className="grid gap-3">
-      <FinancialReauthenticationForm
-        {...scope}
-        action="REQUEST_WITHDRAWAL"
-        feedback="toast"
-        dialog
-        ref={proof}
-        guard={controller.guard}
-        request={ports?.request}
-        now={ports?.now}
-      />
+      {countdown !== null && (
+        <p className="m-0 text-sm text-admin-muted">
+          Tempo restante da prévia:{" "}
+          <span
+            role="timer"
+            aria-label="Tempo restante da prévia"
+            aria-live="off"
+            className="font-semibold tabular-nums"
+          >
+            {countdown}
+          </span>
+        </p>
+      )}
+      {expired && (
+        <p role="status" className="m-0 text-sm font-medium text-destructive">
+          Prévia expirada. Encerre a solicitação para consultar uma nova prévia.
+        </p>
+      )}
+      {!expired && (
+        <FinancialReauthenticationForm
+          {...scope}
+          action="REQUEST_WITHDRAWAL"
+          feedback="toast"
+          dialog
+          ref={proof}
+          guard={controller.guard}
+          request={ports?.request}
+          now={ports?.now}
+        />
+      )}
       <form
-        ref={terms}
         className="grid gap-3"
         onSubmit={(event) => {
           event.preventDefault();
-          if (!event.currentTarget.reportValidity() || !confirmed) return;
+          if (!event.currentTarget.reportValidity() || !confirmed || expired)
+            return;
           setConfirmed(false);
           void controller.act(
             action,
@@ -2191,6 +2251,7 @@ function WithdrawalActions({
             required
             aria-required="true"
             checked={confirmed}
+            disabled={expired || state.busy}
             onChange={(event) => setConfirmed(event.target.checked)}
           />
           Confirmo os termos originais exibidos desta solicitação.
@@ -2206,31 +2267,21 @@ function WithdrawalActions({
         >
           {state.busy
             ? "Processando…"
-            : expired
-              ? "Prévia expirada — encerre a solicitação"
-              : action === "CONFIRM_NEW"
-                ? "Confirmar solicitação de saque"
-                : "Recuperar solicitação original"}
+            : action === "CONFIRM_NEW"
+              ? "Confirmar solicitação de saque"
+              : "Recuperar solicitação original"}
         </Button>
-        {request.state === "OPEN" && (
-          <Button
-            type="button"
-            variant="outline"
-            disabled={!confirmed || state.busy}
-            onClick={() => {
-              if (!terms.current?.reportValidity()) return;
-              setConfirmed(false);
-              void controller.act(
-                "SEAL",
-                () => proof.current?.consumeProof() ?? null,
-                confirmed,
-              );
-            }}
-          >
-            {state.busy ? "Encerrando…" : "Encerrar solicitação sem reserva"}
-          </Button>
-        )}
       </form>
+      {request.state === "OPEN" && (
+        <Button
+          type="button"
+          variant="outline"
+          disabled={state.busy}
+          onClick={() => void controller.act("SEAL", () => null, false)}
+        >
+          {state.busy ? "Encerrando…" : "Encerrar solicitação"}
+        </Button>
+      )}
     </div>
   );
 }

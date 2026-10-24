@@ -441,19 +441,13 @@ export function createFinanceHttpRouter(options: FinanceHttpOptions) {
     );
     if (!requestId.success || !input.success)
       return problem(400, "VALIDATION_ERROR", "Invalid withdrawal payload");
-    if (!seal || !readProof) return providerUnavailable();
+    if (!seal) return providerUnavailable();
     const actor = context.get("financialActor"),
       access = context.get("financialAccess");
-    const recentAuth = readProof(
-      actor,
-      "REQUEST_WITHDRAWAL",
-      input.data.reauthenticationToken,
-    );
     const result = withdrawalRequestStatusResponseSchema.safeParse({
       request: await seal({
         actor,
         access,
-        recentAuth,
         requestId: requestId.data,
       }),
     });

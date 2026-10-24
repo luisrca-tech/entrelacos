@@ -373,34 +373,104 @@ describe("finance HTTP disabled boundary", () => {
     expect(v.readProof).not.toHaveBeenCalled();
     expect(v.service.createWithdrawal).not.toHaveBeenCalled();
   });
-  it("seals the exact path reference with purpose-bound proof and no first-create call", async () => {
+  it.each([{}, { reauthenticationToken: withdrawal.reauthenticationToken }])(
+    "seals the exact owned path without financial proof for body %j",
+    async (body) => {
+      const v = discoveryFixture();
+      const response = await createFinanceHttpRouter(v.options).request(
+        request(`${withdrawalsPath}/request-one/seal`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        }),
+      );
+      expect(response.status).toBe(200);
+      expect((await response.json()).request.state).toBe("SEALED_NOT_CREATED");
+      expect(v.readProof).not.toHaveBeenCalled();
+      expect(v.service.sealUncreatedRequest).toHaveBeenCalledExactlyOnceWith({
+        actor: v.actor,
+        access: access(),
+        requestId: "request-one",
+      });
+      expect(v.service.createWithdrawal).not.toHaveBeenCalled();
+      expect(v.service.confirmNew).not.toHaveBeenCalled();
+      expect(response.headers.get("cache-control")).toBe("no-store");
+    },
+  );
+  it("closes without a configured financial password service", async () => {
     const v = discoveryFixture();
-    const response = await createFinanceHttpRouter(v.options).request(
+    const response = await createFinanceHttpRouter({
+      ...v.options,
+      financialReauthentication: undefined,
+    }).request(
       request(`${withdrawalsPath}/request-one/seal`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          reauthenticationToken: withdrawal.reauthenticationToken,
-        }),
+        body: "{}",
       }),
     );
     expect(response.status).toBe(200);
-    expect((await response.json()).request.state).toBe("SEALED_NOT_CREATED");
-    expect(v.readProof).toHaveBeenCalledExactlyOnceWith(
-      v.actor,
-      "REQUEST_WITHDRAWAL",
-      withdrawal.reauthenticationToken,
-    );
-    expect(v.service.sealUncreatedRequest).toHaveBeenCalledExactlyOnceWith({
-      actor: v.actor,
-      access: access(),
-      requestId: "request-one",
-      recentAuth: expect.any(Object),
-    });
-    expect(v.service.createWithdrawal).not.toHaveBeenCalled();
+    expect(v.readProof).not.toHaveBeenCalled();
+    expect(v.service.sealUncreatedRequest).toHaveBeenCalledOnce();
     expect(v.service.confirmNew).not.toHaveBeenCalled();
-    expect(response.headers.get("cache-control")).toBe("no-store");
   });
+  it.each([
+    "origin",
+    "query",
+    "anonymous",
+    "OWNER",
+    "assistant",
+    "foreign",
+    "revoked",
+  ])(
+    "still denies %s closing without asking for financial proof",
+    async (failure) => {
+      const v = discoveryFixture();
+      if (failure === "anonymous")
+        mocks.requireAdminSession.mockRejectedValueOnce(
+          new mocks.AdminSessionRequiredError(),
+        );
+      else if (failure === "OWNER")
+        mocks.resolveSiteAccess.mockResolvedValueOnce({
+          ...access(),
+          membershipRole: "OWNER",
+          membershipId: null,
+        });
+      else if (failure === "assistant")
+        mocks.resolveSiteAccess.mockResolvedValueOnce({
+          ...access(),
+          membershipRole: "SITE_ASSISTANT",
+        });
+      else if (failure === "foreign")
+        mocks.resolveSiteAccess.mockResolvedValueOnce({
+          ...access(),
+          siteId: "another-site",
+        });
+      else if (failure === "revoked")
+        mocks.resolveSiteAccess.mockResolvedValueOnce({
+          ...access(),
+          membershipId: null,
+        });
+      const response = await createFinanceHttpRouter(v.options).request(
+        request(
+          `${withdrawalsPath}/request-one/seal${failure === "query" ? "?account=private" : ""}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: "{}",
+          },
+          failure === "origin" ? "https://foreign.example.test" : adminOrigin,
+        ),
+      );
+      expect(response.status).toBe(
+        failure === "anonymous" ? 401 : failure === "query" ? 400 : 403,
+      );
+      expect(response.headers.get("cache-control")).toBe("no-store");
+      expect(v.service.sealUncreatedRequest).not.toHaveBeenCalled();
+      expect(v.service.confirmNew).not.toHaveBeenCalled();
+      expect(v.readProof).not.toHaveBeenCalled();
+    },
+  );
   it("keeps HEAD discovery on the same non-mutating reader", async () => {
     const v = discoveryFixture();
     const response = await createFinanceHttpRouter(v.options).request(

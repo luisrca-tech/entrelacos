@@ -168,7 +168,7 @@ export interface WithdrawalReservationRepository {
     attempt: WithdrawalProtectedRequestAttempt,
   ): Promise<WithdrawalReservationRecord | null>;
   sealUncreatedRequest?(
-    attempt: WithdrawalProtectedRequestAttempt,
+    attempt: WithdrawalSealRequestAttempt,
   ): Promise<WithdrawalRequestStatus>;
 }
 
@@ -185,6 +185,10 @@ export interface WithdrawalRequestReadAttempt extends WithdrawalReadAttempt {
 export interface WithdrawalProtectedRequestAttempt
   extends WithdrawalRequestReadAttempt {
   recentAuth: RecentFinancialAuthenticationEvidence | null;
+}
+export interface WithdrawalSealRequestAttempt
+  extends WithdrawalRequestReadAttempt {
+  recentAuth?: RecentFinancialAuthenticationEvidence | null;
 }
 export interface WithdrawalPreviewAttempt extends WithdrawalReadAttempt {
   input: unknown;
@@ -487,7 +491,7 @@ export interface WithdrawalReservationService {
     attempt: WithdrawalProtectedRequestAttempt,
   ): Promise<WithdrawalIntent>;
   sealUncreatedRequest(
-    attempt: WithdrawalProtectedRequestAttempt,
+    attempt: WithdrawalSealRequestAttempt,
   ): Promise<WithdrawalRequestStatus>;
 }
 
@@ -1450,7 +1454,10 @@ export function createWithdrawalReservationService(
       },
       async sealUncreatedRequest(attempt) {
         try {
-          const selected = protectedAttempt(attempt);
+          const selected = {
+            ...readAttempt(attempt),
+            requestId: id(attempt.requestId),
+          };
           if (!seal) return deny("PROVIDER_MODE_UNAVAILABLE", 409);
           const result = withdrawalRequestStatusSchema.parse(
             await seal(selected),
@@ -1461,7 +1468,6 @@ export function createWithdrawalReservationService(
             result.mode !== mode
           )
             return deny("WITHDRAWAL_UNAVAILABLE");
-          freshProof(selected.recentAuth, time(now()), maxAge);
           return result;
         } catch (error) {
           return safe(error);

@@ -600,7 +600,7 @@ export type WithdrawalPreviewInput = z.infer<
 export const withdrawalSealInputSchema = z
   .object({
     reauthenticationToken:
-      financialReauthenticationResponseSchema.shape.reauthenticationToken,
+      financialReauthenticationResponseSchema.shape.reauthenticationToken.optional(),
   })
   .strict();
 export type WithdrawalSealInput = z.infer<typeof withdrawalSealInputSchema>;

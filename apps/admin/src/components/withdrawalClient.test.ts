@@ -194,7 +194,7 @@ describe("withdrawal strict transport", () => {
       );
     },
   );
-  it("seals route identity with proof-only body", async () => {
+  it("seals route identity without a financial reauthentication proof", async () => {
     const sealed = {
       ...open,
       state: "SEALED_NOT_CREATED",
@@ -206,11 +206,11 @@ describe("withdrawal strict transport", () => {
     const { preview: _preview, ...value } = sealed;
     const request = vi.fn().mockResolvedValue({ request: value });
     await expect(
-      sealWithdrawalRequest(siteId, requestId, token, request),
+      sealWithdrawalRequest(siteId, requestId, request),
     ).resolves.toEqual(value);
     expect(request).toHaveBeenCalledExactlyOnceWith(
       `/v1/sites/${siteId}/withdrawals/context/seal`,
-      { method: "POST", body: { reauthenticationToken: token } },
+      { method: "POST", body: {} },
     );
   });
   it.each([
@@ -242,7 +242,7 @@ describe("withdrawal strict transport", () => {
       ),
     ).rejects.toThrow();
     await expect(
-      sealWithdrawalRequest(bad, requestId, token, request),
+      sealWithdrawalRequest(bad, requestId, request),
     ).rejects.toThrow();
     expect(request).not.toHaveBeenCalled();
   });
@@ -254,7 +254,7 @@ describe("withdrawal strict transport", () => {
         loadWithdrawalRequest(siteId, bad, request),
       ).rejects.toThrow();
       await expect(
-        sealWithdrawalRequest(siteId, bad, token, request),
+        sealWithdrawalRequest(siteId, bad, request),
       ).rejects.toThrow();
       expect(request).not.toHaveBeenCalled();
     },
@@ -326,7 +326,7 @@ describe("withdrawal strict transport", () => {
         ),
       ).rejects.toThrow();
       await expect(
-        sealWithdrawalRequest(siteId, requestId, token, request),
+        sealWithdrawalRequest(siteId, requestId, request),
       ).rejects.toThrow();
     },
   );

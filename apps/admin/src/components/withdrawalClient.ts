@@ -118,14 +118,11 @@ export async function postWithdrawalAction(
 export async function sealWithdrawalRequest(
   siteId: string,
   requestId: string,
-  token: string,
   request: WithdrawalTransport = apiRequest,
 ): Promise<WithdrawalRequestStatus> {
   const path = withdrawalPath(siteId);
   const validId = validRequestId(requestId);
-  const body = withdrawalSealInputSchema.parse({
-    reauthenticationToken: token,
-  });
+  const body = withdrawalSealInputSchema.parse({});
   return requestSettlement(
     await request(`${path}/${encodeURIComponent(validId)}/seal`, {
       method: "POST",

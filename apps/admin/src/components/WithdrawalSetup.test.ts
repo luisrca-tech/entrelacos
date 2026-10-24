@@ -1896,7 +1896,10 @@ async function httpWithdrawalPassword(
   await f.settle();
   expect(input.value).toBe("");
 }
-async function mount(f: Awaited<ReturnType<typeof fixture>>) {
+async function mount(
+  f: Awaited<ReturnType<typeof fixture>>,
+  openPasswordDialog = true,
+) {
   const node = document.createElement("div");
   document.body.append(node);
   const root = createRoot(node);
@@ -1914,11 +1917,12 @@ async function mount(f: Awaited<ReturnType<typeof fixture>>) {
       ),
     );
   });
-  await act(async () =>
-    [...node.querySelectorAll("button")]
-      .find((button) => button.textContent === "Confirmar senha")
-      ?.click(),
-  );
+  if (openPasswordDialog)
+    await act(async () =>
+      [...node.querySelectorAll("button")]
+        .find((button) => button.textContent === "Confirmar senha")
+        ?.click(),
+    );
   return { root, node };
 }
 
@@ -3251,7 +3255,7 @@ describe("withdrawal setup owned source lifecycle", () => {
     expect(f.request.mock.calls.filter(([, options]) => options)).toEqual([
       [
         "/v1/sites/wedding-a/withdrawals/request-a/seal",
-        { method: "POST", body: { reauthenticationToken: token } },
+        { method: "POST", body: {} },
       ],
     ]);
     expect(f.storage.data.size).toBe(0);
@@ -3993,6 +3997,103 @@ describe("actual React withdrawal DOM", () => {
       f.cleanup();
     }
   });
+  it("counts down to the fixed preview deadline without resetting on re-render or remount", async () => {
+    const f = await fixture(openContext());
+    const baselineTimers = vi.getTimerCount();
+    try {
+      const first = await mount(f, false);
+      const timer = () => first.node.querySelector('[role="timer"]');
+      expect(timer()?.textContent).toBe("01:00");
+      expect(timer()?.getAttribute("aria-live")).toBe("off");
+      await act(async () => vi.advanceTimersByTimeAsync(1000));
+      expect(timer()?.textContent).toBe("00:59");
+      await act(async () =>
+        first.root.render(
+          createElement(
+            StrictMode,
+            null,
+            createElement(WithdrawalSetup, {
+              ...f.scope,
+              ports: f.ports,
+              onFinancialChange: f.onFinancialChange,
+            }),
+          ),
+        ),
+      );
+      expect(timer()?.textContent).toBe("00:59");
+      await act(async () => first.root.unmount());
+      mounts.splice(
+        mounts.findIndex((entry) => entry.root === first.root),
+        1,
+      );
+      first.node.remove();
+      expect(vi.getTimerCount()).toBe(baselineTimers);
+      await act(async () => vi.advanceTimersByTimeAsync(1000));
+      const second = await mount(f, false);
+      expect(second.node.querySelector('[role="timer"]')?.textContent).toBe(
+        "00:58",
+      );
+      await act(async () => vi.advanceTimersByTimeAsync(58000));
+      expect(second.node.querySelector('[role="timer"]')?.textContent).toBe(
+        "00:00",
+      );
+      expect(
+        second.node.querySelector(".text-destructive")?.textContent,
+      ).toContain("Prévia expirada");
+      expect(
+        [...second.node.querySelectorAll("button")].find(
+          (button) => button.textContent === "Encerrar solicitação",
+        )?.disabled,
+      ).toBe(false);
+      expect(f.request.mock.calls.every(([, options]) => !options)).toBe(true);
+    } finally {
+      f.cleanup();
+    }
+  });
+  it("does not consume withdrawal proof or require monetary confirmation when sealing an expired preview", async () => {
+    const f = await fixture(openContext());
+    try {
+      await f.controller.refresh();
+      await vi.advanceTimersByTimeAsync(60000);
+      const native = required(f.request.getMockImplementation());
+      const { preview: _preview, ...sealed } = open();
+      const value = {
+        ...sealed,
+        state: "SEALED_NOT_CREATED",
+        scopeRevision: "2",
+        requestRevision: "2",
+        observationOrder: {
+          scopeRevision: "2",
+          requestRevision: "2",
+          recordUpdatedAtMicroseconds: String(BigInt(start + 60000) * 1000n),
+        },
+        observedAt: new Date(start + 60000).toISOString(),
+        sealedAt: new Date(start + 60000).toISOString(),
+        command: {
+          requestId: "request-a",
+          amountCents: 10000,
+          destinationVersion: 3,
+        },
+      };
+      f.request.mockImplementation((path, options) =>
+        path.endsWith("/seal")
+          ? Promise.resolve({ request: value })
+          : native(path, options),
+      );
+      const consume = vi.fn(() => null);
+      expect(await f.controller.act("SEAL", consume, false)).toBe(true);
+      expect(consume).not.toHaveBeenCalled();
+      expect(f.request.mock.calls.filter(([, options]) => options)).toEqual([
+        [
+          "/v1/sites/wedding-a/withdrawals/request-a/seal",
+          { method: "POST", body: {} },
+        ],
+      ]);
+      expect(f.storage.data.size).toBe(0);
+    } finally {
+      f.cleanup();
+    }
+  });
   it("updates the actual DOM at quote expiry and retains explicit seal recovery", async () => {
     const f = await fixture(openContext());
     const { node } = await mount(f);
@@ -4003,8 +4104,7 @@ describe("actual React withdrawal DOM", () => {
     expect(node.textContent).toContain("Prévia expirada");
     const confirm = required(
       [...node.querySelectorAll("button")].find(
-        (value) =>
-          value.textContent === "Prévia expirada — encerre a solicitação",
+        (value) => value.textContent === "Confirmar solicitação de saque",
       ),
     );
     expect(confirm.disabled).toBe(true);
@@ -4013,15 +4113,17 @@ describe("actual React withdrawal DOM", () => {
       [...node.querySelectorAll("button")].some(
         (button) => button.textContent === "Confirmar senha",
       ),
-    ).toBe(true);
+    ).toBe(false);
+    expect(node.querySelector(".text-destructive")?.textContent).toContain(
+      "Prévia expirada",
+    );
     expect(f.request).toHaveBeenCalledTimes(count);
     f.cleanup();
   });
-  it("explicitly seals from real password and terms controls without confirmation POST", async () => {
+  it("explicitly seals an expired preview without password, monetary terms or confirmation POST", async () => {
     const success = vi.spyOn(toast, "success");
     const changed = vi.fn();
     const f = await fixture(openContext(), changed);
-    const token = `fr1.cHJvb2Y.${"A".repeat(43)}`;
     const native = required(f.request.getMockImplementation());
     const sealed: WithdrawalRequestStatus = {
       siteId: access.siteId,
@@ -4044,40 +4146,25 @@ describe("actual React withdrawal DOM", () => {
       sealedAt: new Date(start).toISOString(),
     };
     f.request.mockImplementation(async (path, options) =>
-      path.endsWith("/financial-reauthentication")
-        ? {
-            reauthenticationToken: token,
-            expiresAt: new Date(start + 180000).toISOString(),
-          }
-        : path.endsWith("/seal")
-          ? { request: sealed }
-          : native(path, options),
+      path.endsWith("/seal") ? { request: sealed } : native(path, options),
     );
-    const { node } = await mount(f);
-    const input = document.querySelector(
-      'input[type="password"]',
-    ) as HTMLInputElement;
-    input.value = "synthetic-password";
-    await act(async () => {
-      required(input.closest("form")).dispatchEvent(
-        new Event("submit", { bubbles: true, cancelable: true }),
-      );
-    });
-    expect(success).toHaveBeenCalledWith(
-      "Senha confirmada. Agora confirme os termos do saque.",
-    );
-    expect(node.textContent).not.toContain(
-      "Senha confirmada para esta finalidade",
-    );
-    await act(async () => {
-      (
-        node.querySelector('input[type="checkbox"]') as HTMLInputElement
-      ).click();
-    });
+    const { node } = await mount(f, false);
+    expect(document.querySelector('input[type="password"]')).toBeNull();
+    expect(
+      node.querySelector<HTMLInputElement>('input[type="checkbox"]')?.checked,
+    ).toBe(false);
+    await act(async () => vi.advanceTimersByTimeAsync(60000));
+    expect(node.textContent).toContain("Prévia expirada");
+    expect(document.querySelector('input[type="password"]')).toBeNull();
+    expect(
+      [...node.querySelectorAll("button")].some(
+        (button) => button.textContent === "Confirmar senha",
+      ),
+    ).toBe(false);
     await act(async () => {
       required(
         [...node.querySelectorAll("button")].find(
-          (value) => value.textContent === "Encerrar solicitação sem reserva",
+          (value) => value.textContent === "Encerrar solicitação",
         ),
       ).click();
     });
@@ -4092,7 +4179,12 @@ describe("actual React withdrawal DOM", () => {
     ).toHaveLength(0);
     expect(
       f.request.mock.calls.find(([path]) => path.endsWith("/seal"))?.[1]?.body,
-    ).toEqual({ reauthenticationToken: token });
+    ).toEqual({});
+    expect(
+      f.request.mock.calls.some(([path]) =>
+        path.endsWith("/financial-reauthentication"),
+      ),
+    ).toBe(false);
     expect(changed).toHaveBeenCalledTimes(1);
     f.cleanup();
   });
