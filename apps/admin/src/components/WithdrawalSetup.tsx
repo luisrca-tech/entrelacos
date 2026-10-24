@@ -559,8 +559,8 @@ export function createWithdrawalSetupController(
       }
     }
   }
-  function waitForCommandObservation(
-    next: WithdrawalRequestStatus,
+  function waitForObservation(
+    next: Pick<WithdrawalRequestStatus, "observedAt">,
     active: number,
   ): Promise<void> | null {
     if (!current() || active !== revision) return null;
@@ -575,7 +575,7 @@ export function createWithdrawalSetupController(
     const started = performance.now();
     if (!Number.isFinite(started) || started < 0)
       throw new Error("Withdrawal observation clock unavailable");
-    // Wait for this fixed observation without changing either clock or repeating the command.
+    // Wait for this fixed observation without changing either clock or repeating transport.
     return new Promise<void>((resolve) => setTimeout(resolve, ahead)).then(
       () => {
         const elapsed = performance.now() - started;
@@ -583,6 +583,30 @@ export function createWithdrawalSetupController(
           throw new Error("Withdrawal observation wait expired");
       },
     );
+  }
+  async function readContext(
+    request = ports.request,
+    cursor?: string,
+  ): Promise<WithdrawalRequestContext> {
+    const active = revision;
+    const next = await loadWithdrawalContext(scope.siteId, request, cursor);
+    const wait = waitForObservation(next, active);
+    if (wait) await wait;
+    if (!current() || active !== revision)
+      throw new Error("Withdrawal context owner changed");
+    return next;
+  }
+  async function readRequest(
+    requestId: string,
+    request = ports.request,
+  ): Promise<WithdrawalRequestStatus> {
+    const active = revision;
+    const next = await loadWithdrawalRequest(scope.siteId, requestId, request);
+    const wait = waitForObservation(next, active);
+    if (wait) await wait;
+    if (!current() || active !== revision)
+      throw new Error("Withdrawal observation owner changed");
+    return next;
   }
   function installCommandRequest(
     next: WithdrawalRequestStatus,
@@ -696,15 +720,11 @@ export function createWithdrawalSetupController(
       )
         throw new Error("Administrative session changed");
       authentication = false;
-      const context = await loadWithdrawalContext(scope.siteId, ports.request);
+      const context = await readContext();
       if (!current() || revision !== active) return false;
       installContext(context);
       if (selectedId) {
-        const next = await loadWithdrawalRequest(
-          scope.siteId,
-          selectedId,
-          ports.request,
-        );
+        const next = await readRequest(selectedId);
         if (!current() || revision !== active) return false;
         if (next.scopeRevision !== context.scopeRevision)
           throw new Error("Withdrawal scope observation changed");
@@ -777,10 +797,7 @@ export function createWithdrawalSetupController(
       .then(async () => {
         if (!current() || active !== revision) return;
         try {
-          const context = await loadWithdrawalContext(
-            scope.siteId,
-            ports.request,
-          );
+          const context = await readContext();
           if (!current() || active !== revision) return;
           installContext(context, true);
           try {
@@ -830,11 +847,7 @@ export function createWithdrawalSetupController(
               floor = latestRequests.get(id) ?? null;
               selectedId = id;
             }
-            const next = await loadWithdrawalRequest(
-              scope.siteId,
-              id,
-              ports.request,
-            );
+            const next = await readRequest(id);
             if (!current() || active !== revision) return;
             if (next.scopeRevision !== context.scopeRevision)
               throw new Error("Withdrawal scope observation changed");
@@ -848,7 +861,7 @@ export function createWithdrawalSetupController(
       })
       .finally(() => {
         if (refreshing === work) refreshing = null;
-        if (feedback && current() && active === revision)
+        if ((feedback || failure) && current() && active === revision)
           notifyResult("REFRESH", state.status === "ready", failure, active);
       });
     refreshing = work;
@@ -972,9 +985,9 @@ export function createWithdrawalSetupController(
             if (valid()) revoke.call(owner);
             return false;
           }
-          const page = await loadWithdrawalContext(scope.siteId, read, cursor);
+          const page = await readContext(read, cursor);
           if (!valid()) return false;
-          const head = await loadWithdrawalContext(scope.siteId, read);
+          const head = await readContext(read);
           if (!valid()) return false;
           if (
             compareWithdrawalContexts(state.context ?? anchor, head) !==
@@ -1122,10 +1135,7 @@ export function createWithdrawalSetupController(
         proofRevision: state.proofRevision + 1,
       });
       if (!current() || active !== revision) return false;
-      const context = await loadWithdrawalContext(
-        scope.siteId,
-        capturedPorts.request,
-      );
+      const context = await readContext(capturedPorts.request);
       if (!current() || active !== revision) return false;
       if (
         !state.context ||
@@ -1134,11 +1144,7 @@ export function createWithdrawalSetupController(
         )
       )
         throw new Error("Withdrawal context changed");
-      const next = await loadWithdrawalRequest(
-        scope.siteId,
-        requestId,
-        capturedPorts.request,
-      );
+      const next = await readRequest(requestId, capturedPorts.request);
       if (!current() || active !== revision) return false;
       if (
         next.state === "OPEN" ||
@@ -1295,7 +1301,7 @@ export function createWithdrawalSetupController(
       );
       if (!current() || active !== revision) return false;
       const retainedMarker = JSON.stringify(marker);
-      const wait = waitForCommandObservation(result, active);
+      const wait = waitForObservation(result, active);
       if (wait) await wait;
       if (!installCommandRequest(result, active, retainedMarker)) return false;
       if (result.state === "OPEN" && result.preview.amountCents !== amountCents)
@@ -1429,7 +1435,7 @@ export function createWithdrawalSetupController(
         return false;
       }
       const retainedMarker = JSON.stringify(marker);
-      const wait = waitForCommandObservation(result, active);
+      const wait = waitForObservation(result, active);
       if (wait) await wait;
       if (!installCommandRequest(result, active, retainedMarker)) return false;
       publish({ ...state, status: "ready" });
@@ -1530,7 +1536,7 @@ export function createWithdrawalSetupController(
         );
         if (!current() || active !== revision) return false;
         const retainedMarker = JSON.stringify(marker);
-        const wait = waitForCommandObservation(result, active);
+        const wait = waitForObservation(result, active);
         if (wait) await wait;
         if (!installCommandRequest(result, active, retainedMarker))
           return false;

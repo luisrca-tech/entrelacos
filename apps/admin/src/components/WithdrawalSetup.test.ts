@@ -1235,6 +1235,31 @@ async function withdrawalHttpBridge(
 }
 
 describe("withdrawal setup mounted consumer through actual private HTTP", () => {
+  it("waits once for a real SQL context ahead of the browser without repeating its read", async () => {
+    let sqlAheadMs = 0;
+    const f = await withdrawalHttpBridge({
+      sqlNow: () => new Date(Date.now() + sqlAheadMs),
+    });
+    sqlAheadMs = 500;
+    await act(async () =>
+      required(
+        [...f.node.querySelectorAll("button")].find(
+          (button) => button.textContent === "Consultar situação",
+        ),
+      ).click(),
+    );
+    await f.settle();
+    const calls = f.request.mock.calls.length;
+    expect(f.node.querySelector("#withdrawal-amount")).toBeNull();
+    await act(async () => vi.advanceTimersByTimeAsync(499));
+    expect(f.node.querySelector("#withdrawal-amount")).toBeNull();
+    await act(async () => vi.advanceTimersByTimeAsync(1));
+    expect(f.node.querySelector("#withdrawal-amount")).not.toBeNull();
+    expect(f.request).toHaveBeenCalledTimes(calls);
+    expect(f.tables.withdrawal_request).toHaveLength(0);
+    expect(f.tables.withdrawal_intent).toHaveLength(0);
+    expect(f.tables.financial_ledger_entry).toHaveLength(0);
+  });
   it("installs one successful preview after the browser reaches the unchanged SQL observation instant", async () => {
     let sqlAheadMs = 0;
     const success = vi.spyOn(toast, "success");
@@ -3359,14 +3384,110 @@ describe("withdrawal setup owned source lifecycle", () => {
     expect(f.request.mock.calls.every(([, options]) => !options)).toBe(true);
     f.cleanup();
   });
-  it("rejects a future server observation instead of installing authority", async () => {
+  it("waits for a bounded context observation before displaying the mounted withdrawal form", async () => {
     const f = await fixture({
       ...context(),
-      observedAt: new Date(start + 1).toISOString(),
+      observedAt: new Date(start + 500).toISOString(),
+    });
+    try {
+      const { node } = await mount(f);
+      const calls = f.request.mock.calls.length;
+      expect(node.querySelector("#withdrawal-amount")).toBeNull();
+      await act(async () => vi.advanceTimersByTimeAsync(499));
+      expect(node.querySelector("#withdrawal-amount")).toBeNull();
+      await act(async () => vi.advanceTimersByTimeAsync(1));
+      expect(node.querySelector("#withdrawal-amount")).not.toBeNull();
+      expect(f.request).toHaveBeenCalledTimes(calls);
+      expect(f.request.mock.calls.every(([, options]) => !options)).toBe(true);
+    } finally {
+      f.cleanup();
+    }
+  });
+  it("waits for context and exact request observations during consent revalidation", async () => {
+    const f = await fixture(openContext());
+    try {
+      await f.controller.refresh();
+      const next = open();
+      next.observedAt = new Date(start + 1000).toISOString();
+      f.setContext({
+        ...openContext(),
+        observedAt: new Date(start + 500).toISOString(),
+      });
+      f.setRequest(next);
+      const work = f.controller.guard.validate();
+      await vi.advanceTimersByTimeAsync(0);
+      await vi.advanceTimersByTimeAsync(500);
+      expect(f.controller.getState().request?.observedAt).not.toBe(
+        next.observedAt,
+      );
+      await vi.advanceTimersByTimeAsync(500);
+      expect(await work).toBe(true);
+      expect(f.controller.getState().request).toEqual(next);
+      expect(f.request.mock.calls.every(([, options]) => !options)).toBe(true);
+    } finally {
+      f.cleanup();
+    }
+  });
+  it("discards a bounded context wait when its actor is revoked", async () => {
+    const f = await fixture({
+      ...context(),
+      observedAt: new Date(start + 500).toISOString(),
+    });
+    try {
+      const work = f.controller.refresh();
+      await vi.advanceTimersByTimeAsync(0);
+      f.owner.invalidate(false);
+      await vi.advanceTimersByTimeAsync(500);
+      await work;
+      expect(f.controller.getState().status).toBe("denied");
+      expect(f.controller.getState().context).toBeNull();
+    } finally {
+      f.cleanup();
+    }
+  });
+  it("rejects a bounded observation when the wall clock does not advance", async () => {
+    const f = await fixture(
+      {
+        ...context(),
+        observedAt: new Date(start + 500).toISOString(),
+      },
+      undefined,
+      () => start,
+    );
+    try {
+      const work = f.controller.refresh();
+      await vi.advanceTimersByTimeAsync(500);
+      await work;
+      expect(f.controller.getState().status).toBe("unavailable");
+      expect(f.controller.getState().context).toBeNull();
+    } finally {
+      f.cleanup();
+    }
+  });
+  it("rejects an excessive future server observation instead of installing authority", async () => {
+    const f = await fixture({
+      ...context(),
+      observedAt: new Date(start + 1001).toISOString(),
     });
     await f.controller.refresh();
     expect(f.controller.getState().status).toBe("unavailable");
     f.cleanup();
+  });
+  it("reports an initially unavailable context through Sonner", async () => {
+    const error = vi.spyOn(toast, "error");
+    const f = await fixture({
+      ...context(),
+      observedAt: new Date(start + 1001).toISOString(),
+    });
+    try {
+      const { node } = await mount(f);
+      expect(error).toHaveBeenCalledWith(
+        "Não foi possível verificar a situação do saque. Consulte novamente.",
+      );
+      expect(node.querySelector("#withdrawal-amount")).toBeNull();
+    } finally {
+      f.cleanup();
+    }
   });
   it("retracts proof holders at the preview deadline without polling", async () => {
     const f = await fixture(openContext());
@@ -4364,7 +4485,7 @@ describe("deliberate withdrawal discovery paging", () => {
     ],
     [
       "future time",
-      { ...page(), observedAt: new Date(start + 1).toISOString() },
+      { ...page(), observedAt: new Date(start + 1001).toISOString() },
     ],
   ])(
     "rejects a %s batch without authority, proof or partial history changes",
