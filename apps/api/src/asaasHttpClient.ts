@@ -1046,7 +1046,6 @@ export function createAsaasHttpClient(
     return {
       async createPixTransfer(command) {
         try {
-          if (mode !== "sandbox") return unavailable();
           const raw = exactRecord(command, [
             "valueCents",
             "pixAddressKey",

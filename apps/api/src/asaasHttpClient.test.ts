@@ -1911,23 +1911,40 @@ describe("native Asaas Pix transfer transport", () => {
       expect(f.fetch).not.toHaveBeenCalled();
     },
   );
-});
-
-describe("Sandbox-only native transfer dispatch", () => {
-  it("rejects a live POST even with valid live-scoped credentials", async () => {
-    const f = fixture();
+  it("sends exactly one live POST with valid live-scoped credentials", async () => {
+    const f = fixture(
+      json({ ...transfer(), value: 3, netValue: 3, transferFee: 0 }),
+    );
     f.options.mode = "live";
     f.options.binding.environment = "live";
     f.options.credentials.context.environment = "live";
     f.options.credentials.accessToken = "$aact_prod_offline-test-token";
-    await rejected(
-      createAsaasHttpClient(f.options).createPixTransfer({
-        valueCents: 100,
-        pixAddressKey: "sandbox@example.test",
-        pixAddressKeyType: "EMAIL",
-        externalReference: "operation-1",
+    const observation = await createAsaasHttpClient(
+      f.options,
+    ).createPixTransfer({
+      valueCents: 300,
+      pixAddressKey: "recipient@example.test",
+      pixAddressKeyType: "EMAIL",
+      externalReference: "operation-1",
+    });
+    expect(f.fetch).toHaveBeenCalledExactlyOnceWith(
+      "https://api.asaas.com/v3/transfers",
+      expect.objectContaining({
+        method: "POST",
+        redirect: "error",
+        credentials: "omit",
       }),
     );
-    expect(f.fetch).not.toHaveBeenCalled();
+    expect(JSON.parse(String(f.fetch.mock.calls[0][1]?.body))).toEqual({
+      value: 3,
+      operationType: "PIX",
+      pixAddressKey: "recipient@example.test",
+      pixAddressKeyType: "EMAIL",
+      externalReference: "operation-1",
+    });
+    expect(observation).toMatchObject({
+      environment: "live",
+      transfer: { value: "3.00", netValue: "3.00", transferFee: "0.00" },
+    });
   });
 });
