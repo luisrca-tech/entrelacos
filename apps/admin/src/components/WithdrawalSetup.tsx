@@ -1982,7 +1982,9 @@ function WithdrawalSetupView({
         </Button>
       )}
       {state.request &&
-        withdrawal?.state !== "COMPLETED" &&
+        !["COMPLETED", "FAILED", "CANCELLED"].includes(
+          withdrawal?.state ?? "",
+        ) &&
         (controller?.guard.isCurrent() || controller?.canSeal()) && (
           <WithdrawalActions
             key={state.proofRevision}
@@ -2183,6 +2185,12 @@ function WithdrawalActions({
           Prévia expirada. Encerre a solicitação para consultar uma nova prévia.
         </p>
       )}
+      {request.state === "EXISTING" && (
+        <p className="m-0 text-sm text-admin-muted">
+          Continuamos esta mesma solicitação. Se o Pix já foi enviado, apenas
+          estamos verificando o andamento.
+        </p>
+      )}
       {!expired && (
         <FinancialReauthenticationForm
           {...scope}
@@ -2233,7 +2241,7 @@ function WithdrawalActions({
             ? "Processando…"
             : action === "CONFIRM_NEW"
               ? "Confirmar solicitação de saque"
-              : "Recuperar solicitação original"}
+              : "Retomar saque"}
         </Button>
       </form>
       {request.state === "OPEN" && (

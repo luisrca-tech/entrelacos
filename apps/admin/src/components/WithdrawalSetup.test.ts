@@ -3906,13 +3906,17 @@ describe("actual React withdrawal DOM", () => {
             ),
           ).toBe(false);
           expect(node.querySelector('input[type="checkbox"]')).toBeNull();
-          expect(node.textContent).not.toContain(
-            "Recuperar solicitação original",
-          );
+          expect(node.textContent).not.toContain("Retomar saque");
           expect(document.querySelector('input[type="password"]')).toBeNull();
         } else {
           expect(node.querySelector('input[type="checkbox"]')).not.toBeNull();
-          expect(node.textContent).toContain("Recuperar solicitação original");
+          expect(node.textContent).toContain("Retomar saque");
+          expect(node.textContent).toContain(
+            "Continuamos esta mesma solicitação. Se o Pix já foi enviado, apenas estamos verificando o andamento.",
+          );
+          expect(node.textContent).not.toContain(
+            "Recuperar solicitação original",
+          );
           expect(
             document.querySelector('input[type="password"]'),
           ).not.toBeNull();
@@ -3985,6 +3989,9 @@ describe("actual React withdrawal DOM", () => {
         expect(node.textContent).not.toContain(
           "Transferência em acompanhamento",
         );
+        expect(node.textContent).not.toContain("Retomar saque");
+        expect(node.querySelector('input[type="checkbox"]')).toBeNull();
+        expect(document.querySelector('input[type="password"]')).toBeNull();
       } finally {
         f.cleanup();
       }
