@@ -38,6 +38,7 @@ export interface AsaasStoredAccountReader {
   ): Promise<AsaasCheckoutPaymentsObservation>;
   getAccountFees(
     binding: FinancialAccountBinding,
+    options?: { purpose: "PIX_WITHDRAWAL" },
   ): Promise<AsaasAccountFeesObservation>;
   getPayment(claim: GiftPaymentInboxClaim): Promise<AsaasPaymentObservation>;
   getBalance(
@@ -298,12 +299,13 @@ export function createAsaasStoredAccountReader(
       },
       async getAccountFees(
         value: FinancialAccountBinding,
+        feeOptions?: { purpose: "PIX_WITHDRAWAL" },
       ): Promise<AsaasAccountFeesObservation> {
         try {
           activeMode();
           const binding = readBinding(value);
           const client = await loadClient(binding);
-          return await client.getAccountFees();
+          return await client.getAccountFees(feeOptions);
         } catch {
           return unavailable();
         }

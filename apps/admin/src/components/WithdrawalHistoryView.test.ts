@@ -225,8 +225,8 @@ it("shows actual terminal debit and fee with the unused maximum returned", () =>
       },
     ],
   });
-  expect(html).toContain("Valor debitado");
-  expect(html).toContain("Taxa efetiva");
+  expect(html).toContain("Valor do saque");
+  expect(html).not.toContain("Taxa efetiva");
   expect(html).toContain("Reserva liberada");
 });
 
@@ -257,4 +257,22 @@ it("labels the live pre-settlement net as a minimum", () => {
   });
   expect(html).toContain("Líquido mínimo");
   expect(html).toContain("Taxa máxima");
+});
+
+it("shows one withdrawal amount without fee or net divisions when there is no fee", () => {
+  const html = render({
+    status: "ready",
+    withdrawals: [
+      {
+        ...withdrawal,
+        feeSemantics: "MAXIMUM_WITH_MINIMUM_NET",
+        feeCents: 0,
+        netCents: withdrawal.amountCents,
+      },
+    ],
+  });
+  expect(html).toContain("Valor do saque");
+  expect(html).not.toMatch(
+    /Taxa máxima|Débito máximo|Líquido mínimo|Valor líquido/,
+  );
 });

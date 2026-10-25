@@ -3730,6 +3730,64 @@ describe("withdrawal setup owned source lifecycle", () => {
 });
 
 describe("actual React withdrawal DOM", () => {
+  it("replaces the original fee ceiling with a single actual settled amount", async () => {
+    const original = open();
+    original.preview.feeSemantics = "MAXIMUM";
+    const request = {
+      ...existing(original),
+      withdrawal: {
+        ...existing(original).withdrawal,
+        feeSemantics: "MAXIMUM" as const,
+        state: "COMPLETED" as const,
+        settlement: {
+          totalDebitCents: 9750,
+          feeCents: 0,
+          netCents: 9750,
+          releasedCents: 250,
+        },
+      },
+    };
+    const f = await fixture(openContext(original));
+    try {
+      const { node } = await mount(f, false);
+      f.setRequest(request);
+      f.setContext({ ...context("2"), recoverableRequests: [] });
+      await act(async () =>
+        [...node.querySelectorAll("button")]
+          .find((button) => button.textContent === "Consultar situação")
+          ?.click(),
+      );
+      expect(node.textContent).toContain("Valor do saque");
+      expect(node.textContent).toContain("97,50");
+      expect(node.textContent).not.toMatch(
+        /Taxa máxima|Taxa efetiva|Líquido mínimo|O valor líquido é fixo/,
+      );
+    } finally {
+      f.cleanup();
+    }
+  });
+  it("shows a single fee-free preview amount with the verified recipient", async () => {
+    const request = open();
+    request.preview = {
+      ...request.preview,
+      feeSemantics: "MAXIMUM",
+      feeCents: 0,
+      netCents: request.preview.amountCents,
+    };
+    const f = await fixture(openContext(request));
+    try {
+      f.setRequest(request);
+      const { node } = await mount(f);
+      expect(node.textContent).toContain("Valor do saque");
+      expect(node.textContent).toContain("Banco **** 1234");
+      expect(node.textContent).not.toMatch(
+        /Taxa máxima|Líquido mínimo|O débito não ultrapassa/,
+      );
+    } finally {
+      f.cleanup();
+    }
+  });
+
   it("keeps the first successful password proof across context validation with a small server clock lead", async () => {
     const f = await fixture(openContext());
     const token = `fr1.cHJvb2Y.${"A".repeat(43)}`;

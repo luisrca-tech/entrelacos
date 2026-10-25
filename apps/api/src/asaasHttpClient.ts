@@ -75,6 +75,8 @@ export interface AsaasAccountFeesObservation {
   observedAt: Date;
   completedAt: Date;
   fees: AsaasAccountFees;
+  // Derived only for live Pix withdrawals from this credential's native profile.
+  pixTransferExemption?: "PF" | "MEI";
 }
 
 export interface AsaasPaymentSplit {
@@ -172,7 +174,9 @@ export interface AsaasHttpClient {
     providerPaymentReference: string,
   ): Promise<AsaasPaymentObservation>;
   getBalance(): Promise<AsaasBalanceObservation>;
-  getAccountFees(): Promise<AsaasAccountFeesObservation>;
+  getAccountFees(options?: {
+    purpose: "PIX_WITHDRAWAL";
+  }): Promise<AsaasAccountFeesObservation>;
 }
 
 export interface AsaasCheckoutPaymentsObservation {
@@ -1198,10 +1202,26 @@ export function createAsaasHttpClient(
           return unavailable();
         }
       },
-      async getAccountFees(): Promise<AsaasAccountFeesObservation> {
+      async getAccountFees(options): Promise<AsaasAccountFeesObservation> {
         try {
           const startedAt = observedAt();
           const fees = await requestAccountFees();
+          let pixTransferExemption: "PF" | "MEI" | undefined;
+          if (mode === "live" && options?.purpose === "PIX_WITHDRAWAL") {
+            const commercial = await request("/myAccount/commercialInfo/");
+            // Asaas exempts PF/MEI Pix transfers regardless of the generic base tariff.
+            // https://central.ajuda.asaas.com/hc/pt-br/articles/32059618254875
+            if (
+              commercial.personType === "FISICA" &&
+              commercial.companyType == null
+            )
+              pixTransferExemption = "PF";
+            if (
+              commercial.personType === "JURIDICA" &&
+              commercial.companyType === "MEI"
+            )
+              pixTransferExemption = "MEI";
+          }
           const completedAt = observedAt();
           if (completedAt.getTime() < startedAt.getTime()) return unavailable();
           return {
@@ -1211,6 +1231,7 @@ export function createAsaasHttpClient(
             observedAt: startedAt,
             completedAt,
             fees,
+            ...(pixTransferExemption ? { pixTransferExemption } : {}),
           };
         } catch {
           return unavailable();

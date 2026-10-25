@@ -11,6 +11,7 @@ import {
   TableRow,
 } from "@entrelacos/ui";
 import { canReadFinancialOverview } from "./financialOverview";
+import { withdrawalAmountRows } from "./withdrawalAmountRows";
 import type { WithdrawalHistoryResult } from "./withdrawalHistory";
 import { parseWithdrawalHistory } from "./withdrawalHistory";
 
@@ -70,38 +71,10 @@ function WithdrawalRecord({ withdrawal }: { withdrawal: WithdrawalIntent }) {
             )}
             <dl className="m-0 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               {[
-                [
-                  withdrawal.settlement
-                    ? "Valor debitado"
-                    : withdrawal.feeSemantics !== undefined
-                      ? "Débito máximo aprovado"
-                      : "Valor solicitado",
-                  currency.format(
-                    (withdrawal.settlement?.totalDebitCents ??
-                      withdrawal.amountCents) / 100,
-                  ),
-                ],
-                [
-                  withdrawal.settlement
-                    ? "Taxa efetiva"
-                    : withdrawal.feeSemantics !== undefined
-                      ? "Taxa máxima"
-                      : "Taxa",
-                  currency.format(
-                    (withdrawal.settlement?.feeCents ?? withdrawal.feeCents) /
-                      100,
-                  ),
-                ],
-                [
-                  withdrawal.feeSemantics === "MAXIMUM_WITH_MINIMUM_NET" &&
-                  !withdrawal.settlement
-                    ? "Líquido mínimo"
-                    : "Valor líquido",
-                  currency.format(
-                    (withdrawal.settlement?.netCents ?? withdrawal.netCents) /
-                      100,
-                  ),
-                ],
+                ...withdrawalAmountRows(withdrawal).map(([label, cents]) => [
+                  label,
+                  currency.format(cents / 100),
+                ]),
                 ["Status", stateLabels[withdrawal.state]],
               ].map(([label, value]) => (
                 <div key={label} className="grid gap-1">
@@ -112,14 +85,15 @@ function WithdrawalRecord({ withdrawal }: { withdrawal: WithdrawalIntent }) {
                 </div>
               ))}
             </dl>
-            {withdrawal.settlement && (
-              <p className="m-0 text-sm text-admin-muted">
-                Reserva liberada:{" "}
-                {currency.format(withdrawal.settlement.releasedCents / 100)}. O
-                limite aprovado foi{" "}
-                {currency.format(withdrawal.amountCents / 100)}.
-              </p>
-            )}
+            {withdrawal.settlement &&
+              withdrawal.settlement.releasedCents > 0 && (
+                <p className="m-0 text-sm text-admin-muted">
+                  Reserva liberada:{" "}
+                  {currency.format(withdrawal.settlement.releasedCents / 100)}.
+                  O limite aprovado foi{" "}
+                  {currency.format(withdrawal.amountCents / 100)}.
+                </p>
+              )}
             <p className="m-0 text-sm text-admin-muted">
               Solicitado em{" "}
               <time dateTime={withdrawal.createdAt}>
@@ -217,7 +191,7 @@ export function WithdrawalHistoryView({
           <TableHeader>
             <TableRow>
               <TableHead>Solicitado em</TableHead>
-              <TableHead>Valor líquido</TableHead>
+              <TableHead>Valor do saque</TableHead>
               <TableHead>Situação</TableHead>
               <TableHead>
                 <span className="sr-only">Detalhes do saque</span>

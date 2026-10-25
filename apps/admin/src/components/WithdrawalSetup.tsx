@@ -37,6 +37,7 @@ import {
 } from "./financialReauthenticationClient";
 import { parseGiftPriceToCents } from "./GiftEditorView";
 import { type createPanelActorOwner, panelActorOwner } from "./panelActor";
+import { withdrawalAmountRows } from "./withdrawalAmountRows";
 import {
   compareWithdrawalContexts,
   compareWithdrawalObservations,
@@ -1867,22 +1868,9 @@ function WithdrawalSetupView({
       {preview && (
         <dl className="grid gap-4 rounded-lg border border-admin-line bg-admin-paper p-4 sm:grid-cols-2 lg:grid-cols-3">
           {[
-            [
-              preview.feeSemantics !== undefined
-                ? "Débito máximo aprovado"
-                : "Valor solicitado",
-              money.format(preview.amountCents / 100),
-            ],
-            [
-              preview.feeSemantics !== undefined ? "Taxa máxima" : "Taxa",
-              money.format(preview.feeCents / 100),
-            ],
-            [
-              preview.feeSemantics === "MAXIMUM_WITH_MINIMUM_NET"
-                ? "Líquido mínimo"
-                : "Valor líquido",
-              money.format(preview.netCents / 100),
-            ],
+            ...withdrawalAmountRows(
+              withdrawal?.settlement ? withdrawal : preview,
+            ).map(([label, cents]) => [label, money.format(cents / 100)]),
             ["Destino verificado", preview.maskedDestination],
             ...(preview.payoutRecipientName
               ? [["Recebedor Pix", preview.payoutRecipientName]]
@@ -1897,60 +1885,36 @@ function WithdrawalSetupView({
           ))}
         </dl>
       )}
-      {preview?.feeSemantics === "MAXIMUM" && (
-        <p>
-          O valor líquido é fixo. A taxa efetiva pode ser menor que o limite; a
-          reserva não utilizada volta ao saldo após a confirmação.
-        </p>
-      )}
-      {preview?.feeSemantics === "MAXIMUM_WITH_MINIMUM_NET" && (
-        <p>
-          O débito não ultrapassa o limite aprovado. O valor líquido é o mínimo;
-          uma taxa efetiva menor aumenta o valor enviado ao recebedor.
-        </p>
-      )}
+      {preview &&
+        preview.feeCents > 0 &&
+        !withdrawal?.settlement &&
+        preview.feeSemantics === "MAXIMUM" && (
+          <p>
+            O valor líquido é fixo. A taxa efetiva pode ser menor que o limite;
+            a reserva não utilizada volta ao saldo após a confirmação.
+          </p>
+        )}
+      {preview &&
+        preview.feeCents > 0 &&
+        !withdrawal?.settlement &&
+        preview.feeSemantics === "MAXIMUM_WITH_MINIMUM_NET" && (
+          <p>
+            O débito não ultrapassa o limite aprovado. O valor líquido é o
+            mínimo; uma taxa efetiva menor aumenta o valor enviado ao recebedor.
+          </p>
+        )}
       {!preview && state.request?.state === "EXISTING" && (
         <dl className="grid gap-4 rounded-lg border border-admin-line bg-admin-paper p-4 sm:grid-cols-2 lg:grid-cols-3">
-          {[
-            [
-              state.request.withdrawal.settlement
-                ? "Valor debitado"
-                : state.request.withdrawal.feeSemantics !== undefined
-                  ? "Débito máximo aprovado"
-                  : "Valor solicitado",
-              money.format(
-                (state.request.withdrawal.settlement?.totalDebitCents ??
-                  state.request.withdrawal.amountCents) / 100,
-              ),
-            ],
-            [
-              state.request.withdrawal.settlement
-                ? "Taxa efetiva"
-                : state.request.withdrawal.feeSemantics !== undefined
-                  ? "Taxa máxima"
-                  : "Taxa",
-              money.format(
-                (state.request.withdrawal.settlement?.feeCents ??
-                  state.request.withdrawal.feeCents) / 100,
-              ),
-            ],
-            [
-              state.request.withdrawal.feeSemantics ===
-                "MAXIMUM_WITH_MINIMUM_NET" &&
-              !state.request.withdrawal.settlement
-                ? "Líquido mínimo"
-                : "Valor líquido",
-              money.format(
-                (state.request.withdrawal.settlement?.netCents ??
-                  state.request.withdrawal.netCents) / 100,
-              ),
-            ],
-          ].map(([label, value]) => (
-            <div key={label}>
-              <dt className="text-sm text-admin-muted">{label}</dt>
-              <dd className="m-0 font-semibold text-admin-graphite">{value}</dd>
-            </div>
-          ))}
+          {withdrawalAmountRows(state.request.withdrawal)
+            .map(([label, cents]) => [label, money.format(cents / 100)])
+            .map(([label, value]) => (
+              <div key={label}>
+                <dt className="text-sm text-admin-muted">{label}</dt>
+                <dd className="m-0 font-semibold text-admin-graphite">
+                  {value}
+                </dd>
+              </div>
+            ))}
         </dl>
       )}
       {withdrawal && (
@@ -1989,7 +1953,7 @@ function WithdrawalSetupView({
                 className="text-sm font-medium"
                 htmlFor="withdrawal-amount"
               >
-                Valor total solicitado, incluindo a taxa
+                Valor do saque
               </label>
               <Input
                 id="withdrawal-amount"

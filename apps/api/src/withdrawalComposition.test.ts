@@ -95,6 +95,35 @@ describe("native withdrawal maximum fee quote", () => {
       environment: "live",
     });
   });
+  it.each(["PF", "MEI"] as const)(
+    "quotes the full requested value without a fee for a natively verified live %s category",
+    async (category) => {
+      const { quoteAsaasWithdrawalMaximumFee } = await import(
+        "./withdrawalComposition"
+      );
+      expect(
+        quoteAsaasWithdrawalMaximumFee(
+          { ...scope, environment: "live", amountCents: 100 },
+          {
+            ...observation(),
+            environment: "live",
+            pixTransferExemption: category,
+          },
+          now,
+        ),
+      ).toMatchObject({
+        feeCents: 0,
+        feeSemantics: "MAXIMUM_WITH_MINIMUM_NET",
+      });
+      expect(
+        quoteAsaasWithdrawalMaximumFee(
+          scope,
+          { ...observation(), pixTransferExemption: category },
+          now,
+        ),
+      ).toMatchObject({ feeCents: 200 });
+    },
+  );
   it.each([0, 30_000, 60_000])(
     "gives a new maximum fee quote five minutes from its observation after %ims without renewing that observation",
     async (elapsed) => {

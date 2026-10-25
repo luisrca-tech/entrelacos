@@ -120,7 +120,13 @@ export function quoteAsaasWithdrawalMaximumFee(
     !Number.isFinite(observation.completedAt.getTime())
   )
     unavailable();
-  const feeCents = parseBrlCents(base);
+  const baseFeeCents = parseBrlCents(base);
+  const feeCents =
+    scope.environment === "live" &&
+    (observation.pixTransferExemption === "PF" ||
+      observation.pixTransferExemption === "MEI")
+      ? 0
+      : baseFeeCents;
   if (
     feeCents >= scope.amountCents ||
     now.getTime() < observation.completedAt.getTime() ||
@@ -128,7 +134,8 @@ export function quoteAsaasWithdrawalMaximumFee(
     now.getTime() - observation.observedAt.getTime() > 60000
   )
     unavailable();
-  // The full observed base fee is an approved ceiling, never a promised quota exemption.
+  // A verified PF/MEI category is exempt; unknown/PJ accounts retain the base ceiling.
+  // Monthly quota availability alone never establishes a future exemption.
   return {
     ...scope,
     feeCents,
@@ -456,13 +463,16 @@ export function createWithdrawalComposition(
       db.transaction((tx) => loadPresentation(tx, scope)),
     feeQuotes: {
       async quoteWithdrawal(scope) {
-        const observation = await reader.getAccountFees({
-          provider: "ASAAS",
-          siteId: scope.siteId,
-          accountBindingId: scope.accountId,
-          accountReference: scope.accountReference,
-          environment: mode,
-        });
+        const observation = await reader.getAccountFees(
+          {
+            provider: "ASAAS",
+            siteId: scope.siteId,
+            accountBindingId: scope.accountId,
+            accountReference: scope.accountReference,
+            environment: mode,
+          },
+          { purpose: "PIX_WITHDRAWAL" },
+        );
         return quoteAsaasWithdrawalMaximumFee(scope, observation, now());
       },
     },
@@ -783,7 +793,9 @@ export function createWithdrawalComposition(
       !/^(0|[1-9]\d*)$/.test(held.otherHeldCents)
     )
       unavailable();
-    const fees = await activeClient.getAccountFees();
+    const fees = await activeClient.getAccountFees({
+      purpose: "PIX_WITHDRAWAL",
+    });
     const balance = await activeClient.getBalance();
     verifyAsaasWithdrawalDispatchBudget(
       original,

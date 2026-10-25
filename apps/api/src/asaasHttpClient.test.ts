@@ -1224,6 +1224,39 @@ describe("Asaas GET actual completion ownership", () => {
 });
 
 describe("exact account fee observations", () => {
+  it.each([
+    [{ personType: "FISICA", companyType: null }, "PF"],
+    [{ personType: "JURIDICA", companyType: "MEI" }, "MEI"],
+    [{ personType: "JURIDICA", companyType: "LIMITED" }, undefined],
+    [{}, undefined],
+    [{ personType: "FISICA", companyType: "LIMITED" }, undefined],
+  ])(
+    "derives Pix withdrawal exemption only from authenticated live category %j",
+    async (commercial, exemption) => {
+      const f = fixture(json({ transfer: { pix: { feeValue: 2 } } }));
+      f.options.mode = "live";
+      f.options.binding.environment = "live";
+      f.options.credentials.context.environment = "live";
+      f.options.credentials.accessToken = "$aact_prod_offline-test-token";
+      f.fetch
+        .mockResolvedValueOnce(json({ transfer: { pix: { feeValue: 2 } } }))
+        .mockResolvedValueOnce(json(commercial));
+      const result = await createAsaasHttpClient(f.options).getAccountFees({
+        purpose: "PIX_WITHDRAWAL",
+      });
+      expect(result.pixTransferExemption).toBe(exemption);
+      expect(result.fees.transfer?.pix?.feeValue).toBe("2.00");
+      expect(f.fetch.mock.calls.map(([url]) => url)).toEqual([
+        "https://api.asaas.com/v3/myAccount/fees/",
+        "https://api.asaas.com/v3/myAccount/commercialInfo/",
+      ]);
+      expect(
+        f.fetch.mock.calls.every(([, init]) => init?.method === "GET"),
+      ).toBe(true);
+      expect(result).not.toHaveProperty("cpfCnpj");
+    },
+  );
+
   function fees(text: string, init: ResponseInit = {}) {
     return fixture(
       new Response(text, {
