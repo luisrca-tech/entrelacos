@@ -176,6 +176,13 @@
       "when": 1792877474709,
       "tag": "0024_incoming_pix_consent",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1793238813777,
+      "tag": "0025_gift_pricing_settings",
+      "breakpoints": true
     }
   ]
 }

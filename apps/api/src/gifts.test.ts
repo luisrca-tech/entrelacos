@@ -754,6 +754,35 @@ describe("catalog receiving and authorization gates", () => {
     expect(writes).toEqual([]);
   });
 
+  it("reuses the catalog transaction for receiving revalidation after locking the site", async () => {
+    const f = fixture({ gifts: [{ ...gift, publicationState: "DRAFT" }] });
+    f.readReadiness.mockImplementation(async (_siteId, transaction) => {
+      const locked = f.queries.some((query) =>
+        /FROM site WHERE[\s\S]*FOR UPDATE/i.test(query.sql),
+      );
+      if (locked && transaction !== f.db)
+        throw new Error(
+          "A separate receiving refresh would wait on the held site lock",
+        );
+      return ready;
+    });
+    await expect(
+      updateSiteGiftPublication(
+        f.db,
+        actor,
+        siteId,
+        gift.id,
+        { publicationState: "PUBLISHED" },
+        f.options,
+      ),
+    ).resolves.toMatchObject({
+      gift: { publicationState: "PUBLISHED" },
+    });
+    expect(f.readReadiness).toHaveBeenNthCalledWith(1, siteId);
+    expect(f.readReadiness).toHaveBeenNthCalledWith(2, siteId, f.db);
+    expect(f.writes).toHaveLength(1);
+  });
+
   it("rechecks capability and receiving eligibility under the site lock", async () => {
     const { db, options, queries, writes, readReadiness } = fixture();
     readReadiness.mockResolvedValueOnce(ready).mockResolvedValueOnce(blocked);

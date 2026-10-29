@@ -305,6 +305,100 @@ describe("quote fee allocation compatibility", () => {
 });
 
 describe("durable gift checkout orchestration", () => {
+  it("rejects invalid provider configuration before reserving a new operation", async () => {
+    const v = fixture();
+    const assertProviderConfiguration = vi.fn(() => {
+      throw new GiftCheckoutServiceError("CHECKOUT_CONFIGURATION_INVALID");
+    });
+    Object.assign(v.dependencies, { assertProviderConfiguration });
+    await expect(
+      createGiftCheckoutService(v.dependencies).createCheckout(
+        "site-one",
+        body,
+      ),
+    ).rejects.toMatchObject({
+      code: "CHECKOUT_CONFIGURATION_INVALID",
+      status: 503,
+    });
+    expect(assertProviderConfiguration).toHaveBeenCalledOnce();
+    expect(v.dependencies.repository.findQuote).not.toHaveBeenCalled();
+    expect(v.dependencies.repository.reserve).not.toHaveBeenCalled();
+    expect(v.dependencies.repository.markOutcomeUnknown).not.toHaveBeenCalled();
+    expect(v.dependencies.createHostedCheckout).not.toHaveBeenCalled();
+  });
+
+  it("recovers an issued checkout when current provider configuration becomes invalid", async () => {
+    const v = fixture();
+    const assertProviderConfiguration = vi.fn(() => {});
+    Object.assign(v.dependencies, { assertProviderConfiguration });
+    const service = createGiftCheckoutService(v.dependencies);
+    const issued = await service.createCheckout("site-one", body);
+    assertProviderConfiguration.mockImplementation(() => {
+      throw new GiftCheckoutServiceError("CHECKOUT_CONFIGURATION_INVALID");
+    });
+    await expect(service.createCheckout("site-one", body)).resolves.toEqual(
+      issued,
+    );
+    expect(assertProviderConfiguration).toHaveBeenCalledOnce();
+    expect(v.dependencies.repository.reserve).toHaveBeenCalledOnce();
+    expect(v.dependencies.createHostedCheckout).toHaveBeenCalledOnce();
+  });
+
+  it("preserves uncertain delivery instead of using invalid configuration to authorize a retry", async () => {
+    const v = fixture();
+    const assertProviderConfiguration = vi.fn(() => {});
+    Object.assign(v.dependencies, { assertProviderConfiguration });
+    vi.mocked(v.dependencies.createHostedCheckout).mockRejectedValue(
+      new Error("Lost provider ACK"),
+    );
+    const service = createGiftCheckoutService(v.dependencies);
+    await expect(
+      service.createCheckout("site-one", body),
+    ).rejects.toMatchObject({ code: "EXTERNAL_OUTCOME_UNKNOWN" });
+    assertProviderConfiguration.mockImplementation(() => {
+      throw new GiftCheckoutServiceError("CHECKOUT_CONFIGURATION_INVALID");
+    });
+    await expect(
+      service.createCheckout("site-one", body),
+    ).rejects.toMatchObject({ code: "EXTERNAL_OUTCOME_UNKNOWN" });
+    expect(assertProviderConfiguration).toHaveBeenCalledOnce();
+    expect(v.dependencies.repository.reserve).toHaveBeenCalledOnce();
+    expect(v.dependencies.createHostedCheckout).toHaveBeenCalledOnce();
+  });
+
+  it("requires another confirmation when authoritative pricing no longer matches", async () => {
+    const v = fixture();
+    Object.assign(v.dependencies, {
+      revalidateQuote: vi.fn(async () => false),
+    });
+    await expect(
+      createGiftCheckoutService(v.dependencies).createCheckout(
+        "site-one",
+        body,
+      ),
+    ).rejects.toMatchObject({ code: "QUOTE_EXPIRED" });
+    expect(v.dependencies.repository.reserve).not.toHaveBeenCalled();
+    expect(v.dependencies.createHostedCheckout).not.toHaveBeenCalled();
+  });
+  it.each(["amount", "settings"])(
+    "requires a fresh confirmation after stored %s changes",
+    async (change) => {
+      const v = fixture();
+      if (change === "amount") v.gift.gift.nominalCents++;
+      else
+        v.gift.pricingSettings = {
+          feeAllocation: "RECIPIENT_DEDUCTED",
+          revision: 1,
+        };
+      await expect(
+        createGiftCheckoutService(v.dependencies).createCheckout(
+          "site-one",
+          body,
+        ),
+      ).rejects.toMatchObject({ code: "QUOTE_EXPIRED" });
+      expect(v.dependencies.createHostedCheckout).not.toHaveBeenCalled();
+    },
+  );
   it("reserves immutable identities and only a capability hash before hosting", async () => {
     const values = fixture();
     const checkout = await createGiftCheckoutService(

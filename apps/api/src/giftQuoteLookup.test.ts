@@ -1,7 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 
 const lookup = vi.hoisted(() => vi.fn());
+const settings = vi.hoisted(() =>
+  vi.fn(async () => ({ feeAllocation: "RECIPIENT_DEDUCTED", revision: 0 })),
+);
 vi.mock("./gifts", () => ({ lookupPublishedGift: lookup }));
+vi.mock("./giftPricingSettings", () => ({ readGiftPricingSettings: settings }));
 
 import { findPublishedGiftForQuote } from "./giftQuoteLookup";
 
@@ -23,6 +27,7 @@ describe("authoritative quote gift adapter", () => {
     await expect(
       findPublishedGiftForQuote(db, "wedding-a", "gift-a", options),
     ).resolves.toEqual({
+      pricingSettings: { feeAllocation: "RECIPIENT_DEDUCTED", revision: 0 },
       gift,
       publicationState: "PUBLISHED",
       siteActive: true,

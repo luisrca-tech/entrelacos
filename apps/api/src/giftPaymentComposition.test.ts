@@ -12,10 +12,13 @@ import { encryptProviderCredential } from "./providerCredentials";
 vi.mock("./giftCheckouts", async (original) => ({
   ...(await original<typeof import("./giftCheckouts")>()),
   createGiftCheckoutService: (dependencies: {
+    assertProviderConfiguration?(): void;
     createHostedCheckout(command: unknown): Promise<{ checkout: unknown }>;
   }) => ({
-    createCheckout: async (_site: unknown, command: unknown) =>
-      (await dependencies.createHostedCheckout(command)).checkout,
+    createCheckout: async (_site: unknown, command: unknown) => {
+      dependencies.assertProviderConfiguration?.();
+      return (await dependencies.createHostedCheckout(command)).checkout;
+    },
   }),
 }));
 
@@ -117,6 +120,7 @@ function checkoutFixture() {
     credentialTag: envelope.tag,
   };
   const values = fixture();
+  values.publicOrigin = "https://wedding.example.test";
   const rows: unknown[][] = [
     [{ account, isDemo: true }],
     [{ origin: values.publicOrigin }],
@@ -224,6 +228,24 @@ function emptyWithdrawalHistory(siteId = "site-one") {
 }
 
 describe("gift payment composition", () => {
+  it("rejects localhost callback configuration before touching account data or transport", async () => {
+    const values = checkoutFixture();
+    values.publicOrigin = "http://localhost:4321";
+    const composition = createGiftPaymentComposition(values.config, values);
+    await expect(
+      composition.ports.giftPayments?.createCheckout(
+        "site-one",
+        values.command,
+      ),
+    ).rejects.toMatchObject({
+      code: "CHECKOUT_CONFIGURATION_INVALID",
+      status: 503,
+    });
+    expect(values.db.select).not.toHaveBeenCalled();
+    expect(values.fetch).not.toHaveBeenCalled();
+    await composition.close();
+  });
+
   it.each(["sandbox", "live"] as const)(
     "reads actual empty withdrawal history without a receiving account in %s mode",
     async (mode) => {
@@ -704,6 +726,7 @@ describe("gift payment composition", () => {
       "asaasWebhook",
       "finance",
       "giftPayments",
+      "previewPricing",
       "receiving",
       "withdrawalReservation",
     ]);
@@ -810,7 +833,7 @@ describe("gift payment composition", () => {
       "Gift payment composition unavailable",
     );
   });
-  it("uses only the credential bound to the persisted site/account/environment and registered local callbacks", async () => {
+  it("uses only the credential bound to the persisted site/account/environment and registered HTTPS callbacks", async () => {
     const values = checkoutFixture();
     const composition = createGiftPaymentComposition(values.config, values);
     const checkout = await composition.ports.giftPayments?.createCheckout(
@@ -828,9 +851,9 @@ describe("gift payment composition", () => {
     );
     const body = JSON.parse(String(init?.body));
     expect(body.callback).toEqual({
-      successUrl: "http://localhost:4321/",
-      cancelUrl: "http://localhost:4321/",
-      expiredUrl: "http://localhost:4321/",
+      successUrl: "https://wedding.example.test/",
+      cancelUrl: "https://wedding.example.test/",
+      expiredUrl: "https://wedding.example.test/",
     });
     expect(body.splits).toEqual([
       { walletId: "platform-wallet", fixedValue: 2 },

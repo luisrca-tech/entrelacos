@@ -1,4 +1,4 @@
-import {
+﻿import {
   type GiftCreateInput,
   type GiftItem,
   type GiftMediaPublicAsset,
@@ -11,6 +11,7 @@ import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { ApiError, apiRequest } from "../lib/apiClient";
 import { GiftEditorView } from "./GiftEditorView";
 import { GiftImageField } from "./GiftImageField";
+import { GiftPricingSettings } from "./GiftPricingSettings";
 import { GiftCatalogClient } from "./giftCatalogClient";
 import {
   createGiftMediaController,
@@ -76,6 +77,12 @@ export function createGiftEditorController(
         (memberships.length === 1 &&
           memberships[0].capabilities.manageCatalog)),
   );
+  const canManagePricing =
+    authorized &&
+    (actor?.user.role === "OWNER" ||
+      (memberships.length === 1 &&
+        memberships[0].membershipRole === "SITE_ADMIN" &&
+        memberships[0].capabilities.readFinance));
   const transport = ports.transport ?? fetch;
   const suppliedRequest = ports.request;
   const clock = ports.now ?? Date.now;
@@ -573,6 +580,27 @@ export function createGiftEditorController(
     }
   }
   return {
+    canManagePricing,
+    pricingRequest: async (
+      path: string,
+      options: { method?: string; body?: unknown; signal?: AbortSignal } = {},
+    ) => {
+      check();
+      try {
+        const value = await request(path, {
+          ...options,
+          signal: options.signal
+            ? AbortSignal.any([lifetime.signal, options.signal])
+            : lifetime.signal,
+        });
+        check();
+        return value;
+      } catch (cause) {
+        if (current() && !(cause instanceof ApiError && cause.status === 403))
+          invalidate(cause);
+        throw cause;
+      }
+    },
     current,
     load,
     dispose,
@@ -674,53 +702,62 @@ export function GiftEditor({
     return <p role="status">Verifique sua sessão para editar os presentes.</p>;
   const state = controller.getState();
   return (
-    <GiftEditorView
+    <GiftPricingSettings
+      enabled={controller.canManagePricing}
+      key={JSON.stringify([siteId, snapshot.sessionEpoch])}
+      siteId={siteId}
+      request={controller.pricingRequest}
+      isCurrent={controller.current}
       gifts={state.gifts}
-      loading={state.loading}
-      error={state.error || null}
-      busy={state.busy}
-      onRetry={() => {
-        void controller.load();
-      }}
-      onCreate={controller.create}
-      onUpdate={controller.update}
-      onPublication={controller.publication}
-      onReorder={controller.reorder}
-      renderPreview={(gift) => {
-        const preview = state.previews[gift.id];
-        return preview ? (
-          <img
-            src={preview.url}
-            alt={gift.altText}
-            className="h-full w-full object-cover"
+    >
+      <GiftEditorView
+        gifts={state.gifts}
+        loading={state.loading}
+        error={state.error || null}
+        busy={state.busy}
+        onRetry={() => {
+          void controller.load();
+        }}
+        onCreate={controller.create}
+        onUpdate={controller.update}
+        onPublication={controller.publication}
+        onReorder={controller.reorder}
+        renderPreview={(gift) => {
+          const preview = state.previews[gift.id];
+          return preview ? (
+            <img
+              src={preview.url}
+              alt={gift.altText}
+              className="h-full w-full object-cover"
+            />
+          ) : null;
+        }}
+        renderMedia={(gift, blocked) => (
+          <GiftImageField
+            key={JSON.stringify([
+              siteId,
+              snapshot.sessionEpoch,
+              gift.id,
+              gift.mediaAssetId,
+              gift.altText,
+            ])}
+            gift={gift}
+            disabled={blocked && state.activeMediaGift !== gift.id}
+            preview={state.previews[gift.id]}
+            mediaState={state.images[gift.id]}
+            isCurrent={() =>
+              holder.current === controller && controller.current()
+            }
+            onUpload={(file, alt) => controller.uploadImage(gift.id, file, alt)}
+            onConsult={() => controller.consultImage(gift.id)}
+            onRecover={(alt) => controller.recoverImage(gift.id, alt)}
+            onRemove={() =>
+              controller.update(gift.id, { mediaAssetId: null, altText: "" })
+            }
+            onAltChange={(altText) => controller.update(gift.id, { altText })}
           />
-        ) : null;
-      }}
-      renderMedia={(gift, blocked) => (
-        <GiftImageField
-          key={JSON.stringify([
-            siteId,
-            snapshot.sessionEpoch,
-            gift.id,
-            gift.mediaAssetId,
-            gift.altText,
-          ])}
-          gift={gift}
-          disabled={blocked && state.activeMediaGift !== gift.id}
-          preview={state.previews[gift.id]}
-          mediaState={state.images[gift.id]}
-          isCurrent={() =>
-            holder.current === controller && controller.current()
-          }
-          onUpload={(file, alt) => controller.uploadImage(gift.id, file, alt)}
-          onConsult={() => controller.consultImage(gift.id)}
-          onRecover={(alt) => controller.recoverImage(gift.id, alt)}
-          onRemove={() =>
-            controller.update(gift.id, { mediaAssetId: null, altText: "" })
-          }
-          onAltChange={(altText) => controller.update(gift.id, { altText })}
-        />
-      )}
-    />
+        )}
+      />
+    </GiftPricingSettings>
   );
 }

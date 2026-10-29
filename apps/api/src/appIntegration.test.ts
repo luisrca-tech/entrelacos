@@ -16,12 +16,86 @@ import {
   createGiftPaymentHistory,
   type GiftPaymentHistoryRepository,
 } from "./giftPaymentHistory";
+import * as gifts from "./gifts";
 import { deriveReceivingNominationRequestId } from "./receivingNomination";
 import { createReceivingNominationComposition } from "./receivingNominationComposition";
 import * as receivingRepository from "./receivingRepository";
 import * as siteAccess from "./siteAccess";
 
 describe("API composition", () => {
+  it("forwards the catalog transaction through the actual app readiness binding", async () => {
+    try {
+      const db = {} as never;
+      const transaction = {} as never;
+      const receiving = {
+        mode: "sandbox" as const,
+        applicationEnvironment: "development" as const,
+        freshnessMs: 300000,
+      };
+      const readiness = {
+        siteId: "site-one",
+        mode: "sandbox" as const,
+        state: "READY" as const,
+        reason: null,
+        observedAt: "2026-10-29T12:00:00Z",
+        destinationVersion: 1,
+        catalogEligible: true,
+      };
+      vi.spyOn(authHttp, "requireAdminSession").mockResolvedValue({
+        user: { id: "admin-one", role: "SITE_ADMIN" },
+        session: { id: "session-one" },
+      } as never);
+      const read = vi
+        .spyOn(receivingRepository, "readReceivingReadiness")
+        .mockResolvedValue(readiness);
+      vi.spyOn(gifts, "updateSiteGiftPublication").mockImplementation(
+        async (_db, _actor, siteId, _giftId, _input, services) => {
+          await services?.readReadiness?.(siteId, transaction);
+          return {
+            gift: {
+              id: "gift-one",
+              siteId,
+              title: "QA fixture",
+              description: "",
+              nominalCents: 1000,
+              currency: "BRL",
+              mediaAssetId: null,
+              altText: "",
+              sortOrder: 0,
+              publicationState: "PUBLISHED",
+              createdAt: "2026-10-29T12:00:00Z",
+              updatedAt: "2026-10-29T12:00:00Z",
+            },
+          };
+        },
+      );
+      const api = createApp(
+        {
+          auth: {} as never,
+          db,
+          adminOrigin: "http://localhost:3000",
+          receiving,
+        },
+        { sink: () => {} },
+      );
+      const response = await api.request(
+        "/v1/sites/site-one/gifts/gift-one/publication",
+        {
+          method: "PATCH",
+          headers: {
+            Origin: "http://localhost:3000",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ publicationState: "PUBLISHED" }),
+        },
+      );
+      expect(response.status).toBe(200);
+      expect(read).toHaveBeenCalledWith(db, "site-one", receiving, transaction);
+    } finally {
+      vi.restoreAllMocks();
+    }
+  });
+
   it("mounts explicit session-bound incoming verification in the actual app", async () => {
     vi.spyOn(authHttp, "requireAdminSession").mockResolvedValue({
       user: { id: "holder-one", role: "SITE_ADMIN" },

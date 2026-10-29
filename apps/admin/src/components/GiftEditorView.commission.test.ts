@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+﻿// @vitest-environment jsdom
 import type { GiftItem } from "@entrelacos/contracts";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -90,13 +90,24 @@ describe("private gift price commission preview", () => {
       'input[name="nominalPrice"]',
     );
     await enter(input, "100,00");
-    expect(text(form)).toContain("Valor do presente");
-    expect(text(form)).toContain("Comissão descontada (2%)");
-    expect(text(form)).toContain("Líquido estimado antes das tarifas Asaas");
-    expect(amounts(form)).toEqual(["R$ 100,00", "R$ 2,00", "R$ 98,00"]);
-    expect(text(form)).toContain("tarifas Asaas");
-    expect(text(form)).toContain("descontadas do recebimento do casal");
+    expect(text(form)).toContain("Valor que o convidado pagará");
+    expect(text(form)).toContain("Comissão");
+    expect(text(form)).toContain("Líquido do casal");
+    expect(amounts(form)).toEqual([
+      "R$ 100,00",
+      "Indisponível",
+      "Indisponível",
+      "Indisponível",
+      "Indisponível",
+      "R$ 100,00",
+      "Indisponível",
+      "Indisponível",
+      "Indisponível",
+      "Indisponível",
+    ]);
     expect(text(form)).toContain("O convidado paga o valor cadastrado");
+    expect(text(form)).toContain("Indisponível");
+    expect(text(form)).toContain("sem garantia");
     expect(input.value).toBe("100,00");
     expect(v.callbacks.onCreate).not.toHaveBeenCalled();
     await enter(
@@ -119,9 +130,31 @@ describe("private gift price commission preview", () => {
       form,
       'input[name="nominalPrice"]',
     );
-    expect(amounts(form)).toEqual(["R$ 123,45", "R$ 2,47", "R$ 120,98"]);
+    expect(amounts(form)).toEqual([
+      "R$ 123,45",
+      "Indisponível",
+      "Indisponível",
+      "Indisponível",
+      "Indisponível",
+      "R$ 123,45",
+      "Indisponível",
+      "Indisponível",
+      "Indisponível",
+      "Indisponível",
+    ]);
     await enter(input, "25,25");
-    expect(amounts(form)).toEqual(["R$ 25,25", "R$ 0,51", "R$ 24,74"]);
+    expect(amounts(form)).toEqual([
+      "R$ 25,25",
+      "Indisponível",
+      "Indisponível",
+      "Indisponível",
+      "Indisponível",
+      "R$ 25,25",
+      "Indisponível",
+      "Indisponível",
+      "Indisponível",
+      "Indisponível",
+    ]);
     expect(v.callbacks.onUpdate).not.toHaveBeenCalled();
     await act(async () =>
       form.dispatchEvent(
@@ -141,7 +174,7 @@ describe("private gift price commission preview", () => {
       'input[name="nominalPrice"]',
     );
     await enter(input, "100");
-    expect(amounts(form)).toHaveLength(3);
+    expect(amounts(form)).toHaveLength(10);
     for (const value of ["", "0", "1,001", "not-a-price"]) {
       await enter(input, value);
       expect(amounts(form)).toHaveLength(0);
@@ -160,14 +193,28 @@ describe("private gift price commission preview", () => {
     await v.render([{ ...gift }]);
     expect(amounts(requiredElement(v.container, "article form"))).toEqual([
       "R$ 100,00",
-      "R$ 2,00",
-      "R$ 98,00",
+      "Indisponível",
+      "Indisponível",
+      "Indisponível",
+      "Indisponível",
+      "R$ 100,00",
+      "Indisponível",
+      "Indisponível",
+      "Indisponível",
+      "Indisponível",
     ]);
     await v.render([{ ...gift, nominalCents: 20000 }]);
     expect(amounts(requiredElement(v.container, "article form"))).toEqual([
       "R$ 200,00",
-      "R$ 4,00",
-      "R$ 196,00",
+      "Indisponível",
+      "Indisponível",
+      "Indisponível",
+      "Indisponível",
+      "R$ 200,00",
+      "Indisponível",
+      "Indisponível",
+      "Indisponível",
+      "Indisponível",
     ]);
   });
 });

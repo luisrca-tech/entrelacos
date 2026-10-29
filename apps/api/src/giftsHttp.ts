@@ -15,12 +15,22 @@ import { siteOrigin } from "@entrelacos/database/schema";
 import { and, eq } from "drizzle-orm";
 import { type Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
+import {
+  type GiftPricingSettings,
+  giftPricingPreviewInputSchema,
+  giftPricingSettingsInputSchema,
+  giftPricingSettingsResponseSchema,
+} from "../../../packages/contracts/src/giftPricingSettings";
 import { trustedAdminOrigin } from "./adminOrigin";
 import {
   AdminSessionRequiredError,
   type AuthHttpOptions,
   requireAdminSession,
 } from "./authHttp";
+import {
+  loadGiftPricingSettings,
+  updateGiftPricingSettings,
+} from "./giftPricingSettings";
 import {
   createSiteGift,
   GiftServiceError,
@@ -34,8 +44,10 @@ import {
 import { allowsLocalPublicOrigin } from "./localPublicOrigin";
 import { type SiteAccessActor, SiteAccessDeniedError } from "./siteAccess";
 
-export type GiftsHttpOptions = AuthHttpOptions &
-  Pick<
+export type GiftsHttpOptions = AuthHttpOptions & {
+  readPricingSettings?: (siteId: string) => Promise<GiftPricingSettings>;
+  previewPricing?: (siteId: string, input: unknown) => Promise<unknown>;
+} & Pick<
     GiftServiceOptions,
     "readReadiness" | "applicationEnvironment" | "liveDemoSiteId"
   >;
@@ -184,8 +196,23 @@ export function createGiftsHttpRouter(options: GiftsHttpOptions) {
   router.get("/v1/public/sites/:siteId/gifts", async (context) => {
     const siteId = context.req.param("siteId");
     const query = readCatalogQuery(context.req.url);
+    const catalog = await readPublicGifts(options.db, siteId, services, query);
+    const settings = options.readPricingSettings
+      ? await options.readPricingSettings(siteId)
+      : undefined;
     const page = publicGiftCatalogPageResponseSchema.safeParse(
-      await readPublicGifts(options.db, siteId, services, query),
+      settings
+        ? {
+            ...catalog,
+            gifts: catalog.gifts.map((gift) => ({
+              ...gift,
+              pricing: {
+                feeAllocation: settings.feeAllocation,
+                available: settings.feeAllocation === "RECIPIENT_DEDUCTED",
+              },
+            })),
+          }
+        : catalog,
     );
     if (
       !page.success ||
@@ -308,6 +335,66 @@ export function createGiftsHttpRouter(options: GiftsHttpOptions) {
           services,
         ),
       ),
+    );
+  });
+  router.get("/v1/sites/:siteId/gift-pricing-settings", async (context) =>
+    context.json(
+      giftPricingSettingsResponseSchema.parse(
+        await loadGiftPricingSettings(
+          options.db,
+          context.get("actor"),
+          context.req.param("siteId"),
+        ),
+      ),
+    ),
+  );
+  router.patch("/v1/sites/:siteId/gift-pricing-settings", async (context) => {
+    const body = giftPricingSettingsInputSchema.safeParse(
+      await readBody(context.req.raw),
+    );
+    if (!body.success)
+      return problem(
+        context,
+        400,
+        "VALIDATION_ERROR",
+        "Invalid pricing settings",
+      );
+    return context.json(
+      giftPricingSettingsResponseSchema.parse(
+        await updateGiftPricingSettings(
+          options.db,
+          context.get("actor"),
+          context.req.param("siteId"),
+          body.data,
+        ),
+      ),
+    );
+  });
+  router.post("/v1/sites/:siteId/gift-pricing-preview", async (context) => {
+    const body = giftPricingPreviewInputSchema.safeParse(
+      await readBody(context.req.raw),
+    );
+    if (!body.success)
+      return problem(
+        context,
+        400,
+        "VALIDATION_ERROR",
+        "Invalid pricing preview",
+      );
+    const siteId = context.req.param("siteId");
+    await loadGiftPricingSettings(options.db, context.get("actor"), siteId);
+    if (!options.previewPricing)
+      return problem(
+        context,
+        503,
+        "SERVICE_UNAVAILABLE",
+        "Pricing preview unavailable",
+      );
+    return context.json(
+      (await options.previewPricing(siteId, body.data)) as Record<
+        string,
+        unknown
+      >,
     );
   });
   return router;

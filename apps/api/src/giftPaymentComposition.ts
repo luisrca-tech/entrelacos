@@ -8,6 +8,7 @@ import {
 import { and, eq } from "drizzle-orm";
 import type { ApiOptions } from "./app";
 import { createAsaasCheckoutClient } from "./asaasCheckoutClient";
+import { readAsaasCheckoutCallbacks } from "./asaasCheckoutPayload";
 import {
   type AsaasFeeQuotesOptions,
   createAsaasFeeQuotes,
@@ -25,6 +26,7 @@ import { createGiftCheckoutRepository } from "./giftCheckoutRepository";
 import {
   createGiftCheckoutService,
   type GiftCheckoutProviderCommand,
+  GiftCheckoutServiceError,
 } from "./giftCheckouts";
 import { createGiftPaymentCheckoutLookup } from "./giftPaymentCheckoutLookup";
 import type { GiftPaymentConfig } from "./giftPaymentConfig";
@@ -33,9 +35,13 @@ import { createGiftPaymentPostingRepository } from "./giftPaymentPostingReposito
 import { createGiftPaymentRestrictionWorker } from "./giftPaymentRestrictions";
 import { createGiftPaymentWorker } from "./giftPaymentWorker";
 import { createGiftPaymentWorkerLoop } from "./giftPaymentWorkerLoop";
+import { previewGiftPricing } from "./giftPricingPreview";
 import { findPublishedGiftForQuote } from "./giftQuoteLookup";
 import { createGiftQuoteRepository } from "./giftQuoteRepository";
-import { createGiftQuoteService } from "./giftQuotes";
+import {
+  createGiftQuoteService,
+  type GiftQuoteServiceDependencies,
+} from "./giftQuotes";
 import { allowsLiveSite } from "./liveSitePolicy";
 import {
   decryptProviderCredential,
@@ -57,6 +63,7 @@ type PaymentPorts = Pick<
   ApiOptions,
   | "receiving"
   | "giftPayments"
+  | "previewPricing"
   | "asaasWebhook"
   | "asaasWithdrawalAuthorization"
   | "finance"
@@ -113,6 +120,12 @@ export function createGiftPaymentComposition(
   const fetch = options.fetch ?? globalThis.fetch;
   const publicOrigin = new URL(options.publicOrigin).origin;
   if (publicOrigin !== options.publicOrigin) return unavailable();
+  const callback = new URL("/", publicOrigin).href;
+  const callbacks = {
+    successUrl: callback,
+    cancelUrl: callback,
+    expiredUrl: callback,
+  };
   const instanceId = randomUUID();
   const receiving = Object.freeze({
     mode: environment,
@@ -154,7 +167,7 @@ export function createGiftPaymentComposition(
       now,
       readReadiness: (id) => readReceivingReadiness(db, id, receiving),
     });
-  const quoteService = createGiftQuoteService({
+  const quoteDependencies: GiftQuoteServiceDependencies = {
     findPublishedGift: gift,
     loadReceivingContext: context,
     async loadPricingPolicy(scope) {
@@ -222,7 +235,8 @@ export function createGiftPaymentComposition(
     generateId: () => randomUUID(),
     quoteTtlMs: 300_000,
     pricingFreshnessMs: 300_000,
-  });
+  };
+  const quoteService = createGiftQuoteService(quoteDependencies);
   const checkoutRepository = createGiftCheckoutRepository(db, {
     instanceId,
     leaseMs: 60_000,
@@ -348,7 +362,6 @@ export function createGiftPaymentComposition(
       credentialContext,
       keyring,
     );
-    const callback = new URL("/", publicOrigin).href;
     return createAsaasCheckoutClient({
       mode: environment,
       binding: { ...binding, accountBindingId: account.id },
@@ -374,15 +387,42 @@ export function createGiftPaymentComposition(
               },
             }
           : {}),
-        callbacks: {
-          successUrl: callback,
-          cancelUrl: callback,
-          expiredUrl: callback,
-        },
+        callbacks,
       },
     }).createHostedCheckout(command);
   }
   const checkoutService = createGiftCheckoutService({
+    assertProviderConfiguration() {
+      try {
+        readAsaasCheckoutCallbacks(publicOrigin, callbacks);
+      } catch {
+        throw new GiftCheckoutServiceError("CHECKOUT_CONFIGURATION_INVALID");
+      }
+    },
+    async revalidateQuote(snapshot) {
+      try {
+        const current = await createGiftQuoteService({
+          ...quoteDependencies,
+          repository: { append: async () => {} },
+        }).createQuote(snapshot.quote.siteId, {
+          giftId: snapshot.quote.giftId,
+          method: snapshot.quote.method,
+        });
+        return (
+          [
+            "nominalCents",
+            "commissionCents",
+            "processingCents",
+            "totalCents",
+            "feeAllocation",
+            "policyVersion",
+            "title",
+          ] as const
+        ).every((key) => current[key] === snapshot.quote[key]);
+      } catch {
+        return false;
+      }
+    },
     repository: checkoutRepository,
     loadReceivingContext: context,
     findPublishedGift: gift,
@@ -504,6 +544,8 @@ export function createGiftPaymentComposition(
   return Object.freeze({
     ports: Object.freeze({
       receiving,
+      previewPricing: (siteId: string, input: unknown) =>
+        own(() => previewGiftPricing(quoteDependencies, siteId, input)),
       ...(withdrawals.service
         ? { withdrawalReservation: withdrawals.service }
         : {}),

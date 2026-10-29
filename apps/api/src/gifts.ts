@@ -31,12 +31,16 @@ import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { readDatabaseTimestamp } from "./databaseTimestamp";
 import { allowsLiveSite, type LiveSitePolicy } from "./liveSitePolicy";
 import { createDefaultReceivingReadiness } from "./receivingReadiness";
+import type { ReceivingTransaction } from "./receivingRepository";
 import { requireSiteCapability, type SiteAccessActor } from "./siteAccess";
 
 export type GiftDatabase = NodePgDatabase<Record<string, never>>;
 export interface GiftServiceOptions extends LiveSitePolicy {
   applicationEnvironment?: "development" | "test" | "production";
-  readReadiness?: (siteId: string) => Promise<ReceivingReadiness>;
+  readReadiness?: (
+    siteId: string,
+    transaction?: ReceivingTransaction,
+  ) => Promise<ReceivingReadiness>;
   now?: () => Date;
 }
 
@@ -94,11 +98,14 @@ function validIds(siteId: string, giftId?: string): void {
 async function readReady(
   siteId: string,
   options: GiftServiceOptions,
+  transaction?: ReceivingTransaction,
 ): Promise<ReceivingReadiness> {
   let value: unknown;
   try {
     value = options.readReadiness
-      ? await options.readReadiness(siteId)
+      ? await (transaction
+          ? options.readReadiness(siteId, transaction)
+          : options.readReadiness(siteId))
       : createDefaultReceivingReadiness(siteId);
   } catch {
     receivingNotReady();
@@ -216,7 +223,8 @@ export async function withGiftCatalogMutation<T>(
       const now = currentTime(options);
       assertMutationSite(context, now);
       await requireSiteCapability(tx, actor, siteId, "manageCatalog");
-      const readiness = await readReady(siteId, options);
+      // Refreshing on another connection here would wait on our own site lock.
+      const readiness = await readReady(siteId, options, transaction);
       assertMode(context, readiness, options);
       const executionTime = currentTime(options);
       assertMutationSite(context, executionTime);

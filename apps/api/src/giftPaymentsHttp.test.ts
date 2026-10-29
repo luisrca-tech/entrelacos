@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { AuthHttpOptions } from "./authHttp";
+import { GiftCheckoutServiceError } from "./giftCheckouts";
 import { createGiftPaymentsHttpRouter } from "./giftPaymentsHttp";
 
 const origin = "https://wedding.example.test";
@@ -85,6 +86,19 @@ function fixture() {
 }
 
 describe("public gift payment transport", () => {
+  it("reports known pre-dispatch configuration failure without claiming uncertain delivery", async () => {
+    const values = fixture();
+    values.giftPayments.createCheckout.mockRejectedValue(
+      new GiftCheckoutServiceError("CHECKOUT_CONFIGURATION_INVALID"),
+    );
+    const response = await values.post("gift-checkouts", recovery);
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({
+      code: "CHECKOUT_CONFIGURATION_INVALID",
+      status: 503,
+    });
+  });
+
   it("validates a stored registered origin and dispatches only strict server inputs without guest session", async () => {
     const values = fixture();
     const response = await values.post("gift-quotes", {

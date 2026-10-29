@@ -148,6 +148,9 @@ export interface GiftCheckoutRepository {
 }
 
 export interface GiftCheckoutServiceDependencies {
+  // Pure preflight for new commitments only; existing recovery must remain available.
+  assertProviderConfiguration?(): void;
+  revalidateQuote?(snapshot: GiftQuoteSnapshot): Promise<boolean>;
   repository: GiftCheckoutRepository;
   loadReceivingContext(
     siteId: string,
@@ -167,10 +170,11 @@ type CheckoutErrorCode =
   | "QUOTE_INVALID"
   | "QUOTE_EXPIRED"
   | "REQUEST_CONFLICT"
+  | "CHECKOUT_CONFIGURATION_INVALID"
   | "EXTERNAL_OUTCOME_UNKNOWN";
 
 export class GiftCheckoutServiceError extends Error {
-  readonly status: 400 | 409;
+  readonly status: 400 | 409 | 503;
   readonly title: string;
 
   constructor(readonly code: CheckoutErrorCode) {
@@ -178,12 +182,19 @@ export class GiftCheckoutServiceError extends Error {
       QUOTE_INVALID: "Gift checkout input is invalid",
       QUOTE_EXPIRED: "Gift quote has expired",
       REQUEST_CONFLICT: "Gift checkout request is unavailable",
+      CHECKOUT_CONFIGURATION_INVALID:
+        "Gift checkout configuration is unavailable",
       EXTERNAL_OUTCOME_UNKNOWN: "Gift checkout outcome is unresolved",
     }[code];
     super(title);
     this.name = "GiftCheckoutServiceError";
     this.title = title;
-    this.status = code === "QUOTE_INVALID" ? 400 : 409;
+    this.status =
+      code === "QUOTE_INVALID"
+        ? 400
+        : code === "CHECKOUT_CONFIGURATION_INVALID"
+          ? 503
+          : 409;
   }
 }
 
@@ -277,6 +288,14 @@ export function readGiftQuoteSnapshot(
   const gift = publicGiftItemSchema.safeParse(value.gift);
   const binding = value.receiving;
   const pricing = value.pricing;
+  const settings = value.pricingSettings;
+  if (
+    settings &&
+    (!Number.isSafeInteger(settings.revision) ||
+      settings.revision < 0 ||
+      settings.feeAllocation !== quote.data?.feeAllocation)
+  )
+    return fail("QUOTE_INVALID");
   const time = giftQuoteSchema.shape.expiresAt;
   if (
     !quote.success ||
@@ -335,6 +354,7 @@ export function readGiftQuoteSnapshot(
     bankReference: binding.bankReference,
   };
   return freeze({
+    ...(settings ? { pricingSettings: settings } : {}),
     quote: quote.data,
     gift: gift.data,
     receiving,
@@ -575,6 +595,17 @@ function assertEligible(
       gift.gift.siteId !== siteId)
   )
     return fail("QUOTE_INVALID");
+  if (
+    gift &&
+    (gift.gift.nominalCents !== quote.data.nominalCents ||
+      gift.gift.title !== quote.data.title ||
+      (gift.pricingSettings &&
+        (gift.pricingSettings.feeAllocation !==
+          (snapshot.pricingSettings?.feeAllocation ?? "RECIPIENT_DEDUCTED") ||
+          gift.pricingSettings.revision !==
+            (snapshot.pricingSettings?.revision ?? 0))))
+  )
+    return fail("QUOTE_EXPIRED");
 }
 
 export function createGiftCheckoutService(
@@ -611,6 +642,7 @@ export function createGiftCheckoutService(
             body.data.recoveryToken,
           );
         }
+        dependencies.assertProviderConfiguration?.();
         const loaded = await dependencies.repository.findQuote(
           site.data,
           body.data.quoteId,
@@ -629,12 +661,17 @@ export function createGiftCheckoutService(
             )
           : undefined;
         const now = clock(dependencies);
+        if (
+          dependencies.revalidateQuote &&
+          !(await dependencies.revalidateQuote(quoteSnapshot))
+        )
+          return fail("QUOTE_EXPIRED");
         assertEligible(
           quoteSnapshot,
           context,
           site.data,
           body.data.quoteId,
-          now,
+          clock(dependencies),
           gift,
         );
         const reservation = freeze({

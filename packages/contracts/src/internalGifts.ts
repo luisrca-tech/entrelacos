@@ -190,6 +190,20 @@ const safeImageUrl = z
       !url.hash
     );
   });
+const publicGiftPricingSchema = z.discriminatedUnion("feeAllocation", [
+  z
+    .object({
+      feeAllocation: z.literal("RECIPIENT_DEDUCTED"),
+      available: z.literal(true),
+    })
+    .strict(),
+  z
+    .object({
+      feeAllocation: z.literal("BUYER_GROSS_UP"),
+      available: z.literal(false),
+    })
+    .strict(),
+]);
 export const publicGiftItemSchema = z
   .object({
     id,
@@ -198,6 +212,7 @@ export const publicGiftItemSchema = z
     description: giftFields.description,
     nominalCents: giftFields.nominalCents,
     currency: z.literal("BRL"),
+    pricing: publicGiftPricingSchema.optional(),
     image: z
       .object({ url: safeImageUrl, alt: giftFields.altText })
       .strict()
@@ -1455,6 +1470,7 @@ const catalogPageCard = z
     description: catalogText(2000, true),
     nominalCents: giftFields.nominalCents,
     currency: z.literal("BRL"),
+    pricing: publicGiftPricingSchema.optional(),
     image: z
       .object({ url: catalogPageImageUrl, alt: catalogText(240) })
       .strict()
