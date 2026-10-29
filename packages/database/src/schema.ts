@@ -1274,3 +1274,23 @@ export const adminAccessTokenRelations = relations(
 export * from "./financialSchema";
 
 export { receivingSetupHolder } from "./receivingSetupSchema";
+
+export const giftPricingSettings = pgTable(
+  "gift_pricing_settings",
+  {
+    siteId: text("site_id")
+      .primaryKey()
+      .references(() => site.id, { onDelete: "cascade" }),
+    feeAllocation: text("fee_allocation")
+      .notNull()
+      .default("RECIPIENT_DEDUCTED"),
+    revision: integer("revision").notNull().default(0),
+  },
+  (table) => [
+    check(
+      "gift_pricing_settings_allocation_check",
+      sql`${table.feeAllocation} IN ('RECIPIENT_DEDUCTED', 'BUYER_GROSS_UP')`,
+    ),
+    check("gift_pricing_settings_revision_check", sql`${table.revision} >= 0`),
+  ],
+);

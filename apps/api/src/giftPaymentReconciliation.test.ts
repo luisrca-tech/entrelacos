@@ -855,3 +855,65 @@ describe("gift payment reconciliation decision", () => {
     });
   });
 });
+
+describe("explicit buyer gross-up settlement", () => {
+  it.each(["101.99", "102.01"])(
+    "reports a processing divergence for provider net %s without rewriting the quote",
+    (netValue) => {
+      const input = paymentInput({ netValue });
+      input.quoteSnapshot.quote.feeAllocation = "BUYER_GROSS_UP";
+      const frozen = structuredClone(input.quoteSnapshot);
+      const result = reconcileGiftPaymentObservation(input);
+      expect(result).toMatchObject({
+        outcome: "DIVERGENT",
+        reason: "ALLOCATION_MISMATCH",
+        effect: null,
+        payment: {
+          processingCents: netValue === "101.99" ? 301 : 299,
+          recipientNetCents: netValue === "101.99" ? 9999 : 10001,
+          commissionCents: 200,
+        },
+      });
+      expect(input.quoteSnapshot).toEqual(frozen);
+    },
+  );
+
+  it("receives the exact explicit gross-up allocation", () => {
+    const input = fixture();
+    input.quoteSnapshot.quote.feeAllocation = "BUYER_GROSS_UP";
+    expect(reconcileGiftPaymentObservation(input)).toMatchObject({
+      outcome: "RECEIVED",
+      effect: { amountCents: 10000 },
+    });
+  });
+});
+
+describe("recipient and historical fee settlement", () => {
+  it.each(["RECIPIENT_DEDUCTED", undefined] as const)(
+    "preserves actual recipient credit and the immutable estimate for allocation %s",
+    (feeAllocation) => {
+      const input = paymentInput({ netValue: "101.99" });
+      if (feeAllocation === "RECIPIENT_DEDUCTED") {
+        Object.assign(input.quoteSnapshot.quote, {
+          feeAllocation,
+          nominalCents: 10500,
+          commissionCents: 210,
+        });
+        Object.assign(input.observation.payment as object, {
+          split: [{ ...settledSplit, fixedValue: "2.10", totalValue: "2.10" }],
+        });
+        input.quoteSnapshot.gift.nominalCents = 10500;
+      } else {
+        expect(input.quoteSnapshot.quote).not.toHaveProperty("feeAllocation");
+      }
+      const frozen = structuredClone(input.quoteSnapshot);
+      const recipientNetCents = feeAllocation ? 9989 : 9999;
+      expect(reconcileGiftPaymentObservation(input)).toMatchObject({
+        outcome: "RECEIVED",
+        payment: { processingCents: 301, recipientNetCents },
+        effect: { amountCents: recipientNetCents },
+      });
+      expect(input.quoteSnapshot).toEqual(frozen);
+    },
+  );
+});

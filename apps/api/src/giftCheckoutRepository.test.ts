@@ -19,6 +19,7 @@ import type {
 
 vi.mock("./giftQuoteLookup", () => ({ findPublishedGiftForQuote: vi.fn() }));
 
+import { beforeWriteCommitDatabase } from "./giftCheckoutTestBarrier";
 import { findPublishedGiftForQuote } from "./giftQuoteLookup";
 
 const instant = "2026-10-12T17:00:00.000Z";
@@ -518,6 +519,42 @@ async function reserved() {
   await repository.reserve(values.input, () => {});
   return { ...values, repository };
 }
+
+it("pauses after reservation locks and inserts, never after the initial read-only lookup", async () => {
+  const values = fixture();
+  let release!: () => void;
+  const promise = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const observations: string[][] = [];
+  const repository = createGiftCheckoutRepository(
+    beforeWriteCommitDatabase(
+      values.db,
+      {
+        release() {
+          observations.push(values.queries.map((entry) => entry.sql));
+        },
+      },
+      { promise },
+    ),
+    values.options,
+  );
+  // Releasing first avoids a hung failing test while preserving the callback order.
+  release();
+  expect(
+    await repository.findByRequest(values.input.siteId, values.input.requestId),
+  ).toBeNull();
+  expect(observations).toEqual([]);
+  await repository.reserve(values.input, () => {});
+  expect(observations).toHaveLength(1);
+  expect(
+    observations[0].some((text) => /FROM site WHERE.*FOR UPDATE/is.test(text)),
+  ).toBe(true);
+  expect(
+    observations[0].some((text) => /insert into "gift_order"/i.test(text)),
+  ).toBe(true);
+  expect(observations[0].at(-1)).not.toMatch(/^commit/i);
+});
 
 function receipt(values: Awaited<ReturnType<typeof reserved>>) {
   const scope = {

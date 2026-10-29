@@ -19,6 +19,44 @@ const gift: PublicGiftItem = {
 };
 
 describe("gift catalog view", () => {
+  it("allows recovery of an issued payment after buyer pricing has been paused", () => {
+    const html = renderToStaticMarkup(
+      createElement(GiftCatalogView, {
+        gifts: [
+          {
+            ...gift,
+            pricing: { feeAllocation: "BUYER_GROSS_UP", available: false },
+          } as PublicGiftItem,
+        ],
+        mode: "live",
+        busy: false,
+        recoveryOnly: true,
+        actionLabel: "Consultar pagamento",
+        onSelect: vi.fn(),
+      }),
+    );
+    expect(html).toContain("Consultar pagamento");
+    expect(html).not.toContain("123,45");
+    expect(html).not.toContain('disabled=""');
+  });
+  it("never advertises the internal value when buyer pricing is blocked", () => {
+    const html = renderToStaticMarkup(
+      createElement(GiftCatalogView, {
+        gifts: [
+          {
+            ...gift,
+            pricing: { feeAllocation: "BUYER_GROSS_UP", available: false },
+          } as PublicGiftItem,
+        ],
+        mode: "live",
+        busy: false,
+        onSelect: vi.fn(),
+      }),
+    );
+    expect(html).not.toContain("123,45");
+    expect(html).toContain("Preço indisponível");
+    expect(html).toContain("disabled");
+  });
   it("keeps accessible server search/navigation on an admitted empty page", () => {
     const html = renderToStaticMarkup(
       createElement(GiftCatalogView, {

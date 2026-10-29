@@ -34,6 +34,7 @@ import {
   createGiftPaymentsHttpRouter,
   type GiftPaymentsHttpOptions,
 } from "./giftPaymentsHttp";
+import { readGiftPricingSettings } from "./giftPricingSettings";
 import { createGiftsHttpRouter } from "./giftsHttp";
 import { createGuestVerificationHttpRouter } from "./guestVerificationHttp";
 import { createHandoffHttpRouter } from "./handoffHttp";
@@ -52,6 +53,7 @@ import {
 } from "./receivingNominationHttp";
 import {
   type ReceivingRepositoryOptions,
+  type ReceivingTransaction,
   readReceivingReadiness,
 } from "./receivingRepository";
 import type { ReceivingSetupService } from "./receivingSetup";
@@ -83,6 +85,7 @@ export type ApiOptions = GiftPaymentsHttpOptions &
     receivingVerification?: ReceivingSetupHttpOptions["receivingVerification"];
     giftMediaAuth?: GiftMediaHttpOptions["auth"];
     giftPaymentHistory?: GiftPaymentHistoryHttpOptions["giftPaymentHistory"];
+    previewPricing?: (siteId: string, input: unknown) => Promise<unknown>;
   };
 
 export function createApp(
@@ -120,8 +123,18 @@ export function createApp(
       applicationEnvironment: options.receiving?.applicationEnvironment,
       liveDemoSiteId: options.receiving?.liveDemoSiteId,
     };
-    const readReadiness = (siteId: string) =>
-      readReceivingReadiness(options.db, siteId, options.receiving);
+    const readReadiness = (
+      siteId: string,
+      transaction?: ReceivingTransaction,
+    ) =>
+      transaction
+        ? readReceivingReadiness(
+            options.db,
+            siteId,
+            options.receiving,
+            transaction,
+          )
+        : readReceivingReadiness(options.db, siteId, options.receiving);
     app.route("/", createAuthHttpRouter(options));
     app.route("/", createAdminAccessHttpRouter(options));
     app.route("/", createSitesHttpRouter(options));
@@ -174,6 +187,9 @@ export function createApp(
       ...options,
       ...liveSitePolicy,
       readReadiness,
+      readPricingSettings: (siteId) =>
+        readGiftPricingSettings(options.db, siteId),
+      previewPricing: options.previewPricing,
     });
     for (const endpoint of [
       internalGiftsEndpointPaths.giftsRead,
@@ -182,6 +198,9 @@ export function createApp(
       internalGiftsEndpointPaths.giftPublication,
       internalGiftsEndpointPaths.giftsReorder,
       internalGiftsEndpointPaths.publicGifts,
+      "GET /v1/sites/:siteId/gift-pricing-settings",
+      "PATCH /v1/sites/:siteId/gift-pricing-settings",
+      "POST /v1/sites/:siteId/gift-pricing-preview",
       "OPTIONS /v1/public/sites/:siteId/gifts",
     ]) {
       const [method, path] = endpoint.split(" ");

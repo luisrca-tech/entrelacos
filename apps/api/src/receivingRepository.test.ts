@@ -186,6 +186,44 @@ describe("stored receiving context", () => {
     await readReceivingReadiness(v.db, siteId, { ...options, refresh });
     expect(refresh).toHaveBeenCalledOnce();
   });
+  it.each([false, true])(
+    "reads an existing transaction without refreshing or nesting a snapshot (stale bank: %s)",
+    async (stale) => {
+      const v = fixture(
+        stale
+          ? {
+              receiving_verification_evidence: [
+                {
+                  ...evidence,
+                  bankObservedAt: new Date(now.getTime() - 61_000),
+                },
+              ],
+            }
+          : {},
+      );
+      const refresh = vi.fn(async () => {
+        throw new Error("Refresh would reacquire the site lock");
+      });
+      await v.db.transaction(async (transaction) => {
+        const result = await readReceivingReadiness(
+          v.db,
+          siteId,
+          { ...options, refresh },
+          transaction,
+        );
+        expect(result).toMatchObject(
+          stale
+            ? { state: "BLOCKED", reason: "EVIDENCE_STALE" }
+            : { state: "READY", reason: null },
+        );
+      });
+      expect(refresh).not.toHaveBeenCalled();
+      expect(
+        v.queries.filter((query) => /^begin/i.test(query.sql)),
+      ).toHaveLength(1);
+    },
+  );
+
   it("a failed refresh never renews the timestamps of stale bank evidence", async () => {
     const v = fixture();
     const refresh = vi.fn(async () => {

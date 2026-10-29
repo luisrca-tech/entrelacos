@@ -1,5 +1,6 @@
 import { giftQuoteSchema } from "@entrelacos/contracts";
 import { describe, expect, it, vi } from "vitest";
+import { previewGiftPricing } from "./giftPricingPreview";
 import {
   createGiftQuoteService,
   type GiftPricingEvidence,
@@ -119,6 +120,126 @@ async function expectDenied(
 }
 
 describe("immutable gift quote creation", () => {
+  it("estimates a small buyer amount without requiring recipient-deducted viability", async () => {
+    const v = fixture();
+    v.pricing.policy.processingBasisPoints = 0;
+    v.pricing.policy.processingFixedCents = 199;
+    v.pricing.policy.feeBasis = "OBSERVED_ESTIMATE";
+    v.dependencies.loadPricingPolicy = vi.fn(async (binding) => ({
+      ...v.pricing,
+      policy: { ...v.pricing.policy, method: binding.method },
+    }));
+    const preview = await previewGiftPricing(v.dependencies, "site-one", {
+      nominalCents: 100,
+      feeAllocation: "BUYER_GROSS_UP",
+    });
+    expect(preview.guaranteed).toBe(false);
+    for (const method of preview.methods)
+      expect(method).toMatchObject({
+        available: true,
+        nominalCents: 100,
+        commissionCents: 2,
+        processingCents: 199,
+        totalCents: 301,
+        recipientNetCents: 100,
+      });
+    expect(v.dependencies.findPublishedGift).not.toHaveBeenCalled();
+    expect(v.dependencies.repository.append).not.toHaveBeenCalled();
+    const deducted = await previewGiftPricing(v.dependencies, "site-one", {
+      nominalCents: 100,
+      feeAllocation: "RECIPIENT_DEDUCTED",
+    });
+    expect(deducted.methods.every((method) => !method.available)).toBe(true);
+  });
+  it.each(["binding", "method", "stale", "verification"])(
+    "does not simulate buyer pricing with invalid %s evidence",
+    async (change) => {
+      const v = fixture();
+      v.dependencies.loadPricingPolicy = vi.fn(async (binding) => ({
+        ...v.pricing,
+        ...(change === "binding"
+          ? { accountReference: "foreign-account" }
+          : {}),
+        ...(change === "stale"
+          ? { observedAt: new Date("2026-10-11T12:00:00Z") }
+          : {}),
+        ...(change === "verification"
+          ? { verification: "unverified" as const }
+          : {}),
+        policy: {
+          ...v.pricing.policy,
+          method:
+            change === "method"
+              ? binding.method === "PIX"
+                ? ("CREDIT_CARD" as const)
+                : ("PIX" as const)
+              : binding.method,
+        },
+      }));
+      const preview = await previewGiftPricing(v.dependencies, "site-one", {
+        nominalCents: 1000,
+        feeAllocation: "BUYER_GROSS_UP",
+      });
+      expect(
+        preview.methods.every(
+          (method) => !method.available && method.totalCents === null,
+        ),
+      ).toBe(true);
+    },
+  );
+  it("simulates account-bound buyer totals as estimates without emitting or storing a quote", async () => {
+    const v = fixture();
+    v.pricing.policy.feeBasis = "OBSERVED_ESTIMATE";
+    v.dependencies.loadPricingPolicy = vi.fn(async (binding) => ({
+      ...v.pricing,
+      policy: { ...v.pricing.policy, method: binding.method },
+    }));
+    const preview = await previewGiftPricing(v.dependencies, "site-one", {
+      nominalCents: 1000,
+      feeAllocation: "BUYER_GROSS_UP",
+    });
+    expect(preview.guaranteed).toBe(false);
+    expect(preview.methods[0]).toMatchObject({
+      nominalCents: 1000,
+      commissionCents: 20,
+      totalCents: 1087,
+      processingCents: 67,
+      recipientNetCents: 1000,
+    });
+    expect(v.dependencies.repository.append).not.toHaveBeenCalled();
+  });
+  it("returns no simulated processing or total when account fees are unavailable", async () => {
+    const v = fixture();
+    v.dependencies.loadPricingPolicy = vi.fn(async () => null);
+    const preview = await previewGiftPricing(v.dependencies, "site-one", {
+      nominalCents: 1000,
+      feeAllocation: "RECIPIENT_DEDUCTED",
+    });
+    expect(preview.methods).toHaveLength(2);
+    expect(preview.methods[0]).toMatchObject({
+      available: false,
+      totalCents: null,
+      processingCents: null,
+      recipientNetCents: null,
+    });
+  });
+  it("blocks a stored buyer preference until contractual fees and difference handling are approved", async () => {
+    const v = fixture();
+    Object.assign(v.storedGift, {
+      pricingSettings: { feeAllocation: "BUYER_GROSS_UP", revision: 1 },
+    });
+    await expectDenied(v, "POLICY_UNAVAILABLE");
+  });
+  it("snapshots the current settings revision without trusting browser allocation", async () => {
+    const v = fixture();
+    Object.assign(v.storedGift, {
+      pricingSettings: { feeAllocation: "RECIPIENT_DEDUCTED", revision: 3 },
+    });
+    await createGiftQuoteService(v.dependencies).createQuote("site-one", body);
+    expect(v.appended[0]).toMatchObject({
+      pricingSettings: { feeAllocation: "RECIPIENT_DEDUCTED", revision: 3 },
+    });
+  });
   it("persists observed-estimate semantics only for recipient-deducted DEV Sandbox demo quotes", async () => {
     const v = fixture();
     makeDemo(v);

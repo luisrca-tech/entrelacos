@@ -364,8 +364,11 @@ export async function readReceivingReadiness(
   db: ReceivingDatabase,
   siteId: string,
   options?: ReceivingRepositoryOptions,
+  transaction?: ReceivingTransaction,
 ): Promise<ReceivingReadiness> {
-  const context = await loadReceivingContext(db, siteId, options);
+  const context = transaction
+    ? await loadReceivingContextInTransaction(transaction, siteId, options)
+    : await loadReceivingContext(db, siteId, options);
   return context
     ? evaluateReceivingReadiness({
         ...context,

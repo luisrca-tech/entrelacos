@@ -6,6 +6,7 @@ type Props = {
   mode: "disabled" | "sandbox" | "live";
   busy: boolean;
   actionLabel?: string;
+  recoveryOnly?: boolean;
   onSelect: (gift: PublicGiftItem) => void;
   search?: {
     value: string;
@@ -33,6 +34,7 @@ export function GiftCatalogView({
   mode,
   busy,
   actionLabel,
+  recoveryOnly = false,
   onSelect,
   search,
 }: Props) {
@@ -128,14 +130,26 @@ export function GiftCatalogView({
               <p className="m-0 break-words leading-relaxed text-template-muted">
                 {gift.description}
               </p>
-              <p className="m-0 text-template-ink">
-                Valor simbólico:{" "}
-                {currencyFormatter.format(gift.nominalCents / 100)}
-              </p>
+              {gift.pricing?.feeAllocation === "BUYER_GROSS_UP" ? (
+                <p role="status" className="m-0 text-template-muted">
+                  Preço indisponível. Os pagamentos deste presente aguardam
+                  validação.
+                </p>
+              ) : (
+                <p className="m-0 text-template-ink">
+                  Valor simbólico:{" "}
+                  {currencyFormatter.format(gift.nominalCents / 100)}
+                  <span className="block text-sm text-template-muted">
+                    Pix ou cartão à vista · mesmo preço final
+                  </span>
+                </p>
+              )}
               <button
                 type="button"
                 className={giftActionButtonClass}
-                disabled={busy}
+                disabled={
+                  busy || (!recoveryOnly && gift.pricing?.available === false)
+                }
                 onClick={() => onSelect(gift)}
               >
                 {busy ? "Aguarde…" : (actionLabel ?? "Escolher presente")}

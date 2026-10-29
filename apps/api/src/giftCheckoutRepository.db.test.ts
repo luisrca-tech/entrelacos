@@ -27,6 +27,11 @@ import {
   createGiftCheckoutService,
   type GiftCheckoutReservation,
 } from "./giftCheckouts";
+import { beforeWriteCommitDatabase } from "./giftCheckoutTestBarrier";
+import {
+  readGiftPricingSettings,
+  updateGiftPricingSettings,
+} from "./giftPricingSettings";
 import { createGiftQuoteRepository } from "./giftQuoteRepository";
 import type { GiftQuoteSnapshot } from "./giftQuotes";
 import {
@@ -104,17 +109,7 @@ function beforeCommitDatabase(
   started: ReturnType<typeof gate>,
   release: ReturnType<typeof gate>,
 ): GiftCheckoutDatabase {
-  const db = database();
-  return {
-    execute: db.execute.bind(db),
-    transaction: async (callback, config) =>
-      db.transaction(async (tx) => {
-        const result = await callback(tx);
-        started.release();
-        await release.promise;
-        return result;
-      }, config),
-  };
+  return beforeWriteCommitDatabase(database(), started, release);
 }
 function lostCommitAcknowledgementDatabase(): GiftCheckoutDatabase {
   const db = database();
@@ -142,6 +137,22 @@ async function waitForOwnAdvisoryWait() {
   }
   throw new Error(
     "Expected owned checkout transaction to wait on the shared advisory lock",
+  );
+}
+
+async function waitForOwnSiteWait() {
+  const deadline = Date.now() + 5_000;
+  while (Date.now() < deadline) {
+    const result = await database().execute(sql`SELECT EXISTS (
+      SELECT 1 FROM pg_stat_activity WHERE application_name = ${applicationName}
+      AND wait_event_type = 'Lock' AND cardinality(pg_blocking_pids(pid)) > 0
+      AND query LIKE '%site%'
+    ) AS waiting`);
+    if (result.rows[0]?.waiting === true) return;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  throw new Error(
+    "Expected an owned transaction to wait on the shared site lock",
   );
 }
 
@@ -383,6 +394,95 @@ function service(
 }
 
 describe("checkout reserve and pre-dispatch seal PostgreSQL acceptance", () => {
+  it("rejects checkout after an overlapping settings transaction commits first", async () => {
+    const value = await fixture();
+    await database()
+      .update(user)
+      .set({ role: "OWNER" })
+      .where(eq(user.id, value.operatorUserId));
+    const started = gate(),
+      release = gate(),
+      pending: Promise<PromiseSettledResult<unknown>>[] = [];
+    const changing = observeTask(
+      updateGiftPricingSettings(
+        beforeCommitDatabase(started, release),
+        { userId: value.operatorUserId, role: "OWNER" },
+        value.siteId,
+        { feeAllocation: "BUYER_GROSS_UP", revision: 0 },
+      ),
+      pending,
+    );
+    const { checkout, provider } = service(value);
+    let issuing: Promise<PromiseSettledResult<unknown>> | undefined;
+    try {
+      await started.promise;
+      issuing = observeTask(
+        checkout.createCheckout(value.siteId, value.body),
+        pending,
+      );
+      await waitForOwnSiteWait();
+    } finally {
+      release.release();
+      await Promise.all(pending);
+    }
+    expect((await changing).status).toBe("fulfilled");
+    expect(await issuing).toMatchObject({
+      status: "rejected",
+      reason: { code: "QUOTE_EXPIRED" },
+    });
+    expect(provider).not.toHaveBeenCalled();
+    expect(
+      (await readGiftPricingSettings(database(), value.siteId)).revision,
+    ).toBe(1);
+    expect(
+      await database()
+        .select()
+        .from(giftOrder)
+        .where(eq(giftOrder.siteId, value.siteId)),
+    ).toEqual([]);
+  });
+  it("preserves an issued commitment when an overlapping settings update waits for reserve", async () => {
+    const value = await fixture();
+    await database()
+      .update(user)
+      .set({ role: "OWNER" })
+      .where(eq(user.id, value.operatorUserId));
+    const started = gate(),
+      release = gate(),
+      pending: Promise<PromiseSettledResult<unknown>>[] = [];
+    const repository = createGiftCheckoutRepository(
+      beforeCommitDatabase(started, release),
+      options(),
+    );
+    const { checkout, provider } = service(value, repository);
+    const issuing = observeTask(
+      checkout.createCheckout(value.siteId, value.body),
+      pending,
+    );
+    let changing: Promise<PromiseSettledResult<unknown>> | undefined;
+    try {
+      await started.promise;
+      changing = observeTask(
+        updateGiftPricingSettings(
+          database(),
+          { userId: value.operatorUserId, role: "OWNER" },
+          value.siteId,
+          { feeAllocation: "BUYER_GROSS_UP", revision: 0 },
+        ),
+        pending,
+      );
+      await waitForOwnSiteWait();
+    } finally {
+      release.release();
+      await Promise.all(pending);
+    }
+    expect(await changing).toMatchObject({ status: "fulfilled" });
+    const original = taskValue(await issuing);
+    expect(await checkout.createCheckout(value.siteId, value.body)).toEqual(
+      original,
+    );
+    expect(provider).toHaveBeenCalledTimes(1);
+  });
   beforeAll(async () => {
     connection = createDatabaseConnection({
       target: "test",

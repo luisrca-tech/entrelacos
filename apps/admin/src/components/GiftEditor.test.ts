@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+﻿// @vitest-environment jsdom
 import { Blob } from "node:buffer";
 import { webcrypto } from "node:crypto";
 import type { GiftItem, MeResponse } from "@entrelacos/contracts";
@@ -985,6 +985,16 @@ describe("saved gift previews without recovery state", () => {
       let reads = 0;
       let held = false;
       f.request.mockImplementation(async (path, options) => {
+        if (path.endsWith("/gift-pricing-settings"))
+          return {
+            settings: {
+              siteId: saved.siteId,
+              feeAllocation: "RECIPIENT_DEDUCTED",
+              revision: 0,
+              buyerGrossUpAvailable: false,
+              blockedReason: "Pending tariff validation",
+            },
+          };
         if (path.endsWith("/finalize")) {
           if (!held && phase === "consultation") {
             held = true;

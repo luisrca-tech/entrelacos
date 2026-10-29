@@ -1,3 +1,4 @@
+import { isIP } from "node:net";
 import { giftQuoteSchema, publicGiftItemSchema } from "@entrelacos/contracts";
 import { quoteGiftAmounts, serializeBrlCents } from "./giftMoney";
 import type { GiftQuoteSnapshot } from "./giftQuotes";
@@ -38,6 +39,48 @@ function reference(value: unknown): value is string {
     value.length <= 128 &&
     /^[A-Za-z0-9][A-Za-z0-9._:-]*$/.test(value)
   );
+}
+
+// Browser-side loopback origins remain useful locally, but must not be sent to the PSP.
+// A syntactically valid callback still requires an operator-verified, registered destination.
+export function readAsaasCheckoutCallbacks(
+  publicOrigin: string,
+  callbacks: AsaasCheckoutPayload["callback"],
+): AsaasCheckoutPayload["callback"] {
+  try {
+    const origin = new URL(publicOrigin);
+    const hostname = origin.hostname.replace(/\.$/, "").toLowerCase();
+    if (
+      origin.protocol !== "https:" ||
+      !hostname.includes(".") ||
+      hostname === "localhost" ||
+      hostname.endsWith(".localhost") ||
+      isIP(hostname.replace(/^\[|\]$/g, "")) !== 0 ||
+      origin.username ||
+      origin.password ||
+      origin.pathname !== "/" ||
+      origin.search ||
+      origin.hash
+    )
+      unavailable();
+    const result = {} as AsaasCheckoutPayload["callback"];
+    for (const field of ["successUrl", "cancelUrl", "expiredUrl"] as const) {
+      const url = new URL(callbacks[field]);
+      if (
+        url.protocol !== "https:" ||
+        url.origin !== origin.origin ||
+        url.username ||
+        url.password ||
+        url.search ||
+        url.hash
+      )
+        unavailable();
+      result[field] = url.href;
+    }
+    return result;
+  } catch {
+    return unavailable();
+  }
 }
 
 export function buildAsaasCheckoutPayload(
@@ -110,34 +153,10 @@ export function buildAsaasCheckoutPayload(
     ] as const) {
       if (amounts[field] !== quote[field]) unavailable();
     }
-    const origin = new URL(options.publicOrigin);
-    const localSandbox =
-      options.environment === "sandbox" &&
-      origin.protocol === "http:" &&
-      ["localhost", "127.0.0.1", "[::1]"].includes(origin.hostname);
-    if (
-      (origin.protocol !== "https:" && !localSandbox) ||
-      origin.username ||
-      origin.password ||
-      origin.pathname !== "/" ||
-      origin.search ||
-      origin.hash
-    )
-      unavailable();
-    const callback = {} as AsaasCheckoutPayload["callback"];
-    for (const field of ["successUrl", "cancelUrl", "expiredUrl"] as const) {
-      const url = new URL(options.callbacks[field]);
-      if (
-        (url.protocol !== "https:" && !localSandbox) ||
-        url.origin !== origin.origin ||
-        url.username ||
-        url.password ||
-        url.search ||
-        url.hash
-      )
-        unavailable();
-      callback[field] = url.href;
-    }
+    const callback = readAsaasCheckoutCallbacks(
+      options.publicOrigin,
+      options.callbacks,
+    );
     return {
       billingTypes: [quote.method],
       chargeTypes: ["DETACHED"],

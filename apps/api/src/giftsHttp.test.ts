@@ -103,6 +103,48 @@ beforeEach(() => {
   });
 });
 describe("gift catalog HTTP boundary", () => {
+  it("marks buyer prices unavailable from stored site settings and fails closed on read errors", async () => {
+    const readPricingSettings = vi.fn(async () => ({
+      siteId: "wedding-a",
+      feeAllocation: "BUYER_GROSS_UP" as const,
+      revision: 1,
+      buyerGrossUpAvailable: false as const,
+      blockedReason: "External evidence missing",
+    }));
+    const configured = createGiftsHttpRouter({
+      auth: {} as never,
+      db,
+      adminOrigin,
+      readPricingSettings,
+    });
+    const response = await configured.request(
+      request(
+        "/v1/public/sites/wedding-a/gifts",
+        "GET",
+        undefined,
+        publicOrigin,
+      ),
+    );
+    expect(response.status).toBe(200);
+    expect((await response.json()).gifts[0].pricing).toEqual({
+      feeAllocation: "BUYER_GROSS_UP",
+      available: false,
+    });
+    expect(readPricingSettings).toHaveBeenCalledWith("wedding-a");
+    readPricingSettings.mockRejectedValueOnce(new Error("Storage unavailable"));
+    expect(
+      (
+        await configured.request(
+          request(
+            "/v1/public/sites/wedding-a/gifts",
+            "GET",
+            undefined,
+            publicOrigin,
+          ),
+        )
+      ).status,
+    ).toBe(503);
+  });
   it("binds catalog writes to server actor and strict stored-value inputs", async () => {
     const input = {
       title: gift.title,

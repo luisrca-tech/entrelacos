@@ -17,6 +17,10 @@ import {
 } from "./receivingReadiness";
 
 export interface StoredGiftForQuote {
+  pricingSettings?: {
+    feeAllocation: "RECIPIENT_DEDUCTED" | "BUYER_GROSS_UP";
+    revision: number;
+  };
   gift: PublicGiftItem;
   publicationState: GiftItem["publicationState"];
   siteActive: boolean;
@@ -43,6 +47,7 @@ export interface GiftPricingEvidence extends GiftQuoteReceivingBinding {
 }
 
 export interface GiftQuoteSnapshot {
+  readonly pricingSettings?: StoredGiftForQuote["pricingSettings"];
   readonly quote: GiftQuote;
   readonly gift: PublicGiftItem;
   readonly receiving: GiftQuoteReceivingBinding;
@@ -137,6 +142,118 @@ function readQuoteClock(dependencies: GiftQuoteServiceDependencies) {
   return { now, nowTime, deadlineTime, createdAt };
 }
 
+export async function loadGiftPricingEvidence(
+  dependencies: GiftQuoteServiceDependencies,
+  siteId: string,
+  method: GiftQuote["method"],
+) {
+  const loaded = await dependencies.loadReceivingContext(siteId);
+  if (!loaded) throw new ReceivingReadinessServiceError();
+  const context = structuredClone(loaded);
+  const receivingClock = readQuoteClock(dependencies);
+  const readiness = evaluateReceivingReadiness({
+    ...context,
+    siteId: siteId,
+    now: receivingClock.now,
+  });
+  assertReceivingReady(readiness);
+  const binding = context.providerBinding;
+  if (
+    !binding?.accountReference ||
+    !binding.recipientReference ||
+    !binding.destinationVersion ||
+    !binding.bankReference
+  ) {
+    throw new ReceivingReadinessServiceError();
+  }
+  const receiving: GiftQuoteReceivingBinding = {
+    siteId: siteId,
+    provider: binding.provider,
+    operatorReference: binding.operatorReference,
+    environment: binding.environment,
+    accountReference: binding.accountReference,
+    recipientReference: binding.recipientReference,
+    destinationVersion: binding.destinationVersion,
+    bankReference: binding.bankReference,
+  };
+  const loadedPricing = await dependencies.loadPricingPolicy({
+    ...receiving,
+    method: method,
+  });
+  if (!loadedPricing) return policyUnavailable();
+  const pricing = structuredClone(loadedPricing);
+  if (
+    pricing.policy.feeBasis === "OBSERVED_ESTIMATE" &&
+    !(
+      (context.environment === "development" &&
+        context.mode === "sandbox" &&
+        context.isDemo === true) ||
+      (context.environment === "production" &&
+        context.mode === "live" &&
+        allowsLiveSite({
+          siteId: siteId,
+          isDemo: context.isDemo,
+          mode: context.mode,
+          applicationEnvironment: context.environment,
+          liveDemoSiteId: context.liveDemoSiteId,
+        }) &&
+        pricing.provenance === "provider")
+    )
+  )
+    return policyUnavailable();
+  const { now, nowTime, deadlineTime, createdAt } =
+    readQuoteClock(dependencies);
+  // An asynchronous pricing read must not extend old receiving evidence.
+  assertReceivingReady(
+    evaluateReceivingReadiness({ ...context, siteId: siteId, now }),
+  );
+  const observedTime = dateTime(pricing.observedAt);
+  const pricingExpiryTime = dateTime(pricing.expiresAt);
+  if (
+    pricing.verification !== "verified" ||
+    (pricing.provenance !== "provider" &&
+      (pricing.provenance !== "local-test" ||
+        context.isDemo !== true ||
+        context.environment === "production" ||
+        receiving.environment !== "sandbox")) ||
+    pricing.siteId !== receiving.siteId ||
+    pricing.provider !== receiving.provider ||
+    pricing.operatorReference !== receiving.operatorReference ||
+    pricing.accountReference !== receiving.accountReference ||
+    pricing.recipientReference !== receiving.recipientReference ||
+    pricing.environment !== receiving.environment ||
+    pricing.destinationVersion !== receiving.destinationVersion ||
+    pricing.bankReference !== receiving.bankReference ||
+    !Number.isSafeInteger(dependencies.pricingFreshnessMs) ||
+    dependencies.pricingFreshnessMs <= 0 ||
+    !Number.isFinite(observedTime) ||
+    observedTime > nowTime ||
+    nowTime - observedTime > dependencies.pricingFreshnessMs ||
+    !Number.isFinite(pricingExpiryTime) ||
+    pricingExpiryTime <= nowTime
+  ) {
+    return policyUnavailable();
+  }
+  const pricingObservedAt = new Date(observedTime).toISOString();
+  const pricingExpiresAt = new Date(pricingExpiryTime).toISOString();
+  if (
+    !giftQuoteSchema.shape.expiresAt.safeParse(pricingObservedAt).success ||
+    !giftQuoteSchema.shape.expiresAt.safeParse(pricingExpiresAt).success
+  ) {
+    return policyUnavailable();
+  }
+  return {
+    readiness,
+    receiving,
+    pricing,
+    deadlineTime,
+    createdAt,
+    pricingExpiryTime,
+    pricingObservedAt,
+    pricingExpiresAt,
+  };
+}
+
 export function createGiftQuoteService(
   dependencies: GiftQuoteServiceDependencies,
 ) {
@@ -161,103 +278,25 @@ export function createGiftQuoteService(
       ) {
         return quoteInvalid();
       }
+      // Saving a preference cannot establish contractual fees or a difference policy.
+      if (stored.pricingSettings?.feeAllocation === "BUYER_GROSS_UP")
+        return policyUnavailable();
 
-      const loaded = await dependencies.loadReceivingContext(site.data);
-      if (!loaded) throw new ReceivingReadinessServiceError();
-      const context = structuredClone(loaded);
-      const receivingClock = readQuoteClock(dependencies);
-      const readiness = evaluateReceivingReadiness({
-        ...context,
-        siteId: site.data,
-        now: receivingClock.now,
-      });
-      assertReceivingReady(readiness);
-      const binding = context.providerBinding;
-      if (
-        !binding?.accountReference ||
-        !binding.recipientReference ||
-        !binding.destinationVersion ||
-        !binding.bankReference
-      ) {
-        throw new ReceivingReadinessServiceError();
-      }
-      const receiving: GiftQuoteReceivingBinding = {
-        siteId: site.data,
-        provider: binding.provider,
-        operatorReference: binding.operatorReference,
-        environment: binding.environment,
-        accountReference: binding.accountReference,
-        recipientReference: binding.recipientReference,
-        destinationVersion: binding.destinationVersion,
-        bankReference: binding.bankReference,
-      };
-      const loadedPricing = await dependencies.loadPricingPolicy({
-        ...receiving,
-        method: body.data.method,
-      });
-      if (!loadedPricing) return policyUnavailable();
-      const pricing = structuredClone(loadedPricing);
-      if (
-        pricing.policy.feeBasis === "OBSERVED_ESTIMATE" &&
-        !(
-          (context.environment === "development" &&
-            context.mode === "sandbox" &&
-            context.isDemo === true) ||
-          (context.environment === "production" &&
-            context.mode === "live" &&
-            allowsLiveSite({
-              siteId: site.data,
-              isDemo: context.isDemo,
-              mode: context.mode,
-              applicationEnvironment: context.environment,
-              liveDemoSiteId: context.liveDemoSiteId,
-            }) &&
-            pricing.provenance === "provider")
-        )
-      )
-        return policyUnavailable();
-      pricing.policy.feeAllocation = "RECIPIENT_DEDUCTED";
-      const { now, nowTime, deadlineTime, createdAt } =
-        readQuoteClock(dependencies);
-      // An asynchronous pricing read must not extend old receiving evidence.
-      assertReceivingReady(
-        evaluateReceivingReadiness({ ...context, siteId: site.data, now }),
+      const {
+        readiness,
+        receiving,
+        pricing,
+        deadlineTime,
+        createdAt,
+        pricingExpiryTime,
+        pricingObservedAt,
+        pricingExpiresAt,
+      } = await loadGiftPricingEvidence(
+        dependencies,
+        site.data,
+        body.data.method,
       );
-      const observedTime = dateTime(pricing.observedAt);
-      const pricingExpiryTime = dateTime(pricing.expiresAt);
-      if (
-        pricing.verification !== "verified" ||
-        (pricing.provenance !== "provider" &&
-          (pricing.provenance !== "local-test" ||
-            context.isDemo !== true ||
-            context.environment === "production" ||
-            receiving.environment !== "sandbox")) ||
-        pricing.siteId !== receiving.siteId ||
-        pricing.provider !== receiving.provider ||
-        pricing.operatorReference !== receiving.operatorReference ||
-        pricing.accountReference !== receiving.accountReference ||
-        pricing.recipientReference !== receiving.recipientReference ||
-        pricing.environment !== receiving.environment ||
-        pricing.destinationVersion !== receiving.destinationVersion ||
-        pricing.bankReference !== receiving.bankReference ||
-        !Number.isSafeInteger(dependencies.pricingFreshnessMs) ||
-        dependencies.pricingFreshnessMs <= 0 ||
-        !Number.isFinite(observedTime) ||
-        observedTime > nowTime ||
-        nowTime - observedTime > dependencies.pricingFreshnessMs ||
-        !Number.isFinite(pricingExpiryTime) ||
-        pricingExpiryTime <= nowTime
-      ) {
-        return policyUnavailable();
-      }
-      const pricingObservedAt = new Date(observedTime).toISOString();
-      const pricingExpiresAt = new Date(pricingExpiryTime).toISOString();
-      if (
-        !giftQuoteSchema.shape.expiresAt.safeParse(pricingObservedAt).success ||
-        !giftQuoteSchema.shape.expiresAt.safeParse(pricingExpiresAt).success
-      ) {
-        return policyUnavailable();
-      }
+      pricing.policy.feeAllocation = "RECIPIENT_DEDUCTED";
       const amounts = quoteGiftAmounts({
         nominalCents: gift.data.nominalCents,
         method: body.data.method,
@@ -282,6 +321,9 @@ export function createGiftQuoteService(
       const snapshot = freezeSnapshot<GiftQuoteSnapshot>(
         structuredClone({
           quote: quote.data,
+          ...(stored.pricingSettings
+            ? { pricingSettings: structuredClone(stored.pricingSettings) }
+            : {}),
           gift: gift.data,
           receiving,
           pricing: {

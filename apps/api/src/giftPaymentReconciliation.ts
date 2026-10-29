@@ -420,6 +420,8 @@ export function reconcileGiftPaymentObservation(
       recipientNetCents === null ||
       payment.grossCents !== quote.totalCents ||
       commissionCents !== quote.commissionCents ||
+      (quote.feeAllocation === "BUYER_GROSS_UP" &&
+        processingCents !== quote.processingCents) ||
       payment.splitFixedCents !== quote.commissionCents ||
       recipientNetCents <= 0 ||
       BigInt(payment.grossCents) !==

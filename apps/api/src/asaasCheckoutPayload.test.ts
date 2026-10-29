@@ -176,27 +176,27 @@ describe("Asaas hosted checkout payload", () => {
     ).toThrow();
   });
 
-  it.each(["localhost", "127.0.0.1", "[::1]"])(
-    "permits an HTTP loopback callback for sandbox only: %s",
-    (host) => {
+  it.each([
+    "http://localhost:4321",
+    "https://localhost:4321",
+    "http://127.0.0.1:4321",
+    "https://127.0.0.1:4321",
+    "http://[::1]:4321",
+    "https://[::1]:4321",
+    "https://preview.localhost",
+  ])(
+    "rejects loopback provider callbacks even in Sandbox: %s",
+    (publicOrigin) => {
       const values = fixture();
-      const publicOrigin = `http://${host}:4321`;
       values.options.publicOrigin = publicOrigin;
       values.options.callbacks = {
-        successUrl: `${publicOrigin}/presentes`,
-        cancelUrl: `${publicOrigin}/presentes`,
-        expiredUrl: `${publicOrigin}/presentes`,
+        successUrl: `${publicOrigin}/`,
+        cancelUrl: `${publicOrigin}/`,
+        expiredUrl: `${publicOrigin}/`,
       };
-      expect(
-        buildAsaasCheckoutPayload(values.command, values.options).callback,
-      ).toEqual(values.options.callbacks);
-      values.options.environment = "live";
-      values.snapshot.quote.mode = "live";
-      values.snapshot.receiving.environment = "live";
-      values.snapshot.pricing.environment = "live";
       expect(() =>
         buildAsaasCheckoutPayload(values.command, values.options),
-      ).toThrow();
+      ).toThrow("Checkout payload unavailable");
     },
   );
 

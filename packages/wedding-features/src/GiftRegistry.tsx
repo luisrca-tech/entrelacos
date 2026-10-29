@@ -541,6 +541,7 @@ function GiftRegistryRuntime({
     <div ref={root} data-gift-runtime className="grid min-w-0 gap-5">
       {currentCatalog && (
         <GiftCatalogView
+          recoveryOnly={state.phase === "UNKNOWN"}
           gifts={
             !catalogLoading &&
             !catalogError &&

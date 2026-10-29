@@ -3,7 +3,7 @@ import type {
   GiftItem,
   GiftUpdateInput,
 } from "@entrelacos/contracts";
-import { getGiftCommissionCents, giftCentsSchema } from "@entrelacos/contracts";
+import { giftCentsSchema } from "@entrelacos/contracts";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -37,6 +37,10 @@ import {
 import type { FormEvent, ReactNode } from "react";
 import { useId, useState } from "react";
 import { adminStyles, displayHeading } from "../lib/adminStyles";
+import {
+  GiftPricingPreview,
+  useGiftFeeAllocation,
+} from "./GiftPricingSettings";
 
 export type GiftEditorViewProps = {
   gifts: GiftItem[];
@@ -152,10 +156,15 @@ function GiftPriceField({
     initialCents === undefined ? "" : editablePrice(initialCents),
   );
   const nominalCents = parseGiftPriceToCents(price);
+  const feeAllocation = useGiftFeeAllocation();
   return (
     <div className="space-y-3">
       <label htmlFor={id}>
-        Valor do presente (R$)
+        {feeAllocation === "BUYER_GROSS_UP"
+          ? "Valor que vocês receberão (R$)"
+          : feeAllocation === "RECIPIENT_DEDUCTED"
+            ? "Valor que o convidado pagará (R$)"
+            : "Valor cadastrado (R$)"}
         <Input
           id={id}
           name="nominalPrice"
@@ -170,48 +179,7 @@ function GiftPriceField({
           onChange={(event) => setPrice(event.target.value)}
         />
       </label>
-      <div
-        aria-live="polite"
-        className="rounded-lg border border-admin-line bg-admin-beige/30 p-3 text-sm"
-      >
-        {nominalCents === null ? (
-          <p className={adminStyles.muted}>
-            Informe um valor válido para visualizar a estimativa de recebimento.
-          </p>
-        ) : (
-          <dl aria-label="Estimativa de recebimento" className="space-y-2">
-            {(
-              [
-                ["Valor do presente", nominalCents],
-                [
-                  "Comissão descontada (2%)",
-                  getGiftCommissionCents(nominalCents),
-                ],
-                [
-                  "Líquido estimado antes das tarifas Asaas",
-                  nominalCents - getGiftCommissionCents(nominalCents),
-                ],
-              ] as const
-            ).map(([label, amount]) => (
-              <div
-                key={label}
-                className="flex flex-wrap justify-between gap-x-3"
-              >
-                <dt>{label}</dt>
-                <dd className="font-medium text-admin-ink">
-                  {formatPrice(amount)}
-                </dd>
-              </div>
-            ))}
-          </dl>
-        )}
-        <p className={`${adminStyles.muted} mt-3`}>
-          O convidado paga o valor cadastrado. A comissão de 2% e as tarifas
-          Asaas são descontadas do recebimento do casal. A estimativa acima
-          ainda não desconta as tarifas Asaas, que dependem da forma de
-          pagamento.
-        </p>
-      </div>
+      <GiftPricingPreview nominalCents={nominalCents} />
     </div>
   );
 }
