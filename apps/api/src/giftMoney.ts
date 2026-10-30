@@ -14,7 +14,7 @@ export interface GiftProcessingPolicy {
   processingFixedCents: number;
   rounding: "CEILING";
   feeAllocation?: GiftQuote["feeAllocation"];
-  feeBasis?: "OBSERVED_ESTIMATE";
+  feeBasis?: "OBSERVED_ESTIMATE" | "SANDBOX_BUYER_ESTIMATE";
 }
 
 export interface QuoteGiftAmountsInput {
@@ -82,9 +82,12 @@ export function quoteGiftAmounts(input: QuoteGiftAmountsInput): GiftAmounts {
     injected.method !== input.method ||
     injected.commissionBasisPoints !== 200 ||
     (injected.feeBasis !== undefined &&
-      injected.feeBasis !== "OBSERVED_ESTIMATE") ||
+      injected.feeBasis !== "OBSERVED_ESTIMATE" &&
+      injected.feeBasis !== "SANDBOX_BUYER_ESTIMATE") ||
     (injected.feeBasis === "OBSERVED_ESTIMATE" &&
       injected.feeAllocation !== "RECIPIENT_DEDUCTED") ||
+    (injected.feeBasis === "SANDBOX_BUYER_ESTIMATE" &&
+      injected.feeAllocation !== "BUYER_GROSS_UP") ||
     injected.rounding !== "CEILING" ||
     !giftQuoteSchema.shape.feeAllocation.safeParse(injected.feeAllocation)
       .success ||

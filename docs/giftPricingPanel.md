@@ -5,11 +5,11 @@ Implemented on `feat/gifts-panel`, based on `37dc6dd`, in Ubuntu at `/home/lfrca
 ## Current behavior
 
 - A site-wide preference defaults to `RECIPIENT_DEDUCTED`, including sites with no settings row. Guests pay the registered amount; actual processing and the platform commission reduce the couple's receipt.
-- `BUYER_GROSS_UP` can be saved as a preference after an explicit warning that new purchases will pause. It cannot issue a quote until external evidence and a settlement-difference policy have been approved and implemented. There is no browser flag or environment switch to bypass this gate.
+- `BUYER_GROSS_UP` can be saved as a preference after an explicit warning that new purchases will pause. It cannot issue a quote until external evidence and a settlement-difference policy have been approved and implemented. Live purchases retain this gate. An explicit development-only Sandbox homologation scope is documented in [Sandbox buyer QA](sandboxBuyerGrossUpQa.md); it grants no tariff guarantee or commercial approval.
 - Existing issued checkouts, recovery capabilities and historical snapshots retain their original conditions. Old snapshots without an allocation marker retain their historical arithmetic.
 - Settings require both catalog management and financial read access. Assistants can continue managing the catalog without access to the financial settings or simulations.
 - New snapshots include the allocation preference and its revision. Before reserving a checkout, the server refreshes pricing and compares the original amounts/policy, then rechecks gift amount, title and settings revision using freshly locked stored eligibility. A mismatch requires a new quote and confirmation. Existing commitments recover before repricing.
-- The public catalog marks buyer pricing unavailable, hides its internal amount as a purchase price and disables selection. Recipient pricing remains the same final amount for Pix and a single card installment.
+- Outside the explicitly authorized Sandbox homologation scope, the public catalog marks buyer pricing unavailable, hides its internal amount as a purchase price and disables selection. Recipient pricing remains the same final amount for Pix and a single card installment.
 - Private simulations use the receiving account's validated pricing evidence and always declare `guaranteed: false`. Unavailable evidence produces null processing, total and net values. They never persist a quote, reserve an order or contact a checkout endpoint.
 - The existing integer-cent gross-up solver includes processing on the charged total. Commission remains rounded 2% of the nominal amount and the provider split remains fixed.
 

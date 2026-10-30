@@ -86,6 +86,7 @@ export type ApiOptions = GiftPaymentsHttpOptions &
     giftMediaAuth?: GiftMediaHttpOptions["auth"];
     giftPaymentHistory?: GiftPaymentHistoryHttpOptions["giftPaymentHistory"];
     previewPricing?: (siteId: string, input: unknown) => Promise<unknown>;
+    sandboxBuyerGrossUpAvailable?: (siteId: string) => Promise<boolean>;
   };
 
 export function createApp(

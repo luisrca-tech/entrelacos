@@ -7,6 +7,7 @@ export const giftPricingSettingsSchema = z
     feeAllocation: z.enum(["RECIPIENT_DEDUCTED", "BUYER_GROSS_UP"]),
     revision: z.number().int().min(0).max(2147483647),
     buyerGrossUpAvailable: z.literal(false),
+    sandboxBuyerGrossUpAvailable: z.literal(true).optional(),
     blockedReason: z.string().min(1),
   })
   .strict();

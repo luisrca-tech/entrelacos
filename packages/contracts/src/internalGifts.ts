@@ -190,7 +190,7 @@ const safeImageUrl = z
       !url.hash
     );
   });
-const publicGiftPricingSchema = z.discriminatedUnion("feeAllocation", [
+const publicGiftPricingSchema = z.union([
   z
     .object({
       feeAllocation: z.literal("RECIPIENT_DEDUCTED"),
@@ -201,6 +201,13 @@ const publicGiftPricingSchema = z.discriminatedUnion("feeAllocation", [
     .object({
       feeAllocation: z.literal("BUYER_GROSS_UP"),
       available: z.literal(false),
+    })
+    .strict(),
+  z
+    .object({
+      feeAllocation: z.literal("BUYER_GROSS_UP"),
+      available: z.literal(true),
+      sandboxHomologation: z.literal(true),
     })
     .strict(),
 ]);

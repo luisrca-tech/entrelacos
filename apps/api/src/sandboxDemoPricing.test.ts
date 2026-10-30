@@ -407,3 +407,44 @@ describe("live recipient-deducted pricing from bound account observations", () =
     ).toBeNull();
   });
 });
+
+describe("Sandbox buyer homologation fee evidence", () => {
+  it("uses the paid promoted Pix tariff even when an unreserved free quota is reported", async () => {
+    const v = fixture();
+    Object.assign(v.scope, { feeAllocation: "BUYER_GROSS_UP" });
+    Object.assign(v.authorization, { sandboxBuyerGrossUpSiteId: "site-one" });
+    const pix = v.observation.fees.payment?.pix;
+    if (!pix) throw new Error("Missing fixture tariff");
+    Object.assign(pix, {
+      type: "FIXED",
+      fixedFeeValue: "1.99",
+      fixedFeeValueWithDiscount: "0.99",
+      discountExpiration: "2027-01-16 00:00:00",
+      monthlyCreditsWithoutFee: 100,
+      creditsReceivedOfCurrentMonth: 0,
+    });
+    expect(
+      await loadSandboxDemoPricing(v.scope, v.authorization, v),
+    ).toMatchObject({
+      provenance: "provider",
+      policy: {
+        feeBasis: "SANDBOX_BUYER_ESTIMATE",
+        feeAllocation: "BUYER_GROSS_UP",
+        processingFixedCents: 99,
+        processingBasisPoints: 0,
+      },
+    });
+  });
+  it.each([undefined, "another-site"])(
+    "does not grant buyer pricing without exact opt-in %s",
+    async (site) => {
+      const v = fixture();
+      Object.assign(v.scope, { feeAllocation: "BUYER_GROSS_UP" });
+      Object.assign(v.authorization, { sandboxBuyerGrossUpSiteId: site });
+      expect(
+        await loadSandboxDemoPricing(v.scope, v.authorization, v),
+      ).toBeNull();
+      expect(v.readAccountFees).not.toHaveBeenCalled();
+    },
+  );
+});

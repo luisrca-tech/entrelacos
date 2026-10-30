@@ -434,3 +434,53 @@ describe("catalog page HTTP protocol", () => {
     expect(await response.text()).not.toContain(publicGift.id);
   });
 });
+
+describe("Sandbox buyer catalog projection", () => {
+  it.each([
+    ["sandbox", true],
+    ["live", false],
+    ["disabled", false],
+  ] as const)(
+    "advertises homologation only in a scoped Sandbox catalog: %s",
+    async (mode, allowed) => {
+      mocks.public.mockResolvedValueOnce({
+        siteId: "wedding-a",
+        gifts: [publicGift],
+        mode,
+        page: 1,
+        pageSize: 20,
+        q: "",
+        total: 1,
+        totalPages: 1,
+        hasNext: false,
+      });
+      const app = createGiftsHttpRouter({
+        auth: {} as never,
+        db,
+        adminOrigin,
+        sandboxBuyerGrossUpAvailable: async () => true,
+        readPricingSettings: async () => ({
+          siteId: "wedding-a",
+          feeAllocation: "BUYER_GROSS_UP",
+          revision: 4,
+          buyerGrossUpAvailable: false,
+          blockedReason: "Live unavailable",
+        }),
+      });
+      const response = await app.request(
+        request(
+          "/v1/public/sites/wedding-a/gifts",
+          "GET",
+          undefined,
+          publicOrigin,
+        ),
+      );
+      expect(response.status).toBe(200);
+      expect((await response.json()).gifts[0].pricing).toEqual({
+        feeAllocation: "BUYER_GROSS_UP",
+        available: allowed,
+        ...(allowed ? { sandboxHomologation: true } : {}),
+      });
+    },
+  );
+});

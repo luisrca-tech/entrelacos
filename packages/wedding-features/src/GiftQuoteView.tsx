@@ -149,6 +149,14 @@ export function GiftQuoteView({
           <h3 className="m-0 break-words font-template-serif text-2xl font-normal">
             {quote.title}
           </h3>
+          {quote.mode === "sandbox" &&
+            quote.feeAllocation === "BUYER_GROSS_UP" && (
+              <p role="status" className="m-0 text-sm text-template-muted">
+                Homologação Sandbox, sem garantia de líquido. Líquido pretendido
+                do casal: {formatCents(quote.nominalCents)}. As taxas e o
+                líquido efetivos serão conferidos após o recebimento.
+              </p>
+            )}
           <dl className="m-0 grid min-w-0 gap-3">
             {quote.feeAllocation !== "RECIPIENT_DEDUCTED" && (
               <>

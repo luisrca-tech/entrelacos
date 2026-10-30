@@ -327,3 +327,44 @@ describe("Asaas hosted checkout payload", () => {
     expect(JSON.stringify(payload)).not.toContain("private");
   });
 });
+
+describe("Sandbox buyer homologation payload", () => {
+  it("requires exact server authorization and splits only the nominal commission", () => {
+    const v = fixture();
+    Object.assign(v.snapshot.quote, { feeAllocation: "BUYER_GROSS_UP" });
+    Object.assign(v.snapshot.pricing.policy, {
+      feeBasis: "SANDBOX_BUYER_ESTIMATE",
+      feeAllocation: "BUYER_GROSS_UP",
+    });
+    const options = {
+      ...v.options,
+      sandboxBuyerGrossUpSiteId: "site-one",
+      sandboxDemoPricing: {
+        siteId: "site-one",
+        accountReference: "account-one",
+        isDemo: true,
+        applicationEnvironment: "development" as const,
+      },
+    };
+    expect(buildAsaasCheckoutPayload(v.command, options).splits).toEqual([
+      { walletId: "platform-wallet", fixedValue: 2 },
+    ]);
+    for (const change of [
+      { sandboxBuyerGrossUpSiteId: undefined },
+      { sandboxBuyerGrossUpSiteId: "other" },
+      { environment: "live" },
+      {
+        sandboxDemoPricing: {
+          ...options.sandboxDemoPricing,
+          applicationEnvironment: "production",
+        },
+      },
+    ])
+      expect(() =>
+        buildAsaasCheckoutPayload(v.command, {
+          ...options,
+          ...change,
+        } as never),
+      ).toThrow();
+  });
+});

@@ -20,6 +20,7 @@ import {
   evaluateReceivingReadiness,
   ReceivingReadinessServiceError,
 } from "./receivingReadiness";
+import { allowsSandboxBuyerGrossUp } from "./sandboxBuyerGrossUp";
 
 export interface GiftCheckoutIdentity {
   siteId: string;
@@ -148,6 +149,7 @@ export interface GiftCheckoutRepository {
 }
 
 export interface GiftCheckoutServiceDependencies {
+  sandboxBuyerGrossUpSiteId?: string;
   // Pure preflight for new commitments only; existing recovery must remain available.
   assertProviderConfiguration?(): void;
   revalidateQuote?(snapshot: GiftQuoteSnapshot): Promise<boolean>;
@@ -560,6 +562,7 @@ function assertEligible(
   quoteId: string,
   now: Date,
   gift?: StoredGiftForQuote | null,
+  sandboxBuyerGrossUpSiteId?: string,
 ) {
   const quote = giftQuoteSchema.safeParse(snapshot.quote);
   if (
@@ -574,6 +577,18 @@ function assertEligible(
   if (Date.parse(quote.data.expiresAt) <= now.getTime())
     return fail("QUOTE_EXPIRED");
   if (!context) throw new ReceivingReadinessServiceError();
+  if (
+    snapshot.pricing.policy.feeBasis === "SANDBOX_BUYER_ESTIMATE" &&
+    (snapshot.pricing.provenance !== "provider" ||
+      !allowsSandboxBuyerGrossUp({
+        siteId,
+        sandboxBuyerGrossUpSiteId,
+        isDemo: context.isDemo,
+        applicationEnvironment: context.environment,
+        environment: context.mode,
+      }))
+  )
+    return fail("QUOTE_INVALID");
   assertReceivingReady(evaluateReceivingReadiness({ ...context, siteId, now }));
   if (
     !sameBinding(snapshot.receiving, context.providerBinding) ||
@@ -673,6 +688,7 @@ export function createGiftCheckoutService(
           body.data.quoteId,
           clock(dependencies),
           gift,
+          dependencies.sandboxBuyerGrossUpSiteId,
         );
         const reservation = freeze({
           siteId: site.data,
@@ -710,6 +726,7 @@ export function createGiftCheckoutService(
               body.data.quoteId,
               clock(dependencies),
               structuredClone(locked.gift),
+              dependencies.sandboxBuyerGrossUpSiteId,
             );
             eligibilityChecked = true;
           },
@@ -747,6 +764,8 @@ export function createGiftCheckoutService(
             site.data,
             body.data.quoteId,
             clock(dependencies),
+            undefined,
+            dependencies.sandboxBuyerGrossUpSiteId,
           );
           const command = freeze({
             siteId: record.siteId,

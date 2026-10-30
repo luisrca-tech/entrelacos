@@ -17,6 +17,7 @@ const settingsSchema = z.object({
   feeAllocation: allocation,
   revision: z.number().int().nonnegative(),
   buyerGrossUpAvailable: z.literal(false),
+  sandboxBuyerGrossUpAvailable: z.literal(true).optional(),
   blockedReason: z.string().min(1),
 });
 export type PricingSettings = z.infer<typeof settingsSchema>;
@@ -195,8 +196,10 @@ export function GiftPricingSettings({
         <p className="text-sm">
           Esta preferência vale para todos os presentes do site. Quando o casal
           assume as taxas, o convidado paga o valor cadastrado. Ao escolher o
-          convidado, novos pagamentos ficam pausados até a validação das tarifas
-          e da política de diferenças.
+          convidado,{" "}
+          {settings?.sandboxBuyerGrossUpAvailable
+            ? "a homologação fica disponível somente no Sandbox, sem garantia de líquido."
+            : "novos pagamentos ficam pausados até a validação das tarifas e da política de diferenças."}
         </p>
         {busy && <p role="status">Carregando ou salvando preferência…</p>}
         {error && (
@@ -243,8 +246,9 @@ export function GiftPricingSettings({
         </fieldset>
         {settings?.feeAllocation === "BUYER_GROSS_UP" && (
           <p role="status" className="text-sm">
-            Novos pagamentos pausados até a validação das tarifas e da política
-            de diferenças.
+            {settings.sandboxBuyerGrossUpAvailable
+              ? "Homologação Sandbox disponível. Não representa liberação comercial nem garantia de líquido."
+              : "Novos pagamentos pausados até a validação das tarifas e da política de diferenças."}
           </p>
         )}
         {pending && (
@@ -260,10 +264,12 @@ export function GiftPricingSettings({
             </p>
             <p>
               {pending === "BUYER_GROSS_UP"
-                ? "Os valores cadastrados passam a representar o que vocês receberão. Confira abaixo os totais estimados para o convidado."
+                ? "Os valores cadastrados passam a representar o líquido pretendido do casal, sem garantia. Confira abaixo os totais estimados para o convidado."
                 : "Os valores cadastrados passam a representar exatamente o total que o convidado pagará. O líquido do casal é estimado e depende das tarifas."}{" "}
               {pending === "BUYER_GROSS_UP"
-                ? "Esta escolha pausa novos pagamentos até a validação das tarifas e da política de diferenças."
+                ? settings?.sandboxBuyerGrossUpAvailable
+                  ? "Esta escolha permite somente testes no Sandbox. Divergências de recebimento continuam em conciliação, sem ajuste automático."
+                  : "Esta escolha pausa novos pagamentos até a validação das tarifas e da política de diferenças."
                 : "Esta escolha mantém os pagamentos pelo valor nominal, com as taxas descontadas do casal."}
             </p>
             {[
@@ -279,7 +285,9 @@ export function GiftPricingSettings({
             ))}
             <Button type="button" disabled={busy} onClick={() => void save()}>
               {pending === "BUYER_GROSS_UP"
-                ? "Confirmar e pausar novos pagamentos"
+                ? settings?.sandboxBuyerGrossUpAvailable
+                  ? "Confirmar homologação Sandbox"
+                  : "Confirmar e pausar novos pagamentos"
                 : "Confirmar preferência"}
             </Button>{" "}
             <Button
@@ -362,7 +370,9 @@ export function GiftPricingPreview({
       <p>
         Simulação estimada, sem garantia.{" "}
         {feeAllocation === "BUYER_GROSS_UP"
-          ? "Novos pagamentos pausados até a validação das tarifas e da política de diferenças."
+          ? context?.settings?.sandboxBuyerGrossUpAvailable
+            ? "Homologação Sandbox. Franquias gratuitas não são prometidas; o líquido efetivo será conferido no recebimento."
+            : "Novos pagamentos pausados até a validação das tarifas e da política de diferenças."
           : "O convidado paga o valor cadastrado. O líquido do casal depende das tarifas de pagamento."}
       </p>
       {nominalCents === null ? (

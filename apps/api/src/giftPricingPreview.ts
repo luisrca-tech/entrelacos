@@ -38,6 +38,10 @@ export async function previewGiftPricing(
           dependencies,
           siteId.data,
           method,
+          feeAllocation === "BUYER_GROSS_UP" &&
+            dependencies.sandboxBuyerGrossUpSiteId === siteId.data
+            ? feeAllocation
+            : undefined,
         );
         const amounts = quoteGiftAmounts({
           nominalCents,

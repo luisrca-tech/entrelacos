@@ -9,6 +9,7 @@ export type GiftPaymentConfig =
       readonly mode: "sandbox" | "live";
       readonly applicationEnvironment: DatabaseTarget;
       readonly liveDemoSiteId?: string;
+      readonly sandboxBuyerGrossUpSiteId?: string;
       readonly platformApiKey: string;
       readonly platformAccountId: string;
       readonly platformWalletId: string;
@@ -75,6 +76,14 @@ export function readGiftPaymentConfig(
 ): GiftPaymentConfig {
   const mode = env.ASAAS_MODE ?? "disabled";
   const liveDemoSiteId = env.ASAAS_LIVE_DEMO_SITE_ID;
+  const sandboxBuyerGrossUpSiteId = env.ASAAS_SANDBOX_BUYER_GROSS_UP_SITE_ID;
+  if (
+    sandboxBuyerGrossUpSiteId !== undefined &&
+    (mode !== "sandbox" ||
+      applicationEnvironment !== "development" ||
+      !siteIdSchema.safeParse(sandboxBuyerGrossUpSiteId).success)
+  )
+    invalid();
   if (
     liveDemoSiteId !== undefined &&
     (mode !== "live" ||
@@ -109,6 +118,9 @@ export function readGiftPaymentConfig(
     mode,
     applicationEnvironment,
     ...(liveDemoSiteId === undefined ? {} : { liveDemoSiteId }),
+    ...(sandboxBuyerGrossUpSiteId === undefined
+      ? {}
+      : { sandboxBuyerGrossUpSiteId }),
     platformApiKey,
     platformAccountId,
     platformWalletId,

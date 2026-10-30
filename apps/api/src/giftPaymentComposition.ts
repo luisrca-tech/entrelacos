@@ -52,6 +52,7 @@ import {
   loadReceivingContextInTransaction,
   readReceivingReadiness,
 } from "./receivingRepository";
+import { allowsSandboxBuyerGrossUp } from "./sandboxBuyerGrossUp";
 import {
   loadLiveReceivingPricing,
   loadSandboxDemoPricing,
@@ -64,6 +65,7 @@ type PaymentPorts = Pick<
   | "receiving"
   | "giftPayments"
   | "previewPricing"
+  | "sandboxBuyerGrossUpAvailable"
   | "asaasWebhook"
   | "asaasWithdrawalAuthorization"
   | "finance"
@@ -168,6 +170,7 @@ export function createGiftPaymentComposition(
       readReadiness: (id) => readReceivingReadiness(db, id, receiving),
     });
   const quoteDependencies: GiftQuoteServiceDependencies = {
+    sandboxBuyerGrossUpSiteId: config.sandboxBuyerGrossUpSiteId,
     findPublishedGift: gift,
     loadReceivingContext: context,
     async loadPricingPolicy(scope) {
@@ -195,6 +198,7 @@ export function createGiftPaymentComposition(
               environment: "sandbox",
               isDemo: true,
               applicationEnvironment: "development",
+              sandboxBuyerGrossUpSiteId: config.sandboxBuyerGrossUpSiteId,
             },
             { readAccountFees: reader.getAccountFees, now },
           );
@@ -307,6 +311,18 @@ export function createGiftPaymentComposition(
       config.applicationEnvironment === "development" &&
       environment === "sandbox" &&
       isDemo;
+    if (
+      command.quoteSnapshot.pricing.policy.feeBasis ===
+        "SANDBOX_BUYER_ESTIMATE" &&
+      !allowsSandboxBuyerGrossUp({
+        siteId: command.siteId,
+        sandboxBuyerGrossUpSiteId: config.sandboxBuyerGrossUpSiteId,
+        isDemo,
+        applicationEnvironment: config.applicationEnvironment,
+        environment,
+      })
+    )
+      return unavailable();
     const liveRecipient = allowsLiveSite({
       siteId: command.siteId,
       isDemo,
@@ -371,6 +387,7 @@ export function createGiftPaymentComposition(
       maxResponseBytes: 262_144,
       now,
       payload: {
+        sandboxBuyerGrossUpSiteId: config.sandboxBuyerGrossUpSiteId,
         environment,
         platformWalletId: config.platformWalletId,
         publicOrigin,
@@ -392,6 +409,7 @@ export function createGiftPaymentComposition(
     }).createHostedCheckout(command);
   }
   const checkoutService = createGiftCheckoutService({
+    sandboxBuyerGrossUpSiteId: config.sandboxBuyerGrossUpSiteId,
     assertProviderConfiguration() {
       try {
         readAsaasCheckoutCallbacks(publicOrigin, callbacks);
@@ -544,6 +562,27 @@ export function createGiftPaymentComposition(
   return Object.freeze({
     ports: Object.freeze({
       receiving,
+      sandboxBuyerGrossUpAvailable: (siteId: string) =>
+        own(async () => {
+          if (
+            config.applicationEnvironment !== "development" ||
+            environment !== "sandbox" ||
+            siteId !== config.sandboxBuyerGrossUpSiteId
+          )
+            return false;
+          const stored = await context(siteId);
+          return (
+            stored !== null &&
+            stored.providerBinding?.environment === "sandbox" &&
+            allowsSandboxBuyerGrossUp({
+              siteId,
+              sandboxBuyerGrossUpSiteId: config.sandboxBuyerGrossUpSiteId,
+              isDemo: stored.isDemo,
+              applicationEnvironment: stored.environment,
+              environment: stored.mode,
+            })
+          );
+        }),
       previewPricing: (siteId: string, input: unknown) =>
         own(() => previewGiftPricing(quoteDependencies, siteId, input)),
       ...(withdrawals.service

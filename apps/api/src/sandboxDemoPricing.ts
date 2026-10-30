@@ -7,11 +7,13 @@ import type {
   GiftQuoteServiceDependencies,
 } from "./giftQuotes";
 import { allowsLiveSite, type LiveSitePolicy } from "./liveSitePolicy";
+import { allowsSandboxBuyerGrossUp } from "./sandboxBuyerGrossUp";
 
 export interface SandboxDemoPricingAuthorization
   extends FinancialAccountBinding,
     LiveSitePolicy {
   isDemo: boolean;
+  sandboxBuyerGrossUpSiteId?: string;
   applicationEnvironment: "development" | "test" | "production";
 }
 type Scope = Parameters<GiftQuoteServiceDependencies["loadPricingPolicy"]>[0];
@@ -88,7 +90,9 @@ export async function loadSandboxDemoPricing(
     authorization.isDemo !== true ||
     authorization.applicationEnvironment !== "development" ||
     authorization.environment !== "sandbox" ||
-    scope.environment !== "sandbox"
+    scope.environment !== "sandbox" ||
+    (scope.feeAllocation === "BUYER_GROSS_UP" &&
+      !allowsSandboxBuyerGrossUp({ ...authorization, siteId: scope.siteId }))
   )
     return null;
   return loadObservedPricing(scope, authorization, options);
@@ -102,6 +106,7 @@ export async function loadLiveReceivingPricing(
   options: Options,
 ): Promise<GiftPricingEvidence | null> {
   if (
+    scope.feeAllocation === "BUYER_GROSS_UP" ||
     !allowsLiveSite({
       siteId: scope.siteId,
       isDemo: authorization.isDemo,
@@ -198,10 +203,12 @@ async function loadObservedPricing(
           expiresAt = Math.min(expiresAt, expiry);
         }
       }
+      // Homologation uses the paid tariff: a quota counter does not reserve a
+      // free slot, and Sandbox settlement has contradicted this counter.
       if (monthly > 0) {
         if (!fixedType) return null;
         const used = count(pix.creditsReceivedOfCurrentMonth);
-        if (used < monthly) {
+        if (used < monthly && scope.feeAllocation !== "BUYER_GROSS_UP") {
           // Another charge can consume the last free slot. Settlement uses
           // observed actual fees rather than promising this estimate.
           fixed = 0;
@@ -257,7 +264,7 @@ async function loadObservedPricing(
         ]),
       )
       .digest("hex")}`;
-    const { method, ...receiving } = scope;
+    const { method, feeAllocation, ...receiving } = scope;
     return {
       ...receiving,
       verification: "verified",
@@ -267,8 +274,14 @@ async function loadObservedPricing(
       policy: {
         version,
         method,
-        feeAllocation: "RECIPIENT_DEDUCTED",
-        feeBasis: "OBSERVED_ESTIMATE",
+        feeAllocation:
+          feeAllocation === "BUYER_GROSS_UP"
+            ? feeAllocation
+            : "RECIPIENT_DEDUCTED",
+        feeBasis:
+          feeAllocation === "BUYER_GROSS_UP"
+            ? "SANDBOX_BUYER_ESTIMATE"
+            : "OBSERVED_ESTIMATE",
         commissionBasisPoints: 200,
         processingFixedCents: fixed,
         processingBasisPoints: rate,

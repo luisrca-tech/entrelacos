@@ -162,3 +162,13 @@ describe("gift quote view", () => {
 
 beforeEach(() => vi.stubGlobal("__APP_ENV__", "development"));
 afterEach(() => vi.unstubAllGlobals());
+
+it("discloses the intended couple net as an estimate during Sandbox buyer homologation", () => {
+  const html = renderQuote({
+    quote: { ...quote, feeAllocation: "BUYER_GROSS_UP" },
+  });
+  expect(html).toContain("Líquido pretendido do casal");
+  expect(html).toContain("100,00");
+  expect(html).toContain("sem garantia de líquido");
+  expect(html).toContain("105,21");
+});

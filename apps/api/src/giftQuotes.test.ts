@@ -770,3 +770,98 @@ describe("immutable gift quote creation", () => {
     expect(quote.expiresAt).toBe("2026-10-12T12:05:20.000Z");
   });
 });
+
+describe("Sandbox buyer homologation quotes", () => {
+  function buyer() {
+    const v = fixture();
+    makeDemo(v);
+    v.context.environment = "development";
+    if (!v.context.evidence) throw new Error("Missing fixture evidence");
+    v.context.evidence.provenance = "provider";
+    v.pricing.provenance = "provider";
+    v.storedGift.pricingSettings = {
+      feeAllocation: "BUYER_GROSS_UP",
+      revision: 4,
+    };
+    Object.assign(v.dependencies, { sandboxBuyerGrossUpSiteId: "site-one" });
+    Object.assign(v.pricing.policy, {
+      feeBasis: "SANDBOX_BUYER_ESTIMATE",
+      feeAllocation: "BUYER_GROSS_UP",
+      processingFixedCents: 99,
+      processingBasisPoints: 0,
+    });
+    return v;
+  }
+  it("stores a restricted buyer quote with fixed commission on nominal and full charge processing", async () => {
+    const v = buyer();
+    v.storedGift.gift.nominalCents = 1000;
+    expect(
+      await createGiftQuoteService(v.dependencies).createQuote(
+        "site-one",
+        body,
+      ),
+    ).toMatchObject({
+      mode: "sandbox",
+      feeAllocation: "BUYER_GROSS_UP",
+      nominalCents: 1000,
+      commissionCents: 20,
+      processingCents: 99,
+      totalCents: 1119,
+    });
+    expect(v.appended[0].pricingSettings).toEqual({
+      feeAllocation: "BUYER_GROSS_UP",
+      revision: 4,
+    });
+    expect(v.appended[0].pricing.policy.feeBasis).toBe(
+      "SANDBOX_BUYER_ESTIMATE",
+    );
+    expect(v.dependencies.loadPricingPolicy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        feeAllocation: "BUYER_GROSS_UP",
+      }),
+    );
+  });
+  it("calculates card processing on the gross total, with a fixed nominal commission", async () => {
+    const v = buyer();
+    v.storedGift.gift.nominalCents = 1000;
+    Object.assign(v.pricing.policy, {
+      method: "CREDIT_CARD",
+      processingFixedCents: 49,
+      processingBasisPoints: 199,
+    });
+    expect(
+      await createGiftQuoteService(v.dependencies).createQuote("site-one", {
+        giftId: "gift-one",
+        method: "CREDIT_CARD",
+      }),
+    ).toMatchObject({
+      feeAllocation: "BUYER_GROSS_UP",
+      nominalCents: 1000,
+      commissionCents: 20,
+      totalCents: 1091,
+      processingCents: 71,
+    });
+  });
+  it.each([
+    "opt-in",
+    "site",
+    "environment",
+    "demo",
+    "basis",
+    "provenance",
+    "stale",
+  ] as const)("blocks buyer quotes with invalid %s", async (change) => {
+    const v = buyer();
+    if (change === "opt-in")
+      Object.assign(v.dependencies, { sandboxBuyerGrossUpSiteId: undefined });
+    if (change === "site")
+      Object.assign(v.dependencies, { sandboxBuyerGrossUpSiteId: "other" });
+    if (change === "environment") v.context.environment = "test";
+    if (change === "demo") v.context.isDemo = false;
+    if (change === "basis") v.pricing.policy.feeBasis = "OBSERVED_ESTIMATE";
+    if (change === "provenance") v.pricing.provenance = "local-test";
+    if (change === "stale")
+      v.pricing.observedAt = new Date("2026-10-11T12:00:00Z");
+    await expectDenied(v, "POLICY_UNAVAILABLE");
+  });
+});

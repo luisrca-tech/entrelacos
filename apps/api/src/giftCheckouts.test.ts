@@ -1355,3 +1355,61 @@ describe("durable gift checkout orchestration", () => {
     expect(values.dependencies.createHostedCheckout).not.toHaveBeenCalled();
   });
 });
+
+describe("Sandbox buyer commitment boundary", () => {
+  function buyer() {
+    const v = fixture();
+    v.context.isDemo = true;
+    v.context.environment = "development";
+    v.snapshot.pricing.policy.feeBasis = "SANDBOX_BUYER_ESTIMATE";
+    v.snapshot.pricing.policy.feeAllocation = "BUYER_GROSS_UP";
+    v.snapshot.quote.feeAllocation = "BUYER_GROSS_UP";
+    Object.assign(v.snapshot, {
+      pricingSettings: { feeAllocation: "BUYER_GROSS_UP", revision: 4 },
+    });
+    v.gift.pricingSettings = { feeAllocation: "BUYER_GROSS_UP", revision: 4 };
+    v.dependencies.sandboxBuyerGrossUpSiteId = "site-one";
+    return v;
+  }
+  it("creates one commitment and recovers it even after the opt-in is removed", async () => {
+    const v = buyer();
+    const service = createGiftCheckoutService(v.dependencies);
+    const first = await service.createCheckout("site-one", body);
+    v.dependencies.sandboxBuyerGrossUpSiteId = undefined;
+    expect(await service.createCheckout("site-one", body)).toEqual(first);
+    expect(v.dependencies.createHostedCheckout).toHaveBeenCalledTimes(1);
+    expect(v.records.size).toBe(1);
+  });
+  it.each([
+    "opt-in",
+    "demo",
+    "environment",
+    "revision",
+    "revalidation",
+  ] as const)(
+    "refuses a new commitment with invalid %s before provider dispatch",
+    async (change) => {
+      const v = buyer();
+      if (change === "opt-in")
+        v.dependencies.sandboxBuyerGrossUpSiteId = undefined;
+      if (change === "demo") v.context.isDemo = false;
+      if (change === "environment") v.context.environment = "test";
+      if (change === "revision") required(v.gift.pricingSettings).revision++;
+      if (change === "revalidation")
+        v.dependencies.revalidateQuote = async () => false;
+      await expect(
+        createGiftCheckoutService(v.dependencies).createCheckout(
+          "site-one",
+          body,
+        ),
+      ).rejects.toMatchObject({
+        code:
+          change === "revision" || change === "revalidation"
+            ? "QUOTE_EXPIRED"
+            : "QUOTE_INVALID",
+      });
+      expect(v.dependencies.createHostedCheckout).not.toHaveBeenCalled();
+      expect(v.records.size).toBe(0);
+    },
+  );
+});

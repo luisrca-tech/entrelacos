@@ -728,6 +728,7 @@ describe("gift payment composition", () => {
       "giftPayments",
       "previewPricing",
       "receiving",
+      "sandboxBuyerGrossUpAvailable",
       "withdrawalReservation",
     ]);
     expect(values.fetch).not.toHaveBeenCalled();
@@ -948,4 +949,34 @@ describe("gift payment composition", () => {
       new Uint8Array(32).fill(1),
     );
   });
+});
+
+describe("Sandbox buyer composition", () => {
+  it.each([true, false])(
+    "carries only the exact enabled site into the final provider boundary: %s",
+    async (enabled) => {
+      const v = checkoutFixture();
+      Object.assign(v.config, {
+        sandboxBuyerGrossUpSiteId: enabled ? "site-one" : "another",
+      });
+      v.snapshot.pricing.policy.feeBasis = "SANDBOX_BUYER_ESTIMATE";
+      v.snapshot.pricing.policy.feeAllocation = "BUYER_GROSS_UP";
+      v.snapshot.quote.feeAllocation = "BUYER_GROSS_UP";
+      const composition = createGiftPaymentComposition(v.config, v);
+      const payments = composition.ports.giftPayments;
+      if (!payments) throw new Error("Missing fixture payment port");
+      const result = payments.createCheckout("site-one", v.command);
+      if (enabled) {
+        await expect(result).resolves.toMatchObject({ mode: "sandbox" });
+        expect(v.fetch).toHaveBeenCalledTimes(1);
+        expect(String(v.fetch.mock.calls[0][0])).toBe(
+          "https://api-sandbox.asaas.com/v3/checkouts",
+        );
+      } else {
+        await expect(result).rejects.toThrow();
+        expect(v.fetch).not.toHaveBeenCalled();
+      }
+      await composition.close();
+    },
+  );
 });

@@ -242,3 +242,34 @@ describe("gift payment runtime configuration", () => {
     }
   });
 });
+
+describe("Sandbox buyer homologation configuration", () => {
+  it("selects exactly one site only in development Sandbox", () => {
+    expect(
+      readGiftPaymentConfig(
+        {
+          ...configured,
+          ASAAS_SANDBOX_BUYER_GROSS_UP_SITE_ID: "site-one",
+        },
+        "development",
+      ),
+    ).toMatchObject({ sandboxBuyerGrossUpSiteId: "site-one" });
+  });
+  it.each([
+    ["production", "live", "site-one"],
+    ["test", "sandbox", "site-one"],
+    ["development", "sandbox", ""],
+    ["development", "sandbox", "site-one,site-two"],
+  ] as const)("rejects out-of-scope opt-in %s/%s/%s", (target, mode, site) => {
+    expect(() =>
+      readGiftPaymentConfig(
+        {
+          ...configured,
+          ASAAS_MODE: mode,
+          ASAAS_SANDBOX_BUYER_GROSS_UP_SITE_ID: site,
+        },
+        target,
+      ),
+    ).toThrow("Gift payment configuration is invalid");
+  });
+});

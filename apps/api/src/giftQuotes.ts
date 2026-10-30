@@ -15,6 +15,7 @@ import {
   type ReceivingReadinessInput,
   ReceivingReadinessServiceError,
 } from "./receivingReadiness";
+import { allowsSandboxBuyerGrossUp } from "./sandboxBuyerGrossUp";
 
 export interface StoredGiftForQuote {
   pricingSettings?: {
@@ -60,6 +61,7 @@ export interface GiftQuoteSnapshot {
 }
 
 export interface GiftQuoteServiceDependencies {
+  sandboxBuyerGrossUpSiteId?: string;
   // The adapter must read stored publication and site activity, never browser data.
   findPublishedGift(
     siteId: string,
@@ -69,7 +71,10 @@ export interface GiftQuoteServiceDependencies {
     siteId: string,
   ): Promise<GiftQuoteReceivingContext | null>;
   loadPricingPolicy(
-    binding: GiftQuoteReceivingBinding & { method: GiftQuote["method"] },
+    binding: GiftQuoteReceivingBinding & {
+      method: GiftQuote["method"];
+      feeAllocation?: GiftQuote["feeAllocation"];
+    },
   ): Promise<GiftPricingEvidence | null>;
   repository: { append(snapshot: GiftQuoteSnapshot): Promise<void> };
   now(): Date;
@@ -146,6 +151,7 @@ export async function loadGiftPricingEvidence(
   dependencies: GiftQuoteServiceDependencies,
   siteId: string,
   method: GiftQuote["method"],
+  feeAllocation?: GiftQuote["feeAllocation"],
 ) {
   const loaded = await dependencies.loadReceivingContext(siteId);
   if (!loaded) throw new ReceivingReadinessServiceError();
@@ -179,9 +185,24 @@ export async function loadGiftPricingEvidence(
   const loadedPricing = await dependencies.loadPricingPolicy({
     ...receiving,
     method: method,
+    ...(feeAllocation ? { feeAllocation } : {}),
   });
   if (!loadedPricing) return policyUnavailable();
   const pricing = structuredClone(loadedPricing);
+  if (
+    pricing.policy.feeBasis === "SANDBOX_BUYER_ESTIMATE" &&
+    (feeAllocation !== "BUYER_GROSS_UP" ||
+      pricing.policy.feeAllocation !== "BUYER_GROSS_UP" ||
+      pricing.provenance !== "provider" ||
+      !allowsSandboxBuyerGrossUp({
+        siteId,
+        sandboxBuyerGrossUpSiteId: dependencies.sandboxBuyerGrossUpSiteId,
+        applicationEnvironment: context.environment,
+        environment: context.mode,
+        isDemo: context.isDemo,
+      }))
+  )
+    return policyUnavailable();
   if (
     pricing.policy.feeBasis === "OBSERVED_ESTIMATE" &&
     !(
@@ -278,8 +299,14 @@ export function createGiftQuoteService(
       ) {
         return quoteInvalid();
       }
-      // Saving a preference cannot establish contractual fees or a difference policy.
-      if (stored.pricingSettings?.feeAllocation === "BUYER_GROSS_UP")
+      // A preference does not approve live tariffs. Sandbox homologation requires
+      // an explicit site opt-in and separately scoped provider evidence.
+      const allocation =
+        stored.pricingSettings?.feeAllocation ?? "RECIPIENT_DEDUCTED";
+      if (
+        allocation === "BUYER_GROSS_UP" &&
+        dependencies.sandboxBuyerGrossUpSiteId !== site.data
+      )
         return policyUnavailable();
 
       const {
@@ -295,8 +322,14 @@ export function createGiftQuoteService(
         dependencies,
         site.data,
         body.data.method,
+        allocation === "BUYER_GROSS_UP" ? allocation : undefined,
       );
-      pricing.policy.feeAllocation = "RECIPIENT_DEDUCTED";
+      if (
+        allocation === "BUYER_GROSS_UP" &&
+        pricing.policy.feeBasis !== "SANDBOX_BUYER_ESTIMATE"
+      )
+        return policyUnavailable();
+      pricing.policy.feeAllocation = allocation;
       const amounts = quoteGiftAmounts({
         nominalCents: gift.data.nominalCents,
         method: body.data.method,

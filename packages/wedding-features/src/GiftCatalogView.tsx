@@ -132,8 +132,9 @@ export function GiftCatalogView({
               </p>
               {gift.pricing?.feeAllocation === "BUYER_GROSS_UP" ? (
                 <p role="status" className="m-0 text-template-muted">
-                  Preço indisponível. Os pagamentos deste presente aguardam
-                  validação.
+                  {gift.pricing.available && mode === "sandbox"
+                    ? "Homologação Sandbox. Escolha Pix ou cartão para consultar o total com taxas."
+                    : "Preço indisponível. Os pagamentos deste presente aguardam validação."}
                 </p>
               ) : (
                 <p className="m-0 text-template-ink">

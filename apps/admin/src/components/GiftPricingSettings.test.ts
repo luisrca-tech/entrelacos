@@ -349,3 +349,40 @@ describe("gift pricing settings", () => {
     }
   });
 });
+
+it("labels the explicit Sandbox capability without claiming commercial availability", async () => {
+  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  const container = document.createElement("div"),
+    root = createRoot(container);
+  const sandboxSettings = { ...settings, sandboxBuyerGrossUpAvailable: true };
+  expect(
+    parsePricingSettings({ settings: sandboxSettings }, "site-a")
+      .buyerGrossUpAvailable,
+  ).toBe(false);
+  try {
+    await act(async () =>
+      root.render(
+        createElement(GiftPricingSettings, {
+          siteId: "site-a",
+          request: async () => ({ settings: sandboxSettings }),
+          isCurrent: () => true,
+          gifts: [],
+          // biome-ignore lint/correctness/noChildrenProp: Required children contract.
+          children: null,
+        }),
+      ),
+    );
+    await act(async () =>
+      (
+        container.querySelectorAll('input[type="radio"]')[1] as HTMLInputElement
+      ).click(),
+    );
+    expect(container.textContent).toContain("Confirmar homologação Sandbox");
+    expect(container.textContent).toContain("sem garantia");
+    expect(container.textContent).not.toContain(
+      "Confirmar e pausar novos pagamentos",
+    );
+  } finally {
+    await act(async () => root.unmount());
+  }
+});

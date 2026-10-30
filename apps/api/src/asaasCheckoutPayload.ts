@@ -2,6 +2,7 @@ import { isIP } from "node:net";
 import { giftQuoteSchema, publicGiftItemSchema } from "@entrelacos/contracts";
 import { quoteGiftAmounts, serializeBrlCents } from "./giftMoney";
 import type { GiftQuoteSnapshot } from "./giftQuotes";
+import { allowsSandboxBuyerGrossUp } from "./sandboxBuyerGrossUp";
 
 export interface AsaasCheckoutPayload {
   billingTypes: Array<"PIX" | "CREDIT_CARD">;
@@ -14,6 +15,7 @@ export interface AsaasCheckoutPayload {
 }
 
 export interface AsaasCheckoutPayloadOptions {
+  sandboxBuyerGrossUpSiteId?: string;
   // Selected only after reading the persisted demo site and account in development.
   sandboxDemoPricing?: {
     siteId: string;
@@ -105,6 +107,20 @@ export function buildAsaasCheckoutPayload(
       demo.isDemo === true &&
       demo.siteId === command.siteId &&
       demo.accountReference === binding.accountReference;
+    if (
+      pricing.policy.feeBasis === "SANDBOX_BUYER_ESTIMATE" &&
+      (!demo ||
+        pricing.provenance !== "provider" ||
+        demo.accountReference !== binding.accountReference ||
+        demo.siteId !== command.siteId ||
+        !allowsSandboxBuyerGrossUp({
+          ...demo,
+          siteId: command.siteId,
+          environment: options.environment,
+          sandboxBuyerGrossUpSiteId: options.sandboxBuyerGrossUpSiteId,
+        }))
+    )
+      unavailable();
     if (
       quote.siteId !== command.siteId ||
       gift.siteId !== command.siteId ||

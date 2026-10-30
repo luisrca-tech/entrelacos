@@ -47,6 +47,7 @@ import { type SiteAccessActor, SiteAccessDeniedError } from "./siteAccess";
 export type GiftsHttpOptions = AuthHttpOptions & {
   readPricingSettings?: (siteId: string) => Promise<GiftPricingSettings>;
   previewPricing?: (siteId: string, input: unknown) => Promise<unknown>;
+  sandboxBuyerGrossUpAvailable?: (siteId: string) => Promise<boolean>;
 } & Pick<
     GiftServiceOptions,
     "readReadiness" | "applicationEnvironment" | "liveDemoSiteId"
@@ -200,6 +201,10 @@ export function createGiftsHttpRouter(options: GiftsHttpOptions) {
     const settings = options.readPricingSettings
       ? await options.readPricingSettings(siteId)
       : undefined;
+    const sandboxBuyer =
+      catalog.mode === "sandbox" &&
+      settings?.feeAllocation === "BUYER_GROSS_UP" &&
+      (await options.sandboxBuyerGrossUpAvailable?.(siteId)) === true;
     const page = publicGiftCatalogPageResponseSchema.safeParse(
       settings
         ? {
@@ -208,7 +213,10 @@ export function createGiftsHttpRouter(options: GiftsHttpOptions) {
               ...gift,
               pricing: {
                 feeAllocation: settings.feeAllocation,
-                available: settings.feeAllocation === "RECIPIENT_DEDUCTED",
+                available:
+                  settings.feeAllocation === "RECIPIENT_DEDUCTED" ||
+                  sandboxBuyer,
+                ...(sandboxBuyer ? { sandboxHomologation: true as const } : {}),
               },
             })),
           }
@@ -337,13 +345,29 @@ export function createGiftsHttpRouter(options: GiftsHttpOptions) {
       ),
     );
   });
+  async function withSandboxAvailability(result: {
+    settings: GiftPricingSettings;
+  }) {
+    return (await options.sandboxBuyerGrossUpAvailable?.(
+      result.settings.siteId,
+    )) === true
+      ? {
+          settings: {
+            ...result.settings,
+            sandboxBuyerGrossUpAvailable: true as const,
+          },
+        }
+      : result;
+  }
   router.get("/v1/sites/:siteId/gift-pricing-settings", async (context) =>
     context.json(
       giftPricingSettingsResponseSchema.parse(
-        await loadGiftPricingSettings(
-          options.db,
-          context.get("actor"),
-          context.req.param("siteId"),
+        await withSandboxAvailability(
+          await loadGiftPricingSettings(
+            options.db,
+            context.get("actor"),
+            context.req.param("siteId"),
+          ),
         ),
       ),
     ),
@@ -361,11 +385,13 @@ export function createGiftsHttpRouter(options: GiftsHttpOptions) {
       );
     return context.json(
       giftPricingSettingsResponseSchema.parse(
-        await updateGiftPricingSettings(
-          options.db,
-          context.get("actor"),
-          context.req.param("siteId"),
-          body.data,
+        await withSandboxAvailability(
+          await updateGiftPricingSettings(
+            options.db,
+            context.get("actor"),
+            context.req.param("siteId"),
+            body.data,
+          ),
         ),
       ),
     );

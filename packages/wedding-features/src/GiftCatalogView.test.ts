@@ -181,3 +181,30 @@ describe("gift catalog view", () => {
 
 beforeEach(() => vi.stubGlobal("__APP_ENV__", "development"));
 afterEach(() => vi.unstubAllGlobals());
+
+it("offers Sandbox buyer method selection without advertising nominal as the purchase price", () => {
+  const html = renderToStaticMarkup(
+    createElement(GiftCatalogView, {
+      gifts: [
+        {
+          ...gift,
+          pricing: {
+            feeAllocation: "BUYER_GROSS_UP",
+            available: true,
+            sandboxHomologation: true,
+          },
+        },
+      ],
+      mode: "sandbox",
+      busy: false,
+      onSelect: vi.fn(),
+    }),
+  );
+  expect(html).toContain("Homologação Sandbox");
+  expect(html).toContain(
+    "Escolha Pix ou cartão para consultar o total com taxas",
+  );
+  expect(html).not.toContain("123,45");
+  expect(html).not.toContain("Preço indisponível");
+  expect(html).not.toContain('disabled=""');
+});
