@@ -40,14 +40,14 @@ const toneClasses = tone === "olive" ? "bg-template-olive text-template-ivory" :
             decoding="async"
             data-story-frame
             data-story-active={index === 0 ? "true" : undefined}
-            class="absolute inset-0 block h-full w-full object-cover object-[center_6%] opacity-0 transition-opacity duration-[650ms] ease-linear [transition-timing-function:cubic-bezier(0.2,0.7,0.2,1)] data-[story-active=true]:z-[1] data-[story-active=true]:opacity-100 motion-reduce:scale-100 motion-reduce:!animate-none motion-reduce:transition-none data-[story-active=true]:motion-reduce:opacity-100"
+            class="absolute inset-0 block h-full w-full object-cover object-[center_6%] opacity-0 transition-opacity duration-[1800ms] ease-in-out data-[story-outgoing=true]:opacity-100 data-[story-active=true]:z-[1] data-[story-active=true]:opacity-100 motion-reduce:scale-100 motion-reduce:!animate-none motion-reduce:transition-none data-[story-active=true]:motion-reduce:opacity-100"
             aria-hidden={index === 0 ? undefined : "true"}
           />
         ) : null,
       )
     ) : (
         <video
-        class="absolute inset-0 block h-full w-full object-cover object-[center_6%] opacity-100 transition-opacity duration-[650ms] ease-linear [transition-timing-function:cubic-bezier(0.2,0.7,0.2,1)] motion-reduce:scale-100 motion-reduce:!animate-none motion-reduce:transition-none"
+        class="absolute inset-0 block h-full w-full object-cover object-[center_6%] opacity-100 transition-opacity duration-[1800ms] ease-in-out motion-reduce:scale-100 motion-reduce:!animate-none motion-reduce:transition-none"
         src={content.media.src}
         poster={content.media.poster}
         width={content.media.width}

@@ -46,7 +46,7 @@ describe("StorySection compact full-bleed composition", () => {
     expect(sectionSource).toContain("data-story-frame");
     expect(sectionSource).toContain("setupStoryMediaCycle");
     expect(sectionSource).toContain("data-story-active");
-    expect(sectionSource).toContain("duration-[650ms]");
+    expect(sectionSource).toContain("duration-[1800ms]");
     expect(sectionSource).toContain("motion-reduce:!animate-none");
   });
 });
