@@ -51,7 +51,7 @@ const hero = {
   id: "hero",
   eyebrow: "Nosso casamento",
   title: "Marina & Caio",
-  description: "Um dia para celebrar o encontro, a família e tudo o que nos trouxe até aqui.",
+  description: "Esperamos você para celebrar nosso casamento.",
   dateLabel: "18 de setembro de 2027",
   locationLabel: "Goiânia, GO",
   media: {
@@ -72,9 +72,9 @@ const hero = {
 const story = {
   id: "story",
   eyebrow: "A nossa história",
-  title: "O que o tempo uniu, a cerimônia consagra.",
-  description: "Uma história feita de escolhas, agora pronta para ser celebrada.",
-  body: "Não foi um único instante que os fez casal. Foi o acumular de escolhas: ficar, cuidar, construir um nós. Os dias simples, as decisões a dois, a casa que se fez no outro. O que começou em silêncio agora se faz festa, e vocês estão aqui para testemunhar o voto que o tempo já ensaiou.",
+  title: "Uma vida a dois.",
+  description: "Agora, com vocês por perto.",
+  body: "Entre dias simples, cuidado e escolhas a dois, construímos a nossa história. Agora, vamos celebrar com vocês.",
   media: {
     kind: "image" as const,
     src: "/marina-caio-story-encounter.webp",
@@ -102,8 +102,8 @@ const story = {
 const gallery = {
   id: "gallery",
   eyebrow: "Fragmentos",
-  title: "Antes do sim, um dia só nosso.",
-  description: "O pré-wedding é o ensaio do eterno: o casal sozinho, a luz, o silêncio entre um olhar e outro. Aqui, cada sequência guarda esse momento inteiro.",
+  title: "Antes do sim.",
+  description: "Alguns registros do nosso ensaio.",
   controls: {
     ariaLabel: "Navegação da galeria",
     previousLabel: "Anterior",
@@ -183,34 +183,34 @@ const gallery = {
 const schedule = {
   id: "schedule",
   eyebrow: "O dia",
-  title: "Uma programação para viver sem pressa.",
+  title: "A partir das 16h.",
   guidanceLabel: "Orientações práticas",
   entries: [
     {
       id: "ceremony",
       time: "16:00",
       title: "Cerimônia",
-      body: "A celebração começa no mesmo salão. Em seguida, as fotos.",
+      body: "Cerimônia e recepção no mesmo salão.",
     },
     {
       id: "cocktail",
       time: "18:00",
       title: "Coquetel",
-      body: "Frios e um bar de drinks, depois da cerimônia.",
+      body: "Frios e drinks depois da cerimônia.",
     },
     {
       id: "dinner",
       time: "19:30",
       title: "Jantar",
-      body: "Jantar, brindes, pista e gravata.",
+      body: "Jantar, brindes e pista de dança.",
     },
   ],
   guidance: [
-    { id: "arrival", title: "Chegada", body: "Reserve alguns minutos para estacionar. Na entrada, a equipe autoriza pelo nome na lista e indica onde a cerimônia acontece." },
+    { id: "arrival", title: "Chegada", body: "Reserve alguns minutos para estacionar. Na entrada, informe seu nome à equipe." },
     {
       id: "attire",
       title: "Traje",
-      body: "Traje social. Vista-se à altura da celebração: o dia pede elegância, presença e respeito ao momento.",
+      body: "Traje social.",
       detail: {
         label: "Madrinhas & Padrinhos",
         title: "Madrinhas e padrinhos",
@@ -286,12 +286,12 @@ const guestAccess = {
     <Fragment slot="header-addon"><span class="inline-flex h-9 min-w-9 items-center justify-center rounded-full border border-[color-mix(in_srgb,currentColor_56%,transparent)] font-template-serif text-[0.72rem] tracking-normal normal-case [@media(max-width:1024px)]:hidden" aria-label="Monograma M e C">M&amp;C</span></Fragment>
     <Fragment slot="admin-access">{access.siteId && access.apiOrigin && access.panelOrigin && <AdminRecognition {...access} client:load />}</Fragment>
     <Fragment slot="after-main">
-      <GiftSection content={{id:"gifts",eyebrow:"Presentes",title:"Um carinho para nossa nova história.",description:"Escolha um presente simbólico para celebrar este novo capítulo com a gente."}}>
+      <GiftSection content={{id:"gifts",eyebrow:"Presentes",title:"Lista de presentes.",description:"Escolha um presente simbólico para a nossa vida a dois."}}>
         <GiftRegistry {...guestAccess} demo={true} liveDemoSiteId={import.meta.env.PUBLIC_LIVE_DEMO_SITE_ID} client:only="react" />
       </GiftSection>
       <section
         id="guest-access"
-        class="bg-template-ivory px-[var(--template-page-inset)] pt-[clamp(2.5rem,6vw,5rem)] pb-[clamp(1.5rem,3vw,2.5rem)] [&_[data-slot=guest-access]]:bg-transparent [&_[data-slot=guest-access]]:p-0"
+        class="bg-template-ivory px-[var(--template-page-inset)] py-[clamp(4rem,8vw,7rem)] [&_[data-slot=guest-access]]:bg-transparent [&_[data-slot=guest-access]]:p-0"
         aria-label="Confirmação de presença"
       >
         <GuestAccess {...guestAccess} client:only="react">
@@ -300,7 +300,7 @@ const guestAccess = {
       </section>
       <div
         id="mural"
-        class="bg-template-ivory px-[var(--template-page-inset)] pt-[clamp(1rem,2vw,2rem)] pb-[clamp(4rem,8vw,6rem)]"
+        class="border-t border-template-line bg-template-ivory px-[var(--template-page-inset)] py-[clamp(4rem,8vw,7rem)] [&_[data-slot=message-mural]]:p-0"
       >
         <MessageMural {...guestAccess} client:only="react">
           <p slot="fallback" class="m-0 max-w-[38rem] border border-template-line p-5 leading-[1.6] text-template-muted">Esta área interativa precisa de JavaScript. Ative-o para consultar o mural.</p>

@@ -20,13 +20,13 @@ const publicMessageAlertClass =
   "m-0 max-w-[42rem] border border-template-line px-4 py-[0.8rem] text-template-ink";
 const publicMessageLabelClass = "grid gap-[0.45rem] text-[0.85rem] font-bold";
 const publicMessageInputClass =
-  "min-h-11 w-full rounded-none border border-[rgba(37,53,43,0.32)] bg-[#fffdf8] px-3 py-2 text-template-ink font-[inherit]";
+  "min-h-11 w-full rounded-xl border border-[rgba(37,53,43,0.25)] bg-[#fffdf8] px-4 py-3 text-base text-template-ink font-[inherit] transition-[border-color,box-shadow] duration-200 focus:border-template-olive focus:outline-2 focus:outline-offset-2 focus:outline-template-olive motion-reduce:transition-none";
 const publicMessageTextareaClass =
-  "min-h-32 w-full resize-y rounded-none border border-[rgba(37,53,43,0.32)] bg-[#fffdf8] px-3 py-3 text-template-ink font-[inherit] leading-[1.55]";
+  "min-h-11 w-full rounded-xl border border-[rgba(37,53,43,0.25)] bg-[#fffdf8] px-4 py-3 text-base text-template-ink font-[inherit] transition-[border-color,box-shadow] duration-200 focus:border-template-olive focus:outline-2 focus:outline-offset-2 focus:outline-template-olive motion-reduce:transition-none min-h-36 resize-y leading-[1.65]";
 const publicMessageMetaClass =
   "flex items-center justify-between gap-4 text-template-muted text-xs";
 const publicMessageButtonClass =
-  "min-h-11 cursor-pointer rounded-none border border-template-ink bg-template-ink px-4 py-[0.65rem] text-template-ivory font-[inherit] font-bold disabled:cursor-not-allowed disabled:opacity-50";
+  "min-h-11 cursor-pointer rounded-full border border-template-ink bg-template-ink px-5 py-3 text-template-ivory font-[inherit] text-sm font-medium transition-[background-color,box-shadow,transform] duration-200 ease-out hover:-translate-y-0.5 hover:bg-template-olive hover:shadow-sm focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-template-ink disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transform-none motion-reduce:transition-none";
 const publicMessageAuthorNameSchema = createPublicSiteMessageRequestSchema.pick(
   { authorName: true },
 );

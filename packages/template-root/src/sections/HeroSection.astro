@@ -63,14 +63,14 @@ const hasIntro = content.intro !== undefined && introMedia.length > 0;
       </video>
     )}
   </div>
-  <div class="relative z-[1] w-full self-end px-[var(--template-page-inset)] pb-[clamp(2.5rem,5vh,4rem)] pt-[clamp(8rem,22vh,15rem)]">
+  <div class="relative z-[1] w-full self-end px-[var(--template-page-inset)] pb-[clamp(2.5rem,5vh,4rem)] pt-[clamp(8rem,22vh,15rem)] [@media(max-width:600px)]:pb-[max(2rem,env(safe-area-inset-bottom))]">
     {content.eyebrow && (
       <p
         data-template-hero-copy
         class:list={[
-          "m-0 mb-4 text-[0.75rem] font-bold uppercase tracking-[0.16em] motion-reduce:!animate-none motion-reduce:opacity-100",
+          "[animation-duration:600ms] data-[template-intro-complete=true]:[animation-duration:600ms] m-0 mb-4 text-[0.75rem] font-bold uppercase tracking-[0.16em] motion-reduce:!animate-none motion-reduce:opacity-100",
           hasIntro
-            ? "animate-none opacity-0 data-[template-intro-complete=true]:animate-template-hero-copy-intro data-[template-intro-complete=true]:opacity-100 [animation-duration:1s] [animation-timing-function:cubic-bezier(0.14,1,0.34,1)]"
+            ? "animate-none opacity-0 data-[template-intro-complete=true]:animate-template-hero-copy-intro data-[template-intro-complete=true]:opacity-100"
             : "animate-template-hero-copy-intro [animation-delay:0ms]",
         ]}
       >{content.eyebrow}</p>
@@ -78,9 +78,9 @@ const hasIntro = content.intro !== undefined && introMedia.length > 0;
     <h1
       data-template-hero-copy
       class:list={[
-        "m-0 max-w-[10ch] font-template-serif text-[clamp(4rem,12vw,calc(10rem*var(--template-width-scale)))] font-normal tracking-[-0.08em] leading-[0.88] motion-reduce:!animate-none motion-reduce:opacity-100",
+        "[animation-duration:1200ms] data-[template-intro-complete=true]:[animation-duration:1200ms] m-0 max-w-[10ch] font-template-serif text-[clamp(3.5rem,12vw,calc(10rem*var(--template-width-scale)))] font-normal tracking-[-0.08em] leading-[0.88] motion-reduce:!animate-none motion-reduce:opacity-100",
         hasIntro
-          ? "animate-none opacity-0 data-[template-intro-complete=true]:animate-template-hero-copy-intro data-[template-intro-complete=true]:opacity-100 [animation-duration:1s] [animation-delay:120ms] [animation-timing-function:cubic-bezier(0.14,1,0.34,1)]"
+          ? "animate-none opacity-0 data-[template-intro-complete=true]:animate-template-hero-copy-intro data-[template-intro-complete=true]:opacity-100 [animation-delay:120ms]"
           : "animate-template-hero-copy-intro [animation-delay:120ms]",
       ]}
       id={`${id}-title`}
@@ -91,7 +91,7 @@ const hasIntro = content.intro !== undefined && introMedia.length > 0;
         class:list={[
           "m-0 mt-8 max-w-[34rem] text-[1.05rem] leading-[1.6] text-[rgba(244,240,232,0.78)] motion-reduce:!animate-none motion-reduce:opacity-100",
           hasIntro
-            ? "animate-none opacity-0 data-[template-intro-complete=true]:animate-template-hero-copy-intro data-[template-intro-complete=true]:opacity-100 [animation-duration:1s] [animation-delay:220ms] [animation-timing-function:cubic-bezier(0.14,1,0.34,1)]"
+            ? "animate-none opacity-0 data-[template-intro-complete=true]:animate-template-hero-copy-intro data-[template-intro-complete=true]:opacity-100 [animation-delay:220ms]"
             : "animate-template-hero-copy-intro [animation-delay:220ms]",
         ]}
       >{content.description}</p>
@@ -101,7 +101,7 @@ const hasIntro = content.intro !== undefined && introMedia.length > 0;
       class:list={[
         "m-0 mt-8 flex flex-wrap gap-x-6 gap-y-2 text-[0.9rem] uppercase tracking-[0.08em] motion-reduce:!animate-none motion-reduce:opacity-100",
         hasIntro
-          ? "animate-none opacity-0 data-[template-intro-complete=true]:animate-template-hero-copy-intro data-[template-intro-complete=true]:opacity-100 [animation-duration:1s] [animation-delay:320ms] [animation-timing-function:cubic-bezier(0.14,1,0.34,1)]"
+          ? "animate-none opacity-0 data-[template-intro-complete=true]:animate-template-hero-copy-intro data-[template-intro-complete=true]:opacity-100 [animation-delay:320ms]"
           : "animate-template-hero-copy-intro [animation-delay:320ms]",
       ]}
     >
@@ -112,9 +112,9 @@ const hasIntro = content.intro !== undefined && introMedia.length > 0;
       <a
         data-template-hero-copy
         class:list={[
-          "mt-8 inline-flex min-h-11 items-center gap-[0.65rem] rounded-full border border-[rgba(244,240,232,0.56)] px-4 py-3 text-[0.78rem] uppercase tracking-[0.1em] text-template-ivory no-underline transition-[background-color,border-color,color] duration-[180ms] motion-reduce:transition-none hover:border-template-ivory hover:bg-template-ivory hover:text-template-ink focus-visible:border-template-ivory focus-visible:bg-template-ivory focus-visible:text-template-ink motion-reduce:!animate-none motion-reduce:opacity-100",
+          "[animation-duration:900ms] data-[template-intro-complete=true]:[animation-duration:900ms] mt-8 inline-flex min-h-11 items-center gap-[0.65rem] rounded-full border border-[rgba(244,240,232,0.56)] px-4 py-3 text-[0.78rem] uppercase tracking-[0.1em] text-template-ivory no-underline transition-[background-color,border-color,color] duration-[180ms] motion-reduce:transition-none hover:border-template-ivory hover:bg-template-ivory hover:text-template-ink focus-visible:![clip-path:none] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-template-ivory focus-visible:border-template-ivory focus-visible:bg-template-ivory focus-visible:text-template-ink motion-reduce:!animate-none motion-reduce:opacity-100",
           hasIntro
-            ? "animate-none opacity-0 data-[template-intro-complete=true]:animate-template-hero-copy-intro data-[template-intro-complete=true]:opacity-100 [animation-duration:1s] [animation-delay:420ms] [animation-timing-function:cubic-bezier(0.14,1,0.34,1)]"
+            ? "animate-none opacity-0 data-[template-intro-complete=true]:animate-template-hero-copy-intro data-[template-intro-complete=true]:opacity-100 [animation-delay:420ms]"
             : "animate-template-hero-copy-intro [animation-delay:420ms]",
         ]}
         href={content.action.href}

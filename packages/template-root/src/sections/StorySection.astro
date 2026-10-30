@@ -26,7 +26,8 @@ const toneClasses = tone === "olive" ? "bg-template-olive text-template-ivory" :
   aria-labelledby={`${id}-title`}
   style={`--story-media-ratio: ${primary.width} / ${primary.height};`}
 >
-  <figure class="absolute inset-0 z-0 m-0 bg-template-olive [@media(max-width:960px)]:relative [@media(max-width:960px)]:inset-auto [@media(max-width:960px)]:min-h-[min(52svh,26rem)] [@media(max-width:960px)]:w-full [@media(max-width:960px)]:aspect-[var(--story-media-ratio,4/3)]">
+  <div data-template-reveal="curtain" class="absolute inset-0 z-0 [@media(max-width:960px)]:relative [@media(max-width:960px)]:inset-auto [@media(max-width:960px)]:min-h-[min(52svh,26rem)] [@media(max-width:960px)]:w-full [@media(max-width:960px)]:aspect-[var(--story-media-ratio,4/3)]">
+  <figure data-template-reveal-media class="absolute inset-0 m-0 bg-template-olive">
     {content.media.kind === "image" ? (
       frames.map((frame, index) =>
         frame.kind === "image" ? (
@@ -39,14 +40,14 @@ const toneClasses = tone === "olive" ? "bg-template-olive text-template-ivory" :
             decoding="async"
             data-story-frame
             data-story-active={index === 0 ? "true" : undefined}
-            class="absolute inset-0 block h-full w-full scale-[1.04] object-cover object-[center_6%] opacity-0 transition-opacity duration-[650ms] ease-linear [transition-timing-function:cubic-bezier(0.2,0.7,0.2,1)] data-[story-active=true]:z-[1] data-[story-active=true]:opacity-100 data-[story-active=true]:animate-template-story-media-resolve motion-reduce:scale-100 motion-reduce:!animate-none motion-reduce:transition-none data-[story-active=true]:motion-reduce:opacity-100"
+            class="absolute inset-0 block h-full w-full object-cover object-[center_6%] opacity-0 transition-opacity duration-[650ms] ease-linear [transition-timing-function:cubic-bezier(0.2,0.7,0.2,1)] data-[story-active=true]:z-[1] data-[story-active=true]:opacity-100 motion-reduce:scale-100 motion-reduce:!animate-none motion-reduce:transition-none data-[story-active=true]:motion-reduce:opacity-100"
             aria-hidden={index === 0 ? undefined : "true"}
           />
         ) : null,
       )
     ) : (
         <video
-        class="absolute inset-0 block h-full w-full scale-[1.04] object-cover object-[center_6%] opacity-100 transition-opacity duration-[650ms] ease-linear [transition-timing-function:cubic-bezier(0.2,0.7,0.2,1)] animate-template-story-media-resolve motion-reduce:scale-100 motion-reduce:!animate-none motion-reduce:transition-none"
+        class="absolute inset-0 block h-full w-full object-cover object-[center_6%] opacity-100 transition-opacity duration-[650ms] ease-linear [transition-timing-function:cubic-bezier(0.2,0.7,0.2,1)] motion-reduce:scale-100 motion-reduce:!animate-none motion-reduce:transition-none"
         src={content.media.src}
         poster={content.media.poster}
         width={content.media.width}
@@ -68,15 +69,17 @@ const toneClasses = tone === "olive" ? "bg-template-olive text-template-ivory" :
       </video>
     )}
   </figure>
+  </div>
   <div class="absolute inset-0 z-[1] [background:var(--template-story-gradient)]" aria-hidden="true"></div>
   <div
-    class="relative z-[2] max-w-[min(42rem,100%)] translate-y-0 opacity-100 transition-[opacity,transform] duration-700 ease-out [transition-timing-function:cubic-bezier(0.2,0.7,0.2,1)] data-[story-motion=ready]:not-data-[story-visible=true]:translate-y-6 data-[story-motion=ready]:not-data-[story-visible=true]:opacity-0 data-[story-motion=ready]:data-[story-visible=true]:delay-[80ms] [@media(max-width:960px)]:max-w-none [@media(max-width:960px)]:bg-template-olive [@media(max-width:960px)]:px-4 [@media(max-width:960px)]:pb-10 [@media(max-width:960px)]:pt-8 motion-reduce:translate-y-0 motion-reduce:opacity-100 motion-reduce:transition-none"
+    class="relative z-[2] max-w-[min(42rem,100%)] [@media(max-width:960px)]:max-w-none [@media(max-width:960px)]:bg-template-olive [@media(max-width:960px)]:px-4 [@media(max-width:960px)]:pb-10 [@media(max-width:960px)]:pt-8"
     data-story-copy
+    data-template-reveal
   >
-    {content.eyebrow && <p class="m-0 mb-5 text-[0.72rem] font-bold uppercase tracking-[0.16em]">{content.eyebrow}</p>}
-    <h2 class="m-0 max-w-[18ch] font-template-serif text-[clamp(2.5rem,5.5vw,calc(5.6rem*var(--template-width-scale)))] font-normal tracking-[-0.065em] leading-[0.94] [@media(max-width:960px)]:max-w-[12ch] [@media(max-width:960px)]:text-[clamp(2.5rem,12vw,4.5rem)]" id={`${id}-title`}>{content.title}</h2>
-    {content.description && <p class="m-0 mt-6 max-w-[30rem] text-[rgba(244,240,232,0.78)] leading-[1.55] [@media(max-width:960px)]:max-w-112">{content.description}</p>}
-    <p class="m-0 mt-4 max-w-160 text-[clamp(1rem,1.5vw,1.25rem)] leading-[1.6] text-[rgba(244,240,232,0.96)]">{content.body}</p>
+    {content.eyebrow && <p data-template-reveal-item data-template-reveal-kind="label" class="m-0 mb-5 text-[0.72rem] font-bold uppercase tracking-[0.16em]">{content.eyebrow}</p>}
+    <h2 data-template-reveal-item data-template-line-reveal class="m-0 max-w-[18ch] font-template-serif text-[clamp(2.5rem,5.5vw,calc(5.6rem*var(--template-width-scale)))] font-normal tracking-[-0.065em] leading-[0.94] [@media(max-width:960px)]:max-w-[12ch] [@media(max-width:960px)]:text-[clamp(2.5rem,12vw,4.5rem)]" id={`${id}-title`}>{content.title}</h2>
+    {content.description && <p data-template-reveal-item data-template-reveal-kind="body" style="--template-reveal-delay: 1400ms" class="m-0 mt-6 max-w-[30rem] text-[rgba(244,240,232,0.78)] leading-[1.55] [@media(max-width:960px)]:max-w-112">{content.description}</p>}
+    <p data-template-reveal-item data-template-reveal-kind="body" style="--template-reveal-delay: 2400ms" class="m-0 mt-4 max-w-160 text-[clamp(1rem,1.5vw,1.25rem)] leading-[1.6] text-[rgba(244,240,232,0.96)]">{content.body}</p>
   </div>
 </section>
 
@@ -90,28 +93,6 @@ const toneClasses = tone === "olive" ? "bg-template-olive text-template-ivory" :
   document.querySelectorAll<HTMLElement>("[data-template-story]").forEach((story) => {
     if (story.dataset.storyCycle === "ready") return;
     story.dataset.storyCycle = "ready";
-
-    const copy = story.querySelector<HTMLElement>("[data-story-copy]");
-    if (
-      !reducedMotion &&
-      "IntersectionObserver" in window &&
-      copy &&
-      story.getAttribute("data-story-motion") !== "ready"
-    ) {
-      const observer = new IntersectionObserver(
-        (observations) => {
-          observations.forEach((observation) => {
-            if (!observation.isIntersecting) return;
-            observation.target.setAttribute("data-story-visible", "true");
-            observer.unobserve(observation.target);
-          });
-        },
-        { threshold: 0.18 },
-      );
-
-      story.setAttribute("data-story-motion", "ready");
-      observer.observe(copy);
-    }
 
     setupStoryMediaCycle(story, {
       reducedMotion,

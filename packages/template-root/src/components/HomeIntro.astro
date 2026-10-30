@@ -1,6 +1,6 @@
 ---
 import type { HeroIntroContent, Media } from "../content";
-import { buildIntroTimeline, introSourceForMedia } from "./homeIntro";
+import { buildIntroTimeline, introFrames, introSourceForMedia } from "./homeIntro";
 
 interface Props {
   content: HeroIntroContent;
@@ -9,12 +9,12 @@ interface Props {
 }
 
 const { content, media, heroMedia } = Astro.props;
-const frames = [...media, heroMedia];
+const frames = introFrames(media, heroMedia);
 const timeline = buildIntroTimeline(frames.length);
 ---
 
 <div
-  class="group/intro hidden [[data-template-js=true]_&]:fixed [[data-template-js=true]_&]:inset-0 [[data-template-js=true]_&]:z-30 [[data-template-js=true]_&]:grid [[data-template-js=true]_&]:place-items-center [[data-template-js=true]_&]:overflow-hidden [[data-template-js=true]_&]:bg-template-ivory [[data-template-js=true]_&]:text-template-ink [[data-template-js=true]_&]:opacity-100 data-[template-intro-phase=fade]:opacity-0 data-[template-intro-phase=fade]:[transition:opacity_450ms_ease] data-[template-intro-phase=dismiss]:pointer-events-none data-[template-intro-phase=dismiss]:opacity-0 data-[template-intro-phase=dismiss]:[transition:opacity_450ms_ease] motion-reduce:hidden"
+  class="group/intro hidden [[data-template-js=true]_&]:fixed [[data-template-js=true]_&]:inset-0 [[data-template-js=true]_&]:z-30 [[data-template-js=true]_&]:grid [[data-template-js=true]_&]:place-items-center [[data-template-js=true]_&]:overflow-hidden [[data-template-js=true]_&]:bg-template-ivory [[data-template-js=true]_&]:text-template-ink [[data-template-js=true]_&]:opacity-100 data-[template-intro-phase=fade]:opacity-0 data-[template-intro-phase=fade]:[transition:opacity_500ms_ease] data-[template-intro-phase=dismiss]:pointer-events-none data-[template-intro-phase=dismiss]:opacity-0 data-[template-intro-phase=dismiss]:[transition:opacity_500ms_ease] motion-reduce:hidden"
   data-template-home-intro
   data-split-at={timeline.splitAt}
   data-reveal-at={timeline.revealAt.join(",")}
@@ -23,7 +23,7 @@ const timeline = buildIntroTimeline(frames.length);
   data-complete-at={timeline.completeAt}
 >
   <p
-    class="absolute m-0 font-template-serif text-[clamp(2.25rem,5vw,calc(5rem*var(--template-width-scale)))] font-normal tracking-[-0.06em] leading-[0.88] [transition:opacity_500ms_ease,transform_700ms_cubic-bezier(0.22,1,0.36,1)] group-data-[template-intro-phase=split]/intro:[transform:scale(0.96)] group-data-[template-intro-phase=split]/intro:opacity-0 group-data-[template-intro-phase=dismiss]/intro:[transform:scale(0.96)] group-data-[template-intro-phase=dismiss]/intro:opacity-0 group-data-[template-intro-phase=fullscreen]/intro:[transform:scale(0.96)] group-data-[template-intro-phase=fullscreen]/intro:opacity-0 group-data-[template-intro-phase=fade]/intro:[transform:scale(0.96)] group-data-[template-intro-phase=fade]/intro:opacity-0 [@media(max-width:720px)]:text-[clamp(2rem,12vw,3.5rem)]"
+    class="absolute m-0 font-template-serif text-[clamp(2.25rem,5vw,calc(5rem*var(--template-width-scale)))] font-normal tracking-[-0.06em] leading-[0.88] [transition:opacity_500ms_ease,transform_950ms_cubic-bezier(0.22,1,0.36,1)] group-data-[template-intro-phase=split]/intro:[transform:scale(0.96)] group-data-[template-intro-phase=split]/intro:opacity-0 group-data-[template-intro-phase=dismiss]/intro:[transform:scale(0.96)] group-data-[template-intro-phase=dismiss]/intro:opacity-0 group-data-[template-intro-phase=fullscreen]/intro:[transform:scale(0.96)] group-data-[template-intro-phase=fullscreen]/intro:opacity-0 group-data-[template-intro-phase=fade]/intro:[transform:scale(0.96)] group-data-[template-intro-phase=fade]/intro:opacity-0 [@media(max-width:720px)]:text-[clamp(2rem,12vw,3.5rem)]"
     aria-hidden="true"
   >{content.brandLabel}</p>
   <div
@@ -31,16 +31,16 @@ const timeline = buildIntroTimeline(frames.length);
     aria-hidden="true"
   >
     <p
-      class="fixed left-1/2 top-1/2 z-[1] m-0 [transform:translate(-50%,-50%)] whitespace-nowrap font-template-serif text-[clamp(2.25rem,5vw,calc(5rem*var(--template-width-scale)))] font-normal tracking-[-0.06em] leading-[0.88] opacity-0 [transition:opacity_500ms_ease,transform_1.1s_cubic-bezier(0.22,1,0.36,1)] group-data-[template-intro-phase=split]/intro:opacity-100 group-data-[template-intro-phase=dismiss]/intro:opacity-100 group-data-[template-intro-phase=split]/intro:[transform:translate(-50%,calc(-100%_-_var(--template-intro-stage-height)_/_2_-_var(--template-intro-label-gap)))] group-data-[template-intro-phase=dismiss]/intro:[transform:translate(-50%,calc(-100%_-_var(--template-intro-stage-height)_/_2_-_var(--template-intro-label-gap)))] [@media(max-width:720px)]:text-[clamp(2rem,12vw,3.5rem)]"
+      class="fixed left-1/2 top-1/2 z-[1] m-0 [transform:translate(-50%,-50%)] whitespace-nowrap font-template-serif text-[clamp(2.25rem,5vw,calc(5rem*var(--template-width-scale)))] font-normal tracking-[-0.06em] leading-[0.88] opacity-0 [transition:opacity_500ms_ease,transform_950ms_cubic-bezier(0.22,1,0.36,1)] group-data-[template-intro-phase=split]/intro:opacity-100 group-data-[template-intro-phase=dismiss]/intro:opacity-100 group-data-[template-intro-phase=split]/intro:[transform:translate(-50%,calc(-100%_-_var(--template-intro-stage-height)_/_2_-_var(--template-intro-label-gap)))] group-data-[template-intro-phase=dismiss]/intro:[transform:translate(-50%,calc(-100%_-_var(--template-intro-stage-height)_/_2_-_var(--template-intro-label-gap)))] [@media(max-width:720px)]:text-[clamp(2rem,12vw,3.5rem)]"
     >
       {content.topLabel}
     </p>
     <div
-      class="fixed left-1/2 top-1/2 z-0 h-[var(--template-intro-stage-height)] w-0 [transform:translate(-50%,-50%)] overflow-hidden bg-template-olive [transition:width_1.4s_cubic-bezier(0.22,1,0.36,1),height_1.4s_cubic-bezier(0.22,1,0.36,1)] group-data-[template-intro-phase=split]/intro:w-[min(84vw,calc(27.5rem*var(--template-width-scale)))] group-data-[template-intro-phase=dismiss]/intro:w-[min(84vw,calc(27.5rem*var(--template-width-scale)))] group-data-[template-intro-phase=fullscreen]/intro:z-[2] group-data-[template-intro-phase=fullscreen]/intro:h-svh group-data-[template-intro-phase=fullscreen]/intro:w-screen group-data-[template-intro-phase=fade]/intro:z-[2] group-data-[template-intro-phase=fade]/intro:h-svh group-data-[template-intro-phase=fade]/intro:w-screen [@media(max-width:720px)]:group-data-[template-intro-phase=split]/intro:w-[78vw] [@media(max-width:720px)]:group-data-[template-intro-phase=dismiss]/intro:w-[78vw]"
+      class="fixed left-1/2 top-1/2 z-0 h-[var(--template-intro-stage-height)] w-0 [transform:translate(-50%,-50%)] overflow-hidden bg-template-olive [transition:width_1000ms_cubic-bezier(0.22,1,0.36,1),height_1000ms_cubic-bezier(0.22,1,0.36,1)] group-data-[template-intro-phase=split]/intro:w-[min(84vw,calc(27.5rem*var(--template-width-scale)))] group-data-[template-intro-phase=dismiss]/intro:w-[min(84vw,calc(27.5rem*var(--template-width-scale)))] group-data-[template-intro-phase=fullscreen]/intro:z-[2] group-data-[template-intro-phase=fullscreen]/intro:h-svh group-data-[template-intro-phase=fullscreen]/intro:w-screen group-data-[template-intro-phase=fade]/intro:z-[2] group-data-[template-intro-phase=fade]/intro:h-svh group-data-[template-intro-phase=fade]/intro:w-screen [@media(max-width:720px)]:group-data-[template-intro-phase=split]/intro:w-[78vw] [@media(max-width:720px)]:group-data-[template-intro-phase=dismiss]/intro:w-[78vw]"
     >
       {frames.map((frame, index) => (
         <img
-          class="absolute inset-0 z-[var(--template-intro-index)] block h-full w-full object-cover [clip-path:inset(100%_0_0)] [transition:clip-path_1.2s_cubic-bezier(0.22,1,0.36,1)] data-[template-intro-visible=true]:[clip-path:inset(0)]"
+          class="absolute inset-0 z-[var(--template-intro-index)] block h-full w-full object-cover [clip-path:inset(100%_0_0)] [transition:clip-path_900ms_cubic-bezier(0.22,1,0.36,1)] data-[template-intro-visible=true]:[clip-path:inset(0)]"
           src={introSourceForMedia(frame)}
           alt=""
           width={frame.width}
@@ -54,7 +54,7 @@ const timeline = buildIntroTimeline(frames.length);
       ))}
     </div>
     <p
-      class="fixed left-1/2 top-1/2 z-[1] m-0 [transform:translate(-50%,-50%)] whitespace-nowrap font-template-serif text-[clamp(2.25rem,5vw,calc(5rem*var(--template-width-scale)))] font-normal tracking-[-0.06em] leading-[0.88] opacity-0 [transition:opacity_500ms_ease,transform_1.1s_cubic-bezier(0.22,1,0.36,1)] group-data-[template-intro-phase=split]/intro:opacity-100 group-data-[template-intro-phase=dismiss]/intro:opacity-100 group-data-[template-intro-phase=split]/intro:[transform:translate(-50%,calc(var(--template-intro-stage-height)_/_2_+_var(--template-intro-label-gap)))] group-data-[template-intro-phase=dismiss]/intro:[transform:translate(-50%,calc(var(--template-intro-stage-height)_/_2_+_var(--template-intro-label-gap)))] group-data-[template-intro-phase=fullscreen]/intro:opacity-0 group-data-[template-intro-phase=fade]/intro:opacity-0 [@media(max-width:720px)]:text-[clamp(2rem,12vw,3.5rem)]"
+      class="fixed left-1/2 top-1/2 z-[1] m-0 [transform:translate(-50%,-50%)] whitespace-nowrap font-template-serif text-[clamp(2.25rem,5vw,calc(5rem*var(--template-width-scale)))] font-normal tracking-[-0.06em] leading-[0.88] opacity-0 [transition:opacity_500ms_ease,transform_950ms_cubic-bezier(0.22,1,0.36,1)] group-data-[template-intro-phase=split]/intro:opacity-100 group-data-[template-intro-phase=dismiss]/intro:opacity-100 group-data-[template-intro-phase=split]/intro:[transform:translate(-50%,calc(var(--template-intro-stage-height)_/_2_+_var(--template-intro-label-gap)))] group-data-[template-intro-phase=dismiss]/intro:[transform:translate(-50%,calc(var(--template-intro-stage-height)_/_2_+_var(--template-intro-label-gap)))] group-data-[template-intro-phase=fullscreen]/intro:opacity-0 group-data-[template-intro-phase=fade]/intro:opacity-0 [@media(max-width:720px)]:text-[clamp(2rem,12vw,3.5rem)]"
     >
       {content.bottomLabel}
     </p>
@@ -71,9 +71,9 @@ const timeline = buildIntroTimeline(frames.length);
 <script>
   import { OVERLAY_FADE_MS, shouldExpandIntroIntoHero } from "./homeIntro";
 
-  const reduceMotion = window.matchMedia?.(
+  const motionQuery = window.matchMedia?.(
     "(prefers-reduced-motion: reduce)",
-  ).matches;
+  );
 
   document.querySelectorAll<HTMLElement>("[data-template-home-intro]").forEach((intro) => {
     if (intro.dataset.templateIntroReady === "true") return;
@@ -93,6 +93,7 @@ const timeline = buildIntroTimeline(frames.length);
     const previousHtmlOverflow = document.documentElement.style.overflow;
     const previousBodyOverflow = document.body.style.overflow;
     const timers: number[] = [];
+    const mediaCleanups: Array<() => void> = [];
     const heroVideo = hero?.querySelector<HTMLVideoElement>(
       "[data-template-hero-video]",
     );
@@ -115,6 +116,10 @@ const timeline = buildIntroTimeline(frames.length);
         const finish = () => resolve();
         heroVideo.addEventListener("loadeddata", finish, { once: true });
         heroVideo.addEventListener("error", finish, { once: true });
+        mediaCleanups.push(() => {
+          heroVideo.removeEventListener("loadeddata", finish);
+          heroVideo.removeEventListener("error", finish);
+        });
         heroVideo.load();
       });
 
@@ -131,7 +136,7 @@ const timeline = buildIntroTimeline(frames.length);
       if (!(heroVideo instanceof HTMLVideoElement)) return;
 
       heroVideo.currentTime = 0;
-      if (reduceMotion) {
+      if (motionQuery?.matches) {
         heroVideo.pause();
         return;
       }
@@ -152,13 +157,17 @@ const timeline = buildIntroTimeline(frames.length);
       if (introCompleted) return;
       introCompleted = true;
       timers.forEach((timer) => window.clearTimeout(timer));
+      mediaCleanups.forEach((cleanup) => cleanup());
+      skip?.removeEventListener("click", complete);
+      if (motionQuery?.removeEventListener) motionQuery.removeEventListener("change", onMotionChange);
+      else motionQuery?.removeListener?.(onMotionChange);
       startHeroMedia();
       document.documentElement.style.overflow = previousHtmlOverflow;
       document.body.style.overflow = previousBodyOverflow;
       document.documentElement.dataset.templateIntroComplete = "true";
       intro.remove();
 
-      if (reduceMotion) {
+      if (motionQuery?.matches) {
         revealHeroChrome();
         return;
       }
@@ -168,9 +177,14 @@ const timeline = buildIntroTimeline(frames.length);
       });
     };
 
+    const onMotionChange = () => {
+      if (motionQuery?.matches) complete();
+    };
+    if (motionQuery?.addEventListener) motionQuery.addEventListener("change", onMotionChange);
+    else motionQuery?.addListener?.(onMotionChange);
     skip?.addEventListener("click", complete);
 
-    if (reduceMotion || frames.length === 0) {
+    if (motionQuery?.matches || frames.length === 0) {
       complete();
       return;
     }
@@ -199,19 +213,25 @@ const timeline = buildIntroTimeline(frames.length);
               resolve();
               return;
             }
-            frame.addEventListener("load", () => resolve(), { once: true });
-            frame.addEventListener("error", () => resolve(), { once: true });
+            const finish = () => resolve();
+            frame.addEventListener("load", finish, { once: true });
+            frame.addEventListener("error", finish, { once: true });
+            mediaCleanups.push(() => {
+              frame.removeEventListener("load", finish);
+              frame.removeEventListener("error", finish);
+            });
           }),
       ),
     ]);
     const preloadTimeout = new Promise<void>((resolve) => {
-      window.setTimeout(resolve, 4500);
+      schedule(resolve, 150);
     });
 
     void Promise.race([preload, preloadTimeout]).then(() => {
-      const fullscreenAt = numberFromData(intro.dataset.fullscreenAt, 5000);
-      const fadeAt = numberFromData(intro.dataset.fadeAt, 6200);
-      const completeAt = numberFromData(intro.dataset.completeAt, 6650);
+      if (introCompleted) return;
+      const fullscreenAt = numberFromData(intro.dataset.fullscreenAt, 3350);
+      const fadeAt = numberFromData(intro.dataset.fadeAt, 4350);
+      const completeAt = numberFromData(intro.dataset.completeAt, 4850);
       const expandIntoHero = shouldExpandIntroIntoHero(
         hero?.getBoundingClientRect() ?? null,
         window.innerHeight,
@@ -219,7 +239,7 @@ const timeline = buildIntroTimeline(frames.length);
       intro.dataset.templateIntroPhase = "brand";
       schedule(
         () => { intro.dataset.templateIntroPhase = "split"; },
-        numberFromData(intro.dataset.splitAt, 900),
+        numberFromData(intro.dataset.splitAt, 500),
       );
       revealAt.forEach((delay, index) => {
         schedule(() => {
@@ -249,6 +269,6 @@ const timeline = buildIntroTimeline(frames.length);
       schedule(complete, fullscreenAt + OVERLAY_FADE_MS);
     });
 
-    schedule(complete, numberFromData(intro.dataset.completeAt, 6650) + 5000);
+    schedule(complete, numberFromData(intro.dataset.completeAt, 4850) + 150);
   });
 </script>

@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import type { Media } from "../content";
 import {
   buildIntroTimeline,
+  introFrames,
   introSourceForMedia,
   OVERLAY_FADE_MS,
   shouldExpandIntroIntoHero,
@@ -21,13 +22,49 @@ const themeSource = readFileSync(
 describe("home intro sequencing", () => {
   it("builds a staggered reveal followed by the viewport transition", () => {
     expect(buildIntroTimeline(3)).toEqual({
-      splitAt: 900,
-      firstRevealAt: 900,
-      revealAt: [900, 2300, 2650],
-      fullscreenAt: 3850,
-      fadeAt: 5050,
-      completeAt: 5500,
+      splitAt: 500,
+      firstRevealAt: 500,
+      revealAt: [500, 1450, 1700],
+      fullscreenAt: 2600,
+      fadeAt: 3600,
+      completeAt: 4100,
     });
+  });
+
+  it("gives six frames deliberate pacing and bounds larger galleries", () => {
+    const timeline = buildIntroTimeline(6);
+    expect(timeline.completeAt).toBeGreaterThanOrEqual(4800);
+    expect(timeline.completeAt).toBeLessThanOrEqual(5000);
+    expect(buildIntroTimeline(100).completeAt).toBeLessThanOrEqual(5000);
+    expect(
+      timeline.revealAt.every(
+        (at, index, all) => index === 0 || at > (all[index - 1] ?? -Infinity),
+      ),
+    ).toBe(true);
+    for (const count of [0, -1, NaN, Infinity]) {
+      expect(buildIntroTimeline(count)).toEqual(buildIntroTimeline(1));
+    }
+  });
+
+  it("matches the shortened image and overlay CSS transitions", () => {
+    expect(componentSource).toContain("clip-path_900ms_");
+    expect(componentSource).toContain("width_1000ms_");
+    expect(componentSource).toContain("height_1000ms_");
+    expect(componentSource).toContain("opacity_500ms_ease");
+    expect(componentSource).not.toContain("1.4s");
+    expect(componentSource).not.toContain("1.2s");
+  });
+
+  it("omits one gallery image only in the intro and always ends on hero media", () => {
+    const frames = Array.from(
+      { length: 6 },
+      (_, index) => ({ kind: "image", src: `/frame-${index}.jpg` }) as Media,
+    );
+    const hero = { kind: "image", src: "/hero.jpg" } as Media;
+    expect(introFrames(frames, hero)).toEqual([...frames.slice(0, 5), hero]);
+    expect(frames).toHaveLength(6);
+    expect(introFrames(frames.slice(0, 1), hero)).toEqual([frames[0], hero]);
+    expect(introFrames([], hero)).toEqual([hero]);
   });
 
   it("uses posters for video frames and image sources for images", () => {
@@ -87,7 +124,7 @@ describe("home intro sequencing", () => {
       false,
     );
     expect(shouldExpandIntroIntoHero(null, 728)).toBe(false);
-    expect(OVERLAY_FADE_MS).toBe(450);
+    expect(OVERLAY_FADE_MS).toBe(500);
     expect(componentSource).toContain("shouldExpandIntroIntoHero");
     expect(componentSource).toContain('templateIntroPhase = "dismiss"');
     expect(componentSource).toContain("OVERLAY_FADE_MS");

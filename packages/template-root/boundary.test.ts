@@ -90,7 +90,7 @@ describe("template-root public boundary", () => {
     expect(demoPage).toContain("gallery");
     expect(demoPage).toContain("schedule");
     expect(demoPage).toContain("venue");
-    expect(demoPage).toContain("O que o tempo uniu, a cerimônia consagra.");
+    expect(demoPage).toContain('title: "Uma vida a dois."');
     expect(demoPage).toContain("Marina & Caio");
     expect(demoPage).not.toContain('eyebrow: "01 /');
     expect(demoPage).not.toContain('eyebrow: "02 /');

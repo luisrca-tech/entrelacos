@@ -13,7 +13,7 @@ validateGalleryContent(content);
 const id = content.id;
 const toneClasses = tone === "olive" ? "bg-template-olive text-template-ivory" : "bg-template-ivory text-template-ink";
 const descriptionClass = tone === "olive" ? "text-[rgba(244,240,232,0.7)]" : "text-template-muted";
-const revealClasses = "opacity-100 translate-y-0 data-[template-motion-ready=true]:transition-[opacity,transform] data-[template-motion-ready=true]:duration-700 data-[template-motion-ready=true]:ease-out data-[template-motion-ready=true]:data-[template-reveal-state=hidden]:opacity-0 data-[template-motion-ready=true]:data-[template-reveal-state=hidden]:translate-y-3 motion-reduce:opacity-100 motion-reduce:translate-y-0 motion-reduce:transition-none";
+const revealClasses = "template-reveal";
 ---
 
 <section
@@ -22,12 +22,14 @@ const revealClasses = "opacity-100 translate-y-0 data-[template-motion-ready=tru
   aria-labelledby={`${id}-title`}
 >
   <header class={`${revealClasses} [@media(max-width:1024px)]:mb-12 [@media(max-width:1024px)]:px-[var(--template-page-inset)]`} data-template-reveal>
-    {content.eyebrow && <p class="m-0 mb-5 text-[0.72rem] font-bold uppercase tracking-[0.16em]">{content.eyebrow}</p>}
-    <h2 class="m-0 max-w-[12ch] font-template-serif text-[clamp(2.5rem,6vw,calc(5.5rem*var(--template-width-scale)))] font-normal tracking-[-0.065em] leading-[0.96]" id={`${id}-title`}>{content.title}</h2>
-    {content.description && <p class={`m-0 mt-7 max-w-[30rem] leading-[1.7] ${descriptionClass}`}>{content.description}</p>}
+    {content.eyebrow && <p data-template-reveal-item data-template-reveal-kind="label" style="--template-reveal-delay: 0ms" class="m-0 mb-5 text-[0.72rem] font-bold uppercase tracking-[0.16em]">{content.eyebrow}</p>}
+    <h2 data-template-reveal-item data-template-line-reveal class="m-0 max-w-[12ch] font-template-serif text-[clamp(2.5rem,6vw,calc(5.5rem*var(--template-width-scale)))] font-normal tracking-[-0.065em] leading-[0.96]" id={`${id}-title`}>{content.title}</h2>
+    {content.description && <p data-template-reveal-item data-template-reveal-kind="body" style="--template-reveal-delay: 1400ms" class={`m-0 mt-7 max-w-[30rem] leading-[1.7] ${descriptionClass}`}>{content.description}</p>}
   </header>
 
-  <div class={`${revealClasses} min-w-0 self-end`} data-template-reveal>
-    <GalleryCarousel content={content} client:load />
+  <div class="min-w-0 self-end" data-template-reveal="curtain">
+    <div data-template-reveal-media>
+      <GalleryCarousel content={content} client:load />
+    </div>
   </div>
 </section>

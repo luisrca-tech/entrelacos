@@ -42,13 +42,13 @@ const rsvpMemberClass =
 const rsvpMemberDetailsClass = "grid gap-[0.2rem]";
 const rsvpMemberNoteClass = "text-template-muted";
 const rsvpSelectClass =
-  "min-h-11 rounded-[0.4rem] border border-[rgba(37,53,43,0.28)] bg-white px-[0.7rem] py-[0.55rem] text-inherit";
+  "min-h-11 w-full rounded-xl border border-[rgba(37,53,43,0.25)] bg-[#fffdf8] px-4 py-3 text-base text-template-ink font-[inherit] transition-[border-color,box-shadow] duration-200 focus:border-template-olive focus:outline-2 focus:outline-offset-2 focus:outline-template-olive motion-reduce:transition-none w-auto [@media(max-width:560px)]:w-full";
 const rsvpActionsClass =
   "flex items-center justify-start gap-4 flex-wrap [@media(max-width:560px)]:items-stretch [@media(max-width:560px)]:flex-col";
 const rsvpButtonClass =
-  "min-h-11 cursor-pointer rounded-full border border-template-ink bg-template-ink px-4 py-[0.7rem] text-[var(--template-paper,#f4f0e8)] font-[inherit] font-bold disabled:cursor-not-allowed disabled:opacity-50";
+  "min-h-11 cursor-pointer rounded-full border border-template-ink bg-template-ink px-5 py-3 text-template-ivory font-[inherit] text-sm font-medium transition-[background-color,box-shadow,transform] duration-200 ease-out hover:-translate-y-0.5 hover:bg-template-olive hover:shadow-sm focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-template-ink disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transform-none motion-reduce:transition-none";
 const rsvpSecondaryClass =
-  "min-h-11 cursor-pointer rounded-full border border-template-ink bg-transparent px-4 py-[0.7rem] text-template-ink font-[inherit] font-bold disabled:cursor-not-allowed disabled:opacity-50";
+  "min-h-11 cursor-pointer rounded-full border border-template-line bg-transparent px-5 py-3 text-template-ink font-[inherit] text-sm font-medium transition-[background-color,color,border-color,transform] duration-200 ease-out hover:-translate-y-0.5 hover:border-template-ink hover:bg-template-ink hover:text-template-ivory focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-template-ink disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transform-none motion-reduce:transition-none";
 
 export function RsvpForm({
   open,

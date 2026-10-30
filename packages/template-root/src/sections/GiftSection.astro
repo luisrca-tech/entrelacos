@@ -14,13 +14,15 @@ validateSectionContent(content);
   id={content.id}
   hidden
   data-gift-section
-  class="grid min-w-0 gap-10 bg-template-ivory px-[var(--template-page-inset)] py-[clamp(4rem,8vw,7rem)] text-template-ink"
+  class="grid min-w-0 gap-[clamp(2.5rem,5vw,4.5rem)] bg-template-ivory px-[var(--template-page-inset)] py-[clamp(5rem,9vw,8rem)] text-template-ink"
   aria-labelledby={`${content.id}-title`}
 >
-  <header class="grid min-w-0 gap-5">
-    {content.eyebrow && <p class="m-0 text-[0.72rem] font-bold uppercase tracking-[0.16em]">{content.eyebrow}</p>}
-    <h2 id={`${content.id}-title`} class="m-0 max-w-[16ch] font-template-serif text-[clamp(2.5rem,6vw,5.5rem)] font-normal leading-[0.96] tracking-[-0.065em]">{content.title}</h2>
-    {content.description && <p class="m-0 max-w-[38rem] leading-[1.7] text-template-muted">{content.description}</p>}
+  <header class="grid min-w-0 gap-x-12 gap-y-5 border-b border-template-line pb-[clamp(2rem,4vw,3rem)] [@media(min-width:960px)]:grid-cols-[minmax(0,1fr)_minmax(0,0.7fr)] [@media(min-width:960px)]:items-end" data-template-reveal>
+    <div>
+    {content.eyebrow && <p data-template-reveal-item data-template-reveal-kind="label" class="m-0 mb-5 text-[0.72rem] font-bold uppercase tracking-[0.16em]">{content.eyebrow}</p>}
+    <h2 data-template-reveal-item data-template-line-reveal id={`${content.id}-title`} class="m-0 max-w-[16ch] font-template-serif text-[clamp(2.5rem,6vw,5.5rem)] font-normal leading-[0.96] tracking-[-0.065em]">{content.title}</h2>
+    </div>
+    {content.description && <p data-template-reveal-item data-template-reveal-kind="body" style="--template-reveal-delay: 1400ms" class="m-0 max-w-[32rem] leading-[1.7] text-template-muted">{content.description}</p>}
   </header>
   <div class="min-w-0"><slot /></div>
 </section>

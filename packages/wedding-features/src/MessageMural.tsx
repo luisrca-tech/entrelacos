@@ -1,6 +1,13 @@
 import type { PublicMuralResponse } from "@entrelacos/contracts";
 import { toast } from "@entrelacos/ui/toaster";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type CSSProperties,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   getMessageErrorMessage,
   muralRefreshEventName,
@@ -19,7 +26,7 @@ export type MessageMuralProps = {
 type MuralMessage = PublicMuralResponse["messages"][number];
 
 const muralSectionClass =
-  "grid min-w-0 gap-6 bg-[var(--template-paper,#fffdf8)] px-[clamp(2rem,5vw,4rem)] py-[clamp(2rem,5vw,4rem)] text-template-ink [@media(max-width:560px)]:px-4 [@media(max-width:560px)]:py-8";
+  "grid min-w-0 gap-8 bg-transparent px-[clamp(2rem,5vw,4rem)] py-[clamp(2rem,5vw,4rem)] text-template-ink [@media(max-width:560px)]:px-4 [@media(max-width:560px)]:py-8";
 const muralEyebrowClass =
   "m-0 mb-[0.8rem] text-template-muted text-[0.72rem] font-bold tracking-[0.16em] uppercase";
 const muralHeadingClass =
@@ -28,12 +35,12 @@ const muralHeaderClass =
   "flex items-end justify-between gap-6 [@media(max-width:560px)]:items-stretch [@media(max-width:560px)]:flex-col";
 const muralActionsClass = "flex flex-wrap items-center gap-2";
 const muralButtonClass =
-  "min-h-11 cursor-pointer border border-template-ink bg-transparent px-4 py-[0.65rem] text-template-ink font-[inherit] font-bold disabled:cursor-not-allowed disabled:opacity-50";
+  "min-h-11 cursor-pointer rounded-full border border-template-line bg-transparent px-5 py-3 text-template-ink font-[inherit] text-sm font-medium transition-[background-color,color,border-color,transform] duration-200 ease-out hover:-translate-y-0.5 hover:border-template-ink hover:bg-template-ink hover:text-template-ivory focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-template-ink disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transform-none motion-reduce:transition-none";
 const muralPrimaryButtonClass =
-  "min-h-11 cursor-pointer border border-template-ink bg-template-ink px-4 py-[0.65rem] text-template-ivory font-[inherit] font-bold disabled:cursor-not-allowed disabled:opacity-50";
+  "min-h-11 cursor-pointer rounded-full border border-template-ink bg-template-ink px-5 py-3 text-template-ivory font-[inherit] text-sm font-medium transition-[background-color,box-shadow,transform] duration-200 ease-out hover:-translate-y-0.5 hover:bg-template-olive hover:shadow-sm focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-template-ink disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transform-none motion-reduce:transition-none";
 const muralMoreButtonClass =
-  "min-h-11 cursor-pointer justify-self-center border border-template-ink bg-transparent px-4 py-[0.65rem] text-template-ink font-[inherit] font-bold disabled:cursor-not-allowed disabled:opacity-50";
-const muralStatusClass = "m-0 border border-template-line p-4";
+  "min-h-11 cursor-pointer rounded-full border border-template-line bg-transparent px-5 py-3 text-template-ink font-[inherit] text-sm font-medium transition-[background-color,color,border-color,transform] duration-200 ease-out hover:-translate-y-0.5 hover:border-template-ink hover:bg-template-ink hover:text-template-ivory focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-template-ink disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transform-none motion-reduce:transition-none justify-self-center";
+const muralStatusClass = "m-0 rounded-xl border border-template-line p-4";
 
 export function mergeMuralMessages(
   current: MuralMessage[],
@@ -188,32 +195,42 @@ export function MessageMural({
   }, [load, refreshIntervalMs, siteId]);
 
   return (
-    <section className={muralSectionClass} aria-labelledby="mural-title">
-      <header className={muralHeaderClass}>
-        <div>
-          <p className={muralEyebrowClass}>Recados</p>
-          <h2 className={muralHeadingClass} id="mural-title">
-            Mural dos convidados
-          </h2>
-        </div>
-        <div className={muralActionsClass}>
-          {visibility.showComposer && (
+    <section
+      className={muralSectionClass}
+      data-slot="message-mural"
+      aria-labelledby="mural-title"
+    >
+      <header data-template-reveal>
+        <div
+          className={muralHeaderClass}
+          data-template-reveal-item
+          data-template-reveal-kind="group"
+        >
+          <div>
+            <p className={muralEyebrowClass}>Recados</p>
+            <h2 className={muralHeadingClass} id="mural-title">
+              Mural dos convidados
+            </h2>
+          </div>
+          <div className={muralActionsClass}>
+            {visibility.showComposer && (
+              <button
+                type="button"
+                className={muralPrimaryButtonClass}
+                onClick={() => setMessageOpen(true)}
+              >
+                Deixar uma mensagem
+              </button>
+            )}
             <button
               type="button"
-              className={muralPrimaryButtonClass}
-              onClick={() => setMessageOpen(true)}
+              className={muralButtonClass}
+              disabled={loading}
+              onClick={() => void load(false, true)}
             >
-              Deixar uma mensagem
+              {loading ? "Atualizando…" : "Atualizar"}
             </button>
-          )}
-          <button
-            type="button"
-            className={muralButtonClass}
-            disabled={loading}
-            onClick={() => void load(false, true)}
-          >
-            {loading ? "Atualizando…" : "Atualizar"}
-          </button>
+          </div>
         </div>
       </header>
 
@@ -234,23 +251,31 @@ export function MessageMural({
         </p>
       )}
       {visibility.showMessages && (
-        <ul className="m-0 grid list-none grid-cols-2 gap-4 p-0 [@media(max-width:560px)]:grid-cols-1">
-          {messages.map((message) => (
-            <li
-              className="flex min-h-56 flex-col justify-between border border-template-line bg-template-ivory p-[1.35rem]"
-              key={message.id}
-            >
-              <blockquote className="m-0 whitespace-pre-wrap break-words font-template-serif text-[1.2rem] leading-[1.5] [overflow-wrap:anywhere]">
-                {message.text}
-              </blockquote>
-              <p className="mt-8 mb-0 grid gap-[0.2rem] text-template-muted text-[0.78rem]">
-                <strong className="text-template-ink">
-                  {message.authorName}
-                </strong>
-                <time dateTime={message.createdAt}>
-                  {formatMessageDate(message.createdAt)}
-                </time>
-              </p>
+        <ul className="m-0 grid min-w-0 list-none grid-cols-2 items-start gap-6 p-0 [@media(max-width:680px)]:grid-cols-1">
+          {messages.map((message, index) => (
+            <li className="min-w-0" key={message.id} data-template-reveal>
+              <article
+                data-template-reveal-item
+                data-template-reveal-kind="card"
+                style={
+                  {
+                    "--template-card-delay": `${(index % 2) * 180}ms`,
+                  } as CSSProperties
+                }
+                className="flex min-w-0 flex-col gap-8 rounded-[1.35rem] border border-template-line bg-[#fffdf8] p-[clamp(1.25rem,3vw,2rem)] [--template-reveal-delay:0ms] min-[681px]:[--template-reveal-delay:var(--template-card-delay)]"
+              >
+                <blockquote className="m-0 whitespace-pre-wrap break-words font-template-serif text-[1.2rem] leading-[1.5] [overflow-wrap:anywhere]">
+                  {message.text}
+                </blockquote>
+                <p className="m-0 grid gap-1 text-template-muted text-[0.78rem]">
+                  <strong className="text-template-ink">
+                    {message.authorName}
+                  </strong>
+                  <time dateTime={message.createdAt}>
+                    {formatMessageDate(message.createdAt)}
+                  </time>
+                </p>
+              </article>
             </li>
           ))}
         </ul>

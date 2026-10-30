@@ -33,12 +33,10 @@ describe("StorySection compact full-bleed composition", () => {
     expect(sectionSource).not.toContain("sticky");
   });
 
-  it("uses a local one-time reveal and leaves normal scroll physics intact", () => {
-    expect(sectionSource).toContain("IntersectionObserver");
-    expect(sectionSource).toContain("data-story-motion");
+  it("uses the shared one-time reveal while leaving normal scroll physics intact", () => {
+    expect(sectionSource).toContain("data-template-reveal");
+    expect(sectionSource).toContain("data-template-line-reveal");
     expect(sectionSource).toContain("data-story-copy");
-    expect(sectionSource).toContain("motion-reduce");
-    expect(sectionSource).toContain("data-story-visible");
     expect(sectionSource).not.toContain('window.addEventListener("scroll"');
     expect(sectionSource).not.toContain("createStoryTransitionController");
   });

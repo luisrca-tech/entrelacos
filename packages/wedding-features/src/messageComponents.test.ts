@@ -180,14 +180,18 @@ describe("invitation access form", () => {
     expect(guestAccessSource).toContain("publishGuestSessionChange");
   });
 
-  it("centers a wider confirmation column on desktop without wrapping the title", () => {
-    expect(guestAccessSource).toContain("min-[961px]:justify-items-center");
+  it("places the lookup form beside its introduction and stacks on narrow screens", () => {
     expect(guestAccessSource).toContain(
-      "min-[961px]:w-full min-[961px]:max-w-[52rem]",
+      "grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]",
     );
-    expect(guestAccessSource).toContain("min-[961px]:whitespace-nowrap");
-    expect(guestAccessSource).toContain("min-[961px]:max-w-[38rem]");
-    expect(guestAccessSource).toContain("[@media(max-width:560px)]:flex-col");
+    expect(guestAccessSource).toContain(
+      "[@media(max-width:960px)]:grid-cols-1",
+    );
+    expect(guestAccessSource).toContain(
+      "min-[961px]:col-start-2 min-[961px]:row-start-1",
+    );
+    expect(guestAccessSource).not.toContain("min-[961px]:whitespace-nowrap");
+    expect(guestAccessSource).toContain("max-w-[11ch]");
   });
 
   it("places the opened invitation beside the intro, like the split sections", () => {
@@ -250,7 +254,7 @@ describe("public mural visibility", () => {
 
   it("shows only two columns on wide screens and one on narrow screens", () => {
     expect(muralSource).toContain(
-      "grid-cols-2 gap-4 p-0 [@media(max-width:560px)]:grid-cols-1",
+      "grid-cols-2 items-start gap-6 p-0 [@media(max-width:680px)]:grid-cols-1",
     );
   });
 

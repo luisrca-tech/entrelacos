@@ -69,11 +69,11 @@ validateWeddingLayoutProps(Astro.props);
                 data-template-navigation-mobile
               >
                 <summary
-                  class="inline-flex min-h-11 cursor-pointer list-none items-center border border-current px-3 py-2 marker:hidden"
+                  class="inline-flex min-h-11 cursor-pointer list-none items-center rounded-full border border-current px-4 py-2 transition-colors duration-200 hover:bg-[color-mix(in_srgb,currentColor_12%,transparent)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-current motion-reduce:transition-none marker:hidden"
                   aria-label={navigation.menuLabel}
                 >{navigation.menuLabel}</summary>
                 <nav
-                  class="absolute right-4 top-[calc(100%+0.5rem)] grid min-w-48 gap-0.5 bg-template-ivory px-3 py-2 text-template-ink shadow-[0_1rem_2rem_rgba(37,53,43,0.16)] data-[navigation-state=hero]:bg-template-olive data-[navigation-state=hero]:text-template-ivory"
+                  class="absolute right-4 top-[calc(100%+0.5rem)] grid min-w-48 gap-0.5 rounded-xl bg-template-ivory px-3 py-2 text-template-ink shadow-[0_1rem_2rem_rgba(37,53,43,0.16)] data-[navigation-state=hero]:bg-template-olive data-[navigation-state=hero]:text-template-ivory"
                   data-navigation-state={hasHero ? "hero" : "solid"}
                   aria-label={navigation.ariaLabel}
                 >
@@ -91,7 +91,7 @@ validateWeddingLayoutProps(Astro.props);
           <slot name="header-addon" />
         </div>
       </header>
-      <main class="min-h-[70vh] bg-template-ivory">
+      <main class="min-h-[70vh] bg-template-ivory motion-safe:[&_[data-template-motion-ready=true]_[data-template-reveal-item]]:transition-[opacity,translate] motion-safe:[&_[data-template-motion-ready=true]_[data-template-reveal-item]]:duration-[1050ms] motion-safe:[&_[data-template-motion-ready=true]_[data-template-reveal-item]]:ease-[cubic-bezier(0.33,0.05,0.2,1)] motion-safe:[&_[data-template-motion-ready=true]_[data-template-reveal-item]]:[transition-delay:var(--template-reveal-delay,0ms)] motion-safe:[&_[data-template-motion-ready=true][data-template-reveal-state=hidden]_[data-template-reveal-item]:not([data-template-line-ready])]:translate-y-2 motion-safe:[&_[data-template-motion-ready=true][data-template-reveal-state=hidden]_[data-template-reveal-item]:not([data-template-line-ready])]:opacity-0 motion-safe:[&_[data-template-motion-ready=true]_[data-template-reveal-item][data-template-reveal-kind=label]]:duration-[600ms] motion-safe:[&_[data-template-motion-ready=true][data-template-reveal-state=hidden]_[data-template-reveal-item][data-template-reveal-kind=label]:not([data-template-line-ready])]:translate-y-0 motion-safe:[&_[data-template-motion-ready=true]_[data-template-reveal-item][data-template-reveal-kind=body]]:duration-1000 motion-safe:[&_[data-template-motion-ready=true][data-template-reveal-state=hidden]_[data-template-reveal-item][data-template-reveal-kind=body]:not([data-template-line-ready])]:translate-y-[10px] motion-safe:[&_[data-template-motion-ready=true]_[data-template-reveal-item][data-template-reveal-kind=card]]:duration-[1400ms] motion-safe:[&_[data-template-motion-ready=true][data-template-reveal-state=hidden]_[data-template-reveal-item][data-template-reveal-kind=card]:not([data-template-line-ready])]:translate-y-4 motion-safe:[&_[data-template-reveal-media]]:[clip-path:inset(0)] motion-safe:[&_[data-template-motion-ready=true]>[data-template-reveal-media]]:transition-[clip-path,scale] motion-safe:[&_[data-template-motion-ready=true]>[data-template-reveal-media]]:duration-[1400ms] motion-safe:[&_[data-template-motion-ready=true]>[data-template-reveal-media]]:[transition-timing-function:cubic-bezier(0.65,0,0.35,1),cubic-bezier(0.2,0.7,0.2,1)] motion-safe:[&_[data-template-motion-ready=true][data-template-reveal-state=hidden]>[data-template-reveal-media]]:[clip-path:inset(0_0_100%_0)] motion-safe:[&_[data-template-motion-ready=true][data-template-reveal-state=hidden]>[data-template-reveal-media]]:scale-[1.03]">
         <slot name="before-main" />
         <slot />
         <slot name="after-main" />
@@ -121,6 +121,7 @@ validateWeddingLayoutProps(Astro.props);
 </html>
 
 <script>
+  import { setupLineReveals } from "../components/lineReveal";
   import {
     navigationStateForHero,
     setupTemplateInteractions,
@@ -158,4 +159,10 @@ validateWeddingLayoutProps(Astro.props);
   }
 
   setupTemplateInteractions();
+  const motionPreference = window.matchMedia("(prefers-reduced-motion: reduce)");
+  let cleanupLines = setupLineReveals(document, motionPreference.matches);
+  motionPreference.addEventListener("change", () => {
+    cleanupLines();
+    cleanupLines = setupLineReveals(document, motionPreference.matches);
+  });
 </script>

@@ -46,8 +46,8 @@ describe("GallerySection carousel composition", () => {
     );
   });
 
-  it("shrinks gallery overlay controls on compact viewports", () => {
-    expect(carouselSource).toContain("[@media(max-width:1024px)]:size-7");
+  it("keeps gallery overlay controls touch-sized on compact viewports", () => {
+    expect(carouselSource).toContain("[@media(max-width:1024px)]:size-11");
     expect(carouselSource).toContain(
       "[@media(max-width:1024px)]:[&>span:not([aria-hidden])]:hidden",
     );

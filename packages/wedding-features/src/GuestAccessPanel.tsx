@@ -39,33 +39,34 @@ type GuestAccessProps = {
 type GuestAccessPhase = "lookup" | "authenticated";
 
 const guestAccessSectionClass =
-  "grid min-w-0 gap-6 bg-template-ivory px-[clamp(2rem,5vw,4rem)] py-[clamp(2rem,5vw,4rem)] text-template-ink [@media(max-width:560px)]:px-4 [@media(max-width:560px)]:py-8 min-[961px]:justify-items-center";
+  "grid min-w-0 grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)] items-start gap-x-[clamp(2.5rem,6vw,7rem)] gap-y-6 bg-template-ivory px-[clamp(2rem,5vw,4rem)] py-[clamp(2rem,5vw,4rem)] text-template-ink [@media(max-width:960px)]:grid-cols-1 [@media(max-width:560px)]:px-4 [@media(max-width:560px)]:py-8";
 const guestAccessAuthenticatedSectionClass =
   "grid min-w-0 grid-cols-[minmax(0,0.72fr)_minmax(0,1.28fr)] items-start gap-[clamp(2.5rem,6vw,7rem)] bg-template-ivory text-template-ink [@media(max-width:960px)]:block";
 const guestAccessIntroClass =
-  "max-w-[38rem] min-[961px]:w-full min-[961px]:max-w-[52rem]";
+  "min-w-0 max-w-[38rem] min-[961px]:col-start-1 min-[961px]:row-span-2";
 const guestAccessAuthenticatedIntroClass =
   "min-w-0 [@media(max-width:960px)]:mb-12";
 const guestAccessEyebrowClass =
   "m-0 mb-[0.8rem] text-template-muted text-[0.72rem] font-bold tracking-[0.16em] uppercase";
 const guestAccessHeadingClass =
-  "m-0 font-template-serif text-[clamp(2.5rem,6vw,5rem)] font-normal leading-[0.96] tracking-[-0.05em] min-[961px]:whitespace-nowrap min-[961px]:text-[clamp(2.75rem,4.4vw,4.25rem)]";
+  "m-0 max-w-[11ch] font-template-serif text-[clamp(2.5rem,5vw,5rem)] font-normal leading-[1.02] tracking-[-0.05em]";
 const guestAccessAuthenticatedHeadingClass =
   "m-0 max-w-[12ch] font-template-serif text-[clamp(2.5rem,6vw,5rem)] font-normal leading-[0.96] tracking-[-0.065em]";
 const guestAccessSubheadingClass =
   "m-0 font-template-serif text-[clamp(1.8rem,4vw,3rem)] font-normal tracking-[-0.05em]";
 const guestAccessDescriptionClass =
-  "text-template-muted leading-[1.6] min-[961px]:max-w-[38rem]";
+  "mt-6 mb-0 max-w-[32rem] text-template-muted leading-[1.7]";
 const guestAccessMessageClass =
-  "m-0 max-w-[42rem] border border-template-line px-4 py-[0.8rem] text-template-ink min-[961px]:w-full min-[961px]:max-w-[52rem]";
+  "m-0 max-w-[42rem] rounded-xl border border-template-line px-4 py-3 text-template-ink min-[961px]:col-start-2 min-[961px]:row-start-2";
 const guestAccessFormClass =
-  "grid max-w-[34rem] gap-4 min-[961px]:w-full min-[961px]:max-w-[52rem]";
-const guestAccessLabelClass = "grid gap-[0.4rem] text-[0.85rem] font-bold";
+  "grid min-w-0 w-full max-w-[42rem] gap-5 rounded-[1.5rem] border border-template-line bg-[#fffdf8] p-[clamp(1.25rem,3vw,2.25rem)] min-[961px]:col-start-2 min-[961px]:row-start-1";
+const guestAccessLabelClass = "grid gap-2 text-[0.85rem] font-medium";
 const guestAccessInputClass =
-  "min-h-11 w-full rounded-none border border-[rgba(37,53,43,0.32)] bg-[#fffdf8] px-3 py-[0.65rem] text-template-ink font-[inherit]";
+  "min-h-11 w-full rounded-xl border border-[rgba(37,53,43,0.25)] bg-[#fffdf8] px-4 py-3 text-base text-template-ink font-[inherit] transition-[border-color,box-shadow] duration-200 focus:border-template-olive focus:outline-2 focus:outline-offset-2 focus:outline-template-olive motion-reduce:transition-none";
 const guestAccessButtonClass =
-  "min-h-11 cursor-pointer rounded-none border border-template-ink bg-template-ink px-4 py-[0.65rem] text-template-ivory font-[inherit] font-bold disabled:cursor-not-allowed disabled:opacity-50";
-const guestAccessInvitationClass = "grid min-w-0 gap-4 self-start";
+  "min-h-11 cursor-pointer rounded-full border border-template-ink bg-template-ink px-5 py-3 text-template-ivory font-[inherit] text-sm font-medium transition-[background-color,box-shadow,transform] duration-200 ease-out hover:-translate-y-0.5 hover:bg-template-olive hover:shadow-sm focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-template-ink disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transform-none motion-reduce:transition-none";
+const guestAccessInvitationClass =
+  "grid min-w-0 gap-5 self-start rounded-[1.5rem] border border-template-line bg-[#fffdf8] p-[clamp(1.25rem,3vw,2.25rem)]";
 
 function errorWithRetry(error: unknown): string {
   const message = guestAccessErrorMessage(error);
@@ -403,28 +404,31 @@ export function GuestAccess({
             ? guestAccessAuthenticatedIntroClass
             : guestAccessIntroClass
         }
+        data-template-reveal
       >
-        <p className={guestAccessEyebrowClass}>Confirmação de presença</p>
-        <h2
-          className={
-            showingInvitation
-              ? guestAccessAuthenticatedHeadingClass
-              : guestAccessHeadingClass
-          }
-          id="guest-access-title"
-        >
-          Encontre seu convite
-        </h2>
-        <p
-          className={
-            showingInvitation
-              ? `${guestAccessDescriptionClass} mt-7 max-w-[30rem]`
-              : guestAccessDescriptionClass
-          }
-        >
-          Informe o telefone de contato e o PIN compartilhado com este convite
-          para acessar os convidados e confirmar a presença.
-        </p>
+        <div data-template-reveal-item data-template-reveal-kind="group">
+          <p className={guestAccessEyebrowClass}>Confirmação de presença</p>
+          <h2
+            className={
+              showingInvitation
+                ? guestAccessAuthenticatedHeadingClass
+                : guestAccessHeadingClass
+            }
+            id="guest-access-title"
+          >
+            Encontre seu convite
+          </h2>
+          <p
+            className={
+              showingInvitation
+                ? `${guestAccessDescriptionClass} mt-7 max-w-[30rem]`
+                : guestAccessDescriptionClass
+            }
+          >
+            Use o telefone de contato e o PIN do convite para confirmar quem
+            estará presente.
+          </p>
+        </div>
       </div>
 
       {!showingInvitation && error && (
@@ -434,82 +438,95 @@ export function GuestAccess({
       )}
 
       {phase === "lookup" && (
-        <form
-          className={guestAccessFormClass}
-          noValidate
-          onSubmit={accessInvitation}
+        <div
+          data-template-reveal
+          className="min-w-0 min-[961px]:col-start-2 min-[961px]:row-start-1"
         >
-          <label className={guestAccessLabelClass}>
-            Telefone de contato
-            <input
-              className={guestAccessInputClass}
-              autoComplete="tel"
-              inputMode="tel"
-              value={phone}
-              onChange={(event) =>
-                setPhone(formatInvitationPhoneInput(event.target.value))
-              }
-              placeholder="(62) 99999-9999 ou +1 212 555 0123"
-              required
-            />
-          </label>
-          <label className={guestAccessLabelClass}>
-            PIN de 6 dígitos
-            <input
-              className={guestAccessInputClass}
-              autoComplete="one-time-code"
-              inputMode="numeric"
-              pattern="[0-9]{6}"
-              maxLength={6}
-              value={pin}
-              onChange={(event) =>
-                setPin(event.target.value.replace(/\D/g, ""))
-              }
-              required
-            />
-          </label>
-          <button
-            className={guestAccessButtonClass}
-            type="submit"
-            disabled={busy}
+          <form
+            className={guestAccessFormClass}
+            data-template-reveal-item
+            data-template-reveal-kind="group"
+            noValidate
+            onSubmit={accessInvitation}
           >
-            {busy ? "Confirmando…" : "Acessar convite"}
-          </button>
-        </form>
+            <label className={guestAccessLabelClass}>
+              Telefone de contato
+              <input
+                className={guestAccessInputClass}
+                autoComplete="tel"
+                inputMode="tel"
+                value={phone}
+                onChange={(event) =>
+                  setPhone(formatInvitationPhoneInput(event.target.value))
+                }
+                placeholder="(62) 99999-9999 ou +1 212 555 0123"
+                required
+              />
+            </label>
+            <label className={guestAccessLabelClass}>
+              PIN de 6 dígitos
+              <input
+                className={guestAccessInputClass}
+                autoComplete="one-time-code"
+                inputMode="numeric"
+                pattern="[0-9]{6}"
+                maxLength={6}
+                value={pin}
+                onChange={(event) =>
+                  setPin(event.target.value.replace(/\D/g, ""))
+                }
+                required
+              />
+            </label>
+            <button
+              className={guestAccessButtonClass}
+              type="submit"
+              disabled={busy}
+            >
+              {busy ? "Confirmando…" : "Acessar convite"}
+            </button>
+          </form>
+        </div>
       )}
 
       {phase === "authenticated" && session && (
-        <div className={guestAccessInvitationClass}>
-          <h3 className={guestAccessSubheadingClass}>
-            {session.invitationName}
-          </h3>
-          <p className="m-0 text-template-muted">Convidados neste convite</p>
-          <ul className="m-0 grid list-none gap-2 p-0">
-            {session.guests.map((guest) => (
-              <li
-                className="flex items-baseline justify-between gap-4 border-b border-template-line py-3 [@media(max-width:560px)]:flex-col [@media(max-width:560px)]:items-start [@media(max-width:560px)]:gap-[0.15rem]"
-                key={guest.id}
+        <div data-template-reveal className="min-w-0">
+          <div
+            className={guestAccessInvitationClass}
+            data-template-reveal-item
+            data-template-reveal-kind="group"
+          >
+            <h3 className={guestAccessSubheadingClass}>
+              {session.invitationName}
+            </h3>
+            <p className="m-0 text-template-muted">Convidados neste convite</p>
+            <ul className="m-0 grid list-none gap-2 p-0">
+              {session.guests.map((guest) => (
+                <li
+                  className="flex items-baseline justify-between gap-4 border-b border-template-line py-3 [@media(max-width:560px)]:flex-col [@media(max-width:560px)]:items-start [@media(max-width:560px)]:gap-[0.15rem]"
+                  key={guest.id}
+                >
+                  <span>{guest.fullName}</span>
+                  <small className="text-template-muted text-xs">
+                    {guest.guestType === "ADULT" ? "Adulto" : "Criança"}
+                  </small>
+                </li>
+              ))}
+            </ul>
+            {rsvp ? (
+              <button
+                className={guestAccessButtonClass}
+                type="button"
+                onClick={() => setRsvpOpen(true)}
               >
-                <span>{guest.fullName}</span>
-                <small className="text-template-muted text-xs">
-                  {guest.guestType === "ADULT" ? "Adulto" : "Criança"}
-                </small>
-              </li>
-            ))}
-          </ul>
-          {rsvp ? (
-            <button
-              className={guestAccessButtonClass}
-              type="button"
-              onClick={() => setRsvpOpen(true)}
-            >
-              {rsvp.canEdit ? "Responder presença" : "Consultar respostas"}
-            </button>
-          ) : (
-            <p role="status">
-              As respostas de presença não estão disponíveis agora.
-            </p>
-          )}
+                {rsvp.canEdit ? "Responder presença" : "Consultar respostas"}
+              </button>
+            ) : (
+              <p role="status">
+                As respostas de presença não estão disponíveis agora.
+              </p>
+            )}
+          </div>
         </div>
       )}
       {rsvp && (
