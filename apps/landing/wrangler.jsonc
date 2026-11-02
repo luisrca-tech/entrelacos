@@ -1,0 +1,13 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "entrelacos",
+  "compatibility_date": "2026-11-01",
+  "assets": {
+    "directory": "./dist"
+  },
+  "env": {
+    "dev": {
+      "name": "entrelacos-dev"
+    }
+  }
+}

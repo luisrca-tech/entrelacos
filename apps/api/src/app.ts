@@ -76,6 +76,7 @@ export type ApiOptions = GiftPaymentsHttpOptions &
     ReceivingNominationHttpOptions,
     "receivingNominationContext" | "readAdministrativeSession"
   > & {
+    applicationEnvironment?: "development" | "test" | "production";
     receiving?: ReceivingRepositoryOptions;
     asaasWebhook?: AsaasWebhookHttpReceiver;
     asaasWithdrawalAuthorization?: AsaasWithdrawalAuthorizationHttpReceiver;
@@ -121,7 +122,9 @@ export function createApp(
     );
     app.route("/", createAsaasWebhookHttpRouter(options.asaasWebhook));
     const liveSitePolicy = {
-      applicationEnvironment: options.receiving?.applicationEnvironment,
+      applicationEnvironment:
+        options.applicationEnvironment ??
+        options.receiving?.applicationEnvironment,
       liveDemoSiteId: options.receiving?.liveDemoSiteId,
     };
     const readReadiness = (
@@ -152,7 +155,14 @@ export function createApp(
       const [method, path] = endpoint.split(" ");
       app.on(method, path, (context) => teamRouter.fetch(context.req.raw));
     }
-    app.route("/", createReceivingHttpRouter({ ...options, readReadiness }));
+    app.route(
+      "/",
+      createReceivingHttpRouter({
+        ...options,
+        ...liveSitePolicy,
+        readReadiness,
+      }),
+    );
     const receivingSetupRouter = createReceivingSetupHttpRouter(options);
     for (const [method, path] of [
       ["GET", "/v1/sites/:siteId/receiving/setup"],

@@ -1,0 +1,56 @@
+---
+import { LetterComposition, ScheduleSection, VenueSection, WeddingLayout, type LetterContent } from "@entrelacos/template-cartas-do-nosso-sim/v1";
+import { AdminRecognition } from "@entrelacos/wedding-features";
+import DemoFeatures from "../components/DemoFeatures.astro";
+import DemoSwitch from "../components/DemoSwitch.astro";
+import { inactive, access, site, seo, footer as baseFooter, schedule, venue } from "../demoContent";
+import "../styles/tailwind.css";
+
+const navigation = {
+  ariaLabel: "Navegação principal", menuLabel: "Abrir menu",
+  links: [
+    { label: "A carta", href: "#story" }, { label: "O encontro", href: "#schedule" },
+    { label: "Confirmar presença", href: "#guest-access" }, { label: "Presentes", href: "#gifts" },
+    { label: "Mural", href: "#mural" },
+  ],
+};
+const footer = { ...baseFooter, links: navigation.links.filter((link) => link.href !== "#guest-access") };
+const letter: LetterContent = {
+  cover: { id: "hero", eyebrow: "Um convite para estar perto", title: "Marina & Caio", description: "Com as pessoas que amamos, o nosso próximo capítulo começa." },
+  monogram: "M / C", dateLabel: "18 de setembro de 2027", locationLabel: "Goiânia, GO",
+  action: { label: "Confirmar presença", href: "#guest-access" },
+  story: {
+    id: "story", eyebrow: "Uma carta para você", title: "O amor mora nos dias comuns.",
+    paragraphs: [
+      "Querida família, queridos amigos,",
+      "Nossa história não começou com grandes planos. Começou com uma conversa que não dava vontade de terminar. Depois vieram os cafés demorados, os caminhos divididos e a descoberta de que a vida ficava mais bonita quando estávamos juntos.",
+      "Entre uma escolha e outra, aprendemos a cuidar, a ouvir e a rir até dos dias difíceis. Foi assim, no cotidiano, que escolhemos a nossa casa: um ao lado do outro.",
+      "Agora queremos celebrar essa escolha com quem caminhou com a gente. Este convite guarda um lugar para você e para todas as histórias que ainda vamos escrever juntos.",
+    ],
+  },
+  photos: [
+    { kind: "image", src: "/marina-caio-gallery-three.webp", alt: "Marina e Caio trocam olhares em um retrato próximo", width: 1448, height: 1086 },
+    { kind: "image", src: "/marina-caio-story-home.webp", alt: "Marina e Caio conversam com xícaras de café ao ar livre", width: 1448, height: 1086 },
+  ],
+  signature: "Com carinho, Marina & Caio",
+  coverHandoff: "Antes do convite, uma carta para você.",
+  storyHandoff: "Agora, queremos escrever este dia com vocês.",
+};
+// The letter demo has no attire illustration: only its two couple-photo assets.
+const letterSchedule = { ...schedule, eyebrow: "O nosso encontro", title: "Um dia para guardar." };
+---
+
+<WeddingLayout locale="pt-BR" site={{ ...site, href: "/" }} seo={seo} navigation={inactive ? undefined : navigation} footer={inactive ? undefined : footer}>
+  <Fragment slot="head"><link rel="icon" href="/marina-caio-monogram.svg" type="image/svg+xml" /></Fragment>
+  {inactive ? <section class="demo-inactive [min-height:70vh] grid [place-content:center] [padding:6rem_1.5rem] text-center" aria-labelledby="demo-inactive-title"><h1 id="demo-inactive-title">Site indisponível</h1><p>Este site de casamento está temporariamente indisponível.</p></section> : <Fragment>
+    <DemoSwitch />
+    <LetterComposition content={letter} />
+    <div class="letter-event [max-width:94rem] [margin:4rem_auto_0] [border-block:1px_solid_var(--template-line)] [&_>_section]:[padding:clamp(3rem,_6vw,_5rem)_clamp(1.25rem,_5vw,_5rem)] [&_#venue]:[border-top:1px_solid_var(--template-line)] [&_#schedule_li]:[border-color:var(--template-line)] [&_#schedule_aside]:[border-color:var(--template-line)] [&_#schedule_time]:[color:var(--template-olive)] [&_#schedule_time]:font-semibold">
+      <ScheduleSection content={letterSchedule} tone="ivory" />
+      <VenueSection content={{ ...venue, title: "O lugar do nosso sim." }} />
+    </div>
+    <p class="letter-handoff flex items-center [gap:1.5rem] m-0 [padding:2rem_var(--template-page-inset)] [color:var(--template-muted)] [font:italic_clamp(1rem,_1.5vw,_1.25rem)_/_1.65_var(--font-template-serif)] [&::before]:[content:''] [&::before]:[flex:0_0_clamp(1.5rem,_6vw,_6rem)] [&::before]:[height:1px] [&::before]:[background:currentColor] [&::before]:[opacity:0.5] letter-event-handoff">Guardamos um lugar para você. Vem celebrar com a gente?</p>
+    <DemoFeatures />
+  </Fragment>}
+  <Fragment slot="admin-access">{!inactive && access.siteId && access.apiOrigin && access.panelOrigin && <AdminRecognition {...access} client:load />}</Fragment>
+</WeddingLayout>

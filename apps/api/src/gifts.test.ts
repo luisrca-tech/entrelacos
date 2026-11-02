@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { WeddingGiftsApi } from "../../../packages/wedding-features/src/gifts";
+import { findPublishedGiftForQuote } from "./giftQuoteLookup";
+import { createGiftQuoteService } from "./giftQuotes";
 import { createGiftsHttpRouter } from "./giftsHttp";
 
 describe("default public page HTTP-client", () => {
@@ -1363,5 +1365,251 @@ describe("complete current catalog reorder", () => {
     ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
     expect(writes).toEqual([]);
     expect(execute).not.toHaveBeenCalled();
+  });
+});
+
+describe("explicit server-scoped showcase catalogs", () => {
+  const showcase = (id = "demo-wedding-cartas", suffix = "") => ({
+    ...site,
+    id,
+    isDemo: true,
+    repositorySlug: id,
+    publicUrl: `https://${id === "demo-wedding" ? "demo" : "demo-cartas"}${suffix}.entrelacos.workers.dev/`,
+  });
+  const setup = (
+    id = "demo-wedding-cartas",
+    environment = "production" as "production" | "development",
+  ) => {
+    const context = showcase(id, environment === "development" ? "-dev" : "");
+    const f = fixture({
+      site: context,
+      readiness: { ...blocked, siteId: id, mode: "disabled" },
+      gifts: [
+        {
+          ...gift,
+          siteId: id,
+          mediaAssetId: media.id,
+          altText: "Dinner photo",
+        },
+      ],
+      media: [{ ...media, siteId: id }],
+    });
+    return {
+      ...f,
+      context,
+      options: { ...f.options, applicationEnvironment: environment },
+    };
+  };
+  it.each(["demo-wedding", "demo-wedding-cartas"])(
+    "delivers %s items and finalized photos without receiving readiness",
+    async (id) => {
+      const f = setup(id);
+      const page = await readPublicGifts(f.db, id, f.options);
+      expect(page.mode).toBe("demonstration");
+      expect(page.gifts[0]).toMatchObject({
+        siteId: id,
+        nominalCents: gift.nominalCents,
+        image: { url: media.publicUrl },
+      });
+      expect(f.writes).toEqual([]);
+      await expect(
+        lookupPublishedGift(f.db, id, gift.id, f.options),
+      ).rejects.toMatchObject({ code: "RECEIVING_NOT_READY" });
+    },
+  );
+  it("carries the demonstration contract through HTTP, origin authorization and the default client", async () => {
+    const f = setup();
+    const readPricingSettings = vi.fn(() => {
+      throw new Error("Pricing must not be consulted for demonstration");
+    });
+    const router = createGiftsHttpRouter({
+      db: f.db,
+      auth: {} as never,
+      adminOrigin: "https://admin.example.test",
+      ...f.options,
+      readPricingSettings,
+    });
+    const fetcher = vi.fn((url, init) =>
+      router.request(
+        new Request(url, {
+          ...init,
+          headers: { Origin: "https://wedding.example.test" },
+        }),
+      ),
+    );
+    const client = new WeddingGiftsApi({
+      siteId: f.context.id,
+      apiOrigin: "https://api.example.test",
+      demo: true,
+      fetcher: fetcher as typeof fetch,
+    });
+    expect((await client.getCatalog()).mode).toBe("demonstration");
+    expect(readPricingSettings).not.toHaveBeenCalled();
+    const forged = await router.request(
+      new Request(
+        `https://api.example.test/v1/public/sites/${f.context.id}/gifts?mode=demonstration`,
+        { headers: { Origin: "https://wedding.example.test" } },
+      ),
+    );
+    expect(forged.status).toBe(400);
+  });
+  it("never quotes a showcase whose catalog is available only for demonstration", async () => {
+    const f = setup();
+    const append = vi.fn();
+    const loadReceivingContext = vi.fn();
+    const service = createGiftQuoteService({
+      findPublishedGift: (site, giftId) =>
+        findPublishedGiftForQuote(f.db, site, giftId, f.options),
+      loadReceivingContext,
+      loadPricingPolicy: vi.fn(),
+      repository: { append },
+      now: () => now,
+      generateId: () => "quote-example",
+      quoteTtlMs: 300000,
+      pricingFreshnessMs: 60000,
+    });
+    await expect(
+      service.createQuote(f.context.id, { giftId: gift.id, method: "PIX" }),
+    ).rejects.toMatchObject({ code: "RECEIVING_NOT_READY" });
+    expect(loadReceivingContext).not.toHaveBeenCalled();
+    expect(append).not.toHaveBeenCalled();
+    expect(f.writes).toEqual([]);
+  });
+  it("uses the environment-specific identity in development", async () => {
+    const f = setup("demo-wedding-cartas", "development");
+    expect((await readPublicGifts(f.db, f.context.id, f.options)).mode).toBe(
+      "demonstration",
+    );
+  });
+  it("lets authorized administrators list/create/edit with existing media validation and locks", async () => {
+    const f = setup();
+    expect(
+      (await listSiteGifts(f.db, actor, f.context.id, f.options)).gifts,
+    ).toHaveLength(1);
+    const created = await createSiteGift(
+      f.db,
+      actor,
+      f.context.id,
+      {
+        ...input,
+        mediaAssetId: media.id,
+        altText: "Dinner photo",
+      },
+      f.options,
+    );
+    expect(created.gift).toMatchObject({
+      id: "new-gift",
+      siteId: f.context.id,
+      publicationState: "DRAFT",
+    });
+    const edited = await updateSiteGift(
+      f.db,
+      actor,
+      f.context.id,
+      created.gift.id,
+      { title: "Edited example" },
+      f.options,
+    );
+    expect(edited.gift.title).toBe("Edited example");
+    expect(requireSiteCapability).toHaveBeenCalledWith(
+      f.db,
+      actor,
+      f.context.id,
+      "manageCatalog",
+    );
+    expect(f.queries.some((q) => /FOR UPDATE/.test(q.sql))).toBe(true);
+  });
+  it("keeps existing configured Botanical live catalog behavior", async () => {
+    const f = setup("demo-wedding");
+    f.readReadiness.mockResolvedValue({
+      ...ready,
+      siteId: f.context.id,
+      mode: "live",
+    });
+    expect(
+      (
+        await readPublicGifts(f.db, f.context.id, {
+          ...f.options,
+          liveDemoSiteId: f.context.id,
+        })
+      ).mode,
+    ).toBe("live");
+    expect(
+      (
+        await lookupPublishedGift(f.db, f.context.id, gift.id, {
+          ...f.options,
+          liveDemoSiteId: f.context.id,
+        })
+      ).siteId,
+    ).toBe(f.context.id);
+  });
+  it("rejects revoked/foreign administrators before any catalog reads or writes", async () => {
+    const f = setup();
+    vi.mocked(requireSiteCapability).mockRejectedValue(
+      new SiteAccessDeniedError(),
+    );
+    await expect(
+      listSiteGifts(f.db, actor, f.context.id, f.options),
+    ).rejects.toBeInstanceOf(SiteAccessDeniedError);
+    await expect(
+      createSiteGift(f.db, actor, f.context.id, input, f.options),
+    ).rejects.toBeInstanceOf(SiteAccessDeniedError);
+    expect(f.queries).toEqual([]);
+    expect(f.writes).toEqual([]);
+  });
+  it.each([
+    { isDemo: false },
+    { repositorySlug: "customer" },
+    { publicUrl: "https://demo-cartas-dev.entrelacos.workers.dev/" },
+    { id: "other-demo", repositorySlug: "other-demo" },
+  ])(
+    "never expands demonstration access for a mismatched tenant/identity: %j",
+    async (changes) => {
+      const id = changes.id ?? "demo-wedding-cartas";
+      const f = fixture({
+        site: { ...showcase(), ...changes },
+        readiness: { ...blocked, siteId: id },
+      });
+      await expect(
+        readPublicGifts(f.db, id, {
+          ...f.options,
+          applicationEnvironment: "production",
+        }),
+      ).rejects.toMatchObject({ code: "RECEIVING_NOT_READY" });
+      await expect(
+        createSiteGift(f.db, actor, id, input, {
+          ...f.options,
+          applicationEnvironment: "production",
+        }),
+      ).rejects.toMatchObject({ code: "RECEIVING_NOT_READY" });
+      expect(f.writes).toEqual([]);
+    },
+  );
+  it("rechecks showcase identity under the mutation lock", async () => {
+    const id = "demo-wedding-cartas";
+    const f = fixture({
+      site: showcase(),
+      readiness: { ...blocked, siteId: id },
+      siteAfterLock: { ...showcase(), isDemo: false },
+    });
+    await expect(
+      createSiteGift(f.db, actor, id, input, {
+        ...f.options,
+        applicationEnvironment: "production",
+      }),
+    ).rejects.toMatchObject({ code: "RECEIVING_NOT_READY" });
+    expect(f.writes).toEqual([]);
+  });
+  it("retains publication/term and same-site media boundaries", async () => {
+    const f = fixture({
+      site: { ...showcase(), publicationState: "UNPUBLISHED" },
+      readiness: { ...blocked, siteId: "demo-wedding-cartas" },
+    });
+    await expect(
+      readPublicGifts(f.db, "demo-wedding-cartas", {
+        ...f.options,
+        applicationEnvironment: "production",
+      }),
+    ).rejects.toMatchObject({ code: "SITE_INELIGIBLE" });
   });
 });

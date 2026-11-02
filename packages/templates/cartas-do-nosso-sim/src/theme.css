@@ -1,0 +1,138 @@
+@theme inline {
+  --color-template-ivory: var(--template-ivory);
+  --color-template-olive: var(--template-olive);
+  --color-template-ink: var(--template-ink);
+  --color-template-muted: var(--template-muted);
+  --color-template-line: var(--template-line);
+  --font-template-serif: Georgia, "Times New Roman", serif;
+  --template-ivory: #f4f0e8;
+  --template-olive: #34483d;
+  --template-ink: #25352b;
+  --template-muted: #637066;
+  --template-line: rgba(37, 53, 43, 0.18);
+  --template-header-height: 4.05rem;
+  --template-width-scale: clamp(1, calc(100vw / 1440px), 1.3333333333);
+  --template-stage-max-width: 120rem;
+  --template-page-gutter: clamp(1rem, 2.7778vw, 2.5rem);
+  --template-page-inset: max(
+    var(--template-page-gutter),
+    calc((100vw - var(--template-stage-max-width)) / 2 + 2.5rem)
+  );
+  --template-line-soft: rgba(244, 240, 232, 0.24);
+  --template-hero-gradient: linear-gradient(
+    180deg,
+    rgba(17, 27, 22, 0.16),
+    rgba(17, 27, 22, 0.76)
+  );
+  --template-story-gradient: linear-gradient(
+    180deg,
+    rgba(24, 25, 18, 0.05) 0%,
+    rgba(24, 25, 18, 0.2) 38%,
+    rgba(24, 25, 18, 0.84) 100%
+  );
+  --animate-template-hero-media-intro: template-hero-media-intro 1.2s
+    cubic-bezier(0.22, 1, 0.36, 1) both;
+  --animate-template-hero-copy-intro: template-hero-copy-intro 1s
+    cubic-bezier(0.33, 0.05, 0.2, 1) both;
+  --animate-template-header-intro: template-header-intro 900ms
+    cubic-bezier(0.14, 1, 0.34, 1) both;
+  --animate-template-story-media-resolve: template-story-media-resolve 3.4s
+    cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+@keyframes template-hero-media-intro {
+  from {
+    clip-path: inset(3%);
+    transform: scale(1.04);
+  }
+
+  to {
+    clip-path: inset(0);
+    transform: scale(1);
+  }
+}
+
+@keyframes template-hero-copy-intro {
+  from {
+    opacity: 0;
+    clip-path: inset(0 0 100%);
+    transform: translateY(1.75rem);
+  }
+
+  to {
+    opacity: 1;
+    clip-path: inset(0);
+    transform: translateY(0);
+  }
+}
+
+@keyframes template-header-intro {
+  from {
+    opacity: 0;
+    transform: translateY(-0.75rem);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes template-story-media-resolve {
+  from {
+    transform: scale(1.04);
+  }
+
+  to {
+    transform: scale(1);
+  }
+}
+
+html[data-wedding-theme="letters"] {
+  --background: var(--template-ivory);
+  --foreground: var(--template-ink);
+  --surface: var(--template-paper);
+  --surface-foreground: var(--template-ink);
+  --card: var(--template-paper);
+  --card-foreground: var(--template-ink);
+  --popover: var(--template-paper);
+  --popover-foreground: var(--template-ink);
+  --primary: var(--template-olive);
+  --primary-foreground: var(--template-ivory);
+  --secondary: var(--template-ivory);
+  --secondary-foreground: var(--template-ink);
+  --muted: var(--template-ivory);
+  --muted-foreground: var(--template-muted);
+  --accent: var(--template-ivory);
+  --accent-foreground: var(--template-ink);
+  --border: var(--template-input-line);
+  --input: var(--template-input-line);
+  --ring: var(--template-olive);
+  --template-ivory: #f8f1e7;
+  --template-olive: #642c40;
+  --template-ink: #30212a;
+  --template-muted: #715360;
+  --template-line: rgba(100, 44, 64, 0.23);
+  --template-paper: #fffbf5;
+  --template-input-line: #967582;
+  --template-tint: #f0e3df;
+  --template-line-soft: rgba(248, 241, 231, 0.3);
+}
+
+@keyframes template-letter-name {
+  from {
+    transform: translateY(8px);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+@keyframes template-letter-photo {
+  from {
+    transform: rotate(1deg) translateY(8px);
+  }
+  to {
+    transform: rotate(2deg) translateY(0);
+  }
+}

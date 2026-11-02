@@ -33,10 +33,10 @@ The first independent run reported six failing checklist areas. Five public defe
 
 ## Package and reuse boundary
 
-- [ ] Confirm `@entrelacos/template-root` exposes only `./v1` and both consumers avoid deep and app-to-app imports.
-- [ ] Scan `packages/template-root/src` for all demo/fixture wedding values and confirm no fixed wedding, editorial, navigation, SEO, venue, label, or media content exists.
+- [ ] Confirm `@entrelacos/template-cinema-botanico` exposes only `./v1` and both consumers avoid deep and app-to-app imports.
+- [ ] Scan `packages/templates/cinema-botanico/src` for all demo/fixture wedding values and confirm no fixed wedding, editorial, navigation, SEO, venue, label, or media content exists.
 - [ ] Exercise contract rejection for malformed serializable content, unsafe schemes/URLs, invalid canonical/social metadata, invalid/non-positive media dimensions, duplicate IDs, duplicate links, unresolved anchors, absent ordered sections, and a missing/duplicate hero.
-- [ ] Build `apps/wedding-demo` and `apps/template-fixture` independently with no live runtime service.
+- [ ] Build `apps/wedding-demo-botanico` and `apps/template-fixture` independently with no live runtime service.
 - [ ] Confirm the demo uses the default preset while the fixture renders distinct identity/content/media/SEO, story-before-hero order, its local section, and direct `/hospedagem` route without a template fork.
 - [ ] Override each supported CSS variable in a fixture and confirm the contract is limited to `--template-ivory`, `--template-olive`, `--template-ink`, `--template-muted`, and `--template-line`.
 

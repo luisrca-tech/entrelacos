@@ -60,8 +60,20 @@ export const receivingReadinessSchema = z
   );
 export type ReceivingReadiness = z.infer<typeof receivingReadinessSchema>;
 export const receivingReadinessResponseSchema = z
-  .object({ readiness: receivingReadinessSchema })
-  .strict();
+  .object({
+    readiness: receivingReadinessSchema,
+    catalogAccess: z
+      .object({ siteId: id, mode: z.literal("demonstration") })
+      .strict()
+      .optional(),
+  })
+  .strict()
+  .refine(
+    (value) =>
+      !value.catalogAccess ||
+      value.catalogAccess.siteId === value.readiness.siteId,
+    "Catalog access must match the receiving site",
+  );
 
 export const siteMembershipRoleSchema = z.enum([
   "SITE_ADMIN",
@@ -1489,7 +1501,7 @@ const catalogPageCard = z
 export const publicGiftCatalogPageResponseSchema = z
   .object({
     siteId: id,
-    mode: receivingModeSchema,
+    mode: z.enum(["disabled", "sandbox", "live", "demonstration"]),
     gifts: z.array(catalogPageCard).max(giftCatalogLimits.pageSize),
     page: catalogPageNumber,
     pageSize: z.literal(giftCatalogLimits.pageSize),

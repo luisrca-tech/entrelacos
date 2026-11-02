@@ -25,6 +25,11 @@ jobs:
       - run: bun run typecheck
       - run: bun run test
       - run: bun run build
+        env:
+          # CI validates static artifacts without publishing or contacting a site.
+          PUBLIC_SITE_URL: https://entrelacos.example.test/
+          PUBLIC_BOTANICAL_DEMO_URL: https://botanico.example.test/
+          PUBLIC_LETTERS_DEMO_URL: https://cartas.example.test/
       - run: bun run check:public-builds
       - run: git diff --check
 

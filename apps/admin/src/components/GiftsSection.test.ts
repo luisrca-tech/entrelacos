@@ -68,3 +68,29 @@ describe("gift readiness rendering", () => {
 
 beforeEach(() => vi.stubGlobal("__APP_ENV__", "development"));
 afterEach(() => vi.unstubAllGlobals());
+
+it("opens the editor only for the matching server demonstration grant while finance stays locked", () => {
+  const catalog = createElement(
+    "button",
+    { type: "button" },
+    "Adicionar presente",
+  );
+  const render = (catalogSite: string) =>
+    renderToStaticMarkup(
+      createElement(GiftsReadinessView, {
+        siteId: locked.siteId,
+        readiness: {
+          ...locked,
+          catalogAccess: { siteId: catalogSite, mode: "demonstration" },
+        },
+        catalog,
+        onRetry: vi.fn(),
+      }),
+    );
+  expect(render(locked.siteId)).toContain("Adicionar presente");
+  expect(render(locked.siteId)).toContain(
+    "contribuições e recebimentos continuam indisponíveis",
+  );
+  expect(render("foreign")).not.toContain("Adicionar presente");
+  expect(render(locked.siteId)).not.toContain("Recebimentos verificados");
+});

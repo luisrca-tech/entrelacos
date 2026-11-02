@@ -1,0 +1,145 @@
+---
+import "../styles/landing.css";
+import "lenis/dist/lenis.css";
+import { landingConfig } from "../landingConfig";
+const config = landingConfig(import.meta.env, import.meta.env.PROD);
+const questions = [
+  ["O site é feito com a nossa história?", "Sim. Escolhemos o modelo e organizamos as fotos, os textos e as informações do casamento com vocês. O Entrelaços cuida da montagem e da publicação; vocês cuidam dos convidados pelo Dashboard."],
+  ["O que conseguimos gerenciar pelo Dashboard?", "A lista de convidados, os grupos e famílias, as confirmações de presença e o mural. O painel também reúne a gestão dos presentes e o acompanhamento dos recebimentos, conforme a configuração do casamento."],
+  ["Como funcionam os presentes em dinheiro?", "Os itens da lista representam contribuições para o casal, sem entrega de produtos físicos. O convidado escolhe o presente e segue para o pagamento. O recebimento depende da conta configurada e habilitada para o casamento. Taxas, forma de pagamento e condições são apresentadas no fluxo; os prazos seguem o serviço de pagamento."],
+  ["Os convidados precisam criar uma conta?", "A confirmação usa o acesso de convidado vinculado à lista do casamento. Assim, cada família responde pelas pessoas do seu grupo. As informações práticas do evento ficam disponíveis no site."],
+  ["Podemos usar no celular?", "Sim. Os sites e o Dashboard têm versões que se adaptam ao celular. O convidado pode consultar as informações, confirmar presença e deixar sua mensagem pelo próprio aparelho."],
+  ["Como combinamos valores e prazo de entrega?", "Depois de escolher o estilo, conversamos sobre a data, o conteúdo e o que vocês precisam. Valores, prazo de preparação, período de publicação e eventuais custos adicionais são combinados antes da contratação."],
+];
+---
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#f5f0e7" />
+    <title>Entrelaços — o começo da festa, a continuação da sua história</title>
+    <meta name="description" content="Sites de casamento com a sua história. Conheça Cinema Botânico e Cartas do Nosso Sim, com confirmação de presença, mural, presentes em dinheiro e gestão pelo Dashboard." />
+    <link rel="canonical" href={config.siteUrl} />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="robots" content="index, follow" />
+    <meta property="og:type" content="website" />
+    <meta property="og:locale" content="pt_BR" />
+    <meta property="og:title" content="Entrelaços — antes do sim, já é sobre vocês." />
+    <meta property="og:description" content="Do convite ao carinho de quem vem. Dois estilos de site e um lugar para organizar o seu casamento." />
+    <meta property="og:url" content={config.siteUrl} />
+    <meta property="og:image" content={new URL("social-card.png", config.siteUrl).href} />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:image" content={new URL("social-card.png", config.siteUrl).href} />
+    <meta property="og:image:alt" content="Duas alianças entrelaçadas. Histórias que se encontram, em um site só de vocês." />
+  </head>
+  <body>
+    <a href="#conteudo" class="skip-link">Pular para o conteúdo</a>
+    <header class="masthead">
+      <a href="#inicio" class="wordmark" aria-label="Entrelaços, início"><span class="brand-mark" aria-hidden="true">∞</span> entrelaços<span class="brand-dot">.</span></a>
+      <nav aria-label="Navegação principal"><a href="#experiencia">A experiência</a><a href="#modelos">Os modelos</a><a href="#detalhes">Os detalhes</a></nav>
+      <a class="header-cta" href={config.contactUrl ?? "#modelos"}>{config.contactUrl ? "Vamos conversar" : "Encontre seu estilo"}<span aria-hidden="true">↗</span></a>
+    <button type="button" data-motion-toggle hidden aria-pressed="false">Pausar animações</button>
+    </header>
+    <main id="conteudo" tabindex="-1">
+
+      <section id="inicio" class="hero" aria-labelledby="hero-title">
+        <div class="hero-copy">
+          <p class="eyebrow entrance">DUAS HISTÓRIAS. UM NOVO COMEÇO.</p>
+          <h1 id="hero-title" class="entrance">O encontro<br />vira <em>história.</em><br /><span class="title-last">E ganha um lugar.</span></h1>
+          <p class="hero-description entrance">Um site de casamento para unir o que importa: a história de vocês, as pessoas queridas e tudo o que vem depois do sim.</p>
+          <div class="hero-actions entrance"><a href="#modelos" class="button button-wine">Encontre o seu estilo <span aria-hidden="true">↗</span></a><a href="#experiencia" class="hero-explore">Siga o fio <span aria-hidden="true">↓</span></a></div>
+          <p class="hero-note entrance">Design com identidade. Convidados por perto.<br />Os detalhes, no mesmo lugar.</p>
+        </div>
+        <div class="union-art" aria-hidden="true">
+          <div class="union-halo"></div>
+          <div class="union-axis"><span>uma história</span><span>outra história</span></div>
+          <div class="union-stage">
+            <div class="alliance alliance-first">{Array.from({ length: 12 }, (_, slice) => <i class="alliance-slice" style={`--slice: ${slice}`}></i>)}</div>
+            <div class="alliance alliance-second">{Array.from({ length: 12 }, (_, slice) => <i class="alliance-slice" style={`--slice: ${slice}`}></i>)}</div>
+          </div>
+          <div class="union-shadow"></div>
+          <p class="union-caption">O que era de cada um.<br /><em>Agora, de vocês.</em></p>
+          <span class="union-coordinate">O ENCONTRO</span>
+          <div class="union-thread"></div>
+        </div>
+        <div class="hero-bottom"><span>ENTRE HISTÓRIAS, PESSOAS E NOVOS PLANOS.</span><a href="#experiencia">Um encontro puxa o próximo <span aria-hidden="true">↓</span></a></div>
+      </section>
+
+      <section id="experiencia" class="opening chapter" aria-labelledby="opening-title">
+        <div class="chapter-label"><span>QUANDO DUAS HISTÓRIAS SE ENCONTRAM</span></div>
+        <div class="opening-layout">
+          <h2 id="opening-title" class="reveal">Primeiro, vocês.<br /><em>Depois, todos<br />que fazem parte.</em></h2>
+          <div class="opening-copy reveal"><p>O sim é de vocês. A celebração começa quando essa história encontra as pessoas certas.</p><p>Escolham uma identidade, compartilhem o convite e acompanhem cada resposta. Do primeiro clique ao último recado, o Entrelaços aproxima tudo.</p><a class="text-link" href="#modelos">Toda história encontra a sua forma <span aria-hidden="true">↗</span></a></div>
+          <span class="giant-loop" aria-hidden="true">∞</span>
+        </div>
+        <div class="story-thread" aria-hidden="true"><span></span><i>o encontro ganha forma</i><span></span></div>
+      </section>
+
+      <section id="modelos" class="models chapter" aria-labelledby="models-title">
+        <div class="section-heading reveal"><div><p class="eyebrow">DUAS FORMAS DE DIZER SIM</p><h2 id="models-title">O mesmo amor.<br /><em>Outra forma de contar.</em></h2></div><p>Cinema para quem sente pelas imagens.<br />Cartas para quem guarda cada palavra.<br />Qual deles parece com vocês?</p></div>
+        <div class="model-grid">
+          <article class="model model-botanical reveal">
+            <a href={config.botanicalUrl} class="model-scene" aria-label="Explorar o site de demonstração Cinema Botânico">
+              <div class="browser-trim" aria-hidden="true"><span>● ● ●</span><span>CINEMA BOTÂNICO</span><span>↗</span></div>
+              <div class="botanical-cover abstract-botanical"><svg class="botanical-branch" viewBox="0 0 300 400" fill="none" aria-hidden="true"><path d="M80 410C200 240 120 130 260-20" stroke="currentColor" stroke-width="2"/><path d="M137 300C25 280 35 215 140 258C213 226 259 247 137 300ZM163 218C64 192 78 131 166 179C237 156 278 183 163 218ZM193 124C120 100 135 51 207 87C269 72 293 93 193 124Z" fill="currentColor"/></svg><div class="cover-copy"><small>UMA CELEBRAÇÃO COM A SUA ESSÊNCIA</small><span>A nossa<br /><i>história.</i></span><small>CINEMA BOTÂNICO / O PRÓXIMO CAPÍTULO</small></div></div>
+              <div class="preview-foot"><span>Uma história para sentir.</span><span aria-hidden="true">↓</span></div>
+            </a>
+            <div class="model-meta"><span class="model-number">I.</span><div><h3>Cinema Botânico</h3><p>Fotografia, natureza e movimento. Uma abertura cinematográfica e espaço para reviver a história.</p><a href={config.botanicalUrl} class="text-link">Viver essa experiência <span aria-hidden="true">↗</span></a></div><div class="swatches" aria-label="Paleta oliva e marfim"><i></i><i></i></div></div>
+          </article>
+          <article class="model model-letters reveal">
+            <a href={config.lettersUrl} class="model-scene" aria-label="Explorar o site de demonstração Cartas do Nosso Sim">
+              <div class="browser-trim" aria-hidden="true"><span>● ● ●</span><span>CARTAS DO NOSSO SIM</span><span>↗</span></div>
+              <div class="letter-cover abstract-letter"><span class="letter-monogram">nós <i>/</i> dois</span><div class="letter-preview-title"><small>UM CONVITE PARA ESTAR PERTO</small><span>O nosso<br /><i>sim.</i></span><p>Tem histórias que merecem<br />ser escritas com carinho.</p></div><div class="letter-envelope" aria-hidden="true"><span>para: quem faz parte.</span><i>∞</i></div><span class="letter-signature">Com carinho, vocês dois.</span></div>
+              <div class="preview-foot"><span>Uma história para guardar.</span><span aria-hidden="true">↓</span></div>
+            </a>
+            <div class="model-meta"><span class="model-number">II.</span><div><h3>Cartas do Nosso Sim</h3><p>O cuidado de uma carta. Papel, tons de vinho e uma composição editorial que dá voz à história.</p><a href={config.lettersUrl} class="text-link">Abrir essa carta <span aria-hidden="true">↗</span></a></div><div class="swatches" aria-label="Paleta vinho e papel"><i></i><i></i></div></div>
+          </article>
+        </div>
+        <p class="section-note">Duas direções visuais, uma história só de vocês. Abra as demos para explorar os modelos completos com um casamento ilustrativo.</p>
+      </section>
+
+      <section class="invitation-bridge" aria-label="Da identidade aos convidados"><span>Da sua história</span><div class="bridge-rings" aria-hidden="true"><i></i><i></i></div><span>para quem faz parte dela.</span></section>
+
+      <section id="convidados" class="people chapter" aria-labelledby="people-title">
+        <div class="people-copy reveal"><p class="eyebrow">OS NOMES QUE FAZEM DIFERENÇA</p><h2 id="people-title">Não é só<br />quem <em>vem.</em><br />É quem faz parte.</h2><p>Confirme a presença de cada pessoa, organize os convidados por família e acompanhe as respostas no Dashboard.</p><p>No site, o mural abre espaço para o carinho de quem vai celebrar com vocês.</p><a href={new URL("#mural", config.lettersUrl).href} class="text-link">Conheça o mural na demo <span aria-hidden="true">↗</span></a></div>
+        <div class="guest-composition">
+          <div class="guest-list reveal"><div class="list-heading"><span>UM LUGAR PARA CADA NOME</span><span aria-hidden="true">✳</span></div><h3>A nossa gente.</h3><div class="guest-row"><span><i>01</i> Convidada</span><strong>✓ Confirmada</strong></div><div class="guest-row"><span><i>02</i> Convidado</span><strong>✓ Confirmado</strong></div><div class="guest-row"><span><i>03</i> Acompanhante</span><em>Resposta pendente</em></div><p>Ilustração da organização por família.<br />Respostas ilustrativas.</p></div>
+          <blockquote class="guest-message reveal"><span class="quote-mark" aria-hidden="true">“</span><p>Que a vida a dois tenha sempre espaço para mais um café, uma viagem e muitos abraços.</p><footer>Um carinho que fica <span>EXEMPLO DE MENSAGEM</span></footer></blockquote>
+        </div>
+      </section>
+
+      <section id="presentes" class="gifts chapter" aria-labelledby="gifts-title">
+        <div class="gift-object" aria-hidden="true"><div class="gift-box"><div class="gift-top"></div><div class="gift-front"></div><div class="gift-side"></div><div class="gift-ribbon"></div><div class="gift-bow bow-one"></div><div class="gift-bow bow-two"></div><span class="gift-tag">para a vida<br /><i>a dois.</i></span></div><span class="gift-shadow"></span></div>
+        <div class="gift-copy reveal"><p class="eyebrow">CARINHO QUE VIRA POSSIBILIDADE</p><h2 id="gifts-title">O presente é<br /><em>o que vem depois.</em></h2><p>Uma viagem. O primeiro cantinho. Os planos que vocês ainda vão inventar.</p><p>Com a lista de presentes, os convidados escolhem como participar e o casal recebe contribuições em dinheiro pela conta configurada para o casamento.</p><div class="gift-steps"><span>Escolher o presente</span><i aria-hidden="true">→</i><span>Realizar o pagamento</span><i aria-hidden="true">→</i><span>Celebrar novos planos</span></div><p class="fine-print">Os presentes são contribuições, sem entrega física. Recebimento sujeito à habilitação da conta; taxas e condições aparecem no pagamento.</p></div>
+      </section>
+
+      <section id="dashboard" class="dashboard chapter" aria-labelledby="dashboard-title">
+        <div class="section-heading reveal"><div><p class="eyebrow">NOS BASTIDORES, TUDO ENCONTRA SEU LUGAR</p><h2 id="dashboard-title">Menos pontas soltas.<br /><em>Mais espaço para viver.</em></h2></div><p>O site recebe seus convidados.<br />O Dashboard ajuda vocês<br />a cuidar dos detalhes.</p></div>
+        <div class="dashboard-features">
+          <article class="dashboard-feature reveal"><span class="feature-index">CONVIDADOS</span><h3>Cada pessoa.<br />Cada resposta.</h3><p>Famílias, lista de convidados e confirmações reunidas para acompanhar quem confirmou e quem ainda não respondeu.</p><div class="feature-ornament attendance" aria-hidden="true"><i>✓</i><i>✓</i><i>…</i></div></article>
+          <article class="dashboard-feature reveal"><span class="feature-index">MURAL</span><h3>O carinho<br />também fica.</h3><p>Mensagens dos convidados no site, com controles para gerenciar o mural e remover recados quando necessário.</p><div class="feature-ornament message-lines" aria-hidden="true"><i></i><i></i><i></i></div></article>
+          <article class="dashboard-feature reveal"><span class="feature-index">PRESENTES</span><h3>Planos que<br />ganham forma.</h3><p>Gestão dos itens da lista e acompanhamento dos recebimentos, com as informações do casamento reunidas no painel.</p><div class="feature-ornament mini-rings" aria-hidden="true"><i></i><i></i></div></article>
+        </div>
+        <div class="service-note reveal"><span aria-hidden="true">✳</span><p><strong>Vocês trazem a história. Nós preparamos o site.</strong><br />A criação visual e a publicação ficam com o Entrelaços. A organização dos convidados fica nas suas mãos.</p></div>
+      </section>
+
+      <section class="process chapter" aria-labelledby="process-title"><div class="process-intro reveal"><p class="eyebrow">DO PRIMEIRO OLÁ AO PRIMEIRO CONVIDADO</p><h2 id="process-title">Vamos dar forma<br /><em>ao próximo capítulo?</em></h2></div><ol class="process-list"><li class="reveal"><div><h3>Encontramos o estilo.</h3><p>Vocês exploram os modelos e contam o que faz sentido para a celebração.</p></div></li><li class="reveal"><div><h3>Colocamos a história no papel.</h3><p>Organizamos fotos, textos e informações. Vocês conferem o site antes de compartilhar.</p></div></li><li class="reveal"><div><h3>Abrimos as portas.</h3><p>Com o site publicado e o Dashboard preparado, é hora de convidar as pessoas que fazem parte dessa história.</p></div></li></ol></section>
+
+      <section id="detalhes" class="faq chapter" aria-labelledby="faq-title"><div class="faq-intro"><p class="eyebrow">ANTES DE COMEÇAR</p><h2 id="faq-title">Alguns detalhes.<br /><em>Com toda a clareza.</em></h2></div><div class="faq-list">{questions.map(([question, answer]) => <details><summary>{question}<span aria-hidden="true">+</span></summary><p>{answer}</p></details>)}</div></section>
+
+      <section id="comecar" class="closing" aria-labelledby="closing-title"><div class="closing-orbit" aria-hidden="true"></div><p class="eyebrow reveal">O PRÓXIMO CAPÍTULO TEM O NOME DE VOCÊS.</p><h2 id="closing-title" class="reveal">Toda grande festa<br />começa com<br /><em>um encontro.</em></h2><div class="closing-actions reveal"><a class="button button-ivory" href={config.contactUrl ?? "#modelos"}>{config.contactUrl ? "Vamos contar a nossa história" : "Encontrar o nosso modelo"}<span aria-hidden="true">↗</span></a><p>{config.contactUrl ? "Conte a data e o que vocês imaginam. O resto, construímos juntos." : "Escolham um estilo e contem para quem compartilhou este site com vocês."}</p></div><span class="closing-signature" aria-hidden="true">com carinho, entrelaços.</span></section>
+    </main>
+    <footer class="site-footer"><a class="wordmark" href="#inicio">entrelaços<span class="brand-dot">.</span></a><p>Histórias com identidade.<br />Encontros com significado.</p><div><a href={config.botanicalUrl}>Cinema Botânico ↗</a><a href={config.lettersUrl}>Cartas do Nosso Sim ↗</a></div><small>© {new Date().getFullYear()} Entrelaços — Cada história, um novo encontro.</small></footer>
+    <script>
+      import Lenis from "lenis";
+      import { mountLandingMotion } from "../landingMotion";
+      mountLandingMotion(
+        document,
+        window,
+        window.matchMedia("(prefers-reduced-motion: reduce)"),
+        (options) => new Lenis(options),
+      );
+    </script>
+  </body>
+</html>

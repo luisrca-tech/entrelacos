@@ -59,14 +59,14 @@ const guestAccessDescriptionClass =
 const guestAccessMessageClass =
   "m-0 max-w-[42rem] rounded-xl border border-template-line px-4 py-3 text-template-ink min-[961px]:col-start-2 min-[961px]:row-start-2";
 const guestAccessFormClass =
-  "grid min-w-0 w-full max-w-[42rem] gap-5 rounded-[1.5rem] border border-template-line bg-[#fffdf8] p-[clamp(1.25rem,3vw,2.25rem)] min-[961px]:col-start-2 min-[961px]:row-start-1";
+  "grid min-w-0 w-full max-w-[42rem] gap-5 rounded-[1.5rem] border border-template-line bg-[var(--template-paper,#fffdf8)] p-[clamp(1.25rem,3vw,2.25rem)] min-[961px]:col-start-2 min-[961px]:row-start-1";
 const guestAccessLabelClass = "grid gap-2 text-[0.85rem] font-medium";
 const guestAccessInputClass =
-  "min-h-11 w-full rounded-xl border border-[rgba(37,53,43,0.25)] bg-[#fffdf8] px-4 py-3 text-base text-template-ink font-[inherit] transition-[border-color,box-shadow] duration-200 focus:border-template-olive focus:outline-2 focus:outline-offset-2 focus:outline-template-olive motion-reduce:transition-none";
+  "min-h-11 w-full rounded-xl border border-[var(--template-input-line,rgba(37,53,43,0.25))] bg-[var(--template-paper,#fffdf8)] px-4 py-3 text-base text-template-ink font-[inherit] transition-[border-color,box-shadow] duration-200 focus:border-template-olive focus:outline-2 focus:outline-offset-2 focus:outline-template-olive motion-reduce:transition-none";
 const guestAccessButtonClass =
   "min-h-11 cursor-pointer rounded-full border border-template-ink bg-template-ink px-5 py-3 text-template-ivory font-[inherit] text-sm font-medium transition-[background-color,box-shadow,transform] duration-200 ease-out hover:-translate-y-0.5 hover:bg-template-olive hover:shadow-sm focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-template-ink disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transform-none motion-reduce:transition-none";
 const guestAccessInvitationClass =
-  "grid min-w-0 gap-5 self-start rounded-[1.5rem] border border-template-line bg-[#fffdf8] p-[clamp(1.25rem,3vw,2.25rem)]";
+  "grid min-w-0 gap-5 self-start rounded-[1.5rem] border border-template-line bg-[var(--template-paper,#fffdf8)] p-[clamp(1.25rem,3vw,2.25rem)]";
 
 function errorWithRetry(error: unknown): string {
   const message = guestAccessErrorMessage(error);

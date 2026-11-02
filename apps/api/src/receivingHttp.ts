@@ -7,6 +7,7 @@ import { Hono } from "hono";
 import { trustedAdminOrigin } from "./adminOrigin";
 import { type AuthHttpOptions, requireAdminSession } from "./authHttp";
 import { createDefaultReceivingReadiness } from "./receivingReadiness";
+import { readShowcaseCatalogAccess } from "./showcaseCatalog";
 import { resolveSiteAccess } from "./siteAccess";
 
 function problem(status: number, code: string, title: string): Response {
@@ -23,6 +24,7 @@ function problem(status: number, code: string, title: string): Response {
 }
 
 export type ReceivingHttpOptions = AuthHttpOptions & {
+  applicationEnvironment?: "development" | "test" | "production";
   readReadiness?: (siteId: string) => Promise<ReceivingReadiness>;
 };
 
@@ -56,7 +58,18 @@ export function createReceivingHttpRouter(options: ReceivingHttpOptions): Hono {
     const readiness = options.readReadiness
       ? await options.readReadiness(siteId.data)
       : createDefaultReceivingReadiness(siteId.data);
-    const response = receivingReadinessResponseSchema.safeParse({ readiness });
+    const catalogAccess =
+      !readiness.catalogEligible && access.capabilities?.manageCatalog
+        ? await readShowcaseCatalogAccess(
+            options.db,
+            siteId.data,
+            options.applicationEnvironment,
+          )
+        : undefined;
+    const response = receivingReadinessResponseSchema.safeParse({
+      readiness,
+      ...(catalogAccess ? { catalogAccess } : {}),
+    });
     if (!response.success || response.data.readiness.siteId !== siteId.data) {
       return problem(
         503,

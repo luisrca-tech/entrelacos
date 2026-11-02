@@ -16,3 +16,4 @@ work/
 graphify-out/
 .codex/hooks.json
 *.tsbuildinfo
+.worktrees/

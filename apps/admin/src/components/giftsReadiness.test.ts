@@ -45,3 +45,25 @@ describe("gift readiness client boundary", () => {
     ).rejects.toBe(failure);
   });
 });
+
+it("accepts only a same-site explicit server catalog grant without fabricating financial readiness", async () => {
+  const catalogAccess = { siteId: locked.siteId, mode: "demonstration" };
+  const request = vi
+    .fn()
+    .mockResolvedValue({ readiness: locked, catalogAccess });
+  const result = await loadGiftsReadiness(locked.siteId, request);
+  expect(result).toMatchObject({ ...locked, catalogAccess });
+  for (const invalid of [
+    { ...catalogAccess, siteId: "foreign" },
+    { ...catalogAccess, mode: "live" },
+  ]) {
+    await expect(
+      loadGiftsReadiness(
+        locked.siteId,
+        vi
+          .fn()
+          .mockResolvedValue({ readiness: locked, catalogAccess: invalid }),
+      ),
+    ).rejects.toThrow();
+  }
+});

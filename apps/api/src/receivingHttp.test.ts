@@ -154,3 +154,118 @@ describe("receiving HTTP lock", () => {
     expect(await response.text()).not.toContain("private credential detail");
   });
 });
+
+it("returns only the server-selected environment-bound showcase catalog grant to catalog managers", async () => {
+  const siteId = "demo-wedding-cartas";
+  const execute = vi.fn().mockResolvedValue({
+    rows: [
+      {
+        id: siteId,
+        isDemo: true,
+        repositorySlug: siteId,
+        publicUrl: "https://demo-cartas.entrelacos.workers.dev/",
+      },
+    ],
+  });
+  mocks.requireAdminSession.mockResolvedValue({
+    user: { id: "manager", role: "SITE_ADMIN" },
+  });
+  mocks.resolveSiteAccess.mockResolvedValue({
+    siteId,
+    userId: "manager",
+    capabilities: { manageCatalog: true },
+  });
+  const api = createReceivingHttpRouter({
+    auth: {} as never,
+    db: { execute } as never,
+    adminOrigin,
+    applicationEnvironment: "production",
+  });
+  const response = await api.request(
+    request(`/v1/sites/${siteId}/receiving/readiness?mode=live`),
+  );
+  expect(response.status).toBe(200);
+  expect(await response.json()).toMatchObject({
+    readiness: {
+      siteId,
+      state: "NOT_CONFIGURED",
+      catalogEligible: false,
+      mode: "disabled",
+    },
+    catalogAccess: { siteId, mode: "demonstration" },
+  });
+  execute.mockClear();
+  mocks.resolveSiteAccess.mockResolvedValueOnce(null);
+  expect(
+    (await api.request(request(`/v1/sites/${siteId}/receiving/readiness`)))
+      .status,
+  ).toBe(403);
+  expect(execute).not.toHaveBeenCalled();
+  mocks.resolveSiteAccess.mockResolvedValueOnce({
+    siteId,
+    capabilities: { manageCatalog: false },
+  });
+  expect(
+    await (
+      await api.request(request(`/v1/sites/${siteId}/receiving/readiness`))
+    ).json(),
+  ).not.toHaveProperty("catalogAccess");
+  expect(execute).not.toHaveBeenCalled();
+  execute.mockResolvedValueOnce({
+    rows: [
+      {
+        id: "foreign",
+        isDemo: true,
+        repositorySlug: siteId,
+        publicUrl: "https://demo-cartas.entrelacos.workers.dev/",
+      },
+    ],
+  });
+  expect(
+    await (
+      await api.request(request(`/v1/sites/${siteId}/receiving/readiness`))
+    ).json(),
+  ).not.toHaveProperty("catalogAccess");
+});
+
+it("preserves the configured Botanical readiness response without a demonstration extension", async () => {
+  const siteId = "demo-wedding";
+  const readiness = {
+    siteId,
+    state: "READY" as const,
+    reason: null,
+    observedAt: "2026-10-12T12:00:00.000Z",
+    destinationVersion: 1,
+    catalogEligible: true,
+    mode: "live" as const,
+  };
+  mocks.requireAdminSession.mockResolvedValue({
+    user: { id: "manager", role: "SITE_ADMIN" },
+  });
+  mocks.resolveSiteAccess.mockResolvedValue({
+    siteId,
+    capabilities: { manageCatalog: true },
+  });
+  const execute = vi.fn().mockResolvedValue({
+    rows: [
+      {
+        id: siteId,
+        isDemo: true,
+        repositorySlug: siteId,
+        publicUrl: "https://demo.entrelacos.workers.dev/",
+      },
+    ],
+  });
+  const api = createReceivingHttpRouter({
+    auth: {} as never,
+    db: { execute } as never,
+    adminOrigin,
+    applicationEnvironment: "production",
+    readReadiness: async () => readiness,
+  });
+  const response = await api.request(
+    request(`/v1/sites/${siteId}/receiving/readiness`),
+  );
+  expect(await response.json()).toEqual({ readiness });
+  expect(execute).not.toHaveBeenCalled();
+});

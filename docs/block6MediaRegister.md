@@ -14,26 +14,26 @@ Status: the final fictional-couple image set, hero poster, and hero video were a
 
 ## Repository assets
 
-All files are owned by their host app, not `packages/template-root`.
+All files are owned by their host app, not `packages/templates/cinema-botanico`.
 
 | File | Current use | Intrinsic size | Delivery size | Status |
 | --- | --- | --- | --- | --- |
-| `apps/wedding-demo/public/marina-caio-hero.mp4` | Hero background loop | `1920x1080`, 8 seconds, H.264 | 6.8 MiB | Approved fictional-demo video; audio stream removed |
-| `apps/wedding-demo/public/marina-caio-hero-poster.webp` | Hero poster, fallback, and intro ending | `1920x1080` | 182 KiB | Exact first decoded frame of the approved hero video |
-| `apps/wedding-demo/public/marina-caio-hero.webp` | Social image | `1536x1024` | 348 KiB | Approved fictional-demo image |
-| `apps/wedding-demo/public/marina-caio-story-encounter.webp` | História background, first still | `1448x1086` | 196 KiB | Approved fictional-demo image |
-| `apps/wedding-demo/public/marina-caio-story-first-trip.webp` | Retained story alternate | `1448x1086` | 294 KiB | Approved fictional-demo image; not in the compact sequence |
-| `apps/wedding-demo/public/marina-caio-story-home.webp` | História sequence still | `1448x1086` | 197 KiB | Approved fictional-demo image |
-| `apps/wedding-demo/public/marina-caio-story-celebration.webp` | História sequence still | `1448x1086` | 162 KiB | Approved fictional-demo image |
-| `apps/wedding-demo/public/marina-caio-gallery-one.webp` | First gallery item | `1448x1086` | 312 KiB | Approved fictional-demo image |
-| `apps/wedding-demo/public/marina-caio-gallery-two.webp` | Second gallery item | `1448x1086` | 353 KiB | Approved fictional-demo image |
-| `apps/wedding-demo/public/marina-caio-gallery-three.webp` | Third gallery item | `1448x1086` | 192 KiB | Approved fictional-demo image |
-| `apps/wedding-demo/public/marina-caio-gallery-four.webp` | Fourth gallery item | `1448x1086` | 190 KiB | Approved fictional-demo image |
-| `apps/wedding-demo/public/marina-caio-gallery-five.webp` | Fifth gallery item | `1448x1086` | 277 KiB | Approved fictional-demo image |
-| `apps/wedding-demo/public/marina-caio-gallery-six.webp` | Sixth gallery item | `1448x1086` | 168 KiB | Approved fictional-demo image |
-| `apps/wedding-demo/public/marina-caio-attire-palette.webp` | Retained attire illustration | `1440x1440` | 264 KiB | Generated fictional-demo illustration without swatches; retained at the owner's request |
-| `apps/wedding-demo/public/marina-caio-attire-palette-swatches.webp` | Schedule attire detail | `1440x1440` | 264 KiB | Generated fictional-demo illustration with six circular color swatches; wedding-party palette, not a guest dress code |
-| `apps/wedding-demo/public/marina-caio-monogram.svg` | Demo favicon/identity mark | `64x64` | Lightweight SVG | Provisional monogram; not final logo or brand approval |
+| `apps/wedding-demo-botanico/public/marina-caio-hero.mp4` | Hero background loop | `1920x1080`, 8 seconds, H.264 | 6.8 MiB | Approved fictional-demo video; audio stream removed |
+| `apps/wedding-demo-botanico/public/marina-caio-hero-poster.webp` | Hero poster, fallback, and intro ending | `1920x1080` | 182 KiB | Exact first decoded frame of the approved hero video |
+| `apps/wedding-demo-botanico/public/marina-caio-hero.webp` | Social image | `1536x1024` | 348 KiB | Approved fictional-demo image |
+| `apps/wedding-demo-botanico/public/marina-caio-story-encounter.webp` | História background, first still | `1448x1086` | 196 KiB | Approved fictional-demo image |
+| `apps/wedding-demo-botanico/public/marina-caio-story-first-trip.webp` | Retained story alternate | `1448x1086` | 294 KiB | Approved fictional-demo image; not in the compact sequence |
+| `apps/wedding-demo-botanico/public/marina-caio-story-home.webp` | História sequence still | `1448x1086` | 197 KiB | Approved fictional-demo image |
+| `apps/wedding-demo-botanico/public/marina-caio-story-celebration.webp` | História sequence still | `1448x1086` | 162 KiB | Approved fictional-demo image |
+| `apps/wedding-demo-botanico/public/marina-caio-gallery-one.webp` | First gallery item | `1448x1086` | 312 KiB | Approved fictional-demo image |
+| `apps/wedding-demo-botanico/public/marina-caio-gallery-two.webp` | Second gallery item | `1448x1086` | 353 KiB | Approved fictional-demo image |
+| `apps/wedding-demo-botanico/public/marina-caio-gallery-three.webp` | Third gallery item | `1448x1086` | 192 KiB | Approved fictional-demo image |
+| `apps/wedding-demo-botanico/public/marina-caio-gallery-four.webp` | Fourth gallery item | `1448x1086` | 190 KiB | Approved fictional-demo image |
+| `apps/wedding-demo-botanico/public/marina-caio-gallery-five.webp` | Fifth gallery item | `1448x1086` | 277 KiB | Approved fictional-demo image |
+| `apps/wedding-demo-botanico/public/marina-caio-gallery-six.webp` | Sixth gallery item | `1448x1086` | 168 KiB | Approved fictional-demo image |
+| `apps/wedding-demo-botanico/public/marina-caio-attire-palette.webp` | Retained attire illustration | `1440x1440` | 264 KiB | Generated fictional-demo illustration without swatches; retained at the owner's request |
+| `apps/wedding-demo-botanico/public/marina-caio-attire-palette-swatches.webp` | Schedule attire detail | `1440x1440` | 264 KiB | Generated fictional-demo illustration with six circular color swatches; wedding-party palette, not a guest dress code |
+| `apps/wedding-demo-botanico/public/marina-caio-monogram.svg` | Demo favicon/identity mark | `64x64` | Lightweight SVG | Provisional monogram; not final logo or brand approval |
 | `apps/template-fixture/public/fixture-hero.svg` | Technical fixture hero | `1600x1000` | Lightweight SVG | Permanent test fixture; not client/product media |
 
 The optimized WebP delivery set, including the retained attire version, totals approximately 3.3 MiB. The original PNG files are intentionally not duplicated in the repository. The demo supplies exact intrinsic dimensions and meaningful Portuguese alt text from host-owned content.
@@ -59,7 +59,7 @@ The demo host supplies a Google Maps iframe URL for Casablanca Eventos, a Google
 
 ## Prohibited promotion into shared code
 
-Do not move any host asset, couple identity, venue, alt text, media URL, poster, or approval record into `packages/template-root`. The shared package owns reusable rendering, validation, autoplay-loop coordination, and reduced-motion behavior only. A new host must provide its own media register and content values.
+Do not move any host asset, couple identity, venue, alt text, media URL, poster, or approval record into `packages/templates/cinema-botanico`. The shared package owns reusable rendering, validation, autoplay-loop coordination, and reduced-motion behavior only. A new host must provide its own media register and content values.
 
 ## Listening
 

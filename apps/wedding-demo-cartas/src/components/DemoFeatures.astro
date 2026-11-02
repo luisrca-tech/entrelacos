@@ -1,0 +1,29 @@
+---
+import { GiftSection } from "@entrelacos/template-cartas-do-nosso-sim/v1";
+import { GiftRegistry, GuestAccess, MessageMural } from "@entrelacos/wedding-features";
+import { guestAccess } from "../demoContent";
+---
+
+<section id="guest-access" class="demo-reply [padding:clamp(3rem,_6vw,_6rem)_var(--template-page-inset)] [border-top:1px_solid_var(--template-line)] [&_[data-slot='guest-access']]:[padding:0] [&_[data-slot='guest-access']]:[background:transparent]" aria-label="Confirmação de presença">
+  <p class="chapter-number [margin:0_0_2rem] [font-size:0.72rem] font-semibold [letter-spacing:0.14em] uppercase [color:var(--template-muted)]">{"A sua resposta"}</p>
+  <GuestAccess {...guestAccess} client:only="react">
+    <p slot="fallback" class="feature-fallback [max-width:38rem] m-0 [border:1px_solid_var(--template-line)] [padding:1.25rem] [line-height:1.65]">Esta área interativa precisa de JavaScript. Ative-o para encontrar seu convite e responder à confirmação.</p>
+  </GuestAccess>
+</section>
+<p class="chapter-handoff flex items-center [gap:1.5rem] m-0 [padding:2rem_var(--template-page-inset)] [color:var(--template-muted)] [font:italic_clamp(1rem,_1.5vw,_1.25rem)_/_1.65_var(--font-template-serif)] [&::before]:[content:''] [&::before]:[flex:0_0_clamp(1.5rem,_6vw,_6rem)] [&::before]:[height:1px] [&::before]:[background:currentColor] [&::before]:[opacity:0.5] gift-handoff hidden">{"Seu abraço já faz parte da nossa história. Presentear é opcional."}</p>
+<p class="chapter-handoff flex items-center [gap:1.5rem] m-0 [padding:2rem_var(--template-page-inset)] [color:var(--template-muted)] [font:italic_clamp(1rem,_1.5vw,_1.25rem)_/_1.65_var(--font-template-serif)] [&::before]:[content:''] [&::before]:[flex:0_0_clamp(1.5rem,_6vw,_6rem)] [&::before]:[height:1px] [&::before]:[background:currentColor] [&::before]:[opacity:0.5] mural-handoff">Deixe também suas palavras para este dia.</p>
+<GiftSection content={{ id: "gifts", eyebrow: "O próximo capítulo", title: "Para o que vem depois.", description: "Nossa maior alegria é ter você por perto. Se quiser nos presentear, escolha um carinho para a nossa vida a dois." }}>
+  <GiftRegistry {...guestAccess} demo={true} liveDemoSiteId={import.meta.env.PUBLIC_LIVE_DEMO_SITE_ID} client:only="react" />
+  <p class="gift-closing m-0 [font:italic_1.15rem_/_1.7_var(--font-template-serif)]">{"Há palavras que também viram lembrança."}</p>
+</GiftSection>
+<section id="mural" class="demo-mural [padding:clamp(3rem,_6vw,_6rem)_var(--template-page-inset)] [border-top:1px_solid_var(--template-line)] [&_[data-slot='message-mural']]:[padding:0] [&_[data-slot='message-mural']]:[background:transparent]" aria-label="Mural dos convidados">
+  <p class="chapter-number [margin:0_0_2rem] [font-size:0.72rem] font-semibold [letter-spacing:0.14em] uppercase [color:var(--template-muted)]">{"Palavras que ficam"}</p>
+  <MessageMural {...guestAccess} client:only="react">
+    <p slot="fallback" class="feature-fallback [max-width:38rem] m-0 [border:1px_solid_var(--template-line)] [padding:1.25rem] [line-height:1.65]">Esta área interativa precisa de JavaScript. Ative-o para consultar o mural.</p>
+  </MessageMural>
+</section>
+<div class="demo-signature grid justify-items-center [gap:1rem] [padding:4rem_1rem_6rem] text-center [&_p]:m-0 [&_p]:[color:var(--template-muted)] [&_strong]:[font:normal_clamp(2rem,_6vw,_4rem)_/_1.1_var(--font-template-serif)] [&_a]:inline-flex [&_a]:items-center [&_a]:[min-height:44px] [&_a]:[font-size:0.85rem]">
+  <p>{"Com carinho,"}</p>
+  <strong>Marina &amp; Caio</strong>
+  <a href="#guest-access">18 de setembro de 2027 · Confirmar presença</a>
+</div>

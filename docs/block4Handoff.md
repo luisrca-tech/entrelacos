@@ -6,7 +6,7 @@ Status: Block 4 implementation and its authorized local validation are complete 
 
 Block 4 supplies a member-level RSVP capability built on the Block 3 family session. It exposes the three-state model (`PENDING`, `CONFIRMED`, `DECLINED`), explicit save, partial responses, confirm-all as a local draft shortcut, server-authoritative deadline, member revisions, all-or-nothing conflicts, idempotent retries, current admin operations, and a separate operational history view.
 
-The API and database remain authoritative. `packages/template-root` and a wedding host cannot change authorization, deadline, tenant scope, conflict rules, persistence, or history through presentation props, static flags, route IDs, or demo configuration.
+The API and database remain authoritative. `packages/templates/cinema-botanico` and a wedding host cannot change authorization, deadline, tenant scope, conflict rules, persistence, or history through presentation props, static flags, route IDs, or demo configuration.
 
 ## Public feature exports
 

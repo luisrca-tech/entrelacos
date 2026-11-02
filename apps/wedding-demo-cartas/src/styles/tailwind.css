@@ -1,0 +1,8 @@
+@import "tailwindcss";
+@import "@entrelacos/ui/styles.css";
+@import "@entrelacos/wedding-features/theme.css";
+@import "@entrelacos/template-cartas-do-nosso-sim/theme.css";
+
+@source "../../../../packages/ui/src";
+@source "../../../../packages/templates/cartas-do-nosso-sim/src";
+@source "../../../../packages/wedding-features/src";

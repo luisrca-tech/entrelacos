@@ -67,12 +67,25 @@
         "typescript": "5.9.3",
       },
     },
+    "apps/landing": {
+      "name": "@entrelacos/landing",
+      "version": "0.0.0",
+      "dependencies": {
+        "astro": "7.3.2",
+        "lenis": "1.3.26",
+      },
+      "devDependencies": {
+        "@astrojs/check": "0.9.10",
+        "typescript": "5.9.3",
+        "wrangler": "4.130.0",
+      },
+    },
     "apps/template-fixture": {
       "name": "@entrelacos/template-fixture",
       "version": "0.0.0",
       "dependencies": {
         "@astrojs/react": "6.0.5",
-        "@entrelacos/template-root": "workspace:*",
+        "@entrelacos/template-cinema-botanico": "workspace:*",
         "astro": "7.3.2",
         "react": "19.3.0",
         "react-dom": "19.3.0",
@@ -86,12 +99,35 @@
         "typescript": "5.9.3",
       },
     },
-    "apps/wedding-demo": {
-      "name": "@entrelacos/wedding-demo",
+    "apps/wedding-demo-botanico": {
+      "name": "@entrelacos/wedding-demo-botanico",
       "version": "0.0.0",
       "dependencies": {
         "@astrojs/react": "6.0.5",
-        "@entrelacos/template-root": "workspace:*",
+        "@entrelacos/template-cinema-botanico": "workspace:*",
+        "@entrelacos/ui": "workspace:*",
+        "@entrelacos/wedding-features": "workspace:*",
+        "astro": "7.3.2",
+        "react": "19.3.0",
+        "react-dom": "19.3.0",
+      },
+      "devDependencies": {
+        "@astrojs/check": "0.9.10",
+        "@tailwindcss/vite": "4.3.3",
+        "@types/react": "19.3.0",
+        "@types/react-dom": "19.3.0",
+        "tailwindcss": "4.3.3",
+        "typescript": "5.9.3",
+        "vite": "8.2.2",
+        "wrangler": "4.130.0",
+      },
+    },
+    "apps/wedding-demo-cartas": {
+      "name": "@entrelacos/wedding-demo-cartas",
+      "version": "0.0.0",
+      "dependencies": {
+        "@astrojs/react": "6.0.5",
+        "@entrelacos/template-cartas-do-nosso-sim": "workspace:*",
         "@entrelacos/ui": "workspace:*",
         "@entrelacos/wedding-features": "workspace:*",
         "astro": "7.3.2",
@@ -134,8 +170,20 @@
         "typescript": "5.9.3",
       },
     },
-    "packages/template-root": {
-      "name": "@entrelacos/template-root",
+    "packages/templates/cartas-do-nosso-sim": {
+      "name": "@entrelacos/template-cartas-do-nosso-sim",
+      "version": "0.0.0",
+      "dependencies": {
+        "@entrelacos/ui": "workspace:*",
+      },
+      "peerDependencies": {
+        "astro": "7.3.2",
+        "react": "19.3.0",
+        "react-dom": "19.3.0",
+      },
+    },
+    "packages/templates/cinema-botanico": {
+      "name": "@entrelacos/template-cinema-botanico",
       "version": "0.0.0",
       "dependencies": {
         "@entrelacos/ui": "workspace:*",
@@ -445,13 +493,19 @@
 
     "@entrelacos/database": ["@entrelacos/database@workspace:packages/database"],
 
-    "@entrelacos/template-fixture": ["@entrelacos/template-fixture@workspace:apps/template-fixture"],
+    "@entrelacos/landing": ["@entrelacos/landing@workspace:apps/landing"],
 
-    "@entrelacos/template-root": ["@entrelacos/template-root@workspace:packages/template-root"],
+    "@entrelacos/template-cartas-do-nosso-sim": ["@entrelacos/template-cartas-do-nosso-sim@workspace:packages/templates/cartas-do-nosso-sim"],
+
+    "@entrelacos/template-cinema-botanico": ["@entrelacos/template-cinema-botanico@workspace:packages/templates/cinema-botanico"],
+
+    "@entrelacos/template-fixture": ["@entrelacos/template-fixture@workspace:apps/template-fixture"],
 
     "@entrelacos/ui": ["@entrelacos/ui@workspace:packages/ui"],
 
-    "@entrelacos/wedding-demo": ["@entrelacos/wedding-demo@workspace:apps/wedding-demo"],
+    "@entrelacos/wedding-demo-botanico": ["@entrelacos/wedding-demo-botanico@workspace:apps/wedding-demo-botanico"],
+
+    "@entrelacos/wedding-demo-cartas": ["@entrelacos/wedding-demo-cartas@workspace:apps/wedding-demo-cartas"],
 
     "@entrelacos/wedding-features": ["@entrelacos/wedding-features@workspace:packages/wedding-features"],
 

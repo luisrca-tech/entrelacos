@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "owner:bootstrap": "tsx --env-file-if-exists=../../packages/database/.env --env-file-if-exists=.env scripts/bootstrapOwner.ts",
     "owner:reset": "tsx --env-file-if-exists=../../packages/database/.env --env-file-if-exists=.env scripts/resetOwner.ts",
-    "environment:provision": "tsx --env-file-if-exists=../../packages/database/.env --env-file-if-exists=.env scripts/provisionEnvironment.ts"
+    "environment:provision": "tsx --env-file-if-exists=../../packages/database/.env --env-file-if-exists=.env scripts/provisionEnvironment.ts",
+    "showcase:populate": "tsx --env-file-if-exists=../../packages/database/.env --env-file-if-exists=.env scripts/populateShowcases.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "3.1149.0",

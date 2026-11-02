@@ -1,0 +1,8 @@
+@import "tailwindcss";
+@import "@entrelacos/ui/styles.css";
+@import "@entrelacos/wedding-features/theme.css";
+@import "@entrelacos/template-cinema-botanico/theme.css";
+
+@source "../../../../packages/ui/src";
+@source "../../../../packages/templates/cinema-botanico/src";
+@source "../../../../packages/wedding-features/src";

@@ -1,0 +1,311 @@
+---
+import { GiftSection, WeddingHome, WeddingLayout } from "@entrelacos/template-cinema-botanico/v1";
+import { AdminRecognition, GiftRegistry, GuestAccess, MessageMural } from "@entrelacos/wedding-features";
+import "../styles/tailwind.css";
+
+const inactive = import.meta.env.PUBLIC_SITE_INACTIVE === "true";
+const access = {
+  siteId: import.meta.env.PUBLIC_SITE_ID,
+  apiOrigin: import.meta.env.PUBLIC_API_URL,
+  panelOrigin: import.meta.env.PUBLIC_ADMIN_ORIGIN,
+};
+const site = { name: "Marina & Caio", href: "/" };
+const seo = {
+  title: "Cinema Botânico — Marina & Caio | EntreLaços",
+  description: "Informações sobre a celebração de Marina & Caio em Goiânia.",
+  canonical: "https://demo.entrelacos.workers.dev/",
+  robots: "noindex, nofollow" as const,
+  socialImage: {
+    url: "https://demo.entrelacos.workers.dev/marina-caio-hero.webp",
+    alt: "Marina e Caio se beijam sob uma árvore ao pôr do sol",
+  },
+};
+const navigation = {
+  ariaLabel: "Navegação principal",
+  menuLabel: "Abrir menu",
+  extensionAnchorIds: ["guest-access", "mural", "gifts"],
+  links: [
+    { label: "Galeria", href: "#gallery" },
+    { label: "História", href: "#story" },
+    { label: "Programação", href: "#schedule" },
+    { label: "Local", href: "#venue" },
+    { label: "Confirmar presença", href: "#guest-access" },
+    { label: "Mural", href: "#mural" },
+  ],
+};
+const footer = {
+  names: "Marina & Caio",
+  dateLabel: "18 de setembro de 2027",
+  links: [
+    { label: "Galeria", href: "#gallery" },
+    { label: "História", href: "#story" },
+    { label: "Programação", href: "#schedule" },
+    { label: "Local", href: "#venue" },
+  ],
+  rsvp: { label: "Confirmar presença", href: "#guest-access" },
+  year: "2027",
+  copyright: "© Marina & Caio",
+  attribution: "By EntreLaços",
+};
+const hero = {
+  id: "hero",
+  eyebrow: "Nosso casamento",
+  title: "Marina & Caio",
+  description: "Esperamos você para celebrar nosso casamento.",
+  dateLabel: "18 de setembro de 2027",
+  locationLabel: "Goiânia, GO",
+  media: {
+    kind: "video" as const,
+    src: "/marina-caio-hero.mp4",
+    poster: "/marina-caio-hero-poster.webp",
+    alt: "Marina e Caio caminham de mãos dadas por um campo ao pôr do sol",
+    width: 1920,
+    height: 1080,
+  },
+  action: { label: "Confirmar presença", href: "#guest-access" },
+  intro: {
+    brandLabel: "Marina & Caio",
+    topLabel: "Marina &",
+    bottomLabel: "Caio",
+  },
+};
+const story = {
+  id: "story",
+  eyebrow: "A nossa história",
+  title: "Uma vida a dois.",
+  description: "Agora, com vocês por perto.",
+  body: "Entre dias simples, cuidado e escolhas a dois, construímos a nossa história. Agora, vamos celebrar com vocês.",
+  media: {
+    kind: "image" as const,
+    src: "/marina-caio-story-encounter.webp",
+    alt: "Marina e Caio caminham sorrindo por um caminho arborizado",
+    width: 1448,
+    height: 1086,
+  },
+  sequence: [
+    {
+      kind: "image" as const,
+      src: "/marina-caio-story-home.webp",
+      alt: "Marina e Caio conversam sentados com xícaras de café ao ar livre",
+      width: 1448,
+      height: 1086,
+    },
+    {
+      kind: "image" as const,
+      src: "/marina-caio-story-celebration.webp",
+      alt: "Marina e Caio se abraçam ao pôr do sol",
+      width: 1448,
+      height: 1086,
+    },
+  ],
+};
+const gallery = {
+  id: "gallery",
+  eyebrow: "Fragmentos",
+  title: "Antes do sim.",
+  description: "Alguns registros do nosso ensaio.",
+  controls: {
+    ariaLabel: "Navegação da galeria",
+    previousLabel: "Anterior",
+    nextLabel: "Próxima",
+    expandLabel: "Expandir galeria",
+    closeLabel: "Fechar galeria",
+  },
+  items: [
+    {
+      id: "gallery-encontro",
+      caption: "O começo do ensaio",
+      media: {
+        kind: "image" as const,
+        src: "/marina-caio-gallery-one.webp",
+        alt: "Marina e Caio caminham de mãos dadas por um campo iluminado",
+        width: 1448,
+        height: 1086,
+      },
+    },
+    {
+      id: "gallery-caminho",
+      caption: "Entre caminhos",
+      media: {
+        kind: "image" as const,
+        src: "/marina-caio-gallery-two.webp",
+        alt: "Marina e Caio caminham de costas por um caminho entre árvores",
+        width: 1448,
+        height: 1086,
+      },
+    },
+    {
+      id: "gallery-celebracao",
+      caption: "Um instante antes do sim",
+      media: {
+        kind: "image" as const,
+        src: "/marina-caio-gallery-three.webp",
+        alt: "Marina e Caio trocam olhares em um retrato próximo",
+        width: 1448,
+        height: 1086,
+      },
+    },
+    {
+      id: "gallery-retrato",
+      caption: "Um retrato sem pressa",
+      media: {
+        kind: "image" as const,
+        src: "/marina-caio-gallery-four.webp",
+        alt: "Marina e Caio posam juntos em um jardim ao entardecer",
+        width: 1448,
+        height: 1086,
+      },
+    },
+    {
+      id: "gallery-luz",
+      caption: "A luz do fim da tarde",
+      media: {
+        kind: "image" as const,
+        src: "/marina-caio-gallery-five.webp",
+        alt: "Marina dança de mãos dadas com Caio em um campo ao pôr do sol",
+        width: 1448,
+        height: 1086,
+      },
+    },
+    {
+      id: "gallery-abraco",
+      caption: "O abraço que fica",
+      media: {
+        kind: "image" as const,
+        src: "/marina-caio-gallery-six.webp",
+        alt: "Marina e Caio se abraçam à beira de um lago",
+        width: 1448,
+        height: 1086,
+      },
+    },
+  ],
+};
+const schedule = {
+  id: "schedule",
+  eyebrow: "O dia",
+  title: "A partir das 16h.",
+  guidanceLabel: "Orientações práticas",
+  entries: [
+    {
+      id: "ceremony",
+      time: "16:00",
+      title: "Cerimônia",
+      body: "Cerimônia e recepção no mesmo salão.",
+    },
+    {
+      id: "cocktail",
+      time: "18:00",
+      title: "Coquetel",
+      body: "Frios e drinks depois da cerimônia.",
+    },
+    {
+      id: "dinner",
+      time: "19:30",
+      title: "Jantar",
+      body: "Jantar, brindes e pista de dança.",
+    },
+  ],
+  guidance: [
+    { id: "arrival", title: "Chegada", body: "Reserve alguns minutos para estacionar. Na entrada, informe seu nome à equipe." },
+    {
+      id: "attire",
+      title: "Traje",
+      body: "Traje social.",
+      detail: {
+        label: "Madrinhas & Padrinhos",
+        title: "Madrinhas e padrinhos",
+        body: "Madrinhas em vestidos de verde oliva. Padrinhos de terno cinza claro, gravata na mesma paleta e tênis branco.",
+        closeLabel: "Fechar",
+        media: {
+          kind: "image" as const,
+          src: "/marina-caio-attire-palette-swatches.webp",
+          alt: "Dois vestidos longos verde oliva, terno cinza claro, gravata verde oliva, tênis branco e seis círculos com as cores da paleta",
+          width: 1440,
+          height: 1440,
+        },
+      },
+    },
+  ],
+};
+const venue = {
+  id: "venue",
+  eyebrow: "O local",
+  title: "Nos encontramos em Goiânia.",
+  name: "Casablanca Eventos",
+  address: "Av Ipanema 747, Jardim Atlântico, Goiânia, GO, 74343-010",
+  mapEmbedUrl: "https://maps.google.com/maps?q=Casablanca%20Eventos%2C%20Av%20Ipanema%20747%2C%20Jardim%20Atl%C3%A2ntico%2C%20Goi%C3%A2nia%2C%20GO%2074343-010&output=embed",
+  directions: {
+    label: "Como chegar",
+    href: "https://www.google.com/maps/dir/?api=1&destination=Casablanca%20Eventos%2C%20Av%20Ipanema%20747%2C%20Jardim%20Atl%C3%A2ntico%2C%20Goi%C3%A2nia%2C%20GO%2074343-010",
+  },
+  fallback: {
+    label: "Abrir endereço",
+    href: "https://casablancaeventosgoiania.com.br/contato",
+  },
+  labels: {
+    mapTitle: "Mapa do Casablanca Eventos",
+    addressLabel: "Endereço completo",
+    copyLabel: "Copiar endereço",
+    copiedLabel: "Endereço copiado",
+    copyErrorLabel: "Não foi possível copiar o endereço",
+  },
+};
+const guestAccess = {
+  siteId: import.meta.env.PUBLIC_SITE_ID ?? "",
+  apiOrigin: import.meta.env.PUBLIC_API_URL ?? "",
+};
+---
+
+{inactive ? (
+  <WeddingLayout locale="pt-BR" site={site} seo={seo}>
+    <section
+      class="grid min-h-[70vh] place-content-center bg-template-olive px-8 py-24 text-center text-template-ivory"
+      aria-labelledby="demo-inactive-title"
+    >
+      <h1
+        class="m-0 font-template-serif text-[clamp(2.5rem,7vw,6rem)] font-normal"
+        id="demo-inactive-title"
+      >Site indisponível</h1>
+      <p class="mt-4 mb-0">Este site de casamento está temporariamente indisponível.</p>
+    </section>
+  </WeddingLayout>
+) : (
+  <WeddingHome
+    locale="pt-BR"
+    site={site}
+    seo={seo}
+    navigation={navigation}
+    footer={footer}
+    hero={hero}
+    story={story}
+    gallery={gallery}
+    schedule={schedule}
+    venue={venue}
+  >
+    <Fragment slot="head"><link rel="icon" href="/marina-caio-monogram.svg" type="image/svg+xml" /></Fragment>
+    <Fragment slot="header-addon"><span class="inline-flex h-9 min-w-9 items-center justify-center rounded-full border border-[color-mix(in_srgb,currentColor_56%,transparent)] font-template-serif text-[0.72rem] tracking-normal normal-case [@media(max-width:1024px)]:hidden" aria-label="Monograma M e C">M&amp;C</span></Fragment>
+    <Fragment slot="admin-access">{access.siteId && access.apiOrigin && access.panelOrigin && <AdminRecognition {...access} client:load />}</Fragment>
+    <Fragment slot="after-main">
+      <GiftSection content={{id:"gifts",eyebrow:"Presentes",title:"Lista de presentes.",description:"Escolha um presente simbólico para a nossa vida a dois."}}>
+        <GiftRegistry {...guestAccess} demo={true} liveDemoSiteId={import.meta.env.PUBLIC_LIVE_DEMO_SITE_ID} client:only="react" />
+      </GiftSection>
+      <section
+        id="guest-access"
+        class="bg-template-ivory px-[var(--template-page-inset)] py-[clamp(4rem,8vw,7rem)] [&_[data-slot=guest-access]]:bg-transparent [&_[data-slot=guest-access]]:p-0"
+        aria-label="Confirmação de presença"
+      >
+        <GuestAccess {...guestAccess} client:only="react">
+          <p slot="fallback" class="m-0 max-w-[38rem] border border-template-line p-5 leading-[1.6] text-template-muted">Esta área interativa precisa de JavaScript. Ative-o para encontrar seu convite e responder à confirmação.</p>
+        </GuestAccess>
+      </section>
+      <div
+        id="mural"
+        class="border-t border-template-line bg-template-ivory px-[var(--template-page-inset)] py-[clamp(4rem,8vw,7rem)] [&_[data-slot=message-mural]]:p-0"
+      >
+        <MessageMural {...guestAccess} client:only="react">
+          <p slot="fallback" class="m-0 max-w-[38rem] border border-template-line p-5 leading-[1.6] text-template-muted">Esta área interativa precisa de JavaScript. Ative-o para consultar o mural.</p>
+        </MessageMural>
+      </div>
+    </Fragment>
+  </WeddingHome>
+)}

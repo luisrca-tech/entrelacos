@@ -1,0 +1,13 @@
+---
+
+---
+<aside class:list={[
+  "z-[1] flex flex-wrap items-center justify-between gap-x-4 gap-y-1 bg-template-ink px-[var(--template-page-inset)] py-1.5 text-[0.72rem] text-template-ivory [@media(max-width:760px)]:text-[0.65rem]",
+  "relative mt-[var(--template-header-height)]",
+]} aria-label="Demonstrações de templates">
+  <span class="[@media(max-width:760px)]:w-full">EntreLaços · demonstração</span>
+  <nav class="flex flex-wrap gap-x-4" aria-label="Escolher demonstração">
+    <a class="inline-flex min-h-11 items-center underline-offset-4 aria-[current=page]:decoration-2" href={import.meta.env.PUBLIC_BOTANICAL_DEMO_URL ?? "https://demo.entrelacos.workers.dev/"}>Cinema Botânico</a>
+    <a class="inline-flex min-h-11 items-center underline-offset-4 aria-[current=page]:decoration-2" href="/" aria-current="page">Cartas do Nosso Sim</a>
+  </nav>
+</aside>

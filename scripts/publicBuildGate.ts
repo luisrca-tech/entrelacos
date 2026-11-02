@@ -1,6 +1,13 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, normalize, relative, resolve } from "node:path";
 
+export const publicConsumerApps = [
+  "wedding-demo-botanico",
+  "wedding-demo-cartas",
+  "template-fixture",
+  "landing",
+] as const;
+
 function matches(html: string, pattern: RegExp): number {
   return html.match(pattern)?.length ?? 0;
 }
@@ -91,10 +98,9 @@ export function verifyPublicBuild(root: string): string[] {
 
 if (import.meta.main) {
   const repositoryRoot = resolve(import.meta.dirname, "..");
-  const builds = [
-    resolve(repositoryRoot, "apps/wedding-demo/dist"),
-    resolve(repositoryRoot, "apps/template-fixture/dist"),
-  ];
+  const builds = publicConsumerApps.map((app) =>
+    resolve(repositoryRoot, "apps", app, "dist"),
+  );
   const errors = builds.flatMap(verifyPublicBuild);
   if (errors.length > 0) {
     for (const error of errors) console.error(error);

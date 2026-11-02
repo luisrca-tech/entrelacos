@@ -17,8 +17,9 @@ export function missingWorkspaceEntries(
 
 function packageDirectories(repositoryRoot: string): string[] {
   const directories: string[] = [];
-  for (const parent of ["apps", "packages"]) {
+  for (const parent of ["apps", "packages", "packages/templates"]) {
     const parentPath = join(repositoryRoot, parent);
+    if (!existsSync(parentPath)) continue;
     for (const entry of readdirSync(parentPath, { withFileTypes: true })) {
       if (!entry.isDirectory()) continue;
       const directory = join(parentPath, entry.name);
@@ -41,9 +42,12 @@ export function verifyWorkspaceDiscovery(repositoryRoot: string): string[] {
   if (
     !Array.isArray(workspaces) ||
     !workspaces.includes("apps/*") ||
-    !workspaces.includes("packages/*")
+    !workspaces.includes("packages/*") ||
+    !workspaces.includes("packages/templates/*")
   ) {
-    errors.push("Root workspaces must include apps/* and packages/*");
+    errors.push(
+      "Root workspaces must include apps/*, packages/* and packages/templates/*",
+    );
   }
 
   const directories = packageDirectories(repositoryRoot);

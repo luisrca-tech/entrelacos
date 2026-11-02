@@ -51,6 +51,7 @@ export async function createGiftApplication(
       },
       {
         auth,
+        applicationEnvironment: config.target,
         db: connection.db,
         adminOrigin: config.adminOrigin,
         guestFingerprintSecret: config.fingerprintSecret,

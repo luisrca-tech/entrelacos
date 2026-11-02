@@ -47,12 +47,14 @@ describe("gift application integration", () => {
       expect(args[2]).toMatchObject({
         ...receiving,
         ...payment,
+        applicationEnvironment: "development",
         auth: { fixture: "auth" },
       });
       events.push("app-created");
       return app;
     });
     const config = {
+      target: "development",
       giftPayment: { mode: "sandbox" },
       giftPublicOrigin: "http://localhost:4321",
       giftPaymentHistory: { mode: "sandbox" },

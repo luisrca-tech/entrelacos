@@ -9,8 +9,8 @@ Scope: local reusable template, demo host, technical fixture, public feature pla
 
 ## Implemented surface inspected
 
-- `@entrelacos/template-root/v1` is the only package export and contains the reusable layout, home preset, seven public section components, serializable contracts, and validators.
-- `apps/wedding-demo` owns the complete Marina & Caio preset data, public feature placement, noindex SEO, venue/map configuration, provisional monogram, approved fictional-couple WebP set, and silent hero MP4.
+- `@entrelacos/template-cinema-botanico/v1` is the only package export and contains the reusable layout, home preset, seven public section components, serializable contracts, and validators.
+- `apps/wedding-demo-botanico` owns the complete Marina & Caio preset data, public feature placement, noindex SEO, venue/map configuration, provisional monogram, approved fictional-couple WebP set, and silent hero MP4.
 - `apps/template-fixture` owns the distinct Casa Aurora data and asset, noindex SEO, reordered preset, local section, and `/hospedagem` route.
 - `packages/wedding-features` supplies runtime guest access, mural, RSVP dialog behavior, and admin recognition; operational authority remains in the API.
 - Lenis, generic reveals, navigation focus behavior, story fallback, and RSVP dialog focus/scroll exclusion are implemented without adding a public interaction API.
@@ -26,7 +26,7 @@ The B6-T0 through B6-T4 implementation pass reported:
 
 The later B6-T5 pass, after the Lenis, reveal, mobile-menu, and dialog-focus changes, reported:
 
-- `bunx vitest run packages/template-root packages/wedding-features`: 16 files and 78 tests passed;
+- `bunx vitest run packages/templates/cinema-botanico packages/wedding-features`: 16 files and 78 tests passed;
 - uncached typecheck of template fixture, wedding demo, and wedding features: passed;
 - uncached builds of wedding demo and template fixture: passed;
 - Biome checks and `git diff --check`: passed.
@@ -149,7 +149,7 @@ The latest História pass replaces the multi-entry editorial sequence with one h
 
 Focused contract coverage validates one required story body, one required media asset, safe media dimensions, the full-bleed overlay structure, mobile sizing, semantic section labels without numeric prefixes, and the absence of the removed chapter/sticky-stage markup. The final repository run passed Biome, all 8 typecheck tasks with zero Astro diagnostics, 66 test files and 291 tests, both consumer builds, and `git diff --check`. Browser checks at `1440x900` measured a `576px` story frame with a `57.6px` ivory gap after the hero; at `390x844`, the compact frame measured approximately `574px` with a `24px` gap and `358px` of copy width, `scrollWidth` equaled `clientWidth`, and the image/copy remained readable above the gradient.
 
-The documentation pass reran the content, public-boundary, and interaction contract files with `bunx vitest run packages/template-root/src/content.test.ts packages/template-root/boundary.test.ts packages/template-root/src/interactions.test.ts`: three files and 29 tests passed. It cross-checked the five documented theme-variable names against `packages/template-root/src/styles.css`, reconciled the then-current host asset register against both `public` directories, verified the referenced local documents exist, and passed `git diff --check`. Later presentation and final-media passes superseded that asset inventory and revalidated the changed contracts. The repository Biome configuration ignores Markdown; no Markdown lint/format pass is claimed.
+The documentation pass reran the content, public-boundary, and interaction contract files with `bunx vitest run packages/templates/cinema-botanico/src/content.test.ts packages/templates/cinema-botanico/boundary.test.ts packages/templates/cinema-botanico/src/interactions.test.ts`: three files and 29 tests passed. It cross-checked the five documented theme-variable names against `packages/templates/cinema-botanico/src/styles.css`, reconciled the then-current host asset register against both `public` directories, verified the referenced local documents exist, and passed `git diff --check`. Later presentation and final-media passes superseded that asset inventory and revalidated the changed contracts. The repository Biome configuration ignores Markdown; no Markdown lint/format pass is claimed.
 
 ## Known evidence limits
 

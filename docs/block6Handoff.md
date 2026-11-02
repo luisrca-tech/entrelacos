@@ -4,11 +4,11 @@ Status: the local public-template implementation, approved fictional-demo media 
 
 ## Delivered local boundary
 
-- `@entrelacos/template-root/v1` is the only public template entrypoint.
+- `@entrelacos/template-cinema-botanico/v1` is the only public template entrypoint.
 - `WeddingLayout` provides host-driven metadata, navigation/footer shells, named extension slots, the five-variable theme contract, and internal progressive interactions.
 - `WeddingHome` provides the standard composition from the same public sections available for direct use.
 - Hero, optional gallery-derived introduction, story, details, gallery, schedule/guidance, venue/map, footer, responsive navigation, reduced-motion fallbacks, and image/video poster behavior are available through serializable host data.
-- `apps/wedding-demo` is the full default-preset consumer and composes the real `GuestAccess`, `MessageMural`, RSVP path, and recognized-admin return link through `wedding-features`.
+- `apps/wedding-demo-botanico` is the full default-preset consumer and composes the real `GuestAccess`, `MessageMural`, RSVP path, and recognized-admin return link through `wedding-features`.
 - `apps/template-fixture` proves a distinct minimal host, reordered preset, local section, and extra `/hospedagem` page without copying template code.
 
 The exact API, validation, slots, theme variables, motion, media, map, ownership, and privacy rules are frozen in `docs/block6Contracts.md`.
@@ -17,7 +17,7 @@ The exact API, validation, slots, theme variables, motion, media, map, ownership
 
 New or existing wedding hosts must:
 
-1. import only from `@entrelacos/template-root/v1`;
+1. import only from `@entrelacos/template-cinema-botanico/v1`;
 2. own every route, visible string, label, identifier, SEO/indexing value, asset, alt text, map/fallback URL, feature configuration, and local section;
 3. keep configuration serializable and pass it through the typed contracts;
 4. compose runtime guest UI only through public `wedding-features` exports;

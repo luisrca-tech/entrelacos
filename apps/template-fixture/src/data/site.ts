@@ -4,7 +4,7 @@ import type {
   PageSeo,
   SiteIdentity,
   StoryContent,
-} from "@entrelacos/template-root/v1";
+} from "@entrelacos/template-cinema-botanico/v1";
 
 export const site: SiteIdentity = {
   name: "Casa Aurora",

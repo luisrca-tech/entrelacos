@@ -141,7 +141,7 @@ Stable Block 5 codes are `MURAL_DISABLED`, `MESSAGE_BLOCKED`, `MESSAGE_CONFLICT`
 
 ## Package boundary
 
-`packages/contracts` owns the strict serializable HTTP shapes. `packages/database` owns tables, constraints, migrations, and tenant-safe relations. `apps/api` owns authorization, isolation, ordering, mutation, moderation, deletion, report generation, and quota reservation. `apps/admin` owns operational controls and downloads. `packages/wedding-features` owns family message and mural transport/presentation using the existing session store. `apps/wedding-demo` is the runtime QA host. `packages/template-root` owns no Block 5 authority or operational data.
+`packages/contracts` owns the strict serializable HTTP shapes. `packages/database` owns tables, constraints, migrations, and tenant-safe relations. `apps/api` owns authorization, isolation, ordering, mutation, moderation, deletion, report generation, and quota reservation. `apps/admin` owns operational controls and downloads. `packages/wedding-features` owns family message and mural transport/presentation using the existing session store. `apps/wedding-demo-botanico` is the runtime QA host. `packages/templates/cinema-botanico` owns no Block 5 authority or operational data.
 
 ## Listening
 

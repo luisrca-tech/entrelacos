@@ -3,7 +3,10 @@ import { Button, showSandboxNotice } from "@entrelacos/ui";
 import { type ReactNode, useCallback, useEffect, useState } from "react";
 import { GiftEditor } from "./GiftEditor";
 import { GiftsLocked } from "./GiftsLocked";
-import { loadGiftsReadiness } from "./giftsReadiness";
+import {
+  type GiftCatalogReadiness,
+  loadGiftsReadiness,
+} from "./giftsReadiness";
 
 const pendingReasons: Record<
   NonNullable<ReceivingReadiness["reason"]>,
@@ -36,7 +39,7 @@ export function GiftsSection({
   receivingAction?: ReactNode;
   canManage: boolean;
 }) {
-  const [readiness, setReadiness] = useState<ReceivingReadiness | null>(null);
+  const [readiness, setReadiness] = useState<GiftCatalogReadiness | null>(null);
   const [failedSite, setFailedSite] = useState<string | null>(null);
   const [revision, setRevision] = useState(0);
   const retry = useCallback(() => setRevision((value) => value + 1), []);
@@ -89,7 +92,7 @@ export function GiftsReadinessView({
   catalog,
 }: {
   siteId: string;
-  readiness: ReceivingReadiness | null;
+  readiness: GiftCatalogReadiness | null;
   error?: boolean;
   onRetry: () => void;
   receivingAction?: ReactNode;
@@ -118,14 +121,24 @@ export function GiftsReadinessView({
       </p>
     );
 
+  const demonstration =
+    current.catalogAccess?.siteId === siteId &&
+    current.catalogAccess.mode === "demonstration" &&
+    !current.catalogEligible;
   return (
     <div className="grid gap-4">
+      {demonstration && (
+        <p role="status" className="m-0 text-sm text-admin-muted">
+          Catálogo de demonstração. Você pode gerenciar os presentes;
+          contribuições e recebimentos continuam indisponíveis.
+        </p>
+      )}
       {showSandboxNotice(current.mode) && (
         <p className="m-0 text-sm text-admin-muted">
           Ambiente de testes — sem pagamentos reais.
         </p>
       )}
-      {current.catalogEligible ? (
+      {current.catalogEligible || demonstration ? (
         (catalog ?? (
           <section className="rounded-xl border border-admin-line bg-admin-surface p-6">
             <h2 className="m-0 font-admin-display text-2xl">

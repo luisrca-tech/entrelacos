@@ -1,0 +1,75 @@
+---
+import { validateVenueContent } from "../content";
+import type { VenueContent } from "../content";
+
+interface Props {
+  content: VenueContent;
+  tone?: "ivory" | "olive";
+}
+
+const { content, tone = "ivory" } = Astro.props;
+validateVenueContent(content);
+const id = content.id;
+const toneClasses = tone === "olive" ? "bg-template-olive text-template-ivory" : "bg-template-ivory text-template-ink";
+const descriptionClass = tone === "olive" ? "text-[rgba(244,240,232,0.7)]" : "text-template-muted";
+const mutedClass = tone === "olive" ? "text-[rgba(244,240,232,0.7)]" : "text-template-muted";
+const revealClasses = "template-reveal";
+const buttonClass = `inline-flex min-h-11 items-center justify-center rounded-full border border-current bg-transparent px-[1.1rem] py-[0.7rem] text-[0.72rem] uppercase tracking-[0.08em] transition-[background-color,color,border-color] duration-[180ms] hover:border-template-ink hover:bg-template-ink hover:text-template-ivory focus-visible:border-template-ink focus-visible:bg-template-ink focus-visible:text-template-ivory focus-visible:outline-2 focus-visible:outline-offset-[3px] motion-reduce:transition-none ${tone === "olive" ? "focus-visible:outline-template-ivory" : "focus-visible:outline-template-ink"}`;
+---
+
+<section
+  id={id}
+  class={`grid grid-cols-[minmax(0,0.72fr)_minmax(0,1.28fr)] gap-[clamp(2.5rem,6vw,7rem)] px-[var(--template-page-inset)] pb-[clamp(2rem,3vw,3rem)] pt-[clamp(5rem,10vw,9rem)] ${toneClasses} [@media(max-width:960px)]:block`}
+  aria-labelledby={`${id}-title`}
+>
+  <header class={`${revealClasses} [@media(max-width:960px)]:mb-12`} data-template-reveal>
+    {content.eyebrow && <p data-template-reveal-item data-template-reveal-kind="label" style="--template-reveal-delay: 0ms" class="m-0 mb-5 text-[0.72rem] font-bold uppercase tracking-[0.16em]">{content.eyebrow}</p>}
+    <h2 data-template-reveal-item data-template-line-reveal class="m-0 max-w-[12ch] font-template-serif text-[clamp(2.5rem,6vw,calc(5.5rem*var(--template-width-scale)))] font-normal tracking-[-0.065em] leading-[0.96]" id={`${id}-title`}>{content.title}</h2>
+    {content.description && <p data-template-reveal-item data-template-reveal-kind="body" style="--template-reveal-delay: 1400ms" class={`m-0 mt-7 max-w-[30rem] leading-[1.7] ${descriptionClass}`}>{content.description}</p>}
+  </header>
+  <div class={`${revealClasses} min-w-0 self-end`} data-template-reveal>
+    <div data-template-reveal-item>
+      <h3 class="m-0 text-[clamp(1.8rem,3vw,2.75rem)] font-medium tracking-[-0.025em] leading-[1.1]">{content.name}</h3>
+      <p class={`m-0 mb-2 mt-8 text-[0.72rem] font-bold uppercase tracking-[0.16em] ${mutedClass}`}>{content.labels.addressLabel}</p>
+      <address class="max-w-[30rem] text-[clamp(1.15rem,2vw,1.5rem)] not-italic leading-[1.45]" id={`${id}-address`}>{content.address}</address>
+      <div class="mt-8 flex flex-wrap gap-x-4 gap-y-3">
+        <a class={`${buttonClass} no-underline`} href={content.directions.href} target="_blank" rel="noreferrer">{content.directions.label}</a>
+        <a class={`${buttonClass} no-underline`} href={content.fallback.href} target="_blank" rel="noreferrer">{content.fallback.label}</a>
+        <button
+          class={`${buttonClass} font-sans`}
+          type="button"
+          data-copy-address
+          data-address={content.address}
+          data-copy-success={content.labels.copiedLabel}
+          data-copy-error={content.labels.copyErrorLabel}
+        >{content.labels.copyLabel}</button>
+      </div>
+    </div>
+    <figure data-template-reveal-item style="--template-reveal-delay: 90ms" class="mt-8 rounded-[0.75rem] min-h-[clamp(24rem,34vw,28rem)] overflow-hidden bg-template-olive">
+      <iframe
+        class="block h-full min-h-[clamp(24rem,34vw,28rem)] w-full border-0"
+        src={content.mapEmbedUrl}
+        title={content.labels.mapTitle}
+        loading="lazy"
+        referrerpolicy="no-referrer-when-downgrade"
+        allowfullscreen
+      ></iframe>
+    </figure>
+  </div>
+</section>
+
+<script>
+  import { publishToast } from "@entrelacos/ui/toast";
+  import { copyAddress } from "../venue";
+
+  document.querySelectorAll<HTMLButtonElement>("[data-copy-address]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const address = button.dataset.address ?? "";
+      const copied = await copyAddress(address, navigator.clipboard);
+      publishToast(
+        copied ? "success" : "error",
+        (copied ? button.dataset.copySuccess : button.dataset.copyError) ?? "",
+      );
+    });
+  });
+</script>

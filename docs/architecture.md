@@ -24,7 +24,7 @@ Executable C1 contracts and a default-closed authenticated readiness route are l
 | --- | --- | --- |
 | `apps/admin` | TanStack Start / React, Cloudflare Workers | Central login, OWNER management, per-wedding operations; lightweight BFF if required for first-party cookies |
 | `apps/api` | Hono, Node.js 24, Railway | Authentication authority, tenant authorization, business operations, database access, and manual PIN verification |
-| `apps/wedding-demo` | Astro static output, Cloudflare Workers Static Assets | Public demonstration consuming the initial template |
+| `apps/wedding-demo-botanico` | Astro static output, Cloudflare Workers Static Assets | Public demonstration consuming the initial template |
 | Future wedding apps | Independent Astro builds and deployments | Client content, assets, page composition and local overrides |
 
 The admin application must not connect to Neon, import the database package or duplicate authorization rules. Static public sites call the API for protected operations. Public content remains meaningful without JavaScript; functional islands hydrate only where needed. React-based Base UI and Sonner belong to interactive components, not an obligation to render the entire editorial site in React. Motion is the selected animation library, with reduced-motion alternatives.
@@ -47,7 +47,7 @@ Internal workspace packages export source for bundler consumption; deployable ap
 
 The [template/site study](../plans/entrelacos-template-site-study.md) refines the composition boundary for Blocks 4–8. These exports and contracts are planned, not current implementation claims.
 
-- Keep `template-root` and `apps/wedding-demo`; add a public presentation `/v1` entrypoint in B6-T0 with a reusable layout, a standard page preset and individually usable editorial sections. Preserve or migrate existing imports explicitly.
+- Keep `template-root` and `apps/wedding-demo-botanico`; add a public presentation `/v1` entrypoint in B6-T0 with a reusable layout, a standard page preset and individually usable editorial sections. Preserve or migrate existing imports explicitly.
 - Each host owns serializable public content, media, per-page SEO, routes, environment configuration and custom sections. The shared layout renders metadata from host inputs. Extra pages reuse it without requiring every preset section's data.
 - Hosts compose `wedding-features` into template slots or local pages. The template has no API/environment dependency. API contracts, sessions, RSVP deadlines and mural authority remain in their operational blocks; mural data is runtime data, not static content.
 - Verify two independently built compositions, one with an extra page and local/reordered section, before treating the template as reusable. Use native Astro composition and narrow documented theme variables rather than inheritance or a page-builder registry.

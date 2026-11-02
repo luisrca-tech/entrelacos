@@ -32,6 +32,10 @@ import { readDatabaseTimestamp } from "./databaseTimestamp";
 import { allowsLiveSite, type LiveSitePolicy } from "./liveSitePolicy";
 import { createDefaultReceivingReadiness } from "./receivingReadiness";
 import type { ReceivingTransaction } from "./receivingRepository";
+import {
+  allowsShowcaseCatalog,
+  isShowcaseCatalogCandidate,
+} from "./showcaseCatalog";
 import { requireSiteCapability, type SiteAccessActor } from "./siteAccess";
 
 export type GiftDatabase = NodePgDatabase<Record<string, never>>;
@@ -75,7 +79,12 @@ type GiftRow = typeof giftItem.$inferSelect;
 type MediaRow = typeof giftMediaAsset.$inferSelect;
 type SiteContext = Pick<
   typeof site.$inferSelect,
-  "id" | "lifecycle" | "publicationState" | "isDemo"
+  | "id"
+  | "lifecycle"
+  | "publicationState"
+  | "isDemo"
+  | "repositorySlug"
+  | "publicUrl"
 > & {
   startsOn: string | null;
   endsOn: string | null;
@@ -122,12 +131,33 @@ async function readReady(
   return result.data;
 }
 
+// Catalog eligibility never supplies receiving evidence to quotes or checkouts.
+async function readCatalogMode(
+  context: SiteContext,
+  options: GiftServiceOptions,
+  transaction?: ReceivingTransaction,
+): Promise<ReceivingReadiness["mode"] | "demonstration"> {
+  try {
+    const readiness = await readReady(context.id, options, transaction);
+    assertMode(context, readiness, options);
+    return readiness.mode;
+  } catch (error) {
+    if (
+      !(error instanceof GiftServiceError) ||
+      error.code !== "RECEIVING_NOT_READY" ||
+      !allowsShowcaseCatalog(context, options.applicationEnvironment)
+    )
+      throw error;
+    return "demonstration";
+  }
+}
+
 async function readSiteContext(
   db: GiftDatabase,
   siteId: string,
 ): Promise<SiteContext> {
   const result = await db.execute(sql`
-    SELECT s.id, s.lifecycle, s.publication_state AS "publicationState", s.is_demo AS "isDemo",
+    SELECT s.id, s.lifecycle, s.publication_state AS "publicationState", s.is_demo AS "isDemo", s.repository_slug AS "repositorySlug", s.public_url AS "publicUrl",
       to_char(t.starts_on, 'YYYY-MM-DD') AS "startsOn",
       to_char(t.ends_on, 'YYYY-MM-DD') AS "endsOn"
     FROM site s LEFT JOIN site_term t ON t.site_id = s.id
@@ -213,7 +243,9 @@ export async function withGiftCatalogMutation<T>(
   validIds(siteId);
   currentTime(options);
   await requireSiteCapability(db, actor, siteId, "manageCatalog");
-  await readReady(siteId, options);
+  if (isShowcaseCatalogCandidate(siteId, options.applicationEnvironment))
+    await readCatalogMode(await readSiteContext(db, siteId), options);
+  else await readReady(siteId, options);
   return db.transaction(
     async (transaction) => {
       const tx = transaction as GiftDatabase;
@@ -224,8 +256,7 @@ export async function withGiftCatalogMutation<T>(
       assertMutationSite(context, now);
       await requireSiteCapability(tx, actor, siteId, "manageCatalog");
       // Refreshing on another connection here would wait on our own site lock.
-      const readiness = await readReady(siteId, options, transaction);
-      assertMode(context, readiness, options);
+      await readCatalogMode(context, options, transaction);
       const executionTime = currentTime(options);
       assertMutationSite(context, executionTime);
       return operation(tx, executionTime);
@@ -407,8 +438,7 @@ export async function listSiteGifts(
 ): Promise<typeof giftCatalogResponseSchema._output> {
   validIds(siteId);
   await requireSiteCapability(db, actor, siteId, "manageCatalog");
-  const readiness = await readReady(siteId, options);
-  assertMode(await readSiteContext(db, siteId), readiness, options);
+  await readCatalogMode(await readSiteContext(db, siteId), options);
   return { gifts: (await readGiftRows(db, siteId)).map(giftRecord) };
 }
 
@@ -583,7 +613,11 @@ export async function readPublicGifts(
   const parsed = publicGiftCatalogQuerySchema.safeParse(input);
   if (!parsed.success) invalid();
   const query: PublicGiftCatalogQuery = parsed.data;
-  const readiness = await publicContext(db, siteId, options);
+  validIds(siteId);
+  currentTime(options);
+  const context = await readSiteContext(db, siteId);
+  const mode = await readCatalogMode(context, options);
+  assertPublicSite(context, currentTime(options));
   const snapshot = await db.execute(sql`
     WITH matching AS (
       SELECT ${giftColumns} FROM gift_item
@@ -668,7 +702,7 @@ export async function readPublicGifts(
     });
     const page = publicGiftCatalogPageResponseSchema.safeParse({
       siteId,
-      mode: readiness.mode,
+      mode,
       gifts,
       ...query,
       pageSize: giftCatalogLimits.pageSize,

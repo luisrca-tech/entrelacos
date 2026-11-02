@@ -4,7 +4,7 @@ Status: frozen for Block 7 implementation on 2026-09-16. This document freezes t
 
 ## Scope and existing invariants
 
-Block 7 proves the existing Blocks 1–6 slices together. The Hono/Node API and PostgreSQL remain the authority for authorization, tenant isolation, lifecycle, guest identity, RSVP, messages, exports, quotas, and reset behavior. `apps/wedding-demo` remains a host and QA surface. `apps/template-fixture` remains a technical reuse fixture, not a permanent demo environment.
+Block 7 proves the existing Blocks 1–6 slices together. The Hono/Node API and PostgreSQL remain the authority for authorization, tenant isolation, lifecycle, guest identity, RSVP, messages, exports, quotas, and reset behavior. `apps/wedding-demo-botanico` remains a host and QA surface. `apps/template-fixture` remains a technical reuse fixture, not a permanent demo environment.
 The following rules remain in force:
 
 - `OWNER` is global; `SITE_ADMIN` is assigned to one site. Authorization is server-side.

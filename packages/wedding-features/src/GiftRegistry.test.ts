@@ -157,6 +157,23 @@ describe("mounted server catalog runtime", () => {
     await act(flush);
     return entry;
   }
+  it("renders a server demonstration catalog without initiating quotes or checkouts", async () => {
+    const fetcher = vi.fn(async (_url: RequestInfo | URL) =>
+      reply({ ...page(), mode: "demonstration" }),
+    );
+    const { surface } = await mount(fetcher as typeof fetch, "wedding-a", {
+      demo: true,
+    });
+    expect(surface.hidden).toBe(false);
+    expect(surface.textContent).toContain("Contribuições indisponíveis");
+    expect(surface.querySelector("h3")?.textContent).toBe("Dinner 0");
+    expect(surface.textContent).toContain("100,00");
+    expect(surface.textContent).not.toContain("Escolher presente");
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(new URL(String(fetcher.mock.calls[0][0])).pathname).toBe(
+      "/v1/public/sites/wedding-a/gifts",
+    );
+  });
   const query = (url: RequestInfo | URL) => {
     const u = new URL(String(url));
     return {

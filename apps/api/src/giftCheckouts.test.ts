@@ -1413,3 +1413,28 @@ describe("Sandbox buyer commitment boundary", () => {
     },
   );
 });
+
+it.each(["demo-wedding", "demo-wedding-cartas"])(
+  "never starts checkout for the unready %s showcase, even with a previously issued quote",
+  async (siteId) => {
+    const f = fixture();
+    for (const value of [
+      f.snapshot.quote,
+      f.snapshot.gift,
+      f.snapshot.receiving,
+      f.snapshot.pricing,
+      f.context.providerBinding,
+      f.context.evidence,
+      f.gift.gift,
+    ])
+      if (value) Object.assign(value, { siteId });
+    f.context.isDemo = true;
+    f.context.providerBinding = null;
+    f.context.evidence = null;
+    await expect(
+      createGiftCheckoutService(f.dependencies).createCheckout(siteId, body),
+    ).rejects.toMatchObject({ code: "RECEIVING_NOT_READY" });
+    expect(f.dependencies.repository.reserve).not.toHaveBeenCalled();
+    expect(f.dependencies.createHostedCheckout).not.toHaveBeenCalled();
+  },
+);

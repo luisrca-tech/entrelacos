@@ -262,7 +262,7 @@ export function MessageMural({
                     "--template-card-delay": `${(index % 2) * 180}ms`,
                   } as CSSProperties
                 }
-                className="flex min-w-0 flex-col gap-8 rounded-[1.35rem] border border-template-line bg-[#fffdf8] p-[clamp(1.25rem,3vw,2rem)] [--template-reveal-delay:0ms] min-[681px]:[--template-reveal-delay:var(--template-card-delay)]"
+                className="flex min-w-0 flex-col gap-8 rounded-[1.35rem] border border-template-line bg-[var(--template-paper,#fffdf8)] p-[clamp(1.25rem,3vw,2rem)] [--template-reveal-delay:0ms] min-[681px]:[--template-reveal-delay:var(--template-card-delay)]"
               >
                 <blockquote className="m-0 whitespace-pre-wrap break-words font-template-serif text-[1.2rem] leading-[1.5] [overflow-wrap:anywhere]">
                   {message.text}

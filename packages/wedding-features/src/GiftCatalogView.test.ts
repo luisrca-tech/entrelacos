@@ -208,3 +208,26 @@ it("offers Sandbox buyer method selection without advertising nominal as the pur
   expect(html).not.toContain("Preço indisponível");
   expect(html).not.toContain('disabled=""');
 });
+
+it("shows demonstration prices and images without promising payment or offering checkout", () => {
+  const html = renderToStaticMarkup(
+    createElement(GiftCatalogView, {
+      gifts: [
+        {
+          ...gift,
+          pricing: { feeAllocation: "BUYER_GROSS_UP", available: false },
+        },
+      ],
+      mode: "demonstration",
+      busy: false,
+      recoveryOnly: true,
+      onSelect: vi.fn(),
+    }),
+  );
+  expect(html).toContain("123,45");
+  expect(html).toContain(gift.image?.url);
+  expect(html).toContain("Demonstração");
+  expect(html).toContain("Contribuições indisponíveis");
+  expect(html).not.toContain("Escolher presente");
+  expect(html).not.toContain("Pix ou cartão");
+});

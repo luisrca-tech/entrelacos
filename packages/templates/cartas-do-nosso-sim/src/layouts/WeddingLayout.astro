@@ -1,0 +1,170 @@
+---
+import Toaster from "../components/TemplateToaster";
+import { validateWeddingLayoutProps } from "../content";
+import type { WeddingLayoutProps } from "../content";
+
+interface Props extends WeddingLayoutProps {}
+
+const { locale, site, seo, navigation, footer, hasHero = false } = Astro.props;
+validateWeddingLayoutProps(Astro.props);
+const letterDocumentClass = "scroll-pt-[var(--template-header-height)] motion-reduce:scroll-auto [&[data-wedding-theme='letters']_:focus-visible]:[outline:2px_solid_currentColor] [&[data-wedding-theme='letters']_:focus-visible]:[outline-offset:4px] [&[data-wedding-theme='letters']_a[href='#gifts']]:[display:none] [&[data-wedding-theme='letters']:has([data-gift-section]:not([hidden]))_a[href='#gifts']]:[display:inline-flex] [&[data-wedding-theme='letters']:has([data-gift-section]:not([hidden]))_.gift-handoff]:[display:flex] [&[data-wedding-theme='letters']:has([data-gift-section]:not([hidden]))_.mural-handoff]:[display:none] [&[data-wedding-theme='letters']_.demo-reply]:[margin:3rem_var(--template-page-inset)_0] [&[data-wedding-theme='letters']_.demo-reply]:[padding:clamp(1.25rem,_4vw,_4rem)] [&[data-wedding-theme='letters']_.demo-reply]:[border:1px_solid_var(--template-olive)] [&[data-wedding-theme='letters']_.demo-reply]:[background:var(--template-paper)] [&[data-wedding-theme='letters']_.demo-reply_.chapter-number]:[padding-bottom:1.5rem] [&[data-wedding-theme='letters']_.demo-reply_.chapter-number]:[border-bottom:1px_solid_var(--template-line)] [&[data-wedding-theme='letters']_[data-slot='message-mural']_article]:[border-radius:0] [&[data-wedding-theme='letters']_[data-slot='message-mural']_article]:[box-shadow:0_0.5rem_1.25rem_#30212a08] [&[data-wedding-theme='letters']_:is(button,_input,_dialog)]:[border-radius:0.2rem] [&[data-wedding-theme='letters']_footer]:[background:var(--template-olive)] motion-reduce:[&[data-wedding-theme='letters']_*]:[animation:none]! motion-reduce:[&[data-wedding-theme='letters']_*]:[transition-duration:0s]! motion-reduce:[&[data-wedding-theme='letters']_*]:[transition-delay:0s]! motion-reduce:[&[data-wedding-theme='letters']_*]:[scroll-behavior:auto]! motion-reduce:[&[data-wedding-theme='letters']_*::before]:[animation:none]! motion-reduce:[&[data-wedding-theme='letters']_*::before]:[transition-duration:0s]! motion-reduce:[&[data-wedding-theme='letters']_*::before]:[transition-delay:0s]! motion-reduce:[&[data-wedding-theme='letters']_*::before]:[scroll-behavior:auto]! motion-reduce:[&[data-wedding-theme='letters']_*::after]:[animation:none]! motion-reduce:[&[data-wedding-theme='letters']_*::after]:[transition-duration:0s]! motion-reduce:[&[data-wedding-theme='letters']_*::after]:[transition-delay:0s]! motion-reduce:[&[data-wedding-theme='letters']_*::after]:[scroll-behavior:auto]!";
+const letterRevealClass = "min-h-[70vh] bg-template-ivory motion-safe:[&_[data-template-motion-ready=true]_[data-template-reveal-item]]:transition-[opacity,translate] motion-safe:[&_[data-template-motion-ready=true]_[data-template-reveal-item]]:duration-[550ms] motion-safe:[&_[data-template-motion-ready=true]_[data-template-reveal-item]]:ease-[cubic-bezier(0.33,0.05,0.2,1)] motion-safe:[&_[data-template-motion-ready=true]_[data-template-reveal-item]]:[transition-delay:min(var(--template-reveal-delay,0ms),150ms)] motion-safe:[&_[data-template-motion-ready=true][data-template-reveal-state=hidden]_[data-template-reveal-item]:not([data-template-line-ready])]:translate-y-2 motion-safe:[&_[data-template-motion-ready=true][data-template-reveal-state=hidden]_[data-template-reveal-item]:not([data-template-line-ready])]:opacity-0 motion-safe:[&_[data-template-motion-ready=true]_[data-template-reveal-item][data-template-reveal-kind=label]]:duration-[600ms] motion-safe:[&_[data-template-motion-ready=true][data-template-reveal-state=hidden]_[data-template-reveal-item][data-template-reveal-kind=label]:not([data-template-line-ready])]:translate-y-0 motion-safe:[&_[data-template-motion-ready=true]_[data-template-reveal-item][data-template-reveal-kind=body]]:duration-[550ms] motion-safe:[&_[data-template-motion-ready=true][data-template-reveal-state=hidden]_[data-template-reveal-item][data-template-reveal-kind=body]:not([data-template-line-ready])]:translate-y-[10px] motion-safe:[&_[data-template-motion-ready=true]_[data-template-reveal-item][data-template-reveal-kind=card]]:duration-[450ms] motion-safe:[&_[data-template-motion-ready=true][data-template-reveal-state=hidden]_[data-template-reveal-item][data-template-reveal-kind=card]:not([data-template-line-ready])]:translate-y-4 motion-safe:[&_[data-template-reveal-media]]:[clip-path:inset(0)] motion-safe:[&_[data-template-motion-ready=true]>[data-template-reveal-media]]:transition-[clip-path,scale] motion-safe:[&_[data-template-motion-ready=true]>[data-template-reveal-media]]:duration-[1000ms] motion-safe:[&_[data-template-motion-ready=true]>[data-template-reveal-media]]:[transition-timing-function:cubic-bezier(0.65,0,0.35,1),cubic-bezier(0.2,0.7,0.2,1)] motion-safe:[&_[data-template-motion-ready=true][data-template-reveal-state=hidden]>[data-template-reveal-media]]:[clip-path:inset(0_0_100%_0)] motion-safe:[&_[data-template-motion-ready=true][data-template-reveal-state=hidden]>[data-template-reveal-media]]:scale-[1.03] [&_[data-template-reveal-kind=body]]:[--template-reveal-delay:120ms]! [&_#schedule_aside_ul]:[--template-reveal-delay:180ms]!";
+---
+
+<!doctype html>
+<html lang={locale} data-wedding-theme="letters" class={letterDocumentClass}>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width" />
+    <meta name="description" content={seo.description} />
+    <meta name="robots" content={seo.robots} />
+    <link rel="canonical" href={seo.canonical} />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content={seo.title} />
+    <meta property="og:description" content={seo.description} />
+    <meta property="og:url" content={seo.canonical} />
+    <meta property="og:image" content={seo.socialImage.url} />
+    <meta property="og:image:alt" content={seo.socialImage.alt} />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={seo.title} />
+    <meta name="twitter:description" content={seo.description} />
+    <meta name="twitter:image" content={seo.socialImage.url} />
+    <meta name="twitter:image:alt" content={seo.socialImage.alt} />
+    <script is:inline>document.documentElement.dataset.templateJs = "true";</script>
+    <title>{seo.title}</title>
+    <slot name="head" />
+  </head>
+  <body
+    class="min-w-[320px] m-0 bg-template-ivory text-template-ink font-sans leading-normal"
+    data-template-has-hero={hasHero ? "true" : "false"}
+  >
+    <div class="overflow-x-clip">
+      <header
+        class:list={[
+          "fixed top-0 z-10 flex w-full items-center justify-between px-[var(--template-page-inset)] py-[0.65rem] text-[0.78rem] uppercase tracking-[0.08em] text-template-ink bg-template-ivory transition-[background-color,color] duration-[180ms] ease-linear motion-reduce:transition-none motion-reduce:!animate-none data-[navigation-state=hero]:bg-transparent data-[navigation-state=hero]:text-template-ivory data-[template-intro-pending=true]:opacity-0 data-[template-intro-pending=true]:[animation:none] data-[template-intro-complete=true]:animate-template-header-intro",
+          hasHero && "animate-template-hero-copy-intro [animation-delay:500ms]",
+          "[@media(max-width:1024px)]:py-[0.4rem] [@media(max-width:960px)]:flex-nowrap [@media(max-width:960px)]:gap-3",
+        ]}
+        data-template-navigation
+        data-navigation-state={hasHero ? "hero" : "solid"}
+      >
+        <a
+          class="inline-flex min-h-11 items-center font-template-serif text-[1.1rem] tracking-normal no-underline normal-case"
+          href={site.href}
+        >{site.name}</a>
+        <div class="flex items-center gap-[clamp(1rem,4vw,3rem)] [@media(max-width:960px)]:flex-row [@media(max-width:960px)]:gap-2 [@media(max-width:960px)]:text-right">
+          {navigation && navigation.links.length > 0 && (
+            <>
+              <nav
+                class="flex flex-wrap gap-4 [@media(max-width:960px)]:hidden"
+                aria-label={navigation.ariaLabel}
+              >
+                {navigation.links.map((link) => (
+                  <a
+                    class="inline-flex min-h-11 items-center px-1 py-2 no-underline hover:underline hover:underline-offset-4 focus-visible:underline focus-visible:underline-offset-4"
+                    href={link.href}
+                  >{link.label}</a>
+                ))}
+              </nav>
+              <details
+                class="relative hidden [@media(max-width:960px)]:block"
+                data-template-navigation-mobile
+              >
+                <summary
+                  class="inline-flex min-h-11 cursor-pointer list-none items-center rounded-full border border-current px-4 py-2 transition-colors duration-200 hover:bg-[color-mix(in_srgb,currentColor_12%,transparent)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-current motion-reduce:transition-none marker:hidden"
+                  aria-label={navigation.menuLabel}
+                >{navigation.menuLabel}</summary>
+                <nav
+                  class="absolute right-4 top-[calc(100%+0.5rem)] grid min-w-48 gap-0.5 rounded-xl bg-template-ivory px-3 py-2 text-template-ink shadow-[0_1rem_2rem_rgba(37,53,43,0.16)] data-[navigation-state=hero]:bg-template-olive data-[navigation-state=hero]:text-template-ivory"
+                  data-navigation-state={hasHero ? "hero" : "solid"}
+                  aria-label={navigation.ariaLabel}
+                >
+                  {navigation.links.map((link) => (
+                    <a
+                      class="inline-flex min-h-11 items-center px-1 py-2 no-underline hover:underline hover:underline-offset-4 focus-visible:underline focus-visible:underline-offset-4"
+                      href={link.href}
+                    >{link.label}</a>
+                  ))}
+                </nav>
+              </details>
+            </>
+          )}
+          <slot name="admin-access" />
+          <slot name="header-addon" />
+        </div>
+      </header>
+      <main class={letterRevealClass}>
+        <slot name="before-main" />
+        <slot />
+        <slot name="after-main" />
+      </main>
+      {footer && (
+        <footer class="flex flex-wrap items-start justify-between gap-4 bg-template-ink px-[var(--template-page-inset)] py-6 text-[0.74rem] uppercase tracking-[0.08em] text-template-ivory [@media(max-width:960px)]:flex-col">
+          <div class="flex flex-col items-start gap-2">
+            <strong class="font-template-serif text-[1.1rem] font-normal tracking-normal normal-case">{footer.names}</strong>
+            <span>{footer.dateLabel}</span>
+          </div>
+          <nav class="flex flex-wrap items-center gap-x-4 gap-y-2" aria-label={site.name}>
+            {footer.links.map((link) => (
+              <a class="inline-flex min-h-11 items-center underline-offset-4" href={link.href}>{link.label}</a>
+            ))}
+            <a class="inline-flex min-h-11 items-center underline-offset-4" href={footer.rsvp.href}>{footer.rsvp.label}</a>
+          </nav>
+          <div class="flex flex-col items-start gap-2">
+            <span>© {footer.year} {footer.names}</span>
+            <span>{footer.attribution}</span>
+          </div>
+          <slot name="footer-addon" />
+        </footer>
+      )}
+    </div>
+    <Toaster client:load />
+  </body>
+</html>
+
+<script>
+  import { setupLineReveals } from "../components/lineReveal";
+  import {
+    navigationStateForHero,
+    setupTemplateInteractions,
+  } from "../interactions";
+
+  const header = document.querySelector("[data-template-navigation]");
+  const hero = document.querySelector("[data-template-hero-intro]");
+
+  if (header instanceof HTMLElement) {
+    const syncHeaderHeight = () => {
+      document.documentElement.style.setProperty(
+        "--template-header-height",
+        `${header.getBoundingClientRect().height}px`,
+      );
+    };
+    syncHeaderHeight();
+    if ("ResizeObserver" in window) {
+      new ResizeObserver(syncHeaderHeight).observe(header);
+    }
+    window.addEventListener("resize", syncHeaderHeight);
+
+    if (!(hero instanceof HTMLElement)) {
+      header.dataset.navigationState = "solid";
+    } else {
+      const updateNavigationState = () => {
+        header.dataset.navigationState = navigationStateForHero(
+          hero.getBoundingClientRect(),
+          header.offsetHeight,
+        );
+      };
+      updateNavigationState();
+      window.addEventListener("scroll", updateNavigationState, { passive: true });
+      window.addEventListener("resize", updateNavigationState);
+    }
+  }
+
+  setupTemplateInteractions();
+  const motionPreference = window.matchMedia("(prefers-reduced-motion: reduce)");
+  let cleanupLines = setupLineReveals(document, motionPreference.matches);
+  motionPreference.addEventListener("change", () => {
+    cleanupLines();
+    cleanupLines = setupLineReveals(document, motionPreference.matches);
+  });
+</script>

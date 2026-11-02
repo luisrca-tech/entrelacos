@@ -4,7 +4,7 @@ Status: the local Block 6 implementation is present on `block-6/public-wedding-e
 
 ## Ownership boundary
 
-`packages/template-root` owns reusable public presentation only:
+`packages/templates/cinema-botanico` owns reusable public presentation only:
 
 - the document layout, metadata rendering, navigation shell, footer shell, standard home preset, and editorial section rendering;
 - the `/v1` TypeScript contracts and synchronous validation of host inputs;
@@ -19,7 +19,7 @@ Each site host owns every route, visible string, identity, date, venue, navigati
 
 ## Public package surface
 
-`@entrelacos/template-root` exposes only `@entrelacos/template-root/v1`. Direct imports from package source, removed legacy root/layout/section exports, and app-to-app imports are unsupported.
+`@entrelacos/template-cinema-botanico` exposes only `@entrelacos/template-cinema-botanico/v1`. Direct imports from package source, removed legacy root/layout/section exports, and app-to-app imports are unsupported.
 
 The `/v1` entrypoint exports these components:
 
@@ -108,13 +108,13 @@ The RSVP dialog opens as a native modal, moves focus to its first control, close
 
 The host manually supplies the Google Maps iframe URL. Accepted embed forms use HTTPS on `google.com`, `www.google.com`, or `maps.google.com`; directions use approved Google Maps paths. No API key, geocoding service, or map provider account is part of the template. The host also supplies a visible address and external fallback link because iframe availability remains external.
 
-`apps/wedding-demo` and every `apps/template-fixture` page currently emit `noindex, nofollow`, one canonical URL, and complete Open Graph/Twitter image metadata. `noindex` is not access control. A real client indexing change requires an explicit host value and reviewed rebuild/deploy.
+`apps/wedding-demo-botanico` and every `apps/template-fixture` page currently emit `noindex, nofollow`, one canonical URL, and complete Open Graph/Twitter image metadata. `noindex` is not access control. A real client indexing change requires an explicit host value and reviewed rebuild/deploy.
 
 Both consumers must build statically without a live API, database, SMS, map, or media provider. No guest member, phone, PIN, bearer, session, RSVP, message, operational fixture, credential, or server infrastructure value may be serialized into editorial HTML, metadata, public assets, or committed browser evidence. Runtime feature islands may receive public origins/site IDs, but operational data is fetched after hydration under the existing feature contracts.
 
 ## Demonstrated reuse
 
-`apps/wedding-demo` is the polished default-preset consumer and owns the Marina & Caio copy, venue, SEO, navigation, feature placement, monogram, and final fictional-demo media. It is not a source of template defaults.
+`apps/wedding-demo-botanico` is the polished default-preset consumer and owns the Marina & Caio copy, venue, SEO, navigation, feature placement, monogram, and final fictional-demo media. It is not a source of template defaults.
 
 The demo renders the guest-access and mural islands with host-owned static fallback copy until their React clients are available. If scripts fail or are disabled, neither region claims to be loading indefinitely and no runtime data is serialized into the page.
 

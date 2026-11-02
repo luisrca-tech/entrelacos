@@ -20,9 +20,9 @@ const publicMessageAlertClass =
   "m-0 max-w-[42rem] border border-template-line px-4 py-[0.8rem] text-template-ink";
 const publicMessageLabelClass = "grid gap-[0.45rem] text-[0.85rem] font-bold";
 const publicMessageInputClass =
-  "min-h-11 w-full rounded-xl border border-[rgba(37,53,43,0.25)] bg-[#fffdf8] px-4 py-3 text-base text-template-ink font-[inherit] transition-[border-color,box-shadow] duration-200 focus:border-template-olive focus:outline-2 focus:outline-offset-2 focus:outline-template-olive motion-reduce:transition-none";
+  "min-h-11 w-full rounded-xl border border-[var(--template-input-line,rgba(37,53,43,0.25))] bg-[var(--template-paper,#fffdf8)] px-4 py-3 text-base text-template-ink font-[inherit] transition-[border-color,box-shadow] duration-200 focus:border-template-olive focus:outline-2 focus:outline-offset-2 focus:outline-template-olive motion-reduce:transition-none";
 const publicMessageTextareaClass =
-  "min-h-11 w-full rounded-xl border border-[rgba(37,53,43,0.25)] bg-[#fffdf8] px-4 py-3 text-base text-template-ink font-[inherit] transition-[border-color,box-shadow] duration-200 focus:border-template-olive focus:outline-2 focus:outline-offset-2 focus:outline-template-olive motion-reduce:transition-none min-h-36 resize-y leading-[1.65]";
+  "min-h-11 w-full rounded-xl border border-[var(--template-input-line,rgba(37,53,43,0.25))] bg-[var(--template-paper,#fffdf8)] px-4 py-3 text-base text-template-ink font-[inherit] transition-[border-color,box-shadow] duration-200 focus:border-template-olive focus:outline-2 focus:outline-offset-2 focus:outline-template-olive motion-reduce:transition-none min-h-36 resize-y leading-[1.65]";
 const publicMessageMetaClass =
   "flex items-center justify-between gap-4 text-template-muted text-xs";
 const publicMessageButtonClass =

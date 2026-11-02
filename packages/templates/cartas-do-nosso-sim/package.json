@@ -1,0 +1,18 @@
+{
+  "name": "@entrelacos/template-cartas-do-nosso-sim",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./v1": "./src/v1.ts",
+    "./theme.css": "./src/theme.css"
+  },
+  "peerDependencies": {
+    "astro": "7.3.2",
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
+  },
+  "dependencies": {
+    "@entrelacos/ui": "workspace:*"
+  }
+}

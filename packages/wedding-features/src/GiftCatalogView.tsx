@@ -3,7 +3,7 @@ import { type CSSProperties, useId } from "react";
 
 type Props = {
   gifts: PublicGiftItem[];
-  mode: "disabled" | "sandbox" | "live";
+  mode: "disabled" | "sandbox" | "live" | "demonstration";
   busy: boolean;
   actionLabel?: string;
   recoveryOnly?: boolean;
@@ -58,6 +58,13 @@ export function GiftCatalogView({
         </p>
       </header>
 
+      {mode === "demonstration" && (
+        <p role="status" className="m-0 text-template-muted">
+          Demonstração da lista de presentes. Contribuições indisponíveis;
+          nenhum pagamento será iniciado.
+        </p>
+      )}
+
       {search && (
         <div className="grid min-w-0 gap-3">
           <label htmlFor={searchId}>Buscar presentes</label>
@@ -67,7 +74,7 @@ export function GiftCatalogView({
             value={search.value}
             maxLength={100}
             onChange={(event) => search.onChange(event.target.value)}
-            className="min-h-11 w-full rounded-xl border border-[rgba(37,53,43,0.25)] bg-[#fffdf8] px-4 py-3 text-base text-template-ink font-[inherit] transition-[border-color,box-shadow] duration-200 focus:border-template-olive focus:outline-2 focus:outline-offset-2 focus:outline-template-olive motion-reduce:transition-none min-w-0"
+            className="min-h-11 w-full rounded-xl border border-[var(--template-input-line,rgba(37,53,43,0.25))] bg-[var(--template-paper,#fffdf8)] px-4 py-3 text-base text-template-ink font-[inherit] transition-[border-color,box-shadow] duration-200 focus:border-template-olive focus:outline-2 focus:outline-offset-2 focus:outline-template-olive motion-reduce:transition-none min-w-0"
           />
           <nav
             aria-label="Paginação dos presentes"
@@ -138,7 +145,8 @@ export function GiftCatalogView({
                 <p className="m-0 break-words leading-relaxed text-template-muted">
                   {gift.description}
                 </p>
-                {gift.pricing?.feeAllocation === "BUYER_GROSS_UP" ? (
+                {mode !== "demonstration" &&
+                gift.pricing?.feeAllocation === "BUYER_GROSS_UP" ? (
                   <p role="status" className="m-0 text-template-muted">
                     {gift.pricing.available && mode === "sandbox"
                       ? "Homologação Sandbox. Escolha Pix ou cartão para consultar o total com taxas."
@@ -148,21 +156,26 @@ export function GiftCatalogView({
                   <p className="m-0 text-template-ink">
                     Valor simbólico:{" "}
                     {currencyFormatter.format(gift.nominalCents / 100)}
-                    <span className="block text-sm text-template-muted">
-                      Pix ou cartão à vista · mesmo preço final
-                    </span>
+                    {mode !== "demonstration" && (
+                      <span className="block text-sm text-template-muted">
+                        Pix ou cartão à vista · mesmo preço final
+                      </span>
+                    )}
                   </p>
                 )}
-                <button
-                  type="button"
-                  className={giftActionButtonClass}
-                  disabled={
-                    busy || (!recoveryOnly && gift.pricing?.available === false)
-                  }
-                  onClick={() => onSelect(gift)}
-                >
-                  {busy ? "Aguarde…" : (actionLabel ?? "Escolher presente")}
-                </button>
+                {mode !== "demonstration" && (
+                  <button
+                    type="button"
+                    className={giftActionButtonClass}
+                    disabled={
+                      busy ||
+                      (!recoveryOnly && gift.pricing?.available === false)
+                    }
+                    onClick={() => onSelect(gift)}
+                  >
+                    {busy ? "Aguarde…" : (actionLabel ?? "Escolher presente")}
+                  </button>
+                )}
               </div>
             </article>
           </li>

@@ -198,9 +198,10 @@ export function createGiftsHttpRouter(options: GiftsHttpOptions) {
     const siteId = context.req.param("siteId");
     const query = readCatalogQuery(context.req.url);
     const catalog = await readPublicGifts(options.db, siteId, services, query);
-    const settings = options.readPricingSettings
-      ? await options.readPricingSettings(siteId)
-      : undefined;
+    const settings =
+      catalog.mode !== "demonstration" && options.readPricingSettings
+        ? await options.readPricingSettings(siteId)
+        : undefined;
     const sandboxBuyer =
       catalog.mode === "sandbox" &&
       settings?.feeAllocation === "BUYER_GROSS_UP" &&

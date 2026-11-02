@@ -30,9 +30,11 @@ Install the pinned Bun version using the [official installation instructions](ht
 | --- | --- | --- |
 | Central panel | `http://localhost:3000` | First-party BFF, controlled login and wedding operations |
 | API | `http://localhost:8080/v1/health` | Hono API; startup verifies database identity |
-| Wedding demo | `http://localhost:4321` | Astro consuming the reusable template foundation |
+| Botanical demo | `http://localhost:4321` | Cinema Botânico showcase |
+| Letters demo | `http://localhost:4322` | Cartas do Nosso Sim showcase |
+| Marketing landing | `http://localhost:4323` | General product story and model discovery |
 
-Run individual apps with `bun run --filter @entrelacos/admin dev`, `bun run --filter @entrelacos/api dev` or `bun run --filter @entrelacos/wedding-demo dev`.
+Run individual apps with `bun run --filter @entrelacos/admin dev`, `bun run --filter @entrelacos/api dev` or `bun run --filter @entrelacos/wedding-demo-botanico dev`.
 
 `bun run lint`, `bun run typecheck`, `bun run test` and `bun run build` are separate checks. `bun run check` runs all four. Biome handles supported source formats; Astro performs its own syntax/type validation. `bun run test:db` runs the real, serialized PostgreSQL acceptance suite against the verified test branch. CI runs the same credential-free checks; it does not deploy or migrate main.
 
@@ -44,9 +46,14 @@ Use `bun db:generate` to generate a migration without connecting to a database, 
 apps/
   admin/             Central TanStack Start app, Cloudflare Workers
   api/               Hono Node.js API, Railway
-  wedding-demo/      Astro static demonstration app
+  landing/           General product narrative, Astro static
+  wedding-demo-botanico/  Cinema Botânico showcase
+  wedding-demo-cartas/    Cartas do Nosso Sim showcase
+  template-fixture/      Technical Botanical consumer
 packages/
-  template-root/     Reusable editorial composition and default theme
+  templates/         Independent visual templates
+    cinema-botanico/       Botanical composition, styles and motion
+    cartas-do-nosso-sim/    Letters composition, styles and motion
   wedding-features/  Shared guest-facing feature presentation/integration
   ui/                shadcn/Base UI primitives and Sonner
   contracts/         Public API types and runtime schemas
@@ -55,7 +62,7 @@ docs/                Contracts, decisions, operations and historical inputs
 plans/               PRD and implementation blocks
 ```
 
-New client apps compose `template-root`; they do not receive a copied template or a new backend. Each wedding has independent assets, configuration and deployment. Only the API and authorized backend operations access the database package.
+New client apps compose a package under `packages/templates/`; they do not receive a copied template or a new backend. Each wedding has independent assets, configuration and deployment. Only the API and authorized backend operations access the database package.
 
 ## Environment and operational rules
 

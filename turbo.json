@@ -8,6 +8,10 @@
       "env": [
         "APP_ENV",
         "PUBLIC_API_URL",
+        "PUBLIC_SITE_URL",
+        "PUBLIC_BOTANICAL_DEMO_URL",
+        "PUBLIC_LETTERS_DEMO_URL",
+        "PUBLIC_CONTACT_URL",
         "PUBLIC_SITE_ID",
         "PUBLIC_LIVE_DEMO_SITE_ID",
         "PUBLIC_ADMIN_ORIGIN",

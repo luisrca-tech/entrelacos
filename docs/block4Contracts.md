@@ -141,7 +141,7 @@ The API locks and validates every submitted member in the tenant and group scope
 
 `packages/wedding-features` exports the shared `GuestAccess`, `RsvpForm`, `RsvpDraft`, `RsvpMemberSnapshot`, `RsvpStatus`, and draft helpers through its public entrypoint. The component consumes the existing family-session transport and API origin/site configuration; it does not create authentication, a parallel session store, or database access. `confirmAllDraft`, `pendingRsvpUpdates`, and `reconcileRsvpDraft` are presentation-state helpers, not authorization.
 
-`apps/wedding-demo` remains a host and QA surface. It chooses placement and styling and supplies public configuration; it must not embed RSVP data, sessions, credentials, or operational fixtures in static content. `packages/template-root` owns no RSVP rules. Block 6 may apply the final design through the shared exports without rewriting this state machine. Block 5 may consume the current RSVP contract for messages, reports, and quotas without changing RSVP authorization or making SMS a prerequisite.
+`apps/wedding-demo-botanico` remains a host and QA surface. It chooses placement and styling and supplies public configuration; it must not embed RSVP data, sessions, credentials, or operational fixtures in static content. `packages/templates/cinema-botanico` owns no RSVP rules. Block 6 may apply the final design through the shared exports without rewriting this state machine. Block 5 may consume the current RSVP contract for messages, reports, and quotas without changing RSVP authorization or making SMS a prerequisite.
 
 ## Static artifact privacy
 

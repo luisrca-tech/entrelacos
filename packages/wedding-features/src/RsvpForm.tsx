@@ -42,7 +42,7 @@ const rsvpMemberClass =
 const rsvpMemberDetailsClass = "grid gap-[0.2rem]";
 const rsvpMemberNoteClass = "text-template-muted";
 const rsvpSelectClass =
-  "min-h-11 w-full rounded-xl border border-[rgba(37,53,43,0.25)] bg-[#fffdf8] px-4 py-3 text-base text-template-ink font-[inherit] transition-[border-color,box-shadow] duration-200 focus:border-template-olive focus:outline-2 focus:outline-offset-2 focus:outline-template-olive motion-reduce:transition-none w-auto [@media(max-width:560px)]:w-full";
+  "min-h-11 w-full rounded-xl border border-[var(--template-input-line,rgba(37,53,43,0.25))] bg-[var(--template-paper,#fffdf8)] px-4 py-3 text-base text-template-ink font-[inherit] transition-[border-color,box-shadow] duration-200 focus:border-template-olive focus:outline-2 focus:outline-offset-2 focus:outline-template-olive motion-reduce:transition-none w-auto [@media(max-width:560px)]:w-full";
 const rsvpActionsClass =
   "flex items-center justify-start gap-4 flex-wrap [@media(max-width:560px)]:items-stretch [@media(max-width:560px)]:flex-col";
 const rsvpButtonClass =
