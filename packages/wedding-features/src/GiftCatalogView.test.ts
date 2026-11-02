@@ -57,28 +57,33 @@ describe("gift catalog view", () => {
     expect(html).toContain("Preço indisponível");
     expect(html).toContain("disabled");
   });
-  it("keeps accessible server search/navigation on an admitted empty page", () => {
+  it("keeps accessible pagination on an admitted empty page", () => {
     const html = renderToStaticMarkup(
       createElement(GiftCatalogView, {
         gifts: [],
         mode: "sandbox",
         busy: false,
         onSelect: vi.fn(),
-        search: {
-          value: "none",
+        paging: {
           page: 2,
           total: 0,
           totalPages: 1,
           loading: false,
           error: false,
-          onChange: vi.fn(),
           onPage: vi.fn(),
         },
       }),
     );
-    expect(html).toContain('type="search"');
-    expect(html).toContain("Buscar presentes");
+    expect(html).not.toContain('type="search"');
+    expect(html).not.toContain("Buscar presentes");
     expect(html).toContain("Paginação dos presentes");
+    expect(html).toContain("grid w-full grid-cols-[1fr_auto_1fr]");
+    expect(html.indexOf("Página anterior")).toBeLessThan(
+      html.indexOf("Página 2 de 1"),
+    );
+    expect(html.indexOf("Página 2 de 1")).toBeLessThan(
+      html.indexOf("Próxima página"),
+    );
     expect(html).toContain("Nenhum presente");
     expect(html).not.toContain("Valor simbólico:");
   });
@@ -139,8 +144,9 @@ describe("gift catalog view", () => {
     expect(html).not.toContain("125,92");
     expect(html).not.toMatch(/comissão|taxa/i);
     expect(html).not.toContain("Ambiente de testes — sem pagamentos reais.");
-    expect(html).toContain("Presente simbólico");
-    expect(html).toContain("não há produto físico ou entrega");
+    expect(html).toContain("Valor simbólico");
+    expect(html).not.toContain("Presentes simbólicos");
+    expect(html).not.toContain("não há produto físico ou entrega");
     expect(html).not.toMatch(/RSVP|login|entrar/i);
   });
 

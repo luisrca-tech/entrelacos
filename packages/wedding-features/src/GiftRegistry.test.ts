@@ -183,23 +183,6 @@ describe("mounted server catalog runtime", () => {
       q: u.searchParams.get("q") || "",
     };
   };
-  async function search(surface: HTMLElement, value: string) {
-    const input = surface.querySelector<HTMLInputElement>(
-      'input[type="search"]',
-    );
-    expect(input).not.toBeNull();
-    const setter = Object.getOwnPropertyDescriptor(
-      HTMLInputElement.prototype,
-      "value",
-    )?.set;
-    if (!input || !setter) throw new Error("Missing native search input");
-    await act(async () => {
-      setter.call(input, value);
-      input.dispatchEvent(new Event("input", { bubbles: true }));
-      input.dispatchEvent(new Event("change", { bubbles: true }));
-      await flush();
-    });
-  }
   async function advance(ms: number) {
     await act(async () => {
       vi.advanceTimersByTime(ms);
@@ -217,31 +200,22 @@ describe("mounted server catalog runtime", () => {
       await flush();
     });
   }
-  it("debounces300ms after the last input, resets page1 and retains controls on an empty match", async () => {
+  it("pages the catalog without a guest search field", async () => {
     const fetcher = vi.fn<typeof fetch>(async (url) => {
       const q = query(url);
       return reply(page(q.siteId, q.page, q.q));
     });
     const { surface } = await mount(fetcher);
     expect(surface.hidden).toBe(false);
-    await search(surface, "first");
-    expect(surface.textContent).not.toContain("25 presentes");
-    await advance(100);
-    await search(surface, " last ");
-    await advance(299);
-    expect(fetcher).toHaveBeenCalledTimes(1);
-    expect(surface.querySelectorAll("button")).not.toHaveLength(0);
-    await advance(1);
+    expect(surface.querySelector('input[type="search"]')).toBeNull();
+    expect(surface.textContent).not.toContain("Buscar presentes");
+    await click(surface, "Próxima página");
     expect(fetcher).toHaveBeenCalledTimes(2);
-    expect(query(fetcher.mock.calls[1][0])).toMatchObject({
-      page: 1,
-      q: "last",
-    });
-    expect(surface.hidden).toBe(false);
-    expect(surface.querySelector('input[type="search"]')).not.toBeNull();
-    expect(surface.textContent).toContain("Nenhum presente");
+    expect(query(fetcher.mock.calls[1][0])).toMatchObject({ page: 2, q: "" });
+    expect(surface.textContent).toContain("Página 2 de 2");
+    expect(surface.textContent).toContain("Dinner 20");
   });
-  it("queues only the latest intent behind actual prior settlement and never overlaps30s refresh", async () => {
+  it("holds the 30s refresh until the in-flight page request settles", async () => {
     let resolve!: (r: Response) => void;
     const waiting = new Promise<Response>((r) => {
       resolve = r;
@@ -256,23 +230,15 @@ describe("mounted server catalog runtime", () => {
     try {
       await click(surface, "Próxima página");
       expect(fetcher).toHaveBeenCalledTimes(2);
-      expect(query(fetcher.mock.calls[1][0]).page).toBe(2);
-      await search(surface, "stale");
-      await advance(300);
-      await search(surface, "latest");
-      await advance(300);
+      expect(query(fetcher.mock.calls[1][0])).toMatchObject({ page: 2, q: "" });
       await advance(30000);
       expect(fetcher).toHaveBeenCalledTimes(2);
       await act(async () => {
         resolve(reply(page("wedding-a", 2)));
         await flush();
       });
-      expect(fetcher).toHaveBeenCalledTimes(3);
-      expect(query(fetcher.mock.calls[2][0])).toMatchObject({
-        page: 1,
-        q: "latest",
-      });
-      expect(surface.textContent).not.toContain("Dinner 20");
+      expect(fetcher).toHaveBeenCalledTimes(2);
+      expect(surface.textContent).toContain("Dinner 20");
     } finally {
       resolve(reply(page("wedding-a", 2)));
       await act(flush);
@@ -374,16 +340,13 @@ describe("mounted server catalog runtime", () => {
       await act(flush);
     }
   });
-  it("does not close the selected dialog when search or refresh changes the catalog", async () => {
+  it("does not close the selected dialog when refresh changes the catalog", async () => {
     const fetcher = vi.fn<typeof fetch>(async (url) => {
       const q = query(url);
       return reply(page(q.siteId, q.page, q.q));
     });
     const { surface } = await mount(fetcher);
     await click(surface, "Escolher presente");
-    expect(surface.querySelector("dialog")?.open).toBe(true);
-    await search(surface, "none");
-    await advance(300);
     expect(surface.querySelector("dialog")?.open).toBe(true);
     await advance(30000);
     expect(surface.querySelector("dialog")?.open).toBe(true);
@@ -409,8 +372,7 @@ describe("mounted server catalog runtime", () => {
         (button) => button.textContent === "Consultar pagamento",
       ),
     ).toBe(true);
-    await search(surface, "none");
-    await advance(300);
+    await click(surface, "Próxima página");
     expect(JSON.stringify({ ...window.sessionStorage })).toBe(snapshot);
     expect(surface.textContent).not.toContain("Não inicie outro pagamento");
     expect(
@@ -817,57 +779,6 @@ describe("mounted server catalog runtime", () => {
       expect(notify).toHaveBeenCalledTimes(1);
     } finally {
       window.removeEventListener("entrelacos:toast", notify);
-    }
-  });
-
-  it("keeps reentrant latest input authoritative when abort invokes another input intent", async () => {
-    let resolve!: (r: Response) => void;
-    const waiting = new Promise<Response>((r) => {
-      resolve = r;
-    });
-    let surface!: HTMLElement;
-    const fetcher = vi.fn((url, init) => {
-      const q = query(url);
-      if (fetcher.mock.calls.length === 2) {
-        init?.signal?.addEventListener(
-          "abort",
-          () => {
-            const input = surface.querySelector<HTMLInputElement>(
-              'input[type="search"]',
-            );
-            const setter = Object.getOwnPropertyDescriptor(
-              HTMLInputElement.prototype,
-              "value",
-            )?.set;
-            if (!input || !setter)
-              throw new Error("Missing native search input");
-            setter.call(input, "inner");
-            input.dispatchEvent(new Event("input", { bubbles: true }));
-          },
-          { once: true },
-        );
-        return waiting;
-      }
-      return Promise.resolve(reply(page(q.siteId, q.page, q.q)));
-    });
-    const m = await mount(fetcher);
-    surface = m.surface;
-    try {
-      await click(surface, "Próxima página");
-      await search(surface, "outer");
-      await advance(300);
-      await act(async () => {
-        resolve(reply(page("wedding-a", 2)));
-        await flush();
-      });
-      expect(fetcher).toHaveBeenCalledTimes(3);
-      expect(query(fetcher.mock.calls[2][0]).q).toBe("inner");
-      expect(
-        surface.querySelector<HTMLInputElement>('input[type="search"]')?.value,
-      ).toBe("inner");
-    } finally {
-      resolve(reply(page("wedding-a", 2)));
-      await act(flush);
     }
   });
 

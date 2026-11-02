@@ -35,6 +35,11 @@ describe("WeddingLayout landmarks", () => {
     expect(source).not.toContain("../styles.css");
   });
 
+  it("dims the hero header so ivory links stay readable on a light video", () => {
+    expect(source).toContain("data-[navigation-state=hero]:bg-template-ink/50");
+    expect(source).not.toContain("data-[navigation-state=hero]:bg-transparent");
+  });
+
   it("tightens the header further on tablet and mobile", () => {
     expect(source).toContain("[@media(max-width:1024px)]:py-[0.4rem]");
   });
