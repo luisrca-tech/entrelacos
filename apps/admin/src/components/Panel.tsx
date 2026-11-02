@@ -18,6 +18,7 @@ import {
   getSelectedSiteAccess,
   loadAssignedSiteName,
 } from "./panelMemberships";
+import { RingsLoader } from "./RingsLoader";
 import { SiteWorkspace } from "./SiteWorkspace";
 
 export function Panel({ siteId, area }: { siteId?: string; area?: SiteArea }) {
@@ -132,10 +133,7 @@ export function PanelSessionView({
     return (
       <ShellLoading>
         {loading ? (
-          <div role="status" aria-busy="true" aria-label="Carregando painel">
-            <div className="h-8 w-48 animate-pulse rounded-lg bg-admin-line motion-reduce:animate-none" />
-            <div className="mt-4 h-32 animate-pulse rounded-xl bg-admin-line motion-reduce:animate-none" />
-          </div>
+          <RingsLoader />
         ) : (
           <div className="grid gap-4">
             <p className={adminStyles.alert} role="alert">
@@ -267,7 +265,11 @@ function SiteAdminRedirect({ siteId }: { siteId: string }) {
   useEffect(() => {
     window.location.replace(`/sites/${encodeURIComponent(siteId)}/home`);
   }, [siteId]);
-  return <ShellLoading>Abrindo seu casamento…</ShellLoading>;
+  return (
+    <ShellLoading>
+      <RingsLoader label="Abrindo seu casamento" />
+    </ShellLoading>
+  );
 }
 
 function SiteAreaRedirect({
@@ -280,7 +282,11 @@ function SiteAreaRedirect({
   useEffect(() => {
     window.location.replace(`/sites/${encodeURIComponent(siteId)}/${area}`);
   }, [area, siteId]);
-  return <ShellLoading>Redirecionando…</ShellLoading>;
+  return (
+    <ShellLoading>
+      <RingsLoader label="Redirecionando" />
+    </ShellLoading>
+  );
 }
 
 export { lifecycleLabel } from "./OwnerSites";

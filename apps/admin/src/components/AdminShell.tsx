@@ -87,7 +87,7 @@ export function AdminShell({
               expanded ? "justify-items-start" : "justify-items-center",
             )}
             to="/"
-            aria-label="EntreLaços — início"
+            aria-label="Entrelaços — início"
           >
             <img
               src="/brand/entrelacos-logo.svg"
@@ -100,7 +100,7 @@ export function AdminShell({
               )}
             />
             <img
-              src="/brand/entrelacos-favicon.svg"
+              src="/brand/entrelacos-mark.svg"
               alt=""
               aria-hidden="true"
               className={cn(
@@ -205,10 +205,17 @@ export function AdminShell({
       <div className="flex min-h-screen min-w-0 flex-col">
         <header className="mx-auto flex w-full max-w-[1700px] items-center justify-end gap-[18px] border-b border-admin-line px-[42px] py-2.5 [@media(max-width:760px)]:px-5 [@media(max-width:760px)]:py-2 [@media(min-width:761px)_and_(max-width:1060px)]:px-7">
           <Link
-            className="mr-auto hidden font-admin-display text-[1.45rem] tracking-[-0.03em] text-admin-graphite no-underline [@media(max-width:760px)]:block"
+            className="mr-auto hidden items-center gap-2 font-admin-display text-[1.45rem] tracking-[-0.03em] text-admin-graphite no-underline [@media(max-width:760px)]:flex"
             to="/"
           >
-            EntreLaços
+            <img
+              src="/brand/entrelacos-mark.svg"
+              width="32"
+              height="30"
+              alt=""
+              aria-hidden="true"
+            />
+            Entrelaços
           </Link>
           <div className="mr-auto flex items-center gap-2 text-[0.85rem] text-admin-muted [@media(max-width:760px)]:hidden">
             <span className="text-[0.7rem] font-bold uppercase tracking-[0.13em] leading-[1.3] text-admin-muted">
@@ -226,7 +233,16 @@ export function AdminShell({
           {children}
         </main>
         <footer className="mx-auto mt-auto flex w-full max-w-[1700px] justify-between gap-6 border-t border-admin-line px-[42px] pt-6 pb-7 text-[0.78rem] text-admin-muted [@media(max-width:760px)]:hidden [@media(min-width:761px)_and_(max-width:1060px)]:px-7">
-          <span>EntreLaços · Painel administrativo</span>
+          <span className="flex items-center gap-2">
+            <img
+              src="/brand/entrelacos-mark.svg"
+              width="24"
+              height="22"
+              alt=""
+              aria-hidden="true"
+            />
+            Entrelaços · Painel administrativo
+          </span>
           <span>Feito para cuidar de cada detalhe.</span>
         </footer>
       </div>

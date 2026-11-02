@@ -75,6 +75,25 @@ function render(
   );
 }
 describe("panel session boundary", () => {
+  it.each(["unverified", "loading"] as const)(
+    "shows the branded status while the session is %s",
+    (status) => {
+      const html = render(status);
+      expect(html).toContain('role="status"');
+      expect(html).toContain('aria-label="Carregando painel"');
+      expect(html).toContain('data-rings-loader=""');
+      expect(html).not.toContain("workspace");
+    },
+  );
+  it.each(["denied", "unavailable"] as const)(
+    "keeps %s actionable instead of showing an endless loader",
+    (status) => {
+      const html = render(status);
+      expect(html).toContain('role="alert"');
+      expect(html).toContain("Tentar novamente");
+      expect(html).not.toContain('data-rings-loader=""');
+    },
+  );
   it.each(["OWNER", "SITE_ADMIN", "SITE_ASSISTANT"] as const)(
     "protects the dedicated receiving guide for %s",
     (role) => {
