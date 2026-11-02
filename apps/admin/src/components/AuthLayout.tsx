@@ -7,21 +7,22 @@ export function AuthLayout({ children }: { children: ReactNode }) {
       <div className="grid min-h-[min(680px,calc(100vh-48px))] w-full max-w-[1000px] grid-cols-[minmax(220px,0.78fr)_minmax(360px,1.22fr)] overflow-hidden rounded-[18px] border border-admin-line bg-admin-surface shadow-admin [@media(max-width:760px)]:block [@media(max-width:760px)]:min-h-[calc(100vh-24px)]">
         <aside
           className="flex flex-col bg-admin-graphite p-[34px] text-[#f8eee5] [@media(max-width:760px)]:min-h-[180px] [@media(max-width:760px)]:p-6"
-          aria-label="EntreLaços"
+          aria-label="Entrelaços"
         >
           <Link
-            className="font-admin-display text-[1.45rem] tracking-[-0.03em] text-[#fffaf6] no-underline"
+            className="flex items-center gap-2.5 font-admin-display text-[1.45rem] tracking-[-0.03em] text-[#fffaf6] no-underline"
             to="/"
           >
-            EntreLaços
+            <img
+              src="/brand/entrelacos-mark.svg"
+              width="40"
+              height="37"
+              alt=""
+              aria-hidden="true"
+            />
+            Entrelaços
           </Link>
           <div className="my-auto grid gap-6 [@media(max-width:760px)]:mt-[30px] [@media(max-width:760px)]:mb-0 [@media(max-width:760px)]:block">
-            <span
-              className="grid size-[54px] place-items-center rounded-full border border-[rgb(255_250_246_/_40%)] font-admin-display text-2xl [@media(max-width:760px)]:hidden"
-              aria-hidden="true"
-            >
-              E
-            </span>
             <p className="m-0 max-w-[11ch] font-admin-display text-[clamp(2.2rem,4vw,3.8rem)] leading-[1.05] [@media(max-width:760px)]:mt-3.5 [@media(max-width:760px)]:max-w-[24ch] [@media(max-width:760px)]:text-[1.65rem]">
               Seu casamento, mais simples de organizar.
             </p>

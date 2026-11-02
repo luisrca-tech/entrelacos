@@ -66,7 +66,7 @@ const questions = [
   <body>
     <a href="#conteudo" class="skip-link">Pular para o conteúdo</a>
     <header class="masthead">
-      <a href="#inicio" class="wordmark" aria-label="Entrelaços, início"><span class="brand-mark" aria-hidden="true">∞</span> entrelaços<span class="brand-dot">.</span></a>
+      <a href="#inicio" class="wordmark" aria-label="Entrelaços, início"><img class="brand-mark" src="/brand/entrelacos-mark.svg" width="44" height="41" alt="" aria-hidden="true" />Entrelaços</a>
       <nav aria-label="Navegação principal"><a href="#experiencia">A experiência</a><a href="#modelos">Os modelos</a><a href="#detalhes">Os detalhes</a></nav>
       <a class="header-cta" href={config.contactUrl ?? "#modelos"}>{config.contactUrl ? "Vamos conversar" : "Encontre seu estilo"}<span aria-hidden="true">↗</span></a>
     </header>
@@ -164,7 +164,7 @@ const questions = [
 
       <section id="comecar" class="closing" aria-labelledby="closing-title"><h2 id="closing-title" class="reveal">Toda grande festa<br />começa com<br /><em>um encontro.</em></h2><div class="closing-actions reveal"><a class="button button-ivory" href={config.contactUrl ?? "#modelos"}>{config.contactUrl ? "Vamos contar a nossa história" : "Encontrar o nosso modelo"}<span aria-hidden="true">↗</span></a><p>{config.contactUrl ? "Conte a data e o que vocês imaginam. O resto, construímos juntos." : "Escolham um estilo e contem para quem compartilhou este site com vocês."}</p></div><span class="closing-signature" aria-hidden="true">com carinho, entrelaços.</span></section>
     </main>
-    <footer class="site-footer"><a class="wordmark" href="#inicio">entrelaços<span class="brand-dot">.</span></a><p>Histórias com identidade.<br />Encontros com significado.</p><div><a href={config.botanicalUrl} target="_blank" rel="noopener noreferrer">Cinema Botânico ↗</a><a href={config.lettersUrl} target="_blank" rel="noopener noreferrer">Cartas do Nosso Sim ↗</a></div><small>© {new Date().getFullYear()} Entrelaços — Cada história, um novo encontro.</small></footer>
+    <footer class="site-footer"><a class="wordmark" href="#inicio" aria-label="Entrelaços, início"><img class="brand-mark" src="/brand/entrelacos-mark.svg" width="44" height="41" alt="" aria-hidden="true" />Entrelaços</a><p>Histórias com identidade.<br />Encontros com significado.</p><div><a href={config.botanicalUrl} target="_blank" rel="noopener noreferrer">Cinema Botânico ↗</a><a href={config.lettersUrl} target="_blank" rel="noopener noreferrer">Cartas do Nosso Sim ↗</a></div><small>© {new Date().getFullYear()} Entrelaços — Cada história, um novo encontro.</small></footer>
     <script>
       import Lenis from "lenis";
       import { mountLandingMotion } from "../landingMotion";

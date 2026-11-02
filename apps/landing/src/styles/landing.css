@@ -112,14 +112,10 @@ summary:focus-visible {
   letter-spacing: -1.5px;
 }
 .brand-mark {
-  font-size: 2.7rem;
-  line-height: 1;
-  letter-spacing: -4px;
-  margin-right: 0.25rem;
-}
-.brand-dot {
-  color: var(--wine);
-  margin-left: -0.4rem;
+  flex: 0 0 auto;
+  width: 2.75rem;
+  height: 2.55rem;
+  object-fit: contain;
 }
 .masthead nav {
   display: flex;
@@ -1268,7 +1264,8 @@ summary:focus-visible {
     font-size: 1.7rem;
   }
   .brand-mark {
-    font-size: 2.2rem;
+    width: 2.2rem;
+    height: 2.05rem;
   }
   .header-cta {
     font-size: 0.65rem;
