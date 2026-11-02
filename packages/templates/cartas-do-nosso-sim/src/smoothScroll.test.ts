@@ -36,7 +36,7 @@ describe("Letters smooth scroll", () => {
         wheelMultiplier: 0.65,
         smoothWheel: true,
         syncTouch: false,
-        anchors: { duration: 1.15, lerp: 0 },
+        anchors: false,
       }),
     );
     document.body.innerHTML = "<dialog><div></div></dialog><section></section>";

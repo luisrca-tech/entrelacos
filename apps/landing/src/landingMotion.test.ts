@@ -92,7 +92,7 @@ describe("landing motion lifecycle", () => {
     expect(heading.classList.contains("reveal-immediate")).toBe(true);
     dispose();
   });
-  it("smooths wheel input while preserving touch and native anchors", () => {
+  it("smooths wheel input while preserving touch and explicitly handling anchors", () => {
     const { createSmooth, dispose } = setup();
     expect(createSmooth).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -101,7 +101,7 @@ describe("landing motion lifecycle", () => {
         wheelMultiplier: 0.65,
         smoothWheel: true,
         syncTouch: false,
-        anchors: true,
+        anchors: false,
       }),
     );
     dispose();
