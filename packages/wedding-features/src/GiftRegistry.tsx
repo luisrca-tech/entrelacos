@@ -129,10 +129,8 @@ function GiftRegistryRuntime({
   const catalogGeneration = useRef(0);
   const catalogFailureNotified = useRef(false);
   const catalogActions = useRef<{
-    search: (q: string) => void;
     page: (page: number) => void;
   } | null>(null);
-  const [searchText, setSearchText] = useState("");
   const [catalogPage, setCatalogPage] = useState(1);
   const [catalogLoading, setCatalogLoading] = useState(true);
   const [catalogError, setCatalogError] = useState(false);
@@ -188,7 +186,6 @@ function GiftRegistryRuntime({
 
   useEffect(() => {
     let active = true;
-    let debounce: number | undefined;
     let query = { page: 1, q: "" };
     const owner = catalogOwner.current;
     if (!api) return;
@@ -252,27 +249,8 @@ function GiftRegistryRuntime({
       })();
     };
     catalogActions.current = {
-      search: (q) => {
-        if (!active) return;
-        const generation = invalidate();
-        if (!intentCurrent(generation)) return;
-        setSearchText(q);
-        window.clearTimeout(debounce);
-        debounce = window.setTimeout(() => {
-          debounce = undefined;
-          const parsed = publicGiftCatalogQuerySchema.safeParse({ page: 1, q });
-          if (!parsed.success) {
-            setCatalogLoading(false);
-            setCatalogError(true);
-            return;
-          }
-          query = parsed.data;
-          setCatalogPage(1);
-          run();
-        }, 300);
-      },
       page: (page) => {
-        if (!active || debounce !== undefined) return;
+        if (!active) return;
         const parsed = publicGiftCatalogQuerySchema.safeParse({
           ...query,
           page,
@@ -287,7 +265,7 @@ function GiftRegistryRuntime({
     };
     run();
     const interval = window.setInterval(() => {
-      if (owner.active || debounce !== undefined || !active) return;
+      if (owner.active || !active) return;
       const generation = invalidate();
       if (intentCurrent(generation)) run();
     }, 30000);
@@ -297,7 +275,6 @@ function GiftRegistryRuntime({
       catalogActions.current = null;
       if (owner.pending === run) owner.pending = null;
       owner.controller?.abort();
-      window.clearTimeout(debounce);
       window.clearInterval(interval);
     };
   }, [api, catalogOwner]);
@@ -559,16 +536,14 @@ function GiftRegistryRuntime({
             state.phase === "UNKNOWN" ? "Consultar pagamento" : undefined
           }
           onSelect={chooseGift}
-          search={
+          paging={
             catalogShown
               ? {
-                  value: searchText,
                   page: catalogPage,
                   total: currentCatalog.total,
                   totalPages: currentCatalog.totalPages,
                   loading: catalogLoading,
                   error: catalogError,
-                  onChange: (q) => catalogActions.current?.search(q),
                   onPage: (page) => catalogActions.current?.page(page),
                 }
               : undefined

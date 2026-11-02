@@ -1,5 +1,5 @@
 import type { PublicGiftItem } from "@entrelacos/contracts";
-import { type CSSProperties, useId } from "react";
+import type { CSSProperties } from "react";
 
 type Props = {
   gifts: PublicGiftItem[];
@@ -8,14 +8,12 @@ type Props = {
   actionLabel?: string;
   recoveryOnly?: boolean;
   onSelect: (gift: PublicGiftItem) => void;
-  search?: {
-    value: string;
+  paging?: {
     page: number;
     total: number;
     totalPages: number;
     loading: boolean;
     error: boolean;
-    onChange: (q: string) => void;
     onPage: (page: number) => void;
   };
 };
@@ -36,28 +34,12 @@ export function GiftCatalogView({
   actionLabel,
   recoveryOnly = false,
   onSelect,
-  search,
+  paging,
 }: Props) {
-  const searchId = useId();
-  if (mode === "disabled" || (gifts.length === 0 && !search)) return null;
+  if (mode === "disabled" || (gifts.length === 0 && !paging)) return null;
 
   return (
-    <section
-      aria-labelledby="gift-catalog-heading"
-      className="grid min-w-0 gap-5 text-template-ink"
-    >
-      <header className="grid min-w-0 gap-3">
-        <h2
-          id="gift-catalog-heading"
-          className="m-0 text-lg font-medium leading-relaxed"
-        >
-          Presentes simbólicos
-        </h2>
-        <p className="m-0 text-template-muted">
-          Presente simbólico: não há produto físico ou entrega.
-        </p>
-      </header>
-
+    <div className="grid min-w-0 gap-5 text-template-ink">
       {mode === "demonstration" && (
         <p role="status" className="m-0 text-template-muted">
           Demonstração da lista de presentes. Contribuições indisponíveis;
@@ -65,52 +47,43 @@ export function GiftCatalogView({
         </p>
       )}
 
-      {search && (
+      {paging && (
         <div className="grid min-w-0 gap-3">
-          <label htmlFor={searchId}>Buscar presentes</label>
-          <input
-            id={searchId}
-            type="search"
-            value={search.value}
-            maxLength={100}
-            onChange={(event) => search.onChange(event.target.value)}
-            className="min-h-11 w-full rounded-xl border border-[var(--template-input-line,rgba(37,53,43,0.25))] bg-[var(--template-paper,#fffdf8)] px-4 py-3 text-base text-template-ink font-[inherit] transition-[border-color,box-shadow] duration-200 focus:border-template-olive focus:outline-2 focus:outline-offset-2 focus:outline-template-olive motion-reduce:transition-none min-w-0"
-          />
           <nav
             aria-label="Paginação dos presentes"
-            className="flex flex-wrap items-center gap-3"
+            className="grid w-full grid-cols-[1fr_auto_1fr] items-center gap-3"
           >
             <button
               type="button"
-              className={pageButtonClass}
-              disabled={search.loading || search.error || search.page <= 1}
-              onClick={() => search.onPage(search.page - 1)}
+              className={`${pageButtonClass} justify-self-start`}
+              disabled={paging.loading || paging.error || paging.page <= 1}
+              onClick={() => paging.onPage(paging.page - 1)}
             >
               Página anterior
             </button>
-            <p className="m-0" aria-live="polite">
-              {!search.loading && !search.error && (
+            <p className="m-0 text-center" aria-live="polite">
+              {!paging.loading && !paging.error && (
                 <>
-                  Página {search.page} de {search.totalPages} · {search.total}{" "}
+                  Página {paging.page} de {paging.totalPages} · {paging.total}{" "}
                   presentes
                 </>
               )}
             </p>
             <button
               type="button"
-              className={pageButtonClass}
+              className={`${pageButtonClass} justify-self-end`}
               disabled={
-                search.loading ||
-                search.error ||
-                search.page >= search.totalPages
+                paging.loading ||
+                paging.error ||
+                paging.page >= paging.totalPages
               }
-              onClick={() => search.onPage(search.page + 1)}
+              onClick={() => paging.onPage(paging.page + 1)}
             >
               Próxima página
             </button>
           </nav>
-          {search.loading && <p role="status">Carregando presentes…</p>}
-          {!search.loading && !search.error && gifts.length === 0 && (
+          {paging.loading && <p role="status">Carregando presentes…</p>}
+          {!paging.loading && !paging.error && gifts.length === 0 && (
             <p role="status">Nenhum presente nesta página.</p>
           )}
         </div>
@@ -181,6 +154,6 @@ export function GiftCatalogView({
           </li>
         ))}
       </ul>
-    </section>
+    </div>
   );
 }
