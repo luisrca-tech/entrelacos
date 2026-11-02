@@ -23,6 +23,30 @@ describe("reviewed showcase build environments", () => {
       });
     }
   });
+  it.each([
+    ["botanical", "development", "demo-botanico-dev"],
+    ["botanical", "production", "demo-botanico"],
+    ["letters", "development", "demo-cartas-dev"],
+    ["letters", "production", "demo-cartas"],
+    ["landing", "development", "entrelacos-dev"],
+    ["landing", "production", "entrelacos"],
+  ])(
+    "builds %s for %s with the current Worker origins",
+    (app, environment, host) => {
+      const suffix = environment === "development" ? "-dev" : "";
+      expect(showcaseBuildEnvironment(app, environment)).toMatchObject({
+        APP_ENV: environment,
+        PUBLIC_SITE_URL: `https://${host}.entrelacos.workers.dev/`,
+        PUBLIC_BOTANICAL_DEMO_URL: `https://demo-botanico${suffix}.entrelacos.workers.dev/`,
+        PUBLIC_LETTERS_DEMO_URL: `https://demo-cartas${suffix}.entrelacos.workers.dev/`,
+        PUBLIC_API_URL: `https://entrelacosapi-${environment}.up.railway.app`,
+        PUBLIC_ADMIN_ORIGIN: `https://admin${suffix}.entrelacos.workers.dev`,
+        PUBLIC_SITE_ID:
+          app === "letters" ? "demo-wedding-cartas" : "demo-wedding",
+        PUBLIC_SITE_INACTIVE: "false",
+      });
+    },
+  );
   it("rejects unknown targets rather than defaulting to production", () => {
     expect(() => showcaseBuildEnvironment("botanical", "prod")).toThrow();
     expect(() => showcaseBuildEnvironment("unknown", "production")).toThrow();

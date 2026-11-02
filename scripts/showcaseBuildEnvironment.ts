@@ -9,10 +9,11 @@ export function showcaseBuildEnvironment(
     throw new Error("An explicit supported app and environment are required");
   }
   const suffix = environment === "development" ? "-dev" : "";
-  const botanical = `https://demo${suffix}.entrelacos.workers.dev/`;
+  const botanical = `https://demo-botanico${suffix}.entrelacos.workers.dev/`;
   const letters = `https://demo-cartas${suffix}.entrelacos.workers.dev/`;
   return {
     APP_ENV: environment,
+    PUBLIC_SITE_INACTIVE: "false",
     PUBLIC_API_URL: `https://entrelacosapi-${environment}.up.railway.app`,
     PUBLIC_ADMIN_ORIGIN: `https://admin${suffix}.entrelacos.workers.dev`,
     PUBLIC_SITE_ID: app === "letters" ? "demo-wedding-cartas" : "demo-wedding",
