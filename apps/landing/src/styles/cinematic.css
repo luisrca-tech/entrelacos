@@ -42,17 +42,15 @@
   inset: 0;
   background: radial-gradient(ellipse at 34% 35%, #49392c, #201b19 75%);
 }
-[data-opening-skip] {
-  position: fixed;
-  top: max(1rem, env(safe-area-inset-top));
-  right: max(1rem, env(safe-area-inset-right));
-  z-index: 40;
-  min-height: 44px;
-  padding: 0.7rem 1.1rem;
-  color: var(--ink);
-  background: var(--paper);
-  border: 1px solid var(--line);
-  cursor: pointer;
+.opening-brand {
+  position: absolute;
+  inset: auto 1rem 12%;
+  color: #f5ebd9;
+  font: 400 clamp(2.6rem, 7vw, 6rem) / 1.15 var(--serif);
+  letter-spacing: -0.04em;
+  text-align: center;
+  text-shadow: 0 2px 24px #201b19;
+  opacity: 0;
 }
 .model-meta {
   grid-template-columns: 1fr auto;
@@ -179,81 +177,251 @@
   left: 5.5rem;
   top: 2rem;
 }
+/* All tracks share a clock and return to their exact resting pose. */
+.gift-lid {
+  transform-origin: 25% 0;
+}
+.gift-glow {
+  position: absolute;
+  inset: -2rem -1rem;
+  background: radial-gradient(ellipse, #f4ddbba8, #f4ddbb00 68%);
+  transform: translateZ(115px);
+  opacity: 0;
+  pointer-events: none;
+}
+.gift-spark {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  width: 0.5rem;
+  height: 0.85rem;
+  border-radius: 70% 15% 70% 15%;
+  background: #b48b53;
+  opacity: 0;
+}
+.gift-spark:nth-child(even) {
+  background: var(--wine);
+}
 @media (prefers-reduced-motion: no-preference) {
+  .motion-ready .union-art .alliance-first {
+    animation: alliance-breathe-first 12s ease-in-out infinite paused;
+  }
+  .motion-ready .union-art .alliance-second {
+    animation: alliance-breathe-second 12s ease-in-out infinite paused;
+  }
+  .motion-ready [data-union-playing] .alliance {
+    animation-play-state: running;
+  }
+  .motion-ready .gift-object {
+    --gift-cycle: 11.2s;
+  }
+  .motion-ready .gift-box {
+    animation: gift-anticipation var(--gift-cycle) ease-in-out infinite paused;
+  }
   .motion-ready .gift-lid {
-    animation: gift-open 9.6s cubic-bezier(0.45, 0, 0.25, 1) infinite paused;
+    animation: gift-open var(--gift-cycle) cubic-bezier(0.45, 0, 0.25, 1)
+      infinite paused;
+  }
+  .motion-ready .gift-bow {
+    --bow-release: -24px;
+    --bow-turn: -18deg;
+    animation: gift-unwrap var(--gift-cycle) ease-in-out infinite paused;
+  }
+  .motion-ready .bow-two {
+    --bow-release: 24px;
+    --bow-turn: 18deg;
   }
   .motion-ready .gift-wish {
-    animation: gift-letter 9.6s ease-in-out infinite paused;
-    --wish-x: -10px;
-    --wish-y: -105px;
+    animation: gift-letter var(--gift-cycle) ease-in-out infinite paused;
+    --wish-x: -16px;
+    --wish-y: -110px;
     --wish-turn: -12deg;
   }
   .motion-ready .wish-plans {
     animation-name: gift-plans;
-    --wish-x: 12px;
-    --wish-y: -70px;
+    --wish-x: 20px;
+    --wish-y: -72px;
     --wish-turn: 9deg;
   }
-  .motion-ready .gift-shadow {
-    animation: gift-shadow 9.6s ease-in-out infinite paused;
+  .motion-ready .gift-glow {
+    animation: gift-glow var(--gift-cycle) ease-in-out infinite paused;
   }
-  .motion-ready [data-gift-playing] :is(.gift-lid, .gift-wish, .gift-shadow) {
+  .motion-ready .gift-spark {
+    animation: gift-spark var(--gift-cycle) ease-in-out infinite paused;
+  }
+  .motion-ready .gift-shadow {
+    animation: gift-shadow var(--gift-cycle) ease-in-out infinite paused;
+  }
+  .motion-ready
+    [data-gift-playing]
+    :is(
+      .gift-box,
+      .gift-lid,
+      .gift-bow,
+      .gift-wish,
+      .gift-glow,
+      .gift-spark,
+      .gift-shadow
+    ) {
     animation-play-state: running;
+  }
+}
+@keyframes alliance-breathe-first {
+  0%,
+  100% {
+    transform: rotateX(28deg) rotateY(-28deg) rotateZ(-24deg);
+  }
+  35% {
+    transform: rotateX(34deg) rotateY(-20deg) rotateZ(-18deg);
+  }
+  70% {
+    transform: rotateX(23deg) rotateY(-32deg) rotateZ(-28deg);
+  }
+}
+@keyframes alliance-breathe-second {
+  0%,
+  100% {
+    transform: translateZ(20px) rotateX(-23deg) rotateY(30deg) rotateZ(25deg);
+  }
+  35% {
+    transform: translateZ(20px) rotateX(-29deg) rotateY(36deg) rotateZ(19deg);
+  }
+  70% {
+    transform: translateZ(20px) rotateX(-17deg) rotateY(24deg) rotateZ(30deg);
+  }
+}
+@keyframes gift-anticipation {
+  0%,
+  10%,
+  32%,
+  84%,
+  100% {
+    transform: rotateX(-18deg) rotateY(-30deg) rotateZ(-3deg);
+  }
+  16% {
+    transform: translateY(4px) rotateX(-18deg) rotateY(-30deg) rotateZ(-6deg);
+  }
+  21% {
+    transform: translateY(2px) rotateX(-18deg) rotateY(-30deg) rotateZ(0deg);
+  }
+}
+@keyframes gift-unwrap {
+  0%,
+  14%,
+  86%,
+  100% {
+    translate: 0 0;
+    rotate: 0deg;
+    scale: 1;
+    opacity: 1;
+  }
+  28%,
+  66% {
+    translate: var(--bow-release) -14px;
+    rotate: var(--bow-turn);
+    scale: 1.15 0.7;
+    opacity: 0.65;
   }
 }
 @keyframes gift-open {
   0%,
   18%,
-  80%,
+  86%,
   100% {
-    transform: translateY(0) rotateZ(0);
+    transform: translate3d(0, 0, 0) rotateZ(0) rotateX(0);
   }
-  36%,
-  62% {
-    transform: translateY(-95px) rotateZ(-8deg);
+  25% {
+    transform: translate3d(4px, -12px, 0) rotateZ(4deg) rotateX(4deg);
+  }
+  40% {
+    transform: translate3d(-38px, -128px, -30px) rotateZ(-18deg) rotateX(-22deg);
+  }
+  58% {
+    transform: translate3d(-30px, -136px, -30px) rotateZ(-14deg) rotateX(-18deg);
+  }
+  70% {
+    transform: translate3d(-38px, -128px, -30px) rotateZ(-18deg) rotateX(-22deg);
   }
 }
 @keyframes gift-letter {
   0%,
-  24%,
-  76%,
+  28%,
+  80%,
   100% {
     opacity: 0;
     transform: translate3d(0, 25px, 45px) rotate(0);
   }
-  40%,
-  58% {
+  44%,
+  60% {
     opacity: 1;
     transform: translate3d(var(--wish-x), var(--wish-y), 125px)
       rotate(var(--wish-turn));
   }
+  67% {
+    opacity: 1;
+    transform: translate3d(var(--wish-x), calc(var(--wish-y) - 8px), 125px)
+      rotate(-7deg);
+  }
 }
 @keyframes gift-plans {
+  0%,
+  34%,
+  80%,
+  100% {
+    opacity: 0;
+    transform: translate3d(0, 25px, 45px) rotate(0);
+  }
+  50%,
+  64% {
+    opacity: 1;
+    transform: translate3d(var(--wish-x), var(--wish-y), 130px)
+      rotate(var(--wish-turn));
+  }
+  70% {
+    opacity: 1;
+    transform: translate3d(var(--wish-x), calc(var(--wish-y) - 6px), 130px)
+      rotate(5deg);
+  }
+}
+@keyframes gift-glow {
+  0%,
+  24%,
+  82%,
+  100% {
+    opacity: 0;
+  }
+  40%,
+  65% {
+    opacity: 0.8;
+  }
+}
+@keyframes gift-spark {
   0%,
   30%,
   76%,
   100% {
     opacity: 0;
-    transform: translate3d(0, 25px, 45px) rotate(0);
+    transform: translate3d(0, 10px, 120px) rotate(0deg) scale(0.4);
   }
-  46%,
+  42% {
+    opacity: 0.9;
+  }
   62% {
-    opacity: 1;
-    transform: translate3d(var(--wish-x), var(--wish-y), 130px)
-      rotate(var(--wish-turn));
+    opacity: 0;
+    transform: translate3d(var(--spark-x), var(--spark-y), 150px)
+      rotate(var(--spark-turn)) scale(1);
   }
 }
 @keyframes gift-shadow {
   0%,
   18%,
-  80%,
+  86%,
   100% {
     scale: 1;
     opacity: 1;
   }
-  36%,
-  62% {
+  40%,
+  70% {
     scale: 1.12 1;
     opacity: 0.72;
   }

@@ -1,7 +1,7 @@
 import type Lenis from "lenis";
 import type { LenisOptions } from "lenis";
 import { mountCinematicOpening } from "./cinematicOpening";
-import { mountGiftMotion } from "./giftMotion";
+import { mountDecorativeMotion } from "./decorativeMotion";
 
 interface MotionPreference extends EventTarget {
   readonly matches: boolean;
@@ -21,7 +21,7 @@ export function mountLandingMotion(
   const hero = doc.querySelector<HTMLElement>(".hero");
   const elements = [...doc.querySelectorAll<HTMLElement>(".reveal")];
   const opening = mountCinematicOpening(doc, browser, preference);
-  const disposeGift = mountGiftMotion(doc, browser, preference);
+  const disposeDecorations = mountDecorativeMotion(doc, browser, preference);
   const pending = new Set(elements);
   root.classList.add("motion-ready");
   function reveal(element: HTMLElement, immediate = false) {
@@ -186,7 +186,7 @@ export function mountLandingMotion(
     browser.removeEventListener("pagehide", onPageHide);
     preference.removeEventListener("change", syncPreference);
     opening.dispose();
-    disposeGift();
+    disposeDecorations();
     doc.removeEventListener("focusin", revealDestination);
     doc.removeEventListener("click", revealDestination);
     doc.removeEventListener("click", onAnchorClick);

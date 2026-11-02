@@ -134,17 +134,10 @@ describe("home intro sequencing", () => {
     );
   });
 
-  it("keeps the timed introduction dismissible without hiding the control", () => {
-    expect(componentSource).toContain("data-template-intro-skip");
-    expect(componentSource).toContain(
-      'skip?.addEventListener("click", complete)',
-    );
-    const introOpeningTag = componentSource.match(
-      /<div\s+[\s\S]*?data-template-home-intro[\s\S]*?>/,
-    )?.[0];
-    expect(introOpeningTag).not.toContain('aria-hidden="true"');
-    expect(componentSource).toContain("absolute");
-    expect(componentSource).toContain("z-[3]");
+  it("omits the introduction skip control from the real component", () => {
+    expect(componentSource).not.toContain("data-template-intro-skip");
+    expect(componentSource).not.toContain("Pular introdução");
+    expect(componentSource).not.toContain("<button");
   });
 
   it("keeps both split labels above and outside the intro media", () => {

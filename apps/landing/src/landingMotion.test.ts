@@ -14,7 +14,7 @@ afterEach(() => {
 
 function setup(reduced = false, fromPage = false) {
   document.body.innerHTML =
-    '<section class="hero"></section><h2 class="reveal">Our story</h2><div class="gift-object"></div>';
+    '<section class="hero"></section><h2 class="reveal">Our story</h2><div class="gift-object"></div><div class="union-art"><div class="union-scene"></div></div>';
   const heading = document.querySelector("h2") as HTMLElement;
   const rect = vi.spyOn(heading, "getBoundingClientRect").mockReturnValue({
     top: 900,
@@ -240,11 +240,11 @@ describe("gift animation visibility", () => {
     );
     return {
       disconnect,
-      enter: (visible: boolean) =>
+      enter: (visible: boolean, selector = ".gift-object") =>
         notify(
           [
             {
-              target: document.querySelector(".gift-object"),
+              target: document.querySelector(selector),
               isIntersecting: visible,
             } as IntersectionObserverEntry,
           ],
@@ -252,6 +252,59 @@ describe("gift animation visibility", () => {
         ),
     };
   }
+  it("starts the rings only after docking and preserves each illustration visibility", () => {
+    const observer = observe();
+    const { dispose } = setup();
+    const union = document.querySelector(".union-art") as HTMLElement;
+    const gift = document.querySelector(".gift-object") as HTMLElement;
+    document.documentElement.dataset.opening = "playing";
+    observer.enter(true, ".union-art");
+    observer.enter(true);
+    expect(union.hasAttribute("data-union-playing")).toBe(false);
+    expect(gift.hasAttribute("data-gift-playing")).toBe(true);
+    delete document.documentElement.dataset.opening;
+    window.dispatchEvent(new Event("opening:ready"));
+    expect(union.hasAttribute("data-union-playing")).toBe(true);
+    observer.enter(false);
+    expect(union.hasAttribute("data-union-playing")).toBe(true);
+    observer.enter(false, ".union-art");
+    expect(union.hasAttribute("data-union-playing")).toBe(false);
+    dispose();
+  });
+  it("pauses rings for reduced motion, hidden tabs and cached navigation; cleanup cannot restart them", () => {
+    const observer = observe();
+    const { preference, dispose } = setup(true);
+    const union = document.querySelector(".union-art") as HTMLElement;
+    observer.enter(true, ".union-art");
+    expect(union.hasAttribute("data-union-playing")).toBe(false);
+    preference.matches = false;
+    preference.dispatchEvent(new Event("change"));
+    expect(union.hasAttribute("data-union-playing")).toBe(true);
+    const hidden = vi.spyOn(document, "hidden", "get").mockReturnValue(true);
+    document.dispatchEvent(new Event("visibilitychange"));
+    expect(union.hasAttribute("data-union-playing")).toBe(false);
+    hidden.mockReturnValue(false);
+    document.dispatchEvent(new Event("visibilitychange"));
+    expect(union.hasAttribute("data-union-playing")).toBe(true);
+    window.dispatchEvent(
+      new PageTransitionEvent("pagehide", { persisted: true }),
+    );
+    expect(union.hasAttribute("data-union-playing")).toBe(false);
+    window.dispatchEvent(
+      new PageTransitionEvent("pageshow", { persisted: true }),
+    );
+    expect(union.hasAttribute("data-union-playing")).toBe(true);
+    preference.matches = true;
+    preference.dispatchEvent(new Event("change"));
+    expect(union.hasAttribute("data-union-playing")).toBe(false);
+    preference.matches = false;
+    dispose();
+    observer.enter(true, ".union-art");
+    window.dispatchEvent(new Event("opening:ready"));
+    preference.dispatchEvent(new Event("change"));
+    expect(union.hasAttribute("data-union-playing")).toBe(false);
+    expect(observer.disconnect).toHaveBeenCalledOnce();
+  });
   it("plays only in view, pauses offscreen and removes the observer on cleanup", () => {
     const observer = observe();
     const { dispose } = setup();

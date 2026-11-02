@@ -59,13 +59,6 @@ const timeline = buildIntroTimeline(frames.length);
       {content.bottomLabel}
     </p>
   </div>
-  <button
-    class="absolute bottom-[max(1rem,env(safe-area-inset-bottom))] right-[max(1rem,env(safe-area-inset-right))] z-[3] min-h-11 cursor-pointer rounded-full border border-current bg-[color-mix(in_srgb,var(--template-ivory)_86%,transparent)] px-4 py-[0.65rem] font-sans text-template-ink hover:bg-template-ivory focus-visible:bg-template-ivory"
-    type="button"
-    data-template-intro-skip
-  >
-    Pular introdução
-  </button>
 </div>
 
 <script>
@@ -86,9 +79,6 @@ const timeline = buildIntroTimeline(frames.length);
     header?.setAttribute("data-template-intro-pending", "true");
     const frames = Array.from(
       intro.querySelectorAll<HTMLImageElement>("[data-template-intro-frame]"),
-    );
-    const skip = intro.querySelector<HTMLButtonElement>(
-      "[data-template-intro-skip]",
     );
     const previousHtmlOverflow = document.documentElement.style.overflow;
     const previousBodyOverflow = document.body.style.overflow;
@@ -158,7 +148,7 @@ const timeline = buildIntroTimeline(frames.length);
       introCompleted = true;
       timers.forEach((timer) => window.clearTimeout(timer));
       mediaCleanups.forEach((cleanup) => cleanup());
-      skip?.removeEventListener("click", complete);
+      document.removeEventListener("keydown", onKeyDown);
       if (motionQuery?.removeEventListener) motionQuery.removeEventListener("change", onMotionChange);
       else motionQuery?.removeListener?.(onMotionChange);
       startHeroMedia();
@@ -177,12 +167,15 @@ const timeline = buildIntroTimeline(frames.length);
       });
     };
 
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") complete();
+    };
     const onMotionChange = () => {
       if (motionQuery?.matches) complete();
     };
     if (motionQuery?.addEventListener) motionQuery.addEventListener("change", onMotionChange);
     else motionQuery?.addListener?.(onMotionChange);
-    skip?.addEventListener("click", complete);
+    document.addEventListener("keydown", onKeyDown);
 
     if (motionQuery?.matches || frames.length === 0) {
       complete();

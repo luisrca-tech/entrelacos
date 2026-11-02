@@ -31,6 +31,7 @@ const execute = new Function(
 describe("home intro browser lifecycle", () => {
   beforeEach(() => vi.useFakeTimers());
   afterEach(() => {
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
     vi.restoreAllMocks();
     vi.useRealTimers();
     document.body.innerHTML = "";
@@ -40,7 +41,7 @@ describe("home intro browser lifecycle", () => {
 
   function setup({ reduced = false, loaded = true, video = false } = {}) {
     const timeline = buildIntroTimeline(6);
-    document.body.innerHTML = `<header data-template-navigation></header><main><div data-template-home-intro data-split-at="${timeline.splitAt}" data-reveal-at="${timeline.revealAt}" data-fullscreen-at="${timeline.fullscreenAt}" data-fade-at="${timeline.fadeAt}" data-complete-at="${timeline.completeAt}">${Array.from({ length: 6 }, () => "<img data-template-intro-frame>").join("")}<button data-template-intro-skip>Skip</button></div><section data-template-hero-intro data-template-has-intro="true"><div data-template-hero-media>${video ? "<video data-template-hero-video></video>" : ""}</div><div data-template-hero-copy></div></section></main>`;
+    document.body.innerHTML = `<header data-template-navigation></header><main><div data-template-home-intro data-split-at="${timeline.splitAt}" data-reveal-at="${timeline.revealAt}" data-fullscreen-at="${timeline.fullscreenAt}" data-fade-at="${timeline.fadeAt}" data-complete-at="${timeline.completeAt}">${Array.from({ length: 6 }, () => "<img data-template-intro-frame>").join("")}</div><section data-template-hero-intro data-template-has-intro="true"><div data-template-hero-media>${video ? "<video data-template-hero-video></video>" : ""}</div><div data-template-hero-copy></div></section></main>`;
     document.documentElement.style.overflow = "clip";
     document.body.style.overflow = "auto";
     const listeners = new Set<() => void>();
@@ -128,13 +129,38 @@ describe("home intro browser lifecycle", () => {
     ).toBe(false);
   });
 
-  it("does not start a sequence after Skip wins the pending preload race", async () => {
+  it("does not start a sequence after Escape wins the pending preload race", async () => {
     const { intro } = setup({ loaded: false });
-    intro.querySelector<HTMLButtonElement>("button")?.click();
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    expect(intro.isConnected).toBe(false);
     await vi.advanceTimersByTimeAsync(5000);
     expect(intro.dataset.templateIntroPhase).toBeUndefined();
     expect(intro.isConnected).toBe(false);
   });
+
+  it.each([500, 4500])(
+    "releases the overlay and scroll on Escape at %sms and removes its listener",
+    async (elapsed) => {
+      const removeListener = vi.spyOn(document, "removeEventListener");
+      const { intro, hero, play, listeners } = setup({ video: true });
+      await vi.advanceTimersByTimeAsync(elapsed);
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" }));
+      expect(intro.isConnected).toBe(true);
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+      expect(intro.isConnected).toBe(false);
+      expect(document.documentElement.style.overflow).toBe("clip");
+      expect(document.body.style.overflow).toBe("auto");
+      expect(listeners.size).toBe(0);
+      expect(removeListener).toHaveBeenCalledWith(
+        "keydown",
+        expect.any(Function),
+      );
+      await vi.advanceTimersByTimeAsync(6000);
+      expect(hero.dataset.templateIntroComplete).toBe("true");
+      expect(play).toHaveBeenCalledTimes(1);
+      expect(vi.getTimerCount()).toBe(0);
+    },
+  );
 
   it("bypasses the intro and keeps hero video paused with reduced motion", () => {
     const { intro, hero, play } = setup({ reduced: true, video: true });

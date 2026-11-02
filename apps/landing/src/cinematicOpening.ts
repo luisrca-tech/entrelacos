@@ -9,7 +9,6 @@ export function mountCinematicOpening(
     .querySelector<HTMLElement>(".hero")
     ?.getBoundingClientRect();
   const scene = home?.querySelector<HTMLElement>(".union-scene");
-  const skip = doc.querySelector<HTMLButtonElement>("[data-opening-skip]");
   const animations: Animation[] = [];
   const listeners = new AbortController();
   let overlay: HTMLElement | undefined;
@@ -25,9 +24,11 @@ export function mountCinematicOpening(
       home.append(scene);
       scene.removeAttribute("style");
     }
-    for (const animation of animations) animation.cancel();
+    for (const animation of animations) {
+      void animation.finished.catch(() => {});
+      animation.cancel();
+    }
     overlay?.remove();
-    if (skip) skip.hidden = true;
     delete root.dataset.opening;
     browser.dispatchEvent(new Event("opening:ready"));
   }
@@ -37,9 +38,7 @@ export function mountCinematicOpening(
     | undefined;
   if (
     !home ||
-    !scene ||
-    !skip ||
-    !scene.animate ||
+    !scene?.animate ||
     preference.matches ||
     browser.location.hash ||
     !heroRect ||
@@ -64,9 +63,11 @@ export function mountCinematicOpening(
     overlay.setAttribute("aria-hidden", "true");
     const backdrop = doc.createElement("div");
     backdrop.className = "opening-backdrop";
-    overlay.append(backdrop, scene);
+    const brand = doc.createElement("div");
+    brand.className = "opening-brand";
+    brand.textContent = "Entrelaços";
+    overlay.append(backdrop, scene, brand);
     doc.body.append(overlay);
-    skip.hidden = false;
     scene.style.cssText = `position:absolute;left:0;top:0;width:${rect.width}px;height:${rect.height}px;transform-origin:0 0`;
     const mobile = browser.innerWidth <= 760;
     const duration = mobile ? 4200 : 5600;
@@ -90,8 +91,21 @@ export function mountCinematicOpening(
       ],
       { duration, fill: "both" },
     );
+    animations.push(dock);
     animations.push(
-      dock,
+      brand.animate(
+        [
+          { opacity: 0, translate: "0 12px", offset: 0 },
+          { opacity: 0, translate: "0 12px", offset: 0.34 },
+          { opacity: 1, translate: "0 0", offset: 0.44 },
+          { opacity: 1, translate: "0 0", offset: 0.64 },
+          { opacity: 0, translate: "0 -8px", offset: 0.76 },
+          { opacity: 0, translate: "0 -8px", offset: 1 },
+        ],
+        { duration, fill: "both", easing: "ease-in-out" },
+      ),
+    );
+    animations.push(
       backdrop.animate(
         [
           { opacity: 1, offset: 0 },
@@ -137,25 +151,11 @@ export function mountCinematicOpening(
       },
       options,
     );
-    doc.addEventListener(
-      "focusin",
-      (event) => {
-        if (event.target !== skip) settle();
-      },
-      options,
-    );
+    doc.addEventListener("focusin", settle, options);
     doc.addEventListener(
       "click",
       (event) => {
         if ((event.target as Element)?.closest("a")) settle();
-      },
-      options,
-    );
-    skip.addEventListener(
-      "click",
-      () => {
-        settle();
-        doc.getElementById("hero-title")?.focus({ preventScroll: true });
       },
       options,
     );

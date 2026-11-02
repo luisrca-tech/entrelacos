@@ -11,7 +11,7 @@ const animations: Array<{
 let cleanup = () => {};
 function setup(reduced = false) {
   document.body.innerHTML =
-    '<section class="hero"><h1 id="hero-title" tabindex="-1">Our story</h1><div class="union-art"><div class="union-scene"><div class="alliance alliance-first"></div><div class="alliance alliance-second"></div></div></div><button data-opening-skip hidden>Skip</button><a href="#details">Details</a><section id="details"></section></section>';
+    '<section class="hero"><h1 id="hero-title" tabindex="-1">Our story</h1><div class="union-art"><div class="union-scene"><div class="alliance alliance-first"></div><div class="alliance alliance-second"></div></div></div><a href="#details">Details</a><section id="details"></section></section>';
   document.documentElement.dataset.opening = "armed";
   const scene = document.querySelector(".union-scene");
   const preference = Object.assign(new EventTarget(), { matches: reduced });
@@ -57,6 +57,36 @@ afterEach(() => {
   vi.useRealTimers();
 });
 describe("continuous cinematic opening", () => {
+  it("omits the introduction skip control from the real page", () => {
+    const page = readFileSync(
+      new NodeURL("./pages/index.astro", import.meta.url),
+      "utf8",
+    );
+    expect(page).not.toContain("data-opening-skip");
+    expect(page).not.toContain("Pular introdução");
+    expect(page).toContain('class="skip-link"');
+  });
+
+  it("shows the brand between the rings meeting and docking, then removes it", () => {
+    const { controller } = setup();
+    const brand = document.querySelector(
+      "[data-opening-overlay] .opening-brand",
+    );
+    expect(brand?.textContent).toBe("Entrelaços");
+    const animate = vi.mocked(Element.prototype.animate);
+    const index = animate.mock.contexts.indexOf(brand as Element);
+    expect(index).toBeGreaterThanOrEqual(0);
+    expect(animate.mock.calls[index][0]).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ opacity: 1, offset: 0.44 }),
+        expect.objectContaining({ opacity: 1, offset: 0.64 }),
+        expect.objectContaining({ opacity: 0, offset: 0.76 }),
+      ]),
+    );
+    controller.settle();
+    expect(document.querySelector(".opening-brand")).toBeNull();
+  });
+
   it("moves the same scene into an overlay and docks it without duplicating rings", async () => {
     const { scene } = setup();
     expect(document.querySelector("[data-opening-overlay] .union-scene")).toBe(
@@ -81,14 +111,14 @@ describe("continuous cinematic opening", () => {
       expect(document.querySelector(".union-art .union-scene")).toBe(scene);
     },
   );
-  it("skips repeatedly, cancels motion and focuses the heading only on explicit skip", () => {
+  it("settles repeatedly on Escape without a skip button or stealing focus", () => {
     const { controller } = setup();
-    (
-      document.querySelector("[data-opening-skip]") as HTMLButtonElement
-    ).click();
+    expect(animations).toHaveLength(5);
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
     controller.settle();
     controller.dispose();
-    expect(document.activeElement?.id).toBe("hero-title");
+    expect(document.activeElement?.tagName).toBe("BODY");
+    expect(document.documentElement.dataset.opening).toBeUndefined();
     expect(
       animations.every((animation) => animation.cancel.mock.calls.length === 1),
     ).toBe(true);
@@ -114,6 +144,22 @@ describe("continuous cinematic opening", () => {
       expect(document.querySelector("[data-opening-overlay]")).toBeNull();
     },
   );
+  it("cancels already started animations if the brand animation cannot initialize", () => {
+    const animate = Element.prototype.animate;
+    vi.spyOn(Element.prototype, "animate").mockImplementation(function (
+      this: Element,
+      ...args
+    ) {
+      if (this.classList.contains("opening-brand"))
+        throw new Error("Animation unavailable");
+      return animate.apply(this, args);
+    });
+    const { scene } = setup();
+    expect(animations).toHaveLength(1);
+    expect(animations[0].cancel).toHaveBeenCalledOnce();
+    expect(document.querySelector("[data-opening-overlay]")).toBeNull();
+    expect(document.querySelector(".union-art .union-scene")).toBe(scene);
+  });
   it("bypasses reduced motion", () => {
     setup(true);
     expect(animations).toHaveLength(0);

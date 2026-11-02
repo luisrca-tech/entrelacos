@@ -70,7 +70,6 @@ const questions = [
       <nav aria-label="Navegação principal"><a href="#experiencia">A experiência</a><a href="#modelos">Os modelos</a><a href="#detalhes">Os detalhes</a></nav>
       <a class="header-cta" href={config.contactUrl ?? "#modelos"}>{config.contactUrl ? "Vamos conversar" : "Encontre seu estilo"}<span aria-hidden="true">↗</span></a>
     </header>
-    <button type="button" data-opening-skip hidden>Pular introdução</button>
     <main id="conteudo" tabindex="-1">
 
       <section id="inicio" class="hero" aria-labelledby="hero-title">
@@ -140,7 +139,12 @@ const questions = [
       </section>
 
       <section id="presentes" class="gifts chapter" aria-labelledby="gifts-title">
-        <div class="gift-object reveal" aria-hidden="true"><div class="gift-box"><div class="gift-lid"><div class="gift-top"></div><div class="gift-bow bow-one"></div><div class="gift-bow bow-two"></div></div><div class="gift-wishes"><span class="gift-wish wish-affection">com carinho <i>♡</i></span><span class="gift-wish wish-plans">novos planos <i>∞</i></span></div><div class="gift-front"></div><div class="gift-side"></div><span class="gift-tag">para a vida<br /><i>a dois.</i></span></div><span class="gift-shadow"></span></div>
+        <div class="gift-object reveal" aria-hidden="true"><div class="gift-box"><div class="gift-lid"><div class="gift-top"></div><div class="gift-bow bow-one"></div><div class="gift-bow bow-two"></div></div><div class="gift-glow"></div><div class="gift-wishes">{[
+          ["-85px", "-160px", "-60deg"],
+          ["65px", "-185px", "85deg"],
+          ["105px", "-105px", "120deg"],
+          ["-45px", "-205px", "-110deg"],
+        ].map(([x, y, turn]) => <i class="gift-spark" style={`--spark-x: ${x}; --spark-y: ${y}; --spark-turn: ${turn}`}></i>)}<span class="gift-wish wish-affection">com carinho <i>♡</i></span><span class="gift-wish wish-plans">novos planos <i>∞</i></span></div><div class="gift-front"></div><div class="gift-side"></div><span class="gift-tag">para a vida<br /><i>a dois.</i></span></div><span class="gift-shadow"></span></div>
         <div class="gift-copy reveal"><h2 id="gifts-title">O presente é<br /><em>o que vem depois.</em></h2><p>Uma viagem. O primeiro cantinho. Os planos que vocês ainda vão inventar.</p><p>Com a lista de presentes, os convidados escolhem como participar e o casal recebe contribuições em dinheiro pela conta configurada para o casamento.</p><div class="gift-steps"><span>Escolher o presente</span><i aria-hidden="true">→</i><span>Realizar o pagamento</span><i aria-hidden="true">→</i><span>Celebrar novos planos</span></div><p class="fine-print">Os presentes são contribuições, sem entrega física. Recebimento sujeito à habilitação da conta; taxas e condições aparecem no pagamento.</p></div>
       </section>
 
