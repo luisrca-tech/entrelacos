@@ -47,6 +47,45 @@ function setup(reduced = false, fromPage = false) {
 }
 
 describe("landing motion lifecycle", () => {
+  it("uses a later viewport trigger without a tall-element intersection requirement", () => {
+    const construct = vi.fn();
+    vi.stubGlobal(
+      "IntersectionObserver",
+      class {
+        constructor(
+          _callback: IntersectionObserverCallback,
+          options: IntersectionObserverInit,
+        ) {
+          construct(options);
+        }
+        observe = vi.fn();
+        unobserve = vi.fn();
+        disconnect = vi.fn();
+      },
+    );
+    const { dispose } = setup();
+    expect(construct).toHaveBeenCalledWith({
+      threshold: 0,
+      rootMargin: `0px 0px -${Math.round(window.innerHeight * 0.22)}px 0px`,
+    });
+    dispose();
+  });
+  it("immediately exposes keyboard destinations", () => {
+    vi.stubGlobal(
+      "IntersectionObserver",
+      class {
+        observe = vi.fn();
+        unobserve = vi.fn();
+        disconnect = vi.fn();
+      },
+    );
+    const { dispose } = setup();
+    const heading = document.querySelector("h2") as HTMLElement;
+    heading.tabIndex = -1;
+    heading.focus();
+    expect(heading.classList.contains("is-visible")).toBe(true);
+    dispose();
+  });
   it("smooths wheel input while preserving touch and native anchors", () => {
     const { createSmooth, dispose } = setup();
     expect(createSmooth).toHaveBeenCalledWith(

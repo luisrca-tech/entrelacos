@@ -10,13 +10,14 @@ const access = {
   panelOrigin: import.meta.env.PUBLIC_ADMIN_ORIGIN,
 };
 const site = { name: "Marina & Caio", href: "/" };
+const publicSiteUrl = import.meta.env.PUBLIC_SITE_URL ?? "https://demo.entrelacos.workers.dev/";
 const seo = {
   title: "Cinema Botânico — Marina & Caio | EntreLaços",
   description: "Informações sobre a celebração de Marina & Caio em Goiânia.",
-  canonical: "https://demo.entrelacos.workers.dev/",
+  canonical: publicSiteUrl,
   robots: "noindex, nofollow" as const,
   socialImage: {
-    url: "https://demo.entrelacos.workers.dev/marina-caio-hero.webp",
+    url: new URL("marina-caio-hero.webp", publicSiteUrl).href,
     alt: "Marina e Caio se beijam sob uma árvore ao pôr do sol",
   },
 };

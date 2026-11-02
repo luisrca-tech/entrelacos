@@ -1,4 +1,5 @@
 import type { LenisOptions } from "lenis";
+import { mountCinematicOpening } from "./cinematicOpening";
 import { mountMotionControls } from "./motionControls";
 
 interface MotionPreference extends EventTarget {
@@ -16,17 +17,22 @@ export function mountLandingMotion(
   const root = doc.documentElement;
   const hero = doc.querySelector<HTMLElement>(".hero");
   const elements = [...doc.querySelectorAll<HTMLElement>(".reveal")];
+  const opening = mountCinematicOpening(doc, browser, preference);
   const observer =
     typeof IntersectionObserver === "function"
       ? new IntersectionObserver(
           (entries) => {
             for (const entry of entries) {
-              if (!entry.isIntersecting) continue;
+              if (!entry.isIntersecting && entry.boundingClientRect.bottom >= 0)
+                continue;
               entry.target.classList.add("is-visible");
               observer?.unobserve(entry.target);
             }
           },
-          { threshold: 0.12, rootMargin: "0px 0px -24px 0px" },
+          {
+            threshold: 0,
+            rootMargin: `0px 0px -${Math.round(browser.innerHeight * (browser.innerWidth <= 760 ? 0.16 : 0.22))}px 0px`,
+          },
         )
       : undefined;
   for (const element of elements) {
@@ -34,6 +40,25 @@ export function mountLandingMotion(
     else element.classList.add("is-visible");
   }
   if (observer) root.classList.add("motion-ready");
+  function revealDestination(event: Event) {
+    const target = event.target as Element | null;
+    const group = target?.closest<HTMLElement>(".reveal");
+    if (group) {
+      group.classList.add("is-visible");
+      observer?.unobserve(group);
+    }
+    const anchor = target?.closest<HTMLAnchorElement>('a[href^="#"]');
+    if (anchor?.hash) {
+      const destination = doc.getElementById(anchor.hash.slice(1));
+      for (const element of elements)
+        if (destination?.contains(element)) {
+          element.classList.add("is-visible");
+          observer?.unobserve(element);
+        }
+    }
+  }
+  doc.addEventListener("focusin", revealDestination);
+  doc.addEventListener("click", revealDestination);
 
   function updateProgress() {
     frame = 0;
@@ -50,6 +75,7 @@ export function mountLandingMotion(
     if (!frame) frame = browser.requestAnimationFrame(updateProgress);
   }
   const disposeControls = mountMotionControls(doc, preference, (paused) => {
+    if (paused) opening.settle();
     smooth?.destroy();
     smooth = undefined;
     if (!paused) {
@@ -76,6 +102,9 @@ export function mountLandingMotion(
     disposed = true;
     browser.removeEventListener("pagehide", onPageHide);
     disposeControls();
+    opening.dispose();
+    doc.removeEventListener("focusin", revealDestination);
+    doc.removeEventListener("click", revealDestination);
     observer?.disconnect();
     smooth?.destroy();
     browser.removeEventListener("scroll", scheduleProgress);

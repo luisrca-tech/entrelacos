@@ -3,6 +3,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { showcaseBuildEnvironment } from "../../../scripts/showcaseBuildEnvironment";
 import { GiftRegistry } from "./GiftRegistry";
 import { writePendingGiftCheckout } from "./giftCheckoutStorage";
 
@@ -276,6 +277,34 @@ describe("mounted server catalog runtime", () => {
       resolve(reply(page("wedding-a", 2)));
       await act(flush);
     }
+  });
+  it("renders the authorized Botanical build with enabled purchase controls and the existing selection handler", async () => {
+    const env = showcaseBuildEnvironment("botanical", "production");
+    vi.stubGlobal("__APP_ENV__", env.APP_ENV);
+    const catalog = page(env.PUBLIC_SITE_ID);
+    const fetcher = vi.fn<typeof fetch>(async () =>
+      reply({
+        ...catalog,
+        mode: "live",
+        gifts: catalog.gifts.map((gift) => ({
+          ...gift,
+          pricing: { available: true, feeAllocation: "RECIPIENT_DEDUCTED" },
+        })),
+      }),
+    );
+    const { surface } = await mount(fetcher, env.PUBLIC_SITE_ID, {
+      demo: true,
+      liveDemoSiteId: env.PUBLIC_LIVE_DEMO_SITE_ID,
+    });
+    expect(surface.hidden).toBe(false);
+    const purchase = [...surface.querySelectorAll("button")].find(
+      (button) => button.textContent === "Escolher presente",
+    );
+    expect(purchase?.disabled).toBe(false);
+    await click(surface, "Escolher presente");
+    expect(surface.querySelector("dialog")?.open).toBe(true);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(fetcher.mock.calls[0][1]?.method).toBe("GET");
   });
   it("renders the live production showcase without test notices and revokes it when opt-in changes", async () => {
     vi.stubGlobal("__APP_ENV__", "production");

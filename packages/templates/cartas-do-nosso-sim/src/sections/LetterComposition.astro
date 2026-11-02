@@ -18,8 +18,8 @@ const folioClass = "m-0 mb-8 text-[0.72rem] font-semibold uppercase tracking-[0.
     {content.cover.description && <p class="mb-6 mt-4 max-w-[31ch] leading-[1.65] text-template-muted [@media(max-width:760px)]:hidden">{content.cover.description}</p>}
     <a class="inline-flex min-h-12 items-center justify-between gap-10 bg-template-olive px-6 py-3 text-template-ivory no-underline" href={content.action.href}>{content.action.label}<span aria-hidden="true">↗</span></a>
   </div>
-  <figure class="m-0 mb-3 rotate-2 border border-template-line bg-[var(--template-paper)] p-[clamp(0.6rem,1.5vw,1.25rem)] shadow-[0_1rem_3rem_#30212a15] motion-safe:[animation:template-letter-photo_750ms_ease-out_both] [@media(max-width:760px)]:mt-4 [@media(max-width:760px)]:w-[min(76%,22rem)] [@media(max-width:760px)]:justify-self-center">
-    <img class="block aspect-[4/5] h-auto w-full object-cover object-center" src={coverPhoto.src} alt={coverPhoto.alt} width={coverPhoto.width} height={coverPhoto.height} fetchpriority="high" />
+  <figure class="m-0 mb-3 rotate-2 border border-template-line bg-[var(--template-paper)] p-[clamp(0.6rem,1.5vw,1.25rem)] shadow-[0_1rem_3rem_#30212a15] [@media(max-width:760px)]:mt-4 [@media(max-width:760px)]:w-[min(76%,22rem)] [@media(max-width:760px)]:justify-self-center">
+    <div class="relative overflow-hidden" data-photo-curtain><img class="block aspect-[4/5] h-auto w-full object-cover object-center" src={coverPhoto.src} alt={coverPhoto.alt} width={coverPhoto.width} height={coverPhoto.height} fetchpriority="high" /></div>
     <figcaption class="pb-1 pt-5 text-center font-template-serif text-[clamp(0.9rem,1.3vw,1.15rem)] italic leading-normal">{content.signature}</figcaption>
   </figure>
   <p class={handoffClass}>{content.coverHandoff}</p>
@@ -35,11 +35,16 @@ const folioClass = "m-0 mb-8 text-[0.72rem] font-semibold uppercase tracking-[0.
     <p class="mt-8 font-template-serif text-[1.4rem] italic leading-[1.65] text-template-olive">{content.signature}</p>
   </div>
   <div class="relative min-w-0 pt-16 [@media(max-width:760px)]:max-w-[28rem] [@media(max-width:760px)]:pt-0">
-    <figure class="m-0 border border-template-line bg-[var(--template-paper)] p-2.5" data-template-reveal>
-      <img class="block aspect-[4/5] h-auto w-full object-cover [@media(max-width:760px)]:aspect-[4/3]" src={storyPhoto.src} alt={storyPhoto.alt} width={storyPhoto.width} height={storyPhoto.height} loading="lazy" />
+    <figure class="m-0 border border-template-line bg-[var(--template-paper)] p-2.5">
+      <div class="relative overflow-hidden" data-photo-curtain><img class="block aspect-[4/5] h-auto w-full object-cover [@media(max-width:760px)]:aspect-[4/3]" src={storyPhoto.src} alt={storyPhoto.alt} width={storyPhoto.width} height={storyPhoto.height} loading="lazy" /></div>
     </figure>
-    {insertPhoto && <figure class="relative m-0 -ml-4 -mt-12 w-[55%] -rotate-3 border border-template-line bg-[var(--template-paper)] p-2"><img class="block h-auto w-full" src={insertPhoto.src} alt={insertPhoto.alt} width={insertPhoto.width} height={insertPhoto.height} loading="lazy" /></figure>}
+    {insertPhoto && <figure class="relative m-0 -ml-4 -mt-12 w-[55%] -rotate-3 border border-template-line bg-[var(--template-paper)] p-2"><div class="relative overflow-hidden" data-photo-curtain><img class="block h-auto w-full" src={insertPhoto.src} alt={insertPhoto.alt} width={insertPhoto.width} height={insertPhoto.height} loading="lazy" /></div></figure>}
     <p class="text-right font-template-serif text-base italic leading-[1.8] text-template-muted" aria-hidden="true">{content.monogram}<br />—<br />{content.dateLabel}</p>
   </div>
   <p class={handoffClass}>{content.storyHandoff}</p>
 </section>
+
+<script>
+  import { mountPhotoCurtains } from "../components/photoCurtains";
+  mountPhotoCurtains(document, window, window.matchMedia("(prefers-reduced-motion: reduce)"));
+</script>

@@ -9,6 +9,22 @@ The independent hosts are apps/wedding-demo-botanico and apps/wedding-demo-carta
 
 The existing Botanical Worker and site identity are preserved. Public Worker origins follow the existing entrelacos.workers.dev convention; a prepared name is not proof that deployment succeeded.
 
+## Reproducible public builds
+
+Run from the repository root with an explicit app and environment:
+
+```sh
+bun scripts/buildShowcase.ts botanical development
+bun scripts/buildShowcase.ts letters development
+bun scripts/buildShowcase.ts landing development
+```
+
+Replace `development` with `production` only for a production build. The checked-in public environment map overrides inherited public values and rejects unknown targets. It binds each artifact to its API, site, Dashboard and public origins. The Botanical production build explicitly sets `PUBLIC_LIVE_DEMO_SITE_ID=demo-wedding`, as authorized for this tenant. Development retains sandbox behavior; Letters never receives a live opt-in. This does not change receiving eligibility, financial consent, backend live-site policy, quote or checkout guards.
+
+Cloudflare Builds must use the repository root, not the removed `apps/wedding-demo` directory. For Botanical, use `bun scripts/buildShowcase.ts botanical production` (or `development`) as the build command and `bunx wrangler deploy --config apps/wedding-demo-botanico/wrangler.jsonc --keep-vars` (append `--env dev` for development) as the deploy command. Build-system credentials belong in the service configuration, never in source. Confirm branch and service identity before updating a build trigger.
+
+The requested rename to `demo-botanico` / `demo-botanico-dev` is not yet applied. Preserve the existing URLs until the new origins, tenant admission, build integration and compatibility links are verified together. An authenticated manual publish does not establish permission to edit Workers Builds; the latter currently returns HTTP 403 for the designated profile.
+
 ## Controlled data population
 
 The explicitly invoked API script adds illustrative, persistent records. It verifies database identity and the existing demo-wedding identity, uses one transaction and lock, preserves previous operational rows, copies only active, non-revoked management memberships to Letters and registers that site's exact origins. It never creates user accounts, changes authentication credentials, sends invitations, resets datasets, copies guest data across environments, or changes receiving configuration.
