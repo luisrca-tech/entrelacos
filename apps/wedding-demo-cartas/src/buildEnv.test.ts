@@ -37,6 +37,7 @@ describe("progressive enhancement", () => {
     expect(source).toContain("<GiftSection");
     expect(source).toContain("<GiftRegistry");
     expect(source).toContain("demo={true}");
+    expect(source).not.toContain("Há palavras que também viram lembrança.");
     expect(source).not.toContain("gift-quotes");
     expect(source).not.toContain("R2_SECRET");
   });

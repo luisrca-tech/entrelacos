@@ -14,7 +14,6 @@ import { guestAccess } from "../demoContent";
 <p class="chapter-handoff flex items-center [gap:1.5rem] m-0 [padding:2rem_var(--template-page-inset)] [color:var(--template-muted)] [font:italic_clamp(1rem,_1.5vw,_1.25rem)_/_1.65_var(--font-template-serif)] [&::before]:[content:''] [&::before]:[flex:0_0_clamp(1.5rem,_6vw,_6rem)] [&::before]:[height:1px] [&::before]:[background:currentColor] [&::before]:[opacity:0.5] mural-handoff">Deixe também suas palavras para este dia.</p>
 <GiftSection content={{ id: "gifts", eyebrow: "O próximo capítulo", title: "Para o que vem depois.", description: "Nossa maior alegria é ter você por perto. Se quiser nos presentear, escolha um carinho para a nossa vida a dois." }}>
   <GiftRegistry {...guestAccess} demo={true} liveDemoSiteId={import.meta.env.PUBLIC_LIVE_DEMO_SITE_ID} client:only="react" />
-  <p class="gift-closing m-0 [font:italic_1.15rem_/_1.7_var(--font-template-serif)]">{"Há palavras que também viram lembrança."}</p>
 </GiftSection>
 <section id="mural" class="demo-mural [padding:clamp(3rem,_6vw,_6rem)_var(--template-page-inset)] [border-top:1px_solid_var(--template-line)] [&_[data-slot='message-mural']]:[padding:0] [&_[data-slot='message-mural']]:[background:transparent]" aria-label="Mural dos convidados">
   <p class="chapter-number [margin:0_0_2rem] [font-size:0.72rem] font-semibold [letter-spacing:0.14em] uppercase [color:var(--template-muted)]">{"Palavras que ficam"}</p>
