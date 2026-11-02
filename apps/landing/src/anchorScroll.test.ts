@@ -123,6 +123,44 @@ describe.each([
     expect(positions.at(-1)).toBe(1920);
   });
 
+  if (_name === "landing") {
+    it("preserves native keyboard focus transfer for the skip link", () => {
+      const f = fixture();
+      f.anchor.className = "skip-link";
+      f.anchor.href = "#conteudo";
+      const main = document.createElement("main");
+      main.id = "conteudo";
+      main.tabIndex = -1;
+      f.section.replaceWith(main);
+      vi.spyOn(main, "getBoundingClientRect").mockReturnValue({
+        top: 0,
+        bottom: 500,
+        width: 500,
+        height: 500,
+      } as DOMRect);
+      const scroll = vi.spyOn(f.instances[0], "scrollTo");
+      f.anchor.focus();
+      expect(document.activeElement).toBe(f.anchor);
+      let cancelled = true;
+      window.addEventListener(
+        "click",
+        (event) => {
+          cancelled = event.defaultPrevented;
+          // jsdom lacks native fragment focus. Model it only when uncancelled.
+          if (!cancelled) main.focus();
+          event.preventDefault();
+        },
+        { once: true },
+      );
+      f.anchor.dispatchEvent(
+        new MouseEvent("click", { bubbles: true, cancelable: true, detail: 0 }),
+      );
+      expect(cancelled).toBe(false);
+      expect(scroll).not.toHaveBeenCalled();
+      expect(document.activeElement).toBe(main);
+    });
+  }
+
   it.each(["ctrlKey", "metaKey", "altKey", "shiftKey"])(
     "preserves %s clicks",
     (key) => {

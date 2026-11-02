@@ -95,6 +95,7 @@ export function mountLandingMotion(
     const anchor = node.closest<HTMLAnchorElement>("a[href]");
     if (
       !anchor ||
+      anchor.matches(".skip-link") ||
       anchor.hasAttribute("download") ||
       (anchor.target && anchor.target !== "_self")
     )
