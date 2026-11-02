@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { readFileSync } from "node:fs";
+import { URL as NodeURL } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { mountCinematicOpening } from "./cinematicOpening";
 
@@ -9,7 +11,7 @@ const animations: Array<{
 let cleanup = () => {};
 function setup(reduced = false) {
   document.body.innerHTML =
-    '<h1 id="hero-title" tabindex="-1">Our story</h1><div class="union-art"><div class="union-scene"><div class="alliance alliance-first"></div><div class="alliance alliance-second"></div></div></div><button data-opening-skip hidden>Skip</button><a href="#details">Details</a><section id="details"></section>';
+    '<section class="hero"><h1 id="hero-title" tabindex="-1">Our story</h1><div class="union-art"><div class="union-scene"><div class="alliance alliance-first"></div><div class="alliance alliance-second"></div></div></div><button data-opening-skip hidden>Skip</button><a href="#details">Details</a><section id="details"></section></section>';
   document.documentElement.dataset.opening = "armed";
   const scene = document.querySelector(".union-scene");
   const preference = Object.assign(new EventTarget(), { matches: reduced });
@@ -49,6 +51,8 @@ afterEach(() => {
   animations.length = 0;
   document.body.innerHTML = "";
   delete document.documentElement.dataset.opening;
+  vi.unstubAllGlobals();
+  window.history.replaceState(null, "", "/");
   vi.restoreAllMocks();
   vi.useRealTimers();
 });
@@ -110,15 +114,48 @@ describe("continuous cinematic opening", () => {
       expect(document.querySelector("[data-opening-overlay]")).toBeNull();
     },
   );
-  it("bypasses reduced motion and repeated visits", () => {
+  it("bypasses reduced motion", () => {
     setup(true);
     expect(animations).toHaveLength(0);
-    cleanup();
-    setup().controller.settle();
-    cleanup();
-    setup();
-    expect(document.querySelector("[data-opening-overlay]")).toBeNull();
   });
+  it("replays at the hero on reload even after a previous opening in this session", () => {
+    sessionStorage.setItem("entrelacos-opening", "seen");
+    vi.stubGlobal("performance", {
+      getEntriesByType: () => [{ type: "reload" }],
+    });
+    setup();
+    expect(document.querySelector("[data-opening-overlay]")).not.toBeNull();
+  });
+  it("replays after a small restored scroll while the hero is still visible", () => {
+    vi.stubGlobal("scrollY", 120);
+    vi.stubGlobal("performance", {
+      getEntriesByType: () => [{ type: "reload" }],
+    });
+    setup();
+    expect(document.querySelector("[data-opening-overlay]")).not.toBeNull();
+  });
+  it.each(["hash", "restored-scroll", "back_forward"])(
+    "bypasses %s",
+    (reason) => {
+      if (reason === "hash") window.history.replaceState(null, "", "/#modelos");
+      if (reason === "restored-scroll") {
+        vi.stubGlobal("scrollY", 900);
+        vi.spyOn(Element.prototype, "getBoundingClientRect").mockReturnValue({
+          top: -700,
+          bottom: -100,
+          width: 400,
+          height: 600,
+        } as DOMRect);
+      }
+      if (reason === "back_forward")
+        vi.stubGlobal("performance", {
+          getEntriesByType: () => [{ type: "back_forward" }],
+        });
+      setup();
+      expect(animations).toHaveLength(0);
+      expect(document.documentElement.dataset.opening).toBeUndefined();
+    },
+  );
   it("does not cover an already visible page if early initialization expired", () => {
     setup().controller.dispose();
     sessionStorage.clear();
@@ -142,4 +179,62 @@ describe("continuous cinematic opening", () => {
     vi.advanceTimersByTime(6500);
     expect(document.querySelector("[data-opening-overlay]")).toBeNull();
   });
+});
+
+describe("early page arming and runtime handoff", () => {
+  function arm(reduced = false) {
+    vi.stubGlobal("matchMedia", () => ({ matches: reduced }));
+    const inline = readFileSync(
+      new NodeURL("./pages/index.astro", import.meta.url),
+      "utf8",
+    )
+      .split("<script is:inline>")[1]
+      .split("</script>")[0];
+    new Function(inline)();
+  }
+  it("arms same-session reload and survives the first frame until the module is ready", () => {
+    sessionStorage.setItem("entrelacos-opening", "seen");
+    arm();
+    vi.advanceTimersByTime(32);
+    expect(document.documentElement.dataset.opening).toBe("armed");
+  });
+  it.each(["hash", "back_forward", "reduced"])(
+    "does not arm for %s",
+    (reason) => {
+      if (reason === "hash") window.history.replaceState(null, "", "/#modelos");
+      if (reason === "back_forward")
+        vi.stubGlobal("performance", {
+          getEntriesByType: () => [{ type: "back_forward" }],
+        });
+      arm(reason === "reduced");
+      expect(document.documentElement.dataset.opening).toBeUndefined();
+    },
+  );
+  it("lets the runtime decide hero visibility after scroll restoration", () => {
+    document.body.innerHTML = '<section class="hero"></section>';
+    vi.stubGlobal("scrollY", 120);
+    arm();
+    window.dispatchEvent(new Event("scroll"));
+    expect(document.documentElement.dataset.opening).toBe("armed");
+  });
+  it("expires if enhancement fails and does not reopen for a late module", () => {
+    setup().controller.dispose();
+    arm();
+    vi.advanceTimersByTime(1300);
+    expect(document.documentElement.dataset.opening).toBeUndefined();
+    mountCinematicOpening(
+      document,
+      window,
+      Object.assign(new EventTarget(), { matches: false }),
+    );
+    expect(document.querySelector("[data-opening-overlay]")).toBeNull();
+  });
+  it.each(["scroll", "wheel", "touchstart", "keydown", "focusin", "pagehide"])(
+    "cancels early arming on %s before enhancement",
+    (type) => {
+      arm();
+      window.dispatchEvent(new Event(type));
+      expect(document.documentElement.dataset.opening).toBeUndefined();
+    },
+  );
 });

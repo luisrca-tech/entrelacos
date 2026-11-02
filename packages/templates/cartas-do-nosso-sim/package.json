@@ -13,6 +13,7 @@
     "react-dom": "19.3.0"
   },
   "dependencies": {
-    "@entrelacos/ui": "workspace:*"
+    "@entrelacos/ui": "workspace:*",
+    "lenis": "1.3.26"
   }
 }

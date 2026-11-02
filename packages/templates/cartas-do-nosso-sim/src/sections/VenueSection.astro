@@ -19,7 +19,7 @@ const buttonClass = `inline-flex min-h-11 items-center justify-center rounded-fu
 
 <section
   id={id}
-  class={`grid grid-cols-[minmax(0,0.72fr)_minmax(0,1.28fr)] gap-[clamp(2.5rem,6vw,7rem)] px-[var(--template-page-inset)] pb-[clamp(2rem,3vw,3rem)] pt-[clamp(5rem,10vw,9rem)] ${toneClasses} [@media(max-width:960px)]:block`}
+  class={`grid grid-cols-[var(--template-letter-columns)] gap-[var(--template-letter-gap)] px-[var(--template-page-inset)] pb-[clamp(2rem,3vw,3rem)] pt-[clamp(5rem,10vw,9rem)] ${toneClasses} [@media(max-width:960px)]:block`}
   aria-labelledby={`${id}-title`}
 >
   <header class={`${revealClasses} [@media(max-width:960px)]:mb-12`} data-template-reveal>
@@ -45,7 +45,7 @@ const buttonClass = `inline-flex min-h-11 items-center justify-center rounded-fu
         >{content.labels.copyLabel}</button>
       </div>
     </div>
-    <figure data-template-reveal-item style="--template-reveal-delay: 90ms" class="mt-8 rounded-[0.75rem] min-h-[clamp(24rem,34vw,28rem)] overflow-hidden bg-template-olive">
+    <figure data-template-reveal-item style="--template-reveal-delay: 90ms" class="m-0 mt-8 rounded-[0.75rem] min-h-[clamp(24rem,34vw,28rem)] overflow-hidden bg-template-olive">
       <iframe
         class="block h-full min-h-[clamp(24rem,34vw,28rem)] w-full border-0"
         src={content.mapEmbedUrl}

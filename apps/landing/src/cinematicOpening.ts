@@ -5,6 +5,9 @@ export function mountCinematicOpening(
 ) {
   const root = doc.documentElement;
   const home = doc.querySelector<HTMLElement>(".union-art");
+  const heroRect = doc
+    .querySelector<HTMLElement>(".hero")
+    ?.getBoundingClientRect();
   const scene = home?.querySelector<HTMLElement>(".union-scene");
   const skip = doc.querySelector<HTMLButtonElement>("[data-opening-skip]");
   const animations: Animation[] = [];
@@ -26,12 +29,9 @@ export function mountCinematicOpening(
     overlay?.remove();
     if (skip) skip.hidden = true;
     delete root.dataset.opening;
+    browser.dispatchEvent(new Event("opening:ready"));
   }
   const controller = { settle, dispose: settle };
-  let seen = false;
-  try {
-    seen = browser.sessionStorage.getItem("entrelacos-opening") === "seen";
-  } catch {}
   const navigation = browser.performance.getEntriesByType?.("navigation")[0] as
     | PerformanceNavigationTiming
     | undefined;
@@ -41,9 +41,10 @@ export function mountCinematicOpening(
     !skip ||
     !scene.animate ||
     preference.matches ||
-    seen ||
     browser.location.hash ||
-    browser.scrollY > 0 ||
+    !heroRect ||
+    heroRect.bottom <= 0 ||
+    heroRect.top >= browser.innerHeight ||
     navigation?.type === "back_forward" ||
     root.dataset.opening !== "armed"
   ) {
@@ -57,9 +58,7 @@ export function mountCinematicOpening(
   }
   try {
     root.dataset.opening = "playing";
-    try {
-      browser.sessionStorage.setItem("entrelacos-opening", "seen");
-    } catch {}
+    browser.dispatchEvent(new Event("opening:ready"));
     overlay = doc.createElement("div");
     overlay.dataset.openingOverlay = "";
     overlay.setAttribute("aria-hidden", "true");
@@ -141,11 +140,7 @@ export function mountCinematicOpening(
     doc.addEventListener(
       "focusin",
       (event) => {
-        if (
-          event.target !== skip &&
-          !(event.target as Element)?.closest("[data-motion-toggle]")
-        )
-          settle();
+        if (event.target !== skip) settle();
       },
       options,
     );

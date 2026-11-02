@@ -191,7 +191,7 @@ describe("template reveal lifecycle", () => {
     const state = setup();
     expect(state.getOptions()).toEqual({
       threshold: [0, 0.15],
-      rootMargin: "0px 0px -100px 0px",
+      rootMargin: "0px 0px -280px 0px",
     });
     expect(state.elements[0]?.dataset).toMatchObject({
       templateMotionReady: "true",
@@ -339,13 +339,26 @@ describe("template reveal DOM safety", () => {
   it("caps tall-wrapper visibility at a reachable portion of the viewport", () => {
     const f = fixture({ height: 20000 });
     expect(f.observers.at(-1)?.options).toEqual({
-      threshold: [0, 0.0225, 0.15],
-      rootMargin: "0px 0px -100px 0px",
+      threshold: [0, 0.018, 0.15],
+      rootMargin: "0px 0px -280px 0px",
     });
-    f.intersect(f.element, 0.02);
+    f.intersect(f.element, 0.017);
     expect(f.element.dataset.templateRevealState).toBe("hidden");
-    f.intersect(f.element, 0.0225);
+    f.intersect(f.element, 0.018);
     expect(f.element.dataset.templateRevealState).toBe("visible");
+    f.cleanup();
+  });
+  it("settles a block skipped by fast scrolling even away from the page end", () => {
+    const f = fixture();
+    vi.mocked(f.element.getBoundingClientRect).mockReturnValue({
+      height: 300,
+      width: 300,
+      top: -500,
+      bottom: -200,
+    } as DOMRect);
+    window.dispatchEvent(new Event("scroll"));
+    expect(f.element.dataset.templateRevealState).toBe("visible");
+    expect(f.element.dataset.templateMotionReady).toBeUndefined();
     f.cleanup();
   });
   it("reveals focused content immediately and restores content at the page end", () => {

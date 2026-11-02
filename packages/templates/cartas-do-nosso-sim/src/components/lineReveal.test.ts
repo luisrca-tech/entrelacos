@@ -149,7 +149,7 @@ describe("heading line reveal", () => {
     delete (Element.prototype as { animate?: unknown }).animate;
   });
 
-  it.each([["letters", 850]] as const)(
+  it.each([["letters", 1200]] as const)(
     "animates %s headings with their own timing and restores text",
     async (theme, duration) => {
       document.documentElement.dataset.weddingTheme = theme;
@@ -198,7 +198,7 @@ describe("heading line reveal", () => {
       for (const [index, call] of animate.mock.calls.entries()) {
         expect(call[1]).toMatchObject({
           duration,
-          delay: Math.min(index * 80, 240),
+          delay: Math.min(index * 140, 420),
         });
       }
       cleanup();

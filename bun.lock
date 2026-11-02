@@ -175,6 +175,7 @@
       "version": "0.0.0",
       "dependencies": {
         "@entrelacos/ui": "workspace:*",
+        "lenis": "1.3.26",
       },
       "peerDependencies": {
         "astro": "7.3.2",

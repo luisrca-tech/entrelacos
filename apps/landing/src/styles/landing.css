@@ -742,7 +742,6 @@ summary:focus-visible {
   position: relative;
   transform-style: preserve-3d;
   transform: rotateX(-18deg) rotateY(-30deg) rotateZ(-3deg);
-  animation: gift-turn 10s ease-in-out infinite;
 }
 .gift-front,
 .gift-side,
@@ -1102,20 +1101,6 @@ summary:focus-visible {
   align-self: center;
   justify-self: end;
 }
-[data-motion-toggle] {
-  justify-self: start;
-  background: none;
-  border: 1px solid var(--line);
-  color: var(--muted);
-  font-size: 0.65rem;
-  padding: 0.8rem 1rem;
-  min-height: 44px;
-  cursor: pointer;
-}
-[data-motion-toggle]:hover {
-  border-color: var(--wine);
-  color: var(--wine);
-}
 @keyframes ring-first {
   0%,
   100% {
@@ -1132,15 +1117,6 @@ summary:focus-visible {
   }
   50% {
     transform: rotateY(-65deg) rotateX(10deg);
-  }
-}
-@keyframes gift-turn {
-  0%,
-  100% {
-    transform: rotateX(-18deg) rotateY(-30deg) rotateZ(-3deg) translateY(0);
-  }
-  50% {
-    transform: rotateX(-24deg) rotateY(-42deg) rotateZ(2deg) translateY(-14px);
   }
 }
 @keyframes entrance {
@@ -1196,26 +1172,13 @@ summary:focus-visible {
     }
   }
 }
-:root[data-motion="paused"] {
-  scroll-behavior: auto;
-}
-:root[data-motion="paused"] *,
-:root[data-motion="paused"] *::before,
-:root[data-motion="paused"] *::after {
-  /* biome-ignore lint/complexity/noImportantStyles: Accessibility preference must override all motion rules. */
-  animation: none !important;
-  /* biome-ignore lint/complexity/noImportantStyles: Accessibility preference must override all motion rules. */
-  transition: none !important;
-  /* biome-ignore lint/complexity/noImportantStyles: Accessibility preference must override all motion rules. */
-  scroll-behavior: auto !important;
-}
 @media (prefers-reduced-motion: reduce) {
   :root {
     scroll-behavior: auto;
   }
-  :root:not([data-motion="active"]) *,
-  :root:not([data-motion="active"]) *::before,
-  :root:not([data-motion="active"]) *::after {
+  *,
+  *::before,
+  *::after {
     /* biome-ignore lint/complexity/noImportantStyles: Accessibility preference must override all motion rules. */
     animation: none !important;
     /* biome-ignore lint/complexity/noImportantStyles: Accessibility preference must override all motion rules. */
@@ -1621,9 +1584,6 @@ summary:focus-visible {
   .site-footer > div {
     font-size: 0.6rem;
   }
-  [data-motion-toggle] {
-    grid-column: 1 / -1;
-  }
   .site-footer > small {
     grid-column: 1 / -1;
     justify-self: start;
@@ -1650,15 +1610,6 @@ summary:focus-visible {
   }
 }
 
-[data-motion-toggle] {
-  position: fixed;
-  right: 1rem;
-  bottom: 1rem;
-  z-index: 20;
-  background: var(--paper);
-  box-shadow: 0 2px 12px #302b2814;
-}
-
 /* The encounter becomes a shared thread; motion never blocks navigation. */
 .title-last {
   display: block;
@@ -1671,13 +1622,6 @@ summary:focus-visible {
   align-items: center;
   flex-wrap: wrap;
   gap: 1.5rem;
-}
-.hero-explore {
-  font-size: 0.75rem;
-  padding: 0.9rem 0;
-}
-.hero-explore span {
-  margin-left: 0.65rem;
 }
 .union-art {
   position: relative;
@@ -1854,17 +1798,10 @@ summary:focus-visible {
 .reveal {
   opacity: 1;
 }
-:root[data-motion="paused"] .union-stage {
-  transform: none;
-}
 @media (prefers-reduced-motion: reduce) {
   .union-stage {
     transform: none;
   }
-}
-:root[data-motion="paused"] .reveal {
-  opacity: 1;
-  translate: none;
 }
 @keyframes alliance-arrive-first {
   from {

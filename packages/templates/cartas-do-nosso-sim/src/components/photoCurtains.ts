@@ -49,8 +49,8 @@ export function mountPhotoCurtains(
         surface.append(layer);
         const mobile = browser.innerWidth <= 760;
         const options = {
-          duration: mobile ? 1050 : 1350,
-          delay: 180,
+          duration: mobile ? 1400 : 1800,
+          delay: 160,
           fill: "both" as const,
           easing: "cubic-bezier(0.65,0,0.35,1)",
         };

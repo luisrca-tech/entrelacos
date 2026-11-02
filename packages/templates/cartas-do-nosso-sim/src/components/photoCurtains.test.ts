@@ -60,6 +60,18 @@ afterEach(() => {
   vi.useRealTimers();
 });
 describe("Letters photograph curtains", () => {
+  it.each([
+    [1440, 1800],
+    [360, 1400],
+  ])("uses a calm curtain duration at width %s", (width, duration) => {
+    vi.stubGlobal("innerWidth", width);
+    const { surface } = setup();
+    enter(surface);
+    expect(Element.prototype.animate).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ duration, delay: 160 }),
+    );
+  });
   it("reveals only the photograph once, leaving its frame and caption still", async () => {
     const { surface } = setup();
     enter(surface);
@@ -86,7 +98,7 @@ describe("Letters photograph curtains", () => {
     Object.defineProperty(img, "naturalWidth", { value: 800 });
     img.dispatchEvent(new Event("load"));
     expect(surface.querySelector("[data-curtain-layer]")).not.toBeNull();
-    vi.advanceTimersByTime(2000);
+    vi.advanceTimersByTime(2400);
     expect(surface.querySelector("[data-curtain-layer]")).toBeNull();
   });
   it("settles immediately when reduced motion changes", () => {

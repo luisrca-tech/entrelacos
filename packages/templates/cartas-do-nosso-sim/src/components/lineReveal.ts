@@ -162,8 +162,8 @@ export function setupLineReveals(
                 { transform: "translateY(0)" },
               ],
               {
-                duration: 850,
-                delay: Math.min(index * 80, 240),
+                duration: 1200,
+                delay: Math.min(index * 140, 420),
                 easing: "cubic-bezier(0.33,0.05,0.2,1)",
                 fill: "both",
               },

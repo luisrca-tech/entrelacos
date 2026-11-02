@@ -48,10 +48,11 @@ export function setupTemplateMotion(
   let additions: MutationObserver | undefined;
   let disabled = false;
   const viewportHeight = () => browserWindow.innerHeight || 1000;
+  const viewportInset = () => (browserWindow.innerWidth <= 760 ? 0.22 : 0.28);
   const thresholdFor = (element: RevealElement) =>
     Math.min(
       0.15,
-      (viewportHeight() * 0.9 * 0.5) /
+      (viewportHeight() * (1 - viewportInset()) * 0.5) /
         Math.max(1, element.getBoundingClientRect().height),
     );
   const reveal = (element: RevealElement, immediate = false) => {
@@ -72,18 +73,19 @@ export function setupTemplateMotion(
       delete element.dataset.templateRevealState;
     });
   };
-  const checkPageEnd = () => {
+  const checkScrollPosition = () => {
     const document = browserWindow.document;
-    if (
-      !document ||
-      document.documentElement.scrollHeight <= 0 ||
-      browserWindow.scrollY + viewportHeight() <
-        document.documentElement.scrollHeight - 2
-    )
-      return;
+    const atEnd =
+      document &&
+      document.documentElement.scrollHeight > 0 &&
+      browserWindow.scrollY + viewportHeight() >=
+        document.documentElement.scrollHeight - 2;
     pending.forEach((element) => {
       const rect = element.getBoundingClientRect();
-      if (rect.height > 0 && rect.bottom > 0 && rect.top < viewportHeight())
+      if (
+        rect.height > 0 &&
+        (rect.bottom <= 0 || (atEnd && rect.top < viewportHeight()))
+      )
         reveal(element, true);
     });
   };
@@ -107,7 +109,7 @@ export function setupTemplateMotion(
         },
         {
           threshold: thresholds,
-          rootMargin: `0px 0px -${viewportHeight() * 0.1}px 0px`,
+          rootMargin: `0px 0px -${viewportHeight() * viewportInset()}px 0px`,
         },
       );
       pending.forEach((element) => {
@@ -122,7 +124,7 @@ export function setupTemplateMotion(
         }
         observer?.observe(element);
       });
-      checkPageEnd();
+      checkScrollPosition();
     } catch {
       disable();
     }
@@ -195,7 +197,9 @@ export function setupTemplateMotion(
     disable();
   }
   eventRoot.addEventListener?.("focusin", onFocus);
-  browserWindow.addEventListener?.("scroll", checkPageEnd, { passive: true });
+  browserWindow.addEventListener?.("scroll", checkScrollPosition, {
+    passive: true,
+  });
   browserWindow.addEventListener?.("resize", observe);
   const unsubscribe = subscribeToMotionChange(query, () => {
     if (!query.matches) return;
@@ -210,7 +214,7 @@ export function setupTemplateMotion(
   return () => {
     unsubscribe();
     eventRoot.removeEventListener?.("focusin", onFocus);
-    browserWindow.removeEventListener?.("scroll", checkPageEnd);
+    browserWindow.removeEventListener?.("scroll", checkScrollPosition);
     browserWindow.removeEventListener?.("resize", observe);
     disable();
   };
