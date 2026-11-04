@@ -127,8 +127,7 @@ export function GiftCatalogView({
                   </p>
                 ) : (
                   <p className="m-0 text-template-ink">
-                    Valor:{" "}
-                    {currencyFormatter.format(gift.nominalCents / 100)}
+                    Valor: {currencyFormatter.format(gift.nominalCents / 100)}
                     {mode !== "demonstration" && (
                       <span className="block text-sm text-template-muted">
                         Pix ou cartão à vista · mesmo preço final
