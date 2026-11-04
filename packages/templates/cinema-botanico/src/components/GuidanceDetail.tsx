@@ -19,7 +19,7 @@ export default function GuidanceDetail({
 }: GuidanceDetailProps) {
   return (
     <Dialog>
-      <DialogTrigger className="inline-flex min-h-11 cursor-pointer items-center gap-1.5 border-0 bg-transparent p-0 text-[0.62rem] font-medium uppercase tracking-[0.08em] text-inherit">
+      <DialogTrigger className="inline-flex min-h-11 cursor-pointer items-center gap-1.5 rounded-full border border-current bg-transparent px-3 py-1 align-middle text-sm font-medium text-inherit hover:bg-[color-mix(in_srgb,currentColor_10%,transparent)]">
         {detail.label}
         <svg
           viewBox="0 0 24 24"

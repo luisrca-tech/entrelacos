@@ -45,11 +45,11 @@ const revealClasses = "template-reveal";
         <ul data-template-reveal-item style="--template-reveal-delay: 550ms" class="m-0 list-none p-0">
           {content.guidance.map((item) => (
             <li class="[&+li]:mt-6" id={item.id}>
-              <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
-                <strong>{item.title}</strong>
-                {item.detail && <GuidanceDetail detail={item.detail} titleId={`${item.id}-detail-title`} client:load />}
-              </div>
-              <p class="m-0 mt-3 max-w-[36rem] leading-[1.6]">{item.body}</p>
+              <strong>{item.title}</strong>
+              <p class="m-0 mt-3 max-w-[36rem] leading-[1.6]">
+                {item.body}
+                {item.detail && <> <GuidanceDetail detail={item.detail} titleId={`${item.id}-detail-title`} client:load /></>}
+              </p>
             </li>
           ))}
         </ul>

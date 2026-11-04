@@ -1,0 +1,14 @@
+---
+interface Props {
+  ruled?: boolean;
+  className?: string;
+}
+
+const { ruled = false, className } = Astro.props;
+---
+
+<div class:list={[ruled ? "col-span-full" : "px-[var(--template-page-inset)]", className]} data-template-reveal>
+  <p class:list={["m-0 flex items-center gap-6 py-8 font-template-serif text-[clamp(1rem,1.5vw,1.25rem)] italic leading-[1.65] text-template-muted before:h-px before:w-[clamp(1.5rem,6vw,6rem)] before:shrink-0 before:bg-current before:opacity-50 before:content-['']", ruled && "border-b border-template-line"]} data-template-reveal-item>
+    <slot />
+  </p>
+</div>

@@ -25,7 +25,7 @@ export const footer = {
   links: [
     { label: "História", href: "#story" },
     { label: "Programação", href: "#schedule" },
-    { label: "Local", href: "#venue" },
+    { label: "Locais", href: "#ceremony-venue" },
   ],
   rsvp: { label: "Confirmar presença", href: "#guest-access" },
   year: "2027",
@@ -42,13 +42,15 @@ export const schedule = {
       id: "ceremony",
       time: "16:00",
       title: "Cerimônia",
-      body: "Cerimônia e recepção no mesmo salão.",
+      body: "O nosso sim, com vocês por perto.",
+      location: "Santuário Basílica Sagrada Família",
     },
     {
       id: "cocktail",
       time: "18:00",
-      title: "Coquetel",
-      body: "Frios e drinks depois da cerimônia.",
+      title: "Recepção",
+      body: "Depois da cerimônia, nos encontramos para o coquetel e a festa.",
+      location: "Casablanca Eventos",
     },
     {
       id: "dinner",
@@ -61,7 +63,7 @@ export const schedule = {
     {
       id: "arrival",
       title: "Chegada",
-      body: "Reserve alguns minutos para estacionar. Na entrada, informe seu nome à equipe.",
+      body: "Reserve alguns minutos para estacionar na igreja. Na recepção, informe seu nome à equipe.",
     },
     {
       id: "attire",
@@ -70,10 +72,41 @@ export const schedule = {
     },
   ],
 };
-export const venue = {
+const ceremonyName = "Santuário Basílica Sagrada Família";
+const ceremonyAddress =
+  "Rua C-14, 155, Vila Nova Canaã, Goiânia, GO, 74415-220";
+const ceremonyDestination = encodeURIComponent(
+  `${ceremonyName}, ${ceremonyAddress}`,
+);
+
+export const ceremonyVenue = {
+  id: "ceremony-venue",
+  eyebrow: "O local da cerimônia",
+  title: "Onde diremos sim.",
+  name: ceremonyName,
+  address: ceremonyAddress,
+  mapEmbedUrl: `https://maps.google.com/maps?q=${ceremonyDestination}&output=embed`,
+  directions: {
+    label: "Como chegar",
+    href: `https://www.google.com/maps/dir/?api=1&destination=${ceremonyDestination}`,
+  },
+  fallback: {
+    label: "Abrir endereço",
+    href: `https://www.google.com/maps/search/?api=1&query=${ceremonyDestination}`,
+  },
+  labels: {
+    mapTitle: "Mapa do Santuário Basílica Sagrada Família",
+    addressLabel: "Endereço completo",
+    copyLabel: "Copiar endereço",
+    copiedLabel: "Endereço copiado",
+    copyErrorLabel: "Não foi possível copiar o endereço",
+  },
+};
+
+export const receptionVenue = {
   id: "venue",
-  eyebrow: "O local",
-  title: "Nos encontramos em Goiânia.",
+  eyebrow: "O local da festa",
+  title: "Onde vamos celebrar.",
   name: "Casablanca Eventos",
   address: "Av Ipanema 747, Jardim Atlântico, Goiânia, GO, 74343-010",
   mapEmbedUrl:

@@ -21,7 +21,7 @@ const toneClasses = tone === "olive" ? "bg-template-olive text-template-ivory" :
 
 <section
   id={id}
-  class={`relative flex min-h-[clamp(48rem,92svh,68rem)] items-end overflow-hidden mb-[clamp(3rem,5vw,5rem)] px-[var(--template-page-inset)] py-[clamp(3rem,5vw,5rem)] scroll-mt-[calc(var(--template-header-height,4.05rem)+1rem)] ${toneClasses} [@media(max-width:960px)]:m-0 [@media(max-width:960px)]:block [@media(max-width:960px)]:min-h-0 [@media(max-width:960px)]:p-0 [@media(max-width:960px)]:mb-8`}
+  class={`relative flex min-h-[calc(100svh-var(--template-header-height))] items-end overflow-hidden mb-[clamp(3rem,5vw,5rem)] px-[var(--template-page-inset)] py-[clamp(3rem,5vw,5rem)] scroll-mt-[calc(var(--template-header-height,4.05rem)+1rem)] ${toneClasses} [@media(max-width:960px)]:m-0 [@media(max-width:960px)]:flex-col [@media(max-width:960px)]:items-stretch [@media(max-width:960px)]:p-0 [@media(max-width:960px)]:mb-8`}
   data-template-story
   aria-labelledby={`${id}-title`}
   style={`--story-media-ratio: ${primary.width} / ${primary.height};`}
@@ -72,14 +72,14 @@ const toneClasses = tone === "olive" ? "bg-template-olive text-template-ivory" :
   </div>
   <div class="absolute inset-0 z-[1] [background:var(--template-story-gradient)]" aria-hidden="true"></div>
   <div
-    class="relative z-[2] max-w-[min(42rem,100%)] [@media(max-width:960px)]:max-w-none [@media(max-width:960px)]:bg-template-olive [@media(max-width:960px)]:px-4 [@media(max-width:960px)]:pb-10 [@media(max-width:960px)]:pt-8"
+    class="relative z-[2] max-w-[min(42rem,100%)] [@media(max-width:960px)]:grow [@media(max-width:960px)]:max-w-none [@media(max-width:960px)]:bg-template-olive [@media(max-width:960px)]:px-4 [@media(max-width:960px)]:pb-10 [@media(max-width:960px)]:pt-8"
     data-story-copy
     data-template-reveal
   >
     {content.eyebrow && <p data-template-reveal-item data-template-reveal-kind="label" class="m-0 mb-5 text-[0.72rem] font-bold uppercase tracking-[0.16em]">{content.eyebrow}</p>}
     <h2 data-template-reveal-item data-template-line-reveal class="m-0 max-w-[18ch] font-template-serif text-[clamp(2.5rem,5.5vw,calc(5.6rem*var(--template-width-scale)))] font-normal tracking-[-0.065em] leading-[0.94] [@media(max-width:960px)]:max-w-[12ch] [@media(max-width:960px)]:text-[clamp(2.5rem,12vw,4.5rem)]" id={`${id}-title`}>{content.title}</h2>
     {content.description && <p data-template-reveal-item data-template-reveal-kind="body" style="--template-reveal-delay: 1400ms" class="m-0 mt-6 max-w-[30rem] text-[rgba(244,240,232,0.78)] leading-[1.55] [@media(max-width:960px)]:max-w-112">{content.description}</p>}
-    <p data-template-reveal-item data-template-reveal-kind="body" style="--template-reveal-delay: 2400ms" class="m-0 mt-4 max-w-160 text-[clamp(1rem,1.5vw,1.25rem)] leading-[1.6] text-[rgba(244,240,232,0.96)]">{content.body}</p>
+    <p data-template-reveal-item data-template-reveal-kind="body" style="--template-reveal-delay: 1400ms" class="m-0 mt-4 max-w-160 text-[clamp(1rem,1.5vw,1.25rem)] leading-[1.6] text-[rgba(244,240,232,0.96)]">{content.body}</p>
   </div>
 </section>
 

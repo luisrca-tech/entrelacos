@@ -265,9 +265,7 @@ function GiftRegistryRuntime({
     };
     run();
     const interval = window.setInterval(() => {
-      if (owner.active || !active) return;
-      const generation = invalidate();
-      if (intentCurrent(generation)) run();
+      if (!owner.active) run();
     }, 30000);
     return () => {
       active = false;
@@ -519,13 +517,7 @@ function GiftRegistryRuntime({
       {currentCatalog && (
         <GiftCatalogView
           recoveryOnly={state.phase === "UNKNOWN"}
-          gifts={
-            !catalogLoading &&
-            !catalogError &&
-            catalog?.generation === catalogGeneration.current
-              ? currentCatalog.gifts
-              : []
-          }
+          gifts={currentCatalog.gifts}
           mode={currentCatalog.mode}
           busy={
             (outcomePending && state.phase !== "UNKNOWN") ||

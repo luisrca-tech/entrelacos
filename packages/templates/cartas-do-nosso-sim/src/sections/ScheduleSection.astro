@@ -14,6 +14,7 @@ const id = content.id;
 const toneClasses = tone === "olive" ? "bg-template-olive text-template-ivory" : "bg-template-ivory text-template-ink";
 const descriptionClass = tone === "olive" ? "text-[rgba(244,240,232,0.7)]" : "text-template-muted";
 const revealClasses = "template-reveal";
+const dividerClass = tone === "olive" ? "bg-[rgba(244,240,232,0.24)]" : "bg-template-line";
 ---
 
 <section
@@ -29,18 +30,20 @@ const revealClasses = "template-reveal";
   <div class={`${revealClasses} min-w-0 self-end`}>
     <ol class="m-0 list-none p-0" aria-label={content.title}>
       {content.entries.map((entry) => (
-        <li data-template-reveal id={entry.id} class="grid grid-cols-[minmax(4rem,0.28fr)_minmax(0,1fr)] gap-4 border-t border-[rgba(244,240,232,0.24)] py-6 first:border-t-0 first:pt-0">
+        <li data-template-reveal id={entry.id} class="group relative grid grid-cols-[minmax(4rem,0.28fr)_minmax(0,1fr)] gap-4 py-6 first:pt-0">
+          <span data-template-reveal-item data-template-reveal-kind="card" class={`pointer-events-none absolute inset-x-0 top-0 h-px group-first:hidden ${dividerClass}`} aria-hidden="true"></span>
           <time data-template-reveal-item data-template-reveal-kind="label" class="text-[0.9rem] uppercase tracking-[0.08em]">{entry.time}</time>
           <div data-template-reveal-item data-template-reveal-kind="card">
             <h3 class="m-0 text-[clamp(1.4rem,2.5vw,2rem)] font-medium tracking-[-0.025em] leading-[1.1]">{entry.title}</h3>
             <p class="m-0 mt-3 max-w-[30rem] leading-[1.6]">{entry.body}</p>
-            {entry.location && <p class="m-0 mt-3 max-w-[30rem] text-[0.9rem] leading-[1.6] text-[rgba(244,240,232,0.7)]">{entry.location}</p>}
+            {entry.location && <p class={`m-0 mt-3 max-w-[30rem] text-[0.9rem] leading-[1.6] ${descriptionClass}`}>{entry.location}</p>}
           </div>
         </li>
       ))}
     </ol>
     {content.guidance && content.guidance.length > 0 && (
-      <aside data-template-reveal class="mt-12 border-t border-[rgba(244,240,232,0.24)] pt-8" aria-labelledby={`${id}-guidance-title`}>
+      <aside data-template-reveal class="relative mt-12 pt-8" aria-labelledby={`${id}-guidance-title`}>
+        <span data-template-reveal-item class={`pointer-events-none absolute inset-x-0 top-0 h-px ${dividerClass}`} aria-hidden="true"></span>
         <h3 data-template-reveal-item class="m-0 mb-7 text-[clamp(1.4rem,2.5vw,2rem)] font-medium tracking-[-0.025em] leading-[1.1]" id={`${id}-guidance-title`}>{content.guidanceLabel}</h3>
         <ul data-template-reveal-item style="--template-reveal-delay: 550ms" class="m-0 list-none p-0">
           {content.guidance.map((item) => (

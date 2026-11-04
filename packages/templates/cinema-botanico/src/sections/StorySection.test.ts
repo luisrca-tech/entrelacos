@@ -26,7 +26,9 @@ describe("StorySection compact full-bleed composition", () => {
   });
 
   it("keeps the image immersive while preserving readable copy", () => {
-    expect(sectionSource).toContain("min-h-[clamp(48rem,92svh,68rem)]");
+    expect(sectionSource).toContain(
+      "min-h-[calc(100svh-var(--template-header-height))]",
+    );
     expect(sectionSource).toContain("mb-[clamp(3rem,5vw,5rem)]");
     expect(sectionSource).toContain("object-[center_6%]");
     expect(sectionSource).toContain("[@media(max-width:960px)]");

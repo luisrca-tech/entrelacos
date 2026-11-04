@@ -36,7 +36,7 @@ describe("WeddingLayout landmarks", () => {
   });
 
   it("dims the hero header so ivory links stay readable on a light video", () => {
-    expect(source).toContain("data-[navigation-state=hero]:bg-template-ink/50");
+    expect(source).toContain("data-[navigation-state=hero]:bg-template-ink/25");
     expect(source).not.toContain("data-[navigation-state=hero]:bg-transparent");
   });
 

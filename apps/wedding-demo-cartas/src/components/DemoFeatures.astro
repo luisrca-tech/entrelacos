@@ -1,5 +1,5 @@
 ---
-import { GiftSection } from "@entrelacos/template-cartas-do-nosso-sim/v1";
+import { GiftSection, LetterHandoff } from "@entrelacos/template-cartas-do-nosso-sim/v1";
 import { GiftRegistry, GuestAccess, MessageMural } from "@entrelacos/wedding-features";
 import { guestAccess } from "../demoContent";
 ---
@@ -10,8 +10,8 @@ import { guestAccess } from "../demoContent";
     <p slot="fallback" class="feature-fallback [max-width:38rem] m-0 [border:1px_solid_var(--template-line)] [padding:1.25rem] [line-height:1.65]">Esta área interativa precisa de JavaScript. Ative-o para encontrar seu convite e responder à confirmação.</p>
   </GuestAccess>
 </section>
-<p class="chapter-handoff flex items-center [gap:1.5rem] m-0 [padding:2rem_var(--template-page-inset)] [color:var(--template-muted)] [font:italic_clamp(1rem,_1.5vw,_1.25rem)_/_1.65_var(--font-template-serif)] [&::before]:[content:''] [&::before]:[flex:0_0_clamp(1.5rem,_6vw,_6rem)] [&::before]:[height:1px] [&::before]:[background:currentColor] [&::before]:[opacity:0.5] gift-handoff hidden">{"Seu abraço já faz parte da nossa história. Presentear é opcional."}</p>
-<p class="chapter-handoff flex items-center [gap:1.5rem] m-0 [padding:2rem_var(--template-page-inset)] [color:var(--template-muted)] [font:italic_clamp(1rem,_1.5vw,_1.25rem)_/_1.65_var(--font-template-serif)] [&::before]:[content:''] [&::before]:[flex:0_0_clamp(1.5rem,_6vw,_6rem)] [&::before]:[height:1px] [&::before]:[background:currentColor] [&::before]:[opacity:0.5] mural-handoff">Deixe também suas palavras para este dia.</p>
+<LetterHandoff className="gift-handoff hidden">Seu abraço já faz parte da nossa história. Presentear é opcional.</LetterHandoff>
+<LetterHandoff className="mural-handoff">Deixe também suas palavras para este dia.</LetterHandoff>
 <GiftSection content={{ id: "gifts", eyebrow: "O próximo capítulo", title: "Para o que vem depois.", description: "Nossa maior alegria é ter você por perto. Se quiser nos presentear, escolha um carinho para a nossa vida a dois." }}>
   <GiftRegistry {...guestAccess} demo={true} liveDemoSiteId={import.meta.env.PUBLIC_LIVE_DEMO_SITE_ID} client:only="react" />
 </GiftSection>

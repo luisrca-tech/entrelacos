@@ -23,5 +23,6 @@ export { default as WeddingLayout } from "./layouts/WeddingLayout.astro";
 export { type LetterContent, validateLetterContent } from "./letterContent";
 export { default as GiftSection } from "./sections/GiftSection.astro";
 export { default as LetterComposition } from "./sections/LetterComposition.astro";
+export { default as LetterHandoff } from "./sections/LetterHandoff.astro";
 export { default as ScheduleSection } from "./sections/ScheduleSection.astro";
 export { default as VenueSection } from "./sections/VenueSection.astro";

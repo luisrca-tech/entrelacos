@@ -3,15 +3,21 @@ export function mountPhotoCurtains(
   browser: Window,
   preference: EventTarget & { readonly matches: boolean },
 ) {
-  if (preference.matches || typeof IntersectionObserver !== "function")
+  if (preference.matches || typeof IntersectionObserver !== "function") {
+    delete doc.documentElement.dataset.photoCurtains;
     return () => {};
+  }
   const listeners = new AbortController();
-  const states = new Map<HTMLElement, { enter(): void; finish(): void }>();
+  const states = new Map<
+    HTMLElement,
+    { setVisible(visible: boolean): void; finish(): void }
+  >();
   const observer = new IntersectionObserver(
     (entries) => {
       for (const entry of entries)
-        if (entry.isIntersecting)
-          states.get(entry.target as HTMLElement)?.enter();
+        states
+          .get(entry.target as HTMLElement)
+          ?.setVisible(entry.isIntersecting);
     },
     {
       threshold: 0,
@@ -22,12 +28,12 @@ export function mountPhotoCurtains(
     "[data-photo-curtain]",
   )) {
     const img = surface.querySelector("img");
-    if (!img || !surface.animate) continue;
+    const layer = surface.querySelector<HTMLElement>("[data-curtain-layer]");
+    if (!img || !layer?.animate) continue;
     let visible = false;
     let started = false;
     let done = false;
     let ready = img.complete && img.naturalWidth > 0;
-    let layer: HTMLElement | undefined;
     let deadline = 0;
     const animations: Animation[] = [];
     function finish() {
@@ -38,15 +44,9 @@ export function mountPhotoCurtains(
       observer.unobserve(surface);
     }
     function start() {
-      if (!img || !ready || !visible || started || done) return;
+      if (!img || !layer || !ready || !visible || started || done) return;
       started = true;
       try {
-        layer = doc.createElement("span");
-        layer.dataset.curtainLayer = "";
-        layer.setAttribute("aria-hidden", "true");
-        layer.style.cssText =
-          "position:absolute;inset:0;background:var(--template-paper,#fffbf5);pointer-events:none";
-        surface.append(layer);
         const mobile = browser.innerWidth <= 760;
         const options = {
           duration: mobile ? 1400 : 1800,
@@ -88,8 +88,8 @@ export function mountPhotoCurtains(
     );
     img.addEventListener("error", finish, { signal: listeners.signal });
     states.set(surface, {
-      enter() {
-        visible = true;
+      setVisible(isVisible) {
+        visible = isVisible;
         start();
       },
       finish,

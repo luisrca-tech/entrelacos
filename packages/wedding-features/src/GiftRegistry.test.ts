@@ -215,6 +215,45 @@ describe("mounted server catalog runtime", () => {
     expect(surface.textContent).toContain("Página 2 de 2");
     expect(surface.textContent).toContain("Dinner 20");
   });
+  it("keeps the rendered cards during a slow or failed background refresh", async () => {
+    let resolve!: (response: Response) => void;
+    const waiting = new Promise<Response>((done) => {
+      resolve = done;
+    });
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(reply(page()))
+      .mockReturnValueOnce(waiting)
+      .mockResolvedValueOnce(
+        reply({
+          ...page(),
+          mode: "disabled",
+          gifts: [],
+          total: 0,
+          totalPages: 1,
+          hasNext: false,
+        }),
+      );
+    const { surface } = await mount(fetcher);
+    const card = surface.querySelector("article");
+    expect(card).not.toBeNull();
+
+    await advance(30000);
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(surface.querySelector("article")).toBe(card);
+    expect(surface.textContent).not.toContain("Carregando presentes");
+
+    await act(async () => {
+      resolve(reply({}, 503));
+      await flush();
+    });
+    expect(surface.querySelector("article")).toBe(card);
+    expect(surface.hidden).toBe(false);
+
+    await advance(30000);
+    expect(surface.hidden).toBe(true);
+    expect(surface.querySelector("article")).toBeNull();
+  });
   it("holds the 30s refresh until the in-flight page request settles", async () => {
     let resolve!: (r: Response) => void;
     const waiting = new Promise<Response>((r) => {

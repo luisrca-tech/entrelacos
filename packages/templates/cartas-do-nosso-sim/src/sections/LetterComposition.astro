@@ -1,11 +1,11 @@
 ---
+import LetterHandoff from "./LetterHandoff.astro";
 import { type LetterContent, validateLetterContent } from "../letterContent";
 
 interface Props { content: LetterContent; }
 const { content } = Astro.props;
 validateLetterContent(content);
 const [coverPhoto, storyPhoto, insertPhoto] = content.photos;
-const handoffClass = "col-span-full m-0 flex items-center gap-6 border-b border-template-line py-8 font-template-serif text-[clamp(1rem,1.5vw,1.25rem)] italic leading-[1.65] text-template-muted before:h-px before:w-[clamp(1.5rem,6vw,6rem)] before:shrink-0 before:bg-current before:opacity-50 before:content-['']";
 const folioClass = "m-0 mb-8 text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-template-muted";
 ---
 
@@ -19,10 +19,10 @@ const folioClass = "m-0 mb-8 text-[0.72rem] font-semibold uppercase tracking-[0.
     <a class="inline-flex min-h-12 items-center justify-between gap-10 bg-template-olive px-6 py-3 text-template-ivory no-underline" href={content.action.href}>{content.action.label}<span aria-hidden="true">↗</span></a>
   </div>
   <figure class="m-0 mb-3 rotate-2 border border-template-line bg-[var(--template-paper)] p-[clamp(0.6rem,1.5vw,1.25rem)] shadow-[0_1rem_3rem_#30212a15] [@media(max-width:760px)]:mt-4 [@media(max-width:760px)]:w-[min(76%,22rem)] [@media(max-width:760px)]:justify-self-center">
-    <div class="relative overflow-hidden" data-photo-curtain><img class="block aspect-[4/5] [@media(min-width:1280px)]:aspect-[5/4] h-auto w-full object-cover object-center" src={coverPhoto.src} alt={coverPhoto.alt} width={coverPhoto.width} height={coverPhoto.height} fetchpriority="high" /></div>
+    <div class="relative overflow-hidden" data-photo-curtain><img class="block aspect-[4/5] [@media(min-width:1280px)]:aspect-[5/4] h-auto w-full object-cover object-center" src={coverPhoto.src} alt={coverPhoto.alt} width={coverPhoto.width} height={coverPhoto.height} fetchpriority="high" /><span data-curtain-layer aria-hidden="true"></span></div>
     <figcaption class="pb-1 pt-5 text-center font-template-serif text-[clamp(0.9rem,1.3vw,1.15rem)] italic leading-normal">{content.signature}</figcaption>
   </figure>
-  <p class={handoffClass}>{content.coverHandoff}</p>
+  <LetterHandoff ruled>{content.coverHandoff}</LetterHandoff>
 </section>
 
 <section class="grid grid-cols-[var(--template-letter-columns)] items-start gap-x-[var(--template-letter-gap)] gap-y-12 px-[var(--template-page-inset)] pt-[clamp(3rem,7vw,7rem)] [@media(max-width:760px)]:grid-cols-1 [@media(max-width:760px)]:gap-y-8" id={content.story.id} aria-labelledby={`${content.story.id}-title`}>
@@ -36,15 +36,26 @@ const folioClass = "m-0 mb-8 text-[0.72rem] font-semibold uppercase tracking-[0.
   </div>
   <div class="relative min-w-0 pt-16 [@media(max-width:760px)]:max-w-[28rem] [@media(max-width:760px)]:pt-0">
     <figure class="m-0 border border-template-line bg-[var(--template-paper)] p-2.5">
-      <div class="relative overflow-hidden" data-photo-curtain><img class="block aspect-[4/5] [@media(min-width:1280px)]:aspect-[5/4] h-auto w-full object-cover [@media(max-width:760px)]:aspect-[4/3]" src={storyPhoto.src} alt={storyPhoto.alt} width={storyPhoto.width} height={storyPhoto.height} loading="lazy" /></div>
+      <div class="relative overflow-hidden" data-photo-curtain><img class="block aspect-[4/5] [@media(min-width:1280px)]:aspect-[5/4] h-auto w-full object-cover [@media(max-width:760px)]:aspect-[4/3]" src={storyPhoto.src} alt={storyPhoto.alt} width={storyPhoto.width} height={storyPhoto.height} loading="lazy" /><span data-curtain-layer aria-hidden="true"></span></div>
     </figure>
-    {insertPhoto && <figure class="relative m-0 -ml-4 -mt-12 w-[55%] -rotate-3 border border-template-line bg-[var(--template-paper)] p-2"><div class="relative overflow-hidden" data-photo-curtain><img class="block h-auto w-full" src={insertPhoto.src} alt={insertPhoto.alt} width={insertPhoto.width} height={insertPhoto.height} loading="lazy" /></div></figure>}
+    {insertPhoto && <figure class="relative m-0 -ml-4 -mt-12 w-[55%] -rotate-3 border border-template-line bg-[var(--template-paper)] p-2"><div class="relative overflow-hidden" data-photo-curtain><img class="block h-auto w-full" src={insertPhoto.src} alt={insertPhoto.alt} width={insertPhoto.width} height={insertPhoto.height} loading="lazy" /><span data-curtain-layer aria-hidden="true"></span></div></figure>}
     <p class="text-right font-template-serif text-base italic leading-[1.8] text-template-muted" aria-hidden="true">{content.monogram}<br />—<br />{content.dateLabel}</p>
   </div>
-  <p class={handoffClass}>{content.storyHandoff}</p>
+  <LetterHandoff ruled>{content.storyHandoff}</LetterHandoff>
 </section>
 
 <script>
   import { mountPhotoCurtains } from "../components/photoCurtains";
   mountPhotoCurtains(document, window, window.matchMedia("(prefers-reduced-motion: reduce)"));
 </script>
+
+<style>
+  @media (prefers-reduced-motion: no-preference) {
+    :global(html[data-photo-curtains]) [data-curtain-layer] {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background: var(--template-paper);
+    }
+  }
+</style>
