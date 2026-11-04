@@ -367,6 +367,31 @@ describe("template-cinema-botanico v1 content contracts", () => {
     ).not.toThrow();
   });
 
+  it("validates authored copy and optional playback labels for image sequences", () => {
+    const frame = {
+      ...storyFixture.media,
+      copy: { description: "At home", body: "Coffee." },
+    };
+    const story = {
+      ...storyFixture,
+      sequence: [frame],
+      cycleControls: { pauseLabel: "Pause", resumeLabel: "Resume" },
+    };
+    expect(() => validateStoryContent(story)).not.toThrow();
+    expect(() =>
+      validateStoryContent({
+        ...story,
+        sequence: [{ ...frame, copy: { body: "" } }],
+      }),
+    ).toThrow(/copy.body/);
+    expect(() =>
+      validateStoryContent({
+        ...story,
+        cycleControls: { pauseLabel: "Pause" },
+      }),
+    ).toThrow(/resumeLabel/);
+  });
+
   it("rejects an empty or non-image story sequence", () => {
     expect(() =>
       validateStoryContent({ ...storyFixture, sequence: [] }),

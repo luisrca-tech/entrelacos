@@ -106,6 +106,18 @@ describe("GalleryCarousel", () => {
     expect(html).not.toContain('href="/two.svg"');
   });
 
+  it("renders the caption and its position together for every inline slide", () => {
+    const html = renderToStaticMarkup(
+      createElement(GalleryCarousel, { content }),
+    );
+    const captions = [
+      ...html.matchAll(/<figcaption[^>]*>(.*?)<\/figcaption>/g),
+    ];
+    expect(
+      captions.map(([, caption]) => caption.replace(/<[^>]+>/g, "")),
+    ).toEqual(["Primeira foto01 / 02", "Segunda foto02 / 02"]);
+  });
+
   it("keeps all interface labels supplied by the host", () => {
     const source = renderToStaticMarkup(
       createElement(GalleryCarousel, { content }),

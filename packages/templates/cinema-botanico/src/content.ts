@@ -73,7 +73,10 @@ export type SectionContent = {
 export type StoryContent = Omit<SectionContent, "body"> & {
   body: string;
   media: Media;
-  sequence?: readonly ImageMedia[];
+  sequence?: readonly (ImageMedia & {
+    copy?: { description?: string; body: string };
+  })[];
+  cycleControls?: { pauseLabel: string; resumeLabel: string };
 };
 
 export type HeroIntroContent = {
@@ -478,6 +481,17 @@ export function validateStoryContent(
   assertObject(value, "story");
   assertNonEmptyString(value.body, "story.body");
   validateMedia(value.media, "story.media");
+  if (value.cycleControls !== undefined) {
+    assertObject(value.cycleControls, "story.cycleControls");
+    assertNonEmptyString(
+      value.cycleControls.pauseLabel,
+      "story.cycleControls.pauseLabel",
+    );
+    assertNonEmptyString(
+      value.cycleControls.resumeLabel,
+      "story.cycleControls.resumeLabel",
+    );
+  }
   if (value.sequence === undefined) return;
   if (value.media.kind !== "image")
     throw new TypeError("story.sequence requires image media");
@@ -485,9 +499,15 @@ export function validateStoryContent(
     throw new TypeError("story.sequence must contain at least one item");
   for (let index = 0; index < value.sequence.length; index += 1) {
     const item = value.sequence[index];
-    validateMedia(item, `story.sequence[${index}]`);
-    if (item.kind !== "image")
-      throw new TypeError(`story.sequence[${index}] must be an image`);
+    const name = `story.sequence[${index}]`;
+    validateMedia(item, name);
+    if (item.kind !== "image") throw new TypeError(`${name} must be an image`);
+    if ("copy" in item && item.copy !== undefined) {
+      assertObject(item.copy, `${name}.copy`);
+      assertNonEmptyString(item.copy.body, `${name}.copy.body`);
+      if (item.copy.description !== undefined)
+        assertNonEmptyString(item.copy.description, `${name}.copy.description`);
+    }
   }
 }
 

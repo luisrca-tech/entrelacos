@@ -69,9 +69,11 @@ describe("GallerySection carousel composition", () => {
     expect(carouselSource).toContain("rounded-none border-0");
     expect(carouselSource).toContain("shadow-none");
     expect(carouselSource).toContain("[&_[data-slot=carousel-content]]:h-full");
-    expect(carouselSource).toContain('<figure className="h-full min-h-0">');
     expect(carouselSource).toContain(
-      '<figcaption className="mt-3 text-[0.9rem] leading-[1.4]">',
+      '<figure className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)_auto]">',
+    );
+    expect(carouselSource).toContain(
+      "justify-between gap-4 text-[0.9rem] leading-[1.4]",
     );
     expect(carouselSource).toContain("compactOnTablet");
   });

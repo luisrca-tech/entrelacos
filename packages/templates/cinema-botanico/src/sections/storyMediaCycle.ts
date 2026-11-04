@@ -2,18 +2,12 @@ import type { Media, StoryContent } from "../content";
 
 export const STORY_MEDIA_HOLD_MS = 5000;
 export const STORY_MEDIA_CROSSFADE_MS = 1800;
+const STORY_COPY_HOLD_MS = 9000;
 const CURTAIN_FALLBACK_MS = 1600;
 
 export type StoryMediaClock = {
   setTimeout: (callback: () => void, delay: number) => number;
   clearTimeout: (id: number) => void;
-};
-
-type StoryFrame = {
-  dataset: {
-    storyActive?: string;
-    storyOutgoing?: string;
-  };
 };
 
 export function storyBackgroundFrames(
@@ -33,10 +27,16 @@ export function setupStoryMediaCycle(
   },
 ): () => void {
   const frames = Array.from(
-    story.querySelectorAll<HTMLElement>("[data-story-frame]"),
-  ) as StoryFrame[];
+    story.querySelectorAll<HTMLImageElement>("[data-story-frame]"),
+  );
   if (options.reducedMotion || frames.length < 2) return () => undefined;
 
+  const copyFrames = [
+    ...story.querySelectorAll<HTMLElement>("[data-story-copy-frame]"),
+  ];
+  const cyclesCopy = copyFrames.length === frames.length;
+  const toggle = story.querySelector<HTMLButtonElement>("[data-story-toggle]");
+  let paused = false;
   const clock = options.clock ?? globalThis;
   const Observer = options.Observer;
   const curtain = story.querySelector<HTMLElement>(
@@ -65,18 +65,35 @@ export function setupStoryMediaCycle(
     timer = undefined;
   };
   const queue = () => {
-    if (disposed || !visible || !revealed || timer !== undefined) return;
+    if (disposed || paused || !visible || !revealed || timer !== undefined)
+      return;
     timer = clock.setTimeout(
       () => {
         timer = undefined;
         const previous = current;
-        current = (current + 1) % frames.length;
+        const next = (current + 1) % frames.length;
+        if (
+          cyclesCopy &&
+          (!frames[next].complete || !frames[next].naturalWidth)
+        ) {
+          queue();
+          return;
+        }
+        current = next;
         frames.forEach((frame, index) => {
           if (index === previous) frame.dataset.storyOutgoing = "true";
           else delete frame.dataset.storyOutgoing;
           if (index === current) frame.dataset.storyActive = "true";
           else delete frame.dataset.storyActive;
+          frame.setAttribute("aria-hidden", String(index !== current));
         });
+        if (cyclesCopy) {
+          copyFrames.forEach((frame, index) => {
+            if (index === current) frame.dataset.storyActive = "true";
+            else delete frame.dataset.storyActive;
+            frame.setAttribute("aria-hidden", String(index !== current));
+          });
+        }
         outgoingTimer = clock.setTimeout(() => {
           delete frames[previous]?.dataset.storyOutgoing;
           outgoingTimer = undefined;
@@ -84,9 +101,23 @@ export function setupStoryMediaCycle(
         advanced = true;
         queue();
       },
-      STORY_MEDIA_HOLD_MS + (advanced ? STORY_MEDIA_CROSSFADE_MS : 0),
+      (cyclesCopy ? STORY_COPY_HOLD_MS : STORY_MEDIA_HOLD_MS) +
+        (advanced ? STORY_MEDIA_CROSSFADE_MS : 0),
     );
   };
+  const onToggle = () => {
+    if (!toggle) return;
+    paused = !paused;
+    toggle.textContent = paused
+      ? (toggle.dataset.resumeLabel ?? "")
+      : (toggle.dataset.pauseLabel ?? "");
+    if (paused) clear();
+    else queue();
+  };
+  if (toggle) {
+    toggle.hidden = false;
+    toggle.addEventListener("click", onToggle);
+  }
   const completeReveal = () => {
     if (disposed || revealed) return;
     revealed = true;
@@ -165,6 +196,10 @@ export function setupStoryMediaCycle(
   return () => {
     disposed = true;
     clear();
+    if (toggle) {
+      toggle.hidden = true;
+      toggle.removeEventListener("click", onToggle);
+    }
     if (outgoingTimer !== undefined) clock.clearTimeout(outgoingTimer);
     frames.forEach((frame) => {
       delete frame.dataset.storyOutgoing;

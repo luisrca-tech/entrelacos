@@ -74,8 +74,9 @@ const story = {
   id: "story",
   eyebrow: "A nossa história",
   title: "Uma vida a dois.",
-  description: "Agora, com vocês por perto.",
-  body: "Entre dias simples, cuidado e escolhas a dois, construímos a nossa história. Agora, vamos celebrar com vocês.",
+  description: "A conversa que ficou.",
+  body: "No começo, a gente se despedia e logo aparecia mais um assunto. Até hoje, quando saímos pra andar, um dos dois sempre arruma um motivo pra dar mais uma volta.",
+  cycleControls: { pauseLabel: "Pausar a história", resumeLabel: "Retomar a história" },
   media: {
     kind: "image" as const,
     src: "/marina-caio-story-encounter.webp",
@@ -90,6 +91,10 @@ const story = {
       alt: "Marina e Caio conversam sentados com xícaras de café ao ar livre",
       width: 1448,
       height: 1086,
+      copy: {
+        description: "Café que esfria.",
+        body: "O Caio faz o café e a Marina vem contar uma coisa. Quando a gente lembra das xícaras, o café já esfriou. Foi nessas horas, em casa, que a vida a dois foi tomando jeito.",
+      },
     },
     {
       kind: "image" as const,
@@ -97,6 +102,10 @@ const story = {
       alt: "Marina e Caio se abraçam ao pôr do sol",
       width: 1448,
       height: 1086,
+      copy: {
+        description: "Finalmente, todo mundo junto.",
+        body: "Já falamos tanto desse dia que às vezes parece que ele já aconteceu. A parte que a gente mais quer viver é a hora de olhar em volta e ver vocês ali.",
+      },
     },
   ],
 };
@@ -104,7 +113,8 @@ const gallery = {
   id: "gallery",
   eyebrow: "Fragmentos",
   title: "Antes do sim.",
-  description: "Alguns registros do nosso ensaio.",
+  description: "O ensaio começou com a gente meio sem saber onde pôr as mãos. Aí fomos andando, conversando e esquecemos um pouco da câmera.",
+  body: "Quando vimos as fotos, separamos as que mais pareciam com a gente. Tem uma dança no meio do campo e tem aquela em que os dois seguram o riso.",
   controls: {
     ariaLabel: "Navegação da galeria",
     previousLabel: "Anterior",
@@ -115,7 +125,7 @@ const gallery = {
   items: [
     {
       id: "gallery-encontro",
-      caption: "O começo do ensaio",
+      caption: "Aqui ainda estávamos tentando andar no mesmo passo.",
       media: {
         kind: "image" as const,
         src: "/marina-caio-gallery-one.webp",
@@ -126,7 +136,7 @@ const gallery = {
     },
     {
       id: "gallery-caminho",
-      caption: "Entre caminhos",
+      caption: "Esse pedaço do caminho a gente fez de mãos dadas.",
       media: {
         kind: "image" as const,
         src: "/marina-caio-gallery-two.webp",
@@ -137,7 +147,7 @@ const gallery = {
     },
     {
       id: "gallery-celebracao",
-      caption: "Um instante antes do sim",
+      caption: "Dá pra ver quem quase riu primeiro.",
       media: {
         kind: "image" as const,
         src: "/marina-caio-gallery-three.webp",
@@ -148,7 +158,7 @@ const gallery = {
     },
     {
       id: "gallery-retrato",
-      caption: "Um retrato sem pressa",
+      caption: "Já estava escurecendo e a gente resolveu ficar mais um pouco.",
       media: {
         kind: "image" as const,
         src: "/marina-caio-gallery-four.webp",
@@ -159,7 +169,7 @@ const gallery = {
     },
     {
       id: "gallery-luz",
-      caption: "A luz do fim da tarde",
+      caption: "A Marina inventou uma dança no meio do campo.",
       media: {
         kind: "image" as const,
         src: "/marina-caio-gallery-five.webp",
@@ -170,7 +180,7 @@ const gallery = {
     },
     {
       id: "gallery-abraco",
-      caption: "O abraço que fica",
+      caption: "Essa foi lá no lago, quando a gente já estava com vontade de sentar.",
       media: {
         kind: "image" as const,
         src: "/marina-caio-gallery-six.webp",

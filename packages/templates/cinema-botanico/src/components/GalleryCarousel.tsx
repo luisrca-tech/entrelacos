@@ -127,20 +127,31 @@ function GalleryControls({
   );
 }
 
-function GalleryCounter({
-  current,
-  total,
+function formatGalleryPosition(index: number, total: number) {
+  return `${String(index + 1).padStart(2, "0")} / ${String(total).padStart(2, "0")}`;
+}
+
+function GalleryCaption({
+  caption,
+  position,
+  inset = false,
 }: {
-  current: number;
-  total: number;
+  caption?: string;
+  position: string;
+  inset?: boolean;
 }) {
   return (
-    <output
-      className="mt-4 block text-[0.75rem] font-medium tracking-[0.12em] tabular-nums opacity-70 [@media(max-width:1024px)]:px-[var(--template-page-inset)]"
-      aria-live="polite"
+    <figcaption
+      className={`mt-3 flex min-w-0 items-baseline justify-between gap-4 text-[0.9rem] leading-[1.4] ${inset ? "[@media(max-width:1024px)]:px-[var(--template-page-inset)]" : ""}`}
     >
-      {String(current + 1).padStart(2, "0")} / {String(total).padStart(2, "0")}
-    </output>
+      {caption && <span>{caption}</span>}
+      <span
+        aria-hidden="true"
+        className="ml-auto shrink-0 whitespace-nowrap text-[0.75rem] font-medium tracking-[0.12em] tabular-nums opacity-70"
+      >
+        {position}
+      </span>
+    </figcaption>
   );
 }
 
@@ -205,18 +216,23 @@ export default function GalleryCarousel({ content }: Props) {
                       <span>{content.controls.expandLabel}</span>
                     </button>
                   </div>
-                  {item.caption && (
-                    <figcaption className="mt-3 text-[0.9rem] leading-[1.4] [@media(max-width:1024px)]:px-[var(--template-page-inset)]">
-                      {item.caption}
-                    </figcaption>
-                  )}
+                  <GalleryCaption
+                    caption={item.caption}
+                    position={formatGalleryPosition(
+                      index,
+                      content.items.length,
+                    )}
+                    inset
+                  />
                 </figure>
               </CarouselItem>
             ))}
           </CarouselContent>
           <GalleryControls labels={content.controls} compactOnTablet />
         </div>
-        <GalleryCounter current={inlineSelected} total={content.items.length} />
+        <output className="sr-only" aria-live="polite">
+          {formatGalleryPosition(inlineSelected, content.items.length)}
+        </output>
       </Carousel>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -246,7 +262,7 @@ export default function GalleryCarousel({ content }: Props) {
           <Carousel
             options={{ align: "start", loop }}
             setApi={setDialogApi}
-            className="grid min-h-0 grid-rows-[minmax(0,1fr)_auto] [&_[data-slot=carousel-content]]:h-full [&_[data-slot=carousel-content]]:min-h-0 [&_[data-slot=carousel-content]]:overflow-x-auto [&_[data-slot=carousel-content]]:snap-x [&_[data-slot=carousel-content]]:snap-mandatory [&_[data-slot=carousel-content]]:[scrollbar-width:none] [&_[data-slot=carousel-content]::-webkit-scrollbar]:hidden data-[carousel-ready=true]:[&_[data-slot=carousel-content]]:overflow-hidden data-[carousel-ready=true]:[&_[data-slot=carousel-content]]:snap-none"
+            className="min-h-0 [&_[data-slot=carousel-content]]:h-full [&_[data-slot=carousel-content]]:min-h-0 [&_[data-slot=carousel-content]]:overflow-x-auto [&_[data-slot=carousel-content]]:snap-x [&_[data-slot=carousel-content]]:snap-mandatory [&_[data-slot=carousel-content]]:[scrollbar-width:none] [&_[data-slot=carousel-content]::-webkit-scrollbar]:hidden data-[carousel-ready=true]:[&_[data-slot=carousel-content]]:overflow-hidden data-[carousel-ready=true]:[&_[data-slot=carousel-content]]:snap-none"
             aria-label={content.controls.ariaLabel}
           >
             <div className="relative min-h-0 h-full" data-gallery-viewport>
@@ -258,15 +274,17 @@ export default function GalleryCarousel({ content }: Props) {
                     aria-label={item.media.alt}
                     className="min-h-0 h-full min-w-0 basis-full snap-start"
                   >
-                    <figure className="h-full min-h-0">
-                      <div className="relative h-full max-h-[calc(100svh-12rem)] overflow-hidden bg-[#111b16] aspect-auto [&_*]:!object-contain [@media(max-width:720px)]:max-h-[calc(100svh-10rem)]">
+                    <figure className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)_auto]">
+                      <div className="relative min-h-0 overflow-hidden bg-[#111b16] [&_*]:!object-contain">
                         <GalleryMedia media={item.media} />
                       </div>
-                      {item.caption && (
-                        <figcaption className="mt-3 text-[0.9rem] leading-[1.4]">
-                          {item.caption}
-                        </figcaption>
-                      )}
+                      <GalleryCaption
+                        caption={item.caption}
+                        position={formatGalleryPosition(
+                          index,
+                          content.items.length,
+                        )}
+                      />
                     </figure>
                   </CarouselItem>
                 ))}
@@ -276,10 +294,9 @@ export default function GalleryCarousel({ content }: Props) {
                 className="bottom-0 h-full aspect-auto"
               />
             </div>
-            <GalleryCounter
-              current={dialogSelected}
-              total={content.items.length}
-            />
+            <output className="sr-only" aria-live="polite">
+              {formatGalleryPosition(dialogSelected, content.items.length)}
+            </output>
           </Carousel>
         </DialogContent>
       </Dialog>

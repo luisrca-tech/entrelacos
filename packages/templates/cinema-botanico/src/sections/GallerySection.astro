@@ -25,6 +25,7 @@ const revealClasses = "template-reveal";
     {content.eyebrow && <p data-template-reveal-item data-template-reveal-kind="label" style="--template-reveal-delay: 0ms" class="m-0 mb-5 text-[0.72rem] font-bold uppercase tracking-[0.16em]">{content.eyebrow}</p>}
     <h2 data-template-reveal-item data-template-line-reveal class="m-0 max-w-[12ch] font-template-serif text-[clamp(2.5rem,6vw,calc(5.5rem*var(--template-width-scale)))] font-normal tracking-[-0.065em] leading-[0.96]" id={`${id}-title`}>{content.title}</h2>
     {content.description && <p data-template-reveal-item data-template-reveal-kind="body" class={`m-0 mt-7 max-w-[30rem] leading-[1.7] ${descriptionClass}`}>{content.description}</p>}
+    {content.body && <p data-template-reveal-item data-template-reveal-kind="body" class={`m-0 mt-4 max-w-[30rem] leading-[1.7] ${descriptionClass}`}>{content.body}</p>}
   </header>
 
   <div class="w-full min-w-0 justify-self-end [@media(width>1024px)]:max-w-[max(22rem,calc((100svh-var(--template-header-height)-2*var(--gallery-padding)-5rem)*4/3))]" data-template-reveal="curtain">

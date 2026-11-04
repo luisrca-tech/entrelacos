@@ -247,6 +247,56 @@ describe("story media cycle", () => {
     story.remove();
   });
 
+  it("keeps copy paired with loaded photos and pauses and resumes the same scene", () => {
+    const clock = createClock();
+    const story = document.createElement("section");
+    story.innerHTML = `
+      <img data-story-frame data-story-active="true"><img data-story-frame>
+      <div data-story-copy-frame data-story-active="true" aria-hidden="false">First</div>
+      <div data-story-copy-frame aria-hidden="true">Second</div>
+      <button data-story-toggle data-pause-label="Pause" data-resume-label="Resume" hidden>Pause</button>
+    `;
+    const images = [...story.querySelectorAll("img")];
+    const copy = [
+      ...story.querySelectorAll<HTMLElement>("[data-story-copy-frame]"),
+    ];
+    const toggle = story.querySelector("button");
+    if (!toggle) throw new Error("Missing pause control");
+    const width = vi.spyOn(images[1], "naturalWidth", "get").mockReturnValue(0);
+    vi.spyOn(images[1], "complete", "get").mockReturnValue(true);
+    vi.spyOn(images[0], "naturalWidth", "get").mockReturnValue(1200);
+    const cleanup = setupStoryMediaCycle(story, {
+      reducedMotion: false,
+      clock,
+    });
+    expect(toggle.hidden).toBe(false);
+    clock.advance(9000);
+    expect(images[0].dataset.storyActive).toBe("true");
+    expect(copy[0].getAttribute("aria-hidden")).toBe("false");
+
+    width.mockReturnValue(1200);
+    clock.advance(8999);
+    expect(copy[1].getAttribute("aria-hidden")).toBe("true");
+    clock.advance(1);
+    expect(images[1].dataset.storyActive).toBe("true");
+    expect(copy[0].getAttribute("aria-hidden")).toBe("true");
+    expect(copy[1].dataset.storyActive).toBe("true");
+    expect(copy[1].getAttribute("aria-hidden")).toBe("false");
+
+    toggle.click();
+    expect(toggle.textContent).toBe("Resume");
+    clock.advance(30000);
+    expect(copy[1].dataset.storyActive).toBe("true");
+    toggle.click();
+    expect(toggle.textContent).toBe("Pause");
+    clock.advance(10800);
+    expect(images[0].dataset.storyActive).toBe("true");
+    expect(copy[0].dataset.storyActive).toBe("true");
+    cleanup();
+    expect(toggle.hidden).toBe(true);
+    vi.restoreAllMocks();
+  });
+
   it("retains reduced motion, single-frame and unavailable observer fallbacks", () => {
     const clock = createClock();
     const { story, curtain, frames } = createStory();

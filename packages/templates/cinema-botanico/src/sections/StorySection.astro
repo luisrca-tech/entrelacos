@@ -16,6 +16,12 @@ const frames = storyBackgroundFrames({
   sequence: content.sequence,
 });
 const primary = frames[0] ?? content.media;
+const copyFrames = content.sequence?.some((frame) => frame.copy)
+  ? [content, ...content.sequence.map((frame) => frame.copy ?? content)]
+  : undefined;
+const controls = copyFrames ? content.cycleControls : undefined;
+const descriptionClass = "m-0 mt-6 max-w-[30rem] text-[rgba(244,240,232,0.78)] leading-[1.55] [@media(max-width:960px)]:max-w-112";
+const bodyClass = "m-0 mt-4 max-w-160 text-[clamp(1rem,1.5vw,1.25rem)] leading-[1.6] text-[rgba(244,240,232,0.96)]";
 const toneClasses = tone === "olive" ? "bg-template-olive text-template-ivory" : "bg-template-olive text-template-ivory";
 ---
 
@@ -33,7 +39,7 @@ const toneClasses = tone === "olive" ? "bg-template-olive text-template-ivory" :
         frame.kind === "image" ? (
           <img
             src={frame.src}
-            alt={index === 0 ? frame.alt : ""}
+            alt={frame.alt}
             width={frame.width}
             height={frame.height}
             loading="lazy"
@@ -78,8 +84,22 @@ const toneClasses = tone === "olive" ? "bg-template-olive text-template-ivory" :
   >
     {content.eyebrow && <p data-template-reveal-item data-template-reveal-kind="label" class="m-0 mb-5 text-[0.72rem] font-bold uppercase tracking-[0.16em]">{content.eyebrow}</p>}
     <h2 data-template-reveal-item data-template-line-reveal class="m-0 max-w-[18ch] font-template-serif text-[clamp(2.5rem,5.5vw,calc(5.6rem*var(--template-width-scale)))] font-normal tracking-[-0.065em] leading-[0.94] [@media(max-width:960px)]:max-w-[12ch] [@media(max-width:960px)]:text-[clamp(2.5rem,12vw,4.5rem)]" id={`${id}-title`}>{content.title}</h2>
-    {content.description && <p data-template-reveal-item data-template-reveal-kind="body" class="m-0 mt-6 max-w-[30rem] text-[rgba(244,240,232,0.78)] leading-[1.55] [@media(max-width:960px)]:max-w-112">{content.description}</p>}
-    <p data-template-reveal-item data-template-reveal-kind="body" class="m-0 mt-4 max-w-160 text-[clamp(1rem,1.5vw,1.25rem)] leading-[1.6] text-[rgba(244,240,232,0.96)]">{content.body}</p>
+    {copyFrames ? (
+      <div class="grid">
+        {copyFrames.map((copy, index) => (
+          <div class="col-start-1 row-start-1" data-story-copy-frame data-story-active={index === 0 ? "true" : undefined} aria-hidden={index !== 0}>
+            {copy.description && <p data-template-reveal-item data-template-reveal-kind="body" class={descriptionClass}>{copy.description}</p>}
+            <p data-template-reveal-item data-template-reveal-kind="body" class={bodyClass}>{copy.body}</p>
+          </div>
+        ))}
+      </div>
+    ) : (
+      <>
+        {content.description && <p data-template-reveal-item data-template-reveal-kind="body" class={descriptionClass}>{content.description}</p>}
+        <p data-template-reveal-item data-template-reveal-kind="body" class={bodyClass}>{content.body}</p>
+      </>
+    )}
+    {controls && <button type="button" hidden data-story-toggle data-pause-label={controls.pauseLabel} data-resume-label={controls.resumeLabel} data-template-reveal-item class="mt-2 min-h-11 cursor-pointer border-0 bg-transparent p-0 text-sm text-inherit underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-4">{controls.pauseLabel}</button>}
   </div>
 </section>
 
@@ -100,3 +120,28 @@ const toneClasses = tone === "olive" ? "bg-template-olive text-template-ivory" :
     });
   });
 </script>
+
+<style>
+  [data-story-copy-frame] {
+    min-width: 0;
+    opacity: 0;
+    visibility: hidden;
+  }
+
+  [data-story-copy-frame][data-story-active="true"] {
+    opacity: 1;
+    visibility: visible;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    [data-story-copy-frame] {
+      translate: 0 0.35rem;
+      transition: opacity 320ms ease, translate 320ms ease, visibility 0s 320ms;
+    }
+
+    [data-story-copy-frame][data-story-active="true"] {
+      translate: 0 0;
+      transition: opacity 700ms ease 360ms, translate 700ms ease 360ms, visibility 0s;
+    }
+  }
+</style>
