@@ -77,7 +77,7 @@ const letterRevealClass = "min-h-[70vh] bg-template-ivory motion-safe:[&_[data-t
                 ))}
               </nav>
               <details
-                class="relative hidden [@media(max-width:960px)]:block"
+                class="hidden [@media(max-width:960px)]:block"
                 data-template-navigation-mobile
               >
                 <summary
@@ -85,7 +85,7 @@ const letterRevealClass = "min-h-[70vh] bg-template-ivory motion-safe:[&_[data-t
                   aria-label={navigation.menuLabel}
                 >{navigation.menuLabel}</summary>
                 <nav
-                  class="absolute right-4 top-[calc(100%+0.5rem)] grid min-w-48 gap-0.5 rounded-xl bg-template-ivory px-3 py-2 text-template-ink shadow-[0_1rem_2rem_rgba(37,53,43,0.16)] data-[navigation-state=hero]:bg-template-olive data-[navigation-state=hero]:text-template-ivory"
+                  class="absolute right-[var(--template-page-inset)] top-[calc(100%+0.5rem)] grid w-max min-w-56 max-w-[calc(100vw-2*var(--template-page-inset))] gap-0.5 text-left rounded-xl bg-template-ivory px-3 py-2 text-template-ink shadow-[0_1rem_2rem_rgba(37,53,43,0.16)] data-[navigation-state=hero]:bg-template-olive data-[navigation-state=hero]:text-template-ivory"
                   data-navigation-state={hasHero ? "hero" : "solid"}
                   aria-label={navigation.ariaLabel}
                 >
