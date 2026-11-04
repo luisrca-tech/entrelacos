@@ -85,7 +85,7 @@ describe("gift catalog view", () => {
       html.indexOf("Próxima página"),
     );
     expect(html).toContain("Nenhum presente");
-    expect(html).not.toContain("Valor simbólico:");
+    expect(html).not.toContain("Valor:");
   });
   it.each([
     ["development", "sandbox", false],
@@ -125,7 +125,7 @@ describe("gift catalog view", () => {
     expect(render("live", [])).toBe("");
   });
 
-  it("shows public gift cards, accessible images and symbolic disclosure", () => {
+  it("shows public gift cards with accessible images and a price label", () => {
     const html = renderToStaticMarkup(
       createElement(GiftCatalogView, {
         gifts: [gift],
@@ -140,11 +140,11 @@ describe("gift catalog view", () => {
     expect(html).toContain('src="https://images.example.test/jantar.jpg"');
     expect(html).toContain('alt="Mesa posta para um jantar"');
     expect(html).toContain('loading="lazy"');
-    expect(html).toContain("123,45");
+    expect(html).toMatch(/Valor: R\$\s*123,45/);
     expect(html).not.toContain("125,92");
     expect(html).not.toMatch(/comissão|taxa/i);
     expect(html).not.toContain("Ambiente de testes — sem pagamentos reais.");
-    expect(html).toContain("Valor simbólico");
+    expect(html).not.toContain("Valor simbólico");
     expect(html).not.toContain("Presentes simbólicos");
     expect(html).not.toContain("não há produto físico ou entrega");
     expect(html).not.toMatch(/RSVP|login|entrar/i);

@@ -39,7 +39,7 @@ describe("runtime gift registry initial render", () => {
       }),
     );
     expect(fetcher).not.toHaveBeenCalled();
-    expect(html).not.toContain("Valor simbólico:");
+    expect(html).not.toContain("Valor:");
     expect(html).not.toContain("Escolher presente");
     expect(html).not.toContain("Recebido");
     expect(html).toContain("data-gift-runtime");

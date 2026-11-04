@@ -127,7 +127,7 @@ export function GiftCatalogView({
                   </p>
                 ) : (
                   <p className="m-0 text-template-ink">
-                    Valor simbólico:{" "}
+                    Valor:{" "}
                     {currencyFormatter.format(gift.nominalCents / 100)}
                     {mode !== "demonstration" && (
                       <span className="block text-sm text-template-muted">
