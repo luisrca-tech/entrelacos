@@ -1,6 +1,7 @@
 import type { ReceivingReadiness } from "@entrelacos/contracts";
 import { Button, showSandboxNotice } from "@entrelacos/ui";
 import { type ReactNode, useCallback, useEffect, useState } from "react";
+import { displayHeading } from "../lib/adminStyles";
 import { GiftEditor } from "./GiftEditor";
 import { GiftsLocked } from "./GiftsLocked";
 import {
@@ -64,9 +65,12 @@ export function GiftsSection({
 
   if (!canManage)
     return (
-      <p role="status" className="text-admin-muted">
-        Você não tem acesso ao catálogo deste casamento.
-      </p>
+      <div className="grid gap-4">
+        <GiftsPageHeader />
+        <p role="status" className="m-0 text-admin-muted">
+          Você não tem acesso ao catálogo deste casamento.
+        </p>
+      </div>
     );
 
   return (
@@ -102,6 +106,7 @@ export function GiftsReadinessView({
   if (error)
     return (
       <div className="grid gap-4">
+        <GiftsPageHeader />
         <p role="alert" className="m-0 text-admin-muted">
           Não foi possível verificar os recebimentos. Os presentes continuam
           bloqueados.
@@ -116,9 +121,12 @@ export function GiftsReadinessView({
     );
   if (!current)
     return (
-      <p role="status" className="text-admin-muted">
-        Verificando os recebimentos…
-      </p>
+      <div className="grid gap-4">
+        <GiftsPageHeader />
+        <p role="status" className="m-0 text-admin-muted">
+          Verificando os recebimentos…
+        </p>
+      </div>
     );
 
   const demonstration =
@@ -150,15 +158,34 @@ export function GiftsReadinessView({
           </section>
         ))
       ) : (
-        <GiftsLocked
-          receivingAction={receivingAction}
-          reason={
-            current.reason
-              ? pendingReasons[current.reason]
-              : "Os recebimentos precisam ser verificados."
-          }
-        />
+        <>
+          <GiftsPageHeader />
+          <GiftsLocked
+            receivingAction={receivingAction}
+            reason={
+              current.reason
+                ? pendingReasons[current.reason]
+                : "Os recebimentos precisam ser verificados."
+            }
+          />
+        </>
       )}
     </div>
+  );
+}
+
+function GiftsPageHeader() {
+  return (
+    <header className="grid max-w-[600px] gap-2">
+      <h1
+        className={`m-0 text-[clamp(1.85rem,3vw,2.25rem)] text-admin-ink ${displayHeading}`}
+      >
+        Lista de presentes
+      </h1>
+      <p className="m-0 text-base leading-[1.6] text-admin-muted">
+        Cada presente é uma contribuição simbólica em dinheiro para vocês, sem
+        produto ou entrega.
+      </p>
+    </header>
   );
 }

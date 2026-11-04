@@ -13,7 +13,6 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  Badge,
   Button,
   Dialog,
   DialogClose,
@@ -28,19 +27,26 @@ import {
 } from "@entrelacos/ui";
 import {
   ArrowDown,
-  ArrowLeft,
   ArrowUp,
+  Check,
+  ChevronLeft,
   Gift,
+  ImageIcon,
   Plus,
   Search,
+  Upload,
 } from "lucide-react";
 import type { FormEvent, ReactNode } from "react";
-import { useId, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { adminStyles, displayHeading } from "../lib/adminStyles";
 import {
+  GiftFeeAllocationChooser,
+  GiftFeeSummary,
   GiftPricingPreview,
   useGiftFeeAllocation,
+  useGiftPricingControls,
 } from "./GiftPricingSettings";
+import { OverflowMenu } from "./OverflowMenu";
 
 export type GiftEditorViewProps = {
   gifts: GiftItem[];
@@ -143,51 +149,207 @@ function formatPrice(cents: number): string {
   }).format(cents / 100);
 }
 
-function GiftPriceField({
-  id,
-  disabled,
-  nominalCents: initialCents,
-}: {
-  id: string;
-  disabled: boolean;
-  nominalCents?: number;
-}) {
-  const [price, setPrice] = useState(() =>
-    initialCents === undefined ? "" : editablePrice(initialCents),
-  );
-  const nominalCents = parseGiftPriceToCents(price);
-  const feeAllocation = useGiftFeeAllocation();
-  return (
-    <div className="space-y-3">
-      <label htmlFor={id}>
-        {feeAllocation === "BUYER_GROSS_UP"
-          ? "Valor que vocês receberão (R$)"
-          : feeAllocation === "RECIPIENT_DEDUCTED"
-            ? "Valor que o convidado pagará (R$)"
-            : "Valor cadastrado (R$)"}
-        <Input
-          id={id}
-          name="nominalPrice"
-          type="text"
-          inputMode="decimal"
-          autoComplete="off"
-          maxLength={20}
-          placeholder="Ex.: 120,00"
-          required
-          disabled={disabled}
-          value={price}
-          onChange={(event) => setPrice(event.target.value)}
-        />
-      </label>
-      <GiftPricingPreview nominalCents={nominalCents} />
-    </div>
-  );
-}
-
 function statusLabel(state: GiftItem["publicationState"]): string {
   if (state === "PUBLISHED") return "Publicado";
   if (state === "ARCHIVED") return "Arquivado";
   return "Rascunho";
+}
+
+const photoTones = [
+  "bg-admin-beige",
+  "bg-admin-beige-deep",
+  "bg-admin-terracotta-wash",
+];
+
+function GiftStatusBadge({ state }: { state: GiftItem["publicationState"] }) {
+  return (
+    <span
+      className={`inline-flex w-fit items-center rounded-full px-2.5 py-1 text-xs leading-none font-bold ${state === "PUBLISHED" ? "bg-admin-success-wash text-admin-success-ink" : state === "ARCHIVED" ? "bg-admin-danger-wash text-admin-danger-ink" : "bg-admin-beige text-admin-body"}`}
+    >
+      {statusLabel(state)}
+    </span>
+  );
+}
+
+// Publishing needs a described photo, a name and a valid value.
+export function giftPublishChecklist(
+  gift: Pick<GiftItem, "mediaAssetId" | "altText"> | undefined,
+  title: string,
+  nominalCents: number | null,
+) {
+  const items = [
+    {
+      id: "photo",
+      label: "Foto com descrição",
+      done: Boolean(gift?.mediaAssetId && gift.altText.trim()),
+    },
+    {
+      id: "title",
+      label: "Nome do presente",
+      done: Boolean(title.trim()) && title.trim().length <= 120,
+    },
+    { id: "price", label: "Valor", done: nominalCents !== null },
+  ] as const;
+  return { items, done: items.filter((item) => item.done).length };
+}
+
+function FormSectionHeader({
+  number,
+  title,
+  badge,
+}: {
+  number: number;
+  title: string;
+  badge?: ReactNode;
+}) {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <h2 className="m-0 flex items-center gap-3 text-lg font-bold text-admin-ink">
+        <span
+          aria-hidden="true"
+          className="flex size-[30px] shrink-0 items-center justify-center rounded-full bg-admin-terracotta text-sm font-bold text-white"
+        >
+          {number}
+        </span>
+        <span className="sr-only">Parte {number}: </span>
+        {title}
+      </h2>
+      {badge}
+    </div>
+  );
+}
+
+const sectionCard =
+  "grid min-w-0 gap-5 rounded-2xl border border-admin-line bg-admin-surface p-6 [@media(max-width:760px)]:p-4";
+const fieldClass =
+  "min-h-[46px] rounded-[10px] border-admin-line-strong bg-admin-surface px-3.5 text-[0.95rem]";
+
+function Counter({ value, max }: { value: number; max: number }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={`text-xs ${value > max ? "font-bold text-admin-danger-ink" : "text-admin-muted"}`}
+    >
+      {value}/{max}
+    </span>
+  );
+}
+
+function GuestPreviewCard({
+  gift,
+  title,
+  description,
+  nominalCents,
+  photo,
+}: {
+  gift?: GiftItem;
+  title: string;
+  description: string;
+  nominalCents: number | null;
+  photo: ReactNode;
+}) {
+  const feeAllocation = useGiftFeeAllocation();
+  return (
+    <div className="overflow-hidden rounded-2xl border border-admin-line bg-admin-surface">
+      <div className="flex aspect-[300/224] items-center justify-center overflow-hidden border-b border-dashed border-admin-line-strong bg-admin-canvas text-[0.82rem] text-admin-muted [&_img]:h-full [&_img]:w-full [&_img]:object-cover">
+        {photo ??
+          (gift?.mediaAssetId ? (
+            <Gift
+              aria-hidden="true"
+              className="size-10 text-admin-terracotta/60"
+            />
+          ) : (
+            "A foto aparece aqui"
+          ))}
+      </div>
+      <div className="grid gap-2 p-[18px]">
+        <h3 className="m-0 break-words font-admin-display text-[1.35rem] font-normal text-admin-ink">
+          {title.trim() || "Nome do presente"}
+        </h3>
+        <p className="m-0 line-clamp-3 break-words text-sm leading-[1.5] text-admin-body">
+          {description.trim() ||
+            "Um presente simbólico para celebrar essa nova fase."}
+        </p>
+        <p className="m-0 text-lg font-bold text-admin-ink">
+          {nominalCents === null ? "R$ —" : formatPrice(nominalCents)}
+          {feeAllocation === "BUYER_GROSS_UP" && nominalCents !== null && (
+            <span className="text-sm font-semibold text-admin-muted">
+              {" "}
+              + taxas
+            </span>
+          )}
+        </p>
+        <span
+          aria-hidden="true"
+          className="flex min-h-11 items-center justify-center rounded-[10px] bg-admin-terracotta text-[0.95rem] font-bold text-white"
+        >
+          Presentear
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function PublishChecklist({
+  checklist,
+  published,
+}: {
+  checklist: ReturnType<typeof giftPublishChecklist>;
+  published: boolean;
+}) {
+  return (
+    <section className="grid gap-3 rounded-2xl border border-admin-line bg-admin-surface p-5">
+      <h2 className="m-0 text-base font-bold text-admin-ink">
+        Pronto para publicar? {checklist.done}/3
+      </h2>
+      <ul className="m-0 grid list-none gap-2.5 p-0">
+        {checklist.items.map((item) => (
+          <li
+            key={item.id}
+            className="flex items-center gap-2.5 text-[0.95rem] text-admin-body"
+          >
+            <span
+              aria-hidden="true"
+              className={`flex size-[22px] shrink-0 items-center justify-center rounded-full ${item.done ? "bg-admin-status-confirmed text-white" : "border-2 border-admin-line-strong"}`}
+            >
+              {item.done && <Check className="size-3.5" />}
+            </span>
+            {item.label}
+            <span className="sr-only">
+              {item.done ? " (pronto)" : " (pendente)"}
+            </span>
+          </li>
+        ))}
+      </ul>
+      <p className="m-0 text-[0.82rem] leading-[1.5] text-admin-muted">
+        {published
+          ? "Este presente está visível para os convidados. Alterações salvas aparecem na lista publicada."
+          : "Enquanto não publicar, o presente fica como rascunho e só vocês veem."}
+      </p>
+    </section>
+  );
+}
+
+function FeePanel({ onClose }: { onClose: () => void }) {
+  return (
+    <section
+      aria-label="Quem paga as taxas"
+      className="grid gap-4 rounded-2xl border border-admin-line bg-admin-surface p-5"
+    >
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="m-0 text-base font-bold text-admin-ink">
+          Quem paga as taxas dos presentes?
+        </h2>
+        <Button type="button" variant="ghost" size="sm" onClick={onClose}>
+          Fechar
+        </Button>
+      </div>
+      <p className="m-0 text-sm text-admin-muted">
+        Vale para todos os presentes do casamento.
+      </p>
+      <GiftFeeAllocationChooser />
+    </section>
+  );
 }
 
 export function GiftEditorView({
@@ -212,6 +374,16 @@ export function GiftEditorView({
   const [formError, setFormError] = useState<string | null>(null);
   const [archive, setArchive] = useState<GiftItem | null>(null);
   const [previewId, setPreviewId] = useState<string | null>(null);
+  const [feesOpen, setFeesOpen] = useState(false);
+  const [draftPreviewOpen, setDraftPreviewOpen] = useState(false);
+  const [awaitingCreated, setAwaitingCreated] = useState<Set<string> | null>(
+    null,
+  );
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [price, setPrice] = useState("");
+  const pricing = useGiftPricingControls();
+  const feeAllocation = useGiftFeeAllocation();
   const previewGift = gifts.find((gift) => gift.id === previewId);
   const mutationState = { busy, loading, error };
   const mutationBlocked = isGiftMutationBlocked(mutationState);
@@ -226,40 +398,91 @@ export function GiftEditorView({
   const editing = creating || Boolean(selected);
   const activeGifts = getVisibleGifts(gifts, "", "ACTIVE");
   const visibleGifts = getVisibleGifts(gifts, query, filter);
+  const published = gifts.filter(
+    (gift) => gift.publicationState === "PUBLISHED",
+  ).length;
+  const drafts = gifts.filter(
+    (gift) => gift.publicationState === "DRAFT",
+  ).length;
+  const nominalCents = parseGiftPriceToCents(price);
+  const checklist = giftPublishChecklist(selected, title, nominalCents);
+
+  // A new draft opens straight in the editor so the photo can be added next.
+  useEffect(() => {
+    if (!awaitingCreated) return;
+    const created = gifts.find(
+      (gift) =>
+        !awaitingCreated.has(gift.id) && gift.publicationState === "DRAFT",
+    );
+    if (!created) return;
+    setAwaitingCreated(null);
+    setEditor({ kind: "edit", giftId: created.id });
+  }, [gifts, awaitingCreated]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Text drafts reset only when another gift (or a new one) opens.
+  useEffect(() => {
+    setTitle(selected?.title ?? "");
+    setDescription(selected?.description ?? "");
+  }, [editor, selected?.id]);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: The price draft also resets when the saved price changes.
+  useEffect(() => {
+    setPrice(
+      selected?.nominalCents === undefined
+        ? ""
+        : editablePrice(selected.nominalCents),
+    );
+  }, [editor, selected?.id, selected?.nominalCents]);
 
   function openEditor(value: typeof editor) {
     setFormError(null);
+    setFeesOpen(false);
     setEditor(value);
   }
 
   async function saveGift(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (mutationBlocked) return;
+    const submitter = (event.nativeEvent as SubmitEvent).submitter as
+      | HTMLButtonElement
+      | null
+      | undefined;
+    const publish = submitter?.value === "publish";
     const data = new FormData(event.currentTarget);
-    const title = String(data.get("title") ?? "").trim();
-    const description = String(data.get("description") ?? "").trim();
-    const nominalCents = parseGiftPriceToCents(
-      String(data.get("nominalPrice") ?? ""),
-    );
+    const nextTitle = String(data.get("title") ?? "").trim();
+    const nextDescription = String(data.get("description") ?? "").trim();
+    const cents = parseGiftPriceToCents(String(data.get("nominalPrice") ?? ""));
     if (
-      !title ||
-      title.length > 120 ||
-      description.length > 2000 ||
-      nominalCents === null
+      !nextTitle ||
+      nextTitle.length > 120 ||
+      nextDescription.length > 2000 ||
+      cents === null
     ) {
-      setFormError("Confira o título, a descrição e o valor informado.");
+      setFormError("Confira o nome, a mensagem e o valor informado.");
       return;
     }
     setFormError(null);
     try {
       if (selected) {
-        await onUpdate(selected.id, { title, description, nominalCents });
-        toast.success("Alterações salvas.");
+        await onUpdate(selected.id, {
+          title: nextTitle,
+          description: nextDescription,
+          nominalCents: cents,
+        });
+        if (
+          publish &&
+          selected.publicationState === "DRAFT" &&
+          giftPublishChecklist(selected, nextTitle, cents).done === 3
+        ) {
+          await onPublication(selected.id, "PUBLISHED");
+          toast.success("Presente salvo e publicado.");
+          openEditor(null);
+        } else toast.success("Alterações salvas.");
       } else if (creating) {
+        const known = new Set(gifts.map((gift) => gift.id));
         await onCreate({
-          title,
-          description,
-          nominalCents,
+          title: nextTitle,
+          description: nextDescription,
+          nominalCents: cents,
           currency: "BRL",
           mediaAssetId: null,
           altText: "",
@@ -267,8 +490,9 @@ export function GiftEditorView({
         openEditor(null);
         setFilter("ACTIVE");
         setQuery("");
+        setAwaitingCreated(known);
         toast.success(
-          "Presente criado como rascunho. Adicione uma imagem e publique quando estiver pronto.",
+          "Presente salvo como rascunho. Agora adicione a foto e publique quando estiver pronto.",
         );
       }
     } catch {
@@ -293,63 +517,63 @@ export function GiftEditorView({
     void runAction(() => onReorder(ids), "Ordem dos presentes atualizada.");
   }
 
-  const statusBadge = (gift: GiftItem) => (
-    <Badge
-      variant="secondary"
-      className={
-        gift.publicationState === "PUBLISHED"
-          ? "bg-admin-status-confirmed/10 text-admin-status-confirmed"
-          : "bg-admin-beige text-admin-graphite"
-      }
-    >
-      {statusLabel(gift.publicationState)}
-    </Badge>
-  );
+  const formId = `${idPrefix}-form`;
+  const canPublishNow =
+    selected?.publicationState === "DRAFT" && checklist.done === 3;
+  const photo = selected ? renderPreview?.(selected) : null;
 
   return (
     <section
       className="min-w-0 space-y-6"
       aria-labelledby="gift-catalog-heading"
     >
-      <header className="flex flex-wrap items-start justify-between gap-4">
-        <div className="max-w-xl">
-          <h2
-            id="gift-catalog-heading"
-            className={`${displayHeading} text-3xl text-admin-ink`}
-          >
-            {editing
-              ? creating
-                ? "Novo presente"
-                : "Editar presente"
-              : "Lista de presentes"}
-          </h2>
-          <p className="mt-2 text-sm leading-relaxed text-admin-muted">
-            {editing
-              ? "Defina os detalhes e salve. A publicação é feita separadamente no catálogo."
-              : "Cada presente é uma contribuição simbólica para o casal, sem produto físico ou entrega."}
-          </p>
-        </div>
-        {editing ? (
-          <Button
+      {editing ? (
+        <header className="grid gap-2">
+          <button
             type="button"
-            variant="outline"
             disabled={busy}
             onClick={() => openEditor(null)}
+            className="inline-flex min-h-8 w-fit items-center gap-1 bg-transparent p-0 text-[0.95rem] font-semibold text-admin-terracotta-deep hover:underline disabled:opacity-60"
           >
-            <ArrowLeft aria-hidden="true" />
-            Voltar ao catálogo
-          </Button>
-        ) : (
+            <ChevronLeft aria-hidden="true" className="size-4" />
+            Lista de presentes
+          </button>
+          <h1
+            id="gift-catalog-heading"
+            className={`m-0 text-[clamp(1.85rem,3vw,2.25rem)] text-admin-ink ${displayHeading}`}
+          >
+            {creating ? "Novo presente" : "Editar presente"}
+          </h1>
+          <p className="m-0 text-base leading-[1.6] text-admin-muted [@media(max-width:760px)]:hidden">
+            Preencha as três partes. A prévia ao lado mostra como os convidados
+            vão ver.
+          </p>
+        </header>
+      ) : (
+        <header className="flex flex-wrap items-start justify-between gap-4">
+          <div className="grid max-w-[600px] gap-2">
+            <h1
+              id="gift-catalog-heading"
+              className={`m-0 text-[clamp(1.85rem,3vw,2.25rem)] text-admin-ink ${displayHeading}`}
+            >
+              Lista de presentes
+            </h1>
+            <p className="m-0 text-base leading-[1.6] text-admin-muted">
+              Cada presente é uma contribuição simbólica em dinheiro para vocês,
+              sem produto ou entrega.
+            </p>
+          </div>
           <Button
             type="button"
+            className="min-h-12 rounded-[10px] px-6 text-[0.95rem] font-bold bg-admin-terracotta text-white hover:bg-admin-terracotta-deep [@media(max-width:760px)]:w-full"
             disabled={mutationBlocked}
             onClick={() => openEditor({ kind: "create" })}
           >
             <Plus aria-hidden="true" />
             Adicionar presente
           </Button>
-        )}
-      </header>
+        </header>
+      )}
 
       {loading && (
         <p className={adminStyles.notice} role="status">
@@ -372,174 +596,386 @@ export function GiftEditorView({
       )}
 
       {editing ? (
-        <article className="grid min-w-0 gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(260px,0.65fr)]">
-          <section
-            className={`${adminStyles.surface} min-w-0 p-5 sm:p-6`}
-            aria-label="Detalhes do presente"
-          >
-            <h3 className="font-semibold text-admin-ink">
-              Detalhes do presente
-            </h3>
-            <form
-              key={selected?.id ?? "new"}
-              className={`${adminStyles.form} mb-0 mt-5`}
-              onSubmit={(event) => void saveGift(event)}
-            >
-              <label htmlFor={`${idPrefix}-title`}>
-                Título
-                <Input
-                  id={`${idPrefix}-title`}
-                  name="title"
-                  required
-                  maxLength={120}
-                  defaultValue={selected?.title ?? ""}
-                  placeholder="Ex.: Jantar na lua de mel"
-                  disabled={mutationBlocked}
+        <>
+          <article className="grid min-w-0 items-start gap-6 xl:grid-cols-[minmax(0,1fr)_300px]">
+            <div className="grid min-w-0 gap-5">
+              <section className={sectionCard} aria-label="Foto do presente">
+                <FormSectionHeader
+                  number={1}
+                  title="Foto do presente"
+                  badge={
+                    <span className="inline-flex items-center rounded-full bg-admin-beige px-2.5 py-1 text-xs leading-none font-bold text-admin-body [@media(max-width:760px)]:hidden">
+                      Necessária para publicar
+                    </span>
+                  }
                 />
-              </label>
-              <label htmlFor={`${idPrefix}-description`}>
-                Descrição{" "}
-                <span className="text-xs font-normal text-admin-muted">
-                  Opcional
+                {selected && renderMedia ? (
+                  renderMedia(selected, mutationBlocked)
+                ) : (
+                  <div className="flex min-h-[272px] flex-col items-center justify-center gap-2.5 rounded-[14px] border-2 border-dashed border-admin-line-strong bg-admin-canvas px-5 py-8 text-center [@media(max-width:760px)]:min-h-[230px]">
+                    <span
+                      aria-hidden="true"
+                      className="flex size-14 items-center justify-center rounded-full bg-admin-terracotta-wash text-admin-terracotta-deep"
+                    >
+                      <Upload className="size-[26px]" />
+                    </span>
+                    <span className="text-base font-bold text-admin-ink">
+                      {creating
+                        ? "Salve o rascunho para enviar a foto"
+                        : "A foto deste presente é gerenciada aqui"}
+                    </span>
+                    <span className="max-w-md text-[0.82rem] leading-[1.5] text-admin-muted">
+                      JPEG, PNG ou WebP · até 5 MB. Depois de salvar, a área de
+                      envio fica disponível nesta mesma tela.
+                    </span>
+                  </div>
+                )}
+              </section>
+              <form
+                id={formId}
+                key={selected?.id ?? "new"}
+                className="grid min-w-0 gap-5"
+                onSubmit={(event) => void saveGift(event)}
+              >
+                <section className={sectionCard} aria-label="Sobre o presente">
+                  <FormSectionHeader number={2} title="Sobre o presente" />
+                  <div className="grid gap-1.5">
+                    <div className="flex items-baseline justify-between gap-3">
+                      <label
+                        htmlFor={`${idPrefix}-title`}
+                        className="text-sm font-bold text-admin-ink"
+                      >
+                        Nome do presente{" "}
+                        <span className="text-xs font-semibold text-admin-muted">
+                          · Obrigatório
+                        </span>
+                      </label>
+                      <Counter value={title.length} max={120} />
+                    </div>
+                    <Input
+                      id={`${idPrefix}-title`}
+                      name="title"
+                      required
+                      maxLength={120}
+                      value={title}
+                      onChange={(event) => setTitle(event.target.value)}
+                      placeholder="Ex.: Jantar da lua de mel"
+                      disabled={mutationBlocked}
+                      aria-describedby={`${idPrefix}-title-hint`}
+                      className={fieldClass}
+                    />
+                    <p
+                      id={`${idPrefix}-title-hint`}
+                      className="m-0 text-[0.8rem] text-admin-muted"
+                    >
+                      Curto e fácil de reconhecer na lista.
+                    </p>
+                  </div>
+                  <div className="grid gap-1.5">
+                    <div className="flex items-baseline justify-between gap-3">
+                      <label
+                        htmlFor={`${idPrefix}-description`}
+                        className="text-sm font-bold text-admin-ink"
+                      >
+                        Mensagem
+                        <span className="[@media(max-width:760px)]:hidden">
+                          {" "}
+                          para os convidados
+                        </span>{" "}
+                        <span className="text-xs font-semibold text-admin-muted">
+                          · Opcional
+                        </span>
+                      </label>
+                      <Counter value={description.length} max={2000} />
+                    </div>
+                    <Textarea
+                      id={`${idPrefix}-description`}
+                      name="description"
+                      maxLength={2000}
+                      value={description}
+                      onChange={(event) => setDescription(event.target.value)}
+                      placeholder="Conte o que esse presente representa para vocês."
+                      disabled={mutationBlocked}
+                      rows={3}
+                      className="min-h-24 rounded-[10px] border-admin-line-strong bg-admin-surface px-3.5 py-3 text-[0.95rem]"
+                    />
+                  </div>
+                </section>
+                <section className={sectionCard} aria-label="Valor">
+                  <FormSectionHeader number={3} title="Valor" />
+                  <div className="grid gap-1.5">
+                    <label
+                      htmlFor={`${idPrefix}-price`}
+                      className="text-sm font-bold text-admin-ink"
+                    >
+                      {feeAllocation === "BUYER_GROSS_UP"
+                        ? "Quanto vocês querem receber"
+                        : feeAllocation === "RECIPIENT_DEDUCTED"
+                          ? "Quanto o convidado paga"
+                          : "Valor do presente"}{" "}
+                      <span className="text-xs font-semibold text-admin-muted">
+                        · Obrigatório
+                      </span>
+                    </label>
+                    <div className="flex min-h-[52px] w-full max-w-[320px] overflow-hidden rounded-[10px] border border-admin-line-strong bg-admin-surface focus-within:border-admin-terracotta focus-within:outline-[3px] focus-within:outline-offset-2 focus-within:outline-[rgb(168_77_57_/_20%)] [@media(max-width:760px)]:max-w-none">
+                      <span
+                        aria-hidden="true"
+                        className="flex items-center border-r border-admin-line-strong bg-admin-beige px-3.5 text-[0.95rem] font-bold text-admin-graphite"
+                      >
+                        R$
+                      </span>
+                      <input
+                        id={`${idPrefix}-price`}
+                        name="nominalPrice"
+                        type="text"
+                        inputMode="decimal"
+                        autoComplete="off"
+                        maxLength={20}
+                        placeholder="0,00"
+                        required
+                        disabled={mutationBlocked}
+                        value={price}
+                        onChange={(event) => setPrice(event.target.value)}
+                        className="min-w-0 flex-1 bg-transparent px-3.5 text-xl text-admin-ink outline-none placeholder:text-admin-muted disabled:opacity-60"
+                      />
+                    </div>
+                    {pricing && (
+                      <p className="m-0 text-[0.82rem] text-admin-body">
+                        Taxas:{" "}
+                        <strong className="text-admin-ink">
+                          {feeAllocation === "BUYER_GROSS_UP"
+                            ? "o convidado paga"
+                            : feeAllocation === "RECIPIENT_DEDUCTED"
+                              ? "vocês pagam"
+                              : "indisponível"}
+                        </strong>{" "}
+                        ·{" "}
+                        <button
+                          type="button"
+                          className="bg-transparent p-0 text-admin-terracotta-deep underline underline-offset-2"
+                          aria-expanded={feesOpen}
+                          onClick={() => setFeesOpen((value) => !value)}
+                        >
+                          alterar para todos
+                        </button>
+                      </p>
+                    )}
+                  </div>
+                  {feesOpen && <FeePanel onClose={() => setFeesOpen(false)} />}
+                  <GiftPricingPreview nominalCents={nominalCents} />
+                </section>
+                {formError && (
+                  <p className={adminStyles.alert} role="alert">
+                    {formError}
+                  </p>
+                )}
+              </form>
+              <section
+                aria-label="Resumo do presente"
+                className="flex items-center gap-3 rounded-2xl border border-admin-line bg-admin-surface p-4 [@media(min-width:761px)]:hidden"
+              >
+                <span className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-[10px] border-2 border-dashed border-admin-line-strong bg-admin-canvas [&_img]:h-full [&_img]:w-full [&_img]:object-cover">
+                  {photo}
                 </span>
-                <Textarea
-                  id={`${idPrefix}-description`}
-                  name="description"
-                  maxLength={2000}
-                  defaultValue={selected?.description ?? ""}
-                  placeholder="Conte o que esse presente representa para vocês."
-                  disabled={mutationBlocked}
-                  rows={3}
-                />
-              </label>
-              <GiftPriceField
-                key={selected?.nominalCents ?? "new"}
-                id={`${idPrefix}-price`}
-                nominalCents={selected?.nominalCents}
-                disabled={mutationBlocked}
-              />
-              {formError && (
-                <p className={adminStyles.alert} role="alert">
-                  {formError}
-                </p>
-              )}
-              <div className="flex flex-wrap gap-3">
-                <Button type="submit" disabled={mutationBlocked}>
-                  {busy
-                    ? "Salvando…"
-                    : creating
-                      ? "Salvar rascunho"
-                      : "Salvar alterações"}
-                </Button>
-                <Button
+                <span className="grid min-w-0 flex-1 gap-0.5">
+                  <strong className="truncate text-[0.95rem] text-admin-ink">
+                    {title.trim() || "Novo presente"}
+                  </strong>
+                  <span className="text-xs text-admin-muted">
+                    {checklist.items.find((item) => !item.done)?.id === "photo"
+                      ? "Falta a foto para publicar"
+                      : checklist.done === 3
+                        ? "Pronto para publicar"
+                        : "Faltam itens para publicar"}{" "}
+                    · {checklist.done}/3
+                  </span>
+                </span>
+                <button
                   type="button"
-                  variant="outline"
-                  disabled={busy}
-                  onClick={() => openEditor(null)}
+                  className="min-h-11 shrink-0 bg-transparent px-1 text-sm font-semibold text-admin-terracotta-deep underline underline-offset-4"
+                  onClick={() => setDraftPreviewOpen(true)}
                 >
-                  Cancelar
-                </Button>
+                  Prévia
+                </button>
+              </section>
+            </div>
+            <aside className="grid min-w-0 gap-5 [@media(max-width:760px)]:hidden">
+              <div className="grid gap-2.5">
+                <p className="m-0 text-xs font-bold uppercase tracking-[0.08em] text-admin-muted">
+                  Como os convidados vão ver
+                </p>
+                <GuestPreviewCard
+                  gift={selected}
+                  title={title}
+                  description={description}
+                  nominalCents={nominalCents}
+                  photo={photo}
+                />
               </div>
-            </form>
-          </section>
-          <aside className="min-w-0 space-y-5">
-            <div className={`${adminStyles.surface} p-5`}>
-              <div className="flex items-center gap-2 text-sm font-semibold text-admin-ink">
-                <Gift aria-hidden="true" className="size-4" />
-                {selected ? "Publicação" : "Primeiro, salve o rascunho"}
-              </div>
-              {selected && <div className="mt-3">{statusBadge(selected)}</div>}
-              <p className="mt-3 text-sm leading-relaxed text-admin-muted">
-                {selected?.publicationState === "PUBLISHED"
-                  ? "Este presente está visível para os convidados. Alterações salvas aparecem na lista publicada."
-                  : "Rascunhos ficam visíveis apenas para quem administra o casamento. Adicione uma imagem e publique quando estiver pronto."}
-              </p>
+              <PublishChecklist
+                checklist={checklist}
+                published={selected?.publicationState === "PUBLISHED"}
+              />
               {selected && (
                 <Button
                   type="button"
                   variant="ghost"
-                  className="mt-3 text-destructive"
+                  className="w-fit text-destructive"
                   disabled={mutationBlocked}
                   onClick={() => setArchive(selected)}
                 >
                   Arquivar presente
                 </Button>
               )}
+            </aside>
+          </article>
+          <div className="sticky bottom-0 z-[5] -mx-[42px] flex flex-wrap items-center justify-between gap-3 border-t border-admin-line bg-[rgb(255_253_249_/_96%)] px-[42px] py-4 backdrop-blur-sm [@media(max-width:760px)]:bottom-[calc(66px+env(safe-area-inset-bottom))] [@media(max-width:760px)]:-mx-5 [@media(max-width:760px)]:px-4 [@media(min-width:761px)_and_(max-width:1060px)]:-mx-7 [@media(min-width:761px)_and_(max-width:1060px)]:px-7">
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => openEditor(null)}
+              className="min-h-11 bg-transparent p-0 text-[0.95rem] font-semibold text-admin-terracotta-deep underline underline-offset-4 disabled:opacity-60 [@media(max-width:760px)]:hidden"
+            >
+              Cancelar
+            </button>
+            <div className="flex flex-1 flex-wrap justify-end gap-3 [@media(max-width:760px)]:grid [@media(max-width:760px)]:grid-cols-2">
+              {selected?.publicationState === "PUBLISHED" ? (
+                <Button
+                  type="submit"
+                  form={formId}
+                  className="min-h-12 rounded-[10px] px-6 text-[0.95rem] font-bold bg-admin-terracotta text-white hover:bg-admin-terracotta-deep [@media(max-width:760px)]:col-span-2"
+                  disabled={mutationBlocked}
+                >
+                  {busy ? "Salvando…" : "Salvar alterações"}
+                </Button>
+              ) : (
+                <>
+                  <Button
+                    type="submit"
+                    form={formId}
+                    value="draft"
+                    variant="outline"
+                    className="min-h-12 rounded-[10px] border-admin-line-strong px-6 text-[0.95rem] font-semibold"
+                    disabled={mutationBlocked}
+                  >
+                    {busy ? "Salvando…" : "Salvar rascunho"}
+                  </Button>
+                  <Button
+                    type="submit"
+                    form={formId}
+                    value="publish"
+                    className="min-h-12 rounded-[10px] px-6 text-[0.95rem] font-bold bg-admin-terracotta text-white hover:bg-admin-terracotta-deep disabled:bg-admin-beige-deep disabled:text-admin-muted disabled:opacity-100"
+                    disabled={mutationBlocked || !canPublishNow}
+                  >
+                    <span className="[@media(max-width:760px)]:hidden">
+                      Salvar e publicar
+                    </span>
+                    <span className="hidden [@media(max-width:760px)]:inline">
+                      Publicar
+                    </span>
+                  </Button>
+                </>
+              )}
             </div>
-            {selected && renderMedia?.(selected, mutationBlocked)}
-            {creating && (
-              <p className="px-1 text-sm leading-relaxed text-admin-muted">
-                Depois de salvar, abra o presente para adicionar ou trocar sua
-                imagem.
-              </p>
-            )}
-          </aside>
-        </article>
+          </div>
+        </>
       ) : (
         <>
-          <div className="space-y-4">
-            <div className="relative max-w-md">
+          <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.75fr)] gap-3.5 [@media(max-width:760px)]:grid-cols-2">
+            {(
+              [
+                ["Publicados", published],
+                ["Rascunhos", drafts],
+              ] as const
+            ).map(([label, value]) => (
+              <div
+                key={label}
+                className="grid min-w-0 gap-1 rounded-2xl border border-admin-line bg-admin-surface px-[18px] py-4"
+              >
+                <span className="text-[0.82rem] text-admin-muted">{label}</span>
+                <span className="font-admin-display text-[1.75rem] leading-none text-admin-ink">
+                  {loading ? "–" : value}
+                </span>
+              </div>
+            ))}
+            {pricing && (
+              <div className="flex min-w-0 items-center justify-between gap-4 rounded-2xl border border-admin-line bg-admin-surface px-[18px] py-4 [@media(max-width:760px)]:col-span-2">
+                <div className="grid min-w-0 gap-1">
+                  <span className="text-[0.82rem] text-admin-muted">
+                    Quem paga as taxas
+                  </span>
+                  <strong className="text-[0.95rem] text-admin-ink">
+                    <GiftFeeSummary />
+                  </strong>
+                </div>
+                <button
+                  type="button"
+                  aria-expanded={feesOpen}
+                  onClick={() => setFeesOpen((value) => !value)}
+                  className="min-h-10 shrink-0 bg-transparent p-0 text-sm font-semibold text-admin-terracotta-deep underline underline-offset-4"
+                >
+                  {feesOpen ? "Fechar" : "Alterar"}
+                </button>
+              </div>
+            )}
+          </div>
+          {feesOpen && pricing && (
+            <FeePanel onClose={() => setFeesOpen(false)} />
+          )}
+          <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
+            <div className="relative w-full max-w-[406px] [@media(max-width:760px)]:max-w-none">
               <Search
                 aria-hidden="true"
-                className="pointer-events-none absolute left-3 top-3.5 size-4 text-admin-muted"
+                className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-admin-muted"
               />
               <Input
                 aria-label="Buscar presentes"
                 type="search"
-                placeholder="Buscar por título ou descrição"
-                className="pl-10"
+                placeholder="Buscar por nome ou descrição"
+                className="min-h-[42px] rounded-[10px] border-admin-line-strong bg-admin-surface pl-10 text-[0.95rem]"
                 value={query}
                 disabled={loading || Boolean(error)}
                 onChange={(event) => setQuery(event.target.value)}
               />
             </div>
             <fieldset
-              className="flex flex-wrap gap-2"
+              className="m-0 flex min-w-0 max-w-full gap-1 rounded-[10px] border border-admin-line bg-admin-surface p-1 [@media(max-width:760px)]:grid [@media(max-width:760px)]:w-full [@media(max-width:760px)]:grid-cols-4"
               aria-label="Filtrar presentes"
             >
               {(
                 [
-                  ["ACTIVE", "Todos os ativos"],
+                  ["ACTIVE", "Todos"],
                   ["PUBLISHED", "Publicados"],
                   ["DRAFT", "Rascunhos"],
                   ["ARCHIVED", "Arquivados"],
                 ] as const
               ).map(([value, label]) => (
-                <Button
+                <button
                   key={value}
                   type="button"
-                  variant={filter === value ? "secondary" : "ghost"}
-                  size="sm"
                   aria-pressed={filter === value}
                   disabled={loading || Boolean(error)}
                   onClick={() => setFilter(value)}
+                  className={`min-h-9 shrink-0 rounded-[7px] px-3.5 text-sm font-semibold whitespace-nowrap [@media(max-width:760px)]:min-w-0 [@media(max-width:760px)]:px-1 [@media(max-width:760px)]:text-[0.8rem] transition-colors motion-reduce:transition-none disabled:opacity-60 ${filter === value ? "bg-admin-graphite text-white" : "text-admin-body hover:bg-admin-canvas"}`}
                 >
                   {label}
-                </Button>
+                </button>
               ))}
             </fieldset>
           </div>
-          {!loading && !error && visibleGifts.length === 0 && (
-            <div
-              className={`${adminStyles.surface} grid justify-items-center gap-3 px-5 py-12 text-center`}
-            >
-              <div className="rounded-full bg-admin-beige p-4">
-                <Gift
-                  aria-hidden="true"
-                  className="size-7 text-admin-terracotta"
-                />
-              </div>
-              <h3 className="text-lg font-semibold text-admin-ink">
-                {gifts.length === 0
-                  ? "Sua lista começa aqui"
-                  : "Nenhum presente encontrado"}
-              </h3>
-              <p className="max-w-md text-sm leading-relaxed text-admin-muted">
-                {gifts.length === 0
-                  ? "Ainda não há presentes cadastrados. Use Adicionar presente para criar o primeiro rascunho."
-                  : "Tente outra busca ou escolha outro filtro."}
-              </p>
-              {gifts.length > 0 && (
+          {!loading &&
+            !error &&
+            visibleGifts.length === 0 &&
+            gifts.length > 0 && (
+              <div
+                className={`${adminStyles.surface} grid justify-items-center gap-3 px-5 py-12 text-center`}
+              >
+                <h2 className="m-0 text-lg font-semibold text-admin-ink">
+                  Nenhum presente encontrado
+                </h2>
+                <p className="m-0 max-w-md text-sm leading-relaxed text-admin-muted">
+                  Tente outra busca ou escolha outro filtro.
+                </p>
                 <Button
                   type="button"
                   variant="outline"
@@ -550,176 +986,230 @@ export function GiftEditorView({
                 >
                   Limpar filtros
                 </Button>
+              </div>
+            )}
+          {!loading && !error && (
+            <ul className="m-0 grid min-w-0 list-none grid-cols-[repeat(auto-fill,minmax(min(100%,250px),1fr))] gap-[18px] p-0">
+              {filter !== "ARCHIVED" && !query && (
+                <li className="min-w-0">
+                  <button
+                    type="button"
+                    disabled={mutationBlocked}
+                    onClick={() => openEditor({ kind: "create" })}
+                    className="flex h-full min-h-[200px] w-full flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-admin-line-strong bg-transparent p-6 text-center transition-colors hover:bg-admin-surface motion-reduce:transition-none disabled:opacity-60"
+                  >
+                    <span
+                      aria-hidden="true"
+                      className="flex size-12 items-center justify-center rounded-full bg-admin-terracotta-wash text-admin-terracotta-deep"
+                    >
+                      <Plus className="size-6" />
+                    </span>
+                    <span className="text-base font-bold text-admin-terracotta-deep">
+                      {gifts.length === 0
+                        ? "Adicionar o primeiro presente"
+                        : "Novo presente"}
+                    </span>
+                    <span className="text-[0.82rem] text-admin-muted">
+                      {gifts.length === 0
+                        ? "Sua lista começa aqui. Ainda não há presentes cadastrados."
+                        : "Foto, nome e valor"}
+                    </span>
+                  </button>
+                </li>
               )}
-            </div>
-          )}
-          <div className="grid min-w-0 gap-4 md:grid-cols-2 2xl:grid-cols-3">
-            {visibleGifts.map((gift) => {
-              const position = activeGifts.findIndex(
-                (item) => item.id === gift.id,
-              );
-              const archived = gift.publicationState === "ARCHIVED";
-              return (
-                <article
-                  key={gift.id}
-                  className={`${adminStyles.surface} flex min-w-0 flex-col overflow-hidden`}
-                >
-                  <div className="flex aspect-[16/9] items-center justify-center overflow-hidden bg-admin-beige/50 [&_img]:h-full [&_img]:w-full [&_img]:object-cover">
-                    {renderPreview?.(gift) ?? (
-                      <Gift
-                        aria-hidden="true"
-                        className="size-10 text-admin-terracotta/50"
-                      />
-                    )}
-                  </div>
-                  <div className="flex flex-1 flex-col p-5">
-                    <div>{statusBadge(gift)}</div>
-                    <h3 className="mt-3 break-words text-lg font-semibold text-admin-ink">
-                      {gift.title}
-                    </h3>
-                    <p className="mt-1 line-clamp-2 break-words text-sm leading-relaxed text-admin-muted">
-                      {gift.description ||
-                        "Um presente simbólico para celebrar essa nova fase."}
-                    </p>
-                    <p className="mt-4 text-xl font-semibold text-admin-ink">
-                      {formatPrice(gift.nominalCents)}
-                    </p>
-                    <p className="mt-1 text-xs text-admin-muted">
-                      {archived
-                        ? "Preservado no histórico"
-                        : gift.publicationState === "PUBLISHED"
-                          ? "Visível para os convidados"
-                          : "Visível apenas no painel"}
-                    </p>
-                    {!archived && (
-                      <div className="mt-auto pt-5">
-                        <div className="flex flex-wrap gap-2">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            disabled={mutationBlocked}
-                            onClick={() =>
-                              openEditor({ kind: "edit", giftId: gift.id })
-                            }
-                          >
-                            Editar presente
-                          </Button>
-                          <Button
-                            type="button"
-                            variant={
-                              gift.publicationState === "DRAFT"
-                                ? "default"
-                                : "ghost"
-                            }
-                            size="sm"
-                            disabled={mutationBlocked}
-                            onClick={() =>
-                              void runAction(
-                                () =>
-                                  onPublication(
-                                    gift.id,
-                                    gift.publicationState === "DRAFT"
-                                      ? "PUBLISHED"
-                                      : "DRAFT",
-                                  ),
-                                gift.publicationState === "DRAFT"
-                                  ? "Presente publicado."
-                                  : "Presente retirado da lista pública.",
-                              )
-                            }
-                          >
-                            {gift.publicationState === "DRAFT"
-                              ? "Publicar"
-                              : "Despublicar"}
-                          </Button>
-                        </div>
-                        <div className="mt-4 flex items-center justify-between border-t border-admin-line pt-3">
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            disabled={mutationBlocked}
-                            onClick={() => setPreviewId(gift.id)}
-                          >
-                            Ver prévia
-                          </Button>
-                          <div className="flex gap-1">
-                            <Button
+              {visibleGifts.map((gift) => {
+                const position = activeGifts.findIndex(
+                  (item) => item.id === gift.id,
+                );
+                const archived = gift.publicationState === "ARCHIVED";
+                const preview = renderPreview?.(gift);
+                return (
+                  <li key={gift.id} className="min-w-0">
+                    <article className="flex h-full min-w-0 flex-col overflow-hidden rounded-2xl border border-admin-line bg-admin-surface">
+                      <div
+                        className={`relative flex aspect-[290/182] items-center justify-center overflow-hidden ${photoTones[Math.max(position, 0) % photoTones.length]} [&_img]:h-full [&_img]:w-full [&_img]:object-cover`}
+                      >
+                        {preview ?? (
+                          <ImageIcon
+                            aria-hidden="true"
+                            className="size-9 text-admin-terracotta-deep"
+                          />
+                        )}
+                        <span className="absolute top-3 left-3">
+                          <GiftStatusBadge state={gift.publicationState} />
+                        </span>
+                        {!archived && (
+                          <span className="absolute top-2.5 right-2.5 flex gap-1">
+                            <button
                               type="button"
-                              variant="ghost"
-                              size="icon-sm"
                               disabled={mutationBlocked || position === 0}
                               aria-label={`Mover ${gift.title} para cima`}
                               onClick={() => moveGift(gift, "up")}
+                              className="flex size-8 items-center justify-center rounded-lg bg-admin-surface/95 text-admin-graphite shadow-sm hover:bg-white disabled:opacity-40"
                             >
-                              <ArrowUp aria-hidden="true" />
-                            </Button>
-                            <Button
+                              <ArrowUp aria-hidden="true" className="size-4" />
+                            </button>
+                            <button
                               type="button"
-                              variant="ghost"
-                              size="icon-sm"
                               disabled={
                                 mutationBlocked ||
                                 position === activeGifts.length - 1
                               }
                               aria-label={`Mover ${gift.title} para baixo`}
                               onClick={() => moveGift(gift, "down")}
+                              className="flex size-8 items-center justify-center rounded-lg bg-admin-surface/95 text-admin-graphite shadow-sm hover:bg-white disabled:opacity-40"
                             >
-                              <ArrowDown aria-hidden="true" />
-                            </Button>
-                          </div>
-                        </div>
+                              <ArrowDown
+                                aria-hidden="true"
+                                className="size-4"
+                              />
+                            </button>
+                          </span>
+                        )}
                       </div>
-                    )}
-                  </div>
-                </article>
-              );
-            })}
-          </div>
+                      <div className="flex flex-1 flex-col gap-1.5 p-[18px]">
+                        <h3 className="m-0 break-words text-[1.05rem] font-bold text-admin-ink">
+                          {gift.title}
+                        </h3>
+                        <p className="m-0 line-clamp-2 break-words text-sm leading-[1.5] text-admin-body">
+                          {!gift.mediaAssetId &&
+                          gift.publicationState === "DRAFT"
+                            ? "Ainda sem foto. Adicione antes de publicar."
+                            : gift.description ||
+                              "Um presente simbólico para celebrar essa nova fase."}
+                        </p>
+                        <p className="m-0 text-lg font-bold text-admin-ink">
+                          {formatPrice(gift.nominalCents)}
+                        </p>
+                        {archived ? (
+                          <p className="m-0 mt-auto pt-2 text-xs text-admin-muted">
+                            Preservado no histórico
+                          </p>
+                        ) : (
+                          <div className="mt-auto flex items-center gap-2 pt-3">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="min-h-9 border-admin-line-strong"
+                              disabled={mutationBlocked}
+                              onClick={() =>
+                                openEditor({ kind: "edit", giftId: gift.id })
+                              }
+                            >
+                              Editar<span className="sr-only"> presente</span>
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="min-h-9 border-admin-line-strong"
+                              disabled={mutationBlocked}
+                              onClick={() =>
+                                void runAction(
+                                  () =>
+                                    onPublication(
+                                      gift.id,
+                                      gift.publicationState === "DRAFT"
+                                        ? "PUBLISHED"
+                                        : "DRAFT",
+                                    ),
+                                  gift.publicationState === "DRAFT"
+                                    ? "Presente publicado."
+                                    : "Presente retirado da lista pública.",
+                                )
+                              }
+                            >
+                              {gift.publicationState === "DRAFT"
+                                ? "Publicar"
+                                : "Despublicar"}
+                            </Button>
+                            <span className="ml-auto">
+                              <OverflowMenu
+                                label={`Mais ações para ${gift.title}`}
+                                disabled={mutationBlocked}
+                                items={[
+                                  { id: "preview", label: "Ver prévia" },
+                                  {
+                                    id: "archive",
+                                    label: "Arquivar presente",
+                                    variant: "destructive",
+                                  },
+                                ]}
+                                onSelect={(id) =>
+                                  id === "preview"
+                                    ? setPreviewId(gift.id)
+                                    : setArchive(gift)
+                                }
+                              />
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </article>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </>
       )}
       <Dialog
-        open={Boolean(previewGift)}
+        open={Boolean(previewGift) || draftPreviewOpen}
         onOpenChange={(open) => {
-          if (!open) setPreviewId(null);
+          if (!open) {
+            setPreviewId(null);
+            setDraftPreviewOpen(false);
+          }
         }}
       >
         <DialogContent className={adminStyles.dialog}>
           <DialogHeader>
             <DialogTitle>Prévia do presente</DialogTitle>
             <DialogDescription>
-              Confira o conteúdo salvo antes de compartilhar sua lista.
+              {draftPreviewOpen
+                ? "Como os convidados vão ver este presente."
+                : "Confira o conteúdo salvo antes de compartilhar sua lista."}
             </DialogDescription>
           </DialogHeader>
-          {previewGift && (
-            <div className="min-w-0 overflow-hidden rounded-xl border border-admin-line">
-              <div className="flex aspect-[16/9] items-center justify-center overflow-hidden bg-admin-beige/50 [&_img]:h-full [&_img]:w-full [&_img]:object-cover">
-                {renderPreview?.(previewGift) ?? (
-                  <Gift
-                    aria-hidden="true"
-                    className="size-10 text-admin-terracotta/50"
-                  />
-                )}
+          {draftPreviewOpen && !previewGift ? (
+            <GuestPreviewCard
+              gift={selected}
+              title={title}
+              description={description}
+              nominalCents={nominalCents}
+              photo={photo}
+            />
+          ) : (
+            previewGift && (
+              <div className="min-w-0 overflow-hidden rounded-xl border border-admin-line">
+                <div className="flex aspect-[16/9] items-center justify-center overflow-hidden bg-admin-beige/50 [&_img]:h-full [&_img]:w-full [&_img]:object-cover">
+                  {renderPreview?.(previewGift) ?? (
+                    <Gift
+                      aria-hidden="true"
+                      className="size-10 text-admin-terracotta/50"
+                    />
+                  )}
+                </div>
+                <div className="space-y-3 p-5">
+                  <GiftStatusBadge state={previewGift.publicationState} />
+                  <h3 className="break-words text-xl font-semibold text-admin-ink">
+                    {previewGift.title}
+                  </h3>
+                  <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-admin-muted">
+                    {previewGift.description}
+                  </p>
+                  <p className="text-2xl font-semibold text-admin-ink">
+                    {formatPrice(previewGift.nominalCents)}
+                  </p>
+                  <p className="text-xs text-admin-muted">
+                    {previewGift.publicationState === "PUBLISHED"
+                      ? "Visível para os convidados"
+                      : "Este rascunho está visível apenas no painel."}
+                  </p>
+                </div>
               </div>
-              <div className="space-y-3 p-5">
-                {statusBadge(previewGift)}
-                <h3 className="break-words text-xl font-semibold text-admin-ink">
-                  {previewGift.title}
-                </h3>
-                <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-admin-muted">
-                  {previewGift.description}
-                </p>
-                <p className="text-2xl font-semibold text-admin-ink">
-                  {formatPrice(previewGift.nominalCents)}
-                </p>
-                <p className="text-xs text-admin-muted">
-                  {previewGift.publicationState === "PUBLISHED"
-                    ? "Visível para os convidados"
-                    : "Este rascunho está visível apenas no painel."}
-                </p>
-              </div>
-            </div>
+            )
           )}
           <DialogFooter>
             <DialogClose render={<Button variant="outline" />}>
@@ -753,6 +1243,7 @@ export function GiftEditorView({
                 const gift = archive;
                 if (!gift || mutationBlocked) return;
                 setArchive(null);
+                if (selected?.id === gift.id) openEditor(null);
                 void runAction(
                   () => onPublication(gift.id, "ARCHIVED"),
                   "Presente arquivado.",

@@ -1,4 +1,4 @@
-﻿// @vitest-environment jsdom
+// @vitest-environment jsdom
 import type { GiftItem } from "@entrelacos/contracts";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -90,7 +90,7 @@ describe("private gift price commission preview", () => {
       'input[name="nominalPrice"]',
     );
     await enter(input, "100,00");
-    expect(text(form)).toContain("Valor que o convidado pagará");
+    expect(text(form)).toContain("Quanto o convidado paga");
     expect(text(form)).toContain("Comissão");
     expect(text(form)).toContain("Líquido do casal");
     expect(amounts(form)).toEqual([

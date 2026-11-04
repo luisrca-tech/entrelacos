@@ -73,9 +73,14 @@ describe("gift image editor presentation", () => {
     await act(async () => {
       choose(f.container);
     });
-    await act(async () => button(f.container, "Enviar imagem").click());
+    await act(async () => button(f.container, "Enviar foto").click());
     expect(f.props.onUpload).toHaveBeenCalledOnce();
-    expect(button(f.container, "Enviar imagem").disabled).toBe(true);
+    // The sent file is cleared, so no second upload is offered.
+    expect(
+      [...f.container.querySelectorAll("button")].some((value) =>
+        value.textContent?.includes("Enviar foto"),
+      ),
+    ).toBe(false);
   });
   it("offers manual consultation and recovery for unknown retained correlation without automatic callbacks", async () => {
     const consult = vi.fn(async () => {});
@@ -141,7 +146,7 @@ describe("gift image editor presentation", () => {
     await act(async () => {
       choose(f.container);
     });
-    await act(async () => button(f.container, "Enviar imagem").click());
+    await act(async () => button(f.container, "Enviar foto").click());
     await act(async () =>
       f.root.render(
         createElement(GiftImageField, {
@@ -176,9 +181,9 @@ describe("gift image editor presentation", () => {
       }),
     );
     expect(html).toContain('accept="image/jpeg,image/png,image/webp"');
-    expect(html).toContain("Descrição da imagem");
+    expect(html).toContain("Descreva a foto");
     expect(html).toContain("Mesa para o jantar");
-    expect(html).toContain("Remover imagem");
+    expect(html).toContain("Remover foto");
     expect(html).not.toContain("private-asset");
     expect(html).not.toContain("private-gift");
   });

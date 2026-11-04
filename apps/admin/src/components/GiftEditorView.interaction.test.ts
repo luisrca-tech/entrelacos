@@ -42,6 +42,13 @@ function button(label: string) {
   if (!found) throw new Error(`Missing button: ${label}`);
   return found;
 }
+function publishButton() {
+  const found = [...container.querySelectorAll("button")].find((item) =>
+    item.textContent?.startsWith("Salvar e publicar"),
+  );
+  if (!found) throw new Error("Missing button: Salvar e publicar");
+  return found;
+}
 async function enter(input: HTMLInputElement, value: string) {
   await act(async () => {
     Object.getOwnPropertyDescriptor(
@@ -73,12 +80,20 @@ describe("focused gift catalog", () => {
     expect(
       container.querySelector<HTMLInputElement>('input[name="title"]')?.value,
     ).toBe(gift.title);
-    await act(async () => button("Voltar ao catálogo").click());
+    await act(async () => button("Lista de presentes").click());
     expect(container.querySelector("form")).toBeNull();
   });
   it("previews saved content and explains draft visibility without publishing it", async () => {
     const callbacks = await mount();
-    await act(async () => button("Ver prévia").click());
+    const more = container.querySelector<HTMLButtonElement>(
+      '[aria-label="Mais ações para Café especial"]',
+    );
+    await act(async () => more?.click());
+    const item = [...document.querySelectorAll('[role="menuitem"]')].find(
+      (value) => value.textContent?.includes("Ver prévia"),
+    ) as HTMLElement | undefined;
+    expect(item).toBeDefined();
+    await act(async () => item?.click());
     const preview = document.querySelector('[role="dialog"]');
     expect(preview?.textContent).toContain("Café especial");
     expect(preview?.textContent).toContain("Uma pausa a dois");
@@ -92,7 +107,8 @@ describe("focused gift catalog", () => {
     expect(
       container.querySelector<HTMLInputElement>('input[name="title"]')?.value,
     ).toBe(gift.title);
-    expect(container.textContent).toContain("Salvar alterações");
+    expect(container.textContent).toContain("Salvar rascunho");
+    expect(container.textContent).toContain("Salvar e publicar");
   });
   it("publishes explicitly and requires confirmation before archival", async () => {
     const callbacks = await mount();
@@ -221,5 +237,39 @@ describe("focused gift catalog", () => {
       "gift-b",
       "gift-a",
     ]);
+  });
+  it("enables save and publish only when the photo, name and value are ready", async () => {
+    await mount();
+    await act(async () => button("Editar presente").click());
+    expect(container.textContent).toContain("Pronto para publicar? 2/3");
+    expect(publishButton().disabled).toBe(true);
+  });
+  it("saves the draft and then publishes it in one click once complete", async () => {
+    const ready = { ...gift, mediaAssetId: "asset-a", altText: "Xícaras" };
+    const callbacks = await mount([ready]);
+    await act(async () => button("Editar presente").click());
+    expect(container.textContent).toContain("Pronto para publicar? 3/3");
+    const publish = publishButton();
+    expect(publish.disabled).toBe(false);
+    await act(async () => publish.click());
+    expect(callbacks.onUpdate).toHaveBeenCalledExactlyOnceWith(
+      gift.id,
+      expect.objectContaining({ title: gift.title, nominalCents: 10000 }),
+    );
+    expect(callbacks.onPublication).toHaveBeenCalledExactlyOnceWith(
+      gift.id,
+      "PUBLISHED",
+    );
+    expect(callbacks.onUpdate.mock.invocationCallOrder[0]).toBeLessThan(
+      callbacks.onPublication.mock.invocationCallOrder[0],
+    );
+  });
+  it("keeps a saved draft unpublished when only the draft is saved", async () => {
+    const ready = { ...gift, mediaAssetId: "asset-a", altText: "Xícaras" };
+    const callbacks = await mount([ready]);
+    await act(async () => button("Editar presente").click());
+    await act(async () => button("Salvar rascunho").click());
+    expect(callbacks.onUpdate).toHaveBeenCalledOnce();
+    expect(callbacks.onPublication).not.toHaveBeenCalled();
   });
 });

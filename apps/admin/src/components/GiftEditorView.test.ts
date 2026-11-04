@@ -153,13 +153,13 @@ describe("gift editor view", () => {
       "Arquivados",
       "Publicar",
       "Despublicar",
-      "contribuição simbólica para o casal",
+      "contribuição simbólica em dinheiro",
     ]) {
       expect(html).toContain(text);
     }
     expect(html).not.toContain("<form");
     expect(html).not.toContain("Presente antigo");
-    expect(html).toContain("Editar presente");
+    expect(html).toContain('Editar<span class="sr-only"> presente</span>');
     expect(html).toContain("Adicionar presente");
     expect(html).not.toContain("gift-draft-private-id");
     expect(html).not.toContain("gift-published-private-id");

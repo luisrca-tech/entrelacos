@@ -291,7 +291,7 @@ describe("gift editor immutable scope and acknowledged attachment", () => {
       input.dispatchEvent(new Event("change", { bubbles: true })),
     );
     const send = [...dom.container.querySelectorAll("button")].find((value) =>
-      value.textContent?.includes("Enviar imagem"),
+      value.textContent?.includes("Enviar foto"),
     );
     if (!send) throw new Error("Missing upload button");
     await act(async () => {
@@ -431,7 +431,7 @@ describe("gift editor immutable scope and acknowledged attachment", () => {
       input.dispatchEvent(new Event("change", { bubbles: true })),
     );
     const send = [...dom.container.querySelectorAll("button")].find((value) =>
-      value.textContent?.includes("Enviar imagem"),
+      value.textContent?.includes("Enviar foto"),
     );
     if (!send) throw new Error("Missing upload button");
     await act(async () => {
