@@ -19,21 +19,8 @@ export default function GuidanceDetail({
 }: GuidanceDetailProps) {
   return (
     <Dialog>
-      <DialogTrigger className="inline-flex min-h-11 cursor-pointer items-center gap-1.5 rounded-full border border-current bg-transparent px-3 py-1 align-middle text-sm font-medium text-inherit hover:bg-[color-mix(in_srgb,currentColor_10%,transparent)]">
+      <DialogTrigger className="inline cursor-pointer border-0 bg-transparent p-0 font-[inherit] text-inherit underline decoration-1 underline-offset-4 hover:decoration-2 focus-visible:outline-2 focus-visible:outline-offset-4">
         {detail.label}
-        <svg
-          viewBox="0 0 24 24"
-          aria-hidden="true"
-          className="size-4"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <path d="m6 17 5-5-5-5" />
-          <path d="m13 17 5-5-5-5" />
-        </svg>
       </DialogTrigger>
       <DialogContent
         data-lenis-prevent

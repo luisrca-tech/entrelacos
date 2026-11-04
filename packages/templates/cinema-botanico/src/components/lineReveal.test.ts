@@ -150,7 +150,7 @@ describe("heading line reveal", () => {
 
   it("animates masked copies once and restores the accessible original on cleanup", async () => {
     document.body.innerHTML =
-      '<div data-template-reveal data-template-motion-ready="true" data-template-reveal-state="hidden"><h2 data-template-line-reveal>A day</h2></div>';
+      '<div data-template-reveal data-template-motion-ready="true" data-template-reveal-state="hidden"><h2 data-template-line-reveal>One two three four five</h2></div>';
     const heading = document.querySelector("h2");
     const target = document.querySelector<HTMLElement>(
       "[data-template-reveal]",
@@ -162,13 +162,21 @@ describe("heading line reveal", () => {
     vi.spyOn(window, "getComputedStyle").mockReturnValue({
       lineHeight: "40px",
     } as CSSStyleDeclaration);
+    let word = -1;
     vi.spyOn(document, "createRange").mockReturnValue({
-      setStart() {},
+      setStart() {
+        word++;
+      },
       setEnd() {},
-      getBoundingClientRect: () => ({ top: 105, height: 30 }),
+      getBoundingClientRect: () => ({ top: 105 + word * 40, height: 30 }),
     } as unknown as Range);
     const cancel = vi.fn();
-    const animate = vi.fn(() => ({ cancel, finished: new Promise(() => {}) }));
+    const animate = vi.fn(
+      (_keyframes: Keyframe[], _options: KeyframeAnimationOptions) => ({
+        cancel,
+        finished: new Promise(() => {}),
+      }),
+    );
     Object.defineProperty(Element.prototype, "animate", {
       value: animate,
       configurable: true,
@@ -176,19 +184,17 @@ describe("heading line reveal", () => {
     heading.style.position = "sticky";
     const cleanup = setupLineReveals(document, false);
     await Promise.resolve();
-    expect(heading.querySelector('[aria-hidden="true"]')?.textContent).toBe(
-      "A day",
-    );
+    expect(
+      heading.querySelectorAll("[data-template-line-fragment]"),
+    ).toHaveLength(5);
     target.dataset.templateRevealState = "visible";
     await Promise.resolve();
-    expect(animate).toHaveBeenCalledTimes(1);
-    expect(animate.mock.calls[0][1]).toMatchObject({
-      duration: 1200,
-      delay: 0,
-    });
+    expect(animate.mock.calls.map(([, options]) => options.delay)).toEqual([
+      0, 140, 280, 420, 420,
+    ]);
     cleanup();
-    expect(cancel).toHaveBeenCalledOnce();
-    expect(heading.textContent).toBe("A day");
+    expect(cancel).toHaveBeenCalledTimes(5);
+    expect(heading.textContent).toBe("One two three four five");
     expect(heading.style.position).toBe("sticky");
     expect(heading.querySelector('[aria-hidden="true"]')).toBeNull();
     delete (Element.prototype as { animate?: unknown }).animate;

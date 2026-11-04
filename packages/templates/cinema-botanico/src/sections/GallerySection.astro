@@ -18,13 +18,13 @@ const revealClasses = "template-reveal";
 
 <section
   id={id}
-  class={`grid grid-cols-[minmax(16rem,0.58fr)_minmax(0,1.42fr)] min-h-[calc(100svh-var(--template-header-height))] items-center gap-[clamp(2.5rem,6vw,7rem)] px-[var(--template-page-inset)] py-[var(--gallery-padding)] [--gallery-padding:clamp(2rem,4svh,5rem)] ${toneClasses} [@media(max-width:1024px)]:flex [@media(max-width:1024px)]:flex-col [@media(max-width:1024px)]:justify-center [@media(max-width:1024px)]:gap-0 [@media(max-width:1024px)]:px-0`}
+  class={`grid grid-cols-[minmax(16rem,0.58fr)_minmax(0,1.42fr)] min-h-[calc(100svh-var(--template-header-height))] items-start [[data-template-hero-intro]~&]:mt-[clamp(2rem,5vw,5rem)] gap-[clamp(2.5rem,6vw,7rem)] px-[var(--template-page-inset)] py-[var(--gallery-padding)] [--gallery-padding:clamp(2rem,4svh,5rem)] ${toneClasses} [@media(max-width:1024px)]:flex [@media(max-width:1024px)]:flex-col [@media(max-width:1024px)]:items-stretch [@media(max-width:1024px)]:gap-0 [@media(max-width:1024px)]:px-0`}
   aria-labelledby={`${id}-title`}
 >
   <header class={`${revealClasses} [@media(max-width:1024px)]:mb-12 [@media(max-width:1024px)]:px-[var(--template-page-inset)]`} data-template-reveal>
     {content.eyebrow && <p data-template-reveal-item data-template-reveal-kind="label" style="--template-reveal-delay: 0ms" class="m-0 mb-5 text-[0.72rem] font-bold uppercase tracking-[0.16em]">{content.eyebrow}</p>}
     <h2 data-template-reveal-item data-template-line-reveal class="m-0 max-w-[12ch] font-template-serif text-[clamp(2.5rem,6vw,calc(5.5rem*var(--template-width-scale)))] font-normal tracking-[-0.065em] leading-[0.96]" id={`${id}-title`}>{content.title}</h2>
-    {content.description && <p data-template-reveal-item data-template-reveal-kind="body" style="--template-reveal-delay: 1400ms" class={`m-0 mt-7 max-w-[30rem] leading-[1.7] ${descriptionClass}`}>{content.description}</p>}
+    {content.description && <p data-template-reveal-item data-template-reveal-kind="body" class={`m-0 mt-7 max-w-[30rem] leading-[1.7] ${descriptionClass}`}>{content.description}</p>}
   </header>
 
   <div class="w-full min-w-0 justify-self-end [@media(width>1024px)]:max-w-[max(22rem,calc((100svh-var(--template-header-height)-2*var(--gallery-padding)-5rem)*4/3))]" data-template-reveal="curtain">

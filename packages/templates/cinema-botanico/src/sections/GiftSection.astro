@@ -22,7 +22,7 @@ validateSectionContent(content);
     {content.eyebrow && <p data-template-reveal-item data-template-reveal-kind="label" class="m-0 mb-5 text-[0.72rem] font-bold uppercase tracking-[0.16em]">{content.eyebrow}</p>}
     <h2 data-template-reveal-item data-template-line-reveal id={`${content.id}-title`} class="m-0 max-w-[16ch] font-template-serif text-[clamp(2.5rem,6vw,5.5rem)] font-normal leading-[0.96] tracking-[-0.065em]">{content.title}</h2>
     </div>
-    {content.description && <p data-template-reveal-item data-template-reveal-kind="body" style="--template-reveal-delay: 1400ms" class="m-0 max-w-[32rem] leading-[1.7] text-template-muted">{content.description}</p>}
+    {content.description && <p data-template-reveal-item data-template-reveal-kind="body" class="m-0 max-w-[32rem] leading-[1.7] text-template-muted">{content.description}</p>}
   </header>
   <div class="min-w-0"><slot /></div>
 </section>
