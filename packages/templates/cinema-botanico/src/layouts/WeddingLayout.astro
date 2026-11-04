@@ -110,7 +110,7 @@ validateWeddingLayoutProps(Astro.props);
           </nav>
           <div class="flex flex-col items-start gap-2">
             <span>© {footer.year} {footer.names}</span>
-            <span>{footer.attribution}</span>
+            <slot name="footer-attribution"><span>{footer.attribution}</span></slot>
           </div>
           <slot name="footer-addon" />
         </footer>

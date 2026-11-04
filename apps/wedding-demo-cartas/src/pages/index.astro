@@ -52,6 +52,6 @@ const letterSchedule = { ...schedule, eyebrow: "O nosso encontro", title: "Um di
     <LetterHandoff>Guardamos um lugar para você. Vem celebrar com a gente?</LetterHandoff>
     <DemoFeatures />
   </Fragment>}
-  <Fragment slot="footer-addon"><p class="m-0 normal-case">Demonstração · casamento ilustrativo</p></Fragment>
+  <Fragment slot="footer-attribution"><a class="underline-offset-4 hover:underline focus-visible:underline" href="https://entrelacos.entrelacos.workers.dev/">{footer.attribution}</a></Fragment>
   <Fragment slot="admin-access">{!inactive && access.siteId && access.apiOrigin && access.panelOrigin && <AdminRecognition {...access} client:load />}</Fragment>
 </WeddingLayout>
