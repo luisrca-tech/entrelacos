@@ -29,7 +29,8 @@ describe("StorySection compact full-bleed composition", () => {
     expect(sectionSource).toContain(
       "min-h-[calc(100svh-var(--template-header-height))]",
     );
-    expect(sectionSource).toContain("mb-[clamp(3rem,5vw,5rem)]");
+    const sectionOpening = sectionSource.split("<section")[1].split(">")[0];
+    expect(sectionOpening).not.toContain("mb-");
     expect(sectionSource).toContain("object-[center_6%]");
     expect(sectionSource).toContain("[@media(max-width:960px)]");
     expect(sectionSource).not.toContain("sticky");
