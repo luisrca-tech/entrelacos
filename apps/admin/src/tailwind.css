@@ -8,8 +8,17 @@
   --color-admin-beige: #ece4d8;
   --color-admin-beige-deep: #e2d5c4;
   --color-admin-ink: #282521;
-  --color-admin-muted: #777068;
+  --color-admin-muted: #5f5850;
+  --color-admin-body: #4a443d;
   --color-admin-line: #ddd2c5;
+  --color-admin-line-strong: #c9bba9;
+  --color-admin-terracotta-ink: #6f2c20;
+  --color-admin-success-wash: #eaf4ee;
+  --color-admin-success-ink: #145c40;
+  --color-admin-pending-wash: #fbefe0;
+  --color-admin-pending-ink: #8a4d0f;
+  --color-admin-danger-wash: #fbeaea;
+  --color-admin-danger-ink: #7a2828;
   --color-admin-terracotta: #a84d39;
   --color-admin-terracotta-deep: #8e3a2a;
   --color-admin-terracotta-wash: #f3e1d9;

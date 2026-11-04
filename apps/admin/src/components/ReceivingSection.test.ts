@@ -37,8 +37,17 @@ vi.mock("@tanstack/react-router", () => ({
 }));
 
 vi.mock("./ReceivingAccountSetup", () => ({
-  ReceivingAccountSetup: ({ sessionEpoch }: { sessionEpoch: number | null }) =>
-    createElement("div", { "data-setup-epoch": sessionEpoch }),
+  ReceivingAccountSetup: ({
+    sessionEpoch,
+    section,
+  }: {
+    sessionEpoch: number | null;
+    section?: string;
+  }) =>
+    createElement("div", {
+      "data-setup-epoch": sessionEpoch,
+      "data-setup-section": section,
+    }),
 }));
 
 vi.mock("../lib/apiClient", async (original) => ({
@@ -86,6 +95,15 @@ const readiness: ReceivingReadiness = {
   destinationVersion: null,
   catalogEligible: false,
   mode: "disabled",
+};
+const ready: ReceivingReadiness = {
+  siteId: "wedding-1",
+  state: "READY",
+  reason: null,
+  observedAt: "2026-10-12T17:00:00.000Z",
+  destinationVersion: 1,
+  catalogEligible: true,
+  mode: "sandbox",
 };
 beforeEach(() => {
   vi.useFakeTimers();
@@ -200,8 +218,11 @@ describe("receiving session boundary", () => {
     expect(html).not.toContain("/login/auth");
     expect(loadGiftsReadiness).not.toHaveBeenCalled();
   });
-  it("links Recebimentos to the guide for the selected site", () => {
-    expect(render(9)).toContain('href="/sites/wedding-1/receiving-guide"');
+  it("opens the guided setup on the overview until receiving is ready", () => {
+    const html = render(9);
+    expect(html).toContain('data-setup-section="overview"');
+    expect(html).not.toContain('aria-label="Páginas de recebimentos"');
+    expect(html).not.toContain("data-finance-access");
   });
   it("withholds OWNER financial surfaces until selected-site access is returned by the server", () => {
     const html = renderToStaticMarkup(
@@ -257,10 +278,14 @@ describe("receiving session boundary", () => {
     candidate = access,
     page:
       | "overview"
+      | "holder"
+      | "details"
       | "activation"
       | "account"
+      | "fees"
       | "payments"
       | "withdrawals" = "overview",
+    current: ReceivingReadiness | null = null,
   ) {
     return renderToStaticMarkup(
       createElement(ReceivingSectionView, {
@@ -268,7 +293,7 @@ describe("receiving session boundary", () => {
         page,
         access: candidate,
         sessionEpoch,
-        readiness: null,
+        readiness: current,
         failed: false,
         onRetry: vi.fn(),
       }),
@@ -276,27 +301,46 @@ describe("receiving session boundary", () => {
   }
   it("withholds receiving and finance authority while the session is unverified", () => {
     expect(render(null)).toContain('data-receiving-access="false"');
-    expect(render(null)).toContain('data-finance-access="false"');
+    expect(render(null)).not.toContain("data-finance-access");
+    expect(render(null)).not.toContain("data-setup-epoch");
   });
-  it("passes current same-site access to the existing read views", () => {
-    expect(render(9)).toContain('data-finance-epoch="9"');
-    expect(render(9)).toContain('data-finance-access="true"');
-    expect(render(9)).toContain('data-receiving-access="true"');
+  it("passes current same-site access to the existing read views once ready", () => {
+    const html = render(9, access, "overview", ready);
+    expect(html).toContain('data-finance-epoch="9"');
+    expect(html).toContain('data-finance-access="true"');
+    expect(html).toContain('data-receiving-access="true"');
   });
-  it("keeps account and finance tasks off the overview and provides direct navigation", () => {
-    const html = render(9);
+  it("shows payments and withdrawals tabs only when receiving is ready", () => {
+    const html = render(9, access, "overview", ready);
     expect(html).not.toContain("data-setup-epoch");
-    for (const page of ["activation", "account", "payments", "withdrawals"])
+    for (const page of ["payments", "withdrawals"])
+      expect(html).toContain(`href="/sites/wedding-1/receiving/${page}"`);
+    for (const page of ["account", "fees"])
       expect(html).toContain(`href="/sites/wedding-1/receiving/${page}"`);
     expect(html).toContain('aria-current="page"');
+    expect(render(9, access, "overview", readiness)).not.toContain(
+      'aria-label="Páginas de recebimentos"',
+    );
+    expect(render(9, access, "activation", ready)).not.toContain(
+      'aria-label="Páginas de recebimentos"',
+    );
     expect(render(9, access, "activation")).not.toContain(
       "data-finance-access",
     );
-    expect(render(9, access, "payments")).not.toContain("data-setup-epoch");
+    expect(render(9, access, "activation")).toContain(
+      'data-setup-section="activation"',
+    );
+    const early = render(9, access, "payments", readiness);
+    expect(early).not.toContain("data-setup-epoch");
+    expect(early).not.toContain("data-finance-access");
+    expect(early).toContain("quando os recebimentos estiverem liberados");
+    expect(render(9, access, "payments", ready)).toContain(
+      'data-finance-access="true"',
+    );
   });
   it("denies a different-site membership", () => {
-    expect(render(9, { ...access, siteId: "other" })).toContain(
-      'data-finance-access="false"',
-    );
+    const html = render(9, { ...access, siteId: "other" });
+    expect(html).toContain('data-receiving-access="false"');
+    expect(html).not.toContain("data-setup-epoch");
   });
 });

@@ -25,5 +25,7 @@ export function getWorkspaceHeading({
     title: areaTitle[area],
     showBackLink: owner,
     showLifecycleBadge: owner || lifecycle === "INACTIVE",
+    // These areas show a task-specific title and actions of their own.
+    ownPageHeader: area === "receiving" || area === "gifts",
   };
 }

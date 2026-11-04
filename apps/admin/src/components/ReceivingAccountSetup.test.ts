@@ -14,6 +14,31 @@ import {
   ReceivingAccountSetupView,
 } from "./ReceivingAccountSetup";
 
+vi.mock("@tanstack/react-router", () => ({
+  Link: ({
+    children,
+    to,
+    params,
+    hash: _hash,
+    ...props
+  }: {
+    children: React.ReactNode;
+    to: string;
+    params?: { siteId?: string; page?: string };
+    hash?: string;
+  }) =>
+    createElement(
+      "a",
+      {
+        ...props,
+        href: to
+          .replace("$siteId", params?.siteId ?? "")
+          .replace("$page", params?.page ?? ""),
+      },
+      children,
+    ),
+}));
+
 beforeEach(() => vi.stubGlobal("__APP_ENV__", "development"));
 afterEach(() => vi.unstubAllGlobals());
 
@@ -235,6 +260,7 @@ describe("receiving account setup", () => {
         scope: v.scope,
         state: v.controller.getState(),
         guard: v.controller.guard,
+        section: "details",
       }),
     );
     expect(html).not.toContain("Sandbox");
@@ -334,31 +360,29 @@ describe("receiving account setup", () => {
         },
       }),
     );
-    const visible = html.slice(0, html.indexOf("<details"));
-    expect(visible).toContain("Continuar ativação no Asaas");
+    const visible = html.slice(0, html.indexOf('id="duvidas"'));
+    expect(visible).toContain("Abrir o Asaas");
     expect(visible).toContain(
       'href="https://www.asaas.com/login/auth?customerSignUpOriginChannel=HOME"',
     );
     expect(visible).toContain('target="_blank"');
     expect(visible).toContain('rel="noopener noreferrer"');
-    expect(visible).toContain("código por SMS");
+    expect(visible).toContain("código recebido por SMS");
     expect(visible).toContain("tela de ativação do Asaas");
     expect(visible).toContain("Minha conta");
+    expect(visible).toContain("Não recebi o e-mail do Asaas");
     expect(visible).toContain(
-      "é obrigatório ativar a conta e concluir a verificação de identidade no Asaas",
+      'href="mailto:luisrcadev@gmail.com?subject=Ajuda%20com%20a%20ativa%C3%A7%C3%A3o%20no%20Asaas"',
     );
     const guidance = visible.slice(
-      visible.indexOf('aria-label="Próximo passo da ativação"'),
+      visible.indexOf('aria-label="Tarefas no Asaas"'),
     );
     const steps = [
-      "e-mail de ativação",
-      "Entre no Asaas",
-      "código por SMS",
-      "Envie os documentos",
-      "Aguarde a análise",
+      "Criar sua senha",
+      "Confirmar o celular",
+      "Enviar documentos e selfie",
+      "Depois: análise do Asaas",
       "prepara automaticamente",
-      "Volte ao EntreLaços",
-      "chave de saque",
     ];
     const positions = steps.map((step) => guidance.indexOf(step));
     expect(positions.every((position) => position >= 0)).toBe(true);
@@ -401,7 +425,7 @@ describe("receiving account setup", () => {
             scenario === "ready" ? { ...readiness, mode: "live" } : null,
         }),
       );
-      expect(html).not.toContain("Continuar ativação no Asaas");
+      expect(html).not.toContain("Abrir o Asaas");
       values.controller.dispose();
     },
   );
@@ -442,7 +466,7 @@ describe("receiving account setup", () => {
         expect(button).toBeDefined();
         expect(button).not.toMatch(/\sdisabled(?:\s|=|>)/);
       }
-      expect(html).toContain("Conta criada no Asaas");
+      expect(html).toContain("Sua conta foi criada");
       expect(html).not.toContain("Destino Pix para saques");
       const accountHtml = renderToStaticMarkup(
         createElement(ReceivingAccountSetupView, {
@@ -597,6 +621,7 @@ describe("receiving account setup", () => {
         scope: values.scope,
         state: { status: "ready", setup, message: null },
         guard: values.controller.guard,
+        section: "details",
       }),
     );
     expect(html).toContain("Nome completo do titular");
@@ -615,19 +640,20 @@ describe("receiving account setup", () => {
         state: values.controller.getState(),
         guard: values.controller.guard,
         onSubmit: vi.fn(),
+        section: "details",
       }),
     );
-    const beforeForm = html.slice(0, html.indexOf("<form"));
-    expect(beforeForm).toContain(
-      "é obrigatório ativar a conta e concluir a verificação de identidade no Asaas",
+    const afterForm = html.slice(html.indexOf("</form>"));
+    expect(afterForm).toContain("O que vem depois");
+    expect(afterForm).toContain("E-mail do Asaas");
+    expect(afterForm).toContain("confirmar o celular");
+    expect(afterForm).toContain("documento e a selfie");
+    expect(afterForm).toContain("Seus dados ficam seguros");
+    expect(html).toContain("Criar minha conta no Asaas");
+    expect(html).toContain("Ler o termo completo");
+    expect(html).toContain(
+      receivingSetupDisclosure.text.split(" Em Sandbox,")[0],
     );
-    expect(beforeForm).toContain("documentos");
-    expect(beforeForm).toContain("selfie, quando solicitado");
-    expect(beforeForm).toContain("e-mail");
-    expect(beforeForm).toContain("SMS");
-    expect(beforeForm).toContain("no próprio Asaas");
-    expect(beforeForm).toContain("proteger seus recebimentos");
-    expect(html).toContain("Enviar cadastro ao Asaas");
     expect(
       values.request.mock.calls.some(
         ([, options]) => options?.method === "POST",
@@ -655,6 +681,7 @@ describe("receiving account setup", () => {
           message: null,
         },
         guard: values.controller.guard,
+        section: "details",
       }),
     );
     expect(html).toContain("Marina");
@@ -742,7 +769,7 @@ describe("receiving account setup", () => {
     values.controller.dispose();
   });
   it.each([
-    ["PENDING", "Pendente"],
+    ["PENDING", "Aguardando envio"],
     ["AWAITING_APPROVAL", "Em análise"],
   ] as const)(
     "shows %s without implying an unsubmitted account is under review",
@@ -758,7 +785,8 @@ describe("receiving account setup", () => {
               providerStatus: {
                 commercialInfo: "APPROVED",
                 bankAccountInfo: "PENDING",
-                documentation: "PENDING",
+                documentation:
+                  general === "PENDING" ? "PENDING" : "AWAITING_APPROVAL",
                 general,
                 commercialInfoExpired: false,
                 observedAt: "2026-10-16T12:00:00.000Z",
@@ -768,7 +796,7 @@ describe("receiving account setup", () => {
           },
         }),
       );
-      expect(html).toContain(`>${label}</span>`);
+      expect(html).toContain(`${label}</span>`);
       if (general === "PENDING") expect(html).not.toContain("Em análise");
       values.controller.dispose();
     },
@@ -792,18 +820,12 @@ describe("receiving account setup", () => {
         state: values.controller.getState(),
       }),
     );
-    expect(html).toContain("Ativação e acesso ao Asaas");
+    expect(html).toContain("Como o painel acompanha a ativação?");
     expect(html).toContain(
-      "A ativação de acesso e o envio ou recebimento de e-mail não são consultados por este painel.",
+      "A senha e o recebimento do e-mail não são consultados por este painel.",
     );
-    expect(html).toContain("Para contas com acesso direto ao Asaas");
-    expect(html).toContain(
-      "o e-mail de ativação é enviado automaticamente na criação da conta",
-    );
-    expect(html).toContain(
-      "defina sua senha de primeiro acesso no próprio Asaas",
-    );
-    expect(html).toContain("Se o Asaas fornecer uma jornada de cadastro");
+    expect(html).toContain("defina a senha de acesso");
+    expect(html).toContain("O EntreLaços não vê sua senha.");
     expect(html).toContain("atualiza as verificações cadastrais do Asaas");
     expect(html).not.toMatch(/Reenviar|Ativação concluída|E-mail enviado/);
     expect(values.request).toHaveBeenCalledTimes(1);
@@ -832,7 +854,7 @@ describe("receiving account setup", () => {
           },
         }),
       );
-      expect(html).toContain("Ativação e acesso ao Asaas");
+      expect(html).toContain("Como o painel acompanha a ativação?");
       expect(html.includes("comunicações de teste são redirecionadas")).toBe(
         visible,
       );
@@ -864,7 +886,9 @@ describe("receiving account setup", () => {
           },
         }),
       );
-      expect(html).not.toContain("Ativação e acesso ao Asaas");
+      expect(html).not.toContain('aria-label="Tarefas no Asaas"');
+      expect(html).not.toContain("Abrir o Asaas");
+      expect(html).toContain("Primeiro, crie a conta na etapa 2");
       values.controller.dispose();
     },
   );
@@ -878,6 +902,7 @@ describe("receiving account setup", () => {
           setup: { ...setup, accountState: "UNKNOWN" },
           message: null,
         },
+        section: "details",
       }),
     );
     expect(html).toContain("incerto");
@@ -906,6 +931,7 @@ describe("receiving account setup", () => {
           message: null,
         },
         onDesignate: vi.fn(),
+        section: "holder",
       }),
     );
     expect(html).toContain("Marina");
@@ -1020,11 +1046,15 @@ describe("receiving account setup", () => {
           subscribeInvalidation: () => () => {},
         },
         onSubmit: vi.fn(),
+        section: "details",
       }),
     );
     expect(html).toContain('name="cpfCnpj"');
     expect(html).toContain('name="consent"');
-    expect(html).not.toMatch(/type="password"|senha|reauthenticationToken/);
+    // The Asaas password is only mentioned as a later step, never requested.
+    expect(html).not.toMatch(
+      /type="password"|reauthenticationToken|Sua senha do EntreLaços/,
+    );
     expect(html).not.toMatch(/name="consent"[^>]*checked/);
     values.controller.dispose();
   });

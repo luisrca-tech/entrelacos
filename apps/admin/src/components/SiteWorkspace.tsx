@@ -438,34 +438,16 @@ export function SiteWorkspace({
 
   return (
     <>
-      <section className="mb-6 grid gap-2.5">
-        {heading.showBackLink && (
-          <Link
-            className="w-fit text-[0.88rem] text-admin-muted no-underline hover:text-admin-ink"
-            to="/"
-          >
-            ← Todos os casamentos
-          </Link>
-        )}
-        <div className="flex items-end justify-between gap-8 [@media(max-width:760px)]:flex-col [@media(max-width:760px)]:items-start [@media(max-width:760px)]:gap-4">
-          <div>
-            <h1
-              className={`m-0 max-w-none text-[clamp(1.85rem,3vw,2.6rem)] ${displayHeading}`}
-            >
-              {heading.title}
-            </h1>
-            <p className="mt-2 text-base leading-[1.6] text-admin-muted">
-              {site.displayName}
-            </p>
-          </div>
-          <div className="flex shrink-0 flex-wrap items-center justify-end gap-3 [@media(max-width:760px)]:w-full [@media(max-width:760px)]:justify-start">
-            {site.publicUrl && (
-              <a
-                className="inline-flex min-h-[42px] w-fit items-center justify-center rounded-lg border border-admin-graphite bg-admin-graphite px-[17px] py-2.5 text-[0.88rem] font-bold text-[#fffaf6] no-underline hover:bg-admin-ink [@media(max-width:760px)]:w-full"
-                href={publicSiteHandoffUrl(site.publicUrl, panelOrigin)}
+      {heading.ownPageHeader ? (
+        (heading.showBackLink || heading.showLifecycleBadge) && (
+          <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+            {heading.showBackLink && (
+              <Link
+                className="w-fit text-[0.88rem] text-admin-muted no-underline hover:text-admin-ink"
+                to="/"
               >
-                Ir para o site
-              </a>
+                ← Todos os casamentos
+              </Link>
             )}
             {heading.showLifecycleBadge && (
               <Badge
@@ -475,8 +457,50 @@ export function SiteWorkspace({
               </Badge>
             )}
           </div>
-        </div>
-      </section>
+        )
+      ) : (
+        <section className="mb-6 grid gap-2.5">
+          {heading.showBackLink && (
+            <Link
+              className="w-fit text-[0.88rem] text-admin-muted no-underline hover:text-admin-ink"
+              to="/"
+            >
+              ← Todos os casamentos
+            </Link>
+          )}
+          <div className="flex items-end justify-between gap-8 [@media(max-width:760px)]:flex-col [@media(max-width:760px)]:items-start [@media(max-width:760px)]:gap-4">
+            <div>
+              <h1
+                className={`m-0 max-w-none text-[clamp(1.85rem,3vw,2.6rem)] ${displayHeading}`}
+              >
+                {heading.title}
+              </h1>
+              <p className="mt-2 text-base leading-[1.6] text-admin-muted">
+                {site.displayName}
+              </p>
+            </div>
+            <div className="flex shrink-0 flex-wrap items-center justify-end gap-3 [@media(max-width:760px)]:w-full [@media(max-width:760px)]:justify-start">
+              {site.publicUrl && (
+                <a
+                  className="inline-flex min-h-[42px] w-fit items-center justify-center rounded-lg border border-admin-graphite bg-admin-graphite px-[17px] py-2.5 text-[0.88rem] font-bold text-[#fffaf6] no-underline hover:bg-admin-ink [@media(max-width:760px)]:w-full"
+                  href={publicSiteHandoffUrl(site.publicUrl, panelOrigin)}
+                >
+                  Ir para o site
+                </a>
+              )}
+              {heading.showLifecycleBadge && (
+                <Badge
+                  variant={
+                    site.lifecycle === "ACTIVE" ? "default" : "secondary"
+                  }
+                >
+                  {labels[site.lifecycle]}
+                </Badge>
+              )}
+            </div>
+          </div>
+        </section>
+      )}
       {inactive && (
         <p className={adminStyles.notice}>
           Casamento inativo. Os dados estão preservados e a consulta permanece

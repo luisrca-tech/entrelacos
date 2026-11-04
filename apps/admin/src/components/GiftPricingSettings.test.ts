@@ -1,8 +1,9 @@
-﻿// @vitest-environment jsdom
+// @vitest-environment jsdom
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { describe, expect, it, vi } from "vitest";
 import {
+  GiftFeeAllocationChooser,
   GiftPricingPreview,
   GiftPricingSettings,
   parsePricingPreview,
@@ -57,7 +58,7 @@ describe("gift pricing settings", () => {
             isCurrent: () => true,
             gifts: [{ nominalCents: 10000 }],
             // biome-ignore lint/correctness/noChildrenProp: Required children contract.
-            children: null,
+            children: createElement(GiftFeeAllocationChooser),
           }),
         ),
       );
@@ -65,7 +66,7 @@ describe("gift pricing settings", () => {
         (
           container.querySelectorAll(
             'input[type="radio"]',
-          )[1] as HTMLInputElement
+          )[0] as HTMLInputElement
         ).click();
       await act(async () => select());
       await act(async () =>
@@ -143,7 +144,10 @@ describe("gift pricing settings", () => {
             isCurrent: () => true,
             gifts: [{ nominalCents: 10000 }],
             // biome-ignore lint/correctness/noChildrenProp: Required children contract.
-            children: createElement(Meaning),
+            children: [
+              createElement(GiftFeeAllocationChooser, { key: "chooser" }),
+              createElement(Meaning, { key: "meaning" }),
+            ],
           }),
         ),
       );
@@ -151,7 +155,7 @@ describe("gift pricing settings", () => {
         (
           container.querySelectorAll(
             'input[type="radio"]',
-          )[1] as HTMLInputElement
+          )[0] as HTMLInputElement
         ).click(),
       );
       const impact = container.querySelector(
@@ -313,9 +317,13 @@ describe("gift pricing settings", () => {
             isCurrent: () => true,
             gifts: [{ nominalCents: 10000 }],
             // biome-ignore lint/correctness/noChildrenProp: createElement props keep the required children contract.
-            children: createElement(GiftPricingPreview, {
-              nominalCents: 10000,
-            }),
+            children: [
+              createElement(GiftFeeAllocationChooser, { key: "chooser" }),
+              createElement(GiftPricingPreview, {
+                key: "preview",
+                nominalCents: 10000,
+              }),
+            ],
           }),
         ),
       );
@@ -324,7 +332,7 @@ describe("gift pricing settings", () => {
         (
           container.querySelectorAll(
             'input[type="radio"]',
-          )[1] as HTMLInputElement
+          )[0] as HTMLInputElement
         ).click(),
       );
       expect(container.textContent).toContain("R$ 100,00");
@@ -368,13 +376,13 @@ it("labels the explicit Sandbox capability without claiming commercial availabil
           isCurrent: () => true,
           gifts: [],
           // biome-ignore lint/correctness/noChildrenProp: Required children contract.
-          children: null,
+          children: createElement(GiftFeeAllocationChooser),
         }),
       ),
     );
     await act(async () =>
       (
-        container.querySelectorAll('input[type="radio"]')[1] as HTMLInputElement
+        container.querySelectorAll('input[type="radio"]')[0] as HTMLInputElement
       ).click(),
     );
     expect(container.textContent).toContain("Confirmar homologação Sandbox");

@@ -10,6 +10,21 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ReceivingAccountSetup } from "./ReceivingAccountSetup";
 
+vi.mock("@tanstack/react-router", () => ({
+  Link: ({
+    children,
+    to: _to,
+    params: _params,
+    hash: _hash,
+    ...props
+  }: {
+    children: React.ReactNode;
+    to: string;
+    params?: unknown;
+    hash?: string;
+  }) => createElement("a", props, children),
+}));
+
 const access: SiteAccess = {
   siteId: "site-one",
   userId: "holder-one",

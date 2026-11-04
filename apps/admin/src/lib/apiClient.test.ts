@@ -57,13 +57,18 @@ describe("panel API boundary", () => {
       ),
     ).resolves.toBeUndefined();
   });
-  it.each(["activation", "account", "payments", "withdrawals"])(
-    "preserves the receiving %s page after login",
-    (page) => {
-      const destination = `/sites/demo/receiving/${page}?filter=pending`;
-      expect(safePanelReturn(destination)).toBe(destination);
-    },
-  );
+  it.each([
+    "holder",
+    "details",
+    "activation",
+    "account",
+    "fees",
+    "payments",
+    "withdrawals",
+  ])("preserves the receiving %s page after login", (page) => {
+    const destination = `/sites/demo/receiving/${page}?filter=pending`;
+    expect(safePanelReturn(destination)).toBe(destination);
+  });
   it.each([
     "/sites/demo/receiving/unknown",
     "/sites/demo/receiving/activation/extra",

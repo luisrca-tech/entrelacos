@@ -21,7 +21,21 @@ vi.mock("./AdminShell", () => ({
 }));
 vi.mock("./SiteWorkspace", () => ({
   SiteWorkspace: (props: React.ComponentProps<typeof ReceivingAccountSetup>) =>
-    createElement(ReceivingAccountSetup, props),
+    createElement(ReceivingAccountSetup, { ...props, section: "details" }),
+}));
+vi.mock("@tanstack/react-router", () => ({
+  Link: ({
+    children,
+    to: _to,
+    params: _params,
+    hash: _hash,
+    ...props
+  }: {
+    children: React.ReactNode;
+    to: string;
+    params?: unknown;
+    hash?: string;
+  }) => createElement("a", props, children),
 }));
 
 const actor: MeResponse = {

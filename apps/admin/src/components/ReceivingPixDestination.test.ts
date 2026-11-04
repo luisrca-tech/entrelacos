@@ -151,12 +151,12 @@ describe("Pix destination review", () => {
         onConfirm: vi.fn(),
       }),
     );
-    expect(html).toContain("Seu destino Pix salvo");
-    expect(html).toContain("Alterar destino Pix");
+    expect(html).toContain("Sua conta para saque");
+    expect(html).toContain("Alterar conta para saque");
     expect(html).toContain("um destino Pix ativo");
     expect(html).toContain("Celular");
-    expect(html).not.toContain("Chave Pix do destinatário");
-    expect(html).not.toContain("Salvar destino Pix");
+    expect(html).not.toContain("Conferir destinatário");
+    expect(html).not.toContain("Salvar conta para saque");
   });
   it("cancels editing without replacing the saved destination or submitting", async () => {
     (
@@ -183,7 +183,7 @@ describe("Pix destination review", () => {
       );
       await act(async () =>
         [...node.querySelectorAll("button")]
-          .find((button) => button.textContent === "Alterar destino Pix")
+          .find((button) => button.textContent === "Alterar conta para saque")
           ?.click(),
       );
       expect(node.querySelector('input[type="text"]')).not.toBeNull();
@@ -229,7 +229,7 @@ describe("Pix destination review", () => {
           ),
         );
         const button = [...node.querySelectorAll("button")].find(
-          (value) => value.textContent === "Salvar destino Pix",
+          (value) => value.textContent === "Salvar conta para saque",
         );
         const form = button?.closest("form");
         expect(form).toBeTruthy();
@@ -297,9 +297,9 @@ describe("Pix destination review", () => {
         onConfirm: vi.fn(),
       }),
     );
-    expect(html).toContain("Salvar destino Pix");
+    expect(html).toContain("Salvar conta para saque");
     expect(html.match(/type="checkbox"/g)).toHaveLength(2);
-    expect(html).not.toContain("checked=");
+    expect(html).not.toMatch(/type="checkbox"[^>]*checked/);
     expect(html).toContain("escolho prosseguir");
   });
   it("shows saved recipient information read-only to OWNER without a key or confirmation form", () => {
@@ -312,9 +312,9 @@ describe("Pix destination review", () => {
       }),
     );
     expect(html).toContain("Fictional Holder");
-    expect(html).toContain("Seu destino Pix salvo");
+    expect(html).toContain("Sua conta para saque");
     expect(html).not.toContain("<form");
-    expect(html).not.toContain("Salvar destino Pix");
+    expect(html).not.toContain("Salvar conta para saque");
   });
   it("retains an unknown save after Chrome becomes hidden until a saved-destination read", async () => {
     const v = fixture();

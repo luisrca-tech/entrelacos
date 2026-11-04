@@ -62,6 +62,26 @@ describe("site workspace heading", () => {
     ).toBe("Presentes");
   });
 
+  it("lets receiving and gifts render their own page header", () => {
+    for (const area of ["receiving", "gifts"] as const)
+      expect(
+        getWorkspaceHeading({ area, owner: false, lifecycle: "ACTIVE" })
+          .ownPageHeader,
+      ).toBe(true);
+    for (const area of [
+      "home",
+      "invitations",
+      "messages",
+      "receiving-guide",
+      "team",
+      "settings",
+    ] as const)
+      expect(
+        getWorkspaceHeading({ area, owner: true, lifecycle: "ACTIVE" })
+          .ownPageHeader,
+      ).toBe(false);
+  });
+
   it("always shows lifecycle status to owners", () => {
     expect(
       getWorkspaceHeading({

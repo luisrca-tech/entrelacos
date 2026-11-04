@@ -21,6 +21,7 @@ import {
   TableRow,
   toast,
 } from "@entrelacos/ui";
+import { Check } from "lucide-react";
 import {
   type FormEvent,
   type ReactNode,
@@ -40,6 +41,7 @@ import type {
   ReceivingSetupPorts,
   ReceivingSetupScope,
 } from "./ReceivingSetup";
+import { normalizePixKey } from "./receivingSetupForm";
 
 export type ReceivingPixDestinationState = {
   status:
@@ -503,6 +505,20 @@ export function ReceivingPixDestination(props: {
     </ReceivingPixDestinationView>
   );
 }
+const keyTypeLabels: Record<ReceivingPixDestinationInput["type"], string> = {
+  CPF: "CPF",
+  CNPJ: "CNPJ",
+  PHONE: "Celular",
+  EMAIL: "E-mail",
+  EVP: "Chave aleatória",
+};
+const keyPlaceholders: Record<ReceivingPixDestinationInput["type"], string> = {
+  CPF: "000.000.000-00",
+  CNPJ: "00.000.000/0000-00",
+  PHONE: "(11) 90000-0000",
+  EMAIL: "nome@email.com",
+  EVP: "Cole a chave aleatória",
+};
 export function ReceivingPixDestinationView({
   mode,
   state,
@@ -540,29 +556,15 @@ export function ReceivingPixDestinationView({
   const showEditor = !readOnly && (!state.saved || editing);
   function submit(event: FormEvent) {
     event.preventDefault();
-    if (!locked) onLookup?.({ type, key });
+    if (!locked) onLookup?.({ type, key: normalizePixKey(type, key) });
   }
   return (
     <section
       aria-label="Destino Pix para saques"
-      className="grid gap-4 rounded-xl border border-admin-line bg-admin-surface p-6"
+      className="grid min-w-0 gap-5"
     >
-      <h3 className="font-admin-display text-xl">Destino Pix para saques</h3>
-      {showEditor && (
-        <p className="m-0 text-sm text-admin-muted">
-          O destino pode pertencer a outra pessoa. Confira o nome completo, o
-          documento e o banco retornados pelo Asaas antes de confirmar. Salvar o
-          destino não envia dinheiro.
-        </p>
-      )}
-      {showEditor && (
-        <p className="m-0 text-sm text-admin-muted">
-          Cada casamento mantém um destino Pix ativo. Salvar uma alteração
-          substitui o destino anterior.
-        </p>
-      )}
       {showSandboxNotice(mode) && showEditor && (
-        <p>
+        <p className="m-0 rounded-[10px] bg-admin-pending-wash p-3 text-sm leading-[1.55] text-admin-pending-ink">
           No Sandbox, use um exemplo de teste: tipo Celular, chave 47996515839,
           ou tipo E-mail, chave cliente-a00001@pix.bcb.gov.br. Os dados
           retornados pertencem ao ambiente de testes.
@@ -570,125 +572,185 @@ export function ReceivingPixDestinationView({
       )}
       {state.saved && (
         <section
-          aria-label="Seu destino Pix salvo"
-          className="grid gap-3 rounded-lg border border-admin-line p-4"
+          aria-label="Sua conta para saque"
+          className="grid min-w-0 gap-3 overflow-hidden rounded-[14px] border border-admin-line"
         >
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h4 className="m-0 font-semibold">Seu destino Pix salvo</h4>
-            <Badge variant="outline">Atual</Badge>
+          <div className="flex flex-wrap items-center justify-between gap-2 bg-admin-canvas px-[18px] py-3">
+            <h3 className="m-0 text-[0.95rem] font-bold text-admin-ink">
+              Sua conta para saque
+            </h3>
+            <span className="inline-flex items-center rounded-full bg-admin-success-wash px-2.5 py-1 text-xs leading-none font-bold text-admin-success-ink">
+              Atual
+            </span>
           </div>
-          <p className="m-0 text-xs text-admin-muted">
-            Este casamento mantém um destino Pix ativo.
-          </p>
-          <PixRecipientDetails recipient={state.saved} />
-          {!readOnly && !editing && (
-            <Button
-              type="button"
-              variant="outline"
-              disabled={locked}
-              onClick={() => {
-                onReset?.();
-                setType(state.saved?.keyType ?? type);
-                setKey("");
-                setEditing(true);
-              }}
-            >
-              Alterar destino Pix
-            </Button>
-          )}
+          <div className="grid gap-3 px-[18px] pb-[18px]">
+            <PixRecipientDetails recipient={state.saved} />
+            <p className="m-0 text-xs text-admin-muted">
+              Este casamento mantém um destino Pix ativo.
+            </p>
+            {!readOnly && !editing && (
+              <Button
+                type="button"
+                variant="outline"
+                className="w-fit"
+                disabled={locked}
+                onClick={() => {
+                  onReset?.();
+                  setType(state.saved?.keyType ?? type);
+                  setKey("");
+                  setEditing(true);
+                }}
+              >
+                Alterar conta para saque
+              </Button>
+            )}
+          </div>
         </section>
       )}
       {readOnly && !state.saved && state.status === "ready" && (
-        <p>Nenhum destino Pix foi configurado.</p>
+        <p className="m-0 text-admin-body">
+          Nenhum destino Pix foi configurado.
+        </p>
       )}
       {showEditor && (
-        <form className="grid gap-3" onSubmit={submit} autoComplete="off">
-          <label htmlFor={`${id}-type`}>Tipo de chave Pix</label>
-          <select
-            id={`${id}-type`}
-            value={type}
-            disabled={locked}
-            onChange={(event) => {
-              onReset?.();
-              setType(
-                event.target.value as ReceivingPixDestinationInput["type"],
-              );
-            }}
-            className="rounded-lg border border-admin-line p-3"
-          >
-            {[
-              ["CPF", "CPF"],
-              ["CNPJ", "CNPJ"],
-              ["EMAIL", "E-mail"],
-              ["PHONE", "Celular (DDD e número)"],
-              ["EVP", "Chave aleatória"],
-            ].map(([value, label]) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
-          </select>
-          <label htmlFor={`${id}-key`}>
-            {state.saved ? "Nova chave Pix" : "Chave Pix do destinatário"}
-          </label>
-          <Input
-            id={`${id}-key`}
-            type="text"
-            value={key}
-            required
-            maxLength={254}
-            disabled={locked}
-            onChange={(event) => {
-              onReset?.();
-              setKey(event.target.value);
-            }}
-          />
-          <Button type="submit" disabled={locked}>
-            {state.status === "loading"
-              ? "Consultando destinatário…"
-              : "Consultar destinatário Pix"}
-          </Button>
-          {state.saved && (
-            <Button
-              type="button"
-              variant="outline"
-              disabled={state.status === "saving" || state.status === "unknown"}
-              onClick={() => {
-                onReset?.();
-                setEditing(false);
-                setKey("");
-              }}
+        <form
+          className="grid min-w-0 gap-5"
+          onSubmit={submit}
+          autoComplete="off"
+        >
+          <fieldset className="m-0 grid min-w-0 gap-2.5 border-0 p-0">
+            <legend className="mb-2.5 p-0 text-sm font-bold text-admin-ink">
+              Tipo de chave
+            </legend>
+            <div className="flex min-w-0 flex-wrap gap-2.5">
+              {(
+                Object.keys(
+                  keyTypeLabels,
+                ) as ReceivingPixDestinationInput["type"][]
+              ).map((value) => {
+                const checked = type === value;
+                return (
+                  <label
+                    key={value}
+                    className={`inline-flex min-h-11 cursor-pointer items-center gap-2.5 rounded-[10px] border px-4 text-[0.95rem] has-[:focus-visible]:outline-[3px] has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-[rgb(168_77_57_/_30%)] ${checked ? "border-2 border-admin-terracotta bg-admin-terracotta-wash font-semibold text-admin-terracotta-ink" : "border-admin-line-strong bg-admin-surface text-admin-ink"} ${locked ? "cursor-not-allowed opacity-60" : ""}`}
+                  >
+                    <input
+                      type="radio"
+                      name={`${id}-type`}
+                      value={value}
+                      checked={checked}
+                      disabled={locked}
+                      className="size-[18px] accent-admin-terracotta"
+                      onChange={() => {
+                        onReset?.();
+                        setType(value);
+                      }}
+                    />
+                    {keyTypeLabels[value]}
+                  </label>
+                );
+              })}
+            </div>
+          </fieldset>
+          <div className="grid min-w-0 max-w-[460px] gap-1.5">
+            <label
+              htmlFor={`${id}-key`}
+              className="text-sm font-bold text-admin-ink"
             >
-              Cancelar alteração
-            </Button>
+              {state.saved ? "Nova chave Pix" : "Chave Pix"}
+            </label>
+            <Input
+              id={`${id}-key`}
+              type="text"
+              value={key}
+              required
+              maxLength={254}
+              disabled={locked}
+              placeholder={keyPlaceholders[type]}
+              aria-describedby={`${id}-key-hint`}
+              className="min-h-[46px] rounded-[10px] border-admin-line-strong bg-admin-surface px-3.5 text-[0.95rem]"
+              onChange={(event) => {
+                onReset?.();
+                setKey(event.target.value);
+              }}
+            />
+            <p
+              id={`${id}-key-hint`}
+              className="m-0 text-[0.8rem] leading-[1.4] text-admin-muted"
+            >
+              Use a chave de um banco onde você tem conta. Não precisa ser
+              criada no Asaas.
+            </p>
+          </div>
+          {!state.review && (
+            <div className="flex flex-wrap gap-3">
+              <Button type="submit" variant="outline" disabled={locked}>
+                {state.status === "loading"
+                  ? "Conferindo destinatário…"
+                  : "Conferir destinatário"}
+              </Button>
+              {state.saved && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  disabled={
+                    state.status === "saving" || state.status === "unknown"
+                  }
+                  onClick={() => {
+                    onReset?.();
+                    setEditing(false);
+                    setKey("");
+                  }}
+                >
+                  Cancelar alteração
+                </Button>
+              )}
+            </div>
           )}
         </form>
       )}
       {state.status === "unknown" && (
-        <p>
+        <p role="alert" className="m-0 text-sm text-admin-danger-ink">
           Confirmação do destino pendente. Consulte o destino salvo antes de
           alterar novamente.
         </p>
       )}
       {showEditor && state.review && (
         <>
-          <PixRecipientDetails recipient={state.review} />
-          <p role="status">
-            {state.review.identity === "MISMATCH"
-              ? "O destinatário informado pelo Asaas é diferente do titular do recebimento. Você pode prosseguir com esse destinatário mediante confirmação explícita."
-              : state.review.identity === "INCOMPLETE"
-                ? "O Asaas retornou um documento incompleto. Você pode confirmar esse destinatário, mas a consulta não comprova que seja a mesma pessoa que o titular do recebimento."
-                : "Os dados completos retornados pelo Asaas correspondem ao titular do recebimento."}
-          </p>
-          <p>
-            Confira os dados abaixo e confirme para salvar este destino Pix.
-          </p>
+          <section
+            aria-label="Confira o destinatário"
+            className="grid min-w-0 overflow-hidden rounded-[14px] border border-admin-line"
+          >
+            <h3 className="m-0 bg-admin-canvas px-[18px] py-3 text-[0.95rem] font-bold text-admin-ink">
+              Confira o destinatário
+            </h3>
+            <div className="px-[18px] py-4">
+              <PixRecipientDetails recipient={state.review} />
+            </div>
+            <p
+              role="status"
+              className={`m-0 flex items-start gap-2 px-[18px] py-3 text-sm leading-[1.5] font-semibold ${state.review.identity === "MATCH" ? "bg-admin-success-wash text-admin-success-ink" : "bg-admin-pending-wash text-admin-pending-ink"}`}
+            >
+              {state.review.identity === "MATCH" && (
+                <Check aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
+              )}
+              {state.review.identity === "MISMATCH"
+                ? "O destinatário informado pelo Asaas é diferente do titular do recebimento. Você pode prosseguir com esse destinatário mediante confirmação explícita."
+                : state.review.identity === "INCOMPLETE"
+                  ? "O Asaas retornou um documento incompleto. Você pode confirmar esse destinatário, mas a consulta não comprova que seja a mesma pessoa que o titular do recebimento."
+                  : "Mesma pessoa titular dos recebimentos."}
+            </p>
+          </section>
           {onConfirm && !readOnly && (
             <PixRecipientConfirmation
               key={state.review.reviewToken}
               review={state.review}
               enabled={!locked}
               onConfirm={onConfirm}
+              onOtherKey={() => {
+                onReset?.();
+                setKey("");
+              }}
             >
               {children}
             </PixRecipientConfirmation>
@@ -696,58 +758,62 @@ export function ReceivingPixDestinationView({
         </>
       )}
       {!!state.recentDestinations?.length && (
-        <div className="grid gap-3">
-          <h3 className="m-0 font-admin-display text-xl">
+        <div className="grid min-w-0 gap-3">
+          <h3 className="m-0 text-base font-bold text-admin-ink">
             Últimos destinos salvos
           </h3>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Chave Pix</TableHead>
-                <TableHead>Destinatário</TableHead>
-                <TableHead>Salvo em</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {state.recentDestinations.map((destination) => (
-                <TableRow key={destination.destinationId}>
-                  <TableCell>
-                    <span className="font-medium">{destination.maskedKey}</span>
-                    {destination.destinationId ===
-                      state.saved?.destinationId && (
-                      <Badge variant="outline" className="ml-2">
-                        Atual
-                      </Badge>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <span>{destination.ownerName}</span>
-                    <span className="mt-1 block text-xs text-admin-muted">
-                      {destination.bankName}
-                    </span>
-                  </TableCell>
-                  <TableCell className="whitespace-nowrap text-sm">
-                    {new Date(destination.savedAt).toLocaleString("pt-BR", {
-                      timeZone: "America/Sao_Paulo",
-                      dateStyle: "short",
-                      timeStyle: "short",
-                    })}
-                  </TableCell>
+          <div className="min-w-0 overflow-x-auto rounded-[14px] border border-admin-line">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Chave Pix</TableHead>
+                  <TableHead>Destinatário</TableHead>
+                  <TableHead>Salvo em</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {state.recentDestinations.map((destination) => (
+                  <TableRow key={destination.destinationId}>
+                    <TableCell>
+                      <span className="font-medium">
+                        {destination.maskedKey}
+                      </span>
+                      {destination.destinationId ===
+                        state.saved?.destinationId && (
+                        <Badge variant="outline" className="ml-2">
+                          Atual
+                        </Badge>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <span>{destination.ownerName}</span>
+                      <span className="mt-1 block text-xs text-admin-muted">
+                        {destination.bankName}
+                      </span>
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap text-sm">
+                      {new Date(destination.savedAt).toLocaleString("pt-BR", {
+                        timeZone: "America/Sao_Paulo",
+                        dateStyle: "short",
+                        timeStyle: "short",
+                      })}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
         </div>
       )}
       {onRefresh && (
-        <Button
+        <button
           type="button"
-          variant="outline"
           disabled={!enabled || busy}
           onClick={onRefresh}
+          className="inline-flex min-h-10 w-fit items-center bg-transparent p-0 text-sm font-semibold text-admin-terracotta-deep underline underline-offset-4 disabled:cursor-not-allowed disabled:opacity-60"
         >
           Consultar destino salvo
-        </Button>
+        </button>
       )}
     </section>
   );
@@ -761,26 +827,18 @@ function PixRecipientDetails({
   >;
 }) {
   return (
-    <dl>
+    <dl className="m-0 grid min-w-0 grid-cols-[repeat(auto-fit,minmax(min(100%,140px),1fr))] gap-x-5 gap-y-3">
       {[
-        [
-          "Tipo de chave Pix",
-          {
-            CPF: "CPF",
-            CNPJ: "CNPJ",
-            EMAIL: "E-mail",
-            PHONE: "Celular",
-            EVP: "Chave aleatória",
-          }[recipient.keyType],
-        ],
-        ["Nome completo do destinatário", recipient.ownerName],
-        ["CPF/CNPJ retornado pelo Asaas", recipient.maskedCpfCnpj],
-        ["Banco do destinatário", recipient.bankName],
-        ["Chave consultada", recipient.maskedKey],
+        ["Nome", recipient.ownerName],
+        ["Banco", recipient.bankName],
+        ["CPF/CNPJ", recipient.maskedCpfCnpj],
+        [`Chave (${keyTypeLabels[recipient.keyType]})`, recipient.maskedKey],
       ].map(([label, value]) => (
-        <div key={label}>
-          <dt>{label}</dt>
-          <dd>{value}</dd>
+        <div key={label} className="grid min-w-0 gap-0.5">
+          <dt className="text-[0.82rem] text-admin-muted">{label}</dt>
+          <dd className="m-0 break-words text-[0.95rem] font-semibold text-admin-ink">
+            {value}
+          </dd>
         </div>
       ))}
     </dl>
@@ -790,20 +848,30 @@ function PixRecipientConfirmation({
   review,
   enabled,
   onConfirm,
+  onOtherKey,
   children,
 }: {
   review: ReceivingPixDestinationReview;
   enabled: boolean;
   onConfirm: (confirmed: boolean, thirdParty: boolean) => void;
+  onOtherKey: () => void;
   children?: ReactNode;
 }) {
   const [confirmed, setConfirmed] = useState(false),
     [thirdParty, setThirdParty] = useState(false);
   return (
-    <div className="grid gap-3">
-      {children}
+    <div className="grid min-w-0 gap-5">
+      <div className="grid justify-items-start gap-2">
+        <p className="m-0 text-sm font-bold text-admin-ink">
+          Sua senha do EntreLaços
+        </p>
+        <p className="m-0 text-[0.8rem] text-admin-muted">
+          Pedimos a senha para proteger o destino dos seus saques.
+        </p>
+        {children}
+      </div>
       <form
-        className="grid gap-3"
+        className="grid gap-4"
         onSubmit={(event) => {
           event.preventDefault();
           if (
@@ -814,42 +882,54 @@ function PixRecipientConfirmation({
             onConfirm(confirmed, thirdParty);
         }}
       >
-        <label>
+        <label className="flex cursor-pointer items-start gap-3 text-sm leading-[1.5] text-admin-body">
           <input
             type="checkbox"
             required
             aria-required="true"
             checked={confirmed}
             disabled={!enabled}
+            className="mt-0.5 size-5 shrink-0 accent-admin-terracotta"
             onChange={(event) => setConfirmed(event.target.checked)}
-          />{" "}
+          />
           Conferi o nome completo, o banco, o documento e a chave consultada e
           quero configurar este destinatário.
         </label>
         {review.identity !== "MATCH" && (
-          <label>
+          <label className="flex cursor-pointer items-start gap-3 text-sm leading-[1.5] text-admin-body">
             <input
               type="checkbox"
               required
               aria-required="true"
               checked={thirdParty}
               disabled={!enabled}
+              className="mt-0.5 size-5 shrink-0 accent-admin-terracotta"
               onChange={(event) => setThirdParty(event.target.checked)}
-            />{" "}
+            />
             Estou ciente de que o destino pode pertencer a outra pessoa ou ter
             identificação incompleta e escolho prosseguir.
           </label>
         )}
-        <Button
-          type="submit"
-          disabled={
-            !enabled ||
-            !confirmed ||
-            (review.identity !== "MATCH" && !thirdParty)
-          }
-        >
-          Salvar destino Pix
-        </Button>
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+          <Button
+            type="submit"
+            className="min-h-12 rounded-[10px] bg-admin-terracotta px-6 font-bold text-white hover:bg-admin-terracotta-deep disabled:bg-admin-beige-deep disabled:text-admin-muted disabled:opacity-100"
+            disabled={
+              !enabled ||
+              !confirmed ||
+              (review.identity !== "MATCH" && !thirdParty)
+            }
+          >
+            Salvar conta para saque
+          </Button>
+          <button
+            type="button"
+            onClick={onOtherKey}
+            className="inline-flex min-h-11 items-center bg-transparent p-0 text-[0.95rem] font-semibold text-admin-terracotta-deep underline underline-offset-4"
+          >
+            Usar outra chave
+          </button>
+        </div>
       </form>
     </div>
   );

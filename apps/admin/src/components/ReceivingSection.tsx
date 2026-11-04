@@ -3,17 +3,21 @@ import { Button } from "@entrelacos/ui";
 import { Link } from "@tanstack/react-router";
 import { useContext, useEffect, useState } from "react";
 import { ReceivingStatusCard } from "../features/receiving/ReceivingStatusCard";
+import { apiRequest } from "../lib/apiClient";
 import { FinanceSection } from "./FinanceSection";
+import { parsePricingSettings } from "./GiftPricingSettings";
 import { loadGiftsReadiness } from "./giftsReadiness";
 import { isCurrentPanelSessionEpoch, panelActorOwner } from "./panelActor";
 import { ReceivingAccountSetup } from "./ReceivingAccountSetup";
 import { ReceivingGuide } from "./ReceivingGuide";
+import type { ReceivingStepSection } from "./ReceivingSteps";
 import {
   type ReceivingPage,
   ReceivingPageContext,
-  receivingPages,
+  receivingTabs,
 } from "./receivingNavigation";
 import { loadReceivingOwnerAccess } from "./receivingOwnerAccess";
+import { receivingLink, receivingStepTitle } from "./receivingUi";
 
 type ReceivingSectionResult = {
   siteId: string;
@@ -106,6 +110,28 @@ export function ReceivingSection({
   }, [siteId, eligible, revision, sessionEpoch]);
   const current =
     result?.siteId === siteId && result.epoch === sessionEpoch ? result : null;
+  const [feesChosen, setFeesChosen] = useState(false);
+  const pricingReadable =
+    eligible &&
+    (platformOwner ||
+      selectedAccess?.membershipRole === "OWNER" ||
+      !!selectedAccess?.capabilities.manageCatalog);
+  useEffect(() => {
+    let active = true;
+    setFeesChosen(false);
+    if (pricingReadable && !guide && sessionEpoch !== null)
+      void apiRequest(
+        `/v1/sites/${encodeURIComponent(siteId)}/gift-pricing-settings`,
+      )
+        .then((value) => {
+          if (active && isCurrentPanelSessionEpoch(sessionEpoch))
+            setFeesChosen(parsePricingSettings(value, siteId).revision > 0);
+        })
+        .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [siteId, pricingReadable, guide, sessionEpoch]);
   if (guide) {
     return (
       <ReceivingGuide siteId={siteId} mode={current?.readiness?.mode ?? null} />
@@ -121,6 +147,8 @@ export function ReceivingSection({
       readiness={current?.readiness ?? null}
       failed={ownerAccessFailed || (current?.failed ?? false)}
       onRetry={() => setRevision((value) => value + 1)}
+      feesChosen={feesChosen}
+      onFeesChosen={() => setFeesChosen(true)}
     />
   );
 }
@@ -134,6 +162,8 @@ export function ReceivingSectionView({
   failed,
   onRetry,
   page = "overview",
+  feesChosen = false,
+  onFeesChosen,
 }: {
   siteId: string;
   access: SiteAccess | null;
@@ -143,134 +173,222 @@ export function ReceivingSectionView({
   failed: boolean;
   onRetry: () => void;
   page?: ReceivingPage;
+  feesChosen?: boolean;
+  onFeesChosen?: () => void;
 }) {
   const currentAccess =
     sessionEpoch !== null && access?.siteId === siteId ? access : null;
-  return (
-    <div className="grid gap-6">
-      <nav
-        aria-label="Páginas de recebimentos"
-        className="flex min-w-0 gap-1 overflow-x-auto rounded-xl border border-admin-line bg-admin-surface p-1.5"
-      >
-        {receivingPages.map((item) => (
-          <Link
-            key={item.id}
-            activeOptions={{ exact: true }}
-            to={
-              item.id === "overview"
-                ? "/sites/$siteId/receiving"
-                : "/sites/$siteId/receiving/$page"
+  const currentReadiness =
+    currentAccess && readiness?.siteId === siteId ? readiness : null;
+  const ready = currentReadiness?.state === "READY";
+  const setupEligible = canConfigureReceiving(
+    platformOwner,
+    sessionEpoch,
+    currentAccess,
+  );
+  const tabs = receivingTabs(ready);
+  const stepPage = !["overview", "payments", "withdrawals"].includes(page);
+  const statusCard = (
+    <ReceivingStatusCard
+      siteId={siteId}
+      access={currentAccess}
+      readiness={currentReadiness}
+      error={!!currentAccess && failed}
+      onRetry={onRetry}
+      action={
+        ready ? (
+          <Button
+            className="w-fit"
+            nativeButton={false}
+            render={
+              <Link
+                to="/sites/$siteId/receiving/$page"
+                params={{ siteId, page: "withdrawals" }}
+              />
             }
-            params={{ siteId, page: item.id }}
-            aria-current={page === item.id ? "page" : undefined}
-            className={`inline-flex min-h-11 shrink-0 items-center justify-center whitespace-nowrap rounded-lg px-4 py-2 text-sm font-semibold no-underline transition-colors ${page === item.id ? "bg-admin-graphite text-white" : "text-admin-muted hover:bg-admin-paper hover:text-admin-graphite"}`}
           >
-            {item.label}
-          </Link>
-        ))}
-      </nav>
-      {page === "activation" && (
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="m-0 text-sm text-admin-muted">
-            {readiness?.state === "READY"
-              ? "Consulte o cadastro e as verificações dos recebimentos."
-              : "Conclua o cadastro e acompanhe a liberação dos recebimentos."}
-          </p>
-          <Link
-            className="text-sm font-semibold text-admin-terracotta-deep underline underline-offset-4"
-            to="/sites/$siteId/receiving-guide"
-            params={{ siteId }}
+            Ver saques
+          </Button>
+        ) : setupEligible ? (
+          <Button
+            className="w-fit"
+            nativeButton={false}
+            render={
+              <Link
+                to="/sites/$siteId/receiving/$page"
+                params={{ siteId, page: "activation" }}
+              />
+            }
           >
-            Ajuda com a ativação
-          </Link>
-        </div>
-      )}
-      {page === "overview" && (
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="m-0 text-sm text-admin-muted">
-            Acompanhe seus presentes e encontre o próximo passo.
-          </p>
-          <Link
-            className="text-sm font-semibold text-admin-terracotta-deep underline underline-offset-4"
-            to="/sites/$siteId/receiving-guide"
-            params={{ siteId }}
-          >
-            Como funciona
-          </Link>
-        </div>
+            Acompanhar ativação
+          </Button>
+        ) : undefined
+      }
+    />
+  );
+  const setupView = (section: ReceivingStepSection) => (
+    <ReceivingAccountSetup
+      siteId={siteId}
+      access={currentAccess}
+      platformOwner={platformOwner}
+      sessionEpoch={sessionEpoch}
+      onReadinessChange={onRetry}
+      section={section}
+      readiness={readiness}
+      feesChosen={feesChosen}
+      onFeesChosen={onFeesChosen}
+      pricingEnabled={canManageFees(platformOwner, currentAccess)}
+    />
+  );
+  return (
+    <div className="grid min-w-0 gap-6">
+      {tabs.length > 0 && !stepPage && (
+        <nav
+          aria-label="Páginas de recebimentos"
+          className="flex w-fit max-w-full min-w-0 gap-1 overflow-x-auto rounded-xl border border-admin-line bg-admin-surface p-1.5"
+        >
+          {tabs.map((item) => (
+            <Link
+              key={item.id}
+              activeOptions={{ exact: true }}
+              to={
+                item.id === "overview"
+                  ? "/sites/$siteId/receiving"
+                  : "/sites/$siteId/receiving/$page"
+              }
+              params={{ siteId, page: item.id }}
+              aria-current={page === item.id ? "page" : undefined}
+              className={`inline-flex min-h-11 shrink-0 items-center justify-center whitespace-nowrap rounded-lg px-4 py-2 text-sm font-semibold no-underline transition-colors motion-reduce:transition-none ${page === item.id ? "bg-admin-graphite text-white" : "text-admin-muted hover:bg-admin-canvas hover:text-admin-graphite"}`}
+            >
+              {item.label}
+            </Link>
+          ))}
+        </nav>
       )}
       {platformOwner && !currentAccess ? (
-        <section className="grid gap-3 rounded-xl border border-admin-line bg-admin-surface p-6">
+        <section className="grid gap-3 rounded-2xl border border-admin-line bg-admin-surface p-6">
           <p role={failed ? "alert" : "status"}>
             {failed
               ? "Não foi possível consultar o acesso de leitura deste casamento."
               : "Consultando o acesso de leitura deste casamento…"}
           </p>
-          <Button onClick={onRetry}>Verificar acesso</Button>
+          <Button className="w-fit" onClick={onRetry}>
+            Verificar acesso
+          </Button>
         </section>
       ) : page === "overview" ? (
-        <ReceivingStatusCard
-          siteId={siteId}
-          access={currentAccess}
-          readiness={
-            currentAccess && readiness?.siteId === siteId ? readiness : null
-          }
-          error={!!currentAccess && failed}
-          onRetry={onRetry}
-          action={
-            <Button
-              className="w-fit"
-              nativeButton={false}
-              render={
+        setupEligible && !ready && !failed ? (
+          setupView("overview")
+        ) : (
+          <>
+            <ReceivingPageHeader />
+            {statusCard}
+            {setupEligible && ready && (
+              <p className="m-0 text-sm text-admin-muted">
+                Configuração concluída. Para revisar, abra{" "}
                 <Link
                   to="/sites/$siteId/receiving/$page"
-                  params={{
-                    siteId,
-                    page:
-                      readiness?.state === "READY"
-                        ? "withdrawals"
-                        : "activation",
-                  }}
-                />
-              }
-            >
-              {readiness?.state === "READY"
-                ? "Ver saques"
-                : "Acompanhar ativação"}
-            </Button>
-          }
-        />
-      ) : null}
-      {(page === "activation" || page === "account") &&
-        ((sessionEpoch !== null && platformOwner) ||
-          currentAccess?.membershipRole === "OWNER" ||
-          (currentAccess?.membershipRole === "SITE_ADMIN" &&
-            currentAccess.capabilities.configureReceiving)) && (
-          <ReceivingAccountSetup
-            siteId={siteId}
-            access={currentAccess}
-            platformOwner={platformOwner}
-            sessionEpoch={sessionEpoch}
-            onReadinessChange={onRetry}
-            section={page === "account" ? "account" : "activation"}
-            readiness={readiness}
-          />
-        )}
-      {(page === "overview" || page === "payments" || page === "withdrawals") &&
-        (!platformOwner || !!currentAccess) && (
+                  params={{ siteId, page: "account" }}
+                  className={receivingLink}
+                >
+                  Conta para saque
+                </Link>{" "}
+                ou{" "}
+                <Link
+                  to="/sites/$siteId/receiving/$page"
+                  params={{ siteId, page: "fees" }}
+                  className={receivingLink}
+                >
+                  Taxas e presentes
+                </Link>
+                .
+              </p>
+            )}
+            {(!platformOwner || !!currentAccess) && ready && (
+              <FinanceSection
+                page="overview"
+                siteId={siteId}
+                access={currentAccess}
+                sessionEpoch={sessionEpoch}
+              />
+            )}
+          </>
+        )
+      ) : stepPage ? (
+        setupEligible ? (
+          setupView(page as ReceivingStepSection)
+        ) : (
+          <>
+            <ReceivingPageHeader />
+            <p role="status" className="m-0 text-admin-muted">
+              Apenas o titular ou a equipe autorizada configura os recebimentos.
+            </p>
+          </>
+        )
+      ) : ready ? (
+        <>
+          <ReceivingPageHeader />
           <FinanceSection
-            page={
-              page === "payments"
-                ? "payments"
-                : page === "withdrawals"
-                  ? "withdrawals"
-                  : "overview"
-            }
+            page={page === "payments" ? "payments" : "withdrawals"}
             siteId={siteId}
             access={currentAccess}
             sessionEpoch={sessionEpoch}
           />
-        )}
+        </>
+      ) : (
+        <>
+          <ReceivingPageHeader />
+          <section className="grid gap-3 rounded-2xl border border-admin-line bg-admin-surface p-6">
+            <p role="status" className="m-0 text-admin-body">
+              {currentReadiness || failed
+                ? "Pagamentos e saques aparecem aqui quando os recebimentos estiverem liberados."
+                : "Verificando os recebimentos…"}
+            </p>
+            <Link
+              to="/sites/$siteId/receiving"
+              params={{ siteId }}
+              className={`${receivingLink} w-fit text-sm`}
+            >
+              Ver a configuração dos recebimentos
+            </Link>
+          </section>
+        </>
+      )}
     </div>
+  );
+}
+
+function ReceivingPageHeader() {
+  return (
+    <header className="grid gap-1.5">
+      <h1 className={receivingStepTitle}>Recebimentos</h1>
+      <p className="m-0 text-base leading-[1.6] text-admin-muted">
+        Configure uma vez para receber os presentes em dinheiro e sacar para o
+        seu banco.
+      </p>
+    </header>
+  );
+}
+
+export function canConfigureReceiving(
+  platformOwner: boolean,
+  sessionEpoch: number | null,
+  access: SiteAccess | null,
+) {
+  return (
+    (sessionEpoch !== null && platformOwner) ||
+    access?.membershipRole === "OWNER" ||
+    (access?.membershipRole === "SITE_ADMIN" &&
+      access.capabilities.configureReceiving)
+  );
+}
+
+function canManageFees(platformOwner: boolean, access: SiteAccess | null) {
+  return (
+    platformOwner ||
+    access?.membershipRole === "OWNER" ||
+    (access?.membershipRole === "SITE_ADMIN" &&
+      access.capabilities.manageCatalog &&
+      access.capabilities.readFinance)
   );
 }
