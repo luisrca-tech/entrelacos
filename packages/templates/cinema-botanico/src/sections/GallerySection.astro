@@ -18,7 +18,7 @@ const revealClasses = "template-reveal";
 
 <section
   id={id}
-  class={`grid grid-cols-[minmax(16rem,0.58fr)_minmax(0,1.42fr)] min-h-[calc(100svh-var(--template-header-height))] items-start [[data-template-hero-intro]~&]:mt-[clamp(2rem,5vw,5rem)] [&:has(+[data-template-story])]:mb-[clamp(3rem,7vw,7rem)] gap-[clamp(2.5rem,6vw,7rem)] px-[var(--template-page-inset)] py-[var(--gallery-padding)] [--gallery-padding:clamp(2rem,4svh,5rem)] ${toneClasses} [@media(max-width:1024px)]:flex [@media(max-width:1024px)]:flex-col [@media(max-width:1024px)]:items-stretch [@media(max-width:1024px)]:gap-0 [@media(max-width:1024px)]:px-0`}
+  class={`grid grid-cols-[minmax(16rem,0.58fr)_minmax(0,1.42fr)] min-h-[calc(100svh-var(--template-header-height))] items-start [[data-template-hero-intro]~&]:mt-[clamp(2rem,5vw,5rem)] [&:has(+[data-template-story])]:mb-[clamp(3rem,7vw,7rem)] [@media(max-width:760px)]:[&:has(+[data-template-story])]:mb-6 gap-[clamp(2.5rem,6vw,7rem)] px-[var(--template-page-inset)] py-[var(--gallery-padding)] [--gallery-padding:clamp(2rem,4svh,5rem)] ${toneClasses} [@media(max-width:1024px)]:flex [@media(max-width:1024px)]:flex-col [@media(max-width:1024px)]:items-stretch [@media(max-width:1024px)]:gap-0 [@media(max-width:1024px)]:px-0`}
   aria-labelledby={`${id}-title`}
 >
   <header class={`${revealClasses} [@media(max-width:1024px)]:mb-12 [@media(max-width:1024px)]:px-[var(--template-page-inset)]`} data-template-reveal>

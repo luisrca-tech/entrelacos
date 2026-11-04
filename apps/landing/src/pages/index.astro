@@ -4,6 +4,15 @@ import "../styles/cinematic.css";
 import "lenis/dist/lenis.css";
 import { landingConfig } from "../landingConfig";
 const config = landingConfig(import.meta.env, import.meta.env.PROD);
+const navigationLinks = [
+  ["#experiencia", "A experiência"],
+  ["#modelos", "Os modelos"],
+  ["#detalhes", "Os detalhes"],
+];
+const headerAction = {
+  href: config.contactUrl ?? "#modelos",
+  label: config.contactUrl ? "Vamos conversar" : "Encontre seu estilo",
+};
 const questions = [
   ["O site é feito com a nossa história?", "Sim. Escolhemos o modelo e organizamos as fotos, os textos e as informações do casamento com vocês. O Entrelaços cuida da montagem e da publicação; vocês cuidam dos convidados pelo Dashboard."],
   ["O que conseguimos gerenciar pelo Dashboard?", "A lista de convidados, os grupos e famílias, as confirmações de presença e o mural. O painel também reúne a gestão dos presentes e o acompanhamento dos recebimentos, conforme a configuração do casamento."],
@@ -63,8 +72,19 @@ const questions = [
     <a href="#conteudo" class="skip-link">Pular para o conteúdo</a>
     <header class="masthead">
       <a href="#inicio" class="wordmark" aria-label="Entrelaços, início"><img class="brand-mark" src="/brand/entrelacos-mark.svg" width="44" height="41" alt="" aria-hidden="true" />Entrelaços</a>
-      <nav aria-label="Navegação principal"><a href="#experiencia">A experiência</a><a href="#modelos">Os modelos</a><a href="#detalhes">Os detalhes</a></nav>
-      <a class="header-cta" href={config.contactUrl ?? "#modelos"}>{config.contactUrl ? "Vamos conversar" : "Encontre seu estilo"}<span aria-hidden="true">↗</span></a>
+      <nav class="masthead-links" aria-label="Navegação principal">
+        {navigationLinks.map(([href, label]) => <a href={href}>{label}</a>)}
+      </nav>
+      <a class="header-cta" href={headerAction.href}>{headerAction.label}<span aria-hidden="true">↗</span></a>
+      <details class="masthead-menu">
+        <summary aria-label="Menu principal">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" /></svg>
+        </summary>
+        <nav aria-label="Navegação principal">
+          {navigationLinks.map(([href, label]) => <a href={href}>{label}</a>)}
+          {config.contactUrl && <a href={headerAction.href}>{headerAction.label}<span aria-hidden="true"> ↗</span></a>}
+        </nav>
+      </details>
     </header>
     <main id="conteudo" tabindex="-1">
 

@@ -19,6 +19,24 @@ export function mountLandingMotion(
   let frame = 0;
   const root = doc.documentElement;
   const hero = doc.querySelector<HTMLElement>(".hero");
+  const menu = doc.querySelector<HTMLDetailsElement>(".masthead-menu");
+  const menuToggle = menu?.querySelector<HTMLElement>("summary");
+  function dismissMenu(event: MouseEvent) {
+    if (!menu?.open || !(event.target instanceof Element)) return;
+    const selectedLink =
+      menu.contains(event.target) && event.target.closest("a[href]");
+    if (!selectedLink && menu.contains(event.target)) return;
+    menu.open = false;
+    if (selectedLink && event.detail === 0)
+      menuToggle?.focus({ preventScroll: true });
+  }
+  function onMenuEscape(event: KeyboardEvent) {
+    if (event.key !== "Escape" || !menu?.open) return;
+    menu.open = false;
+    menuToggle?.focus({ preventScroll: true });
+  }
+  doc.addEventListener("click", dismissMenu);
+  menu?.addEventListener("keydown", onMenuEscape);
   const elements = [...doc.querySelectorAll<HTMLElement>(".reveal")];
   const opening = mountCinematicOpening(doc, browser, preference);
   const disposeDecorations = mountDecorativeMotion(doc, browser, preference);
@@ -195,6 +213,8 @@ export function mountLandingMotion(
     doc.removeEventListener("focusin", revealDestination);
     doc.removeEventListener("click", revealDestination);
     doc.removeEventListener("click", onAnchorClick);
+    doc.removeEventListener("click", dismissMenu);
+    menu?.removeEventListener("keydown", onMenuEscape);
     pending.clear();
     smooth?.destroy();
     browser.removeEventListener("scroll", scheduleProgress);

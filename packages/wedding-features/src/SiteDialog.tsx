@@ -1,3 +1,4 @@
+import { cn } from "@entrelacos/ui";
 import { type ReactNode, useEffect, useRef } from "react";
 import { captureFocus, type FocusTarget, restoreFocus } from "./dialogFocus";
 
@@ -14,6 +15,7 @@ export const siteDialogCloseClass =
 type SiteDialogProps = {
   open: boolean;
   labelledBy: string;
+  className?: string;
   onClose: () => void;
   children: (requestClose: () => void) => ReactNode;
 };
@@ -21,6 +23,7 @@ type SiteDialogProps = {
 export function SiteDialog({
   open,
   labelledBy,
+  className,
   onClose,
   children,
 }: SiteDialogProps) {
@@ -58,7 +61,7 @@ export function SiteDialog({
   return (
     <dialog
       ref={dialog}
-      className={siteDialogClass}
+      className={cn(siteDialogClass, className)}
       data-lenis-prevent
       aria-labelledby={labelledBy}
       onCancel={(event) => {

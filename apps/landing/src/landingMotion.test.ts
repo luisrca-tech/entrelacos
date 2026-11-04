@@ -83,6 +83,36 @@ describe("landing motion lifecycle", () => {
       dispose();
     },
   );
+  it.each(["link", "outside", "escape"])(
+    "closes the open mobile menu on %s",
+    (action) => {
+      document.body.innerHTML =
+        '<details class="masthead-menu" open><summary>Menu</summary><nav><a href="#models">Models</a></nav></details><section id="models"></section>';
+      const menu = document.querySelector("details") as HTMLDetailsElement;
+      const dispose = mountLandingMotion(
+        document,
+        window,
+        Object.assign(new EventTarget(), { matches: true }),
+        vi.fn(() => ({ destroy: vi.fn() })),
+      );
+      try {
+        if (action === "escape")
+          menu.querySelector("a")?.dispatchEvent(
+            new KeyboardEvent("keydown", {
+              key: "Escape",
+              bubbles: true,
+            }),
+          );
+        else if (action === "link") menu.querySelector("a")?.click();
+        else document.getElementById("models")?.click();
+        expect(menu.open).toBe(false);
+        if (action === "escape")
+          expect(document.activeElement).toBe(menu.querySelector("summary"));
+      } finally {
+        dispose();
+      }
+    },
+  );
   it("immediately exposes keyboard destinations", () => {
     const { dispose } = setup();
     const heading = document.querySelector("h2") as HTMLElement;

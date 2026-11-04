@@ -545,6 +545,7 @@ function GiftRegistryRuntime({
       <SiteDialog
         open={dialogOpen && !!state.gift && state.phase !== "UNKNOWN"}
         labelledBy="gift-quote-heading"
+        className="overflow-hidden p-0 [@media(max-width:760px)]:fixed [@media(max-width:760px)]:inset-0 [@media(max-width:760px)]:m-0 [@media(max-width:760px)]:h-dvh [@media(max-width:760px)]:max-h-dvh [@media(max-width:760px)]:w-full [@media(max-width:760px)]:max-w-none [@media(max-width:760px)]:rounded-none"
         onClose={() => {
           setDialogOpen(false);
           dispatch({ type: "CLOSE" });

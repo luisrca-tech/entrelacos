@@ -6,6 +6,7 @@ interface Props { content: LetterContent; }
 const { content } = Astro.props;
 validateLetterContent(content);
 const [coverPhoto, storyPhoto, insertPhoto] = content.photos;
+const paragraphDelay = (index: number) => `${650 + index * 170}ms`;
 const folioClass = "m-0 mb-8 text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-template-muted";
 ---
 
@@ -26,13 +27,15 @@ const folioClass = "m-0 mb-8 text-[0.72rem] font-semibold uppercase tracking-[0.
 </section>
 
 <section class="grid grid-cols-[var(--template-letter-columns)] items-start gap-x-[var(--template-letter-gap)] gap-y-12 px-[var(--template-page-inset)] pt-[clamp(3rem,7vw,7rem)] [@media(max-width:760px)]:grid-cols-1 [@media(max-width:760px)]:gap-y-8" id={content.story.id} aria-labelledby={`${content.story.id}-title`}>
-  <div data-template-reveal>
+  <div class="letter-story-copy" data-template-reveal>
     {content.story.eyebrow && <p class={folioClass} data-template-reveal-item>{content.story.eyebrow}</p>}
     <h2 class="m-0 mb-8 max-w-[13ch] font-template-serif text-[clamp(2.5rem,4.5vw,4.7rem)] font-normal leading-[1.07] tracking-[-0.045em]" id={`${content.story.id}-title`} data-template-reveal-item>{content.story.title}</h2>
     <div class="max-w-[55ch] text-[clamp(1rem,1.4vw,1.125rem)] leading-[1.75] [&_p]:m-0 [&_p]:mb-5">
-      {content.story.paragraphs.map((paragraph) => <p>{paragraph}</p>)}
+      {content.story.paragraphs.map((paragraph, index) => (
+        <p data-template-reveal-item data-letter-paragraph style={`--letter-paragraph-delay: ${paragraphDelay(index)}`}>{paragraph}</p>
+      ))}
     </div>
-    <p class="mt-8 font-template-serif text-[1.4rem] italic leading-[1.65] text-template-olive">{content.signature}</p>
+    <p data-template-reveal-item data-letter-paragraph style={`--letter-paragraph-delay: ${paragraphDelay(content.story.paragraphs.length)}`} class="mt-8 font-template-serif text-[1.4rem] italic leading-[1.65] text-template-olive">{content.signature}</p>
   </div>
   <div class="relative min-w-0 pt-16 [@media(max-width:760px)]:max-w-[28rem] [@media(max-width:760px)]:pt-0">
     <figure class="m-0 border border-template-line bg-[var(--template-paper)] p-2.5">
@@ -51,6 +54,14 @@ const folioClass = "m-0 mb-8 text-[0.72rem] font-semibold uppercase tracking-[0.
 
 <style>
   @media (prefers-reduced-motion: no-preference) {
+    .letter-story-copy[data-template-motion-ready="true"][data-template-reveal-state="hidden"] [data-template-reveal-item] {
+      transition: none;
+    }
+
+    .letter-story-copy[data-template-motion-ready="true"][data-template-reveal-state="visible"] [data-letter-paragraph] {
+      transition-delay: var(--letter-paragraph-delay);
+    }
+
     :global(html[data-photo-curtains]) [data-curtain-layer] {
       position: absolute;
       inset: 0;
