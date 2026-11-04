@@ -29,7 +29,10 @@ export function mountCinematicOpening(
       animation.cancel();
     }
     overlay?.remove();
-    delete root.dataset.opening;
+    if (root.dataset.opening) {
+      delete root.dataset.opening;
+      root.removeAttribute("inert");
+    }
     browser.dispatchEvent(new Event("opening:ready"));
   }
   const controller = { settle, dispose: settle };
@@ -57,6 +60,7 @@ export function mountCinematicOpening(
   }
   try {
     root.dataset.opening = "playing";
+    root.setAttribute("inert", "");
     browser.dispatchEvent(new Event("opening:ready"));
     overlay = doc.createElement("div");
     overlay.dataset.openingOverlay = "";
@@ -140,25 +144,8 @@ export function mountCinematicOpening(
         ),
       );
     }
-    const options = { signal: listeners.signal, passive: true };
-    for (const type of ["wheel", "touchstart", "scroll", "resize", "pagehide"])
-      browser.addEventListener(type, settle, options);
-    doc.addEventListener(
-      "keydown",
-      (event) => {
-        if (["Escape", "PageDown", "ArrowDown", " ", "End"].includes(event.key))
-          settle();
-      },
-      options,
-    );
-    doc.addEventListener("focusin", settle, options);
-    doc.addEventListener(
-      "click",
-      (event) => {
-        if ((event.target as Element)?.closest("a")) settle();
-      },
-      options,
-    );
+    const options = { signal: listeners.signal };
+    browser.addEventListener("pagehide", settle, options);
     preference.addEventListener(
       "change",
       () => {

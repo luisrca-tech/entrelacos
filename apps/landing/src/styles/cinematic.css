@@ -30,6 +30,10 @@
     #63462a
   );
 }
+html[data-opening] {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
 [data-opening-overlay] {
   position: fixed;
   inset: 0;

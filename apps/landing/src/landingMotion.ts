@@ -149,27 +149,31 @@ export function mountLandingMotion(
   function scheduleProgress() {
     if (!frame) frame = browser.requestAnimationFrame(updateProgress);
   }
-  function syncPreference() {
-    const paused = preference.matches;
-    if (paused) opening.settle();
-    revealReadingArea();
-    smooth?.destroy();
-    smooth = undefined;
-    if (!paused) {
-      try {
-        smooth = createSmooth({
-          autoRaf: true,
-          lerp: 0.07,
-          smoothWheel: true,
-          syncTouch: false,
-          anchors: false,
-          wheelMultiplier: 0.65,
-        });
-      } catch {
-        // Keep native scrolling if the optional enhancement cannot initialize.
-      }
+  function startSmooth() {
+    if (smooth || preference.matches || root.dataset.opening) return;
+    try {
+      smooth = createSmooth({
+        autoRaf: true,
+        lerp: 0.07,
+        smoothWheel: true,
+        syncTouch: false,
+        anchors: false,
+        wheelMultiplier: 0.65,
+      });
+    } catch {
+      // Keep native scrolling if the optional enhancement cannot initialize.
     }
   }
+  function syncPreference() {
+    if (preference.matches) {
+      opening.settle();
+      smooth?.destroy();
+      smooth = undefined;
+    }
+    revealReadingArea();
+    startSmooth();
+  }
+  browser.addEventListener("opening:ready", startSmooth);
   syncPreference();
   preference.addEventListener("change", syncPreference);
   browser.addEventListener("scroll", scheduleProgress, { passive: true });
@@ -184,6 +188,7 @@ export function mountLandingMotion(
     if (disposed) return;
     disposed = true;
     browser.removeEventListener("pagehide", onPageHide);
+    browser.removeEventListener("opening:ready", startSmooth);
     preference.removeEventListener("change", syncPreference);
     opening.dispose();
     disposeDecorations();

@@ -3,16 +3,20 @@ import { readFileSync } from "node:fs";
 import { URL as NodeURL } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { mountCinematicOpening } from "./cinematicOpening";
+import { mountLandingMotion } from "./landingMotion";
 
 const animations: Array<{
   cancel: ReturnType<typeof vi.fn>;
   finish: () => void;
 }> = [];
 let cleanup = () => {};
-function setup(reduced = false) {
+function prepareOpening() {
   document.body.innerHTML =
     '<section class="hero"><h1 id="hero-title" tabindex="-1">Our story</h1><div class="union-art"><div class="union-scene"><div class="alliance alliance-first"></div><div class="alliance alliance-second"></div></div></div><a href="#details">Details</a><section id="details"></section></section>';
   document.documentElement.dataset.opening = "armed";
+}
+function setup(reduced = false) {
+  prepareOpening();
   const scene = document.querySelector(".union-scene");
   const preference = Object.assign(new EventTarget(), { matches: reduced });
   const controller = mountCinematicOpening(document, window, preference);
@@ -51,6 +55,7 @@ afterEach(() => {
   animations.length = 0;
   document.body.innerHTML = "";
   delete document.documentElement.dataset.opening;
+  document.documentElement.removeAttribute("inert");
   vi.unstubAllGlobals();
   window.history.replaceState(null, "", "/");
   vi.restoreAllMocks();
@@ -99,51 +104,79 @@ describe("continuous cinematic opening", () => {
     expect(document.querySelector("[data-opening-overlay]")).toBeNull();
     expect(document.activeElement?.tagName).toBe("BODY");
   });
-  it.each(["wheel", "touchstart", "resize", "pagehide"])(
-    "settles on %s without blocking the event",
-    (type) => {
-      const { scene } = setup();
-      expect(document.querySelector("[data-opening-overlay]")).not.toBeNull();
-      const event = new Event(type, { cancelable: true });
-      window.dispatchEvent(event);
-      expect(event.defaultPrevented).toBe(false);
-      expect(document.querySelector("[data-opening-overlay]")).toBeNull();
-      expect(document.querySelector(".union-art .union-scene")).toBe(scene);
-    },
-  );
-  it("settles repeatedly on Escape without a skip button or stealing focus", () => {
+  it("settles safely on page hide", () => {
+    const { scene } = setup();
+    window.dispatchEvent(new Event("pagehide"));
+    expect(document.querySelector("[data-opening-overlay]")).toBeNull();
+    expect(document.querySelector(".union-art .union-scene")).toBe(scene);
+    expect(document.documentElement.hasAttribute("inert")).toBe(false);
+  });
+
+  it.each([
+    "wheel",
+    "touchstart",
+    "scroll",
+    "resize",
+    "escape",
+    "focus",
+    "click",
+  ])("keeps playing after %s and unlocks when the shot ends", async (input) => {
+    setup();
+    if (input === "escape")
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    else if (input === "focus") document.querySelector("a")?.focus();
+    else if (input === "click")
+      document.querySelector("a")?.dispatchEvent(
+        new MouseEvent("click", {
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+    else window.dispatchEvent(new Event(input));
+    expect(document.documentElement.dataset.opening).toBe("playing");
+    expect(document.documentElement.hasAttribute("inert")).toBe(true);
+    expect(document.querySelector("[data-opening-overlay]")).not.toBeNull();
+    for (const animation of animations) animation.finish();
+    await Promise.resolve();
+    expect(document.documentElement.hasAttribute("inert")).toBe(false);
+    expect(document.querySelector("[data-opening-overlay]")).toBeNull();
+  });
+
+  it("starts smooth scrolling only after the shot unlocks the page", async () => {
+    prepareOpening();
+    const createSmooth = vi.fn(() => ({ destroy: vi.fn() }));
+    cleanup = mountLandingMotion(
+      document,
+      window,
+      Object.assign(new EventTarget(), { matches: false }),
+      createSmooth,
+    );
+    expect(createSmooth).not.toHaveBeenCalled();
+    animations[0].finish();
+    await Promise.resolve();
+    expect(createSmooth).toHaveBeenCalledOnce();
+  });
+
+  it("unlocks immediately if the system switches to reduced motion", () => {
+    const { preference } = setup();
+    preference.matches = true;
+    preference.dispatchEvent(new Event("change"));
+    expect(document.querySelector("[data-opening-overlay]")).toBeNull();
+    expect(document.documentElement.hasAttribute("inert")).toBe(false);
+  });
+
+  it("disposes repeatedly without stealing focus", () => {
     const { controller } = setup();
-    expect(animations).toHaveLength(5);
-    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
     controller.settle();
     controller.dispose();
     expect(document.activeElement?.tagName).toBe("BODY");
     expect(document.documentElement.dataset.opening).toBeUndefined();
+    expect(animations).toHaveLength(5);
     expect(
       animations.every((animation) => animation.cancel.mock.calls.length === 1),
     ).toBe(true);
-    expect(document.querySelector("[data-opening-overlay]")).toBeNull();
+    expect(document.documentElement.hasAttribute("inert")).toBe(false);
   });
-  it.each(["escape", "focus", "anchor", "preference", "pause"])(
-    "settles for %s",
-    (reason) => {
-      const { preference, controller } = setup();
-      expect(document.querySelector("[data-opening-overlay]")).not.toBeNull();
-      if (reason === "escape")
-        document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
-      if (reason === "focus") document.querySelector("a")?.focus();
-      if (reason === "anchor")
-        document
-          .querySelector("a")
-          ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-      if (reason === "preference") {
-        preference.matches = true;
-        preference.dispatchEvent(new Event("change"));
-      }
-      if (reason === "pause") controller.settle();
-      expect(document.querySelector("[data-opening-overlay]")).toBeNull();
-    },
-  );
   it("cancels already started animations if the brand animation cannot initialize", () => {
     const animate = Element.prototype.animate;
     vi.spyOn(Element.prototype, "animate").mockImplementation(function (
@@ -275,12 +308,19 @@ describe("early page arming and runtime handoff", () => {
     );
     expect(document.querySelector("[data-opening-overlay]")).toBeNull();
   });
-  it.each(["scroll", "wheel", "touchstart", "keydown", "focusin", "pagehide"])(
-    "cancels early arming on %s before enhancement",
+  it.each(["scroll", "wheel", "touchstart", "keydown", "focusin", "click"])(
+    "keeps early arming and interaction lock after %s",
     (type) => {
       arm();
       window.dispatchEvent(new Event(type));
-      expect(document.documentElement.dataset.opening).toBeUndefined();
+      expect(document.documentElement.dataset.opening).toBe("armed");
+      expect(document.documentElement.hasAttribute("inert")).toBe(true);
     },
   );
+  it("unlocks early arming on page hide", () => {
+    arm();
+    window.dispatchEvent(new Event("pagehide"));
+    expect(document.documentElement.dataset.opening).toBeUndefined();
+    expect(document.documentElement.hasAttribute("inert")).toBe(false);
+  });
 });

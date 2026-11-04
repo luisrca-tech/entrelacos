@@ -18,8 +18,7 @@ const questions = [
   <head>
     <meta charset="UTF-8" />
     <script is:inline>
-      // Give the deferred module a bounded start window, without blocking input.
-      // The session never suppresses a fresh opening while the hero is visible.
+      // Release the opening lock if the deferred module cannot start.
       try {
         const navigation = performance.getEntriesByType?.("navigation")[0];
         if (!location.hash && navigation?.type !== "back_forward" &&
@@ -27,21 +26,18 @@ const questions = [
           const root = document.documentElement;
           const listeners = new AbortController();
           root.dataset.opening = "armed";
+          root.setAttribute("inert", "");
           const release = () => {
-            if (root.dataset.opening === "armed") delete root.dataset.opening;
+            if (root.dataset.opening === "armed") {
+              delete root.dataset.opening;
+              root.removeAttribute("inert");
+            }
             clearTimeout(deadline);
             listeners.abort();
           };
           const deadline = setTimeout(release, 1200);
-          const cancelOnInput = (event) => {
-            // Restoration into the hero may precede enhancement. Deliberate
-            // wheel, touch and keyboard input still cancel the opening.
-            const hero = document.querySelector(".hero")?.getBoundingClientRect();
-            if (event.type === "scroll" && hero && hero.bottom > 0 && hero.top < innerHeight) return;
-            release();
-          };
-          for (const type of ["scroll", "wheel", "touchstart", "keydown", "focusin", "pagehide", "opening:ready"]) {
-            window.addEventListener(type, cancelOnInput, { signal: listeners.signal, passive: true });
+          for (const type of ["pagehide", "opening:ready"]) {
+            window.addEventListener(type, release, { signal: listeners.signal });
           }
         }
       } catch {}
