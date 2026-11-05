@@ -1,7 +1,8 @@
 import { Link } from "@tanstack/react-router";
-import { Check, ChevronLeft } from "lucide-react";
+import { Check, ChevronLeft, Lock } from "lucide-react";
 import type { ReactNode } from "react";
 import { displayHeading } from "../lib/adminStyles";
+import { type ReadyReceivingPage, receivingTabs } from "./receivingNavigation";
 import {
   type ReceivingStepId,
   type ReceivingStepStatus,
@@ -307,5 +308,102 @@ export function ExternalLink({
       {children}
       <span className="sr-only"> (abre em outra aba)</span>
     </a>
+  );
+}
+
+// Ready state (readiness = READY): tabs, page header and shared card styles.
+export const readyCard =
+  "min-w-0 rounded-[18px] border border-admin-line bg-admin-surface";
+export const readyCardTitle = "m-0 text-[17px] font-bold text-admin-ink";
+export const readyLabel = "m-0 text-sm font-bold text-admin-muted";
+export const readyLinkButton =
+  "inline-flex min-h-11 items-center gap-1.5 bg-transparent p-0 text-sm font-semibold text-admin-terracotta-deep underline underline-offset-4 hover:text-admin-terracotta-ink disabled:cursor-not-allowed disabled:opacity-60";
+export const readyQuietButton =
+  "inline-flex min-h-11 items-center gap-1.5 bg-transparent p-0 text-[13px] text-admin-muted hover:text-admin-graphite disabled:cursor-not-allowed disabled:opacity-60";
+
+const readySubtitles: Record<ReadyReceivingPage, string> = {
+  overview:
+    "Acompanhe os presentes recebidos e o dinheiro disponível para saque.",
+  payments: "Cada presente pago pelos convidados, com o que fica para vocês.",
+  withdrawals: "Saque o saldo disponível para a sua conta bancária.",
+  settings: "Conta para saque, taxas e quem recebe os presentes.",
+};
+
+export function ReadyReceivingHeader({
+  siteId,
+  page,
+}: {
+  siteId: string;
+  page: ReadyReceivingPage;
+}) {
+  return (
+    <header className="grid min-w-0 gap-4">
+      <div className="grid gap-1.5">
+        <h1 className={receivingStepTitle}>Recebimentos</h1>
+        <p className="m-0 text-[15px] leading-[1.5] text-admin-muted">
+          {readySubtitles[page]}
+        </p>
+      </div>
+      <nav
+        aria-label="Páginas de recebimentos"
+        className="flex w-fit max-w-full min-w-0 gap-1 rounded-xl border border-admin-line bg-admin-surface p-1 [@media(max-width:560px)]:grid [@media(max-width:560px)]:w-full [@media(max-width:560px)]:grid-cols-2"
+      >
+        {receivingTabs(true).map((item) => (
+          <Link
+            key={item.id}
+            activeOptions={{ exact: true }}
+            to={
+              item.id === "overview"
+                ? "/sites/$siteId/receiving"
+                : "/sites/$siteId/receiving/$page"
+            }
+            params={{ siteId, page: item.id }}
+            aria-current={page === item.id ? "page" : undefined}
+            className={`inline-flex min-h-[38px] shrink-0 items-center justify-center whitespace-nowrap rounded-[9px] px-4 text-sm font-semibold no-underline transition-colors motion-reduce:transition-none [@media(max-width:760px)]:px-3 ${page === item.id ? "bg-admin-graphite text-white" : "text-admin-muted hover:bg-admin-canvas hover:text-admin-graphite"}`}
+          >
+            {item.label}
+          </Link>
+        ))}
+      </nav>
+    </header>
+  );
+}
+
+export type ToneName = "success" | "pending" | "danger" | "neutral";
+const toneClass: Record<ToneName, string> = {
+  success: "bg-admin-success-wash text-admin-success-ink",
+  pending: "bg-admin-pending-wash text-admin-pending-ink",
+  danger: "bg-admin-danger-wash text-admin-danger-ink",
+  neutral: "bg-admin-beige text-admin-body",
+};
+
+export function ToneBadge({
+  tone,
+  children,
+}: {
+  tone: ToneName;
+  children: ReactNode;
+}) {
+  return (
+    <span
+      className={`inline-flex w-fit shrink-0 items-center rounded-full px-2.5 py-1 text-xs leading-none font-bold whitespace-nowrap ${toneClass[tone]}`}
+    >
+      {children}
+    </span>
+  );
+}
+
+export function ReadOnlyNote({ children }: { children: ReactNode }) {
+  return (
+    <p
+      role="note"
+      className="m-0 flex items-start gap-2.5 rounded-xl border border-admin-line bg-admin-surface px-4 py-3 text-sm leading-[1.5] text-admin-body"
+    >
+      <Lock
+        aria-hidden="true"
+        className="mt-0.5 size-4 shrink-0 text-admin-muted"
+      />
+      <span>{children}</span>
+    </p>
   );
 }

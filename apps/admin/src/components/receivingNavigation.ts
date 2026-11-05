@@ -9,15 +9,29 @@ export const receivingPages = [
   { id: "fees", label: "Taxas e presentes" },
   { id: "payments", label: "Pagamentos" },
   { id: "withdrawals", label: "Saques" },
+  { id: "settings", label: "Configurações" },
 ] as const;
 export type ReceivingPage = (typeof receivingPages)[number]["id"];
 export const ReceivingPageContext = createContext<ReceivingPage>("overview");
 
-// Payments and withdrawals only make sense once receiving is ready.
+export const readyReceivingPages = [
+  "overview",
+  "payments",
+  "withdrawals",
+  "settings",
+] as const satisfies readonly ReceivingPage[];
+export type ReadyReceivingPage = (typeof readyReceivingPages)[number];
+export function isReadyReceivingPage(
+  page: ReceivingPage,
+): page is ReadyReceivingPage {
+  return (readyReceivingPages as readonly string[]).includes(page);
+}
+
+// Payments, withdrawals and settings only make sense once receiving is ready.
 export function receivingTabs(ready: boolean) {
   return ready
     ? receivingPages.filter(({ id }) =>
-        ["overview", "payments", "withdrawals"].includes(id),
+        (readyReceivingPages as readonly string[]).includes(id),
       )
     : [];
 }

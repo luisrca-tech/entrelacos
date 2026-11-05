@@ -26,6 +26,8 @@
   --color-admin-status-pending: #a65d12;
   --color-admin-status-confirmed: #197551;
   --color-admin-status-declined: #b44040;
+  --color-admin-awaiting: #e9b97a;
+  --color-admin-success-line: #b9d9c7;
   --font-admin-display: Georgia, "Times New Roman", serif;
   --shadow-admin: 0 18px 50px rgb(68 49 36 / 8%);
 }
