@@ -64,9 +64,11 @@ describe("financial overview card", () => {
         },
       },
     });
-    expect(html).toContain("Resumo financeiro");
+    expect(html).toContain("Disponível para saque");
+    expect(html).toContain("Para onde foi o dinheiro");
     expect(html).toContain("100,00");
     expect(html).not.toMatch(/<form|<input|Solicitar saque|Confirme sua senha/);
+    expect(html).not.toContain("Sacar para minha conta");
   });
   it("keeps private amounts hidden from missing, owner, assistant and other-site access", () => {
     for (const value of [
@@ -96,31 +98,36 @@ describe("financial overview card", () => {
     ]) {
       const html = render(props);
       expect(html).not.toContain("0,00");
-      expect(html).not.toContain("Transferir");
+      expect(html).not.toContain("Sacar para minha conta");
     }
     expect(render({ error: true })).toContain("Tentar novamente");
     expect(render({ overview: null })).toContain(
       "Resumo financeiro indisponível",
+    );
+    expect(render({ overview: null, loading: true })).toContain(
+      "Consultando o saldo",
     );
   });
 
   it("keeps unknown/stale available funds distinct from recorded receipts and labels sandbox", () => {
     const html = render();
     expect(html).toContain("Presentes recebidos");
+    expect(html).toContain("103,00");
     expect(html).toContain("100,00");
-    expect(html).toContain("Saldo disponível");
-    expect(html).toContain("Ainda não confirmado");
+    expect(html).toContain("Saldo indisponível");
+    expect(html).toContain("Ainda não confirmado pelo Asaas");
+    expect(html).not.toMatch(/text-admin-success-ink[^"]*">R\$\s0,00/);
+    expect(html).not.toContain("Atualizado às");
     expect(html).toContain("Sandbox");
-    expect(html).not.toContain("<button");
-    expect(
-      render({
-        overview: {
-          ...overview,
-          availability: "STALE",
-          synchronizedAt: "2026-10-12T12:00:00.000Z",
-        },
-      }),
-    ).toContain("Saldo desatualizado");
+    const stale = render({
+      overview: {
+        ...overview,
+        availability: "STALE",
+        synchronizedAt: "2026-10-12T12:00:00.000Z",
+      },
+    });
+    expect(stale).toContain("Saldo desatualizado");
+    expect(stale).toContain("Saldo indisponível");
   });
 
   it("shows a current provider balance only from the valid matching projection", () => {
@@ -132,11 +139,34 @@ describe("financial overview card", () => {
         availability: "CURRENT",
         mode: "live",
       },
+      withdrawAction: createElement(
+        "a",
+        { href: "/withdrawals" },
+        "Sacar para minha conta",
+      ),
     });
     expect(html).toContain("50,00");
-    expect(html).toContain("Última atualização");
+    expect(html).toContain("Atualizado às 09:00");
+    expect(html).toContain("Sacar para minha conta");
     expect(html).not.toContain("Sandbox");
     expect(html).not.toContain("<form");
+  });
+
+  it("shows pending withdrawals and refunds in the flow only when present", () => {
+    const quiet = render();
+    expect(quiet).not.toContain("Saques em andamento");
+    expect(quiet).not.toContain("Reembolsado");
+    const busy = render({
+      overview: {
+        ...overview,
+        pendingCommitmentsCents: 1500,
+        refundedCents: 700,
+      },
+    });
+    expect(busy).toContain("Saques em andamento");
+    expect(busy).toContain("15,00");
+    expect(busy).toContain("Reembolsado");
+    expect(busy).toContain("7,00");
   });
 
   it("rejects contradictory, cross-site or private financial response fields", () => {
