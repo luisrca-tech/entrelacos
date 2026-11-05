@@ -194,7 +194,8 @@ async function mounted(strict = false) {
 }
 async function click(node: HTMLElement, label: string) {
   const button = [...node.querySelectorAll("button")].find(
-    (value) => value.textContent === label,
+    (value) =>
+      value.textContent === label || value.getAttribute("aria-label") === label,
   );
   expect(button, label).toBeTruthy();
   await act(async () => button?.click());
@@ -222,17 +223,23 @@ describe("mounted gift history", () => {
     expect(f.request).toHaveBeenCalledTimes(1);
     expect(f.node.textContent).toContain("Lua de mel privada");
     f.setReply({ history: detail });
-    await click(f.node, "Ver histórico desta compra");
-    expect(f.node.textContent).toContain("Valores da cotação");
-    expect(f.node.textContent).toContain("Observação retida nesta consulta");
-    expect(f.node.textContent).toContain(
-      "Recebimento histórico registrado no razão",
-    );
+    await click(f.node, "Ver detalhes de Lua de mel privada");
+    expect(f.node.textContent).toContain("Detalhes do presente");
+    expect(f.node.textContent).toContain("Convidado pagou");
+    expect(f.node.textContent).toContain("Pagamento com restrição no Asaas");
+    expect(f.node.textContent).toContain("Crédito registrado para vocês: R$");
     expect(f.node.textContent).toContain(
       "Situação financeira atual não confirmada",
     );
-    expect(f.node.textContent).toContain("Não registrado");
+    expect(f.node.textContent).toContain("Data não registrada");
     expect(f.node.textContent).toContain("0,00");
+    expect(f.node.textContent).toContain("110,00");
+    expect(f.node.textContent).toContain("100,00");
+    expect(f.node.querySelector("[data-selected=true]")).toBeTruthy();
+    expect(
+      f.node.querySelector("[aria-expanded=true]")?.getAttribute("aria-label"),
+    ).toBe("Ver detalhes de Lua de mel privada");
+    expect(document.activeElement?.id).toBe("gift-payment-detail-title");
     expect(f.node.textContent).not.toMatch(
       /Saldo disponível|Reembolso disponível|Recebido no banco/,
     );
@@ -240,8 +247,8 @@ describe("mounted gift history", () => {
   it("retains receipt after close/reopen, retry and explicit navigation restart", async () => {
     const f = await mounted();
     f.setReply({ history: detail });
-    await click(f.node, "Ver histórico desta compra");
-    expect(f.node.textContent).toContain("Crédito histórico");
+    await click(f.node, "Ver detalhes de Lua de mel privada");
+    expect(f.node.textContent).toContain("Crédito registrado para vocês");
     await click(f.node, "Fechar detalhe");
     f.setReply({
       history: {
@@ -250,14 +257,14 @@ describe("mounted gift history", () => {
         validatedHistoricalReceipts: [],
       },
     });
-    await click(f.node, "Ver histórico desta compra");
-    expect(f.node.textContent).toContain("Crédito histórico");
+    await click(f.node, "Ver detalhes de Lua de mel privada");
+    expect(f.node.textContent).toContain("Crédito registrado para vocês");
     f.request.mockRejectedValueOnce(new Error("private upstream secret"));
     await click(f.node, "Consultar histórico novamente");
-    expect(f.node.textContent).toContain("Crédito histórico");
+    expect(f.node.textContent).toContain("Crédito registrado para vocês");
     expect(f.node.textContent).not.toContain("private upstream");
     await click(f.node, "Tentar consulta novamente");
-    expect(f.node.textContent).toContain("Crédito histórico");
+    expect(f.node.textContent).toContain("Crédito registrado para vocês");
   });
   it("masks before effects on site/access/session replacement and native invalidation", async () => {
     const f = await mounted();
@@ -281,7 +288,7 @@ describe("mounted gift history", () => {
     f.ports.request = vi.fn(async () => ({ history: { ...page, items: [] } }));
     await f.render();
     expect(f.node.textContent).toContain("Lua de mel privada");
-    await click(f.node, "Consultar compras");
+    await click(f.node, "Atualizar lista");
     expect(f.node.textContent).toContain("Lua de mel privada");
     expect(f.ports.request).toHaveBeenCalledTimes(1);
     expect(f.node.textContent).toContain("2 de 64");
@@ -315,10 +322,41 @@ describe("mounted gift history", () => {
     }
     expect(exercised).toBeGreaterThan(1);
   });
+  it("shows totals from the financial overview and never invents them", async () => {
+    const f = await mounted();
+    expect(f.node.textContent).toContain("Compras registradas1");
+    expect(f.node.textContent).toContain("Pago pelos convidadosIndisponível");
+    await f.render({
+      ...f.props,
+      totals: {
+        loading: false,
+        overview: {
+          siteId: access.siteId,
+          currency: "BRL",
+          nominalReceivedCents: 1000,
+          netReceivedCents: 881,
+          processingCents: 99,
+          commissionCents: 20,
+          awaitingReleaseCents: 52600,
+          availableCents: null,
+          pendingCommitmentsCents: 0,
+          withdrawnCents: 0,
+          refundedCents: 0,
+          synchronizedAt: null,
+          availability: "UNKNOWN",
+          mode: "sandbox",
+        },
+      },
+    } as typeof f.props);
+    expect(f.node.textContent).toMatch(/Pago pelos convidadosR\$\s10,00/);
+    expect(f.node.textContent).toMatch(
+      /Para vocês, depois das taxasR\$\s534,81/,
+    );
+  });
   it("does not traverse empty fresh cursors automatically", async () => {
     const f = await mounted();
     f.setReply({ history: { ...page, items: [], nextCursor: "gh1.next" } });
-    await click(f.node, "Consultar compras");
+    await click(f.node, "Atualizar lista");
     expect(f.request).toHaveBeenCalledTimes(2);
     expect(f.node.textContent).toContain("Esta consulta não retornou compras");
     expect(f.node.textContent).toContain("Carregar mais compras");
@@ -326,7 +364,7 @@ describe("mounted gift history", () => {
   it("treats transient read-port failure as unavailable and restores retained receipts without another read", async () => {
     const f = await mounted();
     f.setReply({ history: detail });
-    await click(f.node, "Ver histórico desta compra");
+    await click(f.node, "Ver detalhes de Lua de mel privada");
     const request = f.ports.request;
     let unavailable = true;
     Object.defineProperty(f.ports, "request", {
@@ -345,7 +383,7 @@ describe("mounted gift history", () => {
     expect(f.owner.getSnapshot().status).toBe("verified");
     unavailable = false;
     await f.render();
-    expect(f.node.textContent).toContain("Crédito histórico");
+    expect(f.node.textContent).toContain("Crédito registrado para vocês");
     expect(f.node.textContent).toContain("2 de 64");
     expect(request).toHaveBeenCalledTimes(2);
   });
