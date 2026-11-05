@@ -188,6 +188,12 @@ export function ReceivingSectionView({
   );
   const tabs = receivingTabs(ready);
   const stepPage = !["overview", "payments", "withdrawals"].includes(page);
+  // Until readiness answers, neither the guided setup nor the ready tabs are known.
+  const readinessPending =
+    !stepPage &&
+    !failed &&
+    !currentReadiness &&
+    canReadReadiness(currentAccess);
   const statusCard = (
     <ReceivingStatusCard
       siteId={siteId}
@@ -276,6 +282,18 @@ export function ReceivingSectionView({
             Verificar acesso
           </Button>
         </section>
+      ) : readinessPending ? (
+        <>
+          <ReceivingPageHeader />
+          <section
+            aria-busy="true"
+            className="grid min-h-40 place-items-center rounded-2xl border border-admin-line bg-admin-surface p-6"
+          >
+            <p role="status" className="m-0 text-admin-muted">
+              Verificando os recebimentos…
+            </p>
+          </section>
+        </>
       ) : page === "overview" ? (
         setupEligible && !ready && !failed ? (
           setupView("overview")
@@ -367,6 +385,14 @@ function ReceivingPageHeader() {
         seu banco.
       </p>
     </header>
+  );
+}
+
+function canReadReadiness(access: SiteAccess | null) {
+  return (
+    (access?.membershipRole === "SITE_ADMIN" &&
+      access.capabilities.configureReceiving) ||
+    (access?.membershipRole === "OWNER" && access.capabilities.readFinance)
   );
 }
 

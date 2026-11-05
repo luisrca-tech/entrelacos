@@ -219,10 +219,22 @@ describe("receiving session boundary", () => {
     expect(loadGiftsReadiness).not.toHaveBeenCalled();
   });
   it("opens the guided setup on the overview until receiving is ready", () => {
-    const html = render(9);
+    const html = render(9, access, "overview", readiness);
     expect(html).toContain('data-setup-section="overview"');
     expect(html).not.toContain('aria-label="Páginas de recebimentos"');
     expect(html).not.toContain("data-finance-access");
+  });
+  it("waits for readiness before choosing between the guided setup and the ready tabs", () => {
+    for (const page of ["overview", "payments", "withdrawals"] as const) {
+      const html = render(9, access, page, null);
+      expect(html).toContain('role="status"');
+      expect(html).toContain("Verificando os recebimentos");
+      expect(html).not.toContain("data-setup-epoch");
+      expect(html).not.toContain('aria-label="Páginas de recebimentos"');
+      expect(html).not.toContain("data-finance-access");
+      expect(html).not.toContain("data-receiving-access");
+      expect(html).not.toContain("quando os recebimentos estiverem liberados");
+    }
   });
   it("withholds OWNER financial surfaces until selected-site access is returned by the server", () => {
     const html = renderToStaticMarkup(
