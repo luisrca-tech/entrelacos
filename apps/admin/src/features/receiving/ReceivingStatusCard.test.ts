@@ -78,7 +78,7 @@ describe("receiving status card", () => {
         },
       },
     });
-    expect(html).toContain("Recebimentos verificados");
+    expect(html).toContain("Recebimentos ativos");
     expect(html).not.toMatch(/<form|<input|Solicitar saque|Confirme sua senha/);
   });
   it("blocks missing, assistant, owner, cross-site, and incapable access", () => {
@@ -99,7 +99,7 @@ describe("receiving status card", () => {
     for (const access of restrictedAccess) {
       const html = render({ access });
       expect(html).toContain("Apenas o administrador do site pode consultar");
-      expect(html).not.toContain("Recebimentos verificados");
+      expect(html).not.toContain("Recebimentos ativos");
       expect(html).not.toContain("Ambiente de testes");
       expect(html).not.toContain("<button");
       expect(html).not.toContain("<form");
@@ -111,12 +111,12 @@ describe("receiving status card", () => {
   it("shows loading and an authorized retry after a readiness error", () => {
     const loading = render({ readiness: null });
     expect(loading).toContain("Verificando os recebimentos");
-    expect(loading).not.toContain("Recebimentos verificados");
+    expect(loading).not.toContain("Recebimentos ativos");
 
     const failed = render({ readiness: null, error: true });
     expect(failed).toContain("Não foi possível verificar os recebimentos");
     expect(failed).toContain("Tentar novamente");
-    expect(failed).not.toContain("Recebimentos verificados");
+    expect(failed).not.toContain("Recebimentos ativos");
     expect(failed).not.toContain("<input");
   });
 
@@ -178,26 +178,47 @@ describe("receiving status card", () => {
       expect(html).toContain(
         "Não foi possível confirmar o status dos recebimentos",
       );
-      expect(html).not.toContain("Recebimentos verificados");
+      expect(html).not.toContain("Recebimentos ativos");
       expect(html).not.toContain("123456-7");
     }
   });
 
   it("shows verified status only for a valid live projection", () => {
     const html = render({ readiness: ready });
-    expect(html).toContain("Recebimentos verificados");
-    expect(html).toContain(
-      "O cadastro e a conta de destino foram verificados para este casamento.",
-    );
+    expect(html).toContain("Recebimentos ativos");
+    expect(html).toContain("Convidados já podem presentear por Pix e cartão.");
     expect(html).not.toContain("Ambiente de testes");
     expect(html).not.toContain("projeção de prontidão");
+    expect(html).not.toContain("Saques para");
+  });
+
+  it("names the withdrawal destination and offers the change link it receives", () => {
+    const html = renderToStaticMarkup(
+      createElement(ReceivingStatusCard, {
+        siteId: "wedding-a",
+        readiness: ready,
+        access: allowedAccess,
+        onRetry: vi.fn(),
+        destination: {
+          ownerName: "Ana Souza",
+          keyType: "CPF",
+          maskedKey: "***.456.789-**",
+          bankName: "Banco Exemplo",
+        },
+        action: createElement("a", { href: "/account" }, "Alterar"),
+      }),
+    );
+    expect(html).toContain("Saques para");
+    expect(html).toContain("Ana Souza · CPF ***.456.789-**");
+    expect(html).toContain('href="/account"');
+    expect(html).not.toContain("<button");
   });
 
   it("labels sandbox status without implying movement of real money", () => {
     const html = render({ readiness: { ...ready, mode: "sandbox" } });
     expect(html).toContain("Sandbox —");
     expect(html).toContain("Pronto no ambiente de testes");
-    expect(html).not.toContain("Recebimentos verificados");
+    expect(html).not.toContain("Recebimentos ativos");
     expect(html).toContain("sem movimentação de dinheiro real");
     expect(html).not.toContain("fluxo aprovado");
 
@@ -210,7 +231,7 @@ describe("receiving status card", () => {
     });
     expect(pendingSandbox).toContain("Sandbox —");
     expect(pendingSandbox).toContain("sem movimentação de dinheiro real");
-    expect(pendingSandbox).not.toContain("Recebimentos verificados");
+    expect(pendingSandbox).not.toContain("Recebimentos ativos");
   });
 });
 

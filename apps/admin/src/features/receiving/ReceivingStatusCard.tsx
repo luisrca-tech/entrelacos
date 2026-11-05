@@ -5,7 +5,24 @@ import {
   siteAccessSchema,
 } from "@entrelacos/contracts";
 import { Button, showSandboxNotice } from "@entrelacos/ui";
+import { Check } from "lucide-react";
 import type { ReactNode } from "react";
+import type { SavedPixDestinationSummary } from "../../components/savedPixDestination";
+
+const keyTypeLabels: Record<SavedPixDestinationSummary["keyType"], string> = {
+  CPF: "CPF",
+  CNPJ: "CNPJ",
+  EMAIL: "E-mail",
+  PHONE: "Celular",
+  EVP: "Chave aleatória",
+};
+
+export function destinationKeyLabel(destination: SavedPixDestinationSummary) {
+  return `${keyTypeLabels[destination.keyType]} ${destination.maskedKey}`;
+}
+export function destinationLabel(destination: SavedPixDestinationSummary) {
+  return `${destination.ownerName} · ${destinationKeyLabel(destination)}`;
+}
 
 const reasonMessages: Record<
   NonNullable<ReceivingReadiness["reason"]>,
@@ -42,6 +59,7 @@ export function ReceivingStatusCard({
   error = false,
   onRetry,
   action,
+  destination = null,
 }: {
   siteId: string;
   readiness: ReceivingReadiness | null;
@@ -49,6 +67,7 @@ export function ReceivingStatusCard({
   error?: boolean;
   onRetry: () => void;
   action?: ReactNode;
+  destination?: SavedPixDestinationSummary | null;
 }) {
   const parsedAccess = siteAccessSchema.safeParse(access);
   const canReadStatus =
@@ -108,20 +127,37 @@ export function ReceivingStatusCard({
           permanece pendente.
         </p>
       );
-    } else if (current.state === "READY" && showSandboxNotice(current.mode)) {
-      title = "Pronto no ambiente de testes";
-      content = (
-        <p role="status" className={bodyClassName}>
-          Sandbox — status válido apenas para testes, sem movimentação de
-          dinheiro real.
-        </p>
-      );
     } else if (current.state === "READY") {
-      title = "Recebimentos verificados";
-      content = (
-        <p role="status" className={bodyClassName}>
-          O cadastro e a conta de destino foram verificados para este casamento.
-        </p>
+      const sandbox = showSandboxNotice(current.mode);
+      return (
+        <section
+          aria-labelledby="receiving-status-title"
+          className="flex min-w-0 flex-wrap items-center gap-x-[18px] gap-y-2 rounded-[14px] border border-admin-success-line bg-admin-success-wash px-[18px] py-3.5 text-sm leading-[1.45] text-admin-success-ink"
+        >
+          <h2
+            id="receiving-status-title"
+            className="m-0 flex shrink-0 items-center gap-2 text-sm font-bold"
+          >
+            <span
+              aria-hidden="true"
+              className="flex size-6 items-center justify-center rounded-full bg-admin-status-confirmed text-white"
+            >
+              <Check className="size-3.5" strokeWidth={3} />
+            </span>
+            {sandbox ? "Pronto no ambiente de testes" : "Recebimentos ativos"}
+          </h2>
+          <p role="status" className="m-0 min-w-0 flex-1 basis-56">
+            {sandbox
+              ? "Sandbox — status válido apenas para testes, sem movimentação de dinheiro real."
+              : "Convidados já podem presentear por Pix e cartão."}
+          </p>
+          {destination && (
+            <p className="m-0 min-w-0 [overflow-wrap:anywhere]">
+              Saques para <strong>{destinationLabel(destination)}</strong>
+              {action && <> · {action}</>}
+            </p>
+          )}
+        </section>
       );
     } else {
       title = "Configuração pendente";
