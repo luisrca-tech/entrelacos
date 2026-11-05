@@ -1,16 +1,15 @@
 import type { SiteAccess, WithdrawalIntent } from "@entrelacos/contracts";
-import {
-  Badge,
-  Button,
-  showSandboxNotice,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@entrelacos/ui";
+import { showSandboxNotice } from "@entrelacos/ui";
+import { RefreshCw } from "lucide-react";
+import type { ReactNode } from "react";
 import { canReadFinancialOverview } from "./financialOverview";
+import {
+  readyCard,
+  readyCardTitle,
+  readyQuietButton,
+  ToneBadge,
+  type ToneName,
+} from "./receivingUi";
 import { withdrawalAmountRows } from "./withdrawalAmountRows";
 import type { WithdrawalHistoryResult } from "./withdrawalHistory";
 import { parseWithdrawalHistory } from "./withdrawalHistory";
@@ -34,6 +33,15 @@ const stateLabels: Record<WithdrawalIntent["state"], string> = {
   CANCELLED: "Cancelado",
   UNKNOWN: "Resultado em verificação",
 };
+const badges: Record<WithdrawalIntent["state"], [string, ToneName]> = {
+  REQUESTED: ["Solicitado", "pending"],
+  AWAITING_AUTHORIZATION: ["Aguardando autorização", "pending"],
+  PROCESSING: ["Em processamento", "pending"],
+  COMPLETED: ["Concluído", "success"],
+  FAILED: ["Não concluído", "danger"],
+  CANCELLED: ["Cancelado", "neutral"],
+  UNKNOWN: ["Em verificação", "pending"],
+};
 
 function formatDate(value: string): string {
   const date = new Date(value);
@@ -41,90 +49,150 @@ function formatDate(value: string): string {
     ? "Data indisponível"
     : dateFormatter.format(date);
 }
+function netAmount(withdrawal: WithdrawalIntent) {
+  return currency.format(
+    (withdrawal.settlement?.netCents ?? withdrawal.netCents) / 100,
+  );
+}
+
+export function WithdrawalStateBadge({
+  state,
+}: {
+  state: WithdrawalIntent["state"];
+}) {
+  const [label, tone] = badges[state];
+  return <ToneBadge tone={tone}>{label}</ToneBadge>;
+}
 
 function WithdrawalRecord({ withdrawal }: { withdrawal: WithdrawalIntent }) {
   return (
-    <TableRow>
-      <TableCell className="whitespace-nowrap">
-        <time dateTime={withdrawal.createdAt}>
-          {formatDate(withdrawal.createdAt)}
-        </time>
-      </TableCell>
-      <TableCell className="whitespace-nowrap font-semibold">
-        {currency.format(
-          (withdrawal.settlement?.netCents ?? withdrawal.netCents) / 100,
-        )}
-      </TableCell>
-      <TableCell>
-        <Badge variant="outline">{stateLabels[withdrawal.state]}</Badge>
-      </TableCell>
-      <TableCell>
-        <details className="min-w-48 text-sm">
-          <summary className="cursor-pointer font-semibold text-admin-terracotta-deep">
-            Detalhes
-          </summary>
-          <div className="mt-3 grid gap-3">
-            {showSandboxNotice(withdrawal.mode) && (
-              <p className="m-0 text-sm text-admin-muted">
-                Sandbox — valores de teste, sem movimentação de dinheiro real.
-              </p>
-            )}
-            <dl className="m-0 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              {[
-                ...withdrawalAmountRows(withdrawal).map(([label, cents]) => [
-                  label,
-                  currency.format(cents / 100),
-                ]),
-                ["Status", stateLabels[withdrawal.state]],
-              ].map(([label, value]) => (
-                <div key={label} className="grid gap-1">
-                  <dt className="text-sm text-admin-muted">{label}</dt>
-                  <dd className="m-0 font-semibold text-admin-graphite">
-                    {value}
-                  </dd>
-                </div>
-              ))}
-            </dl>
-            {withdrawal.settlement &&
-              withdrawal.settlement.releasedCents > 0 && (
-                <p className="m-0 text-sm text-admin-muted">
-                  Reserva liberada:{" "}
-                  {currency.format(withdrawal.settlement.releasedCents / 100)}.
-                  O limite aprovado foi{" "}
-                  {currency.format(withdrawal.amountCents / 100)}.
-                </p>
-              )}
-            <p className="m-0 text-sm text-admin-muted">
-              Solicitado em{" "}
+    <li className="border-t border-admin-beige px-6 py-4 [@media(max-width:760px)]:px-5">
+      <details className="group">
+        <summary className="flex min-w-0 cursor-pointer list-none flex-wrap items-center gap-x-[18px] gap-y-2 [&::-webkit-details-marker]:hidden">
+          <span className="grid min-w-0 flex-[1_1_12rem] gap-0.5">
+            <strong className="text-[15px] text-admin-ink">
+              {netAmount(withdrawal)}
+            </strong>
+            <span className="text-[13px] text-admin-muted">
               <time dateTime={withdrawal.createdAt}>
                 {formatDate(withdrawal.createdAt)}
               </time>
-              .
+            </span>
+          </span>
+          <WithdrawalStateBadge state={withdrawal.state} />
+          <span className="text-sm font-semibold text-admin-terracotta-deep underline underline-offset-4">
+            <span className="group-open:hidden">Detalhes</span>
+            <span className="hidden group-open:inline">Ocultar detalhes</span>
+          </span>
+        </summary>
+        <div className="mt-3 grid gap-3 rounded-xl bg-admin-canvas px-4 py-3.5 text-sm">
+          {showSandboxNotice(withdrawal.mode) && (
+            <p className="m-0 text-admin-muted">
+              Sandbox — valores de teste, sem movimentação de dinheiro real.
             </p>
-            <p className="m-0 text-sm text-admin-muted">
-              Atualizado em{" "}
-              <time dateTime={withdrawal.updatedAt}>
-                {formatDate(withdrawal.updatedAt)}
-              </time>
-              .
+          )}
+          <dl className="m-0 grid gap-2">
+            {[
+              ...withdrawalAmountRows(withdrawal).map(([label, cents]) => [
+                label,
+                currency.format(cents / 100),
+              ]),
+              ["Status", stateLabels[withdrawal.state]],
+            ].map(([label, value]) => (
+              <div key={label} className="flex justify-between gap-3">
+                <dt className="text-admin-body">{label}</dt>
+                <dd className="m-0 text-right font-semibold text-admin-ink">
+                  {value}
+                </dd>
+              </div>
+            ))}
+          </dl>
+          {withdrawal.settlement && withdrawal.settlement.releasedCents > 0 && (
+            <p className="m-0 text-admin-muted">
+              Reserva liberada:{" "}
+              {currency.format(withdrawal.settlement.releasedCents / 100)}. O
+              limite aprovado foi{" "}
+              {currency.format(withdrawal.amountCents / 100)}.
             </p>
-            {withdrawal.state === "COMPLETED" && (
-              <p className="m-0 text-sm text-admin-muted">
-                A conclusão informada pelo provedor não confirma o crédito na
-                conta bancária.
-              </p>
-            )}
-            {withdrawal.state === "UNKNOWN" && (
-              <p className="m-0 text-sm text-admin-muted">
-                O resultado segue em verificação e ainda não pode ser
-                confirmado.
-              </p>
-            )}
-          </div>
-        </details>
-      </TableCell>
-    </TableRow>
+          )}
+          <p className="m-0 text-admin-muted">
+            Solicitado em{" "}
+            <time dateTime={withdrawal.createdAt}>
+              {formatDate(withdrawal.createdAt)}
+            </time>
+            . Atualizado em{" "}
+            <time dateTime={withdrawal.updatedAt}>
+              {formatDate(withdrawal.updatedAt)}
+            </time>
+            .
+          </p>
+          {withdrawal.state === "COMPLETED" && (
+            <p className="m-0 text-admin-muted">
+              A conclusão informada pelo provedor não confirma o crédito na
+              conta bancária.
+            </p>
+          )}
+          {withdrawal.state === "UNKNOWN" && (
+            <p className="m-0 text-admin-muted">
+              O resultado segue em verificação e ainda não pode ser confirmado.
+            </p>
+          )}
+        </div>
+      </details>
+    </li>
   );
+}
+
+function readWithdrawals(
+  siteId: string,
+  access: SiteAccess | null,
+  result: WithdrawalHistoryResult,
+) {
+  const authorized = canReadFinancialOverview(siteId, access);
+  if (!authorized || result.status !== "ready")
+    return { authorized, withdrawals: null, invalid: false };
+  try {
+    return {
+      authorized,
+      withdrawals: parseWithdrawalHistory(siteId, {
+        withdrawals: result.withdrawals,
+      }),
+      invalid: false,
+    };
+  } catch {
+    return { authorized, withdrawals: null, invalid: true };
+  }
+}
+
+function HistoryMessage({
+  result,
+  invalid,
+}: {
+  result: WithdrawalHistoryResult;
+  invalid: boolean;
+}) {
+  const className =
+    "m-0 border-t border-admin-beige px-6 py-4 text-sm text-admin-muted";
+  if (invalid || result.status === "error")
+    return (
+      <p role="alert" className={className}>
+        Não foi possível consultar o histórico de saques.
+      </p>
+    );
+  if (result.status === "loading")
+    return (
+      <p role="status" className={className}>
+        Consultando o histórico de saques…
+      </p>
+    );
+  if (result.status === "unavailable")
+    return (
+      <p role="status" className={className}>
+        Histórico de saques indisponível. A consulta não confirmou se existem
+        saques.
+      </p>
+    );
+  return <p className={className}>Ainda não há saques registrados.</p>;
 }
 
 export function WithdrawalHistoryView({
@@ -138,84 +206,113 @@ export function WithdrawalHistoryView({
   result: WithdrawalHistoryResult;
   onRefresh?: () => void;
 }) {
-  const authorized = canReadFinancialOverview(siteId, access);
-  let withdrawals: WithdrawalIntent[] | null = null;
-  let invalidResult = false;
-
-  if (authorized && result.status === "ready") {
-    try {
-      withdrawals = parseWithdrawalHistory(siteId, {
-        withdrawals: result.withdrawals,
-      });
-    } catch {
-      invalidResult = true;
-    }
-  }
-
+  const { authorized, withdrawals, invalid } = readWithdrawals(
+    siteId,
+    access,
+    result,
+  );
   return (
     <section
       aria-labelledby="withdrawal-history-title"
-      className="grid gap-4 rounded-xl border border-admin-line bg-admin-surface p-6 sm:p-8"
+      className={`${readyCard} grid py-2`}
     >
-      <p className="m-0 text-xs font-bold uppercase tracking-wider text-admin-muted">
-        Financeiro
-      </p>
-      <h2
-        id="withdrawal-history-title"
-        className="m-0 font-admin-display text-2xl text-admin-graphite"
-      >
-        {authorized ? "Histórico de saques" : "Acesso financeiro restrito"}
-      </h2>
-      {!authorized ? (
-        <p role="status" className="m-0 text-admin-muted">
-          Apenas os administradores autorizados deste casamento podem consultar
-          valores e movimentações.
-        </p>
-      ) : invalidResult || result.status === "error" ? (
-        <p role="alert" className="m-0 text-admin-muted">
-          Não foi possível consultar o histórico de saques.
-        </p>
-      ) : result.status === "loading" ? (
-        <p role="status" className="m-0 text-admin-muted">
-          Consultando o histórico de saques…
-        </p>
-      ) : result.status === "unavailable" ? (
-        <p role="status" className="m-0 text-admin-muted">
-          Histórico de saques indisponível. A consulta não confirmou se existem
-          saques.
-        </p>
-      ) : withdrawals?.length === 0 ? (
-        <p className="m-0 text-admin-muted">Ainda não há saques registrados.</p>
-      ) : (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Solicitado em</TableHead>
-              <TableHead>Valor do saque</TableHead>
-              <TableHead>Situação</TableHead>
-              <TableHead>
-                <span className="sr-only">Detalhes do saque</span>
-              </TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {withdrawals?.map((withdrawal) => (
-              <WithdrawalRecord key={withdrawal.id} withdrawal={withdrawal} />
-            ))}
-          </TableBody>
-        </Table>
-      )}
-      {authorized && onRefresh && (
-        <div>
-          <Button
+      <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-1 px-6 pt-3.5 pb-2.5 [@media(max-width:760px)]:px-5">
+        <h2 id="withdrawal-history-title" className={readyCardTitle}>
+          {authorized ? "Histórico de saques" : "Acesso financeiro restrito"}
+        </h2>
+        {authorized && onRefresh && (
+          <button
             type="button"
-            variant="outline"
+            className={readyQuietButton}
             disabled={result.status === "loading"}
             onClick={onRefresh}
           >
-            Consultar novamente
-          </Button>
-        </div>
+            <RefreshCw aria-hidden="true" className="size-3.5" />
+            Atualizar
+          </button>
+        )}
+      </div>
+      {!authorized ? (
+        <p
+          role="status"
+          className="m-0 border-t border-admin-beige px-6 py-4 text-sm text-admin-muted"
+        >
+          Apenas os administradores autorizados deste casamento podem consultar
+          valores e movimentações.
+        </p>
+      ) : withdrawals && withdrawals.length > 0 ? (
+        <ul className="m-0 list-none p-0">
+          {withdrawals.map((withdrawal) => (
+            <WithdrawalRecord key={withdrawal.id} withdrawal={withdrawal} />
+          ))}
+        </ul>
+      ) : (
+        <HistoryMessage result={result} invalid={invalid} />
+      )}
+    </section>
+  );
+}
+
+// Overview list: the three latest withdrawals from the same history read.
+export function RecentWithdrawals({
+  siteId,
+  access,
+  result,
+  viewAll,
+}: {
+  siteId: string;
+  access: SiteAccess | null;
+  result: WithdrawalHistoryResult;
+  viewAll: ReactNode;
+}) {
+  const { authorized, withdrawals, invalid } = readWithdrawals(
+    siteId,
+    access,
+    result,
+  );
+  const recent = withdrawals?.slice(0, 3) ?? [];
+  return (
+    <section
+      aria-labelledby="recent-withdrawals-title"
+      className={`${readyCard} grid content-start py-2`}
+    >
+      <div className="flex items-center justify-between gap-3 px-6 pt-3.5 pb-2.5">
+        <h2 id="recent-withdrawals-title" className={readyCardTitle}>
+          Últimos saques
+        </h2>
+        {authorized && recent.length > 0 && viewAll}
+      </div>
+      {authorized && recent.length > 0 ? (
+        <ul className="m-0 list-none p-0">
+          {recent.map((withdrawal) => (
+            <li
+              key={withdrawal.id}
+              className="flex min-w-0 flex-wrap items-center gap-x-3.5 gap-y-1 border-t border-admin-beige px-6 py-3.5"
+            >
+              <span className="grid min-w-0 flex-1 gap-0.5">
+                <strong className="text-[15px] text-admin-ink">
+                  {netAmount(withdrawal)}
+                </strong>
+                <time
+                  dateTime={withdrawal.createdAt}
+                  className="text-[13px] text-admin-muted"
+                >
+                  {formatDate(withdrawal.createdAt)}
+                </time>
+              </span>
+              <WithdrawalStateBadge state={withdrawal.state} />
+            </li>
+          ))}
+        </ul>
+      ) : authorized ? (
+        <HistoryMessage result={result} invalid={invalid} />
+      ) : (
+        <p
+          role="status"
+          className="m-0 border-t border-admin-beige px-6 py-4 text-sm text-admin-muted"
+        >
+          Acesso financeiro restrito.
+        </p>
       )}
     </section>
   );

@@ -2,7 +2,10 @@ import type { SiteAccess, WithdrawalIntent } from "@entrelacos/contracts";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { WithdrawalHistoryView } from "./WithdrawalHistoryView";
+import {
+  RecentWithdrawals,
+  WithdrawalHistoryView,
+} from "./WithdrawalHistoryView";
 import type { WithdrawalHistoryResult } from "./withdrawalHistory";
 
 const access: SiteAccess = {
@@ -94,7 +97,7 @@ describe("withdrawal history view", () => {
       expect(html).not.toContain("Ainda não há saques registrados");
       expect(html).not.toContain("R$");
       expect(html).not.toContain("0,00");
-      expect(html).toContain("Consultar novamente");
+      expect(html).toContain(">Atualizar</button>");
       expect(html).not.toContain("Tentar novamente");
       if ((result as WithdrawalHistoryResult).status === "loading")
         expect(html).toContain('disabled=""');
@@ -169,7 +172,7 @@ describe("withdrawal history view", () => {
       { onRefresh: vi.fn() },
     );
 
-    expect(html).toMatch(/<button[^>]*>Consultar novamente<\/button>/);
+    expect(html).toContain(">Atualizar</button>");
     expect(html.match(/<button\b/g)).toHaveLength(1);
     expect(html).not.toContain("Solicitar saque");
     expect(html).not.toContain("Repetir saque");
@@ -275,4 +278,48 @@ it("shows one withdrawal amount without fee or net divisions when there is no fe
   expect(html).not.toMatch(
     /Taxa máxima|Débito máximo|Líquido mínimo|Valor líquido/,
   );
+});
+
+it("marks each state with a colored badge", () => {
+  const html = render({
+    status: "ready",
+    withdrawals: [
+      { ...withdrawal, state: "COMPLETED" },
+      { ...withdrawal, id: "withdrawal-b", state: "FAILED" },
+    ],
+  });
+  expect(html).toMatch(/bg-admin-success-wash[^"]*">Concluído</);
+  expect(html).toMatch(/bg-admin-danger-wash[^"]*">Não concluído</);
+  expect(html).toContain("Detalhes");
+});
+
+it("lists only the three latest withdrawals on the overview", () => {
+  const withdrawals = ["a", "b", "c", "d"].map((id, index) => ({
+    ...withdrawal,
+    id: `withdrawal-${id}`,
+    netCents: 9800 - index * 100,
+    feeCents: 200 + index * 100,
+  }));
+  const html = renderToStaticMarkup(
+    createElement(RecentWithdrawals, {
+      siteId: "wedding-a",
+      access,
+      result: { status: "ready", withdrawals },
+      viewAll: createElement("a", { href: "/withdrawals" }, "Ver todos"),
+    }),
+  );
+  expect(html).toContain("Últimos saques");
+  expect(html).toContain("Ver todos");
+  expect(html.match(/<li\b/g)).toHaveLength(3);
+  expect(html).not.toContain("95,00");
+  const restricted = renderToStaticMarkup(
+    createElement(RecentWithdrawals, {
+      siteId: "wedding-a",
+      access: null,
+      result: { status: "ready", withdrawals },
+      viewAll: createElement("a", { href: "/withdrawals" }, "Ver todos"),
+    }),
+  );
+  expect(restricted).not.toContain("R$");
+  expect(restricted).not.toContain("Ver todos");
 });

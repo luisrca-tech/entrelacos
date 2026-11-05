@@ -1926,6 +1926,44 @@ async function mount(
   return { root, node };
 }
 
+describe("collapsible withdrawal request", () => {
+  it("shows Solicitar saque first, then opens the form and fills the known balance", async () => {
+    const f = await fixture(context());
+    try {
+      const node = document.createElement("div");
+      document.body.append(node);
+      const root = createRoot(node);
+      mounts.push({ root, node });
+      await act(async () => {
+        root.render(
+          createElement(WithdrawalSetup, {
+            ...f.scope,
+            ports: f.ports,
+            collapsible: true,
+            availableCents: 58100,
+          }),
+        );
+      });
+      const button = (label: string) =>
+        [...node.querySelectorAll("button")].find(
+          (item) => item.textContent === label,
+        );
+      expect(node.querySelector("#withdrawal-amount")).toBeNull();
+      await act(async () => required(button("Solicitar saque")).click());
+      const input = required(
+        node.querySelector<HTMLInputElement>("#withdrawal-amount"),
+      );
+      await act(async () => required(button("Sacar tudo")).click());
+      expect(input.value).toBe("581,00");
+      await act(async () => required(button("Cancelar")).click());
+      expect(node.querySelector("#withdrawal-amount")).toBeNull();
+      expect(button("Solicitar saque")).toBeTruthy();
+    } finally {
+      f.cleanup();
+    }
+  });
+});
+
 describe("withdrawal setup owned source lifecycle", () => {
   it("notifies financial readers after confirmation and explicit consultation, never automatic reads or previews", async () => {
     const changed = vi.fn();
@@ -4103,7 +4141,7 @@ describe("actual React withdrawal DOM", () => {
         "00:00",
       );
       expect(
-        second.node.querySelector(".text-destructive")?.textContent,
+        second.node.querySelector(".text-admin-danger-ink")?.textContent,
       ).toContain("Prévia expirada");
       expect(
         [...second.node.querySelectorAll("button")].find(
@@ -4179,7 +4217,7 @@ describe("actual React withdrawal DOM", () => {
         (button) => button.textContent === "Confirmar senha",
       ),
     ).toBe(false);
-    expect(node.querySelector(".text-destructive")?.textContent).toContain(
+    expect(node.querySelector(".text-admin-danger-ink")?.textContent).toContain(
       "Prévia expirada",
     );
     expect(f.request).toHaveBeenCalledTimes(count);

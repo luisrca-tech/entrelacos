@@ -6,19 +6,7 @@ import {
   type WithdrawalRequestContext,
   type WithdrawalRequestStatus,
 } from "@entrelacos/contracts";
-import {
-  Badge,
-  Button,
-  Input,
-  showSandboxNotice,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-  toast,
-} from "@entrelacos/ui";
+import { showSandboxNotice, toast } from "@entrelacos/ui";
 import {
   type FormEvent,
   useEffect,
@@ -37,6 +25,13 @@ import {
 } from "./financialReauthenticationClient";
 import { parseGiftPriceToCents } from "./GiftEditorView";
 import { type createPanelActorOwner, panelActorOwner } from "./panelActor";
+import {
+  readyLinkButton,
+  readyQuietButton,
+  receivingPrimaryAction,
+  receivingSecondaryAction,
+  ToneBadge,
+} from "./receivingUi";
 import { withdrawalAmountRows } from "./withdrawalAmountRows";
 import {
   compareWithdrawalContexts,
@@ -1698,11 +1693,18 @@ const money = new Intl.NumberFormat("pt-BR", {
   style: "currency",
   currency: "BRL",
 });
+type WithdrawalSetupLayout = {
+  // Shows "Solicitar saque" first and opens the amount form on demand.
+  collapsible?: boolean;
+  // Known available balance, used only to prefill "Sacar tudo".
+  availableCents?: number | null;
+};
 export function WithdrawalSetup(
-  props: WithdrawalSetupScope & {
-    ports?: WithdrawalSetupPorts;
-    onFinancialChange?: () => void;
-  },
+  props: WithdrawalSetupScope &
+    WithdrawalSetupLayout & {
+      ports?: WithdrawalSetupPorts;
+      onFinancialChange?: () => void;
+    },
 ) {
   const pageSlot = useRef<PageReadSlot>({ pending: null });
   const key = financialReauthenticationScopeKey({
@@ -1714,6 +1716,7 @@ export function WithdrawalSetup(
   ) : (
     <WithdrawalSetupView
       scope={props}
+      layout={props}
       state={{
         status: "denied",
         context: null,
@@ -1735,11 +1738,14 @@ function WithdrawalSetupRuntime({
   ports,
   pageSlot,
   onFinancialChange,
-}: WithdrawalSetupScope & {
-  ports?: WithdrawalSetupPorts;
-  pageSlot: PageReadSlot;
-  onFinancialChange?: () => void;
-}) {
+  collapsible,
+  availableCents,
+}: WithdrawalSetupScope &
+  WithdrawalSetupLayout & {
+    ports?: WithdrawalSetupPorts;
+    pageSlot: PageReadSlot;
+    onFinancialChange?: () => void;
+  }) {
   const defaultPorts = useRef<WithdrawalSetupPorts>({});
   const activePorts = ports ?? defaultPorts.current;
   const controller = useRef<ReturnType<
@@ -1789,24 +1795,58 @@ function WithdrawalSetupRuntime({
     <WithdrawalSetupView
       state={projected}
       scope={{ siteId, access, sessionEpoch }}
+      layout={{ collapsible, availableCents }}
       controller={bound ? controller.current : null}
       ports={ports}
     />
   );
 }
 
+const muted = "m-0 text-sm leading-[1.5] text-admin-muted";
+const body = "m-0 text-sm leading-[1.55] text-admin-body";
+const amountBox =
+  "m-0 grid w-full max-w-[420px] gap-2 rounded-xl bg-admin-canvas px-4 py-3.5 text-sm";
+const timeOnly = new Intl.DateTimeFormat("pt-BR", {
+  timeStyle: "medium",
+  timeZone: "America/Sao_Paulo",
+});
+function previewTime(value: string) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : timeOnly.format(date);
+}
+function AmountRows({ rows }: { rows: [string, string][] }) {
+  return (
+    <dl className={amountBox}>
+      {rows.map(([label, value], index) => (
+        <div
+          key={label}
+          className={`flex min-w-0 justify-between gap-3 ${index === rows.length - 1 && rows.length > 1 ? "border-t border-admin-line pt-2 font-bold" : ""}`}
+        >
+          <dt className="text-admin-body">{label}</dt>
+          <dd className="m-0 text-right text-admin-ink [overflow-wrap:anywhere]">
+            {value}
+          </dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
 function WithdrawalSetupView({
   state,
   scope,
+  layout = {},
   controller,
   ports,
 }: {
   state: WithdrawalSetupState;
   scope: WithdrawalSetupScope;
+  layout?: WithdrawalSetupLayout;
   controller: ReturnType<typeof createWithdrawalSetupController> | null;
   ports?: WithdrawalSetupPorts;
 }) {
   const [amount, setAmount] = useState("");
+  const [formOpen, setFormOpen] = useState(!layout.collapsible);
   const preview =
     state.request?.state === "OPEN"
       ? state.request.preview
@@ -1835,61 +1875,68 @@ function WithdrawalSetupView({
               : null;
   return (
     <section
-      className="grid gap-4 rounded-xl border border-admin-line bg-admin-surface p-6"
+      className="grid min-w-0 gap-4"
       aria-labelledby="withdrawal-setup-title"
     >
-      <h2
-        id="withdrawal-setup-title"
-        className="m-0 font-admin-display text-2xl"
-      >
+      <h2 id="withdrawal-setup-title" className="sr-only">
         Solicitação de saque
       </h2>
       {(state.request?.mode ?? state.context?.mode) === "live" && (
-        <p>Live — valores reais.</p>
+        <p className={muted}>Live — valores reais.</p>
       )}
       {showSandboxNotice(state.request?.mode ?? state.context?.mode) && (
-        <p>Sandbox — valores de teste.</p>
+        <p className={muted}>Sandbox — valores de teste.</p>
       )}
       {blocker && (
         <p
           role="status"
-          className="m-0 rounded-lg border border-admin-line bg-admin-paper p-3 text-sm text-admin-muted"
+          className="m-0 rounded-xl bg-admin-canvas px-4 py-3 text-sm leading-[1.5] text-admin-body"
         >
           {blocker}
         </p>
       )}
-      {state.status === "denied" && <p>Acesso financeiro restrito.</p>}
+      {state.status === "denied" && (
+        <p className={muted}>Acesso financeiro restrito.</p>
+      )}
       {state.status === "storage_unavailable" && (
-        <p>Ações bloqueadas: a referência não pôde ser preservada.</p>
+        <p className={muted}>
+          Ações bloqueadas: a referência não pôde ser preservada.
+        </p>
       )}
       {state.uncertain && !withdrawal && (
-        <p>Resultado em verificação. Consulte a situação.</p>
+        <p className={muted}>Resultado em verificação. Consulte a situação.</p>
       )}
       {preview && (
-        <dl className="grid gap-4 rounded-lg border border-admin-line bg-admin-paper p-4 sm:grid-cols-2 lg:grid-cols-3">
-          {[
-            ...withdrawalAmountRows(
+        <div className="grid min-w-0 gap-3 border-t border-admin-beige pt-[18px]">
+          <AmountRows
+            rows={withdrawalAmountRows(
               withdrawal?.settlement ? withdrawal : preview,
-            ).map(([label, cents]) => [label, money.format(cents / 100)]),
-            ["Destino verificado", preview.maskedDestination],
-            ...(preview.payoutRecipientName
-              ? [["Recebedor Pix", preview.payoutRecipientName]]
-              : []),
-            ["Nome no perfil", preview.operatorDisplayName],
-            ["Validade da prévia", preview.expiresAt],
-          ].map(([label, value]) => (
-            <div key={label}>
-              <dt className="text-sm text-admin-muted">{label}</dt>
-              <dd className="m-0 font-semibold text-admin-graphite">{value}</dd>
-            </div>
-          ))}
-        </dl>
+            ).map(([label, cents]) => [label, money.format(cents / 100)])}
+          />
+          <dl className="m-0 grid w-full max-w-[420px] gap-1.5 text-[13px]">
+            {[
+              ["Destino verificado", preview.maskedDestination],
+              ...(preview.payoutRecipientName
+                ? [["Recebedor Pix", preview.payoutRecipientName]]
+                : []),
+              ["Nome no perfil", preview.operatorDisplayName],
+              ["Validade da prévia", previewTime(preview.expiresAt)],
+            ].map(([label, value]) => (
+              <div key={label} className="flex min-w-0 justify-between gap-3">
+                <dt className="text-admin-muted">{label}</dt>
+                <dd className="m-0 text-right text-admin-ink [overflow-wrap:anywhere]">
+                  {value}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </div>
       )}
       {preview &&
         preview.feeCents > 0 &&
         !withdrawal?.settlement &&
         preview.feeSemantics === "MAXIMUM" && (
-          <p>
+          <p className={muted}>
             O valor líquido é fixo. A taxa efetiva pode ser menor que o limite;
             a reserva não utilizada volta ao saldo após a confirmação.
           </p>
@@ -1898,27 +1945,20 @@ function WithdrawalSetupView({
         preview.feeCents > 0 &&
         !withdrawal?.settlement &&
         preview.feeSemantics === "MAXIMUM_WITH_MINIMUM_NET" && (
-          <p>
+          <p className={muted}>
             O débito não ultrapassa o limite aprovado. O valor líquido é o
             mínimo; uma taxa efetiva menor aumenta o valor enviado ao recebedor.
           </p>
         )}
       {!preview && state.request?.state === "EXISTING" && (
-        <dl className="grid gap-4 rounded-lg border border-admin-line bg-admin-paper p-4 sm:grid-cols-2 lg:grid-cols-3">
-          {withdrawalAmountRows(state.request.withdrawal)
-            .map(([label, cents]) => [label, money.format(cents / 100)])
-            .map(([label, value]) => (
-              <div key={label}>
-                <dt className="text-sm text-admin-muted">{label}</dt>
-                <dd className="m-0 font-semibold text-admin-graphite">
-                  {value}
-                </dd>
-              </div>
-            ))}
-        </dl>
+        <AmountRows
+          rows={withdrawalAmountRows(state.request.withdrawal).map(
+            ([label, cents]) => [label, money.format(cents / 100)],
+          )}
+        />
       )}
       {withdrawal && (
-        <p>
+        <p role="status" className={body}>
           {withdrawal.state === "UNKNOWN"
             ? "Resultado em verificação. Consulte a solicitação original."
             : withdrawal.state === "COMPLETED"
@@ -1932,54 +1972,118 @@ function WithdrawalSetupView({
       )}
       {state.request?.state === "EXISTING" &&
         state.request.preview === null && (
-          <p>Os dados do destino original não estão disponíveis.</p>
+          <p className={muted}>
+            Os dados do destino original não estão disponíveis.
+          </p>
         )}
       {state.request?.state === "SEALED_NOT_CREATED" && (
-        <p>Solicitação encerrada sem reserva.</p>
+        <p className={muted}>Solicitação encerrada sem reserva.</p>
       )}
       {state.status === "ready" &&
         state.context?.newRequestAllowed &&
         !state.uncertain &&
-        state.request?.state !== "OPEN" && (
+        state.request?.state !== "OPEN" &&
+        (formOpen ? (
           <form
-            className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end"
+            className="grid min-w-0 gap-4 border-t border-admin-beige pt-[18px]"
             onSubmit={(event: FormEvent) => {
               event.preventDefault();
               void controller?.preview(amount);
             }}
           >
-            <div className="grid gap-1.5">
+            <div className="grid w-full max-w-[420px] gap-1.5">
               <label
-                className="text-sm font-medium"
+                className="text-sm font-bold text-admin-ink"
                 htmlFor="withdrawal-amount"
               >
-                Valor do saque
+                Quanto quer sacar
               </label>
-              <Input
-                id="withdrawal-amount"
-                inputMode="decimal"
-                value={amount}
-                disabled={state.busy}
-                onChange={(event) => {
-                  setAmount(event.target.value);
-                  controller?.resetConsent();
-                }}
-              />
+              <div className="flex min-h-[52px] min-w-0 items-center overflow-hidden rounded-[10px] border border-admin-line-strong bg-white focus-within:border-2 focus-within:border-admin-terracotta focus-within:shadow-[0_0_0_3px_var(--color-admin-terracotta-wash)]">
+                <span
+                  aria-hidden="true"
+                  className="flex h-full items-center self-stretch bg-admin-beige px-3.5 text-[15px] font-bold text-admin-graphite"
+                >
+                  R$
+                </span>
+                <input
+                  id="withdrawal-amount"
+                  inputMode="decimal"
+                  autoComplete="off"
+                  value={amount}
+                  disabled={state.busy}
+                  onChange={(event) => {
+                    setAmount(event.target.value);
+                    controller?.resetConsent();
+                  }}
+                  className="h-full min-w-0 flex-1 border-0 bg-transparent px-3.5 text-xl font-semibold text-admin-ink outline-none disabled:opacity-60"
+                />
+                {typeof layout.availableCents === "number" &&
+                  layout.availableCents > 0 && (
+                    <button
+                      type="button"
+                      disabled={state.busy}
+                      onClick={() => {
+                        setAmount(
+                          ((layout.availableCents as number) / 100)
+                            .toFixed(2)
+                            .replace(".", ","),
+                        );
+                        controller?.resetConsent();
+                      }}
+                      className="mr-1.5 min-h-9 shrink-0 rounded-lg border border-admin-line-strong bg-transparent px-3 text-[13px] font-semibold text-admin-graphite hover:bg-admin-canvas disabled:opacity-60"
+                    >
+                      Sacar tudo
+                    </button>
+                  )}
+              </div>
             </div>
-            <Button type="submit" disabled={state.busy}>
-              {state.busy ? "Consultando prévia…" : "Consultar prévia do saque"}
-            </Button>
+            <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+              <button
+                type="submit"
+                disabled={state.busy}
+                className={receivingPrimaryAction}
+              >
+                {state.busy
+                  ? "Consultando prévia…"
+                  : "Consultar prévia do saque"}
+              </button>
+              {layout.collapsible && (
+                <button
+                  type="button"
+                  className={readyLinkButton}
+                  disabled={state.busy}
+                  onClick={() => {
+                    setFormOpen(false);
+                    setAmount("");
+                    controller?.resetConsent();
+                  }}
+                >
+                  Cancelar
+                </button>
+              )}
+            </div>
           </form>
-        )}
+        ) : (
+          <div>
+            <button
+              type="button"
+              className={receivingPrimaryAction}
+              onClick={() => setFormOpen(true)}
+            >
+              Solicitar saque
+            </button>
+          </div>
+        ))}
       {(controller?.canResumePreview() ||
         (state.busy && state.request?.state === "UNRESOLVED")) && (
-        <Button
+        <button
           type="button"
+          className={receivingPrimaryAction}
           disabled={state.busy}
           onClick={() => void controller?.resumePreview()}
         >
           {state.busy ? "Retomando prévia…" : "Retomar prévia"}
-        </Button>
+        </button>
       )}
       {state.request &&
         !["COMPLETED", "FAILED", "CANCELLED"].includes(
@@ -1995,103 +2099,90 @@ function WithdrawalSetupView({
           />
         )}
       {!!scope.sessionEpoch && state.status !== "denied" && (
-        <Button
-          type="button"
-          variant="outline"
-          disabled={state.busy || state.status === "loading"}
-          onClick={() => void controller?.refresh(undefined, true)}
-        >
-          {state.status === "loading"
-            ? "Consultando…"
-            : state.busy
-              ? "Processando…"
-              : "Consultar situação"}
-        </Button>
+        <div>
+          <button
+            type="button"
+            className={readyQuietButton}
+            disabled={state.busy || state.status === "loading"}
+            onClick={() => void controller?.refresh(undefined, true)}
+          >
+            {state.status === "loading"
+              ? "Consultando…"
+              : state.busy
+                ? "Processando…"
+                : "Consultar situação"}
+          </button>
+        </div>
       )}
       {pendingRequests.length > 0 && (
-        <div className="grid gap-3">
-          <h3 className="m-0 font-admin-display text-xl">
+        <div className="grid min-w-0 gap-2 border-t border-admin-beige pt-[18px]">
+          <h3 className="m-0 text-[15px] font-bold text-admin-ink">
             Solicitações para acompanhar
           </h3>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Situação</TableHead>
-                <TableHead>Valor</TableHead>
-                <TableHead>
-                  <span className="sr-only">Ações</span>
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {pendingRequests.map((request) => (
-                <TableRow
-                  key={request.requestId}
-                  data-request-id={request.requestId}
-                >
-                  <TableCell>
-                    <Badge variant="outline">
-                      {request.state === "OPEN"
-                        ? "Prévia em andamento"
-                        : request.state === "UNRESOLVED"
-                          ? "Resultado em verificação"
-                          : request.state === "EXISTING" &&
-                              request.withdrawal.state === "UNKNOWN"
-                            ? "Resultado em verificação"
-                            : "Em acompanhamento"}
-                    </Badge>
-                    {request.state === "EXISTING" && (
-                      <p className="mt-1 text-xs text-admin-muted">
-                        {new Date(request.withdrawal.createdAt).toLocaleString(
-                          "pt-BR",
-                          {
-                            timeZone: "America/Sao_Paulo",
-                            dateStyle: "short",
-                            timeStyle: "short",
-                          },
-                        )}
-                      </p>
-                    )}
-                  </TableCell>
-                  <TableCell>
+          <ul className="m-0 grid list-none gap-2 p-0">
+            {pendingRequests.map((request) => (
+              <li
+                key={request.requestId}
+                data-request-id={request.requestId}
+                className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2 rounded-xl bg-admin-canvas px-4 py-3"
+              >
+                <span className="grid min-w-0 flex-1 gap-1">
+                  <strong className="text-[15px] text-admin-ink">
                     {request.state === "EXISTING"
                       ? money.format(request.withdrawal.amountCents / 100)
                       : request.state === "OPEN"
                         ? money.format(request.preview.amountCents / 100)
                         : "Em verificação"}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {request.requestId === state.request?.requestId ? (
-                      <span className="text-sm text-admin-muted">
-                        Selecionada
-                      </span>
-                    ) : (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        disabled={state.busy}
-                        onClick={() =>
-                          void controller?.selectDiscoveredRequest(
-                            request.requestId,
-                          )
-                        }
-                      >
-                        Acompanhar
-                      </Button>
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+                  </strong>
+                  {request.state === "EXISTING" && (
+                    <span className="text-xs text-admin-muted">
+                      {new Date(request.withdrawal.createdAt).toLocaleString(
+                        "pt-BR",
+                        {
+                          timeZone: "America/Sao_Paulo",
+                          dateStyle: "short",
+                          timeStyle: "short",
+                        },
+                      )}
+                    </span>
+                  )}
+                </span>
+                <ToneBadge tone="pending">
+                  {request.state === "OPEN"
+                    ? "Prévia em andamento"
+                    : request.state === "UNRESOLVED"
+                      ? "Resultado em verificação"
+                      : request.state === "EXISTING" &&
+                          request.withdrawal.state === "UNKNOWN"
+                        ? "Resultado em verificação"
+                        : "Em acompanhamento"}
+                </ToneBadge>
+                {request.requestId === state.request?.requestId ? (
+                  <span className="text-sm text-admin-muted">Selecionada</span>
+                ) : (
+                  <button
+                    type="button"
+                    className={readyLinkButton}
+                    disabled={state.busy}
+                    onClick={() =>
+                      void controller?.selectDiscoveredRequest(
+                        request.requestId,
+                      )
+                    }
+                  >
+                    Acompanhar
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
         </div>
       )}
       {state.context?.openRequest &&
         state.context.openRequest.requestId !== state.request?.requestId && (
-          <Button
+          <button
             type="button"
-            variant="outline"
+            className={receivingSecondaryAction}
             disabled={state.busy}
             onClick={() =>
               void controller?.refresh(
@@ -2101,24 +2192,24 @@ function WithdrawalSetupView({
             }
           >
             Retomar solicitação em andamento
-          </Button>
+          </button>
         )}
       {state.discovery.nextCursor !== null && (
-        <div>
-          <p>
+        <div className="grid gap-2">
+          <p className={muted}>
             Existem outras solicitações. Esta página não confirma ausência de
             operações anteriores.
           </p>
-          <Button
+          <button
             type="button"
-            variant="outline"
+            className={`${receivingSecondaryAction} min-h-11`}
             disabled={!current || state.discovery.status === "loading"}
             onClick={() => void controller?.loadMore()}
           >
             {state.discovery.status === "loading"
               ? "Consultando solicitações…"
               : "Carregar mais solicitações"}
-          </Button>
+          </button>
         </div>
       )}
     </section>
@@ -2166,10 +2257,10 @@ function WithdrawalActions({
       ? null
       : `${String(Math.floor(remainingSeconds / 60)).padStart(2, "0")}:${String(remainingSeconds % 60).padStart(2, "0")}`;
   return (
-    <div className="grid gap-3">
+    <div className="grid min-w-0 gap-3">
       {countdown !== null && (
-        <p className="m-0 text-sm text-admin-muted">
-          Tempo restante da prévia:{" "}
+        <p className="m-0 text-[13px] text-admin-muted">
+          Prévia válida por{" "}
           <span
             role="timer"
             aria-label="Tempo restante da prévia"
@@ -2178,15 +2269,19 @@ function WithdrawalActions({
           >
             {countdown}
           </span>
+          . Depois disso, os valores são consultados de novo.
         </p>
       )}
       {expired && (
-        <p role="status" className="m-0 text-sm font-medium text-destructive">
+        <p
+          role="status"
+          className="m-0 text-sm font-semibold text-admin-danger-ink"
+        >
           Prévia expirada. Encerre a solicitação para consultar uma nova prévia.
         </p>
       )}
       {request.state === "EXISTING" && (
-        <p className="m-0 text-sm text-admin-muted">
+        <p className="m-0 text-sm leading-[1.5] text-admin-muted">
           Continuamos esta mesma solicitação. Se o Pix já foi enviado, apenas
           estamos verificando o andamento.
         </p>
@@ -2204,7 +2299,7 @@ function WithdrawalActions({
         />
       )}
       <form
-        className="grid gap-3"
+        className="grid min-w-0 gap-3"
         onSubmit={(event) => {
           event.preventDefault();
           if (!event.currentTarget.reportValidity() || !confirmed || expired)
@@ -2217,7 +2312,7 @@ function WithdrawalActions({
           );
         }}
       >
-        <label>
+        <label className="flex max-w-[420px] cursor-pointer items-start gap-2.5 text-sm leading-[1.5] text-admin-body">
           <input
             type="checkbox"
             required
@@ -2225,11 +2320,13 @@ function WithdrawalActions({
             checked={confirmed}
             disabled={expired || state.busy}
             onChange={(event) => setConfirmed(event.target.checked)}
+            className="mt-0.5 size-[18px] shrink-0 accent-admin-terracotta"
           />
           Confirmo os termos originais exibidos desta solicitação.
         </label>
-        <Button
+        <button
           type="submit"
+          className={receivingPrimaryAction}
           disabled={
             !confirmed ||
             state.busy ||
@@ -2242,17 +2339,19 @@ function WithdrawalActions({
             : action === "CONFIRM_NEW"
               ? "Confirmar solicitação de saque"
               : "Retomar saque"}
-        </Button>
+        </button>
       </form>
       {request.state === "OPEN" && (
-        <Button
-          type="button"
-          variant="outline"
-          disabled={state.busy}
-          onClick={() => void controller.act("SEAL", () => null, false)}
-        >
-          {state.busy ? "Encerrando…" : "Encerrar solicitação"}
-        </Button>
+        <div>
+          <button
+            type="button"
+            className={readyLinkButton}
+            disabled={state.busy}
+            onClick={() => void controller.act("SEAL", () => null, false)}
+          >
+            {state.busy ? "Encerrando…" : "Encerrar solicitação"}
+          </button>
+        </div>
       )}
     </div>
   );
