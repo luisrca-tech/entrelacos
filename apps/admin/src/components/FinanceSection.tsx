@@ -3,8 +3,23 @@ import type {
   SiteAccess,
   WithdrawalIntent,
 } from "@entrelacos/contracts";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { FinancialOverviewCard } from "../features/finance/FinancialOverviewCard";
+import { Button } from "@entrelacos/ui";
+import { Landmark } from "lucide-react";
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+import {
+  BalanceFigure,
+  currentOverview,
+  FinancialOverviewCard,
+  OverviewNotice,
+} from "../features/finance/FinancialOverviewCard";
+import { destinationKeyLabel } from "../features/receiving/ReceivingStatusCard";
+import { formatCents } from "./financialFlow";
 import {
   canReadFinancialOverview,
   loadFinancialOverview,
@@ -14,9 +29,18 @@ import {
   observeFinancialRead,
   type ScopedFinancialRead,
 } from "./financialRead";
-import { GiftPaymentHistoryView } from "./GiftPaymentHistoryView";
+import {
+  GiftPaymentHistoryView,
+  RecentGiftPurchases,
+  useGiftPaymentHistory,
+} from "./GiftPaymentHistoryView";
 import type { HistoryPorts } from "./giftPaymentHistory";
-import { WithdrawalHistoryView } from "./WithdrawalHistoryView";
+import { ReadOnlyNote, readyCard, readyLabel } from "./receivingUi";
+import type { SavedPixDestinationSummary } from "./savedPixDestination";
+import {
+  RecentWithdrawals,
+  WithdrawalHistoryView,
+} from "./WithdrawalHistoryView";
 import { WithdrawalSetup } from "./WithdrawalSetup";
 import {
   loadWithdrawalHistory,
@@ -26,6 +50,13 @@ import {
 type SessionFinancialRead<T> = ScopedFinancialRead<T> & {
   sessionEpoch: number | null;
 };
+export type FinanceLinkTarget = "payments" | "withdrawals" | "account";
+// Router links come from the caller so this section stays router-agnostic.
+export type FinanceLinks = (
+  target: FinanceLinkTarget,
+  label: string,
+  variant?: "primary" | "link",
+) => ReactNode;
 
 export function FinanceSection({
   siteId,
@@ -33,12 +64,16 @@ export function FinanceSection({
   sessionEpoch = null,
   historyPorts,
   page = "overview",
+  destination = null,
+  links,
 }: {
   siteId: string;
   access: SiteAccess | null;
   sessionEpoch?: number | null;
   historyPorts?: HistoryPorts;
   page?: "overview" | "payments" | "withdrawals";
+  destination?: SavedPixDestinationSummary | null;
+  links?: FinanceLinks;
 }) {
   const [overviewRead, setOverviewRead] =
     useState<SessionFinancialRead<FinancialOverview> | null>(null);
@@ -63,7 +98,7 @@ export function FinanceSection({
     setHistoryRevision((value) => value + 1);
   }, [siteId, access, sessionEpoch]);
   useEffect(() => {
-    if (!eligible || page === "payments") {
+    if (!eligible) {
       setOverviewRead(null);
       return;
     }
@@ -78,9 +113,9 @@ export function FinanceSection({
           result,
         }),
     );
-  }, [siteId, access, eligible, sessionEpoch, overviewRevision, page]);
+  }, [siteId, access, eligible, sessionEpoch, overviewRevision]);
   useEffect(() => {
-    if (!eligible || page !== "withdrawals") {
+    if (!eligible || page === "payments") {
       setHistoryRead(null);
       return;
     }
@@ -112,53 +147,234 @@ export function FinanceSection({
     history?.status === "ready"
       ? { status: "ready", withdrawals: history.value }
       : (history ?? { status: "loading" });
-  return (
-    <div className="grid gap-6">
-      {eligible && access?.membershipRole === "OWNER" && (
-        <p className="m-0 text-admin-muted">
-          Consulta administrativa em modo somente leitura. A confirmação
-          cadastral e os saques permanecem restritos à titular.
-        </p>
-      )}
-      {page !== "payments" && (
+  const overviewValue =
+    overview?.status === "ready"
+      ? currentOverview(siteId, access, overview.value)
+      : null;
+  const overviewLoading =
+    eligible && (!overview || overview.status === "loading");
+  const overviewFailed =
+    overview?.status === "error" || overview?.status === "unavailable";
+  const retryOverview = () => setOverviewRevision((value) => value + 1);
+  const owner = eligible && access?.membershipRole === "OWNER";
+  const canWithdraw =
+    eligible &&
+    access?.membershipRole === "SITE_ADMIN" &&
+    access.capabilities.requestWithdrawal;
+  if (page === "payments")
+    return (
+      <GiftPaymentHistoryView
+        siteId={siteId}
+        access={access}
+        sessionEpoch={sessionEpoch}
+        ports={historyPorts}
+        totals={{ overview: overviewValue, loading: overviewLoading }}
+      />
+    );
+  if (page === "overview")
+    return (
+      <div className="grid min-w-0 gap-5">
+        {owner && (
+          <ReadOnlyNote>
+            Você está vendo como proprietário, só para consulta. Saques e dados
+            cadastrais ficam com a pessoa titular dos recebimentos.
+          </ReadOnlyNote>
+        )}
         <FinancialOverviewCard
           siteId={siteId}
           access={access}
           overview={overview?.status === "ready" ? overview.value : null}
-          loading={eligible && (!overview || overview.status === "loading")}
-          error={
-            overview?.status === "error" || overview?.status === "unavailable"
+          loading={overviewLoading}
+          error={overviewFailed}
+          onRetry={retryOverview}
+          withdrawAction={
+            canWithdraw
+              ? links?.("withdrawals", "Sacar para minha conta", "primary")
+              : undefined
           }
-          onRetry={() => setOverviewRevision((value) => value + 1)}
+          paymentsLink={links?.("payments", "Ver pagamentos")}
         />
-      )}
-      {page === "withdrawals" &&
-        eligible &&
-        access?.membershipRole === "SITE_ADMIN" &&
-        sessionEpoch !== null && (
-          <WithdrawalSetup
-            siteId={siteId}
-            access={access}
-            sessionEpoch={sessionEpoch}
-            onFinancialChange={onFinancialChange}
-          />
+        {eligible && (
+          <div className="grid min-w-0 items-start gap-5 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+            <RecentGifts
+              siteId={siteId}
+              access={access}
+              sessionEpoch={sessionEpoch}
+              ports={historyPorts}
+              viewAll={links?.("payments", "Ver todos")}
+            />
+            <RecentWithdrawals
+              siteId={siteId}
+              access={access}
+              result={historyResult}
+              viewAll={links?.("withdrawals", "Ver todos")}
+            />
+          </div>
         )}
-      {page === "withdrawals" && (
-        <WithdrawalHistoryView
-          siteId={siteId}
-          access={access}
-          result={historyResult}
-          onRefresh={() => setHistoryRevision((value) => value + 1)}
-        />
+      </div>
+    );
+  return (
+    <div className="grid min-w-0 gap-5">
+      {eligible ? (
+        <div className="grid min-w-0 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_300px]">
+          <section
+            aria-labelledby="withdrawal-balance-title"
+            className={`${readyCard} grid min-w-0 gap-[18px] px-7 py-[26px] [@media(max-width:760px)]:px-5`}
+          >
+            <h2 id="withdrawal-balance-title" className={readyLabel}>
+              Disponível para saque
+            </h2>
+            <WithdrawalBalance
+              loading={overviewLoading}
+              failed={overviewFailed}
+              overview={overviewValue}
+              onRetry={retryOverview}
+            />
+            {destination && (
+              <div className="flex min-w-0 items-center gap-3 rounded-xl bg-admin-canvas px-4 py-3.5">
+                <span
+                  aria-hidden="true"
+                  className="flex size-9 shrink-0 items-center justify-center rounded-[10px] bg-admin-terracotta-wash text-admin-terracotta-deep"
+                >
+                  <Landmark className="size-[18px]" />
+                </span>
+                <div className="grid min-w-0 flex-1 gap-0.5">
+                  <strong className="text-sm text-admin-ink [overflow-wrap:anywhere]">
+                    Destino: {destination.ownerName}
+                  </strong>
+                  <span className="text-[13px] text-admin-muted [overflow-wrap:anywhere]">
+                    Chave Pix {destinationKeyLabel(destination)} ·{" "}
+                    {destination.bankName}
+                  </span>
+                </div>
+                {!owner && links?.("account", "Alterar")}
+              </div>
+            )}
+            {access?.membershipRole === "SITE_ADMIN" &&
+            sessionEpoch !== null ? (
+              <WithdrawalSetup
+                siteId={siteId}
+                access={access}
+                sessionEpoch={sessionEpoch}
+                onFinancialChange={onFinancialChange}
+                collapsible
+                availableCents={
+                  overviewValue?.availability === "CURRENT"
+                    ? overviewValue.availableCents
+                    : null
+                }
+              />
+            ) : (
+              owner && (
+                <p className="m-0 border-t border-admin-beige pt-[18px] text-sm text-admin-muted">
+                  Você está vendo como proprietário, só para consulta. Os saques
+                  ficam com a pessoa titular dos recebimentos.
+                </p>
+              )
+            )}
+          </section>
+          <aside
+            aria-labelledby="withdrawal-help-title"
+            className={`${readyCard} grid min-w-0 gap-2.5 p-[22px]`}
+          >
+            <h2
+              id="withdrawal-help-title"
+              className="m-0 text-base font-bold text-admin-ink"
+            >
+              Como funciona o saque
+            </h2>
+            <ol className="m-0 grid list-decimal gap-2 pl-[18px] text-sm leading-[1.5] text-admin-body marker:text-admin-muted">
+              <li>Escolha o valor e confira a prévia.</li>
+              <li>Confirme com sua senha do EntreLaços.</li>
+              <li>O Asaas transfere por Pix para a sua chave.</li>
+            </ol>
+            <p className="m-0 text-[13px] text-admin-muted">
+              Só a pessoa titular dos recebimentos pode sacar.
+            </p>
+          </aside>
+        </div>
+      ) : (
+        <OverviewNotice title="Acesso financeiro restrito">
+          <p className="m-0">
+            Apenas os administradores autorizados deste casamento podem
+            consultar valores e movimentações.
+          </p>
+        </OverviewNotice>
       )}
-      {page === "payments" && (
-        <GiftPaymentHistoryView
-          siteId={siteId}
-          access={access}
-          sessionEpoch={sessionEpoch}
-          ports={historyPorts}
-        />
+      <WithdrawalHistoryView
+        siteId={siteId}
+        access={access}
+        result={historyResult}
+        onRefresh={() => setHistoryRevision((value) => value + 1)}
+      />
+    </div>
+  );
+}
+
+function WithdrawalBalance({
+  loading,
+  failed,
+  overview,
+  onRetry,
+}: {
+  loading: boolean;
+  failed: boolean;
+  overview: FinancialOverview | null;
+  onRetry: () => void;
+}) {
+  if (loading)
+    return (
+      <p role="status" className="m-0 text-[15px] text-admin-muted">
+        Consultando o saldo…
+      </p>
+    );
+  if (!overview)
+    return (
+      <div className="grid gap-2">
+        <p
+          role={failed ? "alert" : "status"}
+          className="m-0 text-[15px] text-admin-body"
+        >
+          Não foi possível confirmar o saldo agora.
+        </p>
+        <div>
+          <Button type="button" variant="outline" onClick={onRetry}>
+            Tentar novamente
+          </Button>
+        </div>
+      </div>
+    );
+  return (
+    <div className="grid gap-2">
+      <BalanceFigure overview={overview} size="md" />
+      {overview.awaitingReleaseCents > 0 && (
+        <p className="m-0 text-[13px] text-admin-muted">
+          {formatCents(overview.awaitingReleaseCents)} ainda aguardando
+          liberação
+        </p>
       )}
     </div>
   );
+}
+
+function RecentGifts({
+  siteId,
+  access,
+  sessionEpoch,
+  ports,
+  viewAll,
+}: {
+  siteId: string;
+  access: SiteAccess | null;
+  sessionEpoch: number | null;
+  ports?: HistoryPorts;
+  viewAll: ReactNode;
+}) {
+  const history = useGiftPaymentHistory({
+    siteId,
+    access,
+    sessionEpoch,
+    ports,
+  });
+  return <RecentGiftPurchases history={history} viewAll={viewAll} />;
 }

@@ -71,7 +71,7 @@ describe("finance section composition", () => {
         sessionEpoch: 7,
       }),
     );
-    expect(html).toContain("Consultando o financeiro");
+    expect(html).toContain("Consultando o saldo");
     expect(html).toContain("Consultando o histórico de saques");
     expect(html).not.toMatch(
       /data-withdrawal-epoch|<form|<input|Solicitar saque|Confirme sua senha/,
@@ -104,7 +104,7 @@ describe("finance section composition", () => {
         access,
       }),
     );
-    expect(html).toContain("Consultando o financeiro");
+    expect(html).toContain("Consultando o saldo");
     expect(html).toContain("Consultando o histórico de saques");
     expect(html).not.toMatch(
       /R\$|Nenhum saque|Solicitar saque|Refazer saque|Recebido no banco/,
@@ -227,19 +227,21 @@ describe("gift history finance integration", () => {
       expect(node.querySelector("[data-withdrawal-epoch]")).toBeNull();
       const click = async (label: string) => {
         const button = [...node.querySelectorAll("button")].find(
-          (value) => value.textContent === label,
+          (value) =>
+            value.textContent === label ||
+            value.getAttribute("aria-label") === label,
         );
-        expect(button).toBeTruthy();
+        expect(button, label).toBeTruthy();
         await act(async () => button?.click());
       };
       reply = { history: detail };
-      await click("Ver histórico desta compra");
+      await click("Ver detalhes de Presente preservado");
       request.mockRejectedValueOnce(new Error("unavailable"));
       await click("Consultar histórico novamente");
       await click("Tentar consulta novamente");
       await click("Fechar detalhe");
       reply = { history: page };
-      await click("Consultar compras");
+      await click("Atualizar lista");
       expect(node.querySelector("[data-withdrawal-epoch]")).toBeNull();
       expect(writes).not.toHaveBeenCalled();
       expect(
@@ -462,10 +464,8 @@ describe("receiving page read isolation", () => {
             }),
           ),
         );
-        expect(overviewRead).toHaveBeenCalledTimes(page === "payments" ? 0 : 1);
-        expect(historyRead).toHaveBeenCalledTimes(
-          page === "withdrawals" ? 1 : 0,
-        );
+        expect(overviewRead).toHaveBeenCalledTimes(1);
+        expect(historyRead).toHaveBeenCalledTimes(page === "payments" ? 0 : 1);
         expect(!!node.querySelector("[data-withdrawal-epoch]")).toBe(
           page === "withdrawals",
         );

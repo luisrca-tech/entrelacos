@@ -10,6 +10,7 @@ import {
   ReceivingSectionView,
   readReceivingSection,
 } from "./ReceivingSection";
+import type { ReceivingPage } from "./receivingNavigation";
 
 vi.mock("@tanstack/react-router", () => ({
   Link: ({
@@ -56,8 +57,13 @@ vi.mock("../lib/apiClient", async (original) => ({
 }));
 vi.mock("./giftsReadiness", () => ({ loadGiftsReadiness: vi.fn() }));
 vi.mock("../features/receiving/ReceivingStatusCard", () => ({
-  ReceivingStatusCard: ({ access }: { access: SiteAccess | null }) =>
-    createElement("div", { "data-receiving-access": !!access }),
+  ReceivingStatusCard: ({
+    access,
+    action,
+  }: {
+    access: SiteAccess | null;
+    action?: React.ReactNode;
+  }) => createElement("div", { "data-receiving-access": !!access }, action),
 }));
 vi.mock("./FinanceSection", () => ({
   FinanceSection: ({
@@ -288,15 +294,7 @@ describe("receiving session boundary", () => {
   function render(
     sessionEpoch: number | null,
     candidate = access,
-    page:
-      | "overview"
-      | "holder"
-      | "details"
-      | "activation"
-      | "account"
-      | "fees"
-      | "payments"
-      | "withdrawals" = "overview",
+    page: ReceivingPage = "overview",
     current: ReceivingReadiness | null = null,
   ) {
     return renderToStaticMarkup(
@@ -322,13 +320,15 @@ describe("receiving session boundary", () => {
     expect(html).toContain('data-finance-access="true"');
     expect(html).toContain('data-receiving-access="true"');
   });
-  it("shows payments and withdrawals tabs only when receiving is ready", () => {
+  it("shows the ready tabs only when receiving is ready", () => {
     const html = render(9, access, "overview", ready);
     expect(html).not.toContain("data-setup-epoch");
-    for (const page of ["payments", "withdrawals"])
+    for (const page of ["payments", "withdrawals", "settings"])
       expect(html).toContain(`href="/sites/wedding-1/receiving/${page}"`);
-    for (const page of ["account", "fees"])
-      expect(html).toContain(`href="/sites/wedding-1/receiving/${page}"`);
+    expect(html).toContain(">Configurações</a>");
+    expect(html).not.toContain("Configuração concluída");
+    expect(html).toContain('href="/sites/wedding-1/receiving/account"');
+    expect(html).toContain(">Alterar</a>");
     expect(html).toContain('aria-current="page"');
     expect(render(9, access, "overview", readiness)).not.toContain(
       'aria-label="Páginas de recebimentos"',
@@ -349,6 +349,32 @@ describe("receiving session boundary", () => {
     expect(render(9, access, "payments", ready)).toContain(
       'data-finance-access="true"',
     );
+  });
+  it("groups account, fees and holder under the settings tab", () => {
+    const html = render(9, access, "settings", ready);
+    expect(html).toContain('aria-label="Páginas de recebimentos"');
+    for (const page of ["account", "fees", "holder"])
+      expect(html).toContain(`href="/sites/wedding-1/receiving/${page}"`);
+    expect(html).toContain("Conta para saque");
+    expect(html).toContain("Taxas");
+    expect(html).toContain("Titular");
+    expect(html).not.toContain("data-finance-access");
+    expect(html).not.toContain("data-receiving-access");
+  });
+  it("keeps the change link away from read-only owners", () => {
+    const owner: SiteAccess = {
+      ...access,
+      membershipRole: "OWNER",
+      membershipId: null,
+      capabilities: {
+        ...access.capabilities,
+        configureReceiving: false,
+        requestWithdrawal: false,
+      },
+    };
+    const html = render(9, owner, "overview", ready);
+    expect(html).toContain('data-finance-access="true"');
+    expect(html).not.toContain(">Alterar</a>");
   });
   it("denies a different-site membership", () => {
     const html = render(9, { ...access, siteId: "other" });

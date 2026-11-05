@@ -1,10 +1,11 @@
 import type { ReceivingReadiness, SiteAccess } from "@entrelacos/contracts";
 import { Button } from "@entrelacos/ui";
 import { Link } from "@tanstack/react-router";
-import { useContext, useEffect, useState } from "react";
+import { ChevronRight, Landmark, Percent, UserRound } from "lucide-react";
+import { type ReactNode, useContext, useEffect, useState } from "react";
 import { ReceivingStatusCard } from "../features/receiving/ReceivingStatusCard";
 import { apiRequest } from "../lib/apiClient";
-import { FinanceSection } from "./FinanceSection";
+import { type FinanceLinks, FinanceSection } from "./FinanceSection";
 import { parsePricingSettings } from "./GiftPricingSettings";
 import { loadGiftsReadiness } from "./giftsReadiness";
 import { isCurrentPanelSessionEpoch, panelActorOwner } from "./panelActor";
@@ -12,12 +13,23 @@ import { ReceivingAccountSetup } from "./ReceivingAccountSetup";
 import { ReceivingGuide } from "./ReceivingGuide";
 import type { ReceivingStepSection } from "./ReceivingSteps";
 import {
+  isReadyReceivingPage,
+  type ReadyReceivingPage,
   type ReceivingPage,
   ReceivingPageContext,
-  receivingTabs,
 } from "./receivingNavigation";
 import { loadReceivingOwnerAccess } from "./receivingOwnerAccess";
-import { receivingLink, receivingStepTitle } from "./receivingUi";
+import {
+  ReadyReceivingHeader,
+  readyCard,
+  receivingLink,
+  receivingPrimaryAction,
+  receivingStepTitle,
+} from "./receivingUi";
+import {
+  loadSavedPixDestination,
+  type SavedPixDestinationSummary,
+} from "./savedPixDestination";
 
 type ReceivingSectionResult = {
   siteId: string;
@@ -132,6 +144,25 @@ export function ReceivingSection({
       active = false;
     };
   }, [siteId, pricingReadable, guide, sessionEpoch]);
+  const ready =
+    current?.readiness?.siteId === siteId &&
+    current.readiness.state === "READY";
+  const [destination, setDestination] = useState<{
+    siteId: string;
+    value: SavedPixDestinationSummary | null;
+  } | null>(null);
+  useEffect(() => {
+    let active = true;
+    setDestination(null);
+    if (ready && !guide && sessionEpoch !== null)
+      void loadSavedPixDestination(siteId).then((value) => {
+        if (active && isCurrentPanelSessionEpoch(sessionEpoch))
+          setDestination({ siteId, value });
+      });
+    return () => {
+      active = false;
+    };
+  }, [siteId, ready, guide, sessionEpoch]);
   if (guide) {
     return (
       <ReceivingGuide siteId={siteId} mode={current?.readiness?.mode ?? null} />
@@ -149,6 +180,7 @@ export function ReceivingSection({
       onRetry={() => setRevision((value) => value + 1)}
       feesChosen={feesChosen}
       onFeesChosen={() => setFeesChosen(true)}
+      destination={destination?.siteId === siteId ? destination.value : null}
     />
   );
 }
@@ -164,6 +196,7 @@ export function ReceivingSectionView({
   page = "overview",
   feesChosen = false,
   onFeesChosen,
+  destination = null,
 }: {
   siteId: string;
   access: SiteAccess | null;
@@ -175,6 +208,7 @@ export function ReceivingSectionView({
   page?: ReceivingPage;
   feesChosen?: boolean;
   onFeesChosen?: () => void;
+  destination?: SavedPixDestinationSummary | null;
 }) {
   const currentAccess =
     sessionEpoch !== null && access?.siteId === siteId ? access : null;
@@ -186,8 +220,7 @@ export function ReceivingSectionView({
     sessionEpoch,
     currentAccess,
   );
-  const tabs = receivingTabs(ready);
-  const stepPage = !["overview", "payments", "withdrawals"].includes(page);
+  const stepPage = !isReadyReceivingPage(page);
   // Until readiness answers, neither the guided setup nor the ready tabs are known.
   const readinessPending =
     !stepPage &&
@@ -201,20 +234,18 @@ export function ReceivingSectionView({
       readiness={currentReadiness}
       error={!!currentAccess && failed}
       onRetry={onRetry}
+      destination={destination}
       action={
         ready ? (
-          <Button
-            className="w-fit"
-            nativeButton={false}
-            render={
-              <Link
-                to="/sites/$siteId/receiving/$page"
-                params={{ siteId, page: "withdrawals" }}
-              />
-            }
-          >
-            Ver saques
-          </Button>
+          canChangeDestination(currentAccess) ? (
+            <Link
+              to="/sites/$siteId/receiving/$page"
+              params={{ siteId, page: "account" }}
+              className="font-semibold text-admin-success-ink underline underline-offset-4"
+            >
+              Alterar
+            </Link>
+          ) : undefined
         ) : setupEligible ? (
           <Button
             className="w-fit"
@@ -248,29 +279,6 @@ export function ReceivingSectionView({
   );
   return (
     <div className="grid min-w-0 gap-6">
-      {tabs.length > 0 && !stepPage && (
-        <nav
-          aria-label="Páginas de recebimentos"
-          className="flex w-fit max-w-full min-w-0 gap-1 overflow-x-auto rounded-xl border border-admin-line bg-admin-surface p-1.5"
-        >
-          {tabs.map((item) => (
-            <Link
-              key={item.id}
-              activeOptions={{ exact: true }}
-              to={
-                item.id === "overview"
-                  ? "/sites/$siteId/receiving"
-                  : "/sites/$siteId/receiving/$page"
-              }
-              params={{ siteId, page: item.id }}
-              aria-current={page === item.id ? "page" : undefined}
-              className={`inline-flex min-h-11 shrink-0 items-center justify-center whitespace-nowrap rounded-lg px-4 py-2 text-sm font-semibold no-underline transition-colors motion-reduce:transition-none ${page === item.id ? "bg-admin-graphite text-white" : "text-admin-muted hover:bg-admin-canvas hover:text-admin-graphite"}`}
-            >
-              {item.label}
-            </Link>
-          ))}
-        </nav>
-      )}
       {platformOwner && !currentAccess ? (
         <section className="grid gap-3 rounded-2xl border border-admin-line bg-admin-surface p-6">
           <p role={failed ? "alert" : "status"}>
@@ -294,6 +302,17 @@ export function ReceivingSectionView({
             </p>
           </section>
         </>
+      ) : ready && !stepPage ? (
+        <ReadyReceiving
+          siteId={siteId}
+          page={page as ReadyReceivingPage}
+          access={currentAccess}
+          platformOwner={platformOwner}
+          sessionEpoch={sessionEpoch}
+          statusCard={statusCard}
+          destination={destination}
+          canChangeDestination={canChangeDestination(currentAccess)}
+        />
       ) : page === "overview" ? (
         setupEligible && !ready && !failed ? (
           setupView("overview")
@@ -301,35 +320,6 @@ export function ReceivingSectionView({
           <>
             <ReceivingPageHeader />
             {statusCard}
-            {setupEligible && ready && (
-              <p className="m-0 text-sm text-admin-muted">
-                Configuração concluída. Para revisar, abra{" "}
-                <Link
-                  to="/sites/$siteId/receiving/$page"
-                  params={{ siteId, page: "account" }}
-                  className={receivingLink}
-                >
-                  Conta para saque
-                </Link>{" "}
-                ou{" "}
-                <Link
-                  to="/sites/$siteId/receiving/$page"
-                  params={{ siteId, page: "fees" }}
-                  className={receivingLink}
-                >
-                  Taxas e presentes
-                </Link>
-                .
-              </p>
-            )}
-            {(!platformOwner || !!currentAccess) && ready && (
-              <FinanceSection
-                page="overview"
-                siteId={siteId}
-                access={currentAccess}
-                sessionEpoch={sessionEpoch}
-              />
-            )}
           </>
         )
       ) : stepPage ? (
@@ -343,23 +333,13 @@ export function ReceivingSectionView({
             </p>
           </>
         )
-      ) : ready ? (
-        <>
-          <ReceivingPageHeader />
-          <FinanceSection
-            page={page === "payments" ? "payments" : "withdrawals"}
-            siteId={siteId}
-            access={currentAccess}
-            sessionEpoch={sessionEpoch}
-          />
-        </>
       ) : (
         <>
           <ReceivingPageHeader />
           <section className="grid gap-3 rounded-2xl border border-admin-line bg-admin-surface p-6">
             <p role="status" className="m-0 text-admin-body">
               {currentReadiness || failed
-                ? "Pagamentos e saques aparecem aqui quando os recebimentos estiverem liberados."
+                ? "Pagamentos, saques e configurações aparecem aqui quando os recebimentos estiverem liberados."
                 : "Verificando os recebimentos…"}
             </p>
             <Link
@@ -416,5 +396,148 @@ function canManageFees(platformOwner: boolean, access: SiteAccess | null) {
     (access?.membershipRole === "SITE_ADMIN" &&
       access.capabilities.manageCatalog &&
       access.capabilities.readFinance)
+  );
+}
+
+// Changing the Pix destination stays with the receiving holder's team.
+function canChangeDestination(access: SiteAccess | null) {
+  return (
+    access?.membershipRole === "SITE_ADMIN" &&
+    access.capabilities.configureReceiving
+  );
+}
+
+function ReadyReceiving({
+  siteId,
+  page,
+  access,
+  platformOwner,
+  sessionEpoch,
+  statusCard,
+  destination,
+  canChangeDestination,
+}: {
+  siteId: string;
+  page: ReadyReceivingPage;
+  access: SiteAccess | null;
+  platformOwner: boolean;
+  sessionEpoch: number | null;
+  statusCard: ReactNode;
+  destination: SavedPixDestinationSummary | null;
+  canChangeDestination: boolean;
+}) {
+  const links: FinanceLinks = (target, label, variant = "link") => (
+    <Link
+      to="/sites/$siteId/receiving/$page"
+      params={{ siteId, page: target }}
+      className={
+        variant === "primary"
+          ? receivingPrimaryAction
+          : "w-fit text-sm font-semibold whitespace-nowrap text-admin-terracotta-deep underline underline-offset-4 hover:text-admin-terracotta-ink"
+      }
+    >
+      {label}
+      {variant === "primary" && <span aria-hidden="true">→</span>}
+    </Link>
+  );
+  return (
+    <>
+      <ReadyReceivingHeader siteId={siteId} page={page} />
+      {page === "overview" && statusCard}
+      {page === "settings" ? (
+        <ReceivingSettings
+          siteId={siteId}
+          destination={destination}
+          editable={canChangeDestination}
+        />
+      ) : (
+        (!platformOwner || !!access) && (
+          <FinanceSection
+            page={page}
+            siteId={siteId}
+            access={access}
+            sessionEpoch={sessionEpoch}
+            destination={destination}
+            links={(target, label, variant) =>
+              target === "account" && !canChangeDestination
+                ? null
+                : links(target, label, variant)
+            }
+          />
+        )
+      )}
+    </>
+  );
+}
+
+function ReceivingSettings({
+  siteId,
+  destination,
+  editable,
+}: {
+  siteId: string;
+  destination: SavedPixDestinationSummary | null;
+  editable: boolean;
+}) {
+  const items: {
+    page: "account" | "fees" | "holder";
+    title: string;
+    text: string;
+    icon: ReactNode;
+  }[] = [
+    {
+      page: "account",
+      title: "Conta para saque",
+      text: destination
+        ? `${destination.ownerName} · Chave Pix ${destination.maskedKey} · ${destination.bankName}`
+        : "A chave Pix do seu banco, para onde o dinheiro vai.",
+      icon: <Landmark className="size-[18px]" />,
+    },
+    {
+      page: "fees",
+      title: "Taxas",
+      text: "Quem paga as taxas dos presentes: vocês ou os convidados.",
+      icon: <Percent className="size-[18px]" />,
+    },
+    {
+      page: "holder",
+      title: "Titular",
+      text: "Quem recebe os presentes e faz os saques.",
+      icon: <UserRound className="size-[18px]" />,
+    },
+  ];
+  return (
+    <section aria-label="Configurações dos recebimentos" className="grid gap-3">
+      <ul className="m-0 grid list-none gap-3 p-0">
+        {items.map((item) => (
+          <li key={item.page}>
+            <Link
+              to="/sites/$siteId/receiving/$page"
+              params={{ siteId, page: item.page }}
+              className={`${readyCard} flex min-h-[72px] items-center gap-4 px-5 py-4 text-admin-ink no-underline transition-colors hover:border-admin-line-strong hover:bg-admin-canvas motion-reduce:transition-none`}
+            >
+              <span
+                aria-hidden="true"
+                className="flex size-10 shrink-0 items-center justify-center rounded-[10px] bg-admin-terracotta-wash text-admin-terracotta-deep"
+              >
+                {item.icon}
+              </span>
+              <span className="grid min-w-0 flex-1 gap-0.5">
+                <strong className="text-base">{item.title}</strong>
+                <span className="text-sm leading-[1.45] text-admin-muted [overflow-wrap:anywhere]">
+                  {item.text}
+                </span>
+              </span>
+              <span className="flex shrink-0 items-center gap-1 text-sm font-semibold text-admin-terracotta-deep">
+                <span className="[@media(max-width:760px)]:sr-only">
+                  {editable ? "Revisar" : "Ver"}
+                </span>
+                <ChevronRight aria-hidden="true" className="size-4" />
+              </span>
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
