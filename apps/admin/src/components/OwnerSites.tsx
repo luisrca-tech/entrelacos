@@ -6,6 +6,7 @@ import type {
 import {
   Button,
   buttonVariants,
+  cn,
   Input,
   Table,
   TableBody,
@@ -425,7 +426,10 @@ function OwnerSitesRuntime({
   );
 }
 
-const openAction = `${buttonVariants({ variant: "outline" })} h-[38px] rounded-[10px] border-admin-line-strong bg-admin-surface px-6 text-[15px] font-semibold text-admin-graphite no-underline`;
+const openAction = cn(
+  buttonVariants({ variant: "outline" }),
+  "h-[38px] rounded-[10px] border-admin-line-strong bg-admin-surface px-6 text-[15px] font-semibold text-admin-graphite no-underline hover:bg-admin-canvas",
+);
 
 function LifecycleBadge({ lifecycle }: { lifecycle: SiteRecord["lifecycle"] }) {
   return (
@@ -466,7 +470,7 @@ export function lifecycleLabel(value: string) {
 function SiteAndCouple({ site }: { site: OwnerSiteListItem }) {
   const couple = site.coupleAccess;
   return (
-    <div className="grid gap-1">
+    <div className="grid gap-1 whitespace-nowrap">
       <StatusSignal tone={site.publicUrl ? "success" : "neutral"}>
         {site.publicUrl ? "Site vinculado" : "Site não vinculado"}
       </StatusSignal>

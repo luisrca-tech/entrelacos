@@ -70,7 +70,11 @@ const textLink =
 const card = `${adminStyles.surface} grid min-w-0 gap-3 px-[22px] py-5`;
 const title =
   "m-0 font-admin-display text-[22px] font-normal text-admin-graphite";
-const cardTitle = "m-0 font-admin-display text-xl font-normal text-admin-ink";
+// The panel body styles every h3 as a large display heading; card headings
+// override its size, and plain headings also return to body type.
+const cardTitle = "m-0 font-admin-display text-xl! font-normal text-admin-ink";
+const plainHeading =
+  "m-0 font-sans! text-[15px]! font-semibold! leading-normal! tracking-normal! text-admin-graphite";
 const sectionIntro = "m-0 text-sm text-admin-muted";
 const publicationTone: Record<string, "success" | "pending" | "neutral"> = {
   PUBLISHED: "success",
@@ -390,9 +394,7 @@ export function SiteSettingsView({
           <div className={card}>
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div className="grid gap-0.5">
-                <h3 className="m-0 text-[15px] font-semibold text-admin-graphite">
-                  Vigência
-                </h3>
+                <h3 className={plainHeading}>Vigência</h3>
                 <p className="m-0 text-[13px] text-admin-muted">
                   {term
                     ? `Período contratado: ${term}.`
@@ -480,7 +482,7 @@ export function SiteSettingsView({
           </div>
           <div className={`${card} gap-3.5`}>
             <div className="grid gap-1">
-              <h3 className="m-0 text-[15px] font-semibold text-admin-graphite">
+              <h3 className={plainHeading}>
                 Situações que podem ser registradas
               </h3>
               <p className="m-0 text-[13px] text-admin-muted">
@@ -522,9 +524,7 @@ export function SiteSettingsView({
           </div>
           <div className={card}>
             <div className="flex flex-wrap items-center gap-2">
-              <h3 className="m-0 text-[15px] font-semibold text-admin-graphite">
-                Identificador do site
-              </h3>
+              <h3 className={plainHeading}>Identificador do site</h3>
               <ToneBadge tone="neutral">Somente leitura</ToneBadge>
             </div>
             <label
@@ -574,7 +574,7 @@ export function SiteSettingsView({
                   type="url"
                   placeholder="https://"
                   defaultValue={site.publicUrl ?? ""}
-                  className="h-11 rounded-[10px] border-admin-line-strong"
+                  className="h-11 rounded-[10px] border-admin-line-strong placeholder:font-normal placeholder:text-admin-muted"
                   aria-invalid={Boolean(addressError)}
                   aria-describedby="site-public-url-help"
                 />
@@ -602,7 +602,7 @@ export function SiteSettingsView({
           >
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div className="grid min-w-0 flex-[1_1_18rem] gap-1">
-                <h3 className="m-0 text-[15px] font-semibold text-admin-graphite">
+                <h3 className={plainHeading}>
                   Configuração avançada de endereços
                 </h3>
                 <p className="m-0 text-[13px] text-admin-muted">
@@ -623,7 +623,7 @@ export function SiteSettingsView({
                 rows={3}
                 placeholder="https://casamento.exemplo.com"
                 defaultValue={site.trustedOrigins?.join("\n") ?? ""}
-                className="rounded-[10px] border-admin-line-strong"
+                className="rounded-[10px] border-admin-line-strong placeholder:font-normal placeholder:text-admin-muted"
                 aria-invalid={Boolean(originError)}
                 aria-describedby="site-origins-help"
               />
@@ -795,7 +795,7 @@ export function SiteSettingsView({
                   >
                     <div
                       data-slot="couple-access-row"
-                      className="grid min-w-0 grid-cols-[40px_minmax(0,1fr)] items-center gap-x-3.5 gap-y-3 lg:grid-cols-[40px_minmax(0,1fr)_200px_auto]"
+                      className="grid min-w-0 grid-cols-[40px_minmax(0,1fr)] items-center gap-x-3.5 gap-y-3 lg:grid-cols-[40px_minmax(0,1fr)_180px_392px]"
                     >
                       <span
                         data-slot="person-avatar"
@@ -859,7 +859,7 @@ export function SiteSettingsView({
                               <Button
                                 type="button"
                                 variant="outline"
-                                className={outline}
+                                className={`${outline} max-sm:px-4`}
                                 disabled={pending}
                                 onClick={() =>
                                   admin.pendingAccess
@@ -878,7 +878,7 @@ export function SiteSettingsView({
                               <Button
                                 type="button"
                                 disabled={pending}
-                                className={adminStyles.dangerButton}
+                                className={`${adminStyles.dangerButton} max-sm:px-4`}
                                 onClick={() =>
                                   onAdminAction("revoke-access", admin)
                                 }
