@@ -186,6 +186,16 @@ describe("gift catalog HTTP boundary", () => {
       ).toBe(400);
     expect(mocks.create).toHaveBeenCalledTimes(1);
   });
+  it("accepts an image without a description but keeps the description bound", async () => {
+    const patch = (body: unknown) =>
+      router().request(
+        request("/v1/sites/wedding-a/gifts/gift-a", "PATCH", body),
+      );
+    expect((await patch({ mediaAssetId: "asset-a", altText: "" })).status).toBe(
+      200,
+    );
+    expect((await patch({ altText: "a".repeat(241) })).status).toBe(400);
+  });
   it("keeps direct API readiness refusal and sanitizes provider/private diagnostics", async () => {
     mocks.list.mockRejectedValue(
       new GiftServiceError(

@@ -360,8 +360,7 @@ function giftImage(
     !Number.isSafeInteger(asset.height) ||
     (asset.height as number) <= 0 ||
     !Number.isSafeInteger(asset.byteLength) ||
-    (asset.byteLength as number) <= 0 ||
-    !row.altText.trim()
+    (asset.byteLength as number) <= 0
   )
     mediaInvalid();
   const image = publicGiftItemSchema.shape.image.safeParse({

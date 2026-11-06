@@ -429,6 +429,34 @@ describe("gift catalog PostgreSQL service acceptance", () => {
     ).toBe("Shared dinner image");
   });
 
+  it("stores and publishes an image whose description was left blank", async () => {
+    const f = await fixture();
+    const media = await finalizedMedia(f.siteId);
+    const created = await createSiteGift(
+      connection.db,
+      f.actor,
+      f.siteId,
+      { ...input(), mediaAssetId: media.id, altText: "   " },
+      f.options,
+    );
+    expect(created.gift.altText).toBe("");
+    await updateSiteGiftPublication(
+      connection.db,
+      f.actor,
+      f.siteId,
+      created.gift.id,
+      { publicationState: "PUBLISHED" },
+      f.options,
+    );
+    const [stored] = await connection.db
+      .select()
+      .from(giftItem)
+      .where(eq(giftItem.id, created.gift.id));
+    expect(stored.altText).toBe("");
+    const page = await readPublicGifts(connection.db, f.siteId, f.options);
+    expect(page.gifts[0].image).toEqual({ url: media.publicUrl, alt: "" });
+  });
+
   it.each(["term", "site", "user", "membership", "readiness"] as const)(
     "rechecks current %s after the initial capability check",
     async (change) => {

@@ -1039,14 +1039,57 @@ describe("catalog validation and finalized media", () => {
     },
   );
 
-  it("requires alt text when a media association is retained during an edit", async () => {
+  it("stores no description when a retained image's alt text is cleared", async () => {
     const { db, options, writes } = fixture({
       gifts: [{ ...gift, mediaAssetId: media.id, altText: "Dinner" }],
     });
-    await expect(
-      updateSiteGift(db, actor, siteId, gift.id, { altText: " " }, options),
-    ).rejects.toMatchObject({ code: "GIFT_MEDIA_INVALID" });
-    expect(writes).toEqual([]);
+    const result = await updateSiteGift(
+      db,
+      actor,
+      siteId,
+      gift.id,
+      { altText: " " },
+      options,
+    );
+    expect(result.gift).toMatchObject({ mediaAssetId: media.id, altText: "" });
+    expect(writes[0].values).toMatchObject({ altText: "" });
+  });
+
+  it("associates finalized media without a description", async () => {
+    const { db, options } = fixture();
+    const result = await createSiteGift(
+      db,
+      actor,
+      siteId,
+      { ...input, mediaAssetId: media.id, altText: "" },
+      options,
+    );
+    expect(result.gift).toMatchObject({ mediaAssetId: media.id, altText: "" });
+  });
+
+  it("publishes a draft whose image has no description", async () => {
+    const { db, options } = fixture({
+      gifts: [
+        {
+          ...gift,
+          publicationState: "DRAFT",
+          mediaAssetId: media.id,
+          altText: "",
+        },
+      ],
+    });
+    const result = await updateSiteGiftPublication(
+      db,
+      actor,
+      siteId,
+      gift.id,
+      { publicationState: "PUBLISHED" },
+      options,
+    );
+    expect(result.gift).toMatchObject({
+      publicationState: "PUBLISHED",
+      altText: "",
+    });
   });
 
   it("rechecks finalized media before publishing an existing draft", async () => {
@@ -1147,6 +1190,18 @@ describe("public catalog and authoritative quote lookup", () => {
       expect(query?.params).toEqual([siteId, assets.map((asset) => asset.id)]);
     },
   );
+
+  it("serves a published image without a description as an empty alt", async () => {
+    const f = fixture({
+      gifts: [{ ...gift, mediaAssetId: media.id, altText: "" }],
+      media: [media],
+    });
+    const page = await readPublicGifts(f.db, siteId, f.options);
+    expect(page.gifts[0].image).toEqual({ url: media.publicUrl, alt: "" });
+    await expect(
+      lookupPublishedGift(f.db, siteId, gift.id, f.options),
+    ).resolves.toMatchObject({ image: { url: media.publicUrl, alt: "" } });
+  });
 
   it("does not query media for an empty ID set", async () => {
     const f = fixture();
