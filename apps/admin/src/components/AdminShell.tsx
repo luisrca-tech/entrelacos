@@ -20,7 +20,7 @@ import {
   Users,
   Wallet,
 } from "lucide-react";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import {
   type AdminRole,
   getInitials,
@@ -28,6 +28,10 @@ import {
   getSiteNavigation,
   type SiteArea,
 } from "./adminNavigation";
+import {
+  setNavigationExpanded,
+  useNavigationExpanded,
+} from "./navigationPreference";
 
 type AdminShellProps = {
   actor: MeResponse;
@@ -52,12 +56,21 @@ export function AdminShell({
   const navigation = siteId ? getSiteNavigation(role, siteId) : [];
   const navigationArea = area === "receiving-guide" ? "receiving" : area;
   const initials = getInitials(actor.user.name);
-  const [expanded, setExpanded] = useState(true);
+  const expanded = useNavigationExpanded();
+  // A stored "collapsed" preference replaces the expanded server markup right
+  // after hydration; skip transitions until then so the sidebar does not
+  // visibly animate closed on a full page load.
+  const [settled, setSettled] = useState(false);
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => setSettled(true));
+    return () => cancelAnimationFrame(frame);
+  }, []);
 
   return (
     <div
       className={cn(
         "grid min-h-screen transition-[grid-template-columns] duration-200 ease-out motion-reduce:transition-none [@media(max-width:760px)]:block",
+        !settled && "transition-none **:transition-none",
         expanded
           ? "grid-cols-[248px_minmax(0,1fr)] [@media(min-width:761px)_and_(max-width:1060px)]:grid-cols-[216px_minmax(0,1fr)]"
           : "grid-cols-[76px_minmax(0,1fr)]",
@@ -118,7 +131,7 @@ export function AdminShell({
             aria-expanded={expanded}
             aria-controls="admin-primary-nav"
             aria-label={expanded ? "Recolher navegação" : "Expandir navegação"}
-            onClick={() => setExpanded((open) => !open)}
+            onClick={() => setNavigationExpanded(!expanded)}
           >
             <span className="relative grid size-4 place-items-center">
               <PanelLeftClose

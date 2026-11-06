@@ -466,14 +466,6 @@ export function ReceivingOverviewTrack({
                 >
                   {copy.action}
                 </Link>
-                <Link
-                  to="/sites/$siteId/receiving/$page"
-                  params={{ siteId, page: next.id }}
-                  hash="duvidas"
-                  className={`${receivingLink} inline-flex min-h-12 items-center px-1 [@media(max-width:760px)]:w-full [@media(max-width:760px)]:justify-center`}
-                >
-                  Como funciona esta etapa
-                </Link>
               </div>
             </section>
           )}

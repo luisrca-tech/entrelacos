@@ -97,7 +97,10 @@ describe("receiving guided track", () => {
     expect(html).toContain("Próximo passo · Etapa 3 de 5");
     expect(html.match(/Próximo passo/g)).toHaveLength(1);
     expect(html).toContain('href="/sites/site-one/receiving/activation"');
-    expect(html).toContain(
+    // The next-step card offers a single action; a second link to the same
+    // step only duplicated it.
+    expect(html).not.toContain("Como funciona esta etapa");
+    expect(html).not.toContain(
       'href="/sites/site-one/receiving/activation#duvidas"',
     );
     for (const label of ["Concluída", "Agora", "Pode fazer já"])
