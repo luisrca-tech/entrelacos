@@ -3,7 +3,7 @@ import {
   invitationGroupStatus,
 } from "@entrelacos/contracts";
 import { Badge, Button } from "@entrelacos/ui";
-import { Ellipsis, UsersRound } from "lucide-react";
+import { Ellipsis, Mail, UsersRound } from "lucide-react";
 import { invitationResponseSummary } from "./invitationView";
 
 type Props = {
@@ -47,10 +47,16 @@ export function InvitationList({
   if (invitations.length === 0) {
     return (
       <div className="rounded-2xl border border-admin-line bg-admin-surface px-6 py-12 text-center">
-        <UsersRound
-          aria-hidden="true"
-          className="mx-auto mb-4 size-8 text-admin-muted"
-        />
+        {hasFilters ? (
+          <UsersRound
+            aria-hidden="true"
+            className="mx-auto mb-4 size-8 text-admin-muted"
+          />
+        ) : (
+          <span className="mx-auto mb-5 grid size-13 place-items-center rounded-full bg-admin-terracotta-wash text-admin-terracotta-deep">
+            <Mail aria-hidden="true" className="size-5" />
+          </span>
+        )}
         <p className="m-0 font-admin-display text-xl text-admin-graphite">
           {hasFilters ? "Nenhum convite encontrado" : "Ainda não há convites"}
         </p>

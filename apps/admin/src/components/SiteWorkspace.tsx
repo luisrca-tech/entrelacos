@@ -484,7 +484,7 @@ export function SiteWorkspace({
                         : site.displayName}
               </p>
             </div>
-            <div className="flex shrink-0 flex-wrap items-center justify-end gap-3 [@media(min-width:761px)]:self-center [@media(max-width:760px)]:w-full [@media(max-width:760px)]:justify-start">
+            <div className="flex shrink-0 flex-wrap items-center justify-end gap-3 [&:not(:has(>:not(:empty)))]:hidden [@media(min-width:761px)]:self-center [@media(max-width:760px)]:w-full [@media(max-width:760px)]:justify-start">
               {site.publicUrl &&
                 !["home", "invitations", "messages", "team"].includes(area) && (
                   <a
