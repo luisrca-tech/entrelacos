@@ -66,6 +66,7 @@ export function ManageConfirmationsDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
+        showCloseButton
         className={`${adminStyles.dialog} max-w-[min(900px,calc(100vw-32px))]`}
       >
         <DialogTitle className="font-admin-display text-3xl text-admin-graphite">
@@ -170,7 +171,19 @@ export function ManageConfirmationsDialog({
                 </section>
               ))
             )}
-            <div className="sticky bottom-0 flex justify-end border-t border-admin-line bg-admin-surface py-3">
+            {/* Bleeds over the dialog padding so scrolled cards never show beneath it. */}
+            <div
+              data-confirmations-footer
+              className="sticky -bottom-[30px] -mx-[30px] -mb-[30px] flex flex-wrap justify-end gap-3 border-t border-admin-line bg-admin-surface px-[30px] pt-4 pb-[30px] [@media(max-width:760px)]:-bottom-6 [@media(max-width:760px)]:-mx-[18px] [@media(max-width:760px)]:-mb-6 [@media(max-width:760px)]:px-[18px] [@media(max-width:760px)]:pb-6"
+            >
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => onOpenChange(false)}
+                disabled={busy}
+              >
+                Cancelar
+              </Button>
               <Button
                 type="button"
                 onClick={() => onSave(pending)}
