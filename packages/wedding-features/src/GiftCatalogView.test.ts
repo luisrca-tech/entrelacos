@@ -237,3 +237,56 @@ it("shows demonstration prices and images without promising payment or offering 
   expect(html).not.toContain("Escolher presente");
   expect(html).not.toContain("Pix ou cartão");
 });
+
+describe("gift image alt text", () => {
+  const withAlt = (id: string, alt: string): PublicGiftItem => ({
+    ...gift,
+    id,
+    image: { url: `https://images.example.test/${id}.jpg`, alt },
+  });
+  const alts = (html: string) =>
+    [...html.matchAll(/<img[^>]*alt="([^"]*)"/g)].map((match) => match[1]);
+
+  it("keeps a written description and falls back to the list position", () => {
+    const html = renderToStaticMarkup(
+      createElement(GiftCatalogView, {
+        gifts: [
+          withAlt("a", "Mesa posta"),
+          withAlt("b", ""),
+          withAlt("c", "   "),
+        ],
+        mode: "live",
+        busy: false,
+        onSelect: vi.fn(),
+      }),
+    );
+    expect(alts(html)).toEqual([
+      "Mesa posta",
+      "Imagem do presente 2 na lista",
+      "Imagem do presente 3 na lista",
+    ]);
+  });
+
+  it("counts positions across catalog pages", () => {
+    const html = renderToStaticMarkup(
+      createElement(GiftCatalogView, {
+        gifts: [withAlt("a", ""), withAlt("b", "")],
+        mode: "live",
+        busy: false,
+        onSelect: vi.fn(),
+        paging: {
+          page: 2,
+          total: 22,
+          totalPages: 2,
+          loading: false,
+          error: false,
+          onPage: vi.fn(),
+        },
+      }),
+    );
+    expect(alts(html)).toEqual([
+      "Imagem do presente 21 na lista",
+      "Imagem do presente 22 na lista",
+    ]);
+  });
+});

@@ -1,4 +1,8 @@
-import type { PublicGiftItem } from "@entrelacos/contracts";
+import {
+  giftCatalogLimits,
+  giftImageAlt,
+  type PublicGiftItem,
+} from "@entrelacos/contracts";
 import type { CSSProperties } from "react";
 
 type Props = {
@@ -37,6 +41,9 @@ export function GiftCatalogView({
   paging,
 }: Props) {
   if (mode === "disabled" || (gifts.length === 0 && !paging)) return null;
+  const firstPosition = paging
+    ? (paging.page - 1) * giftCatalogLimits.pageSize + 1
+    : 1;
 
   return (
     <div className="grid min-w-0 gap-5 text-template-ink">
@@ -106,7 +113,7 @@ export function GiftCatalogView({
               {gift.image && (
                 <img
                   src={gift.image.url}
-                  alt={gift.image.alt}
+                  alt={giftImageAlt(gift.image.alt, firstPosition + index)}
                   loading="lazy"
                   className="aspect-[4/3] w-full object-cover transition-transform duration-700 ease-out group-hover/gift:scale-[1.025] motion-reduce:transform-none motion-reduce:transition-none"
                 />
