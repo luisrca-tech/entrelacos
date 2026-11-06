@@ -49,6 +49,10 @@ import type { SiteArea } from "./adminNavigation";
 import { GiftsSection } from "./GiftsSection";
 import { InvitationsSection } from "./InvitationsSection";
 import { MessagesSection } from "./MessagesSection";
+import {
+  PageHeaderActionsProvider,
+  PageHeaderActionsSlot,
+} from "./PageHeaderActions";
 import { isCurrentPanelSessionEpoch, panelActorOwner } from "./panelActor";
 import { ReceivingSection } from "./ReceivingSection";
 import { SiteHome } from "./SiteHome";
@@ -430,7 +434,7 @@ export function SiteWorkspace({
     : null;
 
   return (
-    <>
+    <PageHeaderActionsProvider>
       {heading.ownPageHeader ? (
         (heading.showBackLink || heading.showLifecycleBadge) && (
           <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
@@ -461,7 +465,7 @@ export function SiteWorkspace({
               ← Todos os casamentos
             </Link>
           )}
-          <div className="flex items-end justify-between gap-8 [@media(max-width:760px)]:flex-col [@media(max-width:760px)]:items-start [@media(max-width:760px)]:gap-4">
+          <div className="flex items-center justify-between gap-8 [@media(max-width:760px)]:flex-col [@media(max-width:760px)]:items-start [@media(max-width:760px)]:gap-4">
             <div>
               <h1
                 className={`m-0 max-w-none text-[clamp(1.85rem,3vw,2.6rem)] ${displayHeading}`}
@@ -499,6 +503,7 @@ export function SiteWorkspace({
                   {labels[site.lifecycle]}
                 </Badge>
               )}
+              <PageHeaderActionsSlot className="flex flex-wrap items-center gap-2.5" />
             </div>
           </div>
         </section>
@@ -1086,7 +1091,7 @@ export function SiteWorkspace({
             </CardHeader>
           </Card>
         ))}
-    </>
+    </PageHeaderActionsProvider>
   );
 }
 
