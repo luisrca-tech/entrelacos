@@ -5,6 +5,16 @@ import {
   copyAdminAccessLink,
 } from "./siteAdminMenu";
 
+export function accessLinkMailto(name: string, email: string, url: string) {
+  // RFC 6068 keeps "@" literal in the recipient; only the fields are encoded.
+  const recipient = encodeURIComponent(email).replaceAll("%40", "@");
+  const subject = encodeURIComponent("Seu acesso ao painel Entrelaços");
+  const body = encodeURIComponent(
+    `Olá, ${name}! Use este link para definir sua senha e entrar no painel do casamento.\n\n${url}\n\nO link vale por 24 horas e pode ser usado uma vez.`,
+  );
+  return `mailto:${recipient}?subject=${subject}&body=${body}`;
+}
+
 export function GeneratedAccessLink({
   name,
   email,
@@ -17,10 +27,6 @@ export function GeneratedAccessLink({
   onDismiss?: () => void;
 }) {
   const id = useId();
-  const subject = encodeURIComponent("Seu acesso ao painel Entrelaços");
-  const body = encodeURIComponent(
-    `Olá, ${name}! Use este link para definir sua senha e entrar no painel do casamento.\n\n${url}\n\nO link vale por 24 horas e pode ser usado uma vez.`,
-  );
   return (
     <section className="grid min-w-0 gap-3 rounded-xl border border-admin-line bg-admin-surface p-4">
       <label htmlFor={id} className="break-words text-sm font-semibold">
@@ -47,11 +53,7 @@ export function GeneratedAccessLink({
         <Button
           variant="outline"
           nativeButton={false}
-          render={
-            <a
-              href={`mailto:${encodeURIComponent(email)}?subject=${subject}&body=${body}`}
-            />
-          }
+          render={<a href={accessLinkMailto(name, email, url)} />}
         >
           Enviar por e-mail
         </Button>

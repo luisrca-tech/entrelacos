@@ -3,7 +3,7 @@ import type { MeResponse, SiteRecord } from "@entrelacos/contracts";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { apiRequest } from "../lib/apiClient";
+import { ApiError, apiRequest } from "../lib/apiClient";
 import { OwnerSites } from "./OwnerSites";
 import { panelActorOwner } from "./panelActor";
 
@@ -285,4 +285,183 @@ it("ignores a delayed create after session ownership is lost", async () => {
   expect(navigate).not.toHaveBeenCalled();
   expect(toastError).not.toHaveBeenCalled();
   expect(document.querySelector("form")).toBeNull();
+});
+
+type Route = (options?: { method?: string; body?: unknown }) => unknown;
+function routeRequests(routes: Record<string, Route>) {
+  request.mockImplementation(async (path, options) => {
+    const method = options?.method ?? "GET";
+    const route = routes[`${method} ${path.split("?")[0]}`];
+    if (!route) throw new Error(`Unexpected request: ${method} ${path}`);
+    return route(options);
+  });
+}
+function calls(method: string, path: string) {
+  return request.mock.calls.filter(
+    ([called, options]) =>
+      (options?.method ?? "GET") === method && called.split("?")[0] === path,
+  );
+}
+function checkbox(label: string) {
+  const found = [...document.querySelectorAll("label")]
+    .find((entry) => entry.textContent?.trim() === label)
+    ?.querySelector<HTMLInputElement>('input[type="checkbox"]');
+  if (!found) throw new Error(`Checkbox not found: ${label}`);
+  return found;
+}
+function field(name: string) {
+  const found = document.querySelector<HTMLInputElement>(`[name="${name}"]`);
+  if (!found) throw new Error(`Missing field: ${name}`);
+  return found;
+}
+const createdSite = {
+  ...sites[0],
+  id: "new-site",
+  displayName: "Davi & Clara",
+  coupleNames: ["Davi", "Clara"],
+  eventDate: "2027-08-12",
+  publicUrl: null,
+} as SiteRecord;
+
+it("keeps the couple step editable after the site exists and finishes without access when it is unchecked", async () => {
+  await verify();
+  const adminBodies: unknown[] = [];
+  routeRequests({
+    "GET /v1/owner/sites": () => ({ sites, nextCursor: null }),
+    "POST /v1/owner/sites": () => ({ site: createdSite }),
+    "POST /v1/owner/sites/new-site/admins": (options) => {
+      adminBodies.push(options?.body);
+      throw new ApiError(400, "VALIDATION_ERROR");
+    },
+  });
+  await mount();
+  const form = await invitationForm();
+  await act(async () => checkbox("Cadastrar alguém do casal agora").click());
+  await change(field("adminName"), "Clara");
+  await change(field("adminEmail"), "clara@example.test");
+  const listLoads = calls("GET", "/v1/owner/sites").length;
+  await submit(form);
+  expect(document.body.textContent).toContain(
+    "O casamento já foi criado. Tente cadastrar a pessoa novamente.",
+  );
+  expect(calls("GET", "/v1/owner/sites").length).toBeGreaterThan(listLoads);
+  expect(field("first").disabled).toBe(true);
+  expect(field("slug").disabled).toBe(true);
+  expect(field("adminName").disabled).toBe(false);
+  expect(field("adminEmail").disabled).toBe(false);
+  expect(checkbox("Cadastrar alguém do casal agora").disabled).toBe(false);
+  await change(field("adminEmail"), "clara.davi@example.test");
+  await submit(form);
+  expect(adminBodies).toEqual([
+    { name: "Clara", email: "clara@example.test" },
+    { name: "Clara", email: "clara.davi@example.test" },
+  ]);
+  await act(async () => checkbox("Cadastrar alguém do casal agora").click());
+  await submit(form);
+  expect(calls("POST", "/v1/owner/sites")).toHaveLength(1);
+  expect(adminBodies).toHaveLength(2);
+  expect(document.body.textContent).toContain("Casamento criado");
+  expect(document.body.textContent).toContain(
+    "Ninguém do casal foi cadastrado",
+  );
+});
+
+it("shows the server record on success and refreshes the list after an in-flight load", async () => {
+  await verify();
+  let releaseList!: () => void;
+  let deferList = false;
+  routeRequests({
+    "GET /v1/owner/sites": () =>
+      deferList
+        ? new Promise((resolve) => {
+            deferList = false;
+            releaseList = () => resolve({ sites, nextCursor: null });
+          })
+        : { sites, nextCursor: null },
+    "POST /v1/owner/sites": () => {
+      deferList = true;
+      return { site: { ...createdSite, displayName: "Clara e Davi oficial" } };
+    },
+    "POST /v1/owner/sites/new-site/admins": () => ({ userId: "person-a" }),
+  });
+  await mount();
+  const form = await invitationForm();
+  await act(async () => checkbox("Cadastrar alguém do casal agora").click());
+  await change(field("adminName"), "Clara");
+  await change(field("adminEmail"), "clara@example.test");
+  const listLoads = calls("GET", "/v1/owner/sites").length;
+  await submit(form);
+  expect(document.body.textContent).toContain("Casamento criado");
+  expect(document.body.textContent).toContain("Clara e Davi oficial");
+  expect(calls("GET", "/v1/owner/sites")).toHaveLength(listLoads + 1);
+  await act(async () => releaseList());
+  expect(calls("GET", "/v1/owner/sites")).toHaveLength(listLoads + 2);
+});
+
+it("asks for another identifier when the repository slug is already in use", async () => {
+  await verify();
+  routeRequests({
+    "GET /v1/owner/sites": () => ({ sites, nextCursor: null }),
+    "POST /v1/owner/sites": () => {
+      throw new ApiError(409, "REPOSITORY_SLUG_CONFLICT");
+    },
+  });
+  await mount();
+  await act(async () => button("Criar casamento").click());
+  await change(field("first"), "Davi");
+  await change(field("second"), "Clara");
+  await change(field("date"), "2027-08-12");
+  const form = document.querySelector<HTMLFormElement>("form");
+  if (!form) throw new Error("Expected create wedding form");
+  await submit(form);
+  expect(document.body.textContent).toContain(
+    "Esse identificador já está em uso. Escolha outro.",
+  );
+  expect(field("slug").disabled).toBe(false);
+});
+
+it("starts over with a new registration key after a provisioning key conflict", async () => {
+  await verify();
+  routeRequests({
+    "GET /v1/owner/sites": () => ({ sites, nextCursor: null }),
+    "POST /v1/owner/sites": () => {
+      throw new ApiError(409, "PROVISIONING_KEY_CONFLICT");
+    },
+  });
+  await mount();
+  const form = await invitationForm();
+  await submit(form);
+  expect(document.body.textContent).toContain(
+    "Uma tentativa anterior já usou este cadastro com outros dados.",
+  );
+  await act(async () => button("Recomeçar com novo cadastro").click());
+  await submit(form);
+  const keys = calls("POST", "/v1/owner/sites").map(
+    ([, options]) =>
+      (options as { body: { provisioningKey: string } }).body.provisioningKey,
+  );
+  expect(keys).toHaveLength(2);
+  expect(keys[0]).not.toBe(keys[1]);
+});
+
+it("clears previous weddings when the first page of a new filter fails", async () => {
+  await verify();
+  request.mockResolvedValueOnce({ sites, nextCursor: null });
+  await mount();
+  expect(container.textContent).toContain("Ana e João");
+  const filter = container.querySelector<HTMLSelectElement>("select");
+  if (!filter) throw new Error("Expected lifecycle filter");
+  request.mockRejectedValueOnce(new Error("filter unavailable"));
+  await change(filter, "DRAFT");
+  expect(container.textContent).toContain(
+    "Não foi possível carregar os casamentos.",
+  );
+  expect(container.textContent).not.toContain("Ana e João");
+});
+
+it("points the empty state to the create action label", async () => {
+  await verify();
+  request.mockResolvedValueOnce({ sites: [], nextCursor: null });
+  await mount();
+  expect(container.textContent).toContain("Comece em Criar casamento.");
 });

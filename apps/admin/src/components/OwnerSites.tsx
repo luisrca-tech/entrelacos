@@ -86,6 +86,8 @@ function OwnerSitesRuntime({
   const [lifecycle, setLifecycle] = useState("ALL");
   const alive = useRef(true);
   const busy = useRef(false);
+  const refreshQueued = useRef(false);
+  const loadedQuery = useRef<string | null>(null);
   const requestVersion = useRef(0);
   const current = useCallback(
     (attempt?: number) =>
@@ -106,10 +108,12 @@ function OwnerSitesRuntime({
       setError("");
       if (next) setLoadingMore(true);
       else setLoading(true);
+      const filters = new URLSearchParams();
+      if (search.trim()) filters.set("search", search.trim());
+      if (lifecycle !== "ALL") filters.set("lifecycle", lifecycle);
+      const filterKey = filters.toString();
       try {
-        const query = new URLSearchParams();
-        if (search.trim()) query.set("search", search.trim());
-        if (lifecycle !== "ALL") query.set("lifecycle", lifecycle);
+        const query = new URLSearchParams(filters);
         if (next) query.set("cursor", next);
         const result = await apiRequest<
           typeof ownerSiteListResponseSchema._output
@@ -123,12 +127,19 @@ function OwnerSitesRuntime({
             ...result.sites.filter((site) => !ids.has(site.id)),
           ];
         });
+        loadedQuery.current = filterKey;
         setCursor(result.nextCursor);
         setTotals(result.totals);
       } catch (cause) {
         if (!current(attempt)) return;
         panelActorOwner.reportFailure(cause, snapshot.sessionEpoch);
         if (!current(attempt)) return;
+        // Rows from another search or status must not appear under this one.
+        if (!next && loadedQuery.current !== filterKey) {
+          loadedQuery.current = null;
+          setSites([]);
+          setCursor(null);
+        }
         setRetryCursor(next);
         setError(
           next
@@ -140,14 +151,27 @@ function OwnerSitesRuntime({
           busy.current = false;
           setLoading(false);
           setLoadingMore(false);
+          if (refreshQueued.current) {
+            refreshQueued.current = false;
+            void loadRef.current();
+          }
         }
       }
     },
     [current, lifecycle, search, snapshot],
   );
+  const loadRef = useRef(load);
+  loadRef.current = load;
+  // A creation can finish while a page is loading; refresh again afterwards
+  // so the new wedding is never dropped by the in-flight guard.
+  const refresh = useCallback(() => {
+    if (busy.current) refreshQueued.current = true;
+    else void loadRef.current();
+  }, []);
 
   useEffect(() => {
     alive.current = true;
+    refreshQueued.current = false;
     setLoading(true);
     setCursor(null);
     const timeout = search.trim()
@@ -189,7 +213,7 @@ function OwnerSitesRuntime({
         <CreateWeddingDialog
           disabled={loading}
           current={current}
-          onCreated={() => void load()}
+          onCreated={refresh}
           onFailure={(cause) =>
             panelActorOwner.reportFailure(cause, snapshot.sessionEpoch)
           }
@@ -377,7 +401,7 @@ function OwnerSitesRuntime({
           {!loading && !error && visibleSites.length === 0 && (
             <p className="mt-6 leading-[1.6] text-admin-muted">
               {!(search.trim() || lifecycle !== "ALL")
-                ? "Nenhum casamento cadastrado. Comece em Novo casamento."
+                ? "Nenhum casamento cadastrado. Comece em Criar casamento."
                 : "Nenhum casamento encontrado. Ajuste a busca ou o status."}
             </p>
           )}
