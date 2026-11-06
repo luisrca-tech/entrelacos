@@ -37,6 +37,16 @@ export const lifecycleConfirmation: Record<
   },
 };
 
+export const lifecycleTone: Record<
+  SiteRecord["lifecycle"],
+  "success" | "pending" | "neutral" | "danger"
+> = {
+  ACTIVE: "success",
+  IN_REVIEW: "pending",
+  DRAFT: "neutral",
+  INACTIVE: "danger",
+};
+
 export function siteLifecycleMenuActions(
   lifecycle: SiteRecord["lifecycle"],
   hasTerm = true,

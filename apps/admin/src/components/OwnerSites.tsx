@@ -29,9 +29,9 @@ import { formatBrazilianDate } from "./brazilianDate";
 import { CreateWeddingDialog } from "./CreateWeddingDialog";
 import { LoadMoreButton } from "./LoadMoreButton";
 import { type PanelSessionSnapshot, panelActorOwner } from "./panelActor";
-import { ToneBadge, type ToneName } from "./receivingUi";
-
+import { ToneBadge } from "./receivingUi";
 import { StatusSignal } from "./StatusSignal";
+import { lifecycleTone } from "./siteLifecyclePresentation";
 
 const navigateToSite = (path: string) => window.location.assign(path);
 
@@ -426,13 +426,6 @@ function OwnerSitesRuntime({
 }
 
 const openAction = `${buttonVariants({ variant: "outline" })} h-[38px] rounded-[10px] border-admin-line-strong bg-admin-surface px-6 text-[15px] font-semibold text-admin-graphite no-underline`;
-
-const lifecycleTone: Record<SiteRecord["lifecycle"], ToneName> = {
-  ACTIVE: "success",
-  IN_REVIEW: "pending",
-  DRAFT: "neutral",
-  INACTIVE: "danger",
-};
 
 function LifecycleBadge({ lifecycle }: { lifecycle: SiteRecord["lifecycle"] }) {
   return (
