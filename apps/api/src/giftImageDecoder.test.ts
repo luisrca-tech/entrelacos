@@ -548,7 +548,7 @@ describe("real gift image decoder", () => {
     await expect(decodeGiftImage(input, "image/webp")).rejects.toBeInstanceOf(
       GiftImageDecodeError,
     );
-  }, 10_000);
+  }, 30_000); // Encodes a 2048x2048 noise image; slow under full-suite CPU load.
 
   it("respects typed-array slices and takes an immutable input snapshot before asynchronous decoding", async () => {
     const png = await fixture("png");
