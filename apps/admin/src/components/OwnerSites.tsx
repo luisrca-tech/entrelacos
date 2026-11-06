@@ -5,10 +5,7 @@ import type {
 } from "@entrelacos/contracts";
 import {
   Button,
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
+  buttonVariants,
   Input,
   Table,
   TableBody,
@@ -18,6 +15,7 @@ import {
   TableRow,
 } from "@entrelacos/ui";
 import { Link } from "@tanstack/react-router";
+import { Search } from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -25,12 +23,13 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import { adminStyles, displayHeading } from "../lib/adminStyles";
+import { displayHeading } from "../lib/adminStyles";
 import { apiRequest } from "../lib/apiClient";
 import { formatBrazilianDate } from "./brazilianDate";
 import { CreateWeddingDialog } from "./CreateWeddingDialog";
 import { LoadMoreButton } from "./LoadMoreButton";
 import { type PanelSessionSnapshot, panelActorOwner } from "./panelActor";
+import { ToneBadge, type ToneName } from "./receivingUi";
 
 import { StatusSignal } from "./StatusSignal";
 
@@ -238,185 +237,223 @@ function OwnerSitesRuntime({
         </div>
       )}
 
-      <Card className={`${adminStyles.surface} overflow-hidden`}>
-        <CardHeader>
-          <CardDescription>
+      <div className="mb-[22px] flex flex-wrap items-center gap-3">
+        <div className="hidden flex-wrap gap-1 rounded-xl border border-admin-line bg-admin-surface p-1 lg:flex">
+          {(
+            [
+              ["ALL", "Todos"],
+              ["ACTIVE", "Ativos"],
+              ["IN_REVIEW", "Em revisão"],
+              ["DRAFT", "Rascunho"],
+              ["INACTIVE", "Inativos"],
+            ] as const
+          ).map(([status, label]) => (
+            <Button
+              key={status}
+              type="button"
+              size="sm"
+              variant={lifecycle === status ? "default" : "ghost"}
+              aria-pressed={lifecycle === status}
+              className="h-9 px-3 text-sm font-semibold"
+              onClick={() => setLifecycle(status)}
+            >
+              {label}
+              {totals && (
+                <span
+                  className={`rounded-full px-[7px] text-xs font-bold ${lifecycle === status ? "bg-white/20 text-white" : "bg-admin-beige text-admin-body"}`}
+                >
+                  {status === "ALL"
+                    ? Object.values(totals).reduce(
+                        (sum, count) => sum + count,
+                        0,
+                      )
+                    : totals[status]}
+                </span>
+              )}
+            </Button>
+          ))}
+        </div>
+        <label
+          className="relative min-w-0 flex-[1_1_16rem]"
+          htmlFor="owner-site-search"
+        >
+          <span className="sr-only">Buscar casamento</span>
+          <Search
+            aria-hidden="true"
+            className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-admin-muted"
+          />
+          <Input
+            id="owner-site-search"
+            type="search"
+            placeholder="Nome do casamento ou do casal"
+            className="h-11 rounded-[10px] border-admin-line-strong bg-admin-surface pl-10"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+          />
+        </label>
+        <label
+          className="flex min-w-0 flex-[1_1_10rem] items-center gap-2 text-sm font-medium lg:hidden"
+          htmlFor="owner-site-lifecycle"
+        >
+          Status
+          <select
+            id="owner-site-lifecycle"
+            className="h-11 min-w-0 flex-1 rounded-[10px] border border-admin-line-strong bg-admin-surface px-3 text-sm"
+            value={lifecycle}
+            onChange={(event) => setLifecycle(event.target.value)}
+          >
+            <option value="ALL">Todos</option>
+            <option value="DRAFT">Rascunho</option>
+            <option value="IN_REVIEW">Em revisão</option>
+            <option value="ACTIVE">Ativo</option>
+            <option value="INACTIVE">Inativo</option>
+          </select>
+        </label>
+      </div>
+
+      {loading && (
+        <p role="status" className="mb-4 text-sm text-admin-muted">
+          Carregando casamentos…
+        </p>
+      )}
+      <div className="overflow-hidden rounded-[18px] border border-admin-line bg-admin-surface [@media(max-width:760px)]:border-0 [@media(max-width:760px)]:bg-transparent">
+        <div className="overflow-x-auto [@media(max-width:760px)]:hidden">
+          <Table>
+            <TableHeader className="bg-admin-canvas">
+              <TableRow>
+                <TableHead className="px-[22px]">Casamento</TableHead>
+                <TableHead>Data</TableHead>
+                <TableHead>Situação</TableHead>
+                <TableHead>Recebimentos</TableHead>
+                <TableHead>Site e casal</TableHead>
+                <TableHead aria-label="Ação" />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {visibleSites.map((site) => (
+                <TableRow key={site.id}>
+                  <TableCell className="px-[22px] py-3.5">
+                    <div className="grid gap-[3px]">
+                      <strong className="text-[15px] text-admin-graphite">
+                        {site.displayName}
+                      </strong>
+                      <span className="text-[13px] text-admin-muted">
+                        {site.coupleNames.join(" & ")}
+                      </span>
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-admin-body">
+                    {formatBrazilianDate(site.eventDate)}
+                  </TableCell>
+                  <TableCell>
+                    <LifecycleBadge lifecycle={site.lifecycle} />
+                  </TableCell>
+                  <TableCell>
+                    <ReceivingAccountBadge state={site.receivingAccount} />
+                  </TableCell>
+                  <TableCell>
+                    <SiteAndCouple site={site} />
+                  </TableCell>
+                  <TableCell className="pr-[22px] text-right">
+                    <Link
+                      className={openAction}
+                      data-variant="outline"
+                      to="/sites/$siteId/home"
+                      params={{ siteId: site.id }}
+                      aria-label={`Abrir ${site.displayName}`}
+                    >
+                      Abrir
+                    </Link>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+        <div className="hidden gap-2.5 [@media(max-width:760px)]:grid">
+          {visibleSites.map((site) => (
+            <Link
+              className="grid gap-[7px] rounded-xl border border-admin-line bg-admin-surface p-[18px] no-underline"
+              to="/sites/$siteId/home"
+              params={{ siteId: site.id }}
+              key={site.id}
+            >
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <strong className="min-w-0 break-words text-admin-graphite">
+                  {site.displayName}
+                </strong>
+                <LifecycleBadge lifecycle={site.lifecycle} />
+              </div>
+              <span className="text-[0.88rem] text-admin-muted">
+                {site.coupleNames.join(" & ")} ·{" "}
+                {formatBrazilianDate(site.eventDate)}
+              </span>
+              <div className="flex flex-wrap items-center gap-2 text-[13px] text-admin-muted">
+                Recebimentos
+                <ReceivingAccountBadge state={site.receivingAccount} />
+              </div>
+              <SiteAndCouple site={site} />
+            </Link>
+          ))}
+        </div>
+        {!loading && !error && visibleSites.length === 0 && (
+          <p className="m-0 p-[22px] leading-[1.6] text-admin-muted">
+            {!(search.trim() || lifecycle !== "ALL")
+              ? "Nenhum casamento cadastrado. Comece em Criar casamento."
+              : "Nenhum casamento encontrado. Ajuste a busca ou o status."}
+          </p>
+        )}
+        <div
+          data-slot="owner-sites-footer"
+          className="flex flex-wrap items-center justify-between gap-3 border-t border-admin-line px-[22px] py-3.5 [@media(max-width:760px)]:mt-2.5 [@media(max-width:760px)]:rounded-xl [@media(max-width:760px)]:border [@media(max-width:760px)]:bg-admin-surface [@media(max-width:760px)]:px-[18px]"
+        >
+          <p className="m-0 text-[13px] text-admin-muted">
             {visibleSites.length} de {total} casamentos carregados
             {cursor ? " · Carregue mais para ampliar a busca." : ""}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="mb-4 hidden flex-wrap gap-1 rounded-xl border border-admin-line bg-admin-surface p-1 lg:flex">
-            {(
-              [
-                ["ALL", "Todos"],
-                ["ACTIVE", "Ativos"],
-                ["IN_REVIEW", "Em revisão"],
-                ["DRAFT", "Rascunho"],
-                ["INACTIVE", "Inativos"],
-              ] as const
-            ).map(([status, label]) => (
-              <Button
-                key={status}
-                type="button"
-                size="sm"
-                variant={lifecycle === status ? "default" : "ghost"}
-                aria-pressed={lifecycle === status}
-                onClick={() => setLifecycle(status)}
-              >
-                {label}
-                {totals && (
-                  <span className="rounded-full bg-admin-beige px-1.5 text-xs text-admin-ink">
-                    {status === "ALL"
-                      ? Object.values(totals).reduce(
-                          (sum, count) => sum + count,
-                          0,
-                        )
-                      : totals[status]}
-                  </span>
-                )}
-              </Button>
-            ))}
-          </div>
-          <div className="mb-5 grid gap-3 sm:grid-cols-[1fr_auto] lg:grid-cols-1">
-            <label
-              className="grid gap-2 text-sm font-medium"
-              htmlFor="owner-site-search"
-            >
-              Buscar casamento
-              <Input
-                id="owner-site-search"
-                type="search"
-                placeholder="Nome do casamento ou do casal"
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-              />
-            </label>
-            <label
-              className="grid gap-2 text-sm font-medium lg:hidden"
-              htmlFor="owner-site-lifecycle"
-            >
-              Status
-              <select
-                id="owner-site-lifecycle"
-                className="h-11 rounded-lg border border-admin-line bg-admin-surface px-3 text-sm"
-                value={lifecycle}
-                onChange={(event) => setLifecycle(event.target.value)}
-              >
-                <option value="ALL">Todos</option>
-                <option value="DRAFT">Rascunho</option>
-                <option value="IN_REVIEW">Em revisão</option>
-                <option value="ACTIVE">Ativo</option>
-                <option value="INACTIVE">Inativo</option>
-              </select>
-            </label>
-          </div>
-          {loading && (
-            <p role="status" className="text-sm text-admin-muted">
-              Carregando casamentos…
-            </p>
-          )}
-          <div className="overflow-x-auto [@media(max-width:760px)]:hidden">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Casamento</TableHead>
-                  <TableHead>Data</TableHead>
-                  <TableHead>Situação</TableHead>
-                  <TableHead>Site e casal</TableHead>
-                  <TableHead aria-label="Ação" />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {visibleSites.map((site) => (
-                  <TableRow key={site.id}>
-                    <TableCell>
-                      <Link
-                        className="grid gap-1 no-underline"
-                        to="/sites/$siteId/home"
-                        params={{ siteId: site.id }}
-                      >
-                        <strong>{site.displayName}</strong>
-                        <span className="text-[0.88rem] text-admin-muted">
-                          {site.coupleNames.join(" & ")}
-                        </span>
-                      </Link>
-                    </TableCell>
-                    <TableCell>{formatBrazilianDate(site.eventDate)}</TableCell>
-                    <TableCell>
-                      <StatusSignal
-                        tone={
-                          site.lifecycle === "ACTIVE" ? "success" : "neutral"
-                        }
-                      >
-                        {lifecycleLabel(site.lifecycle)}
-                      </StatusSignal>
-                    </TableCell>
-                    <TableCell>
-                      <SiteAndCouple site={site} />
-                    </TableCell>
-                    <TableCell>
-                      <Link
-                        className="text-[0.88rem] font-bold text-admin-terracotta-deep no-underline"
-                        to="/sites/$siteId/home"
-                        params={{ siteId: site.id }}
-                      >
-                        Abrir
-                      </Link>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-          <div className="hidden gap-2.5 [@media(max-width:760px)]:grid">
-            {visibleSites.map((site) => (
-              <Link
-                className="grid gap-[7px] rounded-xl border border-admin-line bg-admin-surface p-[18px] no-underline"
-                to="/sites/$siteId/home"
-                params={{ siteId: site.id }}
-                key={site.id}
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <span className="inline-block text-[0.7rem] font-bold uppercase tracking-[0.13em] leading-[1.3] text-admin-muted">
-                    Casamento
-                  </span>
-                  <StatusSignal
-                    tone={site.lifecycle === "ACTIVE" ? "success" : "neutral"}
-                  >
-                    {lifecycleLabel(site.lifecycle)}
-                  </StatusSignal>
-                </div>
-                <strong>{site.displayName}</strong>
-                <span className="text-[0.88rem] text-admin-muted">
-                  {site.coupleNames.join(" & ")}
-                </span>
-                <SiteAndCouple site={site} />
-                <small className="mt-1 text-admin-muted">
-                  {formatBrazilianDate(site.eventDate)}
-                </small>
-              </Link>
-            ))}
-          </div>
-          {!loading && !error && visibleSites.length === 0 && (
-            <p className="mt-6 leading-[1.6] text-admin-muted">
-              {!(search.trim() || lifecycle !== "ALL")
-                ? "Nenhum casamento cadastrado. Comece em Criar casamento."
-                : "Nenhum casamento encontrado. Ajuste a busca ou o status."}
-            </p>
-          )}
-        </CardContent>
-      </Card>
-
-      <LoadMoreButton
-        cursor={cursor}
-        onLoad={load}
-        loading={loadingMore}
-        disabled={loading}
-        manualOnly={Boolean(error)}
-        className="mt-[18px]"
-      />
+          </p>
+          <LoadMoreButton
+            cursor={cursor}
+            onLoad={load}
+            loading={loadingMore}
+            disabled={loading}
+            manualOnly={Boolean(error)}
+            className="h-[38px] rounded-[10px] border-admin-line-strong px-6 font-semibold text-admin-graphite"
+          />
+        </div>
+      </div>
     </div>
+  );
+}
+
+const openAction = `${buttonVariants({ variant: "outline" })} h-[38px] rounded-[10px] border-admin-line-strong bg-admin-surface px-6 text-[15px] font-semibold text-admin-graphite no-underline`;
+
+const lifecycleTone: Record<SiteRecord["lifecycle"], ToneName> = {
+  ACTIVE: "success",
+  IN_REVIEW: "pending",
+  DRAFT: "neutral",
+  INACTIVE: "danger",
+};
+
+function LifecycleBadge({ lifecycle }: { lifecycle: SiteRecord["lifecycle"] }) {
+  return (
+    <ToneBadge tone={lifecycleTone[lifecycle]}>
+      {lifecycleLabel(lifecycle)}
+    </ToneBadge>
+  );
+}
+
+// Stored account existence only; readiness is shown inside each wedding.
+function ReceivingAccountBadge({
+  state,
+}: {
+  state: OwnerSiteListItem["receivingAccount"] | undefined;
+}) {
+  return state === "CREATED" ? (
+    <ToneBadge tone="success">Conta criada</ToneBadge>
+  ) : state === "MISSING" ? (
+    <ToneBadge tone="neutral">Sem conta</ToneBadge>
+  ) : (
+    <ToneBadge tone="neutral">Desativado</ToneBadge>
   );
 }
 

@@ -386,6 +386,7 @@ export function ToneBadge({
 }) {
   return (
     <span
+      data-slot="status-badge"
       className={`inline-flex w-fit shrink-0 items-center rounded-full px-2.5 py-1 text-xs leading-none font-bold whitespace-nowrap ${toneClass[tone]}`}
     >
       {children}
