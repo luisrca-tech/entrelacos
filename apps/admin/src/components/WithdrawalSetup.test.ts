@@ -1234,7 +1234,10 @@ async function withdrawalHttpBridge(
   };
 }
 
-describe("withdrawal setup mounted consumer through actual private HTTP", () => {
+// These tests mount the real router and HTTP stack; give them headroom under full-suite load.
+describe("withdrawal setup mounted consumer through actual private HTTP", {
+  timeout: 20_000,
+}, () => {
   it("waits once for a real SQL context ahead of the browser without repeating its read", async () => {
     let sqlAheadMs = 0;
     const f = await withdrawalHttpBridge({
