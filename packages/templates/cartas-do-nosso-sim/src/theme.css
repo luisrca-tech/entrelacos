@@ -18,7 +18,8 @@
   --template-letter-gap: clamp(2rem, 5vw, 6rem);
   --template-page-inset: max(
     var(--template-page-gutter),
-    calc((100vw - var(--template-stage-max-width)) / 2 + 5rem)
+    calc(3.75rem + (100vw - 1440px) / 8),
+    calc((100vw - var(--template-stage-max-width)) / 2 + 7.5rem)
   );
   --template-line-soft: rgba(244, 240, 232, 0.24);
   --template-hero-gradient: linear-gradient(

@@ -16,7 +16,8 @@
   --template-page-gutter: clamp(1rem, 2.7778vw, 2.5rem);
   --template-page-inset: max(
     var(--template-page-gutter),
-    calc((100vw - var(--template-stage-max-width)) / 2 + 2.5rem)
+    calc(2.5rem + (100vw - 1440px) / 6),
+    calc((100vw - var(--template-stage-max-width)) / 2 + 7.5rem)
   );
   --template-line-soft: rgba(244, 240, 232, 0.24);
   --template-hero-gradient: linear-gradient(

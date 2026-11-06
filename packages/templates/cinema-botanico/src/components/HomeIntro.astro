@@ -14,7 +14,7 @@ const timeline = buildIntroTimeline(frames.length);
 ---
 
 <div
-  class="group/intro hidden [[data-template-js=true]_&]:fixed [[data-template-js=true]_&]:inset-0 [[data-template-js=true]_&]:z-30 [[data-template-js=true]_&]:grid [[data-template-js=true]_&]:place-items-center [[data-template-js=true]_&]:overflow-hidden [[data-template-js=true]_&]:bg-template-ivory [[data-template-js=true]_&]:text-template-ink [[data-template-js=true]_&]:opacity-100 data-[template-intro-phase=fade]:opacity-0 data-[template-intro-phase=fade]:[transition:opacity_500ms_ease] data-[template-intro-phase=dismiss]:pointer-events-none data-[template-intro-phase=dismiss]:opacity-0 data-[template-intro-phase=dismiss]:[transition:opacity_500ms_ease] motion-reduce:hidden"
+  class="group/intro hidden [[data-template-js=true]_&]:fixed [[data-template-js=true]_&]:inset-0 [[data-template-js=true]_&]:z-30 data-[template-intro-active=true]:grid [[data-template-js=true]_&]:place-items-center [[data-template-js=true]_&]:overflow-hidden [[data-template-js=true]_&]:bg-template-ivory [[data-template-js=true]_&]:text-template-ink [[data-template-js=true]_&]:opacity-100 data-[template-intro-phase=fade]:opacity-0 data-[template-intro-phase=fade]:[transition:opacity_500ms_ease] data-[template-intro-phase=dismiss]:pointer-events-none data-[template-intro-phase=dismiss]:opacity-0 data-[template-intro-phase=dismiss]:[transition:opacity_500ms_ease] motion-reduce:hidden"
   data-template-home-intro
   data-split-at={timeline.splitAt}
   data-reveal-at={timeline.revealAt.join(",")}
@@ -68,7 +68,7 @@ const timeline = buildIntroTimeline(frames.length);
     "(prefers-reduced-motion: reduce)",
   );
 
-  document.querySelectorAll<HTMLElement>("[data-template-home-intro]").forEach((intro) => {
+  const initializeIntro = () => document.querySelectorAll<HTMLElement>("[data-template-home-intro]").forEach((intro) => {
     if (intro.dataset.templateIntroReady === "true") return;
     intro.dataset.templateIntroReady = "true";
 
@@ -177,11 +177,14 @@ const timeline = buildIntroTimeline(frames.length);
     else motionQuery?.addListener?.(onMotionChange);
     document.addEventListener("keydown", onKeyDown);
 
-    if (motionQuery?.matches || frames.length === 0) {
+    if (motionQuery?.matches || frames.length === 0 || !shouldExpandIntroIntoHero(
+      hero?.getBoundingClientRect() ?? null, window.innerHeight,
+    )) {
       complete();
       return;
     }
 
+    intro.dataset.templateIntroActive = "true";
     document.documentElement.style.overflow = "hidden";
     document.body.style.overflow = "hidden";
     const heroMediaReady = prepareHeroMedia();
@@ -264,4 +267,9 @@ const timeline = buildIntroTimeline(frames.length);
 
     schedule(complete, numberFromData(intro.dataset.completeAt, 4850) + 150);
   });
+
+  // Native scroll restoration is settled by the frame following pageshow.
+  const afterRestoration = () => window.requestAnimationFrame(initializeIntro);
+  if (document.readyState === "complete") afterRestoration();
+  else window.addEventListener("pageshow", afterRestoration, { once: true });
 </script>
