@@ -16,8 +16,10 @@ export async function readSiteHomeSummary(
   let receiving: ReceivingReadiness | undefined;
   if (capabilities.readFinance) {
     assertFinancialReadAccess(access, siteId);
-    receiving = await readReadiness(siteId);
-    if (receiving.siteId !== siteId)
+    // The home summary stays useful when the receiving status is unavailable:
+    // financial fields are omitted and the remaining counts are still returned.
+    receiving = await readReadiness(siteId).catch(() => undefined);
+    if (receiving && receiving.siteId !== siteId)
       throw new Error("Unexpected readiness site");
   }
 
