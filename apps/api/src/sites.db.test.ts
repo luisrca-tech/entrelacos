@@ -4,7 +4,12 @@ import {
   type DatabaseConnection,
   verifyDatabaseConnection,
 } from "@entrelacos/database";
-import { site, siteMembership, user } from "@entrelacos/database/schema";
+import {
+  receivingAccount,
+  site,
+  siteMembership,
+  user,
+} from "@entrelacos/database/schema";
 import { eq, like } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
@@ -55,6 +60,9 @@ describe("site lifecycle PostgreSQL integration", () => {
 
   afterAll(async () => {
     for (const siteId of siteIds) {
+      await connection.db
+        .delete(receivingAccount)
+        .where(eq(receivingAccount.siteId, siteId));
       await connection.db.delete(site).where(eq(site.id, siteId));
     }
     for (const userId of userIds) {
@@ -93,6 +101,50 @@ describe("site lifecycle PostgreSQL integration", () => {
         )
       ).sites,
     ).toEqual([]);
+  });
+
+  it("summarizes the stored receiving account for the configured environment", async () => {
+    const phrase = `${fixturePrefix}-receiving`;
+    const withAccount = await createFixture(`${phrase}-a`);
+    const withoutAccount = await createFixture(`${phrase}-b`);
+    await connection.db.insert(receivingAccount).values([
+      {
+        id: `${fixturePrefix}-account-current`,
+        siteId: withAccount.id,
+        environment: "sandbox",
+        provider: "ASAAS",
+        isCurrent: true,
+      },
+      {
+        id: `${fixturePrefix}-account-replaced`,
+        siteId: withoutAccount.id,
+        environment: "sandbox",
+        provider: "ASAAS",
+        isCurrent: false,
+      },
+    ]);
+    const summary = async (mode?: "disabled" | "sandbox" | "live") =>
+      Object.fromEntries(
+        (
+          await listSites(connection.db, { search: phrase }, fixedNow, mode)
+        ).sites.map((item) => [item.id, item.receivingAccount]),
+      );
+    expect(await summary("sandbox")).toEqual({
+      [withAccount.id]: "CREATED",
+      [withoutAccount.id]: "MISSING",
+    });
+    expect(await summary("live")).toEqual({
+      [withAccount.id]: "MISSING",
+      [withoutAccount.id]: "MISSING",
+    });
+    expect(await summary("disabled")).toEqual({
+      [withAccount.id]: null,
+      [withoutAccount.id]: null,
+    });
+    expect(await summary()).toEqual({
+      [withAccount.id]: null,
+      [withoutAccount.id]: null,
+    });
   });
 
   it("creates one site for concurrent retries and rejects key or slug conflicts", async () => {

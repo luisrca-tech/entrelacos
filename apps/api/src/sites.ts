@@ -17,6 +17,7 @@ import {
 } from "@entrelacos/contracts";
 import {
   adminAccessToken,
+  receivingAccount,
   site,
   siteDomain,
   siteMembership,
@@ -337,6 +338,7 @@ export async function listSites(
   db: SiteDatabase,
   queryInput: unknown,
   nowValue?: Date,
+  receivingMode: "disabled" | "sandbox" | "live" = "disabled",
 ) {
   const query = ownerSiteListQuerySchema.parse(queryInput);
   const now = currentTime(nowValue);
@@ -384,6 +386,19 @@ export async function listSites(
       ),
     )
     .as("couple_access");
+  // Served by the partial unique index on current accounts per environment.
+  const receivingEnvironment =
+    receivingMode === "sandbox" || receivingMode === "live"
+      ? receivingMode
+      : null;
+  const hasReceivingAccount = receivingEnvironment
+    ? sql<boolean>`exists (
+        select 1 from ${receivingAccount}
+        where ${receivingAccount.siteId} = ${site.id}
+          and ${receivingAccount.environment} = ${receivingEnvironment}
+          and ${receivingAccount.isCurrent} = true
+      )`
+    : sql<null>`null`;
   const [rows, counts] = await Promise.all([
     db
       .select({
@@ -395,6 +410,7 @@ export async function listSites(
           active: coupleAccess.active,
           pending: coupleAccess.pending,
         },
+        hasReceivingAccount,
       })
       .from(site)
       .leftJoin(siteTerm, eq(siteTerm.siteId, site.id))
@@ -424,6 +440,12 @@ export async function listSites(
       term: item.term ?? undefined,
     }),
     coupleAccess: item.coupleAccess,
+    receivingAccount:
+      receivingEnvironment === null
+        ? null
+        : item.hasReceivingAccount
+          ? "CREATED"
+          : "MISSING",
   }));
   return {
     sites,
