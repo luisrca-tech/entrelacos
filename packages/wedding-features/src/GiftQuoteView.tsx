@@ -1,4 +1,8 @@
-import type { CheckoutCreateInput, GiftQuote } from "@entrelacos/contracts";
+import {
+  type CheckoutCreateInput,
+  type GiftQuote,
+  giftInstallmentExpiryMinutes,
+} from "@entrelacos/contracts";
 import { showSandboxNotice } from "@entrelacos/ui";
 import { useEffect, useId, useState } from "react";
 import { scheduleGiftQuoteExpiry } from "./giftQuoteExpiry";
@@ -259,6 +263,11 @@ export function GiftQuoteView({
                 Estes dados são usados para emitir a cobrança parcelada. Volte a
                 esta página para continuar a mesma cobrança ou acompanhar a
                 confirmação.
+              </p>
+              <p className="m-0 text-sm text-template-muted">
+                Pague em até {giftInstallmentExpiryMinutes} minutos após a
+                emissão. Se o prazo passar, aguarde a confirmação do
+                encerramento antes de tentar novamente.
               </p>
               <label className="grid min-w-0 gap-1">
                 Nome completo

@@ -60,6 +60,12 @@ function fixture(
       if (/^SELECT 1 FROM "gift_payment_record"/i.test(sql))
         return { rows: outstanding ? [{ found: 1 }] : [] };
       if (/^SELECT/i.test(sql)) return { rows: present ? [row] : [] };
+      if (/^UPDATE "gift_checkout_attempt"/i.test(sql))
+        return { rows: [{ id: row.attemptId }] };
+      if (/^UPDATE "financial_operation"/i.test(sql))
+        return {
+          rows: [{ id: row.attemptId, retryAt: "2026-10-16T16:05:00.000Z" }],
+        };
       if (/^UPDATE/i.test(sql))
         return { rows: lostFence ? [] : [{ id: row.eventId }] };
       throw new Error("Unexpected lifecycle SQL");
@@ -80,7 +86,12 @@ function fixture(
     db: drizzle({ query } as unknown as NodePgClient),
     environment: overrides.environment ?? "sandbox",
     instanceId: "worker-one",
-    reader: { listCheckoutPayments: read, getInstallmentRemoval: vi.fn() },
+    reader: {
+      listCheckoutPayments: read,
+      getInstallmentRemoval: vi.fn(),
+      listInstallmentPayments: vi.fn(),
+      removeInstallment: vi.fn(),
+    },
     now: () => now,
     ...overrides,
   });
@@ -267,7 +278,12 @@ it.each([
       removed,
     });
     const f = fixture("PAYMENT_DELETED", {
-      reader: { listCheckoutPayments: vi.fn(), getInstallmentRemoval },
+      reader: {
+        listCheckoutPayments: vi.fn(),
+        getInstallmentRemoval,
+        listInstallmentPayments: vi.fn(),
+        removeInstallment: vi.fn(),
+      },
     });
     const payload = {
       paymentId: "pay_one",
@@ -295,3 +311,179 @@ it.each([
     ).toContain(code);
   },
 );
+
+it.each([
+  "unpaid",
+  "recovered",
+  "already-paid",
+  "late-receipt",
+  "confirmed-parcel",
+  "incomplete-plan",
+  "wrong-amount",
+])(
+  "requires complete provider and local evidence to expire a sixty-minute installment (%s)",
+  async (scenario) => {
+    const removeInstallment = vi.fn().mockResolvedValue(undefined);
+    const getInstallmentRemoval = vi.fn().mockResolvedValue({
+      source: "provider",
+      provider: "ASAAS",
+      siteId: "site-one",
+      accountBindingId: "account-one",
+      accountReference: "remote-one",
+      environment: "sandbox",
+      installmentReference: "checkout-one",
+      observedAt: new Date("2026-10-16T16:00:00.000Z"),
+      removed: true,
+    });
+    const listInstallmentPayments = vi.fn();
+    const values = fixture("CHECKOUT_CREATED", {
+      reader: {
+        listCheckoutPayments: vi.fn(),
+        getInstallmentRemoval,
+        listInstallmentPayments,
+        removeInstallment,
+      },
+    });
+    const one = {
+      installmentCount: 1,
+      totalCents: 10239,
+      installmentSurchargeCents: 0,
+      installmentCents: [10239],
+    };
+    const two = {
+      installmentCount: 2,
+      totalCents: 10239,
+      installmentSurchargeCents: 0,
+      installmentCents: [5119, 5120],
+    };
+    Object.assign(values.row, {
+      createdAt: new Date("2026-10-16T15:00:00.000Z"),
+      expiryPaymentReferences:
+        scenario === "recovered" ? ["pay_1", "pay_2"] : null,
+      lastErrorCode:
+        scenario === "recovered" ? "INSTALLMENT_EXPIRY_DISPATCHED" : null,
+      quote: {
+        ...two,
+        installmentOptions: [one, two],
+        id: "quote-one",
+        giftId: "gift-one",
+        siteId: "site-one",
+        title: "A contribution",
+        mode: "sandbox",
+        method: "CREDIT_CARD",
+        currency: "BRL",
+        nominalCents: 10000,
+        commissionBasisPoints: 200,
+        commissionCents: 200,
+        processingCents: 39,
+        policyVersion: "policy-one",
+        feeAllocation: "BUYER_GROSS_UP",
+        settlementVersion: "PLATFORM_FEE_GUARANTEE_V1",
+        expiresAt: "2026-10-16T15:05:00.000Z",
+      },
+    });
+    if (scenario === "already-paid") values.setOutstanding();
+    listInstallmentPayments.mockImplementation(async () => {
+      if (scenario === "late-receipt") values.setOutstanding();
+      return {
+        source: "provider",
+        provider: "ASAAS",
+        siteId: "site-one",
+        accountBindingId: "account-one",
+        accountReference: "remote-one",
+        environment: "sandbox",
+        installmentReference: "checkout-one",
+        observedAt: new Date("2026-10-16T16:00:00.000Z"),
+        payments: [1, 2]
+          .slice(0, scenario === "incomplete-plan" ? 1 : 2)
+          .map((installmentNumber) => ({
+            id: `pay_${installmentNumber}`,
+            installment: "checkout-one",
+            externalReference: "attempt-one",
+            installmentNumber,
+            billingType: "CREDIT_CARD",
+            status:
+              scenario === "confirmed-parcel" && installmentNumber === 2
+                ? "CONFIRMED"
+                : "PENDING",
+            value:
+              installmentNumber === 1
+                ? "51.19"
+                : scenario === "wrong-amount"
+                  ? "51.21"
+                  : "51.20",
+          })),
+      };
+    });
+    const expected =
+      scenario === "unpaid" || scenario === "recovered"
+        ? "OBSERVED"
+        : scenario === "already-paid"
+          ? "IDLE"
+          : "RETRY";
+    await expect(values.worker.expireNextUnpaidInstallment()).resolves.toEqual({
+      kind: expected,
+    });
+    if (scenario === "unpaid") {
+      expect(getInstallmentRemoval).toHaveBeenCalledOnce();
+      expect(
+        values.statements.some(({ params }) =>
+          params.includes("INSTALLMENT_EXPIRY_DISPATCHED"),
+        ),
+      ).toBe(true);
+      expect(
+        values.statements.some(({ params }) =>
+          params.includes("INSTALLMENT_EXPIRY_CONFIRMED"),
+        ),
+      ).toBe(true);
+      expect(removeInstallment).toHaveBeenCalledExactlyOnceWith(
+        {
+          provider: "ASAAS",
+          siteId: "site-one",
+          accountBindingId: "account-one",
+          accountReference: "remote-one",
+          environment: "sandbox",
+        },
+        "checkout-one",
+      );
+      expect(
+        values.statements.filter(({ sql }) => /FOR UPDATE OF o/.test(sql)),
+      ).toHaveLength(3);
+      expect(
+        values.statements.some(({ sql }) =>
+          /UPDATE "financial_event_inbox"/.test(sql),
+        ),
+      ).toBe(false);
+    } else {
+      expect(removeInstallment).not.toHaveBeenCalled();
+      if (scenario === "recovered") {
+        expect(getInstallmentRemoval).toHaveBeenCalledOnce();
+        expect(listInstallmentPayments).not.toHaveBeenCalled();
+        expect(
+          values.statements.some(({ params }) =>
+            params.includes("INSTALLMENT_EXPIRY_CONFIRMED"),
+          ),
+        ).toBe(true);
+      }
+    }
+  },
+);
+
+it("does not query the provider when no installment attempt is due", async () => {
+  const listInstallmentPayments = vi.fn();
+  const removeInstallment = vi.fn();
+  const values = fixture("CHECKOUT_CREATED", {
+    reader: {
+      listCheckoutPayments: vi.fn(),
+      getInstallmentRemoval: vi.fn(),
+      listInstallmentPayments,
+      removeInstallment,
+    },
+  });
+  values.empty();
+  await expect(values.worker.expireNextUnpaidInstallment()).resolves.toEqual({
+    kind: "IDLE",
+  });
+  expect(listInstallmentPayments).not.toHaveBeenCalled();
+  expect(removeInstallment).not.toHaveBeenCalled();
+});

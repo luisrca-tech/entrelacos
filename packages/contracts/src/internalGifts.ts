@@ -403,6 +403,7 @@ export type GiftUpdateInput = z.infer<typeof giftUpdateInputSchema>;
 export const giftPaymentMethodSchema = z.enum(["PIX", "CREDIT_CARD"]);
 export const giftMaximumInstallments = 12;
 export const giftMinimumInstallmentCents = 500;
+export const giftInstallmentExpiryMinutes = 60;
 const giftInstallmentCountSchema = z
   .number()
   .int()

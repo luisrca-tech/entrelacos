@@ -10,11 +10,19 @@ An explicit historical `BUYER_GROSS_UP` quote still requires the actual processi
 
 ## Installment receipt
 
+The couple's history includes only orders with a verified confirmed or received payment, or retained evidence of a prior payment. Opening checkout, pending charges, expiration and unpaid cancellation remain internal. The same visibility rule applies before list pagination and to direct detail access. A previously credited or confirmed gift remains traceable after a refund; opening a payment page is never presented as a receipt.
+
+Symbolic gifts have no inventory or purchase limit. Each independent guest intent creates its own quote and order. Posting a payment never unpublishes the gift. Quote creation and checkout reservation acquire the site lock before receiving-account locks so simultaneous purchases of the same gift cannot invert that lock order.
+
 Asaas identifies each charge with its own payment ID and groups installments under the plan ID. The plan ID and attempt reference must match the stored checkout operation. The installment number selects the gross and the nominal and fixed commission portions. Rounding remainders are applied to the last installment, so the parts sum to the original amounts. The same installment position may only be bound to one payment for the order. The canonical receipt effect remains unique per provider payment.
 
 A verified `CONFIRMED` payment can appear as awaiting release. A receipt requires Asaas `RECEIVED` and the exact settled fixed split. The worker refreshes provider evidence on either `PAYMENT_RECEIVED` or `PAYMENT_SPLIT_DONE`. Existing webhook registrations can be updated through the existing registration operation to subscribe to split settlement and payment deletion events.
 
-A deleted individual charge can be restored. Closing an unpaid direct installment attempt requires a correlated deletion webhook, a fresh provider confirmation that the installment plan is gone, and an order lock check for payment records or authenticated receipt events.
+A direct installment invoice has a 60-minute payment window starting when the application records the hosted invoice. At the cutoff, recovery hides the payment link. A background worker checks the complete native plan and asks Asaas to permanently remove it only when each charge is pending or overdue and no local payment evidence conflicts. The operation records a durable dispatch marker before the request. Asaas permits removal only while the plan meets its unpaid-state and other removal conditions. A scoped authenticated provider read then confirms that the exact plan is gone. A lost removal response uses the same read and local payment checks to resolve the outcome. Provider outages can delay cancellation; an uncertain result never unlocks another attempt.
+
+A deleted individual charge can be restored. The closure records the provider confirmation under the order lock after checking for payments and authenticated receipt events. A correlated deletion webhook uses the same provider confirmation for manually removed plans.
+
+Migration `0029_gift_installment_expiry.sql` must precede this API version. It adds nullable native payment references to each checkout attempt. These references are committed with the dispatch marker, so a payment-ID-only confirmation or dispute still prevents closure after a crash or lost response. Existing orders and payment records are retained.
 
 ## Platform compensation
 

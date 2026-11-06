@@ -361,6 +361,7 @@ function fixture(rawTimestamps = false) {
               ...attempt,
               attemptId: attempt.id,
               operationState: operation?.state,
+              operationLastErrorCode: operation?.lastErrorCode ?? null,
               operationKind: operation?.kind,
               operationAttempts: operation?.attempts,
               operationRequestId: operation?.requestId,
@@ -376,6 +377,14 @@ function fixture(rawTimestamps = false) {
           }),
         };
       }
+      if (/^SELECT 1 FROM "gift_payment_record" p/i.test(text))
+        return {
+          rows: tables.financial_event_inbox.filter(
+            (event) =>
+              event.authenticatedAt != null &&
+              event.eventType === "PAYMENT_CONFIRMED",
+          ),
+        };
       if (/FROM "financial_ledger_entry" l/i.test(text))
         return { rows: tables.financial_ledger_entry };
       if (/FROM "gift_payment_record" p/i.test(text))
@@ -1392,6 +1401,41 @@ describe("PostgreSQL gift checkout repository", () => {
       closedReason: "CANCELED",
       checkout: null,
       evidence: { kind: "CLOSED_UNPAID", noOutstandingPayment: true },
+    });
+  });
+
+  it("hides the expired invoice and closes only after the authenticated direct removal proof", async () => {
+    const { values, repository } = await hostedInstallment();
+    const operation = values.tables.financial_operation[0];
+    values.clock.value = new Date(now.getTime() + 60 * 60_000);
+    operation.lastErrorCode = "INSTALLMENT_EXPIRY_DISPATCHED";
+    await expect(
+      repository.findByRequest("site-one", "request-one"),
+    ).resolves.toMatchObject({
+      state: "OUTCOME_UNKNOWN",
+      checkout: null,
+    });
+    values.tables.gift_checkout_attempt[0].installmentExpiryPaymentReferences =
+      ["pay_1", "pay_2"];
+    operation.lastErrorCode = "INSTALLMENT_EXPIRY_CONFIRMED";
+    operation.updatedAt = values.clock.value;
+    await expect(
+      repository.findByRequest("site-one", "request-one"),
+    ).resolves.toMatchObject({
+      state: "CLOSED_UNPAID",
+      closedReason: "EXPIRED",
+      checkout: null,
+    });
+    values.tables.financial_event_inbox.push({
+      eventType: "PAYMENT_CONFIRMED",
+      authenticatedAt: values.clock.value,
+      payload: { paymentId: "pay_2" },
+    });
+    await expect(
+      repository.findByRequest("site-one", "request-one"),
+    ).resolves.toMatchObject({
+      state: "OUTCOME_UNKNOWN",
+      checkout: null,
     });
   });
 

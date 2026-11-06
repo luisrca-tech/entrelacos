@@ -185,7 +185,7 @@ function Totals({
     <dl className="m-0 grid min-w-0 grid-cols-[repeat(auto-fit,minmax(12rem,1fr))] gap-3">
       {[
         {
-          label: "Compras registradas",
+          label: "Presentes com pagamento",
           value: `${count}${more ? "+" : ""}`,
           hint: null,
           tone: "text-admin-ink",
@@ -333,7 +333,7 @@ export function GiftPaymentHistoryView(
         </button>
       </div>
       <p className="sr-only" aria-live="polite">
-        {purchases.length} de {state.purchases.length} compras carregadas
+        {purchases.length} de {state.purchases.length} presentes carregados
       </p>
       {state.status === "loading" && (
         <p role="status" className="m-0 text-sm text-admin-muted">
@@ -364,8 +364,7 @@ export function GiftPaymentHistoryView(
         >
           {state.status === "ready" && state.indexReadCount === 0 && (
             <p className="m-0 px-5 py-6 text-sm text-admin-body">
-              Esta consulta não retornou compras. Isso não confirma histórico
-              completo.
+              Nenhum presente com pagamento nesta consulta.
             </p>
           )}
           {purchases.length > 0 ? (
@@ -379,7 +378,7 @@ export function GiftPaymentHistoryView(
                     scope="col"
                     className="hidden w-[136px] px-2 py-3.5 font-semibold md:table-cell"
                   >
-                    Data
+                    Data do pedido
                   </th>
                   <th
                     scope="col"
@@ -453,7 +452,7 @@ export function GiftPaymentHistoryView(
           ) : (
             state.purchases.length > 0 && (
               <p className="m-0 px-5 py-6 text-center text-sm text-admin-muted">
-                Nenhuma compra carregada corresponde aos filtros.
+                Nenhum presente carregado corresponde aos filtros.
               </p>
             )
           )}
@@ -475,7 +474,7 @@ export function GiftPaymentHistoryView(
                 manualOnly={
                   state.status === "unavailable" || state.status === "conflict"
                 }
-                label="Carregar mais compras"
+                label="Carregar mais presentes"
               />
               {(state.status === "unavailable" ||
                 state.status === "conflict") && (
@@ -549,20 +548,6 @@ export function GiftPaymentHistoryView(
                 pagamentos e créditos registrados.
               </p>
               <ol className="m-0 grid list-none gap-3 p-0">
-                <li className="flex items-start gap-3">
-                  <span
-                    aria-hidden="true"
-                    className="mt-1 size-3 shrink-0 rounded-full bg-admin-graphite"
-                  />
-                  <div className="grid min-w-0 gap-0.5">
-                    <strong className="text-sm text-admin-ink">
-                      Compra registrada
-                    </strong>
-                    <span className="text-[13px] text-admin-muted">
-                      {instant(detail.purchase.purchasedAtMicros)}
-                    </span>
-                  </div>
-                </li>
                 {detail.samples.map((sample) => (
                   <li
                     key={JSON.stringify(sample)}
@@ -642,10 +627,9 @@ export function GiftPaymentHistoryView(
                   );
                 })}
               </ol>
-              {detail.samples.length === 0 && (
+              {detail.samples.length === 0 && detail.receipts.length === 0 && (
                 <p className="m-0 text-[13px] text-admin-muted">
-                  Nenhuma observação de pagamento nesta consulta. Isso não
-                  confirma ausência de pagamento.
+                  Nenhum pagamento ou crédito registrado nesta consulta.
                 </p>
               )}
               <p className="m-0 text-[12.5px] leading-[1.5] text-admin-muted">
@@ -713,7 +697,7 @@ export function GiftPaymentHistoryView(
         <p className="mt-2 mb-0 max-w-3xl leading-[1.55]">
           Situação financeira atual não confirmada. Consultas separadas não
           comprovam saldo, estornos ou crédito bancário. A busca e os filtros
-          consideram somente as compras carregadas nesta consulta.
+          consideram somente os presentes carregados nesta consulta.
         </p>
         <p className="mt-2 mb-0">
           Consultas deste contexto: {state.admissions} de 64.
@@ -762,7 +746,7 @@ export function RecentGiftPurchases({
           {state.status === "loading" || state.status === "idle"
             ? "Consultando os presentes…"
             : state.status === "ready"
-              ? "Nenhuma compra registrada ainda."
+              ? "Nenhum presente com pagamento nesta consulta."
               : "Não foi possível consultar os presentes agora."}
         </p>
       ) : (

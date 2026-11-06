@@ -178,6 +178,10 @@ export interface AsaasHttpClient {
     amountCents: number,
     effectiveDate: string,
   ): Promise<boolean>;
+  listInstallmentPayments(
+    installmentReference: string,
+  ): Promise<AsaasInstallmentPaymentsObservation>;
+  removeInstallment(installmentReference: string): Promise<void>;
   getInstallmentRemoval(
     installmentReference: string,
   ): Promise<AsaasInstallmentRemovalObservation>;
@@ -200,6 +204,11 @@ export interface AsaasInstallmentRemovalObservation
   > {
   installmentReference: string;
   removed: boolean;
+}
+
+export interface AsaasInstallmentPaymentsObservation
+  extends Omit<AsaasInstallmentRemovalObservation, "removed"> {
+  payments: AsaasPaymentObservation["payment"][];
 }
 
 export interface AsaasCheckoutPaymentsObservation {
@@ -865,6 +874,7 @@ export function createAsaasHttpClient(
       payload?: string,
       decode: (text: string) => unknown = JSON.parse,
       allowInstallmentNotFound = false,
+      method = payload === undefined ? "GET" : "POST",
     ): Promise<Record<string, unknown>> {
       const controller = new AbortController();
       let timer: ReturnType<typeof setTimeout> | undefined;
@@ -915,7 +925,7 @@ export function createAsaasHttpClient(
         }, timeoutMs);
         const url = base + path;
         const response = await fetch(url, {
-          method: payload === undefined ? "GET" : "POST",
+          method,
           redirect: "error",
           credentials: "omit",
           cache: "no-store",
@@ -1268,6 +1278,59 @@ export function createAsaasHttpClient(
           return unavailable();
         } catch {
           return unavailable();
+        }
+      },
+      async listInstallmentPayments(installmentReference) {
+        const requested = reference(installmentReference);
+        const response = await request(
+          `/installments/${encodeURIComponent(requested)}/payments?limit=100&offset=0`,
+          undefined,
+          decodeAsaasTransfers,
+        );
+        if (
+          response.hasMore !== false ||
+          !Array.isArray(response.data) ||
+          response.data.length > 12 ||
+          response.totalCount !== response.data.length
+        )
+          return unavailable();
+        return {
+          source: "provider",
+          ...binding,
+          installmentReference: requested,
+          observedAt: observedAt(),
+          payments: response.data.map((value) => {
+            const payment = record(value);
+            if (
+              [
+                "paymentDate",
+                "clientPaymentDate",
+                "confirmedDate",
+                "creditDate",
+              ].some((key) => payment[key] != null) ||
+              payment.anticipated === true
+            )
+              return unavailable();
+            return normalizePayment(payment, reference(payment.id));
+          }),
+        };
+      },
+      async removeInstallment(installmentReference) {
+        const requested = reference(installmentReference);
+        try {
+          const response = await request(
+            `/installments/${encodeURIComponent(requested)}`,
+            undefined,
+            JSON.parse,
+            true,
+            "DELETE",
+          );
+          if (response.id !== requested || response.deleted !== true)
+            return unavailable();
+        } catch (error) {
+          if (error !== installmentNotFound) return unavailable();
+          // The same immutable plan ID is gone. Closure still requires the
+          // authenticated deletion event and a separate provider GET.
         }
       },
       async getInstallmentRemoval(installmentReference) {

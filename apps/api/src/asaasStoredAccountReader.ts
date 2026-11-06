@@ -10,6 +10,7 @@ import {
   type AsaasAccountFeesObservation,
   type AsaasBalanceObservation,
   type AsaasCheckoutPaymentsObservation,
+  type AsaasInstallmentPaymentsObservation,
   type AsaasInstallmentRemovalObservation,
   type AsaasPaymentObservation,
   createAsaasHttpClient,
@@ -43,6 +44,14 @@ export interface AsaasStoredAccountReader {
     binding: FinancialAccountBinding,
     paymentReference: string,
   ): Promise<boolean>;
+  listInstallmentPayments(
+    binding: FinancialAccountBinding,
+    installmentReference: string,
+  ): Promise<AsaasInstallmentPaymentsObservation>;
+  removeInstallment(
+    binding: FinancialAccountBinding,
+    installmentReference: string,
+  ): Promise<void>;
   getInstallmentRemoval(
     binding: FinancialAccountBinding,
     installmentReference: string,
@@ -324,6 +333,14 @@ export function createAsaasStoredAccountReader(
           payment.chargeback == null &&
           payment.custody == null
         );
+      },
+      async listInstallmentPayments(value, installmentReference) {
+        const client = await loadClient(readBinding(value));
+        return client.listInstallmentPayments(installmentReference);
+      },
+      async removeInstallment(value, installmentReference) {
+        const client = await loadClient(readBinding(value));
+        return client.removeInstallment(installmentReference);
       },
       async getInstallmentRemoval(value, installmentReference) {
         try {

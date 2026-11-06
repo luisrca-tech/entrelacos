@@ -409,6 +409,56 @@ async function fixture() {
             (row) =>
               row.site_id === "site-one" && row.environment === "sandbox",
           );
+          if (text.includes("p.order_id=o.id")) {
+            rows = rows.filter((order) =>
+              tables.gift_payment_record.some((payment) => {
+                const scoped = (row: Record<string, unknown>) =>
+                  row.site_id === order.site_id &&
+                  row.account_id === order.account_id &&
+                  row.environment === order.environment;
+                if (
+                  payment.order_id !== order.id ||
+                  !scoped(payment) ||
+                  payment.verification_status !== "VERIFIED" ||
+                  payment.observed_at == null ||
+                  payment.currency !== "BRL" ||
+                  Number(payment.gross_cents) <= 0
+                )
+                  return false;
+                return (
+                  ["CONFIRMED", "RECEIVED"].includes(
+                    String(payment.provider_status),
+                  ) ||
+                  tables.financial_ledger_entry.some(
+                    (ledger) =>
+                      scoped(ledger) &&
+                      ledger.payment_id === payment.id &&
+                      ledger.kind === "GIFT_RECEIVED" &&
+                      ledger.direction === "CREDIT" &&
+                      ledger.currency === "BRL" &&
+                      Number(ledger.amount_cents) > 0 &&
+                      ledger.amount_cents === payment.recipient_net_cents &&
+                      ledger.compensates_entry_id === null,
+                  ) ||
+                  tables.financial_event_inbox.some(
+                    (event) =>
+                      scoped(event) &&
+                      event.payment_id === payment.id &&
+                      [
+                        "PAYMENT_CONFIRMED",
+                        "PAYMENT_RECEIVED",
+                        "PAYMENT_SPLIT_DONE",
+                      ].includes(String(event.event_type)) &&
+                      event.state === "PROCESSED" &&
+                      event.authenticated_at != null &&
+                      event.processed_at != null &&
+                      (event.payload as Record<string, unknown>).paymentId ===
+                        payment.provider_payment_reference,
+                  )
+                );
+              }),
+            );
+          }
           const compact = text.replace(/\s/g, "");
           const originalId = compact.match(/o\.id=\$(\d+)/);
           if (originalId)
@@ -508,8 +558,10 @@ async function fixture() {
 function seedIndex(v: Awaited<ReturnType<typeof fixture>>, count: number) {
   const order = v.tables.gift_order[0];
   const quote = v.tables.gift_quote_record[0];
+  const payment = v.tables.gift_payment_record[0];
   v.tables.gift_order = [];
   v.tables.gift_quote_record = [];
+  v.tables.gift_payment_record = [];
   for (let index = 0; index < count; index++) {
     const suffix = String(index).padStart(3, "0");
     const snapshot = structuredClone(quote.snapshot) as {
@@ -521,6 +573,11 @@ function seedIndex(v: Awaited<ReturnType<typeof fixture>>, count: number) {
       id: snapshot.quote.id,
       snapshot,
     });
+    v.tables.gift_payment_record.push({
+      ...payment,
+      id: `payment-${suffix}`,
+      order_id: `order-${suffix}`,
+    });
     v.tables.gift_order.push({
       ...order,
       id: `order-${suffix}`,
@@ -531,6 +588,34 @@ function seedIndex(v: Awaited<ReturnType<typeof fixture>>, count: number) {
   }
 }
 describe("bounded historical purchase stored reader", () => {
+  it("does not expose a checkout without payment to the couple", async () => {
+    const v = await fixture();
+    v.tables.gift_payment_record = [];
+    v.tables.financial_ledger_entry = [];
+    v.tables.financial_event_inbox = [];
+    const page = await v.repository.readPurchasePage(v.scope, null);
+    expect(page.history.items).toEqual([]);
+    expect(page.history.nextCursor).toBeNull();
+    await expect(
+      v.repository.readPurchaseDetailPage(v.scope, "order-one", null),
+    ).rejects.toThrow("Purchase history unavailable");
+    expect(v.tables.gift_order).toHaveLength(1);
+    await v.repository.close();
+  });
+
+  it.each(["PENDING", "OVERDUE", "CANCELLED"])(
+    "does not expose an unpaid %s payment as a gift purchase",
+    async (status) => {
+      const v = await fixture();
+      v.tables.gift_payment_record[0].provider_status = status;
+      v.tables.financial_ledger_entry = [];
+      v.tables.financial_event_inbox = [];
+      expect(
+        (await v.repository.readPurchasePage(v.scope, null)).history.items,
+      ).toEqual([]);
+      await v.repository.close();
+    },
+  );
   it.each(["index", "detail"] as const)(
     "keeps the %s read valid when concurrent session activity advances without changing authority",
     async (kind) => {
@@ -905,13 +990,16 @@ describe("bounded historical purchase stored reader", () => {
     );
     await v.repository.close();
   });
-  it("preserves a recorded pre-dispatch expired order without applying current quote eligibility", async () => {
+  it("keeps a pre-dispatch expired order internal rather than displaying a purchase", async () => {
     const v = await fixture();
     v.tables.gift_order[0].created_at = "2026-10-12T17:01:00.000Z";
     v.tables.financial_operation[1].state = "CANCELLED";
     v.tables.financial_operation[1].created_at = "2026-10-12T17:01:00.000Z";
+    v.tables.gift_payment_record = [];
+    v.tables.financial_ledger_entry = [];
+    v.tables.financial_event_inbox = [];
     const reply = await v.repository.readPurchasePage(v.scope, null);
-    expect(reply.history.items[0].orderId).toBe("order-one");
+    expect(reply.history.items).toEqual([]);
     expect(reply.history.currentKnowledge).toBe("UNKNOWN");
     await v.repository.close();
   });

@@ -91,6 +91,7 @@ function fixture() {
       if (/^(begin|commit|rollback)/i.test(sql)) return { rows: [] };
       if (/^insert into "gift_quote_record"/.test(sql))
         return { rows: [["quote-one"]] };
+      if (/ from "site" /.test(sql)) return { rows: [["site-one"]] };
       const columns = [
         ...(sql.match(/^select (.*?) from/i)?.[1] ?? "").matchAll(
           /(?:"[a-z_]+"\.)?"([a-z_]+)"/g,
@@ -158,10 +159,12 @@ describe("immutable stored gift quote append", () => {
     const selects = values.queries.filter((entry) =>
       entry.sql.startsWith("select"),
     );
-    expect(selects).toHaveLength(2);
-    expect(selects.every((entry) => entry.sql.includes("for share"))).toBe(
-      true,
-    );
+    expect(selects).toHaveLength(3);
+    expect(selects[0].sql).toContain('from "site"');
+    expect(selects[0].sql).toContain("for key share");
+    expect(
+      selects.slice(1).every((entry) => entry.sql.includes("for share")),
+    ).toBe(true);
     expect(selects.map((entry) => entry.sql).join(" ")).not.toMatch(
       /credential|masked_descriptor|webhook_token/,
     );
@@ -262,7 +265,7 @@ describe("immutable stored gift quote append", () => {
     });
     expect(
       values.queries.filter((entry) => entry.sql.startsWith("select")),
-    ).toHaveLength(2);
+    ).toHaveLength(3);
     expect(values.queries.some((entry) => entry.sql.startsWith("insert"))).toBe(
       false,
     );
