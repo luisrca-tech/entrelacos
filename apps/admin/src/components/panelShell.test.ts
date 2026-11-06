@@ -60,8 +60,13 @@ describe("admin shell safety regressions", () => {
   });
 
   it("keeps the create-site dialog from growing a horizontal scrollbar", () => {
-    expect(panelSource).toContain("overflow-x-hidden overflow-y-auto");
-    expect(panelSource).toContain("min-w-0");
+    const createSource = readFileSync(
+      resolve(import.meta.dirname, "CreateWeddingDialog.tsx"),
+      "utf8",
+    );
+    expect(panelSource).toContain("CreateWeddingDialog");
+    expect(createSource).toContain("adminStyles.dialog");
+    expect(createSource).toContain("min-w-0");
   });
 
   it("shows the wedding name in the shell instead of the site id", () => {

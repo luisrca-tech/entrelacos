@@ -9,13 +9,6 @@ import {
   CardContent,
   CardDescription,
   CardHeader,
-  CardTitle,
-  DatePicker,
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogTitle,
   Input,
   Table,
   TableBody,
@@ -23,11 +16,9 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-  toast,
 } from "@entrelacos/ui";
 import { Link } from "@tanstack/react-router";
 import {
-  type FormEvent,
   useCallback,
   useEffect,
   useRef,
@@ -37,6 +28,7 @@ import {
 import { adminStyles, displayHeading } from "../lib/adminStyles";
 import { apiRequest } from "../lib/apiClient";
 import { formatBrazilianDate } from "./brazilianDate";
+import { CreateWeddingDialog } from "./CreateWeddingDialog";
 import { LoadMoreButton } from "./LoadMoreButton";
 import { type PanelSessionSnapshot, panelActorOwner } from "./panelActor";
 
@@ -89,14 +81,11 @@ function OwnerSitesRuntime({
   const [error, setError] = useState("");
   const [retryCursor, setRetryCursor] = useState<string | undefined>();
   const [loading, setLoading] = useState(true);
-  const [pending, setPending] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [dialogOpen, setDialogOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [lifecycle, setLifecycle] = useState("ALL");
   const alive = useRef(true);
   const busy = useRef(false);
-  const creating = useRef(false);
   const requestVersion = useRef(0);
   const current = useCallback(
     (attempt?: number) =>
@@ -111,7 +100,7 @@ function OwnerSitesRuntime({
 
   const load = useCallback(
     async (next?: string) => {
-      if (busy.current || creating.current || !current()) return;
+      if (busy.current || !current()) return;
       busy.current = true;
       const attempt = ++requestVersion.current;
       setError("");
@@ -173,41 +162,6 @@ function OwnerSitesRuntime({
     };
   }, [load, search]);
 
-  async function create(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!current() || creating.current || busy.current) return;
-    const form = new FormData(event.currentTarget);
-    creating.current = true;
-    setPending(true);
-    try {
-      const result = await apiRequest<{ site: SiteRecord }>("/v1/owner/sites", {
-        method: "POST",
-        body: {
-          repositorySlug: form.get("slug"),
-          provisioningKey: form.get("key"),
-          displayName: form.get("name"),
-          coupleNames: [form.get("first"), form.get("second")],
-          eventDate: form.get("date"),
-        },
-      });
-      if (!current()) return;
-      setDialogOpen(false);
-      navigate(`/sites/${encodeURIComponent(result.site.id)}/home`);
-    } catch (cause) {
-      if (!current()) return;
-      panelActorOwner.reportFailure(cause, snapshot.sessionEpoch);
-      if (current())
-        toast.error(
-          "Não foi possível criar o casamento. Confira os dados e tente novamente com a mesma referência.",
-        );
-    } finally {
-      if (current()) {
-        creating.current = false;
-        setPending(false);
-      }
-    }
-  }
-
   const visibleSites = sites;
   const total = totals
     ? lifecycle === "ALL"
@@ -225,148 +179,22 @@ function OwnerSitesRuntime({
           <h1
             className={`m-0 max-w-none text-[clamp(1.85rem,3vw,2.6rem)] ${displayHeading}`}
           >
-            Seus casamentos
+            Casamentos cadastrados
           </h1>
           <p className="mt-[18px] max-w-[56ch] leading-[1.6] text-admin-muted">
             Escolha um casamento para organizar convites, presentes e
             recebimentos.
           </p>
         </div>
-        <Dialog
-          open={dialogOpen}
-          onOpenChange={(open) => {
-            if (!pending) setDialogOpen(open);
-          }}
-        >
-          <Button
-            className="shrink-0 [@media(max-width:760px)]:w-full"
-            type="button"
-            disabled={loading || loadingMore || pending}
-            onClick={() => {
-              setDialogOpen(true);
-            }}
-          >
-            Novo casamento
-          </Button>
-          <DialogContent className="w-[min(680px,calc(100vw-32px))] max-w-[min(680px,calc(100vw-32px))] max-h-[calc(100vh-32px)] overflow-x-hidden overflow-y-auto rounded-2xl border border-admin-line bg-admin-surface p-[30px] shadow-admin [@media(max-width:760px)]:p-6 [@media(max-width:760px)]:px-[18px]">
-            <DialogTitle className="mb-2.5 font-admin-display text-[2.3rem] font-normal">
-              Novo casamento
-            </DialogTitle>
-            <DialogDescription className="m-0 leading-[1.6] text-admin-muted">
-              Preencha os dados do casal e as referências para criar o site.
-            </DialogDescription>
-            <form
-              className="my-7 grid min-w-0 grid-cols-[repeat(auto-fit,minmax(min(100%,240px),1fr))] items-end gap-[18px]"
-              onSubmit={create}
-            >
-              <label
-                className="grid min-w-0 gap-2 text-[0.88rem] font-semibold text-admin-graphite"
-                htmlFor="site-name"
-              >
-                Nome do casamento
-                <Input
-                  id="site-name"
-                  name="name"
-                  required
-                  maxLength={160}
-                  disabled={pending}
-                />
-              </label>
-              <label
-                className="grid min-w-0 gap-2 text-[0.88rem] font-semibold text-admin-graphite"
-                htmlFor="site-date"
-              >
-                Data do casamento
-                <DatePicker
-                  id="site-date"
-                  name="date"
-                  required
-                  disabled={pending}
-                />
-              </label>
-              <label
-                className="grid min-w-0 gap-2 text-[0.88rem] font-semibold text-admin-graphite"
-                htmlFor="site-first-name"
-              >
-                Nome do noivo
-                <Input
-                  id="site-first-name"
-                  name="first"
-                  required
-                  disabled={pending}
-                  maxLength={120}
-                />
-              </label>
-              <label
-                className="grid min-w-0 gap-2 text-[0.88rem] font-semibold text-admin-graphite"
-                htmlFor="site-second-name"
-              >
-                Nome da noiva
-                <Input
-                  id="site-second-name"
-                  name="second"
-                  required
-                  disabled={pending}
-                  maxLength={120}
-                />
-              </label>
-              <fieldset className="col-span-full grid min-w-0 gap-[18px] border-t border-admin-line pt-4 sm:grid-cols-2">
-                <legend className="px-1 text-sm font-semibold text-admin-graphite">
-                  Referências do site
-                </legend>
-                <p className="col-span-full m-0 text-sm text-admin-muted">
-                  Informe as referências deste cadastro. Em uma nova tentativa,
-                  mantenha os mesmos valores.
-                </p>
-                <label
-                  className="grid min-w-0 gap-2 text-[0.88rem] font-semibold text-admin-graphite"
-                  htmlFor="site-slug"
-                >
-                  Identificador do site
-                  <Input
-                    id="site-slug"
-                    name="slug"
-                    required
-                    disabled={pending}
-                    pattern="[a-z0-9]+(-[a-z0-9]+)*"
-                    maxLength={64}
-                    placeholder="ana-e-joao"
-                  />
-                </label>
-                <label
-                  className="grid min-w-0 gap-2 text-[0.88rem] font-semibold text-admin-graphite"
-                  htmlFor="site-key"
-                >
-                  Referência do cadastro
-                  <Input
-                    id="site-key"
-                    name="key"
-                    required
-                    disabled={pending}
-                    maxLength={160}
-                    placeholder="casamento-ana-joao-2027"
-                  />
-                </label>
-              </fieldset>
-              <div className="col-span-full mt-2 flex justify-end gap-2.5 [@media(max-width:760px)]:grid [@media(max-width:760px)]:grid-cols-2 [&>*]:[@media(max-width:760px)]:w-full">
-                <DialogClose
-                  render={
-                    <Button
-                      type="button"
-                      variant="outline"
-                      disabled={pending}
-                    />
-                  }
-                >
-                  Cancelar
-                </DialogClose>
-                <Button type="submit" disabled={pending}>
-                  {pending ? "Salvando…" : "Criar casamento"}
-                </Button>
-              </div>
-            </form>
-          </DialogContent>
-        </Dialog>
+        <CreateWeddingDialog
+          disabled={loading}
+          current={current}
+          onCreated={() => void load()}
+          onFailure={(cause) =>
+            panelActorOwner.reportFailure(cause, snapshot.sessionEpoch)
+          }
+          navigate={navigate}
+        />
       </section>
 
       {error && (
@@ -378,7 +206,7 @@ function OwnerSitesRuntime({
             className="w-fit"
             type="button"
             variant="outline"
-            disabled={loading || loadingMore || pending}
+            disabled={loading || loadingMore}
             onClick={() => void load(retryCursor)}
           >
             Tentar novamente
@@ -388,13 +216,44 @@ function OwnerSitesRuntime({
 
       <Card className={`${adminStyles.surface} overflow-hidden`}>
         <CardHeader>
-          <CardTitle>Casamentos cadastrados</CardTitle>
           <CardDescription>
             {visibleSites.length} de {total} casamentos carregados
             {cursor ? " · Carregue mais para ampliar a busca." : ""}
           </CardDescription>
         </CardHeader>
         <CardContent>
+          <div className="mb-4 hidden flex-wrap gap-1 rounded-xl border border-admin-line bg-admin-surface p-1 lg:flex">
+            {(
+              [
+                ["ALL", "Todos"],
+                ["ACTIVE", "Ativos"],
+                ["IN_REVIEW", "Em revisão"],
+                ["DRAFT", "Rascunho"],
+                ["INACTIVE", "Inativos"],
+              ] as const
+            ).map(([status, label]) => (
+              <Button
+                key={status}
+                type="button"
+                size="sm"
+                variant={lifecycle === status ? "default" : "ghost"}
+                aria-pressed={lifecycle === status}
+                onClick={() => setLifecycle(status)}
+              >
+                {label}
+                {totals && (
+                  <span className="rounded-full bg-admin-beige px-1.5 text-xs text-admin-ink">
+                    {status === "ALL"
+                      ? Object.values(totals).reduce(
+                          (sum, count) => sum + count,
+                          0,
+                        )
+                      : totals[status]}
+                  </span>
+                )}
+              </Button>
+            ))}
+          </div>
           <div className="mb-5 grid gap-3 sm:grid-cols-[1fr_auto]">
             <label
               className="grid gap-2 text-sm font-medium"
@@ -410,7 +269,7 @@ function OwnerSitesRuntime({
               />
             </label>
             <label
-              className="grid gap-2 text-sm font-medium"
+              className="grid gap-2 text-sm font-medium lg:hidden"
               htmlFor="owner-site-lifecycle"
             >
               Status
@@ -439,7 +298,8 @@ function OwnerSitesRuntime({
                 <TableRow>
                   <TableHead>Casamento</TableHead>
                   <TableHead>Data</TableHead>
-                  <TableHead>Status</TableHead>
+                  <TableHead>Situação</TableHead>
+                  <TableHead>Site e casal</TableHead>
                   <TableHead aria-label="Ação" />
                 </TableRow>
               </TableHeader>
@@ -467,6 +327,9 @@ function OwnerSitesRuntime({
                       >
                         {lifecycleLabel(site.lifecycle)}
                       </StatusSignal>
+                    </TableCell>
+                    <TableCell>
+                      <SiteAndCouple site={site} />
                     </TableCell>
                     <TableCell>
                       <Link
@@ -504,6 +367,7 @@ function OwnerSitesRuntime({
                 <span className="text-[0.88rem] text-admin-muted">
                   {site.coupleNames.join(" & ")}
                 </span>
+                <SiteAndCouple site={site} />
                 <small className="mt-1 text-admin-muted">
                   {formatBrazilianDate(site.eventDate)}
                 </small>
@@ -524,7 +388,7 @@ function OwnerSitesRuntime({
         cursor={cursor}
         onLoad={load}
         loading={loadingMore}
-        disabled={pending || loading}
+        disabled={loading}
         manualOnly={Boolean(error)}
         className="mt-[18px]"
       />
@@ -542,5 +406,31 @@ export function lifecycleLabel(value: string) {
         INACTIVE: "Inativo",
       } as Record<string, string>
     )[value] ?? value
+  );
+}
+
+function SiteAndCouple({ site }: { site: OwnerSiteListItem }) {
+  const couple = site.coupleAccess;
+  return (
+    <div className="grid gap-1">
+      <StatusSignal tone={site.publicUrl ? "success" : "neutral"}>
+        {site.publicUrl ? "Site vinculado" : "Site não vinculado"}
+      </StatusSignal>
+      {couple && (
+        <StatusSignal
+          tone={
+            couple.active ? "success" : couple.pending ? "pending" : "neutral"
+          }
+        >
+          {couple.active
+            ? "Acesso ativo"
+            : couple.pending
+              ? "Link ativo"
+              : couple.people
+                ? "Link ainda não gerado"
+                : "Ninguém cadastrado"}
+        </StatusSignal>
+      )}
+    </div>
   );
 }

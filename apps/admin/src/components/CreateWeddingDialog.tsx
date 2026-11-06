@@ -1,0 +1,513 @@
+import {
+  ownerAdminCreateInputSchema,
+  ownerSiteCreateInputSchema,
+} from "@entrelacos/contracts";
+import {
+  Badge,
+  Button,
+  DatePicker,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+  Input,
+} from "@entrelacos/ui";
+import { Check } from "lucide-react";
+import {
+  type FormEvent,
+  type ReactNode,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+import { adminStyles } from "../lib/adminStyles";
+import { formatBrazilianDate } from "./brazilianDate";
+import { GeneratedAccessLink } from "./GeneratedAccessLink";
+import { StatusSignal } from "./StatusSignal";
+import { adminAccessLink } from "./siteAdminMenu";
+import {
+  createWedding,
+  type WeddingCheckpoint,
+  type WeddingDraft,
+  type WeddingOutcome,
+  weddingSlug,
+} from "./weddingCreation";
+
+export function CreateWeddingDialog({
+  disabled,
+  current,
+  onCreated,
+  onFailure,
+  navigate,
+}: {
+  disabled: boolean;
+  current: () => boolean;
+  onCreated: () => void;
+  onFailure: (cause: unknown) => void;
+  navigate: (path: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const saving = useRef(false);
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!saving.current) setOpen(next);
+      }}
+    >
+      <Button
+        type="button"
+        className={primary}
+        disabled={disabled}
+        onClick={() => setOpen(true)}
+      >
+        Criar casamento
+      </Button>
+      {open && (
+        <WeddingDialogContent
+          current={current}
+          saving={saving}
+          onCreated={onCreated}
+          onFailure={onFailure}
+          navigate={navigate}
+          close={() => setOpen(false)}
+        />
+      )}
+    </Dialog>
+  );
+}
+
+const primary = "bg-admin-terracotta text-white hover:bg-admin-terracotta-deep";
+const fields = "grid gap-3 sm:grid-cols-2";
+
+function Block({
+  number,
+  title,
+  children,
+}: {
+  number: number;
+  title: string;
+  children: ReactNode;
+}) {
+  return (
+    <fieldset className="m-0 grid min-w-0 gap-3 border-0 p-0">
+      <legend className="mb-2 flex items-center gap-2.5 text-base font-bold">
+        <span className="grid size-7 shrink-0 place-items-center rounded-full bg-admin-terracotta text-sm text-white">
+          {number}
+        </span>
+        {title}
+      </legend>
+      {children}
+    </fieldset>
+  );
+}
+
+function WeddingDialogContent({
+  current,
+  saving,
+  onCreated,
+  onFailure,
+  navigate,
+  close,
+}: {
+  current: () => boolean;
+  onCreated: () => void;
+  onFailure: (cause: unknown) => void;
+  navigate: (path: string) => void;
+  close: () => void;
+  saving: React.RefObject<boolean>;
+}) {
+  const [first, setFirst] = useState("");
+  const [second, setSecond] = useState("");
+  const [editedName, setEditedName] = useState<string | null>(null);
+  const [editedSlug, setEditedSlug] = useState<string | null>(null);
+  const [editSlug, setEditSlug] = useState(false);
+  const [addAdmin, setAddAdmin] = useState(false);
+  const [issueLink, setIssueLink] = useState(false);
+  const [error, setError] = useState("");
+  const [pending, setPending] = useState(false);
+  const [outcome, setOutcome] = useState<WeddingOutcome | null>(null);
+  const checkpoint = useRef<WeddingCheckpoint>({});
+  const lastDraft = useRef<WeddingDraft | null>(null);
+  const key = useRef<string | null>(null);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  const active = () => mounted.current && current();
+  const name =
+    editedName ?? [first.trim(), second.trim()].filter(Boolean).join(" & ");
+  const slug = editedSlug ?? weddingSlug(first, second);
+  const fixed = Boolean(checkpoint.current.site);
+
+  async function save(draft: WeddingDraft) {
+    if (!active() || saving.current) return;
+    saving.current = true;
+    setPending(true);
+    setError("");
+    lastDraft.current = draft;
+    try {
+      const result = await createWedding(
+        draft,
+        checkpoint.current,
+        (value) => {
+          checkpoint.current = value;
+        },
+        active,
+      );
+      if (!result || !active()) return;
+      setOutcome(result);
+      onCreated();
+    } catch (cause) {
+      if (!active()) return;
+      onFailure(cause);
+      if (!active()) return;
+      setError(
+        checkpoint.current.userId
+          ? "O casamento e a pessoa já foram cadastrados. Tente gerar o link novamente."
+          : checkpoint.current.site
+            ? "O casamento já foi criado. Tente cadastrar a pessoa novamente."
+            : "Não foi possível criar o casamento. Confira os dados e tente novamente.",
+      );
+    } finally {
+      saving.current = false;
+      if (active()) setPending(false);
+    }
+  }
+
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (fixed && lastDraft.current) {
+      void save(lastDraft.current);
+      return;
+    }
+    const data = new FormData(event.currentTarget);
+    key.current ??= crypto.randomUUID();
+    const site = ownerSiteCreateInputSchema.safeParse({
+      provisioningKey: key.current,
+      repositorySlug: slug,
+      displayName: name,
+      coupleNames: [first, second],
+      eventDate: data.get("date"),
+    });
+    const admin = addAdmin
+      ? ownerAdminCreateInputSchema.safeParse({
+          name: data.get("adminName"),
+          email: data.get("adminEmail"),
+        })
+      : null;
+    if (!site.success || (admin && !admin.success)) {
+      setError(
+        "Confira os dados. Use apenas letras minúsculas, números e hífens no identificador do site.",
+      );
+      return;
+    }
+    void save({ site: site.data, admin: admin?.data ?? null, issueLink });
+  }
+
+  const draft = lastDraft.current;
+  const admin = draft?.admin;
+  return (
+    <DialogContent
+      showCloseButton
+      className={`${adminStyles.dialog} max-w-[640px] gap-5`}
+    >
+      {outcome && draft ? (
+        <>
+          <div className="flex items-start gap-3 pr-8">
+            <span className="grid size-10 shrink-0 place-items-center rounded-full bg-admin-success-wash text-admin-success-ink">
+              <Check aria-hidden="true" />
+            </span>
+            <div>
+              <DialogTitle className="font-admin-display text-2xl font-normal">
+                Casamento criado
+              </DialogTitle>
+              <DialogDescription>
+                {draft.site.displayName} foi cadastrado em rascunho.
+              </DialogDescription>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-admin-line bg-admin-canvas p-4">
+            <div className="min-w-0 break-words">
+              <strong>{draft.site.displayName}</strong>
+              <p className="m-0 text-sm text-admin-muted">
+                {draft.site.coupleNames.join(" e ")} ·{" "}
+                {formatBrazilianDate(draft.site.eventDate)}
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant="secondary">Rascunho</Badge>
+              <StatusSignal tone="neutral">Site não vinculado</StatusSignal>
+            </div>
+          </div>
+          {admin && outcome.access ? (
+            <GeneratedAccessLink
+              name={admin.name}
+              email={admin.email}
+              url={adminAccessLink(
+                window.location.origin,
+                outcome.access.token,
+                "ACTIVATION",
+              )}
+            />
+          ) : (
+            <div className="grid gap-3 rounded-xl border border-admin-line p-4">
+              <p className="m-0 text-sm text-admin-muted">
+                {admin
+                  ? `${admin.name} está cadastrado. O link de acesso ainda não foi gerado.`
+                  : "Ninguém do casal foi cadastrado. Você pode adicionar uma pessoa em Configurações → Acessos do casal."}
+              </p>
+              {admin && (
+                <Button
+                  type="button"
+                  className={`w-fit ${primary}`}
+                  disabled={pending}
+                  onClick={() => void save({ ...draft, issueLink: true })}
+                >
+                  {pending
+                    ? "Gerando…"
+                    : error
+                      ? "Tentar gerar novamente"
+                      : "Gerar link agora"}
+                </Button>
+              )}
+              {!admin && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-fit"
+                  onClick={() =>
+                    navigate(
+                      `/sites/${encodeURIComponent(outcome.site.id)}/settings?tab=access`,
+                    )
+                  }
+                >
+                  Cadastrar pessoa
+                </Button>
+              )}
+            </div>
+          )}
+          {error && (
+            <p role="alert" className={adminStyles.authError}>
+              {error}
+            </p>
+          )}
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={close}
+              disabled={pending}
+            >
+              Voltar para a lista
+            </Button>
+            <Button
+              type="button"
+              className={primary}
+              disabled={pending}
+              onClick={() =>
+                navigate(`/sites/${encodeURIComponent(outcome.site.id)}/home`)
+              }
+            >
+              Abrir casamento
+            </Button>
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="grid gap-1 pr-8">
+            <DialogTitle className="font-admin-display text-2xl font-normal">
+              Criar casamento
+            </DialogTitle>
+            <DialogDescription>
+              Cadastre o casal e a data. O casamento começa em rascunho e o
+              endereço público é vinculado depois.
+            </DialogDescription>
+          </div>
+          <form className="grid gap-5" onSubmit={submit}>
+            <Block number={1} title="Casal e data">
+              <div className={fields}>
+                <label
+                  className="grid gap-1.5 text-sm font-medium"
+                  htmlFor="new-wedding-first"
+                >
+                  Nome da pessoa 1
+                  <Input
+                    id="new-wedding-first"
+                    name="first"
+                    value={first}
+                    onChange={(event) => setFirst(event.target.value)}
+                    maxLength={120}
+                    required
+                    disabled={pending || fixed}
+                  />
+                </label>
+                <label
+                  className="grid gap-1.5 text-sm font-medium"
+                  htmlFor="new-wedding-second"
+                >
+                  Nome da pessoa 2
+                  <Input
+                    id="new-wedding-second"
+                    name="second"
+                    value={second}
+                    onChange={(event) => setSecond(event.target.value)}
+                    maxLength={120}
+                    required
+                    disabled={pending || fixed}
+                  />
+                </label>
+                <label
+                  className="grid gap-1.5 text-sm font-medium"
+                  htmlFor="new-wedding-date"
+                >
+                  Data do casamento
+                  <DatePicker
+                    id="new-wedding-date"
+                    name="date"
+                    required
+                    disabled={pending || fixed}
+                  />
+                </label>
+                <label
+                  className="grid gap-1.5 text-sm font-medium"
+                  htmlFor="new-wedding-name"
+                >
+                  Nome do casamento
+                  <Input
+                    id="new-wedding-name"
+                    name="name"
+                    value={name}
+                    onChange={(event) => setEditedName(event.target.value)}
+                    maxLength={160}
+                    required
+                    disabled={pending || fixed}
+                  />
+                </label>
+              </div>
+            </Block>
+            <Block number={2} title="Quem vai administrar (opcional)">
+              <label className="flex items-center gap-2 text-sm font-medium">
+                <input
+                  type="checkbox"
+                  checked={addAdmin}
+                  onChange={(event) => setAddAdmin(event.target.checked)}
+                  disabled={pending || fixed}
+                />{" "}
+                Cadastrar alguém do casal agora
+              </label>
+              {addAdmin && (
+                <>
+                  <div className={fields}>
+                    <label
+                      className="grid gap-1.5 text-sm font-medium"
+                      htmlFor="new-wedding-adminName"
+                    >
+                      Nome
+                      <Input
+                        id="new-wedding-adminName"
+                        name="adminName"
+                        maxLength={160}
+                        required
+                        disabled={pending || fixed}
+                      />
+                    </label>
+                    <label
+                      className="grid gap-1.5 text-sm font-medium"
+                      htmlFor="new-wedding-adminEmail"
+                    >
+                      E-mail
+                      <Input
+                        id="new-wedding-adminEmail"
+                        name="adminEmail"
+                        type="email"
+                        maxLength={320}
+                        required
+                        disabled={pending || fixed}
+                      />
+                    </label>
+                  </div>
+                  <label className="flex items-center gap-2 text-sm font-medium">
+                    <input
+                      type="checkbox"
+                      checked={issueLink}
+                      onChange={(event) => setIssueLink(event.target.checked)}
+                      disabled={pending || fixed}
+                    />{" "}
+                    Gerar link de acesso ao criar
+                  </label>
+                  <p className="m-0 text-xs text-admin-muted">
+                    O link vale por 24 horas. Você também pode gerar em
+                    Configurações → Acessos do casal.
+                  </p>
+                </>
+              )}
+            </Block>
+            <Block number={3} title="Identificador do site">
+              {editSlug ? (
+                <label
+                  className="grid gap-1.5 text-sm font-medium"
+                  htmlFor="new-wedding-slug"
+                >
+                  Identificador
+                  <Input
+                    id="new-wedding-slug"
+                    name="slug"
+                    value={slug}
+                    onChange={(event) => setEditedSlug(event.target.value)}
+                    maxLength={64}
+                    required
+                    disabled={pending || fixed}
+                  />
+                </label>
+              ) : (
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-admin-line bg-admin-canvas p-3 text-sm">
+                  <span className="break-all">
+                    Identificador do site: <strong>{slug || "—"}</strong>
+                  </span>
+                  <Button
+                    type="button"
+                    variant="link"
+                    onClick={() => setEditSlug(true)}
+                    disabled={pending || fixed}
+                  >
+                    Alterar
+                  </Button>
+                </div>
+              )}
+              <p className="m-0 text-xs text-admin-muted">
+                O identificador não pode ser alterado depois. Use letras
+                minúsculas, números e hífens.
+              </p>
+            </Block>
+            {error && (
+              <p role="alert" className={adminStyles.authError}>
+                {error}
+              </p>
+            )}
+            <div className="flex flex-wrap justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={close}
+                disabled={pending}
+              >
+                Cancelar
+              </Button>
+              <Button type="submit" className={primary} disabled={pending}>
+                {pending
+                  ? "Salvando…"
+                  : error
+                    ? "Tentar novamente"
+                    : "Criar casamento"}
+              </Button>
+            </div>
+          </form>
+        </>
+      )}
+    </DialogContent>
+  );
+}

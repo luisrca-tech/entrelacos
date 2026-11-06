@@ -123,20 +123,20 @@ async function change(
   );
 }
 async function invitationForm() {
-  await act(async () => button("Novo casamento").click());
+  await act(async () => button("Criar casamento").click());
+  await act(async () => button("Alterar").click());
   const form = document.querySelector<HTMLFormElement>("form");
   if (!form) throw new Error("Expected create wedding form");
   for (const [name, value] of Object.entries({
     name: "Clara e Davi",
     slug: "clara-e-davi",
-    key: "wedding-clara-davi-2027",
     first: "Davi",
     second: "Clara",
     date: "2027-08-12",
   })) {
     const field = form.querySelector<HTMLInputElement>(`[name="${name}"]`);
     if (!field) throw new Error(`Missing field: ${name}`);
-    field.value = value;
+    await change(field, value);
   }
   return form;
 }
@@ -151,7 +151,7 @@ async function submit(form: HTMLFormElement) {
 it("does not load sites or expose create controls before a verified owner session", async () => {
   await mount();
   expect(request).not.toHaveBeenCalled();
-  expect(container.textContent).not.toContain("Novo casamento");
+  expect(container.textContent).not.toContain("Criar casamento");
 });
 
 it("distinguishes loading from empty and retries a safe loading error", async () => {
@@ -247,19 +247,23 @@ it("preserves all create fields and the registration reference after failure, th
     method: "POST",
     body: {
       repositorySlug: "clara-e-davi",
-      provisioningKey: "wedding-clara-davi-2027",
+      provisioningKey: expect.stringMatching(/^[0-9a-f-]{36}$/),
       displayName: "Clara e Davi",
       coupleNames: ["Davi", "Clara"],
       eventDate: "2027-08-12",
     },
   };
   expect(request).toHaveBeenLastCalledWith("/v1/owner/sites", expected);
-  expect(
-    document.querySelector('[name="key"]')?.getAttribute("required"),
-  ).not.toBeNull();
+  const initial = request.mock.lastCall;
+  expect(document.querySelector('[name="key"]')).toBeNull();
   request.mockResolvedValueOnce({ site: { ...sites[0], id: "new-site" } });
+  request.mockResolvedValueOnce({ sites, nextCursor: null });
   await submit(form);
-  expect(request).toHaveBeenLastCalledWith("/v1/owner/sites", expected);
+  expect(
+    request.mock.calls.filter(([, options]) => options?.method === "POST"),
+  ).toEqual([initial, initial]);
+  expect(document.body.textContent).toContain("Casamento criado");
+  await act(async () => button("Abrir casamento").click());
   expect(navigate).toHaveBeenCalledWith("/sites/new-site/home");
 });
 
