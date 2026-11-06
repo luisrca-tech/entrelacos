@@ -1,4 +1,7 @@
-import type { SiteMessageRecord } from "@entrelacos/contracts";
+import {
+  type SiteMessageRecord,
+  siteHomeSummarySchema,
+} from "@entrelacos/contracts";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -27,6 +30,8 @@ import { OverflowMenu } from "./OverflowMenu";
 type Props = {
   siteId: string;
   lifecycle: "DRAFT" | "IN_REVIEW" | "ACTIVE" | "INACTIVE";
+  /** Public wedding site, linked from the empty state when known. */
+  publicUrl?: string | null;
 };
 
 type MessagesResponse = {
@@ -34,10 +39,11 @@ type MessagesResponse = {
   nextCursor: string | null;
 };
 
-export function MessagesSection({ siteId, lifecycle }: Props) {
+export function MessagesSection({ siteId, lifecycle, publicUrl }: Props) {
   const base = `/v1/sites/${encodeURIComponent(siteId)}`;
   const [messages, setMessages] = useState<SiteMessageRecord[]>([]);
   const [muralEnabled, setMuralEnabled] = useState(false);
+  const [total, setTotal] = useState<number | null>(null);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -60,15 +66,23 @@ export function MessagesSection({ siteId, lifecycle }: Props) {
       setLoadingMore(Boolean(cursor));
       setError("");
       try {
-        const [response, mural] = await Promise.all([
+        const [response, mural, summary] = await Promise.all([
           apiRequest<MessagesResponse>(
             `${base}/messages?${messagesQuery(search, cursor)}`,
           ),
           cursor
             ? Promise.resolve(null)
             : apiRequest<{ siteId: string; enabled: boolean }>(`${base}/mural`),
+          // The wedding-wide total is a nicety: the list works without it.
+          cursor
+            ? Promise.resolve(null)
+            : Promise.resolve()
+                .then(() => apiRequest(`${base}/home-summary`))
+                .then((value) => siteHomeSummarySchema.safeParse(value))
+                .catch(() => null),
         ]);
         if (requestVersionForLoad !== requestVersion.current) return;
+        if (!cursor) setTotal(summary?.data?.messages ?? null);
         setMessages((current) =>
           mergeSiteMessages(current, response.messages, Boolean(cursor)),
         );
@@ -201,9 +215,19 @@ export function MessagesSection({ siteId, lifecycle }: Props) {
 
       <div className="grid gap-4">
         <div className="grid gap-3 sm:flex sm:items-center sm:justify-between">
-          <h2 className="m-0 shrink-0 font-admin-display text-xl text-admin-graphite">
-            Mensagens recebidas
-          </h2>
+          <div className="flex shrink-0 flex-wrap items-center gap-2.5">
+            <h2 className="m-0 font-admin-display text-xl text-admin-graphite">
+              Mensagens recebidas
+            </h2>
+            {total !== null && total > 0 && (
+              <Badge
+                variant="secondary"
+                className="bg-admin-beige font-bold text-admin-body"
+              >
+                {total} {total === 1 ? "mensagem" : "mensagens"}
+              </Badge>
+            )}
+          </div>
           <label
             className="relative block w-full sm:max-w-sm"
             htmlFor="message-author-search"
@@ -227,7 +251,7 @@ export function MessagesSection({ siteId, lifecycle }: Props) {
                 setLoading(true);
                 setError("");
               }}
-              placeholder="Buscar por nome"
+              placeholder="Buscar pelo nome de quem publicou"
               className="min-h-11 border-admin-line bg-admin-surface pl-10"
             />
           </label>
@@ -262,28 +286,46 @@ export function MessagesSection({ siteId, lifecycle }: Props) {
             </p>
           ) : (
             <div
-              className={`${adminStyles.surface} grid max-w-full gap-2 p-6 sm:p-8`}
+              className={`${adminStyles.surface} grid max-w-full items-center gap-8 p-6 sm:p-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,320px)]`}
             >
-              <span className="mb-2 grid size-11 place-items-center rounded-xl bg-admin-terracotta-wash text-admin-terracotta-deep">
-                <MessageCircle aria-hidden="true" className="size-5" />
-              </span>
-              <h3 className="text-admin-graphite">Nenhuma mensagem ainda</h3>
-              <p className="m-0 text-sm font-semibold text-admin-ink">
-                As mensagens dos visitantes aparecerão aqui.
-              </p>
-              <p className="m-0 max-w-xl text-sm leading-relaxed text-admin-muted">
-                Quando alguém deixar um recado no mural do site, ele aparece
-                nesta página. Vocês podem ler tudo e remover o que não quiserem
-                manter publicado.
-              </p>
+              <div className="grid gap-2">
+                <span className="mb-2 grid size-11 place-items-center rounded-xl bg-admin-terracotta-wash text-admin-terracotta-deep">
+                  <MessageCircle aria-hidden="true" className="size-5" />
+                </span>
+                <h3 className="text-admin-graphite">Nenhuma mensagem ainda</h3>
+                <p className="m-0 text-sm font-semibold text-admin-ink">
+                  As mensagens dos visitantes aparecerão aqui.
+                </p>
+                <p className="m-0 max-w-xl text-sm leading-relaxed text-admin-muted">
+                  Quando alguém deixar um recado no mural do site, ele aparece
+                  nesta página. Vocês podem ler tudo e remover o que não
+                  quiserem manter publicado.
+                </p>
+                {publicUrl && (
+                  <a
+                    className="mt-1 w-fit text-sm font-semibold text-admin-terracotta-deep no-underline hover:underline"
+                    href={publicUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Abrir o mural no site <span aria-hidden="true">→</span>
+                  </a>
+                )}
+              </div>
+              <MuralPreview />
             </div>
           )
         ) : (
-          <div className="grid items-start gap-4 md:grid-cols-2">
+          // CSS columns keep the DOM (and keyboard) order newest-first while
+          // cards of different heights pack without gaps.
+          <div
+            className="-mb-4 gap-4 md:columns-2"
+            data-layout="message-columns"
+          >
             {messages.map((message) => (
               <article
                 key={message.id}
-                className={`${adminStyles.surface} min-w-0 p-5 [@media(max-width:600px)]:p-4`}
+                className={`${adminStyles.surface} mb-4 min-w-0 break-inside-avoid p-5 [@media(max-width:600px)]:p-4`}
               >
                 <div className="flex min-w-0 items-start gap-3">
                   <span
@@ -382,5 +424,55 @@ export function MessagesSection({ siteId, lifecycle }: Props) {
         className="justify-self-center"
       />
     </section>
+  );
+}
+
+/**
+ * Static illustration of the public mural while it is still empty. It reuses
+ * the public MessageMural copy and has nothing interactive in it.
+ */
+function MuralPreview() {
+  return (
+    <figure
+      className="m-0 grid min-w-0 gap-2"
+      aria-label="Como aparece no site"
+    >
+      <figcaption className="text-[11px] font-bold uppercase tracking-[0.13em] text-admin-muted">
+        Como aparece no site
+      </figcaption>
+      <div className="grid gap-3 rounded-xl border border-dashed border-admin-line-strong bg-admin-canvas p-4">
+        <div>
+          <p className="m-0 text-[11px] font-bold uppercase tracking-[0.13em] text-admin-terracotta-deep">
+            Recados
+          </p>
+          <p className="m-0 font-admin-display text-xl text-admin-ink">
+            Mural dos convidados
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2 text-xs font-semibold">
+          <span className="rounded-full bg-admin-ink px-3 py-1.5 text-white">
+            Deixar uma mensagem
+          </span>
+          <span className="rounded-full border border-admin-line-strong px-3 py-1.5 text-admin-graphite">
+            Atualizar
+          </span>
+        </div>
+        <p className="m-0 rounded-lg bg-admin-surface px-3 py-2.5 text-xs text-admin-muted">
+          Ainda não há mensagens publicadas.
+        </p>
+        <div className="grid grid-cols-2 gap-2" aria-hidden="true">
+          {[0, 1].map((card) => (
+            <span
+              key={card}
+              className="grid gap-1.5 rounded-lg border border-dashed border-admin-line p-3"
+            >
+              <span className="h-1.5 w-4/5 rounded-full bg-admin-beige" />
+              <span className="h-1.5 w-3/5 rounded-full bg-admin-beige" />
+              <span className="h-1.5 w-2/5 rounded-full bg-admin-beige" />
+            </span>
+          ))}
+        </div>
+      </div>
+    </figure>
   );
 }

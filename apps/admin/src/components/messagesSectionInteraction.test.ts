@@ -209,3 +209,57 @@ it("explains where messages come from while the mural is still empty", async () 
     "Quando alguém deixar um recado no mural do site",
   );
 });
+
+it("previews how the empty mural appears on the public site", async () => {
+  request.mockImplementation(async (path: string) =>
+    path.endsWith("/mural")
+      ? { enabled: true }
+      : path.endsWith("/home-summary")
+        ? { messages: 0 }
+        : { messages: [], nextCursor: null },
+  );
+  await act(async () => {
+    root.render(
+      createElement(MessagesSection, {
+        siteId: "site-1",
+        lifecycle: "ACTIVE",
+        publicUrl: "https://ana-e-pedro.example.com/",
+      }),
+    );
+  });
+  await act(async () => {
+    await vi.runAllTimersAsync();
+  });
+  const preview = container.querySelector(
+    '[aria-label="Como aparece no site"]',
+  );
+  expect(preview?.textContent).toContain("Recados");
+  expect(preview?.textContent).toContain("Mural dos convidados");
+  expect(preview?.textContent).toContain("Deixar uma mensagem");
+  expect(preview?.textContent).toContain("Ainda não há mensagens publicadas.");
+  // The preview is an illustration: nothing in it can be activated.
+  expect(preview?.querySelectorAll("button, a, input")).toHaveLength(0);
+  const link = container.querySelector<HTMLAnchorElement>(
+    'a[href="https://ana-e-pedro.example.com/"]',
+  );
+  expect(link?.textContent).toContain("Abrir o mural no site");
+  expect(container.textContent).not.toMatch(/\d+ mensagens?/);
+});
+
+it("shows the wedding-wide message total beside the received messages heading", async () => {
+  request.mockImplementation(async (path: string) =>
+    path.endsWith("/mural")
+      ? { enabled: true }
+      : path.endsWith("/home-summary")
+        ? { messages: 12 }
+        : { messages: [message], nextCursor: "next" },
+  );
+  await mount();
+  const heading = [...container.querySelectorAll("h2")].find(
+    (entry) => entry.textContent === "Mensagens recebidas",
+  );
+  expect(heading?.parentElement?.textContent).toContain("12 mensagens");
+  expect(
+    container.querySelector('[data-layout="message-columns"]'),
+  ).not.toBeNull();
+});

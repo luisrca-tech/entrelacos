@@ -534,7 +534,11 @@ export function SiteWorkspace({
         />
       )}
       {area === "messages" && (
-        <MessagesSection siteId={site.id} lifecycle={site.lifecycle} />
+        <MessagesSection
+          siteId={site.id}
+          lifecycle={site.lifecycle}
+          publicUrl={site.publicUrl}
+        />
       )}
       {area === "gifts" && (
         <GiftsSection
