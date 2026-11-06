@@ -17,6 +17,7 @@ import { Search } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { adminStyles } from "../lib/adminStyles";
 import { apiRequest } from "../lib/apiClient";
+import { LoadMoreButton } from "./LoadMoreButton";
 import { mergeSiteMessages, messageAdminError } from "./messageAdmin";
 import { messagesQuery } from "./messageSearch";
 
@@ -315,17 +316,15 @@ export function MessagesSection({ siteId, lifecycle }: Props) {
         </AlertDialogContent>
       </AlertDialog>
 
-      {nextCursor && (
-        <Button
-          type="button"
-          variant="outline"
-          className="justify-self-center"
-          disabled={loading || loadingMore || Boolean(pending)}
-          onClick={() => void load(nextCursor, searchInput)}
-        >
-          {loadingMore ? "Carregando mais…" : "Ver mais mensagens"}
-        </Button>
-      )}
+      <LoadMoreButton
+        cursor={nextCursor}
+        onLoad={(cursor) => load(cursor, searchInput)}
+        loading={loadingMore}
+        disabled={loading || Boolean(pending)}
+        manualOnly={Boolean(error)}
+        label="Ver mais mensagens"
+        className="justify-self-center"
+      />
     </section>
   );
 }

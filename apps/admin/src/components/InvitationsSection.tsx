@@ -3,6 +3,7 @@ import type {
   InvitationAccessPinResponse,
   InvitationCreateInput,
   InvitationDeleteConfirmation,
+  InvitationPage,
   InvitationRecord,
   RsvpDeadline,
   RsvpHistoryResponse,
@@ -34,12 +35,10 @@ import {
   invitationExportPath,
 } from "./invitationExport";
 import { emitInvitationsChanged } from "./invitationsRefresh";
-import {
-  filterInvitations,
-  type InvitationFilters,
-  summarizeInvitations,
-} from "./invitationView";
+import { type InvitationFilters, summarizeInvitations } from "./invitationView";
+import { LoadMoreButton } from "./LoadMoreButton";
 import { ManageConfirmationsDialog } from "./ManageConfirmationsDialog";
+import { isCurrentPanelSessionEpoch, panelActorOwner } from "./panelActor";
 import {
   deadlineInstantFromLocal,
   deadlineLocalFromInstant,
@@ -49,6 +48,7 @@ import {
 
 type Props = {
   siteId: string;
+  sessionEpoch: number | null;
   lifecycle: "DRAFT" | "IN_REVIEW" | "ACTIVE" | "INACTIVE";
 };
 
@@ -63,12 +63,18 @@ function exportFilename(disposition: string | null, fallback: string): string {
   return filename?.[1] ?? fallback;
 }
 
-export function InvitationsSection({ siteId, lifecycle }: Props) {
+export function InvitationsSection({ siteId, lifecycle, sessionEpoch }: Props) {
   const base = `/v1/sites/${encodeURIComponent(siteId)}`;
   const invitationBase = `${base}/invitations`;
   const inactive = lifecycle === "INACTIVE";
   const [invitations, setInvitations] = useState<InvitationRecord[]>([]);
   const [filters, setFilters] = useState<InvitationFilters>(emptyFilters);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [pageError, setPageError] = useState("");
+  const request = useRef(0);
+  const currentFilters = useRef(filters);
+  currentFilters.current = filters;
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -100,29 +106,62 @@ export function InvitationsSection({ siteId, lifecycle }: Props) {
     invitations.find((item) => item.id === editId) ?? null;
   const deletingInvitation =
     invitations.find((item) => item.id === deleteId) ?? null;
-  const filtered = useMemo(
-    () => filterInvitations(invitations, filters),
-    [invitations, filters],
-  );
+  const filtered = invitations;
   const summary = useMemo(
     () => summarizeInvitations(invitations),
     [invitations],
   );
 
-  const loadInvitations = useCallback(async () => {
-    setLoading(true);
-    try {
-      const response = await apiRequest<{ invitations: InvitationRecord[] }>(
-        invitationBase,
-      );
-      setInvitations(response.invitations);
-      setError("");
-    } catch (cause) {
-      setError(invitationAdminError(cause));
-    } finally {
-      setLoading(false);
-    }
-  }, [invitationBase]);
+  const loadInvitations = useCallback(
+    async (cursor?: string) => {
+      if (!isCurrentPanelSessionEpoch(sessionEpoch)) return;
+      const attempt = ++request.current;
+      const current = () =>
+        attempt === request.current && isCurrentPanelSessionEpoch(sessionEpoch);
+      if (cursor) setLoadingMore(true);
+      else setLoading(true);
+      setPageError("");
+      const selected = currentFilters.current;
+      const query = new URLSearchParams({ limit: "30" });
+      if (selected.search.trim()) query.set("search", selected.search.trim());
+      if (selected.status !== "ALL") query.set("status", selected.status);
+      if (selected.guestType !== "ALL")
+        query.set("guestType", selected.guestType);
+      if (cursor) query.set("cursor", cursor);
+      try {
+        const response = await apiRequest<InvitationPage>(
+          `${invitationBase}?${query}`,
+        );
+        if (!current()) return;
+        setInvitations((previous) =>
+          cursor
+            ? [
+                ...new Map(
+                  [...previous, ...response.invitations].map((item) => [
+                    item.id,
+                    item,
+                  ]),
+                ).values(),
+              ]
+            : response.invitations,
+        );
+        setNextCursor(response.nextCursor);
+        setError("");
+      } catch (cause) {
+        if (!current()) return;
+        panelActorOwner.reportFailure(cause, sessionEpoch);
+        if (!current()) return;
+        if (cursor) setPageError("Não foi possível carregar mais convites.");
+        else setError(invitationAdminError(cause));
+      } finally {
+        if (current()) {
+          setLoading(false);
+          setLoadingMore(false);
+        }
+      }
+    },
+    [invitationBase, sessionEpoch],
+  );
 
   const loadConfirmations = useCallback(async () => {
     const response = await apiRequest<SiteRsvpResponse>(`${base}/rsvp`);
@@ -149,8 +188,17 @@ export function InvitationsSection({ siteId, lifecycle }: Props) {
   );
 
   useEffect(() => {
-    void loadInvitations();
-  }, [loadInvitations]);
+    setNextCursor(null);
+    setLoading(true);
+    const timeout = setTimeout(
+      () => void loadInvitations(),
+      filters.search ? 250 : 0,
+    );
+    return () => {
+      clearTimeout(timeout);
+      request.current++;
+    };
+  }, [loadInvitations, filters]);
 
   async function mutate<T>(
     operation: () => Promise<T>,
@@ -444,6 +492,19 @@ export function InvitationsSection({ siteId, lifecycle }: Props) {
               }}
             />
           )}
+          {pageError && (
+            <p role="alert" className="text-sm text-admin-danger-ink">
+              {pageError}
+            </p>
+          )}
+          <LoadMoreButton
+            cursor={nextCursor}
+            onLoad={loadInvitations}
+            loading={loadingMore}
+            disabled={loading || busy}
+            manualOnly={Boolean(pageError)}
+            label="Carregar mais convites"
+          />
         </div>
       </div>
       <InvitationFormDialog

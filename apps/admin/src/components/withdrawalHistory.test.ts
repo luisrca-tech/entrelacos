@@ -40,15 +40,17 @@ describe("withdrawal history client", () => {
     const fetcher = vi
       .fn<typeof fetch>()
       .mockResolvedValue(
-        new Response(JSON.stringify({ withdrawals: [withdrawal] })),
+        new Response(
+          JSON.stringify({ withdrawals: [withdrawal], nextCursor: null }),
+        ),
       );
     await expect(
       loadWithdrawalHistory("wedding-a", access, (path) =>
         apiRequest(path, {}, fetcher),
       ),
-    ).resolves.toEqual([withdrawal]);
+    ).resolves.toEqual({ withdrawals: [withdrawal], nextCursor: null });
     expect(fetcher).toHaveBeenCalledExactlyOnceWith(
-      "/api/v1/sites/wedding-a/withdrawals",
+      "/api/v1/sites/wedding-a/withdrawals?limit=20",
       {
         method: "GET",
         credentials: "same-origin",
@@ -62,9 +64,9 @@ describe("withdrawal history client", () => {
       loadWithdrawalHistory(
         "wedding-a",
         access,
-        vi.fn().mockResolvedValue({ withdrawals: [] }),
+        vi.fn().mockResolvedValue({ withdrawals: [], nextCursor: null }),
       ),
-    ).resolves.toEqual([]);
+    ).resolves.toEqual({ withdrawals: [], nextCursor: null });
   });
   it.each([
     null,

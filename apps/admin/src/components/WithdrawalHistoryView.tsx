@@ -3,6 +3,7 @@ import { showSandboxNotice } from "@entrelacos/ui";
 import { RefreshCw } from "lucide-react";
 import type { ReactNode } from "react";
 import { canReadFinancialOverview } from "./financialOverview";
+import { LoadMoreButton } from "./LoadMoreButton";
 import {
   readyCard,
   readyCardTitle,
@@ -200,11 +201,17 @@ export function WithdrawalHistoryView({
   access,
   result,
   onRefresh,
+  onLoadMore,
+  loadingMore,
+  pageError,
 }: {
   siteId: string;
   access: SiteAccess | null;
   result: WithdrawalHistoryResult;
   onRefresh?: () => void;
+  onLoadMore?: (cursor: string) => Promise<void>;
+  loadingMore?: boolean;
+  pageError?: boolean;
 }) {
   const { authorized, withdrawals, invalid } = readWithdrawals(
     siteId,
@@ -249,6 +256,26 @@ export function WithdrawalHistoryView({
       ) : (
         <HistoryMessage result={result} invalid={invalid} />
       )}
+      {authorized &&
+        !invalid &&
+        result.status === "ready" &&
+        result.nextCursor &&
+        onLoadMore && (
+          <div className="grid justify-items-start gap-2 px-6 pb-3">
+            {pageError && (
+              <p role="alert" className="m-0 text-sm text-admin-danger-ink">
+                Não foi possível carregar mais saques.
+              </p>
+            )}
+            <LoadMoreButton
+              cursor={result.nextCursor}
+              onLoad={onLoadMore}
+              loading={loadingMore}
+              manualOnly={pageError}
+              label="Carregar mais saques"
+            />
+          </div>
+        )}
     </section>
   );
 }

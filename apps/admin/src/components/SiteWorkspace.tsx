@@ -520,7 +520,11 @@ export function SiteWorkspace({
         />
       )}
       {area === "invitations" && (
-        <InvitationsSection siteId={site.id} lifecycle={site.lifecycle} />
+        <InvitationsSection
+          siteId={site.id}
+          lifecycle={site.lifecycle}
+          sessionEpoch={sessionEpoch}
+        />
       )}
       {area === "messages" && (
         <MessagesSection siteId={site.id} lifecycle={site.lifecycle} />

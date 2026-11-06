@@ -26,6 +26,7 @@ import {
   filterLoadedGiftPurchases,
   type GiftPurchaseMethodFilter,
 } from "./giftPurchaseFilters";
+import { LoadMoreButton } from "./LoadMoreButton";
 import {
   readyCard,
   readyLinkButton,
@@ -455,18 +456,16 @@ export function GiftPaymentHistoryView(
             state.status === "unavailable" ||
             state.status === "conflict") && (
             <div className="flex flex-wrap gap-3 border-t border-admin-beige px-5 py-3">
-              {state.nextIndexCursor && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={disabled}
-                  onClick={() => {
-                    void active?.loadMoreIndex(state.nextIndexCursor as string);
-                  }}
-                >
-                  Carregar mais compras
-                </Button>
-              )}
+              <LoadMoreButton
+                cursor={state.nextIndexCursor}
+                onLoad={(cursor) => active?.loadMoreIndex(cursor)}
+                loading={state.busy}
+                disabled={disabled}
+                manualOnly={
+                  state.status === "unavailable" || state.status === "conflict"
+                }
+                label="Carregar mais compras"
+              />
               {(state.status === "unavailable" ||
                 state.status === "conflict") && (
                 <Button

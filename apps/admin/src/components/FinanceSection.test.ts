@@ -304,7 +304,7 @@ describe("withdrawal settlement read invalidation", () => {
       .mockResolvedValue(overview);
     const historyRead = vi
       .spyOn(withdrawalHistory, "loadWithdrawalHistory")
-      .mockResolvedValue([]);
+      .mockResolvedValue({ withdrawals: [], nextCursor: null });
     const node = document.createElement("div");
     document.body.append(node);
     const root = createRoot(node);
@@ -344,7 +344,10 @@ describe("withdrawal settlement read invalidation", () => {
       const signal = withdrawalSignals.callbacks.at(-1);
       expect(signal).toBeTypeOf("function");
       expect(f.node.textContent).toContain("Ainda não há saques registrados");
-      f.historyRead.mockResolvedValue([requested]);
+      f.historyRead.mockResolvedValue({
+        withdrawals: [requested],
+        nextCursor: null,
+      });
       await act(async () => signal?.());
       expect(f.overviewRead).toHaveBeenCalledTimes(2);
       expect(f.historyRead).toHaveBeenCalledTimes(2);
@@ -403,15 +406,23 @@ describe("withdrawal settlement read invalidation", () => {
   it("hides the previous session's history until its own fresh read settles", async () => {
     const f = await setup();
     try {
-      f.historyRead.mockResolvedValue([requested]);
+      f.historyRead.mockResolvedValue({
+        withdrawals: [requested],
+        nextCursor: null,
+      });
       await act(async () => withdrawalSignals.callbacks.at(-1)?.());
       expect(f.node.textContent).toContain("Solicitado");
-      const current = pending<WithdrawalIntent[]>();
+      const current = pending<{
+        withdrawals: WithdrawalIntent[];
+        nextCursor: null;
+      }>();
       f.historyRead.mockReturnValueOnce(current.promise);
       await f.render({ sessionEpoch: 8 });
       expect(f.node.textContent).toContain("Consultando o histórico de saques");
       expect(f.node.textContent).not.toContain("Solicitado");
-      await act(async () => current.resolve([]));
+      await act(async () =>
+        current.resolve({ withdrawals: [], nextCursor: null }),
+      );
       expect(f.node.textContent).toContain("Ainda não há saques registrados");
     } finally {
       await f.cleanup();
@@ -422,14 +433,23 @@ describe("withdrawal settlement read invalidation", () => {
     try {
       const signal = withdrawalSignals.callbacks.at(-1);
       expect(signal).toBeTypeOf("function");
-      const older = pending<WithdrawalIntent[]>();
+      const older = pending<{
+        withdrawals: WithdrawalIntent[];
+        nextCursor: null;
+      }>();
       f.historyRead.mockReturnValueOnce(older.promise);
       await act(async () => signal?.());
-      f.historyRead.mockResolvedValue([requested]);
+      f.historyRead.mockResolvedValue({
+        withdrawals: [requested],
+        nextCursor: null,
+      });
       await act(async () => signal?.());
       expect(f.node.textContent).toContain("Solicitado");
       await act(async () =>
-        older.resolve([{ ...requested, state: "COMPLETED" }]),
+        older.resolve({
+          withdrawals: [{ ...requested, state: "COMPLETED" }],
+          nextCursor: null,
+        }),
       );
       expect(f.node.textContent).toContain("Solicitado");
       expect(f.node.textContent).not.toContain("Concluído");
@@ -449,7 +469,7 @@ describe("receiving page read isolation", () => {
         .mockResolvedValue(null as never);
       const historyRead = vi
         .spyOn(withdrawalHistory, "loadWithdrawalHistory")
-        .mockResolvedValue([]);
+        .mockResolvedValue({ withdrawals: [], nextCursor: null });
       const node = document.createElement("div");
       document.body.append(node);
       const root = createRoot(node);

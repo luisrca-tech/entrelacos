@@ -1,7 +1,7 @@
 import type {
   FinancialOverview,
   SiteAccess,
-  WithdrawalIntent,
+  WithdrawalPage,
 } from "@entrelacos/contracts";
 import { Button } from "@entrelacos/ui";
 import { Landmark } from "lucide-react";
@@ -35,6 +35,7 @@ import {
   useGiftPaymentHistory,
 } from "./GiftPaymentHistoryView";
 import type { HistoryPorts } from "./giftPaymentHistory";
+import { isCurrentPanelSessionEpoch, panelActorOwner } from "./panelActor";
 import { ReadOnlyNote, readyCard, readyLabel } from "./receivingUi";
 import type { SavedPixDestinationSummary } from "./savedPixDestination";
 import {
@@ -77,11 +78,14 @@ export function FinanceSection({
 }) {
   const [overviewRead, setOverviewRead] =
     useState<SessionFinancialRead<FinancialOverview> | null>(null);
-  const [historyRead, setHistoryRead] = useState<SessionFinancialRead<
-    WithdrawalIntent[]
-  > | null>(null);
+  const [historyRead, setHistoryRead] =
+    useState<SessionFinancialRead<WithdrawalPage> | null>(null);
   const [overviewRevision, setOverviewRevision] = useState(0);
   const [historyRevision, setHistoryRevision] = useState(0);
+  const [nextHistoryState, setNextHistoryState] = useState<
+    "loading" | "error" | null
+  >(null);
+  const historyRequest = useRef(0);
   const eligible = canReadFinancialOverview(siteId, access);
   const liveScope = useRef({ siteId, access, sessionEpoch, eligible });
   liveScope.current = { siteId, access, sessionEpoch, eligible };
@@ -115,11 +119,12 @@ export function FinanceSection({
     );
   }, [siteId, access, eligible, sessionEpoch, overviewRevision]);
   useEffect(() => {
+    setNextHistoryState(null);
     if (!eligible || page === "payments") {
       setHistoryRead(null);
       return;
     }
-    return observeFinancialRead(
+    const stop = observeFinancialRead(
       () => loadWithdrawalHistory(siteId, access),
       (result) =>
         setHistoryRead({
@@ -130,6 +135,10 @@ export function FinanceSection({
           result,
         }),
     );
+    return () => {
+      historyRequest.current++;
+      stop();
+    };
   }, [siteId, access, eligible, sessionEpoch, historyRevision, page]);
   const overview = currentFinancialRead(
     overviewRead?.sessionEpoch === sessionEpoch ? overviewRead : null,
@@ -145,8 +154,55 @@ export function FinanceSection({
   );
   const historyResult: WithdrawalHistoryResult =
     history?.status === "ready"
-      ? { status: "ready", withdrawals: history.value }
+      ? { status: "ready", ...history.value }
       : (history ?? { status: "loading" });
+  async function loadMoreHistory(cursor: string) {
+    if (
+      !eligible ||
+      history?.status !== "ready" ||
+      history.value.nextCursor !== cursor ||
+      !isCurrentPanelSessionEpoch(sessionEpoch)
+    )
+      return;
+    const version = ++historyRequest.current;
+    const current = () =>
+      historyRequest.current === version &&
+      isCurrentPanelSessionEpoch(sessionEpoch);
+    setNextHistoryState("loading");
+    try {
+      const next = await loadWithdrawalHistory(
+        siteId,
+        access,
+        undefined,
+        cursor,
+      );
+      if (!current()) return;
+      const combined = [
+        ...new Map(
+          [...history.value.withdrawals, ...next.withdrawals].map((item) => [
+            item.id,
+            item,
+          ]),
+        ).values(),
+      ];
+      setHistoryRead((previous) =>
+        previous === historyRead && previous
+          ? {
+              ...previous,
+              result: {
+                status: "ready",
+                value: { withdrawals: combined, nextCursor: next.nextCursor },
+              },
+            }
+          : previous,
+      );
+      setNextHistoryState(null);
+    } catch (cause) {
+      if (!current()) return;
+      panelActorOwner.reportFailure(cause, sessionEpoch);
+      if (current()) setNextHistoryState("error");
+    }
+  }
   const overviewValue =
     overview?.status === "ready"
       ? currentOverview(siteId, access, overview.value)
@@ -306,6 +362,9 @@ export function FinanceSection({
         access={access}
         result={historyResult}
         onRefresh={() => setHistoryRevision((value) => value + 1)}
+        onLoadMore={loadMoreHistory}
+        loadingMore={nextHistoryState === "loading"}
+        pageError={nextHistoryState === "error"}
       />
     </div>
   );

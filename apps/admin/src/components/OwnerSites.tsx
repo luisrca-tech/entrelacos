@@ -1,4 +1,8 @@
-import type { SiteRecord } from "@entrelacos/contracts";
+import type {
+  OwnerSiteListItem,
+  ownerSiteListResponseSchema,
+  SiteRecord,
+} from "@entrelacos/contracts";
 import {
   Button,
   Card,
@@ -33,6 +37,7 @@ import {
 import { adminStyles, displayHeading } from "../lib/adminStyles";
 import { apiRequest } from "../lib/apiClient";
 import { formatBrazilianDate } from "./brazilianDate";
+import { LoadMoreButton } from "./LoadMoreButton";
 import { type PanelSessionSnapshot, panelActorOwner } from "./panelActor";
 
 import { StatusSignal } from "./StatusSignal";
@@ -76,7 +81,10 @@ function OwnerSitesRuntime({
   snapshot: PanelSessionSnapshot;
   navigate: (path: string) => void;
 }) {
-  const [sites, setSites] = useState<SiteRecord[]>([]);
+  const [sites, setSites] = useState<OwnerSiteListItem[]>([]);
+  const [totals, setTotals] = useState<
+    typeof ownerSiteListResponseSchema._output.totals | null
+  >(null);
   const [cursor, setCursor] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [retryCursor, setRetryCursor] = useState<string | undefined>();
@@ -110,12 +118,13 @@ function OwnerSitesRuntime({
       if (next) setLoadingMore(true);
       else setLoading(true);
       try {
-        const result = await apiRequest<{
-          sites: SiteRecord[];
-          nextCursor: string | null;
-        }>(
-          `/v1/owner/sites${next ? `?cursor=${encodeURIComponent(next)}` : ""}`,
-        );
+        const query = new URLSearchParams();
+        if (search.trim()) query.set("search", search.trim());
+        if (lifecycle !== "ALL") query.set("lifecycle", lifecycle);
+        if (next) query.set("cursor", next);
+        const result = await apiRequest<
+          typeof ownerSiteListResponseSchema._output
+        >(`/v1/owner/sites${query.size ? `?${query}` : ""}`);
         if (!current(attempt)) return;
         setSites((previous) => {
           if (!next) return result.sites;
@@ -126,6 +135,7 @@ function OwnerSitesRuntime({
           ];
         });
         setCursor(result.nextCursor);
+        setTotals(result.totals);
       } catch (cause) {
         if (!current(attempt)) return;
         panelActorOwner.reportFailure(cause, snapshot.sessionEpoch);
@@ -144,18 +154,24 @@ function OwnerSitesRuntime({
         }
       }
     },
-    [current, snapshot],
+    [current, lifecycle, search, snapshot],
   );
 
   useEffect(() => {
     alive.current = true;
-    void load();
+    setLoading(true);
+    setCursor(null);
+    const timeout = search.trim()
+      ? setTimeout(() => void load(), 250)
+      : undefined;
+    if (timeout === undefined) void load();
     return () => {
+      clearTimeout(timeout);
       alive.current = false;
       requestVersion.current += 1;
       busy.current = false;
     };
-  }, [load]);
+  }, [load, search]);
 
   async function create(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -192,14 +208,12 @@ function OwnerSitesRuntime({
     }
   }
 
-  const query = normalizeSearch(search.trim());
-  const visibleSites = sites.filter(
-    (site) =>
-      (lifecycle === "ALL" || site.lifecycle === lifecycle) &&
-      normalizeSearch(
-        `${site.displayName} ${site.coupleNames.join(" ")}`,
-      ).includes(query),
-  );
+  const visibleSites = sites;
+  const total = totals
+    ? lifecycle === "ALL"
+      ? Object.values(totals).reduce((sum, count) => sum + count, 0)
+      : totals[lifecycle as SiteRecord["lifecycle"]]
+    : sites.length;
 
   return (
     <div>
@@ -376,7 +390,7 @@ function OwnerSitesRuntime({
         <CardHeader>
           <CardTitle>Casamentos cadastrados</CardTitle>
           <CardDescription>
-            {visibleSites.length} de {sites.length} casamentos carregados
+            {visibleSites.length} de {total} casamentos carregados
             {cursor ? " · Carregue mais para ampliar a busca." : ""}
           </CardDescription>
         </CardHeader>
@@ -498,7 +512,7 @@ function OwnerSitesRuntime({
           </div>
           {!loading && !error && visibleSites.length === 0 && (
             <p className="mt-6 leading-[1.6] text-admin-muted">
-              {sites.length === 0
+              {!(search.trim() || lifecycle !== "ALL")
                 ? "Nenhum casamento cadastrado. Comece em Novo casamento."
                 : "Nenhum casamento encontrado. Ajuste a busca ou o status."}
             </p>
@@ -506,17 +520,14 @@ function OwnerSitesRuntime({
         </CardContent>
       </Card>
 
-      {cursor && (
-        <Button
-          className="mt-[18px]"
-          type="button"
-          variant="outline"
-          disabled={pending || loadingMore || loading}
-          onClick={() => void load(cursor)}
-        >
-          {loadingMore ? "Carregando…" : "Carregar mais"}
-        </Button>
-      )}
+      <LoadMoreButton
+        cursor={cursor}
+        onLoad={load}
+        loading={loadingMore}
+        disabled={pending || loading}
+        manualOnly={Boolean(error)}
+        className="mt-[18px]"
+      />
     </div>
   );
 }
@@ -532,11 +543,4 @@ export function lifecycleLabel(value: string) {
       } as Record<string, string>
     )[value] ?? value
   );
-}
-
-function normalizeSearch(value: string) {
-  return value
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLocaleLowerCase("pt-BR");
 }

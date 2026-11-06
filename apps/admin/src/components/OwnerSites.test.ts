@@ -176,7 +176,7 @@ it("distinguishes loading from empty and retries a safe loading error", async ()
   ).not.toBeNull();
 });
 
-it("filters loaded records by name and status without implying a complete database count", async () => {
+it("debounces name search and resets the cursor when the lifecycle changes", async () => {
   await verify();
   request.mockResolvedValueOnce({ sites, nextCursor: "page-2" });
   await mount();
@@ -185,12 +185,28 @@ it("filters loaded records by name and status without implying a complete databa
   if (!search || !filter)
     throw new Error("Expected owner search and lifecycle filter");
   expect(container.textContent).toContain("2 de 2 casamentos carregados");
+  request.mockResolvedValueOnce({
+    sites: [sites[0]],
+    nextCursor: null,
+    totals: { ACTIVE: 1, DRAFT: 0, IN_REVIEW: 0, INACTIVE: 0 },
+  });
   await change(search, "joao");
-  expect(container.textContent).toContain("1 de 2 casamentos carregados");
+  expect(request.mock.lastCall?.[0]).toBe("/v1/owner/sites");
+  await act(async () => vi.advanceTimersByTimeAsync(250));
+  expect(request.mock.lastCall?.[0]).toBe("/v1/owner/sites?search=joao");
+  expect(container.textContent).toContain("1 de 1 casamentos carregados");
   expect(container.textContent).not.toContain("Bia e Luís");
+  request.mockResolvedValueOnce({
+    sites: [],
+    nextCursor: null,
+    totals: { ACTIVE: 1, DRAFT: 0, IN_REVIEW: 0, INACTIVE: 0 },
+  });
   await change(filter, "DRAFT");
+  await act(async () => vi.advanceTimersByTimeAsync(250));
+  expect(request.mock.lastCall?.[0]).toBe(
+    "/v1/owner/sites?search=joao&lifecycle=DRAFT",
+  );
   expect(container.textContent).toContain("Nenhum casamento encontrado");
-  expect(button("Carregar mais").disabled).toBe(false);
 });
 
 it("prevents duplicate next-page requests and preserves records when retrying a failed page", async () => {
