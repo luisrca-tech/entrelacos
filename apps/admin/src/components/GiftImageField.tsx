@@ -2,35 +2,20 @@ import {
   type GiftItem,
   type GiftMediaPublicAsset,
   giftImageAlt,
-  giftMediaUploadInputSchema,
 } from "@entrelacos/contracts";
 import { Button, Input, toast } from "@entrelacos/ui";
-import { Camera, ImageIcon, Upload } from "lucide-react";
-import {
-  type DragEvent,
-  useEffect,
-  useId,
-  useLayoutEffect,
-  useRef,
-  useState,
-} from "react";
+import { ImageIcon } from "lucide-react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import type { GiftMediaClientState } from "./giftMediaClient";
-
-const acceptedImageTypes =
-  giftMediaUploadInputSchema.shape.contentType.options.join(",");
-
-/** Returns a pt-BR reason when the API would refuse the file, or "" if it fits. */
-function fileProblem(file: File) {
-  if (
-    !giftMediaUploadInputSchema.shape.contentType.safeParse(file.type).success
-  )
-    return "Este arquivo não é uma imagem JPEG, PNG ou WebP. Escolha outra foto.";
-  if (!giftMediaUploadInputSchema.shape.byteLength.safeParse(file.size).success)
-    return file.size > 0
-      ? "A foto passa de 5 MB. Escolha uma imagem menor."
-      : "Este arquivo está vazio. Escolha outra foto.";
-  return "";
-}
+import {
+  acceptedImageTypes,
+  fileProblem,
+  GiftPhotoAltInput,
+  GiftPhotoDropzone,
+  photoSecondaryAction as secondaryAction,
+  photoTextAction as textAction,
+  useGiftPhotoDrop,
+} from "./giftPhotoPicker";
 
 type Props = {
   gift: GiftItem;
@@ -55,14 +40,10 @@ export function GiftImageField(props: Props) {
   const mounted = useRef(false);
   const attempt = useRef(0);
   const inFlight = useRef(false);
-  // Child elements fire their own enter/leave events while a file is dragged
-  // across the zone, so a depth counter keeps the highlight from flickering.
-  const dragDepth = useRef(0);
   const [file, setFile] = useState<File | null>(null);
   const [alt, setAlt] = useState(gift.altText);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const [dragging, setDragging] = useState(false);
   const [localUrl, setLocalUrl] = useState<string | null>(null);
   useEffect(() => {
     if (!file || typeof URL.createObjectURL !== "function") {
@@ -120,6 +101,21 @@ export function GiftImageField(props: Props) {
     );
   }
   const blocked = disabled || busy || Boolean(mediaState?.busy);
+  function pick(selected: File | null | undefined) {
+    if (!selected || blocked || inFlight.current || !validOwner()) return;
+    const problem = fileProblem(selected);
+    if (problem) {
+      setError(problem);
+      if (fileInput.current) fileInput.current.value = "";
+      return;
+    }
+    setError("");
+    setFile(selected);
+  }
+  function openPicker() {
+    if (!blocked) fileInput.current?.click();
+  }
+  const { dragging, dropHandlers } = useGiftPhotoDrop(blocked, pick);
   async function run(action: (revision: number) => Promise<void>) {
     if (disabled || inFlight.current || mediaState?.busy || !validOwner())
       return;
@@ -185,42 +181,6 @@ export function GiftImageField(props: Props) {
       : null;
   const hasPhoto = Boolean(gift.mediaAssetId) || Boolean(file);
   const altChanged = alt.trim() !== gift.altText.trim();
-  function pick(selected: File | null | undefined) {
-    if (!selected || blocked || inFlight.current || !validOwner()) return;
-    const problem = fileProblem(selected);
-    if (problem) {
-      setError(problem);
-      if (fileInput.current) fileInput.current.value = "";
-      return;
-    }
-    setError("");
-    setFile(selected);
-  }
-  function openPicker() {
-    if (!blocked) fileInput.current?.click();
-  }
-  const dropHandlers = {
-    onDragEnter: (event: DragEvent<HTMLElement>) => {
-      event.preventDefault();
-      dragDepth.current++;
-      if (!blocked) setDragging(true);
-    },
-    onDragOver: (event: DragEvent<HTMLElement>) => {
-      event.preventDefault();
-      if (event.dataTransfer)
-        event.dataTransfer.dropEffect = blocked ? "none" : "copy";
-    },
-    onDragLeave: () => {
-      dragDepth.current = Math.max(0, dragDepth.current - 1);
-      if (dragDepth.current === 0) setDragging(false);
-    },
-    onDrop: (event: DragEvent<HTMLElement>) => {
-      event.preventDefault();
-      dragDepth.current = 0;
-      setDragging(false);
-      pick(event.dataTransfer?.files?.[0]);
-    },
-  };
   const describedBy = [
     hasPhoto ? null : `${id}-formats`,
     error ? `${id}-error` : null,
@@ -228,10 +188,6 @@ export function GiftImageField(props: Props) {
     .filter(Boolean)
     .join(" ");
   const uploading = busy || Boolean(mediaState?.busy);
-  const secondaryAction =
-    "inline-flex min-h-11 items-center justify-center rounded-[9px] border border-admin-line-strong bg-transparent px-3.5 text-sm font-semibold text-admin-graphite focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-[rgb(168_77_57_/_30%)] disabled:cursor-not-allowed disabled:opacity-60 enabled:hover:bg-admin-canvas";
-  const textAction =
-    "inline-flex min-h-11 items-center bg-transparent px-2 text-sm font-semibold text-admin-terracotta-deep underline underline-offset-4 focus-visible:outline-[3px] focus-visible:outline-[rgb(168_77_57_/_30%)] disabled:opacity-60";
   return (
     <fieldset
       aria-labelledby={`${id}-heading`}
@@ -256,51 +212,13 @@ export function GiftImageField(props: Props) {
         onChange={(event) => pick(event.target.files?.[0])}
       />
       {!hasPhoto ? (
-        // biome-ignore lint/a11y/useKeyWithClickEvents lint/a11y/noStaticElementInteractions: Pointer convenience only; the "Escolher foto" button inside is the keyboard target.
-        <div
-          data-dropzone=""
-          data-dragging={dragging ? "true" : "false"}
-          {...dropHandlers}
-          onClick={openPicker}
-          className={`flex min-h-[272px] flex-col items-center justify-center gap-2.5 rounded-[14px] border-2 border-dashed px-5 py-8 text-center transition-colors motion-reduce:transition-none has-[:focus-visible]:outline-[3px] has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-[rgb(168_77_57_/_30%)] [@media(max-width:760px)]:min-h-[230px] ${dragging ? "border-admin-terracotta bg-admin-terracotta-wash" : "border-admin-line-strong bg-admin-canvas"} ${blocked ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}
-        >
-          <span
-            aria-hidden="true"
-            className="flex size-14 items-center justify-center rounded-full bg-admin-terracotta-wash text-admin-terracotta-deep"
-          >
-            <Upload className="size-[26px] [@media(max-width:760px)]:hidden [@media(pointer:coarse)]:hidden" />
-            <Camera className="hidden size-[26px] [@media(max-width:760px)]:block [@media(pointer:coarse)]:block" />
-          </span>
-          <span className="text-base font-bold text-admin-ink [@media(max-width:760px)]:hidden [@media(pointer:coarse)]:hidden">
-            {dragging ? "Solte a foto para escolher" : "Arraste a foto aqui"}
-          </span>
-          <span className="hidden text-base font-bold text-admin-ink [@media(max-width:760px)]:inline [@media(pointer:coarse)]:inline">
-            Tire uma foto ou escolha da galeria
-          </span>
-          <Button
-            type="button"
-            variant="outline"
-            disabled={blocked}
-            className="min-h-11 rounded-[10px] border-admin-line-strong bg-admin-surface px-5 text-[0.95rem] font-semibold text-admin-terracotta-deep focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-[rgb(168_77_57_/_30%)] [@media(max-width:760px)]:min-h-12 [@media(max-width:760px)]:w-full [@media(max-width:760px)]:max-w-[280px] [@media(pointer:coarse)]:min-h-12"
-            onClick={(event) => {
-              event.stopPropagation();
-              openPicker();
-            }}
-          >
-            <ImageIcon aria-hidden="true" />
-            Escolher foto
-          </Button>
-          <span
-            id={`${id}-formats`}
-            className="text-[0.82rem] text-admin-muted"
-          >
-            JPEG, PNG ou WebP · até 5 MB
-            <span className="[@media(max-width:760px)]:hidden">
-              {" "}
-              · fotos na horizontal ficam melhores
-            </span>
-          </span>
-        </div>
+        <GiftPhotoDropzone
+          formatsId={`${id}-formats`}
+          blocked={blocked}
+          dragging={dragging}
+          dropHandlers={dropHandlers}
+          onOpen={openPicker}
+        />
       ) : (
         <div className="grid min-w-0 gap-[18px] sm:grid-cols-[minmax(0,1fr)_minmax(0,262px)]">
           <div
@@ -338,36 +256,15 @@ export function GiftImageField(props: Props) {
             </span>
           </div>
           <div className="flex min-w-0 flex-col justify-between gap-4">
-            <div className="grid gap-1.5">
-              <label
-                htmlFor={`${id}-alt`}
-                className="text-sm font-bold text-admin-ink"
-              >
-                Descreva a foto{" "}
-                <span className="text-xs font-semibold text-admin-muted">
-                  · Opcional
-                </span>
-              </label>
-              <Input
-                id={`${id}-alt`}
-                value={alt}
-                maxLength={240}
-                placeholder="Ex.: Mesa de jantar à luz de velas"
-                disabled={blocked}
-                aria-describedby={`${id}-alt-hint`}
-                className="min-h-[46px] rounded-[10px] border-admin-line-strong bg-admin-surface px-3.5 text-[0.95rem]"
-                onChange={(event) => {
-                  if (!blocked && !inFlight.current && validOwner())
-                    setAlt(event.target.value);
-                }}
-              />
-              <p
-                id={`${id}-alt-hint`}
-                className="m-0 text-[0.8rem] leading-[1.45] text-admin-muted"
-              >
-                Ajuda quem usa leitor de tela.
-              </p>
-            </div>
+            <GiftPhotoAltInput
+              id={id}
+              value={alt}
+              disabled={blocked}
+              onChange={(value) => {
+                if (!blocked && !inFlight.current && validOwner())
+                  setAlt(value);
+              }}
+            />
             <div className="flex flex-wrap items-center gap-2">
               {(file || retained) && (
                 <Button
