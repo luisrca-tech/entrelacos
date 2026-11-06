@@ -30,6 +30,11 @@ it("keeps non-financial counts when the receiving status cannot be read", async 
           adults: 3,
           children: 1,
           byStatus: { confirmed: 1, pending: 1, declined: 0, partial: 0 },
+          guestsByStatus: {
+            confirmed: { adults: 2, children: 1 },
+            pending: { adults: 1, children: 0 },
+            declined: { adults: 0, children: 0 },
+          },
         },
         messages: 4,
         publishedGifts: 5,
@@ -52,6 +57,11 @@ it("keeps non-financial counts when the receiving status cannot be read", async 
       adults: 3,
       children: 1,
       byStatus: { confirmed: 1, pending: 1, declined: 0, partial: 0 },
+      guestsByStatus: {
+        confirmed: { adults: 2, children: 1 },
+        pending: { adults: 1, children: 0 },
+        declined: { adults: 0, children: 0 },
+      },
     },
     messages: 4,
     publishedGifts: 5,

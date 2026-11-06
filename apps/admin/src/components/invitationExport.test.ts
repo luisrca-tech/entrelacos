@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { invitationExportPath } from "./invitationExport";
+import { exportableFilters, invitationExportPath } from "./invitationExport";
 
 describe("invitation export URL", () => {
   it("applies visible filters and excludes contacts by default", () => {
@@ -27,5 +27,28 @@ describe("invitation export URL", () => {
     expect(url).not.toContain("status=");
     expect(url).not.toContain("guestType=");
     expect(url).not.toContain("search=");
+  });
+
+  it("exports every answer for the partial filter, which is not a guest state", () => {
+    const filters = exportableFilters({
+      search: "Costa",
+      status: "PARTIAL",
+      guestType: "CHILD",
+    });
+    expect(filters).toEqual({
+      search: "Costa",
+      status: "ALL",
+      guestType: "CHILD",
+    });
+    expect(
+      invitationExportPath("site-1", "csv", {
+        ...filters,
+        requestId: "request-3",
+      }),
+    ).not.toContain("status=");
+    expect(
+      exportableFilters({ search: "", status: "DECLINED", guestType: "ALL" })
+        .status,
+    ).toBe("DECLINED");
   });
 });

@@ -76,6 +76,10 @@ export const receivingReadinessResponseSchema = z
   );
 
 const summaryCount = z.number().int().nonnegative();
+const guestTypeCounts = z.strictObject({
+  adults: summaryCount,
+  children: summaryCount,
+});
 export const siteHomeSummarySchema = z.strictObject({
   invitations: z
     .strictObject({
@@ -94,6 +98,12 @@ export const siteHomeSummarySchema = z.strictObject({
         pending: summaryCount,
         declined: summaryCount,
         partial: summaryCount,
+      }),
+      /** Guest counts by RSVP state and guest type, for event budgeting. */
+      guestsByStatus: z.strictObject({
+        confirmed: guestTypeCounts,
+        pending: guestTypeCounts,
+        declined: guestTypeCounts,
       }),
     })
     .optional(),

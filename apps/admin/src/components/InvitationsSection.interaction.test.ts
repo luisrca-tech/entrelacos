@@ -67,6 +67,11 @@ beforeEach(async () => {
         adults: 32,
         children: 8,
         byStatus: { confirmed: 12, pending: 25, declined: 3, partial: 5 },
+        guestsByStatus: {
+          confirmed: { adults: 16, children: 4 },
+          pending: { adults: 12, children: 3 },
+          declined: { adults: 4, children: 1 },
+        },
       },
     }),
     "/invitations": () => ({
@@ -129,21 +134,45 @@ it("summarizes every invitation of the wedding instead of the loaded page", asyn
   expect(summary?.textContent).toContain("32 adultos");
   expect(summary?.textContent).toContain("8 crianças");
   expect(summary?.textContent).toContain("Respostas dos convidados");
+  expect(summary?.textContent).toContain(
+    "No máximo: 35 pessoas (28 adultos e 7 crianças)",
+  );
 });
 
 it("counts the quick filters across the whole wedding", async () => {
   await mount();
+  const group = container.querySelector(
+    'fieldset[aria-label="Filtrar convites por situação"]',
+  );
+  expect(group?.textContent).toMatch(/^Convites/);
   const chips = [
-    ...container.querySelectorAll<HTMLButtonElement>(
-      'fieldset[aria-label="Situação do convite"] button',
-    ),
+    ...(group?.querySelectorAll<HTMLButtonElement>("button") ?? []),
   ].map((button) => button.textContent);
   expect(chips).toEqual([
     "Todos45",
     "Confirmados12",
     "Sem resposta25",
+    "Em parte5",
     "Não irão3",
   ]);
+});
+
+it("filters invitations with mixed answers through the partial chip", async () => {
+  await mount();
+  const partial = [...container.querySelectorAll("button")].find(
+    (button) => button.textContent === "Em parte5",
+  );
+  if (!partial) throw new Error("Missing partial chip");
+  await act(async () => partial.click());
+  await act(async () => vi.advanceTimersByTimeAsync(1000));
+  expect(partial.getAttribute("aria-pressed")).toBe("true");
+  expect(
+    request.mock.calls.some(
+      ([path]) =>
+        String(path).includes("/invitations?") &&
+        String(path).includes("status=PARTIAL"),
+    ),
+  ).toBe(true);
 });
 
 it("shows only the first-steps guide while the wedding has no invitations", async () => {
@@ -156,6 +185,11 @@ it("shows only the first-steps guide while the wedding has no invitations", asyn
       adults: 0,
       children: 0,
       byStatus: { confirmed: 0, pending: 0, declined: 0, partial: 0 },
+      guestsByStatus: {
+        confirmed: { adults: 0, children: 0 },
+        pending: { adults: 0, children: 0 },
+        declined: { adults: 0, children: 0 },
+      },
     },
   });
   routes["/invitations"] = () => ({ invitations: [], nextCursor: null });
@@ -178,8 +212,11 @@ it("labels a loaded-only summary honestly when site totals are unavailable", asy
   };
   await mount();
   const summary = container.querySelector('[aria-label="Resumo dos convites"]');
-  expect(summary?.textContent).toContain("1 de 1 convidados irão comparecer");
+  expect(summary?.textContent).toContain("1 de 1 convidado irá comparecer");
   expect(summary?.textContent).toContain("convites carregados");
+  expect(summary?.textContent).toContain(
+    "Confirmados hoje: 1 pessoa (1 adulto e 0 crianças)",
+  );
 });
 
 it("keeps rows and the open detail mounted while a search reloads, then clears stale rows when it fails", async () => {

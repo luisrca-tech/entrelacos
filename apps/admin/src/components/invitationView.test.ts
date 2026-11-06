@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   filterInvitations,
   type InvitationListItem,
+  invitationBudget,
   invitationResponseSummary,
+  invitationSummaryFromTotals,
+  peopleCount,
   summarizeInvitations,
 } from "./invitationView";
 
@@ -66,7 +69,72 @@ describe("invitation view", () => {
       pending: 1,
       confirmed: 1,
       declined: 1,
+      guestsByStatus: {
+        confirmed: { adults: 1, children: 0 },
+        pending: { adults: 0, children: 1 },
+        declined: { adults: 1, children: 0 },
+      },
     });
+  });
+
+  it("reads the same summary from wedding-wide totals", () => {
+    expect(
+      invitationSummaryFromTotals({
+        total: 8,
+        confirmed: 9,
+        pending: 7,
+        declined: 2,
+        adults: 14,
+        children: 4,
+        byStatus: { confirmed: 4, pending: 2, declined: 1, partial: 1 },
+        guestsByStatus: {
+          confirmed: { adults: 7, children: 2 },
+          pending: { adults: 5, children: 2 },
+          declined: { adults: 2, children: 0 },
+        },
+      }),
+    ).toEqual({
+      invitations: 8,
+      guests: 18,
+      adults: 14,
+      children: 4,
+      confirmed: 9,
+      pending: 7,
+      declined: 2,
+      guestsByStatus: {
+        confirmed: { adults: 7, children: 2 },
+        pending: { adults: 5, children: 2 },
+        declined: { adults: 2, children: 0 },
+      },
+    });
+  });
+
+  it("sizes the budget from confirmed guests and the pending maximum", () => {
+    expect(
+      invitationBudget({
+        confirmed: { adults: 7, children: 2 },
+        pending: { adults: 5, children: 1 },
+        declined: { adults: 2, children: 0 },
+      }),
+    ).toEqual({
+      confirmed: { adults: 7, children: 2 },
+      maximum: { adults: 12, children: 3 },
+    });
+  });
+
+  it("describes people, adults and children in singular and plural", () => {
+    expect(peopleCount({ adults: 1, children: 0 })).toBe(
+      "1 pessoa (1 adulto e 0 crianças)",
+    );
+    expect(peopleCount({ adults: 0, children: 1 })).toBe(
+      "1 pessoa (0 adultos e 1 criança)",
+    );
+    expect(peopleCount({ adults: 12, children: 3 })).toBe(
+      "15 pessoas (12 adultos e 3 crianças)",
+    );
+    expect(peopleCount({ adults: 0, children: 0 })).toBe(
+      "0 pessoas (0 adultos e 0 crianças)",
+    );
   });
 });
 

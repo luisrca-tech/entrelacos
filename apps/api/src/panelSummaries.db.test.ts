@@ -186,6 +186,11 @@ describe("panel summary and pagination queries", () => {
         adults: 3,
         children: 1,
         byStatus: { confirmed: 1, pending: 1, declined: 0, partial: 1 },
+        guestsByStatus: {
+          confirmed: { adults: 1, children: 0 },
+          pending: { adults: 2, children: 0 },
+          declined: { adults: 0, children: 1 },
+        },
       },
       messages: 1,
       publishedGifts: 1,

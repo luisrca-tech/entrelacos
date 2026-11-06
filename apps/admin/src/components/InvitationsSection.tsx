@@ -33,6 +33,7 @@ import { InvitationList } from "./InvitationList";
 import { InvitationOverview } from "./InvitationOverview";
 import { invitationAdminError } from "./invitationAdminError";
 import {
+  exportableFilters,
   type InvitationExportFormat,
   invitationExportPath,
 } from "./invitationExport";
@@ -70,6 +71,7 @@ function statusCount(
   if (status === "ALL") return totals.total;
   if (status === "CONFIRMED") return totals.byStatus.confirmed;
   if (status === "PENDING") return totals.byStatus.pending;
+  if (status === "PARTIAL") return totals.byStatus.partial;
   return totals.byStatus.declined;
 }
 
@@ -135,6 +137,7 @@ export function InvitationsSection({ siteId, lifecycle, sessionEpoch }: Props) {
   // With no filters an empty first page means the wedding has no invitations.
   const noInvitations =
     loaded && !hasFilters && invitations.length === 0 && !nextCursor && !error;
+  const exportFilters = exportableFilters(filters);
   const summary = useMemo(
     () => summarizeInvitations(invitations),
     [invitations],
@@ -481,7 +484,7 @@ export function InvitationsSection({ siteId, lifecycle, sessionEpoch }: Props) {
     setBusy(true);
     try {
       const path = invitationExportPath(siteId, format, {
-        ...filters,
+        ...exportFilters,
         ...options,
         requestId: crypto.randomUUID(),
       });
@@ -587,14 +590,21 @@ export function InvitationsSection({ siteId, lifecycle, sessionEpoch }: Props) {
                 />
               </label>
               <fieldset
-                className="flex min-w-0 max-w-full gap-1 overflow-x-auto rounded-xl border border-admin-line bg-admin-surface p-1"
-                aria-label="Situação do convite"
+                className="flex min-w-0 max-w-full items-center gap-1 overflow-x-auto rounded-xl border border-admin-line bg-admin-surface p-1"
+                aria-label="Filtrar convites por situação"
               >
+                <span
+                  aria-hidden="true"
+                  className="shrink-0 px-2 text-xs font-semibold text-admin-muted"
+                >
+                  Convites
+                </span>
                 {(
                   [
                     ["ALL", "Todos"],
                     ["CONFIRMED", "Confirmados"],
                     ["PENDING", "Sem resposta"],
+                    ["PARTIAL", "Em parte"],
                     ["DECLINED", "Não irão"],
                   ] as const
                 ).map(([status, label]) => {
@@ -738,9 +748,9 @@ export function InvitationsSection({ siteId, lifecycle, sessionEpoch }: Props) {
         onExport={(format, options) => void downloadExport(format, options)}
         busy={busy}
         hasFilters={Boolean(
-          filters.search.trim() ||
-            filters.status !== "ALL" ||
-            filters.guestType !== "ALL",
+          exportFilters.search.trim() ||
+            exportFilters.status !== "ALL" ||
+            exportFilters.guestType !== "ALL",
         )}
       />
       <Dialog open={deadlineOpen} onOpenChange={setDeadlineOpen}>

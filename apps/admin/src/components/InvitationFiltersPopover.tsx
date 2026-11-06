@@ -9,7 +9,7 @@ import { SlidersHorizontal } from "lucide-react";
 import type {
   InvitationFilters,
   InvitationGuestType,
-  InvitationRsvpState,
+  InvitationStatusFilter,
   InvitationSummary,
 } from "./invitationView";
 
@@ -27,7 +27,7 @@ export function InvitationFiltersPopover({
   const selectedCount =
     Number(filters.status !== "ALL") + Number(filters.guestType !== "ALL");
   const statusOptions: {
-    value: InvitationRsvpState | "ALL";
+    value: InvitationStatusFilter;
     label: string;
     count: number;
     color?: string;

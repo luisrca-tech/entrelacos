@@ -1,3 +1,5 @@
+import type { SiteHomeSummary } from "@entrelacos/contracts";
+
 export type InvitationGuestType = "ADULT" | "CHILD";
 export type InvitationRsvpState = "PENDING" | "CONFIRMED" | "DECLINED";
 
@@ -10,10 +12,21 @@ export type InvitationListItem = {
   }[];
 };
 
+/** Invitation status filter; PARTIAL matches invitations with mixed answers. */
+export type InvitationStatusFilter = InvitationRsvpState | "PARTIAL" | "ALL";
+
 export type InvitationFilters = {
   search: string;
-  status: InvitationRsvpState | "ALL";
+  status: InvitationStatusFilter;
   guestType: InvitationGuestType | "ALL";
+};
+
+export type GuestTypeCounts = { adults: number; children: number };
+
+export type GuestsByStatus = {
+  confirmed: GuestTypeCounts;
+  pending: GuestTypeCounts;
+  declined: GuestTypeCounts;
 };
 
 export type InvitationSummary = {
@@ -24,6 +37,7 @@ export type InvitationSummary = {
   pending: number;
   confirmed: number;
   declined: number;
+  guestsByStatus: GuestsByStatus;
 };
 
 function searchKey(value: string): string {
@@ -65,18 +79,74 @@ export function summarizeInvitations(
     pending: 0,
     confirmed: 0,
     declined: 0,
+    guestsByStatus: {
+      confirmed: { adults: 0, children: 0 },
+      pending: { adults: 0, children: 0 },
+      declined: { adults: 0, children: 0 },
+    },
   };
   for (const invitation of invitations) {
     for (const guest of invitation.guests) {
       summary.guests += 1;
-      if (guest.guestType === "ADULT") summary.adults += 1;
-      else summary.children += 1;
-      if (guest.rsvpState === "PENDING") summary.pending += 1;
-      else if (guest.rsvpState === "CONFIRMED") summary.confirmed += 1;
-      else summary.declined += 1;
+      const type = guest.guestType === "ADULT" ? "adults" : "children";
+      summary[type] += 1;
+      const state =
+        guest.rsvpState === "PENDING"
+          ? "pending"
+          : guest.rsvpState === "CONFIRMED"
+            ? "confirmed"
+            : "declined";
+      summary[state] += 1;
+      summary.guestsByStatus[state][type] += 1;
     }
   }
   return summary;
+}
+
+/** Wedding-wide home-summary counts in the loaded-page summary shape. */
+export function invitationSummaryFromTotals(
+  totals: NonNullable<SiteHomeSummary["invitations"]>,
+): InvitationSummary {
+  return {
+    invitations: totals.total,
+    guests: totals.confirmed + totals.pending + totals.declined,
+    adults: totals.adults,
+    children: totals.children,
+    confirmed: totals.confirmed,
+    pending: totals.pending,
+    declined: totals.declined,
+    guestsByStatus: totals.guestsByStatus,
+  };
+}
+
+/**
+ * Head counts for event budgets: who is confirmed today, and the maximum if
+ * every guest without an answer also comes.
+ */
+export function invitationBudget(guests: GuestsByStatus): {
+  confirmed: GuestTypeCounts;
+  maximum: GuestTypeCounts;
+} {
+  return {
+    confirmed: guests.confirmed,
+    maximum: {
+      adults: guests.confirmed.adults + guests.pending.adults,
+      children: guests.confirmed.children + guests.pending.children,
+    },
+  };
+}
+
+export function countLabel(count: number, singular: string, plural: string) {
+  return `${count} ${count === 1 ? singular : plural}`;
+}
+
+/** e.g. "15 pessoas (12 adultos e 3 crianças)". */
+export function peopleCount({ adults, children }: GuestTypeCounts): string {
+  return `${countLabel(adults + children, "pessoa", "pessoas")} (${countLabel(
+    adults,
+    "adulto",
+    "adultos",
+  )} e ${countLabel(children, "criança", "crianças")})`;
 }
 
 function willAttend(count: number) {
