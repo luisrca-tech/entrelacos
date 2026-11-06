@@ -805,6 +805,9 @@ export const giftCheckoutAttempt = pgTable(
     providerReference: text("provider_reference"),
     hostedUrl: text("hosted_url"),
     expiresAt: timestamp("expires_at", { withTimezone: true }),
+    installmentExpiryPaymentReferences: text(
+      "installment_expiry_payment_references",
+    ).array(),
   },
   (table): PgTableExtraConfigValue[] => [
     unique("gift_checkout_attempt_scope_key").on(
@@ -878,6 +881,10 @@ export const giftCheckoutAttempt = pgTable(
     })
       .onDelete("restrict")
       .onUpdate("restrict"),
+    check(
+      "gift_checkout_attempt_expiry_payment_references_check",
+      sql`${table.installmentExpiryPaymentReferences} IS NULL OR (cardinality(${table.installmentExpiryPaymentReferences}) BETWEEN 2 AND 12 AND array_position(${table.installmentExpiryPaymentReferences}, NULL) IS NULL)`,
+    ),
     check(
       "gift_checkout_attempt_number_check",
       sql`${table.attemptNumber} > 0`,

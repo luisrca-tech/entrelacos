@@ -59,6 +59,22 @@ export interface GiftPaymentHistoryRepositoryOptions {
 type Transaction = Parameters<Parameters<AuthDatabase["transaction"]>[0]>[0];
 type Row = Record<string, unknown>;
 const scanLimit = 512;
+// A checkout reservation is operational evidence, not a purchase for the couple.
+export const giftPurchaseHasPayment = sql`EXISTS (
+  SELECT 1 FROM ${giftPaymentRecord} p
+  WHERE p.order_id=o.id AND p.site_id=o.site_id AND p.account_id=o.account_id AND p.environment=o.environment
+    AND p.verification_status='VERIFIED' AND p.observed_at IS NOT NULL AND p.currency='BRL' AND p.gross_cents>0
+    AND (p.provider_status IN ('CONFIRMED','RECEIVED')
+      OR EXISTS (SELECT 1 FROM ${financialLedgerEntry} l
+        WHERE l.payment_id=p.id AND l.site_id=p.site_id AND l.account_id=p.account_id AND l.environment=p.environment
+          AND l.kind='GIFT_RECEIVED' AND l.direction='CREDIT' AND l.currency='BRL' AND l.amount_cents>0
+          AND l.amount_cents=p.recipient_net_cents AND l.compensates_entry_id IS NULL)
+      OR EXISTS (SELECT 1 FROM ${financialEventInbox} e
+        WHERE e.payment_id=p.id AND e.site_id=p.site_id AND e.account_id=p.account_id AND e.environment=p.environment
+          AND e.event_type IN ('PAYMENT_CONFIRMED','PAYMENT_RECEIVED','PAYMENT_SPLIT_DONE')
+          AND e.state='PROCESSED' AND e.authenticated_at IS NOT NULL AND e.processed_at IS NOT NULL
+          AND e.payload->>'paymentId'=p.provider_payment_reference))
+)`;
 function object(value: unknown): Row {
   if (!value || typeof value !== "object" || Array.isArray(value))
     return historyUnavailable();
@@ -730,7 +746,7 @@ export function createGiftPaymentHistoryRepository(
         if (position) {
           const found =
             await tx.execute(sql`SELECT to_jsonb(o) AS record FROM ${giftOrder} o WHERE o.id=${position.id}
-            AND o.site_id=${scope.siteId} AND o.environment=${mode} LIMIT 2`);
+            AND o.site_id=${scope.siteId} AND o.environment=${mode} AND ${giftPurchaseHasPayment} LIMIT 2`);
           if (found.rows.length !== 1) return historyUnavailable();
           anchor = object(found.rows[0].record);
           if (time(anchor.created_at) !== position.at)
@@ -742,7 +758,7 @@ export function createGiftPaymentHistoryRepository(
           : sql``;
         const result =
           await tx.execute(sql`SELECT to_jsonb(o) AS record FROM ${giftOrder} o WHERE o.site_id=${scope.siteId}
-          AND o.environment=${mode} ${filter} ORDER BY o.created_at DESC,o.id COLLATE "C" DESC LIMIT ${giftPurchaseHistoryLimits.indexRows + 1}`);
+          AND o.environment=${mode} AND ${giftPurchaseHasPayment} ${filter} ORDER BY o.created_at DESC,o.id COLLATE "C" DESC LIMIT ${giftPurchaseHistoryLimits.indexRows + 1}`);
         if (result.rows.length > giftPurchaseHistoryLimits.indexRows + 1)
           return historyUnavailable();
         const orders = result.rows.map((row) => object(row.record));
@@ -782,7 +798,7 @@ export function createGiftPaymentHistoryRepository(
           position = decode(scope, true, orderId, cursor);
         const result =
           await tx.execute(sql`SELECT to_jsonb(o) AS record FROM ${giftOrder} o WHERE o.id=${orderId}
-          AND o.site_id=${scope.siteId} AND o.environment=${mode} LIMIT 2`);
+          AND o.site_id=${scope.siteId} AND o.environment=${mode} AND ${giftPurchaseHasPayment} LIMIT 2`);
         if (result.rows.length !== 1) return historyUnavailable();
         const order = object(result.rows[0].record),
           data = await context(tx, scope, [order]);

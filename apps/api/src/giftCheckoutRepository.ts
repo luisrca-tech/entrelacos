@@ -3,6 +3,7 @@ import { isDeepStrictEqual } from "node:util";
 import {
   checkoutResultSchema,
   giftCentsSchema,
+  giftInstallmentExpiryMinutes,
   giftQuoteSchema,
   publicGiftItemSchema,
 } from "@entrelacos/contracts";
@@ -26,6 +27,11 @@ import {
   compareDatabaseTimestamps,
   readDatabaseTimestamp,
 } from "./databaseTimestamp";
+import {
+  checkoutPaymentFacts,
+  giftInstallmentExpiryConfirmedCode,
+  readInstallmentExpiryPaymentReferences,
+} from "./giftCheckoutLifecycle";
 import {
   type GiftCheckoutEvidence,
   type GiftCheckoutHostedOutcome,
@@ -111,7 +117,9 @@ interface AttemptRow extends GiftCheckoutAccountScope {
   providerReference: string | null;
   hostedUrl: string | null;
   expiresAt: Date | null;
+  installmentExpiryPaymentReferences: string[] | null;
   operationState: string;
+  operationLastErrorCode: string | null;
   operationAttempts: number;
   operationRequestId: string;
   operationRequestHash: string;
@@ -395,8 +403,9 @@ async function readRecord(
   const attempts =
     await tx.execute(sql`SELECT a.id AS "attemptId", a.site_id AS "siteId", a.account_id AS "accountId",
     a.environment, a.order_id AS "orderId", a.operation_id AS "operationId", a.attempt_number AS "attemptNumber",
-    a.provider_reference AS "providerReference", a.hosted_url AS "hostedUrl", a.expires_at AS "expiresAt", op.kind AS "operationKind",
-    op.state AS "operationState", op.attempts AS "operationAttempts", op.request_id AS "operationRequestId", op.request_hash AS "operationRequestHash",
+    a.provider_reference AS "providerReference", a.hosted_url AS "hostedUrl", a.expires_at AS "expiresAt",
+    a.installment_expiry_payment_references AS "installmentExpiryPaymentReferences", op.kind AS "operationKind",
+    op.state AS "operationState", op.last_error_code AS "operationLastErrorCode", op.attempts AS "operationAttempts", op.request_id AS "operationRequestId", op.request_hash AS "operationRequestHash",
     op.request_snapshot AS "requestSnapshot", op.provider_operation_reference AS "providerOperationReference",
     op.lease_owner AS "leaseOwner", op.lease_token AS "leaseToken", op.lease_expires_at AS "leaseExpiresAt", op.updated_at AS "updatedAt"
     FROM ${giftCheckoutAttempt} a INNER JOIN ${financialOperation} op ON op.id = a.operation_id
@@ -637,7 +646,54 @@ async function readRecord(
 
   const count = quoteSnapshot.quote.installmentCount ?? 1;
   if (count > 1) {
-    if (paymentRows.length === 0 && ledgerRows.length === 0) {
+    const unpaid = paymentRows.every(
+      (payment) =>
+        payment.verificationStatus === "VERIFIED" &&
+        payment.providerStatus !== null &&
+        ["PENDING", "OVERDUE"].includes(payment.providerStatus) &&
+        payment.attemptId === attempt.attemptId &&
+        payment.providerInstallmentReference === attempt.providerReference &&
+        validTime(payment.observedAt),
+    );
+    if (unpaid && ledgerRows.length === 0) {
+      if (
+        attempt.operationLastErrorCode === giftInstallmentExpiryConfirmedCode
+      ) {
+        if (
+          !readInstallmentExpiryPaymentReferences(
+            attempt.installmentExpiryPaymentReferences,
+            count,
+          ) ||
+          !validTime(attempt.updatedAt) ||
+          (
+            await tx.execute(
+              checkoutPaymentFacts({
+                siteId,
+                accountId: row.accountId,
+                environment: row.environment,
+                orderId: row.orderId,
+                attemptId: attempt.attemptId,
+                checkoutReference: attempt.providerReference,
+              }),
+            )
+          ).rows.length
+        )
+          return record;
+        const observedAt = instant(attempt.updatedAt);
+        return {
+          ...record,
+          state: "CLOSED_UNPAID",
+          observedAt,
+          closedReason: "EXPIRED",
+          evidence: {
+            ...evidence,
+            kind: "CLOSED_UNPAID",
+            observedAt,
+            noOutstandingPayment: true,
+            closedReason: "EXPIRED",
+          },
+        };
+      }
       const deletionEvents =
         await tx.execute(sql`SELECT e.id, e.site_id AS "siteId", e.account_id AS "accountId", e.environment,
         e.event_type AS "eventType", e.state, e.payload, e.payload_hash AS "payloadHash", e.provider_event_reference AS "providerEventReference",
@@ -696,6 +752,11 @@ async function readRecord(
           },
         };
       }
+      if (
+        clock.getTime() - attempt.updatedAt.getTime() >=
+        giftInstallmentExpiryMinutes * 60_000
+      )
+        return record;
       return {
         ...record,
         state: "AWAITING_PAYMENT",

@@ -5,10 +5,13 @@ import {
   verifyDatabaseConnection,
 } from "@entrelacos/database";
 import {
+  financialEventInbox,
+  financialLedgerEntry,
   financialOperation,
   giftCheckoutAttempt,
   giftItem,
   giftOrder,
+  giftPaymentRecord,
   giftQuoteRecord,
   receivingAccount,
   receivingDestination,
@@ -19,6 +22,7 @@ import {
 } from "@entrelacos/database/schema";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { hashAsaasEventIdentity } from "./asaasWebhook";
 import {
   createGiftCheckoutRepository,
   type GiftCheckoutDatabase,
@@ -28,15 +32,20 @@ import {
   type GiftCheckoutReservation,
 } from "./giftCheckouts";
 import { beforeWriteCommitDatabase } from "./giftCheckoutTestBarrier";
+import { createGiftPaymentPostingRepository } from "./giftPaymentPostingRepository";
 import {
   readGiftPricingSettings,
   updateGiftPricingSettings,
 } from "./giftPricingSettings";
+import { findPublishedGiftForQuote } from "./giftQuoteLookup";
 import { createGiftQuoteRepository } from "./giftQuoteRepository";
 import type { GiftQuoteSnapshot } from "./giftQuotes";
+import { createGiftQuoteService } from "./giftQuotes";
+import { readPublicGifts } from "./gifts";
 import {
   loadReceivingContext,
   loadReceivingContextInTransaction,
+  readReceivingReadiness,
 } from "./receivingRepository";
 
 // Source preparation only. Execute under a separately approved test-database lease
@@ -398,6 +407,239 @@ function service(
 }
 
 describe("checkout reserve and pre-dispatch seal PostgreSQL acceptance", () => {
+  it("appends another quote for the same gift while a checkout locks its site and account", async () => {
+    const value = await fixture();
+    const snapshot = structuredClone(value.snapshot);
+    snapshot.quote.id = randomUUID();
+    const started = gate(),
+      release = gate(),
+      pending: Promise<PromiseSettledResult<unknown>>[] = [];
+    const reserving = observeTask(
+      database().transaction(async (tx) => {
+        await tx
+          .select({ id: site.id })
+          .from(site)
+          .where(eq(site.id, value.siteId))
+          .for("update");
+        started.release();
+        await release.promise;
+        await tx
+          .select({ id: receivingAccount.id })
+          .from(receivingAccount)
+          .where(eq(receivingAccount.id, value.accountId))
+          .for("update");
+      }),
+      pending,
+    );
+    let quoting: Promise<PromiseSettledResult<unknown>> | undefined;
+    try {
+      await Promise.race([
+        started.promise,
+        reserving.then((result) => {
+          taskValue(result);
+          throw new Error(
+            "Reservation locks completed before the controlled gate",
+          );
+        }),
+      ]);
+      quoting = observeTask(
+        createGiftQuoteRepository(database(), { now: () => new Date() }).append(
+          snapshot,
+        ),
+        pending,
+      );
+      await waitForOwnSiteWait();
+    } finally {
+      release.release();
+      await Promise.all(pending);
+      await database()
+        .delete(giftQuoteRecord)
+        .where(eq(giftQuoteRecord.id, snapshot.quote.id));
+    }
+    expect(await reserving).toMatchObject({ status: "fulfilled" });
+    expect(await quoting).toMatchObject({ status: "fulfilled" });
+  });
+  it("keeps a paid gift published and allows more independent guest purchases", async () => {
+    const value = await fixture();
+    const db = database();
+    const repository = createGiftCheckoutRepository(db, options());
+    const { checkout } = service(value, repository);
+    const first = await checkout.createCheckout(value.siteId, value.body);
+    const receivePayment = async (body: CheckoutDatabaseFixture["body"]) => {
+      const existing = await repository.findByRequest(
+        value.siteId,
+        body.requestId,
+      );
+      const providerCheckoutReference =
+        existing?.evidence?.providerCheckoutReference;
+      if (!existing || !providerCheckoutReference)
+        throw new Error("Missing provider checkout");
+      const scope = {
+        siteId: value.siteId,
+        accountId: value.accountId,
+        environment: "sandbox" as const,
+      };
+      const { accountReference } = value.snapshot.receiving;
+      const eventId = randomUUID(),
+        eventReference = randomUUID(),
+        paymentId = randomUUID();
+      const leaseOwner = randomUUID(),
+        leaseToken = randomUUID();
+      const payload = {
+        checkoutId: providerCheckoutReference,
+        paymentId,
+        externalReference: existing.attemptId,
+      };
+      const eventType = "PAYMENT_RECEIVED";
+      const authenticatedAt = new Date();
+      await db.insert(financialEventInbox).values({
+        ...scope,
+        id: eventId,
+        deliveryId: eventId,
+        providerEventReference: eventReference,
+        eventType,
+        payload,
+        payloadHash: hashAsaasEventIdentity(
+          eventReference,
+          eventType,
+          accountReference,
+          payload,
+        ),
+        receivedAt: authenticatedAt,
+        authenticatedAt,
+        state: "CLAIMED",
+        attempts: 1,
+        leaseOwner,
+        leaseToken,
+        leaseExpiresAt: new Date(Date.now() + 30_000),
+      });
+      const posting = createGiftPaymentPostingRepository(db, {
+        environment: "sandbox",
+        platformWalletId: "platform-wallet",
+        retryDelayMs: 5000,
+        now: () => new Date(),
+        generateId: () => randomUUID(),
+      });
+      await expect(
+        posting.postReceivedPayment({
+          claim: { ...scope, eventId, leaseOwner, leaseToken },
+          checkout: {
+            ...scope,
+            orderId: existing.orderId,
+            attemptId: existing.attemptId,
+            accountReference,
+            providerCheckoutReference,
+          },
+          observation: {
+            source: "provider",
+            provider: "ASAAS",
+            siteId: value.siteId,
+            environment: "sandbox",
+            accountReference,
+            currency: "BRL",
+            observedAt: new Date(),
+            payment: {
+              id: paymentId,
+              checkoutSession: providerCheckoutReference,
+              externalReference: existing.attemptId,
+              billingType: "PIX",
+              status: "RECEIVED",
+              value: "102.00",
+              netValue: "102.00",
+              split: [
+                {
+                  id: randomUUID(),
+                  walletId: "platform-wallet",
+                  fixedValue: "2.00",
+                  totalValue: "2.00",
+                  status: "DONE",
+                },
+              ],
+            },
+          },
+        }),
+      ).resolves.toMatchObject({ outcome: "POSTED" });
+      await expect(
+        checkout.getStatus(value.siteId, body),
+      ).resolves.toMatchObject({ state: "RECEIVED" });
+    };
+    await receivePayment(value.body);
+    const readReadiness = (siteId: string) =>
+      readReceivingReadiness(db, siteId, receivingOptions());
+    await expect(
+      readPublicGifts(db, value.siteId, {
+        readReadiness,
+        applicationEnvironment: "test",
+      }),
+    ).resolves.toMatchObject({ gifts: [{ id: value.giftId }] });
+    const quoteService = createGiftQuoteService({
+      findPublishedGift: (siteId, giftId) =>
+        findPublishedGiftForQuote(db, siteId, giftId, {
+          readReadiness,
+          applicationEnvironment: "test",
+        }),
+      loadReceivingContext: (siteId) =>
+        loadReceivingContext(db, siteId, receivingOptions()),
+      loadPricingPolicy: async (scope) => ({
+        ...scope,
+        verification: "verified",
+        provenance: "local-test",
+        policy: value.snapshot.pricing.policy,
+        observedAt: new Date(),
+        expiresAt: new Date(Date.now() + 30_000),
+      }),
+      repository: createGiftQuoteRepository(db, { now: () => new Date() }),
+      now: () => new Date(),
+      generateId: () => randomUUID(),
+      quoteTtlMs: 30000,
+      pricingFreshnessMs: 30000,
+    });
+    const purchaseAgain = async () => {
+      const quote = await quoteService.createQuote(value.siteId, {
+        giftId: value.giftId,
+        method: "PIX",
+      });
+      expect(quote.giftId).toBe(value.giftId);
+      const body = {
+        quoteId: quote.id,
+        requestId: randomUUID(),
+        recoveryToken: randomBytes(32).toString("base64url"),
+      };
+      const result = await service(
+        { ...value, quoteId: quote.id },
+        repository,
+      ).checkout.createCheckout(value.siteId, body);
+      return { result, body };
+    };
+    const later = (
+      await Promise.allSettled([purchaseAgain(), purchaseAgain()])
+    ).map(taskValue);
+    for (const guest of later) await receivePayment(guest.body);
+    await expect(
+      checkout.getStatus(value.siteId, value.body),
+    ).resolves.toMatchObject({ state: "RECEIVED" });
+    expect(
+      new Set([first.orderId, ...later.map(({ result }) => result.orderId)])
+        .size,
+    ).toBe(3);
+    const orderRows = await db
+      .select()
+      .from(giftOrder)
+      .where(eq(giftOrder.siteId, value.siteId));
+    expect(orderRows).toHaveLength(3);
+    const receipts = await db
+      .select()
+      .from(financialLedgerEntry)
+      .where(eq(financialLedgerEntry.siteId, value.siteId));
+    expect(receipts).toHaveLength(3);
+    const gifts = await db
+      .select()
+      .from(giftItem)
+      .where(eq(giftItem.id, value.giftId));
+    expect(gifts).toMatchObject([
+      { publicationState: "PUBLISHED", nominalCents: 10000 },
+    ]);
+  });
   it("rejects checkout after an overlapping settings transaction commits first", async () => {
     const value = await fixture();
     await database()
@@ -519,6 +761,15 @@ describe("checkout reserve and pre-dispatch seal PostgreSQL acceptance", () => {
       for (const value of fixtures) {
         await database().transaction(async (tx) => {
           await tx
+            .delete(financialLedgerEntry)
+            .where(eq(financialLedgerEntry.siteId, value.siteId));
+          await tx
+            .delete(financialEventInbox)
+            .where(eq(financialEventInbox.siteId, value.siteId));
+          await tx
+            .delete(giftPaymentRecord)
+            .where(eq(giftPaymentRecord.siteId, value.siteId));
+          await tx
             .delete(giftCheckoutAttempt)
             .where(
               and(
@@ -544,12 +795,7 @@ describe("checkout reserve and pre-dispatch seal PostgreSQL acceptance", () => {
             );
           await tx
             .delete(giftQuoteRecord)
-            .where(
-              and(
-                eq(giftQuoteRecord.siteId, value.siteId),
-                eq(giftQuoteRecord.id, value.quoteId),
-              ),
-            );
+            .where(eq(giftQuoteRecord.siteId, value.siteId));
           await tx
             .delete(giftItem)
             .where(

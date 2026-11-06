@@ -212,6 +212,8 @@ it("shows the exact installment schedule, surcharge and total of the selected qu
   expect(html).toMatch(/R\$\s*106,01/);
   expect(html).toContain("Dados do pagador");
   expect(html).toContain("continuar a mesma cobrança");
+  expect(html).toContain("60 minutos");
+  expect(html).toContain("aguarde a confirmação do encerramento");
   expect(html).not.toContain("Taxa de processamento");
 });
 
@@ -222,4 +224,5 @@ it("does not offer installments when the server returns only an upfront quote", 
   });
   expect(html).not.toContain("Parcelas");
   expect(html).not.toContain("Dados do pagador");
+  expect(html).not.toContain("60 minutos");
 });

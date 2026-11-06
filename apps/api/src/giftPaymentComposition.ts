@@ -579,6 +579,7 @@ export function createGiftPaymentComposition(
         const results = await Promise.allSettled([
           worker.processNextReceivedPayment(),
           lifecycle.processNextReceivedPayment(),
+          lifecycle.expireNextUnpaidInstallment(),
           restrictions.processNextReceivedPayment(),
           adjustments.processNextReceivedPayment(),
           withdrawals.reconcilePending(),
@@ -586,7 +587,7 @@ export function createGiftPaymentComposition(
         if (results.some((result) => result.status === "rejected"))
           return { kind: "RETRY" };
         const completed = results
-          .slice(0, 4)
+          .slice(0, 5)
           .flatMap((result) =>
             result.status === "fulfilled" && result.value ? [result.value] : [],
           );

@@ -1,4 +1,7 @@
-import { giftMinimumNominalCents } from "@entrelacos/contracts";
+import {
+  giftInstallmentExpiryMinutes,
+  giftMinimumNominalCents,
+} from "@entrelacos/contracts";
 import { showSandboxNotice } from "@entrelacos/ui";
 import { Link } from "@tanstack/react-router";
 import type { ReactNode } from "react";
@@ -280,6 +283,14 @@ export function ReceivingGuide({
           {formatCents(giftMinimumNominalCents)} por presente. O convidado vê o
           preço com as taxas incluídas. Se escolher parcelar no cartão, vê o
           valor das parcelas, o acréscimo e o total antes de pagar.
+        </p>
+        <p className="m-0">
+          Ao abrir uma cobrança, o convidado ainda precisa concluir o pagamento
+          no Asaas. O presente aparece no histórico após a confirmação do
+          pagamento ou o registro de crédito. A cobrança parcelada tem prazo de{" "}
+          {giftInstallmentExpiryMinutes} minutos a partir da emissão. Após esse
+          prazo, o convidado pode tentar novamente quando o Asaas confirmar o
+          encerramento da cobrança anterior.
         </p>
         <p className="m-0">
           O EntreLaços cobre a diferença quando a tarifa de um novo pagamento
