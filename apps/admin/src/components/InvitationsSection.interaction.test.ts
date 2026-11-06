@@ -67,6 +67,11 @@ beforeEach(async () => {
         adults: 32,
         children: 8,
         byStatus: { confirmed: 12, pending: 25, declined: 3, partial: 5 },
+        guestsByStatus: {
+          confirmed: { adults: 16, children: 4 },
+          pending: { adults: 12, children: 3 },
+          declined: { adults: 4, children: 1 },
+        },
       },
     }),
     "/invitations": () => ({
@@ -156,6 +161,11 @@ it("shows only the first-steps guide while the wedding has no invitations", asyn
       adults: 0,
       children: 0,
       byStatus: { confirmed: 0, pending: 0, declined: 0, partial: 0 },
+      guestsByStatus: {
+        confirmed: { adults: 0, children: 0 },
+        pending: { adults: 0, children: 0 },
+        declined: { adults: 0, children: 0 },
+      },
     },
   });
   routes["/invitations"] = () => ({ invitations: [], nextCursor: null });

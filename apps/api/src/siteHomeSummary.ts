@@ -40,6 +40,20 @@ export async function readSiteHomeSummary(
           'pending', count(*) filter (where status = 'PENDING')::int,
           'declined', count(*) filter (where status = 'DECLINED')::int,
           'partial', count(*) filter (where status = 'PARTIAL')::int
+        ),
+        'guestsByStatus', json_build_object(
+          'confirmed', json_build_object(
+            'adults', coalesce(sum(confirmed_adults), 0)::int,
+            'children', coalesce(sum(confirmed_children), 0)::int
+          ),
+          'pending', json_build_object(
+            'adults', coalesce(sum(pending_adults), 0)::int,
+            'children', coalesce(sum(pending_children), 0)::int
+          ),
+          'declined', json_build_object(
+            'adults', coalesce(sum(declined_adults), 0)::int,
+            'children', coalesce(sum(declined_children), 0)::int
+          )
         )
       ) from (
         select
@@ -48,6 +62,18 @@ export async function readSiteHomeSummary(
           count(g.id) filter (where g.rsvp_state = 'DECLINED') as declined,
           count(g.id) filter (where g.guest_type = 'ADULT') as adults,
           count(g.id) filter (where g.guest_type = 'CHILD') as children,
+          count(g.id) filter (where g.rsvp_state = 'CONFIRMED'
+            and g.guest_type = 'ADULT') as confirmed_adults,
+          count(g.id) filter (where g.rsvp_state = 'CONFIRMED'
+            and g.guest_type = 'CHILD') as confirmed_children,
+          count(g.id) filter (where g.rsvp_state = 'PENDING'
+            and g.guest_type = 'ADULT') as pending_adults,
+          count(g.id) filter (where g.rsvp_state = 'PENDING'
+            and g.guest_type = 'CHILD') as pending_children,
+          count(g.id) filter (where g.rsvp_state = 'DECLINED'
+            and g.guest_type = 'ADULT') as declined_adults,
+          count(g.id) filter (where g.rsvp_state = 'DECLINED'
+            and g.guest_type = 'CHILD') as declined_children,
           case when count(distinct g.rsvp_state) > 1 then 'PARTIAL'
             else coalesce(min(g.rsvp_state::text), 'PENDING') end as status
         from invitation i
