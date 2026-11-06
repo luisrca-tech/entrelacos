@@ -18,12 +18,15 @@ describe("StorySection editorial chapters", () => {
     expect(source).toContain("--story-media-ratio");
   });
 
-  it("connects chapter controls to their copy without automatic playback", () => {
+  it("connects chapter controls to their copy and shows timed progress without an additional playback control", () => {
     expect(source).toContain("data-story-chapter");
     expect(source).toMatch(/aria-controls=\{`\$\{id\}-chapter-/);
     expect(source).toMatch(/id=\{hasChapters \? `\$\{id\}-chapter-/);
     expect(source).toContain("aria-pressed={index === 0}");
     expect(source).toContain("setupStoryChapters");
+    expect(source).toContain("data-story-progress");
+    expect(source).not.toContain("data-story-playback");
+    expect(source).toContain("data-story-timed");
     expect(source).not.toContain("setupStoryMediaCycle");
     expect(source).toContain("[data-story-tabs][hidden]");
   });

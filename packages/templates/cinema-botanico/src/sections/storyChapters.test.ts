@@ -55,6 +55,7 @@ function fixture(count = 3) {
 afterEach(() => {
   document.body.innerHTML = "";
   vi.useRealTimers();
+  vi.restoreAllMocks();
 });
 
 describe("manual story chapters", () => {
@@ -123,5 +124,122 @@ describe("manual story chapters", () => {
     setupStoryChapters(story);
     expect(story.dataset.storyReady).toBeUndefined();
     expect(panels[0].hasAttribute("aria-hidden")).toBe(false);
+  });
+});
+
+function autoplayFixture() {
+  vi.useFakeTimers();
+  const values = fixture();
+  values.story.dataset.storyTimed = "true";
+  const reading = document.createElement("div");
+  reading.dataset.storyReading = "";
+  values.story.append(reading);
+  let observe: IntersectionObserverCallback = () => undefined;
+  const disconnect = vi.fn();
+  const Observer = class {
+    constructor(callback: IntersectionObserverCallback) {
+      observe = callback;
+    }
+    observe() {}
+    disconnect = disconnect;
+  } as unknown as typeof IntersectionObserver;
+  const motion = new EventTarget() as MediaQueryList;
+  Object.defineProperty(motion, "matches", { value: false, writable: true });
+  const cleanup = setupStoryChapters(values.story, { Observer, motion });
+  return {
+    ...values,
+    reading,
+    cleanup,
+    disconnect,
+    motion,
+    visible: (visible: boolean) =>
+      observe(
+        [
+          {
+            target: values.story.querySelector("[data-story-tabs]"),
+            isIntersecting: visible,
+            intersectionRatio: visible ? 1 : 0,
+          } as IntersectionObserverEntry,
+        ],
+        {} as IntersectionObserver,
+      ),
+    progress: () =>
+      Number(values.story.style.getPropertyValue("--story-progress")),
+  };
+}
+
+describe("story chapter playback", () => {
+  it("fills progress over eight visible seconds, advances and wraps", () => {
+    const value = autoplayFixture();
+    vi.advanceTimersByTime(16000);
+    expect(value.buttons[0].getAttribute("aria-pressed")).toBe("true");
+    value.visible(true);
+    vi.advanceTimersByTime(4000);
+    expect(value.progress()).toBeCloseTo(0.5, 2);
+    vi.advanceTimersByTime(4016);
+    expect(value.buttons[1].getAttribute("aria-pressed")).toBe("true");
+    vi.advanceTimersByTime(16000);
+    expect(value.buttons[0].getAttribute("aria-pressed")).toBe("true");
+    value.cleanup();
+    expect(vi.getTimerCount()).toBe(0);
+    expect(value.disconnect).toHaveBeenCalled();
+  });
+
+  it("preserves progress while paused or offscreen and resets after manual selection", () => {
+    const value = autoplayFixture();
+    value.visible(true);
+    vi.advanceTimersByTime(3000);
+    value.reading.dispatchEvent(new Event("pointerenter"));
+    const paused = value.progress();
+    vi.advanceTimersByTime(20000);
+    expect(value.progress()).toBe(paused);
+    value.reading.dispatchEvent(new Event("pointerleave"));
+    vi.advanceTimersByTime(1000);
+    expect(value.progress()).toBeCloseTo(0.5, 2);
+    value.visible(false);
+    const offscreen = value.progress();
+    vi.advanceTimersByTime(20000);
+    expect(value.progress()).toBe(offscreen);
+    value.buttons[2].click();
+    expect(value.progress()).toBe(0);
+    value.visible(true);
+    vi.advanceTimersByTime(8016);
+    expect(value.buttons[0].getAttribute("aria-pressed")).toBe("true");
+    value.cleanup();
+  });
+
+  it("stops during keyboard focus and resumes after focus leaves the controls", () => {
+    const value = autoplayFixture();
+    value.visible(true);
+    vi.spyOn(value.buttons[0], "matches").mockReturnValue(true);
+    value.buttons[0].focus();
+    vi.advanceTimersByTime(20000);
+    expect(value.buttons[0].getAttribute("aria-pressed")).toBe("true");
+    value.buttons[0].blur();
+    vi.advanceTimersByTime(8016);
+    expect(value.buttons[1].getAttribute("aria-pressed")).toBe("true");
+    value.cleanup();
+  });
+
+  it("pauses in a hidden tab and disables automatic motion when requested", () => {
+    const value = autoplayFixture();
+    value.visible(true);
+    vi.advanceTimersByTime(1000);
+    const hidden = vi.spyOn(document, "hidden", "get").mockReturnValue(true);
+    document.dispatchEvent(new Event("visibilitychange"));
+    const progress = value.progress();
+    vi.advanceTimersByTime(20000);
+    expect(value.progress()).toBe(progress);
+    hidden.mockReturnValue(false);
+    document.dispatchEvent(new Event("visibilitychange"));
+    Object.assign(value.motion, { matches: true });
+    value.motion.dispatchEvent(new Event("change"));
+    vi.advanceTimersByTime(20000);
+    expect(value.buttons[0].getAttribute("aria-pressed")).toBe("true");
+    expect(value.story.dataset.storyAutoplay).toBe("false");
+    value.buttons[1].click();
+    expect(value.buttons[1].getAttribute("aria-pressed")).toBe("true");
+    value.cleanup();
+    hidden.mockRestore();
   });
 });
