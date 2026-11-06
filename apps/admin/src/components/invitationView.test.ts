@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   filterInvitations,
-  invitationResponseSummary,
   type InvitationListItem,
+  invitationResponseSummary,
   summarizeInvitations,
 } from "./invitationView";
 

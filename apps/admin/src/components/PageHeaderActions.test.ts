@@ -5,8 +5,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, expect, it } from "vitest";
 import {
   PageHeaderActions,
-  PageHeaderActionsSlot,
   PageHeaderActionsProvider,
+  PageHeaderActionsSlot,
 } from "./PageHeaderActions";
 
 let container: HTMLDivElement;
