@@ -829,7 +829,14 @@ export function GiftEditorView({
               )}
             </aside>
           </article>
-          <div className="sticky bottom-0 z-[5] -mx-[42px] flex flex-wrap items-center justify-between gap-3 border-t border-admin-line bg-[rgb(255_253_249_/_96%)] px-[42px] py-4 backdrop-blur-sm [@media(max-width:760px)]:bottom-[calc(66px+env(safe-area-inset-bottom))] [@media(max-width:760px)]:-mx-5 [@media(max-width:760px)]:px-4 [@media(min-width:761px)_and_(max-width:1060px)]:-mx-7 [@media(min-width:761px)_and_(max-width:1060px)]:px-7">
+          {/* The bar is the last block of the page, so its negative bottom
+              margin cancels the AdminShell <main> bottom padding (pb-6) and it
+              sits flush on the footer at the end of the page. On phones it also
+              cancels the space the shell reserves for the fixed bottom nav and
+              pads itself by the same amount: it stays pinned to the viewport
+              bottom with its own opaque background behind the nav, so no strip
+              opens between the bar and the nav at any scroll position. */}
+          <div className="sticky bottom-0 z-[5] -mx-[42px] -mb-6 flex flex-wrap items-center justify-between gap-3 border-t border-admin-line bg-admin-surface px-[42px] py-4 [@media(max-width:760px)]:-mx-5 [@media(max-width:760px)]:-mb-[calc(24px+74px+env(safe-area-inset-bottom))] [@media(max-width:760px)]:px-4 [@media(max-width:760px)]:pb-[calc(16px+74px+env(safe-area-inset-bottom))] [@media(min-width:761px)_and_(max-width:1060px)]:-mx-7 [@media(min-width:761px)_and_(max-width:1060px)]:px-7">
             <button
               type="button"
               disabled={busy}
