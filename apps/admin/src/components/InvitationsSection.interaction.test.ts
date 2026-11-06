@@ -134,6 +134,9 @@ it("summarizes every invitation of the wedding instead of the loaded page", asyn
   expect(summary?.textContent).toContain("32 adultos");
   expect(summary?.textContent).toContain("8 crianças");
   expect(summary?.textContent).toContain("Respostas dos convidados");
+  expect(summary?.textContent).toContain(
+    "No máximo: 35 pessoas (28 adultos e 7 crianças)",
+  );
 });
 
 it("counts the quick filters across the whole wedding", async () => {
@@ -188,8 +191,11 @@ it("labels a loaded-only summary honestly when site totals are unavailable", asy
   };
   await mount();
   const summary = container.querySelector('[aria-label="Resumo dos convites"]');
-  expect(summary?.textContent).toContain("1 de 1 convidados irão comparecer");
+  expect(summary?.textContent).toContain("1 de 1 convidado irá comparecer");
   expect(summary?.textContent).toContain("convites carregados");
+  expect(summary?.textContent).toContain(
+    "Confirmados hoje: 1 pessoa (1 adulto e 0 crianças)",
+  );
 });
 
 it("keeps rows and the open detail mounted while a search reloads, then clears stale rows when it fails", async () => {
