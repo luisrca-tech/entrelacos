@@ -15,10 +15,10 @@ import {
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Plus, Trash2 } from "lucide-react";
 import { useEffect } from "react";
-import { Controller, useFieldArray, useForm } from "react-hook-form";
+import { Controller, useFieldArray, useForm, useWatch } from "react-hook-form";
 import type { z } from "zod";
-import { adminStyles } from "../lib/adminStyles";
 import { invitationFormValues } from "./invitationFormValues";
+import { NumberedSection } from "./NumberedSection";
 
 type FormInput = z.input<typeof invitationCreateInputSchema>;
 
@@ -59,130 +59,123 @@ export function InvitationFormDialog({
     if (open) reset(invitationFormValues(invitation));
   }, [open, invitation, reset]);
 
+  const [reviewName, reviewGuests] = useWatch({
+    control,
+    name: ["name", "guests"],
+  });
+  const adults = (reviewGuests ?? []).filter(
+    (guest) => guest.guestType !== "CHILD",
+  ).length;
+  const children = (reviewGuests ?? []).length - adults;
+  const fieldLabel = "grid gap-2 text-sm font-semibold text-admin-graphite";
+  const fieldError = "text-xs text-admin-status-declined";
+  const inputClass = "min-h-11 border-admin-line bg-admin-surface";
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className={`${adminStyles.dialog} flex max-w-[min(720px,calc(100vw-32px))] flex-col gap-0 overflow-hidden p-0`}
+        data-layout="sheet"
+        className="top-0 right-0 left-auto flex h-dvh max-h-dvh w-full max-w-[min(560px,100vw)] translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-none border-y-0 border-r-0 border-admin-line bg-admin-surface p-0 shadow-admin"
       >
         <form
           onSubmit={handleSubmit(onSave)}
-          className="flex min-h-0 w-full flex-col"
+          className="flex min-h-0 w-full flex-1 flex-col"
           noValidate
         >
-          <div className="min-h-0 flex-auto overflow-y-auto px-[30px] pt-[30px] [@media(max-width:760px)]:px-[18px] [@media(max-width:760px)]:pt-6">
+          <div className="shrink-0 border-b border-admin-line px-[30px] py-6 [@media(max-width:760px)]:px-[18px]">
             <DialogTitle className="font-admin-display text-3xl text-admin-graphite">
-              {invitation ? "Editar convite" : "Adicionar convite"}
+              {invitation ? "Editar convite" : "Novo convite"}
             </DialogTitle>
-            <DialogDescription className="mt-4 leading-relaxed text-admin-muted">
+            <DialogDescription className="mt-2 leading-relaxed text-admin-muted">
               Um convite pode ter uma ou mais pessoas. Cada convidado responde
               individualmente.
             </DialogDescription>
-            <div className="mt-5 grid gap-6 pb-6">
-              <fieldset className="grid gap-4">
-                <legend className="mb-3 font-admin-display text-xl text-admin-graphite">
-                  Dados do convite
-                </legend>
-                <label
-                  htmlFor="invitation-name"
-                  className="grid gap-2 text-sm font-semibold text-admin-graphite"
-                >
-                  Identificação do convite
-                  <Input
-                    id="invitation-name"
-                    {...register("name")}
-                    autoComplete="off"
-                    maxLength={160}
-                    aria-invalid={Boolean(errors.name)}
-                    className="min-h-11 border-admin-line bg-admin-surface"
-                  />
-                  {errors.name && (
-                    <span
-                      role="alert"
-                      className="text-xs text-admin-status-declined"
-                    >
-                      Informe a identificação do convite.
-                    </span>
-                  )}
-                </label>
-                <label
-                  htmlFor="invitation-phone"
-                  className="grid gap-2 text-sm font-semibold text-admin-graphite"
-                >
-                  Telefone de contato
-                  <Controller
-                    control={control}
-                    name="phone"
-                    render={({ field }) => (
-                      <Input
-                        id="invitation-phone"
-                        ref={field.ref}
-                        name={field.name}
-                        value={field.value}
-                        onBlur={field.onBlur}
-                        onChange={(event) =>
-                          field.onChange(
-                            formatInvitationPhoneInput(event.target.value),
-                          )
-                        }
-                        type="tel"
-                        inputMode="tel"
-                        autoComplete="tel"
-                        placeholder="(11) 99999-9999 ou +1 212 555 0123"
-                        aria-invalid={Boolean(errors.phone)}
-                        aria-describedby="invitation-phone-help"
-                        className="min-h-11 border-admin-line bg-admin-surface"
-                      />
-                    )}
-                  />
-                  <span
-                    id="invitation-phone-help"
-                    className="text-xs font-normal leading-relaxed text-admin-muted"
-                  >
-                    Números brasileiros podem ser informados sem +55. Para outro
-                    país, comece com + e o código internacional.
+          </div>
+          <div className="grid min-h-0 flex-1 content-start gap-7 overflow-y-auto px-[30px] py-6 [@media(max-width:760px)]:px-[18px]">
+            <NumberedSection number={1} title="Identificação">
+              <label htmlFor="invitation-name" className={fieldLabel}>
+                Identificação do convite
+                <Input
+                  id="invitation-name"
+                  {...register("name")}
+                  autoComplete="off"
+                  maxLength={160}
+                  aria-invalid={Boolean(errors.name)}
+                  className={inputClass}
+                />
+                {errors.name && (
+                  <span role="alert" className={fieldError}>
+                    Informe a identificação do convite.
                   </span>
-                  {errors.phone && (
-                    <span
-                      role="alert"
-                      className="text-xs text-admin-status-declined"
-                    >
-                      Informe um telefone válido.
-                    </span>
+                )}
+              </label>
+              <label htmlFor="invitation-phone" className={fieldLabel}>
+                Telefone de contato
+                <Controller
+                  control={control}
+                  name="phone"
+                  render={({ field }) => (
+                    <Input
+                      id="invitation-phone"
+                      ref={field.ref}
+                      name={field.name}
+                      value={field.value}
+                      onBlur={field.onBlur}
+                      onChange={(event) =>
+                        field.onChange(
+                          formatInvitationPhoneInput(event.target.value),
+                        )
+                      }
+                      type="tel"
+                      inputMode="tel"
+                      autoComplete="tel"
+                      placeholder="(11) 99999-9999 ou +1 212 555 0123"
+                      aria-invalid={Boolean(errors.phone)}
+                      aria-describedby="invitation-phone-help"
+                      className={inputClass}
+                    />
                   )}
-                </label>
-                <label
-                  htmlFor="invitation-email"
-                  className="grid gap-2 text-sm font-semibold text-admin-graphite"
+                />
+                <span
+                  id="invitation-phone-help"
+                  className="text-xs font-normal leading-relaxed text-admin-muted"
                 >
+                  Números brasileiros podem ser informados sem +55. Para outro
+                  país, comece com + e o código internacional.
+                </span>
+                {errors.phone && (
+                  <span role="alert" className={fieldError}>
+                    Informe um telefone válido.
+                  </span>
+                )}
+              </label>
+              <label htmlFor="invitation-email" className={fieldLabel}>
+                <span>
                   E-mail de contato{" "}
                   <span className="text-xs font-normal text-admin-muted">
                     (opcional)
                   </span>
-                  <Input
-                    id="invitation-email"
-                    {...register("email")}
-                    type="email"
-                    autoComplete="email"
-                    maxLength={320}
-                    aria-invalid={Boolean(errors.email)}
-                    className="min-h-11 border-admin-line bg-admin-surface"
-                  />
-                  {errors.email && (
-                    <span
-                      role="alert"
-                      className="text-xs text-admin-status-declined"
-                    >
-                      Informe um e-mail válido ou deixe o campo vazio.
-                    </span>
-                  )}
-                </label>
-              </fieldset>
-              <fieldset className="grid gap-3 border-t border-admin-line pt-5">
-                <legend className="mb-3 font-admin-display text-xl text-admin-graphite">
-                  Convidados neste convite ({fields.length})
-                </legend>
+                </span>
+                <Input
+                  id="invitation-email"
+                  {...register("email")}
+                  type="email"
+                  autoComplete="email"
+                  maxLength={320}
+                  aria-invalid={Boolean(errors.email)}
+                  className={inputClass}
+                />
+                {errors.email && (
+                  <span role="alert" className={fieldError}>
+                    Informe um e-mail válido ou deixe o campo vazio.
+                  </span>
+                )}
+              </label>
+            </NumberedSection>
+            <NumberedSection number={2} title="Pessoas">
+              <ul className="m-0 grid list-none gap-3 p-0">
                 {fields.map((field, index) => (
-                  <div
+                  <li
                     key={field.fieldKey}
                     className="grid gap-3 rounded-xl border border-admin-line bg-admin-canvas p-4"
                   >
@@ -192,47 +185,44 @@ export function InvitationFormDialog({
                         {...register(`guests.${index}.id`)}
                       />
                     )}
-                    <div className="flex items-center justify-between gap-3">
-                      <strong className="text-sm text-admin-graphite">
-                        Convidado {index + 1}
-                      </strong>
+                    <div className="flex items-end gap-2">
+                      <label
+                        htmlFor={`invitation-guest-name-${index}`}
+                        className={`${fieldLabel} min-w-0 flex-1`}
+                      >
+                        Nome da pessoa {index + 1}
+                        <Input
+                          id={`invitation-guest-name-${index}`}
+                          {...register(`guests.${index}.fullName`)}
+                          maxLength={160}
+                          aria-invalid={Boolean(
+                            errors.guests?.[index]?.fullName,
+                          )}
+                          className={inputClass}
+                        />
+                      </label>
                       {fields.length > 1 && (
                         <Button
                           type="button"
                           variant="ghost"
+                          size="icon"
                           onClick={() => remove(index)}
                           disabled={busy || inactive}
-                          aria-label={`Remover convidado ${index + 1}`}
+                          aria-label={`Remover pessoa ${index + 1}`}
+                          className="size-11 shrink-0"
                         >
                           <Trash2 aria-hidden="true" className="size-4" />
-                          Remover
                         </Button>
                       )}
                     </div>
-                    <label
-                      htmlFor={`invitation-guest-name-${index}`}
-                      className="grid gap-2 text-sm font-semibold text-admin-graphite"
-                    >
-                      Nome completo do convidado
-                      <Input
-                        id={`invitation-guest-name-${index}`}
-                        {...register(`guests.${index}.fullName`)}
-                        maxLength={160}
-                        aria-invalid={Boolean(errors.guests?.[index]?.fullName)}
-                        className="min-h-11 border-admin-line bg-admin-surface"
-                      />
-                      {errors.guests?.[index]?.fullName && (
-                        <span
-                          role="alert"
-                          className="text-xs text-admin-status-declined"
-                        >
-                          Informe o nome do convidado.
-                        </span>
-                      )}
-                    </label>
-                    <fieldset className="grid grid-cols-2 gap-2">
+                    {errors.guests?.[index]?.fullName && (
+                      <span role="alert" className={fieldError}>
+                        Informe o nome do convidado.
+                      </span>
+                    )}
+                    <fieldset className="m-0 grid grid-cols-2 gap-2 border-0 p-0">
                       <legend className="sr-only">
-                        Faixa etária do convidado {index + 1}
+                        Faixa etária da pessoa {index + 1}
                       </legend>
                       <label className="flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-lg border border-admin-line bg-admin-surface px-3 text-sm">
                         <input
@@ -253,30 +243,49 @@ export function InvitationFormDialog({
                         Criança
                       </label>
                     </fieldset>
-                  </div>
+                  </li>
                 ))}
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => append({ fullName: "", guestType: "ADULT" })}
-                  disabled={busy || inactive}
-                  className="min-h-11 border-admin-line"
-                >
-                  <Plus aria-hidden="true" className="size-4" />
-                  Adicionar convidado
-                </Button>
-                {errors.guests?.root && (
-                  <span
-                    role="alert"
-                    className="text-xs text-admin-status-declined"
-                  >
-                    Adicione pelo menos um convidado.
-                  </span>
-                )}
-              </fieldset>
-            </div>
+              </ul>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => append({ fullName: "", guestType: "ADULT" })}
+                disabled={busy || inactive}
+                className="min-h-11 w-fit border-admin-line"
+              >
+                <Plus aria-hidden="true" className="size-4" />
+                Adicionar pessoa
+              </Button>
+              {errors.guests?.root && (
+                <span role="alert" className={fieldError}>
+                  Adicione pelo menos um convidado.
+                </span>
+              )}
+            </NumberedSection>
+            <NumberedSection number={3} title="Revisar">
+              <dl className="m-0 grid gap-2 rounded-xl border border-admin-line bg-admin-canvas p-4 text-sm">
+                <div className="flex flex-wrap justify-between gap-2">
+                  <dt className="text-admin-muted">Convite</dt>
+                  <dd className="m-0 min-w-0 break-words font-semibold">
+                    {reviewName?.trim() || "Sem identificação"}
+                  </dd>
+                </div>
+                <div className="flex flex-wrap justify-between gap-2">
+                  <dt className="text-admin-muted">Pessoas</dt>
+                  <dd className="m-0 font-semibold">
+                    {adults + children}{" "}
+                    {adults + children === 1 ? "pessoa" : "pessoas"} · {adults}{" "}
+                    {adults === 1 ? "adulto" : "adultos"} · {children}{" "}
+                    {children === 1 ? "criança" : "crianças"}
+                  </dd>
+                </div>
+              </dl>
+            </NumberedSection>
           </div>
-          <div className="mt-auto flex w-full shrink-0 justify-end gap-2 border-t border-admin-line bg-admin-surface px-[30px] py-3 [@media(max-width:760px)]:px-[18px]">
+          <div
+            data-slot="sheet-footer"
+            className="sticky bottom-0 flex w-full shrink-0 justify-end gap-2 border-t border-admin-line bg-admin-surface px-[30px] py-3 [@media(max-width:760px)]:px-[18px]"
+          >
             <Button
               type="button"
               variant="outline"
@@ -285,7 +294,11 @@ export function InvitationFormDialog({
             >
               Cancelar
             </Button>
-            <Button type="submit" disabled={busy || inactive}>
+            <Button
+              type="submit"
+              disabled={busy || inactive}
+              className="bg-admin-terracotta text-white hover:bg-admin-terracotta-deep"
+            >
               {busy ? "Salvando…" : "Salvar convite"}
             </Button>
           </div>

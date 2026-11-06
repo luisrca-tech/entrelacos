@@ -7,8 +7,10 @@ import type {
   InvitationRecord,
   RsvpDeadline,
   RsvpHistoryResponse,
+  SiteHomeSummary,
   SiteRsvpResponse,
 } from "@entrelacos/contracts";
+import { siteHomeSummarySchema } from "@entrelacos/contracts";
 import {
   Button,
   Dialog,
@@ -76,6 +78,11 @@ export function InvitationsSection({ siteId, lifecycle, sessionEpoch }: Props) {
   const currentFilters = useRef(filters);
   currentFilters.current = filters;
   const [loading, setLoading] = useState(true);
+  const [loaded, setLoaded] = useState(false);
+  const loadedFilters = useRef<string | null>(null);
+  const [siteTotals, setSiteTotals] =
+    useState<SiteHomeSummary["invitations"]>();
+  const totalsRequest = useRef(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [formOpen, setFormOpen] = useState(false);
@@ -123,11 +130,15 @@ export function InvitationsSection({ siteId, lifecycle, sessionEpoch }: Props) {
       else setLoading(true);
       setPageError("");
       const selected = currentFilters.current;
-      const query = new URLSearchParams({ limit: "30" });
-      if (selected.search.trim()) query.set("search", selected.search.trim());
-      if (selected.status !== "ALL") query.set("status", selected.status);
+      const filterQuery = new URLSearchParams();
+      if (selected.search.trim())
+        filterQuery.set("search", selected.search.trim());
+      if (selected.status !== "ALL") filterQuery.set("status", selected.status);
       if (selected.guestType !== "ALL")
-        query.set("guestType", selected.guestType);
+        filterQuery.set("guestType", selected.guestType);
+      const filterKey = filterQuery.toString();
+      const query = new URLSearchParams({ limit: "30" });
+      for (const [name, value] of filterQuery) query.set(name, value);
       if (cursor) query.set("cursor", cursor);
       try {
         const response = await apiRequest<InvitationPage>(
@@ -146,6 +157,8 @@ export function InvitationsSection({ siteId, lifecycle, sessionEpoch }: Props) {
               ]
             : response.invitations,
         );
+        loadedFilters.current = filterKey;
+        setLoaded(true);
         setNextCursor(response.nextCursor);
         setError("");
       } catch (cause) {
@@ -153,7 +166,15 @@ export function InvitationsSection({ siteId, lifecycle, sessionEpoch }: Props) {
         panelActorOwner.reportFailure(cause, sessionEpoch);
         if (!current()) return;
         if (cursor) setPageError("Não foi possível carregar mais convites.");
-        else setError(invitationAdminError(cause));
+        else {
+          // Rows kept visible during the reload belong to other filters.
+          if (loadedFilters.current !== filterKey) {
+            loadedFilters.current = null;
+            setInvitations([]);
+            setNextCursor(null);
+          }
+          setError(invitationAdminError(cause));
+        }
       } finally {
         if (current()) {
           setLoading(false);
@@ -163,6 +184,31 @@ export function InvitationsSection({ siteId, lifecycle, sessionEpoch }: Props) {
     },
     [invitationBase, sessionEpoch],
   );
+
+  // Wedding-wide counts for the summary; the list itself is paginated.
+  const loadSiteTotals = useCallback(async () => {
+    if (!isCurrentPanelSessionEpoch(sessionEpoch)) return;
+    const attempt = ++totalsRequest.current;
+    try {
+      const response = siteHomeSummarySchema.parse(
+        await apiRequest(`${base}/home-summary`),
+      );
+      if (
+        attempt === totalsRequest.current &&
+        isCurrentPanelSessionEpoch(sessionEpoch)
+      )
+        setSiteTotals(response.invitations);
+    } catch {
+      if (attempt === totalsRequest.current) setSiteTotals(undefined);
+    }
+  }, [base, sessionEpoch]);
+
+  useEffect(() => {
+    void loadSiteTotals();
+    return () => {
+      totalsRequest.current++;
+    };
+  }, [loadSiteTotals]);
 
   useEffect(() => {
     let active = true;
@@ -225,7 +271,7 @@ export function InvitationsSection({ siteId, lifecycle, sessionEpoch }: Props) {
     try {
       const result = await operation();
       onSuccess?.();
-      await loadInvitations();
+      await Promise.all([loadInvitations(), loadSiteTotals()]);
       emitInvitationsChanged(window, siteId);
       toast[tone](success);
       return result;
@@ -345,12 +391,17 @@ export function InvitationsSection({ siteId, lifecycle, sessionEpoch }: Props) {
         loadConfirmations(),
         loadHistory(),
         loadInvitations(),
+        loadSiteTotals(),
       ]);
       emitInvitationsChanged(window, siteId);
       toast.success("Confirmações salvas.");
     } catch (cause) {
       if (cause instanceof ApiError && cause.code === "RSVP_CONFLICT") {
-        await Promise.all([loadConfirmations(), loadInvitations()]);
+        await Promise.all([
+          loadConfirmations(),
+          loadInvitations(),
+          loadSiteTotals(),
+        ]);
       }
       toast.error(invitationAdminError(cause));
     } finally {
@@ -455,6 +506,7 @@ export function InvitationsSection({ siteId, lifecycle, sessionEpoch }: Props) {
       <div className="grid gap-5">
         <InvitationOverview
           summary={summary}
+          siteTotals={siteTotals}
           inactive={inactive}
           onAdd={() => {
             setEditId(null);
@@ -537,12 +589,20 @@ export function InvitationsSection({ siteId, lifecycle, sessionEpoch }: Props) {
               onChange={setFilters}
             />
           </div>
-          {loading ? (
-            <p role="status" className="text-admin-muted">
-              Carregando convites…
+          {loading && loaded && (
+            <p role="status" className="mb-3 text-sm text-admin-muted">
+              Atualizando convites…
             </p>
-          ) : (
+          )}
+          {!loaded ? (
+            loading && (
+              <p role="status" className="text-admin-muted">
+                Carregando convites…
+              </p>
+            )
+          ) : error && invitations.length === 0 ? null : (
             <div
+              aria-busy={loading}
               className={`grid items-start gap-4 ${selectedInvitation ? "lg:grid-cols-[minmax(0,1.65fr)_minmax(0,1fr)]" : ""}`}
             >
               <InvitationList
@@ -638,7 +698,11 @@ export function InvitationsSection({ siteId, lifecycle, sessionEpoch }: Props) {
         onOpenChange={setExportOpen}
         onExport={(format, options) => void downloadExport(format, options)}
         busy={busy}
-        invitationCount={filtered.length}
+        hasFilters={Boolean(
+          filters.search.trim() ||
+            filters.status !== "ALL" ||
+            filters.guestType !== "ALL",
+        )}
       />
       <Dialog open={deadlineOpen} onOpenChange={setDeadlineOpen}>
         <DialogContent className={adminStyles.dialog}>

@@ -1,9 +1,12 @@
+import type { SiteHomeSummary } from "@entrelacos/contracts";
 import { Button } from "@entrelacos/ui";
 import { CalendarClock } from "lucide-react";
 import type { InvitationSummary } from "./invitationView";
 
 type Props = {
   summary: InvitationSummary;
+  /** Wedding-wide counts; when present they replace the loaded-page summary. */
+  siteTotals?: SiteHomeSummary["invitations"] | null;
   inactive: boolean;
   onAdd: () => void;
   onManageConfirmations: () => void;
@@ -22,21 +25,31 @@ export function InvitationOverview({
   onConfigureDeadline,
   deadline,
   partial,
+  siteTotals,
 }: Props) {
+  const counts = siteTotals
+    ? {
+        invitations: siteTotals.total,
+        guests: siteTotals.confirmed + siteTotals.pending + siteTotals.declined,
+        confirmed: siteTotals.confirmed,
+        pending: siteTotals.pending,
+        declined: siteTotals.declined,
+      }
+    : summary;
   const statuses = [
     {
       title: "Confirmados",
-      count: summary.confirmed,
+      count: counts.confirmed,
       color: "bg-admin-status-confirmed",
     },
     {
       title: "Sem resposta",
-      count: summary.pending,
+      count: counts.pending,
       color: "bg-admin-status-pending",
     },
     {
       title: "Não irão",
-      count: summary.declined,
+      count: counts.declined,
       color: "bg-admin-status-declined",
     },
   ];
@@ -61,20 +74,26 @@ export function InvitationOverview({
           aria-label="Resumo dos convites"
         >
           <p className="m-0 text-xs text-admin-muted">
-            {partial
-              ? "Respostas dos convites exibidos"
+            {!siteTotals && partial
+              ? "Respostas dos convites carregados nesta lista"
               : "Respostas dos convidados"}
           </p>
           <h2 className="m-0 font-admin-display text-2xl font-normal">
-            {summary.confirmed} de {summary.guests} convidados irão comparecer
+            {counts.confirmed} de {counts.guests} convidados irão comparecer
           </h2>
           <p className="m-0 text-xs text-admin-muted">
-            {summary.invitations}{" "}
-            {summary.invitations === 1 ? "convite" : "convites"} ·{" "}
-            {summary.adults} {summary.adults === 1 ? "adulto" : "adultos"} ·{" "}
-            {summary.children} {summary.children === 1 ? "criança" : "crianças"}
+            {counts.invitations}{" "}
+            {counts.invitations === 1 ? "convite" : "convites"}
+            {!siteTotals && (
+              <>
+                {" "}
+                · {summary.adults} {summary.adults === 1 ? "adulto" : "adultos"}{" "}
+                · {summary.children}{" "}
+                {summary.children === 1 ? "criança" : "crianças"}
+              </>
+            )}
           </p>
-          {summary.guests > 0 && (
+          {counts.guests > 0 && (
             <div className="flex h-3 gap-1" aria-hidden="true">
               {statuses
                 .filter((status) => status.count > 0)

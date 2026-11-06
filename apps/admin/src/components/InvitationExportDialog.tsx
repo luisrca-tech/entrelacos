@@ -17,7 +17,7 @@ type Props = {
     options: { includePhone: boolean; includeEmail: boolean },
   ) => void;
   busy: boolean;
-  invitationCount: number;
+  hasFilters: boolean;
 };
 
 export function InvitationExportDialog({
@@ -25,7 +25,7 @@ export function InvitationExportDialog({
   onOpenChange,
   onExport,
   busy,
-  invitationCount,
+  hasFilters,
 }: Props) {
   const [includePhone, setIncludePhone] = useState(false);
   const [includeEmail, setIncludeEmail] = useState(false);
@@ -45,9 +45,11 @@ export function InvitationExportDialog({
           Exportar convidados
         </DialogTitle>
         <DialogDescription className="leading-relaxed text-admin-muted">
-          O arquivo terá uma linha por convidado, considerando a busca e os
-          filtros ativos em {invitationCount}{" "}
-          {invitationCount === 1 ? "convite" : "convites"}.
+          O arquivo terá uma linha por convidado de todos os convites do
+          casamento
+          {hasFilters
+            ? " que correspondem à busca e aos filtros ativos, inclusive os que ainda não foram carregados na lista."
+            : ", inclusive os que ainda não foram carregados na lista."}
         </DialogDescription>
         <div className="my-5 grid gap-3 rounded-xl border border-admin-line bg-admin-canvas p-4">
           <p className="m-0 text-sm font-semibold text-admin-graphite">
