@@ -79,8 +79,13 @@ async function fixture(label: string) {
     expiresAt: new Date(now.getTime() + 24 * 60 * 60 * 1000),
     createdAt: now,
   });
-  const firstGuest = first.guests[0];
-  const childGuest = first.guests[1];
+  // Guests come back ordered by their random ids, so pick them by name.
+  const firstGuest = first.guests.find(
+    ({ fullName }) => fullName === "Ana Silva",
+  );
+  const childGuest = first.guests.find(
+    ({ fullName }) => fullName === "Bia Silva",
+  );
   const secondGuest = second.guests[0];
   if (!firstGuest || !childGuest || !secondGuest) {
     throw new Error("Expected guests in RSVP fixture");
