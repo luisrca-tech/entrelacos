@@ -1,13 +1,4 @@
-import {
-  Button,
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  Input,
-  PasswordInput,
-  toast,
-} from "@entrelacos/ui";
+import { Button, Input, PasswordInput } from "@entrelacos/ui";
 import { createFileRoute } from "@tanstack/react-router";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { AuthLayout } from "../components/AuthLayout";
@@ -47,6 +38,7 @@ function LoginPage() {
   const search = Route.useSearch();
   const [hydrated, setHydrated] = useState(false);
   const [pending, setPending] = useState(false);
+  const [failed, setFailed] = useState(false);
   const authActions = useRef<ReturnType<
     typeof createPanelAuthenticationActions
   > | null>(null);
@@ -66,6 +58,7 @@ function LoginPage() {
     const form = new FormData(event.currentTarget);
     const actions = authActions.current;
     if (!actions) return;
+    setFailed(false);
     setPending(true);
     await submitPanelSignIn(
       actions,
@@ -75,9 +68,7 @@ function LoginPage() {
       },
       () => window.location.assign(search.next),
       () => {
-        toast.error(
-          "Não foi possível entrar. Confira o e-mail e a senha ou solicite um novo acesso ao responsável.",
-        );
+        setFailed(true);
         setPending(false);
       },
     );
@@ -85,70 +76,59 @@ function LoginPage() {
 
   return (
     <AuthLayout>
-      <Card
-        className="w-full max-w-[480px] mx-auto border-0 bg-transparent shadow-none [&_[data-slot=card-header]]:p-0 [&_[data-slot=card-content]]:p-0 [&_[data-slot=card-description]]:mt-4 [&_[data-slot=card-description]]:max-w-[44ch] [&_[data-slot=card-description]]:text-admin-muted [&_[data-slot=card-description]]:leading-[1.65]"
-        aria-labelledby="login-title"
-      >
-        <CardHeader>
-          <p className="m-0 mb-3.5 text-[0.7rem] font-bold uppercase tracking-[0.13em] leading-[1.3] text-admin-terracotta-deep">
-            Acesso ao painel
-          </p>
-          <h1
-            className="m-0 max-w-[780px] font-admin-display text-[clamp(2.4rem,5vw,4rem)] font-normal leading-[1.04] tracking-[-0.025em]"
-            id="login-title"
-          >
+      <section className="grid gap-[22px]" aria-labelledby="login-title">
+        <header className="grid gap-3">
+          <p className={adminStyles.authEyebrow}>Acesso ao painel</p>
+          <h1 className={adminStyles.authHeading} id="login-title">
             Entre no seu painel.
           </h1>
-          <CardDescription>
+          <p className="m-0 text-[15px] leading-relaxed text-admin-muted">
             Use seu e-mail e sua senha para cuidar dos detalhes do casamento.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form
-            className={adminStyles.authForm}
-            method="post"
-            onSubmit={submit}
-          >
-            <label
-              className="grid gap-2 text-[0.88rem] font-semibold text-admin-graphite"
-              htmlFor="login-email"
-            >
-              E-mail
-              <Input
-                id="login-email"
-                name="email"
-                type="email"
-                autoComplete="username"
-                defaultValue={search.email}
-                required
-                maxLength={320}
-              />
-            </label>
-            <div className="grid gap-2 text-[0.88rem] font-semibold text-admin-graphite">
-              <label htmlFor="login-password">Senha</label>
-              <PasswordInput
-                id="login-password"
-                name="password"
-                autoComplete="current-password"
-                required
-                maxLength={200}
-              />
-            </div>
-            <Button
-              className="w-fit justify-self-start"
-              type="submit"
-              data-login-ready={hydrated ? "true" : undefined}
-              disabled={!hydrated || pending}
-            >
-              {pending ? "Entrando…" : "Entrar"}
-            </Button>
-          </form>
-          <p className="text-[0.87rem] leading-[1.6] text-admin-muted">
-            Primeiro acesso ou esqueceu a senha? Peça um link de acesso ao
-            responsável pelo casamento.
           </p>
-        </CardContent>
-      </Card>
+        </header>
+        {failed && (
+          <p role="alert" className={adminStyles.authError}>
+            Não foi possível entrar. Confira o e-mail e a senha ou solicite um
+            novo acesso ao responsável.
+          </p>
+        )}
+        <form className={adminStyles.authForm} method="post" onSubmit={submit}>
+          <label className="grid gap-[7px]" htmlFor="login-email">
+            E-mail
+            <Input
+              id="login-email"
+              name="email"
+              type="email"
+              autoComplete="username"
+              defaultValue={search.email}
+              required
+              maxLength={320}
+            />
+          </label>
+          <div className="grid gap-[7px]">
+            <label htmlFor="login-password">Senha</label>
+            <PasswordInput
+              id="login-password"
+              name="password"
+              autoComplete="current-password"
+              required
+              maxLength={200}
+            />
+          </div>
+          <Button
+            className={adminStyles.authButton}
+            type="submit"
+            data-login-ready={hydrated ? "true" : undefined}
+            disabled={!hydrated || pending}
+          >
+            {pending ? "Entrando…" : "Entrar"}
+          </Button>
+        </form>
+        <p className="m-0 text-[13px] leading-relaxed text-admin-muted">
+          Primeiro acesso ou esqueceu a senha? Peça um link de acesso ao
+          responsável pelo casamento.
+        </p>
+      </section>
     </AuthLayout>
   );
 }

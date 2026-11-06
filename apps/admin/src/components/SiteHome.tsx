@@ -19,6 +19,7 @@ import {
 import { useEffect, useState } from "react";
 import { formatBrazilianDate } from "./brazilianDate";
 import { loadGiftsReadiness } from "./giftsReadiness";
+import { HomeAreaCard } from "./HomeAreaCard";
 import { panelActorOwner } from "./panelActor";
 import { buildSiteHomePlan } from "./siteHomePlan";
 
@@ -243,26 +244,13 @@ export function SiteHomeView({
           {plan.sections.map((section) => {
             const Icon = sectionIcons[section.id];
             return (
-              <Link
+              <HomeAreaCard
                 key={section.id}
-                to={section.href}
-                className="group grid content-start gap-4 rounded-xl border border-admin-line bg-admin-surface p-5 text-admin-graphite no-underline transition-colors hover:border-admin-terracotta focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-admin-terracotta sm:p-6"
+                href={section.href}
+                icon={Icon}
+                title={section.label}
+                description={section.description}
               >
-                <div className="flex items-center justify-between gap-3">
-                  <span className="grid size-10 place-items-center rounded-lg bg-admin-paper text-admin-terracotta-deep">
-                    <Icon className="size-5" aria-hidden="true" />
-                  </span>
-                  <ArrowRight
-                    className="size-4 text-admin-muted transition-transform group-hover:translate-x-1 motion-reduce:transition-none"
-                    aria-hidden="true"
-                  />
-                </div>
-                <div>
-                  <h3 className="m-0 font-semibold">{section.label}</h3>
-                  <p className="mt-2 mb-0 text-sm leading-relaxed text-admin-muted">
-                    {section.description}
-                  </p>
-                </div>
                 {section.id === "receiving" && plan.receivingLabel && (
                   <Badge variant="outline" className="w-fit">
                     {loading
@@ -272,7 +260,7 @@ export function SiteHomeView({
                         : plan.receivingLabel}
                   </Badge>
                 )}
-              </Link>
+              </HomeAreaCard>
             );
           })}
         </div>

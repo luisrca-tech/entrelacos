@@ -295,6 +295,7 @@ export function MessagesSection({ siteId, lifecycle }: Props) {
               Cancelar
             </AlertDialogCancel>
             <AlertDialogAction
+              className={adminStyles.dangerButton}
               disabled={Boolean(pending)}
               onClick={() => {
                 if (removeTarget)

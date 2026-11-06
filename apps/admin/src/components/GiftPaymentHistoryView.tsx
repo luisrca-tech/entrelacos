@@ -13,6 +13,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { AdminSidePanel } from "./AdminSidePanel";
 import { financialFlow, formatCents, purchaseNetCents } from "./financialFlow";
 import {
   createGiftPaymentHistoryController,
@@ -483,10 +484,7 @@ export function GiftPaymentHistoryView(
           )}
         </div>
         {detail && (
-          <aside
-            aria-labelledby="gift-payment-detail-title"
-            className={`${readyCard} grid min-w-0 gap-4 p-[22px]`}
-          >
+          <AdminSidePanel aria-labelledby="gift-payment-detail-title">
             <div className="grid min-w-0 gap-1">
               <p className="m-0 text-xs font-bold tracking-[0.06em] text-admin-muted uppercase">
                 Detalhes do presente
@@ -652,7 +650,7 @@ export function GiftPaymentHistoryView(
                 Fechar detalhe
               </button>
             </div>
-          </aside>
+          </AdminSidePanel>
         )}
       </div>
       <details className="text-[13px] text-admin-muted">

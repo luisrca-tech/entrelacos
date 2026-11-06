@@ -7,7 +7,17 @@ export const adminStyles = {
   formGrid:
     "my-7 grid min-w-0 grid-cols-[repeat(auto-fit,minmax(min(100%,240px),1fr))] items-end gap-[18px] [&_label]:grid [&_label]:gap-2 [&_label]:text-[0.88rem] [&_label]:font-[650] [&_label]:text-admin-graphite [&_input]:min-h-11 [&_input]:min-w-0 [&_input]:w-full [&_input]:rounded-lg [&_input]:border [&_input]:border-admin-line [&_input]:bg-admin-surface [&_input]:px-3 [&_input]:py-2.5 [&_input]:text-admin-ink [&_input:focus]:border-admin-terracotta [&_input:focus]:outline-[3px] [&_input:focus]:outline-[rgb(168_77_57_/_20%)] [&_input:focus]:outline-offset-2 [&_textarea]:min-h-11 [&_textarea]:min-w-0 [&_textarea]:w-full [&_textarea]:rounded-lg [&_textarea]:border [&_textarea]:border-admin-line [&_textarea]:bg-admin-surface [&_textarea]:px-3 [&_textarea]:py-2.5 [&_textarea:focus]:border-admin-terracotta [&_textarea:focus]:outline-[3px] [&_textarea:focus]:outline-[rgb(168_77_57_/_20%)] [&_textarea:focus]:outline-offset-2 [&_button]:w-fit [&_button]:min-h-[42px] [&_button]:px-[17px] [&_button]:py-2.5 [&_[data-slot=button]]:w-fit",
   authForm:
-    "my-[34px] mb-[22px] grid gap-[18px] [&_label]:font-[650] [&_input]:min-h-11 [&_input]:min-w-0 [&_input]:w-full [&_input]:rounded-lg [&_input]:border [&_input]:border-admin-line [&_input]:bg-admin-surface [&_input]:px-3 [&_input]:py-2.5 [&_input]:text-admin-ink [&_input:focus]:border-admin-terracotta [&_input:focus]:outline-[3px] [&_input:focus]:outline-[rgb(168_77_57_/_20%)] [&_input:focus]:outline-offset-2 [&_button]:w-fit [&_button]:min-h-[42px] [&_button]:px-[17px] [&_button]:py-2.5 [&_[data-slot=button]]:w-fit",
+    "grid gap-[18px] [&_label]:text-sm [&_label]:font-semibold [&_input]:h-12 [&_input]:rounded-[10px] [&_input]:border-admin-line-strong [&_input]:bg-white [&_input]:px-3.5 [&_input:focus]:border-admin-terracotta [&_input:focus]:ring-admin-terracotta/20",
+  authEyebrow:
+    "m-0 text-[11px] font-bold uppercase tracking-[0.13em] text-admin-terracotta-deep",
+  authError:
+    "m-0 rounded-[10px] border border-admin-status-declined bg-admin-danger-wash px-3.5 py-3 text-sm leading-relaxed text-admin-danger-ink",
+  authHeading:
+    "m-0 font-admin-display text-[36px] font-normal leading-[1.06] tracking-tight lg:text-[44px]",
+  dangerButton:
+    "min-h-12 rounded-[10px] border-transparent bg-admin-status-declined px-6 font-bold text-white hover:bg-admin-danger-ink",
+  authButton:
+    "h-12 w-full rounded-[10px] bg-admin-terracotta font-bold text-white hover:bg-admin-terracotta-deep",
   inline: "flex flex-wrap items-center gap-3.5",
   notice:
     "border-l-[3px] border-admin-terracotta bg-admin-beige px-[18px] py-4 leading-[1.6] text-admin-graphite",

@@ -1,12 +1,4 @@
-import {
-  Button,
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  PasswordInput,
-  toast,
-} from "@entrelacos/ui";
+import { Button, PasswordInput, toast } from "@entrelacos/ui";
 import { Link } from "@tanstack/react-router";
 import { type FormEvent, useEffect, useState } from "react";
 import { adminStyles } from "../lib/adminStyles";
@@ -64,82 +56,80 @@ export function AccessForm({
 
   return (
     <AuthLayout>
-      <Card className="w-full max-w-[480px] mx-auto border-0 bg-transparent shadow-none [&_[data-slot=card-header]]:p-0 [&_[data-slot=card-content]]:p-0 [&_[data-slot=card-description]]:mt-4 [&_[data-slot=card-description]]:max-w-[44ch] [&_[data-slot=card-description]]:text-admin-muted [&_[data-slot=card-description]]:leading-[1.65]">
-        <CardHeader>
-          <p className="m-0 mb-3.5 text-[0.7rem] font-bold uppercase tracking-[0.13em] leading-[1.3] text-admin-terracotta-deep">
+      <section className="grid gap-5" aria-labelledby="access-title">
+        <header className="grid gap-3">
+          <p className={adminStyles.authEyebrow}>
             {purpose === "activation" ? "Primeiro acesso" : "Recuperar acesso"}
           </p>
-          <h1 className="m-0 max-w-[780px] font-admin-display text-[clamp(2.4rem,5vw,4rem)] font-normal leading-[1.04] tracking-[-0.025em]">
+          <h1 className={adminStyles.authHeading} id="access-title">
             {email ? "Sua senha está pronta." : "Defina sua senha."}
           </h1>
-          <CardDescription>
+          <p className="m-0 text-[15px] leading-relaxed text-admin-muted">
             {email
               ? "Agora entre com seu e-mail e a nova senha."
               : purpose === "activation"
                 ? "Escolha uma senha para começar a organizar o casamento."
                 : "Escolha uma nova senha para voltar ao painel."}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {email ? (
-            <Link
-              className="mt-6 inline-flex min-h-[42px] w-fit items-center justify-center rounded-lg border border-admin-graphite bg-admin-graphite px-[17px] py-2.5 text-[0.88rem] font-bold text-[#fffaf6] no-underline hover:bg-admin-ink"
-              to="/login"
-              search={{ email, next: "/" }}
-            >
-              Entrar no painel
-            </Link>
-          ) : !ready ? (
-            <p className="leading-[1.6]" role="status">
-              Carregando…
+          </p>
+        </header>
+        {email ? (
+          <Link
+            className={`${adminStyles.authButton} inline-flex items-center justify-center text-sm no-underline`}
+            to="/login"
+            search={{ email, next: "/" }}
+          >
+            Entrar no painel
+          </Link>
+        ) : !ready ? (
+          <p className="leading-[1.6]" role="status">
+            Carregando…
+          </p>
+        ) : !hasValidAccessToken(token) ? (
+          <p className={adminStyles.authError} role="alert">
+            Link inválido. Solicite um novo link ao responsável.
+          </p>
+        ) : (
+          <>
+            <p className="m-0 rounded-[10px] border border-admin-line bg-admin-canvas p-3 text-[13px] leading-relaxed text-admin-muted">
+              Este link é pessoal, vale por 24 horas e pode ser usado uma vez.
             </p>
-          ) : !hasValidAccessToken(token) ? (
-            <p className={adminStyles.alert} role="alert">
-              Link inválido. Solicite um novo link ao responsável.
-            </p>
-          ) : (
-            <>
-              <p className="m-0 mb-5 leading-[1.6] text-admin-muted">
-                Este link é pessoal, vale por 24 horas e pode ser usado uma vez.
+            <form className={adminStyles.authForm} onSubmit={submit}>
+              <div className="grid gap-2 text-[0.88rem] font-semibold text-admin-graphite">
+                <label htmlFor="access-password">Nova senha</label>
+                <PasswordInput
+                  id="access-password"
+                  name="password"
+                  autoComplete="new-password"
+                  minLength={6}
+                  maxLength={10}
+                  required
+                />
+              </div>
+              <div className="grid gap-2 text-[0.88rem] font-semibold text-admin-graphite">
+                <label htmlFor="access-confirmation">Confirmar senha</label>
+                <PasswordInput
+                  id="access-confirmation"
+                  name="confirmation"
+                  autoComplete="new-password"
+                  minLength={6}
+                  maxLength={10}
+                  required
+                />
+              </div>
+              <p className="text-[0.87rem] leading-[1.6] text-admin-muted">
+                Use de 6 a 10 caracteres.
               </p>
-              <form className={adminStyles.authForm} onSubmit={submit}>
-                <div className="grid gap-2 text-[0.88rem] font-semibold text-admin-graphite">
-                  <label htmlFor="access-password">Nova senha</label>
-                  <PasswordInput
-                    id="access-password"
-                    name="password"
-                    autoComplete="new-password"
-                    minLength={6}
-                    maxLength={10}
-                    required
-                  />
-                </div>
-                <div className="grid gap-2 text-[0.88rem] font-semibold text-admin-graphite">
-                  <label htmlFor="access-confirmation">Confirmar senha</label>
-                  <PasswordInput
-                    id="access-confirmation"
-                    name="confirmation"
-                    autoComplete="new-password"
-                    minLength={6}
-                    maxLength={10}
-                    required
-                  />
-                </div>
-                <p className="text-[0.87rem] leading-[1.6] text-admin-muted">
-                  Use de 6 a 10 caracteres.
-                </p>
-                <Button
-                  className="w-fit justify-self-start"
-                  disabled={pending}
-                  type="submit"
-                >
-                  {pending ? "Salvando…" : "Definir senha"}
-                </Button>
-              </form>
-            </>
-          )}
-        </CardContent>
-      </Card>
+              <Button
+                className={adminStyles.authButton}
+                disabled={pending}
+                type="submit"
+              >
+                {pending ? "Salvando…" : "Definir senha"}
+              </Button>
+            </form>
+          </>
+        )}
+      </section>
     </AuthLayout>
   );
 }

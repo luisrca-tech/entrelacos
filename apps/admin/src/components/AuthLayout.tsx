@@ -1,40 +1,54 @@
 import { Link } from "@tanstack/react-router";
+import { Check } from "lucide-react";
 import type { ReactNode } from "react";
+
+const benefits = [
+  "Convites e confirmações",
+  "Lista de presentes",
+  "Recebimentos por Pix e cartão",
+];
 
 export function AuthLayout({ children }: { children: ReactNode }) {
   return (
-    <main className="grid min-h-screen place-items-center bg-admin-canvas p-6 [@media(max-width:760px)]:p-3">
-      <div className="grid min-h-[min(680px,calc(100vh-48px))] w-full max-w-[1000px] grid-cols-[minmax(220px,0.78fr)_minmax(360px,1.22fr)] overflow-hidden rounded-[18px] border border-admin-line bg-admin-surface shadow-admin [@media(max-width:760px)]:block [@media(max-width:760px)]:min-h-[calc(100vh-24px)]">
-        <aside
-          className="flex flex-col bg-admin-graphite p-[34px] text-[#f8eee5] [@media(max-width:760px)]:min-h-[180px] [@media(max-width:760px)]:p-6"
-          aria-label="Entrelaços"
+    <main className="min-h-dvh bg-admin-surface text-admin-ink md:grid md:grid-cols-[minmax(0,1.08fr)_minmax(0,1fr)] md:py-4 md:pr-4">
+      <section className="grid min-w-0 content-start gap-10 px-4 pt-5 pb-6 md:content-between md:gap-8 md:px-[clamp(24px,5vw,64px)] md:py-6">
+        <Link
+          className="flex w-fit items-center gap-2.5 font-admin-display text-[22px] leading-none md:text-[25px] no-underline"
+          to="/"
         >
-          <Link
-            className="flex items-center gap-2.5 font-admin-display text-[1.45rem] tracking-[-0.03em] text-[#fffaf6] no-underline"
-            to="/"
-          >
-            <img
-              src="/brand/entrelacos-mark.svg"
-              width="40"
-              height="37"
-              alt=""
-              aria-hidden="true"
-            />
-            Entrelaços
-          </Link>
-          <div className="my-auto grid gap-6 [@media(max-width:760px)]:mt-[30px] [@media(max-width:760px)]:mb-0 [@media(max-width:760px)]:block">
-            <p className="m-0 max-w-[11ch] font-admin-display text-[clamp(2.2rem,4vw,3.8rem)] leading-[1.05] [@media(max-width:760px)]:mt-3.5 [@media(max-width:760px)]:max-w-[24ch] [@media(max-width:760px)]:text-[1.65rem]">
-              Seu casamento, mais simples de organizar.
-            </p>
-          </div>
-          <span className="text-[0.78rem] text-[#c9b9ad] [@media(max-width:760px)]:hidden">
-            Seu painel do casamento
-          </span>
-        </aside>
-        <section className="grid items-center p-12 [@media(max-width:760px)]:px-[22px] [@media(max-width:760px)]:py-9">
-          {children}
-        </section>
-      </div>
+          <img src="/brand/entrelacos-mark.svg" width="39" height="36" alt="" />
+          Entrelaços
+        </Link>
+        <div className="w-full max-w-[400px]">{children}</div>
+        <p className="m-0 hidden text-xs text-admin-muted md:block">
+          Seu painel do casamento
+        </p>
+      </section>
+      <aside
+        className="hidden min-w-0 flex-col justify-between gap-12 rounded-[20px] bg-admin-beige p-[clamp(24px,4.375vw,56px)] md:flex"
+        aria-label="Sobre o painel"
+      >
+        <img src="/brand/entrelacos-mark.svg" width="104" height="96" alt="" />
+        <div className="grid gap-4">
+          <p className="m-0 max-w-[470px] font-admin-display text-[clamp(32px,4.06vw,52px)] leading-[1.06] tracking-tight">
+            Seu casamento, mais simples de organizar.
+          </p>
+          <p className="m-0 max-w-[400px] leading-relaxed text-admin-body">
+            Convites, presentes e recebimentos em um só painel, no ritmo de
+            vocês.
+          </p>
+        </div>
+        <ul className="m-0 grid list-none gap-3 p-0 text-[15px] text-admin-graphite">
+          {benefits.map((benefit) => (
+            <li key={benefit} className="flex items-center gap-3">
+              <span className="grid size-7 shrink-0 place-items-center rounded-full bg-admin-surface text-admin-terracotta-deep">
+                <Check aria-hidden="true" className="size-4" />
+              </span>
+              {benefit}
+            </li>
+          ))}
+        </ul>
+      </aside>
     </main>
   );
 }

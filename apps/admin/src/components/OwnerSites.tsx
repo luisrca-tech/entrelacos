@@ -1,6 +1,5 @@
 import type { SiteRecord } from "@entrelacos/contracts";
 import {
-  Badge,
   Button,
   Card,
   CardContent,
@@ -35,6 +34,8 @@ import { adminStyles, displayHeading } from "../lib/adminStyles";
 import { apiRequest } from "../lib/apiClient";
 import { formatBrazilianDate } from "./brazilianDate";
 import { type PanelSessionSnapshot, panelActorOwner } from "./panelActor";
+
+import { StatusSignal } from "./StatusSignal";
 
 const navigateToSite = (path: string) => window.location.assign(path);
 
@@ -445,13 +446,13 @@ function OwnerSitesRuntime({
                     </TableCell>
                     <TableCell>{formatBrazilianDate(site.eventDate)}</TableCell>
                     <TableCell>
-                      <Badge
-                        variant={
-                          site.lifecycle === "ACTIVE" ? "default" : "secondary"
+                      <StatusSignal
+                        tone={
+                          site.lifecycle === "ACTIVE" ? "success" : "neutral"
                         }
                       >
                         {lifecycleLabel(site.lifecycle)}
-                      </Badge>
+                      </StatusSignal>
                     </TableCell>
                     <TableCell>
                       <Link
@@ -479,13 +480,11 @@ function OwnerSitesRuntime({
                   <span className="inline-block text-[0.7rem] font-bold uppercase tracking-[0.13em] leading-[1.3] text-admin-muted">
                     Casamento
                   </span>
-                  <Badge
-                    variant={
-                      site.lifecycle === "ACTIVE" ? "default" : "secondary"
-                    }
+                  <StatusSignal
+                    tone={site.lifecycle === "ACTIVE" ? "success" : "neutral"}
                   >
                     {lifecycleLabel(site.lifecycle)}
-                  </Badge>
+                  </StatusSignal>
                 </div>
                 <strong>{site.displayName}</strong>
                 <span className="text-[0.88rem] text-admin-muted">

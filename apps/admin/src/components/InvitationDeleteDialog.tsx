@@ -14,6 +14,7 @@ import {
   Input,
 } from "@entrelacos/ui";
 import { useState } from "react";
+import { adminStyles } from "../lib/adminStyles";
 
 type Props = {
   invitation: InvitationRecord | null;
@@ -76,7 +77,7 @@ export function InvitationDeleteDialog({
                   confirmInvitationName: confirmationName,
                 });
             }}
-            className="border-admin-status-declined bg-transparent text-admin-status-declined"
+            className={adminStyles.dangerButton}
           >
             {busy ? "Excluindo…" : "Excluir definitivamente"}
           </AlertDialogAction>

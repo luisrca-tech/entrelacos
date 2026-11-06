@@ -1,4 +1,6 @@
 @import "tailwindcss";
+@import "@fontsource-variable/inter";
+@import "@fontsource-variable/source-serif-4/opsz.css";
 @import "@entrelacos/ui/styles.css";
 @source "../../../packages/ui/src";
 
@@ -28,6 +30,8 @@
   --color-admin-status-declined: #b44040;
   --color-admin-awaiting: #e9b97a;
   --color-admin-success-line: #b9d9c7;
-  --font-admin-display: Georgia, "Times New Roman", serif;
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-admin-display:
+    "Source Serif 4 Variable", Georgia, "Times New Roman", serif;
   --shadow-admin: 0 18px 50px rgb(68 49 36 / 8%);
 }

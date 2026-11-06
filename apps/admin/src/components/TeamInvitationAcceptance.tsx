@@ -12,7 +12,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { adminStyles, displayHeading } from "../lib/adminStyles";
+import { adminStyles } from "../lib/adminStyles";
 import { ApiError, apiRequest } from "../lib/apiClient";
 import { AuthLayout } from "./AuthLayout";
 import { hasValidAccessToken, readAccessTokenFromHash } from "./accessToken";
@@ -746,10 +746,8 @@ export function TeamInvitationAcceptance({
   return (
     <AuthLayout>
       <div className="grid min-w-0 gap-5">
-        <p className="m-0 text-xs font-bold uppercase tracking-wider text-admin-muted">
-          Equipe do casamento
-        </p>
-        <h1 className={`${displayHeading} m-0 text-3xl`}>
+        <p className={adminStyles.authEyebrow}>Equipe do casamento</p>
+        <h1 className={adminStyles.authHeading}>
           {completed ? "Convite aceito" : "Aceitar convite de assessor"}
         </h1>
         {completed ? (
@@ -762,7 +760,7 @@ export function TeamInvitationAcceptance({
             </p>
             {completed.signedIn ? (
               <Link
-                className="text-admin-terracotta-deep underline"
+                className={`${adminStyles.authButton} inline-flex items-center justify-center text-sm no-underline`}
                 to="/sites/$siteId/invitations"
                 params={{ siteId: completed.siteId }}
               >
@@ -770,7 +768,7 @@ export function TeamInvitationAcceptance({
               </Link>
             ) : (
               <Link
-                className="text-admin-terracotta-deep underline"
+                className={`${adminStyles.authButton} inline-flex items-center justify-center text-sm no-underline`}
                 to="/login"
                 search={{
                   email: "",
@@ -784,9 +782,20 @@ export function TeamInvitationAcceptance({
         ) : !ready ? (
           <p role="status">Verificando seu acesso…</p>
         ) : !validToken ? (
-          <p role="alert" className={adminStyles.alert}>
-            Link inválido. Peça um novo convite ao casal.
-          </p>
+          <>
+            <p role="alert" className={adminStyles.authError}>
+              Link inválido, expirado ou já utilizado. Peça um novo link ao
+              casal.
+            </p>
+            <Button
+              variant="outline"
+              nativeButton={false}
+              className="w-fit"
+              render={<Link to="/login" search={{ email: "", next: "/" }} />}
+            >
+              Ir para o login
+            </Button>
+          </>
         ) : (
           <>
             <p className="m-0 leading-relaxed text-admin-muted">
@@ -832,12 +841,17 @@ export function TeamInvitationAcceptance({
             ) : (
               <>
                 <fieldset
-                  className="m-0 flex flex-wrap gap-3 border-0 p-0"
+                  className="m-0 grid min-w-0 grid-cols-2 gap-2.5 border-0 p-0"
                   aria-label="Forma de acesso"
                 >
                   <Button
                     type="button"
                     variant={mode === "existing" ? "default" : "outline"}
+                    className={
+                      mode === "existing"
+                        ? adminStyles.authButton
+                        : "h-12 min-w-0 rounded-[10px] border-admin-line-strong px-2"
+                    }
                     disabled={pending}
                     onClick={() => {
                       setMode("existing");
@@ -848,6 +862,11 @@ export function TeamInvitationAcceptance({
                   <Button
                     type="button"
                     variant={mode === "new" ? "default" : "outline"}
+                    className={
+                      mode === "new"
+                        ? adminStyles.authButton
+                        : "h-12 min-w-0 rounded-[10px] border-admin-line-strong px-2"
+                    }
                     disabled={pending}
                     onClick={() => {
                       setMode("new");
@@ -900,7 +919,11 @@ export function TeamInvitationAcceptance({
                         ? "Se você já possui uma conta, escolha Já tenho acesso. O convite não redefine senhas existentes."
                         : "Você entrará na conta existente; sua senha e seus outros casamentos serão preservados."}
                     </p>
-                    <Button type="submit" disabled={pending}>
+                    <Button
+                      className={adminStyles.authButton}
+                      type="submit"
+                      disabled={pending}
+                    >
                       {pending ? "Aceitando…" : "Aceitar convite"}
                     </Button>
                   </form>
