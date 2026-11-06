@@ -392,6 +392,21 @@ describe("template-cinema-botanico v1 content contracts", () => {
     ).toThrow(/resumeLabel/);
   });
 
+  it("validates optional host-authored chapter labels", () => {
+    expect(() =>
+      validateStoryContent({ ...storyFixture, chapterLabel: "The beginning" }),
+    ).not.toThrow();
+    expect(() =>
+      validateStoryContent({ ...storyFixture, chapterLabel: " " }),
+    ).toThrow(/chapterLabel/);
+    expect(() =>
+      validateStoryContent({
+        ...storyFixture,
+        sequence: [{ ...storyFixture.media, chapterLabel: "" }],
+      }),
+    ).toThrow(/chapterLabel/);
+  });
+
   it("rejects an empty or non-image story sequence", () => {
     expect(() =>
       validateStoryContent({ ...storyFixture, sequence: [] }),
@@ -735,6 +750,32 @@ describe("template-cinema-botanico v1 content contracts", () => {
       validateWeddingHomeProps({
         ...heroOnlyHome,
         story: { ...storyFixture, id: "hero-title" },
+      }),
+    ).toThrow(/unique/i);
+  });
+
+  it("does not reserve chapter IDs for a story without chapter controls", () => {
+    expect(() =>
+      validateWeddingHomeProps({
+        ...heroOnlyHome,
+        story: storyFixture,
+        navigation: {
+          ...heroOnlyHome.navigation,
+          extensionAnchorIds: [`${storyFixture.id}-chapter-1`],
+        },
+      }),
+    ).not.toThrow();
+  });
+
+  it.each([1, 2])("reserves generated story chapter %s IDs", (chapter) => {
+    expect(() =>
+      validateWeddingHomeProps({
+        ...heroOnlyHome,
+        story: { ...storyFixture, sequence: [{ ...storyFixture.media }] },
+        navigation: {
+          ...heroOnlyHome.navigation,
+          extensionAnchorIds: [`${storyFixture.id}-chapter-${chapter}`],
+        },
       }),
     ).toThrow(/unique/i);
   });

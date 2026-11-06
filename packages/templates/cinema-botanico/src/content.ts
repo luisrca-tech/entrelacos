@@ -72,8 +72,10 @@ export type SectionContent = {
 
 export type StoryContent = Omit<SectionContent, "body"> & {
   body: string;
+  chapterLabel?: string;
   media: Media;
   sequence?: readonly (ImageMedia & {
+    chapterLabel?: string;
     copy?: { description?: string; body: string };
   })[];
   cycleControls?: { pauseLabel: string; resumeLabel: string };
@@ -480,6 +482,8 @@ export function validateStoryContent(
   validateSectionContent(value, "story");
   assertObject(value, "story");
   assertNonEmptyString(value.body, "story.body");
+  if (value.chapterLabel !== undefined)
+    assertNonEmptyString(value.chapterLabel, "story.chapterLabel");
   validateMedia(value.media, "story.media");
   if (value.cycleControls !== undefined) {
     assertObject(value.cycleControls, "story.cycleControls");
@@ -502,6 +506,8 @@ export function validateStoryContent(
     const name = `story.sequence[${index}]`;
     validateMedia(item, name);
     if (item.kind !== "image") throw new TypeError(`${name} must be an image`);
+    if (item.chapterLabel !== undefined)
+      assertNonEmptyString(item.chapterLabel, `${name}.chapterLabel`);
     if ("copy" in item && item.copy !== undefined) {
       assertObject(item.copy, `${name}.copy`);
       assertNonEmptyString(item.copy.body, `${name}.copy.body`);
@@ -806,6 +812,9 @@ export function validateWeddingHomeProps(
     if (key === "hero") generatedIds.push(`${value.hero.id}-title`);
     if (key === "story" && value.story !== undefined) {
       generatedIds.push(`${value.story.id}-title`);
+      if (value.story.sequence)
+        for (let index = 0; index <= value.story.sequence.length; index++)
+          generatedIds.push(`${value.story.id}-chapter-${index + 1}`);
     }
     if (key === "gallery" && value.gallery !== undefined)
       generatedIds.push(`${value.gallery.id}-title`);
