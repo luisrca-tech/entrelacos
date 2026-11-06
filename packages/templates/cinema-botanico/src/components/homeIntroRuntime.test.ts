@@ -39,7 +39,13 @@ describe("home intro browser lifecycle", () => {
     delete document.documentElement.dataset.templateIntroComplete;
   });
 
-  function setup({ reduced = false, loaded = true, video = false } = {}) {
+  function setup({
+    reduced = false,
+    loaded = true,
+    video = false,
+    heroTop = 0,
+    restoring = false,
+  } = {}) {
     const timeline = buildIntroTimeline(6);
     document.body.innerHTML = `<header data-template-navigation></header><main><div data-template-home-intro data-split-at="${timeline.splitAt}" data-reveal-at="${timeline.revealAt}" data-fullscreen-at="${timeline.fullscreenAt}" data-fade-at="${timeline.fadeAt}" data-complete-at="${timeline.completeAt}">${Array.from({ length: 6 }, () => "<img data-template-intro-frame>").join("")}</div><section data-template-hero-intro data-template-has-intro="true"><div data-template-hero-media>${video ? "<video data-template-hero-video></video>" : ""}</div><div data-template-hero-copy></div></section></main>`;
     document.documentElement.style.overflow = "clip";
@@ -58,6 +64,9 @@ describe("home intro browser lifecycle", () => {
     vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) =>
       window.setTimeout(() => callback(0), 16),
     );
+    vi.spyOn(document, "readyState", "get").mockReturnValue(
+      restoring ? "loading" : "complete",
+    );
     const play = vi
       .spyOn(HTMLMediaElement.prototype, "play")
       .mockResolvedValue();
@@ -71,8 +80,8 @@ describe("home intro browser lifecycle", () => {
     );
     if (!intro || !hero) throw new Error("Intro fixture is incomplete");
     vi.spyOn(hero, "getBoundingClientRect").mockReturnValue({
-      top: 0,
-      bottom: 900,
+      top: heroTop,
+      bottom: heroTop + 900,
     } as DOMRect);
     intro.querySelectorAll("img").forEach((image) => {
       Object.defineProperty(image, "complete", { value: loaded });
@@ -86,6 +95,7 @@ describe("home intro browser lifecycle", () => {
       OVERLAY_FADE_MS,
       shouldExpandIntroIntoHero,
     );
+    if (!restoring) vi.advanceTimersByTime(16);
     return {
       intro,
       hero,
@@ -99,6 +109,32 @@ describe("home intro browser lifecycle", () => {
       },
     };
   }
+
+  it("skips the entire intro when the hero is outside the viewport", async () => {
+    const { intro, hero } = setup({ heroTop: -1800 });
+    expect(intro.isConnected).toBe(false);
+    expect(intro.dataset.templateIntroPhase).toBeUndefined();
+    expect(document.documentElement.style.overflow).toBe("clip");
+    expect(document.body.style.overflow).toBe("auto");
+    await vi.advanceTimersByTimeAsync(6000);
+    expect(hero.dataset.templateIntroComplete).toBe("true");
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("waits for scroll restoration before deciding to show the intro", async () => {
+    const { intro, hero } = setup({ restoring: true });
+    expect(intro.dataset.templateIntroActive).toBeUndefined();
+    expect(document.body.style.overflow).toBe("auto");
+    vi.mocked(hero.getBoundingClientRect).mockReturnValue({
+      top: -1800,
+      bottom: -900,
+    } as DOMRect);
+    window.dispatchEvent(new Event("pageshow"));
+    await vi.advanceTimersByTimeAsync(50);
+    expect(intro.isConnected).toBe(false);
+    expect(intro.dataset.templateIntroPhase).toBeUndefined();
+    expect(document.body.style.overflow).toBe("auto");
+  });
 
   it("completes within five seconds even when media never finishes loading", async () => {
     const { intro, hero } = setup({ loaded: false, video: true });
