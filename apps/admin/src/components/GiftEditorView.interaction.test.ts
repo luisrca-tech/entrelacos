@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import type { GiftItem } from "@entrelacos/contracts";
 import { toast } from "@entrelacos/ui";
-import { act, createElement } from "react";
+import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { GiftEditorView } from "./GiftEditorView";
@@ -313,5 +313,196 @@ describe("focused gift catalog", () => {
       expect.objectContaining({ id: "gift-b" }),
       2,
     );
+  });
+});
+
+describe("photo on a new gift", () => {
+  const failure =
+    "O presente foi salvo, mas a foto não foi enviada. Tente enviar de novo.";
+  const png = () =>
+    new File([new Uint8Array([1, 2, 3])], "mesa.png", { type: "image/png" });
+  beforeEach(() => {
+    let next = 0;
+    Object.assign(URL, {
+      createObjectURL: vi.fn(() => `blob:new-gift-${++next}`),
+      revokeObjectURL: vi.fn(),
+    });
+  });
+  // Mirrors the controller: creating a gift adds it to the catalog and
+  // resolves with the created item.
+  async function mountCreating(
+    upload: (giftId: string, file: File, alt: string) => Promise<void>,
+    create: () => Promise<void> = async () => {},
+  ) {
+    const calls = {
+      onCreate: vi.fn(),
+      onUploadPhoto: vi.fn(upload),
+      onUpdate: vi.fn(async () => {}),
+      onPublication: vi.fn(async () => {}),
+    };
+    function Harness() {
+      const [gifts, setGifts] = useState<GiftItem[]>([]);
+      return createElement(GiftEditorView, {
+        gifts,
+        onRetry: vi.fn(),
+        onReorder: vi.fn(async () => {}),
+        onUpdate: calls.onUpdate,
+        onPublication: calls.onPublication,
+        onUploadPhoto: calls.onUploadPhoto,
+        onCreate: async (input) => {
+          calls.onCreate(input);
+          await create();
+          const created: GiftItem = { ...gift, ...input, id: "gift-new" };
+          setGifts((current) => [...current, created]);
+          return created;
+        },
+      });
+    }
+    await act(async () => root.render(createElement(Harness)));
+    await act(async () => button("Adicionar presente").click());
+    await enter(
+      container.querySelector('input[name="title"]') as HTMLInputElement,
+      "Jantar",
+    );
+    await enter(
+      container.querySelector('input[name="nominalPrice"]') as HTMLInputElement,
+      "25,25",
+    );
+    return calls;
+  }
+  async function choosePhoto(selected = png()) {
+    const input =
+      container.querySelector<HTMLInputElement>('input[type="file"]');
+    if (!input) throw new Error("Missing file input");
+    Object.defineProperty(input, "files", {
+      configurable: true,
+      value: [selected],
+    });
+    await act(async () => {
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    return selected;
+  }
+  function draftButton() {
+    const found = [...container.querySelectorAll("button")].find((item) =>
+      item.textContent?.includes("Salvar rascunho"),
+    );
+    if (!found) throw new Error("Missing button: Salvar rascunho");
+    return found;
+  }
+
+  it("picks a photo before the gift exists and previews it immediately", async () => {
+    await mountCreating(async () => {});
+    expect(container.textContent).not.toContain("Salve o rascunho");
+    expect(publishButton().disabled).toBe(true);
+    await choosePhoto();
+    const image = container.querySelector('img[src="blob:new-gift-1"]');
+    expect(image).not.toBeNull();
+    expect(container.textContent).toContain("Trocar foto");
+    expect(container.textContent).toContain("Pronto para publicar? 3/3");
+    expect(publishButton().disabled).toBe(false);
+  });
+
+  it("creates the gift once and then uploads the kept photo when saving the draft", async () => {
+    const calls = await mountCreating(async () => {});
+    const selected = await choosePhoto();
+    await act(async () => draftButton().click());
+    expect(calls.onCreate).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ title: "Jantar", mediaAssetId: null }),
+    );
+    expect(calls.onUploadPhoto).toHaveBeenCalledExactlyOnceWith(
+      "gift-new",
+      selected,
+      "",
+    );
+    expect(calls.onCreate.mock.invocationCallOrder[0]).toBeLessThan(
+      calls.onUploadPhoto.mock.invocationCallOrder[0],
+    );
+    expect(calls.onPublication).not.toHaveBeenCalled();
+  });
+
+  it("keeps the created gift after an upload failure and retries only the upload", async () => {
+    const error = vi.spyOn(toast, "error");
+    let attempts = 0;
+    const calls = await mountCreating(async () => {
+      if (++attempts === 1) throw new Error("upload failed");
+    });
+    const selected = await choosePhoto();
+    await act(async () => draftButton().click());
+    expect(container.querySelector('[role="alert"]')?.textContent).toBe(
+      failure,
+    );
+    expect(error).toHaveBeenCalledWith(failure);
+    await act(async () => button("Enviar foto de novo").click());
+    expect(calls.onCreate).toHaveBeenCalledOnce();
+    expect(calls.onUploadPhoto).toHaveBeenCalledTimes(2);
+    expect(calls.onUploadPhoto).toHaveBeenLastCalledWith(
+      "gift-new",
+      selected,
+      "",
+    );
+    expect(container.textContent).not.toContain(failure);
+  });
+
+  it("retries the upload, not the creation, when the draft is saved again", async () => {
+    let attempts = 0;
+    const calls = await mountCreating(async () => {
+      if (++attempts === 1) throw new Error("upload failed");
+    });
+    await choosePhoto();
+    await act(async () => draftButton().click());
+    await act(async () => draftButton().click());
+    expect(calls.onCreate).toHaveBeenCalledOnce();
+    expect(calls.onUpdate).toHaveBeenCalledExactlyOnceWith(
+      "gift-new",
+      expect.objectContaining({ title: "Jantar" }),
+    );
+    expect(calls.onUploadPhoto).toHaveBeenCalledTimes(2);
+  });
+
+  it("creates, uploads and only then publishes", async () => {
+    const calls = await mountCreating(async () => {});
+    await choosePhoto();
+    await act(async () => publishButton().click());
+    expect(calls.onPublication).toHaveBeenCalledExactlyOnceWith(
+      "gift-new",
+      "PUBLISHED",
+    );
+    const order = [
+      calls.onCreate.mock.invocationCallOrder[0],
+      calls.onUploadPhoto.mock.invocationCallOrder[0],
+      calls.onPublication.mock.invocationCallOrder[0],
+    ];
+    expect([...order].sort((left, right) => left - right)).toEqual(order);
+  });
+
+  it("does not publish when the photo upload fails", async () => {
+    const calls = await mountCreating(async () => {
+      throw new Error("upload failed");
+    });
+    await choosePhoto();
+    await act(async () => publishButton().click());
+    expect(calls.onCreate).toHaveBeenCalledOnce();
+    expect(calls.onPublication).not.toHaveBeenCalled();
+    expect(container.textContent).toContain(failure);
+  });
+
+  it("disables the photo and save actions while the gift is being saved", async () => {
+    let finish!: () => void;
+    const created = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    await mountCreating(
+      async () => {},
+      () => created,
+    );
+    await choosePhoto();
+    await act(async () => {
+      draftButton().click();
+    });
+    expect(draftButton().disabled).toBe(true);
+    expect(publishButton().disabled).toBe(true);
+    expect(button("Trocar foto").disabled).toBe(true);
+    await act(async () => finish());
   });
 });

@@ -603,7 +603,15 @@ export function createGiftEditorController(
     dispose,
     getState,
     previewDrain: () => previewTail,
-    create: (input: GiftCreateInput) => mutate(() => client.create(input)),
+    // Resolves with the created gift so the editor can attach a kept photo.
+    create: async (input: GiftCreateInput): Promise<GiftItem> => {
+      let created: GiftItem | undefined;
+      await mutate(async () => {
+        created = await client.create(input);
+      });
+      if (!created) throw new Error("Created gift unavailable");
+      return created;
+    },
     update: (id: string, input: GiftUpdateInput) =>
       mutate(() => client.update(id, input)),
     publication: (id: string, value: GiftItem["publicationState"]) =>
@@ -716,6 +724,9 @@ export function GiftEditor({
           void controller.load();
         }}
         onCreate={controller.create}
+        onUploadPhoto={(giftId, file, alt) =>
+          controller.uploadImage(giftId, file, alt)
+        }
         onUpdate={controller.update}
         onPublication={controller.publication}
         onReorder={controller.reorder}

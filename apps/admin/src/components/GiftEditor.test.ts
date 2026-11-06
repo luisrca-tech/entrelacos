@@ -395,6 +395,87 @@ describe("gift editor immutable scope and acknowledged attachment", () => {
     );
     return { container, root };
   }
+  it("creates a new gift and then attaches the photo chosen before it existed", async () => {
+    const f = await fixture();
+    let catalog: GiftItem[] = [{ ...gift }];
+    f.request.mockImplementation(async (path, options) => {
+      if (path.endsWith("/gift-media/uploads"))
+        return { upload: { id: "asset-a", expiresAt: unknown.expiresAt } };
+      if (path.endsWith("/finalize")) return { status: unknown };
+      if (options?.method === "POST" && path === "/v1/sites/site-a/gifts") {
+        const created: GiftItem = {
+          ...gift,
+          ...(options.body as object),
+          id: "gift-b",
+          sortOrder: 1,
+        };
+        catalog = [...catalog, created];
+        return { gift: created };
+      }
+      if (options?.method === "PATCH") {
+        const id = path.split("/").at(-1);
+        catalog = catalog.map((item) =>
+          item.id === id ? { ...item, ...(options.body as object) } : item,
+        );
+        return { gift: catalog.find((item) => item.id === id) };
+      }
+      return { gifts: catalog };
+    });
+    const dom = await mountEditor(f);
+    const click = async (label: string) => {
+      const target = [...dom.container.querySelectorAll("button")].find(
+        (item) => item.textContent?.includes(label),
+      );
+      if (!target) throw new Error(`Missing button: ${label}`);
+      await act(async () => target.click());
+    };
+    const type = async (name: string, value: string) => {
+      const input = dom.container.querySelector<HTMLInputElement>(
+        `input[name="${name}"]`,
+      );
+      if (!input) throw new Error(`Missing input: ${name}`);
+      await act(async () => {
+        Object.getOwnPropertyDescriptor(
+          HTMLInputElement.prototype,
+          "value",
+        )?.set?.call(input, value);
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+    };
+    await click("Novo presente");
+    await type("title", "Viagem");
+    await type("nominalPrice", "50,00");
+    const input =
+      dom.container.querySelector<HTMLInputElement>('input[type="file"]');
+    if (!input) throw new Error("Missing file input");
+    Object.defineProperty(input, "files", {
+      configurable: true,
+      value: [file()],
+    });
+    await act(async () =>
+      input.dispatchEvent(new Event("change", { bubbles: true })),
+    );
+    await click("Salvar rascunho");
+    const writes = f.request.mock.calls.filter(([, options]) =>
+      ["POST", "PATCH"].includes(options?.method ?? ""),
+    );
+    expect(
+      writes.filter(
+        ([path, options]) =>
+          path === "/v1/sites/site-a/gifts" && options?.method === "POST",
+      ),
+    ).toHaveLength(1);
+    expect(
+      writes.find(([, options]) => options?.method === "PATCH"),
+    ).toMatchObject([
+      "/v1/sites/site-a/gifts/gift-b",
+      { body: { mediaAssetId: "asset-a", altText: "" } },
+    ]);
+    expect(catalog.find((item) => item.id === "gift-b")).toMatchObject({
+      title: "Viagem",
+      mediaAssetId: "asset-a",
+    });
+  });
   it("masks the mounted catalog immediately on replacement of its real session owner", async () => {
     const f = await fixture();
     const dom = await mountEditor(f);

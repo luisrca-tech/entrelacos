@@ -3,7 +3,7 @@ import type {
   GiftItem,
   GiftUpdateInput,
 } from "@entrelacos/contracts";
-import { giftCentsSchema } from "@entrelacos/contracts";
+import { giftCentsSchema, giftImageAlt } from "@entrelacos/contracts";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -47,6 +47,10 @@ import {
   useGiftPricingControls,
 } from "./GiftPricingSettings";
 import { OverflowMenu } from "./OverflowMenu";
+import {
+  type PendingGiftPhoto,
+  PendingGiftPhotoField,
+} from "./PendingGiftPhotoField";
 
 export type GiftEditorViewProps = {
   gifts: GiftItem[];
@@ -54,7 +58,10 @@ export type GiftEditorViewProps = {
   error?: string | null;
   busy?: boolean;
   onRetry: () => void;
-  onCreate: (input: GiftCreateInput) => Promise<void>;
+  /** Resolves with the created gift so a kept photo can be attached to it. */
+  onCreate: (input: GiftCreateInput) => Promise<GiftItem | void>;
+  /** Uploads and attaches a photo to an existing gift. */
+  onUploadPhoto?: (giftId: string, file: File, alt: string) => Promise<void>;
   onUpdate: (giftId: string, input: GiftUpdateInput) => Promise<void>;
   onPublication: (
     giftId: string,
@@ -69,6 +76,25 @@ export type GiftEditorViewProps = {
   ) => ReactNode;
   renderPreview?: (gift: GiftItem, position: number) => ReactNode;
 };
+
+const noPendingPhoto: PendingGiftPhoto = { file: null, alt: "" };
+const photoUploadFailure =
+  "O presente foi salvo, mas a foto não foi enviada. Tente enviar de novo.";
+
+/** A browser URL for a local file, revoked when the file changes or unmounts. */
+function useObjectUrl(file: File | null) {
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    if (!file || typeof URL.createObjectURL !== "function") {
+      setUrl(null);
+      return;
+    }
+    const next = URL.createObjectURL(file);
+    setUrl(next);
+    return () => URL.revokeObjectURL(next);
+  }, [file]);
+  return url;
+}
 
 type GiftMutationState = Pick<
   GiftEditorViewProps,
@@ -176,10 +202,11 @@ function GiftStatusBadge({ state }: { state: GiftItem["publicationState"] }) {
   );
 }
 
-// Publishing needs a photo, a name and a valid value. The photo description
-// is optional: renderers fall back to the gift's position in the list.
+// Publishing needs a photo (saved, or kept for a gift being created), a name
+// and a valid value. The photo description is optional: renderers fall back to
+// the gift's position in the list.
 export function giftPublishChecklist(
-  gift: Pick<GiftItem, "mediaAssetId"> | undefined,
+  hasPhoto: boolean,
   title: string,
   nominalCents: number | null,
 ) {
@@ -187,7 +214,7 @@ export function giftPublishChecklist(
     {
       id: "photo",
       label: "Foto",
-      done: Boolean(gift?.mediaAssetId),
+      done: hasPhoto,
     },
     {
       id: "title",
@@ -365,6 +392,7 @@ export function GiftEditorView({
   busy = false,
   onRetry,
   onCreate,
+  onUploadPhoto,
   onUpdate,
   onPublication,
   onReorder,
@@ -388,11 +416,20 @@ export function GiftEditorView({
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [price, setPrice] = useState("");
+  // A photo chosen before its gift exists stays in the browser until the gift
+  // is created. `photoOwner` is the created gift that still owes that upload,
+  // so a failed upload is retried without creating the gift again.
+  const [pendingPhoto, setPendingPhoto] =
+    useState<PendingGiftPhoto>(noPendingPhoto);
+  const [photoOwner, setPhotoOwner] = useState<string | null>(null);
+  const [photoError, setPhotoError] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const pricing = useGiftPricingControls();
   const feeAllocation = useGiftFeeAllocation();
   const previewGift = gifts.find((gift) => gift.id === previewId);
   const mutationState = { busy, loading, error };
-  const mutationBlocked = isGiftMutationBlocked(mutationState);
+  const mutationBlocked = isGiftMutationBlocked(mutationState) || saving;
   const selected =
     editor?.kind === "edit"
       ? gifts.find(
@@ -426,7 +463,20 @@ export function GiftEditorView({
     (gift) => gift.publicationState === "DRAFT",
   ).length;
   const nominalCents = parseGiftPriceToCents(price);
-  const checklist = giftPublishChecklist(selected, title, nominalCents);
+  // Once the kept photo is removed from a created gift, its regular photo
+  // field (with consult and recovery) takes over again.
+  const pendingActive =
+    creating ||
+    (selected !== undefined &&
+      photoOwner === selected.id &&
+      pendingPhoto.file !== null);
+  const hasPendingPhoto = pendingActive && pendingPhoto.file !== null;
+  const checklist = giftPublishChecklist(
+    Boolean(selected?.mediaAssetId) || hasPendingPhoto,
+    title,
+    nominalCents,
+  );
+  const pendingUrl = useObjectUrl(hasPendingPhoto ? pendingPhoto.file : null);
 
   // A new draft opens straight in the editor so the photo can be added next.
   useEffect(() => {
@@ -457,7 +507,42 @@ export function GiftEditorView({
   function openEditor(value: typeof editor) {
     setFormError(null);
     setFeesOpen(false);
+    setPendingPhoto(noPendingPhoto);
+    setPhotoOwner(null);
+    setPhotoError("");
     setEditor(value);
+  }
+
+  // Uploads the kept photo to a saved gift; reports whether it is attached.
+  async function uploadPendingPhoto(giftId: string): Promise<boolean> {
+    const { file, alt } = pendingPhoto;
+    if (!file) return true;
+    setPhotoOwner(giftId);
+    setPhotoError("");
+    setUploadingPhoto(true);
+    try {
+      if (!onUploadPhoto) throw new Error("Photo upload unavailable");
+      await onUploadPhoto(giftId, file, alt.trim());
+      setPendingPhoto(noPendingPhoto);
+      setPhotoOwner(null);
+      return true;
+    } catch {
+      setPhotoError(photoUploadFailure);
+      toast.error(photoUploadFailure);
+      return false;
+    } finally {
+      setUploadingPhoto(false);
+    }
+  }
+
+  async function retryPendingPhoto() {
+    if (!photoOwner || mutationBlocked) return;
+    setSaving(true);
+    try {
+      if (await uploadPendingPhoto(photoOwner)) toast.success("Foto enviada.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function saveGift(event: FormEvent<HTMLFormElement>) {
@@ -482,6 +567,7 @@ export function GiftEditorView({
       return;
     }
     setFormError(null);
+    setSaving(true);
     try {
       if (selected) {
         await onUpdate(selected.id, {
@@ -489,10 +575,16 @@ export function GiftEditorView({
           description: nextDescription,
           nominalCents: cents,
         });
+        const owesPhoto = hasPendingPhoto && photoOwner === selected.id;
+        if (owesPhoto && !(await uploadPendingPhoto(selected.id))) return;
         if (
           publish &&
           selected.publicationState === "DRAFT" &&
-          giftPublishChecklist(selected, nextTitle, cents).done === 3
+          giftPublishChecklist(
+            Boolean(selected.mediaAssetId) || owesPhoto,
+            nextTitle,
+            cents,
+          ).done === 3
         ) {
           await onPublication(selected.id, "PUBLISHED");
           toast.success("Presente salvo e publicado.");
@@ -500,7 +592,7 @@ export function GiftEditorView({
         } else toast.success("Alterações salvas.");
       } else if (creating) {
         const known = new Set(gifts.map((gift) => gift.id));
-        await onCreate({
+        const created = await onCreate({
           title: nextTitle,
           description: nextDescription,
           nominalCents: cents,
@@ -508,6 +600,17 @@ export function GiftEditorView({
           mediaAssetId: null,
           altText: "",
         });
+        if (created && pendingPhoto.file) {
+          // Keep editing the created gift: a failed upload is retried there.
+          setEditor({ kind: "edit", giftId: created.id });
+          if (!(await uploadPendingPhoto(created.id))) return;
+          if (publish) {
+            await onPublication(created.id, "PUBLISHED");
+            toast.success("Presente salvo e publicado.");
+            openEditor(null);
+          } else toast.success("Presente salvo como rascunho.");
+          return;
+        }
         openEditor(null);
         setFilter("ACTIVE");
         setQuery("");
@@ -518,6 +621,8 @@ export function GiftEditorView({
       }
     } catch {
       toast.error("Não foi possível salvar o presente. Tente novamente.");
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -540,10 +645,21 @@ export function GiftEditorView({
 
   const formId = `${idPrefix}-form`;
   const canPublishNow =
-    selected?.publicationState === "DRAFT" && checklist.done === 3;
-  const photo = selected
-    ? renderPreview?.(selected, positionOf(selected))
-    : null;
+    (creating || selected?.publicationState === "DRAFT") &&
+    checklist.done === 3;
+  const photoPosition = selected
+    ? positionOf(selected)
+    : activeGifts.length + 1;
+  const photo =
+    hasPendingPhoto && pendingUrl ? (
+      <img
+        src={pendingUrl}
+        alt={giftImageAlt(pendingPhoto.alt, photoPosition)}
+        className="h-full w-full object-cover"
+      />
+    ) : selected ? (
+      renderPreview?.(selected, photoPosition)
+    ) : null;
 
   return (
     <section
@@ -554,7 +670,7 @@ export function GiftEditorView({
         <header className="grid gap-2">
           <button
             type="button"
-            disabled={busy}
+            disabled={busy || saving}
             onClick={() => openEditor(null)}
             className="inline-flex min-h-8 w-fit items-center gap-1 bg-transparent p-0 text-[0.95rem] font-semibold text-admin-terracotta-deep hover:underline disabled:opacity-60"
           >
@@ -632,7 +748,22 @@ export function GiftEditorView({
                     </span>
                   }
                 />
-                {selected && renderMedia ? (
+                {pendingActive ? (
+                  <PendingGiftPhotoField
+                    value={pendingPhoto}
+                    position={photoPosition}
+                    disabled={mutationBlocked}
+                    uploading={uploadingPhoto}
+                    error={photoError}
+                    onChange={(next) => {
+                      setPhotoError("");
+                      setPendingPhoto(next);
+                    }}
+                    onRetry={
+                      photoOwner ? () => void retryPendingPhoto() : undefined
+                    }
+                  />
+                ) : selected && renderMedia ? (
                   renderMedia(selected, mutationBlocked, positionOf(selected))
                 ) : (
                   <div className="flex min-h-[272px] flex-col items-center justify-center gap-2.5 rounded-[14px] border-2 border-dashed border-admin-line-strong bg-admin-canvas px-5 py-8 text-center [@media(max-width:760px)]:min-h-[230px]">
@@ -643,13 +774,10 @@ export function GiftEditorView({
                       <Upload className="size-[26px]" />
                     </span>
                     <span className="text-base font-bold text-admin-ink">
-                      {creating
-                        ? "Salve o rascunho para enviar a foto"
-                        : "A foto deste presente é gerenciada aqui"}
+                      A foto deste presente é gerenciada aqui
                     </span>
                     <span className="max-w-md text-[0.82rem] leading-[1.5] text-admin-muted">
-                      JPEG, PNG ou WebP · até 5 MB. Depois de salvar, a área de
-                      envio fica disponível nesta mesma tela.
+                      JPEG, PNG ou WebP · até 5 MB.
                     </span>
                   </div>
                 )}
@@ -862,7 +990,7 @@ export function GiftEditorView({
           <div className="sticky bottom-0 z-[5] -mx-[42px] -mb-6 flex flex-wrap items-center justify-between gap-3 border-t border-admin-line bg-admin-surface px-[42px] py-4 [@media(max-width:760px)]:-mx-5 [@media(max-width:760px)]:-mb-[calc(24px+74px+env(safe-area-inset-bottom))] [@media(max-width:760px)]:px-4 [@media(max-width:760px)]:pb-[calc(16px+74px+env(safe-area-inset-bottom))] [@media(min-width:761px)_and_(max-width:1060px)]:-mx-7 [@media(min-width:761px)_and_(max-width:1060px)]:px-7">
             <button
               type="button"
-              disabled={busy}
+              disabled={busy || saving}
               onClick={() => openEditor(null)}
               className="min-h-11 bg-transparent p-0 text-[0.95rem] font-semibold text-admin-terracotta-deep underline underline-offset-4 disabled:opacity-60 [@media(max-width:760px)]:hidden"
             >
