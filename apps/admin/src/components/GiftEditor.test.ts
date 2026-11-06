@@ -976,6 +976,15 @@ describe("saved gift previews without recovery state", () => {
     expect(dom.container.querySelector("img")).toBeNull();
     expect(dom.container.textContent).toContain("Verifique sua sessão");
   });
+  it("previews a saved image without a description using its list position", async () => {
+    const f = await previewFixture();
+    f.setGift({ ...saved, altText: "" });
+    const dom = await mountSaved(f);
+    expect(consultations(f)).toHaveLength(1);
+    const image = dom.container.querySelector("img");
+    expect(image?.getAttribute("src")).toBe(media.url);
+    expect(image?.getAttribute("alt")).toBe("Imagem do presente 1 na lista");
+  });
   it.each(["consultation", "confirmation"] as const)(
     "transfers the pending mounted %s drain across actual owner replacement",
     async (phase) => {

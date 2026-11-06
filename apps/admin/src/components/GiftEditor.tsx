@@ -3,6 +3,7 @@
   type GiftItem,
   type GiftMediaPublicAsset,
   type GiftUpdateInput,
+  giftImageAlt,
   giftMediaStatusResponseSchema,
   meResponseSchema,
   siteIdSchema,
@@ -338,12 +339,7 @@ export function createGiftEditorController(
   }
   function queueSavedPreviews(gifts: GiftItem[], revision: number) {
     const selected = gifts
-      .filter(
-        (gift) =>
-          gift.mediaAssetId &&
-          gift.altText.trim() &&
-          !getState().previews[gift.id],
-      )
+      .filter((gift) => gift.mediaAssetId && !getState().previews[gift.id])
       .map((gift) => Object.freeze({ ...gift }));
     if (!selected.length || !savedCurrent(revision, selected)) return;
     const previous = previewTail;
@@ -722,17 +718,17 @@ export function GiftEditor({
         onUpdate={controller.update}
         onPublication={controller.publication}
         onReorder={controller.reorder}
-        renderPreview={(gift) => {
+        renderPreview={(gift, position) => {
           const preview = state.previews[gift.id];
           return preview ? (
             <img
               src={preview.url}
-              alt={gift.altText}
+              alt={giftImageAlt(gift.altText, position)}
               className="h-full w-full object-cover"
             />
           ) : null;
         }}
-        renderMedia={(gift, blocked) => (
+        renderMedia={(gift, blocked, position) => (
           <GiftImageField
             key={JSON.stringify([
               siteId,
@@ -742,6 +738,7 @@ export function GiftEditor({
               gift.altText,
             ])}
             gift={gift}
+            position={position}
             disabled={blocked && state.activeMediaGift !== gift.id}
             preview={state.previews[gift.id]}
             mediaState={state.images[gift.id]}

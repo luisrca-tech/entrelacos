@@ -1,6 +1,7 @@
 import {
   type GiftItem,
   type GiftMediaPublicAsset,
+  giftImageAlt,
   giftMediaUploadInputSchema,
 } from "@entrelacos/contracts";
 import { Button, Input, toast } from "@entrelacos/ui";
@@ -33,6 +34,8 @@ function fileProblem(file: File) {
 
 type Props = {
   gift: GiftItem;
+  /** 1-based position of the gift in the list it is shown in. */
+  position: number;
   disabled: boolean;
   preview?: GiftMediaPublicAsset;
   mediaState?: GiftMediaClientState;
@@ -44,7 +47,7 @@ type Props = {
   onRecover?: (alt: string) => Promise<void>;
 };
 export function GiftImageField(props: Props) {
-  const { gift, disabled, preview, mediaState } = props;
+  const { gift, position, disabled, preview, mediaState } = props;
   const id = useId();
   const fileInput = useRef<HTMLInputElement>(null);
   const live = useRef(props);
@@ -143,16 +146,9 @@ export function GiftImageField(props: Props) {
   function upload() {
     const selected = file;
     const description = alt.trim();
-    if (
-      !selected ||
-      !description ||
-      description.length > 240 ||
-      fileProblem(selected)
-    ) {
+    if (!selected || description.length > 240 || fileProblem(selected)) {
       if (validOwner())
-        setError(
-          "Escolha uma imagem JPEG, PNG ou WebP de até 5 MB e descreva seu conteúdo.",
-        );
+        setError("Escolha uma imagem JPEG, PNG ou WebP de até 5 MB.");
       return;
     }
     if (mediaState?.retained && !mediaState.canRetrySameBytes) return;
@@ -321,7 +317,7 @@ export function GiftImageField(props: Props) {
             ) : shownPreview ? (
               <img
                 src={shownPreview.url}
-                alt={gift.altText}
+                alt={giftImageAlt(gift.altText, position)}
                 className="absolute inset-0 h-full w-full object-cover"
               />
             ) : (
@@ -349,7 +345,7 @@ export function GiftImageField(props: Props) {
               >
                 Descreva a foto{" "}
                 <span className="text-xs font-semibold text-admin-muted">
-                  · Obrigatório
+                  · Opcional
                 </span>
               </label>
               <Input
@@ -369,7 +365,7 @@ export function GiftImageField(props: Props) {
                 id={`${id}-alt-hint`}
                 className="m-0 text-[0.8rem] leading-[1.45] text-admin-muted"
               >
-                Lida em voz alta para quem usa leitor de tela.
+                Ajuda quem usa leitor de tela.
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -377,7 +373,7 @@ export function GiftImageField(props: Props) {
                 <Button
                   type="button"
                   className="min-h-11"
-                  disabled={blocked || retryBlocked || !file || !alt.trim()}
+                  disabled={blocked || retryBlocked || !file}
                   onClick={upload}
                 >
                   {uploading
@@ -391,7 +387,7 @@ export function GiftImageField(props: Props) {
                 <Button
                   type="button"
                   className="min-h-11"
-                  disabled={blocked || retained || !alt.trim()}
+                  disabled={blocked || retained}
                   onClick={() => {
                     const action = live.current.onAltChange;
                     const description = alt.trim();
@@ -476,7 +472,7 @@ export function GiftImageField(props: Props) {
               <Button
                 type="button"
                 variant="outline"
-                disabled={blocked || !alt.trim()}
+                disabled={blocked}
                 onClick={() => {
                   const action = live.current.onRecover;
                   const description = alt.trim();
@@ -500,7 +496,7 @@ export function GiftImageField(props: Props) {
           >
             Descreva a foto{" "}
             <span className="text-xs font-semibold text-admin-muted">
-              · Obrigatório
+              · Opcional
             </span>
           </label>
           <Input

@@ -61,8 +61,13 @@ export type GiftEditorViewProps = {
     state: GiftItem["publicationState"],
   ) => Promise<void>;
   onReorder: (giftIds: string[]) => Promise<void>;
-  renderMedia?: (gift: GiftItem, blocked: boolean) => ReactNode;
-  renderPreview?: (gift: GiftItem) => ReactNode;
+  // `position` is the gift's 1-based place in the catalog list being shown.
+  renderMedia?: (
+    gift: GiftItem,
+    blocked: boolean,
+    position: number,
+  ) => ReactNode;
+  renderPreview?: (gift: GiftItem, position: number) => ReactNode;
 };
 
 type GiftMutationState = Pick<
@@ -171,17 +176,18 @@ function GiftStatusBadge({ state }: { state: GiftItem["publicationState"] }) {
   );
 }
 
-// Publishing needs a described photo, a name and a valid value.
+// Publishing needs a photo, a name and a valid value. The photo description
+// is optional: renderers fall back to the gift's position in the list.
 export function giftPublishChecklist(
-  gift: Pick<GiftItem, "mediaAssetId" | "altText"> | undefined,
+  gift: Pick<GiftItem, "mediaAssetId"> | undefined,
   title: string,
   nominalCents: number | null,
 ) {
   const items = [
     {
       id: "photo",
-      label: "Foto com descrição",
-      done: Boolean(gift?.mediaAssetId && gift.altText.trim()),
+      label: "Foto",
+      done: Boolean(gift?.mediaAssetId),
     },
     {
       id: "title",
@@ -398,6 +404,21 @@ export function GiftEditorView({
   const editing = creating || Boolean(selected);
   const activeGifts = getVisibleGifts(gifts, "", "ACTIVE");
   const visibleGifts = getVisibleGifts(gifts, query, filter);
+  // Single-gift views (editor, preview) reuse the position the gift's card has
+  // in the visible list, or its place in the full catalog order when hidden.
+  const positionOf = (target: GiftItem) => {
+    const shown = visibleGifts.findIndex((gift) => gift.id === target.id);
+    if (shown >= 0) return shown + 1;
+    const ordered = [...gifts].sort(
+      (left, right) => left.sortOrder - right.sortOrder,
+    );
+    return (
+      Math.max(
+        ordered.findIndex((gift) => gift.id === target.id),
+        0,
+      ) + 1
+    );
+  };
   const published = gifts.filter(
     (gift) => gift.publicationState === "PUBLISHED",
   ).length;
@@ -520,7 +541,9 @@ export function GiftEditorView({
   const formId = `${idPrefix}-form`;
   const canPublishNow =
     selected?.publicationState === "DRAFT" && checklist.done === 3;
-  const photo = selected ? renderPreview?.(selected) : null;
+  const photo = selected
+    ? renderPreview?.(selected, positionOf(selected))
+    : null;
 
   return (
     <section
@@ -610,7 +633,7 @@ export function GiftEditorView({
                   }
                 />
                 {selected && renderMedia ? (
-                  renderMedia(selected, mutationBlocked)
+                  renderMedia(selected, mutationBlocked, positionOf(selected))
                 ) : (
                   <div className="flex min-h-[272px] flex-col items-center justify-center gap-2.5 rounded-[14px] border-2 border-dashed border-admin-line-strong bg-admin-canvas px-5 py-8 text-center [@media(max-width:760px)]:min-h-[230px]">
                     <span
@@ -1024,12 +1047,12 @@ export function GiftEditorView({
                   </button>
                 </li>
               )}
-              {visibleGifts.map((gift) => {
+              {visibleGifts.map((gift, index) => {
                 const position = activeGifts.findIndex(
                   (item) => item.id === gift.id,
                 );
                 const archived = gift.publicationState === "ARCHIVED";
-                const preview = renderPreview?.(gift);
+                const preview = renderPreview?.(gift, index + 1);
                 return (
                   <li key={gift.id} className="min-w-0">
                     <article className="flex h-full min-w-0 flex-col overflow-hidden rounded-2xl border border-admin-line bg-admin-surface">
@@ -1191,7 +1214,7 @@ export function GiftEditorView({
             previewGift && (
               <div className="min-w-0 overflow-hidden rounded-xl border border-admin-line">
                 <div className="flex aspect-[16/9] items-center justify-center overflow-hidden bg-admin-beige/50 [&_img]:h-full [&_img]:w-full [&_img]:object-cover">
-                  {renderPreview?.(previewGift) ?? (
+                  {renderPreview?.(previewGift, positionOf(previewGift)) ?? (
                     <Gift
                       aria-hidden="true"
                       className="size-10 text-admin-terracotta/50"

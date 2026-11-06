@@ -37,6 +37,7 @@ describe("gift image editor presentation", () => {
     mounted.push(root);
     const props = {
       gift,
+      position: 1,
       disabled: false,
       onUpload: vi.fn(async () => {}),
       onRemove: vi.fn(async () => {}),
@@ -270,6 +271,7 @@ describe("gift image editor presentation", () => {
     const html = renderToStaticMarkup(
       createElement(GiftImageField, {
         gift,
+        position: 1,
         disabled: false,
         onUpload: vi.fn(),
         onRemove: vi.fn(),
@@ -287,6 +289,7 @@ describe("gift image editor presentation", () => {
     const html = renderToStaticMarkup(
       createElement(GiftImageField, {
         gift,
+        position: 1,
         disabled: true,
         onUpload: vi.fn(),
         onRemove: vi.fn(),
@@ -297,5 +300,95 @@ describe("gift image editor presentation", () => {
       expect(button[0]).toContain("disabled");
     expect(html).toContain('type="file"');
     expect(html).not.toContain("<form");
+  });
+  it("labels the description optional without mentioning the fallback", () => {
+    const html = renderToStaticMarkup(
+      createElement(GiftImageField, {
+        gift,
+        position: 2,
+        disabled: false,
+        onUpload: vi.fn(),
+        onRemove: vi.fn(),
+        onAltChange: vi.fn(),
+      }),
+    );
+    expect(html).toContain("Descreva a foto");
+    expect(html).toContain("· Opcional");
+    expect(html).not.toContain("Obrigatório");
+    expect(html).toContain("Ajuda quem usa leitor de tela.");
+    expect(html).not.toContain("na lista");
+  });
+  it("sends a chosen photo without a description", async () => {
+    const f = await mount({ gift: { ...gift, altText: "" } });
+    await act(async () => {
+      choose(f.container);
+    });
+    const send = button(f.container, "Enviar foto");
+    expect(send.disabled).toBe(false);
+    await act(async () => send.click());
+    expect(f.props.onUpload).toHaveBeenCalledWith(expect.any(File), "");
+  });
+  it("saves a cleared description as empty", async () => {
+    const f = await mount();
+    const input = f.container.querySelector<HTMLInputElement>(
+      'input:not([type="file"])',
+    );
+    if (!input) throw new Error("Missing description input");
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(
+        HTMLInputElement.prototype,
+        "value",
+      )?.set;
+      setter?.call(input, "   ");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    const save = button(f.container, "Salvar descrição");
+    expect(save.disabled).toBe(false);
+    await act(async () => save.click());
+    expect(f.props.onAltChange).toHaveBeenCalledWith("");
+  });
+  it("recovers a retained image without a description", async () => {
+    const recover = vi.fn(async () => {});
+    const f = await mount({
+      gift: { ...gift, altText: "" },
+      mediaState: {
+        state: "UNKNOWN",
+        busy: false,
+        retained: true,
+        canRetrySameBytes: false,
+        media: null,
+        error: "",
+      },
+      onRecover: recover,
+    });
+    const action = button(f.container, "Recuperar imagem");
+    expect(action.disabled).toBe(false);
+    await act(async () => action.click());
+    expect(recover).toHaveBeenCalledWith("");
+  });
+  it.each([
+    ["Mesa para o jantar", "Mesa para o jantar"],
+    ["", "Imagem do presente 4 na lista"],
+  ])("describes the saved preview %j as %j", (altText, expected) => {
+    const html = renderToStaticMarkup(
+      createElement(GiftImageField, {
+        gift: { ...gift, altText },
+        position: 4,
+        preview: {
+          id: gift.mediaAssetId,
+          siteId: gift.siteId,
+          url: "https://media.example.test/a.webp",
+          contentType: "image/webp",
+          byteLength: 10,
+          width: 10,
+          height: 10,
+        },
+        disabled: false,
+        onUpload: vi.fn(),
+        onRemove: vi.fn(),
+        onAltChange: vi.fn(),
+      }),
+    );
+    expect(html).toContain(`alt="${expected}"`);
   });
 });

@@ -272,4 +272,46 @@ describe("focused gift catalog", () => {
     expect(callbacks.onUpdate).toHaveBeenCalledOnce();
     expect(callbacks.onPublication).not.toHaveBeenCalled();
   });
+  it("publishes a photo without a description", async () => {
+    const ready = { ...gift, mediaAssetId: "asset-a", altText: "" };
+    const callbacks = await mount([ready]);
+    await act(async () => button("Editar presente").click());
+    expect(container.textContent).toContain("Pronto para publicar? 3/3");
+    expect(container.textContent).not.toContain("Foto com descrição");
+    const publish = publishButton();
+    expect(publish.disabled).toBe(false);
+    await act(async () => publish.click());
+    expect(callbacks.onPublication).toHaveBeenCalledExactlyOnceWith(
+      gift.id,
+      "PUBLISHED",
+    );
+  });
+  it("passes each card's 1-based catalog position to its preview", async () => {
+    const renderPreview = vi.fn(() => null);
+    const gifts = [
+      { ...gift, id: "gift-b", sortOrder: 1 },
+      { ...gift, id: "gift-a", sortOrder: 0 },
+    ];
+    await act(async () =>
+      root.render(
+        createElement(GiftEditorView, {
+          gifts,
+          renderPreview,
+          onRetry: vi.fn(),
+          onCreate: vi.fn(async () => {}),
+          onUpdate: vi.fn(async () => {}),
+          onPublication: vi.fn(async () => {}),
+          onReorder: vi.fn(async () => {}),
+        }),
+      ),
+    );
+    expect(renderPreview).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "gift-a" }),
+      1,
+    );
+    expect(renderPreview).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "gift-b" }),
+      2,
+    );
+  });
 });
