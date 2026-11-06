@@ -27,7 +27,7 @@ Names below reflect the PIN-only runtime. Messages and reports add no secret or 
 
 API URL examples use the origin `http://localhost:8080`; `/v1` belongs to the HTTP route path. The panel remains on `http://localhost:3000`, and the public demo remains on `http://localhost:4321`. `PUBLIC_SITE_ID=demo-wedding` is the deterministic environment-local demo identifier created by the provisioning command; it is not an authorization value.
 
-Database integration tests use `DATABASE_URL_TEST` exclusively and verify the actual Neon project, branch, endpoint, database, and role before proceeding. Never fall back to `DATABASE_URL`. Store development/test expected identities in private `DATABASE_PROJECT_ID`, `DATABASE_DEVELOPMENT_BRANCH_ID`, `DATABASE_TEST_BRANCH_ID`, and `DATABASE_NAME` configuration. Production uses only `DATABASE_URL` and derives its endpoint, database, and role checks from that URL. Block 2 validation status is recorded in `docs/block2Validation.md`; Block 4 and Block 5 execution status is recorded in their respective validation documents.
+Database integration tests use `DATABASE_URL_TEST` exclusively and verify the endpoint, database, and role before proceeding. The endpoint must differ from development. `DATABASE_PROJECT_ID`, `DATABASE_DEVELOPMENT_BRANCH_ID`, `DATABASE_TEST_BRANCH_ID`, and `DATABASE_NAME` are optional identity checks. Production uses only `DATABASE_URL` and derives its endpoint, database, and role checks from that URL. Block 2 validation status is recorded in `docs/block2Validation.md`; Block 4 and Block 5 execution status is recorded in their respective validation documents.
 
 | Variable | Consumer | Classification |
 | --- | --- | --- |

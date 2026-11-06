@@ -105,6 +105,23 @@ describe("database connection guards", () => {
     });
   });
 
+  it("derives test identity from its URL when Neon metadata is absent", () => {
+    expect(
+      resolveDatabaseConfig("test", {
+        DATABASE_URL: developmentUrl,
+        DATABASE_URL_TEST: testUrl,
+      }),
+    ).toMatchObject({
+      target: "test",
+      endpoint: "ep-testing.example.neon.tech",
+      expectedIdentity: {
+        endpointId: "ep-testing",
+        databaseName: "neondb",
+        userName: "user",
+      },
+    });
+  });
+
   it("rejects a test URL that points to development or production", () => {
     expect(() =>
       resolveDatabaseConfig("test", {

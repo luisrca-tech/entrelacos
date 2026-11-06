@@ -160,10 +160,8 @@ export function resolveDatabaseConfig(
     };
   }
 
-  const branchId = requiredEnvironmentValue(env, "DATABASE_TEST_BRANCH_ID");
-  if (
-    branchId === requiredEnvironmentValue(env, "DATABASE_DEVELOPMENT_BRANCH_ID")
-  ) {
+  const branchId = env.DATABASE_TEST_BRANCH_ID?.trim() || undefined;
+  if (branchId && branchId === env.DATABASE_DEVELOPMENT_BRANCH_ID?.trim()) {
     throw new Error("Test and development require distinct Neon branches");
   }
 
@@ -173,9 +171,9 @@ export function resolveDatabaseConfig(
     endpoint,
     expectedIdentity: {
       branchId,
-      projectId: requiredEnvironmentValue(env, "DATABASE_PROJECT_ID"),
+      projectId: env.DATABASE_PROJECT_ID?.trim() || undefined,
       endpointId: endpointIdFromUrl(rawUrl),
-      databaseName: requiredEnvironmentValue(env, "DATABASE_NAME"),
+      databaseName: env.DATABASE_NAME?.trim() || databaseNameFromUrl(rawUrl),
       userName:
         (env.DATABASE_USER ?? env.DATABASE_ROLE)?.trim() ||
         userNameFromUrl(rawUrl),
