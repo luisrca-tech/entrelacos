@@ -19,11 +19,12 @@ const hasChapters = chapters.length > 1;
   id={id}
   class="story-section grid grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)] items-center gap-[clamp(3rem,6vw,7rem)] overflow-hidden bg-template-olive px-[var(--template-page-inset)] py-[clamp(5rem,7vw,8rem)] text-template-ivory scroll-mt-[var(--template-header-height)] [@media(max-width:960px)]:grid-cols-1 [@media(max-width:960px)]:gap-0 [@media(max-width:960px)]:p-0 [@media(max-width:760px)]:mb-8"
   data-template-story
+  data-story-timed={hasChapters ? "true" : undefined}
   aria-labelledby={`${id}-title`}
   style={`--story-media-ratio: ${content.media.width} / ${content.media.height};`}
 >
   <div data-template-reveal="curtain" class="relative min-w-0 w-full aspect-[4/5] max-h-[min(50rem,85svh)] [@media(max-width:960px)]:aspect-[var(--story-media-ratio,4/3)] [@media(max-width:960px)]:max-h-[min(52svh,32rem)]">
-    <figure data-template-reveal-media class="absolute inset-0 m-0 overflow-hidden bg-template-ink">
+    <figure data-template-reveal-media class="absolute inset-0 m-0 overflow-hidden rounded-[0.75rem] bg-template-ink">
       {content.media.kind === "image" ? chapters.map((chapter, index) => (
         <img
           src={chapter.media.src}
@@ -55,14 +56,14 @@ const hasChapters = chapters.length > 1;
 
   <div class="min-w-0 [@media(max-width:960px)]:px-[var(--template-page-inset)] [@media(max-width:960px)]:pt-9 [@media(max-width:960px)]:pb-12" data-story-copy data-template-reveal>
     {content.eyebrow && <p data-template-reveal-item data-template-reveal-kind="label" class="m-0 mb-6 text-[0.72rem] font-bold uppercase tracking-[0.18em] text-template-ivory/70">{content.eyebrow}</p>}
-    <h2 data-template-reveal-item data-template-line-reveal class="m-0 max-w-[10ch] font-template-serif text-[clamp(3.5rem,5.5vw,6.5rem)] font-normal tracking-[-0.065em] leading-[0.98] [@media(max-width:960px)]:max-w-[14ch] [@media(max-width:960px)]:text-[clamp(2.5rem,10vw,4.5rem)]" id={`${id}-title`}>{content.title}</h2>
+    <h2 data-template-reveal-item data-template-line-reveal class="m-0 font-template-serif text-[clamp(3.5rem,5.5vw,6.5rem)] font-normal tracking-[-0.065em] leading-[0.98] [@media(max-width:960px)]:max-w-[14ch] [@media(max-width:960px)]:text-[clamp(2.5rem,10vw,4.5rem)]" id={`${id}-title`}>{content.title}</h2>
 
-    <div class="story-copy-frames mt-10 border-t border-template-ivory/25 pt-7 [@media(max-width:960px)]:mt-7" data-template-reveal-item data-template-reveal-kind="body">
+    <div data-story-reading class="story-copy-frames mt-10 border-t border-template-ivory/25 pt-7 [@media(max-width:960px)]:mt-7" data-template-reveal-item data-template-reveal-kind="body">
       {chapters.map((chapter, index) => (
         <div data-story-copy-frame data-story-active={index === 0 ? "true" : undefined} id={hasChapters ? `${id}-chapter-${index + 1}` : undefined} class="min-w-0">
           {hasChapters && <h3 class="m-0 mb-5 flex items-baseline gap-4 font-template-serif text-[clamp(1.5rem,2vw,2rem)] font-normal">{chapter.label !== String(index + 1).padStart(2, "0") && <span class="font-sans text-[0.7rem] tracking-[0.12em] text-template-ivory/70" aria-hidden="true">{String(index + 1).padStart(2, "0")}</span>}{chapter.label}</h3>}
-          {chapter.description && <p class="m-0 mb-4 max-w-[38ch] text-base leading-[1.7] text-template-ivory/70">{chapter.description}</p>}
-          <p class="m-0 max-w-[38ch] text-[clamp(1rem,1.3vw,1.2rem)] leading-[1.8] text-template-ivory/90">{chapter.body}</p>
+          {chapter.description && <p class="m-0 mb-4 [@media(max-width:960px)]:max-w-[38ch] text-base leading-[1.7] text-template-ivory/70">{chapter.description}</p>}
+          <p class="m-0 [@media(max-width:960px)]:max-w-[38ch] text-[clamp(1rem,1.3vw,1.2rem)] leading-[1.8] text-template-ivory/90">{chapter.body}</p>
         </div>
       ))}
     </div>
@@ -74,10 +75,11 @@ const hasChapters = chapters.length > 1;
           data-story-chapter
           aria-controls={`${id}-chapter-${index + 1}`}
           aria-pressed={index === 0}
-          class="group/chapter min-h-16 cursor-pointer border-0 border-t border-solid border-template-ivory/25 bg-transparent px-0 pb-1 pt-4 text-left font-[inherit] text-template-ivory/70 transition-[color,border-color] duration-300 hover:border-template-ivory hover:text-template-ivory aria-pressed:border-template-ivory aria-pressed:text-template-ivory focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-template-ivory motion-reduce:transition-none"
+          class="group/chapter relative min-h-16 cursor-pointer border-0 border-t border-solid border-template-ivory/25 bg-transparent px-0 pb-1 pt-4 text-left font-[inherit] text-template-ivory/70 transition-[color,border-color] duration-300 hover:text-template-ivory aria-pressed:text-template-ivory focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-template-ivory motion-reduce:transition-none"
         >
+          <span data-story-progress aria-hidden="true" class="absolute -top-px inset-x-0 h-px origin-left bg-template-ivory"></span>
           {chapter.label !== String(index + 1).padStart(2, "0") && <span class="mb-2 block text-[0.65rem] tracking-[0.15em]" aria-hidden="true">{String(index + 1).padStart(2, "0")}</span>}
-          <span class="block text-[0.8rem] leading-snug">{chapter.label}</span>
+          <span data-story-label class="block text-[0.8rem] leading-snug">{chapter.label}</span>
         </button>
       ))}
     </div>}
@@ -95,6 +97,10 @@ const hasChapters = chapters.length > 1;
 
 <style>
   [data-story-tabs][hidden] { display: none; }
+  [data-story-chapter][aria-pressed="true"] [data-story-label] { text-decoration: underline; text-underline-offset: 0.3em; }
+  [data-story-progress] { transform: scaleX(0); }
+  [data-story-chapter][aria-pressed="true"] [data-story-progress] { transform: scaleX(var(--story-progress, 1)); }
+  [data-story-autoplay="false"] [data-story-chapter][aria-pressed="true"] [data-story-progress] { transform: scaleX(1); }
   .story-copy-frames { display: grid; gap: 2rem; }
   [data-story-ready="true"] .story-copy-frames { gap: 0; }
   [data-story-ready="true"] [data-story-copy-frame] {
