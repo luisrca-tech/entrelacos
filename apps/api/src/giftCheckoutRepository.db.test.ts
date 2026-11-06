@@ -179,6 +179,7 @@ async function fixture(): Promise<CheckoutDatabaseFixture> {
     environment: "sandbox" as const,
   };
   const snapshot: GiftQuoteSnapshot = {
+    pricingSettings: { feeAllocation: "BUYER_GROSS_UP", revision: 0 },
     quote: {
       id: quoteId,
       siteId,
@@ -191,6 +192,8 @@ async function fixture(): Promise<CheckoutDatabaseFixture> {
       commissionCents: 200,
       processingCents: 0,
       totalCents: 10_200,
+      feeAllocation: "BUYER_GROSS_UP",
+      settlementVersion: "PLATFORM_FEE_GUARANTEE_V1",
       policyVersion: "local-fixture-v1",
       expiresAt,
       mode: "sandbox",
@@ -219,6 +222,7 @@ async function fixture(): Promise<CheckoutDatabaseFixture> {
         processingBasisPoints: 0,
         processingFixedCents: 0,
         rounding: "CEILING",
+        feeAllocation: "BUYER_GROSS_UP",
       },
     },
     createdAt: createdAt.toISOString(),
@@ -461,7 +465,15 @@ describe("checkout reserve and pre-dispatch seal PostgreSQL acceptance", () => {
     );
     let changing: Promise<PromiseSettledResult<unknown>> | undefined;
     try {
-      await started.promise;
+      await Promise.race([
+        started.promise,
+        issuing.then((result) => {
+          taskValue(result);
+          throw new Error(
+            "Reservation completed before the controlled commit gate",
+          );
+        }),
+      ]);
       changing = observeTask(
         updateGiftPricingSettings(
           database(),

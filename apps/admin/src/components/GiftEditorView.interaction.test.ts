@@ -72,6 +72,35 @@ async function mount(gifts: GiftItem[] = [gift]) {
   return callbacks;
 }
 describe("focused gift catalog", () => {
+  it("blocks publishing a historical amount below the minimum and allows unpublishing it", async () => {
+    const callbacks = await mount([
+      { ...gift, nominalCents: 499 },
+      {
+        ...gift,
+        id: "gift-published",
+        nominalCents: 499,
+        publicationState: "PUBLISHED",
+      },
+    ]);
+    const publish = button("Publicar");
+    const unpublish = button("Despublicar");
+    expect(publish.disabled).toBe(true);
+    expect(unpublish.disabled).toBe(false);
+    const help = document.getElementById(
+      publish.getAttribute("aria-describedby") ?? "",
+    );
+    expect(help?.textContent).toMatch(
+      /Ajuste o valor para pelo menos R\$\s*5,00/,
+    );
+    await act(async () => publish.click());
+    expect(callbacks.onPublication).not.toHaveBeenCalled();
+    await act(async () => unpublish.click());
+    expect(callbacks.onPublication).toHaveBeenCalledExactlyOnceWith(
+      "gift-published",
+      "DRAFT",
+    );
+  });
+
   it("opens one editor on demand, preserves unpublished drafts and returns to the catalog", async () => {
     await mount();
     expect(container.querySelector("form")).toBeNull();

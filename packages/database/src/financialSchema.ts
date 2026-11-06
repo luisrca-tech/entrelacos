@@ -909,6 +909,22 @@ export const giftPaymentRecord = pgTable(
     recipientNetCents: integer("recipient_net_cents"),
     splitProviderReference: text("split_provider_reference"),
     splitFixedCents: integer("split_fixed_cents"),
+    providerInstallmentReference: text("provider_installment_reference"),
+    installmentNumber: integer("installment_number"),
+    platformAdjustmentCents: integer("platform_adjustment_cents"),
+    platformAdjustmentDispatchAt: timestamp("platform_adjustment_dispatch_at", {
+      withTimezone: true,
+    }),
+    platformAdjustmentNextAttemptAt: timestamp(
+      "platform_adjustment_next_attempt_at",
+      { withTimezone: true },
+    ),
+    platformAdjustmentTransferReference: text(
+      "platform_adjustment_transfer_reference",
+    ),
+    platformAdjustmentFundedAt: timestamp("platform_adjustment_funded_at", {
+      withTimezone: true,
+    }),
   },
   (table): PgTableExtraConfigValue[] => [
     unique("gift_payment_scope_key").on(
@@ -930,6 +946,22 @@ export const giftPaymentRecord = pgTable(
       table.environment,
       table.providerPaymentReference,
     ),
+    unique("gift_payment_installment_key").on(
+      table.siteId,
+      table.accountId,
+      table.environment,
+      table.orderId,
+      table.installmentNumber,
+    ),
+    unique("gift_payment_adjustment_transfer_key").on(
+      table.environment,
+      table.platformAdjustmentTransferReference,
+    ),
+    index("gift_payment_adjustment_pending_idx")
+      .on(table.environment, table.platformAdjustmentNextAttemptAt)
+      .where(
+        sql`${table.platformAdjustmentCents} IS NOT NULL AND ${table.platformAdjustmentFundedAt} IS NULL`,
+      ),
     index("gift_payment_received_orders_idx")
       .on(table.siteId, table.environment, table.orderId)
       .where(
@@ -960,6 +992,14 @@ export const giftPaymentRecord = pgTable(
       sql`length(trim(${table.providerPaymentReference})) > 0`,
     ),
     check("gift_payment_currency_check", sql`${table.currency} = 'BRL'`),
+    check(
+      "gift_payment_installment_check",
+      sql`(${table.providerInstallmentReference} IS NULL AND ${table.installmentNumber} IS NULL) OR (${table.providerInstallmentReference} IS NOT NULL AND length(${table.providerInstallmentReference}) > 0 AND ${table.installmentNumber} IS NOT NULL AND ${table.installmentNumber} > 0)`,
+    ),
+    check(
+      "gift_payment_platform_adjustment_check",
+      sql`(${table.platformAdjustmentCents} IS NULL AND num_nonnulls(${table.platformAdjustmentDispatchAt}, ${table.platformAdjustmentNextAttemptAt}, ${table.platformAdjustmentTransferReference}, ${table.platformAdjustmentFundedAt}) = 0) OR (${table.platformAdjustmentCents} IS NOT NULL AND ${table.platformAdjustmentCents} > 0 AND (${table.platformAdjustmentTransferReference} IS NULL OR ${table.platformAdjustmentDispatchAt} IS NOT NULL) AND (${table.platformAdjustmentFundedAt} IS NULL OR (${table.platformAdjustmentTransferReference} IS NOT NULL AND ${table.platformAdjustmentFundedAt} >= ${table.platformAdjustmentDispatchAt})))`,
+    ),
     check(
       "gift_payment_amounts_check",
       sql`(${table.grossCents} IS NULL OR ${table.grossCents} BETWEEN 1 AND 2147483647) AND (${table.processingCents} IS NULL OR ${table.processingCents} BETWEEN 0 AND 2147483647) AND (${table.commissionCents} IS NULL OR ${table.commissionCents} BETWEEN 0 AND 2147483647) AND (${table.recipientNetCents} IS NULL OR ${table.recipientNetCents} BETWEEN 0 AND 2147483647) AND (${table.splitFixedCents} IS NULL OR ${table.splitFixedCents} BETWEEN 0 AND 2147483647)`,

@@ -19,6 +19,7 @@ import {
   GiftCheckoutServiceError,
   isSafeCheckoutContinuation,
 } from "./giftCheckouts";
+import { GiftMoneyServiceError } from "./giftMoney";
 import { GiftQuoteServiceError } from "./giftQuotes";
 import { allowsLocalPublicOrigin } from "./localPublicOrigin";
 import { ReceivingReadinessServiceError } from "./receivingReadiness";
@@ -105,6 +106,7 @@ export function createGiftPaymentsHttpRouter(
   router.onError((error, context) => {
     if (
       error instanceof GiftCheckoutServiceError ||
+      error instanceof GiftMoneyServiceError ||
       error instanceof GiftQuoteServiceError ||
       error instanceof ReceivingReadinessServiceError
     )
@@ -162,6 +164,8 @@ export function createGiftPaymentsHttpRouter(
       result.data.quote.siteId !== siteId ||
       result.data.quote.giftId !== input.data.giftId ||
       result.data.quote.method !== input.data.method ||
+      (input.data.installmentCount !== undefined &&
+        result.data.quote.installmentCount !== input.data.installmentCount) ||
       result.data.quote.mode === "disabled"
     )
       return problem(context, 503, "SERVICE_UNAVAILABLE");

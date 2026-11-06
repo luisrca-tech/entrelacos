@@ -1,8 +1,14 @@
-import { checkoutResultSchema, giftQuoteSchema } from "@entrelacos/contracts";
+import {
+  allocateGiftInstallmentCents,
+  checkoutCreateInputSchema,
+  checkoutResultSchema,
+  giftQuoteSchema,
+} from "@entrelacos/contracts";
 import {
   type AsaasCheckoutPayload,
   type AsaasCheckoutPayloadOptions,
   buildAsaasCheckoutPayload,
+  readAsaasCheckoutTerms,
 } from "./asaasCheckoutPayload";
 import type { AsaasHttpClientOptions } from "./asaasHttpClient";
 import {
@@ -10,6 +16,7 @@ import {
   type GiftHostedCheckout,
   readGiftQuoteSnapshot,
 } from "./giftCheckouts";
+import { serializeBrlCents } from "./giftMoney";
 import type { GiftQuoteSnapshot } from "./giftQuotes";
 
 // Reconstruct these options from stored server bindings. Matching credential
@@ -263,10 +270,10 @@ export function createAsaasCheckoutClient(
     const payloadOptions = structuredClone(options.payload);
     if (payloadOptions.environment !== mode) return unavailable();
     reference(payloadOptions.platformWalletId);
-    const url =
+    const base =
       mode === "sandbox"
-        ? "https://api-sandbox.asaas.com/v3/checkouts"
-        : "https://api.asaas.com/v3/checkouts";
+        ? "https://api-sandbox.asaas.com/v3"
+        : "https://api.asaas.com/v3";
 
     function observedAt(): number {
       const now = clock();
@@ -275,7 +282,18 @@ export function createAsaasCheckoutClient(
       return now.getTime();
     }
 
-    async function post(bodyText: string): Promise<Record<string, unknown>> {
+    async function request(
+      path: string,
+      payload?: object,
+    ): Promise<Record<string, unknown>> {
+      const url = `${base}${path}`;
+      const bodyText =
+        payload === undefined ? undefined : JSON.stringify(payload);
+      if (
+        bodyText?.includes(accessToken) ||
+        bodyText?.includes(encodeURIComponent(accessToken))
+      )
+        return unavailable();
       const controller = new AbortController();
       let timer: ReturnType<typeof setTimeout> | undefined;
       let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
@@ -320,7 +338,7 @@ export function createAsaasCheckoutClient(
         const operation = (async () => {
           // No retry, alternative endpoint or undocumented idempotency header.
           const response = await fetch(url, {
-            method: "POST",
+            method: payload === undefined ? "GET" : "POST",
             redirect: "error",
             credentials: "omit",
             cache: "no-store",
@@ -389,6 +407,132 @@ export function createAsaasCheckoutClient(
       }
     }
 
+    async function createInstallmentInvoice(
+      command: GiftCheckoutProviderCommand,
+      startedAt: number,
+    ) {
+      const payer = checkoutCreateInputSchema.shape.payer.parse(command.payer);
+      if (!payer) return unavailable();
+      const { quote } = readAsaasCheckoutTerms(command, payloadOptions);
+      const { installmentCount, installmentCents } = quote;
+      if (!installmentCount || installmentCount < 2 || !installmentCents)
+        return unavailable();
+      const customerResponse = await request("/customers", {
+        ...payer,
+        notificationDisabled: true,
+        externalReference: command.attemptId,
+      });
+      const customer = reference(customerResponse.id);
+      if (
+        !customer.startsWith("cus_") ||
+        (customerResponse.externalReference !== undefined &&
+          customerResponse.externalReference !== command.attemptId)
+      )
+        return unavailable();
+      const currentTime = observedAt();
+      // Expiry applies when the reserved operation starts, before creating its customer.
+      if (currentTime < startedAt) return unavailable();
+      const first = await request("/payments", {
+        customer,
+        billingType: "CREDIT_CARD",
+        dueDate: new Intl.DateTimeFormat("sv-SE", {
+          timeZone: "America/Sao_Paulo",
+        }).format(new Date(currentTime)),
+        description: quote.title,
+        externalReference: command.attemptId,
+        installmentCount,
+        totalValue: Number(serializeBrlCents(quote.totalCents)),
+        // Account-wide late fees must not change the amount the guest accepted.
+        interest: { value: 0 },
+        fine: { value: 0 },
+        split:
+          quote.commissionCents === 0
+            ? []
+            : [
+                {
+                  walletId: payloadOptions.platformWalletId,
+                  totalFixedValue: Number(
+                    serializeBrlCents(quote.commissionCents),
+                  ),
+                },
+              ],
+      });
+      const providerReference = reference(first.installment);
+      const firstId = reference(first.id);
+      const hostedUrl = hostedCheckoutUrl(
+        first.invoiceUrl,
+        payloadOptions.environment,
+        firstId,
+      );
+      const invoice = new URL(hostedUrl);
+      if (
+        invoice.search ||
+        !/^\/i\/[A-Za-z0-9_-]{1,128}$/.test(invoice.pathname)
+      )
+        return unavailable();
+      const plan = await request(
+        `/installments/${providerReference}/payments?limit=100&offset=0`,
+      );
+      if (
+        plan.hasMore !== false ||
+        plan.totalCount !== installmentCount ||
+        !Array.isArray(plan.data) ||
+        plan.data.length !== installmentCount
+      )
+        return unavailable();
+      const commission = allocateGiftInstallmentCents(
+        quote.commissionCents,
+        installmentCount,
+      );
+      const seenIds = new Set<string>();
+      const seenNumbers = new Set<number>();
+      const validatePayment = (payment: Record<string, unknown>) => {
+        const id = reference(payment.id);
+        const count = payment.installmentNumber;
+        if (
+          typeof count !== "number" ||
+          !Number.isInteger(count) ||
+          count < 1 ||
+          count > installmentCount ||
+          payment.installment !== providerReference ||
+          payment.customer !== customer ||
+          payment.externalReference !== command.attemptId ||
+          payment.billingType !== "CREDIT_CARD" ||
+          payment.status !== "PENDING" ||
+          (payment.deleted !== undefined && payment.deleted !== false) ||
+          payment.value !==
+            Number(serializeBrlCents(installmentCents[count - 1])) ||
+          (count === 1 && (id !== firstId || payment.invoiceUrl !== hostedUrl))
+        )
+          return unavailable();
+        const split = payment.split;
+        if (commission[count - 1] === 0) {
+          if (split != null && (!Array.isArray(split) || split.length !== 0))
+            return unavailable();
+        } else {
+          if (!Array.isArray(split) || split.length !== 1) return unavailable();
+          const entry = record(split[0]);
+          if (
+            entry.walletId !== payloadOptions.platformWalletId ||
+            entry.fixedValue !==
+              Number(serializeBrlCents(commission[count - 1])) ||
+            entry.percentualValue != null
+          )
+            return unavailable();
+        }
+        return { id, count };
+      };
+      if (validatePayment(first).count !== 1) return unavailable();
+      for (const raw of plan.data) {
+        const payment = validatePayment(record(raw));
+        if (seenIds.has(payment.id) || seenNumbers.has(payment.count))
+          return unavailable();
+        seenIds.add(payment.id);
+        seenNumbers.add(payment.count);
+      }
+      return { providerReference, hostedUrl };
+    }
+
     return {
       async createHostedCheckout(command): Promise<GiftHostedCheckout> {
         try {
@@ -398,6 +542,7 @@ export function createAsaasCheckoutClient(
             "orderId",
             "attemptId",
             "quoteSnapshot",
+            ...(Object.hasOwn(command, "payer") ? ["payer"] : []),
           ]);
           const snapshot = readGiftQuoteSnapshot(
             supplied.quoteSnapshot as GiftQuoteSnapshot,
@@ -422,25 +567,37 @@ export function createAsaasCheckoutClient(
             Date.parse(snapshot.pricing.expiresAt) <= startedAt
           )
             return unavailable();
-          const payload = buildAsaasCheckoutPayload(
-            { ...identity, quoteSnapshot: snapshot },
-            payloadOptions,
-          );
-          // Project only the PSP display name to its documented 30-character
-          // limit. Never mutate the editable gift or its immutable quote title.
-          payload.items[0].name = providerItemName(payload.items[0].name);
-          const bodyText = JSON.stringify(payload);
-          if (
-            bodyText.includes(accessToken) ||
-            bodyText.includes(encodeURIComponent(accessToken))
-          )
-            return unavailable();
-          const response = await post(bodyText);
+          let providerReference: string;
+          let hostedUrl: string;
+          if ((snapshot.quote.installmentCount ?? 1) > 1) {
+            ({ providerReference, hostedUrl } = await createInstallmentInvoice(
+              {
+                ...identity,
+                quoteSnapshot: snapshot,
+                payer: checkoutCreateInputSchema.shape.payer.parse(
+                  supplied.payer,
+                ),
+              },
+              startedAt,
+            ));
+          } else {
+            if (Object.hasOwn(supplied, "payer")) return unavailable();
+            const payload = buildAsaasCheckoutPayload(
+              { ...identity, quoteSnapshot: snapshot },
+              payloadOptions,
+            );
+            payload.items[0].name = providerItemName(payload.items[0].name);
+            const response = await request("/checkouts", payload);
+            providerReference = checkoutReference(response, payload);
+            hostedUrl = hostedCheckoutUrl(
+              response.link,
+              mode,
+              providerReference,
+            );
+          }
           if (observedAt() < startedAt) return unavailable();
-          const id = checkoutReference(response, payload);
-          const hostedUrl = hostedCheckoutUrl(response.link, mode, id);
           return {
-            providerReference: id,
+            providerReference,
             checkout: checkoutResultSchema.parse({
               orderId: identity.orderId,
               attemptId: identity.attemptId,

@@ -199,7 +199,16 @@ export function FinancialOverviewCard({
             <p className="m-0 text-sm leading-[1.55] text-admin-body">
               Mais <strong>{formatCents(current.awaitingReleaseCents)}</strong>{" "}
               aguardando liberação do Asaas. Pagamentos com cartão ficam
-              disponíveis depois do prazo do cartão.
+              disponíveis conforme a liberação de cada parcela.
+            </p>
+          )}
+          {(current.platformAdjustmentOwedCents ?? 0) > 0 && (
+            <p className="m-0 text-sm leading-[1.55] text-admin-body">
+              O EntreLaços vai creditar{" "}
+              <strong>
+                {formatCents(current.platformAdjustmentOwedCents ?? 0)}
+              </strong>{" "}
+              para cobrir diferenças de tarifa.
             </p>
           )}
           <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2">

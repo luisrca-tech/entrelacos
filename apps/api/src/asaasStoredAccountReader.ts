@@ -10,6 +10,7 @@ import {
   type AsaasAccountFeesObservation,
   type AsaasBalanceObservation,
   type AsaasCheckoutPaymentsObservation,
+  type AsaasInstallmentRemovalObservation,
   type AsaasPaymentObservation,
   createAsaasHttpClient,
 } from "./asaasHttpClient";
@@ -32,6 +33,20 @@ export interface AsaasStoredAccountReaderOptions extends LiveSitePolicy {
   now(): Date;
 }
 export interface AsaasStoredAccountReader {
+  hasInternalTransferCredit(
+    binding: FinancialAccountBinding,
+    transferReference: string,
+    amountCents: number,
+    effectiveDate: string,
+  ): Promise<boolean>;
+  hasUnrestrictedGiftPayment(
+    binding: FinancialAccountBinding,
+    paymentReference: string,
+  ): Promise<boolean>;
+  getInstallmentRemoval(
+    binding: FinancialAccountBinding,
+    installmentReference: string,
+  ): Promise<AsaasInstallmentRemovalObservation>;
   listCheckoutPayments(
     binding: FinancialAccountBinding,
     checkoutReference: string,
@@ -217,7 +232,7 @@ export function createAsaasStoredAccountReader(
         ? sql`AND EXISTS (SELECT 1 FROM ${financialEventInbox} e WHERE e.id=${claim.eventId}
         AND e.site_id=a.site_id AND e.account_id=a.id AND e.environment=a.environment
         AND e.lease_owner=${claim.leaseOwner} AND e.lease_token=${claim.leaseToken} AND e.attempts=${claim.attempts}
-        AND e.payload->>'paymentId'=${claim.paymentReference} AND e.state='CLAIMED' AND e.event_type IN ('PAYMENT_RECEIVED','PAYMENT_CONFIRMED','PAYMENT_REFUNDED','PAYMENT_PARTIALLY_REFUNDED','PAYMENT_REFUND_IN_PROGRESS','PAYMENT_CHARGEBACK_REQUESTED','PAYMENT_CHARGEBACK_DISPUTE','PAYMENT_AWAITING_CHARGEBACK_REVERSAL') AND e.processed_at IS NULL
+        AND e.payload->>'paymentId'=${claim.paymentReference} AND e.state='CLAIMED' AND e.event_type IN ('PAYMENT_RECEIVED','PAYMENT_CONFIRMED','PAYMENT_SPLIT_DONE','PAYMENT_REFUNDED','PAYMENT_PARTIALLY_REFUNDED','PAYMENT_REFUND_IN_PROGRESS','PAYMENT_CHARGEBACK_REQUESTED','PAYMENT_CHARGEBACK_DISPUTE','PAYMENT_AWAITING_CHARGEBACK_REVERSAL') AND e.processed_at IS NULL
         AND e.authenticated_at<=${observed.toISOString()}::timestamptz AND e.authenticated_at<=clock_timestamp() AND e.received_at<=e.authenticated_at
         AND e.lease_expires_at>=${observed.toISOString()}::timestamptz AND e.lease_expires_at>=clock_timestamp())`
         : sql``;
@@ -286,6 +301,41 @@ export function createAsaasStoredAccountReader(
       });
     }
     return {
+      async hasInternalTransferCredit(
+        value,
+        transferReference,
+        amountCents,
+        effectiveDate,
+      ) {
+        const client = await loadClient(readBinding(value));
+        return client.hasInternalTransferCredit(
+          transferReference,
+          amountCents,
+          effectiveDate,
+        );
+      },
+      async hasUnrestrictedGiftPayment(value, paymentReference) {
+        const client = await loadClient(readBinding(value));
+        const { payment } = await client.getPayment(paymentReference);
+        return (
+          payment.status === "RECEIVED" &&
+          payment.deleted !== true &&
+          (payment.refunds == null || payment.refunds.length === 0) &&
+          payment.chargeback == null &&
+          payment.custody == null
+        );
+      },
+      async getInstallmentRemoval(value, installmentReference) {
+        try {
+          activeMode();
+          const binding = readBinding(value);
+          if (!providerId(installmentReference)) return unavailable();
+          const client = await loadClient(binding);
+          return await client.getInstallmentRemoval(installmentReference);
+        } catch {
+          return unavailable();
+        }
+      },
       async listCheckoutPayments(value, checkoutReference) {
         try {
           activeMode();

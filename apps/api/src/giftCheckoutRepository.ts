@@ -37,6 +37,10 @@ import {
   isSafeCheckoutContinuation,
   readGiftQuoteSnapshot,
 } from "./giftCheckouts";
+import {
+  giftPaymentTerms,
+  isGiftReceiptEvent,
+} from "./giftPaymentReconciliation";
 import { findPublishedGiftForQuote } from "./giftQuoteLookup";
 import type {
   GiftQuoteReceivingContext,
@@ -121,7 +125,6 @@ interface AttemptRow extends GiftCheckoutAccountScope {
 
 type PaymentRow = typeof giftPaymentRecord.$inferSelect;
 type LedgerRow = typeof financialLedgerEntry.$inferSelect;
-type EventRow = typeof financialEventInbox.$inferSelect;
 
 const quoteColumns = sql`
   q.id AS "quoteId", q.site_id AS "siteId", q.account_id AS "accountId", q.environment,
@@ -470,7 +473,8 @@ async function readRecord(
     p.order_id AS "orderId", p.attempt_id AS "attemptId", p.provider_payment_reference AS "providerPaymentReference",
     p.provider_status AS "providerStatus", p.verification_status AS "verificationStatus", p.observed_at AS "observedAt",
     p.currency, p.gross_cents AS "grossCents", p.processing_cents AS "processingCents", p.commission_cents AS "commissionCents",
-    p.recipient_net_cents AS "recipientNetCents", p.split_provider_reference AS "splitProviderReference", p.split_fixed_cents AS "splitFixedCents"
+    p.recipient_net_cents AS "recipientNetCents", p.split_provider_reference AS "splitProviderReference", p.split_fixed_cents AS "splitFixedCents",
+    p.provider_installment_reference AS "providerInstallmentReference", p.installment_number AS "installmentNumber"
     FROM ${giftPaymentRecord} p WHERE p.site_id = ${siteId} AND p.account_id = ${row.accountId}
       AND p.environment = ${row.environment} AND p.order_id = ${row.orderId} ORDER BY p.id`);
   const paymentRows = payments.rows.map((raw) => ({
@@ -600,6 +604,251 @@ async function readRecord(
     providerCheckoutReference: attempt.providerReference,
     observedAt: instant(attempt.updatedAt),
   };
+  async function receiptEventIsVerified(
+    paymentId: string,
+    eventId: string | null,
+  ) {
+    if (eventId === null) return true;
+    const events =
+      await tx.execute(sql`SELECT e.id, e.site_id AS "siteId", e.account_id AS "accountId", e.environment,
+      e.payment_id AS "paymentId", e.event_type AS "eventType", e.state, e.authenticated_at AS "authenticatedAt", e.processed_at AS "processedAt"
+      FROM ${financialEventInbox} e WHERE e.site_id = ${siteId} AND e.account_id = ${row.accountId} AND e.environment = ${row.environment} AND e.id = ${eventId}`);
+    const event = events.rows[0];
+    if (
+      events.rows.length !== 1 ||
+      !event ||
+      event.id !== eventId ||
+      !scoped(event as unknown as GiftCheckoutAccountScope, row) ||
+      event.paymentId !== paymentId ||
+      !isGiftReceiptEvent(event.eventType) ||
+      event.state !== "PROCESSED" ||
+      event.authenticatedAt === null ||
+      event.processedAt === null
+    )
+      return false;
+    const authenticated = readDatabaseTimestamp(event.authenticatedAt);
+    const processed = readDatabaseTimestamp(event.processedAt);
+    return (
+      validTime(authenticated) &&
+      validTime(processed) &&
+      compareDatabaseTimestamps(processed, authenticated) >= 0
+    );
+  }
+
+  const count = quoteSnapshot.quote.installmentCount ?? 1;
+  if (count > 1) {
+    if (paymentRows.length === 0 && ledgerRows.length === 0) {
+      const deletionEvents =
+        await tx.execute(sql`SELECT e.id, e.site_id AS "siteId", e.account_id AS "accountId", e.environment,
+        e.event_type AS "eventType", e.state, e.payload, e.payload_hash AS "payloadHash", e.provider_event_reference AS "providerEventReference",
+        e.authenticated_at AS "authenticatedAt", e.received_at AS "receivedAt", e.processed_at AS "processedAt", e.last_error_code AS "lastErrorCode"
+        FROM ${financialEventInbox} e WHERE e.site_id = ${siteId} AND e.account_id = ${row.accountId} AND e.environment = ${row.environment}
+        AND e.event_type = 'PAYMENT_DELETED' AND e.state = 'PROCESSED' AND e.last_error_code = 'PAYMENT_DELETED_INSTALLMENT_EMPTY'
+        AND e.payload->>'externalReference' = ${attempt.attemptId} AND e.payload->>'installmentId' = ${attempt.providerReference}
+        ORDER BY e.processed_at DESC, e.id`);
+      for (const event of deletionEvents.rows) {
+        const payload = event.payload as Record<string, string> | null;
+        if (
+          !scoped(event as unknown as GiftCheckoutAccountScope, row) ||
+          event.eventType !== "PAYMENT_DELETED" ||
+          event.state !== "PROCESSED" ||
+          event.lastErrorCode !== "PAYMENT_DELETED_INSTALLMENT_EMPTY" ||
+          !nonempty(event.providerEventReference) ||
+          payload?.externalReference !== attempt.attemptId ||
+          payload.installmentId !== attempt.providerReference ||
+          !nonempty(payload.paymentId) ||
+          Object.keys(payload).length !== 3 ||
+          event.payloadHash !==
+            hashAsaasEventIdentity(
+              event.providerEventReference,
+              "PAYMENT_DELETED",
+              quoteSnapshot.receiving.accountReference,
+              payload,
+            ) ||
+          event.receivedAt === null ||
+          event.authenticatedAt === null ||
+          event.processedAt === null
+        )
+          continue;
+        const received = readDatabaseTimestamp(event.receivedAt);
+        const authenticated = readDatabaseTimestamp(event.authenticatedAt);
+        const processed = readDatabaseTimestamp(event.processedAt);
+        if (
+          !validTime(received) ||
+          !validTime(authenticated) ||
+          !validTime(processed) ||
+          compareDatabaseTimestamps(authenticated, received) < 0 ||
+          compareDatabaseTimestamps(processed, authenticated) < 0
+        )
+          continue;
+        const observedAt = instant(processed);
+        return {
+          ...record,
+          state: "CLOSED_UNPAID",
+          observedAt,
+          closedReason: "CANCELED",
+          evidence: {
+            ...evidence,
+            kind: "CLOSED_UNPAID",
+            observedAt,
+            noOutstandingPayment: true,
+            closedReason: "CANCELED",
+          },
+        };
+      }
+      return {
+        ...record,
+        state: "AWAITING_PAYMENT",
+        checkout: checkout.data,
+        evidence,
+      };
+    }
+    if (paymentRows.length !== count) return record;
+    const positions = new Set<number>();
+    const paymentReferences = new Set<string>();
+    let confirmed: GiftCheckoutEvidence | undefined;
+    let settled: GiftCheckoutEvidence | undefined;
+    let settledCount = 0;
+    for (const payment of paymentRows) {
+      const terms = giftPaymentTerms(
+        quoteSnapshot.quote,
+        payment.installmentNumber,
+      );
+      const processing = giftCentsSchema.safeParse(payment.processingCents);
+      const net = giftCentsSchema.safeParse(payment.recipientNetCents);
+      if (
+        !terms ||
+        payment.installmentNumber === null ||
+        positions.has(payment.installmentNumber) ||
+        payment.attemptId !== attempt.attemptId ||
+        payment.providerInstallmentReference !== attempt.providerReference ||
+        !nonempty(payment.providerPaymentReference) ||
+        paymentReferences.has(payment.providerPaymentReference) ||
+        payment.verificationStatus !== "VERIFIED" ||
+        !validTime(payment.observedAt) ||
+        payment.currency !== row.currency ||
+        payment.grossCents !== terms.grossCents ||
+        !processing.success ||
+        !net.success ||
+        net.data === 0 ||
+        terms.grossCents !==
+          processing.data + terms.commissionCents + net.data ||
+        payment.splitFixedCents !== terms.commissionCents ||
+        (terms.commissionCents > 0 && !nonempty(payment.splitProviderReference))
+      )
+        return record;
+      positions.add(payment.installmentNumber);
+      paymentReferences.add(payment.providerPaymentReference);
+      const related = ledgerRows.filter(
+        (ledger) => ledger.paymentId === payment.id,
+      );
+      const paymentObservedAt = payment.observedAt;
+      const observedAt = instant(paymentObservedAt);
+      if (
+        payment.providerStatus === "RECEIVED" &&
+        payment.commissionCents === terms.commissionCents &&
+        related.length === 1
+      ) {
+        const ledger = related[0];
+        if (
+          ledger.kind !== "GIFT_RECEIVED" ||
+          ledger.direction !== "CREDIT" ||
+          ledger.currency !== row.currency ||
+          ledger.amountCents !== net.data ||
+          ledger.effectKey !==
+            giftReceivedEffectKey(payment.providerPaymentReference) ||
+          ledger.compensatesEntryId !== null ||
+          (ledger.operationId !== null &&
+            ledger.operationId !== attempt.operationId) ||
+          !giftQuoteSchema.shape.siteId.safeParse(ledger.id).success
+        )
+          return record;
+        if (!(await receiptEventIsVerified(payment.id, ledger.eventId)))
+          return record;
+        settledCount++;
+        if (!settled || observedAt > settled.observedAt)
+          settled = {
+            ...evidence,
+            kind: "SETTLEMENT",
+            observedAt,
+            providerPaymentReference: payment.providerPaymentReference,
+            ledgerEntryId: ledger.id,
+          };
+      } else if (
+        payment.providerStatus === "CONFIRMED" &&
+        payment.commissionCents === null &&
+        related.length === 0
+      ) {
+        const events =
+          await tx.execute(sql`SELECT e.id, e.site_id AS "siteId", e.account_id AS "accountId", e.environment,
+          e.payment_id AS "paymentId", e.event_type AS "eventType", e.state, e.payload, e.payload_hash AS "payloadHash",
+          e.provider_event_reference AS "providerEventReference", e.authenticated_at AS "authenticatedAt", e.processed_at AS "processedAt"
+          FROM ${financialEventInbox} e WHERE e.site_id = ${siteId} AND e.account_id = ${row.accountId} AND e.environment = ${row.environment}
+          AND e.payment_id = ${payment.id} AND e.event_type = 'PAYMENT_CONFIRMED' AND e.state = 'PROCESSED'`);
+        const event = events.rows.find((event) => {
+          const payload = event.payload as Record<string, string> | null;
+          return (
+            event.paymentId === payment.id &&
+            scoped(event as unknown as GiftCheckoutAccountScope, row) &&
+            event.eventType === "PAYMENT_CONFIRMED" &&
+            event.state === "PROCESSED" &&
+            nonempty(event.providerEventReference) &&
+            giftQuoteSchema.shape.siteId.safeParse(event.id).success &&
+            payload?.paymentId === payment.providerPaymentReference &&
+            payload.externalReference === attempt.attemptId &&
+            event.payloadHash ===
+              hashAsaasEventIdentity(
+                event.providerEventReference,
+                "PAYMENT_CONFIRMED",
+                quoteSnapshot.receiving.accountReference,
+                payload,
+              ) &&
+            event.authenticatedAt !== null &&
+            event.processedAt !== null &&
+            compareDatabaseTimestamps(
+              paymentObservedAt,
+              readDatabaseTimestamp(event.authenticatedAt),
+            ) >= 0 &&
+            compareDatabaseTimestamps(
+              paymentObservedAt,
+              readDatabaseTimestamp(event.processedAt),
+            ) <= 0
+          );
+        });
+        if (
+          !event ||
+          !nonempty(event.providerEventReference) ||
+          typeof event.id !== "string"
+        )
+          return record;
+        if (!confirmed || observedAt > confirmed.observedAt)
+          confirmed = {
+            ...evidence,
+            kind: "PAYMENT_CONFIRMATION",
+            observedAt,
+            providerPaymentReference: payment.providerPaymentReference,
+            providerEventReference: event.providerEventReference,
+            eventId: event.id,
+          };
+      } else return record;
+    }
+    if (ledgerRows.length !== settledCount) return record;
+    if (settledCount === count && settled)
+      return {
+        ...record,
+        state: "RECEIVED",
+        observedAt: settled.observedAt,
+        evidence: settled,
+      };
+    if (confirmed)
+      return {
+        ...record,
+        state: "CONFIRMED",
+        observedAt: confirmed.observedAt,
+        evidence: confirmed,
+      };
+    return record;
+  }
   const payment = paymentRows[0];
   const ledger = ledgerRows[0];
   const actualProcessing = giftCentsSchema.safeParse(payment?.processingCents);
@@ -752,41 +1001,8 @@ async function readRecord(
     ledger.compensatesEntryId === null &&
     (ledger.operationId === null || ledger.operationId === attempt.operationId)
   ) {
-    let authenticated = ledger.eventId === null;
-    if (ledger.eventId !== null) {
-      const events =
-        await tx.execute(sql`SELECT e.id, e.site_id AS "siteId", e.account_id AS "accountId", e.environment,
-        e.payment_id AS "paymentId", e.event_type AS "eventType", e.state, e.authenticated_at AS "authenticatedAt", e.processed_at AS "processedAt"
-        FROM ${financialEventInbox} e WHERE e.site_id = ${siteId} AND e.account_id = ${row.accountId} AND e.environment = ${row.environment} AND e.id = ${ledger.eventId}`);
-      const rawEvent = events.rows[0];
-      const event = rawEvent
-        ? ({
-            ...rawEvent,
-            authenticatedAt:
-              rawEvent.authenticatedAt === null
-                ? null
-                : readDatabaseTimestamp(rawEvent.authenticatedAt),
-            processedAt:
-              rawEvent.processedAt === null
-                ? null
-                : readDatabaseTimestamp(rawEvent.processedAt),
-          } as unknown as EventRow)
-        : null;
-      authenticated =
-        events.rows.length === 1 &&
-        event !== null &&
-        event.id === ledger.eventId &&
-        scoped(event, row) &&
-        event.paymentId === payment.id &&
-        event.eventType === "PAYMENT_RECEIVED" &&
-        event.state === "PROCESSED" &&
-        validTime(event.authenticatedAt) &&
-        validTime(event.processedAt) &&
-        compareDatabaseTimestamps(event.processedAt, event.authenticatedAt) >=
-          0;
-    }
     if (
-      authenticated &&
+      (await receiptEventIsVerified(payment.id, ledger.eventId)) &&
       giftQuoteSchema.shape.siteId.safeParse(ledger.id).success
     )
       return {

@@ -31,7 +31,11 @@ export interface AsaasAccountFees {
     creditCard?: {
       operationValue?: string | null;
       oneInstallmentPercentage?: string | null;
+      upToSixInstallmentsPercentage?: string | null;
+      upToTwelveInstallmentsPercentage?: string | null;
       discountOneInstallmentPercentage?: string | null;
+      discountUpToSixInstallmentsPercentage?: string | null;
+      discountUpToTwelveInstallmentsPercentage?: string | null;
       discountExpiration?: string | null;
       hasValidDiscount?: boolean | null;
     } | null;
@@ -92,7 +96,9 @@ export interface AsaasPaymentSplit {
 // normalizing the response never infers receipt, approval or a completed split.
 export interface AsaasPaymentForReconciliation {
   id: string;
-  checkoutSession: string;
+  checkoutSession?: string | null;
+  installment?: string | null;
+  installmentNumber?: number | null;
   status: string;
   billingType: string;
   value: string;
@@ -167,6 +173,14 @@ export interface AsaasHttpClient {
   ): Promise<AsaasTransferObservation>;
   getTransfer(providerReference: string): Promise<AsaasTransferObservation>;
   listTransfers(offset: number): Promise<AsaasTransfersObservation>;
+  hasInternalTransferCredit(
+    providerReference: string,
+    amountCents: number,
+    effectiveDate: string,
+  ): Promise<boolean>;
+  getInstallmentRemoval(
+    installmentReference: string,
+  ): Promise<AsaasInstallmentRemovalObservation>;
   listCheckoutPayments(
     checkoutReference: string,
   ): Promise<AsaasCheckoutPaymentsObservation>;
@@ -177,6 +191,15 @@ export interface AsaasHttpClient {
   getAccountFees(options?: {
     purpose: "PIX_WITHDRAWAL";
   }): Promise<AsaasAccountFeesObservation>;
+}
+
+export interface AsaasInstallmentRemovalObservation
+  extends Omit<
+    AsaasCheckoutPaymentsObservation,
+    "checkoutReference" | "payments"
+  > {
+  installmentReference: string;
+  removed: boolean;
 }
 
 export interface AsaasCheckoutPaymentsObservation {
@@ -342,7 +365,14 @@ function decodeAccountFees(text: string): AsaasAccountFees {
         fees.payment.creditCard = fields(
           payment.creditCard,
           ["operationValue"],
-          ["oneInstallmentPercentage", "discountOneInstallmentPercentage"],
+          [
+            "oneInstallmentPercentage",
+            "upToSixInstallmentsPercentage",
+            "upToTwelveInstallmentsPercentage",
+            "discountOneInstallmentPercentage",
+            "discountUpToSixInstallmentsPercentage",
+            "discountUpToTwelveInstallmentsPercentage",
+          ],
           [],
           ["hasValidDiscount"],
           ["discountExpiration"],
@@ -548,11 +578,32 @@ function normalizePayment(
     return unavailable();
   const payment: AsaasPaymentForReconciliation = {
     id,
-    checkoutSession: reference(raw.checkoutSession),
     status: status(raw.status, paymentStatuses),
     billingType: status(raw.billingType, billingTypes),
     value: serializeBrlCents(gross),
   };
+  if (raw.checkoutSession !== undefined)
+    payment.checkoutSession =
+      raw.checkoutSession === null ? null : reference(raw.checkoutSession);
+  if (raw.installment !== undefined)
+    payment.installment =
+      raw.installment === null ? null : reference(raw.installment);
+  if (raw.installmentNumber !== undefined) {
+    const installmentNumber = raw.installmentNumber;
+    if (
+      installmentNumber !== null &&
+      (typeof installmentNumber !== "number" ||
+        !Number.isSafeInteger(installmentNumber) ||
+        installmentNumber < 1)
+    )
+      return unavailable();
+    payment.installmentNumber = installmentNumber;
+  }
+  if (
+    !payment.checkoutSession &&
+    (!payment.installment || !payment.installmentNumber)
+  )
+    return unavailable();
   if (raw.currency !== undefined) payment.currency = "BRL";
   if (raw.externalReference !== undefined)
     payment.externalReference =
@@ -603,7 +654,10 @@ function normalizePayment(
 }
 
 // Native transfer amounts are read from original JSON tokens, before Number rounding.
-function decodeTransfers(text: string): unknown {
+function decodeAsaasTransferAmounts(
+  text: string,
+  readAmount: (source: string) => string,
+): unknown {
   return (
     JSON.parse as (
       text: string,
@@ -618,8 +672,13 @@ function decodeTransfers(text: string): unknown {
       return value;
     if (typeof value !== "number" || typeof context?.source !== "string")
       return unavailable();
-    return serializeBrlCents(parseBrlCents(context.source));
+    return readAmount(context.source);
   });
+}
+export function decodeAsaasTransfers(text: string): unknown {
+  return decodeAsaasTransferAmounts(text, (source) =>
+    serializeBrlCents(parseBrlCents(source)),
+  );
 }
 // Native effective dates have no timezone; validate without converting the provider value.
 export function readAsaasTransferEffectiveDate(value: unknown): string | null {
@@ -800,10 +859,12 @@ export function createAsaasHttpClient(
         ? "https://api-sandbox.asaas.com/v3"
         : "https://api.asaas.com/v3";
 
+    const installmentNotFound = Symbol();
     async function request(
       path: string,
       payload?: string,
       decode: (text: string) => unknown = JSON.parse,
+      allowInstallmentNotFound = false,
     ): Promise<Record<string, unknown>> {
       const controller = new AbortController();
       let timer: ReturnType<typeof setTimeout> | undefined;
@@ -871,10 +932,12 @@ export function createAsaasHttpClient(
         });
         body = response.body;
         assertDeadline();
+        if (response.redirected || (response.url && response.url !== url))
+          return unavailable();
+        if (allowInstallmentNotFound && response.status === 404)
+          throw installmentNotFound;
         if (
           response.status !== 200 ||
-          response.redirected ||
-          (response.url && response.url !== url) ||
           !/^application\/json(?:\s*;\s*charset=(?:utf-8|"utf-8"))?\s*$/i.test(
             response.headers.get("content-type") ?? "",
           ) ||
@@ -908,7 +971,8 @@ export function createAsaasHttpClient(
         const result = record(decode(text));
         assertDeadline();
         return result;
-      } catch {
+      } catch (error) {
+        if (error === installmentNotFound) throw error;
         return unavailable();
       } finally {
         if (!endOfBody) cancel();
@@ -1079,7 +1143,7 @@ export function createAsaasHttpClient(
           const response = await request(
             "/transfers",
             payload,
-            decodeTransfers,
+            decodeAsaasTransfers,
           );
           return {
             source: "provider",
@@ -1097,7 +1161,7 @@ export function createAsaasHttpClient(
           const response = await request(
             `/transfers/${encodeURIComponent(requested)}`,
             undefined,
-            decodeTransfers,
+            decodeAsaasTransfers,
           );
           const transfer = normalizeTransfer(response);
           if (transfer.id !== requested) return unavailable();
@@ -1123,7 +1187,7 @@ export function createAsaasHttpClient(
           const response = await request(
             `/transfers?limit=100&offset=${offset}`,
             undefined,
-            decodeTransfers,
+            decodeAsaasTransfers,
           );
           if (
             typeof response.hasMore !== "boolean" ||
@@ -1156,6 +1220,78 @@ export function createAsaasHttpClient(
         } catch {
           return unavailable();
         }
+      },
+      async hasInternalTransferCredit(
+        providerReference,
+        amountCents,
+        effectiveDate,
+      ) {
+        try {
+          const requested = reference(providerReference);
+          const date = readAsaasTransferEffectiveDate(effectiveDate)?.slice(
+            0,
+            10,
+          );
+          if (!date || amountCents <= 0) return unavailable();
+          const expectedAmount = serializeBrlCents(amountCents);
+          for (let offset = 0; offset < 1000; offset += 100) {
+            const page = await request(
+              `/financialTransactions?startDate=${date}&finishDate=${date}&limit=100&offset=${offset}`,
+              undefined,
+              (body) => decodeAsaasTransferAmounts(body, (source) => source),
+            );
+            if (
+              typeof page.hasMore !== "boolean" ||
+              !Array.isArray(page.data) ||
+              page.data.length > 100 ||
+              (page.offset !== undefined && page.offset !== offset)
+            )
+              return unavailable();
+            for (const row of page.data) {
+              const entry = record(row);
+              if (
+                entry.type !== "INTERNAL_TRANSFER_CREDIT" ||
+                entry.transferId !== requested
+              )
+                continue;
+              reference(entry.id);
+              if (
+                entry.date !== date ||
+                typeof entry.value !== "string" ||
+                serializeBrlCents(parseBrlCents(entry.value)) !== expectedAmount
+              )
+                return unavailable();
+              return true;
+            }
+            if (!page.hasMore) return false;
+          }
+          return unavailable();
+        } catch {
+          return unavailable();
+        }
+      },
+      async getInstallmentRemoval(installmentReference) {
+        const requested = reference(installmentReference);
+        let removed = false;
+        try {
+          const response = await request(
+            `/installments/${encodeURIComponent(requested)}`,
+            undefined,
+            JSON.parse,
+            true,
+          );
+          if (response.id !== requested) return unavailable();
+        } catch (error) {
+          if (error !== installmentNotFound) return unavailable();
+          removed = true;
+        }
+        return {
+          source: "provider",
+          ...binding,
+          installmentReference: requested,
+          observedAt: observedAt(),
+          removed,
+        };
       },
       async listCheckoutPayments(checkoutReference) {
         try {

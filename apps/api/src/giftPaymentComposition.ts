@@ -1,4 +1,9 @@
 import { randomUUID } from "node:crypto";
+import { isDeepStrictEqual } from "node:util";
+import {
+  giftMinimumNominalCents,
+  type PublicGiftItem,
+} from "@entrelacos/contracts";
 import type { DatabaseConnection } from "@entrelacos/database";
 import {
   receivingAccount,
@@ -28,6 +33,8 @@ import {
   type GiftCheckoutProviderCommand,
   GiftCheckoutServiceError,
 } from "./giftCheckouts";
+import { quoteGiftPurchaseAmounts } from "./giftMoney";
+import { createGiftPaymentAdjustmentWorker } from "./giftPaymentAdjustmentWorker";
 import { createGiftPaymentCheckoutLookup } from "./giftPaymentCheckoutLookup";
 import type { GiftPaymentConfig } from "./giftPaymentConfig";
 import { createGiftPaymentInboxRepository } from "./giftPaymentInboxRepository";
@@ -41,6 +48,7 @@ import { createGiftQuoteRepository } from "./giftQuoteRepository";
 import {
   createGiftQuoteService,
   type GiftQuoteServiceDependencies,
+  loadGiftPricingEvidence,
 } from "./giftQuotes";
 import { allowsLiveSite } from "./liveSitePolicy";
 import { mapWithConcurrency } from "./mapWithConcurrency";
@@ -69,6 +77,7 @@ type PaymentPorts = Pick<
   | "receiving"
   | "giftPayments"
   | "previewPricing"
+  | "loadPublicGiftPrices"
   | "sandboxBuyerGrossUpAvailable"
   | "asaasWebhook"
   | "asaasWithdrawalAuthorization"
@@ -429,6 +438,9 @@ export function createGiftPaymentComposition(
         }).createQuote(snapshot.quote.siteId, {
           giftId: snapshot.quote.giftId,
           method: snapshot.quote.method,
+          ...(snapshot.quote.installmentCount === undefined
+            ? {}
+            : { installmentCount: snapshot.quote.installmentCount }),
         });
         return (
           [
@@ -439,8 +451,10 @@ export function createGiftPaymentComposition(
             "feeAllocation",
             "policyVersion",
             "title",
+            "installmentCount",
+            "installmentCents",
           ] as const
-        ).every((key) => current[key] === snapshot.quote[key]);
+        ).every((key) => isDeepStrictEqual(current[key], snapshot.quote[key]));
       } catch {
         return false;
       }
@@ -452,6 +466,56 @@ export function createGiftPaymentComposition(
     now,
     generateId: () => randomUUID(),
   });
+  async function loadPublicGiftPrices(
+    siteId: string,
+    gifts: readonly Pick<PublicGiftItem, "id" | "nominalCents">[],
+  ) {
+    const prices = new Map<string, number>();
+    const eligible = gifts.filter(
+      (gift) => gift.nominalCents >= giftMinimumNominalCents,
+    );
+    if (!eligible.length) return prices;
+    const policies = await Promise.allSettled(
+      (["PIX", "CREDIT_CARD"] as const).map((method) =>
+        loadGiftPricingEvidence(
+          quoteDependencies,
+          siteId,
+          method,
+          "BUYER_GROSS_UP",
+        ),
+      ),
+    );
+    for (const result of policies) {
+      if (result.status !== "fulfilled") continue;
+      const policy = {
+        ...result.value.pricing.policy,
+        feeAllocation: "BUYER_GROSS_UP",
+      } as const;
+      for (const gift of eligible) {
+        try {
+          const amounts = quoteGiftPurchaseAmounts({
+            nominalCents: gift.nominalCents,
+            method: policy.method,
+            policy,
+          });
+          const minimum = amounts.installmentOptions
+            ? Math.min(
+                ...amounts.installmentOptions.map(
+                  (option) => option.totalCents,
+                ),
+              )
+            : amounts.totalCents;
+          prices.set(
+            gift.id,
+            Math.min(prices.get(gift.id) ?? minimum, minimum),
+          );
+        } catch {
+          // A fee or amount unavailable for one method does not hide other methods.
+        }
+      }
+    }
+    return prices;
+  }
   const webhookRepository = createAsaasWebhookRepository(db, environment);
   const webhook = createAsaasWebhookReceiver({
     mode: environment,
@@ -500,6 +564,15 @@ export function createGiftPaymentComposition(
     reader,
     now,
   });
+  const adjustments = createGiftPaymentAdjustmentWorker(db, {
+    ...liveSitePolicy,
+    environment,
+    platformApiKey: config.platformApiKey,
+    platformWalletId: config.platformWalletId,
+    fetch,
+    now,
+    reader,
+  });
   const loop = (options.createWorkerLoop ?? createGiftPaymentWorkerLoop)({
     worker: {
       async processNextReceivedPayment() {
@@ -507,12 +580,13 @@ export function createGiftPaymentComposition(
           worker.processNextReceivedPayment(),
           lifecycle.processNextReceivedPayment(),
           restrictions.processNextReceivedPayment(),
+          adjustments.processNextReceivedPayment(),
           withdrawals.reconcilePending(),
         ]);
         if (results.some((result) => result.status === "rejected"))
           return { kind: "RETRY" };
         const completed = results
-          .slice(0, 3)
+          .slice(0, 4)
           .flatMap((result) =>
             result.status === "fulfilled" && result.value ? [result.value] : [],
           );
@@ -589,6 +663,10 @@ export function createGiftPaymentComposition(
         }),
       previewPricing: (siteId: string, input: unknown) =>
         own(() => previewGiftPricing(quoteDependencies, siteId, input)),
+      loadPublicGiftPrices: (
+        siteId: string,
+        gifts: readonly Pick<PublicGiftItem, "id" | "nominalCents">[],
+      ) => own(() => loadPublicGiftPrices(siteId, gifts)),
       ...(withdrawals.service
         ? { withdrawalReservation: withdrawals.service }
         : {}),

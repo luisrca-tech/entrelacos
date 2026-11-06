@@ -1,6 +1,7 @@
 import { drizzle, type NodePgClient } from "drizzle-orm/node-postgres";
 import { describe, expect, it, vi } from "vitest";
 import { hashAsaasEventIdentity } from "./asaasWebhook";
+import { quoteGiftPurchaseAmounts, serializeBrlCents } from "./giftMoney";
 import {
   createGiftPaymentPostingRepository,
   type GiftPaymentPostingInput,
@@ -241,6 +242,29 @@ function fixture(rawTimestamps = false) {
           ),
         };
       }
+      if (/SELECT 1 FROM "gift_payment_record" p/i.test(text)) {
+        const [
+          siteId,
+          accountId,
+          environment,
+          orderId,
+          attemptId,
+          plan,
+          number,
+        ] = params;
+        return {
+          rows: tables.gift_payment_record.filter(
+            (row) =>
+              row.siteId === siteId &&
+              row.accountId === accountId &&
+              row.environment === environment &&
+              row.orderId === orderId &&
+              (row.attemptId !== attemptId ||
+                row.providerInstallmentReference !== plan ||
+                row.installmentNumber === number),
+          ),
+        };
+      }
       if (/FROM "gift_payment_record" p/i.test(text))
         return {
           rows: tables.gift_payment_record.filter((row) =>
@@ -325,6 +349,16 @@ function fixture(rawTimestamps = false) {
                 : params[Number(match[1]) - 1];
         }
         return { rows: [{ id: event.id }] };
+      }
+      if (
+        /UPDATE "gift_payment_record" SET platform_adjustment_cents/i.test(text)
+      ) {
+        const [amount, id] = params;
+        const payment = tables.gift_payment_record.find((row) => row.id === id);
+        if (!payment || payment.platformAdjustmentCents != null)
+          return { rows: [] };
+        payment.platformAdjustmentCents = amount;
+        return { rows: [{ id }] };
       }
       if (/UPDATE "gift_payment_record" p/i.test(text)) {
         const parameter = (column: string) => {
@@ -1401,4 +1435,152 @@ describe("payment effect uniqueness", () => {
     });
     expect(values.tables.financial_ledger_entry).toHaveLength(1);
   });
+});
+
+it("posts a previously delayed split when Asaas announces its settlement", async () => {
+  const f = fixture();
+  const event = f.tables.financial_event_inbox[0];
+  event.eventType = "PAYMENT_SPLIT_DONE";
+  event.payloadHash = hashAsaasEventIdentity(
+    String(event.providerEventReference),
+    "PAYMENT_SPLIT_DONE",
+    "provider-account-one",
+    event.payload as Record<string, string>,
+  );
+  const repository = createGiftPaymentPostingRepository(f.db, f.options);
+  await expect(repository.postReceivedPayment(f.input)).resolves.toMatchObject({
+    outcome: "POSTED",
+  });
+  await expect(repository.postReceivedPayment(f.input)).resolves.toMatchObject({
+    outcome: "DUPLICATE",
+  });
+  expect(f.tables.financial_ledger_entry).toHaveLength(1);
+});
+
+it("records a platform obligation with the actual credit in the receipt transaction", async () => {
+  const f = fixture();
+  Object.assign(f.binding.snapshot.quote, {
+    feeAllocation: "BUYER_GROSS_UP",
+    settlementVersion: "PLATFORM_FEE_GUARANTEE_V1",
+  });
+  f.binding.snapshot.pricing.policy.feeAllocation = "BUYER_GROSS_UP";
+  Object.assign(f.input.observation.payment as object, { netValue: "101.99" });
+  const repository = createGiftPaymentPostingRepository(f.db, f.options);
+  await expect(repository.postReceivedPayment(f.input)).resolves.toMatchObject({
+    outcome: "POSTED",
+  });
+  await expect(repository.postReceivedPayment(f.input)).resolves.toMatchObject({
+    outcome: "DUPLICATE",
+  });
+  expect(f.tables.gift_payment_record).toHaveLength(1);
+  expect(f.tables.gift_payment_record[0]).toMatchObject({
+    platformAdjustmentCents: 1,
+    recipientNetCents: 9999,
+  });
+  expect(f.tables.financial_ledger_entry).toEqual([
+    expect.objectContaining({ amountCents: 9999 }),
+  ]);
+});
+
+it("posts each installment once without multiplying the fixed commission", async () => {
+  const f = fixture();
+  const snapshot = f.binding.snapshot;
+  const policy = snapshot.pricing.policy;
+  Object.assign(policy, {
+    method: "CREDIT_CARD",
+    feeAllocation: "BUYER_GROSS_UP",
+    cardInstallmentBasisPoints: { upToSix: 0 },
+  });
+  Object.assign(
+    snapshot.quote,
+    quoteGiftPurchaseAmounts(
+      {
+        nominalCents: snapshot.quote.nominalCents,
+        method: "CREDIT_CARD",
+        policy,
+      },
+      2,
+    ),
+    { method: "CREDIT_CARD", settlementVersion: "PLATFORM_FEE_GUARANTEE_V1" },
+  );
+  f.binding.method = "CREDIT_CARD";
+  const originalEvent = structuredClone(f.tables.financial_event_inbox[0]);
+  let counter = 0;
+  const repository = createGiftPaymentPostingRepository(f.db, {
+    ...f.options,
+    generateId: (kind) => `${kind}-local-${++counter}`,
+  });
+
+  function forInstallment(number: number, suffix: string) {
+    const input = structuredClone(f.input);
+    const paymentId = `pay_${suffix}`;
+    const eventId = `event-${suffix}`;
+    const eventRef = `evt_${suffix}`;
+    const payload = { paymentId, externalReference: input.checkout.attemptId };
+    const event = {
+      ...originalEvent,
+      id: eventId,
+      providerEventReference: eventRef,
+      payload,
+      payloadHash: hashAsaasEventIdentity(
+        eventRef,
+        "PAYMENT_RECEIVED",
+        "provider-account-one",
+        payload,
+      ),
+    };
+    input.claim.eventId = eventId;
+    Object.assign(input.observation.payment as object, {
+      id: paymentId,
+      checkoutSession: null,
+      installment: input.checkout.providerCheckoutReference,
+      installmentNumber: number,
+      billingType: "CREDIT_CARD",
+      value: serializeBrlCents(
+        snapshot.quote.installmentCents?.[number - 1] ?? 0,
+      ),
+      netValue: "51.00",
+      split: [
+        {
+          id: `split-${suffix}`,
+          walletId: f.options.platformWalletId,
+          fixedValue: "1.00",
+          totalValue: "1.00",
+          status: "DONE",
+        },
+      ],
+    });
+    f.tables.financial_event_inbox.push(event);
+    return input;
+  }
+
+  const one = forInstallment(1, "first");
+  await expect(repository.postReceivedPayment(one)).resolves.toMatchObject({
+    outcome: "POSTED",
+  });
+  const two = forInstallment(2, "second");
+  await expect(repository.postReceivedPayment(two)).resolves.toMatchObject({
+    outcome: "POSTED",
+  });
+  await expect(repository.postReceivedPayment(two)).resolves.toMatchObject({
+    outcome: "DUPLICATE",
+  });
+  await expect(
+    repository.postReceivedPayment(forInstallment(2, "contradictory")),
+  ).rejects.toThrow("Payment posting unavailable");
+  expect(f.tables.gift_payment_record).toMatchObject([
+    {
+      providerPaymentReference: "pay_first",
+      installmentNumber: 1,
+      commissionCents: 100,
+    },
+    {
+      providerPaymentReference: "pay_second",
+      installmentNumber: 2,
+      commissionCents: 100,
+    },
+  ]);
+  expect(
+    f.tables.financial_ledger_entry.map((entry) => entry.amountCents),
+  ).toEqual([5000, 5000]);
 });

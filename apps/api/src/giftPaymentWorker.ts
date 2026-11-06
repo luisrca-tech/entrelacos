@@ -166,6 +166,10 @@ function readCheckout(
   });
 }
 
+function paymentCorrelationReference(payment: Record<string, unknown>): string {
+  return reference(payment.checkoutSession ?? payment.installment);
+}
+
 function readObservation(
   value: unknown,
   claim: GiftPaymentInboxClaim,
@@ -195,9 +199,10 @@ function readObservation(
     !giftQuoteSchema.shape.expiresAt.safeParse(raw.observedAt.toISOString())
       .success ||
     reference(payment.id) !== claim.paymentReference ||
-    !reference(payment.checkoutSession) ||
+    (payment.checkoutSession == null && payment.externalReference == null) ||
     (checkout !== undefined &&
-      payment.checkoutSession !== checkout.providerCheckoutReference) ||
+      paymentCorrelationReference(payment) !==
+        checkout.providerCheckoutReference) ||
     (payment.externalReference !== undefined &&
       payment.externalReference !== null &&
       (!id(payment.externalReference) ||
@@ -206,6 +211,7 @@ function readObservation(
     (payment.currency !== undefined && payment.currency !== "BRL")
   )
     return unavailable();
+  paymentCorrelationReference(payment);
   // Posting owns money/status reconciliation and atomic lease/commit checks. In
   // particular, a received event does not mask a newer refund or pending split.
   return copy as AsaasPaymentObservation;
@@ -310,7 +316,9 @@ export function createGiftPaymentWorker(
             checkout = readCheckout(
               await loadCheckout(
                 claim,
-                reference(observation.payment.checkoutSession),
+                paymentCorrelationReference(
+                  observation.payment as unknown as Record<string, unknown>,
+                ),
               ),
               claim,
             );

@@ -608,6 +608,12 @@ describe("internal gifts C1 contracts", () => {
       mediaAssetId: null,
     };
     expect(giftCreateInputSchema.parse(gift)).toEqual(gift);
+    expect(
+      giftCreateInputSchema.safeParse({ ...gift, nominalCents: 499 }).success,
+    ).toBe(false);
+    expect(
+      giftCreateInputSchema.safeParse({ ...gift, nominalCents: 500 }).success,
+    ).toBe(true);
     for (const nominalCents of [0, -1, 1.2, Number.MAX_SAFE_INTEGER]) {
       expect(
         giftCreateInputSchema.safeParse({ ...gift, nominalCents }).success,

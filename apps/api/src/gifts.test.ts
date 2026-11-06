@@ -785,6 +785,35 @@ describe("catalog receiving and authorization gates", () => {
     expect(f.writes).toHaveLength(1);
   });
 
+  it("requires the current gift minimum to publish but still allows archiving historical gifts", async () => {
+    const f = fixture({
+      gifts: [{ ...gift, nominalCents: 499, publicationState: "DRAFT" }],
+    });
+    await expect(
+      updateSiteGiftPublication(
+        f.db,
+        actor,
+        siteId,
+        gift.id,
+        { publicationState: "PUBLISHED" },
+        f.options,
+      ),
+    ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+    expect(f.writes).toEqual([]);
+    await expect(
+      updateSiteGiftPublication(
+        f.db,
+        actor,
+        siteId,
+        gift.id,
+        { publicationState: "ARCHIVED" },
+        f.options,
+      ),
+    ).resolves.toMatchObject({
+      gift: { nominalCents: 499, publicationState: "ARCHIVED" },
+    });
+  });
+
   it("rechecks capability and receiving eligibility under the site lock", async () => {
     const { db, options, queries, writes, readReadiness } = fixture();
     readReadiness.mockResolvedValueOnce(ready).mockResolvedValueOnce(blocked);

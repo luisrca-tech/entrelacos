@@ -35,7 +35,7 @@ import {
   type GiftPaymentsHttpOptions,
 } from "./giftPaymentsHttp";
 import { readGiftPricingSettings } from "./giftPricingSettings";
-import { createGiftsHttpRouter } from "./giftsHttp";
+import { createGiftsHttpRouter, type GiftsHttpOptions } from "./giftsHttp";
 import { createGuestVerificationHttpRouter } from "./guestVerificationHttp";
 import { createHandoffHttpRouter } from "./handoffHttp";
 import { createInvitationsHttpRouter } from "./invitationsHttp";
@@ -87,6 +87,7 @@ export type ApiOptions = GiftPaymentsHttpOptions &
     giftMediaAuth?: GiftMediaHttpOptions["auth"];
     giftPaymentHistory?: GiftPaymentHistoryHttpOptions["giftPaymentHistory"];
     previewPricing?: (siteId: string, input: unknown) => Promise<unknown>;
+    loadPublicGiftPrices?: GiftsHttpOptions["loadPublicGiftPrices"];
     sandboxBuyerGrossUpAvailable?: (siteId: string) => Promise<boolean>;
   };
 

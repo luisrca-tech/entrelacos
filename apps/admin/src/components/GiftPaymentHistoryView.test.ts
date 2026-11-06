@@ -126,7 +126,7 @@ afterEach(async () => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
-async function mounted(strict = false) {
+async function mounted(strict = false, initialHistory = page) {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   const owner = createPanelActorOwner({
     request: async () => structuredClone(actor),
@@ -134,7 +134,7 @@ async function mounted(strict = false) {
   });
   owners.push(owner);
   await owner.load();
-  let reply: unknown = { history: page };
+  let reply: unknown = { history: initialHistory };
   const request = vi.fn(async () => reply);
   const ports: HistoryPorts = { owner, request, now: () => now };
   let props = {
@@ -201,6 +201,65 @@ async function click(node: HTMLElement, label: string) {
   await act(async () => button?.click());
 }
 describe("mounted gift history", () => {
+  it.each([
+    ["platformAdjustmentOwedCents", "a creditar"],
+    ["platformAdjustmentFundedCents", "creditado"],
+  ] as const)(
+    "shows actual fees and %s for a recorded receipt",
+    async (field, label) => {
+      const history = structuredClone(detail);
+      const receipt = history.validatedHistoricalReceipts[0];
+      history.retainedPayments = [
+        {
+          ...history.retainedPayments[0],
+          paymentId: receipt.paymentId,
+          observedAtMicros: receipt.sourceObservedAtMicros,
+          recordedState: "RECEIVED",
+          grossCents: 11000,
+          processingCents: 100,
+          commissionCents: 1000,
+          recipientNetCents: 9900,
+          [field]: 100,
+        },
+      ];
+      receipt.recipientCreditCents = 9900;
+      const f = await mounted();
+      f.setReply({ history });
+      await click(f.node, "Ver detalhes de Lua de mel privada");
+      expect(f.node.textContent).toMatch(/Taxas registradas · R\$\s*11,00/);
+      expect(f.node.textContent).toContain(
+        `Ajuste do EntreLaços ${label} · R$ 1,00`,
+      );
+    },
+  );
+
+  it("shows the combined fees in purchase details without changing the couple's net", async () => {
+    const purchase = structuredClone(detail);
+    purchase.originalPurchase.quoted.processingCents = 321;
+    purchase.originalPurchase.quoted.totalCents = 11321;
+    const f = await mounted(false, {
+      ...page,
+      items: [purchase.originalPurchase],
+    });
+    f.setReply({ history: purchase });
+    await click(f.node, "Ver detalhes de Lua de mel privada");
+    const total = [...f.node.querySelectorAll("dt")].find(
+      (node) => node.textContent === "Total da compra",
+    );
+    expect(total?.nextElementSibling?.textContent).toMatch(/R\$\s*113,21/);
+    expect(f.node.textContent).toContain(
+      "Os valores acima vêm da cotação da compra. O histórico mostra os pagamentos e créditos registrados.",
+    );
+    const row = [...f.node.querySelectorAll("dt")].find(
+      (node) => node.textContent === "Taxas",
+    );
+    expect(row?.nextElementSibling?.textContent).toMatch(/− R\$\s*13,21/);
+    expect(f.node.textContent).not.toMatch(/Comissão|Processamento Asaas/);
+    const net = [...f.node.querySelectorAll("dt")].find(
+      (node) => node.textContent === "Para vocês",
+    );
+    expect(net?.nextElementSibling?.textContent).toMatch(/R\$\s*100,00/);
+  });
   it("does not announce an API failure during a successful initial mount", async () => {
     const error = vi.spyOn(toast, "error");
     const f = await mounted(true);
@@ -225,7 +284,10 @@ describe("mounted gift history", () => {
     f.setReply({ history: detail });
     await click(f.node, "Ver detalhes de Lua de mel privada");
     expect(f.node.textContent).toContain("Detalhes do presente");
-    expect(f.node.textContent).toContain("Convidado pagou");
+    expect(f.node.querySelector("thead")?.textContent).toContain(
+      "Total da compra",
+    );
+    expect(f.node.textContent).not.toContain("Convidado pagou");
     expect(f.node.textContent).toContain("Pagamento com restrição no Asaas");
     expect(f.node.textContent).toContain("Crédito registrado para vocês: R$");
     expect(f.node.textContent).toContain(

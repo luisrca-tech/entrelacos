@@ -18,7 +18,6 @@ const base: ReceivingTrackInput = {
   provider,
   ready: false,
   destinationSaved: false,
-  feesChosen: false,
 };
 
 const statuses = (input: ReceivingTrackInput) =>
@@ -65,17 +64,17 @@ describe("receiving guided track", () => {
     expect(track.next?.id).toBe("details");
   });
 
-  it("unlocks steps 4 and 5 as soon as the Asaas account exists", () => {
+  it("applies the fixed gift fee rule as soon as the Asaas account exists", () => {
     const track = deriveReceivingTrack(base);
     expect(track.steps.map(({ status }) => status)).toEqual([
       "done",
       "done",
       "current",
       "available",
-      "available",
+      "done",
     ]);
     expect(track.next?.id).toBe("activation");
-    expect(track.completed).toBe(2);
+    expect(track.completed).toBe(3);
   });
 
   it("moves the next step forward while Asaas reviews the account", () => {
@@ -90,7 +89,7 @@ describe("receiving guided track", () => {
     expect(track.steps[2].status).toBe("review");
     expect(track.next?.id).toBe("account");
     expect(track.steps[3].status).toBe("current");
-    expect(track.steps[4].status).toBe("available");
+    expect(track.steps[4].status).toBe("done");
   });
 
   it("asks for a fix when Asaas rejects data or it expires", () => {
@@ -104,25 +103,23 @@ describe("receiving guided track", () => {
     }
   });
 
-  it("counts saved destination and chosen fees as done", () => {
+  it("counts saved destination and the fixed fees as done", () => {
     const track = deriveReceivingTrack({
       ...base,
       provider: { ...provider, general: "AWAITING_APPROVAL" },
       destinationSaved: true,
-      feesChosen: true,
     });
     expect(track.completed).toBe(4);
     expect(track.next?.id).toBe("activation");
     expect(track.next?.status).toBe("review");
   });
 
-  it("finishes when receiving is ready and fees were chosen", () => {
+  it("finishes when receiving is ready", () => {
     const track = deriveReceivingTrack({
       ...base,
       provider: { ...provider, general: "APPROVED" },
       ready: true,
       destinationSaved: true,
-      feesChosen: true,
     });
     expect(track.completed).toBe(5);
     expect(track.next).toBeNull();

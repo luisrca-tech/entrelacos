@@ -41,7 +41,11 @@ import {
   historyUnavailable,
   readGiftPaymentHistoryScope,
 } from "./giftPaymentHistory";
-import { giftReceivedEffectKey } from "./giftPaymentReconciliation";
+import {
+  giftPaymentTerms,
+  giftReceivedEffectKey,
+  isGiftReceiptEvent,
+} from "./giftPaymentReconciliation";
 import type { GiftQuoteSnapshot } from "./giftQuotes";
 import { readReceivingProvisioningRecord } from "./receivingNomination";
 import { resolveSiteAccess } from "./siteAccess";
@@ -327,6 +331,9 @@ function original(
     giftId: q.giftId,
     titleSnapshot: q.title,
     method: q.method,
+    ...(q.installmentCount === undefined
+      ? {}
+      : { installmentCount: q.installmentCount }),
     currency: "BRL",
     purchasedAtMicros: purchased.toString(),
     destinationVersion: binding.destinationVersion,
@@ -338,6 +345,9 @@ function original(
       processingCents: q.processingCents,
       totalCents: q.totalCents,
       ...(q.feeAllocation ? { feeAllocation: q.feeAllocation } : {}),
+      ...(q.installmentSurchargeCents === undefined
+        ? {}
+        : { installmentSurchargeCents: q.installmentSurchargeCents }),
     },
   });
   return { purchase, snapshot, account, order, bound };
@@ -462,12 +472,15 @@ function eventPayload(
   if (
     !Object.hasOwn(payload, checkoutEvent ? "checkoutId" : "paymentId") ||
     Object.keys(payload).some(
-      (key) => !["paymentId", "checkoutId", "externalReference"].includes(key),
+      (key) =>
+        !["paymentId", "checkoutId", "externalReference"].includes(key) &&
+        !(key === "installmentId" && row.event_type === "PAYMENT_DELETED"),
     )
   )
     return historyUnavailable();
   if (Object.hasOwn(payload, "paymentId")) ref(payload.paymentId);
   if (Object.hasOwn(payload, "checkoutId")) ref(payload.checkoutId);
+  if (Object.hasOwn(payload, "installmentId")) ref(payload.installmentId);
   if (Object.hasOwn(payload, "externalReference"))
     id(payload.externalReference);
   if (
@@ -862,6 +875,10 @@ export function createGiftPaymentHistoryRepository(
         }
         const projectedPayments = new Map<string, GiftPurchaseHistoryPayment>();
         const nativeRefs = new Set<string>();
+        const installmentNumbers = new Set<unknown>();
+        let guaranteedAttempt: string | undefined;
+        const guaranteed =
+          plan.snapshot.quote.settlementVersion === "PLATFORM_FEE_GUARANTEE_V1";
         for (const payment of payments) {
           scoped(payment, scope, id(plan.account.id));
           if (
@@ -890,6 +907,50 @@ export function createGiftPaymentHistoryRepository(
               payment.gross_cents === null)
           )
             return historyUnavailable();
+          const installmentNumber = payment.installment_number ?? null;
+          const terms = giftPaymentTerms(
+            plan.snapshot.quote,
+            installmentNumber,
+          );
+          const adjustment =
+            payment.platform_adjustment_cents == null
+              ? 0
+              : giftCentsSchema.parse(payment.platform_adjustment_cents);
+          const fundedAt = payment.platform_adjustment_funded_at;
+          const funded = fundedAt != null;
+          if (
+            !terms ||
+            (installmentNumber === null
+              ? payment.provider_installment_reference != null
+              : payment.provider_installment_reference !==
+                attempt.provider_reference) ||
+            (guaranteed &&
+              ((guaranteedAttempt !== undefined &&
+                guaranteedAttempt !== attempt.id) ||
+                installmentNumbers.has(installmentNumber))) ||
+            (adjustment > 0 &&
+              (!guaranteed ||
+                typeof payment.recipient_net_cents !== "number" ||
+                adjustment !==
+                  terms.nominalCents - payment.recipient_net_cents)) ||
+            (funded &&
+              (adjustment === 0 ||
+                payment.platform_adjustment_transfer_reference == null ||
+                payment.platform_adjustment_dispatch_at == null))
+          )
+            return historyUnavailable();
+          if (guaranteed) {
+            guaranteedAttempt = id(attempt.id);
+            installmentNumbers.add(installmentNumber);
+          }
+          if (funded) {
+            ref(payment.platform_adjustment_transfer_reference);
+            within(
+              fundedAt,
+              time(payment.platform_adjustment_dispatch_at),
+              data.at,
+            );
+          }
           const projected = giftPurchaseHistoryPaymentSchema.parse({
             paymentId: id(payment.id),
             attemptId: id(payment.attempt_id),
@@ -913,6 +974,12 @@ export function createGiftPaymentHistoryRepository(
             processingCents: payment.processing_cents,
             commissionCents: payment.commission_cents,
             recipientNetCents: payment.recipient_net_cents,
+            ...(installmentNumber === null ? {} : { installmentNumber }),
+            ...(adjustment === 0
+              ? {}
+              : funded
+                ? { platformAdjustmentFundedCents: adjustment }
+                : { platformAdjustmentOwedCents: adjustment }),
           });
           projectedPayments.set(projected.paymentId, projected);
           if (projected.recordedState === "RESTRICTED") unavailable = true;
@@ -953,8 +1020,12 @@ export function createGiftPaymentHistoryRepository(
           creditedPayments.add(id(payment.id));
           const attempt = attemptMap.get(id(payment.attempt_id));
           if (!attempt) return historyUnavailable();
-          const operation = operationFor(plan, attempt, data, scope),
-            q = plan.snapshot.quote;
+          const operation = operationFor(plan, attempt, data, scope);
+          const terms = giftPaymentTerms(
+            plan.snapshot.quote,
+            payment.installment_number,
+          );
+          if (!terms) return historyUnavailable();
           const actualProcessing = giftCentsSchema.parse(
             payment.processing_cents,
           );
@@ -966,18 +1037,22 @@ export function createGiftPaymentHistoryRepository(
               giftReceivedEffectKey(ref(payment.provider_payment_reference)) ||
             recipientNet <= 0 ||
             amount !== recipientNet ||
+            (guaranteed &&
+              (payment.platform_adjustment_cents ?? 0) !==
+                Math.max(0, terms.nominalCents - recipientNet)) ||
             operation.state !== "SUCCEEDED" ||
             payment.provider_status !== "RECEIVED" ||
             payment.verification_status !== "VERIFIED" ||
             payment.observed_at === null ||
-            payment.gross_cents !== q.totalCents ||
-            BigInt(q.totalCents) !==
+            payment.gross_cents !== terms.grossCents ||
+            BigInt(terms.grossCents) !==
               BigInt(actualProcessing) +
-                BigInt(q.commissionCents) +
+                BigInt(terms.commissionCents) +
                 BigInt(recipientNet) ||
-            payment.commission_cents !== q.commissionCents ||
-            payment.split_fixed_cents !== q.commissionCents ||
-            (q.commissionCents > 0 && !ref(payment.split_provider_reference))
+            payment.commission_cents !== terms.commissionCents ||
+            payment.split_fixed_cents !== terms.commissionCents ||
+            (terms.commissionCents > 0 &&
+              !ref(payment.split_provider_reference))
           )
             return historyUnavailable();
           const observed = within(
@@ -997,7 +1072,7 @@ export function createGiftPaymentHistoryRepository(
           }
           const payload = eventPayload(event, plan, data, scope);
           if (
-            event.event_type !== "PAYMENT_RECEIVED" ||
+            !isGiftReceiptEvent(event.event_type) ||
             event.state !== "PROCESSED" ||
             event.payment_id !== payment.id ||
             payload.paymentId !== payment.provider_payment_reference ||
@@ -1025,6 +1100,17 @@ export function createGiftPaymentHistoryRepository(
           projectedReceipts.clear();
           coverage.receipts = "UNAVAILABLE";
           unavailable = true;
+        }
+        const verifiedReceiptPayments = new Set(
+          [...projectedReceipts.values()].map((receipt) => receipt.paymentId),
+        );
+        for (const payment of projectedPayments.values()) {
+          if (
+            (payment.platformAdjustmentOwedCents !== undefined ||
+              payment.platformAdjustmentFundedCents !== undefined) &&
+            !verifiedReceiptPayments.has(payment.paymentId)
+          )
+            return historyUnavailable();
         }
         const facts = [
           ...[...projectedPayments.values()].map((value) => ({

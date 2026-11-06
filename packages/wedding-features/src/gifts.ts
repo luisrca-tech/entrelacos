@@ -101,7 +101,8 @@ export class WeddingGiftsApi {
         quote.mode === "disabled" ||
         quote.siteId !== this.siteId ||
         quote.giftId !== body.giftId ||
-        quote.method !== body.method
+        quote.method !== body.method ||
+        (quote.installmentCount ?? 1) !== (body.installmentCount ?? 1)
       )
         throw new Error("Unexpected quote binding");
       return quote;

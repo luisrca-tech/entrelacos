@@ -20,6 +20,8 @@ export type StoredFinancialTotals = Pick<
   FinancialOverview,
   | "nominalReceivedCents"
   | "netReceivedCents"
+  | "platformAdjustmentOwedCents"
+  | "platformAdjustmentFundedCents"
   | "processingCents"
   | "commissionCents"
   | "awaitingReleaseCents"
@@ -176,8 +178,16 @@ function dateTime(value: unknown): number {
 }
 
 function readTotals(value: unknown): StoredFinancialTotals {
-  const raw = exactRecord(value, totalsKeys);
-  const entries = totalsKeys.map((key) => {
+  const optionalKeys = [
+    "platformAdjustmentOwedCents",
+    "platformAdjustmentFundedCents",
+  ] as const;
+  const keys = [
+    ...totalsKeys,
+    ...optionalKeys.filter((key) => value != null && Object.hasOwn(value, key)),
+  ];
+  const raw = exactRecord(value, keys);
+  const entries = keys.map((key) => {
     const parsed = giftCentsSchema.safeParse(raw[key]);
     if (!parsed.success) return unavailable();
     return [key, parsed.data] as const;

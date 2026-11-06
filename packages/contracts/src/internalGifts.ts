@@ -202,7 +202,13 @@ const giftFields = {
   mediaAssetId: id.nullable(),
   altText: z.string().trim().max(240),
 };
-export const giftCreateInputSchema = z.object(giftFields).strict();
+export const giftMinimumNominalCents = 500;
+export const giftCreateInputSchema = z
+  .object({
+    ...giftFields,
+    nominalCents: giftCentsSchema.min(giftMinimumNominalCents),
+  })
+  .strict();
 export const giftUpdateInputSchema = giftCreateInputSchema
   .partial()
   .refine((value) => Object.keys(value).length > 0);
@@ -243,6 +249,13 @@ const safeImageUrl = z
     );
   });
 const publicGiftPricingSchema = z.union([
+  z
+    .object({
+      feeAllocation: z.literal("BUYER_GROSS_UP"),
+      available: z.literal(true),
+      startingAtCents: giftCentsSchema.positive(),
+    })
+    .strict(),
   z
     .object({
       feeAllocation: z.literal("RECIPIENT_DEDUCTED"),
@@ -388,13 +401,74 @@ export type GiftCreateInput = z.infer<typeof giftCreateInputSchema>;
 export type GiftUpdateInput = z.infer<typeof giftUpdateInputSchema>;
 
 export const giftPaymentMethodSchema = z.enum(["PIX", "CREDIT_CARD"]);
+export const giftMaximumInstallments = 12;
+export const giftMinimumInstallmentCents = 500;
+const giftInstallmentCountSchema = z
+  .number()
+  .int()
+  .min(1)
+  .max(giftMaximumInstallments);
 export const giftQuoteInputSchema = z
-  .object({ giftId: id, method: giftPaymentMethodSchema })
-  .strict();
+  .object({
+    giftId: id,
+    method: giftPaymentMethodSchema,
+    installmentCount: giftInstallmentCountSchema.optional(),
+  })
+  .strict()
+  .refine(
+    (value) =>
+      value.method === "CREDIT_CARD" || value.installmentCount === undefined,
+  );
 const giftFeeAllocationSchema = z.enum([
   "BUYER_GROSS_UP",
   "RECIPIENT_DEDUCTED",
 ]);
+
+export function allocateGiftInstallmentCents(
+  totalCents: number,
+  installmentCount: number,
+) {
+  const installmentCents = Math.floor(totalCents / installmentCount);
+  return Array.from({ length: installmentCount }, (_, index) =>
+    index === installmentCount - 1
+      ? totalCents - installmentCents * index
+      : installmentCents,
+  );
+}
+
+const giftInstallmentCentsSchema = z
+  .array(giftCentsSchema)
+  .min(1)
+  .max(giftMaximumInstallments);
+const giftInstallmentSurchargeSchema = z
+  .number()
+  .int()
+  .min(-2_147_483_647)
+  .max(2_147_483_647);
+export const giftInstallmentOptionSchema = z
+  .object({
+    installmentCount: giftInstallmentCountSchema,
+    totalCents: giftCentsSchema,
+    installmentSurchargeCents: giftInstallmentSurchargeSchema,
+    installmentCents: giftInstallmentCentsSchema,
+  })
+  .strict()
+  .refine((option) => {
+    const expected = allocateGiftInstallmentCents(
+      option.totalCents,
+      option.installmentCount,
+    );
+    return (
+      option.installmentCents.length === expected.length &&
+      expected.every(
+        (cents, index) =>
+          cents === option.installmentCents[index] &&
+          cents >=
+            (option.installmentCount === 1 ? 1 : giftMinimumInstallmentCents),
+      )
+    );
+  }, "Installments must conserve the total and meet the minimum amount");
+export type GiftInstallmentOption = z.infer<typeof giftInstallmentOptionSchema>;
 
 export const giftQuoteSchema = z
   .object({
@@ -413,6 +487,15 @@ export const giftQuoteSchema = z
     policyVersion: id,
     expiresAt: instant,
     mode: receivingModeSchema,
+    settlementVersion: z.literal("PLATFORM_FEE_GUARANTEE_V1").optional(),
+    installmentCount: giftInstallmentCountSchema.optional(),
+    installmentSurchargeCents: giftInstallmentSurchargeSchema.optional(),
+    installmentCents: giftInstallmentCentsSchema.optional(),
+    installmentOptions: z
+      .array(giftInstallmentOptionSchema)
+      .min(1)
+      .max(giftMaximumInstallments)
+      .optional(),
   })
   .strict()
   .refine(
@@ -424,7 +507,43 @@ export const giftQuoteSchema = z
           value.nominalCents + value.commissionCents + value.processingCents) &&
       value.commissionCents === Math.round((value.nominalCents * 200) / 10000),
     "Quote allocation does not match the nominal commission",
-  );
+  )
+  .refine((quote) => {
+    if (quote.settlementVersion && quote.feeAllocation !== "BUYER_GROSS_UP")
+      return false;
+    const options = quote.installmentOptions;
+    if (!options)
+      return (
+        quote.installmentCount === undefined &&
+        quote.installmentCents === undefined &&
+        quote.installmentSurchargeCents === undefined
+      );
+    const first = options[0];
+    const selected = options.find(
+      (option) => option.installmentCount === quote.installmentCount,
+    );
+    return (
+      quote.method === "CREDIT_CARD" &&
+      quote.settlementVersion !== undefined &&
+      first.installmentCount === 1 &&
+      first.totalCents >= quote.nominalCents + quote.commissionCents &&
+      options.every(
+        (option, index) =>
+          (index === 0 ||
+            option.installmentCount > options[index - 1].installmentCount) &&
+          option.totalCents >= quote.nominalCents + quote.commissionCents &&
+          option.installmentSurchargeCents ===
+            option.totalCents - first.totalCents,
+      ) &&
+      selected !== undefined &&
+      selected.totalCents === quote.totalCents &&
+      selected.installmentSurchargeCents === quote.installmentSurchargeCents &&
+      selected.installmentCents.length === quote.installmentCents?.length &&
+      selected.installmentCents.every(
+        (cents, index) => cents === quote.installmentCents?.[index],
+      )
+    );
+  }, "Selected installments must match the quote");
 export type GiftQuote = z.infer<typeof giftQuoteSchema>;
 export const giftQuoteResponseSchema = z
   .object({ quote: giftQuoteSchema })
@@ -439,8 +558,20 @@ export const checkoutCreateInputSchema = z
     requestId: id,
     recoveryToken: checkoutRecoveryTokenSchema,
   })
-  .strict();
-export const checkoutStatusInputSchema = checkoutCreateInputSchema;
+  .strict()
+  .extend({
+    payer: z
+      .object({
+        name: z.string().trim().min(2).max(100),
+        cpfCnpj: z.string().regex(/^(?:[0-9]{11}|[0-9]{14})$/),
+        email: z.string().trim().max(254).email(),
+      })
+      .strict()
+      .optional(),
+  });
+export const checkoutStatusInputSchema = checkoutCreateInputSchema.omit({
+  payer: true,
+});
 export type CheckoutCreateInput = z.infer<typeof checkoutCreateInputSchema>;
 export type CheckoutStatusInput = z.infer<typeof checkoutStatusInputSchema>;
 export const checkoutResultSchema = z
@@ -521,6 +652,8 @@ export const financialOverviewSchema = z
     currency: z.literal("BRL"),
     nominalReceivedCents: giftCentsSchema,
     netReceivedCents: giftCentsSchema,
+    platformAdjustmentOwedCents: giftCentsSchema.optional(),
+    platformAdjustmentFundedCents: giftCentsSchema.optional(),
     processingCents: giftCentsSchema,
     commissionCents: giftCentsSchema,
     awaitingReleaseCents: giftCentsSchema,
@@ -1199,6 +1332,7 @@ export const giftPurchaseHistoryPurchaseSchema = z
           }),
       ),
     method: giftPaymentMethodSchema,
+    installmentCount: giftInstallmentCountSchema.optional(),
     currency: z.literal("BRL"),
     purchasedAtMicros: purchaseHistoryMicros,
     destinationVersion: z.number().int().min(1).max(2147483647),
@@ -1210,6 +1344,7 @@ export const giftPurchaseHistoryPurchaseSchema = z
         commissionCents: giftCentsSchema,
         processingCents: giftCentsSchema,
         feeAllocation: giftFeeAllocationSchema.optional(),
+        installmentSurchargeCents: giftInstallmentSurchargeSchema.optional(),
         totalCents: giftCentsSchema.refine((value) => value > 0),
       })
       .strict()
@@ -1249,6 +1384,9 @@ export const giftPurchaseHistoryPaymentSchema = z
     processingCents: giftCentsSchema.nullable(),
     commissionCents: giftCentsSchema.nullable(),
     recipientNetCents: giftCentsSchema.nullable(),
+    installmentNumber: giftInstallmentCountSchema.optional(),
+    platformAdjustmentOwedCents: giftCentsSchema.optional(),
+    platformAdjustmentFundedCents: giftCentsSchema.optional(),
   })
   .strict()
   .refine(
@@ -1262,7 +1400,19 @@ export const giftPurchaseHistoryPaymentSchema = z
             value.commissionCents +
             value.recipientNetCents),
     "Complete actual allocation must match actual gross",
-  );
+  )
+  .refine((value) => {
+    const owed = value.platformAdjustmentOwedCents;
+    const funded = value.platformAdjustmentFundedCents;
+    if (owed === undefined && funded === undefined) return true;
+    return (
+      value.recordedState === "RECEIVED" &&
+      value.recipientNetCents !== null &&
+      (owed === undefined
+        ? (funded ?? 0) > 0
+        : funded === undefined && owed > 0)
+    );
+  }, "A received payment has either an owed or a funded fee adjustment");
 export type GiftPurchaseHistoryPayment = z.infer<
   typeof giftPurchaseHistoryPaymentSchema
 >;
@@ -1413,6 +1563,21 @@ export const giftPurchaseHistoryDetailPageSchema = z
       )
     )
       return false;
+    const installmentCount = purchase.installmentCount ?? 1;
+    const installmentNumbers = new Set<number>();
+    for (const payment of payments) {
+      if (installmentCount === 1) {
+        if (payment.installmentNumber !== undefined) return false;
+      } else {
+        if (
+          payment.installmentNumber === undefined ||
+          payment.installmentNumber > installmentCount ||
+          installmentNumbers.has(payment.installmentNumber)
+        )
+          return false;
+        installmentNumbers.add(payment.installmentNumber);
+      }
+    }
     return receipts.every((receipt) => {
       if (
         receipt.orderId !== purchase.orderId ||
@@ -1434,13 +1599,18 @@ export const giftPurchaseHistoryDetailPageSchema = z
       const payment = payments.find(
         (item) => item.paymentId === receipt.paymentId,
       );
+      const portion = (amount: number) =>
+        allocateGiftInstallmentCents(amount, installmentCount)[
+          (payment?.installmentNumber ?? 1) - 1
+        ];
       return (
         !payment ||
         (payment.recordedState === "RECEIVED" &&
           payment.observedAtMicros === receipt.sourceObservedAtMicros &&
-          payment.grossCents === purchase.quoted.totalCents &&
+          payment.grossCents === portion(purchase.quoted.totalCents) &&
           payment.processingCents !== null &&
-          payment.commissionCents === purchase.quoted.commissionCents &&
+          payment.commissionCents ===
+            portion(purchase.quoted.commissionCents) &&
           payment.recipientNetCents === receipt.recipientCreditCents &&
           BigInt(payment.grossCents) ===
             BigInt(payment.processingCents) +

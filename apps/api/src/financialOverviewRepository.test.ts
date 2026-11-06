@@ -1392,3 +1392,147 @@ it.each(["FAILED", "CANCELLED"])(
     });
   },
 );
+
+it.each([false, true])(
+  "separates the fee shortfall from received and available balance (funded=%s)",
+  async (funded) => {
+    const f = fixture();
+    const { p, q, l } = received(f);
+    const snapshot = q.snapshot as { receiving: Row; quote: Row; pricing: Row };
+    snapshot.quote = {
+      id: q.id,
+      giftId: "gift-one",
+      siteId: f.binding.siteId,
+      title: "A contribution",
+      method: "PIX",
+      currency: "BRL",
+      nominalCents: 10000,
+      commissionBasisPoints: 200,
+      commissionCents: 200,
+      processingCents: 39,
+      totalCents: 10239,
+      policyVersion: "test-pricing",
+      mode: "sandbox",
+      feeAllocation: "BUYER_GROSS_UP",
+      settlementVersion: "PLATFORM_FEE_GUARANTEE_V1",
+      expiresAt: "2026-10-12T18:52:00.000Z",
+    };
+    snapshot.pricing = { policy: { feeAllocation: "BUYER_GROSS_UP" } };
+    Object.assign(p, {
+      processing_cents: 40,
+      recipient_net_cents: 9999,
+      platform_adjustment_cents: 1,
+      ...(funded
+        ? {
+            platform_adjustment_dispatch_at: new Date(
+              "2026-10-12T18:57:00.000Z",
+            ),
+            platform_adjustment_transfer_reference: "transfer_one",
+            platform_adjustment_funded_at: new Date("2026-10-12T18:58:00.000Z"),
+          }
+        : {}),
+    });
+    l.amount_cents = 9999;
+    const overview = await loadFinancialOverview({
+      binding: f.binding,
+      mode: "sandbox",
+      repository: f.repository,
+      now: () => new Date(instant),
+      freshnessMs: 60_000,
+    });
+    expect(overview).toMatchObject({
+      nominalReceivedCents: 10000,
+      netReceivedCents: funded ? 10000 : 9999,
+      processingCents: 40,
+      commissionCents: 200,
+      availableCents: null,
+      ...(funded
+        ? { platformAdjustmentFundedCents: 1 }
+        : { platformAdjustmentOwedCents: 1 }),
+    });
+  },
+);
+
+it("attributes only received installment shares and keeps confirmed funds awaiting release", async () => {
+  const f = fixture();
+  const first = received(f, "one", "CONFIRMED");
+  const second = received(f, "two");
+  const snapshot = first.q.snapshot as {
+    receiving: Row;
+    quote: Row;
+    pricing: Row;
+  };
+  const one = {
+    installmentCount: 1,
+    totalCents: 10239,
+    installmentSurchargeCents: 0,
+    installmentCents: [10239],
+  };
+  const two = {
+    installmentCount: 2,
+    totalCents: 10239,
+    installmentSurchargeCents: 0,
+    installmentCents: [5119, 5120],
+  };
+  snapshot.quote = {
+    ...two,
+    id: first.q.id,
+    giftId: "gift-one",
+    siteId: f.binding.siteId,
+    title: "A contribution",
+    method: "CREDIT_CARD",
+    currency: "BRL",
+    nominalCents: 10000,
+    commissionBasisPoints: 200,
+    commissionCents: 200,
+    processingCents: 39,
+    policyVersion: "test-pricing",
+    mode: "sandbox",
+    feeAllocation: "BUYER_GROSS_UP",
+    settlementVersion: "PLATFORM_FEE_GUARANTEE_V1",
+    installmentOptions: [one, two],
+    expiresAt: "2026-10-12T18:52:00.000Z",
+  };
+  snapshot.pricing = { policy: { feeAllocation: "BUYER_GROSS_UP" } };
+  for (const table of ["orders", "quotes", "attempts", "operations"])
+    f.tables[table].pop();
+  for (const [i, entry] of [first, second].entries()) {
+    const pending = i === 0;
+    Object.assign(entry.p, {
+      order_id: first.o.id,
+      attempt_id: first.a.id,
+      provider_installment_reference: first.a.provider_reference,
+      installment_number: i + 1,
+      gross_cents: two.installmentCents[i],
+      processing_cents: pending ? 19 : 21,
+      commission_cents: pending ? null : 100,
+      split_fixed_cents: 100,
+      recipient_net_cents: pending ? 5000 : 4999,
+      ...(pending ? {} : { platform_adjustment_cents: 1 }),
+    });
+    const payload = {
+      paymentId: String(entry.p.provider_payment_reference),
+      externalReference: String(first.a.id),
+    };
+    entry.e.payload = payload;
+    entry.e.event_type = pending ? "PAYMENT_CONFIRMED" : "PAYMENT_RECEIVED";
+    entry.e.payload_hash = hashAsaasEventIdentity(
+      String(entry.e.provider_event_reference),
+      String(entry.e.event_type),
+      f.binding.accountReference,
+      payload,
+    );
+  }
+  second.l.amount_cents = 4999;
+  second.l.operation_id = first.op.id;
+  expect(await f.repository.loadStoredTotals(f.binding)).toMatchObject({
+    totals: {
+      nominalReceivedCents: 5000,
+      netReceivedCents: 4999,
+      processingCents: 21,
+      commissionCents: 100,
+      awaitingReleaseCents: 5000,
+      platformAdjustmentOwedCents: 1,
+    },
+  });
+});

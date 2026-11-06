@@ -197,6 +197,13 @@
       "when": 1793927945516,
       "tag": "0027_withdrawal_history_cursor",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1793989156508,
+      "tag": "0028_gift_payment_settlement",
+      "breakpoints": true
     }
   ]
 }

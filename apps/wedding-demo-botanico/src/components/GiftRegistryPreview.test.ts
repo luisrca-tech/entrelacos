@@ -264,6 +264,11 @@ describe("local gift registry preview", () => {
       await readJson(await fetcher(catalogUrl)),
     );
     const gift = catalog.gifts[0];
+    expect(gift.pricing).toEqual({
+      feeAllocation: "BUYER_GROSS_UP",
+      available: true,
+      startingAtCents: 13860,
+    });
     const input = { giftId: gift.id, method: "PIX" };
     const response = await fetcher(quoteUrl, {
       method: "POST",
@@ -283,8 +288,8 @@ describe("local gift registry preview", () => {
       commissionBasisPoints: 200,
       commissionCents: Math.round((gift.nominalCents * 200) / 10000),
       processingCents: 90,
-      totalCents: gift.nominalCents,
-      feeAllocation: "RECIPIENT_DEDUCTED",
+      totalCents: 13860,
+      feeAllocation: "BUYER_GROSS_UP",
       policyVersion: "local-gift-policy-v1",
       expiresAt: "2026-10-12T12:05:00.000Z",
       mode: "sandbox",
@@ -304,6 +309,29 @@ describe("local gift registry preview", () => {
       processingCents: 290,
       mode: "sandbox",
     });
+  });
+
+  it("returns an exact fictional installment quote and schedule", async () => {
+    const api = new WeddingGiftsApi({
+      siteId,
+      apiOrigin,
+      demo: true,
+      fetcher: createGiftPreviewFetcher(() => fixedNow),
+    });
+    const quote = await api.quoteGift({
+      giftId: "gift-preview-dinner",
+      method: "CREDIT_CARD",
+      installmentCount: 3,
+    });
+    expect(quote).toMatchObject({
+      installmentCount: 3,
+      installmentSurchargeCents: 86,
+      installmentCents: [4715, 4715, 4716],
+      totalCents: 14146,
+    });
+    expect(
+      quote.installmentOptions?.map((option) => option.installmentCount),
+    ).toEqual([1, 3, 6]);
   });
 
   it("rejects malformed quote input and unknown fixture gifts", async () => {

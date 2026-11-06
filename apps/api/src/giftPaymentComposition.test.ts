@@ -726,6 +726,7 @@ describe("gift payment composition", () => {
       "asaasWebhook",
       "finance",
       "giftPayments",
+      "loadPublicGiftPrices",
       "previewPricing",
       "receiving",
       "sandboxBuyerGrossUpAvailable",

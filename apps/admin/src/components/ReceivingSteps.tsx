@@ -4,7 +4,7 @@ import {
   type ReceivingSetupContext,
   receivingIncomingPixDisclosure,
 } from "@entrelacos/contracts";
-import { Button, showSandboxNotice, toast } from "@entrelacos/ui";
+import { Button, showSandboxNotice } from "@entrelacos/ui";
 import { Link } from "@tanstack/react-router";
 import {
   ArrowDown,
@@ -35,11 +35,11 @@ import {
 } from "./asaasTasks";
 import type { FinancialReauthenticationGuard } from "./financialReauthenticationClient";
 import {
-  GiftFeeAllocationChooser,
   GiftPricingPreview,
   GiftPricingSettings,
+  giftFeeExplanation,
   money,
-  useGiftPricingControls,
+  useGiftPricingPreview,
 } from "./GiftPricingSettings";
 import { GiftCatalogClient } from "./giftCatalogClient";
 import { isCurrentPanelSessionEpoch } from "./panelActor";
@@ -89,7 +89,6 @@ export type ReceivingStepsContext = {
   steps: ReceivingTrackStep[];
   next: ReceivingTrackStep | null;
   completed: number;
-  feesChosen: boolean;
   guard?: FinancialReauthenticationGuard;
   pixGuard?: FinancialReauthenticationGuard;
   incomingGuard?: FinancialReauthenticationGuard;
@@ -101,7 +100,6 @@ export type ReceivingStepsContext = {
   onDesignate?: (holderUserId: string) => void;
   onVerifyIncoming?: () => void;
   onAuthorizePix?: () => void;
-  onFeesChosen?: () => void;
 };
 
 const lastCheckFormatter = new Intl.DateTimeFormat("pt-BR", {
@@ -237,8 +235,8 @@ function nextCopy(context: ReceivingStepsContext, tasks: AsaasTasks) {
       };
     case "fees":
       return {
-        text: "Escolha quem paga as taxas dos presentes.",
-        action: "Escolher quem paga as taxas",
+        text: "Entenda as taxas incluídas nos presentes.",
+        action: "Entender as taxas",
       };
     default:
       return null;
@@ -1576,68 +1574,13 @@ export function AccountStep({ context }: { context: ReceivingStepsContext }) {
 }
 
 function FeesExample() {
-  const controls = useGiftPricingControls();
+  const estimate = useGiftPricingPreview(20000);
   return (
     <GiftPricingPreview
-      title="Exemplo: presente de R$ 200,00"
+      title="Exemplo de um presente de R$ 200,00"
       nominalCents={20000}
-      feeAllocation={
-        controls?.pending ?? controls?.savedSettings?.feeAllocation ?? undefined
-      }
+      estimate={estimate}
     />
-  );
-}
-
-function FeesConfirm({
-  context,
-  activationDone,
-}: {
-  context: ReceivingStepsContext;
-  activationDone: boolean;
-}) {
-  const controls = useGiftPricingControls();
-  const saved = controls?.savedSettings;
-  const disabled =
-    !controls || controls.busy || !saved || Boolean(controls.pending);
-  return (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-admin-line pt-6">
-      {context.feesChosen ? (
-        <Link
-          to="/sites/$siteId/receiving"
-          params={{ siteId: context.scope.siteId }}
-          className={receivingPrimaryAction}
-        >
-          Voltar para Recebimentos
-        </Link>
-      ) : (
-        <button
-          type="button"
-          className={receivingPrimaryAction}
-          disabled={disabled}
-          onClick={() => {
-            if (!controls || !saved) return;
-            void controls.save(saved.feeAllocation).then((ok) => {
-              if (!ok) return;
-              toast.success("Preferência de taxas confirmada.");
-              context.onFeesChosen?.();
-            });
-          }}
-        >
-          Concluir configuração
-        </button>
-      )}
-      <p className="m-0 text-[0.82rem] text-admin-muted">
-        {context.feesChosen
-          ? activationDone
-            ? "Etapa concluída."
-            : "Etapa concluída. Falta só a aprovação do Asaas."
-          : controls?.pending
-            ? "Confirme ou cancele a mudança acima antes de concluir."
-            : activationDone
-              ? "Confirma a escolha de quem paga as taxas."
-              : "Falta só a aprovação do Asaas para liberar os recebimentos."}
-      </p>
-    </div>
   );
 }
 
@@ -1735,15 +1678,13 @@ export function FeesStep({
 }) {
   const siteId = context.scope.siteId;
   const epoch = context.scope.sessionEpoch;
-  const activationDone =
-    context.steps.find(({ id }) => id === "activation")?.status === "done";
   const [request] = useState(
     () =>
       (
         path: string,
         options?: { method?: string; body?: unknown; signal?: AbortSignal },
       ) =>
-        apiRequest(path, { method: options?.method, body: options?.body }),
+        apiRequest(path, options),
   );
   const [isCurrent] = useState(
     () => () => epoch !== null && isCurrentPanelSessionEpoch(epoch),
@@ -1755,30 +1696,36 @@ export function FeesStep({
         siteId={siteId}
         request={request}
         isCurrent={isCurrent}
-        gifts={[]}
       >
         <section
           className={`${receivingCard} grid gap-6 p-8 [@media(max-width:760px)]:p-5`}
         >
-          <StepHeading number={5} title="Quem paga as taxas dos presentes?">
-            <p className={receivingBody}>
-              Vale para todos os presentes. Você pode mudar depois em Presentes.
-            </p>
+          <StepHeading number={5} title="Taxas dos presentes">
+            <p className={receivingBody}>{giftFeeExplanation}</p>
           </StepHeading>
-          {pricingEnabled ? (
-            <>
-              <div className="grid min-w-0 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,420px)]">
-                <GiftFeeAllocationChooser />
-                <FeesExample />
-              </div>
-              <FeesConfirm context={context} activationDone={activationDone} />
-            </>
-          ) : (
-            <p role="status" className={receivingBody}>
-              Somente quem administra o catálogo e as finanças deste casamento
-              pode escolher quem paga as taxas.
-            </p>
-          )}
+          <div className="grid min-w-0 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,420px)]">
+            <div className="grid gap-3">
+              <p className={receivingBody}>
+                Cadastre quanto vocês querem receber por cada presente. Ao
+                parcelar no cartão, o convidado vê o acréscimo e o total antes
+                de pagar.
+              </p>
+              <p className={receivingBody}>
+                O EntreLaços cobre diferenças de tarifa acima do previsto. O
+                dinheiro fica disponível conforme a liberação dos pagamentos.
+              </p>
+            </div>
+            {pricingEnabled && <FeesExample />}
+          </div>
+          <div className="border-t border-admin-line pt-6">
+            <Link
+              to="/sites/$siteId/receiving"
+              params={{ siteId }}
+              className={receivingPrimaryAction}
+            >
+              Voltar para Recebimentos
+            </Link>
+          </div>
         </section>
       </GiftPricingSettings>
       <GiftListPreview

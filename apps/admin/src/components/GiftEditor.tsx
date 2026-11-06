@@ -713,7 +713,6 @@ export function GiftEditor({
       siteId={siteId}
       request={controller.pricingRequest}
       isCurrent={controller.current}
-      gifts={state.gifts}
     >
       <GiftEditorView
         gifts={state.gifts}

@@ -445,7 +445,58 @@ describe("catalog page HTTP protocol", () => {
   });
 });
 
-describe("Sandbox buyer catalog projection", () => {
+describe("buyer catalog pricing", () => {
+  it("shows the verified final starting price instead of the couple's nominal amount", async () => {
+    const loadPublicGiftPrices = vi.fn(async () => new Map([[gift.id, 10399]]));
+    const app = createGiftsHttpRouter({
+      auth: {} as never,
+      db,
+      adminOrigin,
+      loadPublicGiftPrices,
+    });
+    const response = await app.request(
+      request(
+        "/v1/public/sites/wedding-a/gifts",
+        "GET",
+        undefined,
+        publicOrigin,
+      ),
+    );
+    expect(response.status).toBe(200);
+    expect((await response.json()).gifts[0].pricing).toEqual({
+      feeAllocation: "BUYER_GROSS_UP",
+      available: true,
+      startingAtCents: 10399,
+    });
+    expect(loadPublicGiftPrices).toHaveBeenCalledWith("wedding-a", [
+      publicGift,
+    ]);
+  });
+  it.each([undefined, 0, 9999, Number.NaN])(
+    "never falls back to a nominal price when the fee quote is missing or invalid: %s",
+    async (price) => {
+      const app = createGiftsHttpRouter({
+        auth: {} as never,
+        db,
+        adminOrigin,
+        loadPublicGiftPrices: async () =>
+          price === undefined ? new Map() : new Map([[gift.id, price]]),
+      });
+      const response = await app.request(
+        request(
+          "/v1/public/sites/wedding-a/gifts",
+          "GET",
+          undefined,
+          publicOrigin,
+        ),
+      );
+      expect(response.status).toBe(200);
+      expect((await response.json()).gifts[0].pricing).toEqual({
+        feeAllocation: "BUYER_GROSS_UP",
+        available: false,
+      });
+    },
+  );
   it.each([
     ["sandbox", true],
     ["live", false],

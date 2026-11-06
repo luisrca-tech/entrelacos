@@ -48,7 +48,7 @@ export const receivingSteps: readonly {
     id: "fees",
     title: "Taxas e presentes",
     short: "Taxas e presentes",
-    summary: "Escolha quem paga as taxas e revise a lista.",
+    summary: "Entenda as taxas incluídas no preço e revise a lista.",
   },
 ];
 
@@ -70,7 +70,6 @@ export type ReceivingTrackInput = {
   > | null;
   ready: boolean;
   destinationSaved: boolean;
-  feesChosen: boolean;
 };
 
 export type ReceivingTrackStep = (typeof receivingSteps)[number] & {
@@ -116,7 +115,7 @@ export function deriveReceivingTrack(input: ReceivingTrackInput) {
       : input.destinationSaved || input.ready
         ? "done"
         : "todo",
-    fees: !created ? "locked" : input.feesChosen ? "done" : "todo",
+    fees: created ? "done" : "locked",
   };
   const actionable = receivingSteps.find(({ id }) =>
     ["todo", "attention"].includes(base[id]),

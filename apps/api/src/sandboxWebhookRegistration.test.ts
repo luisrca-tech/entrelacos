@@ -330,7 +330,7 @@ describe("Sandbox webhook registration operation", () => {
       ),
     ).toHaveLength(1);
   });
-  it("persists an encrypted account token and authentication hash before one native creation with twelve exact events", async () => {
+  it("persists an encrypted account token and authentication hash before one native creation with fourteen exact events", async () => {
     const values = fixture();
     const result = await registerSandboxWebhook(
       values.db,
@@ -361,6 +361,8 @@ describe("Sandbox webhook registration operation", () => {
       "CHECKOUT_EXPIRED",
       "PAYMENT_CONFIRMED",
       "PAYMENT_RECEIVED",
+      "PAYMENT_SPLIT_DONE",
+      "PAYMENT_DELETED",
       "PAYMENT_REFUNDED",
       "PAYMENT_PARTIALLY_REFUNDED",
       "PAYMENT_REFUND_IN_PROGRESS",
@@ -529,8 +531,8 @@ describe("Sandbox webhook registration operation", () => {
     },
   );
 
-  it("retains the twelve-event registration contract", () =>
-    expect(sandboxWebhookEvents).toHaveLength(12));
+  it("retains the fourteen-event registration contract", () =>
+    expect(sandboxWebhookEvents).toHaveLength(14));
 });
 
 describe("explicit production Asaas webhook registration", () => {

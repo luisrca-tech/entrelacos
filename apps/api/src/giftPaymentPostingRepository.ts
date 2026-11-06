@@ -22,7 +22,9 @@ import {
   type GiftPaymentReconciliationResult,
   type GiftPaymentTerminalEvidence,
   type GiftProviderPaymentObservation,
+  giftPaymentTerms,
   giftReceivedEffectKey,
+  isGiftReceiptEvent,
   type ObservedGiftPaymentRecord,
   reconcileGiftPaymentObservation,
   type StoredGiftPaymentCheckoutBinding,
@@ -282,7 +284,9 @@ async function readEvent(
     !event ||
     !sameScope(event, claim) ||
     event.id !== claim.eventId ||
-    !["PAYMENT_RECEIVED", "PAYMENT_CONFIRMED"].includes(event.eventType) ||
+    !["PAYMENT_RECEIVED", "PAYMENT_CONFIRMED", "PAYMENT_SPLIT_DONE"].includes(
+      event.eventType,
+    ) ||
     event.leaseOwner !== claim.leaseOwner ||
     event.leaseToken !== claim.leaseToken ||
     !["CLAIMED", "RETRY", "PROCESSED"].includes(event.state) ||
@@ -352,7 +356,9 @@ async function currentPayment(
     await tx.execute(sql`SELECT p.id, p.site_id AS "siteId", p.account_id AS "accountId", p.environment, p.order_id AS "orderId", p.attempt_id AS "attemptId",
     p.provider_payment_reference AS "providerPaymentReference", p.provider_status AS "providerStatus", p.verification_status AS "verificationStatus", p.observed_at AS "observedAt",
     p.currency, p.gross_cents AS "grossCents", p.processing_cents AS "processingCents", p.commission_cents AS "commissionCents", p.recipient_net_cents AS "recipientNetCents",
-    p.split_provider_reference AS "splitProviderReference", p.split_fixed_cents AS "splitFixedCents"
+    p.split_provider_reference AS "splitProviderReference", p.split_fixed_cents AS "splitFixedCents",
+    p.provider_installment_reference AS "providerInstallmentReference", p.installment_number AS "installmentNumber",
+    p.platform_adjustment_cents AS "platformAdjustmentCents"
     FROM ${giftPaymentRecord} p WHERE p.site_id = ${claim.siteId} AND p.account_id = ${claim.accountId} AND p.environment = ${claim.environment}
       AND p.provider_payment_reference = ${providerReference} FOR UPDATE OF p`);
   if (result.rows.length === 0) return null;
@@ -411,24 +417,35 @@ async function currentReceipt(
     (ledger.operationId !== null && ledger.operationId !== binding.operationId)
   )
     return unavailable();
-  const quote = snapshot.quote;
+  const terms = giftPaymentTerms(snapshot.quote, payment.installmentNumber);
+  if (
+    !terms ||
+    (payment.installmentNumber == null
+      ? payment.providerInstallmentReference != null
+      : payment.providerInstallmentReference !==
+        binding.providerCheckoutReference)
+  )
+    return unavailable();
   if (
     payment.providerStatus === "RECEIVED" &&
     (payment.verificationStatus !== "VERIFIED" ||
       payment.observedAt === null ||
       microseconds(payment.observedAt) < microseconds(binding.orderCreatedAt) ||
-      payment.grossCents !== quote.totalCents ||
+      payment.grossCents !== terms.grossCents ||
       payment.processingCents === null ||
       !Number.isSafeInteger(payment.processingCents) ||
       payment.processingCents < 0 ||
-      payment.commissionCents !== quote.commissionCents ||
+      payment.commissionCents !== terms.commissionCents ||
       payment.recipientNetCents === null ||
+      (snapshot.quote.settlementVersion === "PLATFORM_FEE_GUARANTEE_V1" &&
+        (payment.platformAdjustmentCents ?? 0) !==
+          Math.max(0, terms.nominalCents - payment.recipientNetCents)) ||
       BigInt(payment.grossCents) !==
         BigInt(payment.processingCents) +
           BigInt(payment.commissionCents) +
           BigInt(payment.recipientNetCents) ||
-      payment.splitFixedCents !== quote.commissionCents ||
-      (quote.commissionCents > 0 && !reference(payment.splitProviderReference)))
+      payment.splitFixedCents !== terms.commissionCents ||
+      (terms.commissionCents > 0 && !reference(payment.splitProviderReference)))
   )
     return unavailable();
   if (ledger.eventId !== null) {
@@ -446,7 +463,7 @@ async function currentReceipt(
       !event ||
       !sameScope(event, claim) ||
       event.id !== ledger.eventId ||
-      event.eventType !== "PAYMENT_RECEIVED" ||
+      !isGiftReceiptEvent(event.eventType) ||
       event.paymentId !== payment.id ||
       event.state !== "PROCESSED" ||
       microseconds(event.authenticatedAt) > microseconds(clock) ||
@@ -489,6 +506,8 @@ function paymentFields(payment: ObservedGiftPaymentRecord | Payment) {
     recipientNetCents: payment.recipientNetCents,
     splitProviderReference: payment.splitProviderReference,
     splitFixedCents: payment.splitFixedCents,
+    providerInstallmentReference: payment.providerInstallmentReference ?? null,
+    installmentNumber: payment.installmentNumber ?? null,
   };
 }
 
@@ -520,6 +539,8 @@ async function writePayment(
       commission_cents = ${payment.commissionCents}, recipient_net_cents = ${payment.recipientNetCents}, split_provider_reference = ${payment.splitProviderReference}, split_fixed_cents = ${payment.splitFixedCents}
       WHERE p.id = ${existing.id} AND p.site_id = ${payment.siteId} AND p.account_id = ${payment.accountId} AND p.environment = ${payment.environment}
         AND p.order_id = ${payment.orderId} AND p.attempt_id = ${payment.attemptId} AND p.provider_payment_reference = ${payment.providerPaymentReference}
+        AND p.provider_installment_reference IS NOT DISTINCT FROM ${payment.providerInstallmentReference ?? null}
+        AND p.installment_number IS NOT DISTINCT FROM ${payment.installmentNumber ?? null}
         AND (p.observed_at IS NULL OR p.observed_at <= ${payment.observedAt.toISOString()}::timestamptz)
         AND (p.provider_status IS NULL OR p.provider_status NOT IN ('REFUNDED', 'DISPUTED', 'CANCELLED')) RETURNING p.id`);
     if (result.rows.length !== 1 || result.rows[0]?.id !== existing.id)
@@ -530,10 +551,10 @@ async function writePayment(
   if (!validId(id)) return unavailable();
   const result =
     await tx.execute(sql`INSERT INTO ${giftPaymentRecord} (id, site_id, account_id, environment, order_id, attempt_id, provider_payment_reference,
-    provider_status, verification_status, observed_at, currency, gross_cents, processing_cents, commission_cents, recipient_net_cents, split_provider_reference, split_fixed_cents, created_at)
+    provider_status, verification_status, observed_at, currency, gross_cents, processing_cents, commission_cents, recipient_net_cents, split_provider_reference, split_fixed_cents, provider_installment_reference, installment_number, created_at)
     VALUES (${id}, ${payment.siteId}, ${payment.accountId}, ${payment.environment}, ${payment.orderId}, ${payment.attemptId}, ${payment.providerPaymentReference},
       ${payment.providerStatus}, ${payment.verificationStatus}, ${payment.observedAt.toISOString()}::timestamptz, ${payment.currency}, ${payment.grossCents}, ${payment.processingCents},
-      ${payment.commissionCents}, ${payment.recipientNetCents}, ${payment.splitProviderReference}, ${payment.splitFixedCents}, ${date(options.now()).toISOString()}::timestamptz)
+      ${payment.commissionCents}, ${payment.recipientNetCents}, ${payment.splitProviderReference}, ${payment.splitFixedCents}, ${payment.providerInstallmentReference ?? null}, ${payment.installmentNumber ?? null}, ${date(options.now()).toISOString()}::timestamptz)
     ON CONFLICT (site_id, account_id, environment, provider_payment_reference) DO NOTHING RETURNING id`);
   if (result.rows.length !== 1 || result.rows[0]?.id !== id)
     return unavailable();
@@ -661,7 +682,7 @@ export function createGiftPaymentPostingRepository(
             let reason: RetryReason | null = confirmed ? null : decision.reason;
             if (
               decision.effect &&
-              event.eventType !== "PAYMENT_RECEIVED" &&
+              !isGiftReceiptEvent(event.eventType) &&
               !receipt
             )
               reason = "PAYMENT_NOT_RECEIVED";
@@ -721,6 +742,22 @@ export function createGiftPaymentPostingRepository(
                 ledgerEntryId: receipt?.id ?? null,
               };
             }
+            if (
+              !existing &&
+              binding.snapshot.quote.settlementVersion ===
+                "PLATFORM_FEE_GUARANTEE_V1"
+            ) {
+              // The order row is already locked. Each promised allocation can post once.
+              const conflicts =
+                await tx.execute(sql`SELECT 1 FROM ${giftPaymentRecord} p
+              WHERE p.site_id = ${claim.siteId} AND p.account_id = ${claim.accountId} AND p.environment = ${claim.environment}
+                AND p.order_id = ${payment.orderId}
+                AND (p.attempt_id <> ${payment.attemptId}
+                  OR p.provider_installment_reference IS DISTINCT FROM ${payment.providerInstallmentReference ?? null}
+                  OR p.installment_number IS NOT DISTINCT FROM ${payment.installmentNumber ?? null})
+              LIMIT 1`);
+              if (conflicts.rows.length) return unavailable();
+            }
             const paymentId = await writePayment(
               tx,
               payment,
@@ -728,7 +765,7 @@ export function createGiftPaymentPostingRepository(
               options,
             );
             let ledgerEntryId: string | null = null;
-            if (decision.effect && event.eventType === "PAYMENT_RECEIVED") {
+            if (decision.effect && isGiftReceiptEvent(event.eventType)) {
               ledgerEntryId = options.generateId("ledger");
               if (!validId(ledgerEntryId)) return unavailable();
               const effect = decision.effect;
@@ -740,6 +777,21 @@ export function createGiftPaymentPostingRepository(
               if (
                 ledger.rows.length !== 1 ||
                 ledger.rows[0]?.id !== ledgerEntryId
+              )
+                return unavailable();
+            }
+            if (
+              ledgerEntryId &&
+              decision.outcome === "RECEIVED" &&
+              decision.platformAdjustmentCents
+            ) {
+              const updated =
+                await tx.execute(sql`UPDATE ${giftPaymentRecord} SET platform_adjustment_cents = ${decision.platformAdjustmentCents}
+              WHERE id = ${paymentId} AND site_id = ${claim.siteId} AND account_id = ${claim.accountId} AND environment = ${claim.environment}
+                AND platform_adjustment_cents IS NULL RETURNING id`);
+              if (
+                updated.rows.length !== 1 ||
+                updated.rows[0]?.id !== paymentId
               )
                 return unavailable();
             }
