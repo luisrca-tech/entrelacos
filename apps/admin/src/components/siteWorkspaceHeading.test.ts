@@ -160,6 +160,11 @@ describe("site workspace markup", () => {
     expect(workspaceSource).toContain("site.displayName");
   });
 
+  it("passes the couple names so owner settings show the shared subtitle", () => {
+    expect(workspaceSource).toContain("coupleNames: site.coupleNames");
+    expect(workspaceSource).toContain("heading.subtitle ?? site.displayName");
+  });
+
   it("keeps the public site CTA in the heading", () => {
     expect(workspaceSource).toContain("Ir para o site");
     expect(workspaceSource).toContain(

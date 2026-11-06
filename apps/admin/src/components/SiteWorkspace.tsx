@@ -428,6 +428,7 @@ export function SiteWorkspace({
     area,
     owner,
     lifecycle: site.lifecycle,
+    coupleNames: site.coupleNames,
   });
   const confirmation = lifecycleAction
     ? lifecycleConfirmation[lifecycleAction]
@@ -481,7 +482,7 @@ export function SiteWorkspace({
                       ? "Leia os recados recebidos e cuide do mural do casal."
                       : area === "team"
                         ? "Gerencie quem ajuda a cuidar do casamento."
-                        : site.displayName}
+                        : (heading.subtitle ?? site.displayName)}
               </p>
             </div>
             <div className="flex shrink-0 flex-wrap items-center justify-end gap-3 [&:not(:has(>:not(:empty)))]:hidden [@media(min-width:761px)]:self-center [@media(max-width:760px)]:w-full [@media(max-width:760px)]:justify-start">
