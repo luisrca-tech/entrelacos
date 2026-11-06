@@ -25,13 +25,37 @@ export async function readSiteHomeSummary(
 
   const fields: SQL[] = [];
   if (capabilities.manageInvitations) {
+    // One row per invitation; the group status mirrors the list filter in
+    // listInvitationPage so the filter chips count what they will show.
     fields.push(sql`(
       select json_build_object(
-        'total', (select count(*)::int from invitation where site_id = ${siteId}),
-        'confirmed', count(*) filter (where rsvp_state = 'CONFIRMED')::int,
-        'pending', count(*) filter (where rsvp_state = 'PENDING')::int,
-        'declined', count(*) filter (where rsvp_state = 'DECLINED')::int
-      ) from invitation_guest where site_id = ${siteId}
+        'total', count(*)::int,
+        'confirmed', coalesce(sum(confirmed), 0)::int,
+        'pending', coalesce(sum(pending), 0)::int,
+        'declined', coalesce(sum(declined), 0)::int,
+        'adults', coalesce(sum(adults), 0)::int,
+        'children', coalesce(sum(children), 0)::int,
+        'byStatus', json_build_object(
+          'confirmed', count(*) filter (where status = 'CONFIRMED')::int,
+          'pending', count(*) filter (where status = 'PENDING')::int,
+          'declined', count(*) filter (where status = 'DECLINED')::int,
+          'partial', count(*) filter (where status = 'PARTIAL')::int
+        )
+      ) from (
+        select
+          count(g.id) filter (where g.rsvp_state = 'CONFIRMED') as confirmed,
+          count(g.id) filter (where g.rsvp_state = 'PENDING') as pending,
+          count(g.id) filter (where g.rsvp_state = 'DECLINED') as declined,
+          count(g.id) filter (where g.guest_type = 'ADULT') as adults,
+          count(g.id) filter (where g.guest_type = 'CHILD') as children,
+          case when count(distinct g.rsvp_state) > 1 then 'PARTIAL'
+            else coalesce(min(g.rsvp_state::text), 'PENDING') end as status
+        from invitation i
+        left join invitation_guest g
+          on g.site_id = i.site_id and g.invitation_id = i.id
+        where i.site_id = ${siteId}
+        group by i.id
+      ) per_invitation
     ) as invitations`);
   }
   if (capabilities.manageMessages) {

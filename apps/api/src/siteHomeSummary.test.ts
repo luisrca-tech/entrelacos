@@ -22,7 +22,15 @@ it("keeps non-financial counts when the receiving status cannot be read", async 
   const execute = vi.fn().mockResolvedValue({
     rows: [
       {
-        invitations: { total: 2, confirmed: 3, pending: 1, declined: 0 },
+        invitations: {
+          total: 2,
+          confirmed: 3,
+          pending: 1,
+          declined: 0,
+          adults: 3,
+          children: 1,
+          byStatus: { confirmed: 1, pending: 1, declined: 0, partial: 0 },
+        },
         messages: 4,
         publishedGifts: 5,
         peopleWithAccess: 2,
@@ -36,7 +44,15 @@ it("keeps non-financial counts when the receiving status cannot be read", async 
   await expect(
     readSiteHomeSummary({ execute } as never, adminAccess, readReadiness),
   ).resolves.toEqual({
-    invitations: { total: 2, confirmed: 3, pending: 1, declined: 0 },
+    invitations: {
+      total: 2,
+      confirmed: 3,
+      pending: 1,
+      declined: 0,
+      adults: 3,
+      children: 1,
+      byStatus: { confirmed: 1, pending: 1, declined: 0, partial: 0 },
+    },
     messages: 4,
     publishedGifts: 5,
     peopleWithAccess: 2,

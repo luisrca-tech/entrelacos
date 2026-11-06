@@ -274,7 +274,15 @@ it("serves a private home summary without reading finance or team data for an as
   const execute = vi.fn().mockResolvedValue({
     rows: [
       {
-        invitations: { total: 2, confirmed: 3, pending: 1, declined: 0 },
+        invitations: {
+          total: 2,
+          confirmed: 3,
+          pending: 1,
+          declined: 0,
+          adults: 3,
+          children: 1,
+          byStatus: { confirmed: 1, pending: 1, declined: 0, partial: 0 },
+        },
         messages: 1,
         publishedGifts: 4,
       },
@@ -310,7 +318,15 @@ it("serves a private home summary without reading finance or team data for an as
   expect(response.status).toBe(200);
   expect(response.headers.get("cache-control")).toBe("no-store");
   expect(await response.json()).toEqual({
-    invitations: { total: 2, confirmed: 3, pending: 1, declined: 0 },
+    invitations: {
+      total: 2,
+      confirmed: 3,
+      pending: 1,
+      declined: 0,
+      adults: 3,
+      children: 1,
+      byStatus: { confirmed: 1, pending: 1, declined: 0, partial: 0 },
+    },
     messages: 1,
     publishedGifts: 4,
   });

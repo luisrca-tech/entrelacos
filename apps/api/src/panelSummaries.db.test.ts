@@ -12,7 +12,7 @@ import {
   siteMembership,
   user,
 } from "@entrelacos/database/schema";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { listSiteAdmins } from "./adminAccess";
@@ -56,7 +56,7 @@ describe("panel summary and pagination queries", () => {
       userId,
       role: "SITE_ADMIN",
     });
-    const [first] = await Promise.all([
+    const [first, , mixed] = await Promise.all([
       createInvitation(connection.db, actor, siteId, {
         name: "Família Silva",
         phone: "+5511999990001",
@@ -67,11 +67,28 @@ describe("panel summary and pagination queries", () => {
         phone: "+5511999990002",
         guests: [{ fullName: "João Silva", guestType: "ADULT" }],
       }),
+      createInvitation(connection.db, actor, siteId, {
+        name: "Primos Costa",
+        phone: "+5511999990003",
+        guests: [
+          { fullName: "Bia Costa", guestType: "ADULT" },
+          { fullName: "Léo Costa", guestType: "CHILD" },
+        ],
+      }),
     ]);
     await connection.db
       .update(invitationGuest)
       .set({ rsvpState: "CONFIRMED" })
       .where(eq(invitationGuest.invitationId, first.id));
+    await connection.db
+      .update(invitationGuest)
+      .set({ rsvpState: "DECLINED" })
+      .where(
+        and(
+          eq(invitationGuest.invitationId, mixed.id),
+          eq(invitationGuest.guestType, "CHILD"),
+        ),
+      );
     await connection.db.insert(muralMessage).values({
       id: `${fixture}-message`,
       siteId,
@@ -132,8 +149,8 @@ describe("panel summary and pagination queries", () => {
         await listInvitationPage(connection.db, actor, siteId, {
           status: "PARTIAL",
         })
-      ).invitations,
-    ).toEqual([]);
+      ).invitations.map((item) => item.name),
+    ).toEqual(["Primos Costa"]);
     await expect(
       listInvitationPage(
         connection.db,
@@ -161,7 +178,15 @@ describe("panel summary and pagination queries", () => {
       createDefaultReceivingReadiness(id),
     );
     expect(summary).toMatchObject({
-      invitations: { total: 2, confirmed: 1, pending: 1, declined: 0 },
+      invitations: {
+        total: 3,
+        confirmed: 1,
+        pending: 2,
+        declined: 1,
+        adults: 3,
+        children: 1,
+        byStatus: { confirmed: 1, pending: 1, declined: 0, partial: 1 },
+      },
       messages: 1,
       publishedGifts: 1,
       peopleWithAccess: 1,

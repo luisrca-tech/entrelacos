@@ -79,10 +79,22 @@ const summaryCount = z.number().int().nonnegative();
 export const siteHomeSummarySchema = z.strictObject({
   invitations: z
     .strictObject({
+      /** Number of invitations. */
       total: summaryCount,
+      /** Guest counts by RSVP state. */
       confirmed: summaryCount,
       pending: summaryCount,
       declined: summaryCount,
+      /** Guest counts by guest type. */
+      adults: summaryCount,
+      children: summaryCount,
+      /** Invitation counts by group status, matching the list status filter. */
+      byStatus: z.strictObject({
+        confirmed: summaryCount,
+        pending: summaryCount,
+        declined: summaryCount,
+        partial: summaryCount,
+      }),
     })
     .optional(),
   messages: summaryCount.optional(),
