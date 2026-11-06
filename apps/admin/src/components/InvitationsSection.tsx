@@ -33,6 +33,7 @@ import { InvitationList } from "./InvitationList";
 import { InvitationOverview } from "./InvitationOverview";
 import { invitationAdminError } from "./invitationAdminError";
 import {
+  exportableFilters,
   type InvitationExportFormat,
   invitationExportPath,
 } from "./invitationExport";
@@ -136,6 +137,7 @@ export function InvitationsSection({ siteId, lifecycle, sessionEpoch }: Props) {
   // With no filters an empty first page means the wedding has no invitations.
   const noInvitations =
     loaded && !hasFilters && invitations.length === 0 && !nextCursor && !error;
+  const exportFilters = exportableFilters(filters);
   const summary = useMemo(
     () => summarizeInvitations(invitations),
     [invitations],
@@ -482,7 +484,7 @@ export function InvitationsSection({ siteId, lifecycle, sessionEpoch }: Props) {
     setBusy(true);
     try {
       const path = invitationExportPath(siteId, format, {
-        ...filters,
+        ...exportFilters,
         ...options,
         requestId: crypto.randomUUID(),
       });
@@ -746,9 +748,9 @@ export function InvitationsSection({ siteId, lifecycle, sessionEpoch }: Props) {
         onExport={(format, options) => void downloadExport(format, options)}
         busy={busy}
         hasFilters={Boolean(
-          filters.search.trim() ||
-            filters.status !== "ALL" ||
-            filters.guestType !== "ALL",
+          exportFilters.search.trim() ||
+            exportFilters.status !== "ALL" ||
+            exportFilters.guestType !== "ALL",
         )}
       />
       <Dialog open={deadlineOpen} onOpenChange={setDeadlineOpen}>

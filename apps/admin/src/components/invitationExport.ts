@@ -1,11 +1,26 @@
 import type { InvitationFilters } from "./invitationView";
 
 export type InvitationExportFormat = "csv" | "pdf";
-export type InvitationExportSelection = InvitationFilters & {
+type ExportFilters = InvitationFilters & {
+  status: Exclude<InvitationFilters["status"], "PARTIAL">;
+};
+export type InvitationExportSelection = ExportFilters & {
   requestId: string;
   includePhone?: boolean;
   includeEmail?: boolean;
 };
+
+/**
+ * The report lists guests and filters them by their own answer. A mixed
+ * answer only exists per invitation, so the partial filter exports every
+ * answer and the Status column tells them apart.
+ */
+export function exportableFilters(filters: InvitationFilters): ExportFilters {
+  return {
+    ...filters,
+    status: filters.status === "PARTIAL" ? "ALL" : filters.status,
+  };
+}
 
 export function invitationExportPath(
   siteId: string,
