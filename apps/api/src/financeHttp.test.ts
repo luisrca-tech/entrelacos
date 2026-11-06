@@ -68,6 +68,7 @@ function access(): SiteAccess {
 function router(finance?: {
   readOverview?(siteId: string): Promise<unknown>;
   listWithdrawals?(siteId: string): Promise<unknown>;
+  listWithdrawalPage?: ReturnType<typeof vi.fn>;
 }) {
   return createFinanceHttpRouter({
     auth: {} as never,
@@ -762,6 +763,27 @@ describe("finance HTTP disabled boundary", () => {
     );
     expect(response.status).toBe(503);
     expect(await response.text()).not.toContain("private-provider-token");
+  });
+
+  it("routes a bounded withdrawal page through the guarded reader", async () => {
+    const listWithdrawalPage = vi
+      .fn()
+      .mockResolvedValue({ withdrawals: [], nextCursor: null });
+    const app = router({ listWithdrawalPage });
+    const response = await app.request(request(`${withdrawalsPath}?limit=20`));
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(await response.json()).toEqual({
+      withdrawals: [],
+      nextCursor: null,
+    });
+    expect(listWithdrawalPage).toHaveBeenCalledExactlyOnceWith("site-one", {
+      limit: 20,
+    });
+    expect(
+      (await app.request(request(`${withdrawalsPath}?limit=101`))).status,
+    ).toBe(400);
+    expect(listWithdrawalPage).toHaveBeenCalledOnce();
   });
 
   it("reads actual withdrawal history independently of overview", async () => {

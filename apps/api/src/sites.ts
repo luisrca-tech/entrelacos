@@ -3,6 +3,7 @@ import {
   type DateEditInput,
   dateEditInputSchema,
   type OwnerSiteCreateInput,
+  type OwnerSiteListItem,
   ownerSiteCreateInputSchema,
   ownerSiteListQuerySchema,
   ownerSiteResumeInputSchema,
@@ -15,13 +16,25 @@ import {
   siteUpdateInputSchema,
 } from "@entrelacos/contracts";
 import {
+  adminAccessToken,
   site,
   siteDomain,
   siteMembership,
   siteOrigin,
   siteTerm,
+  user,
 } from "@entrelacos/database/schema";
-import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  eq,
+  getTableColumns,
+  gt,
+  inArray,
+  isNull,
+  sql,
+} from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 
 export type SiteDatabase = NodePgDatabase<Record<string, never>>;
@@ -323,24 +336,99 @@ export async function resumeSite(
 export async function listSites(
   db: SiteDatabase,
   queryInput: unknown,
-): Promise<{ sites: SiteRecord[]; nextCursor: string | null }> {
+  nowValue?: Date,
+) {
   const query = ownerSiteListQuerySchema.parse(queryInput);
-  const rows = await db
-    .select({ id: site.id })
-    .from(site)
-    .where(query.cursor ? sql`${site.id} > ${query.cursor}` : undefined)
-    .orderBy(asc(site.id))
-    .limit(query.limit + 1);
-  const page = rows.slice(0, query.limit);
-  const records: SiteRecord[] = [];
-  for (const row of page) {
-    const bundle = await readSiteBundle(db, row.id);
-    if (bundle) records.push(ownerRecord(bundle));
-  }
+  const now = currentTime(nowValue);
+  const search = query.search
+    ? sql`strpos(lower(concat_ws(' ', ${site.displayName}, ${site.partnerOneName}, ${site.partnerTwoName}, ${site.repositorySlug}, ${site.publicUrl})), lower(${query.search})) > 0`
+    : undefined;
+  const origins = db
+    .select({
+      values: sql<
+        string[]
+      >`coalesce(array_agg(${siteOrigin.origin} order by ${siteOrigin.origin}), array[]::text[])`.as(
+        "values",
+      ),
+    })
+    .from(siteOrigin)
+    .where(eq(siteOrigin.siteId, site.id))
+    .as("origins");
+  const hasPending = sql`exists (
+    select 1 from ${adminAccessToken}
+    where ${adminAccessToken.siteId} = ${site.id}
+      and ${adminAccessToken.userId} = ${user.id}
+      and ${adminAccessToken.revokedAt} is null
+      and ${adminAccessToken.consumedAt} is null
+      and ${adminAccessToken.expiresAt} > ${now}
+  )`;
+  const coupleAccess = db
+    .select({
+      people: count().as("people"),
+      active:
+        sql<boolean>`coalesce(bool_or(${user.state} = 'ACTIVE'), false)`.as(
+          "active",
+        ),
+      pending: sql<boolean>`coalesce(bool_or(${hasPending}), false)`.as(
+        "pending",
+      ),
+    })
+    .from(siteMembership)
+    .innerJoin(user, eq(siteMembership.userId, user.id))
+    .where(
+      and(
+        eq(siteMembership.siteId, site.id),
+        eq(siteMembership.role, "SITE_ADMIN"),
+        eq(user.role, "SITE_ADMIN"),
+        isNull(siteMembership.revokedAt),
+      ),
+    )
+    .as("couple_access");
+  const [rows, counts] = await Promise.all([
+    db
+      .select({
+        row: getTableColumns(site),
+        origins: origins.values,
+        term: getTableColumns(siteTerm),
+        coupleAccess: {
+          people: coupleAccess.people,
+          active: coupleAccess.active,
+          pending: coupleAccess.pending,
+        },
+      })
+      .from(site)
+      .leftJoin(siteTerm, eq(siteTerm.siteId, site.id))
+      .innerJoinLateral(origins, sql`true`)
+      .innerJoinLateral(coupleAccess, sql`true`)
+      .where(
+        and(
+          search,
+          query.lifecycle ? eq(site.lifecycle, query.lifecycle) : undefined,
+          query.cursor ? gt(site.id, query.cursor) : undefined,
+        ),
+      )
+      .orderBy(asc(site.id))
+      .limit(query.limit + 1),
+    db
+      .select({ lifecycle: site.lifecycle, total: count() })
+      .from(site)
+      .where(search)
+      .groupBy(site.lifecycle),
+  ]);
+  const totals = { DRAFT: 0, IN_REVIEW: 0, ACTIVE: 0, INACTIVE: 0 };
+  for (const { lifecycle, total } of counts) totals[lifecycle] = total;
+  const sites: OwnerSiteListItem[] = rows.slice(0, query.limit).map((item) => ({
+    ...ownerRecord({
+      row: item.row,
+      origins: item.origins,
+      term: item.term ?? undefined,
+    }),
+    coupleAccess: item.coupleAccess,
+  }));
   return {
-    sites: records,
-    nextCursor:
-      rows.length > query.limit ? (rows[query.limit]?.id ?? null) : null,
+    sites,
+    totals,
+    nextCursor: rows.length > query.limit ? (sites.at(-1)?.id ?? null) : null,
   };
 }
 

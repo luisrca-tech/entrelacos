@@ -1,12 +1,15 @@
 import { createHmac, randomBytes, randomUUID } from "node:crypto";
 import {
   type InvitationCreateInput,
+  type InvitationPage,
   type InvitationRecord,
   type InvitationUpdateInput,
   invitationAccessPinResponseSchema,
   invitationCreateInputSchema,
   invitationDeleteConfirmationSchema,
   invitationGuestRecordSchema,
+  invitationPageCursorSchema,
+  invitationPageQuerySchema,
   invitationRecordSchema,
   invitationUpdateInputSchema,
 } from "@entrelacos/contracts";
@@ -286,11 +289,95 @@ export async function listInvitations(
     .from(invitation)
     .where(eq(invitation.siteId, siteId))
     .orderBy(asc(invitation.id));
+  return invitationRecords(db, siteId, records);
+}
+
+export async function listInvitationPage(
+  db: InvitationDatabase,
+  actor: InvitationActor,
+  siteId: string,
+  input: unknown,
+): Promise<InvitationPage> {
+  const query = invitationPageQuerySchema.parse(input);
+  const cursor = query.cursor
+    ? decodeInvitationCursor(query.cursor)
+    : undefined;
+  await siteForActor(db, actor, siteId);
+  const search = normalizeInvitationName(query.search ?? "");
+  const scope = sql`${invitationGuest.siteId} = ${invitation.siteId}
+    and ${invitationGuest.invitationId} = ${invitation.id}`;
+  const status = query.status
+    ? sql`(
+    select case when count(distinct ${invitationGuest.rsvpState}) > 1 then 'PARTIAL'
+      else coalesce(min(${invitationGuest.rsvpState}::text), 'PENDING') end
+    from ${invitationGuest} where ${scope}
+  ) = ${query.status}`
+    : undefined;
+  const guestType = query.guestType
+    ? sql`exists (
+    select 1 from ${invitationGuest}
+    where ${scope} and ${invitationGuest.guestType} = ${query.guestType}
+  )`
+    : undefined;
+  const records = await db
+    .select()
+    .from(invitation)
+    .where(
+      and(
+        eq(invitation.siteId, siteId),
+        status,
+        guestType,
+        search
+          ? sql`strpos(${invitation.normalizedName}, ${search}) > 0`
+          : undefined,
+        cursor
+          ? sql`(${invitation.normalizedName}, ${invitation.id}) > (${cursor.name}, ${cursor.id})`
+          : undefined,
+      ),
+    )
+    .orderBy(asc(invitation.normalizedName), asc(invitation.id))
+    .limit(query.limit + 1);
+  const page = records.slice(0, query.limit);
+  const last = page.at(-1);
+  return {
+    invitations: await invitationRecords(db, siteId, page),
+    nextCursor:
+      last && records.length > query.limit
+        ? Buffer.from(
+            JSON.stringify({ name: last.normalizedName, id: last.id }),
+          ).toString("base64url")
+        : null,
+  };
+}
+
+function decodeInvitationCursor(encoded: string) {
+  try {
+    return invitationPageCursorSchema.parse(
+      JSON.parse(Buffer.from(encoded, "base64url").toString("utf8")),
+    );
+  } catch {
+    return reject(400, "VALIDATION_ERROR", "Invalid invitation cursor");
+  }
+}
+
+async function invitationRecords(
+  db: InvitationDatabase,
+  siteId: string,
+  records: Array<typeof invitation.$inferSelect>,
+): Promise<InvitationRecord[]> {
   if (records.length === 0) return [];
   const guests = await db
     .select()
     .from(invitationGuest)
-    .where(eq(invitationGuest.siteId, siteId))
+    .where(
+      and(
+        eq(invitationGuest.siteId, siteId),
+        inArray(
+          invitationGuest.invitationId,
+          records.map((record) => record.id),
+        ),
+      ),
+    )
     .orderBy(asc(invitationGuest.id));
   const guestsByInvitation = new Map<string, InvitationGuestRow[]>();
   for (const guest of guests) {

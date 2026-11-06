@@ -617,6 +617,22 @@ export function createGiftPaymentComposition(
               ),
             ),
           ),
+        listWithdrawalPage: (
+          siteId: string,
+          query: import("@entrelacos/contracts").WithdrawalPageQuery,
+        ) =>
+          own(async () => {
+            const page = await withdrawalHistory.listWithdrawalPage(
+              siteId,
+              query,
+            );
+            return {
+              ...page,
+              withdrawals: await Promise.all(
+                page.withdrawals.map(withdrawals.decorateIntent),
+              ),
+            };
+          }),
         readOverview: (siteId: string) =>
           own(async () => {
             const { account } = await storedAccount(siteId);

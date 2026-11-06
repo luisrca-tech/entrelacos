@@ -15,6 +15,7 @@ import {
   editSiteDates,
   getSiteForActor,
   listDomains,
+  listSites,
   reactivateSite,
   startReview,
   updateDomain,
@@ -60,6 +61,38 @@ describe("site lifecycle PostgreSQL integration", () => {
       await connection.db.delete(user).where(eq(user.id, userId));
     }
     await connection.close();
+  });
+
+  it("filters before keyset pagination and includes lifecycle totals", async () => {
+    const phrase = `${fixturePrefix}-page`;
+    const first = await createFixture(`${phrase}-a`);
+    const second = await createFixture(`${phrase}-b`);
+    const search = { search: phrase, limit: 1 };
+    const page = await listSites(connection.db, search, fixedNow);
+    const tail = await listSites(
+      connection.db,
+      { ...search, cursor: page.nextCursor },
+      fixedNow,
+    );
+    expect(
+      [...page.sites, ...tail.sites].map((item) => item.id).sort(),
+    ).toEqual([first.id, second.id].sort());
+    expect(page.totals.DRAFT).toBe(2);
+    expect(tail.nextCursor).toBeNull();
+    expect(page.sites[0]?.coupleAccess).toEqual({
+      people: 0,
+      active: false,
+      pending: false,
+    });
+    expect(
+      (
+        await listSites(
+          connection.db,
+          { search: `${phrase}-missing` },
+          fixedNow,
+        )
+      ).sites,
+    ).toEqual([]);
   });
 
   it("creates one site for concurrent retries and rejects key or slug conflicts", async () => {

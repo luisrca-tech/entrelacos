@@ -4,6 +4,8 @@ import {
   invitationDeleteConfirmationSchema,
   invitationDeleteResponseSchema,
   invitationListResponseSchema,
+  invitationPageQuerySchema,
+  invitationPageResponseSchema,
   invitationResponseSchema,
   invitationUpdateInputSchema,
 } from "@entrelacos/contracts";
@@ -17,6 +19,7 @@ import {
   getInvitationAccessPin,
   type InvitationActor,
   InvitationServiceError,
+  listInvitationPage,
   listInvitations,
   rotateInvitationAccessPin,
   updateInvitation,
@@ -106,6 +109,18 @@ export function createInvitationsHttpRouter(options: AuthHttpOptions): Hono {
     const actor = await requireActor(context.req.raw, options);
     if (isResponse(actor)) return actor;
     try {
+      const query = context.req.query();
+      if (Object.keys(query).length) {
+        const page = await listInvitationPage(
+          options.db,
+          actor,
+          context.req.param("siteId"),
+          invitationPageQuerySchema.parse(query),
+        );
+        return context.json(invitationPageResponseSchema.parse(page), 200, {
+          "Cache-Control": "no-store",
+        });
+      }
       const records = await listInvitations(
         options.db,
         actor,

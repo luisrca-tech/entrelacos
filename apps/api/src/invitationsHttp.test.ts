@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   requireAdminSession: vi.fn(),
   listInvitations: vi.fn(),
+  listInvitationPage: vi.fn(),
   createInvitation: vi.fn(),
   updateInvitation: vi.fn(),
   deleteInvitation: vi.fn(),
@@ -29,6 +30,7 @@ vi.mock("./invitations", () => ({
   deleteInvitation: mocks.deleteInvitation,
   getInvitationAccessPin: mocks.getInvitationAccessPin,
   listInvitations: mocks.listInvitations,
+  listInvitationPage: mocks.listInvitationPage,
   rotateInvitationAccessPin: mocks.rotateInvitationAccessPin,
   updateInvitation: mocks.updateInvitation,
 }));
@@ -103,6 +105,36 @@ describe("invitations HTTP boundary", () => {
 
     const oldPath = await router.request(request("/v1/sites/site-1/groups"));
     expect(oldPath.status).toBe(404);
+  });
+
+  it("validates page size and returns a cursor for paginated callers", async () => {
+    const router = createInvitationsHttpRouter(options());
+    mocks.listInvitationPage.mockResolvedValue({
+      invitations: [invitation],
+      nextCursor: "cursor",
+    });
+    const result = await router.request(
+      request(
+        "/v1/sites/site-1/invitations?limit=1&search=Silva&status=PARTIAL&guestType=ADULT",
+      ),
+    );
+    expect(result.status).toBe(200);
+    expect(result.headers.get("cache-control")).toBe("no-store");
+    expect(await result.json()).toEqual({
+      invitations: [invitation],
+      nextCursor: "cursor",
+    });
+    expect(mocks.listInvitationPage).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      "site-1",
+      { limit: 1, search: "Silva", status: "PARTIAL", guestType: "ADULT" },
+    );
+    const invalid = await router.request(
+      request("/v1/sites/site-1/invitations?limit=101"),
+    );
+    expect(invalid.status).toBe(400);
+    expect(mocks.listInvitationPage).toHaveBeenCalledTimes(1);
   });
 
   it("passes invitation and exact deletion confirmation to the service", async () => {

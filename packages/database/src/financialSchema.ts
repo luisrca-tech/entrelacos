@@ -521,6 +521,12 @@ export const withdrawalIntent = pgTable(
       .defaultNow(),
   },
   (table) => [
+    index("withdrawal_intent_history_idx").on(
+      table.siteId,
+      table.environment,
+      sql`date_trunc('milliseconds', ${table.createdAt} at time zone 'UTC') desc`,
+      sql`${table.id} collate "C"`,
+    ),
     unique("withdrawal_intent_scope_key").on(
       table.siteId,
       table.accountId,
@@ -924,6 +930,11 @@ export const giftPaymentRecord = pgTable(
       table.environment,
       table.providerPaymentReference,
     ),
+    index("gift_payment_received_orders_idx")
+      .on(table.siteId, table.environment, table.orderId)
+      .where(
+        sql`${table.verificationStatus} = 'VERIFIED' AND ${table.providerStatus} = 'RECEIVED'`,
+      ),
     accountForeignKey(table, "gift_payment_account_fk"),
     foreignKey({
       columns: [

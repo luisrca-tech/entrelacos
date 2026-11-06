@@ -22,6 +22,7 @@ import {
   createSiteAdmin,
   disableAdmin,
   issueAdminAccess,
+  listSiteAdmins,
   revokeAdminAccess,
 } from "./adminAccess";
 import { createAuth } from "./auth";
@@ -131,6 +132,38 @@ describe("administrative access PostgreSQL integration", () => {
       await connection.db.delete(user).where(eq(user.id, userId));
     }
     await connection.close();
+  });
+
+  it("lists only the current pending link metadata", async () => {
+    const { siteId, userId } = await createSiteAdminFixture("pending-link");
+    const first = await issueAdminAccess(connection.db, {
+      userId,
+      purpose: "ACTIVATION",
+      now: fixtureNow,
+    });
+    const replacementTime = new Date(fixtureNow.getTime() + 60_000);
+    const latest = await issueAdminAccess(connection.db, {
+      userId,
+      purpose: "ACTIVATION",
+      now: replacementTime,
+    });
+    const [admin] = await listSiteAdmins(
+      connection.db,
+      siteId,
+      replacementTime,
+    );
+    expect(admin?.pendingAccess).toEqual({
+      purpose: "ACTIVATION",
+      expiresAt: latest.expiresAt.toISOString(),
+    });
+    expect(JSON.stringify(admin)).not.toContain(latest.token);
+    const [expired] = await listSiteAdmins(
+      connection.db,
+      siteId,
+      new Date(latest.expiresAt),
+    );
+    expect(expired?.pendingAccess).toBeNull();
+    expect(first.expiresAt).not.toEqual(latest.expiresAt);
   });
 
   it("creates one pending membership, stores only a hash, and activates once", async () => {

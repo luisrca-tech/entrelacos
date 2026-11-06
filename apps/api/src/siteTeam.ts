@@ -193,8 +193,12 @@ export async function listSiteTeam(
       sm.role AS "membershipRole", sm.revoked_at AS "revokedAt"
     FROM site_membership sm
     INNER JOIN "user" u ON u.id = sm.user_id
-    WHERE sm.site_id = ${siteId} AND sm.role = 'SITE_ASSISTANT'
-    ORDER BY u.name, sm.user_id
+    WHERE sm.site_id = ${siteId} AND (
+      sm.role = 'SITE_ASSISTANT' OR (
+        sm.role = 'SITE_ADMIN' AND sm.revoked_at IS NULL AND u.state = 'ACTIVE'
+      )
+    )
+    ORDER BY sm.role, u.name, sm.user_id
   `);
   const invitations = await db.execute(sql`
     SELECT ${invitationColumns} FROM site_assessor_invitation

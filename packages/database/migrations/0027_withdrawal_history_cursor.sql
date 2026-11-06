@@ -1,0 +1,1 @@
+CREATE INDEX "withdrawal_intent_history_idx" ON "withdrawal_intent" USING btree ("site_id","environment",date_trunc('milliseconds', "created_at" at time zone 'UTC') desc,"id" collate "C");

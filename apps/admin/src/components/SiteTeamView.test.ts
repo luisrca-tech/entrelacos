@@ -124,7 +124,7 @@ describe("site team view", () => {
     );
     expect(html).not.toContain("<form");
     expect(html).toMatch(/>Convidar assessor<\/button>/);
-    expect(html).toContain("Assessores com acesso");
+    expect(html).toContain("Pessoas com acesso");
     expect(html).toContain("Convites da equipe");
   });
 

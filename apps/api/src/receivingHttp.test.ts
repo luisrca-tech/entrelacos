@@ -269,3 +269,54 @@ it("preserves the configured Botanical readiness response without a demonstratio
   expect(await response.json()).toEqual({ readiness });
   expect(execute).not.toHaveBeenCalled();
 });
+
+it("serves a private home summary without reading finance or team data for an assistant", async () => {
+  const execute = vi.fn().mockResolvedValue({
+    rows: [
+      {
+        invitations: { total: 2, confirmed: 3, pending: 1, declined: 0 },
+        messages: 1,
+        publishedGifts: 4,
+      },
+    ],
+  });
+  const readReadiness = vi.fn();
+  mocks.requireAdminSession.mockResolvedValue({
+    user: { id: "helper-a", role: "SITE_ASSISTANT" },
+  });
+  mocks.resolveSiteAccess.mockResolvedValue({
+    siteId: "wedding-a",
+    userId: "helper-a",
+    membershipId: "assistant-a",
+    membershipRole: "SITE_ASSISTANT",
+    capabilities: {
+      manageInvitations: true,
+      manageMessages: true,
+      manageCatalog: true,
+      manageTeam: false,
+      readFinance: false,
+      configureReceiving: false,
+      requestWithdrawal: false,
+    },
+  });
+  const api = createReceivingHttpRouter({
+    auth: {} as never,
+    db: { execute } as never,
+    adminOrigin,
+    readReadiness,
+  });
+  const path = "/v1/sites/wedding-a/home-summary";
+  const response = await api.request(request(path));
+  expect(response.status).toBe(200);
+  expect(response.headers.get("cache-control")).toBe("no-store");
+  expect(await response.json()).toEqual({
+    invitations: { total: 2, confirmed: 3, pending: 1, declined: 0 },
+    messages: 1,
+    publishedGifts: 4,
+  });
+  expect(execute).toHaveBeenCalledOnce();
+  expect(readReadiness).not.toHaveBeenCalled();
+  mocks.resolveSiteAccess.mockResolvedValue(null);
+  expect((await api.request(request(path))).status).toBe(403);
+  expect(execute).toHaveBeenCalledOnce();
+});

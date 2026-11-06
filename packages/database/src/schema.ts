@@ -207,6 +207,7 @@ export const site = pgTable(
     uniqueIndex("site_repository_slug_idx").on(table.repositorySlug),
     uniqueIndex("site_provisioning_key_idx").on(table.provisioningKey),
     uniqueIndex("site_public_url_idx").on(table.publicUrl),
+    index("site_lifecycle_id_idx").on(table.lifecycle, table.id),
     check(
       "site_previous_lifecycle_not_inactive_check",
       sql`${table.previousLifecycle} IS NULL OR ${table.previousLifecycle} <> 'INACTIVE'`,
@@ -250,6 +251,11 @@ export const invitation = pgTable(
       table.phoneE164,
     ),
     index("invitation_site_id_idx").on(table.siteId),
+    index("invitation_site_name_id_idx").on(
+      table.siteId,
+      table.normalizedName,
+      table.id,
+    ),
     check(
       "invitation_name_not_blank_check",
       sql`length(trim(${table.name})) > 0`,
@@ -1014,6 +1020,9 @@ export const adminAccessToken = pgTable(
     uniqueIndex("admin_access_token_hash_idx").on(table.tokenHash),
     index("admin_access_token_user_id_idx").on(table.userId),
     index("admin_access_token_site_id_idx").on(table.siteId),
+    index("admin_access_token_pending_order_idx")
+      .on(table.siteId, table.userId, table.createdAt.desc(), table.id.desc())
+      .where(sql`${table.consumedAt} IS NULL AND ${table.revokedAt} IS NULL`),
     foreignKey({
       columns: [table.siteId, table.userId],
       foreignColumns: [siteMembership.siteId, siteMembership.userId],

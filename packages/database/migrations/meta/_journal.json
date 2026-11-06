@@ -183,6 +183,20 @@
       "when": 1793238813777,
       "tag": "0025_gift_pricing_settings",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1793927537336,
+      "tag": "0026_panel_pagination_indexes",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1793927945516,
+      "tag": "0027_withdrawal_history_cursor",
+      "breakpoints": true
     }
   ]
 }

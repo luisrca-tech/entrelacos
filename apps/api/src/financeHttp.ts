@@ -2,8 +2,11 @@ import {
   financialOverviewResponseSchema,
   type SiteAccess,
   siteIdSchema,
+  type WithdrawalPageQuery,
   withdrawalCreateInputSchema,
   withdrawalListResponseSchema,
+  withdrawalPageQuerySchema,
+  withdrawalPageResponseSchema,
   withdrawalPreviewInputSchema,
   withdrawalRequestContextResponseSchema,
   withdrawalRequestStatusResponseSchema,
@@ -42,6 +45,10 @@ const WITHDRAWALS_PATH = "/v1/sites/:siteId/withdrawals";
 export interface FinanceHttpReadPorts {
   readOverview?(siteId: string): Promise<unknown>;
   listWithdrawals?(siteId: string): Promise<unknown>;
+  listWithdrawalPage?(
+    siteId: string,
+    query: WithdrawalPageQuery,
+  ): Promise<unknown>;
 }
 export type FinanceHttpOptions = AuthHttpOptions & {
   finance?: FinanceHttpReadPorts;
@@ -255,6 +262,9 @@ export function createFinanceHttpRouter(options: FinanceHttpOptions) {
       const contextRead =
         requestRead &&
         /^\/v1\/sites\/[^/]+\/withdrawals\/context$/.test(url.pathname);
+      const historyPage =
+        path === WITHDRAWALS_PATH &&
+        ["GET", "HEAD"].includes(context.req.method);
       const cursor = url.searchParams.get("cursor");
       if (
         (contextRead &&
@@ -262,7 +272,9 @@ export function createFinanceHttpRouter(options: FinanceHttpOptions) {
             url.searchParams.getAll("cursor").length > 1 ||
             (cursor !== null &&
               (cursor.length > 256 || !/^[A-Za-z0-9._:-]+$/.test(cursor))))) ||
-        (!contextRead && url.search)
+        (historyPage &&
+          new Set(url.searchParams.keys()).size !== url.searchParams.size) ||
+        (!contextRead && !historyPage && url.search)
       ) {
         return problem(400, "VALIDATION_ERROR", "Invalid financial query");
       }
@@ -304,11 +316,25 @@ export function createFinanceHttpRouter(options: FinanceHttpOptions) {
     return context.json(result.data);
   });
   router.get(WITHDRAWALS_PATH, async (context) => {
-    if (!options.finance?.listWithdrawals) return providerUnavailable();
     const siteId = context.req.param("siteId");
-    const result = withdrawalListResponseSchema.safeParse({
-      withdrawals: await options.finance.listWithdrawals(siteId),
-    });
+    const query = context.req.query();
+    let result:
+      | ReturnType<typeof withdrawalPageResponseSchema.safeParse>
+      | ReturnType<typeof withdrawalListResponseSchema.safeParse>;
+    if (Object.keys(query).length) {
+      const parsed = withdrawalPageQuerySchema.safeParse(query);
+      if (!parsed.success)
+        return problem(400, "VALIDATION_ERROR", "Invalid withdrawal query");
+      if (!options.finance?.listWithdrawalPage) return providerUnavailable();
+      result = withdrawalPageResponseSchema.safeParse(
+        await options.finance.listWithdrawalPage(siteId, parsed.data),
+      );
+    } else {
+      if (!options.finance?.listWithdrawals) return providerUnavailable();
+      result = withdrawalListResponseSchema.safeParse({
+        withdrawals: await options.finance.listWithdrawals(siteId),
+      });
+    }
     if (
       !result.success ||
       result.data.withdrawals.some((value) => value.siteId !== siteId)

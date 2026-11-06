@@ -136,6 +136,7 @@ describe("owner settings overview", () => {
       name: "Ana",
       email: "ana@example.test",
       state: "PENDING" as const,
+      pendingAccess: null,
     };
     const domain = {
       id: "domain-one",

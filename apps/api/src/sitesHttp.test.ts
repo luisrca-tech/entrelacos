@@ -143,17 +143,24 @@ describe("site HTTP boundary", () => {
   });
 
   it("lists owner sites when no pagination query is provided", async () => {
-    mocks.listSites.mockResolvedValue({ sites: [fixedSite], nextCursor: null });
+    const payload = {
+      sites: [
+        {
+          ...fixedSite,
+          coupleAccess: { people: 0, active: false, pending: false },
+        },
+      ],
+      nextCursor: null,
+      totals: { DRAFT: 1, IN_REVIEW: 0, ACTIVE: 0, INACTIVE: 0 },
+    };
+    mocks.listSites.mockResolvedValue(payload);
 
     const response = await router().request(
       request("/v1/owner/sites", { method: "GET" }),
     );
 
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({
-      sites: [fixedSite],
-      nextCursor: null,
-    });
+    expect(await response.json()).toEqual(payload);
     expect(mocks.listSites).toHaveBeenCalledWith(expect.anything(), {});
   });
 

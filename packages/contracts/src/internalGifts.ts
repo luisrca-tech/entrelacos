@@ -75,6 +75,24 @@ export const receivingReadinessResponseSchema = z
     "Catalog access must match the receiving site",
   );
 
+const summaryCount = z.number().int().nonnegative();
+export const siteHomeSummarySchema = z.strictObject({
+  invitations: z
+    .strictObject({
+      total: summaryCount,
+      confirmed: summaryCount,
+      pending: summaryCount,
+      declined: summaryCount,
+    })
+    .optional(),
+  messages: summaryCount.optional(),
+  publishedGifts: summaryCount.optional(),
+  receivedGifts: summaryCount.optional(),
+  receiving: receivingReadinessSchema.optional(),
+  peopleWithAccess: summaryCount.optional(),
+});
+export type SiteHomeSummary = z.infer<typeof siteHomeSummarySchema>;
+
 export const siteMembershipRoleSchema = z.enum([
   "SITE_ADMIN",
   "SITE_ASSISTANT",
@@ -113,7 +131,7 @@ export const siteTeamMemberSchema = z
     siteId: id,
     name: text(160),
     email: teamEmail,
-    membershipRole: z.literal("SITE_ASSISTANT"),
+    membershipRole: siteMembershipRoleSchema,
     revokedAt: instant.nullable(),
   })
   .strict();
@@ -575,6 +593,29 @@ export const withdrawalResponseSchema = z
 export const withdrawalListResponseSchema = z
   .object({ withdrawals: z.array(withdrawalIntentSchema) })
   .strict();
+
+const withdrawalPageCursor = z
+  .string()
+  .max(160)
+  .refine((value) => {
+    const [time, key, extra] = value.split("~");
+    return (
+      extra === undefined &&
+      instant.safeParse(time).success &&
+      id.safeParse(key).success
+    );
+  });
+export const withdrawalPageQuerySchema = z.strictObject({
+  cursor: withdrawalPageCursor.optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+});
+export type WithdrawalPageQuery = z.infer<typeof withdrawalPageQuerySchema>;
+export const withdrawalPageResponseSchema = withdrawalListResponseSchema.extend(
+  {
+    nextCursor: withdrawalPageCursor.nullable(),
+  },
+);
+export type WithdrawalPage = z.infer<typeof withdrawalPageResponseSchema>;
 
 export const financialReauthenticationActionSchema = z.enum([
   "CONFIGURE_RECEIVING",

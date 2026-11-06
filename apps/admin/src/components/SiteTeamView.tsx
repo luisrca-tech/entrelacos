@@ -180,11 +180,11 @@ export function SiteTeamView({
           id="site-team-members-heading"
           className={`${displayHeading} m-0 border-b border-admin-line p-5 text-xl`}
         >
-          Assessores com acesso
+          Pessoas com acesso
         </h2>
         {team.members.length === 0 ? (
           <p className="m-0 p-5 text-sm text-admin-muted">
-            Ainda não há assessores com acesso.
+            Ainda não há pessoas com acesso.
           </p>
         ) : (
           <ul className="m-0 grid min-w-0 list-none divide-y divide-admin-line p-0">
@@ -214,7 +214,7 @@ export function SiteTeamView({
                       )}
                     </p>
                   </div>
-                  {active && (
+                  {active && member.membershipRole === "SITE_ASSISTANT" && (
                     <Button
                       type="button"
                       size="sm"

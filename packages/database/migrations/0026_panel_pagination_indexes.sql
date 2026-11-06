@@ -1,0 +1,4 @@
+CREATE INDEX "admin_access_token_pending_order_idx" ON "admin_access_token" USING btree ("site_id","user_id","created_at" DESC NULLS LAST,"id" DESC NULLS LAST) WHERE "admin_access_token"."consumed_at" IS NULL AND "admin_access_token"."revoked_at" IS NULL;--> statement-breakpoint
+CREATE INDEX "invitation_site_name_id_idx" ON "invitation" USING btree ("site_id","normalized_name","id");--> statement-breakpoint
+CREATE INDEX "site_lifecycle_id_idx" ON "site" USING btree ("lifecycle","id");--> statement-breakpoint
+CREATE INDEX "gift_payment_received_orders_idx" ON "gift_payment_record" USING btree ("site_id","environment","order_id") WHERE "gift_payment_record"."verification_status" = 'VERIFIED' AND "gift_payment_record"."provider_status" = 'RECEIVED';

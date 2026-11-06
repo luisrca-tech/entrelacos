@@ -322,12 +322,24 @@ export const ownerSiteLifecycleResponseSchema = ownerSiteResponseSchema;
 
 export const ownerSiteListQuerySchema = strictObject({
   cursor: z.string().min(1).max(200).optional(),
+  search: z.string().trim().max(160).optional(),
+  lifecycle: siteLifecycleSchema.optional(),
   limit: z.coerce.number().int().min(1).max(100).default(50),
 });
 
+const totalCountSchema = z.number().int().nonnegative();
+export const ownerSiteListItemSchema = siteRecordSchema.safeExtend({
+  coupleAccess: strictObject({
+    people: totalCountSchema,
+    active: z.boolean(),
+    pending: z.boolean(),
+  }),
+});
+export type OwnerSiteListItem = z.infer<typeof ownerSiteListItemSchema>;
 export const ownerSiteListResponseSchema = strictObject({
-  sites: z.array(siteRecordSchema),
+  sites: z.array(ownerSiteListItemSchema),
   nextCursor: z.string().min(1).max(200).nullable(),
+  totals: z.record(siteLifecycleSchema, totalCountSchema),
 });
 
 export const siteScopedRecordSchema = strictObject({
@@ -403,6 +415,12 @@ export const adminSummarySchema = strictObject({
   email: emailSchema,
   role: z.literal("SITE_ADMIN"),
   state: accountStateSchema,
+  pendingAccess: strictObject({
+    purpose: adminAccessPurposeSchema,
+    expiresAt: instantSchema,
+  })
+    .nullable()
+    .default(null),
 });
 
 export const adminListResponseSchema = strictObject({
@@ -652,6 +670,37 @@ export const invitationResponseSchema = strictObject({
 export const invitationListResponseSchema = strictObject({
   invitations: z.array(invitationRecordSchema),
 });
+
+export const invitationGroupStatusSchema = z.enum([
+  ...rsvpStateSchema.options,
+  "PARTIAL",
+]);
+export type InvitationGroupStatus = z.infer<typeof invitationGroupStatusSchema>;
+
+export function invitationGroupStatus(
+  guests: readonly { rsvpState: RsvpState }[],
+): InvitationGroupStatus {
+  const first = guests[0]?.rsvpState ?? "PENDING";
+  return guests.every((guest) => guest.rsvpState === first) ? first : "PARTIAL";
+}
+
+export const invitationPageQuerySchema = strictObject({
+  cursor: z.string().min(1).max(4096).optional(),
+  status: invitationGroupStatusSchema.optional(),
+  guestType: invitationGuestTypeSchema.optional(),
+  search: z.string().trim().max(160).optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+});
+export const invitationPageCursorSchema = strictObject({
+  name: z.string().min(1).max(512),
+  id: identifierSchema,
+});
+export const invitationPageResponseSchema = invitationListResponseSchema.extend(
+  {
+    nextCursor: invitationPageQuerySchema.shape.cursor.unwrap().nullable(),
+  },
+);
+export type InvitationPage = z.infer<typeof invitationPageResponseSchema>;
 
 export const invitationDeleteResponseSchema = adminMutationResponseSchema;
 

@@ -573,7 +573,7 @@ describe("site-scoped team revocation and listing", () => {
     ).rejects.toMatchObject({ code: "TEAM_INVITATION_INVALID" });
   });
 
-  it("lists public-safe team DTOs without token hashes or administrators", async () => {
+  it("lists public-safe team DTOs including active administrators and excluding token hashes", async () => {
     const { db, queries } = fixture({
       membership: {
         userId: existingUser.id,
@@ -604,7 +604,8 @@ describe("site-scoped team revocation and listing", () => {
     const memberQuery = queries.find((query) =>
       /FROM site_membership/i.test(query.sql),
     );
-    expect(memberQuery?.sql).toMatch(/role = 'SITE_ASSISTANT'/i);
+    expect(memberQuery?.sql).toMatch(/sm.role = 'SITE_ADMIN'/i);
+    expect(memberQuery?.sql).toMatch(/u.state = 'ACTIVE'/i);
     expect(memberQuery?.params).toContain(siteId);
   });
 });

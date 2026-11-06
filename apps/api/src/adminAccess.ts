@@ -7,7 +7,7 @@ import {
   user,
 } from "@entrelacos/database/schema";
 import { hashPassword } from "better-auth/crypto";
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, gt, isNull, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import {
   withCredentialAdvisoryLock,
@@ -75,6 +75,7 @@ export interface SiteAdminSummary {
   email: string;
   role: "SITE_ADMIN";
   state: "PENDING" | "ACTIVE" | "DISABLED";
+  pendingAccess: { purpose: AdminAccessPurpose; expiresAt: string } | null;
 }
 
 export class AdminAccessRejectedError extends Error {
@@ -247,6 +248,7 @@ export async function createSiteAdmin(
       email,
       role: "SITE_ADMIN",
       state: "PENDING",
+      pendingAccess: null,
     };
   });
 }
@@ -254,8 +256,28 @@ export async function createSiteAdmin(
 export async function listSiteAdmins(
   db: AdminAccessDatabase,
   siteId: string,
+  nowValue?: Date,
 ): Promise<SiteAdminSummary[]> {
   const validSiteId = validateUserId(siteId);
+  const now = currentTime(nowValue);
+  const pending = db
+    .select({
+      purpose: adminAccessToken.purpose,
+      expiresAt: adminAccessToken.expiresAt,
+    })
+    .from(adminAccessToken)
+    .where(
+      and(
+        eq(adminAccessToken.userId, user.id),
+        eq(adminAccessToken.siteId, siteMembership.siteId),
+        isNull(adminAccessToken.revokedAt),
+        isNull(adminAccessToken.consumedAt),
+        gt(adminAccessToken.expiresAt, now),
+      ),
+    )
+    .orderBy(desc(adminAccessToken.createdAt), desc(adminAccessToken.id))
+    .limit(1)
+    .as("pending_access");
   const rows = await db
     .select({
       userId: user.id,
@@ -264,9 +286,12 @@ export async function listSiteAdmins(
       email: user.email,
       role: user.role,
       state: user.state,
+      pendingPurpose: pending.purpose,
+      pendingExpiresAt: pending.expiresAt,
     })
     .from(siteMembership)
     .innerJoin(user, eq(siteMembership.userId, user.id))
+    .leftJoinLateral(pending, sql`true`)
     .where(
       and(
         eq(siteMembership.siteId, validSiteId),
@@ -275,7 +300,14 @@ export async function listSiteAdmins(
         isNull(siteMembership.revokedAt),
       ),
     );
-  return rows.map((row) => ({ ...row, role: "SITE_ADMIN" as const }));
+  return rows.map(({ pendingPurpose, pendingExpiresAt, ...row }) => ({
+    ...row,
+    role: "SITE_ADMIN" as const,
+    pendingAccess:
+      pendingPurpose && pendingExpiresAt
+        ? { purpose: pendingPurpose, expiresAt: pendingExpiresAt.toISOString() }
+        : null,
+  }));
 }
 
 export async function issueAdminAccess(
