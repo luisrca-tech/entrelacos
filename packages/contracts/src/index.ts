@@ -4,6 +4,7 @@ import { siteAccessSchema } from "./internalGifts";
 
 export * from "./adminOrigin";
 export * from "./giftCommission";
+export * from "./giftImageAlt";
 export * from "./internalGifts";
 
 const strictObject = <T extends z.ZodRawShape>(shape: T) =>
