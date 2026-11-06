@@ -45,3 +45,9 @@ export function formatBrazilianLongDate(
   const text = `${date.getDate()} de ${months[date.getMonth()]} de ${date.getFullYear()}`;
   return weekday ? `${weekdays[date.getDay()]}, ${text}` : text;
 }
+
+/** Weekday name, e.g. "Domingo". */
+export function formatBrazilianWeekday(value: string): string {
+  const date = parseDateOnly(value);
+  return date ? weekdays[date.getDay()] : value;
+}

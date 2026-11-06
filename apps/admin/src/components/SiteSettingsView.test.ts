@@ -174,7 +174,11 @@ describe("owner settings overview", () => {
         ?.click(),
     );
     await click("Datas e vigência");
-    await click("Editar datas");
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>('[aria-label="Editar vigência"]')
+        ?.click(),
+    );
     await click("Publicação");
     await click("Registrar publicação");
     expect(props.onEditRecord).toHaveBeenNthCalledWith(1, "profile");
@@ -244,14 +248,126 @@ describe("owner settings overview", () => {
   });
 });
 
+describe("owner settings status strip and dates", () => {
+  it("leads the strip with the next lifecycle step and keeps other actions in the menu", async () => {
+    props.site.lifecycle = "DRAFT";
+    props.labels = { ...props.labels, DRAFT: "Rascunho" };
+    await render();
+    const strip = container.querySelector(
+      '[aria-label="Situação do casamento"]',
+    );
+    expect(strip?.textContent).toContain("Rascunho");
+    expect(strip?.textContent).toContain("Casamento em rascunho");
+    const menu = container.querySelector(
+      '[aria-label="Ações da situação do casamento"]',
+    );
+    expect(menu?.textContent).not.toContain("Enviar para revisão");
+    await click("Enviar para revisão");
+    expect(props.onLifecycleAction).toHaveBeenCalledExactlyOnceWith(
+      "review/start",
+    );
+  });
+
+  it("describes the active term in the strip", async () => {
+    await render();
+    const strip = container.querySelector(
+      '[aria-label="Situação do casamento"]',
+    );
+    expect(strip?.textContent).toContain("Casamento ativo");
+    expect(strip?.textContent).toContain(
+      "Vigência de 12/06/2026 a 12/06/2027. A publicação é conferida separadamente.",
+    );
+  });
+
+  it("shows the wedding weekday, countdown and recorded approval", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2027-06-02T12:00:00.000Z"));
+    try {
+      props.site = {
+        ...props.site,
+        reviewApprovedAt: "2026-06-12T15:00:00.000Z",
+      };
+      await render();
+      await click("Datas e vigência");
+      const text = container.textContent ?? "";
+      expect(text).toContain("Data do evento e período contratado.");
+      expect(text).toContain("Sábado · faltam 10 dias");
+      expect(text).toContain("Aprovado em 12/06/2026");
+      expect(text).toContain("Período contratado: 12/06/2026 a 12/06/2027.");
+      props.site = { ...props.site, reviewApprovedAt: null };
+      await render();
+      expect(container.textContent).toContain("Ainda não aprovado");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe("owner couple access rows", () => {
+  it("identifies each person with initials and keeps the status in its own column", async () => {
+    props.admins = [
+      {
+        userId: "person-one",
+        siteId: "site-one",
+        role: "SITE_ADMIN",
+        name: "Rita Souza",
+        email: "rita@example.test",
+        state: "ACTIVE",
+        pendingAccess: null,
+      },
+    ];
+    await render();
+    await click("Acessos do casal");
+    const row = container.querySelector('[data-slot="couple-access-row"]');
+    expect(row?.querySelector('[data-slot="person-avatar"]')?.textContent).toBe(
+      "RS",
+    );
+    expect(row?.textContent).toContain("rita@example.test");
+    expect(
+      row?.querySelector(
+        '[data-slot="access-status"] [data-slot="status-badge"]',
+      )?.textContent,
+    ).toBe("Acesso ativado");
+    expect(
+      row?.querySelector('[data-slot="access-actions"]')?.textContent,
+    ).toContain("Gerar link de recuperação");
+    expect(container.textContent).toContain("1 pessoa");
+  });
+});
+
 describe("owner publication and access link lifetime", () => {
   it("addresses the owner who records the manual publication", async () => {
     await render();
     await click("Publicação");
+    const text = container.textContent ?? "";
+    expect(text).toContain("A equipe Entrelaços publica o site");
+    expect(text).toContain("Confira o site no ar");
+    expect(text).toContain("Esta ação não altera a hospedagem.");
+    expect(text).not.toMatch(/Vocês abrem|Vocês conferem|Registrem/);
+  });
+
+  it("lists every publication state as a badge and separates it from the wedding lifecycle", async () => {
+    props.labels = {
+      ...props.labels,
+      UNPUBLISHED: "Não publicado",
+      PLACEHOLDER: "Página neutra",
+    };
+    await render();
+    await click("Publicação");
+    const badges = Array.from(
+      container.querySelectorAll(
+        'section:not([aria-label]) [data-slot="status-badge"]',
+      ),
+    ).map((badge) => badge.textContent);
+    expect(badges).toEqual([
+      "Publicado",
+      "Não publicado",
+      "Publicado",
+      "Página neutra",
+    ]);
     expect(container.textContent).toContain(
-      "Depois do deploy manual, confira o site no ar e registre a publicação aqui. Esta ação não altera a hospedagem.",
+      "é independente da publicação. Reativar ou inativar o casamento não publica nem tira o site do ar.",
     );
-    expect(container.textContent).not.toMatch(/Vocês abrem|Registrem aqui/);
   });
 
   it("does not bring back a link generated before the access tab was reopened", async () => {

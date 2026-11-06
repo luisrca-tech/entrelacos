@@ -465,3 +465,45 @@ it("points the empty state to the create action label", async () => {
   await mount();
   expect(container.textContent).toContain("Comece em Criar casamento.");
 });
+
+it("shows lifecycle and stored receiving account state as badges with an outline open action", async () => {
+  await verify();
+  request.mockResolvedValueOnce({
+    sites: [
+      { ...sites[0], receivingAccount: "CREATED" },
+      { ...sites[1], receivingAccount: "MISSING" },
+      {
+        ...sites[1],
+        id: "site-3",
+        displayName: "Caio e Lia",
+        receivingAccount: null,
+      },
+    ],
+    nextCursor: "page-2",
+    totals: { ACTIVE: 1, DRAFT: 5, IN_REVIEW: 0, INACTIVE: 0 },
+  });
+  await mount();
+  const table = container.querySelector("table");
+  if (!table) throw new Error("Expected weddings table");
+  const headers = [...table.querySelectorAll("th")].map(
+    (cell) => cell.textContent,
+  );
+  expect(headers).toContain("Recebimentos");
+  const rows = [...table.querySelectorAll("tbody tr")];
+  const cell = (row: number, column: number) =>
+    rows[row]?.querySelectorAll("td")[column];
+  expect(
+    cell(0, 2)?.querySelector('[data-slot="status-badge"]')?.textContent,
+  ).toBe("Ativo");
+  expect(cell(0, 3)?.textContent).toBe("Conta criada");
+  expect(cell(1, 3)?.textContent).toBe("Sem conta");
+  expect(cell(2, 3)?.textContent).toBe("Desativado");
+  const open = cell(0, 5)?.querySelector("a");
+  expect(open?.textContent).toBe("Abrir");
+  expect(open?.getAttribute("data-variant")).toBe("outline");
+  const footer = container.querySelector('[data-slot="owner-sites-footer"]');
+  expect(footer?.textContent).toContain(
+    "3 de 6 casamentos carregados · Carregue mais para ampliar a busca.",
+  );
+  expect(footer?.textContent).toContain("Carregar mais");
+});

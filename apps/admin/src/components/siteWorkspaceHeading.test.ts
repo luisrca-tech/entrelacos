@@ -82,21 +82,37 @@ describe("site workspace heading", () => {
       ).toBe(false);
   });
 
-  it("always shows lifecycle status to owners", () => {
-    expect(
-      getWorkspaceHeading({
-        area: "settings",
-        owner: true,
-        lifecycle: "DRAFT",
-      }).showLifecycleBadge,
-    ).toBe(true);
+  it("shows lifecycle status to owners outside settings, where the status strip already shows it", () => {
+    for (const lifecycle of ["DRAFT", "ACTIVE"] as const) {
+      expect(
+        getWorkspaceHeading({ area: "invitations", owner: true, lifecycle })
+          .showLifecycleBadge,
+      ).toBe(true);
+    }
+    for (const lifecycle of ["DRAFT", "ACTIVE", "INACTIVE"] as const)
+      expect(
+        getWorkspaceHeading({ area: "settings", owner: true, lifecycle })
+          .showLifecycleBadge,
+      ).toBe(false);
+  });
+
+  it("describes owner settings with the real couple names", () => {
     expect(
       getWorkspaceHeading({
         area: "settings",
         owner: true,
         lifecycle: "ACTIVE",
-      }).showLifecycleBadge,
-    ).toBe(true);
+        coupleNames: ["Ana", "Pedro"],
+      }).subtitle,
+    ).toBe("Cadastro, datas e publicação do casamento de Ana & Pedro.");
+    expect(
+      getWorkspaceHeading({
+        area: "invitations",
+        owner: true,
+        lifecycle: "ACTIVE",
+        coupleNames: ["Ana", "Pedro"],
+      }).subtitle,
+    ).toBeNull();
   });
 
   it("shows lifecycle status to site admins only when inactive", () => {
@@ -157,7 +173,8 @@ describe("site workspace markup", () => {
       resolve(import.meta.dirname, "SiteSettingsView.tsx"),
       "utf8",
     );
-    expect(settingsSource).toContain("Situação do casamento");
+    expect(settingsSource).toContain('aria-label="Situação do casamento"');
+    expect(settingsSource).toContain("{labels[site.lifecycle]}");
     expect(settingsSource).toContain('tab === "dates"');
     expect(settingsSource).toContain('tab === "publication"');
     expect(settingsSource).toContain("{labels[site.publicationState]}");

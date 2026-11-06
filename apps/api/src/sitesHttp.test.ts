@@ -148,6 +148,7 @@ describe("site HTTP boundary", () => {
         {
           ...fixedSite,
           coupleAccess: { people: 0, active: false, pending: false },
+          receivingAccount: null,
         },
       ],
       nextCursor: null,
@@ -161,7 +162,46 @@ describe("site HTTP boundary", () => {
 
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual(payload);
-    expect(mocks.listSites).toHaveBeenCalledWith(expect.anything(), {});
+    expect(mocks.listSites).toHaveBeenCalledWith(
+      expect.anything(),
+      {},
+      new Date("2028-02-29T12:00:00.000Z"),
+      undefined,
+    );
+  });
+
+  it("summarizes receiving accounts only for the configured provider environment", async () => {
+    mocks.listSites.mockResolvedValue({
+      sites: [
+        {
+          ...fixedSite,
+          coupleAccess: { people: 0, active: false, pending: false },
+          receivingAccount: "CREATED",
+        },
+      ],
+      nextCursor: null,
+      totals: { DRAFT: 1, IN_REVIEW: 0, ACTIVE: 0, INACTIVE: 0 },
+    });
+    const configured = createSitesHttpRouter({
+      auth: {} as never,
+      db: {} as never,
+      adminOrigin,
+      now: () => new Date("2028-02-29T12:00:00.000Z"),
+      receiving: { mode: "sandbox" },
+    });
+
+    const response = await configured.request(
+      request("/v1/owner/sites?search=ana", { method: "GET" }),
+    );
+
+    expect(response.status).toBe(200);
+    expect((await response.json()).sites[0].receivingAccount).toBe("CREATED");
+    expect(mocks.listSites).toHaveBeenCalledWith(
+      expect.anything(),
+      { search: "ana" },
+      new Date("2028-02-29T12:00:00.000Z"),
+      "sandbox",
+    );
   });
 
   it("returns exact tenant-scoped envelope without internal fields", async () => {

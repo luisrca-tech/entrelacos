@@ -5,7 +5,6 @@ import type {
   siteDomainRecordSchema,
 } from "@entrelacos/contracts";
 import {
-  Badge,
   Button,
   Input,
   Table,
@@ -19,16 +18,20 @@ import {
 import { ChevronDown } from "lucide-react";
 import { type FormEvent, useEffect, useState } from "react";
 import { adminStyles } from "../lib/adminStyles";
-import { formatBrazilianDate } from "./brazilianDate";
+import { getInitials } from "./adminNavigation";
+import { formatBrazilianDate, formatBrazilianWeekday } from "./brazilianDate";
 import { GeneratedAccessLink } from "./GeneratedAccessLink";
 import { OverflowMenu } from "./OverflowMenu";
 import {
   validatePublicAddress,
   validateTrustedOrigins,
 } from "./ownerSiteAddresses";
+import { ToneBadge } from "./receivingUi";
 import { StatusSignal } from "./StatusSignal";
+import { daysUntilWedding } from "./siteHomePlan";
 import {
   type LifecycleAction,
+  lifecycleTone,
   siteLifecycleMenuActions,
 } from "./siteLifecyclePresentation";
 import type { SiteRecordMenuAction } from "./siteRecordMenu";
@@ -46,7 +49,9 @@ type SettingsSite = Pick<
   | "termStartsOn"
   | "termEndsOn"
 > &
-  Partial<Pick<SiteRecord, "repositorySlug" | "trustedOrigins">>;
+  Partial<
+    Pick<SiteRecord, "repositorySlug" | "trustedOrigins" | "reviewApprovedAt">
+  >;
 export type GeneratedCoupleAccess = { userId: string; url: string };
 
 const tabs = [
@@ -56,9 +61,54 @@ const tabs = [
   ["address", "Endereço do site"],
   ["access", "Acessos do casal"],
 ] as const;
-const primary = "bg-admin-terracotta text-white hover:bg-admin-terracotta-deep";
-const card = `${adminStyles.surface} grid min-w-0 gap-3 p-5`;
-const title = "m-0 font-admin-display text-2xl font-normal";
+const primary =
+  "min-h-12 rounded-[10px] bg-admin-terracotta px-6 text-[15px] font-bold text-white hover:bg-admin-terracotta-deep";
+const outline =
+  "min-h-12 rounded-[10px] border-admin-line-strong px-6 text-[15px] font-semibold text-admin-graphite";
+const textLink =
+  "h-auto p-0 text-[15px] font-semibold text-admin-terracotta-deep underline underline-offset-4";
+const card = `${adminStyles.surface} grid min-w-0 gap-3 px-[22px] py-5`;
+const title =
+  "m-0 font-admin-display text-[22px] font-normal text-admin-graphite";
+// The panel body styles every h3 as a large display heading; card headings
+// override its size, and plain headings also return to body type.
+const cardTitle = "m-0 font-admin-display text-xl! font-normal text-admin-ink";
+const plainHeading =
+  "m-0 font-sans! text-[15px]! font-semibold! leading-normal! tracking-normal! text-admin-graphite";
+const sectionIntro = "m-0 text-sm text-admin-muted";
+const publicationTone: Record<string, "success" | "pending" | "neutral"> = {
+  PUBLISHED: "success",
+  PLACEHOLDER: "pending",
+  UNPUBLISHED: "neutral",
+};
+const publicationStates = [
+  ["UNPUBLISHED", "O site ainda não foi conferido no ar."],
+  ["PUBLISHED", "O site está no ar e foi conferido."],
+  [
+    "PLACEHOLDER",
+    "O endereço mostra uma página neutra, por exemplo quando o casamento está inativo.",
+  ],
+] as const;
+const publicationSteps = [
+  [
+    "A equipe Entrelaços publica o site",
+    "O deploy é feito manualmente pela equipe. Nada muda na hospedagem a partir deste painel.",
+  ],
+  [
+    "Confira o site no ar",
+    "Abra o endereço público e confira se as páginas, os presentes e a confirmação estão certos.",
+  ],
+  [
+    "Registre a publicação",
+    "Clique em “Registrar publicação” e escolha a situação. Esta ação não altera a hospedagem.",
+  ],
+] as const;
+const lifecycleHeadline: Record<SiteRecord["lifecycle"], string> = {
+  DRAFT: "Casamento em rascunho",
+  IN_REVIEW: "Casamento em revisão",
+  ACTIVE: "Casamento ativo",
+  INACTIVE: "Casamento inativo",
+};
 
 export function SiteSettingsView({
   site,
@@ -124,6 +174,16 @@ export function SiteSettingsView({
     setError(parsed.error ?? "");
     if (parsed.value) void onSaveAddress(parsed.value);
   }
+  const days = daysUntilWedding(site.eventDate, new Date());
+  const weekday = formatBrazilianWeekday(site.eventDate);
+  const eventHint =
+    days === 0
+      ? `${weekday} · é hoje.`
+      : days === 1
+        ? `${weekday} · falta 1 dia.`
+        : days > 1
+          ? `${weekday} · faltam ${days} dias.`
+          : `${weekday}.`;
   const data = [
     {
       label: "Nome do casamento",
@@ -141,7 +201,7 @@ export function SiteSettingsView({
       label: "Data do casamento",
       value: formatBrazilianDate(site.eventDate),
       action: "dates",
-      hint: "Data do evento.",
+      hint: eventHint,
     },
     {
       label: "Endereço público",
@@ -155,47 +215,78 @@ export function SiteSettingsView({
   const term =
     site.termStartsOn && site.termEndsOn
       ? `${formatBrazilianDate(site.termStartsOn)} a ${formatBrazilianDate(site.termEndsOn)}`
-      : "Vigência ainda não definida";
+      : null;
+  const lifecycleActions = siteLifecycleMenuActions(
+    site.lifecycle,
+    Boolean(site.termStartsOn || site.termEndsOn),
+  );
+  // The next review step leads the strip; the rest stays in the menu.
+  const nextLifecycleAction = lifecycleActions.find(
+    (item) => item.id === "review/start" || item.id === "review/approve",
+  );
+  const lifecycleDescription =
+    site.lifecycle === "DRAFT"
+      ? "Confira o cadastro antes de enviar o casamento para revisão."
+      : site.lifecycle === "IN_REVIEW"
+        ? "Pronto para conferência e aprovação."
+        : site.lifecycle === "INACTIVE"
+          ? "Os dados estão preservados. A publicação é conferida separadamente."
+          : term
+            ? `Vigência de ${term}. A publicação é conferida separadamente.`
+            : "Vigência ainda não definida. Aprove para iniciar a vigência.";
+  const approvedOn = site.reviewApprovedAt
+    ? new Date(site.reviewApprovedAt).toLocaleDateString("pt-BR", {
+        timeZone: "America/Sao_Paulo",
+      })
+    : null;
 
   return (
     <>
-      <div
-        className={`${adminStyles.surface} flex flex-wrap items-center justify-between gap-3 px-5 py-3.5`}
+      <section
+        aria-label="Situação do casamento"
+        className={`${adminStyles.surface} flex flex-wrap items-center gap-x-4 gap-y-3 rounded-[14px] py-3 pr-3.5 pl-[18px]`}
       >
-        <div className="flex flex-wrap items-center gap-2.5 text-sm">
-          <span className="font-semibold text-admin-muted">
-            Situação do casamento
+        <div className="flex shrink-0 items-center gap-2.5">
+          <span className="text-[13px] font-semibold text-admin-muted">
+            Situação
           </span>
-          <Badge
-            variant="secondary"
-            className={
-              site.lifecycle === "ACTIVE"
-                ? "bg-admin-success-wash text-admin-success-ink"
-                : "bg-admin-beige"
-            }
-          >
+          <ToneBadge tone={lifecycleTone[site.lifecycle]}>
             {labels[site.lifecycle]}
-          </Badge>
-          <span className="text-admin-muted">
-            {site.lifecycle === "DRAFT"
-              ? "Confira o cadastro antes de enviar para revisão."
-              : site.lifecycle === "IN_REVIEW"
-                ? "Pronto para conferência e aprovação."
-                : site.lifecycle === "INACTIVE"
-                  ? "Casamento inativo. Os dados estão preservados."
-                  : `Casamento ativo · ${term}`}
+          </ToneBadge>
+        </div>
+        <span
+          aria-hidden="true"
+          className="hidden h-[22px] w-px bg-admin-line sm:block"
+        />
+        <div className="grid min-w-0 flex-[1_1_16rem] gap-0.5">
+          <strong className="text-sm text-admin-graphite">
+            {lifecycleHeadline[site.lifecycle]}
+          </strong>
+          <span className="text-[13.5px] text-admin-muted">
+            {lifecycleDescription}
           </span>
         </div>
-        <OverflowMenu
-          label="Ações da situação do casamento"
-          disabled={pending}
-          items={siteLifecycleMenuActions(
-            site.lifecycle,
-            Boolean(site.termStartsOn || site.termEndsOn),
+        <div className="ml-auto flex shrink-0 items-center gap-2">
+          {nextLifecycleAction && (
+            <Button
+              type="button"
+              className={primary}
+              disabled={pending}
+              onClick={() => onLifecycleAction(nextLifecycleAction.id)}
+            >
+              {nextLifecycleAction.label}
+            </Button>
           )}
-          onSelect={(action) => onLifecycleAction(action as LifecycleAction)}
-        />
-      </div>
+          <OverflowMenu
+            label="Ações da situação do casamento"
+            disabled={pending}
+            items={lifecycleActions.filter(
+              (item) => item !== nextLifecycleAction,
+            )}
+            onSelect={(action) => onLifecycleAction(action as LifecycleAction)}
+          />
+        </div>
+      </section>
       <fieldset
         aria-label="Seções das configurações"
         className="m-0 flex min-w-0 w-fit max-w-full flex-wrap gap-1 rounded-xl border border-admin-line bg-admin-surface p-1"
@@ -208,6 +299,7 @@ export function SiteSettingsView({
             variant={tab === key ? "default" : "ghost"}
             aria-pressed={tab === key}
             disabled={pending}
+            className={`h-[38px] px-4 text-sm font-semibold ${tab === key ? "" : "text-admin-muted"}`}
             onClick={() => selectTab(key)}
           >
             {label}
@@ -215,20 +307,24 @@ export function SiteSettingsView({
         ))}
       </fieldset>
       {tab === "data" && (
-        <section className="grid gap-3">
-          <h2 className={title}>Dados do casamento</h2>
-          <p className="m-0 text-sm text-admin-muted">
-            Identificação e endereço público do casamento.
-          </p>
+        <section className="grid gap-3.5">
+          <div className="grid gap-1">
+            <h2 className={title}>Dados do casamento</h2>
+            <p className={sectionIntro}>
+              Identificação e endereço público. Edite um item por vez.
+            </p>
+          </div>
           <div className="grid gap-3 md:grid-cols-2">
             {data.map((item) => (
               <div key={item.label} className={card}>
-                <div className="flex items-center justify-between gap-2 text-sm">
-                  <span className="text-admin-muted">{item.label}</span>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[13px] font-medium text-admin-body">
+                    {item.label}
+                  </span>
                   <Button
                     type="button"
                     variant="link"
-                    className="h-auto p-0 text-admin-terracotta-deep"
+                    className={textLink}
                     aria-label={`Editar ${item.label.toLowerCase()}`}
                     disabled={pending}
                     onClick={() =>
@@ -240,60 +336,113 @@ export function SiteSettingsView({
                     Editar
                   </Button>
                 </div>
-                <strong className="break-words">{item.value}</strong>
-                <p className="m-0 text-xs text-admin-muted">{item.hint}</p>
+                <strong className="break-words text-[17px] text-admin-ink">
+                  {item.value}
+                </strong>
+                <p className="m-0 break-words text-[13px] text-admin-muted">
+                  {item.hint}
+                </p>
               </div>
             ))}
           </div>
         </section>
       )}
       {tab === "dates" && (
-        <section className="grid gap-3">
-          <h2 className={title}>Datas e vigência</h2>
+        <section className="grid gap-3.5">
+          <div className="grid gap-1">
+            <h2 className={title}>Datas e vigência</h2>
+            <p className={sectionIntro}>Data do evento e período contratado.</p>
+          </div>
+          <div className="grid gap-3 md:grid-cols-2">
+            <div className={card}>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[13px] font-medium text-admin-body">
+                  Data do casamento
+                </span>
+                <Button
+                  type="button"
+                  variant="link"
+                  className={textLink}
+                  aria-label="Editar data do casamento"
+                  disabled={pending}
+                  onClick={() => onEditRecord("dates")}
+                >
+                  Editar
+                </Button>
+              </div>
+              <strong className="text-[17px] text-admin-ink">
+                {formatBrazilianDate(site.eventDate)}
+              </strong>
+              <p className="m-0 text-[13px] text-admin-muted">{eventHint}</p>
+            </div>
+            <div className={card}>
+              <span className="text-[13px] font-medium text-admin-body">
+                Aprovação
+              </span>
+              <strong className="text-[17px] text-admin-ink">
+                {approvedOn
+                  ? `Aprovado em ${approvedOn}`
+                  : "Ainda não aprovado"}
+              </strong>
+              <p className="m-0 text-[13px] text-admin-muted">
+                {approvedOn
+                  ? "Registrada na aprovação da revisão. Não é editável."
+                  : "A vigência começa quando a revisão é aprovada."}
+              </p>
+            </div>
+          </div>
           <div className={card}>
-            <dl className="m-0 grid gap-4 sm:grid-cols-2">
-              <div>
-                <dt className="text-sm text-admin-muted">Data do casamento</dt>
-                <dd className="m-0 font-semibold">
-                  {formatBrazilianDate(site.eventDate)}
-                </dd>
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div className="grid gap-0.5">
+                <h3 className={plainHeading}>Vigência</h3>
+                <p className="m-0 text-[13px] text-admin-muted">
+                  {term
+                    ? `Período contratado: ${term}.`
+                    : "Vigência ainda não definida."}
+                </p>
               </div>
-              <div>
-                <dt className="text-sm text-admin-muted">Vigência</dt>
-                <dd className="m-0 font-semibold">{term}</dd>
-              </div>
-            </dl>
-            <Button
-              type="button"
-              variant="outline"
-              className="w-fit"
-              disabled={pending}
-              onClick={() => onEditRecord("dates")}
-            >
-              Editar datas
-            </Button>
+              <Button
+                type="button"
+                variant="link"
+                className={textLink}
+                aria-label="Editar vigência"
+                disabled={pending}
+                onClick={() => onEditRecord("dates")}
+              >
+                Editar
+              </Button>
+            </div>
+            <p className="m-0 rounded-[10px] bg-admin-beige px-3 py-2.5 text-[13px] leading-normal text-admin-body">
+              A aprovação inicia um ano de vigência. O vencimento não inativa o
+              casamento automaticamente. O fim precisa ser igual ou posterior ao
+              início.
+            </p>
           </div>
         </section>
       )}
       {tab === "publication" && (
-        <section className="grid gap-3">
-          <h2 className={title}>Publicação do site</h2>
-          <p className="m-0 text-sm text-admin-muted">
-            Última situação registrada para o site. A publicação é feita pela
-            equipe Entrelaços.
-          </p>
-          <div className={card}>
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div className="grid gap-2">
+        <section className="grid gap-3.5">
+          <div className="grid gap-1">
+            <h2 className={title}>Publicação do site</h2>
+            <p className={sectionIntro}>
+              Última situação registrada para o site. A publicação é feita pela
+              equipe Entrelaços.
+            </p>
+          </div>
+          <div className={`${card} gap-3.5`}>
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div className="grid min-w-0 flex-[1_1_18rem] gap-1.5">
                 <div className="flex flex-wrap items-center gap-2.5">
-                  <h3 className="m-0 text-xl">Publicação registrada</h3>
-                  <Badge variant="secondary">
+                  <h3 className={cardTitle}>Publicação registrada</h3>
+                  <ToneBadge
+                    tone={publicationTone[site.publicationState] ?? "neutral"}
+                  >
                     {labels[site.publicationState]}
-                  </Badge>
+                  </ToneBadge>
                 </div>
-                <p className="m-0 text-sm text-admin-muted">
-                  Depois do deploy manual, confira o site no ar e registre a
-                  publicação aqui. Esta ação não altera a hospedagem.
+                <p className="m-0 text-sm leading-normal text-admin-muted">
+                  Atualize este registro após conferir o site no ar. A
+                  publicação é realizada separadamente.
                 </p>
               </div>
               <Button
@@ -305,57 +454,89 @@ export function SiteSettingsView({
                 Registrar publicação
               </Button>
             </div>
-            <ol className="m-0 grid list-decimal gap-2 border-t border-admin-line pl-5 pt-4 text-sm text-admin-body">
-              <li>Faça o deploy manual do site.</li>
-              <li>Abra o endereço público e confira o site no ar.</li>
-              <li>Registre aqui a situação encontrada.</li>
-            </ol>
+            <div className="grid gap-3 border-t border-admin-line pt-3.5">
+              <p className="m-0 text-[11px] font-bold uppercase tracking-[0.12em] text-admin-muted">
+                Como funciona
+              </p>
+              <ol className="m-0 grid list-none gap-3 p-0">
+                {publicationSteps.map(([step, detail], index) => (
+                  <li key={step} className="flex items-start gap-3">
+                    <span
+                      aria-hidden="true"
+                      className="flex size-[26px] shrink-0 items-center justify-center rounded-full bg-admin-terracotta-wash text-xs font-bold text-admin-terracotta-ink"
+                    >
+                      {index + 1}
+                    </span>
+                    <div className="grid min-w-0 gap-0.5">
+                      <strong className="text-sm font-semibold text-admin-graphite">
+                        {step}
+                      </strong>
+                      <span className="text-[13px] leading-normal text-admin-muted">
+                        {detail}
+                      </span>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            </div>
           </div>
-          <div className={card}>
-            <p className="m-0 font-semibold">
-              Situações que podem ser registradas
-            </p>
-            <dl className="m-0 grid gap-2 text-sm">
-              <div>
-                <dt className="font-semibold">{labels.UNPUBLISHED}</dt>
-                <dd className="m-0 text-admin-muted">
-                  O site ainda não foi conferido no ar.
-                </dd>
-              </div>
-              <div>
-                <dt className="font-semibold">{labels.PUBLISHED}</dt>
-                <dd className="m-0 text-admin-muted">
-                  O site está no ar e foi conferido.
-                </dd>
-              </div>
-              <div>
-                <dt className="font-semibold">{labels.PLACEHOLDER}</dt>
-                <dd className="m-0 text-admin-muted">
-                  O endereço mostra uma página neutra.
-                </dd>
-              </div>
+          <div className={`${card} gap-3.5`}>
+            <div className="grid gap-1">
+              <h3 className={plainHeading}>
+                Situações que podem ser registradas
+              </h3>
+              <p className="m-0 text-[13px] text-admin-muted">
+                Escolha uma delas em “Registrar publicação”.
+              </p>
+            </div>
+            <dl className="m-0 grid gap-2.5">
+              {publicationStates.map(([state, description]) => (
+                <div
+                  key={state}
+                  className="grid items-center gap-x-3.5 gap-y-1 sm:grid-cols-[130px_minmax(0,1fr)]"
+                >
+                  <dt>
+                    <ToneBadge tone={publicationTone[state]}>
+                      {labels[state] ?? state}
+                    </ToneBadge>
+                  </dt>
+                  <dd className="m-0 text-[13.5px] text-admin-body">
+                    {description}
+                  </dd>
+                </div>
+              ))}
             </dl>
+            <p className="m-0 rounded-[10px] bg-admin-beige px-3.5 py-2.5 text-[13px] leading-normal text-admin-body">
+              A situação do casamento (Rascunho, Em revisão, Ativo ou Inativo)
+              aparece na faixa acima e é independente da publicação. Reativar ou
+              inativar o casamento não publica nem tira o site do ar.
+            </p>
           </div>
         </section>
       )}
       {tab === "address" && (
-        <section className="grid gap-3">
-          <h2 className={title}>Endereço do site</h2>
+        <section className="grid gap-3.5">
+          <div className="grid gap-1">
+            <h2 className={title}>Endereço do site</h2>
+            <p className={sectionIntro}>
+              Identificador do site, endereço público e endereços autorizados.
+            </p>
+          </div>
           <div className={card}>
             <div className="flex flex-wrap items-center gap-2">
-              <strong>Identificador do site</strong>
-              <Badge variant="secondary">Somente leitura</Badge>
+              <h3 className={plainHeading}>Identificador do site</h3>
+              <ToneBadge tone="neutral">Somente leitura</ToneBadge>
             </div>
             <label
               htmlFor="site-repository-slug"
-              className="grid gap-1.5 text-sm"
+              className="grid gap-1.5 text-[13px] font-semibold text-admin-graphite"
             >
               Identificador
               <Input
                 id="site-repository-slug"
                 readOnly
                 value={site.repositorySlug ?? ""}
-                className="bg-admin-beige"
+                className="h-11 rounded-[10px] border-admin-line-strong bg-admin-beige"
               />
             </label>
             <p className="m-0 text-xs text-admin-muted">
@@ -367,23 +548,33 @@ export function SiteSettingsView({
             noValidate
             onSubmit={(event) => saveAddress(event, "publicUrl")}
           >
-            <div className="flex flex-wrap items-center gap-2">
-              <h3 className="m-0 text-xl">Endereço público</h3>
-              <StatusSignal tone={site.publicUrl ? "success" : "neutral"}>
-                {site.publicUrl ? "Site vinculado" : "Site não vinculado"}
-              </StatusSignal>
+            <div className="grid gap-1">
+              <div className="flex flex-wrap items-center gap-2.5">
+                <h3 className={cardTitle}>Endereço público</h3>
+                <StatusSignal tone={site.publicUrl ? "success" : "neutral"}>
+                  {site.publicUrl ? "Site vinculado" : "Site não vinculado"}
+                </StatusSignal>
+              </div>
+              {!site.publicUrl && (
+                <p className="m-0 text-[13px] text-admin-muted">
+                  Site não vinculado — informe o endereço quando o site estiver
+                  no ar.
+                </p>
+              )}
             </div>
             <div className="flex flex-wrap items-end gap-2.5">
               <label
                 htmlFor="site-public-url"
-                className="grid min-w-0 flex-[1_1_16rem] gap-1.5 text-sm font-medium"
+                className="grid min-w-0 flex-[1_1_16rem] gap-1.5 text-[13px] font-semibold text-admin-graphite"
               >
                 Endereço público
                 <Input
                   id="site-public-url"
                   name="publicUrl"
                   type="url"
+                  placeholder="https://"
                   defaultValue={site.publicUrl ?? ""}
+                  className="h-11 rounded-[10px] border-admin-line-strong placeholder:font-normal placeholder:text-admin-muted"
                   aria-invalid={Boolean(addressError)}
                   aria-describedby="site-public-url-help"
                 />
@@ -409,28 +600,37 @@ export function SiteSettingsView({
             noValidate
             onSubmit={(event) => saveAddress(event, "trustedOrigins")}
           >
-            <strong>Configuração avançada de endereços</strong>
-            <p className="m-0 text-sm text-admin-muted">
-              Informe os endereços autorizados a enviar confirmações e mensagens
-              pelo site.
-            </p>
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div className="grid min-w-0 flex-[1_1_18rem] gap-1">
+                <h3 className={plainHeading}>
+                  Configuração avançada de endereços
+                </h3>
+                <p className="m-0 text-[13px] text-admin-muted">
+                  Informe os endereços completos autorizados a enviar
+                  confirmações e mensagens pelo site. Use um por linha.
+                </p>
+              </div>
+              <ToneBadge tone="neutral">Opcional</ToneBadge>
+            </div>
             <label
               htmlFor="site-trusted-origins"
-              className="grid gap-1.5 text-sm font-medium"
+              className="grid gap-1.5 text-[13px] font-semibold text-admin-graphite"
             >
               Endereços autorizados
               <Textarea
                 id="site-trusted-origins"
                 name="trustedOrigins"
                 rows={3}
+                placeholder="https://casamento.exemplo.com"
                 defaultValue={site.trustedOrigins?.join("\n") ?? ""}
+                className="rounded-[10px] border-admin-line-strong placeholder:font-normal placeholder:text-admin-muted"
                 aria-invalid={Boolean(originError)}
                 aria-describedby="site-origins-help"
               />
             </label>
             <p id="site-origins-help" className="m-0 text-xs text-admin-muted">
-              Até 20 endereços. Use uma origem por linha, sem caminho ou barra
-              final.
+              Até 20 endereços. Cada um deve ser só a origem — https:// e o
+              domínio, sem caminho depois da barra.
             </p>
             {originError && (
               <p role="alert" className={adminStyles.authError}>
@@ -440,7 +640,7 @@ export function SiteSettingsView({
             <Button
               type="submit"
               variant="outline"
-              className="w-fit"
+              className={`${outline} w-fit`}
               disabled={pending}
             >
               Salvar endereços
@@ -511,9 +711,9 @@ export function SiteSettingsView({
                           )}
                         </TableCell>
                         <TableCell>
-                          <Badge variant="outline">
+                          <ToneBadge tone="neutral">
                             {labels[domain.state]}
-                          </Badge>
+                          </ToneBadge>
                         </TableCell>
                         <TableCell>
                           {domain.expiresOn
@@ -538,18 +738,19 @@ export function SiteSettingsView({
         </section>
       )}
       {tab === "access" && (
-        <section className="grid gap-3">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="grid gap-1">
+        <section className="grid gap-3.5">
+          <div className="flex flex-wrap items-end justify-between gap-4">
+            <div className="grid min-w-0 flex-[1_1_20rem] gap-1">
               <h2 className={title}>Acessos do casal</h2>
-              <p className="m-0 text-sm text-admin-muted">
-                Links de acesso valem por 24 horas, podem ser usados uma vez e
-                só aparecem ao gerar.
+              <p className={sectionIntro}>
+                Quem do casal administra o painel. Links de acesso valem por 24
+                horas, podem ser usados uma vez e só aparecem ao gerar.
               </p>
             </div>
             <Button
               type="button"
               variant="outline"
+              className={outline}
               disabled={pending}
               onClick={onAddAdmin}
             >
@@ -557,44 +758,71 @@ export function SiteSettingsView({
             </Button>
           </div>
           {!site.publicUrl && (
-            <div
-              className={`${card} flex flex-wrap items-center justify-between`}
-            >
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-admin-line bg-admin-canvas py-2 pr-3 pl-[18px]">
               <StatusSignal tone="neutral">Site não vinculado</StatusSignal>
+              <span
+                aria-hidden="true"
+                className="hidden h-[18px] w-px bg-admin-line sm:block"
+              />
+              <p className="m-0 min-w-0 flex-[1_1_14rem] text-[13.5px] text-admin-body">
+                Vincule o endereço público quando o site estiver no ar.
+              </p>
               <Button
                 type="button"
                 variant="link"
+                className={textLink}
                 onClick={() => selectTab("address")}
               >
                 Ir para Endereço do site
               </Button>
             </div>
           )}
-          <div className={`${adminStyles.surface} overflow-hidden`}>
-            <div className="flex items-center justify-between gap-2 border-b border-admin-line p-5">
-              <h3 className="m-0 text-xl">Pessoas cadastradas</h3>
-              <span className="text-sm text-admin-muted">{admins.length}</span>
+          <div
+            className={`${adminStyles.surface} overflow-hidden rounded-[18px]`}
+          >
+            <div className="flex items-center justify-between gap-2 px-[22px] py-4">
+              <h3 className={cardTitle}>Pessoas cadastradas</h3>
+              <span className="text-[13px] text-admin-muted">
+                {admins.length === 1 ? "1 pessoa" : `${admins.length} pessoas`}
+              </span>
             </div>
             {admins.length ? (
-              <ul className="m-0 list-none divide-y divide-admin-line p-0">
+              <ul className="m-0 list-none p-0">
                 {admins.map((admin) => (
-                  <li key={admin.userId} className="grid gap-3 p-5">
-                    <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <strong className="break-words">{admin.name}</strong>
-                        <p className="m-0 break-all text-sm text-admin-muted">
+                  <li
+                    key={admin.userId}
+                    className="grid gap-3 border-t border-admin-line px-[22px] py-4"
+                  >
+                    <div
+                      data-slot="couple-access-row"
+                      className="grid min-w-0 grid-cols-[40px_minmax(0,1fr)] items-center gap-x-3.5 gap-y-3 lg:grid-cols-[40px_minmax(0,1fr)_180px_392px]"
+                    >
+                      <span
+                        data-slot="person-avatar"
+                        aria-hidden="true"
+                        className="flex size-10 items-center justify-center rounded-full border border-admin-terracotta bg-admin-terracotta-wash text-[12.5px] font-extrabold tracking-[0.04em] text-admin-terracotta-deep"
+                      >
+                        {getInitials(admin.name)}
+                      </span>
+                      <div className="grid min-w-0 gap-[3px]">
+                        <strong className="break-words text-[15px] font-semibold text-admin-ink">
+                          {admin.name}
+                        </strong>
+                        <p className="m-0 break-all text-[13px] text-admin-muted">
                           {admin.email}
                         </p>
                       </div>
-                      <div className="grid gap-1">
-                        <Badge
-                          variant="secondary"
-                          className={
+                      <div
+                        data-slot="access-status"
+                        className="col-start-2 grid min-w-0 gap-[5px] lg:col-start-auto"
+                      >
+                        <ToneBadge
+                          tone={
                             admin.pendingAccess
-                              ? "bg-admin-pending-wash text-admin-pending-ink"
+                              ? "pending"
                               : admin.state === "ACTIVE"
-                                ? "bg-admin-success-wash text-admin-success-ink"
-                                : "bg-admin-beige"
+                                ? "success"
+                                : "neutral"
                           }
                         >
                           {generated?.userId === admin.userId
@@ -604,11 +832,11 @@ export function SiteSettingsView({
                               : admin.state === "ACTIVE"
                                 ? "Acesso ativado"
                                 : labels[admin.state]}
-                        </Badge>
+                        </ToneBadge>
                         {admin.pendingAccess && (
                           <time
                             dateTime={admin.pendingAccess.expiresAt}
-                            className="text-xs text-admin-muted"
+                            className="text-[12.5px] text-admin-muted"
                           >
                             Expira em{" "}
                             {new Date(
@@ -621,62 +849,76 @@ export function SiteSettingsView({
                           </time>
                         )}
                       </div>
-                      {admin.state !== "DISABLED" && (
-                        <div className="flex flex-wrap gap-2">
-                          {generated?.userId !== admin.userId && (
-                            <Button
-                              type="button"
-                              variant="outline"
+                      <div
+                        data-slot="access-actions"
+                        className="col-start-2 flex min-w-0 flex-wrap items-center gap-2 lg:col-start-auto lg:justify-end"
+                      >
+                        {admin.state !== "DISABLED" && (
+                          <>
+                            {generated?.userId !== admin.userId && (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                className={`${outline} max-sm:px-4`}
+                                disabled={pending}
+                                onClick={() =>
+                                  admin.pendingAccess
+                                    ? setReplaceLink(admin.userId)
+                                    : onAdminAction("issue-access", admin)
+                                }
+                              >
+                                {admin.pendingAccess
+                                  ? "Gerar novo link"
+                                  : admin.state === "ACTIVE"
+                                    ? "Gerar link de recuperação"
+                                    : "Gerar link de acesso"}
+                              </Button>
+                            )}
+                            {admin.pendingAccess && (
+                              <Button
+                                type="button"
+                                disabled={pending}
+                                className={`${adminStyles.dangerButton} max-sm:px-4`}
+                                onClick={() =>
+                                  onAdminAction("revoke-access", admin)
+                                }
+                              >
+                                Revogar link
+                              </Button>
+                            )}
+                            <OverflowMenu
+                              label={`Ações de ${admin.name}`}
                               disabled={pending}
-                              onClick={() =>
-                                admin.pendingAccess
-                                  ? setReplaceLink(admin.userId)
-                                  : onAdminAction("issue-access", admin)
+                              items={[
+                                {
+                                  id: "disable-access",
+                                  label: "Desativar acesso",
+                                  variant: "destructive",
+                                },
+                              ]}
+                              onSelect={(action) =>
+                                onAdminAction(action, admin)
                               }
-                            >
-                              {admin.pendingAccess
-                                ? "Gerar novo link"
-                                : admin.state === "ACTIVE"
-                                  ? "Gerar link de recuperação"
-                                  : "Gerar link de acesso"}
-                            </Button>
-                          )}
-                          {admin.pendingAccess && (
-                            <Button
-                              type="button"
-                              disabled={pending}
-                              className={adminStyles.dangerButton}
-                              onClick={() =>
-                                onAdminAction("revoke-access", admin)
-                              }
-                            >
-                              Revogar link
-                            </Button>
-                          )}
-                          <OverflowMenu
-                            label={`Ações de ${admin.name}`}
-                            disabled={pending}
-                            items={[
-                              {
-                                id: "disable-access",
-                                label: "Desativar acesso",
-                                variant: "destructive",
-                              },
-                            ]}
-                            onSelect={(action) => onAdminAction(action, admin)}
-                          />
-                        </div>
-                      )}
+                            />
+                          </>
+                        )}
+                      </div>
                     </div>
                     {replaceLink === admin.userId && (
-                      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-admin-pending-wash p-3 text-sm text-admin-pending-ink">
-                        <p className="m-0">
-                          O link anterior deixará de funcionar imediatamente.
-                        </p>
-                        <div className="flex flex-wrap gap-2">
+                      <div className="flex flex-wrap items-center justify-between gap-3 rounded-[10px] bg-admin-pending-wash py-2.5 pr-2.5 pl-3.5 text-admin-pending-ink lg:ml-[54px]">
+                        <div className="grid min-w-0 gap-0.5">
+                          <strong className="text-[13.5px] font-semibold">
+                            Gerar um novo link para {admin.name}?
+                          </strong>
+                          <p className="m-0 text-[13px]">
+                            O link anterior deixará de funcionar imediatamente.
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-3">
                           <Button
                             type="button"
-                            variant="ghost"
+                            variant="link"
+                            className={textLink}
                             onClick={() => setReplaceLink(null)}
                           >
                             Cancelar
@@ -696,18 +938,20 @@ export function SiteSettingsView({
                       </div>
                     )}
                     {generated?.userId === admin.userId && (
-                      <GeneratedAccessLink
-                        name={admin.name}
-                        email={admin.email}
-                        url={generated.url}
-                        onDismiss={onDismissGenerated}
-                      />
+                      <div className="min-w-0 lg:ml-[54px]">
+                        <GeneratedAccessLink
+                          name={admin.name}
+                          email={admin.email}
+                          url={generated.url}
+                          onDismiss={onDismissGenerated}
+                        />
+                      </div>
                     )}
                   </li>
                 ))}
               </ul>
             ) : (
-              <p className="m-0 p-5 text-sm text-admin-muted">
+              <p className="m-0 border-t border-admin-line px-[22px] py-5 text-sm text-admin-muted">
                 Nenhuma pessoa do casal cadastrada.
               </p>
             )}

@@ -23,6 +23,7 @@ import { type Context, Hono } from "hono";
 import { trustedAdminOrigin } from "./adminOrigin";
 import type { AuthHttpOptions } from "./authHttp";
 import { requireAdminSession } from "./authHttp";
+import type { ReceivingRepositoryOptions } from "./receivingRepository";
 import {
   approveReview,
   createDomain,
@@ -132,7 +133,11 @@ function sendSite(context: Context, site: unknown) {
   return context.json(site, 200, { "Cache-Control": "no-store" });
 }
 
-export function createSitesHttpRouter(options: AuthHttpOptions): Hono {
+export interface SitesHttpOptions extends AuthHttpOptions {
+  receiving?: Pick<ReceivingRepositoryOptions, "mode">;
+}
+
+export function createSitesHttpRouter(options: SitesHttpOptions): Hono {
   const router = new Hono();
   router.onError((error) => {
     if (error instanceof Response) return error;
@@ -148,7 +153,12 @@ export function createSitesHttpRouter(options: AuthHttpOptions): Hono {
     try {
       const url = new URL(context.req.url);
       const query = Object.fromEntries(url.searchParams.entries());
-      const result = await listSites(options.db, query);
+      const result = await listSites(
+        options.db,
+        query,
+        options.now?.(),
+        options.receiving?.mode,
+      );
       return context.json(ownerSiteListResponseSchema.parse(result), 200, {
         "Cache-Control": "no-store",
       });

@@ -334,6 +334,10 @@ export const ownerSiteListItemSchema = siteRecordSchema.safeExtend({
     active: z.boolean(),
     pending: z.boolean(),
   }),
+  // Stored state only: whether a current receiving account exists for the
+  // configured provider environment. Null when receiving is disabled there.
+  // It is not readiness; readiness needs fresh provider evidence.
+  receivingAccount: z.enum(["CREATED", "MISSING"]).nullable(),
 });
 export type OwnerSiteListItem = z.infer<typeof ownerSiteListItemSchema>;
 export const ownerSiteListResponseSchema = strictObject({
