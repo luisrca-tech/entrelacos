@@ -5,8 +5,31 @@ import {
 } from "@entrelacos/contracts";
 import { Button, Input, toast } from "@entrelacos/ui";
 import { Camera, ImageIcon, Upload } from "lucide-react";
-import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import {
+  type DragEvent,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import type { GiftMediaClientState } from "./giftMediaClient";
+
+const acceptedImageTypes =
+  giftMediaUploadInputSchema.shape.contentType.options.join(",");
+
+/** Returns a pt-BR reason when the API would refuse the file, or "" if it fits. */
+function fileProblem(file: File) {
+  if (
+    !giftMediaUploadInputSchema.shape.contentType.safeParse(file.type).success
+  )
+    return "Este arquivo não é uma imagem JPEG, PNG ou WebP. Escolha outra foto.";
+  if (!giftMediaUploadInputSchema.shape.byteLength.safeParse(file.size).success)
+    return file.size > 0
+      ? "A foto passa de 5 MB. Escolha uma imagem menor."
+      : "Este arquivo está vazio. Escolha outra foto.";
+  return "";
+}
 
 type Props = {
   gift: GiftItem;
@@ -29,6 +52,9 @@ export function GiftImageField(props: Props) {
   const mounted = useRef(false);
   const attempt = useRef(0);
   const inFlight = useRef(false);
+  // Child elements fire their own enter/leave events while a file is dragged
+  // across the zone, so a depth counter keeps the highlight from flickering.
+  const dragDepth = useRef(0);
   const [file, setFile] = useState<File | null>(null);
   const [alt, setAlt] = useState(gift.altText);
   const [error, setError] = useState("");
@@ -121,10 +147,7 @@ export function GiftImageField(props: Props) {
       !selected ||
       !description ||
       description.length > 240 ||
-      !giftMediaUploadInputSchema.shape.contentType.safeParse(selected.type)
-        .success ||
-      !giftMediaUploadInputSchema.shape.byteLength.safeParse(selected.size)
-        .success
+      fileProblem(selected)
     ) {
       if (validOwner())
         setError(
@@ -168,33 +191,51 @@ export function GiftImageField(props: Props) {
   const altChanged = alt.trim() !== gift.altText.trim();
   function pick(selected: File | null | undefined) {
     if (!selected || blocked || inFlight.current || !validOwner()) return;
-    if (
-      !giftMediaUploadInputSchema.shape.contentType.safeParse(selected.type)
-        .success ||
-      !giftMediaUploadInputSchema.shape.byteLength.safeParse(selected.size)
-        .success
-    ) {
-      setError("Escolha uma imagem JPEG, PNG ou WebP de até 5 MB.");
+    const problem = fileProblem(selected);
+    if (problem) {
+      setError(problem);
+      if (fileInput.current) fileInput.current.value = "";
       return;
     }
     setError("");
     setFile(selected);
   }
-  const fileInputElement = (
-    <input
-      ref={fileInput}
-      id={`${id}-file`}
-      type="file"
-      accept="image/jpeg,image/png,image/webp"
-      disabled={blocked}
-      className="sr-only"
-      aria-describedby={`${id}-formats`}
-      onChange={(event) => {
-        if (!blocked && !inFlight.current && validOwner())
-          setFile(event.target.files?.[0] ?? null);
-      }}
-    />
-  );
+  function openPicker() {
+    if (!blocked) fileInput.current?.click();
+  }
+  const dropHandlers = {
+    onDragEnter: (event: DragEvent<HTMLElement>) => {
+      event.preventDefault();
+      dragDepth.current++;
+      if (!blocked) setDragging(true);
+    },
+    onDragOver: (event: DragEvent<HTMLElement>) => {
+      event.preventDefault();
+      if (event.dataTransfer)
+        event.dataTransfer.dropEffect = blocked ? "none" : "copy";
+    },
+    onDragLeave: () => {
+      dragDepth.current = Math.max(0, dragDepth.current - 1);
+      if (dragDepth.current === 0) setDragging(false);
+    },
+    onDrop: (event: DragEvent<HTMLElement>) => {
+      event.preventDefault();
+      dragDepth.current = 0;
+      setDragging(false);
+      pick(event.dataTransfer?.files?.[0]);
+    },
+  };
+  const describedBy = [
+    hasPhoto ? null : `${id}-formats`,
+    error ? `${id}-error` : null,
+  ]
+    .filter(Boolean)
+    .join(" ");
+  const uploading = busy || Boolean(mediaState?.busy);
+  const secondaryAction =
+    "inline-flex min-h-11 items-center justify-center rounded-[9px] border border-admin-line-strong bg-transparent px-3.5 text-sm font-semibold text-admin-graphite focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-[rgb(168_77_57_/_30%)] disabled:cursor-not-allowed disabled:opacity-60 enabled:hover:bg-admin-canvas";
+  const textAction =
+    "inline-flex min-h-11 items-center bg-transparent px-2 text-sm font-semibold text-admin-terracotta-deep underline underline-offset-4 focus-visible:outline-[3px] focus-visible:outline-[rgb(168_77_57_/_30%)] disabled:opacity-60";
   return (
     <fieldset
       aria-labelledby={`${id}-heading`}
@@ -203,38 +244,56 @@ export function GiftImageField(props: Props) {
       <legend id={`${id}-heading`} className="sr-only">
         Foto do presente
       </legend>
+      {/* The picker is opened by the visible buttons, so the input stays out
+          of the tab order. No `capture` attribute: phones then offer both the
+          gallery and the camera. */}
+      <input
+        ref={fileInput}
+        id={`${id}-file`}
+        type="file"
+        accept={acceptedImageTypes}
+        tabIndex={-1}
+        disabled={blocked}
+        className="sr-only"
+        aria-labelledby={`${id}-heading`}
+        aria-describedby={describedBy || undefined}
+        onChange={(event) => pick(event.target.files?.[0])}
+      />
       {!hasPhoto ? (
-        <label
-          htmlFor={`${id}-file`}
-          onDragOver={(event) => {
-            event.preventDefault();
-            if (!blocked) setDragging(true);
-          }}
-          onDragLeave={() => setDragging(false)}
-          onDrop={(event) => {
-            event.preventDefault();
-            setDragging(false);
-            pick(event.dataTransfer.files?.[0]);
-          }}
-          className={`flex min-h-[272px] cursor-pointer flex-col items-center justify-center gap-2.5 rounded-[14px] border-2 border-dashed px-5 py-8 text-center transition-colors motion-reduce:transition-none has-[:focus-visible]:outline-[3px] has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-[rgb(168_77_57_/_30%)] [@media(max-width:760px)]:min-h-[230px] ${dragging ? "border-admin-terracotta bg-admin-terracotta-wash" : "border-admin-line-strong bg-admin-canvas"} ${blocked ? "cursor-not-allowed opacity-60" : ""}`}
+        // biome-ignore lint/a11y/useKeyWithClickEvents lint/a11y/noStaticElementInteractions: Pointer convenience only; the "Escolher foto" button inside is the keyboard target.
+        <div
+          data-dropzone=""
+          data-dragging={dragging ? "true" : "false"}
+          {...dropHandlers}
+          onClick={openPicker}
+          className={`flex min-h-[272px] flex-col items-center justify-center gap-2.5 rounded-[14px] border-2 border-dashed px-5 py-8 text-center transition-colors motion-reduce:transition-none has-[:focus-visible]:outline-[3px] has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-[rgb(168_77_57_/_30%)] [@media(max-width:760px)]:min-h-[230px] ${dragging ? "border-admin-terracotta bg-admin-terracotta-wash" : "border-admin-line-strong bg-admin-canvas"} ${blocked ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}
         >
-          {fileInputElement}
           <span
             aria-hidden="true"
             className="flex size-14 items-center justify-center rounded-full bg-admin-terracotta-wash text-admin-terracotta-deep"
           >
-            <Upload className="size-[26px] [@media(max-width:760px)]:hidden" />
-            <Camera className="hidden size-[26px] [@media(max-width:760px)]:block" />
+            <Upload className="size-[26px] [@media(max-width:760px)]:hidden [@media(pointer:coarse)]:hidden" />
+            <Camera className="hidden size-[26px] [@media(max-width:760px)]:block [@media(pointer:coarse)]:block" />
           </span>
-          <span className="text-base font-bold text-admin-ink [@media(max-width:760px)]:hidden">
-            Arraste a foto aqui ou{" "}
-            <span className="text-admin-terracotta-deep underline underline-offset-4">
-              escolha um arquivo
-            </span>
+          <span className="text-base font-bold text-admin-ink [@media(max-width:760px)]:hidden [@media(pointer:coarse)]:hidden">
+            {dragging ? "Solte a foto para escolher" : "Arraste a foto aqui"}
           </span>
-          <span className="hidden text-base font-bold text-admin-ink [@media(max-width:760px)]:inline">
-            Tirar foto ou escolher da galeria
+          <span className="hidden text-base font-bold text-admin-ink [@media(max-width:760px)]:inline [@media(pointer:coarse)]:inline">
+            Tire uma foto ou escolha da galeria
           </span>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={blocked}
+            className="min-h-11 rounded-[10px] border-admin-line-strong bg-admin-surface px-5 text-[0.95rem] font-semibold text-admin-terracotta-deep focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-[rgb(168_77_57_/_30%)] [@media(max-width:760px)]:min-h-12 [@media(max-width:760px)]:w-full [@media(max-width:760px)]:max-w-[280px] [@media(pointer:coarse)]:min-h-12"
+            onClick={(event) => {
+              event.stopPropagation();
+              openPicker();
+            }}
+          >
+            <ImageIcon aria-hidden="true" />
+            Escolher foto
+          </Button>
           <span
             id={`${id}-formats`}
             className="text-[0.82rem] text-admin-muted"
@@ -245,10 +304,14 @@ export function GiftImageField(props: Props) {
               · fotos na horizontal ficam melhores
             </span>
           </span>
-        </label>
+        </div>
       ) : (
         <div className="grid min-w-0 gap-[18px] sm:grid-cols-[minmax(0,1fr)_minmax(0,262px)]">
-          <div className="relative flex min-h-[212px] min-w-0 items-center justify-center overflow-hidden rounded-[14px] bg-admin-beige-deep">
+          <div
+            data-dragging={dragging ? "true" : "false"}
+            {...dropHandlers}
+            className={`relative flex min-h-[212px] min-w-0 items-center justify-center overflow-hidden rounded-[14px] bg-admin-beige-deep ${dragging ? "outline-[3px] outline-offset-2 outline-admin-terracotta outline-dashed" : ""}`}
+          >
             {localUrl ? (
               <img
                 src={localUrl}
@@ -267,8 +330,15 @@ export function GiftImageField(props: Props) {
                 className="size-11 text-admin-terracotta-deep"
               />
             )}
-            <span className="absolute bottom-3 left-3 max-w-[calc(100%-24px)] truncate rounded-full bg-admin-success-wash px-2.5 py-1 text-xs font-bold text-admin-success-ink">
-              {file ? `Pronta para enviar · ${file.name}` : "Foto enviada"}
+            <span
+              aria-live="polite"
+              className={`absolute bottom-3 left-3 max-w-[calc(100%-24px)] truncate rounded-full px-2.5 py-1 text-xs font-bold ${uploading ? "bg-admin-pending-wash text-admin-pending-ink" : "bg-admin-success-wash text-admin-success-ink"}`}
+            >
+              {uploading
+                ? "Enviando foto…"
+                : file
+                  ? `Pronta para enviar · ${file.name}`
+                  : "Foto enviada"}
             </span>
           </div>
           <div className="flex min-w-0 flex-col justify-between gap-4">
@@ -306,10 +376,11 @@ export function GiftImageField(props: Props) {
               {(file || retained) && (
                 <Button
                   type="button"
+                  className="min-h-11"
                   disabled={blocked || retryBlocked || !file || !alt.trim()}
                   onClick={upload}
                 >
-                  {busy || mediaState?.busy
+                  {uploading
                     ? "Aguarde…"
                     : retained
                       ? "Reenviar mesmo arquivo"
@@ -319,6 +390,7 @@ export function GiftImageField(props: Props) {
               {gift.mediaAssetId && !file && altChanged && (
                 <Button
                   type="button"
+                  className="min-h-11"
                   disabled={blocked || retained || !alt.trim()}
                   onClick={() => {
                     const action = live.current.onAltChange;
@@ -331,24 +403,27 @@ export function GiftImageField(props: Props) {
                   Salvar descrição
                 </Button>
               )}
-              <label
-                htmlFor={`${id}-file`}
-                className={`inline-flex min-h-10 cursor-pointer items-center rounded-[9px] border border-admin-line-strong px-3.5 text-sm font-semibold text-admin-graphite has-[:focus-visible]:outline-[3px] has-[:focus-visible]:outline-[rgb(168_77_57_/_30%)] ${blocked ? "cursor-not-allowed opacity-60" : "hover:bg-admin-canvas"}`}
+              <button
+                type="button"
+                disabled={blocked}
+                className={secondaryAction}
+                onClick={openPicker}
               >
-                {fileInputElement}
                 Trocar foto
-              </label>
+              </button>
               {file ? (
                 <button
                   type="button"
+                  aria-label="Remover foto escolhida"
                   disabled={blocked}
-                  className="inline-flex min-h-10 items-center bg-transparent px-2 text-sm font-semibold text-admin-terracotta-deep underline underline-offset-4 disabled:opacity-60"
+                  className={textAction}
                   onClick={() => {
                     setFile(null);
+                    setError("");
                     if (fileInput.current) fileInput.current.value = "";
                   }}
                 >
-                  Cancelar escolha
+                  Remover
                 </button>
               ) : (
                 gift.mediaAssetId && (
@@ -356,7 +431,7 @@ export function GiftImageField(props: Props) {
                     type="button"
                     aria-label="Remover foto"
                     disabled={blocked || retained}
-                    className="inline-flex min-h-10 items-center bg-transparent px-2 text-sm font-semibold text-admin-terracotta-deep underline underline-offset-4 disabled:opacity-60"
+                    className={textAction}
                     onClick={() => {
                       const action = live.current.onRemove;
                       void run(async (revision) => {
@@ -441,7 +516,11 @@ export function GiftImageField(props: Props) {
         </div>
       )}
       {error && (
-        <p role="alert" className="m-0 text-sm text-admin-danger-ink">
+        <p
+          id={`${id}-error`}
+          role="alert"
+          className="m-0 text-sm text-admin-danger-ink"
+        >
           {error}
         </p>
       )}

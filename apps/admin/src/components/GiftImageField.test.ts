@@ -170,6 +170,102 @@ describe("gift image editor presentation", () => {
     expect(f.props.onUpload).not.toHaveBeenCalled();
     expect(f.container.textContent).toContain("Verifique sua sessão");
   });
+  const emptyGift = { ...gift, mediaAssetId: null, altText: "" };
+  function fileInput(container: HTMLElement) {
+    const input =
+      container.querySelector<HTMLInputElement>('input[type="file"]');
+    if (!input) throw new Error("Missing file input");
+    return input;
+  }
+  function dropzone(container: HTMLElement) {
+    const zone = container.querySelector<HTMLElement>("[data-dropzone]");
+    if (!zone) throw new Error("Missing dropzone");
+    return zone;
+  }
+  function dragEvent(type: string, files: File[] = []) {
+    const event = new Event(type, { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "dataTransfer", {
+      value: { files, types: ["Files"], dropEffect: "none" },
+    });
+    return event;
+  }
+  const png = () =>
+    new File([new Uint8Array([1, 2, 3])], "image.png", { type: "image/png" });
+  it("opens the native picker from a visible button and from the whole dropzone", async () => {
+    const f = await mount({ gift: emptyGift });
+    const click = vi.spyOn(fileInput(f.container), "click");
+    await act(async () => button(f.container, "Escolher foto").click());
+    expect(click).toHaveBeenCalledTimes(1);
+    await act(async () => dropzone(f.container).click());
+    expect(click).toHaveBeenCalledTimes(2);
+    expect(fileInput(f.container).accept).toBe(
+      "image/jpeg,image/png,image/webp",
+    );
+    expect(fileInput(f.container).hasAttribute("capture")).toBe(false);
+  });
+  it("rejects unsupported or oversized files chosen in the picker with a described error", async () => {
+    const f = await mount({ gift: emptyGift });
+    const input = fileInput(f.container);
+    for (const [selected, message] of [
+      [
+        new File(["%PDF"], "doc.pdf", { type: "application/pdf" }),
+        "não é uma imagem",
+      ],
+      [
+        new File([new Uint8Array(5_242_881)], "big.png", { type: "image/png" }),
+        "5 MB",
+      ],
+    ] as const) {
+      Object.defineProperty(input, "files", {
+        configurable: true,
+        value: [selected],
+      });
+      await act(async () => {
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+      });
+      const alert = f.container.querySelector('[role="alert"]');
+      expect(alert?.textContent).toContain(message);
+      expect(input.getAttribute("aria-describedby")).toContain(alert?.id);
+      expect(f.container.textContent).not.toContain("Enviar foto");
+    }
+  });
+  it("highlights the dropzone while dragging and stages a dropped image", async () => {
+    const f = await mount({ gift: emptyGift });
+    const zone = dropzone(f.container);
+    await act(async () => {
+      zone.dispatchEvent(dragEvent("dragenter"));
+    });
+    expect(zone.dataset.dragging).toBe("true");
+    const over = dragEvent("dragover");
+    await act(async () => {
+      zone.dispatchEvent(over);
+    });
+    expect(over.defaultPrevented).toBe(true);
+    await act(async () => {
+      zone.dispatchEvent(dragEvent("drop", [png()]));
+    });
+    expect(f.container.querySelector("[data-dropzone]")).toBeNull();
+    expect(f.container.textContent).toContain("Pronta para enviar");
+    expect(button(f.container, "Trocar foto")).toBeTruthy();
+    await act(async () => button(f.container, "Remover").click());
+    expect(f.container.querySelector("[data-dropzone]")).not.toBeNull();
+  });
+  it("rejects a dropped non-image file and clears the highlight", async () => {
+    const f = await mount({ gift: emptyGift });
+    const zone = dropzone(f.container);
+    await act(async () => {
+      zone.dispatchEvent(dragEvent("dragenter"));
+      zone.dispatchEvent(
+        dragEvent("drop", [
+          new File(["x"], "notes.txt", { type: "text/plain" }),
+        ]),
+      );
+    });
+    expect(zone.dataset.dragging).toBe("false");
+    expect(f.container.querySelector('[role="alert"]')?.textContent).toContain(
+      "não é uma imagem",
+    );
+  });
   it("shows alt text and image controls without exposing private media identifiers", () => {
     const html = renderToStaticMarkup(
       createElement(GiftImageField, {
