@@ -43,6 +43,7 @@ import {
   type GiftQuoteServiceDependencies,
 } from "./giftQuotes";
 import { allowsLiveSite } from "./liveSitePolicy";
+import { mapWithConcurrency } from "./mapWithConcurrency";
 import {
   decryptProviderCredential,
   type ProviderCredentialContext,
@@ -59,6 +60,9 @@ import {
 } from "./sandboxDemoPricing";
 import { createWithdrawalComposition } from "./withdrawalComposition";
 import { createWithdrawalHistoryRepository } from "./withdrawalHistoryRepository";
+
+// Each withdrawal decoration opens its own transaction; cap them per request.
+const WITHDRAWAL_DECORATION_CONCURRENCY = 4;
 
 type PaymentPorts = Pick<
   ApiOptions,
@@ -611,10 +615,10 @@ export function createGiftPaymentComposition(
       finance: {
         listWithdrawals: (siteId: string) =>
           own(async () =>
-            Promise.all(
-              (await withdrawalHistory.listWithdrawals(siteId)).map(
-                withdrawals.decorateIntent,
-              ),
+            mapWithConcurrency(
+              await withdrawalHistory.listWithdrawals(siteId),
+              WITHDRAWAL_DECORATION_CONCURRENCY,
+              withdrawals.decorateIntent,
             ),
           ),
         listWithdrawalPage: (
@@ -628,8 +632,10 @@ export function createGiftPaymentComposition(
             );
             return {
               ...page,
-              withdrawals: await Promise.all(
-                page.withdrawals.map(withdrawals.decorateIntent),
+              withdrawals: await mapWithConcurrency(
+                page.withdrawals,
+                WITHDRAWAL_DECORATION_CONCURRENCY,
+                withdrawals.decorateIntent,
               ),
             };
           }),
