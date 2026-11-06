@@ -1,10 +1,12 @@
 import { GiftRegistry } from "@entrelacos/wedding-features";
 import { useMemo, useRef, useState } from "react";
 import {
+  allocateGiftInstallmentCents,
   type CheckoutStatus,
   checkoutCreateInputSchema,
   checkoutStatusInputSchema,
   checkoutStatusResponseSchema,
+  getGiftCommissionCents,
   giftCatalogLimits,
   giftQuoteInputSchema,
   giftQuoteResponseSchema,
@@ -49,6 +51,25 @@ const PREVIEW_SITE_ID = "local-gift-preview";
 const PREVIEW_API_ORIGIN = "https://gift-preview.invalid";
 const PREVIEW_PREFIX = `/v1/public/sites/${PREVIEW_SITE_ID}/`;
 
+const previewInstallmentCounts = [1, 3, 6];
+const previewPixProcessingCents = 90;
+const previewCardProcessingCents = 290;
+
+function previewPricing(nominalCents: number) {
+  return {
+    feeAllocation: "BUYER_GROSS_UP",
+    available: true,
+    startingAtCents:
+      nominalCents +
+      getGiftCommissionCents(nominalCents) +
+      previewPixProcessingCents,
+  };
+}
+
+function previewQuoteId(giftId: string, method: string, count = 1) {
+  return `gift-preview-${giftId}-${method.toLowerCase()}${count > 1 ? `-${count}` : ""}`;
+}
+
 const catalog = publicGiftCatalogResponseSchema.parse({
   mode: "sandbox",
   gifts: [
@@ -59,6 +80,7 @@ const catalog = publicGiftCatalogResponseSchema.parse({
       description:
         "Uma refeição preparada com carinho para marcar um momento especial da viagem.",
       nominalCents: 13_500,
+      pricing: previewPricing(13_500),
       currency: "BRL",
       image: null,
       sortOrder: 0,
@@ -70,6 +92,7 @@ const catalog = publicGiftCatalogResponseSchema.parse({
       description:
         "Uma contribuição para descobrir ruas, praças e cafés no ritmo do casal.",
       nominalCents: 8_000,
+      pricing: previewPricing(8_000),
       currency: "BRL",
       image: null,
       sortOrder: 1,
@@ -82,6 +105,7 @@ const catalog = publicGiftCatalogResponseSchema.parse({
       description:
         "Um presente simbólico para uma pausa tranquila depois da celebração, com tempo para aproveitar a hospedagem, tomar um café sem pressa e guardar boas lembranças. O valor representa apenas a contribuição escolhida para o casal: não existe produto físico, reserva ou entrega associada a esta prévia local.",
       nominalCents: 24_000,
+      pricing: previewPricing(24_000),
       currency: "BRL",
       image: null,
       sortOrder: 2,
@@ -217,12 +241,37 @@ export function createGiftPreviewFetcher(
       const gift = catalog.gifts.find((item) => item.id === inputValue.giftId);
       if (!gift) return jsonResponse({ code: "QUOTE_INVALID" }, 409);
 
-      const commissionCents = Math.round((gift.nominalCents * 200) / 10_000);
-      // Fixture-only processing amounts stand in for values from a server quote.
-      const processingCents = inputValue.method === "PIX" ? 90 : 290;
+      const commissionCents = getGiftCommissionCents(gift.nominalCents);
+      const baseCents = gift.nominalCents + commissionCents;
+      const installmentCount = inputValue.installmentCount ?? 1;
+      const installmentOptions =
+        inputValue.method === "CREDIT_CARD"
+          ? previewInstallmentCounts.map((count) => {
+              const installmentSurchargeCents = 43 * (count - 1);
+              const totalCents =
+                baseCents +
+                previewCardProcessingCents +
+                installmentSurchargeCents;
+              return {
+                installmentCount: count,
+                installmentSurchargeCents,
+                totalCents,
+                installmentCents: allocateGiftInstallmentCents(
+                  totalCents,
+                  count,
+                ),
+              };
+            })
+          : undefined;
+      const selected = installmentOptions?.find(
+        (option) => option.installmentCount === installmentCount,
+      );
+      if (installmentOptions && !selected) return validationError();
+      const totalCents =
+        selected?.totalCents ?? baseCents + previewPixProcessingCents;
       const quote = giftQuoteResponseSchema.parse({
         quote: {
-          id: `gift-preview-${gift.id}-${inputValue.method.toLowerCase()}`,
+          id: previewQuoteId(gift.id, inputValue.method, installmentCount),
           giftId: gift.id,
           siteId:
             scenario === "foreign-site"
@@ -234,9 +283,11 @@ export function createGiftPreviewFetcher(
           nominalCents: gift.nominalCents,
           commissionBasisPoints: 200,
           commissionCents,
-          processingCents,
-          totalCents: gift.nominalCents,
-          feeAllocation: "RECIPIENT_DEDUCTED",
+          processingCents: totalCents - baseCents,
+          totalCents,
+          feeAllocation: "BUYER_GROSS_UP",
+          settlementVersion: "PLATFORM_FEE_GUARANTEE_V1",
+          ...(selected && { ...selected, installmentOptions }),
           policyVersion: "local-gift-policy-v1",
           expiresAt: new Date(
             now().getTime() +
@@ -267,10 +318,12 @@ export function createGiftPreviewFetcher(
       }
       if (scenario === "received-history" || scenario === "refunded-history") {
         const method = (["PIX", "CREDIT_CARD"] as const).find((candidate) =>
-          catalog.gifts.some(
-            (gift) =>
-              inputValue.quoteId ===
-              `gift-preview-${gift.id}-${candidate.toLowerCase()}`,
+          catalog.gifts.some((gift) =>
+            (candidate === "PIX" ? [1] : previewInstallmentCounts).some(
+              (count) =>
+                inputValue.quoteId ===
+                previewQuoteId(gift.id, candidate, count),
+            ),
           ),
         );
         if (!method) return validationError();

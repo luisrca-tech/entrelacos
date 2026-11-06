@@ -5,6 +5,7 @@ import {
   type GiftProcessingPolicy,
   parseBrlCents,
   quoteGiftAmounts,
+  quoteGiftPurchaseAmounts,
   serializeBrlCents,
 } from "./giftMoney";
 
@@ -24,6 +25,35 @@ function policy(
 }
 
 describe("gift amount quoting", () => {
+  it("offers only account-observed tiers whose smallest payment meets the minimum", () => {
+    const card = policy({
+      method: "CREDIT_CARD",
+      feeAllocation: "BUYER_GROSS_UP",
+      feeBasis: "ACCOUNT_BUYER_ESTIMATE",
+      cardInstallmentBasisPoints: { upToSix: 0 },
+    });
+    const quote = (nominalCents: number, installmentCount?: number) =>
+      quoteGiftPurchaseAmounts(
+        {
+          nominalCents,
+          method: "CREDIT_CARD",
+          policy: card,
+        },
+        installmentCount,
+      );
+    expect(
+      quote(979).installmentOptions?.map((option) => option.installmentCount),
+    ).toEqual([1]);
+    expect(quote(980, 2).installmentCents).toEqual([500, 500]);
+    expect(
+      quote(10_000).installmentOptions?.map(
+        (option) => option.installmentCount,
+      ),
+    ).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(() => quote(10_000, 7)).toThrow(
+      expect.objectContaining({ code: "QUOTE_INVALID" }),
+    );
+  });
   it.each(["PIX", "CREDIT_CARD"] as const)(
     "deducts fees from the recipient for %s without increasing buyer total",
     (method) => {

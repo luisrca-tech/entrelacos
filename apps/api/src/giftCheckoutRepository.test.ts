@@ -12,6 +12,7 @@ import {
   type GiftCheckoutHostedOutcome,
   type GiftCheckoutReservation,
 } from "./giftCheckouts";
+import { quoteGiftPurchaseAmounts } from "./giftMoney";
 import type {
   GiftQuoteReceivingContext,
   StoredGiftForQuote,
@@ -601,6 +602,42 @@ function receipt(values: Awaited<ReturnType<typeof reserved>>) {
     authenticatedAt: now,
     processedAt: now,
   });
+}
+
+async function hostedInstallment() {
+  const values = fixture();
+  const snapshot = values.input.quoteSnapshot;
+  Object.assign(snapshot.pricing.policy, {
+    method: "CREDIT_CARD",
+    feeAllocation: "BUYER_GROSS_UP",
+    feeBasis: "ACCOUNT_BUYER_ESTIMATE",
+    cardInstallmentBasisPoints: { upToSix: 350 },
+  });
+  Object.assign(snapshot.quote, {
+    method: "CREDIT_CARD",
+    settlementVersion: "PLATFORM_FEE_GUARANTEE_V1",
+    ...quoteGiftPurchaseAmounts(
+      {
+        nominalCents: 10_000,
+        method: "CREDIT_CARD",
+        policy: snapshot.pricing.policy,
+      },
+      2,
+    ),
+  });
+  const quote = snapshot.quote;
+  Object.assign(values.tables.gift_quote_record[0], {
+    method: quote.method,
+    processingCents: quote.processingCents,
+    totalCents: quote.totalCents,
+    snapshot: structuredClone(snapshot),
+  });
+  const repository = createGiftCheckoutRepository(values.db, values.options);
+  await repository.reserve(values.input, () => {});
+  const hosted = outcome();
+  hosted.checkout.method = "CREDIT_CARD";
+  await repository.saveHostedCheckout(hosted);
+  return { values, repository, hosted, quote };
 }
 
 async function confirmedCard() {
@@ -1312,6 +1349,98 @@ describe("PostgreSQL gift checkout repository", () => {
         providerPaymentReference: "provider-payment-one",
       },
     });
+  });
+
+  it("closes an invoice only after verified terminal deletion of the installment plan", async () => {
+    const { values, repository, hosted } = await hostedInstallment();
+    const payload = {
+      externalReference: "attempt-one",
+      paymentId: "provider-payment-one",
+      installmentId: hosted.providerReference,
+    };
+    const eventType = "PAYMENT_DELETED";
+    const providerEventReference = "event-deleted";
+    const event = {
+      id: "payment-deleted",
+      siteId: "site-one",
+      accountId: "account-one",
+      environment: "sandbox",
+      eventType,
+      providerEventReference,
+      state: "PROCESSED",
+      payload,
+      payloadHash: hashAsaasEventIdentity(
+        providerEventReference,
+        eventType,
+        "provider-account-one",
+        payload,
+      ),
+      authenticatedAt: now,
+      receivedAt: now,
+      processedAt: now,
+      lastErrorCode: "PAYMENT_DELETED_INSTALLMENT_EXISTS",
+    };
+    values.tables.financial_event_inbox.push(event);
+    expect(
+      (await repository.findByRequest("site-one", "request-one"))?.state,
+    ).toBe("AWAITING_PAYMENT");
+    event.lastErrorCode = "PAYMENT_DELETED_INSTALLMENT_EMPTY";
+    expect(
+      await repository.findByRequest("site-one", "request-one"),
+    ).toMatchObject({
+      state: "CLOSED_UNPAID",
+      closedReason: "CANCELED",
+      checkout: null,
+      evidence: { kind: "CLOSED_UNPAID", noOutstandingPayment: true },
+    });
+  });
+
+  it("projects an installment plan as received only after all scoped receipts", async () => {
+    const { values, repository, hosted, quote } = await hostedInstallment();
+    const expected = quote.installmentCents ?? [];
+    const addReceipt = (index: number) => {
+      receipt({ ...values, repository });
+      const paymentId = `payment-${index}`;
+      const providerPaymentReference = `provider-payment-${index}`;
+      const eventId = `event-${index}`;
+      const gross = expected[index - 1];
+      Object.assign(values.tables.gift_payment_record.at(-1) ?? {}, {
+        id: paymentId,
+        providerPaymentReference,
+        providerInstallmentReference: hosted.providerReference,
+        installmentNumber: index,
+        grossCents: gross,
+        processingCents: gross - 5100,
+        commissionCents: 100,
+        recipientNetCents: 5000,
+        splitFixedCents: 100,
+      });
+      Object.assign(values.tables.financial_ledger_entry.at(-1) ?? {}, {
+        id: `ledger-${index}`,
+        paymentId,
+        eventId,
+        amountCents: 5000,
+        effectKey: giftReceivedEffectKey(providerPaymentReference),
+      });
+      Object.assign(values.tables.financial_event_inbox.at(-1) ?? {}, {
+        id: eventId,
+        paymentId,
+        eventType: "PAYMENT_SPLIT_DONE",
+      });
+    };
+    addReceipt(1);
+    expect(
+      (await repository.findByRequest("site-one", "request-one"))?.state,
+    ).toBe("OUTCOME_UNKNOWN");
+    addReceipt(2);
+    expect(
+      (await repository.findByRequest("site-one", "request-one"))?.state,
+    ).toBe("RECEIVED");
+    values.tables.gift_payment_record[1].providerInstallmentReference =
+      "other-plan";
+    expect(
+      (await repository.findByRequest("site-one", "request-one"))?.state,
+    ).toBe("OUTCOME_UNKNOWN");
   });
 
   it.each([

@@ -4,9 +4,7 @@ import { Link } from "@tanstack/react-router";
 import { ChevronRight, Landmark, Percent, UserRound } from "lucide-react";
 import { type ReactNode, useContext, useEffect, useState } from "react";
 import { ReceivingStatusCard } from "../features/receiving/ReceivingStatusCard";
-import { apiRequest } from "../lib/apiClient";
 import { type FinanceLinks, FinanceSection } from "./FinanceSection";
-import { parsePricingSettings } from "./GiftPricingSettings";
 import { loadGiftsReadiness } from "./giftsReadiness";
 import { isCurrentPanelSessionEpoch, panelActorOwner } from "./panelActor";
 import { ReceivingAccountSetup } from "./ReceivingAccountSetup";
@@ -122,28 +120,6 @@ export function ReceivingSection({
   }, [siteId, eligible, revision, sessionEpoch]);
   const current =
     result?.siteId === siteId && result.epoch === sessionEpoch ? result : null;
-  const [feesChosen, setFeesChosen] = useState(false);
-  const pricingReadable =
-    eligible &&
-    (platformOwner ||
-      selectedAccess?.membershipRole === "OWNER" ||
-      !!selectedAccess?.capabilities.manageCatalog);
-  useEffect(() => {
-    let active = true;
-    setFeesChosen(false);
-    if (pricingReadable && !guide && sessionEpoch !== null)
-      void apiRequest(
-        `/v1/sites/${encodeURIComponent(siteId)}/gift-pricing-settings`,
-      )
-        .then((value) => {
-          if (active && isCurrentPanelSessionEpoch(sessionEpoch))
-            setFeesChosen(parsePricingSettings(value, siteId).revision > 0);
-        })
-        .catch(() => {});
-    return () => {
-      active = false;
-    };
-  }, [siteId, pricingReadable, guide, sessionEpoch]);
   const ready =
     current?.readiness?.siteId === siteId &&
     current.readiness.state === "READY";
@@ -178,8 +154,6 @@ export function ReceivingSection({
       readiness={current?.readiness ?? null}
       failed={ownerAccessFailed || (current?.failed ?? false)}
       onRetry={() => setRevision((value) => value + 1)}
-      feesChosen={feesChosen}
-      onFeesChosen={() => setFeesChosen(true)}
       destination={destination?.siteId === siteId ? destination.value : null}
     />
   );
@@ -194,8 +168,6 @@ export function ReceivingSectionView({
   failed,
   onRetry,
   page = "overview",
-  feesChosen = false,
-  onFeesChosen,
   destination = null,
 }: {
   siteId: string;
@@ -206,8 +178,6 @@ export function ReceivingSectionView({
   failed: boolean;
   onRetry: () => void;
   page?: ReceivingPage;
-  feesChosen?: boolean;
-  onFeesChosen?: () => void;
   destination?: SavedPixDestinationSummary | null;
 }) {
   const currentAccess =
@@ -272,9 +242,7 @@ export function ReceivingSectionView({
       onReadinessChange={onRetry}
       section={section}
       readiness={readiness}
-      feesChosen={feesChosen}
-      onFeesChosen={onFeesChosen}
-      pricingEnabled={canManageFees(platformOwner, currentAccess)}
+      pricingEnabled={canPreviewFees(platformOwner, currentAccess)}
     />
   );
   return (
@@ -389,7 +357,7 @@ export function canConfigureReceiving(
   );
 }
 
-function canManageFees(platformOwner: boolean, access: SiteAccess | null) {
+function canPreviewFees(platformOwner: boolean, access: SiteAccess | null) {
   return (
     platformOwner ||
     access?.membershipRole === "OWNER" ||
@@ -496,7 +464,7 @@ function ReceivingSettings({
     {
       page: "fees",
       title: "Taxas",
-      text: "Quem paga as taxas dos presentes: vocês ou os convidados.",
+      text: "As taxas estão incluídas no preço que o convidado vê.",
       icon: <Percent className="size-[18px]" />,
     },
     {

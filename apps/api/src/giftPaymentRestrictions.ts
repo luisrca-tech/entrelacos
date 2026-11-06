@@ -196,6 +196,10 @@ export function createGiftPaymentRestrictionWorker(
         } = event;
         const observation = await reader.getPayment(nativeClaim);
         const payment = observation.payment;
+        const directInstallment = payment.checkoutSession == null;
+        const checkoutReference =
+          payment.checkoutSession ?? payment.installment;
+        const installmentNumber = payment.installmentNumber ?? 0;
         if (
           observation.source !== "provider" ||
           observation.provider !== "ASAAS" ||
@@ -206,9 +210,14 @@ export function createGiftPaymentRestrictionWorker(
           !after(observation.observedAt, event.authenticatedAt) ||
           !after(now(), observation.observedAt) ||
           payment.id !== event.paymentReference ||
-          !reference(payment.checkoutSession) ||
+          !reference(checkoutReference) ||
+          (directInstallment &&
+            (payment.billingType !== "CREDIT_CARD" ||
+              !id(payment.externalReference) ||
+              !Number.isInteger(installmentNumber) ||
+              installmentNumber < 1)) ||
           (event.payload.checkoutId !== undefined &&
-            event.payload.checkoutId !== payment.checkoutSession) ||
+            event.payload.checkoutId !== checkoutReference) ||
           (payment.externalReference != null && !id(payment.externalReference))
         )
           return unavailable();
@@ -219,15 +228,19 @@ export function createGiftPaymentRestrictionWorker(
           INNER JOIN ${giftQuoteRecord} q ON q.id=o.quote_id AND q.site_id=o.site_id AND q.account_id=o.account_id AND q.environment=o.environment
           INNER JOIN ${financialOperation} op ON op.id=a.operation_id AND op.order_id=a.order_id AND op.site_id=a.site_id AND op.account_id=a.account_id AND op.environment=a.environment
             AND op.kind=a.operation_kind AND op.kind='CHECKOUT_CREATE' AND op.state='SUCCEEDED' AND op.provider_operation_reference=a.provider_reference
-          WHERE a.site_id=${event.siteId} AND a.account_id=${event.accountId} AND a.environment=${environment} AND a.provider_reference=${payment.checkoutSession}
+          WHERE a.site_id=${event.siteId} AND a.account_id=${event.accountId} AND a.environment=${environment} AND a.provider_reference=${checkoutReference}
             AND account.provider='ASAAS' AND account.account_reference=${event.providerAccountReference}
-            AND q.snapshot->'receiving'->>'accountReference'=${event.providerAccountReference} LIMIT 2`),
+            AND q.snapshot->'receiving'->>'accountReference'=${event.providerAccountReference}
+            AND (NOT ${directInstallment} OR (a.id=${payment.externalReference ?? null}
+              AND q.method='CREDIT_CARD' AND q.snapshot->'quote'->>'settlementVersion'='PLATFORM_FEE_GUARANTEE_V1'
+              AND (q.snapshot->'quote'->>'installmentCount')::int BETWEEN GREATEST(2,${installmentNumber}::int) AND 12))
+            LIMIT 2`),
         );
         const binding = correlated.rows[0];
         if (
           correlated.rows.length !== 1 ||
           !id(binding?.attemptId) ||
-          binding.checkoutReference !== payment.checkoutSession ||
+          binding.checkoutReference !== checkoutReference ||
           binding.accountReference !== event.providerAccountReference ||
           (event.payload.externalReference !== undefined &&
             binding.attemptId !== event.payload.externalReference) ||

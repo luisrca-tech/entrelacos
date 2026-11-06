@@ -1981,3 +1981,62 @@ describe("native Asaas Pix transfer transport", () => {
     });
   });
 });
+
+it.each([200, 401, 403, 404, 500])(
+  "recognizes a removed Asaas plan only on exact GET 404 (status=%s)",
+  async (status) => {
+    const { options, fetch } = fixture(
+      Response.json({ id: "plan_one" }, { status }),
+    );
+    const client = createAsaasHttpClient(options);
+    const observed = client.getInstallmentRemoval("plan_one");
+    if (status === 200 || status === 404) {
+      await expect(observed).resolves.toMatchObject({
+        installmentReference: "plan_one",
+        accountReference: "remote-account-1",
+        environment: "sandbox",
+        removed: status === 404,
+      });
+      expect(fetch.mock.calls[0]?.[0]).toBe(
+        "https://api-sandbox.asaas.com/v3/installments/plan_one",
+      );
+      expect(fetch.mock.calls[0]?.[1]?.method).toBe("GET");
+    } else {
+      await expect(observed).rejects.toThrow();
+    }
+  },
+);
+
+it.each([true, false])(
+  "requires an exact internal transfer credit on the authenticated recipient statement (matching=%s)",
+  async (matching) => {
+    const { options, fetch } = fixture(
+      Response.json({
+        hasMore: false,
+        data: [
+          {
+            id: "ftn_debit",
+            type: "TRANSFER",
+            transferId: "transfer_one",
+            date: "2026-11-06",
+            value: -0.03,
+          },
+          {
+            id: "ftn_credit",
+            type: "INTERNAL_TRANSFER_CREDIT",
+            transferId: matching ? "transfer_one" : "other",
+            date: "2026-11-06",
+            value: 0.03,
+          },
+        ],
+      }),
+    );
+    const client = createAsaasHttpClient(options);
+    await expect(
+      client.hasInternalTransferCredit("transfer_one", 3, "2026-11-06"),
+    ).resolves.toBe(matching);
+    expect(fetch.mock.calls[0]?.[0]).toContain(
+      "/financialTransactions?startDate=2026-11-06&finishDate=2026-11-06",
+    );
+  },
+);

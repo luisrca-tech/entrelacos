@@ -27,7 +27,11 @@ import type {
   FinancialOverviewRepository,
   StoredFinancialTotals,
 } from "./financialOverview";
-import { giftReceivedEffectKey } from "./giftPaymentReconciliation";
+import {
+  giftPaymentTerms,
+  giftReceivedEffectKey,
+  isGiftReceiptEvent,
+} from "./giftPaymentReconciliation";
 import { allowsLiveSite, type LiveSitePolicy } from "./liveSitePolicy";
 import type { ReceivingTransaction } from "./receivingRepository";
 import {
@@ -249,7 +253,9 @@ async function loadFacts(
     await Promise.all([
       rows(
         tx,
-        sql`SELECT p.id AS "id", p.site_id AS "siteId", p.account_id AS "accountId", p.environment AS "environment", p.order_id AS "orderId", p.attempt_id AS "attemptId", p.provider_payment_reference AS "providerPaymentReference", p.provider_status AS "providerStatus", p.verification_status AS "verificationStatus", p.observed_at AS "observedAt", p.created_at AS "createdAt", p.currency AS "currency", p.gross_cents AS "grossCents", p.processing_cents AS "processingCents", p.commission_cents AS "commissionCents", p.recipient_net_cents AS "recipientNetCents", p.split_provider_reference AS "splitProviderReference", p.split_fixed_cents AS "splitFixedCents",
+        sql`SELECT p.id AS "id", p.site_id AS "siteId", p.account_id AS "accountId", p.environment AS "environment", p.order_id AS "orderId", p.attempt_id AS "attemptId", p.provider_payment_reference AS "providerPaymentReference", p.provider_status AS "providerStatus", p.verification_status AS "verificationStatus", p.observed_at AS "observedAt", p.created_at AS "createdAt", p.currency AS "currency", p.gross_cents AS "grossCents", p.processing_cents AS "processingCents", p.commission_cents AS "commissionCents", p.recipient_net_cents AS "recipientNetCents", p.split_provider_reference AS "splitProviderReference", p.split_fixed_cents AS "splitFixedCents", p.installment_number AS "installmentNumber", p.provider_installment_reference AS "providerInstallmentReference",
+        p.platform_adjustment_cents AS "platformAdjustmentCents", p.platform_adjustment_transfer_reference AS "platformAdjustmentTransferReference",
+        p.platform_adjustment_dispatch_at AS "platformAdjustmentDispatchAt", p.platform_adjustment_funded_at AS "platformAdjustmentFundedAt",
       o.id AS "storedOrderId", o.quote_id AS "orderQuoteId", o.created_at AS "orderCreatedAt", q.id AS "quoteId", q.currency AS "quoteCurrency", q.nominal_cents AS "quoteNominalCents", q.commission_basis_points AS "quoteCommissionBasisPoints", q.commission_cents AS "quoteCommissionCents", q.processing_cents AS "quoteProcessingCents", q.total_cents AS "quoteTotalCents", q.snapshot AS "quoteSnapshot", q.snapshot->'receiving'->>'accountReference' AS "quoteAccountReference", q.snapshot->'receiving'->>'siteId' AS "quoteSiteId", q.snapshot->'receiving'->>'environment' AS "quoteEnvironment", q.snapshot->'receiving'->>'provider' AS "quoteProvider",
       a.id AS "storedAttemptId", a.order_id AS "attemptOrderId", a.operation_id AS "attemptOperationId", a.provider_reference AS "providerCheckoutReference", op.id AS "operationId", op.kind AS "operationKind", op.state AS "operationState", op.provider_operation_reference AS "providerOperationReference"
       FROM ${giftPaymentRecord} p
@@ -305,6 +311,7 @@ function eventPayload(
     "externalReference",
     "accessTokenId",
   ];
+  if (event.eventType === "PAYMENT_DELETED") allowed.push("installmentId");
   for (const [key, value] of Object.entries(payload)) {
     if (
       !allowed.includes(key) ||
@@ -405,11 +412,7 @@ function withdrawal(row: Row, observedAt: Date): void {
     after(storedTime(row.resolutionObservedAt, observedAt), created);
   } else unavailable();
 }
-function payment(
-  row: Row,
-  binding: FinancialAccountBinding,
-  observedAt: Date,
-): void {
+function payment(row: Row, binding: FinancialAccountBinding, observedAt: Date) {
   reference(row.providerPaymentReference);
   const orderId = localId(row.orderId);
   const attemptId = localId(row.attemptId);
@@ -455,6 +458,31 @@ function payment(
   );
   if (!allocation.success || quote.feeAllocation !== policy.feeAllocation)
     unavailable();
+  const guaranteed = quote.settlementVersion === "PLATFORM_FEE_GUARANTEE_V1";
+  const verifiedQuote = guaranteed ? giftQuoteSchema.parse(quote) : null;
+  const terms = giftPaymentTerms(
+    verifiedQuote ?? {
+      totalCents: total,
+      nominalCents: nominal,
+      commissionCents: commission,
+    },
+    row.installmentNumber,
+  );
+  if (
+    !terms ||
+    (row.installmentNumber == null
+      ? row.providerInstallmentReference != null
+      : row.providerInstallmentReference !== checkoutRef) ||
+    (verifiedQuote &&
+      (verifiedQuote.id !== row.quoteId ||
+        verifiedQuote.siteId !== binding.siteId ||
+        verifiedQuote.mode !== binding.environment ||
+        verifiedQuote.totalCents !== total ||
+        verifiedQuote.nominalCents !== nominal ||
+        verifiedQuote.commissionCents !== commission ||
+        verifiedQuote.processingCents !== processing))
+  )
+    return unavailable();
   const quoteAllocated =
     allocation.data === "RECIPIENT_DEDUCTED"
       ? total === nominal &&
@@ -465,16 +493,42 @@ function payment(
     row.quoteCommissionBasisPoints !== 200 ||
     BigInt(commission) !== (BigInt(nominal) * 200n + 5000n) / 10000n ||
     !quoteAllocated ||
-    cents(row.grossCents, true) !== total ||
-    BigInt(total) !==
-      BigInt(actualProcessing) + BigInt(commission) + BigInt(recipientNet) ||
+    cents(row.grossCents, true) !== terms.grossCents ||
+    BigInt(terms.grossCents) !==
+      BigInt(actualProcessing) +
+        BigInt(terms.commissionCents) +
+        BigInt(recipientNet) ||
     (!(row.providerStatus === "CONFIRMED" && row.commissionCents === null) &&
-      cents(row.commissionCents) !== commission) ||
-    cents(row.splitFixedCents) !== commission ||
-    (commission > 0 && optionalReference(row.splitProviderReference) === null)
+      cents(row.commissionCents) !== terms.commissionCents) ||
+    cents(row.splitFixedCents) !== terms.commissionCents ||
+    (terms.commissionCents > 0 &&
+      optionalReference(row.splitProviderReference) === null)
   )
     unavailable();
   optionalReference(row.splitProviderReference);
+  const adjustment =
+    row.platformAdjustmentCents == null
+      ? 0
+      : cents(row.platformAdjustmentCents, true);
+  const funded = row.platformAdjustmentFundedAt != null;
+  if (
+    (adjustment > 0 &&
+      (!guaranteed ||
+        adjustment !== Math.max(0, terms.nominalCents - recipientNet))) ||
+    (row.platformAdjustmentTransferReference != null &&
+      (!reference(row.platformAdjustmentTransferReference) ||
+        row.platformAdjustmentDispatchAt == null)) ||
+    (funded &&
+      (adjustment === 0 || row.platformAdjustmentTransferReference == null))
+  )
+    return unavailable();
+  if (row.platformAdjustmentDispatchAt != null) {
+    const dispatched = storedTime(row.platformAdjustmentDispatchAt, observedAt);
+    after(dispatched, storedTime(row.observedAt, observedAt));
+    if (funded)
+      after(storedTime(row.platformAdjustmentFundedAt, observedAt), dispatched);
+  }
+  return { ...terms, guaranteed, adjustment, funded };
 }
 function ledger(row: Row, observedAt: Date): void {
   cents(row.amountCents, true);
@@ -510,8 +564,28 @@ function indexed(
     operations: scoped(facts.operations, binding),
   };
   const providerPayments = new Set<string>();
+  const paymentAllocations = new Map<string, ReturnType<typeof payment>>();
+  const orderInstallments = new Map<
+    string,
+    { attemptId: unknown; positions: Set<unknown> }
+  >();
   for (const row of maps.payments.values()) {
-    payment(row, binding, observedAt);
+    const allocation = payment(row, binding, observedAt);
+    paymentAllocations.set(String(row.id), allocation);
+    if (allocation.guaranteed) {
+      const order = String(row.orderId);
+      const sameOrder = orderInstallments.get(order) ?? {
+        attemptId: row.attemptId,
+        positions: new Set(),
+      };
+      if (
+        sameOrder.attemptId !== row.attemptId ||
+        sameOrder.positions.has(row.installmentNumber ?? null)
+      )
+        return unavailable();
+      sameOrder.positions.add(row.installmentNumber ?? null);
+      orderInstallments.set(order, sameOrder);
+    }
     if (providerPayments.has(String(row.providerPaymentReference)))
       return unavailable();
     providerPayments.add(String(row.providerPaymentReference));
@@ -570,7 +644,7 @@ function indexed(
     if (effects.has(String(row.effectKey))) return unavailable();
     effects.add(String(row.effectKey));
   }
-  return { ...maps, payloads };
+  return { ...maps, payloads, paymentAllocations };
 }
 function unresolved(data: ReturnType<typeof indexed>): number {
   let count = 0;
@@ -608,6 +682,8 @@ function aggregate(
     bigint
   >;
   const credited = new Set<string>();
+  let platformAdjustmentOwed = 0n;
+  let platformAdjustmentFunded = 0n;
   const completedWithdrawals = new Set<string>();
   for (const op of data.operations.values())
     if (op.kind === "REFUND") return unavailable();
@@ -700,7 +776,7 @@ function aggregate(
       entry.compensatesEntryId !== null ||
       entry.operationId !== p.operationId ||
       e.state !== "PROCESSED" ||
-      e.eventType !== "PAYMENT_RECEIVED" ||
+      !isGiftReceiptEvent(e.eventType) ||
       e.paymentId !== p.id ||
       payload.paymentId !== p.providerPaymentReference ||
       (payload.externalReference !== undefined &&
@@ -719,8 +795,23 @@ function aggregate(
     after(created, storedTime(e.receivedAt, observedAt));
     after(storedTime(e.processedAt, observedAt), created);
     credited.add(String(p.id));
-    sums.nominalReceivedCents += BigInt(cents(p.quoteNominalCents));
-    sums.netReceivedCents += BigInt(cents(p.recipientNetCents));
+    const allocation = data.paymentAllocations.get(String(p.id));
+    if (!allocation) return unavailable();
+    const recipientNet = cents(p.recipientNetCents);
+    if (
+      allocation.guaranteed &&
+      allocation.adjustment !==
+        Math.max(0, allocation.nominalCents - recipientNet)
+    )
+      return unavailable();
+    sums.nominalReceivedCents += BigInt(allocation.nominalCents);
+    sums.netReceivedCents += BigInt(recipientNet);
+    if (allocation.funded) {
+      platformAdjustmentFunded += BigInt(allocation.adjustment);
+      sums.netReceivedCents += BigInt(allocation.adjustment);
+    } else {
+      platformAdjustmentOwed += BigInt(allocation.adjustment);
+    }
     sums.processingCents += BigInt(cents(p.processingCents));
     sums.commissionCents += BigInt(cents(p.commissionCents));
   }
@@ -785,12 +876,25 @@ function aggregate(
     if (!heldStates.includes(String(w.state))) return unavailable();
     sums.pendingCommitmentsCents += BigInt(cents(w.reservedCents));
   }
-  return Object.fromEntries(
-    totalsKeys.map((key) => {
-      if (sums[key] > 2147483647n) return unavailable();
-      return [key, Number(sums[key])];
-    }),
-  ) as StoredFinancialTotals;
+  if (
+    platformAdjustmentOwed > 2147483647n ||
+    platformAdjustmentFunded > 2147483647n
+  )
+    return unavailable();
+  return {
+    ...Object.fromEntries(
+      totalsKeys.map((key) => {
+        if (sums[key] > 2147483647n) return unavailable();
+        return [key, Number(sums[key])];
+      }),
+    ),
+    ...(platformAdjustmentOwed
+      ? { platformAdjustmentOwedCents: Number(platformAdjustmentOwed) }
+      : {}),
+    ...(platformAdjustmentFunded
+      ? { platformAdjustmentFundedCents: Number(platformAdjustmentFunded) }
+      : {}),
+  } as StoredFinancialTotals;
 }
 export function createFinancialOverviewRepository(
   db: FinancialOverviewRepositoryDatabase,

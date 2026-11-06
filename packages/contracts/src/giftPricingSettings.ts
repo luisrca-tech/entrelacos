@@ -6,19 +6,18 @@ export const giftPricingSettingsSchema = z
     siteId: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/),
     feeAllocation: z.enum(["RECIPIENT_DEDUCTED", "BUYER_GROSS_UP"]),
     revision: z.number().int().min(0).max(2147483647),
-    buyerGrossUpAvailable: z.literal(false),
+    buyerGrossUpAvailable: z.boolean(),
     sandboxBuyerGrossUpAvailable: z.literal(true).optional(),
-    blockedReason: z.string().min(1),
+    blockedReason: z.string().min(1).nullable(),
   })
   .strict();
 export type GiftPricingSettings = z.infer<typeof giftPricingSettingsSchema>;
 export const giftPricingSettingsResponseSchema = z
   .object({ settings: giftPricingSettingsSchema })
   .strict();
-export const giftPricingSettingsInputSchema = giftPricingSettingsSchema.pick({
-  feeAllocation: true,
-  revision: true,
-});
+export const giftPricingSettingsInputSchema = giftPricingSettingsSchema
+  .pick({ feeAllocation: true, revision: true })
+  .extend({ feeAllocation: z.literal("BUYER_GROSS_UP") });
 export type GiftPricingSettingsInput = z.infer<
   typeof giftPricingSettingsInputSchema
 >;
@@ -26,6 +25,6 @@ export type GiftPricingSettingsInput = z.infer<
 export const giftPricingPreviewInputSchema = z
   .object({
     nominalCents: giftCreateInputSchema.shape.nominalCents,
-    feeAllocation: giftPricingSettingsInputSchema.shape.feeAllocation,
+    feeAllocation: giftPricingSettingsSchema.shape.feeAllocation,
   })
   .strict();

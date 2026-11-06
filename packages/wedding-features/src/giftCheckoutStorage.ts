@@ -8,6 +8,7 @@ import {
 } from "@entrelacos/contracts";
 
 export const pendingGiftCheckoutSchema = checkoutCreateInputSchema
+  .omit({ payer: true })
   .extend({
     method: giftPaymentMethodSchema,
     mode: receivingModeSchema,

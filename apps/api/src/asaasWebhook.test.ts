@@ -319,3 +319,30 @@ describe("Asaas webhook durable acceptance", () => {
     }
   });
 });
+
+it("keeps just the payment, attempt and plan identifiers for a direct installment deletion", async () => {
+  const f = fixture();
+  await f.receiver.receive(
+    token,
+    JSON.stringify({
+      ...event,
+      event: "PAYMENT_DELETED",
+      payment: {
+        ...event.payment,
+        installment: "plan_one",
+        installmentNumber: 2,
+        deleted: true,
+      },
+    }),
+  );
+  expect(f.append).toHaveBeenCalledWith(
+    expect.objectContaining({
+      eventType: "PAYMENT_DELETED",
+      payload: {
+        paymentId: "pay_one",
+        externalReference: "attempt-one",
+        installmentId: "plan_one",
+      },
+    }),
+  );
+});

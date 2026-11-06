@@ -1,12 +1,14 @@
 import {
   giftCatalogLimits,
   giftCatalogResponseSchema,
+  giftCentsSchema,
   giftCreateInputSchema,
   giftItemResponseSchema,
   giftItemSchema,
   giftPublishInputSchema,
   giftReorderInputSchema,
   giftUpdateInputSchema,
+  type PublicGiftItem,
   publicGiftCatalogPageResponseSchema,
   publicGiftCatalogQuerySchema,
   siteIdSchema,
@@ -45,6 +47,10 @@ import { allowsLocalPublicOrigin } from "./localPublicOrigin";
 import { type SiteAccessActor, SiteAccessDeniedError } from "./siteAccess";
 
 export type GiftsHttpOptions = AuthHttpOptions & {
+  loadPublicGiftPrices?: (
+    siteId: string,
+    gifts: readonly Pick<PublicGiftItem, "id" | "nominalCents">[],
+  ) => Promise<Map<string, number>>;
   readPricingSettings?: (siteId: string) => Promise<GiftPricingSettings>;
   previewPricing?: (siteId: string, input: unknown) => Promise<unknown>;
   sandboxBuyerGrossUpAvailable?: (siteId: string) => Promise<boolean>;
@@ -206,22 +212,50 @@ export function createGiftsHttpRouter(options: GiftsHttpOptions) {
       catalog.mode === "sandbox" &&
       settings?.feeAllocation === "BUYER_GROSS_UP" &&
       (await options.sandboxBuyerGrossUpAvailable?.(siteId)) === true;
+    const prices =
+      options.loadPublicGiftPrices && catalog.mode !== "demonstration"
+        ? catalog.mode === "sandbox" || catalog.mode === "live"
+          ? await options
+              .loadPublicGiftPrices(siteId, catalog.gifts)
+              .catch(() => new Map<string, number>())
+          : new Map<string, number>()
+        : undefined;
     const page = publicGiftCatalogPageResponseSchema.safeParse(
-      settings
+      prices
         ? {
             ...catalog,
-            gifts: catalog.gifts.map((gift) => ({
-              ...gift,
-              pricing: {
-                feeAllocation: settings.feeAllocation,
-                available:
-                  settings.feeAllocation === "RECIPIENT_DEDUCTED" ||
-                  sandboxBuyer,
-                ...(sandboxBuyer ? { sandboxHomologation: true as const } : {}),
-              },
-            })),
+            gifts: catalog.gifts.map((gift) => {
+              const price = giftCentsSchema.safeParse(prices.get(gift.id));
+              return {
+                ...gift,
+                pricing:
+                  price.success && price.data >= gift.nominalCents
+                    ? {
+                        feeAllocation: "BUYER_GROSS_UP",
+                        available: true,
+                        startingAtCents: price.data,
+                      }
+                    : { feeAllocation: "BUYER_GROSS_UP", available: false },
+              };
+            }),
           }
-        : catalog,
+        : settings
+          ? {
+              ...catalog,
+              gifts: catalog.gifts.map((gift) => ({
+                ...gift,
+                pricing: {
+                  feeAllocation: settings.feeAllocation,
+                  available:
+                    settings.feeAllocation === "RECIPIENT_DEDUCTED" ||
+                    sandboxBuyer,
+                  ...(sandboxBuyer
+                    ? { sandboxHomologation: true as const }
+                    : {}),
+                },
+              })),
+            }
+          : catalog,
     );
     if (
       !page.success ||

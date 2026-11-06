@@ -225,3 +225,16 @@ it.each([undefined, "foreign-site", "site-one"])(
     }
   },
 );
+
+it("recognizes a restricted credit card installment bound to the stored plan and attempt", async () => {
+  const f = fixture();
+  Object.assign(f.observation.payment, {
+    checkoutSession: null,
+    installment: f.binding.checkoutReference,
+    installmentNumber: 2,
+    billingType: "CREDIT_CARD",
+  });
+  await expect(f.worker.processNextReceivedPayment()).resolves.toEqual({
+    kind: "DEAD_LETTER",
+  });
+});

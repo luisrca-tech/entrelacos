@@ -11,7 +11,7 @@ import {
   type GiftCheckoutRecord,
   type GiftCheckoutServiceDependencies,
 } from "./giftCheckouts";
-import { quoteGiftAmounts } from "./giftMoney";
+import { quoteGiftAmounts, quoteGiftPurchaseAmounts } from "./giftMoney";
 import type {
   GiftQuoteReceivingContext,
   GiftQuoteSnapshot,
@@ -127,6 +127,99 @@ function fixture(mode: "sandbox" | "live" = "sandbox") {
 }
 
 describe("native Asaas hosted checkout creation", () => {
+  it.each([
+    { altered: false, expiresWhileCreatingCustomer: false },
+    { altered: true, expiresWhileCreatingCustomer: false },
+    { altered: false, expiresWhileCreatingCustomer: true },
+  ])(
+    "verifies the fixed plan before opening the installment invoice ($altered, $expiresWhileCreatingCustomer)",
+    async ({ altered, expiresWhileCreatingCustomer }) => {
+      const values = fixture();
+      if (expiresWhileCreatingCustomer)
+        values.options.now = vi
+          .fn()
+          .mockReturnValueOnce(new Date("2026-10-12T12:04:59.000Z"))
+          .mockReturnValue(new Date("2026-10-12T12:05:01.000Z"));
+      const { command, snapshot, fetch } = values;
+      Object.assign(snapshot.pricing.policy, {
+        method: "CREDIT_CARD",
+        feeAllocation: "BUYER_GROSS_UP",
+        feeBasis: "ACCOUNT_BUYER_ESTIMATE",
+        cardInstallmentBasisPoints: { upToSix: 350 },
+      });
+      Object.assign(snapshot.quote, {
+        method: "CREDIT_CARD",
+        settlementVersion: "PLATFORM_FEE_GUARANTEE_V1",
+        ...quoteGiftPurchaseAmounts(
+          {
+            nominalCents: 10_000,
+            method: "CREDIT_CARD",
+            policy: snapshot.pricing.policy,
+          },
+          3,
+        ),
+      });
+      const payer = {
+        name: "Guest Example",
+        email: "guest@example.test",
+        cpfCnpj: "24971563792",
+      };
+      const customer = "cus_test1";
+      const invoiceUrl = "https://sandbox.asaas.com/i/first-invoice";
+      const payments = snapshot.quote.installmentCents?.map((cents, index) => ({
+        id: `pay_${index + 1}`,
+        billingType: "CREDIT_CARD",
+        customer,
+        installment: providerId,
+        installmentNumber: index + 1,
+        status: "PENDING",
+        externalReference: command.attemptId,
+        value: cents / 100,
+        split: [
+          {
+            walletId: "platform-wallet",
+            fixedValue: index === 2 ? 0.68 : 0.66,
+          },
+        ],
+        ...(index === 0 ? { invoiceUrl } : {}),
+      }));
+      fetch
+        .mockResolvedValueOnce(json({ id: customer }))
+        .mockResolvedValueOnce(json(payments?.[0]));
+      if (altered && payments) payments[2].value += 0.01;
+      fetch.mockResolvedValueOnce(
+        json({ data: payments, hasMore: false, totalCount: 3 }),
+      );
+      const result = createAsaasCheckoutClient(
+        values.options,
+      ).createHostedCheckout({ ...command, payer });
+      if (altered) await expect(result).rejects.toMatchObject(unavailable);
+      else
+        await expect(result).resolves.toMatchObject({
+          providerReference: providerId,
+          checkout: { hostedUrl: invoiceUrl },
+        });
+      expect(
+        fetch.mock.calls.map(([url, init]) => [
+          new URL(String(url)).pathname,
+          init?.method,
+        ]),
+      ).toEqual([
+        ["/v3/customers", "POST"],
+        ["/v3/payments", "POST"],
+        [`/v3/installments/${providerId}/payments`, "GET"],
+      ]);
+      expect(JSON.parse(String(fetch.mock.calls[1][1]?.body))).toMatchObject({
+        customer,
+        installmentCount: 3,
+        totalValue: snapshot.quote.totalCents / 100,
+        interest: { value: 0 },
+        fine: { value: 0 },
+        split: [{ walletId: "platform-wallet", totalFixedValue: 2 }],
+      });
+      expect(String(fetch.mock.calls[1][1]?.body)).not.toContain(payer.cpfCnpj);
+    },
+  );
   it.each(["sandbox", "live"] as const)(
     "keeps bounded local receiving references out of the %s provider payload",
     async (mode) => {

@@ -1,5 +1,9 @@
 import { createHash } from "node:crypto";
-import { giftQuoteSchema } from "@entrelacos/contracts";
+import {
+  allocateGiftInstallmentCents,
+  type GiftQuote,
+  giftQuoteSchema,
+} from "@entrelacos/contracts";
 import { parseBrlCents } from "./giftMoney";
 import type { GiftQuoteSnapshot } from "./giftQuotes";
 
@@ -60,6 +64,8 @@ export interface ObservedGiftPaymentRecord {
   recipientNetCents: number | null;
   splitProviderReference: string | null;
   splitFixedCents: number | null;
+  providerInstallmentReference?: string;
+  installmentNumber?: number;
 }
 
 export interface GiftReceiptEffect {
@@ -76,6 +82,7 @@ export type GiftPaymentReconciliationResult =
       reason: null;
       payment: ObservedGiftPaymentRecord;
       effect: GiftReceiptEffect;
+      platformAdjustmentCents?: number;
     }
   | {
       outcome: "NOT_RECEIVED" | "SPLIT_PENDING" | "DIVERGENT";
@@ -172,6 +179,47 @@ export function giftReceivedEffectKey(
   return `GIFT_RECEIVED:${createHash("sha256").update(reference(providerPaymentReference), "utf8").digest("hex")}`;
 }
 
+export function isGiftReceiptEvent(eventType: unknown): boolean {
+  return eventType === "PAYMENT_RECEIVED" || eventType === "PAYMENT_SPLIT_DONE";
+}
+
+export function giftPaymentTerms(
+  quote: Pick<GiftQuote, "totalCents" | "nominalCents" | "commissionCents"> & {
+    installmentCount?: number;
+    installmentCents?: number[];
+  },
+  installmentNumber: unknown,
+): {
+  grossCents: number;
+  nominalCents: number;
+  commissionCents: number;
+} | null {
+  const count = quote.installmentCount ?? 1;
+  const { totalCents, nominalCents, commissionCents } = quote;
+  if (count === 1)
+    return installmentNumber == null
+      ? { grossCents: totalCents, nominalCents, commissionCents }
+      : null;
+  if (
+    typeof installmentNumber !== "number" ||
+    !Number.isInteger(installmentNumber) ||
+    installmentNumber < 1 ||
+    installmentNumber > count
+  )
+    return null;
+  // Asaas distributes a fixed total across the plan and applies rounding to its last charge.
+  const share = (amount: number) =>
+    allocateGiftInstallmentCents(amount, count)[installmentNumber - 1];
+  const grossCents = quote.installmentCents?.[installmentNumber - 1];
+  return grossCents === undefined
+    ? null
+    : {
+        grossCents,
+        nominalCents: share(nominalCents),
+        commissionCents: share(commissionCents),
+      };
+}
+
 export function reconcileGiftPaymentObservation(
   input: GiftPaymentReconciliationInput,
 ): GiftPaymentReconciliationResult {
@@ -223,7 +271,21 @@ export function reconcileGiftPaymentObservation(
     const raw = record(input.observation.payment);
     const paymentReference = reference(raw.id);
     const status = providerStatus(raw.status);
-    const checkoutReference = reference(raw.checkoutSession);
+    const installmentCount = quote.installmentCount ?? 1;
+    const installment =
+      installmentCount > 1 ? reference(raw.installment) : null;
+    const installmentNumber =
+      installmentCount > 1 ? raw.installmentNumber : null;
+    const terms = giftPaymentTerms(quote, installmentNumber);
+    if (
+      !terms ||
+      (quote.settlementVersion !== undefined &&
+        installment === null &&
+        raw.installmentNumber != null &&
+        raw.installmentNumber !== 1)
+    )
+      return bindingMismatch();
+    const checkoutReference = installment ?? reference(raw.checkoutSession);
     const method = reference(raw.billingType);
     if (
       raw.externalReference !== undefined &&
@@ -233,6 +295,9 @@ export function reconcileGiftPaymentObservation(
       return invalid();
     if (
       checkoutReference !== binding.providerCheckoutReference ||
+      (installment !== null &&
+        (raw.checkoutSession != null ||
+          raw.externalReference !== binding.attemptId)) ||
       method !== quote.method ||
       (raw.currency !== undefined && raw.currency !== "BRL") ||
       (raw.externalReference !== undefined &&
@@ -282,10 +347,16 @@ export function reconcileGiftPaymentObservation(
       recipientNetCents: null,
       splitProviderReference: null,
       splitFixedCents: null,
+      ...(installment === null
+        ? {}
+        : {
+            providerInstallmentReference: installment,
+            installmentNumber: installmentNumber as number,
+          }),
     };
     if (
       status === "CONFIRMED" &&
-      gross === quote.totalCents &&
+      gross === terms.grossCents &&
       net !== null &&
       (raw.deleted == null || raw.deleted === false) &&
       raw.chargeback == null &&
@@ -296,25 +367,25 @@ export function reconcileGiftPaymentObservation(
     ) {
       // A configured split can establish an allocation awaiting release, never a settled commission.
       const split = raw.split.length === 1 ? record(raw.split[0]) : null;
-      const zero = quote.commissionCents === 0 && raw.split.length === 0;
+      const zero = terms.commissionCents === 0 && raw.split.length === 0;
       const matching =
         split &&
         split.walletId === input.platformWalletId &&
         isReference(split.id) &&
         split.percentualValue == null &&
         split.fixedValue != null &&
-        cents(split.fixedValue) === quote.commissionCents &&
+        cents(split.fixedValue) === terms.commissionCents &&
         (split.totalValue == null
           ? split.status !== "DONE"
-          : cents(split.totalValue) === quote.commissionCents ||
+          : cents(split.totalValue) === terms.commissionCents ||
             (split.status !== "DONE" && cents(split.totalValue) === 0)) &&
         ["PENDING", "PROCESSING", "AWAITING_CREDIT", "DONE"].includes(
           String(split.status),
         );
-      if ((zero || matching) && net > quote.commissionCents) {
+      if ((zero || matching) && net > terms.commissionCents) {
         payment.splitProviderReference = split ? reference(split.id) : null;
-        payment.splitFixedCents = quote.commissionCents;
-        payment.recipientNetCents = net - quote.commissionCents;
+        payment.splitFixedCents = terms.commissionCents;
+        payment.recipientNetCents = net - terms.commissionCents;
       }
     }
     if (status !== "RECEIVED")
@@ -355,7 +426,7 @@ export function reconcileGiftPaymentObservation(
       };
     if (!Array.isArray(raw.split)) return invalid();
     const splits = raw.split;
-    if (quote.commissionCents === 0 && splits.length === 0) {
+    if (terms.commissionCents === 0 && splits.length === 0) {
       // An authoritative empty split has no outgoing platform transfer.
       payment.commissionCents = 0;
       payment.splitFixedCents = 0;
@@ -418,11 +489,12 @@ export function reconcileGiftPaymentObservation(
       processingCents === null ||
       commissionCents === null ||
       recipientNetCents === null ||
-      payment.grossCents !== quote.totalCents ||
-      commissionCents !== quote.commissionCents ||
+      payment.grossCents !== terms.grossCents ||
+      commissionCents !== terms.commissionCents ||
       (quote.feeAllocation === "BUYER_GROSS_UP" &&
+        quote.settlementVersion !== "PLATFORM_FEE_GUARANTEE_V1" &&
         processingCents !== quote.processingCents) ||
-      payment.splitFixedCents !== quote.commissionCents ||
+      payment.splitFixedCents !== terms.commissionCents ||
       recipientNetCents <= 0 ||
       BigInt(payment.grossCents) !==
         BigInt(processingCents) +
@@ -440,6 +512,14 @@ export function reconcileGiftPaymentObservation(
       outcome: "RECEIVED",
       reason: null,
       payment,
+      ...(quote.settlementVersion === "PLATFORM_FEE_GUARANTEE_V1"
+        ? {
+            platformAdjustmentCents: Math.max(
+              0,
+              terms.nominalCents - recipientNetCents,
+            ),
+          }
+        : {}),
       effect: {
         effectKey: giftReceivedEffectKey(payment.providerPaymentReference),
         kind: "GIFT_RECEIVED",

@@ -1,7 +1,11 @@
 import {
+  allocateGiftInstallmentCents,
+  type GiftInstallmentOption,
   type GiftQuote,
   getGiftCommissionCents,
   giftCentsSchema,
+  giftMaximumInstallments,
+  giftMinimumInstallmentCents,
   giftPaymentMethodSchema,
   giftQuoteSchema,
 } from "@entrelacos/contracts";
@@ -14,7 +18,11 @@ export interface GiftProcessingPolicy {
   processingFixedCents: number;
   rounding: "CEILING";
   feeAllocation?: GiftQuote["feeAllocation"];
-  feeBasis?: "OBSERVED_ESTIMATE" | "SANDBOX_BUYER_ESTIMATE";
+  feeBasis?:
+    | "OBSERVED_ESTIMATE"
+    | "SANDBOX_BUYER_ESTIMATE"
+    | "ACCOUNT_BUYER_ESTIMATE";
+  cardInstallmentBasisPoints?: { upToSix?: number; upToTwelve?: number };
 }
 
 export interface QuoteGiftAmountsInput {
@@ -83,10 +91,12 @@ export function quoteGiftAmounts(input: QuoteGiftAmountsInput): GiftAmounts {
     injected.commissionBasisPoints !== 200 ||
     (injected.feeBasis !== undefined &&
       injected.feeBasis !== "OBSERVED_ESTIMATE" &&
-      injected.feeBasis !== "SANDBOX_BUYER_ESTIMATE") ||
+      injected.feeBasis !== "SANDBOX_BUYER_ESTIMATE" &&
+      injected.feeBasis !== "ACCOUNT_BUYER_ESTIMATE") ||
     (injected.feeBasis === "OBSERVED_ESTIMATE" &&
       injected.feeAllocation !== "RECIPIENT_DEDUCTED") ||
-    (injected.feeBasis === "SANDBOX_BUYER_ESTIMATE" &&
+    ((injected.feeBasis === "SANDBOX_BUYER_ESTIMATE" ||
+      injected.feeBasis === "ACCOUNT_BUYER_ESTIMATE") &&
       injected.feeAllocation !== "BUYER_GROSS_UP") ||
     injected.rounding !== "CEILING" ||
     !giftQuoteSchema.shape.feeAllocation.safeParse(injected.feeAllocation)
@@ -136,6 +146,86 @@ export function quoteGiftAmounts(input: QuoteGiftAmountsInput): GiftAmounts {
     ...(injected.feeAllocation
       ? { feeAllocation: injected.feeAllocation }
       : {}),
+  };
+}
+
+function quoteGiftCardInstallments(
+  base: GiftAmounts,
+  policy: GiftProcessingPolicy,
+): GiftInstallmentOption[] {
+  const nominalCents = base.nominalCents;
+  const options: GiftInstallmentOption[] = [
+    {
+      installmentCount: 1,
+      totalCents: base.totalCents,
+      installmentSurchargeCents: 0,
+      installmentCents: [base.totalCents],
+    },
+  ];
+  for (const { start, end, rate } of [
+    { start: 2, end: 6, rate: policy.cardInstallmentBasisPoints?.upToSix },
+    {
+      start: 7,
+      end: giftMaximumInstallments,
+      rate: policy.cardInstallmentBasisPoints?.upToTwelve,
+    },
+  ]) {
+    if (rate === undefined) continue;
+    try {
+      const amounts = quoteGiftAmounts({
+        nominalCents,
+        method: "CREDIT_CARD",
+        policy: {
+          ...policy,
+          processingBasisPoints: rate,
+        },
+      });
+      for (let count = start; count <= end; count++) {
+        if (
+          Math.floor(amounts.totalCents / count) < giftMinimumInstallmentCents
+        )
+          break;
+        options.push({
+          installmentCount: count,
+          totalCents: amounts.totalCents,
+          installmentSurchargeCents: amounts.totalCents - base.totalCents,
+          installmentCents: allocateGiftInstallmentCents(
+            amounts.totalCents,
+            count,
+          ),
+        });
+      }
+    } catch (error) {
+      if (!(error instanceof GiftMoneyServiceError)) throw error;
+    }
+  }
+  return options;
+}
+
+export function quoteGiftPurchaseAmounts(
+  input: QuoteGiftAmountsInput,
+  installmentCount?: number,
+): GiftAmounts &
+  Pick<
+    GiftQuote,
+    | "installmentCount"
+    | "installmentCents"
+    | "installmentSurchargeCents"
+    | "installmentOptions"
+  > {
+  const base = quoteGiftAmounts(input);
+  if (input.method !== "CREDIT_CARD" || !input.policy) return base;
+  const options = quoteGiftCardInstallments(base, input.policy);
+  const selected = options.find(
+    (option) => option.installmentCount === (installmentCount ?? 1),
+  );
+  if (!selected) return quoteInvalid();
+  return {
+    ...base,
+    ...selected,
+    processingCents:
+      selected.totalCents - base.nominalCents - base.commissionCents,
+    installmentOptions: options,
   };
 }
 

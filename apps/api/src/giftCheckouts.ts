@@ -1,5 +1,7 @@
 import { createHash, timingSafeEqual } from "node:crypto";
+import { isDeepStrictEqual } from "node:util";
 import {
+  type CheckoutCreateInput,
   type CheckoutResult,
   type CheckoutStatus,
   checkoutCreateInputSchema,
@@ -9,7 +11,7 @@ import {
   giftQuoteSchema,
   publicGiftItemSchema,
 } from "@entrelacos/contracts";
-import { quoteGiftAmounts } from "./giftMoney";
+import { quoteGiftAmounts, quoteGiftPurchaseAmounts } from "./giftMoney";
 import type {
   GiftQuoteReceivingContext,
   GiftQuoteSnapshot,
@@ -116,6 +118,7 @@ export interface GiftCheckoutHostedOutcome
 export interface GiftCheckoutProviderCommand
   extends Omit<GiftCheckoutIdentity, "quoteId"> {
   quoteSnapshot: GiftQuoteSnapshot;
+  payer?: CheckoutCreateInput["payer"];
 }
 
 export interface GiftCheckoutRepository {
@@ -334,14 +337,18 @@ export function readGiftQuoteSnapshot(
     Date.parse(value.expiresAt) > Date.parse(pricing.expiresAt)
   )
     return fail("QUOTE_INVALID");
-  const amounts = quoteGiftAmounts({
+  const input = {
     nominalCents: quote.data.nominalCents,
     method: quote.data.method,
     policy: pricing.policy,
-  });
+  };
+  const amounts = quote.data.settlementVersion
+    ? quoteGiftPurchaseAmounts(input, quote.data.installmentCount)
+    : quoteGiftAmounts(input);
   if (
     Object.entries(amounts).some(
-      ([key, amount]) => quote.data[key as keyof typeof amounts] !== amount,
+      ([key, amount]) =>
+        !isDeepStrictEqual(quote.data[key as keyof typeof amounts], amount),
     )
   )
     return fail("QUOTE_INVALID");
@@ -378,6 +385,26 @@ export function readGiftQuoteSnapshot(
           : {}),
         ...(pricing.policy.feeAllocation
           ? { feeAllocation: pricing.policy.feeAllocation }
+          : {}),
+        ...(pricing.policy.cardInstallmentBasisPoints
+          ? {
+              cardInstallmentBasisPoints: {
+                ...(pricing.policy.cardInstallmentBasisPoints.upToSix !==
+                undefined
+                  ? {
+                      upToSix:
+                        pricing.policy.cardInstallmentBasisPoints.upToSix,
+                    }
+                  : {}),
+                ...(pricing.policy.cardInstallmentBasisPoints.upToTwelve !==
+                undefined
+                  ? {
+                      upToTwelve:
+                        pricing.policy.cardInstallmentBasisPoints.upToTwelve,
+                    }
+                  : {}),
+              },
+            }
           : {}),
       },
     },
@@ -615,8 +642,10 @@ function assertEligible(
     (gift.gift.nominalCents !== quote.data.nominalCents ||
       gift.gift.title !== quote.data.title ||
       (gift.pricingSettings &&
-        (gift.pricingSettings.feeAllocation !==
-          (snapshot.pricingSettings?.feeAllocation ?? "RECIPIENT_DEDUCTED") ||
+        ((!quote.data.settlementVersion &&
+          gift.pricingSettings.feeAllocation !==
+            (snapshot.pricingSettings?.feeAllocation ??
+              "RECIPIENT_DEDUCTED")) ||
           gift.pricingSettings.revision !==
             (snapshot.pricingSettings?.revision ?? 0))))
   )
@@ -664,6 +693,11 @@ export function createGiftCheckoutService(
         );
         if (!loaded) return fail("QUOTE_INVALID");
         const quoteSnapshot = readGiftQuoteSnapshot(loaded);
+        if (
+          (quoteSnapshot.quote.installmentCount ?? 1) > 1 !==
+          Boolean(body.data.payer)
+        )
+          return fail("QUOTE_INVALID");
         const context = structuredClone(
           await dependencies.loadReceivingContext(site.data),
         );
@@ -773,6 +807,7 @@ export function createGiftCheckoutService(
             orderId: record.orderId,
             attemptId: record.attemptId,
             quoteSnapshot: record.quoteSnapshot,
+            ...(body.data.payer ? { payer: body.data.payer } : {}),
           });
           const hosted = structuredClone(
             await dependencies.createHostedCheckout(command),

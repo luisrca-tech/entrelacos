@@ -433,8 +433,6 @@ export function ReceivingAccountSetup(
     onReadinessChange?: () => void;
     section?: ReceivingStepSection;
     readiness?: ReceivingReadiness | null;
-    feesChosen?: boolean;
-    onFeesChosen?: () => void;
     pricingEnabled?: boolean;
   },
 ) {
@@ -521,8 +519,6 @@ export function ReceivingAccountSetup(
       scope={props}
       section={props.section}
       readiness={props.readiness}
-      feesChosen={props.feesChosen}
-      onFeesChosen={props.onFeesChosen}
       pricingEnabled={props.pricingEnabled}
       platformOwner={props.platformOwner}
       state={state}
@@ -588,11 +584,9 @@ export function ReceivingAccountSetupView({
   onDesignate,
   onVerifyIncoming,
   onAuthorizePix,
-  onFeesChosen,
   form,
   section = "activation",
   readiness,
-  feesChosen = false,
   pricingEnabled = false,
 }: {
   scope: ReceivingSetupScope;
@@ -607,11 +601,9 @@ export function ReceivingAccountSetupView({
   onDesignate?: (holderUserId: string) => void;
   onVerifyIncoming?: () => void;
   onAuthorizePix?: () => void;
-  onFeesChosen?: () => void;
   form?: React.RefObject<HTMLFormElement | null>;
   section?: ReceivingStepSection;
   readiness?: ReceivingReadiness | null;
-  feesChosen?: boolean;
   pricingEnabled?: boolean;
 }) {
   const setup = state.setup;
@@ -641,7 +633,6 @@ export function ReceivingAccountSetupView({
     ready: receivingReady,
     destinationSaved:
       !!currentReadiness && currentReadiness.destinationVersion !== null,
-    feesChosen,
   });
   const context: ReceivingStepsContext = {
     scope,
@@ -653,7 +644,6 @@ export function ReceivingAccountSetupView({
     receivingReady,
     readiness: currentReadiness,
     ...track,
-    feesChosen,
     guard,
     pixGuard,
     incomingGuard,
@@ -665,7 +655,6 @@ export function ReceivingAccountSetupView({
     onDesignate,
     onVerifyIncoming,
     onAuthorizePix,
-    onFeesChosen,
   };
   switch (section) {
     case "overview":

@@ -83,3 +83,28 @@ describe("purchase net amount", () => {
     ).toBe(52600);
   });
 });
+
+it("keeps funded platform adjustments out of what guests paid", () => {
+  const flow = financialFlow({
+    ...overview,
+    netReceivedCents: 1000,
+    processingCents: 150,
+    platformAdjustmentOwedCents: 25,
+    platformAdjustmentFundedCents: 50,
+  });
+  expect(flow.releasedGrossCents).toBe(1120);
+  expect(flow.netForCoupleCents).toBe(53625);
+});
+
+it("accounts for the installment surcharge in combined quoted fees", () => {
+  expect(
+    purchaseNetCents({
+      nominalCents: 10000,
+      commissionCents: 200,
+      processingCents: 400,
+      installmentSurchargeCents: 100,
+      feeAllocation: "BUYER_GROSS_UP",
+      totalCents: 10600,
+    }),
+  ).toBe(10000);
+});

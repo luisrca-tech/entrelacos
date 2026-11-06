@@ -80,9 +80,7 @@ function context(
       provider: current.providerStatus,
       ready: false,
       destinationSaved: false,
-      feesChosen: false,
     }),
-    feesChosen: false,
     incomingAvailable: true,
     onRetry: vi.fn(),
   };
@@ -93,7 +91,7 @@ describe("receiving guided track", () => {
     const html = renderToStaticMarkup(
       createElement(ReceivingOverviewTrack, { context: context() }),
     );
-    expect(html).toContain("2 de 5 concluídas");
+    expect(html).toContain("3 de 5 concluídas");
     expect(html).toContain("Próximo passo · Etapa 3 de 5");
     expect(html.match(/Próximo passo/g)).toHaveLength(1);
     expect(html).toContain('href="/sites/site-one/receiving/activation"');
@@ -111,7 +109,7 @@ describe("receiving guided track", () => {
     expect(html).not.toContain("AWAITING_APPROVAL");
   });
 
-  it("lets the couple advance steps 4 and 5 while Asaas reviews", () => {
+  it("keeps account and fee information accessible while Asaas reviews", () => {
     const html = renderToStaticMarkup(
       createElement(ReceivingOverviewTrack, {
         context: context({

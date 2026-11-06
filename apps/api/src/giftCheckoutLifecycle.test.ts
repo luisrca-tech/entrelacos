@@ -50,11 +50,15 @@ function fixture(
   const statements: Array<{ sql: string; params: unknown[] }> = [];
   let present = true;
   let lostFence = false;
+  let outstanding = false;
   const query = vi.fn(
     async (statement: string | { text: string }, params: unknown[] = []) => {
       const sql = typeof statement === "string" ? statement : statement.text;
       statements.push({ sql, params });
       if (/^(begin|commit|rollback)/i.test(sql)) return { rows: [] };
+      if (/^SELECT o.id/i.test(sql)) return { rows: [{ id: row.orderId }] };
+      if (/^SELECT 1 FROM "gift_payment_record"/i.test(sql))
+        return { rows: outstanding ? [{ found: 1 }] : [] };
       if (/^SELECT/i.test(sql)) return { rows: present ? [row] : [] };
       if (/^UPDATE/i.test(sql))
         return { rows: lostFence ? [] : [{ id: row.eventId }] };
@@ -76,7 +80,7 @@ function fixture(
     db: drizzle({ query } as unknown as NodePgClient),
     environment: overrides.environment ?? "sandbox",
     instanceId: "worker-one",
-    reader: { listCheckoutPayments: read },
+    reader: { listCheckoutPayments: read, getInstallmentRemoval: vi.fn() },
     now: () => now,
     ...overrides,
   });
@@ -87,6 +91,9 @@ function fixture(
     statements,
     empty: () => {
       present = false;
+    },
+    setOutstanding: () => {
+      outstanding = true;
     },
     loseFence: () => {
       lostFence = true;
@@ -223,5 +230,68 @@ it.each([undefined, "foreign-site", "site-one"])(
       await expect(v.worker.processNextReceivedPayment()).rejects.toThrow();
       expect(v.read).not.toHaveBeenCalled();
     }
+  },
+);
+
+it.each([
+  {
+    removed: true,
+    outstanding: false,
+    kind: "OBSERVED",
+    code: "PAYMENT_DELETED_INSTALLMENT_EMPTY",
+  },
+  {
+    removed: false,
+    outstanding: false,
+    kind: "RETRY",
+    code: "CHECKOUT_PAYMENT_OUTSTANDING",
+  },
+  {
+    removed: true,
+    outstanding: true,
+    kind: "RETRY",
+    code: "CHECKOUT_PAYMENT_OUTSTANDING",
+  },
+])(
+  "uses both provider and durable payment evidence before closing direct installments ($removed, $outstanding)",
+  async ({ removed, outstanding, kind, code }) => {
+    const getInstallmentRemoval = vi.fn().mockResolvedValue({
+      source: "provider",
+      provider: "ASAAS",
+      siteId: "site-one",
+      accountBindingId: "account-one",
+      accountReference: "remote-one",
+      environment: "sandbox",
+      installmentReference: "checkout-one",
+      observedAt: new Date("2026-10-16T16:00:00.000Z"),
+      removed,
+    });
+    const f = fixture("PAYMENT_DELETED", {
+      reader: { listCheckoutPayments: vi.fn(), getInstallmentRemoval },
+    });
+    const payload = {
+      paymentId: "pay_one",
+      externalReference: "attempt-one",
+      installmentId: "checkout-one",
+    };
+    Object.assign(f.row, {
+      installmentCount: 2,
+      payload,
+      payloadHash: hashAsaasEventIdentity(
+        "evt_one",
+        "PAYMENT_DELETED",
+        "remote-one",
+        payload,
+      ),
+    });
+    if (outstanding) f.setOutstanding();
+    await expect(f.worker.processNextReceivedPayment()).resolves.toEqual({
+      kind,
+    });
+    expect(getInstallmentRemoval).toHaveBeenCalledOnce();
+    expect(
+      f.statements.find(({ sql }) => /SET state='(PROCESSED|RETRY)'/.test(sql))
+        ?.params,
+    ).toContain(code);
   },
 );

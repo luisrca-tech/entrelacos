@@ -26,6 +26,7 @@ const failedCheckoutMessage =
 export type GiftCheckoutState = {
   gift: PublicGiftItem | null;
   method: GiftQuote["method"] | null;
+  installmentCount: number;
   quote: GiftQuote | null;
   checkout: CheckoutResult | null;
   phase:
@@ -47,7 +48,11 @@ export type GiftCheckoutState = {
 
 export type GiftCheckoutEvent =
   | { type: "SELECT_GIFT"; gift: PublicGiftItem }
-  | { type: "SELECT_METHOD"; method: GiftQuote["method"] }
+  | {
+      type: "SELECT_METHOD";
+      method: GiftQuote["method"];
+      installmentCount?: number;
+    }
   | { type: "QUOTE_RESOLVED"; quote: GiftQuote; revision: number }
   | { type: "QUOTE_FAILED"; message: string; revision: number }
   | {
@@ -57,6 +62,7 @@ export type GiftCheckoutEvent =
       now: string;
     }
   | { type: "CHECKOUT_RESOLVED"; checkout: CheckoutResult }
+  | { type: "CHECKOUT_RETURNED" }
   | {
       type: "CHECKOUT_FAILED";
       message: string;
@@ -71,6 +77,7 @@ export function createGiftCheckoutState(): GiftCheckoutState {
   return {
     gift: null,
     method: null,
+    installmentCount: 1,
     quote: null,
     checkout: null,
     phase: "IDLE",
@@ -109,10 +116,24 @@ export function giftCheckoutReducer(
       if (locked || !state.gift) return state;
       const parsed = giftPaymentMethodSchema.safeParse(event.method);
       if (!parsed.success) return state;
+      const installmentCount = event.installmentCount ?? 1;
+      const sameMethod = parsed.data === state.method;
+      if (
+        installmentCount !== 1 &&
+        (!sameMethod ||
+          !state.quote?.installmentOptions?.some(
+            (option) => option.installmentCount === installmentCount,
+          ))
+      )
+        return state;
       return {
         ...state,
         method: parsed.data,
-        quote: null,
+        installmentCount,
+        quote:
+          sameMethod && event.installmentCount !== undefined
+            ? state.quote
+            : null,
         checkout: null,
         phase: "QUOTING",
         revision: state.revision + 1,
@@ -138,7 +159,6 @@ export function giftCheckoutReducer(
       return {
         ...state,
         phase: "SELECTED",
-        quote: null,
         requestId: null,
         recoveryToken: null,
         pending: null,
@@ -219,6 +239,10 @@ export function giftCheckoutReducer(
         error: null,
       };
     }
+    case "CHECKOUT_RETURNED":
+      return state.phase === "REDIRECTING" && state.pending
+        ? { ...state, phase: "UNKNOWN", error: unknownCheckoutMessage }
+        : state;
     case "CHECKOUT_FAILED": {
       if (state.phase !== "CREATING") return state;
       if (event.unknown) {
@@ -376,6 +400,7 @@ function quoteMatchesSelection(
     quote.siteId === state.gift?.siteId &&
     quote.giftId === state.gift.id &&
     quote.method === state.method &&
+    (quote.installmentCount ?? 1) === state.installmentCount &&
     quote.mode !== "disabled"
   );
 }

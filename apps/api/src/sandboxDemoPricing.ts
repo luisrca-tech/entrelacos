@@ -1,13 +1,12 @@
 import { createHash } from "node:crypto";
 import type { AsaasAccountFeesObservation } from "./asaasHttpClient";
 import type { FinancialAccountBinding } from "./financialOverview";
-import { parseBrlCents } from "./giftMoney";
+import { type GiftProcessingPolicy, parseBrlCents } from "./giftMoney";
 import type {
   GiftPricingEvidence,
   GiftQuoteServiceDependencies,
 } from "./giftQuotes";
 import { allowsLiveSite, type LiveSitePolicy } from "./liveSitePolicy";
-import { allowsSandboxBuyerGrossUp } from "./sandboxBuyerGrossUp";
 
 export interface SandboxDemoPricingAuthorization
   extends FinancialAccountBinding,
@@ -90,23 +89,19 @@ export async function loadSandboxDemoPricing(
     authorization.isDemo !== true ||
     authorization.applicationEnvironment !== "development" ||
     authorization.environment !== "sandbox" ||
-    scope.environment !== "sandbox" ||
-    (scope.feeAllocation === "BUYER_GROSS_UP" &&
-      !allowsSandboxBuyerGrossUp({ ...authorization, siteId: scope.siteId }))
+    scope.environment !== "sandbox"
   )
     return null;
   return loadObservedPricing(scope, authorization, options);
 }
 
-// Live estimates use the recipient's scoped native schedule. Only settlement
-// observations establish actual fees; the guest always pays the gift amount.
+// Live estimates use the recipient's scoped native schedule.
 export async function loadLiveReceivingPricing(
   scope: Scope,
   authorization: SandboxDemoPricingAuthorization,
   options: Options,
 ): Promise<GiftPricingEvidence | null> {
   if (
-    scope.feeAllocation === "BUYER_GROSS_UP" ||
     !allowsLiveSite({
       siteId: scope.siteId,
       isDemo: authorization.isDemo,
@@ -166,6 +161,7 @@ async function loadObservedPricing(
       return null;
     let fixed: number;
     let rate: number;
+    let cardInstallmentBasisPoints: GiftProcessingPolicy["cardInstallmentBasisPoints"];
     let expiresAt = started + 300_000;
     if (scope.method === "PIX") {
       const pix = observation.fees.payment?.pix;
@@ -228,6 +224,7 @@ async function loadObservedPricing(
       if (!card) return null;
       fixed = cents(card.operationValue);
       rate = cents(card.oneInstallmentPercentage);
+      let discountActive = false;
       if (
         card.discountOneInstallmentPercentage != null ||
         card.discountExpiration != null ||
@@ -245,7 +242,39 @@ async function loadObservedPricing(
         if (card.hasValidDiscount) {
           if (expiry <= completed) return null;
           rate = discounted;
+          discountActive = true;
           expiresAt = Math.min(expiresAt, expiry);
+        }
+      }
+      if (scope.feeAllocation === "BUYER_GROSS_UP") {
+        const tier = (
+          base: string | null | undefined,
+          discount: string | null | undefined,
+        ) => {
+          if (base == null) return undefined;
+          const regular = cents(base);
+          const observedDiscount =
+            discount == null ? undefined : cents(discount);
+          if (
+            regular >= 10_000 ||
+            (observedDiscount !== undefined && observedDiscount > regular)
+          )
+            return undefined;
+          return discountActive ? observedDiscount : regular;
+        };
+        const upToSix = tier(
+          card.upToSixInstallmentsPercentage,
+          card.discountUpToSixInstallmentsPercentage,
+        );
+        const upToTwelve = tier(
+          card.upToTwelveInstallmentsPercentage,
+          card.discountUpToTwelveInstallmentsPercentage,
+        );
+        if (upToSix !== undefined || upToTwelve !== undefined) {
+          cardInstallmentBasisPoints = {
+            ...(upToSix !== undefined ? { upToSix } : {}),
+            ...(upToTwelve !== undefined ? { upToTwelve } : {}),
+          };
         }
       }
     }
@@ -280,11 +309,12 @@ async function loadObservedPricing(
             : "RECIPIENT_DEDUCTED",
         feeBasis:
           feeAllocation === "BUYER_GROSS_UP"
-            ? "SANDBOX_BUYER_ESTIMATE"
+            ? "ACCOUNT_BUYER_ESTIMATE"
             : "OBSERVED_ESTIMATE",
         commissionBasisPoints: 200,
         processingFixedCents: fixed,
         processingBasisPoints: rate,
+        ...(cardInstallmentBasisPoints ? { cardInstallmentBasisPoints } : {}),
         rounding: "CEILING",
       },
     };

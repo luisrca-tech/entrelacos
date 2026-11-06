@@ -18,6 +18,8 @@ export const asaasWebhookEvents = Object.freeze([
   "CHECKOUT_EXPIRED",
   "PAYMENT_CONFIRMED",
   "PAYMENT_RECEIVED",
+  "PAYMENT_SPLIT_DONE",
+  "PAYMENT_DELETED",
   ...giftPaymentRestrictionEvents,
 ] as const);
 export const sandboxWebhookEvents = asaasWebhookEvents;

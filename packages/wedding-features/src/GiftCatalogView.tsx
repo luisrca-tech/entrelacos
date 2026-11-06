@@ -97,68 +97,79 @@ export function GiftCatalogView({
       )}
 
       <ul className="m-0 grid min-w-0 list-none grid-cols-1 items-stretch gap-6 p-0 sm:grid-cols-2 lg:grid-cols-3">
-        {gifts.map((gift, index) => (
-          <li key={gift.id} className="min-w-0" data-template-reveal>
-            <article
-              data-template-reveal-item
-              data-template-reveal-kind="card"
-              style={
-                {
-                  "--template-card-delay-medium": `${(index % 2) * 180}ms`,
-                  "--template-card-delay-wide": `${(index % 3) * 180}ms`,
-                } as CSSProperties
-              }
-              className="group/gift flex h-full min-w-0 flex-col overflow-hidden rounded-[1.5rem] border border-template-line bg-[var(--template-paper,#fffdf8)] [--template-reveal-delay:0ms] sm:[--template-reveal-delay:var(--template-card-delay-medium)] lg:[--template-reveal-delay:var(--template-card-delay-wide)] transition-[border-color,box-shadow] duration-300 hover:border-template-muted hover:shadow-[0_12px_35px_rgba(37,53,43,0.06)] focus-within:border-template-muted motion-reduce:transition-none"
-            >
-              {gift.image && (
-                <img
-                  src={gift.image.url}
-                  alt={giftImageAlt(gift.image.alt, firstPosition + index)}
-                  loading="lazy"
-                  className="aspect-[4/3] w-full object-cover transition-transform duration-700 ease-out group-hover/gift:scale-[1.025] motion-reduce:transform-none motion-reduce:transition-none"
-                />
-              )}
-              <div className="flex min-w-0 flex-1 flex-col items-start gap-4 p-[clamp(1.25rem,2vw,1.75rem)] [&>button]:mt-auto">
-                <h3 className="m-0 break-words font-template-serif text-2xl font-normal">
-                  {gift.title}
-                </h3>
-                <p className="m-0 break-words leading-relaxed text-template-muted">
-                  {gift.description}
-                </p>
-                {mode !== "demonstration" &&
-                gift.pricing?.feeAllocation === "BUYER_GROSS_UP" ? (
-                  <p role="status" className="m-0 text-template-muted">
-                    {gift.pricing.available && mode === "sandbox"
-                      ? "Homologação Sandbox. Escolha Pix ou cartão para consultar o total com taxas."
-                      : "Preço indisponível. Os pagamentos deste presente aguardam validação."}
-                  </p>
-                ) : (
-                  <p className="m-0 text-template-ink">
-                    Valor: {currencyFormatter.format(gift.nominalCents / 100)}
-                    {mode !== "demonstration" && (
-                      <span className="block text-sm text-template-muted">
-                        Pix ou cartão à vista · mesmo preço final
-                      </span>
-                    )}
-                  </p>
+        {gifts.map((gift, index) => {
+          const buyerPricing =
+            mode !== "demonstration" &&
+            gift.pricing?.feeAllocation === "BUYER_GROSS_UP"
+              ? gift.pricing
+              : null;
+          const startingAtCents =
+            buyerPricing?.available && "startingAtCents" in buyerPricing
+              ? buyerPricing.startingAtCents
+              : null;
+          const priceUnavailable =
+            buyerPricing !== null && startingAtCents === null;
+          return (
+            <li key={gift.id} className="min-w-0" data-template-reveal>
+              <article
+                data-template-reveal-item
+                data-template-reveal-kind="card"
+                style={
+                  {
+                    "--template-card-delay-medium": `${(index % 2) * 180}ms`,
+                    "--template-card-delay-wide": `${(index % 3) * 180}ms`,
+                  } as CSSProperties
+                }
+                className="group/gift flex h-full min-w-0 flex-col overflow-hidden rounded-[1.5rem] border border-template-line bg-[var(--template-paper,#fffdf8)] [--template-reveal-delay:0ms] sm:[--template-reveal-delay:var(--template-card-delay-medium)] lg:[--template-reveal-delay:var(--template-card-delay-wide)] transition-[border-color,box-shadow] duration-300 hover:border-template-muted hover:shadow-[0_12px_35px_rgba(37,53,43,0.06)] focus-within:border-template-muted motion-reduce:transition-none"
+              >
+                {gift.image && (
+                  <img
+                    src={gift.image.url}
+                    alt={giftImageAlt(gift.image.alt, firstPosition + index)}
+                    loading="lazy"
+                    className="aspect-[4/3] w-full object-cover transition-transform duration-700 ease-out group-hover/gift:scale-[1.025] motion-reduce:transform-none motion-reduce:transition-none"
+                  />
                 )}
-                {mode !== "demonstration" && (
-                  <button
-                    type="button"
-                    className={giftActionButtonClass}
-                    disabled={
-                      busy ||
-                      (!recoveryOnly && gift.pricing?.available === false)
-                    }
-                    onClick={() => onSelect(gift)}
-                  >
-                    {busy ? "Aguarde…" : (actionLabel ?? "Escolher presente")}
-                  </button>
-                )}
-              </div>
-            </article>
-          </li>
-        ))}
+                <div className="flex min-w-0 flex-1 flex-col items-start gap-4 p-[clamp(1.25rem,2vw,1.75rem)] [&>button]:mt-auto">
+                  <h3 className="m-0 break-words font-template-serif text-2xl font-normal">
+                    {gift.title}
+                  </h3>
+                  <p className="m-0 break-words leading-relaxed text-template-muted">
+                    {gift.description}
+                  </p>
+                  {priceUnavailable ? (
+                    <p role="status" className="m-0 text-template-muted">
+                      Preço indisponível no momento.
+                    </p>
+                  ) : (
+                    <p className="m-0 text-template-ink">
+                      {startingAtCents === null
+                        ? `Valor: ${currencyFormatter.format(gift.nominalCents / 100)}`
+                        : `A partir de ${currencyFormatter.format(startingAtCents / 100)}`}
+                      {mode !== "demonstration" && (
+                        <span className="block text-sm text-template-muted">
+                          {startingAtCents === null
+                            ? "Pix ou cartão à vista · mesmo preço final"
+                            : "Taxas incluídas no valor"}
+                        </span>
+                      )}
+                    </p>
+                  )}
+                  {mode !== "demonstration" && (
+                    <button
+                      type="button"
+                      className={giftActionButtonClass}
+                      disabled={busy || (!recoveryOnly && priceUnavailable)}
+                      onClick={() => onSelect(gift)}
+                    >
+                      {busy ? "Aguarde…" : (actionLabel ?? "Escolher presente")}
+                    </button>
+                  )}
+                </div>
+              </article>
+            </li>
+          );
+        })}
       </ul>
     </div>
   );

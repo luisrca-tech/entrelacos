@@ -81,8 +81,8 @@ function requiredElement<T extends Element = Element>(
 function amounts(section: Element): string[] {
   return [...section.querySelectorAll("dd")].map((element) => text(element));
 }
-describe("private gift price commission preview", () => {
-  it("shows the configured price, deducted commission and net estimate while creating without changing the submitted base", async () => {
+describe("private gift pricing preview", () => {
+  it("shows the configured net and preserves it on create when the guest total is unavailable", async () => {
     const v = await mount();
     const form = requiredElement(v.container, "form");
     const input = requiredElement<HTMLInputElement>(
@@ -90,24 +90,23 @@ describe("private gift price commission preview", () => {
       'input[name="nominalPrice"]',
     );
     await enter(input, "100,00");
-    expect(text(form)).toContain("Quanto o convidado paga");
-    expect(text(form)).toContain("Comissão");
+    expect(text(form)).toContain("Quanto vocês querem receber");
+    expect(text(form)).toContain("Taxas");
     expect(text(form)).toContain("Líquido do casal");
     expect(amounts(form)).toEqual([
       "R$ 100,00",
       "Indisponível",
       "Indisponível",
       "Indisponível",
-      "Indisponível",
       "R$ 100,00",
       "Indisponível",
       "Indisponível",
       "Indisponível",
-      "Indisponível",
     ]);
-    expect(text(form)).toContain("O convidado paga o valor cadastrado");
     expect(text(form)).toContain("Indisponível");
-    expect(text(form)).toContain("sem garantia");
+    expect(text(form)).toContain(
+      "As taxas estão incluídas no preço que o convidado vê.",
+    );
     expect(input.value).toBe("100,00");
     expect(v.callbacks.onCreate).not.toHaveBeenCalled();
     await enter(
@@ -123,6 +122,39 @@ describe("private gift price commission preview", () => {
       expect.objectContaining({ nominalCents: 10000 }),
     );
   });
+  it("explains the minimum and prevents saving a lower gift amount", async () => {
+    const v = await mount([gift]);
+    const form = requiredElement(v.container, "form");
+    const input = requiredElement<HTMLInputElement>(
+      form,
+      'input[name="nominalPrice"]',
+    );
+    const help = requiredElement(
+      form,
+      `[id="${input.getAttribute("aria-describedby")}"]`,
+    );
+    expect(text(help)).toContain("Valor mínimo de R$ 5,00");
+    await enter(input, "4,99");
+    await act(async () =>
+      form.dispatchEvent(
+        new Event("submit", { bubbles: true, cancelable: true }),
+      ),
+    );
+    expect(v.callbacks.onUpdate).not.toHaveBeenCalled();
+    expect(input.getAttribute("aria-invalid")).toBe("true");
+    expect(text(requiredElement(form, '[role="alert"]'))).toContain("R$ 5,00");
+    await enter(input, "5,00");
+    await act(async () =>
+      form.dispatchEvent(
+        new Event("submit", { bubbles: true, cancelable: true }),
+      ),
+    );
+    expect(v.callbacks.onUpdate).toHaveBeenCalledExactlyOnceWith(
+      gift.id,
+      expect.objectContaining({ nominalCents: 500 }),
+    );
+  });
+
   it("previews the saved edit value and updates only the edited gift with exact cent rounding", async () => {
     const v = await mount([gift]);
     const form = requiredElement(v.container, "article form");
@@ -135,9 +167,7 @@ describe("private gift price commission preview", () => {
       "Indisponível",
       "Indisponível",
       "Indisponível",
-      "Indisponível",
       "R$ 123,45",
-      "Indisponível",
       "Indisponível",
       "Indisponível",
       "Indisponível",
@@ -148,9 +178,7 @@ describe("private gift price commission preview", () => {
       "Indisponível",
       "Indisponível",
       "Indisponível",
-      "Indisponível",
       "R$ 25,25",
-      "Indisponível",
       "Indisponível",
       "Indisponível",
       "Indisponível",
@@ -174,7 +202,7 @@ describe("private gift price commission preview", () => {
       'input[name="nominalPrice"]',
     );
     await enter(input, "100");
-    expect(amounts(form)).toHaveLength(10);
+    expect(amounts(form)).toHaveLength(8);
     for (const value of ["", "0", "1,001", "not-a-price"]) {
       await enter(input, value);
       expect(amounts(form)).toHaveLength(0);
@@ -196,9 +224,7 @@ describe("private gift price commission preview", () => {
       "Indisponível",
       "Indisponível",
       "Indisponível",
-      "Indisponível",
       "R$ 100,00",
-      "Indisponível",
       "Indisponível",
       "Indisponível",
       "Indisponível",
@@ -209,9 +235,7 @@ describe("private gift price commission preview", () => {
       "Indisponível",
       "Indisponível",
       "Indisponível",
-      "Indisponível",
       "R$ 200,00",
-      "Indisponível",
       "Indisponível",
       "Indisponível",
       "Indisponível",
