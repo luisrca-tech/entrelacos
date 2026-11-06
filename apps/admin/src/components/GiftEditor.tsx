@@ -487,7 +487,8 @@ export function createGiftEditorController(
     const entry = images.get(giftId);
     if (!entry?.active || !entry.controller.current())
       throw new Error("Image scope unavailable");
-    if (attach && (!alt.trim() || alt.trim().length > 240))
+    // The description is optional; only its length is bounded.
+    if (attach && alt.trim().length > 240)
       throw new Error("Invalid image description");
     state = { ...state, busy: true, activeMediaGift: giftId, error: "" };
     readRevision++;

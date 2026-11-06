@@ -464,6 +464,28 @@ describe("gift editor immutable scope and acknowledged attachment", () => {
     expect(f.values.size).toBe(0);
     expect(f.controller.getState().previews["gift-a"]).toMatchObject(media);
   });
+  it.each(["", "   "])(
+    "attaches an uploaded image whose description is %j as empty",
+    async (alt) => {
+      const f = await fixture();
+      await f.controller.load();
+      await f.controller.uploadImage("gift-a", file(), alt);
+      const patch = f.request.mock.calls.find(
+        ([, options]) => options?.method === "PATCH",
+      );
+      expect(patch?.[1]).toMatchObject({
+        body: { mediaAssetId: "asset-a", altText: "" },
+      });
+      expect(f.controller.getState().previews["gift-a"]).toMatchObject(media);
+    },
+  );
+  it("rejects an attachment description longer than 240 characters", async () => {
+    const f = await fixture();
+    await f.controller.load();
+    await expect(
+      f.controller.uploadImage("gift-a", file(), "a".repeat(241)),
+    ).rejects.toThrow("Invalid image description");
+  });
   it("treats a lost PATCH acknowledgement as inspection and never overwrites a different image", async () => {
     const f = await fixture();
     await f.controller.load();
