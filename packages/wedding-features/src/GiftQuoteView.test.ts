@@ -71,6 +71,9 @@ describe("gift quote view", () => {
     expect(html).toContain("Taxas incluídas no valor");
     expect(html).not.toContain("Taxa de processamento");
     expect(html).toContain("Total a pagar");
+    expect(html).not.toContain("Valores válidos até");
+    expect(html).not.toContain("<time");
+    expect(html).not.toContain("Cotação válida até");
     expect(html).not.toMatch(/R\$\s*100,00/);
     expect(html).toContain("105,21");
     expect(html).toContain("Ambiente de testes — sem pagamentos reais.");
@@ -123,6 +126,9 @@ describe("gift quote view", () => {
     const expired = renderQuote({
       now: new Date("2026-10-12T15:30:00.000Z"),
     });
+    expect(expired).toContain(
+      "Selecione novamente a forma de pagamento para atualizar os valores e continuar.",
+    );
 
     for (const html of [noQuote, wrongMethod, loading, expired]) {
       expect(html).toMatch(
@@ -204,8 +210,9 @@ it("shows the exact installment schedule, surcharge and total of the selected qu
     },
   });
   expect(html).toContain("Parcelas");
-  expect(html).toMatch(/À vista · total R\$\s*105,21/);
-  expect(html).toMatch(/3 parcelas · total R\$\s*106,01/);
+  expect(html).toMatch(/À vista · R\$\s*105,21/);
+  expect(html).toMatch(/3x de R\$\s*35,33\*/);
+  expect(html).toContain("A última parcela tem ajuste de centavos");
   expect(html).toMatch(/2x de R\$\s*35,33 \+ 1x de R\$\s*35,35/);
   expect(html).toContain("Acréscimo do parcelamento");
   expect(html).toMatch(/R\$\s*0,80/);
@@ -225,4 +232,36 @@ it("does not offer installments when the server returns only an upfront quote", 
   expect(html).not.toContain("Parcelas");
   expect(html).not.toContain("Dados do pagador");
   expect(html).not.toContain("60 minutos");
+});
+
+it("shows equal installments without a rounding marker", () => {
+  const option = {
+    installmentCount: 3,
+    installmentCents: [3534, 3534, 3534],
+    totalCents: 10602,
+    installmentSurchargeCents: 81,
+  };
+  const html = renderQuote({
+    method: "CREDIT_CARD",
+    installmentCount: 3,
+    quote: {
+      ...quote,
+      ...option,
+      method: "CREDIT_CARD",
+      installmentOptions: [
+        {
+          installmentCount: 1,
+          installmentCents: [10521],
+          totalCents: 10521,
+          installmentSurchargeCents: 0,
+        },
+        option,
+      ],
+    },
+  });
+  expect(html).toMatch(
+    /<option[^>]*value="3"[^>]*>3x de R\$\s*35,34<\/option>/,
+  );
+  expect(html).not.toContain("A última parcela tem ajuste de centavos");
+  expect(html).toMatch(/R\$\s*106,02/);
 });
