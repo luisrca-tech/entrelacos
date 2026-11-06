@@ -193,13 +193,13 @@ CI gates cover frozen installation, workspace-discovery, lint, typecheck, unit/c
 
 Database integration must construct the existing test connection with target `test`, which accepts only `DATABASE_URL_TEST`. Before migrations or writes, it verifies:
 
-- `neon.branch_id` equals `DATABASE_TEST_BRANCH_ID`;
-- `neon.project_id` equals `DATABASE_PROJECT_ID`;
+- `neon.branch_id` equals `DATABASE_TEST_BRANCH_ID` when configured;
+- `neon.project_id` equals `DATABASE_PROJECT_ID` when configured;
 - `neon.endpoint_id` and parsed endpoint match the expected test endpoint;
-- `current_database()` equals `DATABASE_NAME`; and
-- `current_user` equals the expected test role when configured.
+- `current_database()` equals `DATABASE_NAME` when configured or the database in `DATABASE_URL_TEST`; and
+- `current_user` equals the configured test role or the role in `DATABASE_URL_TEST`.
 
-The test endpoint and branch must differ from development and production. Missing `DATABASE_URL_TEST`, missing identity expectations, a pooled/direct endpoint mismatch, a branch mismatch, a project mismatch, a database mismatch, or a role mismatch aborts before migration or test startup. There is no fallback to `DATABASE_URL`.
+The test endpoint must differ from development and any configured production endpoint. When both branch IDs are configured, the test branch must also differ from development. A missing `DATABASE_URL_TEST` or an identity mismatch aborts before migration or test startup. There is no fallback to `DATABASE_URL`.
 
 Workflow conditions consume secrets through environment variables and do not interpolate secrets directly into `if:` expressions. Secrets and connection strings are masked and never echoed. If test credentials are absent, the integration job is explicitly `blocked` or `skipped`, never green by implication.
 
