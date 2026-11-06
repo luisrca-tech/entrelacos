@@ -36,14 +36,13 @@ const currencyFormatter = new Intl.NumberFormat("pt-BR", {
   style: "currency",
   currency: "BRL",
 });
-const dateFormatter = new Intl.DateTimeFormat("pt-BR", {
-  dateStyle: "medium",
-  timeStyle: "short",
-  timeZone: "America/Sao_Paulo",
-});
 
 function formatCents(cents: number): string {
   return currencyFormatter.format(cents / 100);
+}
+
+function hasRoundingAdjustment(amounts: number[]): boolean {
+  return amounts.some((cents) => cents !== amounts[0]);
 }
 
 export function GiftQuoteView({
@@ -63,6 +62,7 @@ export function GiftQuoteView({
     "id" | "expiresAt"
   > | null>(null);
   const payerFormId = useId();
+  const roundingHintId = useId();
   const quoteId = quote?.id;
   const expiresAt = quote?.expiresAt;
   useEffect(() => {
@@ -86,6 +86,9 @@ export function GiftQuoteView({
     quoteMatchesSelection && quoteIsCurrent && !loading && !pending;
   const methodsDisabled = loading || pending;
   const options = method === "CREDIT_CARD" ? quote?.installmentOptions : null;
+  const hasRoundedOption = options?.some((option) =>
+    hasRoundingAdjustment(option.installmentCents),
+  );
   const hasPayerForm = quoteMatchesSelection && installmentCount > 1;
   const installmentAmounts = quoteMatchesSelection
     ? quote.installmentCents
@@ -152,6 +155,7 @@ export function GiftQuoteView({
             <select
               className={fieldClass}
               disabled={methodsDisabled}
+              aria-describedby={hasRoundedOption ? roundingHintId : undefined}
               value={installmentCount}
               onChange={(event) =>
                 onSelectMethod("CREDIT_CARD", Number(event.currentTarget.value))
@@ -163,12 +167,16 @@ export function GiftQuoteView({
                   value={option.installmentCount}
                 >
                   {option.installmentCount === 1
-                    ? "À vista"
-                    : `${option.installmentCount} parcelas`}{" "}
-                  · total {formatCents(option.totalCents)}
+                    ? `À vista · ${formatCents(option.totalCents)}`
+                    : `${option.installmentCount}x de ${formatCents(option.installmentCents[0])}${hasRoundingAdjustment(option.installmentCents) ? "*" : ""}`}
                 </option>
               ))}
             </select>
+            {hasRoundedOption && (
+              <span id={roundingHintId} className="text-sm text-template-muted">
+                * A última parcela tem ajuste de centavos, detalhado no resumo.
+              </span>
+            )}
           </label>
         )}
 
@@ -225,15 +233,10 @@ export function GiftQuoteView({
                 Taxas incluídas no valor
               </p>
             )}
-            <p className="m-0 text-sm text-template-muted">
-              Cotação válida até{" "}
-              <time dateTime={quote.expiresAt}>
-                {dateFormatter.format(new Date(quote.expiresAt))}
-              </time>
-            </p>
             {!quoteIsCurrent && (
               <p role="status" className="m-0 text-sm text-template-muted">
-                Esta cotação expirou. Atualize a cotação para continuar.
+                Selecione novamente a forma de pagamento para atualizar os
+                valores e continuar.
               </p>
             )}
           </section>
