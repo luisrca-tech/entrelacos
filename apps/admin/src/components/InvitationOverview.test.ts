@@ -59,4 +59,39 @@ describe("invitation overview", () => {
     );
     expect((html.match(/\sdisabled=""/g) ?? []).length).toBe(2);
   });
+
+  it("uses wedding-wide guest types and shows the time left to answer", () => {
+    const html = renderToStaticMarkup(
+      createElement(InvitationOverview, {
+        summary: {
+          invitations: 1,
+          guests: 1,
+          adults: 1,
+          children: 0,
+          pending: 1,
+          confirmed: 0,
+          declined: 0,
+        },
+        siteTotals: {
+          total: 8,
+          confirmed: 9,
+          pending: 7,
+          declined: 2,
+          adults: 14,
+          children: 4,
+          byStatus: { confirmed: 4, pending: 2, declined: 1, partial: 1 },
+        },
+        inactive: false,
+        onAdd: vi.fn(),
+        onManageConfirmations: vi.fn(),
+        onExport: vi.fn(),
+        onConfigureDeadline: vi.fn(),
+        deadline: "15/01/2027, 23:59",
+        deadlineCountdown: "Faltam 71 dias para encerrar as respostas",
+      }),
+    );
+    expect(html).toContain("9 de 18 convidados irão comparecer");
+    expect(html).toContain("8 convites · 14 adultos · 4 crianças");
+    expect(html).toContain("Faltam 71 dias para encerrar as respostas");
+  });
 });

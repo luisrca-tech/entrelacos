@@ -2,6 +2,7 @@ import type { SiteHomeSummary } from "@entrelacos/contracts";
 import { Button } from "@entrelacos/ui";
 import { CalendarClock } from "lucide-react";
 import type { InvitationSummary } from "./invitationView";
+import { PageHeaderActions } from "./PageHeaderActions";
 
 type Props = {
   summary: InvitationSummary;
@@ -13,6 +14,8 @@ type Props = {
   onExport: () => void;
   onConfigureDeadline: () => void;
   deadline?: string | null;
+  /** Time left to answer, e.g. "Faltam 3 dias para encerrar as respostas". */
+  deadlineCountdown?: string | null;
   partial?: boolean;
 };
 
@@ -24,6 +27,7 @@ export function InvitationOverview({
   onExport,
   onConfigureDeadline,
   deadline,
+  deadlineCountdown,
   partial,
   siteTotals,
 }: Props) {
@@ -31,6 +35,8 @@ export function InvitationOverview({
     ? {
         invitations: siteTotals.total,
         guests: siteTotals.confirmed + siteTotals.pending + siteTotals.declined,
+        adults: siteTotals.adults,
+        children: siteTotals.children,
         confirmed: siteTotals.confirmed,
         pending: siteTotals.pending,
         declined: siteTotals.declined,
@@ -55,7 +61,7 @@ export function InvitationOverview({
   ];
   return (
     <div className="grid gap-3.5">
-      <div className="flex flex-wrap justify-end gap-2.5">
+      <PageHeaderActions>
         <Button type="button" variant="outline" onClick={onExport}>
           Exportar
         </Button>
@@ -67,7 +73,7 @@ export function InvitationOverview({
         >
           Novo convite
         </Button>
-      </div>
+      </PageHeaderActions>
       <div className="grid gap-3.5 lg:grid-cols-[minmax(0,2.1fr)_minmax(0,1fr)]">
         <section
           className="grid gap-2.5 rounded-2xl border border-admin-line bg-admin-surface p-5"
@@ -83,15 +89,9 @@ export function InvitationOverview({
           </h2>
           <p className="m-0 text-xs text-admin-muted">
             {counts.invitations}{" "}
-            {counts.invitations === 1 ? "convite" : "convites"}
-            {!siteTotals && (
-              <>
-                {" "}
-                · {summary.adults} {summary.adults === 1 ? "adulto" : "adultos"}{" "}
-                · {summary.children}{" "}
-                {summary.children === 1 ? "criança" : "crianças"}
-              </>
-            )}
+            {counts.invitations === 1 ? "convite" : "convites"} ·{" "}
+            {counts.adults} {counts.adults === 1 ? "adulto" : "adultos"} ·{" "}
+            {counts.children} {counts.children === 1 ? "criança" : "crianças"}
           </p>
           {counts.guests > 0 && (
             <div className="flex h-3 gap-1" aria-hidden="true">
@@ -134,9 +134,16 @@ export function InvitationOverview({
             <CalendarClock aria-hidden="true" className="size-4" />
             Prazo de confirmação
           </h2>
-          <p className="m-0 font-admin-display text-xl">
-            {deadline ?? "Sem prazo definido"}
-          </p>
+          <div className="grid gap-0.5">
+            <p className="m-0 font-admin-display text-xl">
+              {deadline ?? "Sem prazo definido"}
+            </p>
+            {deadline && deadlineCountdown && (
+              <p className="m-0 text-[13px] text-admin-pending-ink">
+                {deadlineCountdown}
+              </p>
+            )}
+          </div>
           <Button
             type="button"
             variant="link"

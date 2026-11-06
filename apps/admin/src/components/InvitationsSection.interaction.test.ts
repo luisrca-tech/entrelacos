@@ -59,7 +59,15 @@ beforeEach(async () => {
   routes = {
     "/rsvp/deadline": () => ({ deadlineAt: null, deadlineTimezone: null }),
     "/home-summary": () => ({
-      invitations: { total: 45, confirmed: 20, pending: 15, declined: 5 },
+      invitations: {
+        total: 45,
+        confirmed: 20,
+        pending: 15,
+        declined: 5,
+        adults: 32,
+        children: 8,
+        byStatus: { confirmed: 12, pending: 25, declined: 3, partial: 5 },
+      },
     }),
     "/invitations": () => ({
       invitations: [invitation("inv-1", "Família Souza")],
@@ -118,7 +126,50 @@ it("summarizes every invitation of the wedding instead of the loaded page", asyn
   const summary = container.querySelector('[aria-label="Resumo dos convites"]');
   expect(summary?.textContent).toContain("20 de 40 convidados irão comparecer");
   expect(summary?.textContent).toContain("45 convites");
+  expect(summary?.textContent).toContain("32 adultos");
+  expect(summary?.textContent).toContain("8 crianças");
   expect(summary?.textContent).toContain("Respostas dos convidados");
+});
+
+it("counts the quick filters across the whole wedding", async () => {
+  await mount();
+  const chips = [
+    ...container.querySelectorAll<HTMLButtonElement>(
+      'fieldset[aria-label="Situação do convite"] button',
+    ),
+  ].map((button) => button.textContent);
+  expect(chips).toEqual([
+    "Todos45",
+    "Confirmados12",
+    "Sem resposta25",
+    "Não irão3",
+  ]);
+});
+
+it("shows only the first-steps guide while the wedding has no invitations", async () => {
+  routes["/home-summary"] = () => ({
+    invitations: {
+      total: 0,
+      confirmed: 0,
+      pending: 0,
+      declined: 0,
+      adults: 0,
+      children: 0,
+      byStatus: { confirmed: 0, pending: 0, declined: 0, partial: 0 },
+    },
+  });
+  routes["/invitations"] = () => ({ invitations: [], nextCursor: null });
+  await mount();
+  expect(container.querySelector('[aria-label="Resumo dos convites"]')).toBe(
+    null,
+  );
+  expect(container.querySelector("#invitation-search")).toBeNull();
+  expect(container.textContent).toContain("Ainda não há convites");
+  expect(
+    [...container.querySelectorAll("button")].filter(
+      (button) => button.textContent === "Novo convite",
+    ),
+  ).toHaveLength(1);
 });
 
 it("labels a loaded-only summary honestly when site totals are unavailable", async () => {

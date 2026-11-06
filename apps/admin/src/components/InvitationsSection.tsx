@@ -42,6 +42,7 @@ import { LoadMoreButton } from "./LoadMoreButton";
 import { ManageConfirmationsDialog } from "./ManageConfirmationsDialog";
 import { isCurrentPanelSessionEpoch, panelActorOwner } from "./panelActor";
 import {
+  deadlineCountdown,
   deadlineInstantFromLocal,
   deadlineLocalFromInstant,
   joinDeadlineLocal,
@@ -59,6 +60,18 @@ const emptyFilters: InvitationFilters = {
   status: "ALL",
   guestType: "ALL",
 };
+
+/** Wedding-wide invitation count for a quick status filter. */
+function statusCount(
+  totals: SiteHomeSummary["invitations"] | undefined,
+  status: InvitationFilters["status"],
+): number | null {
+  if (!totals) return null;
+  if (status === "ALL") return totals.total;
+  if (status === "CONFIRMED") return totals.byStatus.confirmed;
+  if (status === "PENDING") return totals.byStatus.pending;
+  return totals.byStatus.declined;
+}
 
 function exportFilename(disposition: string | null, fallback: string): string {
   const filename = disposition?.match(/filename="([A-Za-z0-9._-]+)"/i);
@@ -115,6 +128,13 @@ export function InvitationsSection({ siteId, lifecycle, sessionEpoch }: Props) {
   const deletingInvitation =
     invitations.find((item) => item.id === deleteId) ?? null;
   const filtered = invitations;
+  const hasFilters =
+    Boolean(filters.search.trim()) ||
+    filters.status !== "ALL" ||
+    filters.guestType !== "ALL";
+  // With no filters an empty first page means the wedding has no invitations.
+  const noInvitations =
+    loaded && !hasFilters && invitations.length === 0 && !nextCursor && !error;
   const summary = useMemo(
     () => summarizeInvitations(invitations),
     [invitations],
@@ -510,88 +530,107 @@ export function InvitationsSection({ siteId, lifecycle, sessionEpoch }: Props) {
         </p>
       )}
       <div className="grid gap-5">
-        <InvitationOverview
-          summary={summary}
-          siteTotals={siteTotals}
-          inactive={inactive}
-          onAdd={openCreate}
-          onManageConfirmations={() => void openConfirmations()}
-          onExport={() => setExportOpen(true)}
-          onConfigureDeadline={() => void openDeadline()}
-          deadline={
-            deadline?.deadlineAt
-              ? new Intl.DateTimeFormat("pt-BR", {
-                  dateStyle: "short",
-                  timeStyle: "short",
-                  timeZone: deadline.deadlineTimezone ?? "America/Sao_Paulo",
-                }).format(new Date(deadline.deadlineAt))
-              : null
-          }
-          partial={Boolean(
-            nextCursor ||
-              filters.search ||
-              filters.status !== "ALL" ||
-              filters.guestType !== "ALL",
-          )}
-        />
+        {!noInvitations && (
+          <InvitationOverview
+            summary={summary}
+            siteTotals={siteTotals}
+            inactive={inactive}
+            onAdd={openCreate}
+            onManageConfirmations={() => void openConfirmations()}
+            onExport={() => setExportOpen(true)}
+            onConfigureDeadline={() => void openDeadline()}
+            deadline={
+              deadline?.deadlineAt
+                ? new Intl.DateTimeFormat("pt-BR", {
+                    dateStyle: "short",
+                    timeStyle: "short",
+                    timeZone: deadline.deadlineTimezone ?? "America/Sao_Paulo",
+                  }).format(new Date(deadline.deadlineAt))
+                : null
+            }
+            deadlineCountdown={deadlineCountdown(
+              deadline?.deadlineAt ?? null,
+              new Date(),
+            )}
+            partial={Boolean(
+              nextCursor ||
+                filters.search ||
+                filters.status !== "ALL" ||
+                filters.guestType !== "ALL",
+            )}
+          />
+        )}
         <div className="min-w-0">
-          <div className="mb-4 flex flex-wrap items-center gap-3">
-            <label
-              className="relative min-w-[220px] flex-1"
-              htmlFor="invitation-search"
-            >
-              <Search
-                aria-hidden="true"
-                className="absolute left-3 top-3.5 size-4 text-admin-muted"
-              />
-              <span className="sr-only">Buscar identificação do convite</span>
-              <Input
-                id="invitation-search"
-                type="search"
-                value={filters.search}
-                onChange={(event) =>
-                  setFilters((current) => ({
-                    ...current,
-                    search: event.target.value,
-                  }))
-                }
-                placeholder="Buscar identificação do convite"
-                className="min-h-11 border-admin-line bg-admin-surface pl-10"
-              />
-            </label>
-            <fieldset
-              className="flex min-w-0 max-w-full gap-1 overflow-x-auto rounded-xl border border-admin-line bg-admin-surface p-1"
-              aria-label="Situação do convite"
-            >
-              {(
-                [
-                  ["ALL", "Todos"],
-                  ["CONFIRMED", "Confirmados"],
-                  ["PENDING", "Sem resposta"],
-                  ["DECLINED", "Não irão"],
-                ] as const
-              ).map(([status, label]) => (
-                <Button
-                  key={status}
-                  type="button"
-                  size="sm"
-                  variant={filters.status === status ? "default" : "ghost"}
-                  aria-pressed={filters.status === status}
-                  className="shrink-0"
-                  onClick={() =>
-                    setFilters((previous) => ({ ...previous, status }))
+          {!noInvitations && (
+            <div className="mb-4 flex flex-wrap items-center gap-3">
+              <label
+                className="relative min-w-[220px] flex-1"
+                htmlFor="invitation-search"
+              >
+                <Search
+                  aria-hidden="true"
+                  className="absolute left-3 top-3.5 size-4 text-admin-muted"
+                />
+                <span className="sr-only">Buscar identificação do convite</span>
+                <Input
+                  id="invitation-search"
+                  type="search"
+                  value={filters.search}
+                  onChange={(event) =>
+                    setFilters((current) => ({
+                      ...current,
+                      search: event.target.value,
+                    }))
                   }
-                >
-                  {label}
-                </Button>
-              ))}
-            </fieldset>
-            <InvitationFiltersPopover
-              filters={filters}
-              summary={summary}
-              onChange={setFilters}
-            />
-          </div>
+                  placeholder="Buscar identificação do convite"
+                  className="min-h-11 border-admin-line bg-admin-surface pl-10"
+                />
+              </label>
+              <fieldset
+                className="flex min-w-0 max-w-full gap-1 overflow-x-auto rounded-xl border border-admin-line bg-admin-surface p-1"
+                aria-label="Situação do convite"
+              >
+                {(
+                  [
+                    ["ALL", "Todos"],
+                    ["CONFIRMED", "Confirmados"],
+                    ["PENDING", "Sem resposta"],
+                    ["DECLINED", "Não irão"],
+                  ] as const
+                ).map(([status, label]) => {
+                  const count = statusCount(siteTotals, status);
+                  const selected = filters.status === status;
+                  return (
+                    <Button
+                      key={status}
+                      type="button"
+                      size="sm"
+                      variant={selected ? "default" : "ghost"}
+                      aria-pressed={selected}
+                      className="shrink-0 gap-1.5"
+                      onClick={() =>
+                        setFilters((previous) => ({ ...previous, status }))
+                      }
+                    >
+                      {label}
+                      {count !== null && (
+                        <span
+                          className={`rounded-full px-[7px] py-px text-xs font-semibold ${selected ? "bg-admin-ink text-white" : "bg-admin-canvas text-admin-muted"}`}
+                        >
+                          {count}
+                        </span>
+                      )}
+                    </Button>
+                  );
+                })}
+              </fieldset>
+              <InvitationFiltersPopover
+                filters={filters}
+                summary={summary}
+                onChange={setFilters}
+              />
+            </div>
+          )}
           {loading && loaded && (
             <p role="status" className="mb-3 text-sm text-admin-muted">
               Atualizando convites…
@@ -611,11 +650,7 @@ export function InvitationsSection({ siteId, lifecycle, sessionEpoch }: Props) {
               <InvitationList
                 invitations={filtered}
                 selectedId={detailId}
-                hasFilters={
-                  Boolean(filters.search.trim()) ||
-                  filters.status !== "ALL" ||
-                  filters.guestType !== "ALL"
-                }
+                hasFilters={hasFilters}
                 onOpen={(invitation) => {
                   void openInvitationDetail(invitation.id);
                 }}

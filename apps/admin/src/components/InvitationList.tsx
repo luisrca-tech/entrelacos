@@ -4,6 +4,7 @@ import {
 } from "@entrelacos/contracts";
 import { Badge, Button } from "@entrelacos/ui";
 import { Ellipsis, UsersRound } from "lucide-react";
+import { invitationResponseSummary } from "./invitationView";
 
 type Props = {
   invitations: readonly InvitationRecord[];
@@ -95,7 +96,7 @@ export function InvitationList({
   }
 
   const columns =
-    "grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 @2xl:grid-cols-[minmax(0,1fr)_minmax(100px,0.42fr)_minmax(105px,0.4fr)_auto]";
+    "grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 @2xl:grid-cols-[minmax(0,1fr)_minmax(110px,170px)_minmax(150px,230px)_auto]";
   return (
     <section
       className="@container overflow-hidden rounded-2xl border border-admin-line bg-admin-surface"
@@ -124,6 +125,7 @@ export function InvitationList({
         ]
           .filter(Boolean)
           .join(" · ");
+        const answers = invitationResponseSummary(invitation.guests);
         return (
           <button
             key={invitation.id}
@@ -141,13 +143,20 @@ export function InvitationList({
                 {invitation.guests.map((guest) => guest.fullName).join(", ")}
               </span>
               <span className="mt-1 block text-xs text-admin-muted @2xl:hidden">
-                {people}
+                {[people, answers].filter(Boolean).join(" · ")}
               </span>
             </span>
             <span className="hidden text-xs text-admin-muted @2xl:block">
               {people}
             </span>
-            <Badge className={`w-fit ${tone}`}>{label}</Badge>
+            <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+              <Badge className={`w-fit ${tone}`}>{label}</Badge>
+              {answers && (
+                <span className="hidden text-xs text-admin-muted @2xl:inline">
+                  {answers}
+                </span>
+              )}
+            </span>
             <Ellipsis
               className="hidden size-4 text-admin-muted @2xl:block"
               aria-hidden="true"

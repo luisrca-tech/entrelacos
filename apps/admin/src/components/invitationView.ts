@@ -78,3 +78,30 @@ export function summarizeInvitations(
   }
   return summary;
 }
+
+function willAttend(count: number) {
+  return count === 1 ? "irá" : "irão";
+}
+
+/** Short answer breakdown shown beside an invitation's status badge. */
+export function invitationResponseSummary(
+  guests: readonly Pick<InvitationListItem["guests"][number], "rsvpState">[],
+): string | null {
+  const confirmed = guests.filter(
+    (guest) => guest.rsvpState === "CONFIRMED",
+  ).length;
+  if (confirmed === 0) return null;
+  if (confirmed === guests.length)
+    return `${confirmed} de ${guests.length} ${willAttend(confirmed)}`;
+  const pending = guests.filter(
+    (guest) => guest.rsvpState === "PENDING",
+  ).length;
+  const declined = guests.length - confirmed - pending;
+  return [
+    `${confirmed} ${willAttend(confirmed)}`,
+    pending ? `${pending} sem resposta` : "",
+    declined ? `${declined} não ${willAttend(declined)}` : "",
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}

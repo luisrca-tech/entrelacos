@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   filterInvitations,
+  invitationResponseSummary,
   type InvitationListItem,
   summarizeInvitations,
 } from "./invitationView";
@@ -66,5 +67,45 @@ describe("invitation view", () => {
       confirmed: 1,
       declined: 1,
     });
+  });
+});
+
+describe("invitation response summary", () => {
+  const guest = (rsvpState: "PENDING" | "CONFIRMED" | "DECLINED") => ({
+    guestType: "ADULT" as const,
+    rsvpState,
+  });
+
+  it("states how many confirmed people will attend", () => {
+    expect(
+      invitationResponseSummary([guest("CONFIRMED"), guest("CONFIRMED")]),
+    ).toBe("2 de 2 irão");
+    expect(invitationResponseSummary([guest("CONFIRMED")])).toBe("1 de 1 irá");
+  });
+
+  it("breaks down a partial answer", () => {
+    expect(
+      invitationResponseSummary([
+        guest("CONFIRMED"),
+        guest("CONFIRMED"),
+        guest("PENDING"),
+        guest("PENDING"),
+      ]),
+    ).toBe("2 irão · 2 sem resposta");
+    expect(
+      invitationResponseSummary([
+        guest("CONFIRMED"),
+        guest("DECLINED"),
+        guest("PENDING"),
+      ]),
+    ).toBe("1 irá · 1 sem resposta · 1 não irá");
+  });
+
+  it("adds nothing when the badge already says it all", () => {
+    expect(invitationResponseSummary([guest("PENDING")])).toBeNull();
+    expect(
+      invitationResponseSummary([guest("DECLINED"), guest("DECLINED")]),
+    ).toBeNull();
+    expect(invitationResponseSummary([])).toBeNull();
   });
 });

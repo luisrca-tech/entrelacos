@@ -151,3 +151,27 @@ export function deadlineLocalFromInstant(instant: string, timeZone: string) {
   const pad = (part: number) => String(part).padStart(2, "0");
   return `${value.year}-${pad(value.month)}-${pad(value.day)}T${pad(value.hour)}:${pad(value.minute)}`;
 }
+
+const countdownTimeZone = "America/Sao_Paulo";
+const dayInMilliseconds = 86_400_000;
+
+function calendarDay(instant: Date) {
+  const { year, month, day } = partsAt(instant, countdownTimeZone);
+  return Date.UTC(year, month - 1, day) / dayInMilliseconds;
+}
+
+/** Days left to answer, counted in São Paulo calendar days. */
+export function deadlineCountdown(
+  deadlineAt: string | null,
+  now: Date,
+): string | null {
+  if (!deadlineAt) return null;
+  const deadline = new Date(deadlineAt);
+  if (Number.isNaN(deadline.getTime())) return null;
+  if (deadline.getTime() <= now.getTime()) return "Prazo encerrado";
+  const days = calendarDay(deadline) - calendarDay(now);
+  if (days <= 0) return "As respostas encerram hoje";
+  return days === 1
+    ? "Falta 1 dia para encerrar as respostas"
+    : `Faltam ${days} dias para encerrar as respostas`;
+}

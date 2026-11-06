@@ -46,6 +46,7 @@ describe("invitation list", () => {
       "1 adulto",
       "1 criança",
       "Em parte",
+      "1 irá · 1 sem resposta",
     ]) {
       expect(html).toContain(text);
     }
