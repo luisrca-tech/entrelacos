@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import type { SiteTeamResponse } from "@entrelacos/contracts";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -125,7 +126,8 @@ describe("site team view", () => {
     expect(html).not.toContain("<form");
     expect(html).toMatch(/>Convidar assessor<\/button>/);
     expect(html).toContain("Pessoas com acesso");
-    expect(html).toContain("Convites da equipe");
+    expect(html).toContain("Convites pendentes");
+    expect(html).toContain("Histórico");
   });
 
   it("offers revoke actions only for active members and pending invitations", () => {
@@ -187,5 +189,55 @@ describe("site team view", () => {
     const atExpiry = render(new Date("2026-10-12T15:30:00.000Z"));
     expect(atExpiry).toContain("Expirado");
     expect(atExpiry).not.toContain("Revogar convite para Clara no limite");
+  });
+
+  it("separates active access, pending invitations and history", () => {
+    const html = renderToStaticMarkup(
+      createElement(SiteTeamView, {
+        team: {
+          ...team,
+          invitations: [
+            ...team.invitations,
+            {
+              ...team.invitations[0],
+              id: "invitation-expired",
+              inviteeName: "Fábio Expirado",
+              expiresAt: "2026-10-11T15:30:00.000Z",
+            },
+          ],
+        },
+        canManage: true,
+        pending: false,
+        now: observedNow,
+        ...callbacks(),
+      }),
+    );
+    const page = document.createElement("div");
+    page.innerHTML = html;
+    const section = (heading: string) => {
+      const found = [...page.querySelectorAll("section")].find(
+        (entry) => entry.querySelector("h2")?.textContent === heading,
+      );
+      if (!found) throw new Error(`Missing section ${heading}`);
+      return found.textContent ?? "";
+    };
+    const active = section("Pessoas com acesso");
+    expect(active).toContain("Ana Assistente");
+    expect(active).not.toContain("Bia Revogada");
+    const pendingInvites = section("Convites pendentes");
+    expect(pendingInvites).toContain("Clara Pendente");
+    for (const name of ["Duda Utilizada", "Eva Revogada", "Fábio Expirado"])
+      expect(pendingInvites).not.toContain(name);
+    const history = section("Histórico");
+    for (const name of [
+      "Bia Revogada",
+      "Duda Utilizada",
+      "Eva Revogada",
+      "Fábio Expirado",
+    ])
+      expect(history).toContain(name);
+    expect(history).not.toContain("Ana Assistente");
+    expect(history).not.toContain("Clara Pendente");
+    expect(history).not.toContain("Revogar");
   });
 });

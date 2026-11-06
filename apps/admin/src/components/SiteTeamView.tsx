@@ -10,7 +10,7 @@ import {
   Input,
 } from "@entrelacos/ui";
 import { Plus } from "lucide-react";
-import type { FormEvent } from "react";
+import type { FormEvent, ReactNode } from "react";
 import { adminStyles, displayHeading } from "../lib/adminStyles";
 import { getInitials } from "./adminNavigation";
 
@@ -84,6 +84,19 @@ export function SiteTeamView({
       </p>
     );
   }
+
+  const activeMembers = team.members.filter(
+    (member) => member.revokedAt === null,
+  );
+  const revokedMembers = team.members.filter(
+    (member) => member.revokedAt !== null,
+  );
+  const pendingInvitations = team.invitations.filter((invitation) =>
+    isPendingInvitation(invitation, now),
+  );
+  const pastInvitations = team.invitations.filter(
+    (invitation) => !isPendingInvitation(invitation, now),
+  );
 
   return (
     <div className="grid min-w-0 gap-5">
@@ -195,159 +208,234 @@ export function SiteTeamView({
         </DialogContent>
       </Dialog>
 
-      <section
-        aria-labelledby="site-team-members-heading"
-        className={`${adminStyles.surface} min-w-0 overflow-hidden`}
-      >
-        <h2
-          id="site-team-members-heading"
-          className={`${displayHeading} m-0 border-b border-admin-line p-5 text-xl`}
-        >
-          Pessoas com acesso
-        </h2>
-        {team.members.length === 0 ? (
-          <p className="m-0 p-5 text-sm text-admin-muted">
-            Ainda não há pessoas com acesso.
-          </p>
+      <TeamGroup id="site-team-members-heading" title="Pessoas com acesso">
+        {activeMembers.length === 0 ? (
+          <EmptyGroup>Ainda não há pessoas com acesso.</EmptyGroup>
         ) : (
-          <ul className="m-0 grid min-w-0 list-none divide-y divide-admin-line p-0">
-            {team.members.map((member) => {
-              const active = member.revokedAt === null;
-              return (
-                <li
-                  key={member.userId}
-                  className="grid min-w-0 gap-3 p-5 sm:flex sm:items-center sm:justify-between"
-                >
-                  <div className="flex min-w-0 items-start gap-3 break-words">
-                    <span
-                      aria-hidden="true"
-                      className="grid size-10 shrink-0 place-items-center rounded-full bg-admin-terracotta-wash text-xs font-bold text-admin-terracotta-deep"
-                    >
-                      {getInitials(member.name)}
-                    </span>
-                    <div className="min-w-0">
-                      <p className="m-0 font-semibold text-admin-graphite">
-                        {member.name}
-                      </p>
-                      <p className="mb-0 mt-1 break-all text-sm text-admin-muted">
-                        {member.email}
-                      </p>
-                      <p className="mb-0 mt-2 text-sm text-admin-muted">
-                        {member.membershipRole === "SITE_ADMIN"
-                          ? "Titular"
-                          : "Assessor"}{" "}
-                        · {active ? "Acesso ativo" : "Acesso revogado"}
-                        {member.revokedAt && (
-                          <>
-                            {" · Revogado em "}
-                            <time dateTime={member.revokedAt}>
-                              {formatDate(member.revokedAt)}
-                            </time>
-                          </>
-                        )}
-                      </p>
-                    </div>
-                  </div>
-                  {active && member.membershipRole === "SITE_ASSISTANT" && (
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      aria-label={`Revogar acesso de ${member.name}`}
-                      disabled={pending}
-                      onClick={() => onRevokeMember(member.userId)}
-                    >
-                      Revogar acesso
-                    </Button>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
+          <TeamList>
+            {activeMembers.map((member) => (
+              <MemberRow
+                key={member.userId}
+                member={member}
+                pending={pending}
+                onRevoke={onRevokeMember}
+              />
+            ))}
+          </TeamList>
         )}
-      </section>
+      </TeamGroup>
 
-      <section
-        aria-labelledby="site-team-invitations-heading"
-        className={`${adminStyles.surface} min-w-0 overflow-hidden`}
-      >
-        <h2
-          id="site-team-invitations-heading"
-          className={`${displayHeading} m-0 border-b border-admin-line p-5 text-xl`}
-        >
-          Convites da equipe
-        </h2>
+      <TeamGroup id="site-team-invitations-heading" title="Convites pendentes">
         <p className="m-0 border-b border-admin-line px-5 py-3 text-sm text-admin-muted">
           Para enviar de novo, revogue o convite e use “Convidar assessor” para
           criar um novo.
         </p>
-        {team.invitations.length === 0 ? (
-          <p className="m-0 p-5 text-sm text-admin-muted">
-            Ainda não há convites para assessores.
-          </p>
+        {pendingInvitations.length === 0 ? (
+          <EmptyGroup>Nenhum convite aguardando resposta.</EmptyGroup>
         ) : (
-          <ul className="m-0 grid min-w-0 list-none divide-y divide-admin-line p-0">
-            {team.invitations.map((invitation) => {
-              const unconsumedAndUnrevoked =
-                invitation.consumedAt === null && invitation.revokedAt === null;
-              const expired =
-                unconsumedAndUnrevoked &&
-                new Date(invitation.expiresAt).getTime() <= now.getTime();
-              const pendingInvitation = unconsumedAndUnrevoked && !expired;
-              const status = invitation.revokedAt
-                ? "Revogado"
-                : invitation.consumedAt
-                  ? "Utilizado"
-                  : expired
-                    ? "Expirado"
-                    : "Pendente";
-              const eventDate = invitation.revokedAt ?? invitation.consumedAt;
-              const dateLabel = invitation.revokedAt
-                ? "Revogado em"
-                : invitation.consumedAt
-                  ? "Aceito em"
-                  : expired
-                    ? "Expirou em"
-                    : "Expira em";
-              const dateValue = eventDate ?? invitation.expiresAt;
-
-              return (
-                <li
-                  key={invitation.id}
-                  className="grid min-w-0 gap-3 p-5 sm:flex sm:items-center sm:justify-between"
-                >
-                  <div className="min-w-0 break-words">
-                    <p className="m-0 font-semibold text-admin-graphite">
-                      {invitation.inviteeName}
-                    </p>
-                    <p className="mb-0 mt-1 break-all text-sm text-admin-muted">
-                      {invitation.email}
-                    </p>
-                    <p className="mb-0 mt-2 text-sm text-admin-muted">
-                      {status}
-                      {" · "}
-                      {dateLabel}{" "}
-                      <time dateTime={dateValue}>{formatDate(dateValue)}</time>
-                    </p>
-                  </div>
-                  {pendingInvitation && (
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      aria-label={`Revogar convite para ${invitation.inviteeName}`}
-                      disabled={pending}
-                      onClick={() => onRevokeInvitation(invitation.id)}
-                    >
-                      Revogar convite
-                    </Button>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
+          <TeamList>
+            {pendingInvitations.map((invitation) => (
+              <InvitationRow
+                key={invitation.id}
+                invitation={invitation}
+                now={now}
+                pending={pending}
+                onRevoke={onRevokeInvitation}
+              />
+            ))}
+          </TeamList>
         )}
-      </section>
+      </TeamGroup>
+
+      {(revokedMembers.length > 0 || pastInvitations.length > 0) && (
+        <TeamGroup id="site-team-history-heading" title="Histórico">
+          <p className="m-0 border-b border-admin-line px-5 py-3 text-sm text-admin-muted">
+            Acessos revogados e convites utilizados, expirados ou revogados.
+          </p>
+          <TeamList>
+            {revokedMembers.map((member) => (
+              <MemberRow
+                key={member.userId}
+                member={member}
+                pending={pending}
+                onRevoke={onRevokeMember}
+              />
+            ))}
+            {pastInvitations.map((invitation) => (
+              <InvitationRow
+                key={invitation.id}
+                invitation={invitation}
+                now={now}
+                pending={pending}
+                onRevoke={onRevokeInvitation}
+              />
+            ))}
+          </TeamList>
+        </TeamGroup>
+      )}
     </div>
+  );
+}
+
+type Member = SiteTeamResponse["members"][number];
+type TeamInvitation = SiteTeamResponse["invitations"][number];
+
+function isPendingInvitation(invitation: TeamInvitation, now: Date) {
+  return (
+    invitation.consumedAt === null &&
+    invitation.revokedAt === null &&
+    new Date(invitation.expiresAt).getTime() > now.getTime()
+  );
+}
+
+function TeamGroup({
+  id,
+  title,
+  children,
+}: {
+  id: string;
+  title: string;
+  children: ReactNode;
+}) {
+  return (
+    <section
+      aria-labelledby={id}
+      className={`${adminStyles.surface} min-w-0 overflow-hidden`}
+    >
+      <h2
+        id={id}
+        className={`${displayHeading} m-0 border-b border-admin-line p-5 text-xl`}
+      >
+        {title}
+      </h2>
+      {children}
+    </section>
+  );
+}
+
+function TeamList({ children }: { children: ReactNode }) {
+  return (
+    <ul className="m-0 grid min-w-0 list-none divide-y divide-admin-line p-0">
+      {children}
+    </ul>
+  );
+}
+
+function EmptyGroup({ children }: { children: ReactNode }) {
+  return <p className="m-0 p-5 text-sm text-admin-muted">{children}</p>;
+}
+
+function MemberRow({
+  member,
+  pending,
+  onRevoke,
+}: {
+  member: Member;
+  pending: boolean;
+  onRevoke: (userId: string) => void;
+}) {
+  const active = member.revokedAt === null;
+  return (
+    <li className="grid min-w-0 gap-3 p-5 sm:flex sm:items-center sm:justify-between">
+      <div className="flex min-w-0 items-start gap-3 break-words">
+        <span
+          aria-hidden="true"
+          className="grid size-10 shrink-0 place-items-center rounded-full bg-admin-terracotta-wash text-xs font-bold text-admin-terracotta-deep"
+        >
+          {getInitials(member.name)}
+        </span>
+        <div className="min-w-0">
+          <p className="m-0 font-semibold text-admin-graphite">{member.name}</p>
+          <p className="mb-0 mt-1 break-all text-sm text-admin-muted">
+            {member.email}
+          </p>
+          <p className="mb-0 mt-2 text-sm text-admin-muted">
+            {member.membershipRole === "SITE_ADMIN" ? "Titular" : "Assessor"} ·{" "}
+            {active ? "Acesso ativo" : "Acesso revogado"}
+            {member.revokedAt && (
+              <>
+                {" · Revogado em "}
+                <time dateTime={member.revokedAt}>
+                  {formatDate(member.revokedAt)}
+                </time>
+              </>
+            )}
+          </p>
+        </div>
+      </div>
+      {active && member.membershipRole === "SITE_ASSISTANT" && (
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          aria-label={`Revogar acesso de ${member.name}`}
+          disabled={pending}
+          onClick={() => onRevoke(member.userId)}
+        >
+          Revogar acesso
+        </Button>
+      )}
+    </li>
+  );
+}
+
+function InvitationRow({
+  invitation,
+  now,
+  pending,
+  onRevoke,
+}: {
+  invitation: TeamInvitation;
+  now: Date;
+  pending: boolean;
+  onRevoke: (invitationId: string) => void;
+}) {
+  const pendingInvitation = isPendingInvitation(invitation, now);
+  const expired =
+    !pendingInvitation && !invitation.consumedAt && !invitation.revokedAt;
+  const status = invitation.revokedAt
+    ? "Revogado"
+    : invitation.consumedAt
+      ? "Utilizado"
+      : expired
+        ? "Expirado"
+        : "Pendente";
+  const dateLabel = invitation.revokedAt
+    ? "Revogado em"
+    : invitation.consumedAt
+      ? "Aceito em"
+      : expired
+        ? "Expirou em"
+        : "Expira em";
+  const dateValue =
+    invitation.revokedAt ?? invitation.consumedAt ?? invitation.expiresAt;
+  return (
+    <li className="grid min-w-0 gap-3 p-5 sm:flex sm:items-center sm:justify-between">
+      <div className="min-w-0 break-words">
+        <p className="m-0 font-semibold text-admin-graphite">
+          {invitation.inviteeName}
+        </p>
+        <p className="mb-0 mt-1 break-all text-sm text-admin-muted">
+          {invitation.email}
+        </p>
+        <p className="mb-0 mt-2 text-sm text-admin-muted">
+          {status}
+          {" · "}
+          {dateLabel} <time dateTime={dateValue}>{formatDate(dateValue)}</time>
+        </p>
+      </div>
+      {pendingInvitation && (
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          aria-label={`Revogar convite para ${invitation.inviteeName}`}
+          disabled={pending}
+          onClick={() => onRevoke(invitation.id)}
+        >
+          Revogar convite
+        </Button>
+      )}
+    </li>
   );
 }
