@@ -240,4 +240,52 @@ describe("site team view", () => {
     expect(history).not.toContain("Clara Pendente");
     expect(history).not.toContain("Revogar");
   });
+
+  it("marks the signed-in person and counts people with access", () => {
+    const html = renderToStaticMarkup(
+      createElement(SiteTeamView, {
+        team: {
+          ...team,
+          members: [
+            {
+              userId: "user-me",
+              siteId: "site-1",
+              name: "Ana Souza",
+              email: "ana.souza@example.com",
+              membershipRole: "SITE_ADMIN",
+              revokedAt: null,
+            },
+            ...team.members,
+          ],
+        },
+        canManage: true,
+        pending: false,
+        now: observedNow,
+        currentUserId: "user-me",
+        ...callbacks(),
+      }),
+    );
+    expect(html).toContain("Ana Souza (você)");
+    expect(html).not.toContain("Ana Assistente (você)");
+    expect(html).not.toContain("Bia Revogada (você)");
+    const members = html.slice(
+      html.indexOf('id="site-team-members-heading"'),
+      html.indexOf('id="site-team-invitations-heading"'),
+    );
+    expect(members).toContain("2 pessoas");
+  });
+
+  it("uses the singular for a single person with access", () => {
+    const html = renderToStaticMarkup(
+      createElement(SiteTeamView, {
+        team,
+        canManage: true,
+        pending: false,
+        now: observedNow,
+        ...callbacks(),
+      }),
+    );
+    expect(html).toContain("1 pessoa<");
+    expect(html).not.toContain("(você)");
+  });
 });

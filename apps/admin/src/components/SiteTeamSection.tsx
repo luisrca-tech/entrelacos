@@ -370,6 +370,7 @@ export function SiteTeamSection({
   );
   const scope = useRef({ siteId, canManage, owner, ports });
   scope.current = { siteId, canManage, owner, ports };
+  const actor = meResponseSchema.safeParse(snapshot.actor);
   return (
     <SiteTeamRuntime
       key={`${siteId}:${canManage}:${snapshot.status}:${snapshot.sessionEpoch}`}
@@ -377,6 +378,7 @@ export function SiteTeamSection({
       canManage={canManage}
       ports={ports}
       scope={scope}
+      currentUserId={actor.success ? actor.data.user.id : null}
     />
   );
 }
@@ -386,9 +388,11 @@ function SiteTeamRuntime({
   canManage,
   ports,
   scope,
+  currentUserId,
 }: {
   siteId: string;
   canManage: boolean;
+  currentUserId: string | null;
   ports: SiteTeamPorts;
   scope: {
     current: {
@@ -493,6 +497,7 @@ function SiteTeamRuntime({
       )}
       <SiteTeamView
         team={team}
+        currentUserId={currentUserId}
         canManage={authorized}
         pending={pending}
         error={error}

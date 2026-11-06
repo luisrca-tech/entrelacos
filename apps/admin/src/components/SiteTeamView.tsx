@@ -13,6 +13,7 @@ import { Plus } from "lucide-react";
 import type { FormEvent, ReactNode } from "react";
 import { adminStyles, displayHeading } from "../lib/adminStyles";
 import { getInitials } from "./adminNavigation";
+import { PageHeaderActions } from "./PageHeaderActions";
 
 type Props = {
   team: SiteTeamResponse | null;
@@ -20,6 +21,8 @@ type Props = {
   pending: boolean;
   error?: string;
   now?: Date;
+  /** Signed-in user, marked with "(você)" in the member list. */
+  currentUserId?: string | null;
   inviteOpen: boolean;
   onInviteOpenChange: (open: boolean) => void;
   onInvite: (event: FormEvent<HTMLFormElement>) => void;
@@ -47,6 +50,7 @@ export function SiteTeamView({
   pending,
   error,
   now = new Date(),
+  currentUserId = null,
   inviteOpen,
   onInviteOpenChange,
   onInvite,
@@ -118,7 +122,7 @@ export function SiteTeamView({
         </p>
       )}
 
-      <div className="flex justify-end">
+      <PageHeaderActions>
         <Button
           type="button"
           disabled={pending}
@@ -128,7 +132,7 @@ export function SiteTeamView({
           <Plus aria-hidden="true" />
           Convidar assessor
         </Button>
-      </div>
+      </PageHeaderActions>
 
       <section
         className="grid gap-3 rounded-2xl border border-admin-line bg-admin-beige p-5"
@@ -208,7 +212,11 @@ export function SiteTeamView({
         </DialogContent>
       </Dialog>
 
-      <TeamGroup id="site-team-members-heading" title="Pessoas com acesso">
+      <TeamGroup
+        id="site-team-members-heading"
+        title="Pessoas com acesso"
+        meta={`${activeMembers.length} ${activeMembers.length === 1 ? "pessoa" : "pessoas"}`}
+      >
         {activeMembers.length === 0 ? (
           <EmptyGroup>Ainda não há pessoas com acesso.</EmptyGroup>
         ) : (
@@ -217,6 +225,7 @@ export function SiteTeamView({
               <MemberRow
                 key={member.userId}
                 member={member}
+                current={member.userId === currentUserId}
                 pending={pending}
                 onRevoke={onRevokeMember}
               />
@@ -291,10 +300,12 @@ function isPendingInvitation(invitation: TeamInvitation, now: Date) {
 function TeamGroup({
   id,
   title,
+  meta,
   children,
 }: {
   id: string;
   title: string;
+  meta?: string;
   children: ReactNode;
 }) {
   return (
@@ -302,12 +313,12 @@ function TeamGroup({
       aria-labelledby={id}
       className={`${adminStyles.surface} min-w-0 overflow-hidden`}
     >
-      <h2
-        id={id}
-        className={`${displayHeading} m-0 border-b border-admin-line p-5 text-xl`}
-      >
-        {title}
-      </h2>
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b border-admin-line p-5">
+        <h2 id={id} className={`${displayHeading} m-0 text-xl`}>
+          {title}
+        </h2>
+        {meta && <p className="m-0 text-sm text-admin-muted">{meta}</p>}
+      </div>
       {children}
     </section>
   );
@@ -327,10 +338,12 @@ function EmptyGroup({ children }: { children: ReactNode }) {
 
 function MemberRow({
   member,
+  current = false,
   pending,
   onRevoke,
 }: {
   member: Member;
+  current?: boolean;
   pending: boolean;
   onRevoke: (userId: string) => void;
 }) {
@@ -345,7 +358,10 @@ function MemberRow({
           {getInitials(member.name)}
         </span>
         <div className="min-w-0">
-          <p className="m-0 font-semibold text-admin-graphite">{member.name}</p>
+          <p className="m-0 font-semibold text-admin-graphite">
+            {member.name}
+            {current && " (você)"}
+          </p>
           <p className="mb-0 mt-1 break-all text-sm text-admin-muted">
             {member.email}
           </p>
