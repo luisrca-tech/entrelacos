@@ -1,26 +1,17 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { describe, expect, it } from "vitest";
-import { siteRecordMenuActions } from "./siteRecordMenu";
+import { expect, it } from "vitest";
 
-describe("site record overflow actions", () => {
-  it("offers profile, dates, and publication edits", () => {
-    expect(siteRecordMenuActions).toEqual([
-      { id: "profile", label: "Editar cadastro" },
-      { id: "dates", label: "Editar datas" },
-      { id: "publication", label: "Registrar publicação" },
-    ]);
-  });
-
-  it("renders record actions through the overflow menu", () => {
-    const source = readFileSync(
-      resolve(import.meta.dirname, "SiteSettingsView.tsx"),
-      "utf8",
-    );
-    expect(source).toContain("siteRecordMenuActions");
-    expect(source).toContain("OverflowMenu");
-    expect(source).not.toMatch(
-      /setSettingsDialog\("profile"\)[\s\S]*Editar cadastro/,
-    );
-  });
+it("offers publication registration as the primary action in its own section", () => {
+  const source = readFileSync(
+    resolve(import.meta.dirname, "SiteSettingsView.tsx"),
+    "utf8",
+  );
+  const publication = source.slice(
+    source.indexOf('tab === "publication"'),
+    source.indexOf('tab === "address"'),
+  );
+  expect(publication).toContain("Registrar publicação");
+  expect(publication).toContain('onEditRecord("publication")');
+  expect(publication).not.toContain("OverflowMenu");
 });

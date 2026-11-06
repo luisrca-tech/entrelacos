@@ -54,6 +54,7 @@ beforeEach(() => {
       publicUrl: "https://wedding.example.test",
       termStartsOn: "2026-06-12",
       termEndsOn: "2027-06-12",
+      repositorySlug: "maria-joao",
     },
     admins: [],
     domains: [],
@@ -65,6 +66,9 @@ beforeEach(() => {
     onAdminAction: vi.fn(),
     onAddDomain: vi.fn(),
     onEditDomain: vi.fn(),
+    onSaveAddress: vi.fn().mockResolvedValue(true),
+    generated: null,
+    onDismissGenerated: vi.fn(),
   };
 });
 afterEach(async () => {
@@ -94,30 +98,70 @@ describe("owner settings overview", () => {
     expect(props.onEditRecord).not.toHaveBeenCalled();
   });
 
-  it("shows useful core values and leaves administrative details collapsed", async () => {
+  it("shows the wedding data and keeps access and publication in their own sections", async () => {
     await render();
-    expect(container.textContent).toContain("Dados do casamento");
-    expect(container.textContent).toContain("Datas e vigência");
-    expect(container.textContent).toContain("Publicação do site");
     expect(container.textContent).toContain("12-06-2027");
     expect(container.textContent).toContain("https://wedding.example.test");
-    const details = Array.from(container.querySelectorAll("details"));
-    expect(details).toHaveLength(2);
-    expect(details.every((detail) => !detail.open)).toBe(true);
-    expect(details[0].querySelector("summary")?.textContent).toContain(
-      "0 administradores",
+    expect(container.textContent).not.toContain("Registrar publicação");
+    await click("Publicação");
+    expect(container.textContent).toContain("Publicação do site");
+    await click("Acessos do casal");
+    expect(container.textContent).toContain(
+      "Nenhuma pessoa do casal cadastrada.",
     );
-    expect(details[1].querySelector("summary")?.textContent).toContain(
-      "0 endereços",
+    expect(container.textContent).not.toContain("Registrar publicação");
+  });
+
+  it("submits the public address and trusted origins independently", async () => {
+    await render();
+    await click("Endereço do site");
+    const slug = container.querySelector<HTMLInputElement>(
+      "#site-repository-slug",
     );
-    expect(container.textContent).toContain("Nenhum administrador cadastrado");
-    expect(container.textContent).toContain("Nenhum domínio registrado");
+    expect(slug?.readOnly).toBe(true);
+    expect(slug?.value).toBe("maria-joao");
+    const address =
+      container.querySelector<HTMLInputElement>("#site-public-url");
+    const origins = container.querySelector<HTMLTextAreaElement>(
+      "#site-trusted-origins",
+    );
+    if (!address || !origins) throw new Error("Missing address forms");
+    const submit = (form: HTMLFormElement | null) =>
+      act(async () =>
+        form?.dispatchEvent(
+          new Event("submit", { bubbles: true, cancelable: true }),
+        ),
+      );
+    address.value = "https://wedding.example.test/invalid";
+    await submit(address.form);
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+      "endereço público",
+    );
+    expect(props.onSaveAddress).not.toHaveBeenCalled();
+    address.value = "https://wedding.example.test";
+    await submit(address.form);
+    origins.value = "https://guest.example.test";
+    await submit(origins.form);
+    expect(props.onSaveAddress).toHaveBeenNthCalledWith(1, {
+      publicUrl: "https://wedding.example.test",
+    });
+    expect(props.onSaveAddress).toHaveBeenNthCalledWith(2, {
+      trustedOrigins: ["https://guest.example.test"],
+    });
   });
 
   it("keeps each core edit and lifecycle action connected to its existing flow", async () => {
     await render();
-    await click("Editar cadastro");
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>(
+          '[aria-label="Editar nome do casamento"]',
+        )
+        ?.click(),
+    );
+    await click("Datas e vigência");
     await click("Editar datas");
+    await click("Publicação");
     await click("Registrar publicação");
     expect(props.onEditRecord).toHaveBeenNthCalledWith(1, "profile");
     expect(props.onEditRecord).toHaveBeenNthCalledWith(2, "dates");
@@ -136,7 +180,10 @@ describe("owner settings overview", () => {
       name: "Ana",
       email: "ana@example.test",
       state: "PENDING" as const,
-      pendingAccess: null,
+      pendingAccess: {
+        purpose: "ACTIVATION" as const,
+        expiresAt: "2027-01-01T00:00:00.000Z",
+      },
     };
     const domain = {
       id: "domain-one",
@@ -152,17 +199,21 @@ describe("owner settings overview", () => {
     props.admins = [admin];
     props.domains = [domain];
     await render();
-    expect(container.querySelector("summary")?.textContent).toContain(
-      "1 administrador cadastrado",
-    );
+    await click("Acessos do casal");
     expect(container.textContent).toContain("ana@example.test");
-    expect(container.textContent).toContain("Principal");
-    await click("Gerar link de ativação");
+    await click("Gerar novo link");
+    expect(props.onAdminAction).not.toHaveBeenCalled();
+    expect(container.textContent).toContain(
+      "O link anterior deixará de funcionar",
+    );
+    await click("Confirmar novo link");
     expect(props.onAdminAction).toHaveBeenCalledWith("issue-access", admin);
     await click("Revogar link");
     expect(props.onAdminAction).toHaveBeenCalledWith("revoke-access", admin);
     await click("Desativar acesso");
     expect(props.onAdminAction).toHaveBeenCalledWith("disable-access", admin);
+    await click("Endereço do site");
+    expect(container.textContent).toContain("Principal");
     await click("Editar domínio");
     expect(props.onEditDomain).toHaveBeenCalledExactlyOnceWith(domain);
   });
@@ -175,7 +226,6 @@ describe("owner settings overview", () => {
     expect(buttons.every((button) => button.disabled)).toBe(true);
     await click("Inativar casamento");
     expect(props.onLifecycleAction).not.toHaveBeenCalled();
-    await click("Adicionar administrador");
     expect(props.onAddAdmin).not.toHaveBeenCalled();
   });
 });

@@ -155,8 +155,7 @@ describe("panel session boundary", () => {
       userId: "admin-1",
       purpose: "RECOVERY",
       origin: "https://panel.example.test",
-      clipboard: { writeText: vi.fn() },
-      copied: vi.fn(),
+      generated: vi.fn(),
     });
     expect(apiRequest).not.toHaveBeenCalled();
     expect(callbacks.pending).not.toHaveBeenCalled();
@@ -223,7 +222,7 @@ describe("panel session boundary", () => {
     ).toBe(false);
     expect(success).not.toHaveBeenCalled();
   });
-  it("copies only the current access link and reports the clipboard outcome", async () => {
+  it("exposes the generated link only after the current session receives it", async () => {
     const { issueWorkspaceAccess } =
       await vi.importActual<typeof import("./SiteWorkspace")>(
         "./SiteWorkspace",
@@ -233,62 +232,19 @@ describe("panel session boundary", () => {
     vi.mocked(apiRequest).mockResolvedValueOnce({
       token: "fictional-credential",
     });
-    const copied = vi.fn();
-    const clipboard = { writeText: vi.fn().mockResolvedValue(undefined) };
+    const generated = vi.fn();
     await issueWorkspaceAccess(panelActorOwner.getSnapshot().sessionEpoch, {
       userId: "admin-1",
       purpose: "RECOVERY",
       origin: "https://panel.example.test",
-      clipboard,
-      copied,
+      generated,
       failed: vi.fn(),
       pending: vi.fn(),
       isActive: () => true,
     });
-    expect(clipboard.writeText).toHaveBeenCalledWith(
+    expect(generated).toHaveBeenCalledExactlyOnceWith(
       "https://panel.example.test/recover#token=fictional-credential",
     );
-    expect(copied).toHaveBeenCalledWith(true);
-  });
-  it("suppresses a clipboard completion after authority is lost", async () => {
-    const { issueWorkspaceAccess } =
-      await vi.importActual<typeof import("./SiteWorkspace")>(
-        "./SiteWorkspace",
-      );
-    vi.mocked(apiRequest).mockResolvedValueOnce(actor);
-    await panelActorOwner.load();
-    vi.mocked(apiRequest).mockResolvedValueOnce({
-      token: "fictional-credential",
-    });
-    const copied = vi.fn();
-    let resolve!: () => void;
-    const clipboard = {
-      writeText: vi.fn(
-        () =>
-          new Promise<void>((yes) => {
-            resolve = yes;
-          }),
-      ),
-    };
-    const work = issueWorkspaceAccess(
-      panelActorOwner.getSnapshot().sessionEpoch,
-      {
-        userId: "admin-1",
-        purpose: "RECOVERY",
-        origin: "https://panel.example.test",
-        clipboard,
-        copied,
-        failed: vi.fn(),
-        pending: vi.fn(),
-        isActive: () => true,
-      },
-    );
-    await Promise.resolve();
-    expect(clipboard.writeText).toHaveBeenCalledTimes(1);
-    panelActorOwner.invalidate(false);
-    resolve();
-    await work;
-    expect(copied).not.toHaveBeenCalled();
   });
   it.each([401, 403])(
     "revokes current workspace authority on mutation denial %s",
@@ -319,7 +275,7 @@ describe("panel session boundary", () => {
     },
   );
   it.each(["session", "mount"])(
-    "does not copy an access credential arriving after %s loss",
+    "does not show an access credential arriving after %s loss",
     async (loss) => {
       const { issueWorkspaceAccess } =
         await vi.importActual<typeof import("./SiteWorkspace")>(
@@ -335,16 +291,14 @@ describe("panel session boundary", () => {
           resolve = yes;
         }),
       );
-      const clipboard = { writeText: vi.fn().mockResolvedValue(undefined) };
-      const copied = vi.fn();
+      const generated = vi.fn();
       const failed = vi.fn();
       const work = issueWorkspaceAccess(epoch, {
         userId: "admin-1",
         purpose: "RECOVERY",
         origin: "https://panel.example.test",
-        clipboard,
         isActive: () => active,
-        copied,
+        generated,
         failed,
         pending: vi.fn(),
       });
@@ -352,8 +306,7 @@ describe("panel session boundary", () => {
       else active = false;
       resolve({ token: "fictional-credential" });
       await work;
-      expect(clipboard.writeText).not.toHaveBeenCalled();
-      expect(copied).not.toHaveBeenCalled();
+      expect(generated).not.toHaveBeenCalled();
       expect(failed).not.toHaveBeenCalled();
     },
   );

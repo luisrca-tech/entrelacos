@@ -157,7 +157,9 @@ describe("site workspace markup", () => {
       resolve(import.meta.dirname, "SiteSettingsView.tsx"),
       "utf8",
     );
-    expect(settingsSource).toContain('aria-label="Status e datas"');
+    expect(settingsSource).toContain("Situação do casamento");
+    expect(settingsSource).toContain('tab === "dates"');
+    expect(settingsSource).toContain('tab === "publication"');
     expect(settingsSource).toContain("{labels[site.publicationState]}");
     expect(workspaceSource).not.toContain('data-area="overview"');
   });

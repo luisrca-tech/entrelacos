@@ -32,7 +32,6 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-  Textarea,
   toast,
 } from "@entrelacos/ui";
 import { Link } from "@tanstack/react-router";
@@ -53,15 +52,12 @@ import { MessagesSection } from "./MessagesSection";
 import { isCurrentPanelSessionEpoch, panelActorOwner } from "./panelActor";
 import { ReceivingSection } from "./ReceivingSection";
 import { SiteHome } from "./SiteHome";
-import { SiteSettingsView } from "./SiteSettingsView";
-import { SiteTeamSection } from "./SiteTeamSection";
 import {
-  adminAccessLink,
-  adminAccessLinkCopiedMessage,
-  adminAccessLinkCopyFailedMessage,
-  adminAccessLinkRevokedMessage,
-  copyAdminAccessLink,
-} from "./siteAdminMenu";
+  type GeneratedCoupleAccess,
+  SiteSettingsView,
+} from "./SiteSettingsView";
+import { SiteTeamSection } from "./SiteTeamSection";
+import { adminAccessLink } from "./siteAdminMenu";
 import {
   type LifecycleAction,
   lifecycleConfirmation,
@@ -85,14 +81,13 @@ const labels: Record<string, string> = {
 };
 
 type InternalField =
-  | "repositorySlug"
   | "provisioningKey"
   | "trustedOrigins"
   | "reviewApprovedAt"
   | "createdAt"
   | "updatedAt";
-type SiteView = Omit<SiteRecord, InternalField> &
-  Partial<Pick<SiteRecord, InternalField>>;
+type SiteView = Omit<SiteRecord, InternalField | "repositorySlug"> &
+  Partial<Pick<SiteRecord, InternalField>> & { repositorySlug?: string };
 type Admin = typeof adminSummarySchema._output;
 type Domain = typeof siteDomainRecordSchema._output;
 
@@ -138,8 +133,7 @@ export async function issueWorkspaceAccess(
     userId: string;
     purpose: "ACTIVATION" | "RECOVERY";
     origin: string;
-    clipboard: Pick<Clipboard, "writeText">;
-    copied: (copied: boolean) => void;
+    generated: (url: string) => void;
   },
 ) {
   const current = () => options.isActive() && isCurrentPanelSessionEpoch(epoch);
@@ -154,11 +148,9 @@ export async function issueWorkspaceAccess(
       },
     );
     if (!current()) return;
-    const copied = await copyAdminAccessLink(
+    options.generated(
       adminAccessLink(options.origin, result.token, options.purpose),
-      options.clipboard,
     );
-    if (current()) options.copied(copied);
   } catch (cause) {
     if (current()) {
       panelActorOwner.reportFailure(cause, epoch);
@@ -201,6 +193,8 @@ export function SiteWorkspace({
   }, []);
   const [lifecycleAction, setLifecycleAction] =
     useState<LifecycleAction | null>(null);
+  const [generatedAccess, setGeneratedAccess] =
+    useState<GeneratedCoupleAccess | null>(null);
   const [adminToDisable, setAdminToDisable] = useState<Admin | null>(null);
   const [settingsDialog, setSettingsDialog] = useState<
     | "profile"
@@ -296,46 +290,37 @@ export function SiteWorkspace({
     return mutate(path, body(new FormData(event.currentTarget)), method);
   }
 
-  async function issueAndCopy(
-    admin: Admin,
-    purpose: "ACTIVATION" | "RECOVERY",
-    copiedMessage: string,
-    failedMessage: string,
-  ) {
+  async function issue(admin: Admin, purpose: "ACTIVATION" | "RECOVERY") {
     const mount = mountScope.current;
+    setGeneratedAccess(null);
     await issueWorkspaceAccess(sessionEpoch, {
       userId: admin.userId,
       purpose,
       origin: window.location.origin,
-      clipboard: navigator.clipboard,
       isActive: () => mount?.active === true,
       pending: setPending,
-      copied: (copied) => {
-        if (copied) toast.success(copiedMessage);
-        else toast.error(adminAccessLinkCopyFailedMessage);
+      generated: (url) => {
+        setGeneratedAccess({ userId: admin.userId, url });
+        void load(() => mount?.active === true).catch(() => {});
       },
-      failed: (cause) =>
-        toast.error(cause instanceof Error ? cause.message : failedMessage),
+      failed: () => toast.error("Não foi possível gerar o link."),
     });
   }
 
-  async function issue(admin: Admin, purpose: "ACTIVATION" | "RECOVERY") {
-    await issueAndCopy(
-      admin,
-      purpose,
-      adminAccessLinkCopiedMessage(admin.email, purpose),
-      "Não foi possível gerar o link.",
-    );
-  }
-
   async function revokeAccess(admin: Admin) {
-    const purpose = admin.state === "PENDING" ? "ACTIVATION" : "RECOVERY";
-    await issueAndCopy(
-      admin,
-      purpose,
-      adminAccessLinkRevokedMessage(admin.email, purpose),
-      "Não foi possível revogar o link.",
+    const purpose = admin.pendingAccess?.purpose;
+    if (!purpose) return;
+    const saved = await mutate(
+      `/v1/owner/admins/${admin.userId}/access/revoke`,
+      {
+        userId: admin.userId,
+        purpose,
+      },
     );
+    if (saved)
+      setGeneratedAccess((value) =>
+        value?.userId === admin.userId ? null : value,
+      );
   }
 
   function handleAdminMenuAction(action: string, admin: Admin) {
@@ -600,6 +585,9 @@ export function SiteWorkspace({
               onAdminAction={handleAdminMenuAction}
               onAddDomain={() => setSettingsDialog("domain")}
               onEditDomain={openDomainEdit}
+              onSaveAddress={(value) => mutate(base, value, "PATCH")}
+              generated={generatedAccess}
+              onDismissGenerated={() => setGeneratedAccess(null)}
             />
 
             <Dialog
@@ -609,7 +597,7 @@ export function SiteWorkspace({
               <DialogContent className={`${adminStyles.dialog} max-w-2xl`}>
                 <DialogTitle>Editar cadastro</DialogTitle>
                 <DialogDescription>
-                  Atualize os nomes e o endereço público do casamento.
+                  Atualize o nome do casamento e os nomes do casal.
                 </DialogDescription>
                 <form
                   className={adminStyles.formGrid}
@@ -620,10 +608,6 @@ export function SiteWorkspace({
                       (form) => ({
                         displayName: form.get("name"),
                         coupleNames: [form.get("first"), form.get("second")],
-                        publicUrl: form.get("url") || null,
-                        trustedOrigins: String(form.get("origins"))
-                          .split(/\s+/)
-                          .filter(Boolean),
                       }),
                       "PATCH",
                     );
@@ -641,7 +625,7 @@ export function SiteWorkspace({
                     />
                   </label>
                   <label htmlFor="site-couple-first">
-                    Nome da primeira pessoa
+                    Nome da pessoa 1
                     <Input
                       id="site-couple-first"
                       name="first"
@@ -651,7 +635,7 @@ export function SiteWorkspace({
                     />
                   </label>
                   <label htmlFor="site-couple-second">
-                    Nome da segunda pessoa
+                    Nome da pessoa 2
                     <Input
                       id="site-couple-second"
                       name="second"
@@ -660,34 +644,6 @@ export function SiteWorkspace({
                       defaultValue={site.coupleNames[1]}
                     />
                   </label>
-                  <label htmlFor="site-public-url">
-                    Endereço público
-                    <Input
-                      id="site-public-url"
-                      name="url"
-                      type="url"
-                      defaultValue={site.publicUrl ?? ""}
-                    />
-                  </label>
-                  <details className="col-span-full rounded-xl border border-admin-line p-4">
-                    <summary className="cursor-pointer text-sm font-semibold text-admin-ink">
-                      Configuração avançada de endereços
-                    </summary>
-                    <p className="text-sm leading-relaxed text-admin-muted">
-                      Informe os endereços completos autorizados a enviar
-                      confirmações e mensagens pelo site. Use um por linha.
-                    </p>
-                    <label htmlFor="site-trusted-origins">
-                      Endereços autorizados
-                      <Textarea
-                        id="site-trusted-origins"
-                        name="origins"
-                        rows={3}
-                        defaultValue={site.trustedOrigins?.join("\n") ?? ""}
-                        placeholder="https://casamento.exemplo.com"
-                      />
-                    </label>
-                  </details>
                   <div className={adminStyles.inline}>
                     <Button disabled={pending} type="submit">
                       Salvar cadastro
@@ -837,7 +793,7 @@ export function SiteWorkspace({
               onOpenChange={(open) => !open && closeSettingsDialog()}
             >
               <DialogContent>
-                <DialogTitle>Adicionar administrador</DialogTitle>
+                <DialogTitle>Adicionar pessoa do casal</DialogTitle>
                 <DialogDescription>
                   Após adicionar, gere e copie o link de ativação nas ações
                   dessa pessoa.
