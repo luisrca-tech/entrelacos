@@ -31,7 +31,7 @@ const invitation: InvitationRecord = {
 };
 
 describe("invitation list", () => {
-  it("shows each guest status and age type under the invitation", () => {
+  it("shows the group status and age counts without private access data", () => {
     const html = renderToStaticMarkup(
       createElement(InvitationList, {
         invitations: [invitation],
@@ -43,10 +43,9 @@ describe("invitation list", () => {
       "Família Silva",
       "Ana",
       "Bia",
-      "Adulto",
-      "Criança",
-      "Irá comparecer",
-      "Sem resposta",
+      "1 adulto",
+      "1 criança",
+      "Em parte",
     ]) {
       expect(html).toContain(text);
     }

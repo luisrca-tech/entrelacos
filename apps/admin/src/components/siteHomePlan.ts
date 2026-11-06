@@ -152,3 +152,15 @@ export function buildSiteHomePlan({
     };
   return { sections, next, receivingLabel };
 }
+
+const weddingCalendar = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "America/Sao_Paulo",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
+export function daysUntilWedding(eventDate: string, now: Date) {
+  const today = weddingCalendar.format(now);
+  return (Date.parse(eventDate) - Date.parse(today)) / 86_400_000;
+}

@@ -185,3 +185,16 @@ describe("site home orientation", () => {
     expect(plan.next).toBeNull();
   });
 });
+
+it("counts calendar days in São Paulo across UTC midnight", async () => {
+  const { daysUntilWedding } = await import("./siteHomePlan");
+  expect(daysUntilWedding("2027-03-14", new Date("2027-03-14T02:59:00Z"))).toBe(
+    1,
+  );
+  expect(daysUntilWedding("2027-03-14", new Date("2027-03-14T03:00:00Z"))).toBe(
+    0,
+  );
+  expect(daysUntilWedding("2027-03-14", new Date("2027-03-15T03:00:00Z"))).toBe(
+    -1,
+  );
+});

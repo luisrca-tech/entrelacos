@@ -475,19 +475,28 @@ export function SiteWorkspace({
               >
                 {heading.title}
               </h1>
-              <p className="mt-2 text-base leading-[1.6] text-admin-muted">
-                {site.displayName}
+              <p className="mt-2 text-[15px] leading-relaxed text-admin-muted">
+                {area === "home"
+                  ? "Acompanhe a preparação do casamento e retome de onde parou."
+                  : area === "invitations"
+                    ? "Quem vocês convidaram e quem já respondeu, convite por convite."
+                    : area === "messages"
+                      ? "Leia os recados recebidos e cuide do mural do casal."
+                      : area === "team"
+                        ? "Gerencie quem ajuda a cuidar do casamento."
+                        : site.displayName}
               </p>
             </div>
             <div className="flex shrink-0 flex-wrap items-center justify-end gap-3 [@media(max-width:760px)]:w-full [@media(max-width:760px)]:justify-start">
-              {site.publicUrl && (
-                <a
-                  className="inline-flex min-h-[42px] w-fit items-center justify-center rounded-lg border border-admin-graphite bg-admin-graphite px-[17px] py-2.5 text-[0.88rem] font-bold text-[#fffaf6] no-underline hover:bg-admin-ink [@media(max-width:760px)]:w-full"
-                  href={publicSiteHandoffUrl(site.publicUrl, panelOrigin)}
-                >
-                  Ir para o site
-                </a>
-              )}
+              {site.publicUrl &&
+                !["home", "invitations", "messages", "team"].includes(area) && (
+                  <a
+                    className="inline-flex min-h-[42px] w-fit items-center justify-center rounded-lg border border-admin-graphite bg-admin-graphite px-[17px] py-2.5 text-[0.88rem] font-bold text-[#fffaf6] no-underline hover:bg-admin-ink [@media(max-width:760px)]:w-full"
+                    href={publicSiteHandoffUrl(site.publicUrl, panelOrigin)}
+                  >
+                    Ir para o site
+                  </a>
+                )}
               {heading.showLifecycleBadge && (
                 <Badge
                   variant={

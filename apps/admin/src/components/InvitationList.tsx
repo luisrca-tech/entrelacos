@@ -1,15 +1,30 @@
-import type { InvitationRecord } from "@entrelacos/contracts";
-import { Button } from "@entrelacos/ui";
-import { ArrowRight, UsersRound } from "lucide-react";
-import { InvitationStatus } from "./InvitationStatus";
+import {
+  type InvitationRecord,
+  invitationGroupStatus,
+} from "@entrelacos/contracts";
+import { Badge } from "@entrelacos/ui";
+import { Ellipsis, UsersRound } from "lucide-react";
 
 type Props = {
   invitations: readonly InvitationRecord[];
   onOpen: (invitation: InvitationRecord) => void;
   hasFilters: boolean;
+  selectedId?: string | null;
 };
 
-export function InvitationList({ invitations, onOpen, hasFilters }: Props) {
+const statuses = {
+  CONFIRMED: ["Confirmado", "bg-admin-success-wash text-admin-success-ink"],
+  PENDING: ["Sem resposta", "bg-admin-pending-wash text-admin-pending-ink"],
+  DECLINED: ["Não irão", "bg-admin-danger-wash text-admin-danger-ink"],
+  PARTIAL: ["Em parte", "bg-admin-beige text-admin-body"],
+};
+
+export function InvitationList({
+  invitations,
+  onOpen,
+  hasFilters,
+  selectedId,
+}: Props) {
   if (invitations.length === 0) {
     return (
       <div className="rounded-2xl border border-admin-line bg-admin-surface px-6 py-12 text-center">
@@ -29,57 +44,71 @@ export function InvitationList({ invitations, onOpen, hasFilters }: Props) {
     );
   }
 
+  const columns =
+    "grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(100px,0.42fr)_minmax(105px,0.4fr)_auto]";
   return (
     <section
       className="overflow-hidden rounded-2xl border border-admin-line bg-admin-surface"
       aria-label="Lista de convites"
     >
-      {invitations.map((invitation) => (
-        <article
-          key={invitation.id}
-          className="border-b border-admin-line p-5 last:border-b-0 [@media(max-width:600px)]:p-4"
-        >
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div className="min-w-0">
-              <h3 className="m-0 break-words font-admin-display text-[1.3rem] text-admin-graphite">
+      <div
+        className={`${columns} bg-admin-canvas px-5 py-3 text-xs font-semibold text-admin-muted`}
+        aria-hidden="true"
+      >
+        <span>Convite</span>
+        <span className="hidden sm:block">Pessoas</span>
+        <span>Situação</span>
+      </div>
+      {invitations.map((invitation) => {
+        const [label, tone] =
+          statuses[invitationGroupStatus(invitation.guests)];
+        const adults = invitation.guests.filter(
+          (guest) => guest.guestType === "ADULT",
+        ).length;
+        const children = invitation.guests.length - adults;
+        const people = [
+          adults ? `${adults} ${adults === 1 ? "adulto" : "adultos"}` : "",
+          children
+            ? `${children} ${children === 1 ? "criança" : "crianças"}`
+            : "",
+        ]
+          .filter(Boolean)
+          .join(" · ");
+        return (
+          <button
+            key={invitation.id}
+            type="button"
+            className={`${columns} w-full border-t border-admin-line px-5 py-3.5 text-left hover:bg-admin-canvas ${selectedId === invitation.id ? "bg-admin-terracotta-wash" : ""}`}
+            aria-label={`Ver convite ${invitation.name}`}
+            aria-expanded={selectedId === invitation.id}
+            onClick={() => onOpen(invitation)}
+          >
+            <span className="min-w-0">
+              <strong className="block break-words text-sm text-admin-ink">
                 {invitation.name}
-              </h3>
-              <p className="mb-0 mt-1 text-xs text-admin-muted">
-                {invitation.guests.length}{" "}
-                {invitation.guests.length === 1 ? "convidado" : "convidados"}
-              </p>
-            </div>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpen(invitation)}
-              className="shrink-0 border-admin-line bg-admin-canvas"
-              aria-label={`Ver convite ${invitation.name}`}
-            >
-              Ver convite
-              <ArrowRight aria-hidden="true" className="size-4" />
-            </Button>
-          </div>
-          <ul className="mt-4 grid gap-2.5">
-            {invitation.guests.map((guest) => (
-              <li
-                key={guest.id}
-                className="flex flex-wrap items-center justify-between gap-x-5 gap-y-1.5 text-sm"
-              >
-                <span className="min-w-0 break-words font-medium text-admin-ink">
-                  {guest.fullName}
-                </span>
-                <span className="flex items-center gap-3">
-                  <InvitationStatus state={guest.rsvpState} />
-                  <span className="rounded-full bg-admin-canvas px-2.5 py-1 text-xs text-admin-muted">
-                    {guest.guestType === "ADULT" ? "Adulto" : "Criança"}
-                  </span>
-                </span>
-              </li>
-            ))}
-          </ul>
-        </article>
-      ))}
+              </strong>
+              <span className="mt-0.5 block break-words text-xs text-admin-muted">
+                {invitation.guests.map((guest) => guest.fullName).join(", ")}
+              </span>
+              <span className="mt-1 block text-xs text-admin-muted sm:hidden">
+                {people}
+              </span>
+            </span>
+            <span className="hidden text-xs text-admin-muted sm:block">
+              {people}
+            </span>
+            <Badge className={`w-fit ${tone}`}>{label}</Badge>
+            <Ellipsis
+              className="hidden size-4 text-admin-muted sm:block"
+              aria-hidden="true"
+            />
+          </button>
+        );
+      })}
+      <p className="m-0 border-t border-admin-line px-5 py-3 text-xs text-admin-muted">
+        {invitations.length}{" "}
+        {invitations.length === 1 ? "convite carregado" : "convites carregados"}
+      </p>
     </section>
   );
 }

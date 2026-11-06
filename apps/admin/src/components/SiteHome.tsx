@@ -1,15 +1,18 @@
-import type {
-  ReceivingReadiness,
-  SiteAccess,
-  SiteRecord,
+import {
+  type ReceivingReadiness,
+  type SiteAccess,
+  type SiteHomeSummary,
+  type SiteRecord,
+  siteHomeSummarySchema,
 } from "@entrelacos/contracts";
-import { Badge, Button } from "@entrelacos/ui";
+import { Badge, Button, toast } from "@entrelacos/ui";
 import { Link } from "@tanstack/react-router";
 import {
   ArrowRight,
   CalendarDays,
   Gift,
   HeartHandshake,
+  Link2,
   Mail,
   MessageCircle,
   Settings2,
@@ -17,11 +20,12 @@ import {
   Wallet,
 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { apiRequest } from "../lib/apiClient";
 import { formatBrazilianDate } from "./brazilianDate";
 import { loadGiftsReadiness } from "./giftsReadiness";
 import { HomeAreaCard } from "./HomeAreaCard";
-import { panelActorOwner } from "./panelActor";
-import { buildSiteHomePlan } from "./siteHomePlan";
+import { isCurrentPanelSessionEpoch, panelActorOwner } from "./panelActor";
+import { buildSiteHomePlan, daysUntilWedding } from "./siteHomePlan";
 
 type HomeSite = Pick<
   SiteRecord,
@@ -31,6 +35,7 @@ type HomeSite = Pick<
   | "eventDate"
   | "lifecycle"
   | "publicationState"
+  | "publicUrl"
   | "isDemo"
 >;
 type HomeScope = {
@@ -81,40 +86,62 @@ export async function readHomeReceiving(
   }
 }
 
-export function SiteHome(props: Props) {
-  const { site, access, owner, sessionEpoch } = props;
+export function SiteHome({ site, access, owner, sessionEpoch }: Props) {
   const [revision, setRevision] = useState(0);
   const [result, setResult] = useState<{
     siteId: string;
     epoch: number | null;
-    readiness: ReceivingReadiness | null;
+    summary: SiteHomeSummary | null;
     failed: boolean;
   } | null>(null);
-  const eligible =
-    owner ||
-    (access?.siteId === site.id &&
-      access.membershipRole === "SITE_ADMIN" &&
-      access.capabilities.configureReceiving);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: Retry refreshes only this optional, server-owned status.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: The retry increments revision.
   useEffect(() => {
     let active = true;
     setResult(null);
-    if (eligible)
-      void readHomeReceiving(
-        { siteId: site.id, access, owner, sessionEpoch },
-        (readiness, failed) =>
+    const current = () => active && isCurrentPanelSessionEpoch(sessionEpoch);
+    if (current()) {
+      void apiRequest(`/v1/sites/${encodeURIComponent(site.id)}/home-summary`)
+        .then((response) => {
+          if (!current()) return;
+          const summary = siteHomeSummarySchema.parse(response);
+          if (summary.receiving && summary.receiving.siteId !== site.id)
+            throw new Error("Unexpected summary site");
           setResult({
             siteId: site.id,
             epoch: sessionEpoch,
-            readiness,
-            failed,
-          }),
-        () => active,
-      );
+            summary,
+            failed: false,
+          });
+        })
+        .catch((cause) => {
+          if (!current()) return;
+          panelActorOwner.reportFailure(cause, sessionEpoch);
+          if (!current()) return;
+          setResult({
+            siteId: site.id,
+            epoch: sessionEpoch,
+            summary: null,
+            failed: true,
+          });
+          void readHomeReceiving(
+            { siteId: site.id, access, owner, sessionEpoch },
+            (readiness) => {
+              if (readiness)
+                setResult({
+                  siteId: site.id,
+                  epoch: sessionEpoch,
+                  summary: { receiving: readiness },
+                  failed: true,
+                });
+            },
+            current,
+          );
+        });
+    }
     return () => {
       active = false;
     };
-  }, [site.id, access, owner, sessionEpoch, eligible, revision]);
+  }, [site.id, access, owner, sessionEpoch, revision]);
   const current =
     result?.siteId === site.id && result.epoch === sessionEpoch ? result : null;
   return (
@@ -122,8 +149,9 @@ export function SiteHome(props: Props) {
       site={site}
       access={access}
       owner={owner}
-      readiness={current?.readiness ?? null}
-      loading={eligible && !current}
+      summary={current?.summary}
+      readiness={current?.summary?.receiving ?? null}
+      loading={!current}
       failed={current?.failed ?? false}
       onRetry={() => setRevision((value) => value + 1)}
     />
@@ -140,11 +168,45 @@ const sectionIcons = {
   home: HeartHandshake,
   "receiving-guide": HeartHandshake,
 };
+function areaSummary(
+  section: string,
+  summary: SiteHomeSummary | null | undefined,
+) {
+  if (section === "invitations" && summary?.invitations) {
+    const { total, confirmed, pending, declined } = summary.invitations;
+    return {
+      active: total > 0,
+      text: `${confirmed} de ${confirmed + pending + declined} confirmados`,
+    };
+  }
+  if (section === "messages" && summary?.messages !== undefined)
+    return {
+      active: summary.messages > 0,
+      text: `${summary.messages} no mural`,
+    };
+  if (section === "gifts" && summary?.publishedGifts !== undefined) {
+    const received = summary.receivedGifts;
+    return {
+      active: summary.publishedGifts > 0,
+      text: `${summary.publishedGifts} publicados${received === undefined ? "" : ` · ${received} recebidos`}`,
+    };
+  }
+  if (section === "receiving" && summary?.receiving)
+    return { active: summary.receiving.state === "READY", text: null };
+  if (section === "team" && summary?.peopleWithAccess !== undefined)
+    return {
+      active: summary.peopleWithAccess > 0,
+      text: `${summary.peopleWithAccess} com acesso`,
+    };
+  return null;
+}
+
 export function SiteHomeView({
   site,
   access,
   owner,
   readiness,
+  summary,
   loading,
   failed,
   onRetry,
@@ -153,74 +215,127 @@ export function SiteHomeView({
   access: SiteAccess | null;
   owner: boolean;
   readiness: ReceivingReadiness | null;
+  summary?: SiteHomeSummary | null;
   loading: boolean;
   failed: boolean;
   onRetry: () => void;
 }) {
   const plan = buildSiteHomePlan({ site, access, owner, readiness });
+  const [days, setDays] = useState<number | null>(null);
+  useEffect(() => {
+    const update = () => setDays(daysUntilWedding(site.eventDate, new Date()));
+    update();
+    const interval = setInterval(update, 60_000);
+    return () => clearInterval(interval);
+  }, [site.eventDate]);
+
+  async function copySite() {
+    if (!site.publicUrl) return;
+    try {
+      await navigator.clipboard.writeText(site.publicUrl);
+      toast.success("Endereço do site copiado.");
+    } catch {
+      toast.error("Não foi possível copiar o endereço do site.");
+    }
+  }
+
   return (
-    <div className="grid gap-7" data-area="home">
+    <div className="grid gap-5" data-area="home">
       <section
-        className="grid overflow-hidden rounded-2xl border border-admin-line bg-admin-surface lg:grid-cols-[minmax(0,1fr)_260px]"
-        aria-label="Seu ponto de partida"
+        className="grid overflow-hidden rounded-2xl border border-admin-line bg-admin-surface sm:grid-cols-[3fr_2fr]"
+        aria-label="Seu casamento"
       >
-        <div className="grid content-center gap-3 p-5 sm:gap-4 sm:p-8">
-          <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-admin-terracotta-deep">
-            <HeartHandshake className="size-4" aria-hidden="true" />
-            Seu ponto de partida
-          </div>
-          <h2 className="m-0 max-w-xl font-admin-display text-2xl font-normal leading-tight sm:text-4xl">
-            Um passo de cada vez.
-            <br />
-            Tudo no mesmo lugar.
+        <div className="grid content-center gap-3 p-5 sm:p-8">
+          <p className={adminHomeEyebrow}>Seu casamento</p>
+          <h2 className="m-0 break-words font-admin-display text-4xl font-normal sm:text-[42px]">
+            {site.coupleNames.join(" & ")}
           </h2>
-          <p className="m-0 max-w-xl text-sm leading-relaxed text-admin-muted sm:text-base">
-            Dos primeiros convites aos presentes recebidos, este é o espaço para
-            cuidar do casamento de {site.coupleNames.join(" e ")}.
-          </p>
+          <div className="flex flex-wrap items-center gap-2.5 text-[15px]">
+            <CalendarDays
+              className="size-4 text-admin-terracotta-deep"
+              aria-hidden="true"
+            />
+            <time dateTime={site.eventDate}>
+              {formatBrazilianDate(site.eventDate)}
+            </time>
+            {days !== null && days >= 0 && (
+              <Badge className="bg-admin-terracotta-wash text-admin-terracotta-ink">
+                {days === 0
+                  ? "É hoje"
+                  : days === 1
+                    ? "Falta 1 dia"
+                    : `Faltam ${days} dias`}
+              </Badge>
+            )}
+          </div>
         </div>
-        <div className="grid grid-cols-[auto_minmax(0,1fr)] content-center items-center justify-items-start gap-x-3 gap-y-2 border-t border-admin-line bg-admin-beige p-4 sm:p-6 lg:grid-cols-1 lg:gap-3 lg:border-t-0 lg:border-l lg:p-8">
-          <CalendarDays
-            aria-hidden="true"
-            className="row-span-2 size-6 text-admin-terracotta-deep lg:row-span-1"
-          />
-          <span className="sr-only text-xs font-semibold uppercase tracking-wider text-admin-muted lg:not-sr-only">
-            O grande dia
-          </span>
-          <strong className="col-start-2 font-admin-display text-2xl font-normal text-admin-graphite lg:col-start-auto lg:text-3xl">
-            {formatBrazilianDate(site.eventDate)}
-          </strong>
-          <div className="col-start-2 flex flex-wrap gap-2 lg:col-start-auto">
-            <Badge variant="outline">
+        <div className="grid min-w-0 content-center gap-3 border-t border-admin-line bg-admin-beige p-5 sm:border-t-0 sm:border-l sm:p-7">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="m-0 text-xs font-bold uppercase tracking-wider text-admin-muted">
+              Site do casal
+            </p>
+            <Badge
+              variant="secondary"
+              className={
+                site.publicationState === "PUBLISHED"
+                  ? "bg-admin-success-wash text-admin-success-ink"
+                  : "bg-admin-surface text-admin-muted"
+              }
+            >
               {site.publicationState === "PUBLISHED"
                 ? "Site publicado"
                 : site.publicationState === "PLACEHOLDER"
-                  ? "Página de apresentação"
-                  : "Site não publicado"}
+                  ? "Página neutra"
+                  : "Não publicado"}
             </Badge>
-            {site.isDemo && <Badge variant="secondary">Demonstração</Badge>}
           </div>
+          {site.publicUrl ? (
+            <>
+              <p className="m-0 flex min-w-0 items-center gap-2 rounded-lg border border-admin-line bg-admin-surface px-3 py-2 text-sm [overflow-wrap:anywhere]">
+                <Link2 className="size-4 shrink-0" aria-hidden="true" />
+                {site.publicUrl}
+              </p>
+              <div className="flex flex-wrap items-center gap-3.5">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="border-admin-line-strong bg-transparent"
+                  onClick={() => void copySite()}
+                >
+                  Copiar
+                </Button>
+                <a
+                  href={site.publicUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-sm font-semibold text-admin-terracotta-deep underline"
+                >
+                  Abrir site
+                </a>
+              </div>
+            </>
+          ) : (
+            <p className="m-0 text-sm text-admin-muted">Site não vinculado</p>
+          )}
         </div>
       </section>
       {plan.next && (
         <section
-          className="flex flex-col items-start justify-between gap-5 rounded-xl border border-admin-line bg-admin-terracotta-wash p-5 sm:flex-row sm:items-center sm:p-6"
+          className="flex flex-col items-start justify-between gap-5 rounded-2xl border border-admin-terracotta bg-admin-terracotta-wash p-5 sm:flex-row sm:items-center sm:p-7"
           aria-label="Próximo passo"
         >
           <div className="grid gap-2">
-            <p className="m-0 text-xs font-bold uppercase tracking-wider text-admin-terracotta-deep">
-              Próximo passo
-            </p>
-            <h2 className="m-0 font-admin-display text-2xl font-normal">
+            <p className={adminHomeEyebrow}>Próximo passo</p>
+            <h2 className="m-0 font-admin-display text-2xl font-normal sm:text-[28px]">
               {plan.next.title}
             </h2>
-            <p className="m-0 max-w-2xl text-sm leading-relaxed text-admin-muted">
+            <p className="m-0 text-sm leading-relaxed text-admin-body">
               {plan.next.description}
             </p>
           </div>
           <Button
             nativeButton={false}
-            className="shrink-0"
+            className="w-full shrink-0 bg-admin-terracotta text-white hover:bg-admin-terracotta-deep sm:w-auto"
             render={<Link to={plan.next.href} />}
           >
             {plan.next.label}
@@ -228,70 +343,75 @@ export function SiteHomeView({
           </Button>
         </section>
       )}
-      <section className="grid gap-4" aria-labelledby="home-areas-title">
+      <section className="grid gap-3" aria-labelledby="home-areas-title">
         <div>
           <h2
             id="home-areas-title"
             className="m-0 font-admin-display text-2xl font-normal"
           >
-            Encontre o que precisa
+            Como o painel funciona
           </h2>
-          <p className="mt-2 mb-0 text-sm text-admin-muted">
-            Cada área tem seu papel. Você pode voltar aqui quando quiser.
+          <p className="mt-1 mb-0 text-sm text-admin-muted">
+            Cada área cuida de uma parte do casamento. Você pode voltar aqui
+            quando precisar.
           </p>
         </div>
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {plan.sections.map((section) => {
-            const Icon = sectionIcons[section.id];
-            return (
-              <HomeAreaCard
-                key={section.id}
-                href={section.href}
-                icon={Icon}
-                title={section.label}
-                description={section.description}
-              >
-                {section.id === "receiving" && plan.receivingLabel && (
-                  <Badge variant="outline" className="w-fit">
-                    {loading
-                      ? "Consultando situação…"
-                      : failed
-                        ? "Consulta indisponível"
-                        : plan.receivingLabel}
-                  </Badge>
-                )}
-              </HomeAreaCard>
-            );
-          })}
+        <div className="grid gap-4 md:grid-cols-2">
+          {plan.sections
+            .filter((section) => section.id !== "settings")
+            .map((section) => {
+              const current = areaSummary(section.id, summary);
+              const label =
+                section.id === "receiving" && readiness
+                  ? plan.receivingLabel
+                  : current
+                    ? current.active
+                      ? "Em uso"
+                      : "Não iniciado"
+                    : loading
+                      ? "Consultando"
+                      : "Situação indisponível";
+              return (
+                <HomeAreaCard
+                  key={section.id}
+                  href={section.href}
+                  icon={sectionIcons[section.id]}
+                  title={section.label}
+                  description={section.description}
+                  action={
+                    current && !current.active && site.lifecycle !== "INACTIVE"
+                      ? "Começar"
+                      : "Abrir"
+                  }
+                >
+                  <div className="flex flex-wrap items-center gap-2 text-xs text-admin-muted">
+                    <Badge
+                      variant="secondary"
+                      className={
+                        current?.active
+                          ? "bg-admin-success-wash text-admin-success-ink"
+                          : "bg-admin-beige text-admin-muted"
+                      }
+                    >
+                      {label}
+                    </Badge>
+                    {current?.text}
+                  </div>
+                </HomeAreaCard>
+              );
+            })}
         </div>
         {failed && (
           <div className="flex flex-wrap items-center gap-2 text-sm text-admin-muted">
-            <span>Não foi possível atualizar a situação dos recebimentos.</span>
+            <span>Não foi possível atualizar o resumo do casamento.</span>
             <Button type="button" variant="ghost" size="sm" onClick={onRetry}>
               Tentar novamente
             </Button>
           </div>
         )}
       </section>
-      <details className="rounded-xl border border-admin-line bg-admin-surface p-5 text-sm text-admin-muted">
-        <summary className="cursor-pointer font-semibold text-admin-graphite">
-          Como o painel e o site do casal se conectam
-        </summary>
-        <div className="mt-3 grid max-w-3xl gap-3 leading-relaxed">
-          <p className="m-0">
-            Este painel é o espaço privado de organização. No site do casal, os
-            convidados acessam os convites, confirmam presença, deixam mensagens
-            e escolhem presentes.
-          </p>
-          {plan.receivingLabel !== null && (
-            <p className="m-0">
-              A lista de presentes pagos fica disponível depois da ativação dos
-              recebimentos. O dinheiro recebido e o saldo liberado para saque
-              podem ser diferentes; acompanhe essas etapas em Recebimentos.
-            </p>
-          )}
-        </div>
-      </details>
     </div>
   );
 }
+const adminHomeEyebrow =
+  "m-0 text-xs font-bold uppercase tracking-wider text-admin-terracotta-deep";

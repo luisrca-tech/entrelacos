@@ -24,13 +24,13 @@ describe("invitation overview", () => {
       }),
     );
     for (const label of [
-      "Convites",
-      "Convidados",
-      "Adultos",
-      "Crianças",
-      "Adicionar convite",
+      "2 convites",
+      "3 convidados",
+      "2 adultos",
+      "1 criança",
+      "Novo convite",
       "Gerenciar confirmações",
-      "Exportar CSV ou PDF",
+      "Exportar",
       "Prazo de confirmação",
     ]) {
       expect(html).toContain(label);

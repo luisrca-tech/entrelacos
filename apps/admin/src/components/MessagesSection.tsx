@@ -8,18 +8,21 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
+  Badge,
   Button,
   Checkbox,
   Input,
   toast,
 } from "@entrelacos/ui";
-import { Search } from "lucide-react";
+import { MessageCircle, Search } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { adminStyles } from "../lib/adminStyles";
 import { apiRequest } from "../lib/apiClient";
+import { getInitials } from "./adminNavigation";
 import { LoadMoreButton } from "./LoadMoreButton";
 import { mergeSiteMessages, messageAdminError } from "./messageAdmin";
 import { messagesQuery } from "./messageSearch";
+import { OverflowMenu } from "./OverflowMenu";
 
 type Props = {
   siteId: string;
@@ -132,22 +135,41 @@ export function MessagesSection({ siteId, lifecycle }: Props) {
       <div
         className={`${adminStyles.surface} flex flex-wrap items-center justify-between gap-4 p-5`}
       >
-        <div>
-          <h2 className="m-0 font-admin-display text-xl text-admin-graphite">
-            Mural de mensagens
-          </h2>
-          <p className="mb-0 mt-1 text-sm text-admin-muted">
-            {loading
-              ? "Carregando mural…"
-              : !muralLoaded
-                ? "Configuração indisponível"
-                : muralEnabled
-                  ? "Visitantes podem enviar mensagens pelo site."
-                  : "Novos envios pausados. As mensagens continuam no site."}
-          </p>
+        <div className="flex min-w-0 flex-1 items-center gap-3">
+          <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-admin-success-wash text-admin-success-ink">
+            <MessageCircle aria-hidden="true" className="size-5" />
+          </span>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="m-0 font-admin-display text-xl text-admin-graphite">
+                Mural no site
+              </h2>
+              {muralLoaded && (
+                <Badge
+                  variant="secondary"
+                  className={
+                    muralEnabled
+                      ? "bg-admin-success-wash text-admin-success-ink"
+                      : "bg-admin-beige text-admin-muted"
+                  }
+                >
+                  {muralEnabled ? "Recebendo mensagens" : "Envios pausados"}
+                </Badge>
+              )}
+            </div>
+            <p className="mb-0 mt-1 text-sm text-admin-muted">
+              {loading
+                ? "Carregando mural…"
+                : !muralLoaded
+                  ? "Configuração indisponível"
+                  : muralEnabled
+                    ? "Visitantes podem enviar mensagens pelo site."
+                    : "Novos envios pausados. As mensagens continuam no site."}
+            </p>
+          </div>
         </div>
         <label
-          className="flex items-center gap-2.5 text-sm"
+          className="flex shrink-0 items-center gap-2.5 rounded-lg border border-admin-line bg-admin-canvas px-3 py-2 text-sm"
           htmlFor="mural-enabled"
         >
           <Checkbox
@@ -177,8 +199,8 @@ export function MessagesSection({ siteId, lifecycle }: Props) {
         </label>
       </div>
 
-      <div className={`${adminStyles.surface} overflow-hidden`}>
-        <div className="grid gap-3 border-b border-admin-line p-5 sm:flex sm:items-center sm:justify-between">
+      <div className="grid gap-4">
+        <div className="grid gap-3 sm:flex sm:items-center sm:justify-between">
           <h2 className="m-0 shrink-0 font-admin-display text-xl text-admin-graphite">
             Mensagens recebidas
           </h2>
@@ -232,49 +254,61 @@ export function MessagesSection({ siteId, lifecycle }: Props) {
             Carregando mensagens…
           </p>
         ) : messages.length === 0 && !error ? (
-          <p className="m-0 p-5 leading-[1.6] text-admin-muted">
+          <p
+            className={`${adminStyles.surface} m-0 px-5 py-12 text-center text-admin-muted`}
+          >
             {searchInput.trim()
               ? "Nenhuma mensagem encontrada para esse nome."
               : "As mensagens dos visitantes aparecerão aqui."}
           </p>
         ) : (
-          messages.map((message) => (
-            <article
-              key={message.id}
-              className="border-b border-admin-line p-5 last:border-b-0 [@media(max-width:600px)]:p-4"
-            >
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <h3 className="m-0 break-words font-admin-display text-[1.3rem] text-admin-graphite">
-                  {message.authorName}
-                </h3>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="destructive"
-                  disabled={!mutable || loading || Boolean(pending)}
-                  aria-label={`Remover mensagem de ${message.authorName}`}
-                  onClick={() => setRemoveTarget(message)}
-                >
-                  {pending === `delete:${message.id}`
-                    ? "Removendo…"
-                    : "Remover mensagem"}
-                </Button>
-              </div>
-              <blockquote className="mb-0 mt-4 break-words whitespace-pre-wrap text-sm leading-[1.55] text-admin-ink">
-                {message.text}
-              </blockquote>
-              <p className="mb-0 mt-2 text-xs text-admin-muted">
-                Publicada em{" "}
-                <time dateTime={message.createdAt}>
-                  {new Intl.DateTimeFormat("pt-BR", {
-                    dateStyle: "medium",
-                    timeStyle: "short",
-                    timeZone: "America/Sao_Paulo",
-                  }).format(new Date(message.createdAt))}
-                </time>
-              </p>
-            </article>
-          ))
+          <div className="grid items-start gap-4 md:grid-cols-2">
+            {messages.map((message) => (
+              <article
+                key={message.id}
+                className={`${adminStyles.surface} min-w-0 p-5 [@media(max-width:600px)]:p-4`}
+              >
+                <div className="flex min-w-0 items-start gap-3">
+                  <span
+                    aria-hidden="true"
+                    className="grid size-9 shrink-0 place-items-center rounded-full bg-admin-terracotta-wash text-xs font-bold text-admin-terracotta-deep"
+                  >
+                    {getInitials(message.authorName)}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <h3 className="m-0 break-words font-admin-display text-xl! text-admin-ink">
+                      {message.authorName}
+                    </h3>
+                    <p className="m-0 mt-1 text-xs text-admin-muted">
+                      Publicada em{" "}
+                      <time dateTime={message.createdAt}>
+                        {new Intl.DateTimeFormat("pt-BR", {
+                          dateStyle: "medium",
+                          timeStyle: "short",
+                          timeZone: "America/Sao_Paulo",
+                        }).format(new Date(message.createdAt))}
+                      </time>
+                    </p>
+                  </div>
+                  <OverflowMenu
+                    label={`Ações da mensagem de ${message.authorName}`}
+                    items={[
+                      {
+                        id: "remove",
+                        label: "Remover mensagem",
+                        variant: "destructive",
+                      },
+                    ]}
+                    disabled={!mutable || loading || Boolean(pending)}
+                    onSelect={() => setRemoveTarget(message)}
+                  />
+                </div>
+                <blockquote className="m-0 mt-3 break-words whitespace-pre-wrap text-sm leading-relaxed text-admin-body">
+                  {message.text}
+                </blockquote>
+              </article>
+            ))}
+          </div>
         )}
       </div>
 
@@ -291,6 +325,11 @@ export function MessagesSection({ siteId, lifecycle }: Props) {
                 : ""}
             </AlertDialogDescription>
           </AlertDialogHeader>
+          {removeTarget && (
+            <blockquote className="m-0 line-clamp-3 break-words rounded-lg bg-admin-beige p-3 text-sm text-admin-body">
+              {removeTarget.text}
+            </blockquote>
+          )}
           <AlertDialogFooter>
             <AlertDialogCancel disabled={Boolean(pending)}>
               Cancelar

@@ -140,13 +140,16 @@ it("requires confirmation before removing the selected message and uses transien
   await act(async () =>
     container
       .querySelector<HTMLButtonElement>(
-        '[aria-label="Remover mensagem de Ana"]',
+        '[aria-label="Ações da mensagem de Ana"]',
       )
       ?.click(),
   );
   expect(
     request.mock.calls.some(([, options]) => options?.method === "DELETE"),
   ).toBe(false);
+  const remove = document.querySelector<HTMLElement>('[role="menuitem"]');
+  expect(remove?.textContent).toBe("Remover mensagem");
+  await act(async () => remove?.click());
   const dialog = document.querySelector('[role="alertdialog"]');
   expect(dialog?.textContent).toContain("não poderá ser recuperado");
   const confirm = [
@@ -183,7 +186,7 @@ it("keeps inactive sites readable and disables mural changes and message removal
   ).toBe(true);
   expect(
     container.querySelector<HTMLButtonElement>(
-      '[aria-label="Remover mensagem de Ana"]',
+      '[aria-label="Ações da mensagem de Ana"]',
     )?.disabled,
   ).toBe(true);
   expect(request.mock.calls.every(([, options]) => options === undefined)).toBe(

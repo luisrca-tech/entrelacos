@@ -12,6 +12,7 @@ import {
 import { Plus } from "lucide-react";
 import type { FormEvent } from "react";
 import { adminStyles, displayHeading } from "../lib/adminStyles";
+import { getInitials } from "./adminNavigation";
 
 type Props = {
   team: SiteTeamResponse | null;
@@ -104,19 +105,41 @@ export function SiteTeamView({
         </p>
       )}
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="m-0 text-sm text-admin-muted">
-          Gerencie quem ajuda a cuidar do casamento.
-        </p>
+      <div className="flex justify-end">
         <Button
           type="button"
           disabled={pending}
+          className="bg-admin-terracotta text-white hover:bg-admin-terracotta-deep"
           onClick={() => onInviteOpenChange(true)}
         >
           <Plus aria-hidden="true" />
           Convidar assessor
         </Button>
       </div>
+
+      <section
+        className="grid gap-3 rounded-2xl border border-admin-line bg-admin-beige p-5"
+        aria-label="Quem pode fazer o quê"
+      >
+        <h2 className="m-0 text-sm font-bold">Quem pode fazer o quê</h2>
+        <div className="grid gap-3 md:grid-cols-2">
+          <div className={`${adminStyles.surface} p-4`}>
+            <p className="m-0 text-sm font-semibold">Titular · Vocês dois</p>
+            <p className="m-0 mt-2 text-sm text-admin-body">
+              Cuida das áreas do casamento, gerencia a equipe e acompanha os
+              recebimentos.
+            </p>
+          </div>
+          <div className={`${adminStyles.surface} p-4`}>
+            <p className="m-0 text-sm font-semibold">
+              Assessor · Quem ajuda na organização
+            </p>
+            <p className="m-0 mt-2 text-sm text-admin-body">
+              Pode cuidar de Convites, Mensagens e Presentes.
+            </p>
+          </div>
+        </div>
+      </section>
 
       <Dialog
         open={inviteOpen}
@@ -195,24 +218,35 @@ export function SiteTeamView({
                   key={member.userId}
                   className="grid min-w-0 gap-3 p-5 sm:flex sm:items-center sm:justify-between"
                 >
-                  <div className="min-w-0 break-words">
-                    <p className="m-0 font-semibold text-admin-graphite">
-                      {member.name}
-                    </p>
-                    <p className="mb-0 mt-1 break-all text-sm text-admin-muted">
-                      {member.email}
-                    </p>
-                    <p className="mb-0 mt-2 text-sm text-admin-muted">
-                      {active ? "Acesso ativo" : "Acesso revogado"}
-                      {member.revokedAt && (
-                        <>
-                          {" · Revogado em "}
-                          <time dateTime={member.revokedAt}>
-                            {formatDate(member.revokedAt)}
-                          </time>
-                        </>
-                      )}
-                    </p>
+                  <div className="flex min-w-0 items-start gap-3 break-words">
+                    <span
+                      aria-hidden="true"
+                      className="grid size-10 shrink-0 place-items-center rounded-full bg-admin-terracotta-wash text-xs font-bold text-admin-terracotta-deep"
+                    >
+                      {getInitials(member.name)}
+                    </span>
+                    <div className="min-w-0">
+                      <p className="m-0 font-semibold text-admin-graphite">
+                        {member.name}
+                      </p>
+                      <p className="mb-0 mt-1 break-all text-sm text-admin-muted">
+                        {member.email}
+                      </p>
+                      <p className="mb-0 mt-2 text-sm text-admin-muted">
+                        {member.membershipRole === "SITE_ADMIN"
+                          ? "Titular"
+                          : "Assessor"}{" "}
+                        · {active ? "Acesso ativo" : "Acesso revogado"}
+                        {member.revokedAt && (
+                          <>
+                            {" · Revogado em "}
+                            <time dateTime={member.revokedAt}>
+                              {formatDate(member.revokedAt)}
+                            </time>
+                          </>
+                        )}
+                      </p>
+                    </div>
                   </div>
                   {active && member.membershipRole === "SITE_ASSISTANT" && (
                     <Button
@@ -243,6 +277,10 @@ export function SiteTeamView({
         >
           Convites da equipe
         </h2>
+        <p className="m-0 border-b border-admin-line px-5 py-3 text-sm text-admin-muted">
+          Para enviar de novo, revogue o convite e use “Convidar assessor” para
+          criar um novo.
+        </p>
         {team.invitations.length === 0 ? (
           <p className="m-0 p-5 text-sm text-admin-muted">
             Ainda não há convites para assessores.

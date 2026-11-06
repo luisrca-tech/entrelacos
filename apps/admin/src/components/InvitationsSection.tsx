@@ -99,6 +99,7 @@ export function InvitationsSection({ siteId, lifecycle, sessionEpoch }: Props) {
   const [accessPin, setAccessPin] = useState<string | null>(null);
   const [pinLoading, setPinLoading] = useState(false);
   const pinRequest = useRef(0);
+  const detailTrigger = useRef<HTMLElement | null>(null);
 
   const selectedInvitation =
     invitations.find((item) => item.id === detailId) ?? null;
@@ -162,6 +163,20 @@ export function InvitationsSection({ siteId, lifecycle, sessionEpoch }: Props) {
     },
     [invitationBase, sessionEpoch],
   );
+
+  useEffect(() => {
+    let active = true;
+    if (isCurrentPanelSessionEpoch(sessionEpoch))
+      void apiRequest<RsvpDeadline>(`${base}/rsvp/deadline`)
+        .then((value) => {
+          if (active && isCurrentPanelSessionEpoch(sessionEpoch))
+            setDeadline(value);
+        })
+        .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [base, sessionEpoch]);
 
   const loadConfirmations = useCallback(async () => {
     const response = await apiRequest<SiteRsvpResponse>(`${base}/rsvp`);
@@ -275,6 +290,10 @@ export function InvitationsSection({ siteId, lifecycle, sessionEpoch }: Props) {
   }
 
   async function openInvitationDetail(invitationId: string) {
+    detailTrigger.current =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
     const request = ++pinRequest.current;
     setDetailId(invitationId);
     setAccessPin(null);
@@ -294,6 +313,8 @@ export function InvitationsSection({ siteId, lifecycle, sessionEpoch }: Props) {
   }
 
   function closeInvitationDetail() {
+    detailTrigger.current?.focus({ preventScroll: true });
+    detailTrigger.current = null;
     pinRequest.current += 1;
     setDetailId(null);
     setAccessPin(null);
@@ -431,7 +452,7 @@ export function InvitationsSection({ siteId, lifecycle, sessionEpoch }: Props) {
           {error}
         </p>
       )}
-      <div className="grid items-start gap-6 xl:grid-cols-[minmax(280px,370px)_minmax(0,1fr)]">
+      <div className="grid gap-5">
         <InvitationOverview
           summary={summary}
           inactive={inactive}
@@ -443,6 +464,21 @@ export function InvitationsSection({ siteId, lifecycle, sessionEpoch }: Props) {
           onManageConfirmations={() => void openConfirmations()}
           onExport={() => setExportOpen(true)}
           onConfigureDeadline={() => void openDeadline()}
+          deadline={
+            deadline?.deadlineAt
+              ? new Intl.DateTimeFormat("pt-BR", {
+                  dateStyle: "short",
+                  timeStyle: "short",
+                  timeZone: deadline.deadlineTimezone ?? "America/Sao_Paulo",
+                }).format(new Date(deadline.deadlineAt))
+              : null
+          }
+          partial={Boolean(
+            nextCursor ||
+              filters.search ||
+              filters.status !== "ALL" ||
+              filters.guestType !== "ALL",
+          )}
         />
         <div className="min-w-0">
           <div className="mb-4 flex flex-wrap items-center gap-3">
@@ -469,6 +505,32 @@ export function InvitationsSection({ siteId, lifecycle, sessionEpoch }: Props) {
                 className="min-h-11 border-admin-line bg-admin-surface pl-10"
               />
             </label>
+            <fieldset
+              className="flex flex-wrap gap-1 rounded-xl border border-admin-line bg-admin-surface p-1"
+              aria-label="Situação do convite"
+            >
+              {(
+                [
+                  ["ALL", "Todos"],
+                  ["CONFIRMED", "Confirmados"],
+                  ["PENDING", "Sem resposta"],
+                  ["DECLINED", "Não irão"],
+                ] as const
+              ).map(([status, label]) => (
+                <Button
+                  key={status}
+                  type="button"
+                  size="sm"
+                  variant={filters.status === status ? "default" : "ghost"}
+                  aria-pressed={filters.status === status}
+                  onClick={() =>
+                    setFilters((previous) => ({ ...previous, status }))
+                  }
+                >
+                  {label}
+                </Button>
+              ))}
+            </fieldset>
             <InvitationFiltersPopover
               filters={filters}
               summary={summary}
@@ -480,17 +542,45 @@ export function InvitationsSection({ siteId, lifecycle, sessionEpoch }: Props) {
               Carregando convites…
             </p>
           ) : (
-            <InvitationList
-              invitations={filtered}
-              hasFilters={
-                Boolean(filters.search.trim()) ||
-                filters.status !== "ALL" ||
-                filters.guestType !== "ALL"
-              }
-              onOpen={(invitation) => {
-                void openInvitationDetail(invitation.id);
-              }}
-            />
+            <div
+              className={`grid items-start gap-4 ${selectedInvitation ? "lg:grid-cols-[minmax(0,1.65fr)_minmax(0,1fr)]" : ""}`}
+            >
+              <InvitationList
+                invitations={filtered}
+                selectedId={detailId}
+                hasFilters={
+                  Boolean(filters.search.trim()) ||
+                  filters.status !== "ALL" ||
+                  filters.guestType !== "ALL"
+                }
+                onOpen={(invitation) => {
+                  void openInvitationDetail(invitation.id);
+                }}
+              />
+              {selectedInvitation && (
+                <InvitationDetailDialog
+                  key={detailId ?? "closed"}
+                  invitation={selectedInvitation}
+                  inactive={inactive}
+                  onOpenChange={(open) => {
+                    if (!open) closeInvitationDetail();
+                  }}
+                  onManage={() => void openConfirmations()}
+                  accessPin={accessPin}
+                  pinLoading={pinLoading}
+                  onEdit={() => {
+                    setEditId(detailId);
+                    closeInvitationDetail();
+                    setFormOpen(true);
+                  }}
+                  onDelete={() => {
+                    setDeleteId(detailId);
+                    closeInvitationDetail();
+                  }}
+                  onRotatePin={() => void rotatePin()}
+                />
+              )}
+            </div>
           )}
           {pageError && (
             <p role="alert" className="text-sm text-admin-danger-ink">
@@ -517,26 +607,6 @@ export function InvitationsSection({ siteId, lifecycle, sessionEpoch }: Props) {
           if (!open) setEditId(null);
         }}
         onSave={(value) => void saveInvitation(value)}
-      />
-      <InvitationDetailDialog
-        key={detailId ?? "closed"}
-        invitation={selectedInvitation}
-        inactive={inactive}
-        onOpenChange={(open) => {
-          if (!open) closeInvitationDetail();
-        }}
-        accessPin={accessPin}
-        pinLoading={pinLoading}
-        onEdit={() => {
-          setEditId(detailId);
-          closeInvitationDetail();
-          setFormOpen(true);
-        }}
-        onDelete={() => {
-          setDeleteId(detailId);
-          closeInvitationDetail();
-        }}
-        onRotatePin={() => void rotatePin()}
       />
       <InvitationDeleteDialog
         invitation={deletingInvitation}

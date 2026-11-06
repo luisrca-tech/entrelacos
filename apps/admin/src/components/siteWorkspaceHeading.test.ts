@@ -136,15 +136,12 @@ describe("site workspace markup", () => {
     expect(workspaceSource).not.toContain('owner ? "Gestão do casamento"');
   });
 
-  it("uses the wedding identity as the heading subtitle", () => {
-    expect(workspaceSource).toContain(
-      "text-base leading-[1.6] text-admin-muted",
-    );
-    expect(workspaceSource).toContain("{site.displayName}");
-    expect(workspaceSource).not.toContain("heading.lede");
-    expect(workspaceSource).not.toMatch(
-      /className="panel-heading workspace-heading"[\s\S]*className="lede"/,
-    );
+  it("describes the redesigned areas and keeps the wedding name as a fallback", () => {
+    expect(workspaceSource).toContain("Acompanhe a preparação do casamento");
+    expect(workspaceSource).toContain("Quem vocês convidaram");
+    expect(workspaceSource).toContain("Leia os recados recebidos");
+    expect(workspaceSource).toContain("Gerencie quem ajuda");
+    expect(workspaceSource).toContain("site.displayName");
   });
 
   it("keeps the public site CTA in the heading", () => {
