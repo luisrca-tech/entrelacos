@@ -21,7 +21,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { apiRequest } from "../lib/apiClient";
-import { formatBrazilianDate } from "./brazilianDate";
+import { formatBrazilianLongDate } from "./brazilianDate";
 import { loadGiftsReadiness } from "./giftsReadiness";
 import { HomeAreaCard } from "./HomeAreaCard";
 import { isCurrentPanelSessionEpoch, panelActorOwner } from "./panelActor";
@@ -256,7 +256,12 @@ export function SiteHomeView({
               aria-hidden="true"
             />
             <time dateTime={site.eventDate}>
-              {formatBrazilianDate(site.eventDate)}
+              <span className="hidden sm:inline">
+                {formatBrazilianLongDate(site.eventDate)}
+              </span>
+              <span className="sm:hidden">
+                {formatBrazilianLongDate(site.eventDate, { weekday: false })}
+              </span>
             </time>
             {days !== null && days >= 0 && (
               <Badge className="bg-admin-terracotta-wash text-admin-terracotta-ink">
@@ -400,6 +405,16 @@ export function SiteHomeView({
                 </HomeAreaCard>
               );
             })}
+          <aside className="hidden rounded-2xl border border-dashed border-admin-line-strong bg-admin-beige p-6 md:block">
+            <p className="m-0 text-sm font-semibold text-admin-ink">
+              Como o painel e o site do casal se conectam
+            </p>
+            <p className="mt-2 mb-0 text-xs leading-relaxed text-admin-muted">
+              Este painel é o espaço privado de organização. No site do casal,
+              os convidados acessam os convites, confirmam presença, deixam
+              mensagens e escolhem presentes.
+            </p>
+          </aside>
         </div>
         {failed && (
           <div className="flex flex-wrap items-center gap-2 text-sm text-admin-muted">

@@ -100,7 +100,7 @@ describe("owner settings overview", () => {
 
   it("shows the wedding data and keeps access and publication in their own sections", async () => {
     await render();
-    expect(container.textContent).toContain("12-06-2027");
+    expect(container.textContent).toContain("12/06/2027");
     expect(container.textContent).toContain("https://wedding.example.test");
     expect(container.textContent).not.toContain("Registrar publicação");
     await click("Publicação");
@@ -110,6 +110,20 @@ describe("owner settings overview", () => {
       "Nenhuma pessoa do casal cadastrada.",
     );
     expect(container.textContent).not.toContain("Registrar publicação");
+  });
+
+  it("only asks to link the public address while the site is unlinked", async () => {
+    await render();
+    expect(container.textContent).toContain("wedding.example.test");
+    expect(container.textContent).not.toContain(
+      "Vincule o endereço quando o site estiver no ar.",
+    );
+    props.site.publicUrl = null;
+    await render();
+    expect(container.textContent).toContain("Site não vinculado");
+    expect(container.textContent).toContain(
+      "Vincule o endereço quando o site estiver no ar.",
+    );
   });
 
   it("submits the public address and trusted origins independently", async () => {

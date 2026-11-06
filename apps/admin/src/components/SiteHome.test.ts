@@ -128,6 +128,22 @@ describe("site home", () => {
     expect(html).not.toContain("Configurações");
     expect(html).not.toContain("0 convidados");
   });
+  it("spells the wedding date and explains how the panel meets the couple site", () => {
+    const html = renderToStaticMarkup(
+      createElement(SiteHomeView, {
+        site: { ...site, eventDate: "2027-03-14" },
+        access,
+        owner: false,
+        readiness,
+        loading: false,
+        failed: false,
+        onRetry: vi.fn(),
+      }),
+    );
+    expect(html).toContain("14 de março de 2027");
+    expect(html).toContain("Domingo, ");
+    expect(html).toContain("Como o painel e o site do casal se conectam");
+  });
   it("keeps finance and owner guidance out of assistant orientation", () => {
     const assistant = {
       ...access,

@@ -145,9 +145,11 @@ export function SiteSettingsView({
     },
     {
       label: "Endereço público",
-      value: site.publicUrl ?? "Site não vinculado",
+      value: site.publicUrl
+        ? publicUrlHostname(site.publicUrl)
+        : "Site não vinculado",
       action: "address",
-      hint: "Vincule o endereço quando o site estiver no ar.",
+      hint: site.publicUrl ?? "Vincule o endereço quando o site estiver no ar.",
     },
   ] as const;
   const term =
@@ -714,4 +716,12 @@ export function SiteSettingsView({
       )}
     </>
   );
+}
+
+function publicUrlHostname(url: string): string {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return url;
+  }
 }

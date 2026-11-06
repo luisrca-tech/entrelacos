@@ -65,4 +65,25 @@ describe("invitation list", () => {
     expect(render(false)).toContain("Ainda não há convites");
     expect(render(true)).toContain("Nenhum convite encontrado");
   });
+
+  it("guides the first invitation when the list is empty", () => {
+    const render = (hasFilters: boolean) =>
+      renderToStaticMarkup(
+        createElement(InvitationList, {
+          invitations: [],
+          hasFilters,
+          onOpen: vi.fn(),
+          onAdd: vi.fn(),
+        }),
+      );
+    const empty = render(false);
+    for (const text of [
+      "Crie o convite",
+      "Compartilhe",
+      "Acompanhe as respostas",
+      "Novo convite",
+    ])
+      expect(empty).toContain(text);
+    expect(render(true)).not.toContain("Crie o convite");
+  });
 });

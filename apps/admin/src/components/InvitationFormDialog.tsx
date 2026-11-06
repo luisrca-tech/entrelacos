@@ -75,6 +75,7 @@ export function InvitationFormDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         data-layout="sheet"
+        showCloseButton
         className="top-0 right-0 left-auto flex h-dvh max-h-dvh w-full max-w-[min(560px,100vw)] translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-none border-y-0 border-r-0 border-admin-line bg-admin-surface p-0 shadow-admin"
       >
         <form
@@ -82,7 +83,7 @@ export function InvitationFormDialog({
           className="flex min-h-0 w-full flex-1 flex-col"
           noValidate
         >
-          <div className="shrink-0 border-b border-admin-line px-[30px] py-6 [@media(max-width:760px)]:px-[18px]">
+          <div className="shrink-0 border-b border-admin-line py-6 pr-14 pl-[30px] [@media(max-width:760px)]:pl-[18px]">
             <DialogTitle className="font-admin-display text-3xl text-admin-graphite">
               {invitation ? "Editar convite" : "Novo convite"}
             </DialogTitle>

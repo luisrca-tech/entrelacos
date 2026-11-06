@@ -496,6 +496,12 @@ export function InvitationsSection({ siteId, lifecycle, sessionEpoch }: Props) {
     }
   }
 
+  function openCreate() {
+    setEditId(null);
+    setFormOpen(true);
+    setError("");
+  }
+
   return (
     <section data-area="invitations" aria-label="Convites">
       {error && (
@@ -508,11 +514,7 @@ export function InvitationsSection({ siteId, lifecycle, sessionEpoch }: Props) {
           summary={summary}
           siteTotals={siteTotals}
           inactive={inactive}
-          onAdd={() => {
-            setEditId(null);
-            setFormOpen(true);
-            setError("");
-          }}
+          onAdd={openCreate}
           onManageConfirmations={() => void openConfirmations()}
           onExport={() => setExportOpen(true)}
           onConfigureDeadline={() => void openDeadline()}
@@ -558,7 +560,7 @@ export function InvitationsSection({ siteId, lifecycle, sessionEpoch }: Props) {
               />
             </label>
             <fieldset
-              className="flex flex-wrap gap-1 rounded-xl border border-admin-line bg-admin-surface p-1"
+              className="flex min-w-0 max-w-full gap-1 overflow-x-auto rounded-xl border border-admin-line bg-admin-surface p-1"
               aria-label="Situação do convite"
             >
               {(
@@ -575,6 +577,7 @@ export function InvitationsSection({ siteId, lifecycle, sessionEpoch }: Props) {
                   size="sm"
                   variant={filters.status === status ? "default" : "ghost"}
                   aria-pressed={filters.status === status}
+                  className="shrink-0"
                   onClick={() =>
                     setFilters((previous) => ({ ...previous, status }))
                   }
@@ -616,6 +619,7 @@ export function InvitationsSection({ siteId, lifecycle, sessionEpoch }: Props) {
                 onOpen={(invitation) => {
                   void openInvitationDetail(invitation.id);
                 }}
+                onAdd={inactive ? undefined : openCreate}
               />
               {selectedInvitation && (
                 <InvitationDetailDialog

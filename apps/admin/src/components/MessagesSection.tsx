@@ -254,13 +254,30 @@ export function MessagesSection({ siteId, lifecycle }: Props) {
             Carregando mensagens…
           </p>
         ) : messages.length === 0 && !error ? (
-          <p
-            className={`${adminStyles.surface} m-0 px-5 py-12 text-center text-admin-muted`}
-          >
-            {searchInput.trim()
-              ? "Nenhuma mensagem encontrada para esse nome."
-              : "As mensagens dos visitantes aparecerão aqui."}
-          </p>
+          searchInput.trim() ? (
+            <p
+              className={`${adminStyles.surface} m-0 px-5 py-12 text-center text-admin-muted`}
+            >
+              Nenhuma mensagem encontrada para esse nome.
+            </p>
+          ) : (
+            <div
+              className={`${adminStyles.surface} grid max-w-full gap-2 p-6 sm:p-8`}
+            >
+              <span className="mb-2 grid size-11 place-items-center rounded-xl bg-admin-terracotta-wash text-admin-terracotta-deep">
+                <MessageCircle aria-hidden="true" className="size-5" />
+              </span>
+              <h3 className="text-admin-graphite">Nenhuma mensagem ainda</h3>
+              <p className="m-0 text-sm font-semibold text-admin-ink">
+                As mensagens dos visitantes aparecerão aqui.
+              </p>
+              <p className="m-0 max-w-xl text-sm leading-relaxed text-admin-muted">
+                Quando alguém deixar um recado no mural do site, ele aparece
+                nesta página. Vocês podem ler tudo e remover o que não quiserem
+                manter publicado.
+              </p>
+            </div>
+          )
         ) : (
           <div className="grid items-start gap-4 md:grid-cols-2">
             {messages.map((message) => (

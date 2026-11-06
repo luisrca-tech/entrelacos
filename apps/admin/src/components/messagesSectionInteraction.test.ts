@@ -193,3 +193,19 @@ it("keeps inactive sites readable and disables mural changes and message removal
     true,
   );
 });
+
+it("explains where messages come from while the mural is still empty", async () => {
+  request.mockImplementation(async (path: string) =>
+    path.endsWith("/mural")
+      ? { enabled: true }
+      : { messages: [], nextCursor: null },
+  );
+  await mount();
+  expect(container.textContent).toContain("Nenhuma mensagem ainda");
+  expect(container.textContent).toContain(
+    "As mensagens dos visitantes aparecerão aqui.",
+  );
+  expect(container.textContent).toContain(
+    "Quando alguém deixar um recado no mural do site",
+  );
+});

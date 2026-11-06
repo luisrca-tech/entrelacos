@@ -278,7 +278,7 @@ function OwnerSitesRuntime({
               </Button>
             ))}
           </div>
-          <div className="mb-5 grid gap-3 sm:grid-cols-[1fr_auto]">
+          <div className="mb-5 grid gap-3 sm:grid-cols-[1fr_auto] lg:grid-cols-1">
             <label
               className="grid gap-2 text-sm font-medium"
               htmlFor="owner-site-search"
