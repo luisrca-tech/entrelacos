@@ -150,9 +150,8 @@ export function InvitationOverview({
               ))}
             </tbody>
           </table>
-          <div
+          <section
             className="grid gap-1 rounded-xl bg-admin-canvas px-3.5 py-3 text-[13px]"
-            role="group"
             aria-label="Estimativa para orçamento"
           >
             <p className="m-0">
@@ -165,7 +164,7 @@ export function InvitationOverview({
               Use o máximo para fechar orçamentos enquanto há respostas
               pendentes.
             </p>
-          </div>
+          </section>
           <Button
             type="button"
             variant="link"
