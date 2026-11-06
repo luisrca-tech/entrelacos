@@ -135,7 +135,7 @@ export function MessagesSection({ siteId, lifecycle }: Props) {
       <div
         className={`${adminStyles.surface} flex flex-wrap items-center justify-between gap-4 p-5`}
       >
-        <div className="flex min-w-0 flex-1 items-center gap-3">
+        <div className="flex min-w-0 flex-[1_1_16rem] items-center gap-3">
           <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-admin-success-wash text-admin-success-ink">
             <MessageCircle aria-hidden="true" className="size-5" />
           </span>
