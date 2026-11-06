@@ -70,6 +70,7 @@ function statusCount(
   if (status === "ALL") return totals.total;
   if (status === "CONFIRMED") return totals.byStatus.confirmed;
   if (status === "PENDING") return totals.byStatus.pending;
+  if (status === "PARTIAL") return totals.byStatus.partial;
   return totals.byStatus.declined;
 }
 
@@ -587,14 +588,21 @@ export function InvitationsSection({ siteId, lifecycle, sessionEpoch }: Props) {
                 />
               </label>
               <fieldset
-                className="flex min-w-0 max-w-full gap-1 overflow-x-auto rounded-xl border border-admin-line bg-admin-surface p-1"
-                aria-label="Situação do convite"
+                className="flex min-w-0 max-w-full items-center gap-1 overflow-x-auto rounded-xl border border-admin-line bg-admin-surface p-1"
+                aria-label="Filtrar convites por situação"
               >
+                <span
+                  aria-hidden="true"
+                  className="shrink-0 px-2 text-xs font-semibold text-admin-muted"
+                >
+                  Convites
+                </span>
                 {(
                   [
                     ["ALL", "Todos"],
                     ["CONFIRMED", "Confirmados"],
                     ["PENDING", "Sem resposta"],
+                    ["PARTIAL", "Em parte"],
                     ["DECLINED", "Não irão"],
                   ] as const
                 ).map(([status, label]) => {

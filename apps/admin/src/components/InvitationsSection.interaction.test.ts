@@ -141,17 +141,38 @@ it("summarizes every invitation of the wedding instead of the loaded page", asyn
 
 it("counts the quick filters across the whole wedding", async () => {
   await mount();
+  const group = container.querySelector(
+    'fieldset[aria-label="Filtrar convites por situação"]',
+  );
+  expect(group?.textContent).toMatch(/^Convites/);
   const chips = [
-    ...container.querySelectorAll<HTMLButtonElement>(
-      'fieldset[aria-label="Situação do convite"] button',
-    ),
+    ...(group?.querySelectorAll<HTMLButtonElement>("button") ?? []),
   ].map((button) => button.textContent);
   expect(chips).toEqual([
     "Todos45",
     "Confirmados12",
     "Sem resposta25",
+    "Em parte5",
     "Não irão3",
   ]);
+});
+
+it("filters invitations with mixed answers through the partial chip", async () => {
+  await mount();
+  const partial = [...container.querySelectorAll("button")].find(
+    (button) => button.textContent === "Em parte5",
+  );
+  if (!partial) throw new Error("Missing partial chip");
+  await act(async () => partial.click());
+  await act(async () => vi.advanceTimersByTimeAsync(1000));
+  expect(partial.getAttribute("aria-pressed")).toBe("true");
+  expect(
+    request.mock.calls.some(
+      ([path]) =>
+        String(path).includes("/invitations?") &&
+        String(path).includes("status=PARTIAL"),
+    ),
+  ).toBe(true);
 });
 
 it("shows only the first-steps guide while the wedding has no invitations", async () => {
