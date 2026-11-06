@@ -2040,3 +2040,42 @@ it.each([true, false])(
     );
   },
 );
+
+it.each([200, 404])(
+  "uses the permanent full-plan DELETE with idempotent missing-plan handling (status=%s)",
+  async (status) => {
+    const { options, fetch } = fixture(
+      Response.json({ id: "plan_one", deleted: true }, { status }),
+    );
+    await expect(
+      createAsaasHttpClient(options).removeInstallment("plan_one"),
+    ).resolves.toBeUndefined();
+    expect(fetch.mock.calls[0]?.[0]).toBe(
+      "https://api-sandbox.asaas.com/v3/installments/plan_one",
+    );
+    expect(fetch.mock.calls[0]?.[1]?.method).toBe("DELETE");
+  },
+);
+
+it("rejects a nominally pending installment with contradictory paid-date evidence", async () => {
+  const { options } = fixture(
+    Response.json({
+      hasMore: false,
+      totalCount: 1,
+      data: [
+        {
+          id: "pay_one",
+          installment: "plan_one",
+          installmentNumber: 1,
+          billingType: "CREDIT_CARD",
+          status: "PENDING",
+          value: 51.19,
+          confirmedDate: "2026-10-16",
+        },
+      ],
+    }),
+  );
+  await expect(
+    createAsaasHttpClient(options).listInstallmentPayments("plan_one"),
+  ).rejects.toThrow();
+});

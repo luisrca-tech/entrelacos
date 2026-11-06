@@ -93,10 +93,12 @@ type Holder = {
   failed: Read | null;
   indexReadCount: number | null;
   purchases: Map<string, GiftPurchaseHistoryPurchase>;
+  listedOrders: Set<string>;
   quotes: Map<string, string>;
   payments: Map<string, GiftPurchaseHistoryPayment[]>;
   paymentOrders: Map<string, string>;
-  attempts: Map<string, string>;
+  attemptOrders: Map<string, string>;
+  paymentSlots: Map<string, string>;
   receipts: Map<string, GiftPurchaseHistoryReceipt>;
   credited: Map<string, string>;
   index: Navigation;
@@ -256,10 +258,12 @@ function newHolder(captured: Authority): Holder {
     failed: null,
     indexReadCount: null,
     purchases: new Map(),
+    listedOrders: new Set(),
     quotes: new Map(),
     payments: new Map(),
     paymentOrders: new Map(),
-    attempts: new Map(),
+    attemptOrders: new Map(),
+    paymentSlots: new Map(),
     receipts: new Map(),
     credited: new Map(),
     index: navigation(),
@@ -294,10 +298,12 @@ class HistorySession {
     this.holder = null;
     if (previous) {
       previous.purchases.clear();
+      previous.listedOrders.clear();
       previous.quotes.clear();
       previous.payments.clear();
       previous.paymentOrders.clear();
-      previous.attempts.clear();
+      previous.attemptOrders.clear();
+      previous.paymentSlots.clear();
       previous.receipts.clear();
       previous.credited.clear();
       previous.details.clear();
@@ -448,10 +454,12 @@ function stage(holder: Holder, value: unknown, read: Read) {
   )
     conflict();
   const purchases = new Map(holder.purchases),
+    listedOrders = new Set(holder.listedOrders),
     quotes = new Map(holder.quotes);
   const payments = new Map(holder.payments),
     paymentOrders = new Map(holder.paymentOrders),
-    attempts = new Map(holder.attempts);
+    attemptOrders = new Map(holder.attemptOrders),
+    paymentSlots = new Map(holder.paymentSlots);
   const receipts = new Map(holder.receipts),
     credited = new Map(holder.credited),
     details = new Map(holder.details),
@@ -470,17 +478,25 @@ function stage(holder: Holder, value: unknown, read: Read) {
     quotes.set(purchase.quoteId, purchase.orderId);
   }
   let index = holder.index;
-  if ("items" in history)
+  if ("items" in history) {
     index = validateNavigation(
       holder.index,
       history.items.map(indexKey),
       history.nextCursor,
       read,
     );
-  else {
+    if (read.restart) {
+      // A validated receipt remains historical evidence across index reads.
+      // Quotes and uncredited confirmations need to appear in the new index.
+      listedOrders.clear();
+      for (const receipt of receipts.values())
+        listedOrders.add(receipt.orderId);
+    }
+    for (const purchase of history.items) listedOrders.add(purchase.orderId);
+  } else {
     if (
       history.originalPurchase.orderId !== read.orderId ||
-      !holder.purchases.has(history.originalPurchase.orderId)
+      !holder.listedOrders.has(history.originalPurchase.orderId)
     )
       conflict();
     const keys: NavigationKey[] = [];
@@ -492,17 +508,28 @@ function stage(holder: Holder, value: unknown, read: Read) {
         orderId: sample.orderId,
         currency: sample.currency,
         createdAtMicros: sample.createdAtMicros,
+        installmentNumber: sample.installmentNumber,
       });
+      const slot =
+        payment.installmentNumber === undefined
+          ? JSON.stringify(["attempt", payment.attemptId])
+          : JSON.stringify([
+              "installment",
+              payment.orderId,
+              payment.installmentNumber,
+            ]);
       if (
         (prior[0] && !equal(binding(prior[0]), binding(payment))) ||
         (paymentOrders.has(payment.paymentId) &&
           paymentOrders.get(payment.paymentId) !== payment.orderId) ||
-        (attempts.has(payment.attemptId) &&
-          attempts.get(payment.attemptId) !== payment.paymentId)
+        (attemptOrders.has(payment.attemptId) &&
+          attemptOrders.get(payment.attemptId) !== payment.orderId) ||
+        (paymentSlots.has(slot) && paymentSlots.get(slot) !== payment.paymentId)
       )
         conflict();
       paymentOrders.set(payment.paymentId, payment.orderId);
-      attempts.set(payment.attemptId, payment.paymentId);
+      attemptOrders.set(payment.attemptId, payment.orderId);
+      paymentSlots.set(slot, payment.paymentId);
       if (!prior.some((sample) => equal(sample, payment)))
         payments.set(payment.paymentId, [...prior, freeze(payment)]);
       keys.push({
@@ -551,10 +578,12 @@ function stage(holder: Holder, value: unknown, read: Read) {
   return {
     wireScope: freeze(history.scope),
     purchases,
+    listedOrders,
     quotes,
     payments,
     paymentOrders,
-    attempts,
+    attemptOrders,
+    paymentSlots,
     receipts,
     credited,
     index,
@@ -566,15 +595,18 @@ function stage(holder: Holder, value: unknown, read: Read) {
 }
 function project(holder: Holder, busy: boolean): GiftPaymentHistoryState {
   const orderId = holder.selected,
-    purchase = orderId ? holder.purchases.get(orderId) : undefined,
+    purchase =
+      orderId && holder.listedOrders.has(orderId)
+        ? holder.purchases.get(orderId)
+        : undefined,
     read = orderId ? holder.reads.get(orderId) : undefined;
   return freeze({
     status: holder.status,
     busy,
     admissions: holder.admissions,
-    purchases: [...holder.purchases.values()].sort(
-      (a, b) => -compare(indexKey(a), indexKey(b)),
-    ),
+    purchases: [...holder.purchases.values()]
+      .filter(({ orderId }) => holder.listedOrders.has(orderId))
+      .sort((a, b) => -compare(indexKey(a), indexKey(b))),
     nextIndexCursor: holder.index.cursor,
     nextDetailCursor: orderId
       ? (holder.details.get(orderId)?.cursor ?? null)
@@ -675,7 +707,7 @@ export function createGiftPaymentHistoryController(
       read.orderId === null
         ? holder.index
         : (holder.details.get(read.orderId) ?? navigation());
-    if (read.orderId !== null && !holder.purchases.has(read.orderId))
+    if (read.orderId !== null && !holder.listedOrders.has(read.orderId))
       return Promise.resolve(false);
     if (
       read.cursor !== null &&

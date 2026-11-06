@@ -271,6 +271,44 @@ describe("private gift payment history", () => {
     expect(await f.controller.loadFirstIndex()).toBe(false);
     expect(f.controller.getState().purchases).toEqual([]);
   });
+  it("removes previously listed orders without payment evidence on a successful refresh", async () => {
+    const unverified = purchase("order-a", "50");
+    let reply: unknown = { history: page([purchase(), unverified]) };
+    const f = await fixture(vi.fn(async () => reply));
+    expect(await f.controller.loadFirstIndex()).toBe(true);
+    reply = { history: detail({ retainedPayments: [] }) };
+    expect(await f.controller.openPurchase("order-z")).toBe(true);
+    reply = { history: page([]) };
+    expect(await f.controller.restartIndex()).toBe(true);
+    expect(f.controller.getState().purchases).toEqual([purchase()]);
+    expect(await f.controller.openPurchase(unverified.orderId)).toBe(false);
+  });
+  it("reuses confirmation details when the refreshed index lists the order again", async () => {
+    let reply: unknown = { history: page() };
+    const f = await fixture(vi.fn(async () => reply));
+    await f.controller.loadFirstIndex();
+    const confirmation = payment({ recordedState: "CONFIRMED" });
+    reply = {
+      history: detail({
+        retainedPayments: [confirmation],
+        validatedHistoricalReceipts: [],
+      }),
+    };
+    expect(await f.controller.openPurchase("order-z")).toBe(true);
+    reply = { history: page([], "gh1.more") };
+    expect(await f.controller.restartIndex()).toBe(true);
+    expect(f.controller.getState().purchases).toEqual([]);
+    reply = { history: page() };
+    expect(await f.controller.loadMoreIndex("gh1.more")).toBe(true);
+    reply = {
+      history: detail({
+        retainedPayments: [],
+        validatedHistoricalReceipts: [],
+      }),
+    };
+    expect(await f.controller.openPurchase("order-z")).toBe(true);
+    expect(f.controller.getState().detail?.samples).toEqual([confirmation]);
+  });
   it("keeps a receipt-only page through missing, unavailable, failure, retry and both restarts", async () => {
     let reply: unknown = { history: page() };
     let fail = false;
@@ -420,6 +458,59 @@ describe("private gift payment history", () => {
       expect(f.controller.getState().detail?.receipts).toEqual([receipt()]);
     },
   );
+  it("keeps distinct installment payments from the same attempt without allowing slot rebinding", async () => {
+    const original = {
+      ...purchase(),
+      method: "CREDIT_CARD" as const,
+      installmentCount: 2,
+    };
+    const first = payment({
+      installmentNumber: 1,
+      grossCents: 5500,
+      commissionCents: 500,
+      recipientNetCents: 5000,
+    });
+    const second = {
+      ...first,
+      paymentId: "payment-b",
+      installmentNumber: 2,
+      createdAtMicros: "201",
+    };
+    let reply: unknown = { history: page([original]) };
+    const f = await fixture(vi.fn(async () => reply));
+    expect(await f.controller.loadFirstIndex()).toBe(true);
+    const installmentDetail = detail({
+      originalPurchase: original,
+      retainedPayments: [first],
+      validatedHistoricalReceipts: [],
+      nextCursor: "gh1.next",
+    });
+    reply = { history: installmentDetail };
+    expect(await f.controller.openPurchase(original.orderId)).toBe(true);
+    reply = {
+      history: {
+        ...installmentDetail,
+        retainedPayments: [second],
+        nextCursor: null,
+      },
+    };
+    expect(
+      await f.controller.loadMoreDetail(original.orderId, "gh1.next"),
+    ).toBe(true);
+    expect(f.controller.getState().detail?.samples).toEqual([first, second]);
+
+    reply = {
+      history: {
+        ...installmentDetail,
+        retainedPayments: [
+          { ...first, attemptId: "attempt-other", paymentId: "payment-other" },
+        ],
+        nextCursor: null,
+      },
+    };
+    expect(await f.controller.restartDetail(original.orderId)).toBe(false);
+    expect(f.controller.getState().detail?.samples).toEqual([first, second]);
+  });
   it("rejects cross-purchase payment/effect/attempt associations", async () => {
     let reply: unknown = {
       history: page([purchase(), purchase("order-a", "50")]),
@@ -549,7 +640,7 @@ describe("private gift payment history", () => {
     expect(await next.loadFirstIndex()).toBe(false);
     expect(await next.restartIndex()).toBe(true);
     expect(next.getState()).toMatchObject({
-      purchases: [purchase()],
+      purchases: [],
       admissions: 2,
     });
   });

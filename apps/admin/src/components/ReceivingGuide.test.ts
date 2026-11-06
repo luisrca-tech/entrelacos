@@ -114,6 +114,14 @@ describe("receiving guide environment boundaries", () => {
       expect(html).toContain("Voltar para Recebimentos");
     },
   );
+  it("explains verified payment history and the unpaid installment deadline", () => {
+    const html = render();
+    expect(html).toContain(
+      "Ao abrir uma cobrança, o convidado ainda precisa concluir o pagamento",
+    );
+    expect(html).toContain("60 minutos");
+    expect(html).toContain("Asaas confirmar o encerramento");
+  });
   it("explains activation, Pix destinations and optional official apps", () => {
     const html = render();
     expect(html).toContain("enviado automaticamente");

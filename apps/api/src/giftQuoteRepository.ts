@@ -3,6 +3,7 @@ import {
   giftQuoteRecord,
   receivingAccount,
   receivingDestination,
+  site,
 } from "@entrelacos/database/schema";
 import { and, eq } from "drizzle-orm";
 import { readGiftQuoteSnapshot } from "./giftCheckouts";
@@ -42,6 +43,13 @@ export function createGiftQuoteRepository(
         if (binding.provider !== "ASAAS") unavailable();
         assertFresh();
         await db.transaction(async (tx) => {
+          // Take the site foreign-key lock before receiving locks, as checkout reservation does.
+          const [boundSite] = await tx
+            .select({ id: site.id })
+            .from(site)
+            .where(eq(site.id, binding.siteId))
+            .for("key share");
+          if (boundSite?.id !== binding.siteId) unavailable();
           const accounts = await tx
             .select({
               id: receivingAccount.id,

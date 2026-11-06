@@ -204,6 +204,13 @@
       "when": 1793989156508,
       "tag": "0028_gift_payment_settlement",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1793994637802,
+      "tag": "0029_gift_installment_expiry",
+      "breakpoints": true
     }
   ]
 }

@@ -1,0 +1,2 @@
+ALTER TABLE "gift_checkout_attempt" ADD COLUMN "installment_expiry_payment_references" text[];--> statement-breakpoint
+ALTER TABLE "gift_checkout_attempt" ADD CONSTRAINT "gift_checkout_attempt_expiry_payment_references_check" CHECK ("gift_checkout_attempt"."installment_expiry_payment_references" IS NULL OR (cardinality("gift_checkout_attempt"."installment_expiry_payment_references") BETWEEN 2 AND 12 AND array_position("gift_checkout_attempt"."installment_expiry_payment_references", NULL) IS NULL));
