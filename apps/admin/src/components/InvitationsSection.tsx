@@ -33,8 +33,8 @@ import { InvitationList } from "./InvitationList";
 import { InvitationOverview } from "./InvitationOverview";
 import { invitationAdminError } from "./invitationAdminError";
 import {
-  exportableFilters,
-  type InvitationExportFormat,
+  type InvitationExportSelection,
+  invitationExportFormat,
   invitationExportPath,
 } from "./invitationExport";
 import { emitInvitationsChanged } from "./invitationsRefresh";
@@ -137,7 +137,6 @@ export function InvitationsSection({ siteId, lifecycle, sessionEpoch }: Props) {
   // With no filters an empty first page means the wedding has no invitations.
   const noInvitations =
     loaded && !hasFilters && invitations.length === 0 && !nextCursor && !error;
-  const exportFilters = exportableFilters(filters);
   const summary = useMemo(
     () => summarizeInvitations(invitations),
     [invitations],
@@ -477,15 +476,12 @@ export function InvitationsSection({ siteId, lifecycle, sessionEpoch }: Props) {
     }
   }
 
-  async function downloadExport(
-    format: InvitationExportFormat,
-    options: { includePhone: boolean; includeEmail: boolean },
-  ) {
+  async function downloadExport(selection: InvitationExportSelection) {
+    const format = invitationExportFormat(selection.model);
     setBusy(true);
     try {
-      const path = invitationExportPath(siteId, format, {
-        ...exportFilters,
-        ...options,
+      const path = invitationExportPath(siteId, {
+        ...selection,
         requestId: crypto.randomUUID(),
       });
       const response = await fetch(`/api${path}`, {
@@ -510,10 +506,11 @@ export function InvitationsSection({ siteId, lifecycle, sessionEpoch }: Props) {
       link.click();
       link.remove();
       window.setTimeout(() => URL.revokeObjectURL(blobUrl), 0);
-      setExportOpen(false);
       toast.success(`Relatório ${format.toUpperCase()} gerado.`);
+      return true;
     } catch (cause) {
       toast.error(invitationAdminError(cause));
+      return false;
     } finally {
       setBusy(false);
     }
@@ -745,13 +742,10 @@ export function InvitationsSection({ siteId, lifecycle, sessionEpoch }: Props) {
       <InvitationExportDialog
         open={exportOpen}
         onOpenChange={setExportOpen}
-        onExport={(format, options) => void downloadExport(format, options)}
+        onExport={downloadExport}
         busy={busy}
-        hasFilters={Boolean(
-          exportFilters.search.trim() ||
-            exportFilters.status !== "ALL" ||
-            exportFilters.guestType !== "ALL",
-        )}
+        filters={hasFilters ? filters : undefined}
+        totals={siteTotals}
       />
       <Dialog open={deadlineOpen} onOpenChange={setDeadlineOpen}>
         <DialogContent className={adminStyles.dialog}>

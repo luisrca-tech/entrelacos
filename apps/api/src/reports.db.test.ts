@@ -233,6 +233,29 @@ describe("invitation reports PostgreSQL service", () => {
     ).toBe(true);
   });
 
+  it("exports all people in groups matching the panel filters and only confirmed guests for reception", async () => {
+    const actor = { userId: adminId, role: "SITE_ADMIN" } as const;
+    const groups = await readInvitationReport(connection.db, actor, siteId, {
+      requestId: randomUUID(),
+      model: "groups",
+      groupStatus: "PARTIAL",
+      guestType: "CHILD",
+      search: "familia",
+    });
+    expect(groups.selectedTotals).toMatchObject({
+      invitations: 1,
+      guests: 2,
+      confirmed: 1,
+      pending: 1,
+    });
+    const reception = await readInvitationReport(connection.db, actor, siteId, {
+      requestId: randomUUID(),
+      model: "reception",
+    });
+    expect(reception.rows.map((row) => row.guestName)).toEqual(["João Silva"]);
+    expect(reception.filters.status).toBe("CONFIRMED");
+  });
+
   it("denies an admin access to another site", async () => {
     await expect(
       readInvitationReport(

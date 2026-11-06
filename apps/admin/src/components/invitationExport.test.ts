@@ -1,54 +1,44 @@
 import { describe, expect, it } from "vitest";
-import { exportableFilters, invitationExportPath } from "./invitationExport";
+import { invitationExportPath } from "./invitationExport";
 
 describe("invitation export URL", () => {
-  it("applies visible filters and excludes contacts by default", () => {
+  it("uses the chosen model and preserves the group-level partial filter", () => {
     expect(
-      invitationExportPath("site/1", "csv", {
-        requestId: "request-1",
-        search: "Família Silva",
-        status: "PENDING",
-        guestType: "CHILD",
+      invitationExportPath("site-1", {
+        model: "groups",
+        filters: { search: "Costa", status: "PARTIAL", guestType: "CHILD" },
+        requestId: "request-3",
+        includePhone: true,
+        includeEmail: false,
       }),
     ).toBe(
-      "/v1/sites/site%2F1/reports/invitations.csv?requestId=request-1&includePhone=false&includeEmail=false&search=Fam%C3%ADlia+Silva&status=PENDING&guestType=CHILD",
+      "/v1/sites/site-1/reports/invitations.csv?requestId=request-3&model=groups&includePhone=true&includeEmail=false&search=Costa&groupStatus=PARTIAL&guestType=CHILD",
     );
   });
 
-  it("includes each contact field only when explicitly selected", () => {
-    const url = invitationExportPath("site-1", "pdf", {
-      requestId: "request-2",
-      search: "",
-      status: "ALL",
-      guestType: "ALL",
-      includePhone: true,
-    });
-    expect(url).toContain("includePhone=true&includeEmail=false");
-    expect(url).not.toContain("status=");
-    expect(url).not.toContain("guestType=");
-    expect(url).not.toContain("search=");
+  it("does not send filters or contact information with the reception list", () => {
+    expect(
+      invitationExportPath("site-1", {
+        model: "reception",
+        filters: { search: "Costa", status: "DECLINED", guestType: "ADULT" },
+        requestId: "request-4",
+        includePhone: true,
+        includeEmail: true,
+      }),
+    ).toBe(
+      "/v1/sites/site-1/reports/invitations.pdf?requestId=request-4&model=reception&includePhone=false&includeEmail=false",
+    );
   });
 
-  it("exports every answer for the partial filter, which is not a guest state", () => {
-    const filters = exportableFilters({
-      search: "Costa",
-      status: "PARTIAL",
-      guestType: "CHILD",
+  it("uses the selected detailed CSV and exports the whole wedding when no filters are selected", () => {
+    const url = invitationExportPath("site/1", {
+      model: "guests",
+      requestId: "request-2",
+      includePhone: false,
+      includeEmail: true,
     });
-    expect(filters).toEqual({
-      search: "Costa",
-      status: "ALL",
-      guestType: "CHILD",
-    });
-    expect(
-      invitationExportPath("site-1", "csv", {
-        ...filters,
-        requestId: "request-3",
-      }),
-    ).not.toContain("status=");
-    expect(
-      exportableFilters({ search: "", status: "DECLINED", guestType: "ALL" })
-        .status,
-    ).toBe("DECLINED");
+    expect(url).toBe(
+      "/v1/sites/site%2F1/reports/invitations.csv?requestId=request-2&model=guests&includePhone=false&includeEmail=true",
+    );
   });
 });

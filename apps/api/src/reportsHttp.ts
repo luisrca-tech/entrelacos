@@ -1,4 +1,5 @@
 import {
+  type InvitationExportModel,
   invitationExportQuerySchema,
   siteIdSchema,
 } from "@entrelacos/contracts";
@@ -78,6 +79,13 @@ function attachmentName(
   return `entrelacos-invitations-${safeSegment(siteId)}-${utc}-${safeSegment(requestId)}.${extension}`;
 }
 
+const modelFileNames = {
+  groups: "respostas-por-convite",
+  guests: "respostas-por-convidado",
+  planning: "lista-para-assessoria",
+  reception: "lista-de-recepcao",
+} satisfies Record<InvitationExportModel, string>;
+
 function binaryResponse(
   bytes: Uint8Array,
   contentType: string,
@@ -120,6 +128,13 @@ export function createReportsHttpRouter(options: AuthHttpOptions): Hono {
         if (!query.success) {
           return problem(400, "VALIDATION_ERROR", "Invalid report request");
         }
+        const { model } = query.data;
+        if (
+          model &&
+          (model === "groups" || model === "guests") !== (extension === "csv")
+        ) {
+          return problem(400, "VALIDATION_ERROR", "Invalid report format");
+        }
         try {
           const report = await readInvitationReport(
             options.db,
@@ -132,15 +147,28 @@ export function createReportsHttpRouter(options: AuthHttpOptions): Hono {
             extension === "csv"
               ? createInvitationCsv(report, query.data)
               : await createInvitationPdf(report, query.data);
+          const wedding = safeSegment(
+            report.reportTitle
+              .normalize("NFD")
+              .replace(/\p{Diacritic}/gu, "")
+              .toLowerCase()
+              .replace(/[^a-z0-9]+/g, "-")
+              .replace(/^-|-$/g, ""),
+          );
+          const date = new Intl.DateTimeFormat("sv-SE", {
+            timeZone: report.timezone,
+          }).format(new Date(report.generatedAt));
           return binaryResponse(
             bytes,
             contentType,
-            attachmentName(
-              siteId,
-              report.generatedAt,
-              query.data.requestId,
-              extension,
-            ),
+            model
+              ? `entrelacos-${modelFileNames[model]}-${wedding}-${date}.${extension}`
+              : attachmentName(
+                  siteId,
+                  report.generatedAt,
+                  query.data.requestId,
+                  extension,
+                ),
           );
         } catch (error) {
           const response = serviceError(error);

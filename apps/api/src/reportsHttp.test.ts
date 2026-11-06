@@ -106,6 +106,42 @@ describe("invitation report HTTP boundary", () => {
     expect(mocks.readInvitationReport).not.toHaveBeenCalled();
   });
 
+  it("validates model and format before reading private rows", async () => {
+    for (const suffix of [
+      "csv&model=reception",
+      "pdf&model=groups",
+      "pdf&model=planning&includeEmail=true",
+      "pdf&model=reception&status=PENDING",
+    ]) {
+      const [format, ...query] = suffix.split("&");
+      const response = await router().request(
+        request(
+          `/v1/sites/site-1/reports/invitations.${format}?requestId=${requestId}&${query.join("&")}`,
+        ),
+      );
+      expect(response.status).toBe(400);
+    }
+    expect(mocks.readInvitationReport).not.toHaveBeenCalled();
+
+    const response = await router().request(
+      request(
+        `/v1/sites/site-1/reports/invitations.pdf?requestId=${requestId}&model=reception`,
+      ),
+    );
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Content-Disposition")).toContain(
+      "lista-de-recepcao",
+    );
+    expect(mocks.createInvitationPdf).toHaveBeenCalledWith(
+      report,
+      expect.objectContaining({
+        model: "reception",
+        includePhone: false,
+        includeEmail: false,
+      }),
+    );
+  });
+
   it("returns binary attachment bytes, no-store, and safe filename", async () => {
     const response = await router().request(
       request(

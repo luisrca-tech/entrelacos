@@ -32,6 +32,7 @@ const report: InvitationReport = {
   },
   rows: [
     {
+      invitationId: "invitation-one",
       invitationName: "=Família Silva",
       guestName: "João, 'Silva'",
       guestType: "ADULT",
@@ -43,6 +44,30 @@ const report: InvitationReport = {
 };
 
 describe("invitation report", () => {
+  it("exports counts per invitation ID and does not merge invitations with the same name", () => {
+    const guest = report.rows[0];
+    if (!guest) throw new Error("Missing report fixture row");
+    const csv = new TextDecoder().decode(
+      createInvitationCsv(
+        {
+          ...report,
+          rows: [
+            guest,
+            { ...guest, rsvpState: "PENDING" },
+            { ...guest, invitationId: "invitation-two", rsvpState: "DECLINED" },
+          ],
+        },
+        { model: "groups", includePhone: true, includeEmail: false },
+      ),
+    );
+    expect(csv.split("\r\n").filter(Boolean)).toEqual([
+      '"Convite","Convidados","Confirmados","Sem resposta","Não irão","Situação do convite","Telefone"',
+      `"'=Família Silva","2","1","1","0","Em parte","'+5511999999999"`,
+      `"'=Família Silva","1","0","0","1","Não irão","'+5511999999999"`,
+    ]);
+    expect(csv).not.toContain(guest.guestName);
+  });
+
   it("matches accent-insensitive names and applies status/type to the same guest", () => {
     const rows = [
       {
@@ -109,22 +134,32 @@ describe("invitation report", () => {
     expect(email).not.toContain("+5511999999999");
   });
 
-  it("produces a paginated PDF with Unicode fonts", async () => {
-    const firstRow = report.rows[0];
-    if (!firstRow) throw new Error("Missing report fixture row");
-    const bytes = await createInvitationPdf(
-      {
-        ...report,
-        rows: Array.from({ length: 100 }, (_, index) => ({
-          ...firstRow,
-          guestName: `Convidado ${index} — São José`,
-        })),
-      },
-      { includePhone: false, includeEmail: false },
-    );
-    const pdf = new TextDecoder("latin1").decode(bytes);
-    expect(pdf.startsWith("%PDF-")).toBe(true);
-    expect((pdf.match(/\/Type \/Page\b/g) ?? []).length).toBeGreaterThan(1);
-    expect(pdf).toContain("DejaVuSans");
-  });
+  it.each(["planning", "reception"] as const)(
+    "produces a paginated %s PDF with Unicode fonts",
+    async (model) => {
+      const firstRow = report.rows[0];
+      if (!firstRow) throw new Error("Missing report fixture row");
+      const bytes = await createInvitationPdf(
+        {
+          ...report,
+          selectedTotals: {
+            ...report.selectedTotals,
+            guests: 100,
+            adults: 100,
+            confirmed: 100,
+          },
+          rows: Array.from({ length: 100 }, (_, index) => ({
+            ...firstRow,
+            guestName: `Convidado ${index} — São José`,
+          })),
+        },
+        { model, includePhone: false, includeEmail: false },
+      );
+      const pdf = new TextDecoder("latin1").decode(bytes);
+      expect(pdf.startsWith("%PDF-")).toBe(true);
+      expect((pdf.match(/\/Type \/Page\b/g) ?? []).length).toBeGreaterThan(1);
+      expect(pdf).toContain("DejaVuSans");
+      expect(pdf).toContain("DejaVuSerif");
+    },
+  );
 });

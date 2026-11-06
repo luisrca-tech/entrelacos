@@ -1,13 +1,16 @@
 import { createRequire } from "node:module";
 import {
+  type InvitationExportModel,
   type InvitationExportQuery,
   type InvitationGuestType,
   invitationExportQuerySchema,
+  invitationGroupStatus,
   type RsvpState,
 } from "@entrelacos/contracts";
 import { sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import PDFDocument from "pdfkit";
+import { normalizeInvitationName } from "./invitations";
 
 export type ReportsDatabase = NodePgDatabase<Record<string, never>>;
 export type ReportsAdminActor = {
@@ -24,6 +27,7 @@ export type InvitationReportTotals = {
   declined: number;
 };
 export type InvitationReportRow = {
+  invitationId: string;
   invitationName: string;
   guestName: string;
   guestType: InvitationGuestType;
@@ -36,7 +40,10 @@ export type InvitationReport = {
   reportTitle: string;
   generatedAt: string;
   timezone: "America/Sao_Paulo";
-  filters: Pick<InvitationExportQuery, "search" | "status" | "guestType">;
+  filters: Pick<
+    InvitationExportQuery,
+    "search" | "status" | "groupStatus" | "guestType"
+  >;
   totals: InvitationReportTotals;
   selectedTotals: InvitationReportTotals;
   rows: InvitationReportRow[];
@@ -101,9 +108,22 @@ export function filterInvitationReportRows<
   );
 }
 
-type DatabaseRow = InvitationReportRow & { invitationId: string };
+function groupInvitationRows(rows: readonly InvitationReportRow[]) {
+  const groups = new Map<
+    string,
+    [InvitationReportRow, ...InvitationReportRow[]]
+  >();
+  for (const row of rows) {
+    const group = groups.get(row.invitationId);
+    if (group) group.push(row);
+    else groups.set(row.invitationId, [row]);
+  }
+  return groups.values();
+}
 
-function summarize(rows: readonly DatabaseRow[]): InvitationReportTotals {
+function summarize(
+  rows: readonly InvitationReportRow[],
+): InvitationReportTotals {
   const invitationIds = new Set<string>();
   const totals: InvitationReportTotals = {
     invitations: 0,
@@ -174,21 +194,46 @@ export async function readInvitationReport(
         WHERE i.site_id = ${site.id}
         ORDER BY i.name ASC, i.id ASC, g.full_name ASC, g.id ASC
       `);
-      const allRows = result.rows as unknown as DatabaseRow[];
-      const selectedRows = filterInvitationReportRows(allRows, query);
+      const allRows = result.rows as unknown as InvitationReportRow[];
+      const { model, groupStatus, search, guestType } = query;
+      const status = model === "reception" ? "CONFIRMED" : query.status;
+      const normalizedSearch = normalizeInvitationName(search ?? "");
+      let selectedRows = allRows;
+      if (!model || model === "reception") {
+        selectedRows = filterInvitationReportRows(allRows, {
+          search,
+          status,
+          guestType,
+        });
+      } else if (normalizedSearch || groupStatus || guestType) {
+        selectedRows = [...groupInvitationRows(allRows)]
+          .filter(
+            (group) =>
+              (!normalizedSearch ||
+                normalizeInvitationName(group[0].invitationName).includes(
+                  normalizedSearch,
+                )) &&
+              (!groupStatus || invitationGroupStatus(group) === groupStatus) &&
+              (!guestType ||
+                group.some((guest) => guest.guestType === guestType)),
+          )
+          .flat();
+      }
       return {
         siteId: site.id,
         reportTitle: site.display_name,
         generatedAt: generatedAt.toISOString(),
         timezone: "America/Sao_Paulo",
         filters: {
-          search: query.search,
-          status: query.status,
-          guestType: query.guestType,
+          search,
+          status,
+          groupStatus,
+          guestType,
         },
         totals: summarize(allRows),
         selectedTotals: summarize(selectedRows),
         rows: selectedRows.map((row) => ({
+          invitationId: row.invitationId,
           invitationName: row.invitationName,
           guestName: row.guestName,
           guestType: row.guestType,
@@ -211,6 +256,12 @@ const TYPE_LABELS = {
   ADULT: "Adulto",
   CHILD: "Criança",
 } satisfies Record<InvitationGuestType, string>;
+const GROUP_LABELS = {
+  CONFIRMED: "Confirmados",
+  PENDING: "Sem resposta",
+  DECLINED: "Não irão",
+  PARTIAL: "Em parte",
+} as const;
 
 function protectSpreadsheetCell(value: string): string {
   return /^[=+\-@\t\r\n]/u.test(value) ? `'${value}` : value;
@@ -220,29 +271,57 @@ function csvCell(value: string): string {
   return `"${protectSpreadsheetCell(value).replaceAll('"', '""')}"`;
 }
 
-type ContactOptions = { includePhone: boolean; includeEmail: boolean };
+type ExportOptions = {
+  includePhone: boolean;
+  includeEmail: boolean;
+  model?: InvitationExportModel;
+};
 
 export function createInvitationCsv(
   report: InvitationReport,
-  options: ContactOptions,
+  options: ExportOptions,
 ): Uint8Array {
+  const grouped = options.model === "groups";
+  const contactValues = (row: InvitationReportRow) => [
+    ...(options.includePhone ? [row.phone ?? ""] : []),
+    ...(options.includeEmail ? [row.email ?? ""] : []),
+  ];
   const rows = [
     [
-      "Convite",
-      "Convidado",
-      "Tipo",
-      "Status",
+      ...(grouped
+        ? [
+            "Convite",
+            "Convidados",
+            "Confirmados",
+            "Sem resposta",
+            "Não irão",
+            "Situação do convite",
+          ]
+        : ["Convite", "Convidado", "Tipo", "Status"]),
       ...(options.includePhone ? ["Telefone"] : []),
       ...(options.includeEmail ? ["E-mail"] : []),
     ],
-    ...report.rows.map((row) => [
-      row.invitationName,
-      row.guestName,
-      TYPE_LABELS[row.guestType],
-      RSVP_LABELS[row.rsvpState],
-      ...(options.includePhone ? [row.phone ?? ""] : []),
-      ...(options.includeEmail ? [row.email ?? ""] : []),
-    ]),
+    ...(grouped
+      ? [...groupInvitationRows(report.rows)].map((group) => {
+          const [first] = group;
+          const { guests, confirmed, pending, declined } = summarize(group);
+          return [
+            first.invitationName,
+            String(guests),
+            String(confirmed),
+            String(pending),
+            String(declined),
+            GROUP_LABELS[invitationGroupStatus(group)],
+            ...contactValues(first),
+          ];
+        })
+      : report.rows.map((row) => [
+          row.invitationName,
+          row.guestName,
+          TYPE_LABELS[row.guestType],
+          RSVP_LABELS[row.rsvpState],
+          ...contactValues(row),
+        ])),
   ];
   return new TextEncoder().encode(
     `\uFEFF${rows.map((row) => row.map(csvCell).join(",")).join("\r\n")}\r\n`,
@@ -252,10 +331,15 @@ export function createInvitationCsv(
 const require = createRequire(import.meta.url);
 const regularFont = require.resolve("dejavu-fonts-ttf/ttf/DejaVuSans.ttf");
 const boldFont = require.resolve("dejavu-fonts-ttf/ttf/DejaVuSans-Bold.ttf");
+const displayFont = require.resolve("dejavu-fonts-ttf/ttf/DejaVuSerif.ttf");
 const MM = 72 / 25.4;
 const MARGIN = 15 * MM;
 const FOOTER_Y = 785;
-const PAGE_WIDTH = 595.28;
+const INK = "#2b211b";
+const ACCENT = "#8e3a2a";
+const MUTED = "#62554b";
+const LINE = "#e2d8ca";
+const WASH = "#f7f3ed";
 
 function pdfText(value: string): string {
   return Array.from(value)
@@ -273,7 +357,7 @@ function pdfText(value: string): string {
 
 export function createInvitationPdf(
   report: InvitationReport,
-  options: ContactOptions,
+  options: ExportOptions,
 ): Promise<Uint8Array> {
   return new Promise((resolve, rejectPromise) => {
     const document = new PDFDocument({
@@ -288,54 +372,221 @@ export function createInvitationPdf(
     try {
       document.registerFont("DejaVu", regularFont);
       document.registerFont("DejaVu-Bold", boldFont);
+      document.registerFont("DejaVu-Serif", displayFont);
+      const reception = options.model === "reception";
+      const title = reception ? "Lista de recepção" : "Lista para a assessoria";
+      const wedding = pdfText(report.reportTitle);
+      const width = document.page.width - 2 * MARGIN;
+      const bottom = FOOTER_Y - 19;
+      const columnWidths = reception
+        ? [width - 253, 190, 63]
+        : [width - 193, 74, 119];
+      const columns = reception
+        ? ["Convidado", "Convite", "Chegou"]
+        : ["Convidado", "Tipo", "Resposta"];
+      let y = MARGIN;
+
+      function rowHeight(
+        cells: readonly string[],
+        widths: readonly number[],
+        bold = false,
+      ) {
+        document.font(bold ? "DejaVu-Bold" : "DejaVu").fontSize(9);
+        return (
+          Math.max(
+            13,
+            ...cells.map((value, index) =>
+              document.heightOfString(pdfText(value), {
+                width: widths[index] - 20,
+              }),
+            ),
+          ) + 14
+        );
+      }
+
+      function drawRow(
+        cells: readonly string[],
+        widths: readonly number[],
+        style: "header" | "group" | "guest",
+        checkbox = false,
+      ) {
+        const bold = style !== "guest";
+        const height = rowHeight(cells, widths, bold);
+        if (bold) document.rect(MARGIN, y, width, height).fill(WASH);
+        document.fillColor(style === "group" ? ACCENT : INK);
+        let x = MARGIN;
+        for (const [index, value] of cells.entries()) {
+          document.text(pdfText(value), x + 10, y + 7, {
+            width: widths[index] - 20,
+          });
+          x += widths[index];
+        }
+        if (checkbox) {
+          document
+            .rect(MARGIN + width - columnWidths[2] + 10, y + 7, 10, 10)
+            .strokeColor(MUTED)
+            .stroke();
+        }
+        y += height;
+        document
+          .moveTo(MARGIN, y)
+          .lineTo(MARGIN + width, y)
+          .strokeColor(LINE)
+          .stroke();
+      }
+
+      function startNextPage() {
+        document.addPage();
+        document
+          .font("DejaVu-Bold")
+          .fontSize(10)
+          .fillColor(INK)
+          .text(`${title} · ${wedding}`, MARGIN, MARGIN, { width });
+        y = document.y + 12;
+        drawRow(columns, columnWidths, "header");
+      }
+
+      const date = new Intl.DateTimeFormat("pt-BR", {
+        dateStyle: "short",
+        timeStyle: "short",
+        timeZone: report.timezone,
+      }).format(new Date(report.generatedAt));
       document
         .font("DejaVu-Bold")
-        .fontSize(18)
-        .text(pdfText(report.reportTitle));
-      document.font("DejaVu").fontSize(9).moveDown(0.4);
-      document.text(`Gerado em ${report.generatedAt} (UTC)`);
+        .fontSize(9)
+        .fillColor(ACCENT)
+        .text("ENTRELAÇOS", MARGIN, MARGIN);
+      document
+        .font("DejaVu-Serif")
+        .fontSize(25)
+        .fillColor(INK)
+        .moveDown(0.25)
+        .text(title);
+      document.font("DejaVu-Serif").fontSize(16).text(wedding);
+      document
+        .font("DejaVu")
+        .fontSize(9)
+        .fillColor(MUTED)
+        .moveDown(0.5)
+        .text(`Gerado em ${date} · horário de Brasília`);
+
+      const { search, status, groupStatus, guestType } = report.filters;
+      const scope = [
+        search && `Busca: ${search}`,
+        groupStatus && GROUP_LABELS[groupStatus],
+        status && RSVP_LABELS[status],
+        guestType && TYPE_LABELS[guestType],
+      ]
+        .filter(Boolean)
+        .join(" · ");
       document.text(
-        `Busca: ${pdfText(report.filters.search || "Todas")} | Status: ${report.filters.status ? RSVP_LABELS[report.filters.status] : "Todos"} | Tipo: ${report.filters.guestType ? TYPE_LABELS[report.filters.guestType] : "Todos"}`,
+        reception
+          ? "Somente convidados confirmados · ordem alfabética"
+          : scope
+            ? `Recorte: ${pdfText(scope)}`
+            : "Todos os convites",
       );
-      document.moveDown(0.5);
-      document.text(
-        `Total do site: ${report.totals.invitations} convites, ${report.totals.guests} convidados`,
-      );
-      document.text(
-        `Seleção: ${report.selectedTotals.invitations} convites, ${report.selectedTotals.guests} convidados — ${report.selectedTotals.adults} adultos, ${report.selectedTotals.children} crianças`,
-      );
-      document.text(
-        `Sem resposta: ${report.selectedTotals.pending} | Irá comparecer: ${report.selectedTotals.confirmed} | Não comparecerá: ${report.selectedTotals.declined}`,
-      );
-      document.moveDown(0.65);
-      for (const row of report.rows) {
-        const lines = [
-          `${row.invitationName} — ${row.guestName}`,
-          `${TYPE_LABELS[row.guestType]} | ${RSVP_LABELS[row.rsvpState]}`,
-          ...(options.includePhone ? [`Telefone: ${row.phone ?? ""}`] : []),
-          ...(options.includeEmail ? [`E-mail: ${row.email ?? ""}`] : []),
-        ].map(pdfText);
-        const height =
-          lines.reduce(
-            (sum, line, index) =>
-              sum +
-              document
-                .font(index === 0 ? "DejaVu-Bold" : "DejaVu")
-                .fontSize(index === 0 ? 9 : 8)
-                .heightOfString(line, { width: PAGE_WIDTH - 2 * MARGIN }),
-            0,
-          ) + 9;
-        if (document.y + height > FOOTER_Y - 18) {
-          document.addPage();
-        }
-        for (const [index, line] of lines.entries()) {
-          document
-            .font(index === 0 ? "DejaVu-Bold" : "DejaVu")
-            .fontSize(index === 0 ? 9 : 8)
-            .text(line);
-        }
-        document.moveDown(0.45);
+      y = document.y + 16;
+
+      const { invitations, guests, confirmed, pending, declined } =
+        report.selectedTotals;
+      const confirmedAdults = report.rows.filter(
+        (row) => row.rsvpState === "CONFIRMED" && row.guestType === "ADULT",
+      ).length;
+      const metrics = reception
+        ? [[confirmed, "Confirmados"]]
+        : [
+            [confirmed, "Confirmados"],
+            [pending, "Sem resposta"],
+            [declined, "Não irão"],
+          ];
+      const metricWidth = (width - 10 * (metrics.length - 1)) / metrics.length;
+      for (const [index, [count, label]] of metrics.entries()) {
+        const x = MARGIN + index * (metricWidth + 10);
+        document.rect(x, y, metricWidth, 51).fill(WASH);
+        document
+          .font("DejaVu-Serif")
+          .fontSize(21)
+          .fillColor(ACCENT)
+          .text(String(count), x + 10, y + 4);
+        document
+          .font("DejaVu")
+          .fontSize(9)
+          .fillColor(INK)
+          .text(String(label), x + 10, y + 32);
       }
+      y += 60;
+      document
+        .font("DejaVu")
+        .fontSize(9)
+        .fillColor(MUTED)
+        .text(
+          `Confirmados: ${confirmedAdults} adultos · ${confirmed - confirmedAdults} crianças` +
+            (reception
+              ? ""
+              : `   |   Recorte: ${invitations} convites · ${guests} convidados`),
+          MARGIN,
+          y,
+          { width },
+        );
+      y = document.y + 15;
+      drawRow(columns, columnWidths, "header");
+
+      if (!report.rows.length) {
+        drawRow(
+          [
+            reception
+              ? "Ainda não há convidados confirmados."
+              : "Nenhum convidado neste recorte.",
+          ],
+          [width],
+          "guest",
+        );
+      } else if (reception) {
+        const collator = new Intl.Collator("pt-BR", { sensitivity: "base" });
+        const sorted = [...report.rows].sort(
+          (a, b) =>
+            collator.compare(a.guestName, b.guestName) ||
+            collator.compare(a.invitationName, b.invitationName),
+        );
+        for (const row of sorted) {
+          const cells = [row.guestName, row.invitationName, ""];
+          if (y + rowHeight(cells, columnWidths) > bottom) startNextPage();
+          drawRow(cells, columnWidths, "guest", true);
+        }
+      } else {
+        for (const group of groupInvitationRows(report.rows)) {
+          const [first] = group;
+          const groupLabel = [first.invitationName];
+          for (const [index, row] of group.entries()) {
+            const contacts = [
+              options.includePhone && row.phone,
+              options.includeEmail && row.email,
+            ].filter(Boolean);
+            const cells = [
+              [row.guestName, ...contacts].join("\n"),
+              TYPE_LABELS[row.guestType],
+              RSVP_LABELS[row.rsvpState],
+            ];
+            const groupHeight =
+              index === 0 ? rowHeight(groupLabel, [width], true) : 0;
+            const needsPage =
+              y + groupHeight + rowHeight(cells, columnWidths) > bottom;
+            if (needsPage) startNextPage();
+            if (index === 0 || needsPage) {
+              drawRow(
+                index === 0
+                  ? groupLabel
+                  : [`${first.invitationName} (continuação)`],
+                [width],
+                "group",
+              );
+            }
+            drawRow(cells, columnWidths, "guest");
+          }
+        }
+      }
+
       const range = document.bufferedPageRange();
       for (
         let index = range.start;
@@ -343,13 +594,21 @@ export function createInvitationPdf(
         index += 1
       ) {
         document.switchToPage(index);
-        document.font("DejaVu").fontSize(8).fillColor("#555555");
+        document
+          .moveTo(MARGIN, FOOTER_Y - 7)
+          .lineTo(MARGIN + width, FOOTER_Y - 7)
+          .strokeColor(LINE)
+          .stroke();
+        document.font("DejaVu").fontSize(8).fillColor(MUTED);
+        document.text("Entrelaços · Lista de convidados", MARGIN, FOOTER_Y, {
+          width,
+        });
         document.text(
           `Página ${index + 1} / ${range.count}`,
           MARGIN,
           FOOTER_Y,
           {
-            width: PAGE_WIDTH - MARGIN * 2,
+            width,
             align: "right",
           },
         );

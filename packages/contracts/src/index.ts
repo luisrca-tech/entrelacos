@@ -1053,8 +1053,17 @@ const explicitBooleanQuerySchema = z
   .enum(["true", "false"])
   .transform((value) => value === "true");
 
+export const invitationExportModelSchema = z.enum([
+  "groups",
+  "guests",
+  "planning",
+  "reception",
+]);
+export type InvitationExportModel = z.infer<typeof invitationExportModelSchema>;
+
 export const invitationExportQuerySchema = strictObject({
   requestId: z.string().uuid(),
+  model: invitationExportModelSchema.optional(),
   search: z
     .string()
     .trim()
@@ -1062,10 +1071,27 @@ export const invitationExportQuerySchema = strictObject({
     .optional()
     .transform((value) => (value === "" ? undefined : value)),
   status: rsvpStateSchema.optional(),
+  groupStatus: invitationGroupStatusSchema.optional(),
   guestType: invitationGuestTypeSchema.optional(),
   includePhone: explicitBooleanQuerySchema.optional().default(false),
   includeEmail: explicitBooleanQuerySchema.optional().default(false),
-});
+}).refine(
+  ({
+    model,
+    status,
+    groupStatus,
+    search,
+    guestType,
+    includePhone,
+    includeEmail,
+  }) =>
+    (!model || !status) &&
+    (model !== undefined || !groupStatus) &&
+    ((model !== "planning" && model !== "reception") ||
+      (!includePhone && !includeEmail)) &&
+    (model !== "reception" || (!groupStatus && !search && !guestType)),
+  { message: "Invalid filters or contacts for the report model" },
+);
 export type InvitationExportQuery = z.infer<typeof invitationExportQuerySchema>;
 
 export const block5ErrorCodeSchema = z.enum([

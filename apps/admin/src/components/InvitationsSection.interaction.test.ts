@@ -247,12 +247,31 @@ it("keeps rows and the open detail mounted while a search reloads, then clears s
   expect(container.querySelector('[role="alert"]')).not.toBeNull();
 });
 
-it("describes the export scope without the loaded page count", async () => {
+it("offers three export purposes with one download action and wedding-wide counts", async () => {
   await mount();
   const exportButton = [...container.querySelectorAll("button")].find(
     (entry) => entry.textContent === "Exportar",
   );
   await act(async () => exportButton?.click());
-  expect(document.body.textContent).toContain("todos os convites do casamento");
-  expect(document.body.textContent).not.toMatch(/filtros ativos em \d+/);
+  const dialog = document.querySelector('[role="dialog"]');
+  if (!dialog) throw new Error("Missing export dialog");
+  const models = dialog.querySelectorAll<HTMLInputElement>(
+    'input[type="radio"]',
+  );
+  const downloadActions = () =>
+    [...dialog.querySelectorAll("button")]
+      .map((button) => button.textContent)
+      .filter((label) => label?.startsWith("Baixar"));
+
+  expect(models).toHaveLength(3);
+  expect(models[0]?.checked).toBe(true);
+  expect(dialog.textContent).toContain("Todos os convites");
+  expect(dialog.textContent).toContain("40 convidados em 45 convites");
+  expect(downloadActions()).toEqual(["Baixar CSV"]);
+
+  await act(async () => models[2]?.click());
+  expect(dialog.textContent).toContain("Somente convidados confirmados");
+  expect(dialog.textContent).toContain("20 confirmados");
+  expect(dialog.textContent).not.toContain("Opções da planilha");
+  expect(downloadActions()).toEqual(["Baixar PDF"]);
 });

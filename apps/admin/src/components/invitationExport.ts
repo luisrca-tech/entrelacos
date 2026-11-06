@@ -1,40 +1,40 @@
+import type { InvitationExportModel } from "@entrelacos/contracts";
 import type { InvitationFilters } from "./invitationView";
 
-export type InvitationExportFormat = "csv" | "pdf";
-type ExportFilters = InvitationFilters & {
-  status: Exclude<InvitationFilters["status"], "PARTIAL">;
-};
-export type InvitationExportSelection = ExportFilters & {
-  requestId: string;
-  includePhone?: boolean;
-  includeEmail?: boolean;
+export type InvitationExportSelection = {
+  model: InvitationExportModel;
+  filters?: InvitationFilters;
+  includePhone: boolean;
+  includeEmail: boolean;
 };
 
-/**
- * The report lists guests and filters them by their own answer. A mixed
- * answer only exists per invitation, so the partial filter exports every
- * answer and the Status column tells them apart.
- */
-export function exportableFilters(filters: InvitationFilters): ExportFilters {
-  return {
-    ...filters,
-    status: filters.status === "PARTIAL" ? "ALL" : filters.status,
-  };
+export function invitationExportFormat(model: InvitationExportModel) {
+  return model === "groups" || model === "guests" ? "csv" : "pdf";
 }
 
 export function invitationExportPath(
   siteId: string,
-  format: InvitationExportFormat,
-  selection: InvitationExportSelection,
+  {
+    model,
+    filters,
+    includePhone,
+    includeEmail,
+    requestId,
+  }: InvitationExportSelection & {
+    requestId: string;
+  },
 ): string {
+  const format = invitationExportFormat(model);
   const query = new URLSearchParams({
-    requestId: selection.requestId,
-    includePhone: String(selection.includePhone === true),
-    includeEmail: String(selection.includeEmail === true),
+    requestId,
+    model,
+    includePhone: String(format === "csv" && includePhone),
+    includeEmail: String(format === "csv" && includeEmail),
   });
-  if (selection.search.trim()) query.set("search", selection.search.trim());
-  if (selection.status !== "ALL") query.set("status", selection.status);
-  if (selection.guestType !== "ALL")
-    query.set("guestType", selection.guestType);
+  if (filters && model !== "reception") {
+    if (filters.search.trim()) query.set("search", filters.search.trim());
+    if (filters.status !== "ALL") query.set("groupStatus", filters.status);
+    if (filters.guestType !== "ALL") query.set("guestType", filters.guestType);
+  }
   return `/v1/sites/${encodeURIComponent(siteId)}/reports/invitations.${format}?${query.toString()}`;
 }
