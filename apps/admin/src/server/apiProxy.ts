@@ -619,18 +619,32 @@ function resolveTarget(
     return problem(404, "NOT_FOUND", "Not Found");
   }
 
-  let decodedPath: string;
-  try {
-    decodedPath = decodeURIComponent(pathname);
-  } catch {
-    return problem(404, "NOT_FOUND", "Not Found");
-  }
-  if (
-    decodedPath !== pathname ||
-    decodedPath.includes("..") ||
-    decodedPath.includes("\\")
-  ) {
-    return problem(404, "NOT_FOUND", "Not Found");
+  // Resource ids may contain reserved characters (e.g. "showcase-v1:site:family")
+  // that clients encode per segment. Accept only canonical per-segment encoding
+  // that never hides a separator, a dot segment or a control character.
+  // Gift media ids are plain, so that family keeps rejecting any encoding.
+  const mediaFamily = /^\/api\/v1\/sites\/[^/]+\/gift-media(?:\/|$)/.test(
+    pathname,
+  );
+  for (const segment of pathname.split("/")) {
+    let decoded: string;
+    try {
+      decoded = decodeURIComponent(segment);
+    } catch {
+      return problem(404, "NOT_FOUND", "Not Found");
+    }
+    if (
+      decoded.includes("/") ||
+      decoded.includes("\\") ||
+      decoded.includes("..") ||
+      decoded === "." ||
+      // biome-ignore lint/suspicious/noControlCharactersInRegex: rejects control characters.
+      /[\u0000-\u001f\u007f]/.test(decoded) ||
+      (decoded !== segment &&
+        (mediaFamily || encodeURIComponent(decoded) !== segment))
+    ) {
+      return problem(404, "NOT_FOUND", "Not Found");
+    }
   }
 
   const target = new URL(`/v1/${pathname.slice("/api/v1/".length)}`, apiBase);

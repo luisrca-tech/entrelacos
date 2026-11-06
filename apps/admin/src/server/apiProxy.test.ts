@@ -833,6 +833,44 @@ describe("admin API proxy", () => {
     expect(upstream).not.toHaveBeenCalled();
   });
 
+  it("forwards canonically encoded resource ids such as showcase invitations", async () => {
+    const upstream = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ accessPin: "123456" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", upstream);
+    const id = encodeURIComponent("showcase-v1:demo-wedding:family:duarte");
+
+    const response = await proxyApiRequest(
+      proxyRequest(`/api/v1/sites/demo-wedding/invitations/${id}/access-pin`),
+      config,
+    );
+
+    expect(response.status).toBe(200);
+    expect(upstream.mock.calls[0]?.[0]).toBe(
+      `https://api.example.test/v1/sites/demo-wedding/invitations/${id}/access-pin`,
+    );
+  });
+
+  it("rejects encoded separators, control characters and non-canonical escapes", async () => {
+    const upstream = vi.fn();
+    vi.stubGlobal("fetch", upstream);
+    // Encoded dot segments are already normalized away by the URL parser.
+    for (const path of [
+      "/api/v1/sites/a%2Fb/invitations",
+      "/api/v1/sites/a%5Cb/invitations",
+      "/api/v1/sites/a%3ab/invitations",
+      "/api/v1/sites/a%00b/invitations",
+      "/api/v1/sites/%E0%A4%A/invitations",
+    ]) {
+      const response = await proxyApiRequest(proxyRequest(path), config);
+      expect(response.status, path).toBe(404);
+    }
+    expect(upstream).not.toHaveBeenCalled();
+  });
+
   it("rejects hostile origins, traversal, and open-proxy paths without fetching", async () => {
     const upstream = vi.fn();
     vi.stubGlobal("fetch", upstream);
