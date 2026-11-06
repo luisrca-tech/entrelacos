@@ -917,3 +917,67 @@ describe("recipient and historical fee settlement", () => {
     },
   );
 });
+
+describe("platform fee guarantee", () => {
+  it("posts actual wallet funds and keeps the promised shortfall separately owed", () => {
+    const input = paymentInput({ netValue: "101.99" });
+    Object.assign(input.quoteSnapshot.quote, {
+      feeAllocation: "BUYER_GROSS_UP",
+      settlementVersion: "PLATFORM_FEE_GUARANTEE_V1",
+    });
+    expect(reconcileGiftPaymentObservation(input)).toMatchObject({
+      outcome: "RECEIVED",
+      payment: { processingCents: 301, recipientNetCents: 9999 },
+      effect: { amountCents: 9999 },
+      platformAdjustmentCents: 1,
+    });
+  });
+
+  it("applies the last installment's remainder to gross, nominal and fixed split", () => {
+    const input = paymentInput({
+      billingType: "CREDIT_CARD",
+      checkoutSession: null,
+      installment: "checkout-1",
+      installmentNumber: 3,
+      value: "35.02",
+      netValue: "33.99",
+      split: [{ ...settledSplit, fixedValue: "0.68", totalValue: "0.68" }],
+    });
+    Object.assign(input.quoteSnapshot.quote, {
+      method: "CREDIT_CARD",
+      feeAllocation: "BUYER_GROSS_UP",
+      settlementVersion: "PLATFORM_FEE_GUARANTEE_V1",
+      installmentCount: 3,
+      installmentSurchargeCents: 0,
+      installmentCents: [3500, 3500, 3502],
+      installmentOptions: [
+        {
+          installmentCount: 1,
+          totalCents: 10502,
+          installmentSurchargeCents: 0,
+          installmentCents: [10502],
+        },
+        {
+          installmentCount: 3,
+          totalCents: 10502,
+          installmentSurchargeCents: 0,
+          installmentCents: [3500, 3500, 3502],
+        },
+      ],
+      totalCents: 10502,
+      processingCents: 302,
+    });
+    expect(reconcileGiftPaymentObservation(input)).toMatchObject({
+      outcome: "RECEIVED",
+      payment: {
+        installmentNumber: 3,
+        providerInstallmentReference: "checkout-1",
+        grossCents: 3502,
+        commissionCents: 68,
+        recipientNetCents: 3331,
+      },
+      effect: { amountCents: 3331 },
+      platformAdjustmentCents: 3,
+    });
+  });
+});

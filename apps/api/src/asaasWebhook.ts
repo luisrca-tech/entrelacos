@@ -207,6 +207,16 @@ export function createAsaasWebhookReceiver(
             payload.externalReference = entry.externalReference;
           }
         }
+        const payment = object(event.payment);
+        if (
+          event.event === "PAYMENT_DELETED" &&
+          payment?.checkoutSession == null &&
+          payment?.installment != null
+        ) {
+          if (!reference(payment.installment, 128))
+            reject(400, "WEBHOOK_INVALID");
+          payload.installmentId = payment.installment;
+        }
         const now = dependencies.now();
         if (!(now instanceof Date) || !Number.isFinite(now.getTime()))
           reject(503, "WEBHOOK_UNAVAILABLE");

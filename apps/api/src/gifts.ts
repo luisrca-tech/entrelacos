@@ -9,6 +9,7 @@ import {
   giftCreateInputSchema,
   type giftItemResponseSchema,
   giftItemSchema,
+  giftMinimumNominalCents,
   giftPublishInputSchema,
   giftReorderInputSchema,
   giftUpdateInputSchema,
@@ -524,6 +525,11 @@ export async function updateSiteGiftPublication(
     options,
     async (tx, now) => {
       const current = await getGift(tx, siteId, giftId);
+      if (
+        result.data.publicationState === "PUBLISHED" &&
+        current.nominalCents < giftMinimumNominalCents
+      )
+        invalid();
       if (
         current.publicationState === "ARCHIVED" &&
         result.data.publicationState !== "ARCHIVED"

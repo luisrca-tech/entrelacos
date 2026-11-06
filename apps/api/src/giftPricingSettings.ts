@@ -14,8 +14,6 @@ import {
   SiteAccessDeniedError,
 } from "./siteAccess";
 
-const blockedReason =
-  "Buyer gross-up requires verified provider pricing and settlement evidence before purchases can be enabled.";
 function settingsFromRow(row: unknown): GiftPricingSettings {
   const value = row as
     | { site_id: string; fee_allocation: string; revision: number }
@@ -24,10 +22,11 @@ function settingsFromRow(row: unknown): GiftPricingSettings {
     throw new GiftServiceError(404, "SITE_NOT_FOUND", "Site unavailable");
   const parsed = giftPricingSettingsSchema.safeParse({
     siteId: value.site_id,
-    feeAllocation: value.fee_allocation,
+    // Existing purchases retain their snapshots; the current policy is no longer selectable.
+    feeAllocation: "BUYER_GROSS_UP",
     revision: value.revision,
-    buyerGrossUpAvailable: false,
-    blockedReason,
+    buyerGrossUpAvailable: true,
+    blockedReason: null,
   });
   if (!parsed.success)
     throw new GiftServiceError(
@@ -42,7 +41,7 @@ export async function readGiftPricingSettings(
   siteId: string,
 ): Promise<GiftPricingSettings> {
   const result = await db.execute(sql`
-    SELECT s.id AS site_id, coalesce(p.fee_allocation, 'RECIPIENT_DEDUCTED') AS fee_allocation,
+    SELECT s.id AS site_id, 'BUYER_GROSS_UP' AS fee_allocation,
       coalesce(p.revision, 0) AS revision
     FROM site s LEFT JOIN gift_pricing_settings p ON p.site_id = s.id WHERE s.id = ${siteId}
   `);

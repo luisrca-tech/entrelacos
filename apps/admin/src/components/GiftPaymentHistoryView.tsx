@@ -73,8 +73,12 @@ function micros(value: string) {
 export function instant(value: string | null, format = date) {
   return value === null ? "Data não registrada" : format.format(micros(value));
 }
-export function methodLabel(method: "PIX" | "CREDIT_CARD") {
-  return method === "PIX" ? "Pix" : "Cartão";
+export function methodLabel(
+  method: "PIX" | "CREDIT_CARD",
+  installmentCount = 1,
+) {
+  if (method === "PIX") return "Pix";
+  return installmentCount > 1 ? `Cartão em ${installmentCount}x` : "Cartão";
 }
 const masked: GiftPaymentHistoryState = {
   status: "denied",
@@ -195,7 +199,11 @@ function Totals({
         {
           label: "Para vocês, depois das taxas",
           value: flow ? formatCents(flow.netForCoupleCents) : pending,
-          hint: flow ? "inclui o que aguarda liberação" : null,
+          hint: flow
+            ? (totals?.overview?.platformAdjustmentOwedCents ?? 0) > 0
+              ? "inclui liberação e ajustes do EntreLaços pendentes"
+              : "inclui o que aguarda liberação"
+            : null,
           tone: flow ? "text-admin-success-ink" : "text-xl text-admin-muted",
         },
       ].map((item) => (
@@ -377,7 +385,7 @@ export function GiftPaymentHistoryView(
                     scope="col"
                     className="hidden w-[128px] px-2 py-3.5 text-right font-semibold whitespace-nowrap sm:table-cell"
                   >
-                    Convidado pagou
+                    Total da compra
                   </th>
                   <th
                     scope="col"
@@ -414,7 +422,10 @@ export function GiftPaymentHistoryView(
                           </span>
                           <span className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-admin-muted">
                             <span className="rounded-full bg-admin-beige px-2.5 py-1 font-bold text-admin-body">
-                              {methodLabel(purchase.method)}
+                              {methodLabel(
+                                purchase.method,
+                                purchase.installmentCount,
+                              )}
                             </span>
                             {showSandboxNotice(purchase.mode) && (
                               <Badge variant="outline">Sandbox</Badge>
@@ -497,23 +508,22 @@ export function GiftPaymentHistoryView(
                 {detail.purchase.titleSnapshot}
               </h3>
               <p className="m-0 text-[13px] text-admin-muted">
-                {methodLabel(detail.purchase.method)} ·{" "}
-                {instant(detail.purchase.purchasedAtMicros)}
+                {methodLabel(
+                  detail.purchase.method,
+                  detail.purchase.installmentCount,
+                )}{" "}
+                · {instant(detail.purchase.purchasedAtMicros)}
               </p>
             </div>
             <dl className="m-0 grid gap-2 rounded-xl bg-admin-canvas px-4 py-3.5 text-sm">
               {[
                 [
-                  "Convidado pagou",
+                  "Total da compra",
                   formatCents(detail.purchase.quoted.totalCents),
                 ],
                 [
-                  "Comissão",
-                  `− ${formatCents(detail.purchase.quoted.commissionCents)}`,
-                ],
-                [
-                  "Processamento Asaas",
-                  `− ${formatCents(detail.purchase.quoted.processingCents)}`,
+                  "Taxas",
+                  `− ${formatCents(detail.purchase.quoted.commissionCents + detail.purchase.quoted.processingCents)}`,
                 ],
               ].map(([label, value]) => (
                 <div key={label} className="flex justify-between gap-3">
@@ -534,6 +544,10 @@ export function GiftPaymentHistoryView(
               <h4 className="m-0 text-sm font-bold text-admin-ink">
                 Histórico
               </h4>
+              <p className="m-0 text-[13px] text-admin-muted">
+                Os valores acima vêm da cotação da compra. O histórico mostra os
+                pagamentos e créditos registrados.
+              </p>
               <ol className="m-0 grid list-none gap-3 p-0">
                 <li className="flex items-start gap-3">
                   <span
@@ -560,6 +574,8 @@ export function GiftPaymentHistoryView(
                     />
                     <div className="grid min-w-0 gap-0.5">
                       <strong className="text-sm text-admin-ink">
+                        {sample.installmentNumber &&
+                          `Parcela ${sample.installmentNumber} · `}
                         {sampleLabels[sample.recordedState]}
                       </strong>
                       <span className="text-[13px] text-admin-muted">
@@ -570,23 +586,61 @@ export function GiftPaymentHistoryView(
                     </div>
                   </li>
                 ))}
-                {detail.receipts.map((receipt) => (
-                  <li key={receipt.effectId} className="flex items-start gap-3">
-                    <span
-                      aria-hidden="true"
-                      className="mt-1 size-3 shrink-0 rounded-full bg-admin-status-confirmed"
-                    />
-                    <div className="grid min-w-0 gap-0.5">
-                      <strong className="text-sm text-admin-ink">
-                        Crédito registrado para vocês:{" "}
-                        {amount(receipt.recipientCreditCents)}
-                      </strong>
-                      <span className="text-[13px] text-admin-muted">
-                        {instant(receipt.postedAtMicros)}
-                      </span>
-                    </div>
-                  </li>
-                ))}
+                {detail.receipts.map((receipt) => {
+                  const sample = detail.samples.find(
+                    (payment) =>
+                      payment.paymentId === receipt.paymentId &&
+                      payment.observedAtMicros ===
+                        receipt.sourceObservedAtMicros,
+                  );
+                  return (
+                    <li
+                      key={receipt.effectId}
+                      className="flex items-start gap-3"
+                    >
+                      <span
+                        aria-hidden="true"
+                        className="mt-1 size-3 shrink-0 rounded-full bg-admin-status-confirmed"
+                      />
+                      <div className="grid min-w-0 gap-0.5">
+                        <strong className="text-sm text-admin-ink">
+                          {sample?.installmentNumber &&
+                            `Parcela ${sample.installmentNumber} · `}
+                          Crédito registrado para vocês:{" "}
+                          {amount(receipt.recipientCreditCents)}
+                        </strong>
+                        <span className="text-[13px] text-admin-muted">
+                          {instant(receipt.postedAtMicros)}
+                        </span>
+                        {sample?.commissionCents != null &&
+                          sample.processingCents != null && (
+                            <span className="text-[13px] text-admin-muted">
+                              Taxas registradas ·{" "}
+                              {formatCents(
+                                sample.commissionCents + sample.processingCents,
+                              )}
+                            </span>
+                          )}
+                        {(sample?.platformAdjustmentFundedCents ?? 0) > 0 && (
+                          <span className="text-[13px] text-admin-muted">
+                            Ajuste do EntreLaços creditado ·{" "}
+                            {formatCents(
+                              sample?.platformAdjustmentFundedCents ?? 0,
+                            )}
+                          </span>
+                        )}
+                        {(sample?.platformAdjustmentOwedCents ?? 0) > 0 && (
+                          <span className="text-[13px] text-admin-muted">
+                            Ajuste do EntreLaços a creditar ·{" "}
+                            {formatCents(
+                              sample?.platformAdjustmentOwedCents ?? 0,
+                            )}
+                          </span>
+                        )}
+                      </div>
+                    </li>
+                  );
+                })}
               </ol>
               {detail.samples.length === 0 && (
                 <p className="m-0 text-[13px] text-admin-muted">
@@ -729,7 +783,7 @@ export function RecentGiftPurchases({
                   {purchase.titleSnapshot}
                 </strong>
                 <span className="text-[13px] text-admin-muted">
-                  {methodLabel(purchase.method)} ·{" "}
+                  {methodLabel(purchase.method, purchase.installmentCount)} ·{" "}
                   {instant(purchase.purchasedAtMicros, shortDate)}
                 </span>
               </div>

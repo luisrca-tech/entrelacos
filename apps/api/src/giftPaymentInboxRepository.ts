@@ -208,9 +208,11 @@ export function createGiftPaymentInboxRepository(
               row.bindingEnvironment !== claim.environment ||
               row.bindingProvider !== "ASAAS" ||
               row.providerAccountReference !== claim.providerAccountReference ||
-              !["PAYMENT_RECEIVED", "PAYMENT_CONFIRMED"].includes(
-                row.eventType as string,
-              ) ||
+              ![
+                "PAYMENT_RECEIVED",
+                "PAYMENT_CONFIRMED",
+                "PAYMENT_SPLIT_DONE",
+              ].includes(row.eventType as string) ||
               row.leaseOwner !== claim.leaseOwner ||
               row.leaseToken !== claim.leaseToken ||
               row.attempts !== claim.attempts ||
@@ -253,7 +255,7 @@ export function createGiftPaymentInboxRepository(
             const saved =
               await tx.execute(sql`UPDATE ${financialEventInbox} e SET state=${kind}, last_error_code=${reason}, next_attempt_at=${due.toISOString()}::timestamptz
             WHERE e.id=${claim.eventId} AND e.site_id=${claim.siteId} AND e.account_id=${claim.accountId} AND e.environment=${claim.environment}
-              AND e.state='CLAIMED' AND e.event_type IN ('PAYMENT_RECEIVED','PAYMENT_CONFIRMED') AND e.attempts=${claim.attempts}
+              AND e.state='CLAIMED' AND e.event_type IN ('PAYMENT_RECEIVED','PAYMENT_CONFIRMED','PAYMENT_SPLIT_DONE') AND e.attempts=${claim.attempts}
               AND e.lease_owner=${claim.leaseOwner} AND e.lease_token=${claim.leaseToken}
               AND e.lease_expires_at>=${clock.toISOString()}::timestamptz AND e.lease_expires_at>=clock_timestamp()
               AND e.authenticated_at<=${clock.toISOString()}::timestamptz AND e.authenticated_at<=clock_timestamp()
@@ -281,7 +283,7 @@ export function createGiftPaymentInboxRepository(
           FROM ${financialEventInbox} e INNER JOIN ${receivingAccount} a ON a.site_id=e.site_id AND a.id=e.account_id AND a.environment=e.environment
           INNER JOIN ${site} st ON st.id=e.site_id
           WHERE e.environment=${options.environment} AND a.provider='ASAAS' AND a.account_reference IS NOT NULL AND length(trim(a.account_reference))>0
-            AND (${options.environment}<>'live' OR st.is_demo=false OR st.id=${liveDemoSiteId}) AND e.authenticated_at IS NOT NULL AND e.event_type IN ('PAYMENT_RECEIVED','PAYMENT_CONFIRMED')
+            AND (${options.environment}<>'live' OR st.is_demo=false OR st.id=${liveDemoSiteId}) AND e.authenticated_at IS NOT NULL AND e.event_type IN ('PAYMENT_RECEIVED','PAYMENT_CONFIRMED','PAYMENT_SPLIT_DONE')
             AND ((e.state IN ('RECEIVED','RETRY') AND e.next_attempt_at<=${clock.toISOString()}::timestamptz AND e.next_attempt_at<=clock_timestamp())
               OR (e.state='CLAIMED' AND e.lease_expires_at<=${clock.toISOString()}::timestamptz AND e.lease_expires_at<=clock_timestamp()))
           ORDER BY e.next_attempt_at,e.id LIMIT 1 FOR UPDATE OF e SKIP LOCKED`);

@@ -62,6 +62,7 @@ function normalizedEvent(
     "accessTokenId",
     "externalReference",
   ]);
+  if (input.eventType === "PAYMENT_DELETED") allowed.add("installmentId");
   const payload: Record<string, string> = {};
   for (const [key, value] of Object.entries(input.payload)) {
     if (

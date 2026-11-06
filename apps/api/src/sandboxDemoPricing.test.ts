@@ -428,7 +428,7 @@ describe("Sandbox buyer homologation fee evidence", () => {
     ).toMatchObject({
       provenance: "provider",
       policy: {
-        feeBasis: "SANDBOX_BUYER_ESTIMATE",
+        feeBasis: "ACCOUNT_BUYER_ESTIMATE",
         feeAllocation: "BUYER_GROSS_UP",
         processingFixedCents: 99,
         processingBasisPoints: 0,
@@ -436,15 +436,20 @@ describe("Sandbox buyer homologation fee evidence", () => {
     });
   });
   it.each([undefined, "another-site"])(
-    "does not grant buyer pricing without exact opt-in %s",
+    "uses verified Sandbox buyer fees independently of the legacy opt-in %s",
     async (site) => {
       const v = fixture();
       Object.assign(v.scope, { feeAllocation: "BUYER_GROSS_UP" });
       Object.assign(v.authorization, { sandboxBuyerGrossUpSiteId: site });
       expect(
         await loadSandboxDemoPricing(v.scope, v.authorization, v),
-      ).toBeNull();
-      expect(v.readAccountFees).not.toHaveBeenCalled();
+      ).toMatchObject({
+        policy: {
+          feeAllocation: "BUYER_GROSS_UP",
+          feeBasis: "ACCOUNT_BUYER_ESTIMATE",
+        },
+      });
+      expect(v.readAccountFees).toHaveBeenCalledOnce();
     },
   );
 });

@@ -108,8 +108,7 @@ describe("gift editor view", () => {
   it("parses BRL decimals into exact safe integer cents", () => {
     expect(parseGiftPriceToCents("12,34")).toBe(1_234);
     expect(parseGiftPriceToCents("12.34")).toBe(1_234);
-    expect(parseGiftPriceToCents("0,01")).toBe(1);
-    expect(parseGiftPriceToCents("1")).toBe(100);
+    expect(parseGiftPriceToCents("5,00")).toBe(500);
     expect(parseGiftPriceToCents("21474836,47")).toBe(2_147_483_647);
   });
 
@@ -117,6 +116,8 @@ describe("gift editor view", () => {
     "",
     "0",
     "-1,00",
+    "0,01",
+    "4,99",
     "1,001",
     "1.234,56",
     "21474836,48",

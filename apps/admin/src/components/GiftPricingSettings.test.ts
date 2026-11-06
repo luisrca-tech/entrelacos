@@ -3,252 +3,124 @@ import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { describe, expect, it, vi } from "vitest";
 import {
-  GiftFeeAllocationChooser,
   GiftPricingPreview,
   GiftPricingSettings,
   parsePricingPreview,
-  parsePricingSettings,
-  useGiftFeeAllocation,
+  useGiftPricingPreview,
 } from "./GiftPricingSettings";
 
-const settings = {
-  siteId: "site-a",
-  feeAllocation: "RECIPIENT_DEDUCTED",
-  revision: 0,
-  buyerGrossUpAvailable: false,
-  blockedReason: "Aguardando validação",
-};
-describe("gift pricing settings", () => {
-  it("ignores a cancelled pending simulation that resolves after a new selection", async () => {
-    Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
-    const container = document.createElement("div"),
-      root = createRoot(container);
-    let resolveOld!: (value: unknown) => void;
-    let previews = 0;
-    const response = (processingCents: number) => ({
-      siteId: "site-a",
-      feeAllocation: "BUYER_GROSS_UP",
-      guaranteed: false,
-      methods: ["PIX", "CREDIT_CARD"].map((method) => ({
-        method,
-        available: true,
-        nominalCents: 10000,
-        commissionCents: 200,
-        processingCents,
-        totalCents: 10200 + processingCents,
-        recipientNetCents: 10000,
-      })),
-    });
-    const request = vi.fn(
-      async (_path: string, options?: { method?: string }) => {
-        if (options?.method !== "POST") return { settings };
-        if (previews++ === 0)
-          return new Promise<unknown>((resolve) => {
-            resolveOld = resolve;
-          });
-        return response(299);
-      },
-    );
-    try {
-      await act(async () =>
+function response(nominalCents: number, processingCents: number | null) {
+  return {
+    siteId: "site-a",
+    feeAllocation: "BUYER_GROSS_UP",
+    guaranteed: false,
+    methods: ["PIX", "CREDIT_CARD"].map((method) => ({
+      method,
+      available: processingCents !== null,
+      nominalCents,
+      commissionCents: 200,
+      processingCents,
+      totalCents:
+        processingCents === null ? null : nominalCents + 200 + processingCents,
+      recipientNetCents: processingCents === null ? null : nominalCents,
+    })),
+  };
+}
+
+function Preview({ nominalCents }: { nominalCents: number }) {
+  const estimate = useGiftPricingPreview(nominalCents);
+  return createElement(GiftPricingPreview, { nominalCents, estimate });
+}
+
+function mount(
+  request: React.ComponentProps<typeof GiftPricingSettings>["request"],
+  enabled = true,
+) {
+  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  const container = document.createElement("div");
+  const root = createRoot(container);
+  const isCurrent = () => true;
+  return {
+    container,
+    render: (nominalCents: number) =>
+      act(async () =>
         root.render(
           createElement(GiftPricingSettings, {
+            enabled,
             siteId: "site-a",
             request,
-            isCurrent: () => true,
-            gifts: [{ nominalCents: 10000 }],
+            isCurrent,
             // biome-ignore lint/correctness/noChildrenProp: Required children contract.
-            children: createElement(GiftFeeAllocationChooser),
+            children: createElement(Preview, { nominalCents }),
           }),
         ),
-      );
-      const select = () =>
-        (
-          container.querySelectorAll(
-            'input[type="radio"]',
-          )[0] as HTMLInputElement
-        ).click();
-      await act(async () => select());
-      await act(async () =>
-        [...container.querySelectorAll("button")]
-          .find((button) => button.textContent === "Cancelar")
-          ?.click(),
-      );
-      await act(async () => select());
-      expect(
-        container.querySelector('[aria-label="Confirmar impacto das taxas"]')
-          ?.textContent,
-      ).toContain("104,99");
-      await act(async () => resolveOld(response(199)));
-      const impact = container.querySelector(
-        '[aria-label="Confirmar impacto das taxas"]',
-      );
-      expect(impact?.textContent).toContain("104,99");
-      expect(impact?.textContent).not.toContain("103,99");
-      expect(
-        request.mock.calls.some(([, options]) => options?.method === "PATCH"),
-      ).toBe(false);
-    } finally {
-      await act(async () => root.unmount());
-    }
-  });
-  it("shows pending method totals before PATCH and preserves saved allocation on cancellation", async () => {
-    Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
-    const container = document.createElement("div");
-    const root = createRoot(container);
-    const request = vi.fn(
-      async (
-        _path: string,
-        options?: {
-          method?: string;
-          body?: unknown;
-        },
-      ) => {
-        if (options?.method !== "POST") return { settings };
-        const body = options.body as { feeAllocation: string };
-        return {
-          siteId: "site-a",
-          feeAllocation: body.feeAllocation,
-          guaranteed: false,
-          methods: ["PIX", "CREDIT_CARD"].map((method, index) => ({
-            method,
-            available: true,
-            nominalCents: 10000,
-            commissionCents: 200,
-            processingCents: index ? 500 : 199,
-            totalCents:
-              body.feeAllocation === "BUYER_GROSS_UP"
-                ? index
-                  ? 10700
-                  : 10399
-                : 10000,
-            recipientNetCents:
-              body.feeAllocation === "BUYER_GROSS_UP"
-                ? 10000
-                : index
-                  ? 9300
-                  : 9601,
-          })),
-        };
-      },
-    );
-    function Meaning() {
-      return createElement("output", null, useGiftFeeAllocation());
-    }
-    try {
-      await act(async () =>
-        root.render(
-          createElement(GiftPricingSettings, {
-            siteId: "site-a",
-            request,
-            isCurrent: () => true,
-            gifts: [{ nominalCents: 10000 }],
-            // biome-ignore lint/correctness/noChildrenProp: Required children contract.
-            children: [
-              createElement(GiftFeeAllocationChooser, { key: "chooser" }),
-              createElement(Meaning, { key: "meaning" }),
-            ],
-          }),
-        ),
-      );
-      await act(async () =>
-        (
-          container.querySelectorAll(
-            'input[type="radio"]',
-          )[0] as HTMLInputElement
-        ).click(),
-      );
-      const impact = container.querySelector(
-        '[aria-label="Confirmar impacto das taxas"]',
-      );
-      expect(impact?.textContent).toContain("103,99");
-      expect(impact?.textContent).toContain("107,00");
-      expect(impact?.textContent).toContain("sem garantia");
-      expect(
-        request.mock.calls.some(([, options]) => options?.method === "PATCH"),
-      ).toBe(false);
-      expect(container.querySelector("output")?.textContent).toBe(
-        "RECIPIENT_DEDUCTED",
-      );
-      await act(async () =>
-        [...container.querySelectorAll("button")]
-          .find((button) => button.textContent === "Cancelar")
-          ?.click(),
-      );
-      expect(
-        container.querySelector('[aria-label="Confirmar impacto das taxas"]'),
-      ).toBeNull();
-      expect(container.querySelector("output")?.textContent).toBe(
-        "RECIPIENT_DEDUCTED",
-      );
-    } finally {
-      await act(async () => root.unmount());
-    }
-  });
-  it("does not guess who pays when authoritative settings cannot be loaded", async () => {
-    Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
-    const container = document.createElement("div");
-    const root = createRoot(container);
-    function Meaning() {
-      return createElement(
-        "output",
-        null,
-        useGiftFeeAllocation() ?? "UNAVAILABLE",
-      );
-    }
-    try {
-      await act(async () =>
-        root.render(
-          createElement(GiftPricingSettings, {
-            siteId: "site-a",
-            request: async () => {
-              throw new Error("Unavailable");
-            },
-            isCurrent: () => true,
-            gifts: [],
-            // biome-ignore lint/correctness/noChildrenProp: Required children contract.
-            children: createElement(Meaning),
-          }),
-        ),
-      );
-      expect(container.querySelector("output")?.textContent).toBe(
-        "UNAVAILABLE",
-      );
-    } finally {
-      await act(async () => root.unmount());
-    }
-  });
-  it("rejects a different site and unlocked purchases", () => {
-    expect(parsePricingSettings({ settings }, "site-a")).toEqual(settings);
-    expect(() => parsePricingSettings({ settings }, "site-b")).toThrow();
-    expect(() =>
-      parsePricingSettings(
-        { settings: { ...settings, buyerGrossUpAvailable: true } },
-        "site-a",
       ),
-    ).toThrow();
+    close: () => act(async () => root.unmount()),
+  };
+}
+
+describe("gift pricing preview", () => {
+  it.each([
+    [199, "R$ 3,99"],
+    [0, "R$ 2,00"],
+    [null, "Indisponível"],
+  ])(
+    "combines fees without treating missing processing as zero: %s",
+    async (processing, label) => {
+      const request = vi.fn(async () => response(10000, processing));
+      const view = mount(request);
+      try {
+        await view.render(10000);
+        expect(request).toHaveBeenCalledExactlyOnceWith(
+          "/v1/sites/site-a/gift-pricing-preview",
+          expect.objectContaining({
+            method: "POST",
+            body: { nominalCents: 10000, feeAllocation: "BUYER_GROSS_UP" },
+          }),
+        );
+        const rows = [...view.container.querySelectorAll("dt")].filter(
+          (node) => node.textContent === "Taxas",
+        );
+        expect(rows.map((row) => row.nextElementSibling?.textContent)).toEqual([
+          label,
+          label,
+        ]);
+        expect(view.container.textContent).not.toMatch(
+          /Comissão|Processamento Asaas/,
+        );
+        expect(view.container.querySelector("button, input")).toBeNull();
+      } finally {
+        await view.close();
+      }
+    },
+  );
+
+  it("ignores an old estimate that resolves after the amount changes", async () => {
+    let resolveOld!: (value: unknown) => void;
+    const old = new Promise((resolve) => {
+      resolveOld = resolve;
+    });
+    const request = vi
+      .fn()
+      .mockReturnValueOnce(old)
+      .mockResolvedValue(response(20000, 0));
+    const view = mount(request);
+    try {
+      await view.render(10000);
+      await view.render(20000);
+      await act(async () => resolveOld(response(10000, 199)));
+      expect(view.container.textContent).toContain("R$ 202,00");
+      expect(view.container.textContent).not.toContain("R$ 103,99");
+    } finally {
+      await view.close();
+    }
   });
+
   it("rejects mismatched previews and invented unavailable totals", () => {
-    const preview = {
-      siteId: "site-a",
-      feeAllocation: "RECIPIENT_DEDUCTED",
-      guaranteed: false,
-      methods: ["PIX", "CREDIT_CARD"].map((method) => ({
-        method,
-        available: false,
-        nominalCents: 10000,
-        commissionCents: 200,
-        processingCents: null,
-        totalCents: null,
-        recipientNetCents: null,
-      })),
-    };
-    expect(
-      parsePricingPreview(preview, "site-a", 10000, "RECIPIENT_DEDUCTED"),
-    ).toEqual(preview);
-    expect(() =>
-      parsePricingPreview(preview, "site-a", 20000, "RECIPIENT_DEDUCTED"),
-    ).toThrow();
+    const preview = response(10000, null);
+    expect(parsePricingPreview(preview, "site-a", 10000)).toEqual(preview);
+    expect(() => parsePricingPreview(preview, "site-b", 10000)).toThrow();
+    expect(() => parsePricingPreview(preview, "site-a", 20000)).toThrow();
     expect(() =>
       parsePricingPreview(
         {
@@ -260,137 +132,19 @@ describe("gift pricing settings", () => {
         },
         "site-a",
         10000,
-        "RECIPIENT_DEDUCTED",
       ),
     ).toThrow();
   });
-  it("hides financial settings and sends no request without pricing permission", async () => {
-    Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
-    const container = document.createElement("div");
-    const root = createRoot(container);
-    const request = vi.fn(async () => ({ settings }));
-    try {
-      await act(async () =>
-        root.render(
-          createElement(GiftPricingSettings, {
-            enabled: false,
-            siteId: "site-a",
-            request,
-            isCurrent: () => true,
-            gifts: [],
-            // biome-ignore lint/correctness/noChildrenProp: Required children contract.
-            children: createElement("p", null, "Catalog"),
-          }),
-        ),
-      );
-      expect(request).not.toHaveBeenCalled();
-      expect(container.textContent).toBe("Catalog");
-    } finally {
-      await act(async () => root.unmount());
-    }
-  });
-  it("requires impact confirmation before saving buyer preference and fails closed on errors", async () => {
-    Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
-    const container = document.createElement("div");
-    document.body.append(container);
-    const root = createRoot(container);
-    const request = vi.fn(
-      async (_path: string, options?: { method?: string }) => {
-        if (options?.method === "PATCH")
-          return {
-            settings: {
-              ...settings,
-              feeAllocation: "BUYER_GROSS_UP",
-              revision: 1,
-            },
-          };
-        if (options?.method === "POST") throw new Error("Missing tariff");
-        return { settings };
-      },
-    );
-    try {
-      await act(async () =>
-        root.render(
-          createElement(GiftPricingSettings, {
-            siteId: "site-a",
-            request,
-            isCurrent: () => true,
-            gifts: [{ nominalCents: 10000 }],
-            // biome-ignore lint/correctness/noChildrenProp: createElement props keep the required children contract.
-            children: [
-              createElement(GiftFeeAllocationChooser, { key: "chooser" }),
-              createElement(GiftPricingPreview, {
-                key: "preview",
-                nominalCents: 10000,
-              }),
-            ],
-          }),
-        ),
-      );
-      expect(container.textContent).toContain("Indisponível");
-      await act(async () =>
-        (
-          container.querySelectorAll(
-            'input[type="radio"]',
-          )[0] as HTMLInputElement
-        ).click(),
-      );
-      expect(container.textContent).toContain("R$ 100,00");
-      expect(
-        request.mock.calls.filter(([, options]) => options?.method === "PATCH"),
-      ).toHaveLength(0);
-      const confirm = [...container.querySelectorAll("button")].find((button) =>
-        button.textContent?.includes("Confirmar e pausar"),
-      );
-      await act(async () => confirm?.click());
-      expect(
-        request.mock.calls.find(
-          ([, options]) => options?.method === "PATCH",
-        )?.[1],
-      ).toMatchObject({
-        body: { feeAllocation: "BUYER_GROSS_UP", revision: 0 },
-      });
-      expect(container.textContent).toContain("Novos pagamentos pausados");
-    } finally {
-      await act(async () => root.unmount());
-      container.remove();
-    }
-  });
-});
 
-it("labels the explicit Sandbox capability without claiming commercial availability", async () => {
-  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
-  const container = document.createElement("div"),
-    root = createRoot(container);
-  const sandboxSettings = { ...settings, sandboxBuyerGrossUpAvailable: true };
-  expect(
-    parsePricingSettings({ settings: sandboxSettings }, "site-a")
-      .buyerGrossUpAvailable,
-  ).toBe(false);
-  try {
-    await act(async () =>
-      root.render(
-        createElement(GiftPricingSettings, {
-          siteId: "site-a",
-          request: async () => ({ settings: sandboxSettings }),
-          isCurrent: () => true,
-          gifts: [],
-          // biome-ignore lint/correctness/noChildrenProp: Required children contract.
-          children: createElement(GiftFeeAllocationChooser),
-        }),
-      ),
-    );
-    await act(async () =>
-      (
-        container.querySelectorAll('input[type="radio"]')[0] as HTMLInputElement
-      ).click(),
-    );
-    expect(container.textContent).toContain("Confirmar homologação Sandbox");
-    expect(container.textContent).toContain("sem garantia");
-    expect(container.textContent).not.toContain(
-      "Confirmar e pausar novos pagamentos",
-    );
-  } finally {
-    await act(async () => root.unmount());
-  }
+  it("hides the preview and sends no request without pricing permission", async () => {
+    const request = vi.fn(async () => response(10000, 0));
+    const view = mount(request, false);
+    try {
+      await view.render(10000);
+      expect(request).not.toHaveBeenCalled();
+      expect(view.container.textContent).toBe("");
+    } finally {
+      await view.close();
+    }
+  });
 });

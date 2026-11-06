@@ -1,6 +1,6 @@
-import type { GiftQuote } from "@entrelacos/contracts";
+import type { CheckoutCreateInput, GiftQuote } from "@entrelacos/contracts";
 import { showSandboxNotice } from "@entrelacos/ui";
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { scheduleGiftQuoteExpiry } from "./giftQuoteExpiry";
 
 type PaymentMethod = "PIX" | "CREDIT_CARD";
@@ -8,11 +8,12 @@ type PaymentMethod = "PIX" | "CREDIT_CARD";
 type Props = {
   quote: GiftQuote | null;
   method: PaymentMethod | null;
+  installmentCount?: number;
   loading: boolean;
   pending: boolean;
   error?: string;
-  onSelectMethod: (method: PaymentMethod) => void;
-  onConfirm: () => void;
+  onSelectMethod: (method: PaymentMethod, installmentCount?: number) => void;
+  onConfirm: (payer?: CheckoutCreateInput["payer"]) => void;
   onCancel: () => void;
   now?: Date;
 };
@@ -23,6 +24,8 @@ const secondaryButtonClass =
   "min-h-11 cursor-pointer rounded-full border border-template-line bg-transparent px-5 py-3 text-template-ink font-[inherit] text-sm font-medium transition-[background-color,color,border-color,transform] duration-200 ease-out hover:-translate-y-0.5 hover:border-template-ink hover:bg-template-ink hover:text-template-ivory focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-template-ink disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transform-none motion-reduce:transition-none";
 const methodButtonClass =
   "min-h-11 cursor-pointer rounded-full border border-template-line bg-transparent px-5 py-3 text-template-ink font-[inherit] text-sm font-medium transition-[background-color,color,border-color,transform] duration-200 ease-out hover:-translate-y-0.5 hover:border-template-ink hover:bg-template-ink hover:text-template-ivory focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-template-ink disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transform-none motion-reduce:transition-none aria-pressed:border-template-ink aria-pressed:bg-template-ink aria-pressed:text-template-ivory";
+const fieldClass =
+  "min-h-11 min-w-0 w-full rounded-xl border border-[var(--template-input-line,rgba(37,53,43,0.25))] bg-[var(--template-paper,#fffdf8)] px-4 py-3 text-base text-template-ink font-[inherit] transition-[border-color,box-shadow] duration-200 focus:border-template-olive focus:outline-2 focus:outline-offset-2 focus:outline-template-olive motion-reduce:transition-none";
 const quoteCardClass =
   "grid min-w-0 gap-5 rounded-2xl border border-template-line bg-[var(--template-paper,#fffdf8)] p-5 sm:p-6";
 const currencyFormatter = new Intl.NumberFormat("pt-BR", {
@@ -42,6 +45,7 @@ function formatCents(cents: number): string {
 export function GiftQuoteView({
   quote,
   method,
+  installmentCount = 1,
   loading,
   pending,
   error,
@@ -54,6 +58,7 @@ export function GiftQuoteView({
     GiftQuote,
     "id" | "expiresAt"
   > | null>(null);
+  const payerFormId = useId();
   const quoteId = quote?.id;
   const expiresAt = quote?.expiresAt;
   useEffect(() => {
@@ -62,7 +67,10 @@ export function GiftQuoteView({
       setExpiredQuote({ id: quoteId, expiresAt }),
     );
   }, [now, quoteId, expiresAt]);
-  const quoteMatchesMethod = quote !== null && quote.method === method;
+  const quoteMatchesSelection =
+    quote !== null &&
+    quote.method === method &&
+    (quote.installmentCount ?? 1) === installmentCount;
   const quoteIsCurrent =
     quote !== null &&
     new Date(quote.expiresAt).getTime() > (now ?? new Date()).getTime() &&
@@ -71,8 +79,14 @@ export function GiftQuoteView({
       expiredQuote.expiresAt === quote.expiresAt
     );
   const canConfirm =
-    quoteMatchesMethod && quoteIsCurrent && !loading && !pending;
+    quoteMatchesSelection && quoteIsCurrent && !loading && !pending;
   const methodsDisabled = loading || pending;
+  const options = method === "CREDIT_CARD" ? quote?.installmentOptions : null;
+  const hasPayerForm = quoteMatchesSelection && installmentCount > 1;
+  const installmentAmounts = quoteMatchesSelection
+    ? quote.installmentCents
+    : null;
+  const surcharge = quote?.installmentSurchargeCents ?? 0;
 
   return (
     <section
@@ -92,7 +106,6 @@ export function GiftQuoteView({
           </p>
           <p className="m-0 text-template-muted">
             Ao confirmar, você continuará em uma página segura de pagamento.
-            Esta tela não coleta dados de pagamento.
           </p>
         </header>
 
@@ -124,10 +137,36 @@ export function GiftQuoteView({
               disabled={methodsDisabled}
               onClick={() => onSelectMethod("CREDIT_CARD")}
             >
-              Cartão à vista
+              Cartão de crédito
             </button>
           </div>
         </fieldset>
+
+        {options && options.length > 1 && (
+          <label className="grid min-w-0 gap-2">
+            <span className="font-bold">Parcelas</span>
+            <select
+              className={fieldClass}
+              disabled={methodsDisabled}
+              value={installmentCount}
+              onChange={(event) =>
+                onSelectMethod("CREDIT_CARD", Number(event.currentTarget.value))
+              }
+            >
+              {options.map((option) => (
+                <option
+                  key={option.installmentCount}
+                  value={option.installmentCount}
+                >
+                  {option.installmentCount === 1
+                    ? "À vista"
+                    : `${option.installmentCount} parcelas`}{" "}
+                  · total {formatCents(option.totalCents)}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
 
         {error && (
           <p role="alert" className="m-0 border border-template-line p-4">
@@ -145,38 +184,28 @@ export function GiftQuoteView({
           </p>
         )}
 
-        {quote && (
+        {quoteMatchesSelection && (
           <section aria-label="Resumo da cotação" className={quoteCardClass}>
-            <h3 className="m-0 break-words font-template-serif text-2xl font-normal">
-              {quote.title}
-            </h3>
-            {quote.mode === "sandbox" &&
-              quote.feeAllocation === "BUYER_GROSS_UP" && (
-                <p role="status" className="m-0 text-sm text-template-muted">
-                  Homologação Sandbox, sem garantia de líquido. Líquido
-                  pretendido do casal: {formatCents(quote.nominalCents)}. As
-                  taxas e o líquido efetivos serão conferidos após o
-                  recebimento.
-                </p>
-              )}
             <dl className="m-0 grid min-w-0 gap-3">
-              {quote.feeAllocation !== "RECIPIENT_DEDUCTED" && (
+              {installmentAmounts && installmentAmounts.length > 1 && (
                 <>
                   <div className="flex min-w-0 flex-wrap justify-between gap-x-4 gap-y-1">
-                    <dt className="min-w-0 text-template-muted">
-                      Valor do presente
-                    </dt>
-                    <dd className="m-0 shrink-0">
-                      {formatCents(quote.nominalCents + quote.commissionCents)}
+                    <dt className="text-template-muted">Valor das parcelas</dt>
+                    <dd className="m-0">
+                      {installmentAmounts.every(
+                        (cents) => cents === installmentAmounts[0],
+                      )
+                        ? `${installmentAmounts.length}x de ${formatCents(installmentAmounts[0])}`
+                        : `${installmentAmounts.length - 1}x de ${formatCents(installmentAmounts[0])} + 1x de ${formatCents(installmentAmounts[installmentAmounts.length - 1])}`}
                     </dd>
                   </div>
                   <div className="flex min-w-0 flex-wrap justify-between gap-x-4 gap-y-1">
-                    <dt className="min-w-0 text-template-muted">
-                      Taxa de processamento
+                    <dt className="text-template-muted">
+                      {surcharge < 0
+                        ? "Desconto no parcelamento"
+                        : "Acréscimo do parcelamento"}
                     </dt>
-                    <dd className="m-0 shrink-0">
-                      {formatCents(quote.processingCents)}
-                    </dd>
+                    <dd className="m-0">{formatCents(Math.abs(surcharge))}</dd>
                   </div>
                 </>
               )}
@@ -187,32 +216,94 @@ export function GiftQuoteView({
                 </dd>
               </div>
             </dl>
+            {quote.feeAllocation !== "RECIPIENT_DEDUCTED" && (
+              <p className="m-0 text-sm text-template-muted">
+                Taxas incluídas no valor
+              </p>
+            )}
             <p className="m-0 text-sm text-template-muted">
               Cotação válida até{" "}
               <time dateTime={quote.expiresAt}>
                 {dateFormatter.format(new Date(quote.expiresAt))}
               </time>
             </p>
-            {!quoteMatchesMethod && (
-              <p role="status" className="m-0 text-sm text-template-muted">
-                A cotação exibida corresponde a outra forma de pagamento.
-              </p>
-            )}
-            {quoteMatchesMethod && !quoteIsCurrent && (
+            {!quoteIsCurrent && (
               <p role="status" className="m-0 text-sm text-template-muted">
                 Esta cotação expirou. Atualize a cotação para continuar.
               </p>
             )}
           </section>
         )}
+
+        {hasPayerForm && (
+          <form
+            id={payerFormId}
+            className="min-w-0"
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (!canConfirm) return;
+              const data = new FormData(event.currentTarget);
+              onConfirm({
+                name: String(data.get("name")).trim(),
+                cpfCnpj: String(data.get("cpfCnpj")).replace(/[^0-9]/g, ""),
+                email: String(data.get("email")).trim(),
+              });
+            }}
+          >
+            <fieldset
+              disabled={pending}
+              className="grid min-w-0 gap-3 border border-template-line p-4 sm:p-5"
+            >
+              <legend className="px-1 font-bold">Dados do pagador</legend>
+              <p className="m-0 text-sm text-template-muted">
+                Estes dados são usados para emitir a cobrança parcelada. Volte a
+                esta página para continuar a mesma cobrança ou acompanhar a
+                confirmação.
+              </p>
+              <label className="grid min-w-0 gap-1">
+                Nome completo
+                <input
+                  name="name"
+                  autoComplete="name"
+                  className={fieldClass}
+                  minLength={2}
+                  maxLength={100}
+                  required
+                />
+              </label>
+              <label className="grid min-w-0 gap-1">
+                CPF ou CNPJ
+                <input
+                  name="cpfCnpj"
+                  inputMode="numeric"
+                  className={fieldClass}
+                  maxLength={18}
+                  required
+                />
+              </label>
+              <label className="grid min-w-0 gap-1">
+                E-mail
+                <input
+                  name="email"
+                  type="email"
+                  autoComplete="email"
+                  className={fieldClass}
+                  maxLength={254}
+                  required
+                />
+              </label>
+            </fieldset>
+          </form>
+        )}
       </div>
 
       <footer className="flex min-w-0 flex-wrap gap-3 border-t border-template-line px-[clamp(1.25rem,4vw,2.5rem)] pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
         <button
-          type="button"
+          type={hasPayerForm ? "submit" : "button"}
+          form={hasPayerForm ? payerFormId : undefined}
           className={primaryButtonClass}
           disabled={!canConfirm}
-          onClick={onConfirm}
+          onClick={hasPayerForm ? undefined : () => onConfirm()}
         >
           {pending ? "Aguarde…" : "Continuar para pagamento"}
         </button>

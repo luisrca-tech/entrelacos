@@ -26,6 +26,7 @@ const observedNow = new Date("2026-10-12T12:00:00.000Z");
 type QuoteViewProps = {
   quote: GiftQuote | null;
   method: "PIX" | "CREDIT_CARD" | null;
+  installmentCount?: number;
   loading: boolean;
   pending: boolean;
   error?: string;
@@ -62,17 +63,15 @@ describe("gift quote view", () => {
     expect(html).toContain('aria-pressed="true"');
     expect(html).toContain('aria-pressed="false"');
     expect(html).toContain("Pix");
-    expect(html).toContain("Cartão à vista");
+    expect(html).toContain("Cartão de crédito");
     expect(html).toContain('role="alert"');
     expect(html).toContain("Não foi possível atualizar a cotação.");
     expect(html).toContain("Jantar especial");
-    expect(html).toContain("Valor do presente");
     expect(html).not.toMatch(/comissão/i);
-    expect(html).toContain("Taxa de processamento");
+    expect(html).toContain("Taxas incluídas no valor");
+    expect(html).not.toContain("Taxa de processamento");
     expect(html).toContain("Total a pagar");
-    expect(html).toMatch(/Valor do presente<\/dt><dd[^>]*>R\$\s*102,00<\/dd>/);
     expect(html).not.toMatch(/R\$\s*100,00/);
-    expect(html).toContain("3,21");
     expect(html).toContain("105,21");
     expect(html).toContain("Ambiente de testes — sem pagamentos reais.");
     expect(html).toContain("Presente simbólico");
@@ -96,7 +95,9 @@ describe("gift quote view", () => {
     });
     expect(html).toContain("Total a pagar");
     expect(html).toMatch(/R\$\s*10,00/);
-    expect(html).not.toMatch(/comissão|taxa de processamento|10,20|11,10/i);
+    expect(html).not.toMatch(
+      /taxas incluídas|comissão|taxa de processamento|10,20|11,10/i,
+    );
   });
 
   it.each([
@@ -163,12 +164,62 @@ describe("gift quote view", () => {
 beforeEach(() => vi.stubGlobal("__APP_ENV__", "development"));
 afterEach(() => vi.unstubAllGlobals());
 
-it("discloses the intended couple net as an estimate during Sandbox buyer homologation", () => {
+it("shows the guest total and hides the couple net in Sandbox", () => {
   const html = renderQuote({
     quote: { ...quote, feeAllocation: "BUYER_GROSS_UP" },
   });
-  expect(html).toContain("Líquido pretendido do casal");
-  expect(html).toContain("100,00");
-  expect(html).toContain("sem garantia de líquido");
+  expect(html).not.toContain("Líquido pretendido do casal");
+  expect(html).not.toContain("100,00");
+  expect(html).not.toContain("sem garantia de líquido");
   expect(html).toContain("105,21");
+});
+
+it("shows the exact installment schedule, surcharge and total of the selected quote", () => {
+  const installments = [3533, 3533, 3535];
+  const html = renderQuote({
+    method: "CREDIT_CARD",
+    installmentCount: 3,
+    quote: {
+      ...quote,
+      method: "CREDIT_CARD",
+      feeAllocation: "BUYER_GROSS_UP",
+      installmentCount: 3,
+      installmentCents: installments,
+      installmentSurchargeCents: 80,
+      totalCents: 10601,
+      installmentOptions: [
+        {
+          installmentCount: 1,
+          installmentCents: [10521],
+          installmentSurchargeCents: 0,
+          totalCents: 10521,
+        },
+        {
+          installmentCount: 3,
+          installmentCents: installments,
+          installmentSurchargeCents: 80,
+          totalCents: 10601,
+        },
+      ],
+    },
+  });
+  expect(html).toContain("Parcelas");
+  expect(html).toMatch(/À vista · total R\$\s*105,21/);
+  expect(html).toMatch(/3 parcelas · total R\$\s*106,01/);
+  expect(html).toMatch(/2x de R\$\s*35,33 \+ 1x de R\$\s*35,35/);
+  expect(html).toContain("Acréscimo do parcelamento");
+  expect(html).toMatch(/R\$\s*0,80/);
+  expect(html).toMatch(/R\$\s*106,01/);
+  expect(html).toContain("Dados do pagador");
+  expect(html).toContain("continuar a mesma cobrança");
+  expect(html).not.toContain("Taxa de processamento");
+});
+
+it("does not offer installments when the server returns only an upfront quote", () => {
+  const html = renderQuote({
+    method: "CREDIT_CARD",
+    quote: { ...quote, method: "CREDIT_CARD" },
+  });
+  expect(html).not.toContain("Parcelas");
+  expect(html).not.toContain("Dados do pagador");
 });

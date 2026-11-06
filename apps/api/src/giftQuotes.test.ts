@@ -120,33 +120,68 @@ async function expectDenied(
 }
 
 describe("immutable gift quote creation", () => {
+  it("rejects a new quote below the minimum nominal gift amount", async () => {
+    const values = fixture();
+    values.storedGift.gift.nominalCents = 499;
+    await expectDenied(values, "QUOTE_INVALID");
+  });
+  it("freezes an explicitly selected card schedule while preserving nominal proceeds", async () => {
+    const v = fixture();
+    v.pricing.policy.method = "CREDIT_CARD";
+    Object.assign(v.pricing.policy, {
+      feeAllocation: "BUYER_GROSS_UP",
+      feeBasis: "ACCOUNT_BUYER_ESTIMATE",
+      cardInstallmentBasisPoints: { upToSix: 350, upToTwelve: 450 },
+    });
+    const quote = await createGiftQuoteService(v.dependencies).createQuote(
+      "site-one",
+      {
+        giftId: "gift-one",
+        method: "CREDIT_CARD",
+        installmentCount: 3,
+      },
+    );
+    expect(quote).toMatchObject({
+      feeAllocation: "BUYER_GROSS_UP",
+      settlementVersion: "PLATFORM_FEE_GUARANTEE_V1",
+      installmentCount: 3,
+      commissionCents: 200,
+      processingCents: 411,
+      totalCents: 10_611,
+      installmentSurchargeCents: 109,
+      installmentCents: [3537, 3537, 3537],
+    });
+    expect(quote.installmentOptions).toHaveLength(12);
+    expect(v.appended[0].quote).toEqual(quote);
+    expect(Object.isFrozen(v.appended[0].quote.installmentCents)).toBe(true);
+  });
   it("estimates a small buyer amount without requiring recipient-deducted viability", async () => {
     const v = fixture();
     v.pricing.policy.processingBasisPoints = 0;
-    v.pricing.policy.processingFixedCents = 199;
+    v.pricing.policy.processingFixedCents = 599;
     v.pricing.policy.feeBasis = "OBSERVED_ESTIMATE";
     v.dependencies.loadPricingPolicy = vi.fn(async (binding) => ({
       ...v.pricing,
       policy: { ...v.pricing.policy, method: binding.method },
     }));
     const preview = await previewGiftPricing(v.dependencies, "site-one", {
-      nominalCents: 100,
+      nominalCents: 500,
       feeAllocation: "BUYER_GROSS_UP",
     });
     expect(preview.guaranteed).toBe(false);
     for (const method of preview.methods)
       expect(method).toMatchObject({
         available: true,
-        nominalCents: 100,
-        commissionCents: 2,
-        processingCents: 199,
-        totalCents: 301,
-        recipientNetCents: 100,
+        nominalCents: 500,
+        commissionCents: 10,
+        processingCents: 599,
+        totalCents: 1109,
+        recipientNetCents: 500,
       });
     expect(v.dependencies.findPublishedGift).not.toHaveBeenCalled();
     expect(v.dependencies.repository.append).not.toHaveBeenCalled();
     const deducted = await previewGiftPricing(v.dependencies, "site-one", {
-      nominalCents: 100,
+      nominalCents: 500,
       feeAllocation: "RECIPIENT_DEDUCTED",
     });
     expect(deducted.methods.every((method) => !method.available)).toBe(true);
@@ -223,12 +258,17 @@ describe("immutable gift quote creation", () => {
       recipientNetCents: null,
     });
   });
-  it("blocks a stored buyer preference until contractual fees and difference handling are approved", async () => {
+  it("prices a live buyer quote without requiring a separate contract profile", async () => {
     const v = fixture();
     Object.assign(v.storedGift, {
       pricingSettings: { feeAllocation: "BUYER_GROSS_UP", revision: 1 },
     });
-    await expectDenied(v, "POLICY_UNAVAILABLE");
+    await expect(
+      createGiftQuoteService(v.dependencies).createQuote("site-one", body),
+    ).resolves.toMatchObject({
+      feeAllocation: "BUYER_GROSS_UP",
+      settlementVersion: "PLATFORM_FEE_GUARANTEE_V1",
+    });
   });
   it("snapshots the current settings revision without trusting browser allocation", async () => {
     const v = fixture();
@@ -237,27 +277,31 @@ describe("immutable gift quote creation", () => {
     });
     await createGiftQuoteService(v.dependencies).createQuote("site-one", body);
     expect(v.appended[0]).toMatchObject({
-      pricingSettings: { feeAllocation: "RECIPIENT_DEDUCTED", revision: 3 },
+      pricingSettings: { feeAllocation: "BUYER_GROSS_UP", revision: 3 },
     });
   });
-  it("persists observed-estimate semantics only for recipient-deducted DEV Sandbox demo quotes", async () => {
+  it("persists account-observed buyer pricing for a DEV Sandbox demo", async () => {
     const v = fixture();
     makeDemo(v);
     v.context.environment = "development";
-    v.pricing.policy.feeBasis = "OBSERVED_ESTIMATE";
+    v.pricing.provenance = "provider";
+    v.pricing.policy.feeBasis = "ACCOUNT_BUYER_ESTIMATE";
+    v.pricing.policy.feeAllocation = "BUYER_GROSS_UP";
     const quote = await createGiftQuoteService(v.dependencies).createQuote(
       "site-one",
       body,
     );
-    expect(quote.feeAllocation).toBe("RECIPIENT_DEDUCTED");
-    expect(v.appended[0].pricing.policy.feeBasis).toBe("OBSERVED_ESTIMATE");
-    expect(v.pricing.policy.feeAllocation).toBeUndefined();
+    expect(quote.feeAllocation).toBe("BUYER_GROSS_UP");
+    expect(v.appended[0].pricing.policy.feeBasis).toBe(
+      "ACCOUNT_BUYER_ESTIMATE",
+    );
   });
-  it("keeps a real showcase quote provider-bound and exactly nominal under the opt-in", async () => {
+  it("keeps a real showcase quote provider-bound under the live-site opt-in", async () => {
     const v = fixture();
     v.context.isDemo = true;
     Object.assign(v.context, { liveDemoSiteId: "site-one" });
-    v.pricing.policy.feeBasis = "OBSERVED_ESTIMATE";
+    v.pricing.policy.feeBasis = "ACCOUNT_BUYER_ESTIMATE";
+    v.pricing.policy.feeAllocation = "BUYER_GROSS_UP";
     expect(
       await createGiftQuoteService(v.dependencies).createQuote(
         "site-one",
@@ -265,27 +309,30 @@ describe("immutable gift quote creation", () => {
       ),
     ).toMatchObject({
       mode: "live",
-      totalCents: 10000,
-      feeAllocation: "RECIPIENT_DEDUCTED",
+      totalCents: 10_502,
+      feeAllocation: "BUYER_GROSS_UP",
     });
     expect(v.context.isDemo).toBe(true);
   });
-  it("keeps the exact guest price with live provider-observed recipient deductions", async () => {
+  it("preserves the nominal recipient price under live account-observed buyer pricing", async () => {
     const v = fixture();
-    v.pricing.policy.feeBasis = "OBSERVED_ESTIMATE";
+    v.pricing.policy.feeBasis = "ACCOUNT_BUYER_ESTIMATE";
+    v.pricing.policy.feeAllocation = "BUYER_GROSS_UP";
     const quote = await createGiftQuoteService(v.dependencies).createQuote(
       "site-one",
       body,
     );
     expect(quote).toMatchObject({
       nominalCents: 10000,
-      totalCents: 10000,
+      totalCents: 10_502,
       commissionCents: 200,
-      processingCents: 289,
-      feeAllocation: "RECIPIENT_DEDUCTED",
+      processingCents: 302,
+      feeAllocation: "BUYER_GROSS_UP",
       mode: "live",
     });
-    expect(v.appended[0].pricing.policy.feeBasis).toBe("OBSERVED_ESTIMATE");
+    expect(v.appended[0].pricing.policy.feeBasis).toBe(
+      "ACCOUNT_BUYER_ESTIMATE",
+    );
   });
   it("rejects production observed estimates with local-test provenance", async () => {
     const v = fixture();
@@ -294,7 +341,7 @@ describe("immutable gift quote creation", () => {
     await expectDenied(v, "POLICY_UNAVAILABLE");
   });
 
-  it("loads stored values and keeps the configured buyer total and snapshots recipient deductions", async () => {
+  it("loads stored values and snapshots the full buyer amount and nominal commission", async () => {
     const { dependencies, appended, storedGift, pricing } = fixture();
     const result = await createGiftQuoteService(dependencies).createQuote(
       "site-one",
@@ -310,9 +357,10 @@ describe("immutable gift quote creation", () => {
       nominalCents: 10_000,
       commissionBasisPoints: 200,
       commissionCents: 200,
-      processingCents: 289,
-      totalCents: 10_000,
-      feeAllocation: "RECIPIENT_DEDUCTED",
+      processingCents: 302,
+      totalCents: 10_502,
+      feeAllocation: "BUYER_GROSS_UP",
+      settlementVersion: "PLATFORM_FEE_GUARANTEE_V1",
       policyVersion: "verified-test-policy-v1",
       expiresAt: "2026-10-12T12:05:00.000Z",
       mode: "live",
@@ -332,6 +380,7 @@ describe("immutable gift quote creation", () => {
       destinationVersion: 1,
       bankReference: "bank-private",
       method: "PIX",
+      feeAllocation: "BUYER_GROSS_UP",
     });
     expect(appended).toHaveLength(1);
     expect(appended[0]).toEqual({
@@ -349,7 +398,7 @@ describe("immutable gift quote creation", () => {
       },
       pricing: {
         ...pricing,
-        policy: { ...pricing.policy, feeAllocation: "RECIPIENT_DEDUCTED" },
+        policy: { ...pricing.policy, feeAllocation: "BUYER_GROSS_UP" },
         observedAt,
         expiresAt: policyExpiry,
       },
@@ -495,9 +544,9 @@ describe("immutable gift quote creation", () => {
       method: "CREDIT_CARD",
       nominalCents: 10_000,
       commissionCents: 200,
-      processingCents: 548,
-      totalCents: 10_000,
-      feeAllocation: "RECIPIENT_DEDUCTED",
+      processingCents: 588,
+      totalCents: 10_788,
+      feeAllocation: "BUYER_GROSS_UP",
     });
     expect(values.appended[0].pricing.policy.method).toBe("CREDIT_CARD");
   });

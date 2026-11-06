@@ -1,7 +1,9 @@
+import { giftMinimumNominalCents } from "@entrelacos/contracts";
 import { showSandboxNotice } from "@entrelacos/ui";
 import { Link } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import { adminStyles } from "../lib/adminStyles";
+import { formatCents } from "./financialFlow";
 
 const linkClassName =
   "font-semibold text-admin-terracotta-deep underline underline-offset-4";
@@ -264,6 +266,48 @@ export function ReceivingGuide({
             </p>
           </li>
         </ol>
+      </section>
+      <section
+        className={panelClassName}
+        aria-labelledby="receiving-guide-gifts"
+      >
+        <h2 id="receiving-guide-gifts" className={titleClassName}>
+          Presentes, taxas e saldo
+        </h2>
+        <p className="m-0">
+          Os presentes são contribuições em dinheiro, sem envio de produtos.
+          Vocês cadastram quanto querem receber, a partir de{" "}
+          {formatCents(giftMinimumNominalCents)} por presente. O convidado vê o
+          preço com as taxas incluídas. Se escolher parcelar no cartão, vê o
+          valor das parcelas, o acréscimo e o total antes de pagar.
+        </p>
+        <p className="m-0">
+          O EntreLaços cobre a diferença quando a tarifa de um novo pagamento
+          supera a prevista. O saldo disponível para saque acompanha a liberação
+          de cada pagamento ou parcela pelo Asaas. A confirmação da compra pode
+          acontecer antes de o dinheiro ficar disponível.
+        </p>
+        <p className="m-0">
+          O Asaas oferece transferências Pix gratuitas para contas de pessoa
+          física e MEI. Confira as condições da sua conta e a prévia antes de
+          solicitar o saque.
+        </p>
+        <p className="m-0">
+          <OfficialLink href="https://central.ajuda.asaas.com/hc/pt-br/articles/32059618254875-Como-funcionam-as-taxas-e-a-gratuidade-para-transfer%C3%AAncias-Pix-no-Asaas">
+            Consulte as condições das transferências Pix
+          </OfficialLink>
+        </p>
+        <p className="m-0">
+          Para tratar um estorno, confira o pagamento no Asaas. O andamento
+          depende da forma de pagamento, da situação da cobrança e do saldo
+          necessário para a devolução. No cartão, o prazo para aparecer na
+          fatura depende do processamento do estorno.
+        </p>
+        <p className="m-0">
+          <OfficialLink href="https://docs.asaas.com/docs/estornos">
+            Entenda os estornos no Asaas
+          </OfficialLink>
+        </p>
       </section>
       <div className="grid gap-6 md:grid-cols-2">
         <section

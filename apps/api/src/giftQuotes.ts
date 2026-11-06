@@ -1,12 +1,16 @@
 import {
   type GiftItem,
   type GiftQuote,
+  giftMinimumNominalCents,
   giftQuoteInputSchema,
   giftQuoteSchema,
   type PublicGiftItem,
   publicGiftItemSchema,
 } from "@entrelacos/contracts";
-import { type GiftProcessingPolicy, quoteGiftAmounts } from "./giftMoney";
+import {
+  type GiftProcessingPolicy,
+  quoteGiftPurchaseAmounts,
+} from "./giftMoney";
 import { allowsLiveSite } from "./liveSitePolicy";
 import {
   assertReceivingReady,
@@ -222,6 +226,12 @@ export async function loadGiftPricingEvidence(
     )
   )
     return policyUnavailable();
+  if (
+    pricing.policy.feeBasis === "ACCOUNT_BUYER_ESTIMATE" &&
+    (pricing.policy.feeAllocation !== "BUYER_GROSS_UP" ||
+      pricing.provenance !== "provider")
+  )
+    return policyUnavailable();
   const { now, nowTime, deadlineTime, createdAt } =
     readQuoteClock(dependencies);
   // An asynchronous pricing read must not extend old receiving evidence.
@@ -294,20 +304,13 @@ export function createGiftQuoteService(
         !gift.success ||
         gift.data.siteId !== site.data ||
         gift.data.id !== body.data.giftId ||
+        gift.data.nominalCents < giftMinimumNominalCents ||
         stored?.publicationState !== "PUBLISHED" ||
         stored.siteActive !== true
       ) {
         return quoteInvalid();
       }
-      // A preference does not approve live tariffs. Sandbox homologation requires
-      // an explicit site opt-in and separately scoped provider evidence.
-      const allocation =
-        stored.pricingSettings?.feeAllocation ?? "RECIPIENT_DEDUCTED";
-      if (
-        allocation === "BUYER_GROSS_UP" &&
-        dependencies.sandboxBuyerGrossUpSiteId !== site.data
-      )
-        return policyUnavailable();
+      const allocation = "BUYER_GROSS_UP";
 
       const {
         readiness,
@@ -322,19 +325,17 @@ export function createGiftQuoteService(
         dependencies,
         site.data,
         body.data.method,
-        allocation === "BUYER_GROSS_UP" ? allocation : undefined,
+        allocation,
       );
-      if (
-        allocation === "BUYER_GROSS_UP" &&
-        pricing.policy.feeBasis !== "SANDBOX_BUYER_ESTIMATE"
-      )
-        return policyUnavailable();
-      pricing.policy.feeAllocation = allocation;
-      const amounts = quoteGiftAmounts({
-        nominalCents: gift.data.nominalCents,
-        method: body.data.method,
-        policy: pricing.policy,
-      });
+      const policy = { ...pricing.policy, feeAllocation: allocation } as const;
+      const amounts = quoteGiftPurchaseAmounts(
+        {
+          nominalCents: gift.data.nominalCents,
+          method: body.data.method,
+          policy,
+        },
+        body.data.installmentCount,
+      );
       const expiresAt = new Date(
         Math.min(deadlineTime, pricingExpiryTime),
       ).toISOString();
@@ -347,6 +348,7 @@ export function createGiftQuoteService(
         method: body.data.method,
         currency: gift.data.currency,
         commissionBasisPoints: 200,
+        settlementVersion: "PLATFORM_FEE_GUARANTEE_V1",
         expiresAt,
         mode: readiness.mode,
       });
@@ -355,7 +357,12 @@ export function createGiftQuoteService(
         structuredClone({
           quote: quote.data,
           ...(stored.pricingSettings
-            ? { pricingSettings: structuredClone(stored.pricingSettings) }
+            ? {
+                pricingSettings: {
+                  revision: stored.pricingSettings.revision,
+                  feeAllocation: allocation,
+                },
+              }
             : {}),
           gift: gift.data,
           receiving,
@@ -373,7 +380,13 @@ export function createGiftQuoteService(
               ...(pricing.policy.feeBasis
                 ? { feeBasis: pricing.policy.feeBasis }
                 : {}),
-              feeAllocation: pricing.policy.feeAllocation,
+              feeAllocation: allocation,
+              ...(policy.cardInstallmentBasisPoints
+                ? {
+                    cardInstallmentBasisPoints:
+                      policy.cardInstallmentBasisPoints,
+                  }
+                : {}),
             },
             observedAt: pricingObservedAt,
             expiresAt: pricingExpiresAt,

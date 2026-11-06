@@ -1,4 +1,4 @@
-import type { GiftQuote } from "@entrelacos/contracts";
+import type { CheckoutCreateInput, GiftQuote } from "@entrelacos/contracts";
 import type { GiftCheckoutEvent } from "./giftCheckoutState";
 import {
   clearPendingGiftCheckout,
@@ -28,6 +28,7 @@ export async function submitGiftCheckout(
   pending: PendingGiftCheckout,
   getStorage: () => Pick<Storage, "getItem" | "removeItem">,
   isCurrent: () => boolean = () => true,
+  payer?: CheckoutCreateInput["payer"],
 ): Promise<GiftCheckoutEvent | null> {
   if (!isCurrent()) return null;
   try {
@@ -36,6 +37,7 @@ export async function submitGiftCheckout(
         quoteId: pending.quoteId,
         requestId: pending.requestId,
         recoveryToken: pending.recoveryToken,
+        ...(payer && { payer }),
       },
       quote,
     );

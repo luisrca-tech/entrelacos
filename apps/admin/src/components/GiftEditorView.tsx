@@ -3,7 +3,11 @@ import type {
   GiftItem,
   GiftUpdateInput,
 } from "@entrelacos/contracts";
-import { giftCentsSchema, giftImageAlt } from "@entrelacos/contracts";
+import {
+  giftCentsSchema,
+  giftImageAlt,
+  giftMinimumNominalCents,
+} from "@entrelacos/contracts";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -40,11 +44,10 @@ import type { FormEvent, ReactNode } from "react";
 import { useEffect, useId, useState } from "react";
 import { adminStyles, displayHeading } from "../lib/adminStyles";
 import {
-  GiftFeeAllocationChooser,
-  GiftFeeSummary,
+  type GiftPricingEstimate,
   GiftPricingPreview,
-  useGiftFeeAllocation,
-  useGiftPricingControls,
+  giftFeeExplanation,
+  useGiftPricingPreview,
 } from "./GiftPricingSettings";
 import { OverflowMenu } from "./OverflowMenu";
 import {
@@ -124,7 +127,11 @@ export function parseGiftPriceToCents(value: string): number | null {
 
   const cents =
     BigInt(match[1]) * 100n + BigInt((match[2] ?? "").padEnd(2, "0"));
-  if (cents <= 0n || cents > BigInt(Number.MAX_SAFE_INTEGER)) return null;
+  if (
+    cents < BigInt(giftMinimumNominalCents) ||
+    cents > BigInt(Number.MAX_SAFE_INTEGER)
+  )
+    return null;
   const parsed = Number(cents);
   return giftCentsSchema.safeParse(parsed).success ? parsed : null;
 }
@@ -272,16 +279,15 @@ function GuestPreviewCard({
   gift,
   title,
   description,
-  nominalCents,
+  estimate,
   photo,
 }: {
   gift?: GiftItem;
   title: string;
   description: string;
-  nominalCents: number | null;
+  estimate: GiftPricingEstimate | null;
   photo: ReactNode;
 }) {
-  const feeAllocation = useGiftFeeAllocation();
   return (
     <div className="overflow-hidden rounded-2xl border border-admin-line bg-admin-surface">
       <div className="flex aspect-[300/224] items-center justify-center overflow-hidden border-b border-dashed border-admin-line-strong bg-admin-canvas text-[0.82rem] text-admin-muted [&_img]:h-full [&_img]:w-full [&_img]:object-cover">
@@ -303,15 +309,7 @@ function GuestPreviewCard({
           {description.trim() ||
             "Um presente simbólico para celebrar essa nova fase."}
         </p>
-        <p className="m-0 text-lg font-bold text-admin-ink">
-          {nominalCents === null ? "R$ —" : formatPrice(nominalCents)}
-          {feeAllocation === "BUYER_GROSS_UP" && nominalCents !== null && (
-            <span className="text-sm font-semibold text-admin-muted">
-              {" "}
-              + taxas
-            </span>
-          )}
-        </p>
+        <GuestPreviewPrice estimate={estimate} />
         <span
           aria-hidden="true"
           className="flex min-h-11 items-center justify-center rounded-[10px] bg-admin-terracotta text-[0.95rem] font-bold text-white"
@@ -363,25 +361,21 @@ function PublishChecklist({
   );
 }
 
-function FeePanel({ onClose }: { onClose: () => void }) {
+function GuestPreviewPrice({
+  estimate,
+}: {
+  estimate: GiftPricingEstimate | null;
+}) {
+  const startingAtCents = estimate?.startingAtCents;
+  if (startingAtCents == null)
+    return <p className="m-0 text-sm text-admin-muted">Preço indisponível.</p>;
   return (
-    <section
-      aria-label="Quem paga as taxas"
-      className="grid gap-4 rounded-2xl border border-admin-line bg-admin-surface p-5"
-    >
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="m-0 text-base font-bold text-admin-ink">
-          Quem paga as taxas dos presentes?
-        </h2>
-        <Button type="button" variant="ghost" size="sm" onClick={onClose}>
-          Fechar
-        </Button>
-      </div>
-      <p className="m-0 text-sm text-admin-muted">
-        Vale para todos os presentes do casamento.
-      </p>
-      <GiftFeeAllocationChooser />
-    </section>
+    <p className="m-0 text-lg font-bold text-admin-ink">
+      A partir de {formatPrice(startingAtCents)}
+      <span className="block text-sm font-normal text-admin-muted">
+        Taxas incluídas no valor
+      </span>
+    </p>
   );
 }
 
@@ -408,7 +402,6 @@ export function GiftEditorView({
   const [formError, setFormError] = useState<string | null>(null);
   const [archive, setArchive] = useState<GiftItem | null>(null);
   const [previewId, setPreviewId] = useState<string | null>(null);
-  const [feesOpen, setFeesOpen] = useState(false);
   const [draftPreviewOpen, setDraftPreviewOpen] = useState(false);
   const [awaitingCreated, setAwaitingCreated] = useState<Set<string> | null>(
     null,
@@ -425,8 +418,6 @@ export function GiftEditorView({
   const [photoError, setPhotoError] = useState("");
   const [saving, setSaving] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
-  const pricing = useGiftPricingControls();
-  const feeAllocation = useGiftFeeAllocation();
   const previewGift = gifts.find((gift) => gift.id === previewId);
   const mutationState = { busy, loading, error };
   const mutationBlocked = isGiftMutationBlocked(mutationState) || saving;
@@ -463,6 +454,9 @@ export function GiftEditorView({
     (gift) => gift.publicationState === "DRAFT",
   ).length;
   const nominalCents = parseGiftPriceToCents(price);
+  const estimate = useGiftPricingPreview(
+    previewGift?.nominalCents ?? (editing ? nominalCents : null),
+  );
   // Once the kept photo is removed from a created gift, its regular photo
   // field (with consult and recovery) takes over again.
   const pendingActive =
@@ -506,7 +500,6 @@ export function GiftEditorView({
 
   function openEditor(value: typeof editor) {
     setFormError(null);
-    setFeesOpen(false);
     setPendingPhoto(noPendingPhoto);
     setPhotoOwner(null);
     setPhotoError("");
@@ -557,13 +550,14 @@ export function GiftEditorView({
     const nextTitle = String(data.get("title") ?? "").trim();
     const nextDescription = String(data.get("description") ?? "").trim();
     const cents = parseGiftPriceToCents(String(data.get("nominalPrice") ?? ""));
-    if (
-      !nextTitle ||
-      nextTitle.length > 120 ||
-      nextDescription.length > 2000 ||
-      cents === null
-    ) {
-      setFormError("Confira o nome, a mensagem e o valor informado.");
+    if (cents === null) {
+      setFormError(
+        `Informe um valor válido de pelo menos ${formatPrice(giftMinimumNominalCents)}.`,
+      );
+      return;
+    }
+    if (!nextTitle || nextTitle.length > 120 || nextDescription.length > 2000) {
+      setFormError("Confira o nome e a mensagem do presente.");
       return;
     }
     setFormError(null);
@@ -859,11 +853,7 @@ export function GiftEditorView({
                       htmlFor={`${idPrefix}-price`}
                       className="text-sm font-bold text-admin-ink"
                     >
-                      {feeAllocation === "BUYER_GROSS_UP"
-                        ? "Quanto vocês querem receber"
-                        : feeAllocation === "RECIPIENT_DEDUCTED"
-                          ? "Quanto o convidado paga"
-                          : "Valor do presente"}{" "}
+                      Quanto vocês querem receber{" "}
                       <span className="text-xs font-semibold text-admin-muted">
                         · Obrigatório
                       </span>
@@ -878,6 +868,10 @@ export function GiftEditorView({
                       <input
                         id={`${idPrefix}-price`}
                         name="nominalPrice"
+                        aria-describedby={`${idPrefix}-price-minimum`}
+                        aria-invalid={
+                          formError !== null && nominalCents === null
+                        }
                         type="text"
                         inputMode="decimal"
                         autoComplete="off"
@@ -890,30 +884,17 @@ export function GiftEditorView({
                         className="min-w-0 flex-1 bg-transparent px-3.5 text-xl text-admin-ink outline-none placeholder:text-admin-muted disabled:opacity-60"
                       />
                     </div>
-                    {pricing && (
-                      <p className="m-0 text-[0.82rem] text-admin-body">
-                        Taxas:{" "}
-                        <strong className="text-admin-ink">
-                          {feeAllocation === "BUYER_GROSS_UP"
-                            ? "o convidado paga"
-                            : feeAllocation === "RECIPIENT_DEDUCTED"
-                              ? "vocês pagam"
-                              : "indisponível"}
-                        </strong>{" "}
-                        ·{" "}
-                        <button
-                          type="button"
-                          className="bg-transparent p-0 text-admin-terracotta-deep underline underline-offset-2"
-                          aria-expanded={feesOpen}
-                          onClick={() => setFeesOpen((value) => !value)}
-                        >
-                          alterar para todos
-                        </button>
-                      </p>
-                    )}
+                    <p
+                      id={`${idPrefix}-price-minimum`}
+                      className="m-0 text-[0.82rem] text-admin-body"
+                    >
+                      Valor mínimo de {formatPrice(giftMinimumNominalCents)}.
+                    </p>
                   </div>
-                  {feesOpen && <FeePanel onClose={() => setFeesOpen(false)} />}
-                  <GiftPricingPreview nominalCents={nominalCents} />
+                  <GiftPricingPreview
+                    nominalCents={nominalCents}
+                    estimate={estimate}
+                  />
                 </section>
                 {formError && (
                   <p className={adminStyles.alert} role="alert">
@@ -959,7 +940,7 @@ export function GiftEditorView({
                   gift={selected}
                   title={title}
                   description={description}
-                  nominalCents={nominalCents}
+                  estimate={estimate}
                   photo={photo}
                 />
               </div>
@@ -1056,30 +1037,17 @@ export function GiftEditorView({
                 </span>
               </div>
             ))}
-            {pricing && (
-              <div className="flex min-w-0 items-center justify-between gap-4 rounded-2xl border border-admin-line bg-admin-surface px-[18px] py-4 [@media(max-width:760px)]:col-span-2">
-                <div className="grid min-w-0 gap-1">
-                  <span className="text-[0.82rem] text-admin-muted">
-                    Quem paga as taxas
-                  </span>
-                  <strong className="text-[0.95rem] text-admin-ink">
-                    <GiftFeeSummary />
-                  </strong>
-                </div>
-                <button
-                  type="button"
-                  aria-expanded={feesOpen}
-                  onClick={() => setFeesOpen((value) => !value)}
-                  className="min-h-10 shrink-0 bg-transparent p-0 text-sm font-semibold text-admin-terracotta-deep underline underline-offset-4"
-                >
-                  {feesOpen ? "Fechar" : "Alterar"}
-                </button>
+            <div className="flex min-w-0 items-center gap-4 rounded-2xl border border-admin-line bg-admin-surface px-[18px] py-4 [@media(max-width:760px)]:col-span-2">
+              <div className="grid min-w-0 gap-1">
+                <span className="text-[0.82rem] text-admin-muted">
+                  Taxas dos presentes
+                </span>
+                <strong className="text-[0.95rem] text-admin-ink">
+                  {giftFeeExplanation}
+                </strong>
               </div>
-            )}
+            </div>
           </div>
-          {feesOpen && pricing && (
-            <FeePanel onClose={() => setFeesOpen(false)} />
-          )}
           <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
             <div className="relative w-full max-w-[406px] [@media(max-width:760px)]:max-w-none">
               <Search
@@ -1180,6 +1148,11 @@ export function GiftEditorView({
                   (item) => item.id === gift.id,
                 );
                 const archived = gift.publicationState === "ARCHIVED";
+                const belowMinimum =
+                  !archived && gift.nominalCents < giftMinimumNominalCents;
+                const publishBlocked =
+                  belowMinimum && gift.publicationState === "DRAFT";
+                const minimumHintId = `${idPrefix}-minimum-${gift.id}`;
                 const preview = renderPreview?.(gift, index + 1);
                 return (
                   <li key={gift.id} className="min-w-0">
@@ -1239,6 +1212,16 @@ export function GiftEditorView({
                         <p className="m-0 text-lg font-bold text-admin-ink">
                           {formatPrice(gift.nominalCents)}
                         </p>
+                        {belowMinimum && (
+                          <p
+                            id={minimumHintId}
+                            className="m-0 text-xs text-admin-muted"
+                          >
+                            Ajuste o valor para pelo menos{" "}
+                            {formatPrice(giftMinimumNominalCents)} para receber
+                            contribuições.
+                          </p>
+                        )}
                         {archived ? (
                           <p className="m-0 mt-auto pt-2 text-xs text-admin-muted">
                             Preservado no histórico
@@ -1262,7 +1245,10 @@ export function GiftEditorView({
                               variant="outline"
                               size="sm"
                               className="min-h-9 border-admin-line-strong"
-                              disabled={mutationBlocked}
+                              disabled={mutationBlocked || publishBlocked}
+                              aria-describedby={
+                                publishBlocked ? minimumHintId : undefined
+                              }
                               onClick={() =>
                                 void runAction(
                                   () =>
@@ -1335,7 +1321,7 @@ export function GiftEditorView({
               gift={selected}
               title={title}
               description={description}
-              nominalCents={nominalCents}
+              estimate={estimate}
               photo={photo}
             />
           ) : (
@@ -1357,9 +1343,7 @@ export function GiftEditorView({
                   <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-admin-muted">
                     {previewGift.description}
                   </p>
-                  <p className="text-2xl font-semibold text-admin-ink">
-                    {formatPrice(previewGift.nominalCents)}
-                  </p>
+                  <GuestPreviewPrice estimate={estimate} />
                   <p className="text-xs text-admin-muted">
                     {previewGift.publicationState === "PUBLISHED"
                       ? "Visível para os convidados"

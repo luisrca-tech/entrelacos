@@ -94,3 +94,42 @@ estimate, paid Pix pricing avoids promising the contradicted free quota, and str
 settlement divergence exposes discrepancies for homologation. A generic feature-flag
 framework, a new database setting, changed historical snapshots, automatic absorption,
 and guessed provider rounding were rejected as unnecessary or unsupported.
+
+## Installment checkout follow-up
+
+New purchases use buyer gross-up. The quote reads the recipient account's Pix and
+card fee terms and retains the effective card tiers and the selected installment
+schedule. It estimates one fixed card operation fee plus the applicable percentage
+on the charged total, rounding up to whole cents. It shows the installment price
+difference relative to the account's one-payment card price. The actual processing
+fee is determined during settlement, when the platform covers a shortfall in the
+quoted recipient proceeds.
+
+The regular Asaas Checkout supports only a maximum installment count. For a
+selected plan of two or more payments, the integration creates the card installment
+by count and total and verifies the pending charges and fixed platform split
+before handing the guest the Asaas invoice. The invoice collects the card details
+and the application sends only the guest's customer details during creation.
+Pix and one-payment card keep using the original Checkout flow.
+
+On November 6, 2026, the verified development demo subaccount returned its active
+Sandbox card tiers and discounts from the account fees endpoint. Its hosted invoice
+for BRL 32.02 displayed BRL 10.67, BRL 10.67 and BRL 10.68 with no installment-count
+selector in the card form. The authenticated plan read matched the hosted amounts.
+A BRL 32.03 probe put the remaining cents in the final payment, and a BRL 0.65
+fixed split allocated BRL 0.21, BRL 0.21 and BRL 0.23. The BRL 32.02 plan showed
+an estimated native fee of BRL 1.26 at the observed BRL 0.49 plus 2.49% tariff,
+three cents below the whole-charge quote estimate. These pending observations
+establish neither the final settled fee nor a universal rounding rule.
+
+The provider requested reCAPTCHA when the test card form continued, so no test
+card capture or settlement was confirmed. A separate Sandbox invoice request
+with automatic return was rejected because the subaccount had no commercial
+website registered with Asaas. Guests return to the registry to recover the
+status of an installment invoice. [Account fees](https://docs.asaas.com/reference/recuperar-taxas-da-conta)
+and [installment payments](https://docs.asaas.com/docs/criar-uma-cobranca-parcelada).
+
+The Sandbox platform credential identified the configured wallet and returned its
+balance. Transfer reads returned HTTP 403 because the credential lacked permission
+for transfer operations. The fee adjustment path therefore has test coverage with
+simulated provider responses, with no native transfer dispatched or verified.

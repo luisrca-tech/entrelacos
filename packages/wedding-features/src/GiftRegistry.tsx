@@ -1,10 +1,14 @@
 import type {
+  CheckoutCreateInput,
   CheckoutStatus,
   GiftQuote,
   PublicGiftCatalogPageResponse,
   PublicGiftItem,
 } from "@entrelacos/contracts";
-import { publicGiftCatalogQuerySchema } from "@entrelacos/contracts";
+import {
+  checkoutCreateInputSchema,
+  publicGiftCatalogQuerySchema,
+} from "@entrelacos/contracts";
 import { toast } from "@entrelacos/ui/toast";
 import { useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { GiftCatalogView } from "./GiftCatalogView";
@@ -283,7 +287,13 @@ function GiftRegistryRuntime({
     let active = true;
     const revision = state.revision;
     void api
-      .quoteGift({ giftId: state.gift.id, method: state.method })
+      .quoteGift({
+        giftId: state.gift.id,
+        method: state.method,
+        ...(state.method === "CREDIT_CARD" && state.installmentCount > 1
+          ? { installmentCount: state.installmentCount }
+          : {}),
+      })
       .then((quote) => {
         if (active) dispatch({ type: "QUOTE_RESOLVED", quote, revision });
       })
@@ -298,12 +308,27 @@ function GiftRegistryRuntime({
     return () => {
       active = false;
     };
-  }, [api, state.gift, state.method, state.phase, state.revision]);
+  }, [
+    api,
+    state.gift,
+    state.method,
+    state.installmentCount,
+    state.phase,
+    state.revision,
+  ]);
 
   useEffect(() => {
     if (state.phase === "REDIRECTING" && state.checkout)
       window.location.assign(state.checkout.hostedUrl);
   }, [state.phase, state.checkout]);
+
+  useEffect(() => {
+    const resumeCheckout = (event: PageTransitionEvent) => {
+      if (event.persisted) dispatch({ type: "CHECKOUT_RETURNED" });
+    };
+    window.addEventListener("pageshow", resumeCheckout);
+    return () => window.removeEventListener("pageshow", resumeCheckout);
+  }, []);
 
   function chooseGift(gift: PublicGiftItem) {
     if (state.phase === "UNKNOWN") {
@@ -321,9 +346,12 @@ function GiftRegistryRuntime({
     setOperationError("");
     setDialogOpen(true);
   }
-  function chooseMethod(method: GiftQuote["method"]) {
+  function chooseMethod(
+    method: GiftQuote["method"],
+    installmentCount?: number,
+  ) {
     setOperationError("");
-    dispatch({ type: "SELECT_METHOD", method });
+    dispatch({ type: "SELECT_METHOD", method, installmentCount });
   }
   async function recover(notify = false) {
     if (!api || state.phase !== "UNKNOWN" || !state.pending) {
@@ -464,7 +492,7 @@ function GiftRegistryRuntime({
     };
   }, [api, state.phase, pendingRequestId]);
 
-  async function checkout() {
+  async function checkout(payer?: CheckoutCreateInput["payer"]) {
     if (!api || state.phase !== "READY" || !state.quote || inFlight.current)
       return;
     inFlight.current = true;
@@ -493,6 +521,20 @@ function GiftRegistryRuntime({
         method: quote.method,
         mode: quote.mode,
       };
+      if (
+        ((quote.installmentCount ?? 1) > 1 && !payer) ||
+        !checkoutCreateInputSchema.safeParse({
+          quoteId: pending.quoteId,
+          requestId,
+          recoveryToken,
+          payer,
+        }).success
+      ) {
+        setOperationError(
+          "Confira o nome, o CPF ou CNPJ e o e-mail do pagador.",
+        );
+        return;
+      }
       writePendingGiftCheckout(window.sessionStorage, siteId, pending);
       dispatch(event);
       const result = await submitGiftCheckout(
@@ -501,6 +543,7 @@ function GiftRegistryRuntime({
         pending,
         () => window.sessionStorage,
         current,
+        payer,
       );
       if (result && current()) dispatch(result);
     } catch {
@@ -556,13 +599,14 @@ function GiftRegistryRuntime({
             <GiftQuoteView
               quote={state.quote}
               method={state.method}
+              installmentCount={state.installmentCount}
               loading={state.phase === "QUOTING"}
               pending={
                 state.phase === "CREATING" || state.phase === "REDIRECTING"
               }
               error={operationError || state.error || undefined}
               onSelectMethod={chooseMethod}
-              onConfirm={() => void checkout()}
+              onConfirm={(payer) => void checkout(payer)}
               onCancel={requestClose}
             />
           )

@@ -108,6 +108,7 @@ describe("gift checkout selection and quotation", () => {
     expect(createGiftCheckoutState()).toEqual({
       gift: null,
       method: null,
+      installmentCount: 1,
       quote: null,
       checkout: null,
       phase: "IDLE",
@@ -1145,4 +1146,88 @@ describe("uncertain gift checkout and closure", () => {
       }),
     ).toBe(closed);
   });
+});
+
+it("invalidates payment when switching to a different installment count", () => {
+  const state = giftCheckoutReducer(selected(), {
+    type: "SELECT_METHOD",
+    method: "CREDIT_CARD",
+  });
+  const installmentOptions = [
+    {
+      installmentCount: 1,
+      installmentCents: [10500],
+      installmentSurchargeCents: 0,
+      totalCents: 10500,
+    },
+    {
+      installmentCount: 2,
+      installmentCents: [5300, 5300],
+      installmentSurchargeCents: 100,
+      totalCents: 10600,
+    },
+  ];
+  const one = {
+    ...quote,
+    method: "CREDIT_CARD" as const,
+    feeAllocation: "BUYER_GROSS_UP" as const,
+    settlementVersion: "PLATFORM_FEE_GUARANTEE_V1" as const,
+    ...installmentOptions[0],
+    installmentOptions,
+  };
+  const ready = giftCheckoutReducer(state, {
+    type: "QUOTE_RESOLVED",
+    quote: one,
+    revision: state.revision,
+  });
+  const next = giftCheckoutReducer(ready, {
+    type: "SELECT_METHOD",
+    method: "CREDIT_CARD",
+    installmentCount: 2,
+  });
+  expect(next).toMatchObject({ phase: "QUOTING", installmentCount: 2 });
+  expect(
+    giftCheckoutReducer(next, {
+      type: "QUOTE_RESOLVED",
+      quote: one,
+      revision: next.revision,
+    }),
+  ).toBe(next);
+  expect(
+    giftCheckoutReducer(next, {
+      type: "CHECKOUT_STARTED",
+      requestId: "request-a",
+      recoveryToken,
+      now,
+    }),
+  ).toBe(next);
+  expect(
+    giftCheckoutReducer(next, {
+      type: "QUOTE_RESOLVED",
+      quote: {
+        ...one,
+        id: "quote-two",
+        processingCents: 400,
+        ...installmentOptions[1],
+      },
+      revision: next.revision,
+    }),
+  ).toMatchObject({ phase: "READY", quote: { id: "quote-two" } });
+});
+
+it("recovers the same operation after a back-forward cache restore", () => {
+  const redirecting = giftCheckoutReducer(creating(), {
+    type: "CHECKOUT_RESOLVED",
+    checkout,
+  });
+  const returning = giftCheckoutReducer(redirecting, {
+    type: "CHECKOUT_RETURNED",
+  });
+  expect(returning).toMatchObject({
+    phase: "UNKNOWN",
+    pending,
+    checkout,
+  });
+  const idle = createGiftCheckoutState();
+  expect(giftCheckoutReducer(idle, { type: "CHECKOUT_RETURNED" })).toBe(idle);
 });

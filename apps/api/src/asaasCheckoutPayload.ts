@@ -1,6 +1,11 @@
 import { isIP } from "node:net";
+import { isDeepStrictEqual } from "node:util";
 import { giftQuoteSchema, publicGiftItemSchema } from "@entrelacos/contracts";
-import { quoteGiftAmounts, serializeBrlCents } from "./giftMoney";
+import {
+  quoteGiftAmounts,
+  quoteGiftPurchaseAmounts,
+  serializeBrlCents,
+} from "./giftMoney";
 import type { GiftQuoteSnapshot } from "./giftQuotes";
 import { allowsSandboxBuyerGrossUp } from "./sandboxBuyerGrossUp";
 
@@ -85,14 +90,14 @@ export function readAsaasCheckoutCallbacks(
   }
 }
 
-export function buildAsaasCheckoutPayload(
+export function readAsaasCheckoutTerms(
   command: {
     siteId: string;
     attemptId: string;
     quoteSnapshot: GiftQuoteSnapshot;
   },
   options: AsaasCheckoutPayloadOptions,
-): AsaasCheckoutPayload {
+) {
   try {
     const snapshot = command.quoteSnapshot;
     const quote = giftQuoteSchema.parse(snapshot.quote);
@@ -154,49 +159,55 @@ export function buildAsaasCheckoutPayload(
     ] as const) {
       if (binding[field] !== pricing[field]) unavailable();
     }
-    const amounts = quoteGiftAmounts({
+    const input = {
       nominalCents: quote.nominalCents,
       method: quote.method,
       policy: pricing.policy,
-    });
-    for (const field of [
-      "nominalCents",
-      "commissionCents",
-      "processingCents",
-      "totalCents",
-      "policyVersion",
-      "feeAllocation",
-    ] as const) {
-      if (amounts[field] !== quote[field]) unavailable();
+    };
+    const amounts = quote.settlementVersion
+      ? quoteGiftPurchaseAmounts(input, quote.installmentCount)
+      : quoteGiftAmounts(input);
+    for (const [field, amount] of Object.entries(amounts)) {
+      if (!isDeepStrictEqual(amount, quote[field as keyof typeof quote]))
+        unavailable();
     }
     const callback = readAsaasCheckoutCallbacks(
       options.publicOrigin,
       options.callbacks,
     );
-    return {
-      billingTypes: [quote.method],
-      chargeTypes: ["DETACHED"],
-      minutesToExpire: options.minutesToExpire,
-      externalReference: command.attemptId,
-      callback,
-      items: [
-        {
-          name: quote.title,
-          quantity: 1,
-          value: Number(serializeBrlCents(quote.totalCents)),
-        },
-      ],
-      splits:
-        quote.commissionCents === 0
-          ? []
-          : [
-              {
-                walletId: options.platformWalletId,
-                fixedValue: Number(serializeBrlCents(quote.commissionCents)),
-              },
-            ],
-    };
+    return { quote, callback };
   } catch {
     return unavailable();
   }
+}
+
+export function buildAsaasCheckoutPayload(
+  command: Parameters<typeof readAsaasCheckoutTerms>[0],
+  options: AsaasCheckoutPayloadOptions,
+): AsaasCheckoutPayload {
+  const { quote, callback } = readAsaasCheckoutTerms(command, options);
+  if ((quote.installmentCount ?? 1) > 1) unavailable();
+  return {
+    billingTypes: [quote.method],
+    chargeTypes: ["DETACHED"],
+    minutesToExpire: options.minutesToExpire,
+    externalReference: command.attemptId,
+    callback,
+    items: [
+      {
+        name: quote.title,
+        quantity: 1,
+        value: Number(serializeBrlCents(quote.totalCents)),
+      },
+    ],
+    splits:
+      quote.commissionCents === 0
+        ? []
+        : [
+            {
+              walletId: options.platformWalletId,
+              fixedValue: Number(serializeBrlCents(quote.commissionCents)),
+            },
+          ],
+  };
 }

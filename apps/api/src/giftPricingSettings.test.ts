@@ -53,6 +53,29 @@ const actor = { userId: "admin", role: "SITE_ADMIN" as const };
 const input = { feeAllocation: "BUYER_GROSS_UP" as const, revision: 0 };
 
 describe("gift pricing settings", () => {
+  it("applies buyer pricing to new purchases even when an old recipient preference exists", async () => {
+    const f = fixture();
+    expect(await readGiftPricingSettings(f.db, "site-a")).toMatchObject({
+      feeAllocation: "BUYER_GROSS_UP",
+      buyerGrossUpAvailable: true,
+      blockedReason: null,
+    });
+    expect(
+      f.queries.some(
+        (query) => query.includes("INSERT") || query.includes("UPDATE"),
+      ),
+    ).toBe(false);
+  });
+  it("rejects attempts to restore recipient fees before writing", async () => {
+    const f = fixture();
+    await expect(
+      updateGiftPricingSettings(f.db, actor, "site-a", {
+        feeAllocation: "RECIPIENT_DEDUCTED",
+        revision: 0,
+      } as never),
+    ).rejects.toMatchObject({ status: 400, code: "VALIDATION_ERROR" });
+    expect(f.queries.some((query) => query.includes("INSERT"))).toBe(false);
+  });
   it("rechecks revoked access after waiting for the site lock", async () => {
     const f = fixture();
     const execute = (f.db as unknown as { execute: ReturnType<typeof vi.fn> })
@@ -72,13 +95,13 @@ describe("gift pricing settings", () => {
     ).rejects.toMatchObject({ status: 403 });
     expect(f.queries.some((query) => query.includes("INSERT"))).toBe(false);
   });
-  it("defaults to recipient deducted and saves a blocked buyer preference with revision", async () => {
+  it("returns the fixed buyer policy and preserves revision checks for legacy clients", async () => {
     const f = fixture();
     expect(await readGiftPricingSettings(f.db, "site-a")).toMatchObject({
       siteId: "site-a",
-      feeAllocation: "RECIPIENT_DEDUCTED",
+      feeAllocation: "BUYER_GROSS_UP",
       revision: 0,
-      buyerGrossUpAvailable: false,
+      buyerGrossUpAvailable: true,
     });
     expect(
       await updateGiftPricingSettings(f.db, actor, "site-a", input),
@@ -86,16 +109,8 @@ describe("gift pricing settings", () => {
       settings: {
         feeAllocation: "BUYER_GROSS_UP",
         revision: 1,
-        buyerGrossUpAvailable: false,
+        buyerGrossUpAvailable: true,
       },
-    });
-    expect(
-      await updateGiftPricingSettings(f.db, actor, "site-a", {
-        feeAllocation: "RECIPIENT_DEDUCTED",
-        revision: 1,
-      }),
-    ).toMatchObject({
-      settings: { revision: 2, feeAllocation: "RECIPIENT_DEDUCTED" },
     });
     await expect(
       updateGiftPricingSettings(f.db, actor, "site-a", input),

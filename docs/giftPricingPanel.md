@@ -1,17 +1,31 @@
 # Gift pricing responsibility
 
-Implemented on `feat/gifts-panel`, based on `37dc6dd`, in Ubuntu at `/home/lfrca/projetos/personal-projects/entrelacos`. No deployment has been executed. After explicit user approval of the pending chain, migrations 0022–0025 were applied to the verified development configuration.
+## Current policy (2026-11-06)
 
-## Current behavior
+New purchases use `BUYER_GROSS_UP` exclusively. The panel explains this fixed policy rather than asking the couple to select who pays. The compatibility settings endpoint returns the effective buyer policy and rejects attempts to restore recipient deductions. It does not rewrite old quotes or purchase snapshots.
 
-- A site-wide preference defaults to `RECIPIENT_DEDUCTED`, including sites with no settings row. Guests pay the registered amount; actual processing and the platform commission reduce the couple's receipt.
-- `BUYER_GROSS_UP` can be saved as a preference after an explicit warning that new purchases will pause. It cannot issue a quote until external evidence and a settlement-difference policy have been approved and implemented. Live purchases retain this gate. An explicit development-only Sandbox homologation scope is documented in [Sandbox buyer QA](sandboxBuyerGrossUpQa.md); it grants no tariff guarantee or commercial approval.
-- Existing issued checkouts, recovery capabilities and historical snapshots retain their original conditions. Old snapshots without an allocation marker retain their historical arithmetic.
-- Settings require both catalog management and financial read access. Assistants can continue managing the catalog without access to the financial settings or simulations.
-- New snapshots include the allocation preference and its revision. Before reserving a checkout, the server refreshes pricing and compares the original amounts/policy, then rechecks gift amount, title and settings revision using freshly locked stored eligibility. A mismatch requires a new quote and confirmation. Existing commitments recover before repricing.
-- Outside the explicitly authorized Sandbox homologation scope, the public catalog marks buyer pricing unavailable, hides its internal amount as a purchase price and disables selection. Recipient pricing remains the same final amount for Pix and a single card installment.
-- Private simulations use the receiving account's validated pricing evidence and always declare `guaranteed: false`. Unavailable evidence produces null processing, total and net values. They never persist a quote, reserve an order or contact a checkout endpoint.
-- The existing integer-cent gross-up solver includes processing on the charged total. Commission remains rounded 2% of the nominal amount and the provider split remains fixed.
+- New and updated nominal gift amounts must be at least R$5.00. Historical smaller gifts remain readable but cannot be published or quoted for a new purchase until their value is corrected.
+- Guests see the server-calculated starting price with fees included. A missing price never falls back to the couple's nominal amount. The selected payment method and installments produce a fresh quote before confirmation.
+- The couple sees one `Taxas` amount equal to platform commission plus processing. Commission remains the existing rounded 2% of nominal. The installment surcharge is already included in the quoted processing amount and must not be added twice.
+- Card purchases offer up to 12 installments, each at least R$5.00, only when the receiving account provides valid corresponding tariff evidence. Pix remains a single payment. Prices use the existing integer-cent gross-up and current account terms; published promotional prices are not embedded in code.
+- Exact-count installments use the Asaas payment invoice flow, not hosted checkout's maximum-count selector. The created plan is checked against the immutable quote before redirect. Card details remain with Asaas. Payer name, tax identifier and email are submitted to create the provider customer and are not stored in checkout recovery storage.
+- New quotes carry `PLATFORM_FEE_GUARANTEE_V1`. When the actual receipt is below the promised nominal portion, the platform owes and funds the difference. Owed compensation is separate from funds actually available for withdrawal. See [settlement and operational recovery](giftPricingSettlement.md).
+- Issued checkouts recover under their original conditions before new pricing is considered. New attempts revalidate receiving eligibility, gift identity, pricing evidence and current terms under the existing reservation boundaries.
+- The guides explain symbolic gifts, included fees, installment totals, monthly release versus available balance, the minimum gift amount and platform coverage of tariff differences.
+
+Migration `0028_gift_payment_settlement.sql` must be applied through the normal verified migration process before running this API version. It adds installment identity and durable compensation tracking; generating or testing it is not a production migration. Existing Asaas webhook subscriptions must include the payment split and deletion events configured by the current registration operation.
+
+### Current validation
+
+The complete unit suite passed 8,819 tests across 342 files. All 141 database integration tests passed against a disposable local PostgreSQL instance after applying the full migration chain. Offline schema generation reported no changes. Workspace checks, lint, typecheck, production builds, public artifact checks and diff whitespace checks passed. Existing lint warnings remain.
+
+The actual panel and guest components were visually checked with synthetic data at desktop and mobile widths. Sandbox evidence confirms exact installment amounts and split allocation, but card capture stopped at the provider's reCAPTCHA. Compensation transfers were tested with deterministic responses and PostgreSQL; no actual compensation was dispatched. The current Sandbox platform key lacks transfer-read permission, which prevents the worker from arming a dispatch. See [provider evidence and limitations](sandboxBuyerGrossUpQa.md).
+
+No shared database migration or production deployment was performed by these checks.
+
+## Historical rollout notes
+
+The sections below record earlier implementations and QA, including the old selectable responsibility and commercial release gates. They are historical evidence, not the current product policy. The original implementation was on `feat/gifts-panel`, based on `37dc6dd`; migrations 0022–0025 were subsequently applied to the verified development configuration after explicit approval.
 
 ## Storage and endpoints
 

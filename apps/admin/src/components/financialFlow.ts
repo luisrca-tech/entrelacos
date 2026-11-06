@@ -31,7 +31,7 @@ export function financialFlow(overview: FinancialOverview) {
     },
     {
       id: "fees",
-      label: "Taxas (comissão + Asaas)",
+      label: "Taxas",
       cents: overview.commissionCents + overview.processingCents,
       always: true,
     },
@@ -69,12 +69,15 @@ export function financialFlow(overview: FinancialOverview) {
     totalCents: segments.reduce((sum, { cents }) => sum + cents, 0),
     // What guests paid for gifts the provider has already released.
     releasedGrossCents:
-      overview.netReceivedCents +
+      overview.netReceivedCents -
+      (overview.platformAdjustmentFundedCents ?? 0) +
       overview.commissionCents +
       overview.processingCents,
     // Released and still awaiting, both after fees.
     netForCoupleCents:
-      overview.netReceivedCents + overview.awaitingReleaseCents,
+      overview.netReceivedCents +
+      overview.awaitingReleaseCents +
+      (overview.platformAdjustmentOwedCents ?? 0),
   };
 }
 

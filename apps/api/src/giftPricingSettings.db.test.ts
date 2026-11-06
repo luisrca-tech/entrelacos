@@ -41,7 +41,7 @@ it("applies the migration and persists isolated preferences with PostgreSQL revi
         ),
       );
       expect(await readGiftPricingSettings(tx, "site-a")).toMatchObject({
-        feeAllocation: "RECIPIENT_DEDUCTED",
+        feeAllocation: "BUYER_GROSS_UP",
         revision: 0,
       });
       const actor = { userId: "owner", role: "OWNER" as const };
@@ -55,7 +55,7 @@ it("applies the migration and persists isolated preferences with PostgreSQL revi
       });
       expect(
         await updateGiftPricingSettings(tx, actor, "site-a", {
-          feeAllocation: "RECIPIENT_DEDUCTED",
+          feeAllocation: "BUYER_GROSS_UP",
           revision: 1,
         }),
       ).toMatchObject({ settings: { revision: 2 } });
@@ -66,7 +66,7 @@ it("applies the migration and persists isolated preferences with PostgreSQL revi
         }),
       ).rejects.toMatchObject({ code: "GIFT_PRICING_SETTINGS_CONFLICT" });
       expect(await readGiftPricingSettings(tx, "site-b")).toMatchObject({
-        feeAllocation: "RECIPIENT_DEDUCTED",
+        feeAllocation: "BUYER_GROSS_UP",
         revision: 0,
       });
     });
