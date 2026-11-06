@@ -229,3 +229,25 @@ describe("owner settings overview", () => {
     expect(props.onAddAdmin).not.toHaveBeenCalled();
   });
 });
+
+describe("owner publication and access link lifetime", () => {
+  it("addresses the owner who records the manual publication", async () => {
+    await render();
+    await click("Publicação");
+    expect(container.textContent).toContain(
+      "Depois do deploy manual, confira o site no ar e registre a publicação aqui. Esta ação não altera a hospedagem.",
+    );
+    expect(container.textContent).not.toMatch(/Vocês abrem|Registrem aqui/);
+  });
+
+  it("does not bring back a link generated before the access tab was reopened", async () => {
+    window.history.replaceState(null, "", "/sites/site-1/settings?tab=access");
+    props.generated = { userId: "admin-1", url: "https://panel/ativar#x" };
+    try {
+      await render();
+      expect(props.onDismissGenerated).toHaveBeenCalled();
+    } finally {
+      window.history.replaceState(null, "", "/");
+    }
+  });
+});

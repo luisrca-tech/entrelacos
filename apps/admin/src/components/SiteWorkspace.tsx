@@ -195,6 +195,13 @@ export function SiteWorkspace({
     useState<LifecycleAction | null>(null);
   const [generatedAccess, setGeneratedAccess] =
     useState<GeneratedCoupleAccess | null>(null);
+  const currentArea = useRef(area);
+  currentArea.current = area;
+  // Access links are single-use credentials: drop them as soon as the owner
+  // leaves settings instead of keeping them in memory for a later visit.
+  useEffect(() => {
+    if (area !== "settings") setGeneratedAccess(null);
+  }, [area]);
   const [adminToDisable, setAdminToDisable] = useState<Admin | null>(null);
   const [settingsDialog, setSettingsDialog] = useState<
     | "profile"
@@ -300,7 +307,8 @@ export function SiteWorkspace({
       isActive: () => mount?.active === true,
       pending: setPending,
       generated: (url) => {
-        setGeneratedAccess({ userId: admin.userId, url });
+        if (currentArea.current === "settings")
+          setGeneratedAccess({ userId: admin.userId, url });
         void load(() => mount?.active === true).catch(() => {});
       },
       failed: () => toast.error("Não foi possível gerar o link."),

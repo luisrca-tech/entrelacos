@@ -95,7 +95,11 @@ export function SiteSettingsView({
   const [replaceLink, setReplaceLink] = useState<string | null>(null);
   const [addressError, setAddressError] = useState("");
   const [originError, setOriginError] = useState("");
+  // A link generated during an earlier visit must not reappear when the
+  // settings view is mounted again, including through the ?tab=access entry.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Runs once on mount.
   useEffect(() => {
+    onDismissGenerated();
     if (new URLSearchParams(window.location.search).get("tab") === "access")
       setTab("access");
   }, []);
@@ -286,7 +290,8 @@ export function SiteSettingsView({
                   </Badge>
                 </div>
                 <p className="m-0 text-sm text-admin-muted">
-                  Atualize este registro após conferir o site no ar.
+                  Depois do deploy manual, confira o site no ar e registre a
+                  publicação aqui. Esta ação não altera a hospedagem.
                 </p>
               </div>
               <Button
@@ -299,9 +304,9 @@ export function SiteSettingsView({
               </Button>
             </div>
             <ol className="m-0 grid list-decimal gap-2 border-t border-admin-line pl-5 pt-4 text-sm text-admin-body">
-              <li>A equipe Entrelaços publica o site manualmente.</li>
-              <li>Vocês abrem o endereço público e conferem o site no ar.</li>
-              <li>Registrem aqui a situação que encontraram.</li>
+              <li>Faça o deploy manual do site.</li>
+              <li>Abra o endereço público e confira o site no ar.</li>
+              <li>Registre aqui a situação encontrada.</li>
             </ol>
           </div>
           <div className={card}>
