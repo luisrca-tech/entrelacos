@@ -132,3 +132,61 @@ describe("mobile panel navigation", () => {
     }
   });
 });
+
+describe("desktop navigation collapse", () => {
+  async function mountShell(area: "home" | "gifts") {
+    (
+      globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
+    ).IS_REACT_ACT_ENVIRONMENT = true;
+    const node = document.createElement("div");
+    document.body.append(node);
+    const root = createRoot(node);
+    await act(async () =>
+      root.render(
+        createElement(
+          AdminShell,
+          { actor, siteId: "wedding-a", area, onLogout: vi.fn() },
+          createElement("p", null, area),
+        ),
+      ),
+    );
+    const toggle = () => {
+      const button = node.querySelector<HTMLButtonElement>(
+        "#admin-primary-nav button[aria-expanded]",
+      );
+      if (!button) throw new Error("Missing collapse toggle");
+      return button;
+    };
+    return {
+      toggle,
+      async unmount() {
+        await act(async () => root.unmount());
+        node.remove();
+      },
+    };
+  }
+
+  it("keeps the sidebar collapsed when a navigation remounts the shell", async () => {
+    const home = await mountShell("home");
+    expect(home.toggle().getAttribute("aria-expanded")).toBe("true");
+    await act(async () => home.toggle().click());
+    expect(home.toggle().getAttribute("aria-label")).toBe("Expandir navegação");
+    await home.unmount();
+
+    // Each route renders its own Panel, so navigating mounts a new shell.
+    const gifts = await mountShell("gifts");
+    try {
+      expect(gifts.toggle().getAttribute("aria-expanded")).toBe("false");
+      expect(window.localStorage.getItem("entrelacos.admin.navigation")).toBe(
+        "collapsed",
+      );
+      await act(async () => gifts.toggle().click());
+      expect(gifts.toggle().getAttribute("aria-expanded")).toBe("true");
+      expect(window.localStorage.getItem("entrelacos.admin.navigation")).toBe(
+        "expanded",
+      );
+    } finally {
+      await gifts.unmount();
+    }
+  });
+});
