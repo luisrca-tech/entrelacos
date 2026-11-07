@@ -1,7 +1,8 @@
 import { handoffIssueInputSchema } from "@entrelacos/contracts";
-import { Button, Card, CardContent, CardHeader, toast } from "@entrelacos/ui";
+import { Card, CardContent, CardHeader, toast } from "@entrelacos/ui";
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
+import { AdminButton } from "../components/AdminButton";
 import { AuthLayout } from "../components/AuthLayout";
 import { ApiError, apiRequest } from "../lib/apiClient";
 
@@ -55,13 +56,13 @@ function HandoffPage() {
         </CardHeader>
         <CardContent>
           {error ? (
-            <Button
-              variant="outline"
+            <AdminButton
+              tone="secondary"
               nativeButton={false}
               render={<a href="/" />}
             >
               Voltar ao painel
-            </Button>
+            </AdminButton>
           ) : (
             <p className="leading-[1.6]" role="status">
               Verificando seu acesso ao casamento.

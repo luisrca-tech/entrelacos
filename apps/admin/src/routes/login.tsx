@@ -1,6 +1,7 @@
-import { Button, Input, PasswordInput } from "@entrelacos/ui";
+import { Input, PasswordInput } from "@entrelacos/ui";
 import { createFileRoute } from "@tanstack/react-router";
 import { type FormEvent, useEffect, useRef, useState } from "react";
+import { AdminButton } from "../components/AdminButton";
 import { AuthLayout } from "../components/AuthLayout";
 import {
   createPanelAuthenticationActions,
@@ -115,14 +116,15 @@ function LoginPage() {
               maxLength={200}
             />
           </div>
-          <Button
+          <AdminButton
+            tone="primary"
             className={adminStyles.authButton}
             type="submit"
             data-login-ready={hydrated ? "true" : undefined}
             disabled={!hydrated || pending}
           >
             {pending ? "Entrando…" : "Entrar"}
-          </Button>
+          </AdminButton>
         </form>
         <p className="m-0 text-[13px] leading-relaxed text-admin-text-secondary">
           Primeiro acesso ou esqueceu a senha? Peça um link de acesso ao

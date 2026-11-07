@@ -4,8 +4,9 @@ import type {
   RsvpState,
   SiteRsvpResponse,
 } from "@entrelacos/contracts";
-import { Button, Dialog, DialogDescription, DialogTitle } from "@entrelacos/ui";
+import { Dialog, DialogDescription, DialogTitle } from "@entrelacos/ui";
 import { useEffect, useState } from "react";
+import { AdminButton } from "./AdminButton";
 import { AdminDialogContent } from "./AdminDialog";
 import { pendingAdminRsvpUpdates } from "./confirmationDraft";
 import { InvitationStatus } from "./InvitationStatus";
@@ -167,15 +168,16 @@ export function ManageConfirmationsDialog({
               data-confirmations-footer
               className="sticky -bottom-[30px] -mx-[30px] -mb-[30px] flex flex-wrap justify-end gap-3 border-t border-admin-border bg-admin-surface px-[30px] pt-4 pb-[30px] [@media(max-width:760px)]:-bottom-6 [@media(max-width:760px)]:-mx-[18px] [@media(max-width:760px)]:-mb-6 [@media(max-width:760px)]:px-[18px] [@media(max-width:760px)]:pb-6"
             >
-              <Button
+              <AdminButton
                 type="button"
-                variant="outline"
+                tone="secondary"
                 onClick={() => onOpenChange(false)}
                 disabled={busy}
               >
                 Cancelar
-              </Button>
-              <Button
+              </AdminButton>
+              <AdminButton
+                tone="primary"
                 type="button"
                 onClick={() => onSave(pending)}
                 disabled={inactive || busy || pending.length === 0}
@@ -183,7 +185,7 @@ export function ManageConfirmationsDialog({
                 {busy
                   ? "Salvando…"
                   : `Salvar alterações${pending.length > 0 ? ` (${pending.length})` : ""}`}
-              </Button>
+              </AdminButton>
             </div>
           </div>
         ) : (
@@ -227,15 +229,15 @@ export function ManageConfirmationsDialog({
               ))
             )}
             {history?.nextCursor && (
-              <Button
+              <AdminButton
                 type="button"
-                variant="outline"
+                tone="secondary"
                 onClick={onLoadMoreHistory}
                 disabled={loading}
                 className="justify-self-center"
               >
                 Carregar mais
-              </Button>
+              </AdminButton>
             )}
           </div>
         )}

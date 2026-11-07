@@ -3,7 +3,7 @@ import {
   meResponseSchema,
   siteTeamInviteInputSchema,
 } from "@entrelacos/contracts";
-import { Button, Input, PasswordInput } from "@entrelacos/ui";
+import { Input, PasswordInput } from "@entrelacos/ui";
 import { Link } from "@tanstack/react-router";
 import {
   type FormEvent,
@@ -14,6 +14,7 @@ import {
 } from "react";
 import { adminStyles } from "../lib/adminStyles";
 import { ApiError, apiRequest } from "../lib/apiClient";
+import { AdminButton } from "./AdminButton";
 import { AuthLayout } from "./AuthLayout";
 import { hasValidAccessToken, readAccessTokenFromHash } from "./accessToken";
 import { type PanelSessionSnapshot, panelActorOwner } from "./panelActor";
@@ -787,14 +788,14 @@ export function TeamInvitationAcceptance({
               Link inválido, expirado ou já utilizado. Peça um novo link ao
               casal.
             </p>
-            <Button
-              variant="outline"
+            <AdminButton
+              tone="secondary"
               nativeButton={false}
               className="w-fit"
               render={<Link to="/login" search={{ email: "", next: "/" }} />}
             >
               Ir para o login
-            </Button>
+            </AdminButton>
           </>
         ) : (
           <>
@@ -809,34 +810,35 @@ export function TeamInvitationAcceptance({
               </p>
             )}
             {sessionUnavailable ? (
-              <Button
+              <AdminButton
                 type="button"
-                variant="outline"
+                tone="secondary"
                 onClick={() => void controller?.start()}
               >
                 Tentar novamente
-              </Button>
+              </AdminButton>
             ) : actor ? (
               <>
                 <p className="m-0 break-words text-admin-text-secondary">
                   Você está conectado como {actor.user.email}. Confirme somente
                   se este é o e-mail convidado.
                 </p>
-                <Button
+                <AdminButton
+                  tone="primary"
                   type="button"
                   disabled={pending}
                   onClick={() => void controller?.accept({ mode: "signedIn" })}
                 >
                   {pending ? "Aceitando…" : "Aceitar convite"}
-                </Button>
-                <Button
+                </AdminButton>
+                <AdminButton
                   type="button"
-                  variant="outline"
+                  tone="secondary"
                   disabled={pending}
                   onClick={() => void controller?.signOut()}
                 >
                   Usar outra conta
-                </Button>
+                </AdminButton>
               </>
             ) : (
               <>
@@ -844,9 +846,9 @@ export function TeamInvitationAcceptance({
                   className="m-0 grid min-w-0 grid-cols-2 gap-2.5 border-0 p-0"
                   aria-label="Forma de acesso"
                 >
-                  <Button
+                  <AdminButton
                     type="button"
-                    variant="outline"
+                    tone="secondary"
                     className={
                       mode === "existing"
                         ? `h-12 min-w-0 rounded-[10px] border-admin-accent px-2 font-bold ${adminStyles.selected}`
@@ -858,10 +860,10 @@ export function TeamInvitationAcceptance({
                     }}
                   >
                     Já tenho acesso
-                  </Button>
-                  <Button
+                  </AdminButton>
+                  <AdminButton
                     type="button"
-                    variant="outline"
+                    tone="secondary"
                     className={
                       mode === "new"
                         ? `h-12 min-w-0 rounded-[10px] border-admin-accent px-2 font-bold ${adminStyles.selected}`
@@ -873,7 +875,7 @@ export function TeamInvitationAcceptance({
                     }}
                   >
                     Primeiro acesso
-                  </Button>
+                  </AdminButton>
                 </fieldset>
                 {mode && (
                   <form
@@ -919,13 +921,14 @@ export function TeamInvitationAcceptance({
                         ? "Se você já possui uma conta, escolha Já tenho acesso. O convite não redefine senhas existentes."
                         : "Você entrará na conta existente; sua senha e seus outros casamentos serão preservados."}
                     </p>
-                    <Button
+                    <AdminButton
+                      tone="primary"
                       className={adminStyles.authButton}
                       type="submit"
                       disabled={pending}
                     >
                       {pending ? "Aceitando…" : "Aceitar convite"}
-                    </Button>
+                    </AdminButton>
                   </form>
                 )}
               </>

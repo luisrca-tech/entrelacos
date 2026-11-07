@@ -237,6 +237,43 @@ describe("admin Tailwind policy", () => {
     expect(findAll(/\?\s*"default"\s*:\s*"(?:ghost|outline)"/g)).toEqual([]);
   });
 
+  it("renders every admin button through AdminButton instead of the shared dark default", () => {
+    // These shared exports render the packages/ui Button variants directly,
+    // whose default resolves to the dark `bg-foreground` pill.
+    const sharedButtonExports = new Set([
+      "Button",
+      "buttonVariants",
+      "AlertDialogAction",
+      "AlertDialogCancel",
+    ]);
+    const offenders = adminSourceFiles
+      .filter(({ path }) => path !== "components/AdminButton.tsx")
+      .flatMap(({ path, source }) => [
+        ...[
+          ...source.matchAll(
+            /import\s*(?:type\s*)?\{([^}]*)\}\s*from\s*"@entrelacos\/ui"/g,
+          ),
+        ]
+          .flatMap(([, specifiers = ""]) =>
+            specifiers.split(",").map(
+              (specifier) =>
+                specifier
+                  .trim()
+                  .replace(/^type\s+/, "")
+                  .split(/\s+as\s+/)[0],
+            ),
+          )
+          .filter((name) => name && sharedButtonExports.has(name))
+          .map((name) => `${path}: imports ${name}`),
+        ...[...source.matchAll(/<Button\b/g)].map(() => `${path}: <Button`),
+      ]);
+
+    expect(offenders).toEqual([]);
+    expect(
+      findAll(/import\s*\*\s*as\s+\w+\s+from\s*"@entrelacos\/ui"/g),
+    ).toEqual([]);
+  });
+
   it("resolves the shared primary, link and focus colors to the admin accent", () => {
     expect(tailwindSource).toContain(
       "--color-primary: var(--color-admin-accent);",

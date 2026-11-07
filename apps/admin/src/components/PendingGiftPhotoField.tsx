@@ -1,6 +1,6 @@
 import { giftImageAlt } from "@entrelacos/contracts";
-import { Button } from "@entrelacos/ui";
 import { useEffect, useId, useRef, useState } from "react";
+import { AdminButton } from "./AdminButton";
 import {
   acceptedImageTypes,
   fileProblem,
@@ -138,14 +138,15 @@ export function PendingGiftPhotoField({
             />
             <div className="flex flex-wrap items-center gap-2">
               {onRetry && error && (
-                <Button
+                <AdminButton
+                  tone="primary"
                   type="button"
                   className="min-h-11"
                   disabled={disabled}
                   onClick={onRetry}
                 >
                   Enviar foto de novo
-                </Button>
+                </AdminButton>
               )}
               <button
                 type="button"

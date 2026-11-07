@@ -1,7 +1,8 @@
 import type { ReceivingReadiness } from "@entrelacos/contracts";
-import { Button, showSandboxNotice } from "@entrelacos/ui";
+import { showSandboxNotice } from "@entrelacos/ui";
 import { type ReactNode, useCallback, useEffect, useState } from "react";
 import { displayHeading } from "../lib/adminStyles";
+import { AdminButton } from "./AdminButton";
 import { GiftEditor } from "./GiftEditor";
 import { GiftsLocked } from "./GiftsLocked";
 import {
@@ -112,9 +113,9 @@ export function GiftsReadinessView({
           bloqueados.
         </p>
         <div>
-          <Button type="button" variant="outline" onClick={onRetry}>
+          <AdminButton type="button" tone="secondary" onClick={onRetry}>
             Tentar novamente
-          </Button>
+          </AdminButton>
         </div>
         <GiftsLocked receivingAction={receivingAction} />
       </div>

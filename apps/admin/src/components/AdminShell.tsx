@@ -1,11 +1,5 @@
 import type { MeResponse, SiteAccess } from "@entrelacos/contracts";
-import {
-  Button,
-  cn,
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@entrelacos/ui";
+import { cn, Popover, PopoverContent, PopoverTrigger } from "@entrelacos/ui";
 import { Link } from "@tanstack/react-router";
 import {
   BookOpen,
@@ -21,6 +15,7 @@ import {
   Wallet,
 } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
+import { AdminButton } from "./AdminButton";
 import {
   type AdminRole,
   getInitials,
@@ -123,9 +118,9 @@ export function AdminShell({
               )}
             />
           </Link>
-          <Button
+          <AdminButton
             type="button"
-            variant="ghost"
+            tone="ghost"
             size="icon-sm"
             className="size-8 shrink-0 justify-self-center text-admin-text-secondary hover:bg-admin-accent-subtle hover:text-admin-accent-hover"
             aria-expanded={expanded}
@@ -149,7 +144,7 @@ export function AdminShell({
                 )}
               />
             </span>
-          </Button>
+          </AdminButton>
         </div>
         <div
           className={cn(

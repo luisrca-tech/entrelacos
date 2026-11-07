@@ -1,5 +1,5 @@
-import { Button } from "@entrelacos/ui";
 import { useCallback, useEffect, useRef } from "react";
+import { AdminButton } from "./AdminButton";
 
 export function LoadMoreButton({
   cursor,
@@ -62,16 +62,16 @@ export function LoadMoreButton({
 
   if (!cursor) return null;
   return (
-    <Button
+    <AdminButton
       ref={button}
       type="button"
-      variant="outline"
+      tone="secondary"
       className={className}
       disabled={disabled || loading}
       aria-busy={loading}
       onClick={() => void load()}
     >
       {loading ? "Carregando mais…" : label}
-    </Button>
+    </AdminButton>
   );
 }

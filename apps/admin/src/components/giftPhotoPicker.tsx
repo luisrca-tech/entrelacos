@@ -1,7 +1,8 @@
 import { giftMediaUploadInputSchema } from "@entrelacos/contracts";
-import { Button, Input } from "@entrelacos/ui";
+import { Input } from "@entrelacos/ui";
 import { Camera, ImageIcon, Upload } from "lucide-react";
 import { type DragEvent, useRef, useState } from "react";
+import { AdminButton } from "./AdminButton";
 
 // Shared pieces of the gift photo field: the saved-gift field (GiftImageField)
 // and the new-gift field (PendingGiftPhotoField) pick, drop and describe a
@@ -98,9 +99,9 @@ export function GiftPhotoDropzone({
       <span className="hidden text-base font-bold text-admin-text [@media(max-width:760px)]:inline [@media(pointer:coarse)]:inline">
         Tire uma foto ou escolha da galeria
       </span>
-      <Button
+      <AdminButton
         type="button"
-        variant="outline"
+        tone="secondary"
         disabled={blocked}
         className="min-h-11 rounded-[10px] border-admin-border-strong bg-admin-surface px-5 text-[0.95rem] font-semibold text-admin-accent-hover focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-admin-accent/30 [@media(max-width:760px)]:min-h-12 [@media(max-width:760px)]:w-full [@media(max-width:760px)]:max-w-[280px] [@media(pointer:coarse)]:min-h-12"
         onClick={(event) => {
@@ -110,7 +111,7 @@ export function GiftPhotoDropzone({
       >
         <ImageIcon aria-hidden="true" />
         Escolher foto
-      </Button>
+      </AdminButton>
       <span id={formatsId} className="text-[0.82rem] text-admin-text-secondary">
         JPEG, PNG ou WebP · até 5 MB
         <span className="[@media(max-width:760px)]:hidden">

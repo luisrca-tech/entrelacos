@@ -4,7 +4,6 @@ import type {
 } from "@entrelacos/contracts";
 import {
   Badge,
-  Button,
   Dialog,
   DialogTitle,
   showSandboxNotice,
@@ -21,6 +20,7 @@ import {
   useState,
 } from "react";
 import { adminStyles } from "../lib/adminStyles";
+import { AdminButton } from "./AdminButton";
 import { AdminDialogContent } from "./AdminDialog";
 import { financialFlow, formatCents, purchaseNetCents } from "./financialFlow";
 import {
@@ -483,16 +483,16 @@ export function GiftPaymentHistoryView(
               {!detail &&
                 (state.status === "unavailable" ||
                   state.status === "conflict") && (
-                  <Button
+                  <AdminButton
                     type="button"
-                    variant="outline"
+                    tone="secondary"
                     disabled={disabled}
                     onClick={() => {
                       void active?.retryFailedRead();
                     }}
                   >
                     Tentar consulta novamente
-                  </Button>
+                  </AdminButton>
                 )}
             </div>
           )}
@@ -678,16 +678,16 @@ export function GiftPaymentHistoryView(
                     Não foi possível atualizar esta consulta. O histórico
                     anterior foi preservado.
                   </p>
-                  <Button
+                  <AdminButton
                     type="button"
-                    variant="outline"
+                    tone="secondary"
                     disabled={disabled}
                     onClick={() => {
                       void active?.retryFailedRead();
                     }}
                   >
                     Tentar consulta novamente
-                  </Button>
+                  </AdminButton>
                 </div>
               )}
               <div className="flex flex-wrap gap-x-4">

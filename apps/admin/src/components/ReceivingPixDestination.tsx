@@ -10,7 +10,6 @@ import {
 } from "@entrelacos/contracts";
 import {
   Badge,
-  Button,
   Input,
   showSandboxNotice,
   Table,
@@ -31,6 +30,7 @@ import {
   useState,
 } from "react";
 import { ApiError, apiRequest } from "../lib/apiClient";
+import { AdminButton } from "./AdminButton";
 import {
   FinancialReauthenticationForm,
   type FinancialReauthenticationHandle,
@@ -589,9 +589,9 @@ export function ReceivingPixDestinationView({
               Este casamento mantém um destino Pix ativo.
             </p>
             {!readOnly && !editing && (
-              <Button
+              <AdminButton
                 type="button"
-                variant="outline"
+                tone="secondary"
                 className="w-fit"
                 disabled={locked}
                 onClick={() => {
@@ -602,7 +602,7 @@ export function ReceivingPixDestinationView({
                 }}
               >
                 Alterar conta para saque
-              </Button>
+              </AdminButton>
             )}
           </div>
         </section>
@@ -684,15 +684,15 @@ export function ReceivingPixDestinationView({
           </div>
           {!state.review && (
             <div className="flex flex-wrap gap-3">
-              <Button type="submit" variant="outline" disabled={locked}>
+              <AdminButton type="submit" tone="secondary" disabled={locked}>
                 {state.status === "loading"
                   ? "Conferindo destinatário…"
                   : "Conferir destinatário"}
-              </Button>
+              </AdminButton>
               {state.saved && (
-                <Button
+                <AdminButton
                   type="button"
-                  variant="ghost"
+                  tone="ghost"
                   disabled={
                     state.status === "saving" || state.status === "unknown"
                   }
@@ -703,7 +703,7 @@ export function ReceivingPixDestinationView({
                   }}
                 >
                   Cancelar alteração
-                </Button>
+                </AdminButton>
               )}
             </div>
           )}
@@ -911,9 +911,10 @@ function PixRecipientConfirmation({
           </label>
         )}
         <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
-          <Button
+          <AdminButton
+            tone="primary"
             type="submit"
-            className="min-h-12 rounded-[10px] bg-admin-accent px-6 font-bold text-admin-on-accent hover:bg-admin-accent-hover disabled:bg-admin-subtle-hover disabled:text-admin-text-secondary disabled:opacity-100"
+            className="min-h-12 rounded-[10px] px-6 font-bold disabled:bg-admin-subtle-hover disabled:text-admin-text-secondary disabled:opacity-100"
             disabled={
               !enabled ||
               !confirmed ||
@@ -921,7 +922,7 @@ function PixRecipientConfirmation({
             }
           >
             Salvar conta para saque
-          </Button>
+          </AdminButton>
           <button
             type="button"
             onClick={onOtherKey}

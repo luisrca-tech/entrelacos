@@ -5,7 +5,7 @@ import {
   type SiteRecord,
   siteHomeSummarySchema,
 } from "@entrelacos/contracts";
-import { Badge, Button, toast } from "@entrelacos/ui";
+import { Badge, toast } from "@entrelacos/ui";
 import { Link } from "@tanstack/react-router";
 import {
   ArrowRight,
@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { apiRequest } from "../lib/apiClient";
+import { AdminButton } from "./AdminButton";
 import { formatBrazilianLongDate } from "./brazilianDate";
 import { loadGiftsReadiness } from "./giftsReadiness";
 import { HomeAreaCard } from "./HomeAreaCard";
@@ -301,14 +302,14 @@ export function SiteHomeView({
                 {site.publicUrl}
               </p>
               <div className="flex flex-wrap items-center gap-3.5">
-                <Button
+                <AdminButton
                   type="button"
-                  variant="outline"
+                  tone="secondary"
                   className="border-admin-border-strong bg-transparent"
                   onClick={() => void copySite()}
                 >
                   Copiar
-                </Button>
+                </AdminButton>
                 <a
                   href={site.publicUrl}
                   target="_blank"
@@ -340,14 +341,15 @@ export function SiteHomeView({
               {plan.next.description}
             </p>
           </div>
-          <Button
+          <AdminButton
+            tone="primary"
             nativeButton={false}
-            className="w-full shrink-0 bg-admin-accent text-admin-on-accent hover:bg-admin-accent-hover sm:w-auto"
+            className="w-full shrink-0 sm:w-auto"
             render={<Link to={plan.next.href} />}
           >
             {plan.next.label}
             <ArrowRight className="size-4" aria-hidden="true" />
-          </Button>
+          </AdminButton>
         </section>
       )}
       <section className="grid gap-3" aria-labelledby="home-areas-title">
@@ -421,9 +423,9 @@ export function SiteHomeView({
         {failed && (
           <div className="flex flex-wrap items-center gap-2 text-sm text-admin-text-secondary">
             <span>Não foi possível atualizar o resumo do casamento.</span>
-            <Button type="button" variant="ghost" size="sm" onClick={onRetry}>
+            <AdminButton type="button" tone="ghost" size="sm" onClick={onRetry}>
               Tentar novamente
-            </Button>
+            </AdminButton>
           </div>
         )}
       </section>

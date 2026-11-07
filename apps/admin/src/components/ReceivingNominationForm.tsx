@@ -1,5 +1,5 @@
 import { receivingNominationResponseSchema } from "@entrelacos/contracts";
-import { Button, Checkbox, showSandboxNotice } from "@entrelacos/ui";
+import { Checkbox, showSandboxNotice } from "@entrelacos/ui";
 import {
   type FormEvent,
   useId,
@@ -7,6 +7,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { AdminButton } from "./AdminButton";
 import {
   FinancialReauthenticationForm,
   type FinancialReauthenticationHandle,
@@ -244,11 +245,11 @@ export function ReceivingNominationView({
               Confirmo que estou me indicando como recebedor deste casamento.
             </label>
           </div>
-          <Button type="submit" disabled={disabled}>
+          <AdminButton tone="primary" type="submit" disabled={disabled}>
             {current.uncertain
               ? "Verificar esta indicação"
               : "Confirmar minha indicação"}
-          </Button>
+          </AdminButton>
         </form>
       )}
     </section>

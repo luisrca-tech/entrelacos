@@ -1,9 +1,9 @@
 import type { ReceivingReadiness, SiteAccess } from "@entrelacos/contracts";
-import { Button } from "@entrelacos/ui";
 import { Link } from "@tanstack/react-router";
 import { ChevronRight, Landmark, Percent, UserRound } from "lucide-react";
 import { type ReactNode, useContext, useEffect, useState } from "react";
 import { ReceivingStatusCard } from "../features/receiving/ReceivingStatusCard";
+import { AdminButton } from "./AdminButton";
 import { type FinanceLinks, FinanceSection } from "./FinanceSection";
 import { loadGiftsReadiness } from "./giftsReadiness";
 import { isCurrentPanelSessionEpoch, panelActorOwner } from "./panelActor";
@@ -217,7 +217,8 @@ export function ReceivingSectionView({
             </Link>
           ) : undefined
         ) : setupEligible ? (
-          <Button
+          <AdminButton
+            tone="primary"
             className="w-fit"
             nativeButton={false}
             render={
@@ -228,7 +229,7 @@ export function ReceivingSectionView({
             }
           >
             Acompanhar ativação
-          </Button>
+          </AdminButton>
         ) : undefined
       }
     />
@@ -254,9 +255,9 @@ export function ReceivingSectionView({
               ? "Não foi possível consultar o acesso de leitura deste casamento."
               : "Consultando o acesso de leitura deste casamento…"}
           </p>
-          <Button className="w-fit" onClick={onRetry}>
+          <AdminButton tone="primary" className="w-fit" onClick={onRetry}>
             Verificar acesso
-          </Button>
+          </AdminButton>
         </section>
       ) : readinessPending ? (
         <>

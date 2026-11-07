@@ -1,9 +1,10 @@
 import type { MeResponse } from "@entrelacos/contracts";
-import { Button, toast } from "@entrelacos/ui";
+import { toast } from "@entrelacos/ui";
 import { Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { adminStyles, displayHeading } from "../lib/adminStyles";
 import { apiRequest } from "../lib/apiClient";
+import { AdminButton } from "./AdminButton";
 import { AdminShell, ShellLoading } from "./AdminShell";
 import { resolveSiteArea, type SiteArea } from "./adminNavigation";
 import { OwnerSites } from "./OwnerSites";
@@ -141,9 +142,9 @@ export function PanelSessionView({
                 ? "Você não tem acesso ao painel."
                 : "Não foi possível carregar o painel."}
             </p>
-            <Button className="w-fit" onClick={onVerify}>
+            <AdminButton tone="primary" className="w-fit" onClick={onVerify}>
               Tentar novamente
-            </Button>
+            </AdminButton>
           </div>
         )}
       </ShellLoading>

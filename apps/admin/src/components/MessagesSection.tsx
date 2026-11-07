@@ -4,14 +4,12 @@ import {
 } from "@entrelacos/contracts";
 import {
   AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
+  AlertDialogClose,
   AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
   Badge,
-  Button,
   Checkbox,
   Input,
   toast,
@@ -20,6 +18,7 @@ import { MessageCircle, Search } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { adminStyles } from "../lib/adminStyles";
 import { apiRequest } from "../lib/apiClient";
+import { AdminButton } from "./AdminButton";
 import { AdminAlertDialogContent } from "./AdminDialog";
 import { getInitials } from "./adminNavigation";
 import { LoadMoreButton } from "./LoadMoreButton";
@@ -262,15 +261,15 @@ export function MessagesSection({ siteId, lifecycle, publicUrl }: Props) {
             <p className="m-0 text-sm text-admin-text-secondary" role="alert">
               {error}
             </p>
-            <Button
+            <AdminButton
               className="w-fit"
               type="button"
-              variant="outline"
+              tone="secondary"
               disabled={loading || loadingMore}
               onClick={() => void load(retryCursor, searchInput)}
             >
               Tentar novamente
-            </Button>
+            </AdminButton>
           </div>
         )}
         {loading ? (
@@ -393,10 +392,14 @@ export function MessagesSection({ siteId, lifecycle, publicUrl }: Props) {
             </blockquote>
           )}
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={Boolean(pending)}>
+            <AlertDialogClose
+              render={<AdminButton tone="secondary" className="sm:min-w-24" />}
+              disabled={Boolean(pending)}
+            >
               Cancelar
-            </AlertDialogCancel>
-            <AlertDialogAction
+            </AlertDialogClose>
+            <AdminButton
+              tone="danger"
               className={adminStyles.dangerButton}
               disabled={Boolean(pending)}
               onClick={() => {
@@ -412,7 +415,7 @@ export function MessagesSection({ siteId, lifecycle, publicUrl }: Props) {
               }}
             >
               Remover mensagem
-            </AlertDialogAction>
+            </AdminButton>
           </AlertDialogFooter>
         </AdminAlertDialogContent>
       </AlertDialog>

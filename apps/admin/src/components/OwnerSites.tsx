@@ -4,9 +4,6 @@ import type {
   SiteRecord,
 } from "@entrelacos/contracts";
 import {
-  Button,
-  buttonVariants,
-  cn,
   Input,
   Table,
   TableBody,
@@ -26,6 +23,7 @@ import {
 } from "react";
 import { adminStyles, displayHeading } from "../lib/adminStyles";
 import { apiRequest } from "../lib/apiClient";
+import { AdminButton, adminButtonClassName } from "./AdminButton";
 import { formatBrazilianDate } from "./brazilianDate";
 import { CreateWeddingDialog } from "./CreateWeddingDialog";
 import { LoadMoreButton } from "./LoadMoreButton";
@@ -226,15 +224,15 @@ function OwnerSitesRuntime({
           <p className="m-0 text-sm text-admin-text-secondary" role="alert">
             {error}
           </p>
-          <Button
+          <AdminButton
             className="w-fit"
             type="button"
-            variant="outline"
+            tone="secondary"
             disabled={loading || loadingMore}
             onClick={() => void load(retryCursor)}
           >
             Tentar novamente
-          </Button>
+          </AdminButton>
         </div>
       )}
 
@@ -249,13 +247,13 @@ function OwnerSitesRuntime({
               ["INACTIVE", "Inativos"],
             ] as const
           ).map(([status, label]) => (
-            <Button
+            <AdminButton
               key={status}
               type="button"
               size="sm"
-              variant="ghost"
+              tone="ghost"
               aria-pressed={lifecycle === status}
-              className={`h-9 px-3 text-sm font-semibold ${lifecycle === status ? adminStyles.selected : ""}`}
+              className={`h-9 px-3 text-sm font-semibold ${lifecycle === status ? adminStyles.selected : "text-admin-text-secondary"}`}
               onClick={() => setLifecycle(status)}
             >
               {label}
@@ -271,7 +269,7 @@ function OwnerSitesRuntime({
                     : totals[status]}
                 </span>
               )}
-            </Button>
+            </AdminButton>
           ))}
         </div>
         <label
@@ -426,9 +424,9 @@ function OwnerSitesRuntime({
   );
 }
 
-const openAction = cn(
-  buttonVariants({ variant: "outline" }),
-  "h-[38px] rounded-[10px] border-admin-border-strong bg-admin-surface px-6 text-[15px] font-semibold text-admin-text no-underline hover:bg-admin-canvas",
+const openAction = adminButtonClassName(
+  "secondary",
+  "h-[38px] rounded-[10px] border-admin-border-strong px-6 text-[15px] font-semibold no-underline hover:bg-admin-canvas",
 );
 
 function LifecycleBadge({ lifecycle }: { lifecycle: SiteRecord["lifecycle"] }) {

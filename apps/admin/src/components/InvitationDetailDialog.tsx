@@ -2,9 +2,10 @@ import {
   formatInvitationPhoneInput,
   type InvitationRecord,
 } from "@entrelacos/contracts";
-import { Button, Dialog, DialogTitle, toast } from "@entrelacos/ui";
+import { Dialog, DialogTitle, toast } from "@entrelacos/ui";
 import { Copy, Pencil, Plus, RotateCcw, Trash2 } from "lucide-react";
 import { useRef } from "react";
+import { AdminButton } from "./AdminButton";
 import { AdminDialogContent } from "./AdminDialog";
 import { InvitationStatus } from "./InvitationStatus";
 
@@ -74,16 +75,16 @@ export function InvitationDetailDialog({
               <p className="m-0 text-sm font-bold text-admin-text">
                 Como acessam o site
               </p>
-              <Button
+              <AdminButton
                 type="button"
-                variant="outline"
+                tone="secondary"
                 onClick={onEdit}
                 disabled={inactive}
                 className="border-admin-border"
               >
                 <Pencil aria-hidden="true" className="size-4" />
                 Editar
-              </Button>
+              </AdminButton>
             </div>
             <dl className="mt-5 grid gap-3 border-t border-admin-border pt-4 text-sm">
               <div>
@@ -118,25 +119,25 @@ export function InvitationDetailDialog({
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <Button
+                  <AdminButton
                     type="button"
-                    variant="outline"
+                    tone="secondary"
                     onClick={copyPin}
                     disabled={!accessPin}
                     className="border-admin-border"
                   >
                     <Copy aria-hidden="true" className="size-4" />
                     Copiar
-                  </Button>
-                  <Button
+                  </AdminButton>
+                  <AdminButton
                     type="button"
-                    variant="ghost"
+                    tone="ghost"
                     onClick={onRotatePin}
                     disabled={inactive}
                     aria-label="Gerar novo PIN"
                   >
                     <RotateCcw aria-hidden="true" className="size-4" />
-                  </Button>
+                  </AdminButton>
                 </div>
               </div>
               <p className="mb-0 mt-3 text-xs leading-relaxed text-admin-text-secondary">
@@ -168,28 +169,34 @@ export function InvitationDetailDialog({
               ))}
             </ul>
           </section>
-          <Button
+          <AdminButton
+            tone="primary"
             type="button"
             onClick={onManage}
-            className="w-full bg-admin-accent text-admin-on-accent hover:bg-admin-accent-hover"
+            className="w-full"
           >
             Gerenciar confirmações
-          </Button>
+          </AdminButton>
           <div className="flex flex-wrap justify-between gap-3 border-t border-admin-border pt-4">
-            <Button
+            <AdminButton
               type="button"
-              variant="outline"
+              tone="secondary"
               onClick={onDelete}
               disabled={inactive}
               className="border-admin-danger text-admin-danger"
             >
               <Trash2 aria-hidden="true" className="size-4" />
               Excluir convite
-            </Button>
-            <Button type="button" onClick={onEdit} disabled={inactive}>
+            </AdminButton>
+            <AdminButton
+              tone="secondary"
+              type="button"
+              onClick={onEdit}
+              disabled={inactive}
+            >
               <Plus aria-hidden="true" className="size-4" />
               Adicionar convidado
-            </Button>
+            </AdminButton>
           </div>
         </div>
       </AdminDialogContent>

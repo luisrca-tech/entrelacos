@@ -4,9 +4,10 @@ import {
   type SiteAccess,
   siteAccessSchema,
 } from "@entrelacos/contracts";
-import { Button, showSandboxNotice } from "@entrelacos/ui";
+import { showSandboxNotice } from "@entrelacos/ui";
 import { RefreshCw } from "lucide-react";
 import type { ReactNode } from "react";
+import { AdminButton } from "../../components/AdminButton";
 import {
   type FinancialFlowSegmentId,
   financialFlow,
@@ -169,9 +170,9 @@ export function FinancialOverviewCard({
         </p>
         {error && (
           <div>
-            <Button type="button" variant="outline" onClick={onRetry}>
+            <AdminButton type="button" tone="secondary" onClick={onRetry}>
               Tentar novamente
-            </Button>
+            </AdminButton>
           </div>
         )}
       </OverviewNotice>

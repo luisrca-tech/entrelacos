@@ -2,8 +2,9 @@ import {
   type InvitationRecord,
   invitationGroupStatus,
 } from "@entrelacos/contracts";
-import { Badge, Button } from "@entrelacos/ui";
+import { Badge } from "@entrelacos/ui";
 import { Ellipsis, Mail, UsersRound } from "lucide-react";
+import { AdminButton } from "./AdminButton";
 import { invitationResponseSummary } from "./invitationView";
 
 type Props = {
@@ -87,13 +88,14 @@ export function InvitationList({
               ))}
             </ol>
             {onAdd && (
-              <Button
+              <AdminButton
+                tone="primary"
                 type="button"
                 onClick={onAdd}
-                className="mt-6 bg-admin-accent text-admin-on-accent hover:bg-admin-accent-hover"
+                className="mt-6"
               >
                 Novo convite
-              </Button>
+              </AdminButton>
             )}
           </>
         )}

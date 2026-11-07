@@ -1,11 +1,11 @@
 import {
-  Button,
   Popover,
   PopoverContent,
   PopoverTitle,
   PopoverTrigger,
 } from "@entrelacos/ui";
 import { SlidersHorizontal } from "lucide-react";
+import { AdminButton } from "./AdminButton";
 import type {
   InvitationFilters,
   InvitationGuestType,
@@ -66,9 +66,9 @@ export function InvitationFiltersPopover({
     <Popover>
       <PopoverTrigger
         render={
-          <Button
+          <AdminButton
             type="button"
-            variant="outline"
+            tone="secondary"
             aria-label="Filtrar convites"
             className="min-h-11 border-admin-border bg-admin-surface"
           />
@@ -138,15 +138,15 @@ export function InvitationFiltersPopover({
         </fieldset>
         {selectedCount > 0 && (
           <div className="border-t border-admin-border px-4 py-3">
-            <Button
+            <AdminButton
               type="button"
-              variant="ghost"
+              tone="ghost"
               onClick={() =>
                 onChange({ ...filters, status: "ALL", guestType: "ALL" })
               }
             >
               Limpar filtros
-            </Button>
+            </AdminButton>
           </div>
         )}
       </PopoverContent>

@@ -4,18 +4,13 @@ import {
   type InvitationRecord,
   invitationCreateInputSchema,
 } from "@entrelacos/contracts";
-import {
-  Button,
-  Dialog,
-  DialogDescription,
-  DialogTitle,
-  Input,
-} from "@entrelacos/ui";
+import { Dialog, DialogDescription, DialogTitle, Input } from "@entrelacos/ui";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Plus, Trash2 } from "lucide-react";
 import { useEffect } from "react";
 import { Controller, useFieldArray, useForm, useWatch } from "react-hook-form";
 import type { z } from "zod";
+import { AdminButton } from "./AdminButton";
 import { AdminDialogContent } from "./AdminDialog";
 import { invitationFormValues } from "./invitationFormValues";
 import { NumberedSection } from "./NumberedSection";
@@ -199,9 +194,9 @@ export function InvitationFormDialog({
                         />
                       </label>
                       {fields.length > 1 && (
-                        <Button
+                        <AdminButton
                           type="button"
-                          variant="ghost"
+                          tone="ghost"
                           size="icon"
                           onClick={() => remove(index)}
                           disabled={busy || inactive}
@@ -209,7 +204,7 @@ export function InvitationFormDialog({
                           className="size-11 shrink-0"
                         >
                           <Trash2 aria-hidden="true" className="size-4" />
-                        </Button>
+                        </AdminButton>
                       )}
                     </div>
                     {errors.guests?.[index]?.fullName && (
@@ -243,16 +238,16 @@ export function InvitationFormDialog({
                   </li>
                 ))}
               </ul>
-              <Button
+              <AdminButton
                 type="button"
-                variant="outline"
+                tone="secondary"
                 onClick={() => append({ fullName: "", guestType: "ADULT" })}
                 disabled={busy || inactive}
                 className="min-h-11 w-fit border-admin-border"
               >
                 <Plus aria-hidden="true" className="size-4" />
                 Adicionar pessoa
-              </Button>
+              </AdminButton>
               {errors.guests?.root && (
                 <span role="alert" className={fieldError}>
                   Adicione pelo menos um convidado.
@@ -283,21 +278,21 @@ export function InvitationFormDialog({
             data-slot="dialog-footer"
             className="sticky bottom-0 flex w-full shrink-0 justify-end gap-2 border-t border-admin-border bg-admin-surface px-[30px] py-3 [@media(max-width:760px)]:px-[18px]"
           >
-            <Button
+            <AdminButton
               type="button"
-              variant="outline"
+              tone="secondary"
               onClick={() => onOpenChange(false)}
               disabled={busy}
             >
               Cancelar
-            </Button>
-            <Button
+            </AdminButton>
+            <AdminButton
+              tone="primary"
               type="submit"
               disabled={busy || inactive}
-              className="bg-admin-accent text-admin-on-accent hover:bg-admin-accent-hover"
             >
               {busy ? "Salvando…" : "Salvar convite"}
-            </Button>
+            </AdminButton>
           </div>
         </form>
       </AdminDialogContent>

@@ -12,7 +12,6 @@ import type {
 } from "@entrelacos/contracts";
 import { siteHomeSummarySchema } from "@entrelacos/contracts";
 import {
-  Button,
   Dialog,
   DialogDescription,
   DialogTitle,
@@ -23,6 +22,7 @@ import { Search } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { adminStyles } from "../lib/adminStyles";
 import { ApiError, apiRequest } from "../lib/apiClient";
+import { AdminButton } from "./AdminButton";
 import { AdminDialogContent } from "./AdminDialog";
 import { InvitationDeleteDialog } from "./InvitationDeleteDialog";
 import { InvitationDetailDialog } from "./InvitationDetailDialog";
@@ -609,13 +609,13 @@ export function InvitationsSection({ siteId, lifecycle, sessionEpoch }: Props) {
                   const count = statusCount(siteTotals, status);
                   const selected = filters.status === status;
                   return (
-                    <Button
+                    <AdminButton
                       key={status}
                       type="button"
                       size="sm"
-                      variant="ghost"
+                      tone="ghost"
                       aria-pressed={selected}
-                      className={`shrink-0 gap-1.5 ${selected ? adminStyles.selected : ""}`}
+                      className={`shrink-0 gap-1.5 ${selected ? adminStyles.selected : "text-admin-text-secondary"}`}
                       onClick={() =>
                         setFilters((previous) => ({ ...previous, status }))
                       }
@@ -628,7 +628,7 @@ export function InvitationsSection({ siteId, lifecycle, sessionEpoch }: Props) {
                           {count}
                         </span>
                       )}
-                    </Button>
+                    </AdminButton>
                   );
                 })}
               </fieldset>
@@ -803,9 +803,9 @@ export function InvitationsSection({ siteId, lifecycle, sessionEpoch }: Props) {
               </p>
             )}
             <div className="flex flex-wrap justify-end gap-2">
-              <Button
+              <AdminButton
                 type="button"
-                variant="outline"
+                tone="secondary"
                 onClick={() => {
                   setDeadlineDate("");
                   setDeadlineTime("");
@@ -813,10 +813,14 @@ export function InvitationsSection({ siteId, lifecycle, sessionEpoch }: Props) {
                 disabled={busy}
               >
                 Remover prazo
-              </Button>
-              <Button type="submit" disabled={busy || inactive}>
+              </AdminButton>
+              <AdminButton
+                tone="primary"
+                type="submit"
+                disabled={busy || inactive}
+              >
                 {busy ? "Salvando…" : "Salvar prazo"}
-              </Button>
+              </AdminButton>
             </div>
           </form>
         </AdminDialogContent>

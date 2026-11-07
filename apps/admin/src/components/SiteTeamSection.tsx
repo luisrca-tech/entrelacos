@@ -6,13 +6,11 @@ import {
 } from "@entrelacos/contracts";
 import {
   AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
+  AlertDialogClose,
   AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  Button,
   Input,
   toast,
 } from "@entrelacos/ui";
@@ -24,6 +22,7 @@ import {
   useSyncExternalStore,
 } from "react";
 import { apiRequest } from "../lib/apiClient";
+import { AdminButton } from "./AdminButton";
 import { AdminAlertDialogContent } from "./AdminDialog";
 import { panelActorOwner } from "./panelActor";
 import { SiteTeamView } from "./SiteTeamView";
@@ -485,13 +484,13 @@ function SiteTeamRuntime({
             e pode ser usado uma vez.
           </p>
           <div>
-            <Button
+            <AdminButton
               type="button"
-              variant="outline"
+              tone="secondary"
               onClick={() => controller?.hideLink()}
             >
               Ocultar link
-            </Button>
+            </AdminButton>
           </div>
         </section>
       )}
@@ -532,8 +531,14 @@ function SiteTeamRuntime({
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={pending}>Cancelar</AlertDialogCancel>
-            <AlertDialogAction
+            <AlertDialogClose
+              render={<AdminButton tone="secondary" className="sm:min-w-24" />}
+              disabled={pending}
+            >
+              Cancelar
+            </AlertDialogClose>
+            <AdminButton
+              tone="danger"
               disabled={pending}
               onClick={(event) => {
                 event.preventDefault();
@@ -541,7 +546,7 @@ function SiteTeamRuntime({
               }}
             >
               Revogar
-            </AlertDialogAction>
+            </AdminButton>
           </AlertDialogFooter>
         </AdminAlertDialogContent>
       </AlertDialog>

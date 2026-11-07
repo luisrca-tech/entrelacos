@@ -4,9 +4,10 @@ import {
   type SiteAccess,
   siteAccessSchema,
 } from "@entrelacos/contracts";
-import { Button, showSandboxNotice } from "@entrelacos/ui";
+import { showSandboxNotice } from "@entrelacos/ui";
 import { Check } from "lucide-react";
 import type { ReactNode } from "react";
+import { AdminButton } from "../../components/AdminButton";
 import type { SavedPixDestinationSummary } from "../../components/savedPixDestination";
 
 const keyTypeLabels: Record<SavedPixDestinationSummary["keyType"], string> = {
@@ -99,9 +100,9 @@ export function ReceivingStatusCard({
           indisponível.
         </p>
         <div>
-          <Button type="button" variant="outline" onClick={onRetry}>
+          <AdminButton type="button" tone="secondary" onClick={onRetry}>
             Tentar novamente
-          </Button>
+          </AdminButton>
         </div>
       </>
     );

@@ -4,7 +4,7 @@ import {
   type ReceivingSetupContext,
   receivingIncomingPixDisclosure,
 } from "@entrelacos/contracts";
-import { Button, showSandboxNotice } from "@entrelacos/ui";
+import { showSandboxNotice } from "@entrelacos/ui";
 import { Link } from "@tanstack/react-router";
 import {
   ArrowDown,
@@ -27,6 +27,7 @@ import {
   useState,
 } from "react";
 import { apiRequest } from "../lib/apiClient";
+import { AdminButton } from "./AdminButton";
 import {
   type AsaasTasks,
   asaasTasksKey,
@@ -155,14 +156,14 @@ function SetupStatus({ context }: { context: ReceivingStepsContext }) {
         <p role="alert" className={receivingBody}>
           Configuração indisponível. Verifique a conexão e tente novamente.
         </p>
-        <Button
-          variant="outline"
+        <AdminButton
+          tone="secondary"
           className="w-fit"
           disabled={!context.onRetry}
           onClick={context.onRetry}
         >
           Tentar novamente
-        </Button>
+        </AdminButton>
       </div>
     );
   return null;
@@ -1015,14 +1016,14 @@ export function DetailsStep({ context }: { context: ReceivingStepsContext }) {
           setup.accountState !== "CREATED" &&
           context.status === "ready" &&
           !owner && (
-            <Button
-              variant="outline"
+            <AdminButton
+              tone="secondary"
               className="w-fit"
               disabled={busy || !context.onRetry}
               onClick={context.onRetry}
             >
               Verificar situação
-            </Button>
+            </AdminButton>
           )}
       </section>
     </StepFrame>
@@ -1558,13 +1559,13 @@ export function AccountStep({ context }: { context: ReceivingStepsContext }) {
                 </Link>
               )}
             {status === "unavailable" && (
-              <Button
-                variant="outline"
+              <AdminButton
+                tone="secondary"
                 className="w-fit"
                 onClick={context.onRetry}
               >
                 Tentar novamente
-              </Button>
+              </AdminButton>
             )}
           </div>
         )}

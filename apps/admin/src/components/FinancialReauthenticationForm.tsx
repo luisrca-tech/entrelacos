@@ -1,6 +1,5 @@
 import { financialReauthenticationResponseSchema } from "@entrelacos/contracts";
 import {
-  Button,
   Dialog,
   DialogDescription,
   DialogTitle,
@@ -18,6 +17,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { AdminButton } from "./AdminButton";
 import { AdminDialogContent } from "./AdminDialog";
 import {
   createFinancialReauthenticationController,
@@ -170,19 +170,21 @@ function FinancialReauthenticationRuntime(props: Props) {
   return (
     <Dialog open={open} onOpenChange={changeOpen}>
       <DialogTrigger
-        render={<Button type="button" variant="outline" disabled={!ready} />}
+        render={
+          <AdminButton type="button" tone="secondary" disabled={!ready} />
+        }
       >
         Confirmar senha
       </DialogTrigger>
       <AdminDialogContent>
         {view}
-        <Button
+        <AdminButton
           type="button"
-          variant="outline"
+          tone="secondary"
           onClick={() => changeOpen(false)}
         >
           Cancelar
-        </Button>
+        </AdminButton>
       </AdminDialogContent>
     </Dialog>
   );
@@ -345,9 +347,14 @@ export function FinancialReauthenticationView({
               aria-describedby={`${id}-hint`}
             />
           </div>
-          <Button type="submit" disabled={disabled} className="w-fit">
+          <AdminButton
+            tone="primary"
+            type="submit"
+            disabled={disabled}
+            className="w-fit"
+          >
             {current.status === "loading" ? "Confirmando…" : "Confirmar senha"}
-          </Button>
+          </AdminButton>
         </form>
       )}
     </section>

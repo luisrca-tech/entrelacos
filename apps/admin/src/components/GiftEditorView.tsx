@@ -10,13 +10,11 @@ import {
 } from "@entrelacos/contracts";
 import {
   AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
+  AlertDialogClose,
   AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  Button,
   Dialog,
   DialogClose,
   DialogDescription,
@@ -41,6 +39,7 @@ import {
 import type { FormEvent, ReactNode } from "react";
 import { useEffect, useId, useState } from "react";
 import { adminStyles, displayHeading } from "../lib/adminStyles";
+import { AdminButton } from "./AdminButton";
 import { AdminAlertDialogContent, AdminDialogContent } from "./AdminDialog";
 import {
   type GiftPricingEstimate,
@@ -696,15 +695,16 @@ export function GiftEditorView({
               sem produto ou entrega.
             </p>
           </div>
-          <Button
+          <AdminButton
+            tone="primary"
             type="button"
-            className="min-h-12 rounded-[10px] px-6 text-[0.95rem] font-bold bg-admin-accent text-admin-on-accent hover:bg-admin-accent-hover [@media(max-width:760px)]:w-full"
+            className="min-h-12 rounded-[10px] px-6 text-[0.95rem] font-bold [@media(max-width:760px)]:w-full"
             disabled={mutationBlocked}
             onClick={() => openEditor({ kind: "create" })}
           >
             <Plus aria-hidden="true" />
             Adicionar presente
-          </Button>
+          </AdminButton>
         </header>
       )}
 
@@ -716,15 +716,15 @@ export function GiftEditorView({
       {error && (
         <div className={adminStyles.alert} role="alert">
           <p>{error}</p>
-          <Button
+          <AdminButton
             type="button"
-            variant="outline"
+            tone="secondary"
             className="mt-3"
             disabled={busy || loading}
             onClick={onRetry}
           >
             Tentar novamente
-          </Button>
+          </AdminButton>
         </div>
       )}
 
@@ -949,15 +949,15 @@ export function GiftEditorView({
                 published={selected?.publicationState === "PUBLISHED"}
               />
               {selected && (
-                <Button
+                <AdminButton
                   type="button"
-                  variant="ghost"
+                  tone="ghost"
                   className="w-fit text-admin-danger-text"
                   disabled={mutationBlocked}
                   onClick={() => setArchive(selected)}
                 >
                   Arquivar presente
-                </Button>
+                </AdminButton>
               )}
             </aside>
           </article>
@@ -979,31 +979,33 @@ export function GiftEditorView({
             </button>
             <div className="flex flex-1 flex-wrap justify-end gap-3 [@media(max-width:760px)]:grid [@media(max-width:760px)]:grid-cols-2">
               {selected?.publicationState === "PUBLISHED" ? (
-                <Button
+                <AdminButton
+                  tone="primary"
                   type="submit"
                   form={formId}
-                  className="min-h-12 rounded-[10px] px-6 text-[0.95rem] font-bold bg-admin-accent text-admin-on-accent hover:bg-admin-accent-hover [@media(max-width:760px)]:col-span-2"
+                  className="min-h-12 rounded-[10px] px-6 text-[0.95rem] font-bold [@media(max-width:760px)]:col-span-2"
                   disabled={mutationBlocked}
                 >
                   {busy ? "Salvando…" : "Salvar alterações"}
-                </Button>
+                </AdminButton>
               ) : (
                 <>
-                  <Button
+                  <AdminButton
                     type="submit"
                     form={formId}
                     value="draft"
-                    variant="outline"
+                    tone="secondary"
                     className="min-h-12 rounded-[10px] border-admin-border-strong px-6 text-[0.95rem] font-semibold"
                     disabled={mutationBlocked}
                   >
                     {busy ? "Salvando…" : "Salvar rascunho"}
-                  </Button>
-                  <Button
+                  </AdminButton>
+                  <AdminButton
+                    tone="primary"
                     type="submit"
                     form={formId}
                     value="publish"
-                    className="min-h-12 rounded-[10px] px-6 text-[0.95rem] font-bold bg-admin-accent text-admin-on-accent hover:bg-admin-accent-hover disabled:bg-admin-subtle-hover disabled:text-admin-text-secondary disabled:opacity-100"
+                    className="min-h-12 rounded-[10px] px-6 text-[0.95rem] font-bold disabled:bg-admin-subtle-hover disabled:text-admin-text-secondary disabled:opacity-100"
                     disabled={mutationBlocked || !canPublishNow}
                   >
                     <span className="[@media(max-width:760px)]:hidden">
@@ -1012,7 +1014,7 @@ export function GiftEditorView({
                     <span className="hidden [@media(max-width:760px)]:inline">
                       Publicar
                     </span>
-                  </Button>
+                  </AdminButton>
                 </>
               )}
             </div>
@@ -1104,16 +1106,16 @@ export function GiftEditorView({
                 <p className="m-0 max-w-md text-sm leading-relaxed text-admin-text-secondary">
                   Tente outra busca ou escolha outro filtro.
                 </p>
-                <Button
+                <AdminButton
                   type="button"
-                  variant="outline"
+                  tone="secondary"
                   onClick={() => {
                     setQuery("");
                     setFilter("ACTIVE");
                   }}
                 >
                   Limpar filtros
-                </Button>
+                </AdminButton>
               </div>
             )}
           {!loading && !error && (
@@ -1230,9 +1232,9 @@ export function GiftEditorView({
                           </p>
                         ) : (
                           <div className="mt-auto flex items-center gap-2 pt-3">
-                            <Button
+                            <AdminButton
                               type="button"
-                              variant="outline"
+                              tone="secondary"
                               size="sm"
                               className="min-h-9 border-admin-border-strong"
                               disabled={mutationBlocked}
@@ -1241,10 +1243,10 @@ export function GiftEditorView({
                               }
                             >
                               Editar<span className="sr-only"> presente</span>
-                            </Button>
-                            <Button
+                            </AdminButton>
+                            <AdminButton
                               type="button"
-                              variant="outline"
+                              tone="secondary"
                               size="sm"
                               className="min-h-9 border-admin-border-strong"
                               disabled={mutationBlocked || publishBlocked}
@@ -1269,7 +1271,7 @@ export function GiftEditorView({
                               {gift.publicationState === "DRAFT"
                                 ? "Publicar"
                                 : "Despublicar"}
-                            </Button>
+                            </AdminButton>
                             <span className="ml-auto">
                               <OverflowMenu
                                 label={`Mais ações para ${gift.title}`}
@@ -1356,7 +1358,7 @@ export function GiftEditorView({
             )
           )}
           <DialogFooter>
-            <DialogClose render={<Button variant="outline" />}>
+            <DialogClose render={<AdminButton tone="secondary" />}>
               Fechar prévia
             </DialogClose>
           </DialogFooter>
@@ -1377,11 +1379,14 @@ export function GiftEditorView({
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={mutationBlocked}>
+            <AlertDialogClose
+              render={<AdminButton tone="secondary" className="sm:min-w-24" />}
+              disabled={mutationBlocked}
+            >
               Cancelar
-            </AlertDialogCancel>
-            <AlertDialogAction
-              variant="destructive"
+            </AlertDialogClose>
+            <AdminButton
+              tone="danger"
               disabled={mutationBlocked}
               onClick={() => {
                 const gift = archive;
@@ -1395,7 +1400,7 @@ export function GiftEditorView({
               }}
             >
               Arquivar presente
-            </AlertDialogAction>
+            </AdminButton>
           </AlertDialogFooter>
         </AdminAlertDialogContent>
       </AlertDialog>

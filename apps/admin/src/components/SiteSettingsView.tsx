@@ -5,7 +5,6 @@ import type {
   siteDomainRecordSchema,
 } from "@entrelacos/contracts";
 import {
-  Button,
   Input,
   Table,
   TableBody,
@@ -18,6 +17,7 @@ import {
 import { ChevronDown } from "lucide-react";
 import { type FormEvent, useEffect, useState } from "react";
 import { adminStyles } from "../lib/adminStyles";
+import { AdminButton } from "./AdminButton";
 import { getInitials } from "./adminNavigation";
 import { formatBrazilianDate, formatBrazilianWeekday } from "./brazilianDate";
 import { GeneratedAccessLink } from "./GeneratedAccessLink";
@@ -61,8 +61,7 @@ const tabs = [
   ["address", "Endereço do site"],
   ["access", "Acessos do casal"],
 ] as const;
-const primary =
-  "min-h-12 rounded-[10px] bg-admin-accent px-6 text-[15px] font-bold text-admin-on-accent hover:bg-admin-accent-hover";
+const primary = "min-h-12 rounded-[10px] px-6 text-[15px] font-bold";
 const outline =
   "min-h-12 rounded-[10px] border-admin-border-strong px-6 text-[15px] font-semibold text-admin-text";
 const textLink =
@@ -267,14 +266,15 @@ export function SiteSettingsView({
         </div>
         <div className="ml-auto flex shrink-0 items-center gap-2">
           {nextLifecycleAction && (
-            <Button
+            <AdminButton
+              tone="primary"
               type="button"
               className={primary}
               disabled={pending}
               onClick={() => onLifecycleAction(nextLifecycleAction.id)}
             >
               {nextLifecycleAction.label}
-            </Button>
+            </AdminButton>
           )}
           <OverflowMenu
             label="Ações da situação do casamento"
@@ -291,18 +291,18 @@ export function SiteSettingsView({
         className="m-0 flex min-w-0 w-fit max-w-full flex-wrap gap-1 rounded-xl border border-admin-border bg-admin-surface p-1"
       >
         {tabs.map(([key, label]) => (
-          <Button
+          <AdminButton
             key={key}
             type="button"
             size="sm"
-            variant="ghost"
+            tone="ghost"
             aria-pressed={tab === key}
             disabled={pending}
             className={`h-[38px] px-4 text-sm font-semibold ${tab === key ? adminStyles.selected : "text-admin-text-secondary"}`}
             onClick={() => selectTab(key)}
           >
             {label}
-          </Button>
+          </AdminButton>
         ))}
       </fieldset>
       {tab === "data" && (
@@ -320,9 +320,9 @@ export function SiteSettingsView({
                   <span className="text-[13px] font-medium text-admin-text">
                     {item.label}
                   </span>
-                  <Button
+                  <AdminButton
                     type="button"
-                    variant="link"
+                    tone="link"
                     className={textLink}
                     aria-label={`Editar ${item.label.toLowerCase()}`}
                     disabled={pending}
@@ -333,7 +333,7 @@ export function SiteSettingsView({
                     }
                   >
                     Editar
-                  </Button>
+                  </AdminButton>
                 </div>
                 <strong className="break-words text-[17px] text-admin-text">
                   {item.value}
@@ -358,16 +358,16 @@ export function SiteSettingsView({
                 <span className="text-[13px] font-medium text-admin-text">
                   Data do casamento
                 </span>
-                <Button
+                <AdminButton
                   type="button"
-                  variant="link"
+                  tone="link"
                   className={textLink}
                   aria-label="Editar data do casamento"
                   disabled={pending}
                   onClick={() => onEditRecord("dates")}
                 >
                   Editar
-                </Button>
+                </AdminButton>
               </div>
               <strong className="text-[17px] text-admin-text">
                 {formatBrazilianDate(site.eventDate)}
@@ -402,16 +402,16 @@ export function SiteSettingsView({
                     : "Vigência ainda não definida."}
                 </p>
               </div>
-              <Button
+              <AdminButton
                 type="button"
-                variant="link"
+                tone="link"
                 className={textLink}
                 aria-label="Editar vigência"
                 disabled={pending}
                 onClick={() => onEditRecord("dates")}
               >
                 Editar
-              </Button>
+              </AdminButton>
             </div>
             <p className="m-0 rounded-[10px] bg-admin-subtle px-3 py-2.5 text-[13px] leading-normal text-admin-text">
               A aprovação inicia um ano de vigência. O vencimento não inativa o
@@ -446,14 +446,15 @@ export function SiteSettingsView({
                   publicação é realizada separadamente.
                 </p>
               </div>
-              <Button
+              <AdminButton
+                tone="primary"
                 type="button"
                 className={primary}
                 disabled={pending}
                 onClick={() => onEditRecord("publication")}
               >
                 Registrar publicação
-              </Button>
+              </AdminButton>
             </div>
             <div className="grid gap-3 border-t border-admin-border pt-3.5">
               <p className="m-0 text-[11px] font-bold uppercase tracking-[0.12em] text-admin-text-secondary">
@@ -580,9 +581,14 @@ export function SiteSettingsView({
                   aria-describedby="site-public-url-help"
                 />
               </label>
-              <Button type="submit" className={primary} disabled={pending}>
+              <AdminButton
+                tone="primary"
+                type="submit"
+                className={primary}
+                disabled={pending}
+              >
                 Vincular endereço
-              </Button>
+              </AdminButton>
             </div>
             <p
               id="site-public-url-help"
@@ -641,14 +647,14 @@ export function SiteSettingsView({
                 {originError}
               </p>
             )}
-            <Button
+            <AdminButton
               type="submit"
-              variant="outline"
+              tone="secondary"
               className={`${outline} w-fit`}
               disabled={pending}
             >
               Salvar endereços
-            </Button>
+            </AdminButton>
           </form>
           <details className={`group ${adminStyles.surface}`}>
             <summary className="flex cursor-pointer list-none items-center gap-4 rounded-2xl p-6 outline-offset-4 marker:content-none">
@@ -674,14 +680,14 @@ export function SiteSettingsView({
                 <p className="m-0 text-sm text-admin-text-secondary">
                   Configuração, hospedagem e renovação são feitas separadamente.
                 </p>
-                <Button
+                <AdminButton
                   type="button"
-                  variant="outline"
+                  tone="secondary"
                   disabled={pending}
                   onClick={onAddDomain}
                 >
                   Registrar domínio
-                </Button>
+                </AdminButton>
               </div>
               {domains.length === 0 ? (
                 <p className="m-0 rounded-xl bg-admin-canvas p-4 text-sm text-admin-text-secondary">
@@ -751,15 +757,15 @@ export function SiteSettingsView({
                 horas, podem ser usados uma vez e só aparecem ao gerar.
               </p>
             </div>
-            <Button
+            <AdminButton
               type="button"
-              variant="outline"
+              tone="secondary"
               className={outline}
               disabled={pending}
               onClick={onAddAdmin}
             >
               Adicionar pessoa
-            </Button>
+            </AdminButton>
           </div>
           {!site.publicUrl && (
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-admin-border bg-admin-canvas py-2 pr-3 pl-[18px]">
@@ -771,14 +777,14 @@ export function SiteSettingsView({
               <p className="m-0 min-w-0 flex-[1_1_14rem] text-[13.5px] text-admin-text">
                 Vincule o endereço público quando o site estiver no ar.
               </p>
-              <Button
+              <AdminButton
                 type="button"
-                variant="link"
+                tone="link"
                 className={textLink}
                 onClick={() => selectTab("address")}
               >
                 Ir para Endereço do site
-              </Button>
+              </AdminButton>
             </div>
           )}
           <div
@@ -860,9 +866,9 @@ export function SiteSettingsView({
                         {admin.state !== "DISABLED" && (
                           <>
                             {generated?.userId !== admin.userId && (
-                              <Button
+                              <AdminButton
                                 type="button"
-                                variant="outline"
+                                tone="secondary"
                                 className={`${outline} max-sm:px-4`}
                                 disabled={pending}
                                 onClick={() =>
@@ -876,10 +882,11 @@ export function SiteSettingsView({
                                   : admin.state === "ACTIVE"
                                     ? "Gerar link de recuperação"
                                     : "Gerar link de acesso"}
-                              </Button>
+                              </AdminButton>
                             )}
                             {admin.pendingAccess && (
-                              <Button
+                              <AdminButton
+                                tone="danger"
                                 type="button"
                                 disabled={pending}
                                 className={`${adminStyles.dangerButton} max-sm:px-4`}
@@ -888,7 +895,7 @@ export function SiteSettingsView({
                                 }
                               >
                                 Revogar link
-                              </Button>
+                              </AdminButton>
                             )}
                             <OverflowMenu
                               label={`Ações de ${admin.name}`}
@@ -919,15 +926,16 @@ export function SiteSettingsView({
                           </p>
                         </div>
                         <div className="flex flex-wrap items-center gap-3">
-                          <Button
+                          <AdminButton
                             type="button"
-                            variant="link"
+                            tone="link"
                             className={textLink}
                             onClick={() => setReplaceLink(null)}
                           >
                             Cancelar
-                          </Button>
-                          <Button
+                          </AdminButton>
+                          <AdminButton
+                            tone="primary"
                             type="button"
                             className={primary}
                             disabled={pending}
@@ -937,7 +945,7 @@ export function SiteSettingsView({
                             }}
                           >
                             Confirmar novo link
-                          </Button>
+                          </AdminButton>
                         </div>
                       </div>
                     )}

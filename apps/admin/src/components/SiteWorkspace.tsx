@@ -6,14 +6,12 @@ import type {
 } from "@entrelacos/contracts";
 import {
   AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
+  AlertDialogClose,
   AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
   Badge,
-  Button,
   Card,
   CardDescription,
   CardHeader,
@@ -43,6 +41,7 @@ import {
 } from "react";
 import { adminStyles, displayHeading } from "../lib/adminStyles";
 import { ApiError, apiRequest } from "../lib/apiClient";
+import { AdminButton } from "./AdminButton";
 import { AdminAlertDialogContent, AdminDialogContent } from "./AdminDialog";
 import type { SiteArea } from "./adminNavigation";
 import { GiftsSection } from "./GiftsSection";
@@ -662,14 +661,18 @@ export function SiteWorkspace({
                     />
                   </label>
                   <div className={adminStyles.inline}>
-                    <Button disabled={pending} type="submit">
+                    <AdminButton
+                      tone="primary"
+                      disabled={pending}
+                      type="submit"
+                    >
                       Salvar cadastro
-                    </Button>
+                    </AdminButton>
                     <DialogClose
                       render={
-                        <Button
+                        <AdminButton
                           type="button"
-                          variant="outline"
+                          tone="secondary"
                           disabled={pending}
                         />
                       }
@@ -720,14 +723,18 @@ export function SiteWorkspace({
                     </>
                   )}
                   <div className={adminStyles.inline}>
-                    <Button disabled={pending} type="submit">
+                    <AdminButton
+                      tone="primary"
+                      disabled={pending}
+                      type="submit"
+                    >
                       Salvar datas
-                    </Button>
+                    </AdminButton>
                     <DialogClose
                       render={
-                        <Button
+                        <AdminButton
                           type="button"
-                          variant="outline"
+                          tone="secondary"
                           disabled={pending}
                         />
                       }
@@ -786,14 +793,18 @@ export function SiteWorkspace({
                     </Select>
                   </label>
                   <div className={adminStyles.inline}>
-                    <Button disabled={pending} type="submit">
+                    <AdminButton
+                      tone="primary"
+                      disabled={pending}
+                      type="submit"
+                    >
                       Registrar publicação
-                    </Button>
+                    </AdminButton>
                     <DialogClose
                       render={
-                        <Button
+                        <AdminButton
                           type="button"
-                          variant="outline"
+                          tone="secondary"
                           disabled={pending}
                         />
                       }
@@ -849,14 +860,18 @@ export function SiteWorkspace({
                     />
                   </label>
                   <div className={adminStyles.inline}>
-                    <Button disabled={pending} type="submit">
+                    <AdminButton
+                      tone="primary"
+                      disabled={pending}
+                      type="submit"
+                    >
                       Adicionar administrador
-                    </Button>
+                    </AdminButton>
                     <DialogClose
                       render={
-                        <Button
+                        <AdminButton
                           type="button"
-                          variant="outline"
+                          tone="secondary"
                           disabled={pending}
                         />
                       }
@@ -920,14 +935,14 @@ export function SiteWorkspace({
                             setDomainExpiry(value ?? "")
                           }
                         />
-                        <Button
+                        <AdminButton
                           type="button"
-                          variant="outline"
+                          tone="secondary"
                           disabled={pending || !domainExpiry}
                           onClick={() => setDomainExpiry("")}
                         >
                           Limpar data
-                        </Button>
+                        </AdminButton>
                       </div>
                     </label>
                     <label
@@ -944,14 +959,18 @@ export function SiteWorkspace({
                       Domínio principal
                     </label>
                     <div className={adminStyles.inline}>
-                      <Button disabled={pending} type="submit">
+                      <AdminButton
+                        tone="primary"
+                        disabled={pending}
+                        type="submit"
+                      >
                         Salvar domínio
-                      </Button>
+                      </AdminButton>
                       <DialogClose
                         render={
-                          <Button
+                          <AdminButton
                             type="button"
-                            variant="outline"
+                            tone="secondary"
                             disabled={pending}
                           />
                         }
@@ -1000,14 +1019,18 @@ export function SiteWorkspace({
                       Domínio principal
                     </label>
                     <div className={adminStyles.inline}>
-                      <Button disabled={pending} type="submit">
+                      <AdminButton
+                        tone="primary"
+                        disabled={pending}
+                        type="submit"
+                      >
                         Registrar domínio
-                      </Button>
+                      </AdminButton>
                       <DialogClose
                         render={
-                          <Button
+                          <AdminButton
                             type="button"
-                            variant="outline"
+                            tone="secondary"
                             disabled={pending}
                           />
                         }
@@ -1032,10 +1055,18 @@ export function SiteWorkspace({
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
-                  <AlertDialogCancel disabled={pending}>
+                  <AlertDialogClose
+                    render={
+                      <AdminButton tone="secondary" className="sm:min-w-24" />
+                    }
+                    disabled={pending}
+                  >
                     Cancelar
-                  </AlertDialogCancel>
-                  <AlertDialogAction
+                  </AlertDialogClose>
+                  <AdminButton
+                    tone={
+                      lifecycleAction === "deactivate" ? "danger" : "primary"
+                    }
                     disabled={pending}
                     onClick={() => {
                       if (lifecycleAction)
@@ -1044,7 +1075,7 @@ export function SiteWorkspace({
                     }}
                   >
                     {confirmation?.confirmLabel}
-                  </AlertDialogAction>
+                  </AdminButton>
                 </AlertDialogFooter>
               </AdminAlertDialogContent>
             </AlertDialog>
@@ -1063,10 +1094,16 @@ export function SiteWorkspace({
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
-                  <AlertDialogCancel disabled={pending}>
+                  <AlertDialogClose
+                    render={
+                      <AdminButton tone="secondary" className="sm:min-w-24" />
+                    }
+                    disabled={pending}
+                  >
                     Cancelar
-                  </AlertDialogCancel>
-                  <AlertDialogAction
+                  </AlertDialogClose>
+                  <AdminButton
+                    tone="danger"
                     disabled={pending}
                     onClick={() => {
                       if (adminToDisable) {
@@ -1079,7 +1116,7 @@ export function SiteWorkspace({
                     }}
                   >
                     Desativar acesso
-                  </AlertDialogAction>
+                  </AdminButton>
                 </AlertDialogFooter>
               </AdminAlertDialogContent>
             </AlertDialog>

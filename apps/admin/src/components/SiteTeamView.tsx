@@ -1,6 +1,5 @@
 import type { SiteTeamResponse } from "@entrelacos/contracts";
 import {
-  Button,
   Dialog,
   DialogDescription,
   DialogFooter,
@@ -11,6 +10,7 @@ import {
 import { Plus } from "lucide-react";
 import type { FormEvent, ReactNode } from "react";
 import { adminStyles, displayHeading } from "../lib/adminStyles";
+import { AdminButton } from "./AdminButton";
 import { AdminDialogContent } from "./AdminDialog";
 import { getInitials } from "./adminNavigation";
 import { PageHeaderActions } from "./PageHeaderActions";
@@ -73,9 +73,9 @@ export function SiteTeamView({
           Não foi possível carregar a equipe.
         </p>
         <div>
-          <Button type="button" variant="outline" onClick={onRetry}>
+          <AdminButton type="button" tone="secondary" onClick={onRetry}>
             Tentar novamente
-          </Button>
+          </AdminButton>
         </div>
       </div>
     );
@@ -110,9 +110,9 @@ export function SiteTeamView({
             Não foi possível concluir a ação da equipe.
           </p>
           <div>
-            <Button type="button" variant="outline" onClick={onRetry}>
+            <AdminButton type="button" tone="secondary" onClick={onRetry}>
               Tentar novamente
-            </Button>
+            </AdminButton>
           </div>
         </div>
       )}
@@ -123,15 +123,15 @@ export function SiteTeamView({
       )}
 
       <PageHeaderActions>
-        <Button
+        <AdminButton
+          tone="primary"
           type="button"
           disabled={pending}
-          className="bg-admin-accent text-admin-on-accent hover:bg-admin-accent-hover"
           onClick={() => onInviteOpenChange(true)}
         >
           <Plus aria-hidden="true" />
           Convidar assessor
-        </Button>
+        </AdminButton>
       </PageHeaderActions>
 
       <section
@@ -196,17 +196,17 @@ export function SiteTeamView({
               />
             </label>
             <DialogFooter>
-              <Button
+              <AdminButton
                 type="button"
-                variant="outline"
+                tone="secondary"
                 disabled={pending}
                 onClick={() => onInviteOpenChange(false)}
               >
                 Cancelar
-              </Button>
-              <Button type="submit" disabled={pending}>
+              </AdminButton>
+              <AdminButton tone="primary" type="submit" disabled={pending}>
                 {pending ? "Criando convite…" : "Criar convite"}
-              </Button>
+              </AdminButton>
             </DialogFooter>
           </form>
         </AdminDialogContent>
@@ -384,16 +384,16 @@ function MemberRow({
         </div>
       </div>
       {active && member.membershipRole === "SITE_ASSISTANT" && (
-        <Button
+        <AdminButton
           type="button"
           size="sm"
-          variant="outline"
+          tone="secondary"
           aria-label={`Revogar acesso de ${member.name}`}
           disabled={pending}
           onClick={() => onRevoke(member.userId)}
         >
           Revogar acesso
-        </Button>
+        </AdminButton>
       )}
     </li>
   );
@@ -445,16 +445,16 @@ function InvitationRow({
         </p>
       </div>
       {pendingInvitation && (
-        <Button
+        <AdminButton
           type="button"
           size="sm"
-          variant="outline"
+          tone="secondary"
           aria-label={`Revogar convite para ${invitation.inviteeName}`}
           disabled={pending}
           onClick={() => onRevoke(invitation.id)}
         >
           Revogar convite
-        </Button>
+        </AdminButton>
       )}
     </li>
   );

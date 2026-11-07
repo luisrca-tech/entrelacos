@@ -3,7 +3,6 @@ import type {
   SiteAccess,
   WithdrawalPage,
 } from "@entrelacos/contracts";
-import { Button } from "@entrelacos/ui";
 import { Landmark } from "lucide-react";
 import {
   type ReactNode,
@@ -19,6 +18,7 @@ import {
   OverviewNotice,
 } from "../features/finance/FinancialOverviewCard";
 import { destinationKeyLabel } from "../features/receiving/ReceivingStatusCard";
+import { AdminButton } from "./AdminButton";
 import { formatCents } from "./financialFlow";
 import {
   canReadFinancialOverview,
@@ -397,9 +397,9 @@ function WithdrawalBalance({
           Não foi possível confirmar o saldo agora.
         </p>
         <div>
-          <Button type="button" variant="outline" onClick={onRetry}>
+          <AdminButton type="button" tone="secondary" onClick={onRetry}>
             Tentar novamente
-          </Button>
+          </AdminButton>
         </div>
       </div>
     );

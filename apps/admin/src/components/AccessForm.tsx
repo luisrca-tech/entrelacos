@@ -1,8 +1,9 @@
-import { Button, PasswordInput, toast } from "@entrelacos/ui";
+import { PasswordInput, toast } from "@entrelacos/ui";
 import { Link } from "@tanstack/react-router";
 import { type FormEvent, useEffect, useState } from "react";
 import { adminStyles } from "../lib/adminStyles";
 import { apiRequest } from "../lib/apiClient";
+import { AdminButton } from "./AdminButton";
 import { AuthLayout } from "./AuthLayout";
 import { hasValidAccessToken, readAccessTokenFromHash } from "./accessToken";
 
@@ -119,13 +120,14 @@ export function AccessForm({
               <p className="text-[0.87rem] leading-[1.6] text-admin-text-secondary">
                 Use de 6 a 10 caracteres.
               </p>
-              <Button
+              <AdminButton
+                tone="primary"
                 className={adminStyles.authButton}
                 disabled={pending}
                 type="submit"
               >
                 {pending ? "Salvando…" : "Definir senha"}
-              </Button>
+              </AdminButton>
             </form>
           </>
         )}

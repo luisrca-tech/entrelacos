@@ -1,13 +1,8 @@
 import type { SiteHomeSummary } from "@entrelacos/contracts";
-import {
-  Badge,
-  Button,
-  Dialog,
-  DialogDescription,
-  DialogTitle,
-} from "@entrelacos/ui";
+import { Badge, Dialog, DialogDescription, DialogTitle } from "@entrelacos/ui";
 import { Download } from "lucide-react";
 import { useId, useState } from "react";
+import { AdminButton } from "./AdminButton";
 import { AdminDialogContent } from "./AdminDialog";
 import {
   type InvitationExportSelection,
@@ -223,15 +218,16 @@ export function InvitationExportDialog({
           )}
         </div>
         <div className="grid shrink-0 grid-cols-2 gap-2 border-t border-admin-border bg-admin-surface px-5 py-4 sm:flex sm:justify-end sm:px-7">
-          <Button
+          <AdminButton
             type="button"
-            variant="outline"
+            tone="secondary"
             onClick={close}
             disabled={busy}
           >
             Cancelar
-          </Button>
-          <Button
+          </AdminButton>
+          <AdminButton
+            tone="primary"
             type="button"
             onClick={() => void download()}
             disabled={busy}
@@ -239,7 +235,7 @@ export function InvitationExportDialog({
           >
             <Download aria-hidden="true" className="size-4" />
             {busy ? "Gerando…" : `Baixar ${format}`}
-          </Button>
+          </AdminButton>
         </div>
       </AdminDialogContent>
     </Dialog>

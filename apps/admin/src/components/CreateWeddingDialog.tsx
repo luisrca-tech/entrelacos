@@ -4,7 +4,6 @@ import {
 } from "@entrelacos/contracts";
 import {
   Badge,
-  Button,
   DatePicker,
   Dialog,
   DialogDescription,
@@ -15,6 +14,7 @@ import { Check } from "lucide-react";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { adminStyles } from "../lib/adminStyles";
 import { ApiError } from "../lib/apiClient";
+import { AdminButton } from "./AdminButton";
 import { AdminDialogContent } from "./AdminDialog";
 import { formatBrazilianDate } from "./brazilianDate";
 import { GeneratedAccessLink } from "./GeneratedAccessLink";
@@ -51,14 +51,14 @@ export function CreateWeddingDialog({
         if (!saving.current) setOpen(next);
       }}
     >
-      <Button
+      <AdminButton
+        tone="primary"
         type="button"
-        className={primary}
         disabled={disabled}
         onClick={() => setOpen(true)}
       >
         Criar casamento
-      </Button>
+      </AdminButton>
       {open && (
         <WeddingDialogContent
           current={current}
@@ -73,8 +73,6 @@ export function CreateWeddingDialog({
   );
 }
 
-const primary =
-  "bg-admin-accent text-admin-on-accent hover:bg-admin-accent-hover";
 const fields = "grid gap-3 sm:grid-cols-2";
 
 function WeddingDialogContent({
@@ -282,9 +280,10 @@ function WeddingDialogContent({
                   : "Ninguém do casal foi cadastrado. Você pode adicionar uma pessoa em Configurações → Acessos do casal."}
               </p>
               {admin && (
-                <Button
+                <AdminButton
+                  tone="primary"
                   type="button"
-                  className={`w-fit ${primary}`}
+                  className="w-fit"
                   disabled={pending}
                   onClick={() => void save({ ...draft, issueLink: true })}
                 >
@@ -293,12 +292,12 @@ function WeddingDialogContent({
                     : error
                       ? "Tentar gerar novamente"
                       : "Gerar link agora"}
-                </Button>
+                </AdminButton>
               )}
               {!admin && (
-                <Button
+                <AdminButton
                   type="button"
-                  variant="outline"
+                  tone="secondary"
                   className="w-fit"
                   onClick={() =>
                     navigate(
@@ -307,7 +306,7 @@ function WeddingDialogContent({
                   }
                 >
                   Cadastrar pessoa
-                </Button>
+                </AdminButton>
               )}
             </div>
           )}
@@ -317,24 +316,24 @@ function WeddingDialogContent({
             </p>
           )}
           <div className="flex flex-wrap justify-end gap-2">
-            <Button
+            <AdminButton
               type="button"
-              variant="outline"
+              tone="secondary"
               onClick={close}
               disabled={pending}
             >
               Voltar para a lista
-            </Button>
-            <Button
+            </AdminButton>
+            <AdminButton
+              tone="primary"
               type="button"
-              className={primary}
               disabled={pending}
               onClick={() =>
                 navigate(`/sites/${encodeURIComponent(outcome.site.id)}/home`)
               }
             >
               Abrir casamento
-            </Button>
+            </AdminButton>
           </div>
         </>
       ) : (
@@ -489,14 +488,14 @@ function WeddingDialogContent({
                   <span className="break-all">
                     Identificador do site: <strong>{slug || "—"}</strong>
                   </span>
-                  <Button
+                  <AdminButton
                     type="button"
-                    variant="link"
+                    tone="link"
                     onClick={() => setEditSlug(true)}
                     disabled={pending || siteFixed}
                   >
                     Alterar
-                  </Button>
+                  </AdminButton>
                 </div>
               )}
               <p className="m-0 text-xs text-admin-text-secondary">
@@ -511,30 +510,30 @@ function WeddingDialogContent({
             )}
             <div className="flex flex-wrap justify-end gap-2">
               {keyConflict && (
-                <Button
+                <AdminButton
                   type="button"
-                  variant="outline"
+                  tone="secondary"
                   onClick={restart}
                   disabled={pending}
                 >
                   Recomeçar com novo cadastro
-                </Button>
+                </AdminButton>
               )}
-              <Button
+              <AdminButton
                 type="button"
-                variant="outline"
+                tone="secondary"
                 onClick={close}
                 disabled={pending}
               >
                 Cancelar
-              </Button>
-              <Button type="submit" className={primary} disabled={pending}>
+              </AdminButton>
+              <AdminButton tone="primary" type="submit" disabled={pending}>
                 {pending
                   ? "Salvando…"
                   : error
                     ? "Tentar novamente"
                     : "Criar casamento"}
-              </Button>
+              </AdminButton>
             </div>
           </form>
         </>

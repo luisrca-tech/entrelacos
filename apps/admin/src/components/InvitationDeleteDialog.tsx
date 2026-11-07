@@ -4,8 +4,7 @@ import type {
 } from "@entrelacos/contracts";
 import {
   AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
+  AlertDialogClose,
   AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogHeader,
@@ -14,6 +13,7 @@ import {
 } from "@entrelacos/ui";
 import { useState } from "react";
 import { adminStyles } from "../lib/adminStyles";
+import { AdminButton } from "./AdminButton";
 import { AdminAlertDialogContent } from "./AdminDialog";
 
 type Props = {
@@ -62,10 +62,15 @@ export function InvitationDeleteDialog({
           />
         </label>
         <AlertDialogFooter>
-          <AlertDialogCancel disabled={busy} onClick={() => changeOpen(false)}>
+          <AlertDialogClose
+            render={<AdminButton tone="secondary" className="sm:min-w-24" />}
+            disabled={busy}
+            onClick={() => changeOpen(false)}
+          >
             Cancelar
-          </AlertDialogCancel>
-          <AlertDialogAction
+          </AlertDialogClose>
+          <AdminButton
+            tone="danger"
             disabled={
               busy || !invitation || confirmationName !== invitation.name
             }
@@ -80,7 +85,7 @@ export function InvitationDeleteDialog({
             className={adminStyles.dangerButton}
           >
             {busy ? "Excluindo…" : "Excluir definitivamente"}
-          </AlertDialogAction>
+          </AdminButton>
         </AlertDialogFooter>
       </AdminAlertDialogContent>
     </AlertDialog>

@@ -1,6 +1,6 @@
 import type { SiteHomeSummary } from "@entrelacos/contracts";
-import { Button } from "@entrelacos/ui";
 import { CalendarClock } from "lucide-react";
+import { AdminButton } from "./AdminButton";
 import {
   countLabel,
   type InvitationSummary,
@@ -62,17 +62,17 @@ export function InvitationOverview({
   return (
     <div className="grid gap-3.5">
       <PageHeaderActions>
-        <Button type="button" variant="outline" onClick={onExport}>
+        <AdminButton type="button" tone="secondary" onClick={onExport}>
           Exportar
-        </Button>
-        <Button
+        </AdminButton>
+        <AdminButton
+          tone="primary"
           type="button"
           onClick={onAdd}
           disabled={inactive}
-          className="bg-admin-accent text-admin-on-accent hover:bg-admin-accent-hover"
         >
           Novo convite
-        </Button>
+        </AdminButton>
       </PageHeaderActions>
       <div className="grid gap-3.5 lg:grid-cols-[minmax(0,2.1fr)_minmax(0,1fr)]">
         <section
@@ -165,14 +165,14 @@ export function InvitationOverview({
               pendentes.
             </p>
           </section>
-          <Button
+          <AdminButton
             type="button"
-            variant="link"
+            tone="link"
             onClick={onManageConfirmations}
             className="h-auto w-fit p-0 text-admin-accent-hover"
           >
             Gerenciar confirmações
-          </Button>
+          </AdminButton>
         </section>
         <section className="grid content-start gap-2 rounded-2xl border border-admin-border bg-admin-surface p-5">
           <h2 className="m-0 flex items-center gap-2 text-xs font-normal text-admin-text-secondary">
@@ -189,15 +189,15 @@ export function InvitationOverview({
               </p>
             )}
           </div>
-          <Button
+          <AdminButton
             type="button"
-            variant="link"
+            tone="link"
             onClick={onConfigureDeadline}
             disabled={inactive}
             className="h-auto w-fit p-0 text-admin-accent-hover"
           >
             Alterar prazo
-          </Button>
+          </AdminButton>
         </section>
       </div>
     </div>

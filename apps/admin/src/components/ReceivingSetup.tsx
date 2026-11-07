@@ -5,9 +5,10 @@ import {
   receivingNominationResponseSchema,
   type SiteAccess,
 } from "@entrelacos/contracts";
-import { Button, showSandboxNotice } from "@entrelacos/ui";
+import { showSandboxNotice } from "@entrelacos/ui";
 import { useLayoutEffect, useRef, useState } from "react";
 import { ApiError, apiRequest } from "../lib/apiClient";
+import { AdminButton } from "./AdminButton";
 import {
   type FinancialReauthenticationGuard,
   financialReauthenticationScopeKey,
@@ -398,9 +399,9 @@ export function ReceivingSetupView({
           onStateChange={onNominationState}
         />
         {state.uncertain && (
-          <Button disabled={!onRetry} onClick={onRetry}>
+          <AdminButton tone="primary" disabled={!onRetry} onClick={onRetry}>
             Verificar situação
-          </Button>
+          </AdminButton>
         )}
       </div>
     );
@@ -443,12 +444,13 @@ export function ReceivingSetupView({
         </p>
       )}
       {state.status !== "denied" && (
-        <Button
+        <AdminButton
+          tone="primary"
           disabled={!ready || !onRetry || state.status === "loading"}
           onClick={onRetry}
         >
           Verificar situação
-        </Button>
+        </AdminButton>
       )}
     </section>
   );

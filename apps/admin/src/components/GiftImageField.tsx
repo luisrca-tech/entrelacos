@@ -3,9 +3,10 @@ import {
   type GiftMediaPublicAsset,
   giftImageAlt,
 } from "@entrelacos/contracts";
-import { Button, Input, toast } from "@entrelacos/ui";
+import { Input, toast } from "@entrelacos/ui";
 import { ImageIcon } from "lucide-react";
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { AdminButton } from "./AdminButton";
 import type { GiftMediaClientState } from "./giftMediaClient";
 import {
   acceptedImageTypes,
@@ -267,7 +268,8 @@ export function GiftImageField(props: Props) {
             />
             <div className="flex flex-wrap items-center gap-2">
               {(file || retained) && (
-                <Button
+                <AdminButton
+                  tone="primary"
                   type="button"
                   className="min-h-11"
                   disabled={blocked || retryBlocked || !file}
@@ -278,10 +280,11 @@ export function GiftImageField(props: Props) {
                     : retained
                       ? "Reenviar mesmo arquivo"
                       : "Enviar foto"}
-                </Button>
+                </AdminButton>
               )}
               {gift.mediaAssetId && !file && altChanged && (
-                <Button
+                <AdminButton
+                  tone="primary"
                   type="button"
                   className="min-h-11"
                   disabled={blocked || retained}
@@ -294,7 +297,7 @@ export function GiftImageField(props: Props) {
                   }}
                 >
                   Salvar descrição
-                </Button>
+                </AdminButton>
               )}
               <button
                 type="button"
@@ -350,9 +353,9 @@ export function GiftImageField(props: Props) {
       {retained && (props.onConsult || props.onRecover) && (
         <div className="flex flex-wrap gap-2">
           {props.onConsult && (
-            <Button
+            <AdminButton
               type="button"
-              variant="outline"
+              tone="secondary"
               disabled={blocked}
               onClick={() => {
                 const action = live.current.onConsult;
@@ -362,13 +365,13 @@ export function GiftImageField(props: Props) {
               }}
             >
               Consultar envio
-            </Button>
+            </AdminButton>
           )}
           {props.onRecover &&
             (phase === "UNKNOWN" || phase === "FINALIZED") && (
-              <Button
+              <AdminButton
                 type="button"
-                variant="outline"
+                tone="secondary"
                 disabled={blocked}
                 onClick={() => {
                   const action = live.current.onRecover;
@@ -381,7 +384,7 @@ export function GiftImageField(props: Props) {
                 {phase === "FINALIZED"
                   ? "Usar imagem validada"
                   : "Recuperar imagem"}
-              </Button>
+              </AdminButton>
             )}
         </div>
       )}

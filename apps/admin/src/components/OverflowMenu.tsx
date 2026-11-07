@@ -1,5 +1,4 @@
 import {
-  Button,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -7,6 +6,7 @@ import {
   DropdownMenuTrigger,
 } from "@entrelacos/ui";
 import { MoreHorizontal } from "lucide-react";
+import { AdminButton } from "./AdminButton";
 
 export type OverflowMenuItem = {
   id: string;
@@ -35,11 +35,11 @@ export function OverflowMenu({
       <DropdownMenuTrigger
         disabled={disabled}
         render={
-          <Button
+          <AdminButton
             type="button"
-            variant="ghost"
+            tone="ghost"
             size="icon-sm"
-            className="size-8"
+            className="size-8 text-admin-text-secondary"
             aria-label={label}
           />
         }

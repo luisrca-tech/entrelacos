@@ -1,5 +1,6 @@
-import { Button, Input, toast } from "@entrelacos/ui";
+import { Input, toast } from "@entrelacos/ui";
 import { useId } from "react";
+import { AdminButton } from "./AdminButton";
 import {
   adminAccessLinkCopyFailedMessage,
   copyAdminAccessLink,
@@ -39,9 +40,9 @@ export function GeneratedAccessLink({
         className="min-w-0 bg-admin-canvas text-xs"
       />
       <div className="flex flex-wrap gap-2">
-        <Button
+        <AdminButton
+          tone="primary"
           type="button"
-          className="bg-admin-accent text-admin-on-accent hover:bg-admin-accent-hover"
           onClick={async () => {
             if (await copyAdminAccessLink(url, navigator.clipboard))
               toast.success("Link copiado.");
@@ -49,18 +50,18 @@ export function GeneratedAccessLink({
           }}
         >
           Copiar link
-        </Button>
-        <Button
-          variant="outline"
+        </AdminButton>
+        <AdminButton
+          tone="secondary"
           nativeButton={false}
           render={<a href={accessLinkMailto(name, email, url)} />}
         >
           Enviar por e-mail
-        </Button>
+        </AdminButton>
         {onDismiss && (
-          <Button type="button" variant="link" onClick={onDismiss}>
+          <AdminButton type="button" tone="link" onClick={onDismiss}>
             Ocultar link
-          </Button>
+          </AdminButton>
         )}
       </div>
       <p className="m-0 rounded-lg bg-admin-pending-subtle p-3 text-xs text-admin-pending-text">
