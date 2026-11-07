@@ -38,6 +38,8 @@ Only `/v1` is public. Layout and section source files remain internal implementa
 
 ## Listening
 
+The hero media receives its pending state in server-rendered HTML so the video poster cannot flash before the introduction initializes. Pending visibility applies only with JavaScript and normal motion; the final handoff or an early dismissal clears it. Initialization still waits for scroll restoration to avoid showing the opening over a restored position farther down the page. The waiting surface uses the same ivory background as the introduction.
+
 The new seam preserves the presentation/runtime split. A hidden initial surface avoids showing an empty gift section before server eligibility is known. Static host content and template tokens remain editable independently of the operational catalog.
 
 The green template adapts the approved New Era Capital Rebrand motion from `src/utils/homeMotion.ts`, `homeStory.ts`, `homeSmoothScroll.ts`, and their entrance components. Headings rise through measured line masks over 1.2 seconds, with 180 milliseconds between lines and the reference `cubic-bezier(0.33, 0.05, 0.2, 1)` curve. Labels fade over 0.6 seconds; body copy takes 1 second after the heading's 1.4-second reading beat. Complete groups rise 8 pixels over 1.05 seconds, and cards rise 16 pixels over 1.4 seconds. Images open downward over 1.4 seconds with the reference's separate curtain and scale curves. The wedding template keeps its own content and layout rather than adopting the reference's pinned investment scenes.
