@@ -86,6 +86,9 @@ describe("home intro browser lifecycle", () => {
     intro.querySelectorAll("img").forEach((image) => {
       Object.defineProperty(image, "complete", { value: loaded });
     });
+    hero
+      .querySelector("[data-template-hero-media]")
+      ?.setAttribute("data-template-intro-pending", "true");
     execute(
       window,
       document,
@@ -147,12 +150,15 @@ describe("home intro browser lifecycle", () => {
 
   it("starts hero media during the fade and reveals chrome only after the overlay leaves", async () => {
     const { intro, hero, play } = setup({ video: true });
+    const media = hero.querySelector("[data-template-hero-media]");
     await vi.advanceTimersByTimeAsync(4499);
+    expect(media?.getAttribute("data-template-intro-pending")).toBe("true");
     expect(play).not.toHaveBeenCalled();
     expect(hero.dataset.templateIntroComplete).toBeUndefined();
     await vi.advanceTimersByTimeAsync(1);
     expect(intro.dataset.templateIntroPhase).toBe("fade");
     expect(hero.dataset.templateIntroMediaReady).toBe("true");
+    expect(media?.hasAttribute("data-template-intro-pending")).toBe(false);
     expect(play).toHaveBeenCalledTimes(1);
     await vi.advanceTimersByTimeAsync(550);
     expect(intro.isConnected).toBe(false);
@@ -203,6 +209,11 @@ describe("home intro browser lifecycle", () => {
     expect(intro.isConnected).toBe(false);
     expect(hero.dataset.templateIntroComplete).toBe("true");
     expect(play).not.toHaveBeenCalled();
+    expect(
+      hero
+        .querySelector("[data-template-hero-media]")
+        ?.hasAttribute("data-template-intro-pending"),
+    ).toBe(false);
   });
 
   it("dismisses immediately if reduced motion is enabled during the intro", async () => {

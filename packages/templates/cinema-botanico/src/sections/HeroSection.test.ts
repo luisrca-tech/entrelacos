@@ -8,6 +8,16 @@ const source = readFileSync(
 );
 
 describe("HeroSection media contract", () => {
+  it("marks the media itself pending in the initial HTML when an intro exists", () => {
+    const mediaTag = source.match(
+      /<div\s[^>]*\bdata-template-hero-media\s[^>]*>/,
+    )?.[0];
+    expect(mediaTag).toBeDefined();
+    expect(mediaTag).toContain(
+      'data-template-intro-pending={hasIntro ? "true" : undefined}',
+    );
+  });
+
   it("keeps media dimensions and eager image fallback in the rendered source", () => {
     expect(source).toContain('loading="eager"');
     expect(source).toContain("width={content.media.width}");
