@@ -2,7 +2,11 @@
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it } from "vitest";
-import { AdminButton, type AdminButtonTone } from "./AdminButton";
+import {
+  AdminButton,
+  type AdminButtonTone,
+  adminButtonClassName,
+} from "./AdminButton";
 
 const expectedClasses: Record<AdminButtonTone, string[]> = {
   primary: [
@@ -62,6 +66,22 @@ describe("AdminButton", () => {
       expect(rendered).toContain("focus-visible:border-admin-accent");
     });
   }
+
+  it("exposes the same tone classes for links styled as buttons", () => {
+    const classes = adminButtonClassName("secondary", "no-underline").split(
+      /\s+/,
+    );
+
+    expect(classes).toEqual(
+      expect.arrayContaining([
+        ...expectedClasses.secondary,
+        "focus-visible:ring-admin-accent/30",
+        "no-underline",
+      ]),
+    );
+    expect(classes).not.toContain("border-border");
+    expect(classes).not.toContain("bg-background");
+  });
 
   it("lets callers extend the tone with layout classes", async () => {
     const button = await render("primary", "w-fit min-h-12");

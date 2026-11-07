@@ -1,4 +1,4 @@
-import { Button, cn } from "@entrelacos/ui";
+import { Button, buttonVariants, cn } from "@entrelacos/ui";
 import type { ComponentProps } from "react";
 
 type SharedButtonProps = ComponentProps<typeof Button>;
@@ -50,6 +50,15 @@ const tones: Record<
 export type AdminButtonProps = Omit<SharedButtonProps, "variant"> & {
   tone: AdminButtonTone;
 };
+
+/** Tone classes for elements that look like a button but are not one (links). */
+export function adminButtonClassName(
+  tone: AdminButtonTone,
+  className?: string,
+): string {
+  const { variant, className: toneClassName } = tones[tone];
+  return cn(buttonVariants({ variant }), toneClassName, focus, className);
+}
 
 export function AdminButton({ tone, className, ...props }: AdminButtonProps) {
   const { variant, className: toneClassName } = tones[tone];
