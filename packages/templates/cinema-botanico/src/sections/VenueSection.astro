@@ -29,7 +29,7 @@ const buttonClass = `inline-flex min-h-11 items-center justify-center rounded-fu
   </header>
   <div class={`${revealClasses} min-w-0 self-end`} data-template-reveal>
     <div data-template-reveal-item>
-      <h3 class="m-0 text-[clamp(1.8rem,3vw,2.75rem)] font-medium tracking-[-0.025em] leading-[1.1]">{content.name}</h3>
+      {content.name !== content.title && <h3 class="m-0 text-[clamp(1.8rem,3vw,2.75rem)] font-medium tracking-[-0.025em] leading-[1.1]">{content.name}</h3>}
       <p class={`m-0 mb-2 mt-8 text-[0.72rem] font-bold uppercase tracking-[0.16em] ${mutedClass}`}>{content.labels.addressLabel}</p>
       <address class="max-w-[30rem] text-[clamp(1.15rem,2vw,1.5rem)] not-italic leading-[1.45]" id={`${id}-address`}>{content.address}</address>
       <div class="mt-8 flex flex-wrap gap-x-4 gap-y-3">

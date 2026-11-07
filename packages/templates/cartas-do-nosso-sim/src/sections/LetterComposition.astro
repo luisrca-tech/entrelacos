@@ -21,30 +21,28 @@ const folioClass = "m-0 mb-8 text-[0.72rem] font-semibold uppercase tracking-[0.
   </div>
   <figure class="m-0 mb-3 rotate-2 border border-template-line bg-[var(--template-paper)] p-[clamp(0.6rem,1.5vw,1.25rem)] shadow-[0_1rem_3rem_#30212a15] [@media(max-width:760px)]:mt-4 [@media(max-width:760px)]:w-[min(76%,22rem)] [@media(max-width:760px)]:justify-self-center">
     <div class="relative overflow-hidden" data-photo-curtain><img class="block aspect-[4/5] [@media(min-width:1280px)]:aspect-[5/4] h-auto w-full object-cover object-center" src={coverPhoto.src} alt={coverPhoto.alt} width={coverPhoto.width} height={coverPhoto.height} fetchpriority="high" /><span data-curtain-layer aria-hidden="true"></span></div>
-    <figcaption class="pb-1 pt-5 text-center font-template-serif text-[clamp(0.9rem,1.3vw,1.15rem)] italic leading-normal">{content.signature}</figcaption>
   </figure>
-  <LetterHandoff ruled>{content.coverHandoff}</LetterHandoff>
+  {content.coverHandoff && <LetterHandoff ruled>{content.coverHandoff}</LetterHandoff>}
 </section>
 
 <section class="grid grid-cols-[var(--template-letter-columns)] items-start gap-x-[var(--template-letter-gap)] gap-y-12 px-[var(--template-page-inset)] pt-[clamp(3rem,7vw,7rem)] [@media(max-width:760px)]:grid-cols-1 [@media(max-width:760px)]:gap-y-8" id={content.story.id} aria-labelledby={`${content.story.id}-title`}>
-  <div class="letter-story-copy" data-template-reveal>
+  <div class="letter-story-copy min-w-0 border border-template-line bg-[var(--template-paper)] p-[clamp(1.5rem,3vw,3rem)] shadow-[0_0.5rem_2rem_#30212a06]" data-template-reveal>
     {content.story.eyebrow && <p class={folioClass} data-template-reveal-item>{content.story.eyebrow}</p>}
-    <h2 class="m-0 mb-8 max-w-[13ch] font-template-serif text-[clamp(2.5rem,4.5vw,4.7rem)] font-normal leading-[1.07] tracking-[-0.045em]" id={`${content.story.id}-title`} data-template-reveal-item>{content.story.title}</h2>
-    <div class="max-w-[55ch] text-[clamp(1rem,1.4vw,1.125rem)] leading-[1.75] [&_p]:m-0 [&_p]:mb-5">
+    <h2 class="m-0 mb-7 font-template-letter text-[clamp(2rem,3vw,2.75rem)] font-medium leading-[1.2] text-template-olive" id={`${content.story.id}-title`} data-template-reveal-item>{content.story.title}</h2>
+    <div class="max-w-[48ch] font-template-letter text-[clamp(1.5rem,1.8vw,1.8rem)] font-medium leading-[1.45] [&_p]:m-0 [&_p]:mb-6">
       {content.story.paragraphs.map((paragraph, index) => (
         <p data-template-reveal-item data-letter-paragraph style={`--letter-paragraph-delay: ${paragraphDelay(index)}`}>{paragraph}</p>
       ))}
     </div>
-    <p data-template-reveal-item data-letter-paragraph style={`--letter-paragraph-delay: ${paragraphDelay(content.story.paragraphs.length)}`} class="mt-8 font-template-serif text-[1.4rem] italic leading-[1.65] text-template-olive">{content.signature}</p>
+    <p data-template-reveal-item data-letter-paragraph style={`--letter-paragraph-delay: ${paragraphDelay(content.story.paragraphs.length)}`} class="mb-0 mt-8 font-template-letter text-[clamp(1.75rem,2.4vw,2.25rem)] font-medium leading-[1.3] text-template-olive">{content.signature}</p>
   </div>
-  <div class="relative min-w-0 pt-16 [@media(max-width:760px)]:max-w-[28rem] [@media(max-width:760px)]:pt-0">
+  <div class="relative min-w-0 self-center [@media(max-width:760px)]:max-w-[28rem] [@media(max-width:760px)]:pt-0">
     <figure class="m-0 border border-template-line bg-[var(--template-paper)] p-2.5">
       <div class="relative overflow-hidden" data-photo-curtain><img class="block aspect-[4/5] [@media(min-width:1280px)]:aspect-[5/4] h-auto w-full object-cover [@media(max-width:760px)]:aspect-[4/3]" src={storyPhoto.src} alt={storyPhoto.alt} width={storyPhoto.width} height={storyPhoto.height} loading="lazy" /><span data-curtain-layer aria-hidden="true"></span></div>
     </figure>
     {insertPhoto && <figure class="relative m-0 -ml-4 -mt-12 w-[55%] -rotate-3 border border-template-line bg-[var(--template-paper)] p-2"><div class="relative overflow-hidden" data-photo-curtain><img class="block h-auto w-full" src={insertPhoto.src} alt={insertPhoto.alt} width={insertPhoto.width} height={insertPhoto.height} loading="lazy" /><span data-curtain-layer aria-hidden="true"></span></div></figure>}
-    <p class="text-right font-template-serif text-base italic leading-[1.8] text-template-muted" aria-hidden="true">{content.monogram}<br />—<br />{content.dateLabel}</p>
   </div>
-  <LetterHandoff ruled>{content.storyHandoff}</LetterHandoff>
+  {content.storyHandoff && <LetterHandoff ruled>{content.storyHandoff}</LetterHandoff>}
 </section>
 
 <script>

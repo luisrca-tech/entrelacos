@@ -407,7 +407,6 @@ export function GuestAccess({
         data-template-reveal
       >
         <div data-template-reveal-item data-template-reveal-kind="group">
-          <p className={guestAccessEyebrowClass}>Confirmação de presença</p>
           <h2
             className={
               showingInvitation
@@ -416,7 +415,7 @@ export function GuestAccess({
             }
             id="guest-access-title"
           >
-            Encontre seu convite
+            Confirme sua presença
           </h2>
           <p
             className={

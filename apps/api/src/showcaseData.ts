@@ -88,32 +88,32 @@ export const showcaseMessages = [
   {
     slug: "helena",
     author: "Helena Duarte · exemplo",
-    text: "Marina e Caio, que a casa de vocês tenha sempre café passado, conversa boa e espaço para sonhar. Estamos contando os dias para celebrar esse amor!",
+    text: "Marina, lembro de quando você me contou do primeiro encontro com o Caio. Agora vou ver vocês se casarem! Um beijo da tia Helena.",
   },
   {
     slug: "gabriel",
     author: "Gabriel Lima · exemplo",
-    text: "Da primeira viagem juntos até este sim: é lindo ver a parceria de vocês crescer. Que venham muitos capítulos felizes. A pista de dança já tem companhia!",
+    text: "Podem contar comigo na pista até a última música!",
   },
   {
     slug: "teresa",
     author: "Teresa Azevedo · exemplo",
-    text: "Que vocês continuem escolhendo um ao outro nos dias de festa e nos dias comuns. Recebam nosso carinho e os melhores desejos para essa nova etapa.",
+    text: "Presença confirmada, meus queridos. Teresa e Eduardo.",
   },
   {
     slug: "bia",
     author: "Bia Ramos · exemplo",
-    text: "Mesmo de longe, vamos brindar por vocês. Que nunca faltem cumplicidade, risadas e coragem para construir os sonhos de mãos dadas!",
+    text: "Não vamos conseguir ir, mas queremos ver todas as fotos depois. Mandem notícias. Beijos dos dois!",
   },
   {
     slug: "ricardo",
     author: "Ricardo Duarte · exemplo",
-    text: "A alegria de vocês contagia todo mundo. Vai ser um privilégio estar pertinho nesse dia tão esperado. Um abraço enorme para os dois!",
+    text: "Já comprei a passagem. Chego na sexta e fico para o almoço de domingo.",
   },
   {
     slug: "julia",
     author: "Júlia Lima · exemplo",
-    text: "Já estamos preparando o abraço! Que esse encontro reúna todas as pessoas queridas e vire uma lembrança bonita para a vida inteira.",
+    text: "Até setembro! Estou contando os dias.",
   },
 ] as const;
 
@@ -122,8 +122,7 @@ export const showcaseGifts = [
   {
     slug: "cafe",
     title: "Café da manhã a dois",
-    description:
-      "Para os cafés demorados da nossa vida juntos. Um presente simbólico para celebrar os dias comuns.",
+    description: "Uma contribuição para os nossos cafés da manhã.",
     cents: 15000,
     alt: "Xícara de café com grãos sobre tecido marrom",
     photo: "photo-1497515114629-f71d768fd07c",
@@ -134,8 +133,7 @@ export const showcaseGifts = [
   {
     slug: "cozinha",
     title: "Nossa cozinha, nossas receitas",
-    description:
-      "Uma contribuição para equipar a cozinha e inventar novos pratos de domingo.",
+    description: "Uma contribuição para equipar a nossa cozinha.",
     cents: 35000,
     alt: "Frigideira com ingredientes frescos para preparar uma massa",
     photo: "photo-1518291344630-4857135fb581",
@@ -146,8 +144,7 @@ export const showcaseGifts = [
   {
     slug: "viagem",
     title: "Malas prontas para a lua de mel",
-    description:
-      "Para levar nossos planos na bagagem e voltar com histórias para contar.",
+    description: "Uma contribuição para a nossa lua de mel.",
     cents: 55000,
     alt: "Mala de viagem pronta para uma nova aventura",
     photo: "photo-1714235058886-a0b38ad5066c",
@@ -158,8 +155,7 @@ export const showcaseGifts = [
   {
     slug: "casa",
     title: "Uma mesa para receber quem amamos",
-    description:
-      "Um carinho para a casa nova, com espaço para os amigos e os almoços em família.",
+    description: "Uma contribuição para a mesa de jantar da nossa casa.",
     cents: 80000,
     alt: "Mesa de jantar com cadeiras em uma sala iluminada",
     photo: "photo-1770646403987-64cf5c08c870",
