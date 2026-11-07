@@ -46,7 +46,7 @@ const footer = {
   rsvp: { label: "Confirmar presença", href: "#guest-access" },
   year: "2027",
   copyright: "© Marina & Caio",
-  attribution: "By EntreLaços",
+  attribution: "Feito com Entrelaços",
 };
 const hero = {
   id: "hero",
@@ -72,8 +72,7 @@ const hero = {
 };
 const story = {
   id: "story",
-  eyebrow: "A nossa história",
-  title: "Uma vida a dois.",
+  title: "Nossa história",
   chapterLabel: "O encontro",
   body: "No começo, a gente se despedia e logo aparecia mais um assunto. Até hoje, quando saímos pra andar, um dos dois sempre arruma um motivo pra dar mais uma volta.",
   media: {
@@ -110,8 +109,7 @@ const story = {
 };
 const gallery = {
   id: "gallery",
-  eyebrow: "Fragmentos",
-  title: "Antes do sim.",
+  title: "Nosso ensaio",
   description: "Alguns momentos do nosso ensaio. Estamos contando os dias pra celebrar com vocês.",
   controls: {
     ariaLabel: "Navegação da galeria",
@@ -191,8 +189,7 @@ const gallery = {
 };
 const schedule = {
   id: "schedule",
-  eyebrow: "O dia",
-  title: "A partir das 16h.",
+  title: "Programação",
   guidanceLabel: "Orientações práticas",
   entries: [
     {
@@ -238,8 +235,7 @@ const schedule = {
 };
 const venue = {
   id: "venue",
-  eyebrow: "O local",
-  title: "Nos encontramos em Goiânia.",
+  title: "Casablanca Eventos",
   name: "Casablanca Eventos",
   address: "Av Ipanema 747, Jardim Atlântico, Goiânia, GO, 74343-010",
   mapEmbedUrl: "https://maps.google.com/maps?q=Casablanca%20Eventos%2C%20Av%20Ipanema%20747%2C%20Jardim%20Atl%C3%A2ntico%2C%20Goi%C3%A2nia%2C%20GO%2074343-010&output=embed",
@@ -296,7 +292,7 @@ const guestAccess = {
     <Fragment slot="admin-access">{access.siteId && access.apiOrigin && access.panelOrigin && <AdminRecognition {...access} client:load />}</Fragment>
     <Fragment slot="footer-attribution"><a class="underline-offset-4 hover:underline focus-visible:underline" href="https://entrelacos.entrelacos.workers.dev/">{footer.attribution}</a></Fragment>
     <Fragment slot="after-main">
-      <GiftSection content={{id:"gifts",eyebrow:"Presentes",title:"Lista de presentes.",description:"Escolha um presente simbólico para a nossa vida a dois."}}>
+      <GiftSection content={{id:"gifts",title:"Lista de presentes",description:"Escolha um presente simbólico para a nossa vida a dois."}}>
         <GiftRegistry {...guestAccess} demo={true} liveDemoSiteId={import.meta.env.PUBLIC_LIVE_DEMO_SITE_ID} client:only="react" />
       </GiftSection>
       <section

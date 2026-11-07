@@ -61,7 +61,7 @@ const hasChapters = chapters.length > 1;
     <div data-story-reading class="story-copy-frames mt-10 border-t border-template-ivory/25 pt-7 [@media(max-width:960px)]:mt-7" data-template-reveal-item data-template-reveal-kind="body">
       {chapters.map((chapter, index) => (
         <div data-story-copy-frame data-story-active={index === 0 ? "true" : undefined} id={hasChapters ? `${id}-chapter-${index + 1}` : undefined} class="min-w-0">
-          {hasChapters && <h3 class="m-0 mb-5 flex items-baseline gap-4 font-template-serif text-[clamp(1.5rem,2vw,2rem)] font-normal">{chapter.label !== String(index + 1).padStart(2, "0") && <span class="font-sans text-[0.7rem] tracking-[0.12em] text-template-ivory/70" aria-hidden="true">{String(index + 1).padStart(2, "0")}</span>}{chapter.label}</h3>}
+          {hasChapters && <h3 class="m-0 mb-5 font-template-serif text-[clamp(1.5rem,2vw,2rem)] font-normal [[data-story-ready=true]_&]:sr-only">{chapter.label}</h3>}
           {chapter.description && <p class="m-0 mb-4 [@media(max-width:960px)]:max-w-[38ch] text-base leading-[1.7] text-template-ivory/70">{chapter.description}</p>}
           <p class="m-0 [@media(max-width:960px)]:max-w-[38ch] text-[clamp(1rem,1.3vw,1.2rem)] leading-[1.8] text-template-ivory/90">{chapter.body}</p>
         </div>
@@ -78,7 +78,7 @@ const hasChapters = chapters.length > 1;
           class="group/chapter relative min-h-16 cursor-pointer border-0 border-t border-solid border-template-ivory/25 bg-transparent px-0 pb-1 pt-4 text-left font-[inherit] text-template-ivory/70 transition-[color,border-color] duration-300 hover:text-template-ivory aria-pressed:text-template-ivory focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-template-ivory motion-reduce:transition-none"
         >
           <span data-story-progress aria-hidden="true" class="absolute -top-px inset-x-0 h-px origin-left bg-template-ivory"></span>
-          {chapter.label !== String(index + 1).padStart(2, "0") && <span class="mb-2 block text-[0.65rem] tracking-[0.15em]" aria-hidden="true">{String(index + 1).padStart(2, "0")}</span>}
+
           <span data-story-label class="block text-[0.8rem] leading-snug">{chapter.label}</span>
         </button>
       ))}

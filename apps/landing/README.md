@@ -89,3 +89,11 @@ guests, shared plans and organization. CSS 3D avoids another rendering engine;
 the existing pinned Lenis version handles smooth scrolling. Personal wedding
 examples stay in the separate demos. Contact remains configurable rather than
 invented. Independent visual QA and the reviewed production release remain open.
+
+## Editorial structure
+
+The landing has seven main sections: introduction, models, guest organization and mural, gifts, preparation, FAQ, and the final action. The model links consistently name the demonstration, and operational copy uses "painel do casal". The existing `experiencia` and `dashboard` anchors remain on the combined guest section for inbound links. Contact actions still require the configured, verified `PUBLIC_CONTACT_URL`; no destination is invented.
+
+### Listening
+
+The product story now explains the managed setup in the opening. Repeated feature cards and the second introduction were removed; the existing rings, abstract model covers and gift illustration retain the brand's visual identity. Wedding photographs remain in the separate demos.

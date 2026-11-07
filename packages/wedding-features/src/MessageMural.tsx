@@ -27,8 +27,6 @@ type MuralMessage = PublicMuralResponse["messages"][number];
 
 const muralSectionClass =
   "grid min-w-0 gap-8 bg-transparent px-[clamp(2rem,5vw,4rem)] py-[clamp(2rem,5vw,4rem)] text-template-ink [@media(max-width:560px)]:px-4 [@media(max-width:560px)]:py-8";
-const muralEyebrowClass =
-  "m-0 mb-[0.8rem] text-template-muted text-[0.72rem] font-bold tracking-[0.16em] uppercase";
 const muralHeadingClass =
   "m-0 font-template-serif text-[clamp(2.3rem,6vw,4.8rem)] font-normal leading-[0.96] tracking-[-0.05em]";
 const muralHeaderClass =
@@ -207,7 +205,6 @@ export function MessageMural({
           data-template-reveal-kind="group"
         >
           <div>
-            <p className={muralEyebrowClass}>Recados</p>
             <h2 className={muralHeadingClass} id="mural-title">
               Mural dos convidados
             </h2>

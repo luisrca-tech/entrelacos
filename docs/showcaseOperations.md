@@ -60,3 +60,7 @@ Check the public mural and gift endpoints with the exact registered Origin, and 
 ## Listening
 
 Template ownership and demo dataset ownership are independent. Separate visual packages avoid theme switches in Botanical; feature and API authority remains shared. The additive script was chosen instead of the existing reset procedure so real rows, accounts and previous payment activity survive. Catalog demonstration and financial readiness now have separate contracts. Normal financial readiness remains a payment dependency to verify independently, never an inferred consequence of seeding catalog rows.
+
+## Editorial seed content
+
+`apps/api/src/showcaseData.ts` contains the revised illustrative messages and gift descriptions. Changing this source does not rewrite persisted mural posts or gifts in an existing environment. Do not reset a showcase or rerun broad population merely to refresh copy. Existing real messages and financial records must remain intact; a live copy refresh requires a separately scoped update to the identified illustrative records.

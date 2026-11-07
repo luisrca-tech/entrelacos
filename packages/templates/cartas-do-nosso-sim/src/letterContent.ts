@@ -18,8 +18,8 @@ export type LetterContent = {
   story: SectionContent & { paragraphs: readonly string[] };
   photos: readonly ImageMedia[];
   signature: string;
-  coverHandoff: string;
-  storyHandoff: string;
+  coverHandoff?: string;
+  storyHandoff?: string;
 };
 
 export function validateLetterContent(content: LetterContent): void {
@@ -37,10 +37,13 @@ export function validateLetterContent(content: LetterContent): void {
     "locationLabel",
     "monogram",
     "signature",
-    "coverHandoff",
-    "storyHandoff",
   ] as const) {
     if (typeof content[key] !== "string" || !content[key].trim())
+      throw new TypeError(`letter.${key} must be a non-empty string`);
+  }
+  for (const key of ["coverHandoff", "storyHandoff"] as const) {
+    const value = content[key];
+    if (value !== undefined && (typeof value !== "string" || !value.trim()))
       throw new TypeError(`letter.${key} must be a non-empty string`);
   }
   validateNavigation({
