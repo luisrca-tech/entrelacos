@@ -59,11 +59,11 @@ describe("AdminButton", () => {
       const rendered = button.className.split(/\s+/);
 
       for (const expected of classes) expect(rendered).toContain(expected);
+      // Shared `ring` is admin-scoped to the accent in tailwind.css; every
+      // other shared color token must be replaced by the tone.
       expect(button.className).not.toMatch(
-        /(?:^|\s)(?:[\w-]+:)*(?:bg|text|border|ring)-(?:foreground|background|primary|ring|border|muted|input)(?:\/\d+)?(?=\s|$)/,
+        /(?:^|\s)(?:[\w-]+:)*(?:bg|text|border|ring)-(?:foreground|background|primary|border|muted|input)(?:\/\d+)?(?=\s|$)/,
       );
-      expect(rendered).toContain("focus-visible:ring-admin-accent/30");
-      expect(rendered).toContain("focus-visible:border-admin-accent");
     });
   }
 
@@ -73,11 +73,7 @@ describe("AdminButton", () => {
     );
 
     expect(classes).toEqual(
-      expect.arrayContaining([
-        ...expectedClasses.secondary,
-        "focus-visible:ring-admin-accent/30",
-        "no-underline",
-      ]),
+      expect.arrayContaining([...expectedClasses.secondary, "no-underline"]),
     );
     expect(classes).not.toContain("border-border");
     expect(classes).not.toContain("bg-background");

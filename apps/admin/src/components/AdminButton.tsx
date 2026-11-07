@@ -14,8 +14,9 @@ export type AdminButtonTone =
 // The shared Button stays untouched for the public sites; each admin tone
 // replaces every color class of its base variant (tailwind-merge drops the
 // shared ones), so the admin never resolves to the dark `bg-foreground` pill.
-const focus =
-  "focus-visible:border-admin-accent focus-visible:ring-admin-accent/30";
+// The admin root draws the accent focus outline on every button and link, so
+// the shared focus ring is switched off instead of stacking a second ring.
+const focus = "focus-visible:ring-0";
 
 const tones: Record<
   AdminButtonTone,

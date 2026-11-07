@@ -38,7 +38,7 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
       <head>
         <HeadContent />
       </head>
-      <body className="min-w-[320px] min-h-screen bg-admin-canvas text-admin-text font-sans antialiased [font-synthesis:none] [text-rendering:optimizeLegibility] [&_a:focus-visible]:border-admin-accent [&_a:focus-visible]:outline-[3px] [&_a:focus-visible]:outline-admin-accent/20 [&_a:focus-visible]:outline-offset-2 [&_button]:cursor-pointer [&_button:disabled]:cursor-wait [&_button:focus-visible]:border-admin-accent [&_button:focus-visible]:outline-[3px] [&_button:focus-visible]:outline-admin-accent/20 [&_button:focus-visible]:outline-offset-2 [&_button:focus-visible]:ring-0 [&_h3]:m-0 [&_h3]:font-admin-display [&_h3]:text-[1.55rem] [&_h3]:font-normal [&_h3]:leading-[1.08] [&_h3]:tracking-[-0.025em]">
+      <body className="min-w-[320px] min-h-screen bg-admin-canvas text-admin-text font-sans antialiased [font-synthesis:none] [text-rendering:optimizeLegibility] [&_a:focus-visible]:border-admin-accent [&_a:focus-visible]:outline-solid [&_a:focus-visible]:outline-[3px] [&_a:focus-visible]:outline-admin-accent/30 [&_a:focus-visible]:outline-offset-2 [&_button]:cursor-pointer [&_button:disabled]:cursor-wait [&_button:focus-visible]:border-admin-accent [&_button:focus-visible]:outline-solid [&_button:focus-visible]:outline-[3px] [&_button:focus-visible]:outline-admin-accent/30 [&_button:focus-visible]:outline-offset-2 [&_button:focus-visible]:ring-0 [&_h3]:m-0 [&_h3]:font-admin-display [&_h3]:text-[1.55rem] [&_h3]:font-normal [&_h3]:leading-[1.08] [&_h3]:tracking-[-0.025em]">
         {children}
         <Toaster />
         <Scripts />

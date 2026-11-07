@@ -274,6 +274,23 @@ describe("admin Tailwind policy", () => {
     ).toEqual([]);
   });
 
+  it("gives every admin button and link the accent/30 focus outline", () => {
+    for (const element of ["button", "a"]) {
+      expect(rootSource).toContain(
+        `[&_${element}:focus-visible]:outline-admin-accent/30`,
+      );
+      expect(rootSource).not.toContain(
+        `[&_${element}:focus-visible]:outline-admin-accent/20`,
+      );
+      // Shared primitives set `outline-none`; the root must restore the style.
+      expect(rootSource).toContain(
+        `[&_${element}:focus-visible]:outline-solid`,
+      );
+    }
+    // The root outline replaces the shared ring on every button.
+    expect(rootSource).toContain("[&_button:focus-visible]:ring-0");
+  });
+
   it("resolves the shared primary, link and focus colors to the admin accent", () => {
     expect(tailwindSource).toContain(
       "--color-primary: var(--color-admin-accent);",
