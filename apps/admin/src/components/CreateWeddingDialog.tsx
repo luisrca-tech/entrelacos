@@ -7,7 +7,6 @@ import {
   Button,
   DatePicker,
   Dialog,
-  DialogContent,
   DialogDescription,
   DialogTitle,
   Input,
@@ -16,6 +15,7 @@ import { Check } from "lucide-react";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { adminStyles } from "../lib/adminStyles";
 import { ApiError } from "../lib/apiClient";
+import { AdminDialogContent } from "./AdminDialog";
 import { formatBrazilianDate } from "./brazilianDate";
 import { GeneratedAccessLink } from "./GeneratedAccessLink";
 import { NumberedSection } from "./NumberedSection";
@@ -232,10 +232,7 @@ function WeddingDialogContent({
   const admin = draft?.admin;
   const created = outcome?.site;
   return (
-    <DialogContent
-      showCloseButton
-      className={`${adminStyles.dialog} max-w-[640px] gap-5`}
-    >
+    <AdminDialogContent showCloseButton className="max-w-[640px]">
       {outcome && draft ? (
         <>
           <div className="flex items-start gap-3 pr-8">
@@ -541,6 +538,6 @@ function WeddingDialogContent({
           </form>
         </>
       )}
-    </DialogContent>
+    </AdminDialogContent>
   );
 }

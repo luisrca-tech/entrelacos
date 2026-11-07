@@ -65,7 +65,7 @@ describe("admin shell safety regressions", () => {
       "utf8",
     );
     expect(panelSource).toContain("CreateWeddingDialog");
-    expect(createSource).toContain("adminStyles.dialog");
+    expect(createSource).toContain("AdminDialogContent");
     expect(createSource).toContain("min-w-0");
   });
 

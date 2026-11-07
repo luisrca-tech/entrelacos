@@ -14,7 +14,6 @@ import { siteHomeSummarySchema } from "@entrelacos/contracts";
 import {
   Button,
   Dialog,
-  DialogContent,
   DialogDescription,
   DialogTitle,
   Input,
@@ -24,6 +23,7 @@ import { Search } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { adminStyles } from "../lib/adminStyles";
 import { ApiError, apiRequest } from "../lib/apiClient";
+import { AdminDialogContent } from "./AdminDialog";
 import { InvitationDeleteDialog } from "./InvitationDeleteDialog";
 import { InvitationDetailDialog } from "./InvitationDetailDialog";
 import { InvitationExportDialog } from "./InvitationExportDialog";
@@ -390,6 +390,7 @@ export function InvitationsSection({ siteId, lifecycle, sessionEpoch }: Props) {
   }
 
   async function openConfirmations() {
+    closeInvitationDetail();
     setConfirmationOpen(true);
     setConfirmationsLoading(true);
     try {
@@ -650,10 +651,7 @@ export function InvitationsSection({ siteId, lifecycle, sessionEpoch }: Props) {
               </p>
             )
           ) : error && invitations.length === 0 ? null : (
-            <div
-              aria-busy={loading}
-              className={`grid items-start gap-4 ${selectedInvitation ? "lg:grid-cols-[minmax(0,1.65fr)_minmax(0,1fr)]" : ""}`}
-            >
+            <div aria-busy={loading} className="grid items-start gap-4">
               <InvitationList
                 invitations={filtered}
                 selectedId={detailId}
@@ -748,7 +746,7 @@ export function InvitationsSection({ siteId, lifecycle, sessionEpoch }: Props) {
         totals={siteTotals}
       />
       <Dialog open={deadlineOpen} onOpenChange={setDeadlineOpen}>
-        <DialogContent className={adminStyles.dialog}>
+        <AdminDialogContent>
           <DialogTitle className="font-admin-display text-3xl text-admin-graphite">
             Prazo de confirmação
           </DialogTitle>
@@ -821,7 +819,7 @@ export function InvitationsSection({ siteId, lifecycle, sessionEpoch }: Props) {
               </Button>
             </div>
           </form>
-        </DialogContent>
+        </AdminDialogContent>
       </Dialog>
     </section>
   );

@@ -7,7 +7,6 @@ import {
 import {
   Button,
   Dialog,
-  DialogContent,
   DialogDescription,
   DialogTitle,
   Input,
@@ -17,6 +16,7 @@ import { Plus, Trash2 } from "lucide-react";
 import { useEffect } from "react";
 import { Controller, useFieldArray, useForm, useWatch } from "react-hook-form";
 import type { z } from "zod";
+import { AdminDialogContent } from "./AdminDialog";
 import { invitationFormValues } from "./invitationFormValues";
 import { NumberedSection } from "./NumberedSection";
 
@@ -73,11 +73,7 @@ export function InvitationFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        data-layout="sheet"
-        showCloseButton
-        className="top-0 right-0 left-auto flex h-dvh max-h-dvh w-full max-w-[min(560px,100vw)] translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-none border-y-0 border-r-0 border-admin-line bg-admin-surface p-0 shadow-admin"
-      >
+      <AdminDialogContent scrollable={false}>
         <form
           onSubmit={handleSubmit(onSave)}
           className="flex min-h-0 w-full flex-1 flex-col"
@@ -284,7 +280,7 @@ export function InvitationFormDialog({
             </NumberedSection>
           </div>
           <div
-            data-slot="sheet-footer"
+            data-slot="dialog-footer"
             className="sticky bottom-0 flex w-full shrink-0 justify-end gap-2 border-t border-admin-line bg-admin-surface px-[30px] py-3 [@media(max-width:760px)]:px-[18px]"
           >
             <Button
@@ -304,7 +300,7 @@ export function InvitationFormDialog({
             </Button>
           </div>
         </form>
-      </DialogContent>
+      </AdminDialogContent>
     </Dialog>
   );
 }

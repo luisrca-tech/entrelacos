@@ -3,12 +3,12 @@ import {
   Badge,
   Button,
   Dialog,
-  DialogContent,
   DialogDescription,
   DialogTitle,
 } from "@entrelacos/ui";
 import { Download } from "lucide-react";
 import { useId, useState } from "react";
+import { AdminDialogContent } from "./AdminDialog";
 import {
   type InvitationExportSelection,
   invitationExportFormat,
@@ -118,8 +118,8 @@ export function InvitationExportDialog({
         if (!next && !busy) close();
       }}
     >
-      <DialogContent className="grid max-h-[calc(100dvh-32px)] max-w-[min(540px,calc(100vw-32px))] grid-rows-[minmax(0,1fr)_auto] gap-0 overflow-hidden rounded-2xl border-admin-line bg-admin-surface p-0 shadow-admin">
-        <div className="min-h-0 overflow-y-auto px-5 pb-5 pt-6 sm:px-7">
+      <AdminDialogContent scrollable={false} className="max-w-[540px]">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-5 pt-6 sm:px-7 [&_[data-slot=dialog-title]]:pr-10">
           <DialogTitle className="font-admin-display text-[27px] text-admin-graphite">
             Exportar convidados
           </DialogTitle>
@@ -224,7 +224,7 @@ export function InvitationExportDialog({
             </details>
           )}
         </div>
-        <div className="grid grid-cols-2 gap-2 border-t border-admin-line bg-admin-surface px-5 py-4 sm:flex sm:justify-end sm:px-7">
+        <div className="grid shrink-0 grid-cols-2 gap-2 border-t border-admin-line bg-admin-surface px-5 py-4 sm:flex sm:justify-end sm:px-7">
           <Button
             type="button"
             variant="outline"
@@ -243,7 +243,7 @@ export function InvitationExportDialog({
             {busy ? "Gerando…" : `Baixar ${format}`}
           </Button>
         </div>
-      </DialogContent>
+      </AdminDialogContent>
     </Dialog>
   );
 }

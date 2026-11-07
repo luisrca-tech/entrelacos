@@ -2,7 +2,6 @@ import { financialReauthenticationResponseSchema } from "@entrelacos/contracts";
 import {
   Button,
   Dialog,
-  DialogContent,
   DialogDescription,
   DialogTitle,
   DialogTrigger,
@@ -19,6 +18,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { AdminDialogContent } from "./AdminDialog";
 import {
   createFinancialReauthenticationController,
   type FinancialReauthenticationGuard,
@@ -174,7 +174,7 @@ function FinancialReauthenticationRuntime(props: Props) {
       >
         Confirmar senha
       </DialogTrigger>
-      <DialogContent>
+      <AdminDialogContent>
         {view}
         <Button
           type="button"
@@ -183,7 +183,7 @@ function FinancialReauthenticationRuntime(props: Props) {
         >
           Cancelar
         </Button>
-      </DialogContent>
+      </AdminDialogContent>
     </Dialog>
   );
 }

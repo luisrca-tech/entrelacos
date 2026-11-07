@@ -2,7 +2,6 @@ import type { SiteTeamResponse } from "@entrelacos/contracts";
 import {
   Button,
   Dialog,
-  DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
@@ -12,6 +11,7 @@ import {
 import { Plus } from "lucide-react";
 import type { FormEvent, ReactNode } from "react";
 import { adminStyles, displayHeading } from "../lib/adminStyles";
+import { AdminDialogContent } from "./AdminDialog";
 import { getInitials } from "./adminNavigation";
 import { PageHeaderActions } from "./PageHeaderActions";
 
@@ -164,7 +164,7 @@ export function SiteTeamView({
           if (!pending) onInviteOpenChange(open);
         }}
       >
-        <DialogContent className={adminStyles.dialog}>
+        <AdminDialogContent>
           <DialogHeader>
             <DialogTitle>Convidar assessor</DialogTitle>
             <DialogDescription>
@@ -209,7 +209,7 @@ export function SiteTeamView({
               </Button>
             </DialogFooter>
           </form>
-        </DialogContent>
+        </AdminDialogContent>
       </Dialog>
 
       <TeamGroup

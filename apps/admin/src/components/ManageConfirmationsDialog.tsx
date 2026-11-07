@@ -4,15 +4,9 @@ import type {
   RsvpState,
   SiteRsvpResponse,
 } from "@entrelacos/contracts";
-import {
-  Button,
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogTitle,
-} from "@entrelacos/ui";
+import { Button, Dialog, DialogDescription, DialogTitle } from "@entrelacos/ui";
 import { useEffect, useState } from "react";
-import { adminStyles } from "../lib/adminStyles";
+import { AdminDialogContent } from "./AdminDialog";
 import { pendingAdminRsvpUpdates } from "./confirmationDraft";
 import { InvitationStatus } from "./InvitationStatus";
 
@@ -65,10 +59,7 @@ export function ManageConfirmationsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        showCloseButton
-        className={`${adminStyles.dialog} max-w-[min(900px,calc(100vw-32px))]`}
-      >
+      <AdminDialogContent showCloseButton className="max-w-[900px]">
         <DialogTitle className="font-admin-display text-3xl text-admin-graphite">
           Gerenciar confirmações
         </DialogTitle>
@@ -248,7 +239,7 @@ export function ManageConfirmationsDialog({
             )}
           </div>
         )}
-      </DialogContent>
+      </AdminDialogContent>
     </Dialog>
   );
 }

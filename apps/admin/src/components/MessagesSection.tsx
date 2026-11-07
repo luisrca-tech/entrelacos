@@ -6,7 +6,6 @@ import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
-  AlertDialogContent,
   AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogHeader,
@@ -21,6 +20,7 @@ import { MessageCircle, Search } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { adminStyles } from "../lib/adminStyles";
 import { apiRequest } from "../lib/apiClient";
+import { AdminAlertDialogContent } from "./AdminDialog";
 import { getInitials } from "./adminNavigation";
 import { LoadMoreButton } from "./LoadMoreButton";
 import { mergeSiteMessages, messageAdminError } from "./messageAdmin";
@@ -375,7 +375,7 @@ export function MessagesSection({ siteId, lifecycle, publicUrl }: Props) {
         open={removeTarget !== null}
         onOpenChange={(open) => !open && setRemoveTarget(null)}
       >
-        <AlertDialogContent>
+        <AdminAlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Remover mensagem?</AlertDialogTitle>
             <AlertDialogDescription>
@@ -411,7 +411,7 @@ export function MessagesSection({ siteId, lifecycle, publicUrl }: Props) {
               Remover mensagem
             </AlertDialogAction>
           </AlertDialogFooter>
-        </AlertDialogContent>
+        </AdminAlertDialogContent>
       </AlertDialog>
 
       <LoadMoreButton

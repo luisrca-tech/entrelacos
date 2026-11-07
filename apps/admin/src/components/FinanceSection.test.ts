@@ -226,7 +226,7 @@ describe("gift history finance integration", () => {
       expect(node.textContent).toContain("Presente preservado");
       expect(node.querySelector("[data-withdrawal-epoch]")).toBeNull();
       const click = async (label: string) => {
-        const button = [...node.querySelectorAll("button")].find(
+        const button = [...document.querySelectorAll("button")].find(
           (value) =>
             value.textContent === label ||
             value.getAttribute("aria-label") === label,

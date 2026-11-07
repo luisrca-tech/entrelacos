@@ -12,7 +12,6 @@ import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
-  AlertDialogContent,
   AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogHeader,
@@ -20,7 +19,6 @@ import {
   Button,
   Dialog,
   DialogClose,
-  DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
@@ -43,6 +41,7 @@ import {
 import type { FormEvent, ReactNode } from "react";
 import { useEffect, useId, useState } from "react";
 import { adminStyles, displayHeading } from "../lib/adminStyles";
+import { AdminAlertDialogContent, AdminDialogContent } from "./AdminDialog";
 import {
   type GiftPricingEstimate,
   GiftPricingPreview,
@@ -1307,7 +1306,7 @@ export function GiftEditorView({
           }
         }}
       >
-        <DialogContent className={adminStyles.dialog}>
+        <AdminDialogContent>
           <DialogHeader>
             <DialogTitle>Prévia do presente</DialogTitle>
             <DialogDescription>
@@ -1358,7 +1357,7 @@ export function GiftEditorView({
               Fechar prévia
             </DialogClose>
           </DialogFooter>
-        </DialogContent>
+        </AdminDialogContent>
       </Dialog>
       <AlertDialog
         open={Boolean(archive)}
@@ -1366,7 +1365,7 @@ export function GiftEditorView({
           if (!open) setArchive(null);
         }}
       >
-        <AlertDialogContent>
+        <AdminAlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Arquivar este presente?</AlertDialogTitle>
             <AlertDialogDescription>
@@ -1395,7 +1394,7 @@ export function GiftEditorView({
               Arquivar presente
             </AlertDialogAction>
           </AlertDialogFooter>
-        </AlertDialogContent>
+        </AdminAlertDialogContent>
       </AlertDialog>
     </section>
   );

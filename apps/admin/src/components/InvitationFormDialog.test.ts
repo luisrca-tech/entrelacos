@@ -50,16 +50,16 @@ async function type(selector: string, value: string) {
   );
 }
 
-it("organizes the invitation in numbered sheet sections with a fixed footer", () => {
-  const sheet = document.querySelector('[data-slot="dialog-content"]');
-  expect(sheet?.getAttribute("data-layout")).toBe("sheet");
+it("organizes the invitation in numbered dialog sections with a fixed footer", () => {
+  const dialog = document.querySelector('[data-slot="dialog-content"]');
+  expect(dialog?.getAttribute("data-layout")).toBe("responsive");
   const legends = [...document.querySelectorAll("legend")].map((legend) =>
     legend.textContent?.trim(),
   );
   expect(legends).toEqual(
     expect.arrayContaining(["1Identificação", "2Pessoas", "3Revisar"]),
   );
-  const footer = document.querySelector('[data-slot="sheet-footer"]');
+  const footer = document.querySelector('[data-slot="dialog-footer"]');
   expect(footer?.textContent).toContain("Cancelar");
   expect(footer?.textContent).toContain("Salvar convite");
 });

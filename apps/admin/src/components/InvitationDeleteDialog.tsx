@@ -6,7 +6,6 @@ import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
-  AlertDialogContent,
   AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogHeader,
@@ -15,6 +14,7 @@ import {
 } from "@entrelacos/ui";
 import { useState } from "react";
 import { adminStyles } from "../lib/adminStyles";
+import { AdminAlertDialogContent } from "./AdminDialog";
 
 type Props = {
   invitation: InvitationRecord | null;
@@ -38,7 +38,7 @@ export function InvitationDeleteDialog({
 
   return (
     <AlertDialog open={invitation !== null} onOpenChange={changeOpen}>
-      <AlertDialogContent>
+      <AdminAlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>Excluir convite?</AlertDialogTitle>
           <AlertDialogDescription>
@@ -82,7 +82,7 @@ export function InvitationDeleteDialog({
             {busy ? "Excluindo…" : "Excluir definitivamente"}
           </AlertDialogAction>
         </AlertDialogFooter>
-      </AlertDialogContent>
+      </AdminAlertDialogContent>
     </AlertDialog>
   );
 }

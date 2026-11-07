@@ -8,7 +8,6 @@ import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
-  AlertDialogContent,
   AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogHeader,
@@ -25,6 +24,7 @@ import {
   useSyncExternalStore,
 } from "react";
 import { apiRequest } from "../lib/apiClient";
+import { AdminAlertDialogContent } from "./AdminDialog";
 import { panelActorOwner } from "./panelActor";
 import { SiteTeamView } from "./SiteTeamView";
 import { copyAdminAccessLink } from "./siteAdminMenu";
@@ -518,7 +518,7 @@ function SiteTeamRuntime({
           if (!open && !pending) controller?.selectTarget(null);
         }}
       >
-        <AlertDialogContent>
+        <AdminAlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
               {target?.kind === "members"
@@ -543,7 +543,7 @@ function SiteTeamRuntime({
               Revogar
             </AlertDialogAction>
           </AlertDialogFooter>
-        </AlertDialogContent>
+        </AdminAlertDialogContent>
       </AlertDialog>
     </div>
   );

@@ -2,10 +2,10 @@ import {
   formatInvitationPhoneInput,
   type InvitationRecord,
 } from "@entrelacos/contracts";
-import { Button, toast } from "@entrelacos/ui";
-import { Copy, Pencil, Plus, RotateCcw, Trash2, X } from "lucide-react";
-import { useEffect, useRef } from "react";
-import { AdminSidePanel } from "./AdminSidePanel";
+import { Button, Dialog, DialogTitle, toast } from "@entrelacos/ui";
+import { Copy, Pencil, Plus, RotateCcw, Trash2 } from "lucide-react";
+import { useRef } from "react";
+import { AdminDialogContent } from "./AdminDialog";
 import { InvitationStatus } from "./InvitationStatus";
 
 type Props = {
@@ -42,162 +42,155 @@ export function InvitationDetailDialog({
   }
 
   const heading = useRef<HTMLHeadingElement>(null);
-  useEffect(() => {
-    heading.current?.focus({ preventScroll: true });
-    if (window.matchMedia("(max-width: 1023px)").matches)
-      heading.current?.scrollIntoView({ block: "start" });
-  }, []);
   if (!invitation) return null;
 
   return (
-    <AdminSidePanel aria-labelledby="invitation-detail-title">
-      <div className="flex min-w-0 items-start justify-between gap-2">
-        <div className="min-w-0">
-          <p className="m-0 text-xs font-bold uppercase tracking-wider text-admin-muted">
-            Detalhes do convite
-          </p>
-          <h2
-            id="invitation-detail-title"
-            ref={heading}
-            tabIndex={-1}
-            className="m-0 break-words font-admin-display text-2xl font-normal"
-          >
-            {invitation.name}
-          </h2>
-        </div>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          aria-label="Fechar detalhes do convite"
-          onClick={() => onOpenChange(false)}
-        >
-          <X aria-hidden="true" />
-        </Button>
-      </div>
-      <div className="grid gap-5">
-        <section
-          className="rounded-xl border border-admin-line bg-admin-canvas p-4"
-          aria-label="Dados do convite"
-        >
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <p className="m-0 text-sm font-bold text-admin-ink">
-              Como acessam o site
+    <Dialog open onOpenChange={onOpenChange}>
+      <AdminDialogContent
+        aria-labelledby="invitation-detail-title"
+        initialFocus={heading}
+      >
+        <div className="flex min-w-0 items-start justify-between gap-2">
+          <div className="min-w-0">
+            <p className="m-0 text-xs font-bold uppercase tracking-wider text-admin-muted">
+              Detalhes do convite
             </p>
+            <DialogTitle
+              id="invitation-detail-title"
+              ref={heading}
+              tabIndex={-1}
+              className="m-0 break-words font-admin-display text-2xl font-normal"
+            >
+              {invitation.name}
+            </DialogTitle>
+          </div>
+        </div>
+        <div className="grid gap-5">
+          <section
+            className="rounded-xl border border-admin-line bg-admin-canvas p-4"
+            aria-label="Dados do convite"
+          >
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <p className="m-0 text-sm font-bold text-admin-ink">
+                Como acessam o site
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={onEdit}
+                disabled={inactive}
+                className="border-admin-line"
+              >
+                <Pencil aria-hidden="true" className="size-4" />
+                Editar
+              </Button>
+            </div>
+            <dl className="mt-5 grid gap-3 border-t border-admin-line pt-4 text-sm">
+              <div>
+                <dt className="text-admin-muted">Telefone de contato</dt>
+                <dd className="m-0 mt-1 text-admin-ink">
+                  {formatInvitationPhoneInput(invitation.phone)}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-admin-muted">E-mail de contato</dt>
+                <dd className="m-0 mt-1 text-admin-ink">
+                  {invitation.email ?? "Não informado"}
+                </dd>
+              </div>
+            </dl>
+            <div className="mt-4 border-t border-admin-line pt-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <span className="text-xs text-admin-muted">
+                    PIN do convite
+                  </span>
+                  <p
+                    className={
+                      accessPin
+                        ? "m-0 mt-1 font-mono text-lg tracking-[0.18em] text-admin-ink"
+                        : "m-0 mt-1 text-sm text-admin-muted"
+                    }
+                  >
+                    {accessPin ?? (pinLoading ? "Consultando…" : "—")}
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={copyPin}
+                    disabled={!accessPin}
+                    className="border-admin-line"
+                  >
+                    <Copy aria-hidden="true" className="size-4" />
+                    Copiar
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={onRotatePin}
+                    disabled={inactive}
+                    aria-label="Gerar novo PIN"
+                  >
+                    <RotateCcw aria-hidden="true" className="size-4" />
+                  </Button>
+                </div>
+              </div>
+              <p className="mb-0 mt-3 text-xs leading-relaxed text-admin-muted">
+                O telefone e este PIN permitem acessar as confirmações no site.
+                Compartilhe-os somente com os convidados deste convite.
+              </p>
+            </div>
+          </section>
+          <section aria-label="Convidados neste convite" className="grid gap-6">
+            <h3 className="m-0 font-admin-display text-xl text-admin-graphite">
+              Convidados neste convite ({invitation.guests.length})
+            </h3>
+            <ul className="grid gap-2.5">
+              {invitation.guests.map((guest) => (
+                <li
+                  key={guest.id}
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-admin-line bg-admin-surface p-3.5"
+                >
+                  <div className="grid gap-1">
+                    <strong className="text-sm text-admin-ink">
+                      {guest.fullName}
+                    </strong>
+                    <InvitationStatus state={guest.rsvpState} />
+                  </div>
+                  <span className="rounded-full bg-admin-canvas px-2.5 py-1 text-xs text-admin-muted">
+                    {guest.guestType === "ADULT" ? "Adulto" : "Criança"}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </section>
+          <Button
+            type="button"
+            onClick={onManage}
+            className="w-full bg-admin-terracotta text-white hover:bg-admin-terracotta-deep"
+          >
+            Gerenciar confirmações
+          </Button>
+          <div className="flex flex-wrap justify-between gap-3 border-t border-admin-line pt-4">
             <Button
               type="button"
               variant="outline"
-              onClick={onEdit}
+              onClick={onDelete}
               disabled={inactive}
-              className="border-admin-line"
+              className="border-admin-status-declined text-admin-status-declined"
             >
-              <Pencil aria-hidden="true" className="size-4" />
-              Editar
+              <Trash2 aria-hidden="true" className="size-4" />
+              Excluir convite
+            </Button>
+            <Button type="button" onClick={onEdit} disabled={inactive}>
+              <Plus aria-hidden="true" className="size-4" />
+              Adicionar convidado
             </Button>
           </div>
-          <dl className="mt-5 grid gap-3 border-t border-admin-line pt-4 text-sm">
-            <div>
-              <dt className="text-admin-muted">Telefone de contato</dt>
-              <dd className="m-0 mt-1 text-admin-ink">
-                {formatInvitationPhoneInput(invitation.phone)}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-admin-muted">E-mail de contato</dt>
-              <dd className="m-0 mt-1 text-admin-ink">
-                {invitation.email ?? "Não informado"}
-              </dd>
-            </div>
-          </dl>
-          <div className="mt-4 border-t border-admin-line pt-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <span className="text-xs text-admin-muted">PIN do convite</span>
-                <p
-                  className={
-                    accessPin
-                      ? "m-0 mt-1 font-mono text-lg tracking-[0.18em] text-admin-ink"
-                      : "m-0 mt-1 text-sm text-admin-muted"
-                  }
-                >
-                  {accessPin ?? (pinLoading ? "Consultando…" : "—")}
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={copyPin}
-                  disabled={!accessPin}
-                  className="border-admin-line"
-                >
-                  <Copy aria-hidden="true" className="size-4" />
-                  Copiar
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  onClick={onRotatePin}
-                  disabled={inactive}
-                  aria-label="Gerar novo PIN"
-                >
-                  <RotateCcw aria-hidden="true" className="size-4" />
-                </Button>
-              </div>
-            </div>
-            <p className="mb-0 mt-3 text-xs leading-relaxed text-admin-muted">
-              O telefone e este PIN permitem acessar as confirmações no site.
-              Compartilhe-os somente com os convidados deste convite.
-            </p>
-          </div>
-        </section>
-        <section aria-label="Convidados neste convite" className="grid gap-6">
-          <h3 className="m-0 font-admin-display text-xl text-admin-graphite">
-            Convidados neste convite ({invitation.guests.length})
-          </h3>
-          <ul className="grid gap-2.5">
-            {invitation.guests.map((guest) => (
-              <li
-                key={guest.id}
-                className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-admin-line bg-admin-surface p-3.5"
-              >
-                <div className="grid gap-1">
-                  <strong className="text-sm text-admin-ink">
-                    {guest.fullName}
-                  </strong>
-                  <InvitationStatus state={guest.rsvpState} />
-                </div>
-                <span className="rounded-full bg-admin-canvas px-2.5 py-1 text-xs text-admin-muted">
-                  {guest.guestType === "ADULT" ? "Adulto" : "Criança"}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </section>
-        <Button
-          type="button"
-          onClick={onManage}
-          className="w-full bg-admin-terracotta text-white hover:bg-admin-terracotta-deep"
-        >
-          Gerenciar confirmações
-        </Button>
-        <div className="flex flex-wrap justify-between gap-3 border-t border-admin-line pt-4">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={onDelete}
-            disabled={inactive}
-            className="border-admin-status-declined text-admin-status-declined"
-          >
-            <Trash2 aria-hidden="true" className="size-4" />
-            Excluir convite
-          </Button>
-          <Button type="button" onClick={onEdit} disabled={inactive}>
-            <Plus aria-hidden="true" className="size-4" />
-            Adicionar convidado
-          </Button>
         </div>
-      </div>
-    </AdminSidePanel>
+      </AdminDialogContent>
+    </Dialog>
   );
 }

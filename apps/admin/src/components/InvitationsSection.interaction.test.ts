@@ -219,32 +219,30 @@ it("labels a loaded-only summary honestly when site totals are unavailable", asy
   );
 });
 
-it("keeps rows and the open detail mounted while a search reloads, then clears stale rows when it fails", async () => {
+it("opens invitation details in a modal and closes them with Escape", async () => {
   await mount();
   const row = [...container.querySelectorAll("button")].find((entry) =>
     entry.textContent?.includes("Família Souza"),
   );
   if (!row) throw new Error("Missing invitation row");
+  row.focus();
   await act(async () => row.click());
-  await act(async () => vi.advanceTimersByTimeAsync(0));
-  const heading = container.querySelector("#invitation-detail-title");
-  expect(heading).not.toBeNull();
-  let reject!: (cause: Error) => void;
-  routes["/invitations"] = () =>
-    new Promise((_, no) => {
-      reject = no;
-    });
-  search().focus();
-  await type(search(), "Lima");
-  await act(async () => vi.advanceTimersByTimeAsync(250));
-  expect(container.textContent).toContain("Família Souza");
-  expect(container.textContent).not.toContain("Carregando convites…");
-  expect(container.textContent).toContain("Atualizando convites…");
-  expect(container.querySelector("#invitation-detail-title")).toBe(heading);
-  expect(document.activeElement).toBe(search());
-  await act(async () => reject(new Error("search unavailable")));
-  expect(container.textContent).not.toContain("Família Souza");
-  expect(container.querySelector('[role="alert"]')).not.toBeNull();
+  await act(async () => vi.advanceTimersByTimeAsync(50));
+  const dialog = document.querySelector('[role="dialog"]');
+  expect(dialog).not.toBeNull();
+  expect(
+    dialog?.contains(document.querySelector("#invitation-detail-title")),
+  ).toBe(true);
+  expect(container.contains(dialog)).toBe(false);
+  expect(dialog?.contains(document.activeElement)).toBe(true);
+  await act(async () =>
+    document.activeElement?.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+    ),
+  );
+  await act(async () => vi.advanceTimersByTimeAsync(1000));
+  expect(document.querySelector('[role="dialog"]')).toBeNull();
+  expect(document.activeElement).toBe(row);
 });
 
 it("offers three export purposes with one download action and wedding-wide counts", async () => {
@@ -275,3 +273,51 @@ it("offers three export purposes with one download action and wedding-wide count
   expect(dialog.textContent).not.toContain("Opções da planilha");
   expect(downloadActions()).toEqual(["Baixar PDF"]);
 });
+
+it("preserves loaded rows during a search and clears stale rows on failure", async () => {
+  await mount();
+  let reject!: (cause: Error) => void;
+  routes["/invitations"] = () =>
+    new Promise((_, no) => {
+      reject = no;
+    });
+  search().focus();
+  await type(search(), "Lima");
+  await act(async () => vi.advanceTimersByTimeAsync(250));
+  expect(container.textContent).toContain("Família Souza");
+  expect(container.textContent).toContain("Atualizando convites…");
+  expect(document.activeElement).toBe(search());
+  await act(async () => reject(new Error("search unavailable")));
+  expect(container.textContent).not.toContain("Família Souza");
+  expect(container.querySelector('[role="alert"]')).not.toBeNull();
+});
+
+it.each(["Editar", "Gerenciar confirmações", "Excluir convite"])(
+  "replaces invitation details when choosing %s",
+  async (label) => {
+    routes["/rsvp"] = () => ({ invitations: [] });
+    routes["/rsvp/history"] = () => ({ entries: [], nextCursor: null });
+    await mount();
+    const row = [...container.querySelectorAll("button")].find((entry) =>
+      entry.textContent?.includes("Família Souza"),
+    );
+    row?.focus();
+    await act(async () => row?.click());
+    await act(async () => vi.advanceTimersByTimeAsync(50));
+    const action = [...document.querySelectorAll("[role=dialog] button")].find(
+      (entry) => entry.textContent?.trim() === label,
+    );
+    expect(action).toBeDefined();
+    await act(async () => (action as HTMLButtonElement).click());
+    await act(async () => vi.advanceTimersByTimeAsync(50));
+    expect(document.querySelector("#invitation-detail-title")).toBeNull();
+    expect(
+      document.querySelectorAll('[role="dialog"], [role="alertdialog"]'),
+    ).toHaveLength(1);
+    expect(
+      document
+        .querySelector('[role="dialog"], [role="alertdialog"]')
+        ?.contains(document.activeElement),
+    ).toBe(true);
+  },
+);

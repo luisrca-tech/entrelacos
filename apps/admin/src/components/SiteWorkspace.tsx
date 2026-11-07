@@ -8,7 +8,6 @@ import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
-  AlertDialogContent,
   AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogHeader,
@@ -23,7 +22,6 @@ import {
   DatePicker,
   Dialog,
   DialogClose,
-  DialogContent,
   DialogDescription,
   DialogTitle,
   Input,
@@ -45,6 +43,7 @@ import {
 } from "react";
 import { adminStyles, displayHeading } from "../lib/adminStyles";
 import { ApiError, apiRequest } from "../lib/apiClient";
+import { AdminAlertDialogContent, AdminDialogContent } from "./AdminDialog";
 import type { SiteArea } from "./adminNavigation";
 import { GiftsSection } from "./GiftsSection";
 import { InvitationsSection } from "./InvitationsSection";
@@ -612,7 +611,7 @@ export function SiteWorkspace({
               open={settingsDialog === "profile"}
               onOpenChange={(open) => !open && closeSettingsDialog()}
             >
-              <DialogContent className={`${adminStyles.dialog} max-w-2xl`}>
+              <AdminDialogContent className="max-w-2xl">
                 <DialogTitle>Editar cadastro</DialogTitle>
                 <DialogDescription>
                   Atualize o nome do casamento e os nomes do casal.
@@ -679,14 +678,14 @@ export function SiteWorkspace({
                     </DialogClose>
                   </div>
                 </form>
-              </DialogContent>
+              </AdminDialogContent>
             </Dialog>
 
             <Dialog
               open={settingsDialog === "dates"}
               onOpenChange={(open) => !open && closeSettingsDialog()}
             >
-              <DialogContent>
+              <AdminDialogContent>
                 <DialogTitle>Editar datas</DialogTitle>
                 <DialogDescription>
                   Altere a data do casamento e, quando disponível, a vigência.
@@ -737,14 +736,14 @@ export function SiteWorkspace({
                     </DialogClose>
                   </div>
                 </form>
-              </DialogContent>
+              </AdminDialogContent>
             </Dialog>
 
             <Dialog
               open={settingsDialog === "publication"}
               onOpenChange={(open) => !open && closeSettingsDialog()}
             >
-              <DialogContent>
+              <AdminDialogContent>
                 <DialogTitle>Registrar publicação</DialogTitle>
                 <DialogDescription>
                   Registre após verificar a publicação. Esta ação não altera a
@@ -803,14 +802,14 @@ export function SiteWorkspace({
                     </DialogClose>
                   </div>
                 </form>
-              </DialogContent>
+              </AdminDialogContent>
             </Dialog>
 
             <Dialog
               open={settingsDialog === "admin"}
               onOpenChange={(open) => !open && closeSettingsDialog()}
             >
-              <DialogContent>
+              <AdminDialogContent>
                 <DialogTitle>Adicionar pessoa do casal</DialogTitle>
                 <DialogDescription>
                   Após adicionar, gere e copie o link de ativação nas ações
@@ -866,7 +865,7 @@ export function SiteWorkspace({
                     </DialogClose>
                   </div>
                 </form>
-              </DialogContent>
+              </AdminDialogContent>
             </Dialog>
 
             <Dialog
@@ -875,7 +874,7 @@ export function SiteWorkspace({
               }
               onOpenChange={(open) => !open && closeSettingsDialog()}
             >
-              <DialogContent>
+              <AdminDialogContent>
                 <DialogTitle>
                   {domainToEdit ? "Editar domínio" : "Registrar domínio"}
                 </DialogTitle>
@@ -1018,14 +1017,14 @@ export function SiteWorkspace({
                     </div>
                   </form>
                 )}
-              </DialogContent>
+              </AdminDialogContent>
             </Dialog>
 
             <AlertDialog
               open={lifecycleAction !== null}
               onOpenChange={(open) => !open && setLifecycleAction(null)}
             >
-              <AlertDialogContent>
+              <AdminAlertDialogContent>
                 <AlertDialogHeader>
                   <AlertDialogTitle>{confirmation?.title}</AlertDialogTitle>
                   <AlertDialogDescription>
@@ -1047,14 +1046,14 @@ export function SiteWorkspace({
                     {confirmation?.confirmLabel}
                   </AlertDialogAction>
                 </AlertDialogFooter>
-              </AlertDialogContent>
+              </AdminAlertDialogContent>
             </AlertDialog>
 
             <AlertDialog
               open={adminToDisable !== null}
               onOpenChange={(open) => !open && setAdminToDisable(null)}
             >
-              <AlertDialogContent>
+              <AdminAlertDialogContent>
                 <AlertDialogHeader>
                   <AlertDialogTitle>Desativar acesso?</AlertDialogTitle>
                   <AlertDialogDescription>
@@ -1082,7 +1081,7 @@ export function SiteWorkspace({
                     Desativar acesso
                   </AlertDialogAction>
                 </AlertDialogFooter>
-              </AlertDialogContent>
+              </AdminAlertDialogContent>
             </AlertDialog>
           </section>
         ) : (

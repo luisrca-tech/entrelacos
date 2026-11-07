@@ -226,8 +226,10 @@ describe("mounted gift history", () => {
       const f = await mounted();
       f.setReply({ history });
       await click(f.node, "Ver detalhes de Lua de mel privada");
-      expect(f.node.textContent).toMatch(/Taxas registradas · R\$\s*11,00/);
-      expect(f.node.textContent).toContain(
+      expect(document.body.textContent).toMatch(
+        /Taxas registradas · R\$\s*11,00/,
+      );
+      expect(document.body.textContent).toContain(
         `Ajuste do EntreLaços ${label} · R$ 1,00`,
       );
     },
@@ -243,27 +245,29 @@ describe("mounted gift history", () => {
     });
     f.setReply({ history: purchase });
     await click(f.node, "Ver detalhes de Lua de mel privada");
-    const total = [...f.node.querySelectorAll("dt")].find(
+    const total = [...document.querySelectorAll("dt")].find(
       (node) => node.textContent === "Total da compra",
     );
     expect(total?.nextElementSibling?.textContent).toMatch(/R\$\s*113,21/);
-    expect(f.node.textContent).toContain(
+    expect(document.body.textContent).toContain(
       "Os valores acima vêm da cotação da compra. O histórico mostra os pagamentos e créditos registrados.",
     );
-    const row = [...f.node.querySelectorAll("dt")].find(
+    const row = [...document.querySelectorAll("dt")].find(
       (node) => node.textContent === "Taxas",
     );
     expect(row?.nextElementSibling?.textContent).toMatch(/− R\$\s*13,21/);
-    expect(f.node.textContent).not.toMatch(/Comissão|Processamento Asaas/);
-    const net = [...f.node.querySelectorAll("dt")].find(
+    expect(document.body.textContent).not.toMatch(
+      /Comissão|Processamento Asaas/,
+    );
+    const net = [...document.querySelectorAll("dt")].find(
       (node) => node.textContent === "Para vocês",
     );
     expect(net?.nextElementSibling?.textContent).toMatch(/R\$\s*100,00/);
   });
   it("does not announce an API failure during a successful initial mount", async () => {
     const error = vi.spyOn(toast, "error");
-    const f = await mounted(true);
-    expect(f.node.textContent).toContain("Lua de mel privada");
+    await mounted(true);
+    expect(document.body.textContent).toContain("Lua de mel privada");
     expect(error).not.toHaveBeenCalled();
   });
   it("denies SSR private data and props-only authority", () => {
@@ -280,29 +284,36 @@ describe("mounted gift history", () => {
   it("mounts once under StrictMode and separates quote, samples, receipts and unknown current state", async () => {
     const f = await mounted(true);
     expect(f.request).toHaveBeenCalledTimes(1);
-    expect(f.node.textContent).toContain("Lua de mel privada");
+    expect(document.body.textContent).toContain("Lua de mel privada");
     f.setReply({ history: detail });
     await click(f.node, "Ver detalhes de Lua de mel privada");
-    expect(f.node.textContent).toContain("Detalhes do presente");
+    expect(document.querySelector('[role="dialog"]')).not.toBeNull();
+    expect(document.body.textContent).toContain("Detalhes do presente");
     expect(f.node.querySelector("thead")?.textContent).toContain(
       "Total da compra",
     );
-    expect(f.node.textContent).not.toContain("Convidado pagou");
-    expect(f.node.textContent).toContain("Pagamento com restrição no Asaas");
-    expect(f.node.textContent).toContain("Crédito registrado para vocês: R$");
-    expect(f.node.textContent).toContain(
+    expect(document.body.textContent).not.toContain("Convidado pagou");
+    expect(document.body.textContent).toContain(
+      "Pagamento com restrição no Asaas",
+    );
+    expect(document.body.textContent).toContain(
+      "Crédito registrado para vocês: R$",
+    );
+    expect(document.body.textContent).toContain(
       "Situação financeira atual não confirmada",
     );
-    expect(f.node.textContent).toContain("Data não registrada");
-    expect(f.node.textContent).toContain("0,00");
-    expect(f.node.textContent).toContain("110,00");
-    expect(f.node.textContent).toContain("100,00");
+    expect(document.body.textContent).toContain("Data não registrada");
+    expect(document.body.textContent).toContain("0,00");
+    expect(document.body.textContent).toContain("110,00");
+    expect(document.body.textContent).toContain("100,00");
     expect(f.node.querySelector("[data-selected=true]")).toBeTruthy();
     expect(
       f.node.querySelector("[aria-expanded=true]")?.getAttribute("aria-label"),
     ).toBe("Ver detalhes de Lua de mel privada");
-    expect(document.activeElement?.id).toBe("gift-payment-detail-title");
-    expect(f.node.textContent).not.toMatch(
+    await vi.waitFor(() =>
+      expect(document.activeElement?.id).toBe("gift-payment-detail-title"),
+    );
+    expect(document.body.textContent).not.toMatch(
       /Saldo disponível|Reembolso disponível|Recebido no banco/,
     );
   });
@@ -316,11 +327,11 @@ describe("mounted gift history", () => {
       },
     });
     await click(f.node, "Ver detalhes de Lua de mel privada");
-    expect(f.node.textContent).toContain("Total da compra");
-    expect(f.node.textContent).toContain(
+    expect(document.body.textContent).toContain("Total da compra");
+    expect(document.body.textContent).toContain(
       "Nenhum pagamento ou crédito registrado nesta consulta.",
     );
-    expect(f.node.textContent).not.toMatch(
+    expect(document.body.textContent).not.toMatch(
       /Compra registrada|Pagamento confirmado|Pagamento recebido/,
     );
   });
@@ -328,8 +339,10 @@ describe("mounted gift history", () => {
     const f = await mounted();
     f.setReply({ history: detail });
     await click(f.node, "Ver detalhes de Lua de mel privada");
-    expect(f.node.textContent).toContain("Crédito registrado para vocês");
-    await click(f.node, "Fechar detalhe");
+    expect(document.body.textContent).toContain(
+      "Crédito registrado para vocês",
+    );
+    await click(document.body, "Fechar detalhe");
     f.setReply({
       history: {
         ...detail,
@@ -338,17 +351,25 @@ describe("mounted gift history", () => {
       },
     });
     await click(f.node, "Ver detalhes de Lua de mel privada");
-    expect(f.node.textContent).toContain("Crédito registrado para vocês");
+    expect(document.body.textContent).toContain(
+      "Crédito registrado para vocês",
+    );
     f.request.mockRejectedValueOnce(new Error("private upstream secret"));
-    await click(f.node, "Consultar histórico novamente");
-    expect(f.node.textContent).toContain("Crédito registrado para vocês");
-    expect(f.node.textContent).not.toContain("private upstream");
-    await click(f.node, "Tentar consulta novamente");
-    expect(f.node.textContent).toContain("Crédito registrado para vocês");
+    await click(document.body, "Consultar histórico novamente");
+    expect(document.body.textContent).toContain(
+      "Crédito registrado para vocês",
+    );
+    expect(document.body.textContent).not.toContain("private upstream");
+    const dialog = document.querySelector<HTMLElement>('[role="dialog"]');
+    if (!dialog) throw new Error("Missing payment dialog");
+    await click(dialog, "Tentar consulta novamente");
+    expect(document.body.textContent).toContain(
+      "Crédito registrado para vocês",
+    );
   });
   it("masks before effects on site/access/session replacement and native invalidation", async () => {
     const f = await mounted();
-    expect(f.node.textContent).toContain("Lua de mel privada");
+    expect(document.body.textContent).toContain("Lua de mel privada");
     await f.render({
       ...f.props,
       access: {
@@ -357,21 +378,21 @@ describe("mounted gift history", () => {
       },
     });
     expect(f.beforeEffects.at(-1)).not.toMatch(/Lua de mel|R\$/);
-    expect(f.node.textContent).not.toMatch(/Lua de mel|R\$/);
-    expect(f.node.textContent).toContain("Acesso financeiro restrito");
+    expect(document.body.textContent).not.toMatch(/Lua de mel|R\$/);
+    expect(document.body.textContent).toContain("Acesso financeiro restrito");
     await f.render(f.props);
     await act(async () => f.owner.invalidate(false));
-    expect(f.node.textContent).not.toMatch(/Lua de mel|R\$/);
+    expect(document.body.textContent).not.toMatch(/Lua de mel|R\$/);
   });
   it("rebinds same-object ports until an authoritative refresh or resetting64 admissions", async () => {
     const f = await mounted(true);
     f.ports.request = vi.fn(async () => ({ history: { ...page, items: [] } }));
     await f.render();
-    expect(f.node.textContent).toContain("Lua de mel privada");
+    expect(document.body.textContent).toContain("Lua de mel privada");
     await click(f.node, "Atualizar lista");
-    expect(f.node.textContent).not.toContain("Lua de mel privada");
+    expect(document.body.textContent).not.toContain("Lua de mel privada");
     expect(f.ports.request).toHaveBeenCalledTimes(1);
-    expect(f.node.textContent).toContain("2 de 64");
+    expect(document.body.textContent).toContain("2 de 64");
   });
   it("masks late native-getter access changes in the committed DOM before effects", async () => {
     let exercised = 0;
@@ -397,15 +418,17 @@ describe("mounted gift history", () => {
           f.beforeEffects.at(-1),
           `render native getter ${boundary}`,
         ).not.toMatch(/Lua de mel|R\$/);
-        expect(f.node.textContent).not.toMatch(/Lua de mel|R\$/);
+        expect(document.body.textContent).not.toMatch(/Lua de mel|R\$/);
       }
     }
     expect(exercised).toBeGreaterThan(1);
   });
   it("shows totals from the financial overview and never invents them", async () => {
     const f = await mounted();
-    expect(f.node.textContent).toContain("Presentes com pagamento1");
-    expect(f.node.textContent).toContain("Pago pelos convidadosIndisponível");
+    expect(document.body.textContent).toContain("Presentes com pagamento1");
+    expect(document.body.textContent).toContain(
+      "Pago pelos convidadosIndisponível",
+    );
     await f.render({
       ...f.props,
       totals: {
@@ -428,8 +451,10 @@ describe("mounted gift history", () => {
         },
       },
     } as typeof f.props);
-    expect(f.node.textContent).toMatch(/Pago pelos convidadosR\$\s10,00/);
-    expect(f.node.textContent).toMatch(
+    expect(document.body.textContent).toMatch(
+      /Pago pelos convidadosR\$\s10,00/,
+    );
+    expect(document.body.textContent).toMatch(
       /Para vocês, depois das taxasR\$\s534,81/,
     );
   });
@@ -438,10 +463,10 @@ describe("mounted gift history", () => {
     f.setReply({ history: { ...page, items: [], nextCursor: "gh1.next" } });
     await click(f.node, "Atualizar lista");
     expect(f.request).toHaveBeenCalledTimes(2);
-    expect(f.node.textContent).toContain(
+    expect(document.body.textContent).toContain(
       "Nenhum presente com pagamento nesta consulta.",
     );
-    expect(f.node.textContent).toContain("Carregar mais presentes");
+    expect(document.body.textContent).toContain("Carregar mais presentes");
   });
   it("treats transient read-port failure as unavailable and restores retained receipts without another read", async () => {
     const f = await mounted();
@@ -457,16 +482,22 @@ describe("mounted gift history", () => {
       },
     });
     await f.render();
-    expect(f.node.textContent).toContain("Histórico de presentes indisponível");
-    expect(f.node.textContent).not.toContain("Acesso financeiro restrito");
-    expect(f.node.textContent).not.toMatch(
+    expect(document.body.textContent).toContain(
+      "Histórico de presentes indisponível",
+    );
+    expect(document.body.textContent).not.toContain(
+      "Acesso financeiro restrito",
+    );
+    expect(document.body.textContent).not.toMatch(
       /Lua de mel|R\$|private port failure/,
     );
     expect(f.owner.getSnapshot().status).toBe("verified");
     unavailable = false;
     await f.render();
-    expect(f.node.textContent).toContain("Crédito registrado para vocês");
-    expect(f.node.textContent).toContain("2 de 64");
+    expect(document.body.textContent).toContain(
+      "Crédito registrado para vocês",
+    );
+    expect(document.body.textContent).toContain("2 de 64");
     expect(request).toHaveBeenCalledTimes(2);
   });
 });

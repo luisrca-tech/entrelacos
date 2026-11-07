@@ -2,7 +2,14 @@ import type {
   FinancialOverview,
   GiftPurchaseHistoryPayment,
 } from "@entrelacos/contracts";
-import { Badge, Button, showSandboxNotice, toast } from "@entrelacos/ui";
+import {
+  Badge,
+  Button,
+  Dialog,
+  DialogTitle,
+  showSandboxNotice,
+  toast,
+} from "@entrelacos/ui";
 import { Gift, Search } from "lucide-react";
 import {
   type ReactNode,
@@ -13,7 +20,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { AdminSidePanel } from "./AdminSidePanel";
+import { AdminDialogContent } from "./AdminDialog";
 import { financialFlow, formatCents, purchaseNetCents } from "./financialFlow";
 import {
   createGiftPaymentHistoryController,
@@ -243,7 +250,6 @@ export function GiftPaymentHistoryView(
   const [method, setMethod] = useState<GiftPurchaseMethodFilter>("ALL");
   const purchases = filterLoadedGiftPurchases(state.purchases, search, method);
   const detailHeading = useRef<HTMLHeadingElement | null>(null);
-  const opened = useRef<string | null>(null);
   useEffect(() => {
     if (!bound) return;
     if (state.status === "unavailable")
@@ -253,12 +259,6 @@ export function GiftPaymentHistoryView(
         "A consulta retornou informações conflitantes. O histórico anterior foi preservado.",
       );
   }, [bound, state.status]);
-  // Moves focus to the details panel the person asked to open.
-  useEffect(() => {
-    const id = detail?.purchase.orderId ?? null;
-    if (id && opened.current === id) detailHeading.current?.focus();
-    opened.current = null;
-  }, [detail?.purchase.orderId]);
   if (!allowed)
     return (
       <section
@@ -358,10 +358,8 @@ export function GiftPaymentHistoryView(
           Esta identidade exige compatibilidade de consulta ainda indisponível.
         </p>
       )}
-      <div className="grid min-w-0 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
-        <div
-          className={`${readyCard} grid min-w-0 overflow-hidden ${detail ? "" : "lg:col-span-2"}`}
-        >
+      <div className="grid min-w-0 items-start gap-5">
+        <div className={`${readyCard} grid min-w-0 overflow-hidden`}>
           {state.status === "ready" && state.indexReadCount === 0 && (
             <p className="m-0 px-5 py-6 text-sm text-admin-body">
               Nenhum presente com pagamento nesta consulta.
@@ -411,7 +409,6 @@ export function GiftPaymentHistoryView(
                           aria-label={`Ver detalhes de ${purchase.titleSnapshot}`}
                           aria-expanded={selected}
                           onClick={() => {
-                            opened.current = purchase.orderId;
                             void active?.openPurchase(purchase.orderId);
                           }}
                           className="grid w-full min-w-0 cursor-pointer gap-1 bg-transparent p-0 text-left text-admin-ink after:absolute after:inset-0 disabled:cursor-not-allowed"
@@ -476,218 +473,250 @@ export function GiftPaymentHistoryView(
                 }
                 label="Carregar mais presentes"
               />
-              {(state.status === "unavailable" ||
-                state.status === "conflict") && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={disabled}
-                  onClick={() => {
-                    void active?.retryFailedRead();
-                  }}
-                >
-                  Tentar consulta novamente
-                </Button>
-              )}
+              {!detail &&
+                (state.status === "unavailable" ||
+                  state.status === "conflict") && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={disabled}
+                    onClick={() => {
+                      void active?.retryFailedRead();
+                    }}
+                  >
+                    Tentar consulta novamente
+                  </Button>
+                )}
             </div>
           )}
         </div>
         {detail && (
-          <AdminSidePanel aria-labelledby="gift-payment-detail-title">
-            <div className="grid min-w-0 gap-1">
-              <p className="m-0 text-xs font-bold tracking-[0.06em] text-admin-muted uppercase">
-                Detalhes do presente
-              </p>
-              <h3
-                id="gift-payment-detail-title"
-                ref={detailHeading}
-                tabIndex={-1}
-                className="m-0 font-admin-display text-[22px] leading-[1.25] font-normal text-admin-ink outline-none [overflow-wrap:anywhere]"
-              >
-                {detail.purchase.titleSnapshot}
-              </h3>
-              <p className="m-0 text-[13px] text-admin-muted">
-                {methodLabel(
-                  detail.purchase.method,
-                  detail.purchase.installmentCount,
-                )}{" "}
-                · {instant(detail.purchase.purchasedAtMicros)}
-              </p>
-            </div>
-            <dl className="m-0 grid gap-2 rounded-xl bg-admin-canvas px-4 py-3.5 text-sm">
-              {[
-                [
-                  "Total da compra",
-                  formatCents(detail.purchase.quoted.totalCents),
-                ],
-                [
-                  "Taxas",
-                  `− ${formatCents(detail.purchase.quoted.commissionCents + detail.purchase.quoted.processingCents)}`,
-                ],
-              ].map(([label, value]) => (
-                <div key={label} className="flex justify-between gap-3">
-                  <dt className="text-admin-body">{label}</dt>
-                  <dd className="m-0 whitespace-nowrap text-admin-ink">
-                    {value}
+          <Dialog
+            open
+            onOpenChange={(open) => {
+              if (!open) active?.closeDetail();
+            }}
+          >
+            <AdminDialogContent
+              aria-labelledby="gift-payment-detail-title"
+              initialFocus={detailHeading}
+            >
+              <div className="grid min-w-0 gap-1">
+                <p className="m-0 text-xs font-bold tracking-[0.06em] text-admin-muted uppercase">
+                  Detalhes do presente
+                </p>
+                <DialogTitle
+                  id="gift-payment-detail-title"
+                  ref={detailHeading}
+                  tabIndex={-1}
+                  className="m-0 font-admin-display text-[22px] leading-[1.25] font-normal text-admin-ink outline-none [overflow-wrap:anywhere]"
+                >
+                  {detail.purchase.titleSnapshot}
+                </DialogTitle>
+                <p className="m-0 text-[13px] text-admin-muted">
+                  {methodLabel(
+                    detail.purchase.method,
+                    detail.purchase.installmentCount,
+                  )}{" "}
+                  · {instant(detail.purchase.purchasedAtMicros)}
+                </p>
+              </div>
+              <dl className="m-0 grid gap-2 rounded-xl bg-admin-canvas px-4 py-3.5 text-sm">
+                {[
+                  [
+                    "Total da compra",
+                    formatCents(detail.purchase.quoted.totalCents),
+                  ],
+                  [
+                    "Taxas",
+                    `− ${formatCents(detail.purchase.quoted.commissionCents + detail.purchase.quoted.processingCents)}`,
+                  ],
+                ].map(([label, value]) => (
+                  <div key={label} className="flex justify-between gap-3">
+                    <dt className="text-admin-body">{label}</dt>
+                    <dd className="m-0 whitespace-nowrap text-admin-ink">
+                      {value}
+                    </dd>
+                  </div>
+                ))}
+                <div className="flex justify-between gap-3 border-t border-admin-line pt-2 font-bold">
+                  <dt className="text-admin-ink">Para vocês</dt>
+                  <dd className="m-0 whitespace-nowrap text-admin-success-ink">
+                    {formatCents(purchaseNetCents(detail.purchase.quoted))}
                   </dd>
                 </div>
-              ))}
-              <div className="flex justify-between gap-3 border-t border-admin-line pt-2 font-bold">
-                <dt className="text-admin-ink">Para vocês</dt>
-                <dd className="m-0 whitespace-nowrap text-admin-success-ink">
-                  {formatCents(purchaseNetCents(detail.purchase.quoted))}
-                </dd>
-              </div>
-            </dl>
-            <div className="grid gap-3">
-              <h4 className="m-0 text-sm font-bold text-admin-ink">
-                Histórico
-              </h4>
-              <p className="m-0 text-[13px] text-admin-muted">
-                Os valores acima vêm da cotação da compra. O histórico mostra os
-                pagamentos e créditos registrados.
-              </p>
-              <ol className="m-0 grid list-none gap-3 p-0">
-                {detail.samples.map((sample) => (
-                  <li
-                    key={JSON.stringify(sample)}
-                    className="flex items-start gap-3"
-                  >
-                    <span
-                      aria-hidden="true"
-                      className={`mt-1 size-3 shrink-0 rounded-full ${sampleDots[sample.recordedState]}`}
-                    />
-                    <div className="grid min-w-0 gap-0.5">
-                      <strong className="text-sm text-admin-ink">
-                        {sample.installmentNumber &&
-                          `Parcela ${sample.installmentNumber} · `}
-                        {sampleLabels[sample.recordedState]}
-                      </strong>
-                      <span className="text-[13px] text-admin-muted">
-                        {instant(sample.observedAtMicros)}
-                        {sample.recipientNetCents !== null &&
-                          ` · ${amount(sample.recipientNetCents)} para vocês`}
-                      </span>
-                    </div>
-                  </li>
-                ))}
-                {detail.receipts.map((receipt) => {
-                  const sample = detail.samples.find(
-                    (payment) =>
-                      payment.paymentId === receipt.paymentId &&
-                      payment.observedAtMicros ===
-                        receipt.sourceObservedAtMicros,
-                  );
-                  return (
+              </dl>
+              <div className="grid gap-3">
+                <h4 className="m-0 text-sm font-bold text-admin-ink">
+                  Histórico
+                </h4>
+                <p className="m-0 text-[13px] text-admin-muted">
+                  Os valores acima vêm da cotação da compra. O histórico mostra
+                  os pagamentos e créditos registrados.
+                </p>
+                <ol className="m-0 grid list-none gap-3 p-0">
+                  {detail.samples.map((sample) => (
                     <li
-                      key={receipt.effectId}
+                      key={JSON.stringify(sample)}
                       className="flex items-start gap-3"
                     >
                       <span
                         aria-hidden="true"
-                        className="mt-1 size-3 shrink-0 rounded-full bg-admin-status-confirmed"
+                        className={`mt-1 size-3 shrink-0 rounded-full ${sampleDots[sample.recordedState]}`}
                       />
                       <div className="grid min-w-0 gap-0.5">
                         <strong className="text-sm text-admin-ink">
-                          {sample?.installmentNumber &&
+                          {sample.installmentNumber &&
                             `Parcela ${sample.installmentNumber} · `}
-                          Crédito registrado para vocês:{" "}
-                          {amount(receipt.recipientCreditCents)}
+                          {sampleLabels[sample.recordedState]}
                         </strong>
                         <span className="text-[13px] text-admin-muted">
-                          {instant(receipt.postedAtMicros)}
+                          {instant(sample.observedAtMicros)}
+                          {sample.recipientNetCents !== null &&
+                            ` · ${amount(sample.recipientNetCents)} para vocês`}
                         </span>
-                        {sample?.commissionCents != null &&
-                          sample.processingCents != null && (
+                      </div>
+                    </li>
+                  ))}
+                  {detail.receipts.map((receipt) => {
+                    const sample = detail.samples.find(
+                      (payment) =>
+                        payment.paymentId === receipt.paymentId &&
+                        payment.observedAtMicros ===
+                          receipt.sourceObservedAtMicros,
+                    );
+                    return (
+                      <li
+                        key={receipt.effectId}
+                        className="flex items-start gap-3"
+                      >
+                        <span
+                          aria-hidden="true"
+                          className="mt-1 size-3 shrink-0 rounded-full bg-admin-status-confirmed"
+                        />
+                        <div className="grid min-w-0 gap-0.5">
+                          <strong className="text-sm text-admin-ink">
+                            {sample?.installmentNumber &&
+                              `Parcela ${sample.installmentNumber} · `}
+                            Crédito registrado para vocês:{" "}
+                            {amount(receipt.recipientCreditCents)}
+                          </strong>
+                          <span className="text-[13px] text-admin-muted">
+                            {instant(receipt.postedAtMicros)}
+                          </span>
+                          {sample?.commissionCents != null &&
+                            sample.processingCents != null && (
+                              <span className="text-[13px] text-admin-muted">
+                                Taxas registradas ·{" "}
+                                {formatCents(
+                                  sample.commissionCents +
+                                    sample.processingCents,
+                                )}
+                              </span>
+                            )}
+                          {(sample?.platformAdjustmentFundedCents ?? 0) > 0 && (
                             <span className="text-[13px] text-admin-muted">
-                              Taxas registradas ·{" "}
+                              Ajuste do EntreLaços creditado ·{" "}
                               {formatCents(
-                                sample.commissionCents + sample.processingCents,
+                                sample?.platformAdjustmentFundedCents ?? 0,
                               )}
                             </span>
                           )}
-                        {(sample?.platformAdjustmentFundedCents ?? 0) > 0 && (
-                          <span className="text-[13px] text-admin-muted">
-                            Ajuste do EntreLaços creditado ·{" "}
-                            {formatCents(
-                              sample?.platformAdjustmentFundedCents ?? 0,
-                            )}
-                          </span>
-                        )}
-                        {(sample?.platformAdjustmentOwedCents ?? 0) > 0 && (
-                          <span className="text-[13px] text-admin-muted">
-                            Ajuste do EntreLaços a creditar ·{" "}
-                            {formatCents(
-                              sample?.platformAdjustmentOwedCents ?? 0,
-                            )}
-                          </span>
-                        )}
-                      </div>
-                    </li>
-                  );
-                })}
-              </ol>
-              {detail.samples.length === 0 && detail.receipts.length === 0 && (
-                <p className="m-0 text-[13px] text-admin-muted">
-                  Nenhum pagamento ou crédito registrado nesta consulta.
+                          {(sample?.platformAdjustmentOwedCents ?? 0) > 0 && (
+                            <span className="text-[13px] text-admin-muted">
+                              Ajuste do EntreLaços a creditar ·{" "}
+                              {formatCents(
+                                sample?.platformAdjustmentOwedCents ?? 0,
+                              )}
+                            </span>
+                          )}
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ol>
+                {detail.samples.length === 0 &&
+                  detail.receipts.length === 0 && (
+                    <p className="m-0 text-[13px] text-admin-muted">
+                      Nenhum pagamento ou crédito registrado nesta consulta.
+                    </p>
+                  )}
+                <p className="m-0 text-[12.5px] leading-[1.5] text-admin-muted">
+                  Pagamentos{" "}
+                  {detail.coverage.payments === "AVAILABLE"
+                    ? "consultados"
+                    : "indisponíveis"}{" "}
+                  e créditos{" "}
+                  {detail.coverage.receipts === "AVAILABLE"
+                    ? "consultados"
+                    : "indisponíveis"}{" "}
+                  nesta leitura. Estornos e liquidação bancária não aparecem
+                  aqui; o histórico não confirma a situação atual nem o crédito
+                  no banco.
                 </p>
+                {detail.purchase.binding === "UNBOUND" && (
+                  <p className="m-0 text-[13px] text-admin-muted">
+                    Vínculo original indisponível; os fatos financeiros desta
+                    compra não puderam ser consultados.
+                  </p>
+                )}
+              </div>
+              {(state.status === "unavailable" ||
+                state.status === "conflict") && (
+                <div className="grid gap-3 rounded-xl border border-admin-line bg-admin-canvas p-4">
+                  <p role="status" className="m-0 text-sm text-admin-muted">
+                    Não foi possível atualizar esta consulta. O histórico
+                    anterior foi preservado.
+                  </p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={disabled}
+                    onClick={() => {
+                      void active?.retryFailedRead();
+                    }}
+                  >
+                    Tentar consulta novamente
+                  </Button>
+                </div>
               )}
-              <p className="m-0 text-[12.5px] leading-[1.5] text-admin-muted">
-                Pagamentos{" "}
-                {detail.coverage.payments === "AVAILABLE"
-                  ? "consultados"
-                  : "indisponíveis"}{" "}
-                e créditos{" "}
-                {detail.coverage.receipts === "AVAILABLE"
-                  ? "consultados"
-                  : "indisponíveis"}{" "}
-                nesta leitura. Estornos e liquidação bancária não aparecem aqui;
-                o histórico não confirma a situação atual nem o crédito no
-                banco.
-              </p>
-              {detail.purchase.binding === "UNBOUND" && (
-                <p className="m-0 text-[13px] text-admin-muted">
-                  Vínculo original indisponível; os fatos financeiros desta
-                  compra não puderam ser consultados.
-                </p>
-              )}
-            </div>
-            <div className="flex flex-wrap gap-x-4">
-              {state.nextDetailCursor && (
+              <div className="flex flex-wrap gap-x-4">
+                {state.nextDetailCursor && (
+                  <button
+                    type="button"
+                    className={readyLinkButton}
+                    disabled={disabled}
+                    onClick={() => {
+                      void active?.loadMoreDetail(
+                        detail.purchase.orderId,
+                        state.nextDetailCursor as string,
+                      );
+                    }}
+                  >
+                    Carregar mais fatos desta compra
+                  </button>
+                )}
                 <button
                   type="button"
                   className={readyLinkButton}
                   disabled={disabled}
                   onClick={() => {
-                    void active?.loadMoreDetail(
-                      detail.purchase.orderId,
-                      state.nextDetailCursor as string,
-                    );
+                    void active?.restartDetail(detail.purchase.orderId);
                   }}
                 >
-                  Carregar mais fatos desta compra
+                  Consultar histórico novamente
                 </button>
-              )}
-              <button
-                type="button"
-                className={readyLinkButton}
-                disabled={disabled}
-                onClick={() => {
-                  void active?.restartDetail(detail.purchase.orderId);
-                }}
-              >
-                Consultar histórico novamente
-              </button>
-              <button
-                type="button"
-                className={readyLinkButton}
-                disabled={state.busy}
-                onClick={() => active?.closeDetail()}
-              >
-                Fechar detalhe
-              </button>
-            </div>
-          </AdminSidePanel>
+                <button
+                  type="button"
+                  className={readyLinkButton}
+                  disabled={state.busy}
+                  onClick={() => active?.closeDetail()}
+                >
+                  Fechar detalhe
+                </button>
+              </div>
+            </AdminDialogContent>
+          </Dialog>
         )}
       </div>
       <details className="text-[13px] text-admin-muted">
