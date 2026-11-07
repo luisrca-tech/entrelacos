@@ -120,9 +120,9 @@ const timeline = buildIntroTimeline(frames.length);
       if (!(hero instanceof HTMLElement) || heroMediaStarted) return;
       heroMediaStarted = true;
       hero.setAttribute("data-template-intro-media-ready", "true");
-      hero
-        .querySelector<HTMLElement>("[data-template-hero-media]")
-        ?.setAttribute("data-template-intro-media-ready", "true");
+      const heroMedia = hero.querySelector<HTMLElement>("[data-template-hero-media]");
+      heroMedia?.removeAttribute("data-template-intro-pending");
+      heroMedia?.setAttribute("data-template-intro-media-ready", "true");
       if (!(heroVideo instanceof HTMLVideoElement)) return;
 
       heroVideo.currentTime = 0;
