@@ -501,3 +501,25 @@ describe("mounted gift history", () => {
     expect(request).toHaveBeenCalledTimes(2);
   });
 });
+
+it("keeps payment filters local and refreshes only through the refresh action", async () => {
+  const f = await mounted();
+  expect(f.request).toHaveBeenCalledTimes(1);
+  await click(f.node, "Cartão");
+  expect(f.node.textContent).toContain(
+    "Nenhum presente carregado corresponde aos filtros.",
+  );
+  expect(f.node.querySelector('[aria-pressed="true"]')?.textContent).toBe(
+    "Cartão",
+  );
+  expect(f.request).toHaveBeenCalledTimes(1);
+  await click(f.node, "Atualizar lista");
+  expect(f.request).toHaveBeenCalledTimes(2);
+  expect(f.node.querySelector('[aria-pressed="true"]')?.textContent).toBe(
+    "Cartão",
+  );
+  await click(f.node, "Pix");
+  expect(f.node.textContent).toContain("Lua de mel privada");
+  await click(f.node, "Todos");
+  expect(f.request).toHaveBeenCalledTimes(2);
+});

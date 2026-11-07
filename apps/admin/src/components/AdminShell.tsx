@@ -14,7 +14,13 @@ import {
   Users,
   Wallet,
 } from "lucide-react";
-import { type ReactNode, useEffect, useState } from "react";
+import {
+  type CSSProperties,
+  type ReactNode,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { AdminButton } from "./AdminButton";
 import {
   type AdminRole,
@@ -52,6 +58,20 @@ export function AdminShell({
   const navigationArea = area === "receiving-guide" ? "receiving" : area;
   const initials = getInitials(actor.user.name);
   const expanded = useNavigationExpanded();
+  const mobileDock = useRef<HTMLElement>(null);
+  const [mobileDockHeight, setMobileDockHeight] = useState<number | null>(null);
+  useEffect(() => {
+    if (!siteId) return;
+    const dock = mobileDock.current;
+    if (!dock) return;
+    const measure = () =>
+      setMobileDockHeight(dock.getBoundingClientRect().height);
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(dock);
+    return () => observer.disconnect();
+  }, [siteId]);
   // A stored "collapsed" preference replaces the expanded server markup right
   // after hydration; skip transitions until then so the sidebar does not
   // visibly animate closed on a full page load.
@@ -63,6 +83,13 @@ export function AdminShell({
 
   return (
     <div
+      style={
+        mobileDockHeight === null
+          ? undefined
+          : ({
+              "--admin-mobile-nav-height": `${mobileDockHeight}px`,
+            } as CSSProperties)
+      }
       className={cn(
         "grid min-h-screen transition-[grid-template-columns] duration-200 ease-out motion-reduce:transition-none [@media(max-width:760px)]:block",
         !settled && "transition-none **:transition-none",
@@ -70,7 +97,7 @@ export function AdminShell({
           ? "grid-cols-[248px_minmax(0,1fr)] [@media(min-width:761px)_and_(max-width:1060px)]:grid-cols-[216px_minmax(0,1fr)]"
           : "grid-cols-[76px_minmax(0,1fr)]",
         siteId &&
-          "[@media(max-width:760px)]:pb-[calc(74px+env(safe-area-inset-bottom))]",
+          "[@media(max-width:760px)]:pb-[var(--admin-mobile-nav-height,calc(74px+env(safe-area-inset-bottom)))]",
       )}
     >
       <aside
@@ -257,6 +284,7 @@ export function AdminShell({
 
       {siteId && (
         <nav
+          ref={mobileDock}
           className="fixed right-0 bottom-0 left-0 z-[8] hidden border-t border-admin-border bg-admin-surface/96 px-2.5 pt-2 pb-[calc(8px+env(safe-area-inset-bottom))] shadow-admin-dock [@media(max-width:760px)]:block"
           aria-label="Navegação do casamento no celular"
         >
@@ -314,7 +342,7 @@ function navigationLinkClass(
 ) {
   return cn(
     mobile
-      ? "grid min-h-[54px] flex-1 basis-0 place-items-center gap-[3px] px-[3px] py-1.5 text-center text-[0.65rem] text-admin-text-secondary no-underline"
+      ? "grid min-h-[54px] min-w-0 flex-1 basis-0 grid-cols-[minmax(0,1fr)] place-items-center gap-[3px] px-[3px] py-1.5 text-center text-[0.65rem] text-admin-text-secondary no-underline"
       : "grid min-h-[42px] items-center overflow-hidden rounded-[9px] py-2 text-[0.9rem] text-admin-text-secondary no-underline transition-[grid-template-columns,gap,padding,background,color] duration-200 ease-out motion-reduce:transition-none hover:bg-admin-accent-subtle hover:text-admin-accent-hover",
     !mobile &&
       (collapsed
@@ -339,7 +367,11 @@ function NavigationLabel({
         "overflow-hidden whitespace-nowrap transition-[max-width,opacity] duration-200 ease-out motion-reduce:transition-none",
         mobile &&
           "min-w-0 max-w-full whitespace-normal break-words leading-tight",
-        collapsed ? "max-w-0 opacity-0" : "max-w-40 opacity-100",
+        collapsed
+          ? "max-w-0 opacity-0"
+          : mobile
+            ? "max-w-full opacity-100"
+            : "max-w-40 opacity-100",
       )}
     >
       {children}

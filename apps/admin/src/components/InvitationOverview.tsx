@@ -60,7 +60,7 @@ export function InvitationOverview({
   ];
   const budget = invitationBudget(counts.guestsByStatus);
   return (
-    <div className="grid gap-3.5">
+    <div className="grid min-w-0 grid-cols-1 gap-3.5">
       <PageHeaderActions>
         <AdminButton type="button" tone="secondary" onClick={onExport}>
           Exportar
@@ -74,9 +74,9 @@ export function InvitationOverview({
           Novo convite
         </AdminButton>
       </PageHeaderActions>
-      <div className="grid gap-3.5 lg:grid-cols-[minmax(0,2.1fr)_minmax(0,1fr)]">
+      <div className="grid min-w-0 grid-cols-1 gap-3.5 lg:grid-cols-[minmax(0,2.1fr)_minmax(0,1fr)]">
         <section
-          className="grid gap-2.5 rounded-2xl border border-admin-border bg-admin-surface p-5"
+          className="grid min-w-0 grid-cols-1 gap-2.5 rounded-2xl border border-admin-border bg-admin-surface p-5"
           aria-label="Resumo dos convites"
         >
           <p className="m-0 text-xs text-admin-text-secondary">
@@ -107,49 +107,57 @@ export function InvitationOverview({
                 ))}
             </div>
           )}
-          <table className="w-full border-collapse text-[13px] tabular-nums">
-            <caption className="sr-only">Convidados por situação</caption>
-            <thead>
-              <tr className="text-left text-xs text-admin-text-secondary">
-                <th scope="col" className="py-1 pr-2 font-normal">
-                  Situação
-                </th>
-                <th scope="col" className="px-2 py-1 text-right font-normal">
-                  Pessoas
-                </th>
-                <th scope="col" className="px-2 py-1 text-right font-normal">
-                  Adultos
-                </th>
-                <th scope="col" className="py-1 pl-2 text-right font-normal">
-                  Crianças
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {statuses.map((status) => (
-                <tr key={status.title} className="border-t border-admin-border">
-                  <th scope="row" className="py-1.5 pr-2 text-left font-normal">
-                    <span className="inline-flex items-center gap-1.5">
-                      <span
-                        className={`size-2 shrink-0 rounded-full ${status.color}`}
-                        aria-hidden="true"
-                      />
-                      {status.title}
-                    </span>
+          <div className="min-w-0 overflow-x-auto">
+            <table className="w-full border-collapse text-[13px] tabular-nums">
+              <caption className="sr-only">Convidados por situação</caption>
+              <thead>
+                <tr className="text-left text-xs text-admin-text-secondary">
+                  <th scope="col" className="py-1 pr-2 font-normal">
+                    Situação
                   </th>
-                  <td className="px-2 py-1.5 text-right font-semibold">
-                    {status.count}
-                  </td>
-                  <td className="px-2 py-1.5 text-right">
-                    {status.types.adults}
-                  </td>
-                  <td className="py-1.5 pl-2 text-right">
-                    {status.types.children}
-                  </td>
+                  <th scope="col" className="px-2 py-1 text-right font-normal">
+                    Pessoas
+                  </th>
+                  <th scope="col" className="px-2 py-1 text-right font-normal">
+                    Adultos
+                  </th>
+                  <th scope="col" className="py-1 pl-2 text-right font-normal">
+                    Crianças
+                  </th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {statuses.map((status) => (
+                  <tr
+                    key={status.title}
+                    className="border-t border-admin-border"
+                  >
+                    <th
+                      scope="row"
+                      className="py-1.5 pr-2 text-left font-normal"
+                    >
+                      <span className="inline-flex items-center gap-1.5">
+                        <span
+                          className={`size-2 shrink-0 rounded-full ${status.color}`}
+                          aria-hidden="true"
+                        />
+                        {status.title}
+                      </span>
+                    </th>
+                    <td className="px-2 py-1.5 text-right font-semibold">
+                      {status.count}
+                    </td>
+                    <td className="px-2 py-1.5 text-right">
+                      {status.types.adults}
+                    </td>
+                    <td className="py-1.5 pl-2 text-right">
+                      {status.types.children}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
           <section
             className="grid gap-1 rounded-xl bg-admin-canvas px-3.5 py-3 text-[13px]"
             aria-label="Estimativa para orçamento"
@@ -169,7 +177,7 @@ export function InvitationOverview({
             type="button"
             tone="link"
             onClick={onManageConfirmations}
-            className="h-auto w-fit p-0 text-admin-accent-hover"
+            className="h-auto min-h-11 w-fit max-w-full whitespace-normal p-0 text-left text-admin-accent-hover"
           >
             Gerenciar confirmações
           </AdminButton>
@@ -194,7 +202,7 @@ export function InvitationOverview({
             tone="link"
             onClick={onConfigureDeadline}
             disabled={inactive}
-            className="h-auto w-fit p-0 text-admin-accent-hover"
+            className="h-auto min-h-11 w-fit max-w-full whitespace-normal p-0 text-left text-admin-accent-hover"
           >
             Alterar prazo
           </AdminButton>

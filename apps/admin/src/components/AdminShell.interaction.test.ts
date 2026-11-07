@@ -190,3 +190,68 @@ describe("desktop navigation collapse", () => {
     }
   });
 });
+
+describe("mobile dock clearance", () => {
+  it("reserves the measured dock height and updates it when labels wrap", async () => {
+    Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+    let notify: ResizeObserverCallback | undefined;
+    const disconnect = vi.fn();
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        constructor(callback: ResizeObserverCallback) {
+          notify = callback;
+        }
+        observe = vi.fn();
+        disconnect = disconnect;
+      },
+    );
+    let dockHeight = 74;
+    const box = vi
+      .spyOn(HTMLElement.prototype, "getBoundingClientRect")
+      .mockImplementation(function (this: HTMLElement) {
+        return {
+          height:
+            this.getAttribute("aria-label") ===
+            "Navegação do casamento no celular"
+              ? dockHeight
+              : 0,
+        } as DOMRect;
+      });
+    const node = document.createElement("div");
+    document.body.append(node);
+    const root = createRoot(node);
+    try {
+      await act(async () =>
+        root.render(
+          createElement(
+            AdminShell,
+            {
+              actor,
+              siteId: "wedding-a",
+              area: "receiving",
+              onLogout: vi.fn(),
+            },
+            createElement("button", { type: "button" }, "Last page action"),
+          ),
+        ),
+      );
+      const shell = node.firstElementChild as HTMLElement;
+      expect(shell.style.getPropertyValue("--admin-mobile-nav-height")).toBe(
+        "74px",
+      );
+      dockHeight = 132;
+      await act(async () => notify?.([], {} as ResizeObserver));
+      expect(shell.style.getPropertyValue("--admin-mobile-nav-height")).toBe(
+        "132px",
+      );
+      await act(async () => root.unmount());
+      expect(disconnect).toHaveBeenCalledOnce();
+    } finally {
+      await act(async () => root.unmount());
+      node.remove();
+      box.mockRestore();
+      vi.unstubAllGlobals();
+    }
+  });
+});

@@ -138,7 +138,7 @@ export function MessagesSection({ siteId, lifecycle, publicUrl }: Props) {
   }
 
   return (
-    <section className="grid gap-4" aria-label="Mensagens">
+    <section className="grid min-w-0 grid-cols-1 gap-4" aria-label="Mensagens">
       {!mutable && (
         <p className={adminStyles.notice} role="status">
           As mensagens podem ser consultadas, mas não moderadas enquanto o site
@@ -146,7 +146,7 @@ export function MessagesSection({ siteId, lifecycle, publicUrl }: Props) {
         </p>
       )}
       <div
-        className={`${adminStyles.surface} flex flex-wrap items-center justify-between gap-4 p-5`}
+        className={`${adminStyles.surface} min-w-0 flex flex-wrap items-center justify-between gap-4 p-5`}
       >
         <div className="flex min-w-0 flex-[1_1_16rem] items-center gap-3">
           <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-admin-success-subtle text-admin-success-text">
@@ -162,8 +162,8 @@ export function MessagesSection({ siteId, lifecycle, publicUrl }: Props) {
                   variant="secondary"
                   className={
                     muralEnabled
-                      ? "bg-admin-success-subtle text-admin-success-text"
-                      : "bg-admin-subtle text-admin-text-secondary"
+                      ? "max-w-full whitespace-normal bg-admin-success-subtle text-admin-success-text"
+                      : "max-w-full whitespace-normal bg-admin-subtle text-admin-text-secondary"
                   }
                 >
                   {muralEnabled ? "Recebendo mensagens" : "Envios pausados"}
@@ -182,7 +182,7 @@ export function MessagesSection({ siteId, lifecycle, publicUrl }: Props) {
           </div>
         </div>
         <label
-          className="flex shrink-0 items-center gap-2.5 rounded-lg border border-admin-border bg-admin-canvas px-3 py-2 text-sm"
+          className="flex min-w-0 items-center gap-2.5 rounded-lg border border-admin-border bg-admin-canvas px-3 py-2 text-sm"
           htmlFor="mural-enabled"
         >
           <Checkbox
@@ -212,8 +212,8 @@ export function MessagesSection({ siteId, lifecycle, publicUrl }: Props) {
         </label>
       </div>
 
-      <div className="grid gap-4">
-        <div className="grid gap-3 sm:flex sm:items-center sm:justify-between">
+      <div className="grid min-w-0 grid-cols-1 gap-4">
+        <div className="grid min-w-0 grid-cols-1 gap-3 sm:flex sm:items-center sm:justify-between">
           <div className="flex shrink-0 flex-wrap items-center gap-2.5">
             <h2 className="m-0 font-admin-display text-xl text-admin-text">
               Mensagens recebidas

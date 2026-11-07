@@ -316,7 +316,7 @@ export function GiftPaymentHistoryView(
             className={`${receivingField} min-h-11 pl-10`}
           />
         </label>
-        <fieldset className="m-0 flex min-w-0 gap-1 rounded-xl border border-admin-border bg-admin-surface p-1">
+        <fieldset className="m-0 flex min-w-0 flex-wrap gap-1 rounded-xl border border-admin-border bg-admin-surface p-1 [@media(max-width:760px)]:w-full">
           <legend className="sr-only">Forma de pagamento</legend>
           {methods.map(([value, label]) => (
             <button
@@ -324,7 +324,7 @@ export function GiftPaymentHistoryView(
               type="button"
               aria-pressed={method === value}
               onClick={() => setMethod(value)}
-              className={`min-h-9 rounded-[9px] px-3.5 text-sm font-semibold transition-colors motion-reduce:transition-none ${method === value ? adminStyles.selected : "text-admin-text-secondary hover:bg-admin-canvas hover:text-admin-text"}`}
+              className={`min-h-11 flex-1 rounded-[9px] px-3.5 text-sm font-semibold transition-colors motion-reduce:transition-none ${method === value ? adminStyles.selected : "text-admin-text-secondary hover:bg-admin-canvas hover:text-admin-text"}`}
             >
               {label}
             </button>

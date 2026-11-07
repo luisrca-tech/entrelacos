@@ -258,7 +258,7 @@ function FormSectionHeader({
 }
 
 const sectionCard =
-  "grid min-w-0 gap-5 rounded-2xl border border-admin-border bg-admin-surface p-6 [@media(max-width:760px)]:p-4";
+  "grid min-w-0 grid-cols-1 gap-5 rounded-2xl border border-admin-border bg-admin-surface p-6 [@media(max-width:760px)]:p-4";
 const fieldClass =
   "min-h-[46px] rounded-[10px] border-admin-border-strong bg-admin-surface px-3.5 text-[0.95rem]";
 
@@ -698,7 +698,7 @@ export function GiftEditorView({
           <AdminButton
             tone="primary"
             type="button"
-            className="min-h-12 rounded-[10px] px-6 text-[0.95rem] font-bold [@media(max-width:760px)]:w-full"
+            className="h-auto min-h-12 min-w-0 whitespace-normal rounded-[10px] px-6 text-[0.95rem] font-bold [@media(max-width:760px)]:w-full"
             disabled={mutationBlocked}
             onClick={() => openEditor({ kind: "create" })}
           >
@@ -730,8 +730,8 @@ export function GiftEditorView({
 
       {editing ? (
         <>
-          <article className="grid min-w-0 items-start gap-6 xl:grid-cols-[minmax(0,1fr)_300px]">
-            <div className="grid min-w-0 gap-5">
+          <article className="grid min-w-0 grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(0,1fr)_300px]">
+            <div className="grid min-w-0 grid-cols-1 gap-5">
               <section className={sectionCard} aria-label="Foto do presente">
                 <FormSectionHeader
                   number={1}
@@ -779,7 +779,7 @@ export function GiftEditorView({
               <form
                 id={formId}
                 key={selected?.id ?? "new"}
-                className="grid min-w-0 gap-5"
+                className="grid min-w-0 grid-cols-1 gap-5"
                 onSubmit={(event) => void saveGift(event)}
               >
                 <section className={sectionCard} aria-label="Sobre o presente">
@@ -931,7 +931,7 @@ export function GiftEditorView({
                 </button>
               </section>
             </div>
-            <aside className="grid min-w-0 gap-5 [@media(max-width:760px)]:hidden">
+            <aside className="grid min-w-0 grid-cols-1 gap-5 [@media(max-width:760px)]:hidden">
               <div className="grid gap-2.5">
                 <p className="m-0 text-xs font-bold uppercase tracking-[0.08em] text-admin-text-secondary">
                   Como os convidados vão ver
@@ -968,7 +968,7 @@ export function GiftEditorView({
               pads itself by the same amount: it stays pinned to the viewport
               bottom with its own opaque background behind the nav, so no strip
               opens between the bar and the nav at any scroll position. */}
-          <div className="sticky bottom-0 z-[5] -mx-[42px] -mb-6 flex flex-wrap items-center justify-between gap-3 border-t border-admin-border bg-admin-surface px-[42px] py-4 [@media(max-width:760px)]:-mx-5 [@media(max-width:760px)]:-mb-[calc(24px+74px+env(safe-area-inset-bottom))] [@media(max-width:760px)]:px-4 [@media(max-width:760px)]:pb-[calc(16px+74px+env(safe-area-inset-bottom))] [@media(min-width:761px)_and_(max-width:1060px)]:-mx-7 [@media(min-width:761px)_and_(max-width:1060px)]:px-7">
+          <div className="sticky bottom-0 z-[5] -mx-[42px] -mb-6 flex flex-wrap items-center justify-between gap-3 border-t border-admin-border bg-admin-surface px-[42px] py-4 [@media(max-width:760px)]:-mx-5 [@media(max-width:760px)]:-mb-[calc(24px+var(--admin-mobile-nav-height,calc(74px+env(safe-area-inset-bottom))))] [@media(max-width:760px)]:px-4 [@media(max-width:760px)]:pb-[calc(16px+var(--admin-mobile-nav-height,calc(74px+env(safe-area-inset-bottom))))] [@media(min-width:761px)_and_(max-width:1060px)]:-mx-7 [@media(min-width:761px)_and_(max-width:1060px)]:px-7">
             <button
               type="button"
               disabled={busy || saving}
@@ -983,7 +983,7 @@ export function GiftEditorView({
                   tone="primary"
                   type="submit"
                   form={formId}
-                  className="min-h-12 rounded-[10px] px-6 text-[0.95rem] font-bold [@media(max-width:760px)]:col-span-2"
+                  className="h-auto min-h-12 min-w-0 whitespace-normal rounded-[10px] px-6 text-[0.95rem] font-bold [@media(max-width:760px)]:col-span-2"
                   disabled={mutationBlocked}
                 >
                   {busy ? "Salvando…" : "Salvar alterações"}
@@ -995,7 +995,7 @@ export function GiftEditorView({
                     form={formId}
                     value="draft"
                     tone="secondary"
-                    className="min-h-12 rounded-[10px] border-admin-border-strong px-6 text-[0.95rem] font-semibold"
+                    className="h-auto min-h-12 min-w-0 whitespace-normal rounded-[10px] border-admin-border-strong px-6 text-[0.95rem] font-semibold"
                     disabled={mutationBlocked}
                   >
                     {busy ? "Salvando…" : "Salvar rascunho"}
@@ -1005,7 +1005,7 @@ export function GiftEditorView({
                     type="submit"
                     form={formId}
                     value="publish"
-                    className="min-h-12 rounded-[10px] px-6 text-[0.95rem] font-bold disabled:bg-admin-subtle-hover disabled:text-admin-text-secondary disabled:opacity-100"
+                    className="h-auto min-h-12 min-w-0 whitespace-normal rounded-[10px] px-6 text-[0.95rem] font-bold disabled:bg-admin-subtle-hover disabled:text-admin-text-secondary disabled:opacity-100"
                     disabled={mutationBlocked || !canPublishNow}
                   >
                     <span className="[@media(max-width:760px)]:hidden">
@@ -1069,7 +1069,7 @@ export function GiftEditorView({
               />
             </div>
             <fieldset
-              className="m-0 flex min-w-0 max-w-full gap-1 rounded-[10px] border border-admin-border bg-admin-surface p-1 [@media(max-width:760px)]:grid [@media(max-width:760px)]:w-full [@media(max-width:760px)]:grid-cols-4"
+              className="m-0 flex min-w-0 max-w-full gap-1 rounded-[10px] border border-admin-border bg-admin-surface p-1 [@media(max-width:760px)]:grid [@media(max-width:760px)]:w-full [@media(max-width:760px)]:grid-cols-[repeat(auto-fit,minmax(min(100%,7rem),1fr))]"
               aria-label="Filtrar presentes"
             >
               {(
@@ -1086,7 +1086,7 @@ export function GiftEditorView({
                   aria-pressed={filter === value}
                   disabled={loading || Boolean(error)}
                   onClick={() => setFilter(value)}
-                  className={`min-h-9 shrink-0 rounded-[7px] px-3.5 text-sm font-semibold whitespace-nowrap [@media(max-width:760px)]:min-w-0 [@media(max-width:760px)]:px-1 [@media(max-width:760px)]:text-[0.8rem] transition-colors motion-reduce:transition-none disabled:opacity-60 ${filter === value ? adminStyles.selected : "text-admin-text hover:bg-admin-canvas"}`}
+                  className={`min-h-11 shrink-0 rounded-[7px] px-3.5 text-sm font-semibold whitespace-nowrap [@media(max-width:760px)]:min-w-0 [@media(max-width:760px)]:px-1 [@media(max-width:760px)]:text-[0.8rem] transition-colors motion-reduce:transition-none disabled:opacity-60 ${filter === value ? adminStyles.selected : "text-admin-text hover:bg-admin-canvas"}`}
                 >
                   {label}
                 </button>
@@ -1231,7 +1231,7 @@ export function GiftEditorView({
                             Preservado no histórico
                           </p>
                         ) : (
-                          <div className="mt-auto flex items-center gap-2 pt-3">
+                          <div className="mt-auto flex flex-wrap items-center gap-2 pt-3">
                             <AdminButton
                               type="button"
                               tone="secondary"
