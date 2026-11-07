@@ -4,9 +4,57 @@
 @import "@entrelacos/ui/styles.css";
 @source "../../../packages/ui/src";
 
+/*
+ * Primitive palette. Raw values live here only; components never use these
+ * directly. `static` keeps every primitive emitted for the semantic layer.
+ */
+@theme static {
+  --palette-sand-50: #fffdf9;
+  --palette-sand-100: #f7f3ed;
+  --palette-sand-200: #ece4d8;
+  --palette-sand-250: #e2d5c4;
+  --palette-sand-300: #ddd2c5;
+  --palette-sand-400: #c9bba9;
+  --palette-sand-700: #5f5850;
+  --palette-sand-900: #282521;
+  --palette-terracotta-100: #f3e1d9;
+  --palette-terracotta-600: #a84d39;
+  --palette-terracotta-700: #8e3a2a;
+  --palette-forest-100: #eaf4ee;
+  --palette-forest-600: #197551;
+  --palette-forest-800: #145c40;
+  --palette-ochre-100: #fbefe0;
+  --palette-ochre-600: #a65d12;
+  --palette-ochre-800: #8a4d0f;
+  --palette-brick-100: #fbeaea;
+  --palette-brick-600: #b44040;
+  --palette-brick-800: #7a2828;
+}
+
+/* Semantic tokens: the only admin colors components may use. */
 @theme {
-  --color-admin-canvas: #f7f3ed;
-  --color-admin-surface: #fffdf9;
+  --color-admin-canvas: var(--palette-sand-100);
+  --color-admin-surface: var(--palette-sand-50);
+  --color-admin-subtle: var(--palette-sand-200);
+  --color-admin-subtle-hover: var(--palette-sand-250);
+  --color-admin-border: var(--palette-sand-300);
+  --color-admin-border-strong: var(--palette-sand-400);
+  --color-admin-text: var(--palette-sand-900);
+  --color-admin-text-secondary: var(--palette-sand-700);
+  --color-admin-on-accent: var(--palette-sand-50);
+  --color-admin-accent: var(--palette-terracotta-600);
+  --color-admin-accent-hover: var(--palette-terracotta-700);
+  --color-admin-accent-subtle: var(--palette-terracotta-100);
+  --color-admin-success: var(--palette-forest-600);
+  --color-admin-success-subtle: var(--palette-forest-100);
+  --color-admin-success-text: var(--palette-forest-800);
+  --color-admin-pending: var(--palette-ochre-600);
+  --color-admin-pending-subtle: var(--palette-ochre-100);
+  --color-admin-pending-text: var(--palette-ochre-800);
+  --color-admin-danger: var(--palette-brick-600);
+  --color-admin-danger-subtle: var(--palette-brick-100);
+  --color-admin-danger-text: var(--palette-brick-800);
+  /* Legacy names, removed once usages migrate. */
   --color-admin-beige: #ece4d8;
   --color-admin-beige-deep: #e2d5c4;
   --color-admin-ink: #282521;
@@ -34,4 +82,5 @@
   --font-admin-display:
     "Source Serif 4 Variable", Georgia, "Times New Roman", serif;
   --shadow-admin: 0 18px 50px rgb(68 49 36 / 8%);
+  --shadow-admin-dock: 0 -8px 24px rgb(68 49 36 / 8%);
 }
