@@ -1,22 +1,18 @@
 ---
-import { GiftSection, LetterHandoff } from "@entrelacos/template-cartas-do-nosso-sim/v1";
+import { GiftSection } from "@entrelacos/template-cartas-do-nosso-sim/v1";
 import { GiftRegistry, GuestAccess, MessageMural } from "@entrelacos/wedding-features";
 import { guestAccess } from "../demoContent";
 ---
 
 <section id="guest-access" class="demo-reply [padding:clamp(3rem,_6vw,_6rem)_var(--template-page-inset)] [border-top:1px_solid_var(--template-line)] [&_[data-slot='guest-access']]:[padding:0] [&_[data-slot='guest-access']]:[background:transparent]" aria-label="Confirmação de presença">
-  <p class="chapter-number [margin:0_0_2rem] [font-size:0.72rem] font-semibold [letter-spacing:0.14em] uppercase [color:var(--template-muted)]">{"A sua resposta"}</p>
   <GuestAccess {...guestAccess} client:only="react">
     <p slot="fallback" class="feature-fallback [max-width:38rem] m-0 [border:1px_solid_var(--template-line)] [padding:1.25rem] [line-height:1.65]">Esta área interativa precisa de JavaScript. Ative-o para encontrar seu convite e responder à confirmação.</p>
   </GuestAccess>
 </section>
-<LetterHandoff className="gift-handoff hidden">Seu abraço já faz parte da nossa história. Presentear é opcional.</LetterHandoff>
-<LetterHandoff className="mural-handoff">Deixe também suas palavras para este dia.</LetterHandoff>
-<GiftSection content={{ id: "gifts", eyebrow: "O próximo capítulo", title: "Para o que vem depois.", description: "Nossa maior alegria é ter você por perto. Se quiser nos presentear, escolha um carinho para a nossa vida a dois." }}>
+<GiftSection content={{ id: "gifts", title: "Lista de presentes", description: "Se quiser nos presentear, você pode contribuir com os planos da nossa casa e da lua de mel." }}>
   <GiftRegistry {...guestAccess} demo={true} liveDemoSiteId={import.meta.env.PUBLIC_LIVE_DEMO_SITE_ID} client:only="react" />
 </GiftSection>
 <section id="mural" class="demo-mural [padding:clamp(3rem,_6vw,_6rem)_var(--template-page-inset)] [border-top:1px_solid_var(--template-line)] [&_[data-slot='message-mural']]:[padding:0] [&_[data-slot='message-mural']]:[background:transparent]" aria-label="Mural dos convidados">
-  <p class="chapter-number [margin:0_0_2rem] [font-size:0.72rem] font-semibold [letter-spacing:0.14em] uppercase [color:var(--template-muted)]">{"Palavras que ficam"}</p>
   <MessageMural {...guestAccess} client:only="react">
     <p slot="fallback" class="feature-fallback [max-width:38rem] m-0 [border:1px_solid_var(--template-line)] [padding:1.25rem] [line-height:1.65]">Esta área interativa precisa de JavaScript. Ative-o para consultar o mural.</p>
   </MessageMural>

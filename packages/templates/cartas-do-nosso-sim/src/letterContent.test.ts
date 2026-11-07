@@ -26,6 +26,22 @@ const letter = {
 };
 
 describe("letter composition content", () => {
+  it("accepts a letter without decorative transitions", () => {
+    const { coverHandoff, storyHandoff, ...withoutTransitions } = letter;
+    expect(() => validateLetterContent(withoutTransitions)).not.toThrow();
+  });
+
+  it.each(["coverHandoff", "storyHandoff"] as const)(
+    "rejects an invalid optional %s",
+    (key) => {
+      for (const value of ["", "   ", null, 42]) {
+        expect(() =>
+          validateLetterContent({ ...letter, [key]: value }),
+        ).toThrow(/must be a non-empty string/);
+      }
+    },
+  );
+
   it("accepts two photos without dummy hero media or a gallery", () => {
     expect(() => validateLetterContent(letter)).not.toThrow();
   });

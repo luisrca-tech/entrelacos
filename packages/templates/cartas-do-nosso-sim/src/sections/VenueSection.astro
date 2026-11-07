@@ -19,20 +19,20 @@ const buttonClass = `inline-flex min-h-11 items-center justify-center rounded-fu
 
 <section
   id={id}
-  class={`grid grid-cols-[var(--template-letter-columns)] gap-[var(--template-letter-gap)] px-[var(--template-page-inset)] pb-[clamp(2rem,3vw,3rem)] pt-[clamp(5rem,10vw,9rem)] ${toneClasses} [@media(max-width:960px)]:block`}
+  class={`flex min-w-0 flex-col gap-5 ${toneClasses}`}
   aria-labelledby={`${id}-title`}
 >
-  <header class={`${revealClasses} [@media(max-width:960px)]:mb-12`} data-template-reveal>
+  <header class={revealClasses} data-template-reveal>
     {content.eyebrow && <p data-template-reveal-item data-template-reveal-kind="label" style="--template-reveal-delay: 0ms" class="m-0 mb-5 text-[0.72rem] font-bold uppercase tracking-[0.16em]">{content.eyebrow}</p>}
-    <h2 data-template-reveal-item data-template-line-reveal class="m-0 max-w-[12ch] font-template-serif text-[clamp(2.5rem,6vw,calc(5.5rem*var(--template-width-scale)))] font-normal tracking-[-0.065em] leading-[0.96]" id={`${id}-title`}>{content.title}</h2>
+    <h3 data-template-reveal-item class="m-0 text-sm font-medium uppercase tracking-[0.08em] text-template-muted" id={`${id}-title`}>{content.title}</h3>
     {content.description && <p data-template-reveal-item data-template-reveal-kind="body" style="--template-reveal-delay: 1400ms" class={`m-0 mt-7 max-w-[30rem] leading-[1.7] ${descriptionClass}`}>{content.description}</p>}
   </header>
-  <div class={`${revealClasses} min-w-0 self-end`} data-template-reveal>
+  <div class={`${revealClasses} flex min-w-0 flex-1 flex-col`} data-template-reveal>
     <div data-template-reveal-item>
-      <h3 class="m-0 text-[clamp(1.8rem,3vw,2.75rem)] font-medium tracking-[-0.025em] leading-[1.1]">{content.name}</h3>
-      <p class={`m-0 mb-2 mt-8 text-[0.72rem] font-bold uppercase tracking-[0.16em] ${mutedClass}`}>{content.labels.addressLabel}</p>
-      <address class="max-w-[30rem] text-[clamp(1.15rem,2vw,1.5rem)] not-italic leading-[1.45]" id={`${id}-address`}>{content.address}</address>
-      <div class="mt-8 flex flex-wrap gap-x-4 gap-y-3">
+      <p class="m-0 font-template-serif text-[clamp(1.8rem,3vw,2.5rem)] tracking-[-0.025em] leading-[1.15]">{content.name}</p>
+      <p class={`m-0 mb-2 mt-5 text-[0.72rem] font-bold uppercase tracking-[0.16em] ${mutedClass}`}>{content.labels.addressLabel}</p>
+      <address class="max-w-[30rem] text-base not-italic leading-[1.45]" id={`${id}-address`}>{content.address}</address>
+      <div class="mt-5 mb-6 flex flex-wrap gap-x-3 gap-y-2">
         <a class={`${buttonClass} no-underline`} href={content.directions.href} target="_blank" rel="noreferrer">{content.directions.label}</a>
         <a class={`${buttonClass} no-underline`} href={content.fallback.href} target="_blank" rel="noreferrer">{content.fallback.label}</a>
         <button
@@ -45,9 +45,9 @@ const buttonClass = `inline-flex min-h-11 items-center justify-center rounded-fu
         >{content.labels.copyLabel}</button>
       </div>
     </div>
-    <figure data-template-reveal-item style="--template-reveal-delay: 90ms" class="m-0 mt-8 rounded-[0.75rem] min-h-[clamp(24rem,34vw,28rem)] overflow-hidden bg-template-olive">
+    <figure data-template-reveal-item style="--template-reveal-delay: 90ms" class="m-0 mt-auto min-h-64 overflow-hidden bg-template-olive">
       <iframe
-        class="block h-full min-h-[clamp(24rem,34vw,28rem)] w-full border-0"
+        class="block h-64 w-full border-0"
         src={content.mapEmbedUrl}
         title={content.labels.mapTitle}
         loading="lazy"

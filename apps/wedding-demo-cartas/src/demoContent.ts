@@ -11,7 +11,7 @@ const siteUrl =
 export const seo = {
   title: "Cartas do Nosso Sim — Marina & Caio | EntreLaços",
   description:
-    "Um convite escrito com carinho. Cartas do Nosso Sim: demo de casamento com duas fotos e uma história para contar.",
+    "Demonstração do modelo Cartas do Nosso Sim, com carta do casal, programação, confirmação de presença e mural.",
   canonical: new URL("/", siteUrl).href,
   robots: "noindex, nofollow" as const,
   socialImage: {
@@ -30,11 +30,10 @@ export const footer = {
   rsvp: { label: "Confirmar presença", href: "#guest-access" },
   year: "2027",
   copyright: "© Marina & Caio",
-  attribution: "By EntreLaços",
+  attribution: "Feito com Entrelaços",
 };
 export const schedule = {
   id: "schedule",
-  eyebrow: "O dia",
   title: "A partir das 16h.",
   guidanceLabel: "Orientações práticas",
   entries: [
@@ -42,7 +41,7 @@ export const schedule = {
       id: "ceremony",
       time: "16:00",
       title: "Cerimônia",
-      body: "O nosso sim, com vocês por perto.",
+      body: "A cerimônia começa às 16h.",
       location: "Santuário Basílica Sagrada Família",
     },
     {
@@ -81,8 +80,7 @@ const ceremonyDestination = encodeURIComponent(
 
 export const ceremonyVenue = {
   id: "ceremony-venue",
-  eyebrow: "O local da cerimônia",
-  title: "Onde diremos sim.",
+  title: "Cerimônia · 16h",
   name: ceremonyName,
   address: ceremonyAddress,
   mapEmbedUrl: `https://maps.google.com/maps?q=${ceremonyDestination}&output=embed`,
@@ -105,8 +103,7 @@ export const ceremonyVenue = {
 
 export const receptionVenue = {
   id: "venue",
-  eyebrow: "O local da festa",
-  title: "Onde vamos celebrar.",
+  title: "Recepção · 18h",
   name: "Casablanca Eventos",
   address: "Av Ipanema 747, Jardim Atlântico, Goiânia, GO, 74343-010",
   mapEmbedUrl:

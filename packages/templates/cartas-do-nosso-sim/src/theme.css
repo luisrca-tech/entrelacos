@@ -1,3 +1,11 @@
+@font-face {
+  font-family: "Caveat";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("./assets/caveat-latin-500.woff2") format("woff2");
+}
+
 @theme inline {
   --color-template-ivory: var(--template-ivory);
   --color-template-olive: var(--template-olive);
@@ -5,6 +13,7 @@
   --color-template-muted: var(--template-muted);
   --color-template-line: var(--template-line);
   --font-template-serif: Georgia, "Times New Roman", serif;
+  --font-template-letter: "Caveat", "Segoe Print", cursive;
   --template-ivory: #f4f0e8;
   --template-olive: #34483d;
   --template-ink: #25352b;

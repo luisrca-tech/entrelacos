@@ -1,5 +1,5 @@
 ---
-import { LetterComposition, LetterHandoff, ScheduleSection, VenueSection, WeddingLayout, type LetterContent } from "@entrelacos/template-cartas-do-nosso-sim/v1";
+import { LetterComposition, ScheduleSection, VenueSection, WeddingLayout, type LetterContent } from "@entrelacos/template-cartas-do-nosso-sim/v1";
 import { AdminRecognition } from "@entrelacos/wedding-features";
 import DemoFeatures from "../components/DemoFeatures.astro";
 import { inactive, access, site, seo, footer as baseFooter, schedule, ceremonyVenue, receptionVenue } from "../demoContent";
@@ -8,7 +8,7 @@ import "../styles/tailwind.css";
 const navigation = {
   ariaLabel: "Navegação principal", menuLabel: "Abrir menu",
   links: [
-    { label: "A carta", href: "#story" }, { label: "O encontro", href: "#schedule" },
+    { label: "A carta", href: "#story" }, { label: "Programação", href: "#schedule" },
     { label: "Locais", href: "#ceremony-venue" },
     { label: "Confirmar presença", href: "#guest-access" }, { label: "Presentes", href: "#gifts" },
     { label: "Mural", href: "#mural" },
@@ -16,16 +16,15 @@ const navigation = {
 };
 const footer = { ...baseFooter, links: navigation.links.filter((link) => link.href !== "#guest-access") };
 const letter: LetterContent = {
-  cover: { id: "hero", eyebrow: "Um convite para estar perto", title: "Marina & Caio", description: "Com as pessoas que amamos, o nosso próximo capítulo começa." },
+  cover: { id: "hero", eyebrow: "Nosso casamento", title: "Marina & Caio", description: "Vamos nos casar. E queremos você com a gente." },
   monogram: "M / C", dateLabel: "18 de setembro de 2027", locationLabel: "Goiânia, GO",
   action: { label: "Confirmar presença", href: "#guest-access" },
   story: {
-    id: "story", eyebrow: "Uma carta para você", title: "O amor mora nos dias comuns.",
+    id: "story", title: "Querida família, queridos amigos,",
     paragraphs: [
-      "Querida família, queridos amigos,",
-      "Nossa história não começou com grandes planos. Começou com uma conversa que não dava vontade de terminar. Depois vieram os cafés demorados, os caminhos divididos e a descoberta de que a vida ficava mais bonita quando estávamos juntos.",
-      "Entre uma escolha e outra, aprendemos a cuidar, a ouvir e a rir até dos dias difíceis. Foi assim, no cotidiano, que escolhemos a nossa casa: um ao lado do outro.",
-      "Agora queremos celebrar essa escolha com quem caminhou com a gente. Este convite guarda um lugar para você e para todas as histórias que ainda vamos escrever juntos.",
+      "Quando a gente começou a sair, sempre ficava mais um assunto para a próxima conversa. Hoje dividimos a casa, o café da manhã e a mania de esticar o passeio só para conversar mais um pouco.",
+      "Muitos de vocês acompanharam tudo isso de perto. Estiveram nos almoços de domingo, ajudaram na mudança e ouviram os nossos planos para o casamento.",
+      "No dia 18 de setembro, queremos encontrar vocês na igreja e depois comemorar juntos. Vai ter jantar, música e tempo para colocar a conversa em dia. Esperamos vocês lá.",
     ],
   },
   photos: [
@@ -33,23 +32,25 @@ const letter: LetterContent = {
     { kind: "image", src: "/marina-caio-story-home.webp", alt: "Marina e Caio conversam com xícaras de café ao ar livre", width: 1448, height: 1086 },
   ],
   signature: "Com carinho, Marina & Caio",
-  coverHandoff: "Antes do convite, uma carta para você.",
-  storyHandoff: "Agora, queremos escrever este dia com vocês.",
 };
 // The letter demo has no attire illustration: only its two couple-photo assets.
-const letterSchedule = { ...schedule, eyebrow: "O nosso encontro", title: "Um dia para guardar." };
+const letterSchedule = { ...schedule, title: "Programação" };
 ---
 
 <WeddingLayout locale="pt-BR" site={{ ...site, href: "/" }} seo={seo} navigation={inactive ? undefined : navigation} footer={inactive ? undefined : footer}>
   <Fragment slot="head"><link rel="icon" href="/marina-caio-monogram.svg" type="image/svg+xml" /></Fragment>
   {inactive ? <section class="demo-inactive [min-height:70vh] grid [place-content:center] [padding:6rem_1.5rem] text-center" aria-labelledby="demo-inactive-title"><h1 id="demo-inactive-title">Site indisponível</h1><p>Este site de casamento está temporariamente indisponível.</p></section> : <Fragment>
     <LetterComposition content={letter} />
-    <div class="letter-event [margin:4rem_auto_0] border-b border-template-line [&_>_section]:[padding:clamp(3rem,_6vw,_5rem)_var(--template-page-inset)] [&_>_section+section]:border-t [&_>_section+section]:border-template-line [&_#schedule_time]:[color:var(--template-olive)] [&_#schedule_time]:font-semibold">
+    <div class="letter-event [margin:4rem_auto_0] border-y border-template-line [&_>_section]:[padding:clamp(3rem,_6vw,_5rem)_var(--template-page-inset)] [&_>_section+section]:border-t [&_>_section+section]:border-template-line [&_#schedule_time]:[color:var(--template-olive)] [&_#schedule_time]:font-semibold">
       <ScheduleSection content={letterSchedule} tone="ivory" />
-      <VenueSection content={ceremonyVenue} />
-      <VenueSection content={receptionVenue} />
+      <section aria-labelledby="venues-title">
+        <h2 id="venues-title" class="m-0 mb-10 font-template-serif text-[clamp(2.5rem,5vw,4.5rem)] font-normal leading-[1.05] tracking-[-0.04em]">Cerimônia e recepção</h2>
+        <div class="grid grid-cols-2 gap-[var(--template-letter-gap)] [@media(max-width:760px)]:grid-cols-1">
+          <VenueSection content={ceremonyVenue} />
+          <VenueSection content={receptionVenue} />
+        </div>
+      </section>
     </div>
-    <LetterHandoff>Guardamos um lugar para você. Vem celebrar com a gente?</LetterHandoff>
     <DemoFeatures />
   </Fragment>}
   <Fragment slot="footer-attribution"><a class="underline-offset-4 hover:underline focus-visible:underline" href="https://entrelacos.entrelacos.workers.dev/">{footer.attribution}</a></Fragment>
