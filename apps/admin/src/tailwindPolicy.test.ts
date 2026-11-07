@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -42,6 +42,78 @@ const invitationsSource = readFileSync(
   "utf8",
 );
 
+const adminSourceFiles = readdirSync(import.meta.dirname, { recursive: true })
+  .map(String)
+  .filter(
+    (relativePath) =>
+      /\.(?:ts|tsx)$/.test(relativePath) &&
+      !/\.test\.(?:ts|tsx)$/.test(relativePath) &&
+      !relativePath.endsWith("routeTree.gen.ts"),
+  )
+  .map((relativePath) => ({
+    path: relativePath,
+    source: readFileSync(resolve(import.meta.dirname, relativePath), "utf8"),
+  }));
+
+const semanticColorTokens = [
+  "canvas",
+  "surface",
+  "subtle",
+  "subtle-hover",
+  "border",
+  "border-strong",
+  "text",
+  "text-secondary",
+  "on-accent",
+  "accent",
+  "accent-hover",
+  "accent-subtle",
+  "success",
+  "success-subtle",
+  "success-text",
+  "pending",
+  "pending-subtle",
+  "pending-text",
+  "danger",
+  "danger-subtle",
+  "danger-text",
+] as const;
+
+const removedColorTokens = [
+  "beige",
+  "beige-deep",
+  "ink",
+  "graphite",
+  "body",
+  "muted",
+  "line",
+  "line-strong",
+  "terracotta",
+  "terracotta-deep",
+  "terracotta-ink",
+  "terracotta-wash",
+  "success-wash",
+  "success-ink",
+  "success-line",
+  "pending-wash",
+  "pending-ink",
+  "danger-wash",
+  "danger-ink",
+  "status-pending",
+  "status-confirmed",
+  "status-declined",
+  "awaiting",
+] as const;
+
+const colorUtility =
+  "(?:bg|text|border(?:-[trblxyse])?|ring(?:-offset)?|outline|fill|stroke|from|via|to|divide|placeholder|caret|accent|decoration)";
+
+function findAll(pattern: RegExp) {
+  return adminSourceFiles.flatMap(({ path, source }) =>
+    [...source.matchAll(pattern)].map((match) => `${path}: ${match[0]}`),
+  );
+}
+
 describe("admin Tailwind policy", () => {
   it("uses the Tailwind entrypoint without a legacy stylesheet", () => {
     expect(rootSource).toContain('import "../tailwind.css";');
@@ -79,19 +151,15 @@ describe("admin Tailwind policy", () => {
   });
 
   it("keeps legacy data-form focus treatment in Tailwind form utilities", () => {
+    expect(adminStylesSource).toContain("[&_input:focus]:border-admin-accent");
     expect(adminStylesSource).toContain(
-      "[&_input:focus]:border-admin-terracotta",
+      "[&_textarea:focus]:border-admin-accent",
     );
-    expect(adminStylesSource).toContain(
-      "[&_textarea:focus]:border-admin-terracotta",
-    );
-    expect(adminStylesSource).toContain(
-      "[&_select:focus]:border-admin-terracotta",
-    );
+    expect(adminStylesSource).toContain("[&_select:focus]:border-admin-accent");
     expect(adminStylesSource).toContain('checkbox: "flex! items-center gap-2"');
     expect(adminStylesSource).toContain("[&_input:focus]:outline-[3px]");
     expect(adminStylesSource).toContain(
-      "[&_input:focus]:outline-[rgb(168_77_57_/_20%)]",
+      "[&_input:focus]:outline-admin-accent/20",
     );
   });
 
@@ -100,5 +168,72 @@ describe("admin Tailwind policy", () => {
     expect(workspaceSource).not.toContain("sms-usage");
     expect(invitationsSource).not.toContain("SMS");
     expect(invitationsSource).not.toContain("demo-grant");
+  });
+  it("defines only the semantic admin color tokens, backed by the primitive palette", () => {
+    const defined = [
+      ...tailwindSource.matchAll(/--color-admin-([a-z-]+):\s*([^;]+);/g),
+    ];
+
+    expect(defined.map(([, name]) => name).sort()).toEqual(
+      [...semanticColorTokens].sort(),
+    );
+    for (const [, name, value] of defined) {
+      expect(value, name).toMatch(/^var\(--palette-[a-z]+-\d+\)$/);
+    }
+    for (const name of removedColorTokens) {
+      expect(tailwindSource).not.toMatch(
+        new RegExp(`--color-admin-${name}(?![\\w-])`),
+      );
+    }
+  });
+
+  it("keeps raw colors out of admin source files", () => {
+    expect(findAll(/#[0-9a-fA-F]{3,8}\b(?![\w-])/g)).toEqual([]);
+    expect(findAll(/\b(?:rgba?|hsla?|oklch|oklab|lab|lch|hwb)\(/g)).toEqual([]);
+  });
+
+  it("keeps Tailwind default palette colors out of admin source files", () => {
+    expect(
+      findAll(
+        new RegExp(
+          `\\b${colorUtility}-(?:slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)-(?:50|[1-9]00|950)\\b`,
+          "g",
+        ),
+      ),
+    ).toEqual([]);
+    expect(
+      findAll(new RegExp(`\\b${colorUtility}-(?:white|black)\\b`, "g")),
+    ).toEqual([]);
+  });
+
+  it("keeps admin source files on semantic admin color tokens", () => {
+    const allowed = new Set<string>(semanticColorTokens);
+    const used = adminSourceFiles.flatMap(({ path, source }) =>
+      [
+        ...source.matchAll(
+          new RegExp(
+            `\\b${colorUtility}-admin-([a-z]+(?:-[a-z]+)*)|--color-admin-([a-z]+(?:-[a-z]+)*)`,
+            "g",
+          ),
+        ),
+      ].map((match) => ({ path, name: match[1] ?? match[2] ?? "" })),
+    );
+
+    expect(used.length).toBeGreaterThan(0);
+    expect(
+      used
+        .filter(({ name }) => !allowed.has(name))
+        .map(({ path, name }) => `${path}: admin-${name}`),
+    ).toEqual([]);
+    expect(findAll(/--palette-[a-z]+-\d+/g)).toEqual([]);
+    expect(
+      findAll(
+        /\b(?:bg|text|border)-(?:sand|terracotta|forest|ochre|brick)-\d+/g,
+      ),
+    ).toEqual([]);
+  });
+
+  it("styles selected toggles with the accent-subtle pattern instead of a dark pill", () => {
+    expect(findAll(/\?\s*"default"\s*:\s*"(?:ghost|outline)"/g)).toEqual([]);
   });
 });

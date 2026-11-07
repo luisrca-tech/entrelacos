@@ -406,10 +406,10 @@ export function ReceivingSetupView({
     );
   return (
     <section
-      className="grid gap-4 rounded-xl border border-admin-line bg-admin-surface p-6 sm:p-8"
+      className="grid gap-4 rounded-xl border border-admin-border bg-admin-surface p-6 sm:p-8"
       aria-label="Configuração de recebimento"
     >
-      <h2 className="m-0 font-admin-display text-2xl text-admin-graphite">
+      <h2 className="m-0 font-admin-display text-2xl text-admin-text">
         Indicação de recebedor
       </h2>
       {context?.state === "PENDING" ? (

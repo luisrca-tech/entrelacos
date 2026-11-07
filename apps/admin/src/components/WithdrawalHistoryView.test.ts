@@ -288,8 +288,8 @@ it("marks each state with a colored badge", () => {
       { ...withdrawal, id: "withdrawal-b", state: "FAILED" },
     ],
   });
-  expect(html).toMatch(/bg-admin-success-wash[^"]*">Concluído</);
-  expect(html).toMatch(/bg-admin-danger-wash[^"]*">Não concluído</);
+  expect(html).toMatch(/bg-admin-success-subtle[^"]*">Concluído</);
+  expect(html).toMatch(/bg-admin-danger-subtle[^"]*">Não concluído</);
   expect(html).toContain("Detalhes");
 });
 

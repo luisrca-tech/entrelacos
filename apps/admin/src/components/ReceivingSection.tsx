@@ -211,7 +211,7 @@ export function ReceivingSectionView({
             <Link
               to="/sites/$siteId/receiving/$page"
               params={{ siteId, page: "account" }}
-              className="font-semibold text-admin-success-ink underline underline-offset-4"
+              className="font-semibold text-admin-success-text underline underline-offset-4"
             >
               Alterar
             </Link>
@@ -248,7 +248,7 @@ export function ReceivingSectionView({
   return (
     <div className="grid min-w-0 gap-6">
       {platformOwner && !currentAccess ? (
-        <section className="grid gap-3 rounded-2xl border border-admin-line bg-admin-surface p-6">
+        <section className="grid gap-3 rounded-2xl border border-admin-border bg-admin-surface p-6">
           <p role={failed ? "alert" : "status"}>
             {failed
               ? "Não foi possível consultar o acesso de leitura deste casamento."
@@ -263,9 +263,9 @@ export function ReceivingSectionView({
           <ReceivingPageHeader />
           <section
             aria-busy="true"
-            className="grid min-h-40 place-items-center rounded-2xl border border-admin-line bg-admin-surface p-6"
+            className="grid min-h-40 place-items-center rounded-2xl border border-admin-border bg-admin-surface p-6"
           >
-            <p role="status" className="m-0 text-admin-muted">
+            <p role="status" className="m-0 text-admin-text-secondary">
               Verificando os recebimentos…
             </p>
           </section>
@@ -296,7 +296,7 @@ export function ReceivingSectionView({
         ) : (
           <>
             <ReceivingPageHeader />
-            <p role="status" className="m-0 text-admin-muted">
+            <p role="status" className="m-0 text-admin-text-secondary">
               Apenas o titular ou a equipe autorizada configura os recebimentos.
             </p>
           </>
@@ -304,8 +304,8 @@ export function ReceivingSectionView({
       ) : (
         <>
           <ReceivingPageHeader />
-          <section className="grid gap-3 rounded-2xl border border-admin-line bg-admin-surface p-6">
-            <p role="status" className="m-0 text-admin-body">
+          <section className="grid gap-3 rounded-2xl border border-admin-border bg-admin-surface p-6">
+            <p role="status" className="m-0 text-admin-text">
               {currentReadiness || failed
                 ? "Pagamentos, saques e configurações aparecem aqui quando os recebimentos estiverem liberados."
                 : "Verificando os recebimentos…"}
@@ -328,7 +328,7 @@ function ReceivingPageHeader() {
   return (
     <header className="grid gap-1.5">
       <h1 className={receivingStepTitle}>Recebimentos</h1>
-      <p className="m-0 text-base leading-[1.6] text-admin-muted">
+      <p className="m-0 text-base leading-[1.6] text-admin-text-secondary">
         Configure uma vez para receber os presentes em dinheiro e sacar para o
         seu banco.
       </p>
@@ -401,7 +401,7 @@ function ReadyReceiving({
       className={
         variant === "primary"
           ? receivingPrimaryAction
-          : "w-fit text-sm font-semibold whitespace-nowrap text-admin-terracotta-deep underline underline-offset-4 hover:text-admin-terracotta-ink"
+          : "w-fit text-sm font-semibold whitespace-nowrap text-admin-accent-hover underline underline-offset-4 hover:text-admin-accent-hover"
       }
     >
       {label}
@@ -482,21 +482,21 @@ function ReceivingSettings({
             <Link
               to="/sites/$siteId/receiving/$page"
               params={{ siteId, page: item.page }}
-              className={`${readyCard} flex min-h-[72px] items-center gap-4 px-5 py-4 text-admin-ink no-underline transition-colors hover:border-admin-line-strong hover:bg-admin-canvas motion-reduce:transition-none`}
+              className={`${readyCard} flex min-h-[72px] items-center gap-4 px-5 py-4 text-admin-text no-underline transition-colors hover:border-admin-border-strong hover:bg-admin-canvas motion-reduce:transition-none`}
             >
               <span
                 aria-hidden="true"
-                className="flex size-10 shrink-0 items-center justify-center rounded-[10px] bg-admin-terracotta-wash text-admin-terracotta-deep"
+                className="flex size-10 shrink-0 items-center justify-center rounded-[10px] bg-admin-accent-subtle text-admin-accent-hover"
               >
                 {item.icon}
               </span>
               <span className="grid min-w-0 flex-1 gap-0.5">
                 <strong className="text-base">{item.title}</strong>
-                <span className="text-sm leading-[1.45] text-admin-muted [overflow-wrap:anywhere]">
+                <span className="text-sm leading-[1.45] text-admin-text-secondary [overflow-wrap:anywhere]">
                   {item.text}
                 </span>
               </span>
-              <span className="flex shrink-0 items-center gap-1 text-sm font-semibold text-admin-terracotta-deep">
+              <span className="flex shrink-0 items-center gap-1 text-sm font-semibold text-admin-accent-hover">
                 <span className="[@media(max-width:760px)]:sr-only">
                   {editable ? "Revisar" : "Ver"}
                 </span>

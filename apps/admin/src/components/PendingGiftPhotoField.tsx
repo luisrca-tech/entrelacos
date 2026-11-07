@@ -111,7 +111,7 @@ export function PendingGiftPhotoField({
           <div
             data-dragging={dragging ? "true" : "false"}
             {...dropHandlers}
-            className={`relative flex min-h-[212px] min-w-0 items-center justify-center overflow-hidden rounded-[14px] bg-admin-beige-deep ${dragging ? "outline-[3px] outline-offset-2 outline-admin-terracotta outline-dashed" : ""}`}
+            className={`relative flex min-h-[212px] min-w-0 items-center justify-center overflow-hidden rounded-[14px] bg-admin-subtle-hover ${dragging ? "outline-[3px] outline-offset-2 outline-admin-accent outline-dashed" : ""}`}
           >
             {localUrl && (
               <img
@@ -122,7 +122,7 @@ export function PendingGiftPhotoField({
             )}
             <span
               aria-live="polite"
-              className={`absolute bottom-3 left-3 max-w-[calc(100%-24px)] truncate rounded-full px-2.5 py-1 text-xs font-bold ${uploading ? "bg-admin-pending-wash text-admin-pending-ink" : "bg-admin-success-wash text-admin-success-ink"}`}
+              className={`absolute bottom-3 left-3 max-w-[calc(100%-24px)] truncate rounded-full px-2.5 py-1 text-xs font-bold ${uploading ? "bg-admin-pending-subtle text-admin-pending-text" : "bg-admin-success-subtle text-admin-success-text"}`}
             >
               {uploading ? "Enviando foto…" : `Foto escolhida · ${file.name}`}
             </span>
@@ -175,7 +175,7 @@ export function PendingGiftPhotoField({
         <p
           id={`${id}-error`}
           role="alert"
-          className="m-0 text-sm text-admin-danger-ink"
+          className="m-0 text-sm text-admin-danger-text"
         >
           {message}
         </p>

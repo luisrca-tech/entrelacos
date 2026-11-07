@@ -564,7 +564,7 @@ export function ReceivingPixDestinationView({
       className="grid min-w-0 gap-5"
     >
       {showSandboxNotice(mode) && showEditor && (
-        <p className="m-0 rounded-[10px] bg-admin-pending-wash p-3 text-sm leading-[1.55] text-admin-pending-ink">
+        <p className="m-0 rounded-[10px] bg-admin-pending-subtle p-3 text-sm leading-[1.55] text-admin-pending-text">
           No Sandbox, use um exemplo de teste: tipo Celular, chave 47996515839,
           ou tipo E-mail, chave cliente-a00001@pix.bcb.gov.br. Os dados
           retornados pertencem ao ambiente de testes.
@@ -573,19 +573,19 @@ export function ReceivingPixDestinationView({
       {state.saved && (
         <section
           aria-label="Sua conta para saque"
-          className="grid min-w-0 gap-3 overflow-hidden rounded-[14px] border border-admin-line"
+          className="grid min-w-0 gap-3 overflow-hidden rounded-[14px] border border-admin-border"
         >
           <div className="flex flex-wrap items-center justify-between gap-2 bg-admin-canvas px-[18px] py-3">
-            <h3 className="m-0 text-[0.95rem] font-bold text-admin-ink">
+            <h3 className="m-0 text-[0.95rem] font-bold text-admin-text">
               Sua conta para saque
             </h3>
-            <span className="inline-flex items-center rounded-full bg-admin-success-wash px-2.5 py-1 text-xs leading-none font-bold text-admin-success-ink">
+            <span className="inline-flex items-center rounded-full bg-admin-success-subtle px-2.5 py-1 text-xs leading-none font-bold text-admin-success-text">
               Atual
             </span>
           </div>
           <div className="grid gap-3 px-[18px] pb-[18px]">
             <PixRecipientDetails recipient={state.saved} />
-            <p className="m-0 text-xs text-admin-muted">
+            <p className="m-0 text-xs text-admin-text-secondary">
               Este casamento mantém um destino Pix ativo.
             </p>
             {!readOnly && !editing && (
@@ -608,7 +608,7 @@ export function ReceivingPixDestinationView({
         </section>
       )}
       {readOnly && !state.saved && state.status === "ready" && (
-        <p className="m-0 text-admin-body">
+        <p className="m-0 text-admin-text">
           Nenhum destino Pix foi configurado.
         </p>
       )}
@@ -619,7 +619,7 @@ export function ReceivingPixDestinationView({
           autoComplete="off"
         >
           <fieldset className="m-0 grid min-w-0 gap-2.5 border-0 p-0">
-            <legend className="mb-2.5 p-0 text-sm font-bold text-admin-ink">
+            <legend className="mb-2.5 p-0 text-sm font-bold text-admin-text">
               Tipo de chave
             </legend>
             <div className="flex min-w-0 flex-wrap gap-2.5">
@@ -632,7 +632,7 @@ export function ReceivingPixDestinationView({
                 return (
                   <label
                     key={value}
-                    className={`inline-flex min-h-11 cursor-pointer items-center gap-2.5 rounded-[10px] border px-4 text-[0.95rem] has-[:focus-visible]:outline-[3px] has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-[rgb(168_77_57_/_30%)] ${checked ? "border-2 border-admin-terracotta bg-admin-terracotta-wash font-semibold text-admin-terracotta-ink" : "border-admin-line-strong bg-admin-surface text-admin-ink"} ${locked ? "cursor-not-allowed opacity-60" : ""}`}
+                    className={`inline-flex min-h-11 cursor-pointer items-center gap-2.5 rounded-[10px] border px-4 text-[0.95rem] has-[:focus-visible]:outline-[3px] has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-admin-accent/30 ${checked ? "border-2 border-admin-accent bg-admin-accent-subtle font-semibold text-admin-accent-hover" : "border-admin-border-strong bg-admin-surface text-admin-text"} ${locked ? "cursor-not-allowed opacity-60" : ""}`}
                   >
                     <input
                       type="radio"
@@ -640,7 +640,7 @@ export function ReceivingPixDestinationView({
                       value={value}
                       checked={checked}
                       disabled={locked}
-                      className="size-[18px] accent-admin-terracotta"
+                      className="size-[18px] accent-admin-accent"
                       onChange={() => {
                         onReset?.();
                         setType(value);
@@ -655,7 +655,7 @@ export function ReceivingPixDestinationView({
           <div className="grid min-w-0 max-w-[460px] gap-1.5">
             <label
               htmlFor={`${id}-key`}
-              className="text-sm font-bold text-admin-ink"
+              className="text-sm font-bold text-admin-text"
             >
               {state.saved ? "Nova chave Pix" : "Chave Pix"}
             </label>
@@ -668,7 +668,7 @@ export function ReceivingPixDestinationView({
               disabled={locked}
               placeholder={keyPlaceholders[type]}
               aria-describedby={`${id}-key-hint`}
-              className="min-h-[46px] rounded-[10px] border-admin-line-strong bg-admin-surface px-3.5 text-[0.95rem]"
+              className="min-h-[46px] rounded-[10px] border-admin-border-strong bg-admin-surface px-3.5 text-[0.95rem]"
               onChange={(event) => {
                 onReset?.();
                 setKey(event.target.value);
@@ -676,7 +676,7 @@ export function ReceivingPixDestinationView({
             />
             <p
               id={`${id}-key-hint`}
-              className="m-0 text-[0.8rem] leading-[1.4] text-admin-muted"
+              className="m-0 text-[0.8rem] leading-[1.4] text-admin-text-secondary"
             >
               Use a chave de um banco onde você tem conta. Não precisa ser
               criada no Asaas.
@@ -710,7 +710,7 @@ export function ReceivingPixDestinationView({
         </form>
       )}
       {state.status === "unknown" && (
-        <p role="alert" className="m-0 text-sm text-admin-danger-ink">
+        <p role="alert" className="m-0 text-sm text-admin-danger-text">
           Confirmação do destino pendente. Consulte o destino salvo antes de
           alterar novamente.
         </p>
@@ -719,9 +719,9 @@ export function ReceivingPixDestinationView({
         <>
           <section
             aria-label="Confira o destinatário"
-            className="grid min-w-0 overflow-hidden rounded-[14px] border border-admin-line"
+            className="grid min-w-0 overflow-hidden rounded-[14px] border border-admin-border"
           >
-            <h3 className="m-0 bg-admin-canvas px-[18px] py-3 text-[0.95rem] font-bold text-admin-ink">
+            <h3 className="m-0 bg-admin-canvas px-[18px] py-3 text-[0.95rem] font-bold text-admin-text">
               Confira o destinatário
             </h3>
             <div className="px-[18px] py-4">
@@ -729,7 +729,7 @@ export function ReceivingPixDestinationView({
             </div>
             <p
               role="status"
-              className={`m-0 flex items-start gap-2 px-[18px] py-3 text-sm leading-[1.5] font-semibold ${state.review.identity === "MATCH" ? "bg-admin-success-wash text-admin-success-ink" : "bg-admin-pending-wash text-admin-pending-ink"}`}
+              className={`m-0 flex items-start gap-2 px-[18px] py-3 text-sm leading-[1.5] font-semibold ${state.review.identity === "MATCH" ? "bg-admin-success-subtle text-admin-success-text" : "bg-admin-pending-subtle text-admin-pending-text"}`}
             >
               {state.review.identity === "MATCH" && (
                 <Check aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
@@ -759,10 +759,10 @@ export function ReceivingPixDestinationView({
       )}
       {!!state.recentDestinations?.length && (
         <div className="grid min-w-0 gap-3">
-          <h3 className="m-0 text-base font-bold text-admin-ink">
+          <h3 className="m-0 text-base font-bold text-admin-text">
             Últimos destinos salvos
           </h3>
-          <div className="min-w-0 overflow-x-auto rounded-[14px] border border-admin-line">
+          <div className="min-w-0 overflow-x-auto rounded-[14px] border border-admin-border">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -787,7 +787,7 @@ export function ReceivingPixDestinationView({
                     </TableCell>
                     <TableCell>
                       <span>{destination.ownerName}</span>
-                      <span className="mt-1 block text-xs text-admin-muted">
+                      <span className="mt-1 block text-xs text-admin-text-secondary">
                         {destination.bankName}
                       </span>
                     </TableCell>
@@ -810,7 +810,7 @@ export function ReceivingPixDestinationView({
           type="button"
           disabled={!enabled || busy}
           onClick={onRefresh}
-          className="inline-flex min-h-10 w-fit items-center bg-transparent p-0 text-sm font-semibold text-admin-terracotta-deep underline underline-offset-4 disabled:cursor-not-allowed disabled:opacity-60"
+          className="inline-flex min-h-10 w-fit items-center bg-transparent p-0 text-sm font-semibold text-admin-accent-hover underline underline-offset-4 disabled:cursor-not-allowed disabled:opacity-60"
         >
           Consultar destino salvo
         </button>
@@ -835,8 +835,8 @@ function PixRecipientDetails({
         [`Chave (${keyTypeLabels[recipient.keyType]})`, recipient.maskedKey],
       ].map(([label, value]) => (
         <div key={label} className="grid min-w-0 gap-0.5">
-          <dt className="text-[0.82rem] text-admin-muted">{label}</dt>
-          <dd className="m-0 break-words text-[0.95rem] font-semibold text-admin-ink">
+          <dt className="text-[0.82rem] text-admin-text-secondary">{label}</dt>
+          <dd className="m-0 break-words text-[0.95rem] font-semibold text-admin-text">
             {value}
           </dd>
         </div>
@@ -862,10 +862,10 @@ function PixRecipientConfirmation({
   return (
     <div className="grid min-w-0 gap-5">
       <div className="grid justify-items-start gap-2">
-        <p className="m-0 text-sm font-bold text-admin-ink">
+        <p className="m-0 text-sm font-bold text-admin-text">
           Sua senha do EntreLaços
         </p>
-        <p className="m-0 text-[0.8rem] text-admin-muted">
+        <p className="m-0 text-[0.8rem] text-admin-text-secondary">
           Pedimos a senha para proteger o destino dos seus saques.
         </p>
         {children}
@@ -882,28 +882,28 @@ function PixRecipientConfirmation({
             onConfirm(confirmed, thirdParty);
         }}
       >
-        <label className="flex cursor-pointer items-start gap-3 text-sm leading-[1.5] text-admin-body">
+        <label className="flex cursor-pointer items-start gap-3 text-sm leading-[1.5] text-admin-text">
           <input
             type="checkbox"
             required
             aria-required="true"
             checked={confirmed}
             disabled={!enabled}
-            className="mt-0.5 size-5 shrink-0 accent-admin-terracotta"
+            className="mt-0.5 size-5 shrink-0 accent-admin-accent"
             onChange={(event) => setConfirmed(event.target.checked)}
           />
           Conferi o nome completo, o banco, o documento e a chave consultada e
           quero configurar este destinatário.
         </label>
         {review.identity !== "MATCH" && (
-          <label className="flex cursor-pointer items-start gap-3 text-sm leading-[1.5] text-admin-body">
+          <label className="flex cursor-pointer items-start gap-3 text-sm leading-[1.5] text-admin-text">
             <input
               type="checkbox"
               required
               aria-required="true"
               checked={thirdParty}
               disabled={!enabled}
-              className="mt-0.5 size-5 shrink-0 accent-admin-terracotta"
+              className="mt-0.5 size-5 shrink-0 accent-admin-accent"
               onChange={(event) => setThirdParty(event.target.checked)}
             />
             Estou ciente de que o destino pode pertencer a outra pessoa ou ter
@@ -913,7 +913,7 @@ function PixRecipientConfirmation({
         <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
           <Button
             type="submit"
-            className="min-h-12 rounded-[10px] bg-admin-terracotta px-6 font-bold text-white hover:bg-admin-terracotta-deep disabled:bg-admin-beige-deep disabled:text-admin-muted disabled:opacity-100"
+            className="min-h-12 rounded-[10px] bg-admin-accent px-6 font-bold text-admin-on-accent hover:bg-admin-accent-hover disabled:bg-admin-subtle-hover disabled:text-admin-text-secondary disabled:opacity-100"
             disabled={
               !enabled ||
               !confirmed ||
@@ -925,7 +925,7 @@ function PixRecipientConfirmation({
           <button
             type="button"
             onClick={onOtherKey}
-            className="inline-flex min-h-11 items-center bg-transparent p-0 text-[0.95rem] font-semibold text-admin-terracotta-deep underline underline-offset-4"
+            className="inline-flex min-h-11 items-center bg-transparent p-0 text-[0.95rem] font-semibold text-admin-accent-hover underline underline-offset-4"
           >
             Usar outra chave
           </button>

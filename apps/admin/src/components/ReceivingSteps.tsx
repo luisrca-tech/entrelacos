@@ -111,7 +111,7 @@ const lastCheckFormatter = new Intl.DateTimeFormat("pt-BR", {
 function LastCheck({ setup }: { setup: ReceivingSetupContext | null }) {
   const observedAt = setup?.providerStatus?.observedAt;
   return (
-    <p className="m-0 flex items-center gap-2 text-[0.82rem] text-admin-muted">
+    <p className="m-0 flex items-center gap-2 text-[0.82rem] text-admin-text-secondary">
       <RefreshCw aria-hidden="true" className="size-4 shrink-0" />
       {observedAt ? (
         <span>
@@ -170,7 +170,7 @@ function SetupStatus({ context }: { context: ReceivingStepsContext }) {
 
 function SandboxNotice({ mode }: { mode: string | null | undefined }) {
   return showSandboxNotice(mode) ? (
-    <p className="m-0 rounded-[10px] bg-admin-pending-wash p-3 text-sm text-admin-pending-ink">
+    <p className="m-0 rounded-[10px] bg-admin-pending-subtle p-3 text-sm text-admin-pending-text">
       Sandbox Asaas: ambiente de teste, sem movimentação de dinheiro real.
     </p>
   ) : null;
@@ -267,12 +267,12 @@ function TaskQuickList({
         <li key={task}>
           <label
             htmlFor={`${id}-${task}`}
-            className="flex min-h-11 cursor-pointer items-center gap-3 text-[0.95rem] text-admin-ink"
+            className="flex min-h-11 cursor-pointer items-center gap-3 text-[0.95rem] text-admin-text"
           >
             <input
               id={`${id}-${task}`}
               type="checkbox"
-              className="size-[22px] shrink-0 accent-admin-status-confirmed"
+              className="size-[22px] shrink-0 accent-admin-success"
               checked={tasks[task]}
               disabled={disabled}
               onChange={(event) => onToggle(task, event.target.checked)}
@@ -281,10 +281,10 @@ function TaskQuickList({
           </label>
         </li>
       ))}
-      <li className="flex min-h-11 items-center gap-3 text-[0.95rem] text-admin-ink">
+      <li className="flex min-h-11 items-center gap-3 text-[0.95rem] text-admin-text">
         <span
           aria-hidden="true"
-          className={`flex size-[22px] shrink-0 items-center justify-center rounded-[5px] border-2 ${documents === "done" ? "border-admin-status-confirmed bg-admin-status-confirmed text-white" : "border-admin-line-strong"}`}
+          className={`flex size-[22px] shrink-0 items-center justify-center rounded-[5px] border-2 ${documents === "done" ? "border-admin-success bg-admin-success text-admin-on-accent" : "border-admin-border-strong"}`}
         >
           {documents === "done" && <Check className="size-3.5" />}
         </span>
@@ -342,7 +342,7 @@ function AdvanceCard({
               <Link
                 to="/sites/$siteId/receiving/$page"
                 params={{ siteId, page: step.id }}
-                className="font-semibold text-admin-terracotta-ink underline underline-offset-4"
+                className="font-semibold text-admin-accent-hover underline underline-offset-4"
               >
                 {step.number} ·{" "}
                 {step.id === "account"
@@ -401,7 +401,7 @@ export function ReceivingOverviewTrack({
     <div className="grid min-w-0 gap-6">
       <header className="grid gap-1.5">
         <h1 className={receivingStepTitle}>Recebimentos</h1>
-        <p className="m-0 text-base leading-[1.6] text-admin-muted">
+        <p className="m-0 text-base leading-[1.6] text-admin-text-secondary">
           Configure uma vez para receber os presentes em dinheiro e sacar para o
           seu banco.
         </p>
@@ -411,10 +411,10 @@ export function ReceivingOverviewTrack({
           <SetupStatus context={context} />
           <section className={`${receivingCard} grid gap-3 px-6 py-[22px]`}>
             <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-              <h2 className="m-0 text-base font-bold text-admin-ink">
+              <h2 className="m-0 text-base font-bold text-admin-text">
                 Configuração dos recebimentos
               </h2>
-              <p className="m-0 text-sm text-admin-muted">
+              <p className="m-0 text-sm text-admin-text-secondary">
                 {completed} de 5 concluídas
               </p>
             </div>
@@ -423,14 +423,14 @@ export function ReceivingOverviewTrack({
           {next && copy && (
             <section
               aria-labelledby="receiving-next-step"
-              className="grid min-w-0 gap-3.5 rounded-2xl border-2 border-admin-terracotta bg-admin-surface p-7 [@media(max-width:760px)]:p-5"
+              className="grid min-w-0 gap-3.5 rounded-2xl border-2 border-admin-accent bg-admin-surface p-7 [@media(max-width:760px)]:p-5"
             >
               <p className={receivingEyebrow}>
                 Próximo passo · Etapa {next.number} de 5
               </p>
               <h2
                 id="receiving-next-step"
-                className="m-0 font-admin-display text-[1.75rem] leading-[1.15] font-normal text-admin-ink"
+                className="m-0 font-admin-display text-[1.75rem] leading-[1.15] font-normal text-admin-text"
               >
                 {next.title}
               </h2>
@@ -474,7 +474,7 @@ export function ReceivingOverviewTrack({
           >
             <h2
               id="receiving-steps-title"
-              className="m-0 px-6 pt-4 pb-2 text-sm font-bold uppercase tracking-[0.06em] text-admin-muted"
+              className="m-0 px-6 pt-4 pb-2 text-sm font-bold uppercase tracking-[0.06em] text-admin-text-secondary"
             >
               As 5 etapas
             </h2>
@@ -482,19 +482,19 @@ export function ReceivingOverviewTrack({
               {steps.map((step) => (
                 <li
                   key={step.id}
-                  className="flex gap-4 border-t border-admin-beige px-6 py-4 [@media(max-width:760px)]:px-4"
+                  className="flex gap-4 border-t border-admin-subtle px-6 py-4 [@media(max-width:760px)]:px-4"
                 >
                   <StepIndicator number={step.number} status={step.status} />
                   <div className="grid min-w-0 flex-1 gap-1">
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-                      <h3 className="m-0 text-base font-bold text-admin-ink">
+                      <h3 className="m-0 text-base font-bold text-admin-text">
                         {step.status === "locked" ? (
                           step.title
                         ) : (
                           <Link
                             to="/sites/$siteId/receiving/$page"
                             params={{ siteId, page: step.id }}
-                            className="text-admin-ink no-underline hover:underline"
+                            className="text-admin-text no-underline hover:underline"
                           >
                             <span className="sr-only">
                               Etapa {step.number}:{" "}
@@ -505,7 +505,7 @@ export function ReceivingOverviewTrack({
                       </h3>
                       <StatusBadge status={step.status} />
                     </div>
-                    <p className="m-0 text-sm leading-[1.5] text-admin-muted">
+                    <p className="m-0 text-sm leading-[1.5] text-admin-text-secondary">
                       {step.summary}
                     </p>
                     {step.status === "available" && (
@@ -532,11 +532,11 @@ export function ReceivingOverviewTrack({
                 <li key={text} className="flex gap-3">
                   <span
                     aria-hidden="true"
-                    className="flex size-[26px] shrink-0 items-center justify-center rounded-full bg-admin-beige text-[0.8rem] font-bold text-admin-ink"
+                    className="flex size-[26px] shrink-0 items-center justify-center rounded-full bg-admin-subtle text-[0.8rem] font-bold text-admin-text"
                   >
                     {index + 1}
                   </span>
-                  <span className="text-sm leading-[1.5] text-admin-body">
+                  <span className="text-sm leading-[1.5] text-admin-text">
                     {text}
                   </span>
                 </li>
@@ -608,7 +608,7 @@ export function HolderStep({ context }: { context: ReceivingStepsContext }) {
         <SetupStatus context={context} />
         {setup?.holder && (
           <div className="flex flex-wrap items-center gap-3 rounded-[14px] bg-admin-canvas p-4">
-            <p className="m-0 text-[0.95rem] text-admin-ink">
+            <p className="m-0 text-[0.95rem] text-admin-text">
               Titular dos recebimentos: <strong>{setup.holder.name}</strong>
             </p>
             <StatusBadge status="done" />
@@ -633,7 +633,7 @@ export function HolderStep({ context }: { context: ReceivingStepsContext }) {
           >
             <label
               htmlFor={`${id}-holder`}
-              className="text-sm font-bold text-admin-ink"
+              className="text-sm font-bold text-admin-text"
             >
               Conta do titular neste casamento
             </label>
@@ -652,12 +652,12 @@ export function HolderStep({ context }: { context: ReceivingStepsContext }) {
               ))}
             </select>
             {!setup.holderCandidates?.length && (
-              <p className="m-0 text-sm text-admin-muted">
+              <p className="m-0 text-sm text-admin-text-secondary">
                 Adicione uma conta administradora para o titular antes de
                 designar o titular.
               </p>
             )}
-            <p className="m-0 text-sm text-admin-muted">
+            <p className="m-0 text-sm text-admin-text-secondary">
               A conta deve estar ativa e administrar este casamento. A
               designação será fixa; confirme a identidade antes de salvar.
             </p>
@@ -792,18 +792,18 @@ export function DetailsStep({ context }: { context: ReceivingStepsContext }) {
                 <li key={title} className="flex gap-3">
                   <Icon
                     aria-hidden="true"
-                    className="mt-0.5 size-[18px] shrink-0 text-admin-terracotta-deep"
+                    className="mt-0.5 size-[18px] shrink-0 text-admin-accent-hover"
                   />
                   <span className="grid gap-0.5 text-sm leading-[1.5]">
-                    <strong className="text-admin-ink">{title}</strong>
-                    <span className="text-admin-body">{text}</span>
+                    <strong className="text-admin-text">{title}</strong>
+                    <span className="text-admin-text">{text}</span>
                   </span>
                 </li>
               ))}
             </ul>
           </AsideCard>
           <AsideCard title="Seus dados ficam seguros">
-            <p className="m-0 text-sm leading-[1.6] text-admin-body">
+            <p className="m-0 text-sm leading-[1.6] text-admin-text">
               Os dados vão direto para o Asaas, a instituição de pagamento que
               guarda os valores no seu nome. Não abra outra conta no Asaas por
               conta própria: use a que criamos aqui.
@@ -876,7 +876,7 @@ export function DetailsStep({ context }: { context: ReceivingStepsContext }) {
             </p>
           )}
         {setup?.accountState === "UNKNOWN" && (
-          <div className="grid gap-3 rounded-[14px] bg-admin-danger-wash p-4 text-admin-danger-ink">
+          <div className="grid gap-3 rounded-[14px] bg-admin-danger-subtle p-4 text-admin-danger-text">
             <p role="alert" className="m-0 text-sm leading-[1.55]">
               O resultado da criação está incerto. Verifique a conta existente
               antes de repetir qualquer criação.
@@ -892,7 +892,7 @@ export function DetailsStep({ context }: { context: ReceivingStepsContext }) {
         {setup?.accountState === "CREATED" && (
           <div className="grid gap-4">
             <div className="flex flex-wrap items-center gap-3 rounded-[14px] bg-admin-canvas p-4">
-              <p role="status" className="m-0 text-[0.95rem] text-admin-ink">
+              <p role="status" className="m-0 text-[0.95rem] text-admin-text">
                 Conta criada no Asaas
                 {setup.holder ? ` em nome de ${setup.holder.name}` : ""}.
               </p>
@@ -922,7 +922,7 @@ export function DetailsStep({ context }: { context: ReceivingStepsContext }) {
                 >
                   <label
                     htmlFor={`${id}-${field.name}`}
-                    className="text-sm font-bold text-admin-ink"
+                    className="text-sm font-bold text-admin-text"
                   >
                     {field.label}
                   </label>
@@ -943,7 +943,7 @@ export function DetailsStep({ context }: { context: ReceivingStepsContext }) {
                   {field.hint && (
                     <p
                       id={`${id}-${field.name}-hint`}
-                      className="m-0 text-[0.8rem] leading-[1.4] text-admin-muted"
+                      className="m-0 text-[0.8rem] leading-[1.4] text-admin-text-secondary"
                     >
                       {field.hint}
                     </p>
@@ -951,12 +951,12 @@ export function DetailsStep({ context }: { context: ReceivingStepsContext }) {
                 </div>
               ))}
             </div>
-            <fieldset className="m-0 grid min-w-0 gap-3 rounded-[14px] border border-admin-line bg-admin-canvas p-5">
+            <fieldset className="m-0 grid min-w-0 gap-3 rounded-[14px] border border-admin-border bg-admin-canvas p-5">
               <legend className="sr-only">Autorizações</legend>
-              <p className="m-0 text-[0.95rem] font-bold text-admin-ink">
+              <p className="m-0 text-[0.95rem] font-bold text-admin-text">
                 Ao continuar, você autoriza
               </p>
-              <ul className="m-0 grid list-disc gap-2 pl-5 text-sm leading-[1.55] text-admin-body">
+              <ul className="m-0 grid list-disc gap-2 pl-5 text-sm leading-[1.55] text-admin-text">
                 <li>
                   Abrir uma conta no Asaas no seu nome e verificar sua
                   identidade.
@@ -975,7 +975,7 @@ export function DetailsStep({ context }: { context: ReceivingStepsContext }) {
                 >
                   Ler o termo completo
                 </summary>
-                <div className="mt-3 grid gap-2 text-sm leading-[1.6] text-admin-body">
+                <div className="mt-3 grid gap-2 text-sm leading-[1.6] text-admin-text">
                   <p className="m-0">
                     {showSandboxNotice(setup.mode)
                       ? setup.disclosure.text
@@ -984,13 +984,13 @@ export function DetailsStep({ context }: { context: ReceivingStepsContext }) {
                   <p className="m-0">{receivingIncomingPixDisclosure.text}</p>
                 </div>
               </details>
-              <label className="mt-1 flex cursor-pointer items-start gap-3 text-[0.95rem] text-admin-ink">
+              <label className="mt-1 flex cursor-pointer items-start gap-3 text-[0.95rem] text-admin-text">
                 <input
                   type="checkbox"
                   name="consent"
                   required
                   disabled={busy}
-                  className="mt-0.5 size-5 shrink-0 accent-admin-terracotta"
+                  className="mt-0.5 size-5 shrink-0 accent-admin-accent"
                 />
                 Confirmo que sou o titular designado dos recebimentos e concordo
                 com os itens acima.
@@ -1004,7 +1004,7 @@ export function DetailsStep({ context }: { context: ReceivingStepsContext }) {
               >
                 Criar minha conta no Asaas
               </button>
-              <p className="m-0 text-[0.82rem] text-admin-muted">
+              <p className="m-0 text-[0.82rem] text-admin-text-secondary">
                 Depois disso, você segue para a ativação.
               </p>
             </div>
@@ -1043,17 +1043,17 @@ function ActivationTaskRow({
   control: ReactNode;
 }) {
   return (
-    <li className="flex gap-4 border-b border-admin-beige px-6 py-5 last:border-b-0 [@media(max-width:760px)]:px-4">
+    <li className="flex gap-4 border-b border-admin-subtle px-6 py-5 last:border-b-0 [@media(max-width:760px)]:px-4">
       <div className="pt-0.5">{control}</div>
       <div className="grid min-w-0 flex-1 gap-1.5">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-          <h3 className="m-0 text-base font-bold text-admin-ink">{title}</h3>
+          <h3 className="m-0 text-base font-bold text-admin-text">{title}</h3>
           {badge}
         </div>
-        <p className="m-0 text-[0.95rem] leading-[1.55] text-admin-body">
+        <p className="m-0 text-[0.95rem] leading-[1.55] text-admin-text">
           {description}
         </p>
-        <p className="m-0 text-xs text-admin-muted">{note}</p>
+        <p className="m-0 text-xs text-admin-text-secondary">{note}</p>
       </div>
     </li>
   );
@@ -1067,11 +1067,11 @@ function TaskBadge({
   children: ReactNode;
 }) {
   const classes = {
-    done: "bg-admin-success-wash text-admin-success-ink",
-    todo: "bg-admin-beige text-admin-body",
-    waiting: "bg-admin-pending-wash text-admin-pending-ink",
-    review: "bg-admin-pending-wash text-admin-pending-ink",
-    attention: "bg-admin-danger-wash text-admin-danger-ink",
+    done: "bg-admin-success-subtle text-admin-success-text",
+    todo: "bg-admin-subtle text-admin-text",
+    waiting: "bg-admin-pending-subtle text-admin-pending-text",
+    review: "bg-admin-pending-subtle text-admin-pending-text",
+    attention: "bg-admin-danger-subtle text-admin-danger-text",
   }[tone];
   return (
     <span
@@ -1176,11 +1176,11 @@ export function ActivationStep({
             icon={
               <RefreshCw
                 aria-hidden="true"
-                className="size-[18px] text-admin-terracotta-deep"
+                className="size-[18px] text-admin-accent-hover"
               />
             }
           >
-            <p className="m-0 text-sm leading-[1.55] text-admin-body">
+            <p className="m-0 text-sm leading-[1.55] text-admin-text">
               {receivingReady
                 ? "Recebimentos liberados. Você pode acompanhar os pagamentos e consultar a disponibilidade de saque."
                 : "Quando concluir uma tarefa no Asaas, verifique de novo para atualizar a situação aqui."}
@@ -1273,7 +1273,7 @@ export function ActivationStep({
                   <input
                     type="checkbox"
                     aria-label={`${title}: marcar como feito`}
-                    className="size-6 accent-admin-status-confirmed"
+                    className="size-6 accent-admin-success"
                     checked={tasks[task]}
                     disabled={!taskOwner || busy}
                     onChange={(event) => toggle(task, event.target.checked)}
@@ -1313,7 +1313,7 @@ export function ActivationStep({
               control={
                 <span
                   aria-hidden="true"
-                  className={`flex size-6 items-center justify-center rounded-full border-2 ${documents === "done" ? "border-admin-status-confirmed bg-admin-status-confirmed text-white" : documents === "attention" ? "border-admin-status-declined" : "border-admin-status-pending"}`}
+                  className={`flex size-6 items-center justify-center rounded-full border-2 ${documents === "done" ? "border-admin-success bg-admin-success text-admin-on-accent" : documents === "attention" ? "border-admin-danger" : "border-admin-pending"}`}
                 >
                   {documents === "done" && <Check className="size-3.5" />}
                 </span>
@@ -1321,7 +1321,7 @@ export function ActivationStep({
             />
           </ul>
           {taskOwner && !receivingReady && context.incomingAvailable && (
-            <div className="grid gap-4 border-t border-admin-beige px-6 py-5 [@media(max-width:760px)]:px-4">
+            <div className="grid gap-4 border-t border-admin-subtle px-6 py-5 [@media(max-width:760px)]:px-4">
               <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
                 <ExternalLink
                   href={asaasLoginUrl(setup.mode)}
@@ -1345,10 +1345,10 @@ export function ActivationStep({
                 hidden={!help}
                 className="rounded-[14px] bg-admin-canvas p-5"
               >
-                <p className="m-0 mb-2 text-[0.95rem] font-bold text-admin-ink">
+                <p className="m-0 mb-2 text-[0.95rem] font-bold text-admin-text">
                   Vamos resolver
                 </p>
-                <ol className="m-0 grid list-decimal gap-2 pl-5 text-sm leading-[1.55] text-admin-body">
+                <ol className="m-0 grid list-decimal gap-2 pl-5 text-sm leading-[1.55] text-admin-text">
                   <li>
                     Procure por “Asaas” na caixa de entrada, no spam e em
                     Promoções.
@@ -1369,7 +1369,7 @@ export function ActivationStep({
             </div>
           )}
           {!taskOwner && setup.holder && (
-            <p className="m-0 border-t border-admin-beige px-6 py-4 text-sm text-admin-muted">
+            <p className="m-0 border-t border-admin-subtle px-6 py-4 text-sm text-admin-text-secondary">
               Somente {setup.holder.name} conclui estas tarefas no Asaas.
             </p>
           )}
@@ -1378,7 +1378,7 @@ export function ActivationStep({
       {rejected && (
         <p
           role="alert"
-          className="m-0 rounded-[14px] bg-admin-danger-wash p-4 text-sm leading-[1.55] text-admin-danger-ink"
+          className="m-0 rounded-[14px] bg-admin-danger-subtle p-4 text-sm leading-[1.55] text-admin-danger-text"
         >
           Há dados rejeitados pelo Asaas. O titular precisa corrigir as
           pendências no fluxo de verificação do provedor.
@@ -1387,7 +1387,7 @@ export function ActivationStep({
       {provider?.commercialInfoExpired && (
         <p
           role="alert"
-          className="m-0 rounded-[14px] bg-admin-danger-wash p-4 text-sm leading-[1.55] text-admin-danger-ink"
+          className="m-0 rounded-[14px] bg-admin-danger-subtle p-4 text-sm leading-[1.55] text-admin-danger-text"
         >
           Os dados comerciais estão expirados. Atualize ou confirme os dados com
           o Asaas.
@@ -1404,7 +1404,7 @@ export function ActivationStep({
             aria-label="Autorização para preparar o Pix"
             className={`${receivingCard} grid gap-3 p-6`}
           >
-            <p className="m-0 text-sm leading-[1.55] text-admin-body">
+            <p className="m-0 text-sm leading-[1.55] text-admin-text">
               {receivingIncomingPixDisclosure.text}
             </p>
             <button
@@ -1422,17 +1422,17 @@ export function ActivationStep({
         <section className={`${receivingCard} flex gap-4 p-6`}>
           <span
             aria-hidden="true"
-            className="flex size-9 shrink-0 items-center justify-center rounded-full bg-admin-beige text-admin-graphite"
+            className="flex size-9 shrink-0 items-center justify-center rounded-full bg-admin-subtle text-admin-text"
           >
             <Clock className="size-[18px]" />
           </span>
           <div className="grid gap-1">
-            <h2 className="m-0 text-base font-bold text-admin-ink">
+            <h2 className="m-0 text-base font-bold text-admin-text">
               {receivingReady
                 ? "Recebimentos liberados"
                 : "Depois: análise do Asaas"}
             </h2>
-            <p className="m-0 text-[0.95rem] leading-[1.55] text-admin-body">
+            <p className="m-0 text-[0.95rem] leading-[1.55] text-admin-text">
               {receivingReady
                 ? "Recebimentos liberados. Você pode acompanhar os pagamentos e consultar a disponibilidade de saque."
                 : "Quando as 3 tarefas estiverem feitas, o Asaas analisa a conta. Não é preciso fazer nada aqui; após a aprovação, o EntreLaços prepara automaticamente o recebimento por Pix."}
@@ -1462,13 +1462,13 @@ export function AccountStep({ context }: { context: ReceivingStepsContext }) {
                     ArrowDown,
                     "Para receber",
                     "Uma chave aleatória criada por nós na sua conta Asaas. Você não precisa fazer nada.",
-                    "bg-admin-beige text-admin-graphite",
+                    "bg-admin-subtle text-admin-text",
                   ],
                   [
                     ArrowUp,
                     "Para sacar",
                     "A chave do seu banco, informada aqui. Ela só recebe os saques e não é levada para o Asaas.",
-                    "bg-admin-terracotta-wash text-admin-terracotta-deep",
+                    "bg-admin-accent-subtle text-admin-accent-hover",
                   ],
                 ] as const
               ).map(([Icon, title, text, tone]) => (
@@ -1480,8 +1480,8 @@ export function AccountStep({ context }: { context: ReceivingStepsContext }) {
                     <Icon className="size-4" />
                   </span>
                   <span className="grid gap-0.5 text-sm leading-[1.5]">
-                    <strong className="text-admin-ink">{title}</strong>
-                    <span className="text-admin-body">{text}</span>
+                    <strong className="text-admin-text">{title}</strong>
+                    <span className="text-admin-text">{text}</span>
                   </span>
                 </li>
               ))}
@@ -1617,10 +1617,10 @@ function GiftListPreview({
     >
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="grid max-w-xl gap-1.5">
-          <h2 className="m-0 font-admin-display text-[1.75rem] leading-[1.15] font-normal text-admin-ink">
+          <h2 className="m-0 font-admin-display text-[1.75rem] leading-[1.15] font-normal text-admin-text">
             Sua lista de presentes
           </h2>
-          <p className="m-0 text-sm leading-[1.5] text-admin-body">
+          <p className="m-0 text-sm leading-[1.5] text-admin-text">
             {eligible
               ? "Monte e ajuste à vontade. Os presentes publicados aparecem para os convidados."
               : "A lista é liberada para montar quando o Asaas aprovar a conta."}
@@ -1635,19 +1635,19 @@ function GiftListPreview({
           {visible.map((gift) => (
             <li
               key={gift.id}
-              className="grid min-w-0 overflow-hidden rounded-[14px] border border-admin-line bg-admin-surface"
+              className="grid min-w-0 overflow-hidden rounded-[14px] border border-admin-border bg-admin-surface"
             >
               <span
                 aria-hidden="true"
-                className="flex h-[110px] items-center justify-center bg-admin-beige"
+                className="flex h-[110px] items-center justify-center bg-admin-subtle"
               >
-                <Gift className="size-7 text-admin-terracotta-deep" />
+                <Gift className="size-7 text-admin-accent-hover" />
               </span>
               <span className="grid gap-1 p-4">
-                <strong className="break-words text-[0.95rem] text-admin-ink">
+                <strong className="break-words text-[0.95rem] text-admin-text">
                   {gift.title}
                 </strong>
-                <span className="text-sm text-admin-body">
+                <span className="text-sm text-admin-text">
                   {money(gift.nominalCents)}
                 </span>
               </span>
@@ -1657,7 +1657,7 @@ function GiftListPreview({
             <Link
               to="/sites/$siteId/gifts"
               params={{ siteId }}
-              className="flex h-full min-h-[160px] flex-col items-center justify-center gap-2 rounded-[14px] border-2 border-dashed border-admin-line-strong p-4 text-center font-bold text-admin-terracotta-deep no-underline hover:bg-admin-canvas"
+              className="flex h-full min-h-[160px] flex-col items-center justify-center gap-2 rounded-[14px] border-2 border-dashed border-admin-border-strong p-4 text-center font-bold text-admin-accent-hover no-underline hover:bg-admin-canvas"
             >
               <Plus aria-hidden="true" className="size-6" />
               {gifts?.length ? "Ver a lista completa" : "Adicionar presente"}
@@ -1717,7 +1717,7 @@ export function FeesStep({
             </div>
             {pricingEnabled && <FeesExample />}
           </div>
-          <div className="border-t border-admin-line pt-6">
+          <div className="border-t border-admin-border pt-6">
             <Link
               to="/sites/$siteId/receiving"
               params={{ siteId }}

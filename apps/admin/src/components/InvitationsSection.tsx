@@ -570,7 +570,7 @@ export function InvitationsSection({ siteId, lifecycle, sessionEpoch }: Props) {
               >
                 <Search
                   aria-hidden="true"
-                  className="absolute left-3 top-3.5 size-4 text-admin-muted"
+                  className="absolute left-3 top-3.5 size-4 text-admin-text-secondary"
                 />
                 <span className="sr-only">Buscar identificação do convite</span>
                 <Input
@@ -584,16 +584,16 @@ export function InvitationsSection({ siteId, lifecycle, sessionEpoch }: Props) {
                     }))
                   }
                   placeholder="Buscar identificação do convite"
-                  className="min-h-11 border-admin-line bg-admin-surface pl-10"
+                  className="min-h-11 border-admin-border bg-admin-surface pl-10"
                 />
               </label>
               <fieldset
-                className="flex min-w-0 max-w-full items-center gap-1 overflow-x-auto rounded-xl border border-admin-line bg-admin-surface p-1"
+                className="flex min-w-0 max-w-full items-center gap-1 overflow-x-auto rounded-xl border border-admin-border bg-admin-surface p-1"
                 aria-label="Filtrar convites por situação"
               >
                 <span
                   aria-hidden="true"
-                  className="shrink-0 px-2 text-xs font-semibold text-admin-muted"
+                  className="shrink-0 px-2 text-xs font-semibold text-admin-text-secondary"
                 >
                   Convites
                 </span>
@@ -613,9 +613,9 @@ export function InvitationsSection({ siteId, lifecycle, sessionEpoch }: Props) {
                       key={status}
                       type="button"
                       size="sm"
-                      variant={selected ? "default" : "ghost"}
+                      variant="ghost"
                       aria-pressed={selected}
-                      className="shrink-0 gap-1.5"
+                      className={`shrink-0 gap-1.5 ${selected ? adminStyles.selected : ""}`}
                       onClick={() =>
                         setFilters((previous) => ({ ...previous, status }))
                       }
@@ -623,7 +623,7 @@ export function InvitationsSection({ siteId, lifecycle, sessionEpoch }: Props) {
                       {label}
                       {count !== null && (
                         <span
-                          className={`rounded-full px-[7px] py-px text-xs font-semibold ${selected ? "bg-admin-ink text-white" : "bg-admin-canvas text-admin-muted"}`}
+                          className={`rounded-full px-[7px] py-px text-xs font-semibold ${selected ? "bg-admin-surface text-admin-accent-hover" : "bg-admin-canvas text-admin-text-secondary"}`}
                         >
                           {count}
                         </span>
@@ -640,13 +640,13 @@ export function InvitationsSection({ siteId, lifecycle, sessionEpoch }: Props) {
             </div>
           )}
           {loading && loaded && (
-            <p role="status" className="mb-3 text-sm text-admin-muted">
+            <p role="status" className="mb-3 text-sm text-admin-text-secondary">
               Atualizando convites…
             </p>
           )}
           {!loaded ? (
             loading && (
-              <p role="status" className="text-admin-muted">
+              <p role="status" className="text-admin-text-secondary">
                 Carregando convites…
               </p>
             )
@@ -687,7 +687,7 @@ export function InvitationsSection({ siteId, lifecycle, sessionEpoch }: Props) {
             </div>
           )}
           {pageError && (
-            <p role="alert" className="text-sm text-admin-danger-ink">
+            <p role="alert" className="text-sm text-admin-danger-text">
               {pageError}
             </p>
           )}
@@ -747,10 +747,10 @@ export function InvitationsSection({ siteId, lifecycle, sessionEpoch }: Props) {
       />
       <Dialog open={deadlineOpen} onOpenChange={setDeadlineOpen}>
         <AdminDialogContent>
-          <DialogTitle className="font-admin-display text-3xl text-admin-graphite">
+          <DialogTitle className="font-admin-display text-3xl text-admin-text">
             Prazo de confirmação
           </DialogTitle>
-          <DialogDescription className="text-admin-muted">
+          <DialogDescription className="text-admin-text-secondary">
             Após o prazo, os convidados podem consultar as respostas, mas não
             alterá-las.
           </DialogDescription>
@@ -760,7 +760,7 @@ export function InvitationsSection({ siteId, lifecycle, sessionEpoch }: Props) {
           >
             <label
               htmlFor="invitation-deadline-date"
-              className="grid gap-2 text-sm font-semibold text-admin-graphite"
+              className="grid gap-2 text-sm font-semibold text-admin-text"
             >
               Data
               <Input
@@ -768,12 +768,12 @@ export function InvitationsSection({ siteId, lifecycle, sessionEpoch }: Props) {
                 type="date"
                 value={deadlineDate}
                 onChange={(event) => setDeadlineDate(event.target.value)}
-                className="border-admin-line"
+                className="border-admin-border"
               />
             </label>
             <label
               htmlFor="invitation-deadline-time"
-              className="grid gap-2 text-sm font-semibold text-admin-graphite"
+              className="grid gap-2 text-sm font-semibold text-admin-text"
             >
               Horário
               <Input
@@ -781,12 +781,12 @@ export function InvitationsSection({ siteId, lifecycle, sessionEpoch }: Props) {
                 type="time"
                 value={deadlineTime}
                 onChange={(event) => setDeadlineTime(event.target.value)}
-                className="border-admin-line"
+                className="border-admin-border"
               />
             </label>
             <label
               htmlFor="invitation-deadline-timezone"
-              className="grid gap-2 text-sm font-semibold text-admin-graphite"
+              className="grid gap-2 text-sm font-semibold text-admin-text"
             >
               Fuso horário (IANA)
               <Input
@@ -794,11 +794,11 @@ export function InvitationsSection({ siteId, lifecycle, sessionEpoch }: Props) {
                 value={deadlineTimezone}
                 onChange={(event) => setDeadlineTimezone(event.target.value)}
                 placeholder="America/Sao_Paulo"
-                className="border-admin-line"
+                className="border-admin-border"
               />
             </label>
             {deadline?.deadlineAt && (
-              <p className="m-0 text-sm text-admin-muted">
+              <p className="m-0 text-sm text-admin-text-secondary">
                 Prazo atual configurado.
               </p>
             )}

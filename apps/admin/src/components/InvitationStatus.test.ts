@@ -5,9 +5,9 @@ import { InvitationStatus } from "./InvitationStatus";
 
 describe("invitation status", () => {
   it.each([
-    ["PENDING", "Sem resposta", "admin-status-pending"],
-    ["CONFIRMED", "Irá comparecer", "admin-status-confirmed"],
-    ["DECLINED", "Não comparecerá", "admin-status-declined"],
+    ["PENDING", "Sem resposta", "bg-admin-pending"],
+    ["CONFIRMED", "Irá comparecer", "bg-admin-success"],
+    ["DECLINED", "Não comparecerá", "bg-admin-danger"],
   ] as const)("renders %s with color and text", (state, label, token) => {
     const html = renderToStaticMarkup(
       createElement(InvitationStatus, { state }),

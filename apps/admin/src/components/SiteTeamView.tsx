@@ -60,7 +60,7 @@ export function SiteTeamView({
 }: Props) {
   if (!canManage) {
     return (
-      <p role="status" className="m-0 text-admin-muted">
+      <p role="status" className="m-0 text-admin-text-secondary">
         Você não tem acesso para gerenciar a equipe.
       </p>
     );
@@ -69,7 +69,7 @@ export function SiteTeamView({
   if (!team && error) {
     return (
       <div className="grid min-w-0 gap-3">
-        <p role="alert" className="m-0 text-admin-muted">
+        <p role="alert" className="m-0 text-admin-text-secondary">
           Não foi possível carregar a equipe.
         </p>
         <div>
@@ -83,7 +83,7 @@ export function SiteTeamView({
 
   if (!team) {
     return (
-      <p role="status" className="m-0 text-admin-muted">
+      <p role="status" className="m-0 text-admin-text-secondary">
         Carregando equipe…
       </p>
     );
@@ -106,7 +106,7 @@ export function SiteTeamView({
     <div className="grid min-w-0 gap-5">
       {error && (
         <div className="grid min-w-0 gap-3">
-          <p role="alert" className="m-0 text-admin-muted">
+          <p role="alert" className="m-0 text-admin-text-secondary">
             Não foi possível concluir a ação da equipe.
           </p>
           <div>
@@ -117,7 +117,7 @@ export function SiteTeamView({
         </div>
       )}
       {pending && (
-        <p role="status" className="m-0 text-admin-muted">
+        <p role="status" className="m-0 text-admin-text-secondary">
           Atualizando equipe…
         </p>
       )}
@@ -126,7 +126,7 @@ export function SiteTeamView({
         <Button
           type="button"
           disabled={pending}
-          className="bg-admin-terracotta text-white hover:bg-admin-terracotta-deep"
+          className="bg-admin-accent text-admin-on-accent hover:bg-admin-accent-hover"
           onClick={() => onInviteOpenChange(true)}
         >
           <Plus aria-hidden="true" />
@@ -135,14 +135,14 @@ export function SiteTeamView({
       </PageHeaderActions>
 
       <section
-        className="grid gap-3 rounded-2xl border border-admin-line bg-admin-beige p-5"
+        className="grid gap-3 rounded-2xl border border-admin-border bg-admin-subtle p-5"
         aria-label="Quem pode fazer o quê"
       >
         <h2 className="m-0 text-sm font-bold">Quem pode fazer o quê</h2>
         <div className="grid gap-3 md:grid-cols-2">
           <div className={`${adminStyles.surface} p-4`}>
             <p className="m-0 text-sm font-semibold">Titular · Vocês dois</p>
-            <p className="m-0 mt-2 text-sm text-admin-body">
+            <p className="m-0 mt-2 text-sm text-admin-text">
               Cuida das áreas do casamento, gerencia a equipe e acompanha os
               recebimentos.
             </p>
@@ -151,7 +151,7 @@ export function SiteTeamView({
             <p className="m-0 text-sm font-semibold">
               Assessor · Quem ajuda na organização
             </p>
-            <p className="m-0 mt-2 text-sm text-admin-body">
+            <p className="m-0 mt-2 text-sm text-admin-text">
               Pode cuidar de Convites, Mensagens e Presentes.
             </p>
           </div>
@@ -235,7 +235,7 @@ export function SiteTeamView({
       </TeamGroup>
 
       <TeamGroup id="site-team-invitations-heading" title="Convites pendentes">
-        <p className="m-0 border-b border-admin-line px-5 py-3 text-sm text-admin-muted">
+        <p className="m-0 border-b border-admin-border px-5 py-3 text-sm text-admin-text-secondary">
           Para enviar de novo, revogue o convite e use “Convidar assessor” para
           criar um novo.
         </p>
@@ -258,7 +258,7 @@ export function SiteTeamView({
 
       {(revokedMembers.length > 0 || pastInvitations.length > 0) && (
         <TeamGroup id="site-team-history-heading" title="Histórico">
-          <p className="m-0 border-b border-admin-line px-5 py-3 text-sm text-admin-muted">
+          <p className="m-0 border-b border-admin-border px-5 py-3 text-sm text-admin-text-secondary">
             Acessos revogados e convites utilizados, expirados ou revogados.
           </p>
           <TeamList>
@@ -313,11 +313,13 @@ function TeamGroup({
       aria-labelledby={id}
       className={`${adminStyles.surface} min-w-0 overflow-hidden`}
     >
-      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b border-admin-line p-5">
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b border-admin-border p-5">
         <h2 id={id} className={`${displayHeading} m-0 text-xl`}>
           {title}
         </h2>
-        {meta && <p className="m-0 text-sm text-admin-muted">{meta}</p>}
+        {meta && (
+          <p className="m-0 text-sm text-admin-text-secondary">{meta}</p>
+        )}
       </div>
       {children}
     </section>
@@ -326,14 +328,16 @@ function TeamGroup({
 
 function TeamList({ children }: { children: ReactNode }) {
   return (
-    <ul className="m-0 grid min-w-0 list-none divide-y divide-admin-line p-0">
+    <ul className="m-0 grid min-w-0 list-none divide-y divide-admin-border p-0">
       {children}
     </ul>
   );
 }
 
 function EmptyGroup({ children }: { children: ReactNode }) {
-  return <p className="m-0 p-5 text-sm text-admin-muted">{children}</p>;
+  return (
+    <p className="m-0 p-5 text-sm text-admin-text-secondary">{children}</p>
+  );
 }
 
 function MemberRow({
@@ -353,19 +357,19 @@ function MemberRow({
       <div className="flex min-w-0 items-start gap-3 break-words">
         <span
           aria-hidden="true"
-          className="grid size-10 shrink-0 place-items-center rounded-full bg-admin-terracotta-wash text-xs font-bold text-admin-terracotta-deep"
+          className="grid size-10 shrink-0 place-items-center rounded-full bg-admin-accent-subtle text-xs font-bold text-admin-accent-hover"
         >
           {getInitials(member.name)}
         </span>
         <div className="min-w-0">
-          <p className="m-0 font-semibold text-admin-graphite">
+          <p className="m-0 font-semibold text-admin-text">
             {member.name}
             {current && " (você)"}
           </p>
-          <p className="mb-0 mt-1 break-all text-sm text-admin-muted">
+          <p className="mb-0 mt-1 break-all text-sm text-admin-text-secondary">
             {member.email}
           </p>
-          <p className="mb-0 mt-2 text-sm text-admin-muted">
+          <p className="mb-0 mt-2 text-sm text-admin-text-secondary">
             {member.membershipRole === "SITE_ADMIN" ? "Titular" : "Assessor"} ·{" "}
             {active ? "Acesso ativo" : "Acesso revogado"}
             {member.revokedAt && (
@@ -428,13 +432,13 @@ function InvitationRow({
   return (
     <li className="grid min-w-0 gap-3 p-5 sm:flex sm:items-center sm:justify-between">
       <div className="min-w-0 break-words">
-        <p className="m-0 font-semibold text-admin-graphite">
+        <p className="m-0 font-semibold text-admin-text">
           {invitation.inviteeName}
         </p>
-        <p className="mb-0 mt-1 break-all text-sm text-admin-muted">
+        <p className="mb-0 mt-1 break-all text-sm text-admin-text-secondary">
           {invitation.email}
         </p>
-        <p className="mb-0 mt-2 text-sm text-admin-muted">
+        <p className="mb-0 mt-2 text-sm text-admin-text-secondary">
           {status}
           {" · "}
           {dateLabel} <time dateTime={dateValue}>{formatDate(dateValue)}</time>

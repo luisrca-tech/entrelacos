@@ -37,7 +37,7 @@ export function RingsLoader({
         </div>
       </div>
       <span
-        className="font-admin-display text-[1.8rem] tracking-[-0.035em] text-admin-graphite"
+        className="font-admin-display text-[1.8rem] tracking-[-0.035em] text-admin-text"
         aria-hidden="true"
       >
         Entrelaços

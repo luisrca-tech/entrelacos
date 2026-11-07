@@ -24,7 +24,7 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import { displayHeading } from "../lib/adminStyles";
+import { adminStyles, displayHeading } from "../lib/adminStyles";
 import { apiRequest } from "../lib/apiClient";
 import { formatBrazilianDate } from "./brazilianDate";
 import { CreateWeddingDialog } from "./CreateWeddingDialog";
@@ -52,7 +52,7 @@ export function OwnerSites({
     snapshot.sessionEpoch === null
   ) {
     return (
-      <p role="status" className="text-admin-muted">
+      <p role="status" className="text-admin-text-secondary">
         Verificando acesso aos casamentos…
       </p>
     );
@@ -197,7 +197,7 @@ function OwnerSitesRuntime({
     <div>
       <section className="mb-6 flex items-end justify-between gap-8 [@media(max-width:760px)]:flex-col [@media(max-width:760px)]:items-start [@media(max-width:760px)]:gap-5">
         <div>
-          <p className="m-0 mb-3.5 text-[0.7rem] font-bold uppercase tracking-[0.13em] leading-[1.3] text-admin-muted">
+          <p className="m-0 mb-3.5 text-[0.7rem] font-bold uppercase tracking-[0.13em] leading-[1.3] text-admin-text-secondary">
             Painel EntreLaços
           </p>
           <h1
@@ -205,7 +205,7 @@ function OwnerSitesRuntime({
           >
             Casamentos cadastrados
           </h1>
-          <p className="mt-[18px] max-w-[56ch] leading-[1.6] text-admin-muted">
+          <p className="mt-[18px] max-w-[56ch] leading-[1.6] text-admin-text-secondary">
             Escolha um casamento para organizar convites, presentes e
             recebimentos.
           </p>
@@ -222,8 +222,8 @@ function OwnerSitesRuntime({
       </section>
 
       {error && (
-        <div className="mb-5 grid gap-3 rounded-xl border border-admin-line bg-admin-surface p-5">
-          <p className="m-0 text-sm text-admin-muted" role="alert">
+        <div className="mb-5 grid gap-3 rounded-xl border border-admin-border bg-admin-surface p-5">
+          <p className="m-0 text-sm text-admin-text-secondary" role="alert">
             {error}
           </p>
           <Button
@@ -239,7 +239,7 @@ function OwnerSitesRuntime({
       )}
 
       <div className="mb-[22px] flex flex-wrap items-center gap-3">
-        <div className="hidden flex-wrap gap-1 rounded-xl border border-admin-line bg-admin-surface p-1 lg:flex">
+        <div className="hidden flex-wrap gap-1 rounded-xl border border-admin-border bg-admin-surface p-1 lg:flex">
           {(
             [
               ["ALL", "Todos"],
@@ -253,15 +253,15 @@ function OwnerSitesRuntime({
               key={status}
               type="button"
               size="sm"
-              variant={lifecycle === status ? "default" : "ghost"}
+              variant="ghost"
               aria-pressed={lifecycle === status}
-              className="h-9 px-3 text-sm font-semibold"
+              className={`h-9 px-3 text-sm font-semibold ${lifecycle === status ? adminStyles.selected : ""}`}
               onClick={() => setLifecycle(status)}
             >
               {label}
               {totals && (
                 <span
-                  className={`rounded-full px-[7px] text-xs font-bold ${lifecycle === status ? "bg-white/20 text-white" : "bg-admin-beige text-admin-body"}`}
+                  className={`rounded-full px-[7px] text-xs font-bold ${lifecycle === status ? "bg-admin-surface text-admin-accent-hover" : "bg-admin-subtle text-admin-text"}`}
                 >
                   {status === "ALL"
                     ? Object.values(totals).reduce(
@@ -281,13 +281,13 @@ function OwnerSitesRuntime({
           <span className="sr-only">Buscar casamento</span>
           <Search
             aria-hidden="true"
-            className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-admin-muted"
+            className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-admin-text-secondary"
           />
           <Input
             id="owner-site-search"
             type="search"
             placeholder="Nome do casamento ou do casal"
-            className="h-11 rounded-[10px] border-admin-line-strong bg-admin-surface pl-10"
+            className="h-11 rounded-[10px] border-admin-border-strong bg-admin-surface pl-10"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
           />
@@ -299,7 +299,7 @@ function OwnerSitesRuntime({
           Status
           <select
             id="owner-site-lifecycle"
-            className="h-11 min-w-0 flex-1 rounded-[10px] border border-admin-line-strong bg-admin-surface px-3 text-sm"
+            className="h-11 min-w-0 flex-1 rounded-[10px] border border-admin-border-strong bg-admin-surface px-3 text-sm"
             value={lifecycle}
             onChange={(event) => setLifecycle(event.target.value)}
           >
@@ -313,11 +313,11 @@ function OwnerSitesRuntime({
       </div>
 
       {loading && (
-        <p role="status" className="mb-4 text-sm text-admin-muted">
+        <p role="status" className="mb-4 text-sm text-admin-text-secondary">
           Carregando casamentos…
         </p>
       )}
-      <div className="overflow-hidden rounded-[18px] border border-admin-line bg-admin-surface [@media(max-width:760px)]:border-0 [@media(max-width:760px)]:bg-transparent">
+      <div className="overflow-hidden rounded-[18px] border border-admin-border bg-admin-surface [@media(max-width:760px)]:border-0 [@media(max-width:760px)]:bg-transparent">
         <div className="overflow-x-auto [@media(max-width:760px)]:hidden">
           <Table>
             <TableHeader className="bg-admin-canvas">
@@ -335,15 +335,15 @@ function OwnerSitesRuntime({
                 <TableRow key={site.id}>
                   <TableCell className="px-[22px] py-3.5">
                     <div className="grid gap-[3px]">
-                      <strong className="text-[15px] text-admin-graphite">
+                      <strong className="text-[15px] text-admin-text">
                         {site.displayName}
                       </strong>
-                      <span className="text-[13px] text-admin-muted">
+                      <span className="text-[13px] text-admin-text-secondary">
                         {site.coupleNames.join(" & ")}
                       </span>
                     </div>
                   </TableCell>
-                  <TableCell className="text-admin-body">
+                  <TableCell className="text-admin-text">
                     {formatBrazilianDate(site.eventDate)}
                   </TableCell>
                   <TableCell>
@@ -374,22 +374,22 @@ function OwnerSitesRuntime({
         <div className="hidden gap-2.5 [@media(max-width:760px)]:grid">
           {visibleSites.map((site) => (
             <Link
-              className="grid gap-[7px] rounded-xl border border-admin-line bg-admin-surface p-[18px] no-underline"
+              className="grid gap-[7px] rounded-xl border border-admin-border bg-admin-surface p-[18px] no-underline"
               to="/sites/$siteId/home"
               params={{ siteId: site.id }}
               key={site.id}
             >
               <div className="flex flex-wrap items-start justify-between gap-2">
-                <strong className="min-w-0 break-words text-admin-graphite">
+                <strong className="min-w-0 break-words text-admin-text">
                   {site.displayName}
                 </strong>
                 <LifecycleBadge lifecycle={site.lifecycle} />
               </div>
-              <span className="text-[0.88rem] text-admin-muted">
+              <span className="text-[0.88rem] text-admin-text-secondary">
                 {site.coupleNames.join(" & ")} ·{" "}
                 {formatBrazilianDate(site.eventDate)}
               </span>
-              <div className="flex flex-wrap items-center gap-2 text-[13px] text-admin-muted">
+              <div className="flex flex-wrap items-center gap-2 text-[13px] text-admin-text-secondary">
                 Recebimentos
                 <ReceivingAccountBadge state={site.receivingAccount} />
               </div>
@@ -398,7 +398,7 @@ function OwnerSitesRuntime({
           ))}
         </div>
         {!loading && !error && visibleSites.length === 0 && (
-          <p className="m-0 p-[22px] leading-[1.6] text-admin-muted">
+          <p className="m-0 p-[22px] leading-[1.6] text-admin-text-secondary">
             {!(search.trim() || lifecycle !== "ALL")
               ? "Nenhum casamento cadastrado. Comece em Criar casamento."
               : "Nenhum casamento encontrado. Ajuste a busca ou o status."}
@@ -406,9 +406,9 @@ function OwnerSitesRuntime({
         )}
         <div
           data-slot="owner-sites-footer"
-          className="flex flex-wrap items-center justify-between gap-3 border-t border-admin-line px-[22px] py-3.5 [@media(max-width:760px)]:mt-2.5 [@media(max-width:760px)]:rounded-xl [@media(max-width:760px)]:border [@media(max-width:760px)]:bg-admin-surface [@media(max-width:760px)]:px-[18px]"
+          className="flex flex-wrap items-center justify-between gap-3 border-t border-admin-border px-[22px] py-3.5 [@media(max-width:760px)]:mt-2.5 [@media(max-width:760px)]:rounded-xl [@media(max-width:760px)]:border [@media(max-width:760px)]:bg-admin-surface [@media(max-width:760px)]:px-[18px]"
         >
-          <p className="m-0 text-[13px] text-admin-muted">
+          <p className="m-0 text-[13px] text-admin-text-secondary">
             {visibleSites.length} de {total} casamentos carregados
             {cursor ? " · Carregue mais para ampliar a busca." : ""}
           </p>
@@ -418,7 +418,7 @@ function OwnerSitesRuntime({
             loading={loadingMore}
             disabled={loading}
             manualOnly={Boolean(error)}
-            className="h-[38px] rounded-[10px] border-admin-line-strong px-6 font-semibold text-admin-graphite"
+            className="h-[38px] rounded-[10px] border-admin-border-strong px-6 font-semibold text-admin-text"
           />
         </div>
       </div>
@@ -428,7 +428,7 @@ function OwnerSitesRuntime({
 
 const openAction = cn(
   buttonVariants({ variant: "outline" }),
-  "h-[38px] rounded-[10px] border-admin-line-strong bg-admin-surface px-6 text-[15px] font-semibold text-admin-graphite no-underline hover:bg-admin-canvas",
+  "h-[38px] rounded-[10px] border-admin-border-strong bg-admin-surface px-6 text-[15px] font-semibold text-admin-text no-underline hover:bg-admin-canvas",
 );
 
 function LifecycleBadge({ lifecycle }: { lifecycle: SiteRecord["lifecycle"] }) {

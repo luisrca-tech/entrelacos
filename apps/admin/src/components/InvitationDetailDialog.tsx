@@ -52,7 +52,7 @@ export function InvitationDetailDialog({
       >
         <div className="flex min-w-0 items-start justify-between gap-2">
           <div className="min-w-0">
-            <p className="m-0 text-xs font-bold uppercase tracking-wider text-admin-muted">
+            <p className="m-0 text-xs font-bold uppercase tracking-wider text-admin-text-secondary">
               Detalhes do convite
             </p>
             <DialogTitle
@@ -67,11 +67,11 @@ export function InvitationDetailDialog({
         </div>
         <div className="grid gap-5">
           <section
-            className="rounded-xl border border-admin-line bg-admin-canvas p-4"
+            className="rounded-xl border border-admin-border bg-admin-canvas p-4"
             aria-label="Dados do convite"
           >
             <div className="flex flex-wrap items-start justify-between gap-3">
-              <p className="m-0 text-sm font-bold text-admin-ink">
+              <p className="m-0 text-sm font-bold text-admin-text">
                 Como acessam o site
               </p>
               <Button
@@ -79,37 +79,39 @@ export function InvitationDetailDialog({
                 variant="outline"
                 onClick={onEdit}
                 disabled={inactive}
-                className="border-admin-line"
+                className="border-admin-border"
               >
                 <Pencil aria-hidden="true" className="size-4" />
                 Editar
               </Button>
             </div>
-            <dl className="mt-5 grid gap-3 border-t border-admin-line pt-4 text-sm">
+            <dl className="mt-5 grid gap-3 border-t border-admin-border pt-4 text-sm">
               <div>
-                <dt className="text-admin-muted">Telefone de contato</dt>
-                <dd className="m-0 mt-1 text-admin-ink">
+                <dt className="text-admin-text-secondary">
+                  Telefone de contato
+                </dt>
+                <dd className="m-0 mt-1 text-admin-text">
                   {formatInvitationPhoneInput(invitation.phone)}
                 </dd>
               </div>
               <div>
-                <dt className="text-admin-muted">E-mail de contato</dt>
-                <dd className="m-0 mt-1 text-admin-ink">
+                <dt className="text-admin-text-secondary">E-mail de contato</dt>
+                <dd className="m-0 mt-1 text-admin-text">
                   {invitation.email ?? "Não informado"}
                 </dd>
               </div>
             </dl>
-            <div className="mt-4 border-t border-admin-line pt-4">
+            <div className="mt-4 border-t border-admin-border pt-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <span className="text-xs text-admin-muted">
+                  <span className="text-xs text-admin-text-secondary">
                     PIN do convite
                   </span>
                   <p
                     className={
                       accessPin
-                        ? "m-0 mt-1 font-mono text-lg tracking-[0.18em] text-admin-ink"
-                        : "m-0 mt-1 text-sm text-admin-muted"
+                        ? "m-0 mt-1 font-mono text-lg tracking-[0.18em] text-admin-text"
+                        : "m-0 mt-1 text-sm text-admin-text-secondary"
                     }
                   >
                     {accessPin ?? (pinLoading ? "Consultando…" : "—")}
@@ -121,7 +123,7 @@ export function InvitationDetailDialog({
                     variant="outline"
                     onClick={copyPin}
                     disabled={!accessPin}
-                    className="border-admin-line"
+                    className="border-admin-border"
                   >
                     <Copy aria-hidden="true" className="size-4" />
                     Copiar
@@ -137,29 +139,29 @@ export function InvitationDetailDialog({
                   </Button>
                 </div>
               </div>
-              <p className="mb-0 mt-3 text-xs leading-relaxed text-admin-muted">
+              <p className="mb-0 mt-3 text-xs leading-relaxed text-admin-text-secondary">
                 O telefone e este PIN permitem acessar as confirmações no site.
                 Compartilhe-os somente com os convidados deste convite.
               </p>
             </div>
           </section>
           <section aria-label="Convidados neste convite" className="grid gap-6">
-            <h3 className="m-0 font-admin-display text-xl text-admin-graphite">
+            <h3 className="m-0 font-admin-display text-xl text-admin-text">
               Convidados neste convite ({invitation.guests.length})
             </h3>
             <ul className="grid gap-2.5">
               {invitation.guests.map((guest) => (
                 <li
                   key={guest.id}
-                  className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-admin-line bg-admin-surface p-3.5"
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-admin-border bg-admin-surface p-3.5"
                 >
                   <div className="grid gap-1">
-                    <strong className="text-sm text-admin-ink">
+                    <strong className="text-sm text-admin-text">
                       {guest.fullName}
                     </strong>
                     <InvitationStatus state={guest.rsvpState} />
                   </div>
-                  <span className="rounded-full bg-admin-canvas px-2.5 py-1 text-xs text-admin-muted">
+                  <span className="rounded-full bg-admin-canvas px-2.5 py-1 text-xs text-admin-text-secondary">
                     {guest.guestType === "ADULT" ? "Adulto" : "Criança"}
                   </span>
                 </li>
@@ -169,17 +171,17 @@ export function InvitationDetailDialog({
           <Button
             type="button"
             onClick={onManage}
-            className="w-full bg-admin-terracotta text-white hover:bg-admin-terracotta-deep"
+            className="w-full bg-admin-accent text-admin-on-accent hover:bg-admin-accent-hover"
           >
             Gerenciar confirmações
           </Button>
-          <div className="flex flex-wrap justify-between gap-3 border-t border-admin-line pt-4">
+          <div className="flex flex-wrap justify-between gap-3 border-t border-admin-border pt-4">
             <Button
               type="button"
               variant="outline"
               onClick={onDelete}
               disabled={inactive}
-              className="border-admin-status-declined text-admin-status-declined"
+              className="border-admin-danger text-admin-danger"
             >
               <Trash2 aria-hidden="true" className="size-4" />
               Excluir convite

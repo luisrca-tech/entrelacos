@@ -50,7 +50,7 @@ export function InvitationDeleteDialog({
         </AlertDialogHeader>
         <label
           htmlFor="invitation-delete-name"
-          className="grid gap-2 text-sm font-semibold text-admin-graphite"
+          className="grid gap-2 text-sm font-semibold text-admin-text"
         >
           Identificação exata do convite
           <Input
@@ -58,7 +58,7 @@ export function InvitationDeleteDialog({
             autoComplete="off"
             value={confirmationName}
             onChange={(event) => setConfirmationName(event.target.value)}
-            className="border-admin-line bg-admin-surface"
+            className="border-admin-border bg-admin-surface"
           />
         </label>
         <AlertDialogFooter>

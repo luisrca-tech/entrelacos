@@ -242,7 +242,7 @@ export function SiteHomeView({
   return (
     <div className="grid gap-5" data-area="home">
       <section
-        className="grid overflow-hidden rounded-2xl border border-admin-line bg-admin-surface sm:grid-cols-[3fr_2fr]"
+        className="grid overflow-hidden rounded-2xl border border-admin-border bg-admin-surface sm:grid-cols-[3fr_2fr]"
         aria-label="Seu casamento"
       >
         <div className="grid content-center gap-3 p-5 sm:p-8">
@@ -252,7 +252,7 @@ export function SiteHomeView({
           </h2>
           <div className="flex flex-wrap items-center gap-2.5 text-[15px]">
             <CalendarDays
-              className="size-4 text-admin-terracotta-deep"
+              className="size-4 text-admin-accent-hover"
               aria-hidden="true"
             />
             <time dateTime={site.eventDate}>
@@ -264,7 +264,7 @@ export function SiteHomeView({
               </span>
             </time>
             {days !== null && days >= 0 && (
-              <Badge className="bg-admin-terracotta-wash text-admin-terracotta-ink">
+              <Badge className="bg-admin-accent-subtle text-admin-accent-hover">
                 {days === 0
                   ? "É hoje"
                   : days === 1
@@ -274,17 +274,17 @@ export function SiteHomeView({
             )}
           </div>
         </div>
-        <div className="grid min-w-0 content-center gap-3 border-t border-admin-line bg-admin-beige p-5 sm:border-t-0 sm:border-l sm:p-7">
+        <div className="grid min-w-0 content-center gap-3 border-t border-admin-border bg-admin-subtle p-5 sm:border-t-0 sm:border-l sm:p-7">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="m-0 text-xs font-bold uppercase tracking-wider text-admin-muted">
+            <p className="m-0 text-xs font-bold uppercase tracking-wider text-admin-text-secondary">
               Site do casal
             </p>
             <Badge
               variant="secondary"
               className={
                 site.publicationState === "PUBLISHED"
-                  ? "bg-admin-success-wash text-admin-success-ink"
-                  : "bg-admin-surface text-admin-muted"
+                  ? "bg-admin-success-subtle text-admin-success-text"
+                  : "bg-admin-surface text-admin-text-secondary"
               }
             >
               {site.publicationState === "PUBLISHED"
@@ -296,7 +296,7 @@ export function SiteHomeView({
           </div>
           {site.publicUrl ? (
             <>
-              <p className="m-0 flex min-w-0 items-center gap-2 rounded-lg border border-admin-line bg-admin-surface px-3 py-2 text-sm [overflow-wrap:anywhere]">
+              <p className="m-0 flex min-w-0 items-center gap-2 rounded-lg border border-admin-border bg-admin-surface px-3 py-2 text-sm [overflow-wrap:anywhere]">
                 <Link2 className="size-4 shrink-0" aria-hidden="true" />
                 {site.publicUrl}
               </p>
@@ -304,7 +304,7 @@ export function SiteHomeView({
                 <Button
                   type="button"
                   variant="outline"
-                  className="border-admin-line-strong bg-transparent"
+                  className="border-admin-border-strong bg-transparent"
                   onClick={() => void copySite()}
                 >
                   Copiar
@@ -313,20 +313,22 @@ export function SiteHomeView({
                   href={site.publicUrl}
                   target="_blank"
                   rel="noreferrer"
-                  className="text-sm font-semibold text-admin-terracotta-deep underline"
+                  className="text-sm font-semibold text-admin-accent-hover underline"
                 >
                   Abrir site
                 </a>
               </div>
             </>
           ) : (
-            <p className="m-0 text-sm text-admin-muted">Site não vinculado</p>
+            <p className="m-0 text-sm text-admin-text-secondary">
+              Site não vinculado
+            </p>
           )}
         </div>
       </section>
       {plan.next && (
         <section
-          className="flex flex-col items-start justify-between gap-5 rounded-2xl border border-admin-terracotta bg-admin-terracotta-wash p-5 sm:flex-row sm:items-center sm:p-7"
+          className="flex flex-col items-start justify-between gap-5 rounded-2xl border border-admin-accent bg-admin-accent-subtle p-5 sm:flex-row sm:items-center sm:p-7"
           aria-label="Próximo passo"
         >
           <div className="grid gap-2">
@@ -334,13 +336,13 @@ export function SiteHomeView({
             <h2 className="m-0 font-admin-display text-2xl font-normal sm:text-[28px]">
               {plan.next.title}
             </h2>
-            <p className="m-0 text-sm leading-relaxed text-admin-body">
+            <p className="m-0 text-sm leading-relaxed text-admin-text">
               {plan.next.description}
             </p>
           </div>
           <Button
             nativeButton={false}
-            className="w-full shrink-0 bg-admin-terracotta text-white hover:bg-admin-terracotta-deep sm:w-auto"
+            className="w-full shrink-0 bg-admin-accent text-admin-on-accent hover:bg-admin-accent-hover sm:w-auto"
             render={<Link to={plan.next.href} />}
           >
             {plan.next.label}
@@ -356,7 +358,7 @@ export function SiteHomeView({
           >
             Como o painel funciona
           </h2>
-          <p className="mt-1 mb-0 text-sm text-admin-muted">
+          <p className="mt-1 mb-0 text-sm text-admin-text-secondary">
             Cada área cuida de uma parte do casamento. Você pode voltar aqui
             quando precisar.
           </p>
@@ -389,13 +391,13 @@ export function SiteHomeView({
                       : "Abrir"
                   }
                 >
-                  <div className="flex flex-wrap items-center gap-2 text-xs text-admin-muted">
+                  <div className="flex flex-wrap items-center gap-2 text-xs text-admin-text-secondary">
                     <Badge
                       variant="secondary"
                       className={
                         current?.active
-                          ? "bg-admin-success-wash text-admin-success-ink"
-                          : "bg-admin-beige text-admin-muted"
+                          ? "bg-admin-success-subtle text-admin-success-text"
+                          : "bg-admin-subtle text-admin-text-secondary"
                       }
                     >
                       {label}
@@ -405,11 +407,11 @@ export function SiteHomeView({
                 </HomeAreaCard>
               );
             })}
-          <aside className="hidden rounded-2xl border border-dashed border-admin-line-strong bg-admin-beige p-6 md:block">
-            <p className="m-0 text-sm font-semibold text-admin-ink">
+          <aside className="hidden rounded-2xl border border-dashed border-admin-border-strong bg-admin-subtle p-6 md:block">
+            <p className="m-0 text-sm font-semibold text-admin-text">
               Como o painel e o site do casal se conectam
             </p>
-            <p className="mt-2 mb-0 text-xs leading-relaxed text-admin-muted">
+            <p className="mt-2 mb-0 text-xs leading-relaxed text-admin-text-secondary">
               Este painel é o espaço privado de organização. No site do casal,
               os convidados acessam os convites, confirmam presença, deixam
               mensagens e escolhem presentes.
@@ -417,7 +419,7 @@ export function SiteHomeView({
           </aside>
         </div>
         {failed && (
-          <div className="flex flex-wrap items-center gap-2 text-sm text-admin-muted">
+          <div className="flex flex-wrap items-center gap-2 text-sm text-admin-text-secondary">
             <span>Não foi possível atualizar o resumo do casamento.</span>
             <Button type="button" variant="ghost" size="sm" onClick={onRetry}>
               Tentar novamente
@@ -429,4 +431,4 @@ export function SiteHomeView({
   );
 }
 const adminHomeEyebrow =
-  "m-0 text-xs font-bold uppercase tracking-wider text-admin-terracotta-deep";
+  "m-0 text-xs font-bold uppercase tracking-wider text-admin-accent-hover";

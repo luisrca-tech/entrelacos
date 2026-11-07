@@ -67,9 +67,9 @@ export function InvitationFormDialog({
     (guest) => guest.guestType !== "CHILD",
   ).length;
   const children = (reviewGuests ?? []).length - adults;
-  const fieldLabel = "grid gap-2 text-sm font-semibold text-admin-graphite";
-  const fieldError = "text-xs text-admin-status-declined";
-  const inputClass = "min-h-11 border-admin-line bg-admin-surface";
+  const fieldLabel = "grid gap-2 text-sm font-semibold text-admin-text";
+  const fieldError = "text-xs text-admin-danger";
+  const inputClass = "min-h-11 border-admin-border bg-admin-surface";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -79,11 +79,11 @@ export function InvitationFormDialog({
           className="flex min-h-0 w-full flex-1 flex-col"
           noValidate
         >
-          <div className="shrink-0 border-b border-admin-line py-6 pr-14 pl-[30px] [@media(max-width:760px)]:pl-[18px]">
-            <DialogTitle className="font-admin-display text-3xl text-admin-graphite">
+          <div className="shrink-0 border-b border-admin-border py-6 pr-14 pl-[30px] [@media(max-width:760px)]:pl-[18px]">
+            <DialogTitle className="font-admin-display text-3xl text-admin-text">
               {invitation ? "Editar convite" : "Novo convite"}
             </DialogTitle>
-            <DialogDescription className="mt-2 leading-relaxed text-admin-muted">
+            <DialogDescription className="mt-2 leading-relaxed text-admin-text-secondary">
               Um convite pode ter uma ou mais pessoas. Cada convidado responde
               individualmente.
             </DialogDescription>
@@ -135,7 +135,7 @@ export function InvitationFormDialog({
                 />
                 <span
                   id="invitation-phone-help"
-                  className="text-xs font-normal leading-relaxed text-admin-muted"
+                  className="text-xs font-normal leading-relaxed text-admin-text-secondary"
                 >
                   Números brasileiros podem ser informados sem +55. Para outro
                   país, comece com + e o código internacional.
@@ -149,7 +149,7 @@ export function InvitationFormDialog({
               <label htmlFor="invitation-email" className={fieldLabel}>
                 <span>
                   E-mail de contato{" "}
-                  <span className="text-xs font-normal text-admin-muted">
+                  <span className="text-xs font-normal text-admin-text-secondary">
                     (opcional)
                   </span>
                 </span>
@@ -174,7 +174,7 @@ export function InvitationFormDialog({
                 {fields.map((field, index) => (
                   <li
                     key={field.fieldKey}
-                    className="grid gap-3 rounded-xl border border-admin-line bg-admin-canvas p-4"
+                    className="grid gap-3 rounded-xl border border-admin-border bg-admin-canvas p-4"
                   >
                     {field.id && (
                       <input
@@ -221,21 +221,21 @@ export function InvitationFormDialog({
                       <legend className="sr-only">
                         Faixa etária da pessoa {index + 1}
                       </legend>
-                      <label className="flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-lg border border-admin-line bg-admin-surface px-3 text-sm">
+                      <label className="flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-lg border border-admin-border bg-admin-surface px-3 text-sm">
                         <input
                           type="radio"
                           value="ADULT"
                           {...register(`guests.${index}.guestType`)}
-                          className="accent-admin-terracotta"
+                          className="accent-admin-accent"
                         />
                         Adulto
                       </label>
-                      <label className="flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-lg border border-admin-line bg-admin-surface px-3 text-sm">
+                      <label className="flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-lg border border-admin-border bg-admin-surface px-3 text-sm">
                         <input
                           type="radio"
                           value="CHILD"
                           {...register(`guests.${index}.guestType`)}
-                          className="accent-admin-terracotta"
+                          className="accent-admin-accent"
                         />
                         Criança
                       </label>
@@ -248,7 +248,7 @@ export function InvitationFormDialog({
                 variant="outline"
                 onClick={() => append({ fullName: "", guestType: "ADULT" })}
                 disabled={busy || inactive}
-                className="min-h-11 w-fit border-admin-line"
+                className="min-h-11 w-fit border-admin-border"
               >
                 <Plus aria-hidden="true" className="size-4" />
                 Adicionar pessoa
@@ -260,15 +260,15 @@ export function InvitationFormDialog({
               )}
             </NumberedSection>
             <NumberedSection number={3} title="Revisar">
-              <dl className="m-0 grid gap-2 rounded-xl border border-admin-line bg-admin-canvas p-4 text-sm">
+              <dl className="m-0 grid gap-2 rounded-xl border border-admin-border bg-admin-canvas p-4 text-sm">
                 <div className="flex flex-wrap justify-between gap-2">
-                  <dt className="text-admin-muted">Convite</dt>
+                  <dt className="text-admin-text-secondary">Convite</dt>
                   <dd className="m-0 min-w-0 break-words font-semibold">
                     {reviewName?.trim() || "Sem identificação"}
                   </dd>
                 </div>
                 <div className="flex flex-wrap justify-between gap-2">
-                  <dt className="text-admin-muted">Pessoas</dt>
+                  <dt className="text-admin-text-secondary">Pessoas</dt>
                   <dd className="m-0 font-semibold">
                     {adults + children}{" "}
                     {adults + children === 1 ? "pessoa" : "pessoas"} · {adults}{" "}
@@ -281,7 +281,7 @@ export function InvitationFormDialog({
           </div>
           <div
             data-slot="dialog-footer"
-            className="sticky bottom-0 flex w-full shrink-0 justify-end gap-2 border-t border-admin-line bg-admin-surface px-[30px] py-3 [@media(max-width:760px)]:px-[18px]"
+            className="sticky bottom-0 flex w-full shrink-0 justify-end gap-2 border-t border-admin-border bg-admin-surface px-[30px] py-3 [@media(max-width:760px)]:px-[18px]"
           >
             <Button
               type="button"
@@ -294,7 +294,7 @@ export function InvitationFormDialog({
             <Button
               type="submit"
               disabled={busy || inactive}
-              className="bg-admin-terracotta text-white hover:bg-admin-terracotta-deep"
+              className="bg-admin-accent text-admin-on-accent hover:bg-admin-accent-hover"
             >
               {busy ? "Salvando…" : "Salvar convite"}
             </Button>

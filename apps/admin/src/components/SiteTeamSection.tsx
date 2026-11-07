@@ -470,7 +470,7 @@ function SiteTeamRuntime({
   return (
     <div className="grid min-w-0 gap-5">
       {authorized && link && (
-        <section className="grid min-w-0 gap-3 rounded-xl border border-admin-line bg-admin-surface p-5">
+        <section className="grid min-w-0 gap-3 rounded-xl border border-admin-border bg-admin-surface p-5">
           <label htmlFor="team-invite-link" className="text-sm font-semibold">
             Link de convite do assessor
           </label>
@@ -480,7 +480,7 @@ function SiteTeamRuntime({
             readOnly
             onFocus={(event) => event.currentTarget.select()}
           />
-          <p className="m-0 text-sm text-admin-muted">
+          <p className="m-0 text-sm text-admin-text-secondary">
             Compartilhe somente com a pessoa convidada. O link vale por 24 horas
             e pode ser usado uma vez.
           </p>

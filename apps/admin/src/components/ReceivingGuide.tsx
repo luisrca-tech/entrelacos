@@ -9,10 +9,10 @@ import { adminStyles } from "../lib/adminStyles";
 import { formatCents } from "./financialFlow";
 
 const linkClassName =
-  "font-semibold text-admin-terracotta-deep underline underline-offset-4";
+  "font-semibold text-admin-accent-hover underline underline-offset-4";
 const panelClassName =
-  "grid gap-4 rounded-xl border border-admin-line bg-admin-surface p-6 sm:p-8";
-const titleClassName = "m-0 font-admin-display text-2xl text-admin-graphite";
+  "grid gap-4 rounded-xl border border-admin-border bg-admin-surface p-6 sm:p-8";
+const titleClassName = "m-0 font-admin-display text-2xl text-admin-text";
 
 function OfficialLink({
   href,
@@ -49,7 +49,7 @@ export function ReceivingGuide({
       : null;
 
   return (
-    <article className="grid max-w-5xl gap-6 leading-relaxed text-admin-muted">
+    <article className="grid max-w-5xl gap-6 leading-relaxed text-admin-text-secondary">
       <Link
         className={`${linkClassName} w-fit`}
         to="/sites/$siteId/receiving"
@@ -102,7 +102,7 @@ export function ReceivingGuide({
           </p>
         )}
         <details>
-          <summary className="cursor-pointer font-semibold text-admin-graphite">
+          <summary className="cursor-pointer font-semibold text-admin-text">
             Aplicativos e segurança do acesso
           </summary>
           <div className="mt-3 grid gap-3">
@@ -141,9 +141,9 @@ export function ReceivingGuide({
         <h2 id="receiving-guide-steps" className={titleClassName}>
           Do cadastro ao saque
         </h2>
-        <ol className="m-0 grid list-decimal gap-6 pl-6 marker:font-bold marker:text-admin-terracotta-deep">
+        <ol className="m-0 grid list-decimal gap-6 pl-6 marker:font-bold marker:text-admin-accent-hover">
           <li className="pl-1">
-            <h3 className="m-0 mb-2 text-base font-bold text-admin-graphite">
+            <h3 className="m-0 mb-2 text-base font-bold text-admin-text">
               Confirme o recebedor no Entrelacos
             </h3>
             <p className="m-0">
@@ -163,7 +163,7 @@ export function ReceivingGuide({
             </p>
           </li>
           <li className="pl-1">
-            <h3 className="m-0 mb-2 text-base font-bold text-admin-graphite">
+            <h3 className="m-0 mb-2 text-base font-bold text-admin-text">
               Ative o acesso ao Asaas
             </h3>
             <p className="m-0">
@@ -184,7 +184,7 @@ export function ReceivingGuide({
             </p>
           </li>
           <li className="pl-1">
-            <h3 className="m-0 mb-2 text-base font-bold text-admin-graphite">
+            <h3 className="m-0 mb-2 text-base font-bold text-admin-text">
               Conclua as verificações da conta
             </h3>
             <p className="m-0">
@@ -207,7 +207,7 @@ export function ReceivingGuide({
             </p>
           </li>
           <li className="pl-1">
-            <h3 className="m-0 mb-2 text-base font-bold text-admin-graphite">
+            <h3 className="m-0 mb-2 text-base font-bold text-admin-text">
               Configure o destino do saque no Entrelacos
             </h3>
             <p className="m-0">
@@ -234,7 +234,7 @@ export function ReceivingGuide({
             </p>
           </li>
           <li className="pl-1">
-            <h3 className="m-0 mb-2 text-base font-bold text-admin-graphite">
+            <h3 className="m-0 mb-2 text-base font-bold text-admin-text">
               Revise o valor e solicite o saque
             </h3>
             <p className="m-0">

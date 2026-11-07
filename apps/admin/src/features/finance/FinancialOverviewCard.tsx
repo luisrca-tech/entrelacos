@@ -52,12 +52,12 @@ export function currentOverview(
 }
 
 export const segmentColors: Record<FinancialFlowSegmentId, string> = {
-  awaiting: "bg-admin-awaiting",
-  fees: "bg-admin-line-strong",
-  withdrawn: "bg-admin-graphite",
-  pending: "bg-admin-status-pending",
-  refunded: "bg-admin-status-declined",
-  available: "bg-admin-status-confirmed",
+  awaiting: "bg-admin-pending/50",
+  fees: "bg-admin-border-strong",
+  withdrawn: "bg-admin-text",
+  pending: "bg-admin-pending",
+  refunded: "bg-admin-danger",
+  available: "bg-admin-success",
 };
 
 export function OverviewNotice({
@@ -77,7 +77,7 @@ export function OverviewNotice({
       <h2 id="financial-overview-title" className={readyCardTitle}>
         {title}
       </h2>
-      <div role={role} className="grid gap-3 text-[15px] text-admin-body">
+      <div role={role} className="grid gap-3 text-[15px] text-admin-text">
         {children}
       </div>
     </section>
@@ -100,18 +100,18 @@ export function BalanceFigure({
       : "text-[clamp(2.25rem,5vw,3rem)]";
   return known ? (
     <p
-      className={`m-0 font-admin-display leading-none font-normal text-admin-success-ink ${figure}`}
+      className={`m-0 font-admin-display leading-none font-normal text-admin-success-text ${figure}`}
     >
       {formatCents(overview.availableCents as number)}
     </p>
   ) : (
     <div className="grid gap-1.5">
       <p
-        className={`m-0 font-admin-display text-[clamp(1.75rem,4vw,2.25rem)] leading-none font-normal text-admin-muted`}
+        className={`m-0 font-admin-display text-[clamp(1.75rem,4vw,2.25rem)] leading-none font-normal text-admin-text-secondary`}
       >
         Saldo indisponível
       </p>
-      <p role="status" className="m-0 text-sm text-admin-muted">
+      <p role="status" className="m-0 text-sm text-admin-text-secondary">
         {overview.availability === "STALE"
           ? "Saldo desatualizado. Aguarde uma nova confirmação para solicitar uma transferência."
           : "Ainda não confirmado pelo Asaas."}
@@ -182,7 +182,7 @@ export function FinancialOverviewCard({
   return (
     <div className="grid min-w-0 gap-5">
       {showSandboxNotice(current.mode) && (
-        <p className="m-0 text-sm text-admin-muted">
+        <p className="m-0 text-sm text-admin-text-secondary">
           Sandbox — valores de teste, sem movimentação de dinheiro real.
         </p>
       )}
@@ -196,14 +196,14 @@ export function FinancialOverviewCard({
           </h2>
           <BalanceFigure overview={current} />
           {current.awaitingReleaseCents > 0 && (
-            <p className="m-0 text-sm leading-[1.55] text-admin-body">
+            <p className="m-0 text-sm leading-[1.55] text-admin-text">
               Mais <strong>{formatCents(current.awaitingReleaseCents)}</strong>{" "}
               aguardando liberação do Asaas. Pagamentos com cartão ficam
               disponíveis conforme a liberação de cada parcela.
             </p>
           )}
           {(current.platformAdjustmentOwedCents ?? 0) > 0 && (
-            <p className="m-0 text-sm leading-[1.55] text-admin-body">
+            <p className="m-0 text-sm leading-[1.55] text-admin-text">
               O EntreLaços vai creditar{" "}
               <strong>
                 {formatCents(current.platformAdjustmentOwedCents ?? 0)}
@@ -247,10 +247,10 @@ export function FinancialOverviewCard({
           <h2 id="financial-received-title" className={readyLabel}>
             Presentes recebidos
           </h2>
-          <p className="m-0 font-admin-display text-[2.5rem] leading-none font-normal text-admin-ink">
+          <p className="m-0 font-admin-display text-[2.5rem] leading-none font-normal text-admin-text">
             {formatCents(flow.releasedGrossCents)}
           </p>
-          <p className="m-0 text-sm leading-[1.5] text-admin-body">
+          <p className="m-0 text-sm leading-[1.5] text-admin-text">
             pagos pelos convidados em presentes já liberados.
             {current.awaitingReleaseCents > 0 && (
               <>
@@ -285,14 +285,14 @@ export function FinancialFlowCard({
         <h2 id="financial-flow-title" className={readyCardTitle}>
           Para onde foi o dinheiro
         </h2>
-        <p className="m-0 text-[13px] text-admin-muted">
+        <p className="m-0 text-[13px] text-admin-text-secondary">
           Total acompanhado: {formatCents(flow.totalCents)}
         </p>
       </div>
       <div
         role="img"
         aria-label={`Distribuição: ${flow.segments.map(({ label, cents }) => `${label.toLowerCase()} ${formatCents(cents)}`).join("; ")}`}
-        className="flex h-[18px] w-full gap-0.5 overflow-hidden rounded-full bg-admin-beige"
+        className="flex h-[18px] w-full gap-0.5 overflow-hidden rounded-full bg-admin-subtle"
       >
         {visible.map((segment) => (
           <span
@@ -310,9 +310,11 @@ export function FinancialFlowCard({
               className={`mt-[3px] size-3 shrink-0 rounded-[3px] ${segmentColors[segment.id]}`}
             />
             <div className="grid min-w-0 gap-0.5">
-              <dt className="text-[13px] text-admin-muted">{segment.label}</dt>
+              <dt className="text-[13px] text-admin-text-secondary">
+                {segment.label}
+              </dt>
               <dd
-                className={`m-0 text-[15px] font-bold ${segment.id === "available" ? "text-admin-success-ink" : "text-admin-ink"}`}
+                className={`m-0 text-[15px] font-bold ${segment.id === "available" ? "text-admin-success-text" : "text-admin-text"}`}
               >
                 {formatCents(segment.cents)}
               </dd>
@@ -323,13 +325,13 @@ export function FinancialFlowCard({
           <div className="flex min-w-0 items-start gap-2.5">
             <span
               aria-hidden="true"
-              className="mt-[3px] size-3 shrink-0 rounded-[3px] border border-dashed border-admin-line-strong"
+              className="mt-[3px] size-3 shrink-0 rounded-[3px] border border-dashed border-admin-border-strong"
             />
             <div className="grid min-w-0 gap-0.5">
-              <dt className="text-[13px] text-admin-muted">
+              <dt className="text-[13px] text-admin-text-secondary">
                 Disponível para saque
               </dt>
-              <dd className="m-0 text-[15px] font-bold text-admin-muted">
+              <dd className="m-0 text-[15px] font-bold text-admin-text-secondary">
                 Indisponível
               </dd>
             </div>

@@ -234,7 +234,7 @@ function AssignedSites({ actor }: { actor: MeResponse }) {
   return (
     <section className="grid gap-5">
       <h1 className={displayHeading}>Seus casamentos</h1>
-      <p className="m-0 text-admin-muted">
+      <p className="m-0 text-admin-text-secondary">
         Escolha o casamento que deseja acompanhar.
       </p>
       <ul className="m-0 grid list-none gap-3 p-0">
@@ -243,12 +243,12 @@ function AssignedSites({ actor }: { actor: MeResponse }) {
           .map((entry) => (
             <li key={entry.siteId}>
               <Link
-                className="flex min-h-14 items-center justify-between gap-4 rounded-xl border border-admin-line bg-admin-surface p-4 text-admin-graphite no-underline"
+                className="flex min-h-14 items-center justify-between gap-4 rounded-xl border border-admin-border bg-admin-surface p-4 text-admin-text no-underline"
                 to="/sites/$siteId/home"
                 params={{ siteId: entry.siteId }}
               >
                 <AssignedSiteName siteId={entry.siteId} />
-                <span className="text-sm text-admin-muted">
+                <span className="text-sm text-admin-text-secondary">
                   {entry.membershipRole === "SITE_ASSISTANT"
                     ? "Assessor"
                     : "Administrador"}

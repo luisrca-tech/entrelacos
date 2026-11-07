@@ -150,12 +150,12 @@ export function MessagesSection({ siteId, lifecycle, publicUrl }: Props) {
         className={`${adminStyles.surface} flex flex-wrap items-center justify-between gap-4 p-5`}
       >
         <div className="flex min-w-0 flex-[1_1_16rem] items-center gap-3">
-          <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-admin-success-wash text-admin-success-ink">
+          <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-admin-success-subtle text-admin-success-text">
             <MessageCircle aria-hidden="true" className="size-5" />
           </span>
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <h2 className="m-0 font-admin-display text-xl text-admin-graphite">
+              <h2 className="m-0 font-admin-display text-xl text-admin-text">
                 Mural no site
               </h2>
               {muralLoaded && (
@@ -163,15 +163,15 @@ export function MessagesSection({ siteId, lifecycle, publicUrl }: Props) {
                   variant="secondary"
                   className={
                     muralEnabled
-                      ? "bg-admin-success-wash text-admin-success-ink"
-                      : "bg-admin-beige text-admin-muted"
+                      ? "bg-admin-success-subtle text-admin-success-text"
+                      : "bg-admin-subtle text-admin-text-secondary"
                   }
                 >
                   {muralEnabled ? "Recebendo mensagens" : "Envios pausados"}
                 </Badge>
               )}
             </div>
-            <p className="mb-0 mt-1 text-sm text-admin-muted">
+            <p className="mb-0 mt-1 text-sm text-admin-text-secondary">
               {loading
                 ? "Carregando mural…"
                 : !muralLoaded
@@ -183,7 +183,7 @@ export function MessagesSection({ siteId, lifecycle, publicUrl }: Props) {
           </div>
         </div>
         <label
-          className="flex shrink-0 items-center gap-2.5 rounded-lg border border-admin-line bg-admin-canvas px-3 py-2 text-sm"
+          className="flex shrink-0 items-center gap-2.5 rounded-lg border border-admin-border bg-admin-canvas px-3 py-2 text-sm"
           htmlFor="mural-enabled"
         >
           <Checkbox
@@ -216,13 +216,13 @@ export function MessagesSection({ siteId, lifecycle, publicUrl }: Props) {
       <div className="grid gap-4">
         <div className="grid gap-3 sm:flex sm:items-center sm:justify-between">
           <div className="flex shrink-0 flex-wrap items-center gap-2.5">
-            <h2 className="m-0 font-admin-display text-xl text-admin-graphite">
+            <h2 className="m-0 font-admin-display text-xl text-admin-text">
               Mensagens recebidas
             </h2>
             {total !== null && total > 0 && (
               <Badge
                 variant="secondary"
-                className="bg-admin-beige font-bold text-admin-body"
+                className="bg-admin-subtle font-bold text-admin-text"
               >
                 {total} {total === 1 ? "mensagem" : "mensagens"}
               </Badge>
@@ -234,7 +234,7 @@ export function MessagesSection({ siteId, lifecycle, publicUrl }: Props) {
           >
             <Search
               aria-hidden="true"
-              className="absolute left-3 top-3.5 size-4 text-admin-muted"
+              className="absolute left-3 top-3.5 size-4 text-admin-text-secondary"
             />
             <span className="sr-only">Buscar pelo nome de quem publicou</span>
             <Input
@@ -252,14 +252,14 @@ export function MessagesSection({ siteId, lifecycle, publicUrl }: Props) {
                 setError("");
               }}
               placeholder="Buscar pelo nome de quem publicou"
-              className="min-h-11 border-admin-line bg-admin-surface pl-10"
+              className="min-h-11 border-admin-border bg-admin-surface pl-10"
             />
           </label>
         </div>
 
         {error && (
-          <div className="grid gap-3 border-b border-admin-line p-5">
-            <p className="m-0 text-sm text-admin-muted" role="alert">
+          <div className="grid gap-3 border-b border-admin-border p-5">
+            <p className="m-0 text-sm text-admin-text-secondary" role="alert">
               {error}
             </p>
             <Button
@@ -274,13 +274,16 @@ export function MessagesSection({ siteId, lifecycle, publicUrl }: Props) {
           </div>
         )}
         {loading ? (
-          <p className="m-0 p-5 leading-[1.6] text-admin-muted" role="status">
+          <p
+            className="m-0 p-5 leading-[1.6] text-admin-text-secondary"
+            role="status"
+          >
             Carregando mensagens…
           </p>
         ) : messages.length === 0 && !error ? (
           searchInput.trim() ? (
             <p
-              className={`${adminStyles.surface} m-0 px-5 py-12 text-center text-admin-muted`}
+              className={`${adminStyles.surface} m-0 px-5 py-12 text-center text-admin-text-secondary`}
             >
               Nenhuma mensagem encontrada para esse nome.
             </p>
@@ -289,21 +292,21 @@ export function MessagesSection({ siteId, lifecycle, publicUrl }: Props) {
               className={`${adminStyles.surface} grid max-w-full items-center gap-8 p-6 sm:p-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,320px)]`}
             >
               <div className="grid gap-2">
-                <span className="mb-2 grid size-11 place-items-center rounded-xl bg-admin-terracotta-wash text-admin-terracotta-deep">
+                <span className="mb-2 grid size-11 place-items-center rounded-xl bg-admin-accent-subtle text-admin-accent-hover">
                   <MessageCircle aria-hidden="true" className="size-5" />
                 </span>
-                <h3 className="text-admin-graphite">Nenhuma mensagem ainda</h3>
-                <p className="m-0 text-sm font-semibold text-admin-ink">
+                <h3 className="text-admin-text">Nenhuma mensagem ainda</h3>
+                <p className="m-0 text-sm font-semibold text-admin-text">
                   As mensagens dos visitantes aparecerão aqui.
                 </p>
-                <p className="m-0 max-w-xl text-sm leading-relaxed text-admin-muted">
+                <p className="m-0 max-w-xl text-sm leading-relaxed text-admin-text-secondary">
                   Quando alguém deixar um recado no mural do site, ele aparece
                   nesta página. Vocês podem ler tudo e remover o que não
                   quiserem manter publicado.
                 </p>
                 {publicUrl && (
                   <a
-                    className="mt-1 w-fit text-sm font-semibold text-admin-terracotta-deep no-underline hover:underline"
+                    className="mt-1 w-fit text-sm font-semibold text-admin-accent-hover no-underline hover:underline"
                     href={publicUrl}
                     target="_blank"
                     rel="noopener noreferrer"
@@ -330,15 +333,15 @@ export function MessagesSection({ siteId, lifecycle, publicUrl }: Props) {
                 <div className="flex min-w-0 items-start gap-3">
                   <span
                     aria-hidden="true"
-                    className="grid size-9 shrink-0 place-items-center rounded-full bg-admin-terracotta-wash text-xs font-bold text-admin-terracotta-deep"
+                    className="grid size-9 shrink-0 place-items-center rounded-full bg-admin-accent-subtle text-xs font-bold text-admin-accent-hover"
                   >
                     {getInitials(message.authorName)}
                   </span>
                   <div className="min-w-0 flex-1">
-                    <h3 className="m-0 break-words font-admin-display text-xl! text-admin-ink">
+                    <h3 className="m-0 break-words font-admin-display text-xl! text-admin-text">
                       {message.authorName}
                     </h3>
-                    <p className="m-0 mt-1 text-xs text-admin-muted">
+                    <p className="m-0 mt-1 text-xs text-admin-text-secondary">
                       Publicada em{" "}
                       <time dateTime={message.createdAt}>
                         {new Intl.DateTimeFormat("pt-BR", {
@@ -362,7 +365,7 @@ export function MessagesSection({ siteId, lifecycle, publicUrl }: Props) {
                     onSelect={() => setRemoveTarget(message)}
                   />
                 </div>
-                <blockquote className="m-0 mt-3 break-words whitespace-pre-wrap text-sm leading-relaxed text-admin-body">
+                <blockquote className="m-0 mt-3 break-words whitespace-pre-wrap text-sm leading-relaxed text-admin-text">
                   {message.text}
                 </blockquote>
               </article>
@@ -385,7 +388,7 @@ export function MessagesSection({ siteId, lifecycle, publicUrl }: Props) {
             </AlertDialogDescription>
           </AlertDialogHeader>
           {removeTarget && (
-            <blockquote className="m-0 line-clamp-3 break-words rounded-lg bg-admin-beige p-3 text-sm text-admin-body">
+            <blockquote className="m-0 line-clamp-3 break-words rounded-lg bg-admin-subtle p-3 text-sm text-admin-text">
               {removeTarget.text}
             </blockquote>
           )}
@@ -437,38 +440,38 @@ function MuralPreview() {
       className="m-0 grid min-w-0 gap-2"
       aria-label="Como aparece no site"
     >
-      <figcaption className="text-[11px] font-bold uppercase tracking-[0.13em] text-admin-muted">
+      <figcaption className="text-[11px] font-bold uppercase tracking-[0.13em] text-admin-text-secondary">
         Como aparece no site
       </figcaption>
-      <div className="grid gap-3 rounded-xl border border-dashed border-admin-line-strong bg-admin-canvas p-4">
+      <div className="grid gap-3 rounded-xl border border-dashed border-admin-border-strong bg-admin-canvas p-4">
         <div>
-          <p className="m-0 text-[11px] font-bold uppercase tracking-[0.13em] text-admin-terracotta-deep">
+          <p className="m-0 text-[11px] font-bold uppercase tracking-[0.13em] text-admin-accent-hover">
             Recados
           </p>
-          <p className="m-0 font-admin-display text-xl text-admin-ink">
+          <p className="m-0 font-admin-display text-xl text-admin-text">
             Mural dos convidados
           </p>
         </div>
         <div className="flex flex-wrap gap-2 text-xs font-semibold">
-          <span className="rounded-full bg-admin-ink px-3 py-1.5 text-white">
+          <span className="rounded-full bg-admin-accent px-3 py-1.5 text-admin-on-accent">
             Deixar uma mensagem
           </span>
-          <span className="rounded-full border border-admin-line-strong px-3 py-1.5 text-admin-graphite">
+          <span className="rounded-full border border-admin-border-strong px-3 py-1.5 text-admin-text">
             Atualizar
           </span>
         </div>
-        <p className="m-0 rounded-lg bg-admin-surface px-3 py-2.5 text-xs text-admin-muted">
+        <p className="m-0 rounded-lg bg-admin-surface px-3 py-2.5 text-xs text-admin-text-secondary">
           Ainda não há mensagens publicadas.
         </p>
         <div className="grid grid-cols-2 gap-2" aria-hidden="true">
           {[0, 1].map((card) => (
             <span
               key={card}
-              className="grid gap-1.5 rounded-lg border border-dashed border-admin-line p-3"
+              className="grid gap-1.5 rounded-lg border border-dashed border-admin-border p-3"
             >
-              <span className="h-1.5 w-4/5 rounded-full bg-admin-beige" />
-              <span className="h-1.5 w-3/5 rounded-full bg-admin-beige" />
-              <span className="h-1.5 w-2/5 rounded-full bg-admin-beige" />
+              <span className="h-1.5 w-4/5 rounded-full bg-admin-subtle" />
+              <span className="h-1.5 w-3/5 rounded-full bg-admin-subtle" />
+              <span className="h-1.5 w-2/5 rounded-full bg-admin-subtle" />
             </span>
           ))}
         </div>

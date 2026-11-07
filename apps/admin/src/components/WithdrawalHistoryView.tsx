@@ -67,28 +67,28 @@ export function WithdrawalStateBadge({
 
 function WithdrawalRecord({ withdrawal }: { withdrawal: WithdrawalIntent }) {
   return (
-    <li className="border-t border-admin-beige px-6 py-4 [@media(max-width:760px)]:px-5">
+    <li className="border-t border-admin-subtle px-6 py-4 [@media(max-width:760px)]:px-5">
       <details className="group">
         <summary className="flex min-w-0 cursor-pointer list-none flex-wrap items-center gap-x-[18px] gap-y-2 [&::-webkit-details-marker]:hidden">
           <span className="grid min-w-0 flex-[1_1_12rem] gap-0.5">
-            <strong className="text-[15px] text-admin-ink">
+            <strong className="text-[15px] text-admin-text">
               {netAmount(withdrawal)}
             </strong>
-            <span className="text-[13px] text-admin-muted">
+            <span className="text-[13px] text-admin-text-secondary">
               <time dateTime={withdrawal.createdAt}>
                 {formatDate(withdrawal.createdAt)}
               </time>
             </span>
           </span>
           <WithdrawalStateBadge state={withdrawal.state} />
-          <span className="text-sm font-semibold text-admin-terracotta-deep underline underline-offset-4">
+          <span className="text-sm font-semibold text-admin-accent-hover underline underline-offset-4">
             <span className="group-open:hidden">Detalhes</span>
             <span className="hidden group-open:inline">Ocultar detalhes</span>
           </span>
         </summary>
         <div className="mt-3 grid gap-3 rounded-xl bg-admin-canvas px-4 py-3.5 text-sm">
           {showSandboxNotice(withdrawal.mode) && (
-            <p className="m-0 text-admin-muted">
+            <p className="m-0 text-admin-text-secondary">
               Sandbox — valores de teste, sem movimentação de dinheiro real.
             </p>
           )}
@@ -101,22 +101,22 @@ function WithdrawalRecord({ withdrawal }: { withdrawal: WithdrawalIntent }) {
               ["Status", stateLabels[withdrawal.state]],
             ].map(([label, value]) => (
               <div key={label} className="flex justify-between gap-3">
-                <dt className="text-admin-body">{label}</dt>
-                <dd className="m-0 text-right font-semibold text-admin-ink">
+                <dt className="text-admin-text">{label}</dt>
+                <dd className="m-0 text-right font-semibold text-admin-text">
                   {value}
                 </dd>
               </div>
             ))}
           </dl>
           {withdrawal.settlement && withdrawal.settlement.releasedCents > 0 && (
-            <p className="m-0 text-admin-muted">
+            <p className="m-0 text-admin-text-secondary">
               Reserva liberada:{" "}
               {currency.format(withdrawal.settlement.releasedCents / 100)}. O
               limite aprovado foi{" "}
               {currency.format(withdrawal.amountCents / 100)}.
             </p>
           )}
-          <p className="m-0 text-admin-muted">
+          <p className="m-0 text-admin-text-secondary">
             Solicitado em{" "}
             <time dateTime={withdrawal.createdAt}>
               {formatDate(withdrawal.createdAt)}
@@ -128,13 +128,13 @@ function WithdrawalRecord({ withdrawal }: { withdrawal: WithdrawalIntent }) {
             .
           </p>
           {withdrawal.state === "COMPLETED" && (
-            <p className="m-0 text-admin-muted">
+            <p className="m-0 text-admin-text-secondary">
               A conclusão informada pelo provedor não confirma o crédito na
               conta bancária.
             </p>
           )}
           {withdrawal.state === "UNKNOWN" && (
-            <p className="m-0 text-admin-muted">
+            <p className="m-0 text-admin-text-secondary">
               O resultado segue em verificação e ainda não pode ser confirmado.
             </p>
           )}
@@ -173,7 +173,7 @@ function HistoryMessage({
   invalid: boolean;
 }) {
   const className =
-    "m-0 border-t border-admin-beige px-6 py-4 text-sm text-admin-muted";
+    "m-0 border-t border-admin-subtle px-6 py-4 text-sm text-admin-text-secondary";
   if (invalid || result.status === "error")
     return (
       <p role="alert" className={className}>
@@ -242,7 +242,7 @@ export function WithdrawalHistoryView({
       {!authorized ? (
         <p
           role="status"
-          className="m-0 border-t border-admin-beige px-6 py-4 text-sm text-admin-muted"
+          className="m-0 border-t border-admin-subtle px-6 py-4 text-sm text-admin-text-secondary"
         >
           Apenas os administradores autorizados deste casamento podem consultar
           valores e movimentações.
@@ -263,7 +263,7 @@ export function WithdrawalHistoryView({
         onLoadMore && (
           <div className="grid justify-items-start gap-2 px-6 pb-3">
             {pageError && (
-              <p role="alert" className="m-0 text-sm text-admin-danger-ink">
+              <p role="alert" className="m-0 text-sm text-admin-danger-text">
                 Não foi possível carregar mais saques.
               </p>
             )}
@@ -314,15 +314,15 @@ export function RecentWithdrawals({
           {recent.map((withdrawal) => (
             <li
               key={withdrawal.id}
-              className="flex min-w-0 flex-wrap items-center gap-x-3.5 gap-y-1 border-t border-admin-beige px-6 py-3.5"
+              className="flex min-w-0 flex-wrap items-center gap-x-3.5 gap-y-1 border-t border-admin-subtle px-6 py-3.5"
             >
               <span className="grid min-w-0 flex-1 gap-0.5">
-                <strong className="text-[15px] text-admin-ink">
+                <strong className="text-[15px] text-admin-text">
                   {netAmount(withdrawal)}
                 </strong>
                 <time
                   dateTime={withdrawal.createdAt}
-                  className="text-[13px] text-admin-muted"
+                  className="text-[13px] text-admin-text-secondary"
                 >
                   {formatDate(withdrawal.createdAt)}
                 </time>
@@ -336,7 +336,7 @@ export function RecentWithdrawals({
       ) : (
         <p
           role="status"
-          className="m-0 border-t border-admin-beige px-6 py-4 text-sm text-admin-muted"
+          className="m-0 border-t border-admin-subtle px-6 py-4 text-sm text-admin-text-secondary"
         >
           Acesso financeiro restrito.
         </p>

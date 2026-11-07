@@ -20,6 +20,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { adminStyles } from "../lib/adminStyles";
 import { AdminDialogContent } from "./AdminDialog";
 import { financialFlow, formatCents, purchaseNetCents } from "./financialFlow";
 import {
@@ -65,11 +66,11 @@ const sampleLabels: Record<
 };
 const sampleDots: Record<GiftPurchaseHistoryPayment["recordedState"], string> =
   {
-    UNKNOWN: "bg-admin-line-strong",
-    PENDING: "bg-admin-line-strong",
-    CONFIRMED: "bg-admin-awaiting",
-    RECEIVED: "bg-admin-status-confirmed",
-    RESTRICTED: "bg-admin-status-declined",
+    UNKNOWN: "bg-admin-border-strong",
+    PENDING: "bg-admin-border-strong",
+    CONFIRMED: "bg-admin-pending/50",
+    RECEIVED: "bg-admin-success",
+    RESTRICTED: "bg-admin-danger",
   };
 function amount(value: number | null) {
   return value === null ? "Não registrado" : formatCents(value);
@@ -195,13 +196,13 @@ function Totals({
           label: "Presentes com pagamento",
           value: `${count}${more ? "+" : ""}`,
           hint: null,
-          tone: "text-admin-ink",
+          tone: "text-admin-text",
         },
         {
           label: "Pago pelos convidados",
           value: flow ? formatCents(flow.releasedGrossCents) : pending,
           hint: flow ? "em presentes já liberados" : null,
-          tone: flow ? "text-admin-ink" : "text-xl text-admin-muted",
+          tone: flow ? "text-admin-text" : "text-xl text-admin-text-secondary",
         },
         {
           label: "Para vocês, depois das taxas",
@@ -211,21 +212,27 @@ function Totals({
               ? "inclui liberação e ajustes do EntreLaços pendentes"
               : "inclui o que aguarda liberação"
             : null,
-          tone: flow ? "text-admin-success-ink" : "text-xl text-admin-muted",
+          tone: flow
+            ? "text-admin-success-text"
+            : "text-xl text-admin-text-secondary",
         },
       ].map((item) => (
         <div
           key={item.label}
-          className="grid min-w-0 content-start gap-0.5 rounded-[14px] border border-admin-line bg-admin-surface px-[18px] py-4"
+          className="grid min-w-0 content-start gap-0.5 rounded-[14px] border border-admin-border bg-admin-surface px-[18px] py-4"
         >
-          <dt className="text-[13px] text-admin-muted">{item.label}</dt>
+          <dt className="text-[13px] text-admin-text-secondary">
+            {item.label}
+          </dt>
           <dd
             className={`m-0 font-admin-display text-[28px] leading-[1.2] ${item.tone}`}
           >
             {item.value}
           </dd>
           {item.hint && (
-            <dd className="m-0 text-xs text-admin-muted">{item.hint}</dd>
+            <dd className="m-0 text-xs text-admin-text-secondary">
+              {item.hint}
+            </dd>
           )}
         </div>
       ))}
@@ -267,11 +274,11 @@ export function GiftPaymentHistoryView(
       >
         <h2
           id="gift-payment-history-title"
-          className="m-0 text-[17px] font-bold text-admin-ink"
+          className="m-0 text-[17px] font-bold text-admin-text"
         >
           Acesso financeiro restrito
         </h2>
-        <p role="status" className="m-0 text-admin-body">
+        <p role="status" className="m-0 text-admin-text">
           Apenas administradores com sessão e acesso financeiro verificados
           podem consultar este histórico.
         </p>
@@ -298,7 +305,7 @@ export function GiftPaymentHistoryView(
           <span className="sr-only">Buscar presente</span>
           <Search
             aria-hidden="true"
-            className="pointer-events-none absolute top-1/2 left-3.5 size-[18px] -translate-y-1/2 text-admin-muted"
+            className="pointer-events-none absolute top-1/2 left-3.5 size-[18px] -translate-y-1/2 text-admin-text-secondary"
           />
           <input
             id={`${filterId}-search`}
@@ -309,7 +316,7 @@ export function GiftPaymentHistoryView(
             className={`${receivingField} min-h-11 pl-10`}
           />
         </label>
-        <fieldset className="m-0 flex min-w-0 gap-1 rounded-xl border border-admin-line bg-admin-surface p-1">
+        <fieldset className="m-0 flex min-w-0 gap-1 rounded-xl border border-admin-border bg-admin-surface p-1">
           <legend className="sr-only">Forma de pagamento</legend>
           {methods.map(([value, label]) => (
             <button
@@ -317,7 +324,7 @@ export function GiftPaymentHistoryView(
               type="button"
               aria-pressed={method === value}
               onClick={() => setMethod(value)}
-              className={`min-h-9 rounded-[9px] px-3.5 text-sm font-semibold transition-colors motion-reduce:transition-none ${method === value ? "bg-admin-graphite text-white" : "text-admin-muted hover:bg-admin-canvas hover:text-admin-graphite"}`}
+              className={`min-h-9 rounded-[9px] px-3.5 text-sm font-semibold transition-colors motion-reduce:transition-none ${method === value ? adminStyles.selected : "text-admin-text-secondary hover:bg-admin-canvas hover:text-admin-text"}`}
             >
               {label}
             </button>
@@ -336,39 +343,39 @@ export function GiftPaymentHistoryView(
         {purchases.length} de {state.purchases.length} presentes carregados
       </p>
       {state.status === "loading" && (
-        <p role="status" className="m-0 text-sm text-admin-muted">
+        <p role="status" className="m-0 text-sm text-admin-text-secondary">
           Consultando o histórico de presentes…
         </p>
       )}
       {(state.status === "local_limit" || limited) && (
-        <p role="status" className="m-0 text-sm text-admin-muted">
+        <p role="status" className="m-0 text-sm text-admin-text-secondary">
           Limite local de consultas atingido. O histórico retido permanece
           disponível.
         </p>
       )}
       {(state.status === "unavailable" || state.status === "conflict") && (
-        <p role="status" className="m-0 text-sm text-admin-muted">
+        <p role="status" className="m-0 text-sm text-admin-text-secondary">
           {state.status === "unavailable"
             ? "Histórico de presentes indisponível nesta consulta. O histórico anterior foi preservado."
             : "A consulta apresentou informações conflitantes. O histórico anterior foi preservado."}
         </p>
       )}
       {state.status === "local_code" && (
-        <p role="status" className="m-0 text-sm text-admin-muted">
+        <p role="status" className="m-0 text-sm text-admin-text-secondary">
           Esta identidade exige compatibilidade de consulta ainda indisponível.
         </p>
       )}
       <div className="grid min-w-0 items-start gap-5">
         <div className={`${readyCard} grid min-w-0 overflow-hidden`}>
           {state.status === "ready" && state.indexReadCount === 0 && (
-            <p className="m-0 px-5 py-6 text-sm text-admin-body">
+            <p className="m-0 px-5 py-6 text-sm text-admin-text">
               Nenhum presente com pagamento nesta consulta.
             </p>
           )}
           {purchases.length > 0 ? (
             <table className="w-full border-collapse text-left text-sm">
               <thead>
-                <tr className="text-[13px] text-admin-muted">
+                <tr className="text-[13px] text-admin-text-secondary">
                   <th scope="col" className="px-5 py-3.5 font-semibold">
                     Presente
                   </th>
@@ -400,7 +407,7 @@ export function GiftPaymentHistoryView(
                     <tr
                       key={purchase.orderId}
                       data-selected={selected}
-                      className={`relative border-t border-admin-beige ${selected ? "bg-admin-terracotta-wash" : "hover:bg-admin-canvas"}`}
+                      className={`relative border-t border-admin-subtle ${selected ? "bg-admin-accent-subtle" : "hover:bg-admin-canvas"}`}
                     >
                       <td className="px-5 py-3.5 align-middle">
                         <button
@@ -411,13 +418,13 @@ export function GiftPaymentHistoryView(
                           onClick={() => {
                             void active?.openPurchase(purchase.orderId);
                           }}
-                          className="grid w-full min-w-0 cursor-pointer gap-1 bg-transparent p-0 text-left text-admin-ink after:absolute after:inset-0 disabled:cursor-not-allowed"
+                          className="grid w-full min-w-0 cursor-pointer gap-1 bg-transparent p-0 text-left text-admin-text after:absolute after:inset-0 disabled:cursor-not-allowed"
                         >
                           <span className="text-[15px] font-bold [overflow-wrap:anywhere]">
                             {purchase.titleSnapshot}
                           </span>
-                          <span className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-admin-muted">
-                            <span className="rounded-full bg-admin-beige px-2.5 py-1 font-bold text-admin-body">
+                          <span className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-admin-text-secondary">
+                            <span className="rounded-full bg-admin-subtle px-2.5 py-1 font-bold text-admin-text">
                               {methodLabel(
                                 purchase.method,
                                 purchase.installmentCount,
@@ -432,13 +439,13 @@ export function GiftPaymentHistoryView(
                           </span>
                         </button>
                       </td>
-                      <td className="hidden px-2 py-3.5 whitespace-nowrap text-admin-body md:table-cell">
+                      <td className="hidden px-2 py-3.5 whitespace-nowrap text-admin-text md:table-cell">
                         {instant(purchase.purchasedAtMicros)}
                       </td>
-                      <td className="hidden px-2 py-3.5 text-right whitespace-nowrap text-admin-body sm:table-cell">
+                      <td className="hidden px-2 py-3.5 text-right whitespace-nowrap text-admin-text sm:table-cell">
                         {formatCents(purchase.quoted.totalCents)}
                       </td>
-                      <td className="px-5 py-3.5 text-right font-bold whitespace-nowrap text-admin-ink">
+                      <td className="px-5 py-3.5 text-right font-bold whitespace-nowrap text-admin-text">
                         {formatCents(purchaseNetCents(purchase.quoted))}
                       </td>
                     </tr>
@@ -448,13 +455,13 @@ export function GiftPaymentHistoryView(
             </table>
           ) : (
             state.purchases.length > 0 && (
-              <p className="m-0 px-5 py-6 text-center text-sm text-admin-muted">
+              <p className="m-0 px-5 py-6 text-center text-sm text-admin-text-secondary">
                 Nenhum presente carregado corresponde aos filtros.
               </p>
             )
           )}
           {state.purchases.length > 0 && (
-            <p className="m-0 border-t border-admin-beige px-5 py-3 text-[12.5px] leading-[1.5] text-admin-muted">
+            <p className="m-0 border-t border-admin-subtle px-5 py-3 text-[12.5px] leading-[1.5] text-admin-text-secondary">
               Clique em um presente para ver as taxas e o histórico. Valores
               conforme a cotação do momento da compra.
             </p>
@@ -462,7 +469,7 @@ export function GiftPaymentHistoryView(
           {(state.nextIndexCursor ||
             state.status === "unavailable" ||
             state.status === "conflict") && (
-            <div className="flex flex-wrap gap-3 border-t border-admin-beige px-5 py-3">
+            <div className="flex flex-wrap gap-3 border-t border-admin-subtle px-5 py-3">
               <LoadMoreButton
                 cursor={state.nextIndexCursor}
                 onLoad={(cursor) => active?.loadMoreIndex(cursor)}
@@ -502,18 +509,18 @@ export function GiftPaymentHistoryView(
               initialFocus={detailHeading}
             >
               <div className="grid min-w-0 gap-1">
-                <p className="m-0 text-xs font-bold tracking-[0.06em] text-admin-muted uppercase">
+                <p className="m-0 text-xs font-bold tracking-[0.06em] text-admin-text-secondary uppercase">
                   Detalhes do presente
                 </p>
                 <DialogTitle
                   id="gift-payment-detail-title"
                   ref={detailHeading}
                   tabIndex={-1}
-                  className="m-0 font-admin-display text-[22px] leading-[1.25] font-normal text-admin-ink outline-none [overflow-wrap:anywhere]"
+                  className="m-0 font-admin-display text-[22px] leading-[1.25] font-normal text-admin-text outline-none [overflow-wrap:anywhere]"
                 >
                   {detail.purchase.titleSnapshot}
                 </DialogTitle>
-                <p className="m-0 text-[13px] text-admin-muted">
+                <p className="m-0 text-[13px] text-admin-text-secondary">
                   {methodLabel(
                     detail.purchase.method,
                     detail.purchase.installmentCount,
@@ -533,24 +540,24 @@ export function GiftPaymentHistoryView(
                   ],
                 ].map(([label, value]) => (
                   <div key={label} className="flex justify-between gap-3">
-                    <dt className="text-admin-body">{label}</dt>
-                    <dd className="m-0 whitespace-nowrap text-admin-ink">
+                    <dt className="text-admin-text">{label}</dt>
+                    <dd className="m-0 whitespace-nowrap text-admin-text">
                       {value}
                     </dd>
                   </div>
                 ))}
-                <div className="flex justify-between gap-3 border-t border-admin-line pt-2 font-bold">
-                  <dt className="text-admin-ink">Para vocês</dt>
-                  <dd className="m-0 whitespace-nowrap text-admin-success-ink">
+                <div className="flex justify-between gap-3 border-t border-admin-border pt-2 font-bold">
+                  <dt className="text-admin-text">Para vocês</dt>
+                  <dd className="m-0 whitespace-nowrap text-admin-success-text">
                     {formatCents(purchaseNetCents(detail.purchase.quoted))}
                   </dd>
                 </div>
               </dl>
               <div className="grid gap-3">
-                <h4 className="m-0 text-sm font-bold text-admin-ink">
+                <h4 className="m-0 text-sm font-bold text-admin-text">
                   Histórico
                 </h4>
-                <p className="m-0 text-[13px] text-admin-muted">
+                <p className="m-0 text-[13px] text-admin-text-secondary">
                   Os valores acima vêm da cotação da compra. O histórico mostra
                   os pagamentos e créditos registrados.
                 </p>
@@ -565,12 +572,12 @@ export function GiftPaymentHistoryView(
                         className={`mt-1 size-3 shrink-0 rounded-full ${sampleDots[sample.recordedState]}`}
                       />
                       <div className="grid min-w-0 gap-0.5">
-                        <strong className="text-sm text-admin-ink">
+                        <strong className="text-sm text-admin-text">
                           {sample.installmentNumber &&
                             `Parcela ${sample.installmentNumber} · `}
                           {sampleLabels[sample.recordedState]}
                         </strong>
-                        <span className="text-[13px] text-admin-muted">
+                        <span className="text-[13px] text-admin-text-secondary">
                           {instant(sample.observedAtMicros)}
                           {sample.recipientNetCents !== null &&
                             ` · ${amount(sample.recipientNetCents)} para vocês`}
@@ -592,21 +599,21 @@ export function GiftPaymentHistoryView(
                       >
                         <span
                           aria-hidden="true"
-                          className="mt-1 size-3 shrink-0 rounded-full bg-admin-status-confirmed"
+                          className="mt-1 size-3 shrink-0 rounded-full bg-admin-success"
                         />
                         <div className="grid min-w-0 gap-0.5">
-                          <strong className="text-sm text-admin-ink">
+                          <strong className="text-sm text-admin-text">
                             {sample?.installmentNumber &&
                               `Parcela ${sample.installmentNumber} · `}
                             Crédito registrado para vocês:{" "}
                             {amount(receipt.recipientCreditCents)}
                           </strong>
-                          <span className="text-[13px] text-admin-muted">
+                          <span className="text-[13px] text-admin-text-secondary">
                             {instant(receipt.postedAtMicros)}
                           </span>
                           {sample?.commissionCents != null &&
                             sample.processingCents != null && (
-                              <span className="text-[13px] text-admin-muted">
+                              <span className="text-[13px] text-admin-text-secondary">
                                 Taxas registradas ·{" "}
                                 {formatCents(
                                   sample.commissionCents +
@@ -615,7 +622,7 @@ export function GiftPaymentHistoryView(
                               </span>
                             )}
                           {(sample?.platformAdjustmentFundedCents ?? 0) > 0 && (
-                            <span className="text-[13px] text-admin-muted">
+                            <span className="text-[13px] text-admin-text-secondary">
                               Ajuste do EntreLaços creditado ·{" "}
                               {formatCents(
                                 sample?.platformAdjustmentFundedCents ?? 0,
@@ -623,7 +630,7 @@ export function GiftPaymentHistoryView(
                             </span>
                           )}
                           {(sample?.platformAdjustmentOwedCents ?? 0) > 0 && (
-                            <span className="text-[13px] text-admin-muted">
+                            <span className="text-[13px] text-admin-text-secondary">
                               Ajuste do EntreLaços a creditar ·{" "}
                               {formatCents(
                                 sample?.platformAdjustmentOwedCents ?? 0,
@@ -637,11 +644,11 @@ export function GiftPaymentHistoryView(
                 </ol>
                 {detail.samples.length === 0 &&
                   detail.receipts.length === 0 && (
-                    <p className="m-0 text-[13px] text-admin-muted">
+                    <p className="m-0 text-[13px] text-admin-text-secondary">
                       Nenhum pagamento ou crédito registrado nesta consulta.
                     </p>
                   )}
-                <p className="m-0 text-[12.5px] leading-[1.5] text-admin-muted">
+                <p className="m-0 text-[12.5px] leading-[1.5] text-admin-text-secondary">
                   Pagamentos{" "}
                   {detail.coverage.payments === "AVAILABLE"
                     ? "consultados"
@@ -655,7 +662,7 @@ export function GiftPaymentHistoryView(
                   no banco.
                 </p>
                 {detail.purchase.binding === "UNBOUND" && (
-                  <p className="m-0 text-[13px] text-admin-muted">
+                  <p className="m-0 text-[13px] text-admin-text-secondary">
                     Vínculo original indisponível; os fatos financeiros desta
                     compra não puderam ser consultados.
                   </p>
@@ -663,8 +670,11 @@ export function GiftPaymentHistoryView(
               </div>
               {(state.status === "unavailable" ||
                 state.status === "conflict") && (
-                <div className="grid gap-3 rounded-xl border border-admin-line bg-admin-canvas p-4">
-                  <p role="status" className="m-0 text-sm text-admin-muted">
+                <div className="grid gap-3 rounded-xl border border-admin-border bg-admin-canvas p-4">
+                  <p
+                    role="status"
+                    className="m-0 text-sm text-admin-text-secondary"
+                  >
                     Não foi possível atualizar esta consulta. O histórico
                     anterior foi preservado.
                   </p>
@@ -719,7 +729,7 @@ export function GiftPaymentHistoryView(
           </Dialog>
         )}
       </div>
-      <details className="text-[13px] text-admin-muted">
+      <details className="text-[13px] text-admin-text-secondary">
         <summary className="w-fit cursor-pointer font-semibold">
           Sobre os dados deste histórico
         </summary>
@@ -754,7 +764,7 @@ export function RecentGiftPurchases({
       <div className="flex items-center justify-between gap-3 px-6 pt-3.5 pb-2.5">
         <h2
           id="recent-gifts-title"
-          className="m-0 text-[17px] font-bold text-admin-ink"
+          className="m-0 text-[17px] font-bold text-admin-text"
         >
           Últimos presentes
         </h2>
@@ -763,14 +773,14 @@ export function RecentGiftPurchases({
       {!allowed ? (
         <p
           role="status"
-          className="m-0 border-t border-admin-beige px-6 py-4 text-sm text-admin-muted"
+          className="m-0 border-t border-admin-subtle px-6 py-4 text-sm text-admin-text-secondary"
         >
           Acesso financeiro restrito.
         </p>
       ) : recent.length === 0 ? (
         <p
           role="status"
-          className="m-0 border-t border-admin-beige px-6 py-4 text-sm text-admin-muted"
+          className="m-0 border-t border-admin-subtle px-6 py-4 text-sm text-admin-text-secondary"
         >
           {state.status === "loading" || state.status === "idle"
             ? "Consultando os presentes…"
@@ -783,28 +793,28 @@ export function RecentGiftPurchases({
           {recent.map((purchase) => (
             <li
               key={purchase.orderId}
-              className="flex min-w-0 items-center gap-3.5 border-t border-admin-beige px-6 py-3.5 [@media(max-width:760px)]:px-5"
+              className="flex min-w-0 items-center gap-3.5 border-t border-admin-subtle px-6 py-3.5 [@media(max-width:760px)]:px-5"
             >
               <span
                 aria-hidden="true"
-                className="flex size-11 shrink-0 items-center justify-center rounded-[10px] bg-admin-terracotta-wash text-admin-terracotta-deep [@media(max-width:420px)]:hidden"
+                className="flex size-11 shrink-0 items-center justify-center rounded-[10px] bg-admin-accent-subtle text-admin-accent-hover [@media(max-width:420px)]:hidden"
               >
                 <Gift className="size-5" />
               </span>
               <div className="grid min-w-0 flex-1 gap-0.5">
-                <strong className="text-[15px] text-admin-ink [overflow-wrap:anywhere]">
+                <strong className="text-[15px] text-admin-text [overflow-wrap:anywhere]">
                   {purchase.titleSnapshot}
                 </strong>
-                <span className="text-[13px] text-admin-muted">
+                <span className="text-[13px] text-admin-text-secondary">
                   {methodLabel(purchase.method, purchase.installmentCount)} ·{" "}
                   {instant(purchase.purchasedAtMicros, shortDate)}
                 </span>
               </div>
               <div className="grid shrink-0 justify-items-end gap-0.5">
-                <strong className="text-[15px] text-admin-ink">
+                <strong className="text-[15px] text-admin-text">
                   {formatCents(purchase.quoted.totalCents)}
                 </strong>
-                <span className="text-xs text-admin-muted">
+                <span className="text-xs text-admin-text-secondary">
                   {formatCents(purchaseNetCents(purchase.quoted))} para vocês
                 </span>
               </div>

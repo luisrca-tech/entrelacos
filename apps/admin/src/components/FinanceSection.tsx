@@ -290,15 +290,15 @@ export function FinanceSection({
               <div className="flex min-w-0 items-center gap-3 rounded-xl bg-admin-canvas px-4 py-3.5">
                 <span
                   aria-hidden="true"
-                  className="flex size-9 shrink-0 items-center justify-center rounded-[10px] bg-admin-terracotta-wash text-admin-terracotta-deep"
+                  className="flex size-9 shrink-0 items-center justify-center rounded-[10px] bg-admin-accent-subtle text-admin-accent-hover"
                 >
                   <Landmark className="size-[18px]" />
                 </span>
                 <div className="grid min-w-0 flex-1 gap-0.5">
-                  <strong className="text-sm text-admin-ink [overflow-wrap:anywhere]">
+                  <strong className="text-sm text-admin-text [overflow-wrap:anywhere]">
                     Destino: {destination.ownerName}
                   </strong>
-                  <span className="text-[13px] text-admin-muted [overflow-wrap:anywhere]">
+                  <span className="text-[13px] text-admin-text-secondary [overflow-wrap:anywhere]">
                     Chave Pix {destinationKeyLabel(destination)} ·{" "}
                     {destination.bankName}
                   </span>
@@ -322,7 +322,7 @@ export function FinanceSection({
               />
             ) : (
               owner && (
-                <p className="m-0 border-t border-admin-beige pt-[18px] text-sm text-admin-muted">
+                <p className="m-0 border-t border-admin-subtle pt-[18px] text-sm text-admin-text-secondary">
                   Você está vendo como proprietário, só para consulta. Os saques
                   ficam com a pessoa titular dos recebimentos.
                 </p>
@@ -335,16 +335,16 @@ export function FinanceSection({
           >
             <h2
               id="withdrawal-help-title"
-              className="m-0 text-base font-bold text-admin-ink"
+              className="m-0 text-base font-bold text-admin-text"
             >
               Como funciona o saque
             </h2>
-            <ol className="m-0 grid list-decimal gap-2 pl-[18px] text-sm leading-[1.5] text-admin-body marker:text-admin-muted">
+            <ol className="m-0 grid list-decimal gap-2 pl-[18px] text-sm leading-[1.5] text-admin-text marker:text-admin-text-secondary">
               <li>Escolha o valor e confira a prévia.</li>
               <li>Confirme com sua senha do EntreLaços.</li>
               <li>O Asaas transfere por Pix para a sua chave.</li>
             </ol>
-            <p className="m-0 text-[13px] text-admin-muted">
+            <p className="m-0 text-[13px] text-admin-text-secondary">
               Só a pessoa titular dos recebimentos pode sacar.
             </p>
           </aside>
@@ -383,7 +383,7 @@ function WithdrawalBalance({
 }) {
   if (loading)
     return (
-      <p role="status" className="m-0 text-[15px] text-admin-muted">
+      <p role="status" className="m-0 text-[15px] text-admin-text-secondary">
         Consultando o saldo…
       </p>
     );
@@ -392,7 +392,7 @@ function WithdrawalBalance({
       <div className="grid gap-2">
         <p
           role={failed ? "alert" : "status"}
-          className="m-0 text-[15px] text-admin-body"
+          className="m-0 text-[15px] text-admin-text"
         >
           Não foi possível confirmar o saldo agora.
         </p>
@@ -407,7 +407,7 @@ function WithdrawalBalance({
     <div className="grid gap-2">
       <BalanceFigure overview={overview} size="md" />
       {overview.awaitingReleaseCents > 0 && (
-        <p className="m-0 text-[13px] text-admin-muted">
+        <p className="m-0 text-[13px] text-admin-text-secondary">
           {formatCents(overview.awaitingReleaseCents)} ainda aguardando
           liberação
         </p>

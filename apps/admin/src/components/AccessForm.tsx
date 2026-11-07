@@ -64,7 +64,7 @@ export function AccessForm({
           <h1 className={adminStyles.authHeading} id="access-title">
             {email ? "Sua senha está pronta." : "Defina sua senha."}
           </h1>
-          <p className="m-0 text-[15px] leading-relaxed text-admin-muted">
+          <p className="m-0 text-[15px] leading-relaxed text-admin-text-secondary">
             {email
               ? "Agora entre com seu e-mail e a nova senha."
               : purpose === "activation"
@@ -90,11 +90,11 @@ export function AccessForm({
           </p>
         ) : (
           <>
-            <p className="m-0 rounded-[10px] border border-admin-line bg-admin-canvas p-3 text-[13px] leading-relaxed text-admin-muted">
+            <p className="m-0 rounded-[10px] border border-admin-border bg-admin-canvas p-3 text-[13px] leading-relaxed text-admin-text-secondary">
               Este link é pessoal, vale por 24 horas e pode ser usado uma vez.
             </p>
             <form className={adminStyles.authForm} onSubmit={submit}>
-              <div className="grid gap-2 text-[0.88rem] font-semibold text-admin-graphite">
+              <div className="grid gap-2 text-[0.88rem] font-semibold text-admin-text">
                 <label htmlFor="access-password">Nova senha</label>
                 <PasswordInput
                   id="access-password"
@@ -105,7 +105,7 @@ export function AccessForm({
                   required
                 />
               </div>
-              <div className="grid gap-2 text-[0.88rem] font-semibold text-admin-graphite">
+              <div className="grid gap-2 text-[0.88rem] font-semibold text-admin-text">
                 <label htmlFor="access-confirmation">Confirmar senha</label>
                 <PasswordInput
                   id="access-confirmation"
@@ -116,7 +116,7 @@ export function AccessForm({
                   required
                 />
               </div>
-              <p className="text-[0.87rem] leading-[1.6] text-admin-muted">
+              <p className="text-[0.87rem] leading-[1.6] text-admin-text-secondary">
                 Use de 6 a 10 caracteres.
               </p>
               <Button

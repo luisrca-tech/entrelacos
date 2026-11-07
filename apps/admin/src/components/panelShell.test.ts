@@ -86,7 +86,7 @@ describe("admin shell safety regressions", () => {
     expect(shellSource).toContain(
       'import { Link } from "@tanstack/react-router";',
     );
-    expect(shellSource).toContain("bg-admin-terracotta-wash");
+    expect(shellSource).toContain("bg-admin-accent-subtle");
     expect(shellSource).toContain('to="/"');
     expect(shellSource).toContain("to={item.href}");
     expect(shellSource).toContain(
@@ -105,7 +105,9 @@ describe("admin shell safety regressions", () => {
     expect(workspaceSource).toContain(
       'import { Link } from "@tanstack/react-router";',
     );
-    expect(workspaceSource).toContain("text-[0.88rem] text-admin-muted");
+    expect(workspaceSource).toContain(
+      "text-[0.88rem] text-admin-text-secondary",
+    );
     expect(workspaceSource).not.toContain(
       '<a className="workspace-back" href="/">',
     );

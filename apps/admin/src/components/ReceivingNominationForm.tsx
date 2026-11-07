@@ -181,15 +181,15 @@ export function ReceivingNominationView({
   return (
     <section
       aria-labelledby={`${id}-title`}
-      className="grid gap-4 rounded-xl border border-admin-line bg-admin-surface p-6 sm:p-8"
+      className="grid gap-4 rounded-xl border border-admin-border bg-admin-surface p-6 sm:p-8"
     >
       <h2
         id={`${id}-title`}
-        className="m-0 font-admin-display text-2xl text-admin-graphite"
+        className="m-0 font-admin-display text-2xl text-admin-text"
       >
         Indicação de recebedor
       </h2>
-      <p className="m-0 text-admin-muted">
+      <p className="m-0 text-admin-text-secondary">
         Indique a si mesmo como recebedor deste casamento. A verificação do
         provedor ainda será necessária.
       </p>
@@ -200,7 +200,7 @@ export function ReceivingNominationView({
               ? "alert"
               : "status"
           }
-          className="m-0 text-admin-muted"
+          className="m-0 text-admin-text-secondary"
         >
           {current.status === "pending" ? (
             <>
@@ -216,7 +216,7 @@ export function ReceivingNominationView({
         </p>
       )}
       {current.uncertain && current.status !== "unknown" && (
-        <p role="alert" className="m-0 text-admin-muted">
+        <p role="alert" className="m-0 text-admin-text-secondary">
           Não foi possível verificar o resultado anterior. A mesma indicação
           será verificada após nova confirmação de senha.
         </p>
@@ -239,7 +239,7 @@ export function ReceivingNominationView({
             />
             <label
               htmlFor={`${id}-confirm`}
-              className="text-sm text-admin-graphite"
+              className="text-sm text-admin-text"
             >
               Confirmo que estou me indicando como recebedor deste casamento.
             </label>

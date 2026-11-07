@@ -4144,7 +4144,7 @@ describe("actual React withdrawal DOM", () => {
         "00:00",
       );
       expect(
-        second.node.querySelector(".text-admin-danger-ink")?.textContent,
+        second.node.querySelector(".text-admin-danger-text")?.textContent,
       ).toContain("Prévia expirada");
       expect(
         [...second.node.querySelectorAll("button")].find(
@@ -4220,9 +4220,9 @@ describe("actual React withdrawal DOM", () => {
         (button) => button.textContent === "Confirmar senha",
       ),
     ).toBe(false);
-    expect(node.querySelector(".text-admin-danger-ink")?.textContent).toContain(
-      "Prévia expirada",
-    );
+    expect(
+      node.querySelector(".text-admin-danger-text")?.textContent,
+    ).toContain("Prévia expirada");
     expect(f.request).toHaveBeenCalledTimes(count);
     f.cleanup();
   });

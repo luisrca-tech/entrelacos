@@ -46,11 +46,11 @@ const reasonMessages: Record<
 };
 
 const cardClassName =
-  "grid gap-4 rounded-xl border border-admin-line bg-admin-surface p-6 sm:p-8";
+  "grid gap-4 rounded-xl border border-admin-border bg-admin-surface p-6 sm:p-8";
 const eyebrowClassName =
-  "m-0 text-xs font-bold uppercase tracking-wider text-admin-muted";
-const titleClassName = "m-0 font-admin-display text-2xl text-admin-graphite";
-const bodyClassName = "m-0 max-w-2xl leading-relaxed text-admin-muted";
+  "m-0 text-xs font-bold uppercase tracking-wider text-admin-text-secondary";
+const titleClassName = "m-0 font-admin-display text-2xl text-admin-text";
+const bodyClassName = "m-0 max-w-2xl leading-relaxed text-admin-text-secondary";
 
 export function ReceivingStatusCard({
   siteId,
@@ -132,7 +132,7 @@ export function ReceivingStatusCard({
       return (
         <section
           aria-labelledby="receiving-status-title"
-          className="flex min-w-0 flex-wrap items-center gap-x-[18px] gap-y-2 rounded-[14px] border border-admin-success-line bg-admin-success-wash px-[18px] py-3.5 text-sm leading-[1.45] text-admin-success-ink"
+          className="flex min-w-0 flex-wrap items-center gap-x-[18px] gap-y-2 rounded-[14px] border border-admin-success/30 bg-admin-success-subtle px-[18px] py-3.5 text-sm leading-[1.45] text-admin-success-text"
         >
           <h2
             id="receiving-status-title"
@@ -140,7 +140,7 @@ export function ReceivingStatusCard({
           >
             <span
               aria-hidden="true"
-              className="flex size-6 items-center justify-center rounded-full bg-admin-status-confirmed text-white"
+              className="flex size-6 items-center justify-center rounded-full bg-admin-success text-admin-on-accent"
             >
               <Check className="size-3.5" strokeWidth={3} />
             </span>
@@ -174,7 +174,7 @@ export function ReceivingStatusCard({
               ? reasonMessages[current.reason]
               : "Os recebimentos precisam ser verificados."}
           </p>
-          <p className="m-0 text-sm text-admin-muted">
+          <p className="m-0 text-sm text-admin-text-secondary">
             Acompanhe a etapa pendente em Ativação.
           </p>
         </>

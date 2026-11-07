@@ -253,14 +253,14 @@ export function FinancialReauthenticationView({
   return (
     <section
       aria-labelledby={dialog ? undefined : `${id}-title`}
-      className="grid gap-4 rounded-xl border border-admin-line bg-admin-surface p-6 sm:p-8"
+      className="grid gap-4 rounded-xl border border-admin-border bg-admin-surface p-6 sm:p-8"
     >
       {dialog ? (
         <DialogTitle>Confirme sua senha</DialogTitle>
       ) : (
         <h2
           id={`${id}-title`}
-          className="m-0 font-admin-display text-2xl text-admin-graphite"
+          className="m-0 font-admin-display text-2xl text-admin-text"
         >
           Confirme sua senha
         </h2>
@@ -268,7 +268,7 @@ export function FinancialReauthenticationView({
       {!restricted && (
         <>
           {feedback !== "toast" && (
-            <p className="m-0 text-admin-muted">
+            <p className="m-0 text-admin-text-secondary">
               {scope.action === "CONFIGURE_RECEIVING"
                 ? "Confirmação para configurar o recebimento."
                 : "Confirmação para solicitar um saque."}
@@ -284,7 +284,10 @@ export function FinancialReauthenticationView({
               </span>
             </DialogDescription>
           ) : (
-            <p id={`${id}-hint`} className="m-0 text-sm text-admin-muted">
+            <p
+              id={`${id}-hint`}
+              className="m-0 text-sm text-admin-text-secondary"
+            >
               {feedback === "toast"
                 ? "Confirme sua senha para continuar."
                 : "Esta confirmação não altera o responsável financeiro nem movimenta valores."}
@@ -302,7 +305,7 @@ export function FinancialReauthenticationView({
               ? "alert"
               : "status"
           }
-          className="m-0 text-admin-muted"
+          className="m-0 text-admin-text-secondary"
         >
           {current.status === "verified" ? (
             <>
@@ -327,7 +330,7 @@ export function FinancialReauthenticationView({
           <div className="grid gap-2">
             <label
               htmlFor={`${id}-password`}
-              className="text-sm font-semibold text-admin-graphite"
+              className="text-sm font-semibold text-admin-text"
             >
               Senha atual
             </label>

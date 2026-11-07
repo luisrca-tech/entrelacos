@@ -67,7 +67,7 @@ export function GiftsSection({
     return (
       <div className="grid gap-4">
         <GiftsPageHeader />
-        <p role="status" className="m-0 text-admin-muted">
+        <p role="status" className="m-0 text-admin-text-secondary">
           Você não tem acesso ao catálogo deste casamento.
         </p>
       </div>
@@ -107,7 +107,7 @@ export function GiftsReadinessView({
     return (
       <div className="grid gap-4">
         <GiftsPageHeader />
-        <p role="alert" className="m-0 text-admin-muted">
+        <p role="alert" className="m-0 text-admin-text-secondary">
           Não foi possível verificar os recebimentos. Os presentes continuam
           bloqueados.
         </p>
@@ -123,7 +123,7 @@ export function GiftsReadinessView({
     return (
       <div className="grid gap-4">
         <GiftsPageHeader />
-        <p role="status" className="m-0 text-admin-muted">
+        <p role="status" className="m-0 text-admin-text-secondary">
           Verificando os recebimentos…
         </p>
       </div>
@@ -136,23 +136,23 @@ export function GiftsReadinessView({
   return (
     <div className="grid gap-4">
       {demonstration && (
-        <p role="status" className="m-0 text-sm text-admin-muted">
+        <p role="status" className="m-0 text-sm text-admin-text-secondary">
           Catálogo de demonstração. Você pode gerenciar os presentes;
           contribuições e recebimentos continuam indisponíveis.
         </p>
       )}
       {showSandboxNotice(current.mode) && (
-        <p className="m-0 text-sm text-admin-muted">
+        <p className="m-0 text-sm text-admin-text-secondary">
           Ambiente de testes — sem pagamentos reais.
         </p>
       )}
       {current.catalogEligible || demonstration ? (
         (catalog ?? (
-          <section className="rounded-xl border border-admin-line bg-admin-surface p-6">
+          <section className="rounded-xl border border-admin-border bg-admin-surface p-6">
             <h2 className="m-0 font-admin-display text-2xl">
               Recebimentos verificados
             </h2>
-            <p className="mb-0 text-admin-muted">
+            <p className="mb-0 text-admin-text-secondary">
               Aguarde o carregamento do catálogo de presentes.
             </p>
           </section>
@@ -178,11 +178,11 @@ function GiftsPageHeader() {
   return (
     <header className="grid max-w-[600px] gap-2">
       <h1
-        className={`m-0 text-[clamp(1.85rem,3vw,2.25rem)] text-admin-ink ${displayHeading}`}
+        className={`m-0 text-[clamp(1.85rem,3vw,2.25rem)] text-admin-text ${displayHeading}`}
       >
         Lista de presentes
       </h1>
-      <p className="m-0 text-base leading-[1.6] text-admin-muted">
+      <p className="m-0 text-base leading-[1.6] text-admin-text-secondary">
         Cada presente é uma contribuição simbólica em dinheiro para vocês, sem
         produto ou entrega.
       </p>

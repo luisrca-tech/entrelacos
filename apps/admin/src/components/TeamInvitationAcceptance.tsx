@@ -752,7 +752,7 @@ export function TeamInvitationAcceptance({
         </h1>
         {completed ? (
           <>
-            <p className="m-0 text-admin-muted">
+            <p className="m-0 text-admin-text-secondary">
               Seu acesso de assessor foi associado a este casamento.{" "}
               {completed.signedIn
                 ? "Você pode abrir o painel."
@@ -798,7 +798,7 @@ export function TeamInvitationAcceptance({
           </>
         ) : (
           <>
-            <p className="m-0 leading-relaxed text-admin-muted">
+            <p className="m-0 leading-relaxed text-admin-text-secondary">
               O convite dá acesso aos convites, às mensagens e aos presentes
               deste casamento. O financeiro e os recebimentos ficam reservados
               ao casal.
@@ -818,7 +818,7 @@ export function TeamInvitationAcceptance({
               </Button>
             ) : actor ? (
               <>
-                <p className="m-0 break-words text-admin-muted">
+                <p className="m-0 break-words text-admin-text-secondary">
                   Você está conectado como {actor.user.email}. Confirme somente
                   se este é o e-mail convidado.
                 </p>
@@ -846,11 +846,11 @@ export function TeamInvitationAcceptance({
                 >
                   <Button
                     type="button"
-                    variant={mode === "existing" ? "default" : "outline"}
+                    variant="outline"
                     className={
                       mode === "existing"
-                        ? adminStyles.authButton
-                        : "h-12 min-w-0 rounded-[10px] border-admin-line-strong px-2"
+                        ? `h-12 min-w-0 rounded-[10px] border-admin-accent px-2 font-bold ${adminStyles.selected}`
+                        : "h-12 min-w-0 rounded-[10px] border-admin-border-strong px-2"
                     }
                     disabled={pending}
                     onClick={() => {
@@ -861,11 +861,11 @@ export function TeamInvitationAcceptance({
                   </Button>
                   <Button
                     type="button"
-                    variant={mode === "new" ? "default" : "outline"}
+                    variant="outline"
                     className={
                       mode === "new"
-                        ? adminStyles.authButton
-                        : "h-12 min-w-0 rounded-[10px] border-admin-line-strong px-2"
+                        ? `h-12 min-w-0 rounded-[10px] border-admin-accent px-2 font-bold ${adminStyles.selected}`
+                        : "h-12 min-w-0 rounded-[10px] border-admin-border-strong px-2"
                     }
                     disabled={pending}
                     onClick={() => {
@@ -914,7 +914,7 @@ export function TeamInvitationAcceptance({
                         disabled={pending}
                       />
                     </div>
-                    <p className="m-0 text-sm text-admin-muted">
+                    <p className="m-0 text-sm text-admin-text-secondary">
                       {mode === "new"
                         ? "Se você já possui uma conta, escolha Já tenho acesso. O convite não redefine senhas existentes."
                         : "Você entrará na conta existente; sua senha e seus outros casamentos serão preservados."}

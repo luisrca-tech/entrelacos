@@ -193,15 +193,15 @@ function statusLabel(state: GiftItem["publicationState"]): string {
 }
 
 const photoTones = [
-  "bg-admin-beige",
-  "bg-admin-beige-deep",
-  "bg-admin-terracotta-wash",
+  "bg-admin-subtle",
+  "bg-admin-subtle-hover",
+  "bg-admin-accent-subtle",
 ];
 
 function GiftStatusBadge({ state }: { state: GiftItem["publicationState"] }) {
   return (
     <span
-      className={`inline-flex w-fit items-center rounded-full px-2.5 py-1 text-xs leading-none font-bold ${state === "PUBLISHED" ? "bg-admin-success-wash text-admin-success-ink" : state === "ARCHIVED" ? "bg-admin-danger-wash text-admin-danger-ink" : "bg-admin-beige text-admin-body"}`}
+      className={`inline-flex w-fit items-center rounded-full px-2.5 py-1 text-xs leading-none font-bold ${state === "PUBLISHED" ? "bg-admin-success-subtle text-admin-success-text" : state === "ARCHIVED" ? "bg-admin-danger-subtle text-admin-danger-text" : "bg-admin-subtle text-admin-text"}`}
     >
       {statusLabel(state)}
     </span>
@@ -243,10 +243,10 @@ function FormSectionHeader({
 }) {
   return (
     <div className="flex flex-wrap items-center justify-between gap-3">
-      <h2 className="m-0 flex items-center gap-3 text-lg font-bold text-admin-ink">
+      <h2 className="m-0 flex items-center gap-3 text-lg font-bold text-admin-text">
         <span
           aria-hidden="true"
-          className="flex size-[30px] shrink-0 items-center justify-center rounded-full bg-admin-terracotta text-sm font-bold text-white"
+          className="flex size-[30px] shrink-0 items-center justify-center rounded-full bg-admin-accent text-sm font-bold text-admin-on-accent"
         >
           {number}
         </span>
@@ -259,15 +259,15 @@ function FormSectionHeader({
 }
 
 const sectionCard =
-  "grid min-w-0 gap-5 rounded-2xl border border-admin-line bg-admin-surface p-6 [@media(max-width:760px)]:p-4";
+  "grid min-w-0 gap-5 rounded-2xl border border-admin-border bg-admin-surface p-6 [@media(max-width:760px)]:p-4";
 const fieldClass =
-  "min-h-[46px] rounded-[10px] border-admin-line-strong bg-admin-surface px-3.5 text-[0.95rem]";
+  "min-h-[46px] rounded-[10px] border-admin-border-strong bg-admin-surface px-3.5 text-[0.95rem]";
 
 function Counter({ value, max }: { value: number; max: number }) {
   return (
     <span
       aria-hidden="true"
-      className={`text-xs ${value > max ? "font-bold text-admin-danger-ink" : "text-admin-muted"}`}
+      className={`text-xs ${value > max ? "font-bold text-admin-danger-text" : "text-admin-text-secondary"}`}
     >
       {value}/{max}
     </span>
@@ -288,30 +288,27 @@ function GuestPreviewCard({
   photo: ReactNode;
 }) {
   return (
-    <div className="overflow-hidden rounded-2xl border border-admin-line bg-admin-surface">
-      <div className="flex aspect-[300/224] items-center justify-center overflow-hidden border-b border-dashed border-admin-line-strong bg-admin-canvas text-[0.82rem] text-admin-muted [&_img]:h-full [&_img]:w-full [&_img]:object-cover">
+    <div className="overflow-hidden rounded-2xl border border-admin-border bg-admin-surface">
+      <div className="flex aspect-[300/224] items-center justify-center overflow-hidden border-b border-dashed border-admin-border-strong bg-admin-canvas text-[0.82rem] text-admin-text-secondary [&_img]:h-full [&_img]:w-full [&_img]:object-cover">
         {photo ??
           (gift?.mediaAssetId ? (
-            <Gift
-              aria-hidden="true"
-              className="size-10 text-admin-terracotta/60"
-            />
+            <Gift aria-hidden="true" className="size-10 text-admin-accent/60" />
           ) : (
             "A foto aparece aqui"
           ))}
       </div>
       <div className="grid gap-2 p-[18px]">
-        <h3 className="m-0 break-words font-admin-display text-[1.35rem] font-normal text-admin-ink">
+        <h3 className="m-0 break-words font-admin-display text-[1.35rem] font-normal text-admin-text">
           {title.trim() || "Nome do presente"}
         </h3>
-        <p className="m-0 line-clamp-3 break-words text-sm leading-[1.5] text-admin-body">
+        <p className="m-0 line-clamp-3 break-words text-sm leading-[1.5] text-admin-text">
           {description.trim() ||
             "Um presente simbólico para celebrar essa nova fase."}
         </p>
         <GuestPreviewPrice estimate={estimate} />
         <span
           aria-hidden="true"
-          className="flex min-h-11 items-center justify-center rounded-[10px] bg-admin-terracotta text-[0.95rem] font-bold text-white"
+          className="flex min-h-11 items-center justify-center rounded-[10px] bg-admin-accent text-[0.95rem] font-bold text-admin-on-accent"
         >
           Presentear
         </span>
@@ -328,19 +325,19 @@ function PublishChecklist({
   published: boolean;
 }) {
   return (
-    <section className="grid gap-3 rounded-2xl border border-admin-line bg-admin-surface p-5">
-      <h2 className="m-0 text-base font-bold text-admin-ink">
+    <section className="grid gap-3 rounded-2xl border border-admin-border bg-admin-surface p-5">
+      <h2 className="m-0 text-base font-bold text-admin-text">
         Pronto para publicar? {checklist.done}/3
       </h2>
       <ul className="m-0 grid list-none gap-2.5 p-0">
         {checklist.items.map((item) => (
           <li
             key={item.id}
-            className="flex items-center gap-2.5 text-[0.95rem] text-admin-body"
+            className="flex items-center gap-2.5 text-[0.95rem] text-admin-text"
           >
             <span
               aria-hidden="true"
-              className={`flex size-[22px] shrink-0 items-center justify-center rounded-full ${item.done ? "bg-admin-status-confirmed text-white" : "border-2 border-admin-line-strong"}`}
+              className={`flex size-[22px] shrink-0 items-center justify-center rounded-full ${item.done ? "bg-admin-success text-admin-on-accent" : "border-2 border-admin-border-strong"}`}
             >
               {item.done && <Check className="size-3.5" />}
             </span>
@@ -351,7 +348,7 @@ function PublishChecklist({
           </li>
         ))}
       </ul>
-      <p className="m-0 text-[0.82rem] leading-[1.5] text-admin-muted">
+      <p className="m-0 text-[0.82rem] leading-[1.5] text-admin-text-secondary">
         {published
           ? "Este presente está visível para os convidados. Alterações salvas aparecem na lista publicada."
           : "Enquanto não publicar, o presente fica como rascunho e só vocês veem."}
@@ -367,11 +364,15 @@ function GuestPreviewPrice({
 }) {
   const startingAtCents = estimate?.startingAtCents;
   if (startingAtCents == null)
-    return <p className="m-0 text-sm text-admin-muted">Preço indisponível.</p>;
+    return (
+      <p className="m-0 text-sm text-admin-text-secondary">
+        Preço indisponível.
+      </p>
+    );
   return (
-    <p className="m-0 text-lg font-bold text-admin-ink">
+    <p className="m-0 text-lg font-bold text-admin-text">
       A partir de {formatPrice(startingAtCents)}
-      <span className="block text-sm font-normal text-admin-muted">
+      <span className="block text-sm font-normal text-admin-text-secondary">
         Taxas incluídas no valor
       </span>
     </p>
@@ -665,18 +666,18 @@ export function GiftEditorView({
             type="button"
             disabled={busy || saving}
             onClick={() => openEditor(null)}
-            className="inline-flex min-h-8 w-fit items-center gap-1 bg-transparent p-0 text-[0.95rem] font-semibold text-admin-terracotta-deep hover:underline disabled:opacity-60"
+            className="inline-flex min-h-8 w-fit items-center gap-1 bg-transparent p-0 text-[0.95rem] font-semibold text-admin-accent-hover hover:underline disabled:opacity-60"
           >
             <ChevronLeft aria-hidden="true" className="size-4" />
             Lista de presentes
           </button>
           <h1
             id="gift-catalog-heading"
-            className={`m-0 text-[clamp(1.85rem,3vw,2.25rem)] text-admin-ink ${displayHeading}`}
+            className={`m-0 text-[clamp(1.85rem,3vw,2.25rem)] text-admin-text ${displayHeading}`}
           >
             {creating ? "Novo presente" : "Editar presente"}
           </h1>
-          <p className="m-0 text-base leading-[1.6] text-admin-muted [@media(max-width:760px)]:hidden">
+          <p className="m-0 text-base leading-[1.6] text-admin-text-secondary [@media(max-width:760px)]:hidden">
             Preencha as três partes. A prévia ao lado mostra como os convidados
             vão ver.
           </p>
@@ -686,18 +687,18 @@ export function GiftEditorView({
           <div className="grid max-w-[600px] gap-2">
             <h1
               id="gift-catalog-heading"
-              className={`m-0 text-[clamp(1.85rem,3vw,2.25rem)] text-admin-ink ${displayHeading}`}
+              className={`m-0 text-[clamp(1.85rem,3vw,2.25rem)] text-admin-text ${displayHeading}`}
             >
               Lista de presentes
             </h1>
-            <p className="m-0 text-base leading-[1.6] text-admin-muted">
+            <p className="m-0 text-base leading-[1.6] text-admin-text-secondary">
               Cada presente é uma contribuição simbólica em dinheiro para vocês,
               sem produto ou entrega.
             </p>
           </div>
           <Button
             type="button"
-            className="min-h-12 rounded-[10px] px-6 text-[0.95rem] font-bold bg-admin-terracotta text-white hover:bg-admin-terracotta-deep [@media(max-width:760px)]:w-full"
+            className="min-h-12 rounded-[10px] px-6 text-[0.95rem] font-bold bg-admin-accent text-admin-on-accent hover:bg-admin-accent-hover [@media(max-width:760px)]:w-full"
             disabled={mutationBlocked}
             onClick={() => openEditor({ kind: "create" })}
           >
@@ -736,7 +737,7 @@ export function GiftEditorView({
                   number={1}
                   title="Foto do presente"
                   badge={
-                    <span className="inline-flex items-center rounded-full bg-admin-beige px-2.5 py-1 text-xs leading-none font-bold text-admin-body [@media(max-width:760px)]:hidden">
+                    <span className="inline-flex items-center rounded-full bg-admin-subtle px-2.5 py-1 text-xs leading-none font-bold text-admin-text [@media(max-width:760px)]:hidden">
                       Necessária para publicar
                     </span>
                   }
@@ -759,17 +760,17 @@ export function GiftEditorView({
                 ) : selected && renderMedia ? (
                   renderMedia(selected, mutationBlocked, positionOf(selected))
                 ) : (
-                  <div className="flex min-h-[272px] flex-col items-center justify-center gap-2.5 rounded-[14px] border-2 border-dashed border-admin-line-strong bg-admin-canvas px-5 py-8 text-center [@media(max-width:760px)]:min-h-[230px]">
+                  <div className="flex min-h-[272px] flex-col items-center justify-center gap-2.5 rounded-[14px] border-2 border-dashed border-admin-border-strong bg-admin-canvas px-5 py-8 text-center [@media(max-width:760px)]:min-h-[230px]">
                     <span
                       aria-hidden="true"
-                      className="flex size-14 items-center justify-center rounded-full bg-admin-terracotta-wash text-admin-terracotta-deep"
+                      className="flex size-14 items-center justify-center rounded-full bg-admin-accent-subtle text-admin-accent-hover"
                     >
                       <Upload className="size-[26px]" />
                     </span>
-                    <span className="text-base font-bold text-admin-ink">
+                    <span className="text-base font-bold text-admin-text">
                       A foto deste presente é gerenciada aqui
                     </span>
-                    <span className="max-w-md text-[0.82rem] leading-[1.5] text-admin-muted">
+                    <span className="max-w-md text-[0.82rem] leading-[1.5] text-admin-text-secondary">
                       JPEG, PNG ou WebP · até 5 MB.
                     </span>
                   </div>
@@ -787,10 +788,10 @@ export function GiftEditorView({
                     <div className="flex items-baseline justify-between gap-3">
                       <label
                         htmlFor={`${idPrefix}-title`}
-                        className="text-sm font-bold text-admin-ink"
+                        className="text-sm font-bold text-admin-text"
                       >
                         Nome do presente{" "}
-                        <span className="text-xs font-semibold text-admin-muted">
+                        <span className="text-xs font-semibold text-admin-text-secondary">
                           · Obrigatório
                         </span>
                       </label>
@@ -810,7 +811,7 @@ export function GiftEditorView({
                     />
                     <p
                       id={`${idPrefix}-title-hint`}
-                      className="m-0 text-[0.8rem] text-admin-muted"
+                      className="m-0 text-[0.8rem] text-admin-text-secondary"
                     >
                       Curto e fácil de reconhecer na lista.
                     </p>
@@ -819,14 +820,14 @@ export function GiftEditorView({
                     <div className="flex items-baseline justify-between gap-3">
                       <label
                         htmlFor={`${idPrefix}-description`}
-                        className="text-sm font-bold text-admin-ink"
+                        className="text-sm font-bold text-admin-text"
                       >
                         Mensagem
                         <span className="[@media(max-width:760px)]:hidden">
                           {" "}
                           para os convidados
                         </span>{" "}
-                        <span className="text-xs font-semibold text-admin-muted">
+                        <span className="text-xs font-semibold text-admin-text-secondary">
                           · Opcional
                         </span>
                       </label>
@@ -841,7 +842,7 @@ export function GiftEditorView({
                       placeholder="Conte o que esse presente representa para vocês."
                       disabled={mutationBlocked}
                       rows={3}
-                      className="min-h-24 rounded-[10px] border-admin-line-strong bg-admin-surface px-3.5 py-3 text-[0.95rem]"
+                      className="min-h-24 rounded-[10px] border-admin-border-strong bg-admin-surface px-3.5 py-3 text-[0.95rem]"
                     />
                   </div>
                 </section>
@@ -850,17 +851,17 @@ export function GiftEditorView({
                   <div className="grid gap-1.5">
                     <label
                       htmlFor={`${idPrefix}-price`}
-                      className="text-sm font-bold text-admin-ink"
+                      className="text-sm font-bold text-admin-text"
                     >
                       Quanto vocês querem receber{" "}
-                      <span className="text-xs font-semibold text-admin-muted">
+                      <span className="text-xs font-semibold text-admin-text-secondary">
                         · Obrigatório
                       </span>
                     </label>
-                    <div className="flex min-h-[52px] w-full max-w-[320px] overflow-hidden rounded-[10px] border border-admin-line-strong bg-admin-surface focus-within:border-admin-terracotta focus-within:outline-[3px] focus-within:outline-offset-2 focus-within:outline-[rgb(168_77_57_/_20%)] [@media(max-width:760px)]:max-w-none">
+                    <div className="flex min-h-[52px] w-full max-w-[320px] overflow-hidden rounded-[10px] border border-admin-border-strong bg-admin-surface focus-within:border-admin-accent focus-within:outline-[3px] focus-within:outline-offset-2 focus-within:outline-admin-accent/20 [@media(max-width:760px)]:max-w-none">
                       <span
                         aria-hidden="true"
-                        className="flex items-center border-r border-admin-line-strong bg-admin-beige px-3.5 text-[0.95rem] font-bold text-admin-graphite"
+                        className="flex items-center border-r border-admin-border-strong bg-admin-subtle px-3.5 text-[0.95rem] font-bold text-admin-text"
                       >
                         R$
                       </span>
@@ -880,12 +881,12 @@ export function GiftEditorView({
                         disabled={mutationBlocked}
                         value={price}
                         onChange={(event) => setPrice(event.target.value)}
-                        className="min-w-0 flex-1 bg-transparent px-3.5 text-xl text-admin-ink outline-none placeholder:text-admin-muted disabled:opacity-60"
+                        className="min-w-0 flex-1 bg-transparent px-3.5 text-xl text-admin-text outline-none placeholder:text-admin-text-secondary disabled:opacity-60"
                       />
                     </div>
                     <p
                       id={`${idPrefix}-price-minimum`}
-                      className="m-0 text-[0.82rem] text-admin-body"
+                      className="m-0 text-[0.82rem] text-admin-text"
                     >
                       Valor mínimo de {formatPrice(giftMinimumNominalCents)}.
                     </p>
@@ -903,16 +904,16 @@ export function GiftEditorView({
               </form>
               <section
                 aria-label="Resumo do presente"
-                className="flex items-center gap-3 rounded-2xl border border-admin-line bg-admin-surface p-4 [@media(min-width:761px)]:hidden"
+                className="flex items-center gap-3 rounded-2xl border border-admin-border bg-admin-surface p-4 [@media(min-width:761px)]:hidden"
               >
-                <span className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-[10px] border-2 border-dashed border-admin-line-strong bg-admin-canvas [&_img]:h-full [&_img]:w-full [&_img]:object-cover">
+                <span className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-[10px] border-2 border-dashed border-admin-border-strong bg-admin-canvas [&_img]:h-full [&_img]:w-full [&_img]:object-cover">
                   {photo}
                 </span>
                 <span className="grid min-w-0 flex-1 gap-0.5">
-                  <strong className="truncate text-[0.95rem] text-admin-ink">
+                  <strong className="truncate text-[0.95rem] text-admin-text">
                     {title.trim() || "Novo presente"}
                   </strong>
-                  <span className="text-xs text-admin-muted">
+                  <span className="text-xs text-admin-text-secondary">
                     {checklist.items.find((item) => !item.done)?.id === "photo"
                       ? "Falta a foto para publicar"
                       : checklist.done === 3
@@ -923,7 +924,7 @@ export function GiftEditorView({
                 </span>
                 <button
                   type="button"
-                  className="min-h-11 shrink-0 bg-transparent px-1 text-sm font-semibold text-admin-terracotta-deep underline underline-offset-4"
+                  className="min-h-11 shrink-0 bg-transparent px-1 text-sm font-semibold text-admin-accent-hover underline underline-offset-4"
                   onClick={() => setDraftPreviewOpen(true)}
                 >
                   Prévia
@@ -932,7 +933,7 @@ export function GiftEditorView({
             </div>
             <aside className="grid min-w-0 gap-5 [@media(max-width:760px)]:hidden">
               <div className="grid gap-2.5">
-                <p className="m-0 text-xs font-bold uppercase tracking-[0.08em] text-admin-muted">
+                <p className="m-0 text-xs font-bold uppercase tracking-[0.08em] text-admin-text-secondary">
                   Como os convidados vão ver
                 </p>
                 <GuestPreviewCard
@@ -951,7 +952,7 @@ export function GiftEditorView({
                 <Button
                   type="button"
                   variant="ghost"
-                  className="w-fit text-destructive"
+                  className="w-fit text-admin-danger-text"
                   disabled={mutationBlocked}
                   onClick={() => setArchive(selected)}
                 >
@@ -967,12 +968,12 @@ export function GiftEditorView({
               pads itself by the same amount: it stays pinned to the viewport
               bottom with its own opaque background behind the nav, so no strip
               opens between the bar and the nav at any scroll position. */}
-          <div className="sticky bottom-0 z-[5] -mx-[42px] -mb-6 flex flex-wrap items-center justify-between gap-3 border-t border-admin-line bg-admin-surface px-[42px] py-4 [@media(max-width:760px)]:-mx-5 [@media(max-width:760px)]:-mb-[calc(24px+74px+env(safe-area-inset-bottom))] [@media(max-width:760px)]:px-4 [@media(max-width:760px)]:pb-[calc(16px+74px+env(safe-area-inset-bottom))] [@media(min-width:761px)_and_(max-width:1060px)]:-mx-7 [@media(min-width:761px)_and_(max-width:1060px)]:px-7">
+          <div className="sticky bottom-0 z-[5] -mx-[42px] -mb-6 flex flex-wrap items-center justify-between gap-3 border-t border-admin-border bg-admin-surface px-[42px] py-4 [@media(max-width:760px)]:-mx-5 [@media(max-width:760px)]:-mb-[calc(24px+74px+env(safe-area-inset-bottom))] [@media(max-width:760px)]:px-4 [@media(max-width:760px)]:pb-[calc(16px+74px+env(safe-area-inset-bottom))] [@media(min-width:761px)_and_(max-width:1060px)]:-mx-7 [@media(min-width:761px)_and_(max-width:1060px)]:px-7">
             <button
               type="button"
               disabled={busy || saving}
               onClick={() => openEditor(null)}
-              className="min-h-11 bg-transparent p-0 text-[0.95rem] font-semibold text-admin-terracotta-deep underline underline-offset-4 disabled:opacity-60 [@media(max-width:760px)]:hidden"
+              className="min-h-11 bg-transparent p-0 text-[0.95rem] font-semibold text-admin-accent-hover underline underline-offset-4 disabled:opacity-60 [@media(max-width:760px)]:hidden"
             >
               Cancelar
             </button>
@@ -981,7 +982,7 @@ export function GiftEditorView({
                 <Button
                   type="submit"
                   form={formId}
-                  className="min-h-12 rounded-[10px] px-6 text-[0.95rem] font-bold bg-admin-terracotta text-white hover:bg-admin-terracotta-deep [@media(max-width:760px)]:col-span-2"
+                  className="min-h-12 rounded-[10px] px-6 text-[0.95rem] font-bold bg-admin-accent text-admin-on-accent hover:bg-admin-accent-hover [@media(max-width:760px)]:col-span-2"
                   disabled={mutationBlocked}
                 >
                   {busy ? "Salvando…" : "Salvar alterações"}
@@ -993,7 +994,7 @@ export function GiftEditorView({
                     form={formId}
                     value="draft"
                     variant="outline"
-                    className="min-h-12 rounded-[10px] border-admin-line-strong px-6 text-[0.95rem] font-semibold"
+                    className="min-h-12 rounded-[10px] border-admin-border-strong px-6 text-[0.95rem] font-semibold"
                     disabled={mutationBlocked}
                   >
                     {busy ? "Salvando…" : "Salvar rascunho"}
@@ -1002,7 +1003,7 @@ export function GiftEditorView({
                     type="submit"
                     form={formId}
                     value="publish"
-                    className="min-h-12 rounded-[10px] px-6 text-[0.95rem] font-bold bg-admin-terracotta text-white hover:bg-admin-terracotta-deep disabled:bg-admin-beige-deep disabled:text-admin-muted disabled:opacity-100"
+                    className="min-h-12 rounded-[10px] px-6 text-[0.95rem] font-bold bg-admin-accent text-admin-on-accent hover:bg-admin-accent-hover disabled:bg-admin-subtle-hover disabled:text-admin-text-secondary disabled:opacity-100"
                     disabled={mutationBlocked || !canPublishNow}
                   >
                     <span className="[@media(max-width:760px)]:hidden">
@@ -1028,20 +1029,22 @@ export function GiftEditorView({
             ).map(([label, value]) => (
               <div
                 key={label}
-                className="grid min-w-0 gap-1 rounded-2xl border border-admin-line bg-admin-surface px-[18px] py-4"
+                className="grid min-w-0 gap-1 rounded-2xl border border-admin-border bg-admin-surface px-[18px] py-4"
               >
-                <span className="text-[0.82rem] text-admin-muted">{label}</span>
-                <span className="font-admin-display text-[1.75rem] leading-none text-admin-ink">
+                <span className="text-[0.82rem] text-admin-text-secondary">
+                  {label}
+                </span>
+                <span className="font-admin-display text-[1.75rem] leading-none text-admin-text">
                   {loading ? "–" : value}
                 </span>
               </div>
             ))}
-            <div className="flex min-w-0 items-center gap-4 rounded-2xl border border-admin-line bg-admin-surface px-[18px] py-4 [@media(max-width:760px)]:col-span-2">
+            <div className="flex min-w-0 items-center gap-4 rounded-2xl border border-admin-border bg-admin-surface px-[18px] py-4 [@media(max-width:760px)]:col-span-2">
               <div className="grid min-w-0 gap-1">
-                <span className="text-[0.82rem] text-admin-muted">
+                <span className="text-[0.82rem] text-admin-text-secondary">
                   Taxas dos presentes
                 </span>
-                <strong className="text-[0.95rem] text-admin-ink">
+                <strong className="text-[0.95rem] text-admin-text">
                   {giftFeeExplanation}
                 </strong>
               </div>
@@ -1051,20 +1054,20 @@ export function GiftEditorView({
             <div className="relative w-full max-w-[406px] [@media(max-width:760px)]:max-w-none">
               <Search
                 aria-hidden="true"
-                className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-admin-muted"
+                className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-admin-text-secondary"
               />
               <Input
                 aria-label="Buscar presentes"
                 type="search"
                 placeholder="Buscar por nome ou descrição"
-                className="min-h-[42px] rounded-[10px] border-admin-line-strong bg-admin-surface pl-10 text-[0.95rem]"
+                className="min-h-[42px] rounded-[10px] border-admin-border-strong bg-admin-surface pl-10 text-[0.95rem]"
                 value={query}
                 disabled={loading || Boolean(error)}
                 onChange={(event) => setQuery(event.target.value)}
               />
             </div>
             <fieldset
-              className="m-0 flex min-w-0 max-w-full gap-1 rounded-[10px] border border-admin-line bg-admin-surface p-1 [@media(max-width:760px)]:grid [@media(max-width:760px)]:w-full [@media(max-width:760px)]:grid-cols-4"
+              className="m-0 flex min-w-0 max-w-full gap-1 rounded-[10px] border border-admin-border bg-admin-surface p-1 [@media(max-width:760px)]:grid [@media(max-width:760px)]:w-full [@media(max-width:760px)]:grid-cols-4"
               aria-label="Filtrar presentes"
             >
               {(
@@ -1081,7 +1084,7 @@ export function GiftEditorView({
                   aria-pressed={filter === value}
                   disabled={loading || Boolean(error)}
                   onClick={() => setFilter(value)}
-                  className={`min-h-9 shrink-0 rounded-[7px] px-3.5 text-sm font-semibold whitespace-nowrap [@media(max-width:760px)]:min-w-0 [@media(max-width:760px)]:px-1 [@media(max-width:760px)]:text-[0.8rem] transition-colors motion-reduce:transition-none disabled:opacity-60 ${filter === value ? "bg-admin-graphite text-white" : "text-admin-body hover:bg-admin-canvas"}`}
+                  className={`min-h-9 shrink-0 rounded-[7px] px-3.5 text-sm font-semibold whitespace-nowrap [@media(max-width:760px)]:min-w-0 [@media(max-width:760px)]:px-1 [@media(max-width:760px)]:text-[0.8rem] transition-colors motion-reduce:transition-none disabled:opacity-60 ${filter === value ? adminStyles.selected : "text-admin-text hover:bg-admin-canvas"}`}
                 >
                   {label}
                 </button>
@@ -1095,10 +1098,10 @@ export function GiftEditorView({
               <div
                 className={`${adminStyles.surface} grid justify-items-center gap-3 px-5 py-12 text-center`}
               >
-                <h2 className="m-0 text-lg font-semibold text-admin-ink">
+                <h2 className="m-0 text-lg font-semibold text-admin-text">
                   Nenhum presente encontrado
                 </h2>
-                <p className="m-0 max-w-md text-sm leading-relaxed text-admin-muted">
+                <p className="m-0 max-w-md text-sm leading-relaxed text-admin-text-secondary">
                   Tente outra busca ou escolha outro filtro.
                 </p>
                 <Button
@@ -1121,20 +1124,20 @@ export function GiftEditorView({
                     type="button"
                     disabled={mutationBlocked}
                     onClick={() => openEditor({ kind: "create" })}
-                    className="flex h-full min-h-[200px] w-full flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-admin-line-strong bg-transparent p-6 text-center transition-colors hover:bg-admin-surface motion-reduce:transition-none disabled:opacity-60"
+                    className="flex h-full min-h-[200px] w-full flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-admin-border-strong bg-transparent p-6 text-center transition-colors hover:bg-admin-surface motion-reduce:transition-none disabled:opacity-60"
                   >
                     <span
                       aria-hidden="true"
-                      className="flex size-12 items-center justify-center rounded-full bg-admin-terracotta-wash text-admin-terracotta-deep"
+                      className="flex size-12 items-center justify-center rounded-full bg-admin-accent-subtle text-admin-accent-hover"
                     >
                       <Plus className="size-6" />
                     </span>
-                    <span className="text-base font-bold text-admin-terracotta-deep">
+                    <span className="text-base font-bold text-admin-accent-hover">
                       {gifts.length === 0
                         ? "Adicionar o primeiro presente"
                         : "Novo presente"}
                     </span>
-                    <span className="text-[0.82rem] text-admin-muted">
+                    <span className="text-[0.82rem] text-admin-text-secondary">
                       {gifts.length === 0
                         ? "Sua lista começa aqui. Ainda não há presentes cadastrados."
                         : "Foto, nome e valor"}
@@ -1155,14 +1158,14 @@ export function GiftEditorView({
                 const preview = renderPreview?.(gift, index + 1);
                 return (
                   <li key={gift.id} className="min-w-0">
-                    <article className="flex h-full min-w-0 flex-col overflow-hidden rounded-2xl border border-admin-line bg-admin-surface">
+                    <article className="flex h-full min-w-0 flex-col overflow-hidden rounded-2xl border border-admin-border bg-admin-surface">
                       <div
                         className={`relative flex aspect-[290/182] items-center justify-center overflow-hidden ${photoTones[Math.max(position, 0) % photoTones.length]} [&_img]:h-full [&_img]:w-full [&_img]:object-cover`}
                       >
                         {preview ?? (
                           <ImageIcon
                             aria-hidden="true"
-                            className="size-9 text-admin-terracotta-deep"
+                            className="size-9 text-admin-accent-hover"
                           />
                         )}
                         <span className="absolute top-3 left-3">
@@ -1175,7 +1178,7 @@ export function GiftEditorView({
                               disabled={mutationBlocked || position === 0}
                               aria-label={`Mover ${gift.title} para cima`}
                               onClick={() => moveGift(gift, "up")}
-                              className="flex size-8 items-center justify-center rounded-lg bg-admin-surface/95 text-admin-graphite shadow-sm hover:bg-white disabled:opacity-40"
+                              className="flex size-8 items-center justify-center rounded-lg bg-admin-surface/95 text-admin-text shadow-sm hover:bg-admin-surface disabled:opacity-40"
                             >
                               <ArrowUp aria-hidden="true" className="size-4" />
                             </button>
@@ -1187,7 +1190,7 @@ export function GiftEditorView({
                               }
                               aria-label={`Mover ${gift.title} para baixo`}
                               onClick={() => moveGift(gift, "down")}
-                              className="flex size-8 items-center justify-center rounded-lg bg-admin-surface/95 text-admin-graphite shadow-sm hover:bg-white disabled:opacity-40"
+                              className="flex size-8 items-center justify-center rounded-lg bg-admin-surface/95 text-admin-text shadow-sm hover:bg-admin-surface disabled:opacity-40"
                             >
                               <ArrowDown
                                 aria-hidden="true"
@@ -1198,23 +1201,23 @@ export function GiftEditorView({
                         )}
                       </div>
                       <div className="flex flex-1 flex-col gap-1.5 p-[18px]">
-                        <h3 className="m-0 break-words text-[1.05rem] font-bold text-admin-ink">
+                        <h3 className="m-0 break-words text-[1.05rem] font-bold text-admin-text">
                           {gift.title}
                         </h3>
-                        <p className="m-0 line-clamp-2 break-words text-sm leading-[1.5] text-admin-body">
+                        <p className="m-0 line-clamp-2 break-words text-sm leading-[1.5] text-admin-text">
                           {!gift.mediaAssetId &&
                           gift.publicationState === "DRAFT"
                             ? "Ainda sem foto. Adicione antes de publicar."
                             : gift.description ||
                               "Um presente simbólico para celebrar essa nova fase."}
                         </p>
-                        <p className="m-0 text-lg font-bold text-admin-ink">
+                        <p className="m-0 text-lg font-bold text-admin-text">
                           {formatPrice(gift.nominalCents)}
                         </p>
                         {belowMinimum && (
                           <p
                             id={minimumHintId}
-                            className="m-0 text-xs text-admin-muted"
+                            className="m-0 text-xs text-admin-text-secondary"
                           >
                             Ajuste o valor para pelo menos{" "}
                             {formatPrice(giftMinimumNominalCents)} para receber
@@ -1222,7 +1225,7 @@ export function GiftEditorView({
                           </p>
                         )}
                         {archived ? (
-                          <p className="m-0 mt-auto pt-2 text-xs text-admin-muted">
+                          <p className="m-0 mt-auto pt-2 text-xs text-admin-text-secondary">
                             Preservado no histórico
                           </p>
                         ) : (
@@ -1231,7 +1234,7 @@ export function GiftEditorView({
                               type="button"
                               variant="outline"
                               size="sm"
-                              className="min-h-9 border-admin-line-strong"
+                              className="min-h-9 border-admin-border-strong"
                               disabled={mutationBlocked}
                               onClick={() =>
                                 openEditor({ kind: "edit", giftId: gift.id })
@@ -1243,7 +1246,7 @@ export function GiftEditorView({
                               type="button"
                               variant="outline"
                               size="sm"
-                              className="min-h-9 border-admin-line-strong"
+                              className="min-h-9 border-admin-border-strong"
                               disabled={mutationBlocked || publishBlocked}
                               aria-describedby={
                                 publishBlocked ? minimumHintId : undefined
@@ -1325,25 +1328,25 @@ export function GiftEditorView({
             />
           ) : (
             previewGift && (
-              <div className="min-w-0 overflow-hidden rounded-xl border border-admin-line">
-                <div className="flex aspect-[16/9] items-center justify-center overflow-hidden bg-admin-beige/50 [&_img]:h-full [&_img]:w-full [&_img]:object-cover">
+              <div className="min-w-0 overflow-hidden rounded-xl border border-admin-border">
+                <div className="flex aspect-[16/9] items-center justify-center overflow-hidden bg-admin-subtle/50 [&_img]:h-full [&_img]:w-full [&_img]:object-cover">
                   {renderPreview?.(previewGift, positionOf(previewGift)) ?? (
                     <Gift
                       aria-hidden="true"
-                      className="size-10 text-admin-terracotta/50"
+                      className="size-10 text-admin-accent/50"
                     />
                   )}
                 </div>
                 <div className="space-y-3 p-5">
                   <GiftStatusBadge state={previewGift.publicationState} />
-                  <h3 className="break-words text-xl font-semibold text-admin-ink">
+                  <h3 className="break-words text-xl font-semibold text-admin-text">
                     {previewGift.title}
                   </h3>
-                  <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-admin-muted">
+                  <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-admin-text-secondary">
                     {previewGift.description}
                   </p>
                   <GuestPreviewPrice estimate={estimate} />
-                  <p className="text-xs text-admin-muted">
+                  <p className="text-xs text-admin-text-secondary">
                     {previewGift.publicationState === "PUBLISHED"
                       ? "Visível para os convidados"
                       : "Este rascunho está visível apenas no painel."}

@@ -60,17 +60,17 @@ export function ManageConfirmationsDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <AdminDialogContent showCloseButton className="max-w-[900px]">
-        <DialogTitle className="font-admin-display text-3xl text-admin-graphite">
+        <DialogTitle className="font-admin-display text-3xl text-admin-text">
           Gerenciar confirmações
         </DialogTitle>
-        <DialogDescription className="leading-relaxed text-admin-muted">
+        <DialogDescription className="leading-relaxed text-admin-text-secondary">
           A resposta é individual para cada convidado. Alterações feitas aqui
           entram no histórico.
         </DialogDescription>
         <div
           role="tablist"
           aria-label="Visões das confirmações"
-          className="mt-5 flex gap-2 border-b border-admin-line"
+          className="mt-5 flex gap-2 border-b border-admin-border"
         >
           <button
             type="button"
@@ -79,7 +79,7 @@ export function ManageConfirmationsDialog({
             aria-selected={tab === "current"}
             aria-controls="confirmations-current-panel"
             onClick={() => setTab("current")}
-            className="min-h-11 border-b-2 border-transparent px-3 text-sm font-semibold text-admin-muted aria-selected:border-admin-terracotta aria-selected:text-admin-terracotta-deep"
+            className="min-h-11 border-b-2 border-transparent px-3 text-sm font-semibold text-admin-text-secondary aria-selected:border-admin-accent aria-selected:text-admin-accent-hover"
           >
             Confirmações atuais
           </button>
@@ -90,7 +90,7 @@ export function ManageConfirmationsDialog({
             aria-selected={tab === "history"}
             aria-controls="confirmations-history-panel"
             onClick={() => setTab("history")}
-            className="min-h-11 border-b-2 border-transparent px-3 text-sm font-semibold text-admin-muted aria-selected:border-admin-terracotta aria-selected:text-admin-terracotta-deep"
+            className="min-h-11 border-b-2 border-transparent px-3 text-sm font-semibold text-admin-text-secondary aria-selected:border-admin-accent aria-selected:text-admin-accent-hover"
           >
             Histórico
           </button>
@@ -103,40 +103,40 @@ export function ManageConfirmationsDialog({
             className="mt-5 grid gap-4"
           >
             {loading || !view ? (
-              <p role="status" className="text-admin-muted">
+              <p role="status" className="text-admin-text-secondary">
                 Carregando confirmações…
               </p>
             ) : view.invitations.length === 0 ? (
-              <p className="text-admin-muted">
+              <p className="text-admin-text-secondary">
                 Ainda não há convidados para confirmar.
               </p>
             ) : (
               view.invitations.map((invitation) => (
                 <section
                   key={invitation.id}
-                  className="rounded-xl border border-admin-line bg-admin-canvas p-4"
+                  className="rounded-xl border border-admin-border bg-admin-canvas p-4"
                 >
-                  <h3 className="m-0 mb-3 font-admin-display text-[1.25rem] text-admin-graphite">
+                  <h3 className="m-0 mb-3 font-admin-display text-[1.25rem] text-admin-text">
                     {invitation.name}
                   </h3>
                   <div className="grid gap-3">
                     {invitation.guests.map((guest) => (
                       <div
                         key={guest.id}
-                        className="flex flex-wrap items-center justify-between gap-3 border-t border-admin-line pt-3 first:border-t-0 first:pt-0"
+                        className="flex flex-wrap items-center justify-between gap-3 border-t border-admin-border pt-3 first:border-t-0 first:pt-0"
                       >
                         <div className="grid gap-1">
-                          <strong className="text-sm text-admin-ink">
+                          <strong className="text-sm text-admin-text">
                             {guest.fullName}
                           </strong>
-                          <span className="text-xs text-admin-muted">
+                          <span className="text-xs text-admin-text-secondary">
                             {guest.guestType === "ADULT" ? "Adulto" : "Criança"}
                           </span>
                           <InvitationStatus
                             state={draft[guest.id] ?? guest.state}
                           />
                         </div>
-                        <label className="grid gap-1 text-xs text-admin-muted">
+                        <label className="grid gap-1 text-xs text-admin-text-secondary">
                           Resposta
                           <select
                             value={draft[guest.id] ?? guest.state}
@@ -147,7 +147,7 @@ export function ManageConfirmationsDialog({
                               }))
                             }
                             disabled={inactive || busy}
-                            className="min-h-10 rounded-lg border border-admin-line bg-admin-surface px-3 text-sm text-admin-ink"
+                            className="min-h-10 rounded-lg border border-admin-border bg-admin-surface px-3 text-sm text-admin-text"
                           >
                             {states.map((state) => (
                               <option key={state.value} value={state.value}>
@@ -165,7 +165,7 @@ export function ManageConfirmationsDialog({
             {/* Bleeds over the dialog padding so scrolled cards never show beneath it. */}
             <div
               data-confirmations-footer
-              className="sticky -bottom-[30px] -mx-[30px] -mb-[30px] flex flex-wrap justify-end gap-3 border-t border-admin-line bg-admin-surface px-[30px] pt-4 pb-[30px] [@media(max-width:760px)]:-bottom-6 [@media(max-width:760px)]:-mx-[18px] [@media(max-width:760px)]:-mb-6 [@media(max-width:760px)]:px-[18px] [@media(max-width:760px)]:pb-6"
+              className="sticky -bottom-[30px] -mx-[30px] -mb-[30px] flex flex-wrap justify-end gap-3 border-t border-admin-border bg-admin-surface px-[30px] pt-4 pb-[30px] [@media(max-width:760px)]:-bottom-6 [@media(max-width:760px)]:-mx-[18px] [@media(max-width:760px)]:-mb-6 [@media(max-width:760px)]:px-[18px] [@media(max-width:760px)]:pb-6"
             >
               <Button
                 type="button"
@@ -194,32 +194,32 @@ export function ManageConfirmationsDialog({
             className="mt-5 grid gap-2"
           >
             {!history ? (
-              <p role="status" className="text-admin-muted">
+              <p role="status" className="text-admin-text-secondary">
                 Carregando histórico…
               </p>
             ) : history.entries.length === 0 ? (
-              <p className="text-admin-muted">
+              <p className="text-admin-text-secondary">
                 Ainda não há alterações de confirmação.
               </p>
             ) : (
               history.entries.map((entry) => (
                 <article
                   key={entry.id}
-                  className="grid gap-2 border-b border-admin-line py-3 last:border-b-0"
+                  className="grid gap-2 border-b border-admin-border py-3 last:border-b-0"
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <strong className="text-sm text-admin-ink">
+                    <strong className="text-sm text-admin-text">
                       {entry.guestDisplayName} · {entry.invitationName}
                     </strong>
                     <time
-                      className="text-xs text-admin-muted"
+                      className="text-xs text-admin-text-secondary"
                       dateTime={entry.occurredAt}
                     >
                       {dateFormatter.format(new Date(entry.occurredAt))}
                     </time>
                   </div>
                   <InvitationStatus state={entry.afterState} />
-                  <span className="text-xs text-admin-muted">
+                  <span className="text-xs text-admin-text-secondary">
                     Alterado por{" "}
                     {entry.actorType === "ADMIN" ? "administração" : "convite"}
                   </span>

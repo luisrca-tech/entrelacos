@@ -224,7 +224,7 @@ export function GiftImageField(props: Props) {
           <div
             data-dragging={dragging ? "true" : "false"}
             {...dropHandlers}
-            className={`relative flex min-h-[212px] min-w-0 items-center justify-center overflow-hidden rounded-[14px] bg-admin-beige-deep ${dragging ? "outline-[3px] outline-offset-2 outline-admin-terracotta outline-dashed" : ""}`}
+            className={`relative flex min-h-[212px] min-w-0 items-center justify-center overflow-hidden rounded-[14px] bg-admin-subtle-hover ${dragging ? "outline-[3px] outline-offset-2 outline-admin-accent outline-dashed" : ""}`}
           >
             {localUrl ? (
               <img
@@ -241,12 +241,12 @@ export function GiftImageField(props: Props) {
             ) : (
               <ImageIcon
                 aria-hidden="true"
-                className="size-11 text-admin-terracotta-deep"
+                className="size-11 text-admin-accent-hover"
               />
             )}
             <span
               aria-live="polite"
-              className={`absolute bottom-3 left-3 max-w-[calc(100%-24px)] truncate rounded-full px-2.5 py-1 text-xs font-bold ${uploading ? "bg-admin-pending-wash text-admin-pending-ink" : "bg-admin-success-wash text-admin-success-ink"}`}
+              className={`absolute bottom-3 left-3 max-w-[calc(100%-24px)] truncate rounded-full px-2.5 py-1 text-xs font-bold ${uploading ? "bg-admin-pending-subtle text-admin-pending-text" : "bg-admin-success-subtle text-admin-success-text"}`}
             >
               {uploading
                 ? "Enviando foto…"
@@ -343,7 +343,7 @@ export function GiftImageField(props: Props) {
         </div>
       )}
       {notice && (
-        <p role="status" className="m-0 text-sm text-admin-muted">
+        <p role="status" className="m-0 text-sm text-admin-text-secondary">
           {notice}
         </p>
       )}
@@ -389,10 +389,10 @@ export function GiftImageField(props: Props) {
         <div className="grid gap-1.5">
           <label
             htmlFor={`${id}-alt`}
-            className="text-sm font-bold text-admin-ink"
+            className="text-sm font-bold text-admin-text"
           >
             Descreva a foto{" "}
-            <span className="text-xs font-semibold text-admin-muted">
+            <span className="text-xs font-semibold text-admin-text-secondary">
               · Opcional
             </span>
           </label>
@@ -412,7 +412,7 @@ export function GiftImageField(props: Props) {
         <p
           id={`${id}-error`}
           role="alert"
-          className="m-0 text-sm text-admin-danger-ink"
+          className="m-0 text-sm text-admin-danger-text"
         >
           {error}
         </p>

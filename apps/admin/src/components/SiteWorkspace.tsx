@@ -440,7 +440,7 @@ export function SiteWorkspace({
           <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
             {heading.showBackLink && (
               <Link
-                className="w-fit text-[0.88rem] text-admin-muted no-underline hover:text-admin-ink"
+                className="w-fit text-[0.88rem] text-admin-text-secondary no-underline hover:text-admin-text"
                 to="/"
               >
                 ← Todos os casamentos
@@ -459,7 +459,7 @@ export function SiteWorkspace({
         <section className="mb-6 grid gap-2.5">
           {heading.showBackLink && (
             <Link
-              className="w-fit text-[0.88rem] text-admin-muted no-underline hover:text-admin-ink"
+              className="w-fit text-[0.88rem] text-admin-text-secondary no-underline hover:text-admin-text"
               to="/"
             >
               ← Todos os casamentos
@@ -472,7 +472,7 @@ export function SiteWorkspace({
               >
                 {heading.title}
               </h1>
-              <p className="mt-2 text-[15px] leading-relaxed text-admin-muted">
+              <p className="mt-2 text-[15px] leading-relaxed text-admin-text-secondary">
                 {area === "home"
                   ? "Acompanhe a preparação do casamento e retome de onde parou."
                   : area === "invitations"
@@ -488,7 +488,7 @@ export function SiteWorkspace({
               {site.publicUrl &&
                 !["home", "invitations", "messages", "team"].includes(area) && (
                   <a
-                    className="inline-flex min-h-[42px] w-fit items-center justify-center rounded-lg border border-admin-graphite bg-admin-graphite px-[17px] py-2.5 text-[0.88rem] font-bold text-[#fffaf6] no-underline hover:bg-admin-ink [@media(max-width:760px)]:w-full"
+                    className="inline-flex min-h-[42px] w-fit items-center justify-center rounded-lg border border-admin-accent bg-admin-accent px-[17px] py-2.5 text-[0.88rem] font-bold text-admin-on-accent no-underline hover:border-admin-accent-hover hover:bg-admin-accent-hover [@media(max-width:760px)]:w-full"
                     href={publicSiteHandoffUrl(site.publicUrl, panelOrigin)}
                   >
                     Ir para o site
@@ -552,7 +552,7 @@ export function SiteWorkspace({
             access?.siteId === site.id &&
             access.capabilities.configureReceiving ? (
               <Link
-                className="text-admin-terracotta-deep underline underline-offset-4"
+                className="text-admin-accent-hover underline underline-offset-4"
                 to="/sites/$siteId/receiving"
                 params={{ siteId: site.id }}
               >

@@ -10,24 +10,24 @@ export function GiftsLocked({
 }) {
   return (
     <section
-      className="rounded-2xl border border-admin-line bg-admin-surface p-6 sm:p-8"
+      className="rounded-2xl border border-admin-border bg-admin-surface p-6 sm:p-8"
       aria-labelledby="gifts-locked-title"
       data-area="gifts"
     >
-      <div className="mb-5 flex size-12 items-center justify-center rounded-xl bg-admin-beige">
-        <Gift aria-hidden="true" className="size-6 text-admin-terracotta" />
+      <div className="mb-5 flex size-12 items-center justify-center rounded-xl bg-admin-subtle">
+        <Gift aria-hidden="true" className="size-6 text-admin-accent" />
       </div>
-      <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-admin-muted">
+      <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-admin-text-secondary">
         <LockKeyhole aria-hidden="true" className="size-3.5" />
         Lista de presentes
       </p>
       <h2
         id="gifts-locked-title"
-        className="font-admin-display text-2xl text-admin-ink"
+        className="font-admin-display text-2xl text-admin-text"
       >
         Configure os recebimentos primeiro
       </h2>
-      <p className="mt-3 max-w-xl text-sm leading-relaxed text-admin-muted">
+      <p className="mt-3 max-w-xl text-sm leading-relaxed text-admin-text-secondary">
         Sua lista será liberada após a verificação do recebedor e da conta de
         destino. Os presentes são simbólicos e convertidos em dinheiro para o
         casal.
@@ -35,7 +35,7 @@ export function GiftsLocked({
       {reason && (
         <p
           role="status"
-          className="mt-3 max-w-xl text-sm font-medium text-admin-graphite"
+          className="mt-3 max-w-xl text-sm font-medium text-admin-text"
         >
           {reason}
         </p>
@@ -43,7 +43,7 @@ export function GiftsLocked({
       {receivingAction ? (
         <div className="mt-5">{receivingAction}</div>
       ) : (
-        <p className="mt-4 text-sm text-admin-muted">
+        <p className="mt-4 text-sm text-admin-text-secondary">
           Peça ao casal para concluir a configuração dos recebimentos.
         </p>
       )}

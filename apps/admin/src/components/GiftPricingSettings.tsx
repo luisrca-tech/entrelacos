@@ -144,11 +144,11 @@ function PreviewRow({
 }) {
   return (
     <div className="flex min-w-0 flex-wrap justify-between gap-x-3 gap-y-0.5">
-      <dt className={strong ? "font-bold text-admin-ink" : "text-admin-body"}>
+      <dt className={strong ? "font-bold text-admin-text" : "text-admin-text"}>
         {label}
       </dt>
       <dd
-        className={`m-0 text-right ${strong ? "font-bold" : ""} ${tone === "success" ? "text-admin-success-ink" : "text-admin-ink"}`}
+        className={`m-0 text-right ${strong ? "font-bold" : ""} ${tone === "success" ? "text-admin-success-text" : "text-admin-text"}`}
       >
         {value}
       </dd>
@@ -171,9 +171,9 @@ export function GiftPricingPreview({
       aria-live="polite"
       className="grid min-w-0 gap-3 rounded-[14px] bg-admin-canvas p-4 text-sm"
     >
-      {title && <p className="m-0 font-bold text-admin-ink">{title}</p>}
+      {title && <p className="m-0 font-bold text-admin-text">{title}</p>}
       {nominalCents === null ? (
-        <p className="m-0 text-admin-muted">
+        <p className="m-0 text-admin-text-secondary">
           Informe um valor válido para simular.
         </p>
       ) : (
@@ -185,7 +185,7 @@ export function GiftPricingPreview({
               aria-label={method === "PIX" ? "Pix" : "Cartão à vista"}
               className="grid min-w-0 gap-1.5"
             >
-              <h4 className="m-0 text-xs font-bold uppercase tracking-[0.06em] text-admin-muted">
+              <h4 className="m-0 text-xs font-bold uppercase tracking-[0.06em] text-admin-text-secondary">
                 {method === "PIX" ? "Pix" : "Cartão à vista"}
               </h4>
               <dl className="m-0 grid gap-1.5">
@@ -201,7 +201,7 @@ export function GiftPricingPreview({
                       : item.commissionCents + item.processingCents,
                   )}
                 />
-                <div className="my-0.5 border-t border-admin-line" />
+                <div className="my-0.5 border-t border-admin-border" />
                 <PreviewRow
                   label="Total do convidado"
                   value={money(item?.totalCents ?? null)}
@@ -218,7 +218,7 @@ export function GiftPricingPreview({
           );
         })
       )}
-      <p className="m-0 text-xs leading-[1.5] text-admin-muted">
+      <p className="m-0 text-xs leading-[1.5] text-admin-text-secondary">
         {giftFeeExplanation} A simulação mostra os valores à vista.
       </p>
     </div>

@@ -37,19 +37,19 @@ export function InvitationFiltersPopover({
       value: "PENDING",
       label: "Sem resposta",
       count: summary.pending,
-      color: "bg-admin-status-pending",
+      color: "bg-admin-pending",
     },
     {
       value: "CONFIRMED",
       label: "Irá comparecer",
       count: summary.confirmed,
-      color: "bg-admin-status-confirmed",
+      color: "bg-admin-success",
     },
     {
       value: "DECLINED",
       label: "Não comparecerá",
       count: summary.declined,
-      color: "bg-admin-status-declined",
+      color: "bg-admin-danger",
     },
   ];
   const typeOptions: {
@@ -70,7 +70,7 @@ export function InvitationFiltersPopover({
             type="button"
             variant="outline"
             aria-label="Filtrar convites"
-            className="min-h-11 border-admin-line bg-admin-surface"
+            className="min-h-11 border-admin-border bg-admin-surface"
           />
         }
       >
@@ -79,13 +79,13 @@ export function InvitationFiltersPopover({
       </PopoverTrigger>
       <PopoverContent
         align="end"
-        className="w-[min(320px,calc(100vw-32px))] border-admin-line bg-admin-surface p-0 text-admin-ink"
+        className="w-[min(320px,calc(100vw-32px))] border-admin-border bg-admin-surface p-0 text-admin-text"
       >
-        <PopoverTitle className="border-b border-admin-line px-4 py-3 text-base">
+        <PopoverTitle className="border-b border-admin-border px-4 py-3 text-base">
           Filtrar convidados
         </PopoverTitle>
-        <fieldset className="grid border-b border-admin-line px-4 pb-3">
-          <legend className="mb-1 pt-3 text-[0.78rem] font-bold uppercase tracking-[0.08em] text-admin-muted">
+        <fieldset className="grid border-b border-admin-border px-4 pb-3">
+          <legend className="mb-1 pt-3 text-[0.78rem] font-bold uppercase tracking-[0.08em] text-admin-text-secondary">
             Status
           </legend>
           {statusOptions.map((option) => (
@@ -99,7 +99,7 @@ export function InvitationFiltersPopover({
                 value={option.value}
                 checked={filters.status === option.value}
                 onChange={() => onChange({ ...filters, status: option.value })}
-                className="accent-admin-terracotta"
+                className="accent-admin-accent"
               />
               {option.color && (
                 <span
@@ -108,12 +108,12 @@ export function InvitationFiltersPopover({
                 />
               )}
               <span className="flex-1">{option.label}</span>
-              <span className="text-admin-muted">{option.count}</span>
+              <span className="text-admin-text-secondary">{option.count}</span>
             </label>
           ))}
         </fieldset>
         <fieldset className="grid px-4 pb-3">
-          <legend className="mb-1 pt-3 text-[0.78rem] font-bold uppercase tracking-[0.08em] text-admin-muted">
+          <legend className="mb-1 pt-3 text-[0.78rem] font-bold uppercase tracking-[0.08em] text-admin-text-secondary">
             Faixa etária
           </legend>
           {typeOptions.map((option) => (
@@ -129,15 +129,15 @@ export function InvitationFiltersPopover({
                 onChange={() =>
                   onChange({ ...filters, guestType: option.value })
                 }
-                className="accent-admin-terracotta"
+                className="accent-admin-accent"
               />
               <span className="flex-1">{option.label}</span>
-              <span className="text-admin-muted">{option.count}</span>
+              <span className="text-admin-text-secondary">{option.count}</span>
             </label>
           ))}
         </fieldset>
         {selectedCount > 0 && (
-          <div className="border-t border-admin-line px-4 py-3">
+          <div className="border-t border-admin-border px-4 py-3">
             <Button
               type="button"
               variant="ghost"

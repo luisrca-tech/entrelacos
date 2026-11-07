@@ -1,10 +1,10 @@
 import type { ReactNode } from "react";
 
 const tones = {
-  success: { dot: "bg-admin-status-confirmed", text: "text-admin-success-ink" },
-  pending: { dot: "bg-admin-status-pending", text: "text-admin-pending-ink" },
-  neutral: { dot: "bg-admin-line-strong", text: "text-admin-muted" },
-  danger: { dot: "bg-admin-status-declined", text: "text-admin-danger-ink" },
+  success: { dot: "bg-admin-success", text: "text-admin-success-text" },
+  pending: { dot: "bg-admin-pending", text: "text-admin-pending-text" },
+  neutral: { dot: "bg-admin-border-strong", text: "text-admin-text-secondary" },
+  danger: { dot: "bg-admin-danger", text: "text-admin-danger-text" },
 };
 
 export function StatusSignal({

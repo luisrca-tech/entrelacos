@@ -62,20 +62,19 @@ const tabs = [
   ["access", "Acessos do casal"],
 ] as const;
 const primary =
-  "min-h-12 rounded-[10px] bg-admin-terracotta px-6 text-[15px] font-bold text-white hover:bg-admin-terracotta-deep";
+  "min-h-12 rounded-[10px] bg-admin-accent px-6 text-[15px] font-bold text-admin-on-accent hover:bg-admin-accent-hover";
 const outline =
-  "min-h-12 rounded-[10px] border-admin-line-strong px-6 text-[15px] font-semibold text-admin-graphite";
+  "min-h-12 rounded-[10px] border-admin-border-strong px-6 text-[15px] font-semibold text-admin-text";
 const textLink =
-  "h-auto p-0 text-[15px] font-semibold text-admin-terracotta-deep underline underline-offset-4";
+  "h-auto p-0 text-[15px] font-semibold text-admin-accent-hover underline underline-offset-4";
 const card = `${adminStyles.surface} grid min-w-0 gap-3 px-[22px] py-5`;
-const title =
-  "m-0 font-admin-display text-[22px] font-normal text-admin-graphite";
+const title = "m-0 font-admin-display text-[22px] font-normal text-admin-text";
 // The panel body styles every h3 as a large display heading; card headings
 // override its size, and plain headings also return to body type.
-const cardTitle = "m-0 font-admin-display text-xl! font-normal text-admin-ink";
+const cardTitle = "m-0 font-admin-display text-xl! font-normal text-admin-text";
 const plainHeading =
-  "m-0 font-sans! text-[15px]! font-semibold! leading-normal! tracking-normal! text-admin-graphite";
-const sectionIntro = "m-0 text-sm text-admin-muted";
+  "m-0 font-sans! text-[15px]! font-semibold! leading-normal! tracking-normal! text-admin-text";
+const sectionIntro = "m-0 text-sm text-admin-text-secondary";
 const publicationTone: Record<string, "success" | "pending" | "neutral"> = {
   PUBLISHED: "success",
   PLACEHOLDER: "pending",
@@ -247,7 +246,7 @@ export function SiteSettingsView({
         className={`${adminStyles.surface} flex flex-wrap items-center gap-x-4 gap-y-3 rounded-[14px] py-3 pr-3.5 pl-[18px]`}
       >
         <div className="flex shrink-0 items-center gap-2.5">
-          <span className="text-[13px] font-semibold text-admin-muted">
+          <span className="text-[13px] font-semibold text-admin-text-secondary">
             Situação
           </span>
           <ToneBadge tone={lifecycleTone[site.lifecycle]}>
@@ -256,13 +255,13 @@ export function SiteSettingsView({
         </div>
         <span
           aria-hidden="true"
-          className="hidden h-[22px] w-px bg-admin-line sm:block"
+          className="hidden h-[22px] w-px bg-admin-border sm:block"
         />
         <div className="grid min-w-0 flex-[1_1_16rem] gap-0.5">
-          <strong className="text-sm text-admin-graphite">
+          <strong className="text-sm text-admin-text">
             {lifecycleHeadline[site.lifecycle]}
           </strong>
-          <span className="text-[13.5px] text-admin-muted">
+          <span className="text-[13.5px] text-admin-text-secondary">
             {lifecycleDescription}
           </span>
         </div>
@@ -289,17 +288,17 @@ export function SiteSettingsView({
       </section>
       <fieldset
         aria-label="Seções das configurações"
-        className="m-0 flex min-w-0 w-fit max-w-full flex-wrap gap-1 rounded-xl border border-admin-line bg-admin-surface p-1"
+        className="m-0 flex min-w-0 w-fit max-w-full flex-wrap gap-1 rounded-xl border border-admin-border bg-admin-surface p-1"
       >
         {tabs.map(([key, label]) => (
           <Button
             key={key}
             type="button"
             size="sm"
-            variant={tab === key ? "default" : "ghost"}
+            variant="ghost"
             aria-pressed={tab === key}
             disabled={pending}
-            className={`h-[38px] px-4 text-sm font-semibold ${tab === key ? "" : "text-admin-muted"}`}
+            className={`h-[38px] px-4 text-sm font-semibold ${tab === key ? adminStyles.selected : "text-admin-text-secondary"}`}
             onClick={() => selectTab(key)}
           >
             {label}
@@ -318,7 +317,7 @@ export function SiteSettingsView({
             {data.map((item) => (
               <div key={item.label} className={card}>
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-[13px] font-medium text-admin-body">
+                  <span className="text-[13px] font-medium text-admin-text">
                     {item.label}
                   </span>
                   <Button
@@ -336,10 +335,10 @@ export function SiteSettingsView({
                     Editar
                   </Button>
                 </div>
-                <strong className="break-words text-[17px] text-admin-ink">
+                <strong className="break-words text-[17px] text-admin-text">
                   {item.value}
                 </strong>
-                <p className="m-0 break-words text-[13px] text-admin-muted">
+                <p className="m-0 break-words text-[13px] text-admin-text-secondary">
                   {item.hint}
                 </p>
               </div>
@@ -356,7 +355,7 @@ export function SiteSettingsView({
           <div className="grid gap-3 md:grid-cols-2">
             <div className={card}>
               <div className="flex items-center justify-between gap-2">
-                <span className="text-[13px] font-medium text-admin-body">
+                <span className="text-[13px] font-medium text-admin-text">
                   Data do casamento
                 </span>
                 <Button
@@ -370,21 +369,23 @@ export function SiteSettingsView({
                   Editar
                 </Button>
               </div>
-              <strong className="text-[17px] text-admin-ink">
+              <strong className="text-[17px] text-admin-text">
                 {formatBrazilianDate(site.eventDate)}
               </strong>
-              <p className="m-0 text-[13px] text-admin-muted">{eventHint}</p>
+              <p className="m-0 text-[13px] text-admin-text-secondary">
+                {eventHint}
+              </p>
             </div>
             <div className={card}>
-              <span className="text-[13px] font-medium text-admin-body">
+              <span className="text-[13px] font-medium text-admin-text">
                 Aprovação
               </span>
-              <strong className="text-[17px] text-admin-ink">
+              <strong className="text-[17px] text-admin-text">
                 {approvedOn
                   ? `Aprovado em ${approvedOn}`
                   : "Ainda não aprovado"}
               </strong>
-              <p className="m-0 text-[13px] text-admin-muted">
+              <p className="m-0 text-[13px] text-admin-text-secondary">
                 {approvedOn
                   ? "Registrada na aprovação da revisão. Não é editável."
                   : "A vigência começa quando a revisão é aprovada."}
@@ -395,7 +396,7 @@ export function SiteSettingsView({
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div className="grid gap-0.5">
                 <h3 className={plainHeading}>Vigência</h3>
-                <p className="m-0 text-[13px] text-admin-muted">
+                <p className="m-0 text-[13px] text-admin-text-secondary">
                   {term
                     ? `Período contratado: ${term}.`
                     : "Vigência ainda não definida."}
@@ -412,7 +413,7 @@ export function SiteSettingsView({
                 Editar
               </Button>
             </div>
-            <p className="m-0 rounded-[10px] bg-admin-beige px-3 py-2.5 text-[13px] leading-normal text-admin-body">
+            <p className="m-0 rounded-[10px] bg-admin-subtle px-3 py-2.5 text-[13px] leading-normal text-admin-text">
               A aprovação inicia um ano de vigência. O vencimento não inativa o
               casamento automaticamente. O fim precisa ser igual ou posterior ao
               início.
@@ -440,7 +441,7 @@ export function SiteSettingsView({
                     {labels[site.publicationState]}
                   </ToneBadge>
                 </div>
-                <p className="m-0 text-sm leading-normal text-admin-muted">
+                <p className="m-0 text-sm leading-normal text-admin-text-secondary">
                   Atualize este registro após conferir o site no ar. A
                   publicação é realizada separadamente.
                 </p>
@@ -454,8 +455,8 @@ export function SiteSettingsView({
                 Registrar publicação
               </Button>
             </div>
-            <div className="grid gap-3 border-t border-admin-line pt-3.5">
-              <p className="m-0 text-[11px] font-bold uppercase tracking-[0.12em] text-admin-muted">
+            <div className="grid gap-3 border-t border-admin-border pt-3.5">
+              <p className="m-0 text-[11px] font-bold uppercase tracking-[0.12em] text-admin-text-secondary">
                 Como funciona
               </p>
               <ol className="m-0 grid list-none gap-3 p-0">
@@ -463,15 +464,15 @@ export function SiteSettingsView({
                   <li key={step} className="flex items-start gap-3">
                     <span
                       aria-hidden="true"
-                      className="flex size-[26px] shrink-0 items-center justify-center rounded-full bg-admin-terracotta-wash text-xs font-bold text-admin-terracotta-ink"
+                      className="flex size-[26px] shrink-0 items-center justify-center rounded-full bg-admin-accent-subtle text-xs font-bold text-admin-accent-hover"
                     >
                       {index + 1}
                     </span>
                     <div className="grid min-w-0 gap-0.5">
-                      <strong className="text-sm font-semibold text-admin-graphite">
+                      <strong className="text-sm font-semibold text-admin-text">
                         {step}
                       </strong>
-                      <span className="text-[13px] leading-normal text-admin-muted">
+                      <span className="text-[13px] leading-normal text-admin-text-secondary">
                         {detail}
                       </span>
                     </div>
@@ -485,7 +486,7 @@ export function SiteSettingsView({
               <h3 className={plainHeading}>
                 Situações que podem ser registradas
               </h3>
-              <p className="m-0 text-[13px] text-admin-muted">
+              <p className="m-0 text-[13px] text-admin-text-secondary">
                 Escolha uma delas em “Registrar publicação”.
               </p>
             </div>
@@ -500,13 +501,13 @@ export function SiteSettingsView({
                       {labels[state] ?? state}
                     </ToneBadge>
                   </dt>
-                  <dd className="m-0 text-[13.5px] text-admin-body">
+                  <dd className="m-0 text-[13.5px] text-admin-text">
                     {description}
                   </dd>
                 </div>
               ))}
             </dl>
-            <p className="m-0 rounded-[10px] bg-admin-beige px-3.5 py-2.5 text-[13px] leading-normal text-admin-body">
+            <p className="m-0 rounded-[10px] bg-admin-subtle px-3.5 py-2.5 text-[13px] leading-normal text-admin-text">
               A situação do casamento (Rascunho, Em revisão, Ativo ou Inativo)
               aparece na faixa acima e é independente da publicação. Reativar ou
               inativar o casamento não publica nem tira o site do ar.
@@ -529,17 +530,17 @@ export function SiteSettingsView({
             </div>
             <label
               htmlFor="site-repository-slug"
-              className="grid gap-1.5 text-[13px] font-semibold text-admin-graphite"
+              className="grid gap-1.5 text-[13px] font-semibold text-admin-text"
             >
               Identificador
               <Input
                 id="site-repository-slug"
                 readOnly
                 value={site.repositorySlug ?? ""}
-                className="h-11 rounded-[10px] border-admin-line-strong bg-admin-beige"
+                className="h-11 rounded-[10px] border-admin-border-strong bg-admin-subtle"
               />
             </label>
-            <p className="m-0 text-xs text-admin-muted">
+            <p className="m-0 text-xs text-admin-text-secondary">
               Definido na criação do site. Não pode ser alterado.
             </p>
           </div>
@@ -556,7 +557,7 @@ export function SiteSettingsView({
                 </StatusSignal>
               </div>
               {!site.publicUrl && (
-                <p className="m-0 text-[13px] text-admin-muted">
+                <p className="m-0 text-[13px] text-admin-text-secondary">
                   Site não vinculado — informe o endereço quando o site estiver
                   no ar.
                 </p>
@@ -565,7 +566,7 @@ export function SiteSettingsView({
             <div className="flex flex-wrap items-end gap-2.5">
               <label
                 htmlFor="site-public-url"
-                className="grid min-w-0 flex-[1_1_16rem] gap-1.5 text-[13px] font-semibold text-admin-graphite"
+                className="grid min-w-0 flex-[1_1_16rem] gap-1.5 text-[13px] font-semibold text-admin-text"
               >
                 Endereço público
                 <Input
@@ -574,7 +575,7 @@ export function SiteSettingsView({
                   type="url"
                   placeholder="https://"
                   defaultValue={site.publicUrl ?? ""}
-                  className="h-11 rounded-[10px] border-admin-line-strong placeholder:font-normal placeholder:text-admin-muted"
+                  className="h-11 rounded-[10px] border-admin-border-strong placeholder:font-normal placeholder:text-admin-text-secondary"
                   aria-invalid={Boolean(addressError)}
                   aria-describedby="site-public-url-help"
                 />
@@ -585,7 +586,7 @@ export function SiteSettingsView({
             </div>
             <p
               id="site-public-url-help"
-              className="m-0 text-xs text-admin-muted"
+              className="m-0 text-xs text-admin-text-secondary"
             >
               Use o endereço completo com https://, sem caminho depois da barra.
             </p>
@@ -605,7 +606,7 @@ export function SiteSettingsView({
                 <h3 className={plainHeading}>
                   Configuração avançada de endereços
                 </h3>
-                <p className="m-0 text-[13px] text-admin-muted">
+                <p className="m-0 text-[13px] text-admin-text-secondary">
                   Informe os endereços completos autorizados a enviar
                   confirmações e mensagens pelo site. Use um por linha.
                 </p>
@@ -614,7 +615,7 @@ export function SiteSettingsView({
             </div>
             <label
               htmlFor="site-trusted-origins"
-              className="grid gap-1.5 text-[13px] font-semibold text-admin-graphite"
+              className="grid gap-1.5 text-[13px] font-semibold text-admin-text"
             >
               Endereços autorizados
               <Textarea
@@ -623,12 +624,15 @@ export function SiteSettingsView({
                 rows={3}
                 placeholder="https://casamento.exemplo.com"
                 defaultValue={site.trustedOrigins?.join("\n") ?? ""}
-                className="rounded-[10px] border-admin-line-strong placeholder:font-normal placeholder:text-admin-muted"
+                className="rounded-[10px] border-admin-border-strong placeholder:font-normal placeholder:text-admin-text-secondary"
                 aria-invalid={Boolean(originError)}
                 aria-describedby="site-origins-help"
               />
             </label>
-            <p id="site-origins-help" className="m-0 text-xs text-admin-muted">
+            <p
+              id="site-origins-help"
+              className="m-0 text-xs text-admin-text-secondary"
+            >
               Até 20 endereços. Cada um deve ser só a origem — https:// e o
               domínio, sem caminho depois da barra.
             </p>
@@ -649,10 +653,10 @@ export function SiteSettingsView({
           <details className={`group ${adminStyles.surface}`}>
             <summary className="flex cursor-pointer list-none items-center gap-4 rounded-2xl p-6 outline-offset-4 marker:content-none">
               <div className="min-w-0 flex-1">
-                <h2 className="m-0 text-base font-semibold text-admin-ink">
+                <h2 className="m-0 text-base font-semibold text-admin-text">
                   Domínios
                 </h2>
-                <p className="mb-0 mt-1 text-sm leading-relaxed text-admin-muted">
+                <p className="mb-0 mt-1 text-sm leading-relaxed text-admin-text-secondary">
                   {domains.length}{" "}
                   {domains.length === 1
                     ? "endereço registrado"
@@ -661,13 +665,13 @@ export function SiteSettingsView({
                 </p>
               </div>
               <ChevronDown
-                className="size-4 shrink-0 text-admin-muted transition-transform group-open:rotate-180"
+                className="size-4 shrink-0 text-admin-text-secondary transition-transform group-open:rotate-180"
                 aria-hidden="true"
               />
             </summary>
-            <div className="grid gap-4 border-t border-admin-line p-6">
+            <div className="grid gap-4 border-t border-admin-border p-6">
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <p className="m-0 text-sm text-admin-muted">
+                <p className="m-0 text-sm text-admin-text-secondary">
                   Configuração, hospedagem e renovação são feitas separadamente.
                 </p>
                 <Button
@@ -680,7 +684,7 @@ export function SiteSettingsView({
                 </Button>
               </div>
               {domains.length === 0 ? (
-                <p className="m-0 rounded-xl bg-admin-canvas p-4 text-sm text-admin-muted">
+                <p className="m-0 rounded-xl bg-admin-canvas p-4 text-sm text-admin-text-secondary">
                   Nenhum domínio registrado. Registre os endereços para
                   acompanhar a configuração e a renovação.
                 </p>
@@ -697,7 +701,7 @@ export function SiteSettingsView({
                   <TableBody>
                     {domains.map((domain) => (
                       <TableRow
-                        className="border-b border-admin-line"
+                        className="border-b border-admin-border"
                         key={`${domain.id}-${domain.updatedAt}`}
                       >
                         <TableCell className="whitespace-normal">
@@ -705,7 +709,7 @@ export function SiteSettingsView({
                             {domain.hostname}
                           </span>
                           {domain.isPrimary && (
-                            <span className="mt-1 block text-xs text-admin-muted">
+                            <span className="mt-1 block text-xs text-admin-text-secondary">
                               Principal
                             </span>
                           )}
@@ -758,13 +762,13 @@ export function SiteSettingsView({
             </Button>
           </div>
           {!site.publicUrl && (
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-admin-line bg-admin-canvas py-2 pr-3 pl-[18px]">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-admin-border bg-admin-canvas py-2 pr-3 pl-[18px]">
               <StatusSignal tone="neutral">Site não vinculado</StatusSignal>
               <span
                 aria-hidden="true"
-                className="hidden h-[18px] w-px bg-admin-line sm:block"
+                className="hidden h-[18px] w-px bg-admin-border sm:block"
               />
-              <p className="m-0 min-w-0 flex-[1_1_14rem] text-[13.5px] text-admin-body">
+              <p className="m-0 min-w-0 flex-[1_1_14rem] text-[13.5px] text-admin-text">
                 Vincule o endereço público quando o site estiver no ar.
               </p>
               <Button
@@ -782,7 +786,7 @@ export function SiteSettingsView({
           >
             <div className="flex items-center justify-between gap-2 px-[22px] py-4">
               <h3 className={cardTitle}>Pessoas cadastradas</h3>
-              <span className="text-[13px] text-admin-muted">
+              <span className="text-[13px] text-admin-text-secondary">
                 {admins.length === 1 ? "1 pessoa" : `${admins.length} pessoas`}
               </span>
             </div>
@@ -791,7 +795,7 @@ export function SiteSettingsView({
                 {admins.map((admin) => (
                   <li
                     key={admin.userId}
-                    className="grid gap-3 border-t border-admin-line px-[22px] py-4"
+                    className="grid gap-3 border-t border-admin-border px-[22px] py-4"
                   >
                     <div
                       data-slot="couple-access-row"
@@ -800,15 +804,15 @@ export function SiteSettingsView({
                       <span
                         data-slot="person-avatar"
                         aria-hidden="true"
-                        className="flex size-10 items-center justify-center rounded-full border border-admin-terracotta bg-admin-terracotta-wash text-[12.5px] font-extrabold tracking-[0.04em] text-admin-terracotta-deep"
+                        className="flex size-10 items-center justify-center rounded-full border border-admin-accent bg-admin-accent-subtle text-[12.5px] font-extrabold tracking-[0.04em] text-admin-accent-hover"
                       >
                         {getInitials(admin.name)}
                       </span>
                       <div className="grid min-w-0 gap-[3px]">
-                        <strong className="break-words text-[15px] font-semibold text-admin-ink">
+                        <strong className="break-words text-[15px] font-semibold text-admin-text">
                           {admin.name}
                         </strong>
-                        <p className="m-0 break-all text-[13px] text-admin-muted">
+                        <p className="m-0 break-all text-[13px] text-admin-text-secondary">
                           {admin.email}
                         </p>
                       </div>
@@ -836,7 +840,7 @@ export function SiteSettingsView({
                         {admin.pendingAccess && (
                           <time
                             dateTime={admin.pendingAccess.expiresAt}
-                            className="text-[12.5px] text-admin-muted"
+                            className="text-[12.5px] text-admin-text-secondary"
                           >
                             Expira em{" "}
                             {new Date(
@@ -905,7 +909,7 @@ export function SiteSettingsView({
                       </div>
                     </div>
                     {replaceLink === admin.userId && (
-                      <div className="flex flex-wrap items-center justify-between gap-3 rounded-[10px] bg-admin-pending-wash py-2.5 pr-2.5 pl-3.5 text-admin-pending-ink lg:ml-[54px]">
+                      <div className="flex flex-wrap items-center justify-between gap-3 rounded-[10px] bg-admin-pending-subtle py-2.5 pr-2.5 pl-3.5 text-admin-pending-text lg:ml-[54px]">
                         <div className="grid min-w-0 gap-0.5">
                           <strong className="text-[13.5px] font-semibold">
                             Gerar um novo link para {admin.name}?
@@ -951,7 +955,7 @@ export function SiteSettingsView({
                 ))}
               </ul>
             ) : (
-              <p className="m-0 border-t border-admin-line px-[22px] py-5 text-sm text-admin-muted">
+              <p className="m-0 border-t border-admin-border px-[22px] py-5 text-sm text-admin-text-secondary">
                 Nenhuma pessoa do casal cadastrada.
               </p>
             )}

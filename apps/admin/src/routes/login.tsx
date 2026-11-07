@@ -82,7 +82,7 @@ function LoginPage() {
           <h1 className={adminStyles.authHeading} id="login-title">
             Entre no seu painel.
           </h1>
-          <p className="m-0 text-[15px] leading-relaxed text-admin-muted">
+          <p className="m-0 text-[15px] leading-relaxed text-admin-text-secondary">
             Use seu e-mail e sua senha para cuidar dos detalhes do casamento.
           </p>
         </header>
@@ -124,7 +124,7 @@ function LoginPage() {
             {pending ? "Entrando…" : "Entrar"}
           </Button>
         </form>
-        <p className="m-0 text-[13px] leading-relaxed text-admin-muted">
+        <p className="m-0 text-[13px] leading-relaxed text-admin-text-secondary">
           Primeiro acesso ou esqueceu a senha? Peça um link de acesso ao
           responsável pelo casamento.
         </p>

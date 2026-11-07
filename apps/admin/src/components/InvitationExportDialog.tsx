@@ -120,10 +120,10 @@ export function InvitationExportDialog({
     >
       <AdminDialogContent scrollable={false} className="max-w-[540px]">
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-5 pt-6 sm:px-7 [&_[data-slot=dialog-title]]:pr-10">
-          <DialogTitle className="font-admin-display text-[27px] text-admin-graphite">
+          <DialogTitle className="font-admin-display text-[27px] text-admin-text">
             Exportar convidados
           </DialogTitle>
-          <DialogDescription className="mt-1 text-sm leading-relaxed text-admin-muted">
+          <DialogDescription className="mt-1 text-sm leading-relaxed text-admin-text-secondary">
             Escolha o arquivo que você precisa.
           </DialogDescription>
           <fieldset disabled={busy} className="mt-5 grid min-w-0 gap-2">
@@ -131,7 +131,7 @@ export function InvitationExportDialog({
             {exportOptions.map((option) => (
               <label
                 key={option.model}
-                className="grid cursor-pointer grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-x-3 gap-y-0.5 rounded-xl border border-admin-line bg-admin-surface px-3 py-3 has-checked:border-admin-terracotta has-checked:bg-admin-terracotta-wash/50"
+                className="grid cursor-pointer grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-x-3 gap-y-0.5 rounded-xl border border-admin-border bg-admin-surface px-3 py-3 has-checked:border-admin-accent has-checked:bg-admin-accent-subtle/50"
               >
                 <input
                   type="radio"
@@ -139,9 +139,9 @@ export function InvitationExportDialog({
                   checked={model === option.model}
                   onChange={() => setModel(option.model)}
                   aria-describedby={`${radioName}-${option.model}`}
-                  className="mt-0.5 size-4 accent-admin-terracotta"
+                  className="mt-0.5 size-4 accent-admin-accent"
                 />
-                <span className="text-sm font-semibold text-admin-graphite">
+                <span className="text-sm font-semibold text-admin-text">
                   {option.title}
                 </span>
                 <Badge
@@ -152,37 +152,35 @@ export function InvitationExportDialog({
                 </Badge>
                 <span
                   id={`${radioName}-${option.model}`}
-                  className="col-start-2 col-span-2 text-xs leading-relaxed text-admin-muted"
+                  className="col-start-2 col-span-2 text-xs leading-relaxed text-admin-text-secondary"
                 >
                   {option.description}
                 </span>
               </label>
             ))}
           </fieldset>
-          <div className="mt-4 rounded-xl border border-admin-line bg-admin-canvas px-3 py-2.5">
-            <p className="m-0 text-sm font-semibold text-admin-graphite">
-              {scope}
-            </p>
+          <div className="mt-4 rounded-xl border border-admin-border bg-admin-canvas px-3 py-2.5">
+            <p className="m-0 text-sm font-semibold text-admin-text">{scope}</p>
             {scopeDetails && (
-              <p className="m-0 break-words text-xs leading-relaxed text-admin-muted">
+              <p className="m-0 break-words text-xs leading-relaxed text-admin-text-secondary">
                 {scopeDetails}
               </p>
             )}
             {filters && model !== "reception" && (
-              <label className="mt-2 flex min-h-8 cursor-pointer items-center gap-2 text-sm text-admin-graphite">
+              <label className="mt-2 flex min-h-8 cursor-pointer items-center gap-2 text-sm text-admin-text">
                 <input
                   type="checkbox"
                   checked={useFilters}
                   disabled={busy}
                   onChange={(event) => setUseFilters(event.target.checked)}
-                  className="size-4 accent-admin-terracotta"
+                  className="size-4 accent-admin-accent"
                 />
                 Usar busca e filtros atuais
               </label>
             )}
           </div>
           {model === "groups" && (
-            <details className="mt-3 text-sm text-admin-graphite">
+            <details className="mt-3 text-sm text-admin-text">
               <summary className="cursor-pointer py-1 font-medium">
                 Opções da planilha
               </summary>
@@ -215,7 +213,7 @@ export function InvitationExportDialog({
                       type="checkbox"
                       checked={value}
                       onChange={(event) => change(event.target.checked)}
-                      className="size-4 accent-admin-terracotta"
+                      className="size-4 accent-admin-accent"
                     />
                     {label}
                   </label>
@@ -224,7 +222,7 @@ export function InvitationExportDialog({
             </details>
           )}
         </div>
-        <div className="grid shrink-0 grid-cols-2 gap-2 border-t border-admin-line bg-admin-surface px-5 py-4 sm:flex sm:justify-end sm:px-7">
+        <div className="grid shrink-0 grid-cols-2 gap-2 border-t border-admin-border bg-admin-surface px-5 py-4 sm:flex sm:justify-end sm:px-7">
           <Button
             type="button"
             variant="outline"

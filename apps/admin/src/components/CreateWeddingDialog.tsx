@@ -73,7 +73,8 @@ export function CreateWeddingDialog({
   );
 }
 
-const primary = "bg-admin-terracotta text-white hover:bg-admin-terracotta-deep";
+const primary =
+  "bg-admin-accent text-admin-on-accent hover:bg-admin-accent-hover";
 const fields = "grid gap-3 sm:grid-cols-2";
 
 function WeddingDialogContent({
@@ -236,7 +237,7 @@ function WeddingDialogContent({
       {outcome && draft ? (
         <>
           <div className="flex items-start gap-3 pr-8">
-            <span className="grid size-10 shrink-0 place-items-center rounded-full bg-admin-success-wash text-admin-success-ink">
+            <span className="grid size-10 shrink-0 place-items-center rounded-full bg-admin-success-subtle text-admin-success-text">
               <Check aria-hidden="true" />
             </span>
             <div>
@@ -248,10 +249,10 @@ function WeddingDialogContent({
               </DialogDescription>
             </div>
           </div>
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-admin-line bg-admin-canvas p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-admin-border bg-admin-canvas p-4">
             <div className="min-w-0 break-words">
               <strong>{created?.displayName}</strong>
-              <p className="m-0 text-sm text-admin-muted">
+              <p className="m-0 text-sm text-admin-text-secondary">
                 {created?.coupleNames.join(" e ")} ·{" "}
                 {created && formatBrazilianDate(created.eventDate)}
               </p>
@@ -274,8 +275,8 @@ function WeddingDialogContent({
               )}
             />
           ) : (
-            <div className="grid gap-3 rounded-xl border border-admin-line p-4">
-              <p className="m-0 text-sm text-admin-muted">
+            <div className="grid gap-3 rounded-xl border border-admin-border p-4">
+              <p className="m-0 text-sm text-admin-text-secondary">
                 {admin
                   ? `${admin.name} está cadastrado. O link de acesso ainda não foi gerado.`
                   : "Ninguém do casal foi cadastrado. Você pode adicionar uma pessoa em Configurações → Acessos do casal."}
@@ -459,7 +460,7 @@ function WeddingDialogContent({
                     />{" "}
                     Gerar link de acesso ao criar
                   </label>
-                  <p className="m-0 text-xs text-admin-muted">
+                  <p className="m-0 text-xs text-admin-text-secondary">
                     O link vale por 24 horas. Você também pode gerar em
                     Configurações → Acessos do casal.
                   </p>
@@ -484,7 +485,7 @@ function WeddingDialogContent({
                   />
                 </label>
               ) : (
-                <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-admin-line bg-admin-canvas p-3 text-sm">
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-admin-border bg-admin-canvas p-3 text-sm">
                   <span className="break-all">
                     Identificador do site: <strong>{slug || "—"}</strong>
                   </span>
@@ -498,7 +499,7 @@ function WeddingDialogContent({
                   </Button>
                 </div>
               )}
-              <p className="m-0 text-xs text-admin-muted">
+              <p className="m-0 text-xs text-admin-text-secondary">
                 O identificador não pode ser alterado depois. Use letras
                 minúsculas, números e hífens.
               </p>

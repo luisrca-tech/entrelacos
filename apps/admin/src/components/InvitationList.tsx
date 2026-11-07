@@ -31,10 +31,10 @@ const firstSteps = [
 ] as const;
 
 const statuses = {
-  CONFIRMED: ["Confirmado", "bg-admin-success-wash text-admin-success-ink"],
-  PENDING: ["Sem resposta", "bg-admin-pending-wash text-admin-pending-ink"],
-  DECLINED: ["Não irão", "bg-admin-danger-wash text-admin-danger-ink"],
-  PARTIAL: ["Em parte", "bg-admin-beige text-admin-body"],
+  CONFIRMED: ["Confirmado", "bg-admin-success-subtle text-admin-success-text"],
+  PENDING: ["Sem resposta", "bg-admin-pending-subtle text-admin-pending-text"],
+  DECLINED: ["Não irão", "bg-admin-danger-subtle text-admin-danger-text"],
+  PARTIAL: ["Em parte", "bg-admin-subtle text-admin-text"],
 };
 
 export function InvitationList({
@@ -46,21 +46,21 @@ export function InvitationList({
 }: Props) {
   if (invitations.length === 0) {
     return (
-      <div className="rounded-2xl border border-admin-line bg-admin-surface px-6 py-12 text-center">
+      <div className="rounded-2xl border border-admin-border bg-admin-surface px-6 py-12 text-center">
         {hasFilters ? (
           <UsersRound
             aria-hidden="true"
-            className="mx-auto mb-4 size-8 text-admin-muted"
+            className="mx-auto mb-4 size-8 text-admin-text-secondary"
           />
         ) : (
-          <span className="mx-auto mb-5 grid size-13 place-items-center rounded-full bg-admin-terracotta-wash text-admin-terracotta-deep">
+          <span className="mx-auto mb-5 grid size-13 place-items-center rounded-full bg-admin-accent-subtle text-admin-accent-hover">
             <Mail aria-hidden="true" className="size-5" />
           </span>
         )}
-        <p className="m-0 font-admin-display text-xl text-admin-graphite">
+        <p className="m-0 font-admin-display text-xl text-admin-text">
           {hasFilters ? "Nenhum convite encontrado" : "Ainda não há convites"}
         </p>
-        <p className="mx-auto mt-2 max-w-sm text-sm text-admin-muted">
+        <p className="mx-auto mt-2 max-w-sm text-sm text-admin-text-secondary">
           {hasFilters
             ? "Ajuste a busca ou os filtros para ver outros convites."
             : "Adicione o primeiro convite para começar a organizar os convidados. Um convite pode reunir uma família inteira ou uma pessoa só."}
@@ -75,12 +75,12 @@ export function InvitationList({
                 >
                   <span
                     aria-hidden="true"
-                    className="grid size-7 place-items-center rounded-full bg-admin-terracotta text-xs font-bold text-white"
+                    className="grid size-7 place-items-center rounded-full bg-admin-accent text-xs font-bold text-admin-on-accent"
                   >
                     {index + 1}
                   </span>
-                  <strong className="text-sm text-admin-ink">{title}</strong>
-                  <span className="text-xs leading-relaxed text-admin-muted">
+                  <strong className="text-sm text-admin-text">{title}</strong>
+                  <span className="text-xs leading-relaxed text-admin-text-secondary">
                     {text}
                   </span>
                 </li>
@@ -90,7 +90,7 @@ export function InvitationList({
               <Button
                 type="button"
                 onClick={onAdd}
-                className="mt-6 bg-admin-terracotta text-white hover:bg-admin-terracotta-deep"
+                className="mt-6 bg-admin-accent text-admin-on-accent hover:bg-admin-accent-hover"
               >
                 Novo convite
               </Button>
@@ -105,11 +105,11 @@ export function InvitationList({
     "grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 @2xl:grid-cols-[minmax(0,1fr)_minmax(110px,170px)_minmax(150px,230px)_auto]";
   return (
     <section
-      className="@container overflow-hidden rounded-2xl border border-admin-line bg-admin-surface"
+      className="@container overflow-hidden rounded-2xl border border-admin-border bg-admin-surface"
       aria-label="Lista de convites"
     >
       <div
-        className={`${columns} bg-admin-canvas px-5 py-3 text-xs font-semibold text-admin-muted`}
+        className={`${columns} bg-admin-canvas px-5 py-3 text-xs font-semibold text-admin-text-secondary`}
         aria-hidden="true"
       >
         <span>Convite</span>
@@ -136,41 +136,41 @@ export function InvitationList({
           <button
             key={invitation.id}
             type="button"
-            className={`${columns} w-full border-t border-admin-line px-5 py-3.5 text-left hover:bg-admin-canvas ${selectedId === invitation.id ? "bg-admin-terracotta-wash" : ""}`}
+            className={`${columns} w-full border-t border-admin-border px-5 py-3.5 text-left hover:bg-admin-canvas ${selectedId === invitation.id ? "bg-admin-accent-subtle" : ""}`}
             aria-label={`Ver convite ${invitation.name}`}
             aria-expanded={selectedId === invitation.id}
             onClick={() => onOpen(invitation)}
           >
             <span className="min-w-0">
-              <strong className="block break-words text-sm text-admin-ink">
+              <strong className="block break-words text-sm text-admin-text">
                 {invitation.name}
               </strong>
-              <span className="mt-0.5 block break-words text-xs text-admin-muted">
+              <span className="mt-0.5 block break-words text-xs text-admin-text-secondary">
                 {invitation.guests.map((guest) => guest.fullName).join(", ")}
               </span>
-              <span className="mt-1 block text-xs text-admin-muted @2xl:hidden">
+              <span className="mt-1 block text-xs text-admin-text-secondary @2xl:hidden">
                 {[people, answers].filter(Boolean).join(" · ")}
               </span>
             </span>
-            <span className="hidden text-xs text-admin-muted @2xl:block">
+            <span className="hidden text-xs text-admin-text-secondary @2xl:block">
               {people}
             </span>
             <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
               <Badge className={`w-fit ${tone}`}>{label}</Badge>
               {answers && (
-                <span className="hidden text-xs text-admin-muted @2xl:inline">
+                <span className="hidden text-xs text-admin-text-secondary @2xl:inline">
                   {answers}
                 </span>
               )}
             </span>
             <Ellipsis
-              className="hidden size-4 text-admin-muted @2xl:block"
+              className="hidden size-4 text-admin-text-secondary @2xl:block"
               aria-hidden="true"
             />
           </button>
         );
       })}
-      <p className="m-0 border-t border-admin-line px-5 py-3 text-xs text-admin-muted">
+      <p className="m-0 border-t border-admin-border px-5 py-3 text-xs text-admin-text-secondary">
         {invitations.length}{" "}
         {invitations.length === 1 ? "convite carregado" : "convites carregados"}
       </p>

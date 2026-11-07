@@ -28,7 +28,7 @@ export function GeneratedAccessLink({
 }) {
   const id = useId();
   return (
-    <section className="grid min-w-0 gap-3 rounded-xl border border-admin-line bg-admin-surface p-4">
+    <section className="grid min-w-0 gap-3 rounded-xl border border-admin-border bg-admin-surface p-4">
       <label htmlFor={id} className="break-words text-sm font-semibold">
         Link de acesso para {name} ({email})
       </label>
@@ -41,7 +41,7 @@ export function GeneratedAccessLink({
       <div className="flex flex-wrap gap-2">
         <Button
           type="button"
-          className="bg-admin-terracotta text-white hover:bg-admin-terracotta-deep"
+          className="bg-admin-accent text-admin-on-accent hover:bg-admin-accent-hover"
           onClick={async () => {
             if (await copyAdminAccessLink(url, navigator.clipboard))
               toast.success("Link copiado.");
@@ -63,7 +63,7 @@ export function GeneratedAccessLink({
           </Button>
         )}
       </div>
-      <p className="m-0 rounded-lg bg-admin-pending-wash p-3 text-xs text-admin-pending-ink">
+      <p className="m-0 rounded-lg bg-admin-pending-subtle p-3 text-xs text-admin-pending-text">
         Vale por 24 horas e pode ser usado uma vez. Se expirar, gere outro em
         Configurações → Acessos do casal.
       </p>

@@ -1802,8 +1802,8 @@ function WithdrawalSetupRuntime({
   );
 }
 
-const muted = "m-0 text-sm leading-[1.5] text-admin-muted";
-const body = "m-0 text-sm leading-[1.55] text-admin-body";
+const muted = "m-0 text-sm leading-[1.5] text-admin-text-secondary";
+const body = "m-0 text-sm leading-[1.55] text-admin-text";
 const amountBox =
   "m-0 grid w-full max-w-[420px] gap-2 rounded-xl bg-admin-canvas px-4 py-3.5 text-sm";
 const timeOnly = new Intl.DateTimeFormat("pt-BR", {
@@ -1820,10 +1820,10 @@ function AmountRows({ rows }: { rows: [string, string][] }) {
       {rows.map(([label, value], index) => (
         <div
           key={label}
-          className={`flex min-w-0 justify-between gap-3 ${index === rows.length - 1 && rows.length > 1 ? "border-t border-admin-line pt-2 font-bold" : ""}`}
+          className={`flex min-w-0 justify-between gap-3 ${index === rows.length - 1 && rows.length > 1 ? "border-t border-admin-border pt-2 font-bold" : ""}`}
         >
-          <dt className="text-admin-body">{label}</dt>
-          <dd className="m-0 text-right text-admin-ink [overflow-wrap:anywhere]">
+          <dt className="text-admin-text">{label}</dt>
+          <dd className="m-0 text-right text-admin-text [overflow-wrap:anywhere]">
             {value}
           </dd>
         </div>
@@ -1890,7 +1890,7 @@ function WithdrawalSetupView({
       {blocker && (
         <p
           role="status"
-          className="m-0 rounded-xl bg-admin-canvas px-4 py-3 text-sm leading-[1.5] text-admin-body"
+          className="m-0 rounded-xl bg-admin-canvas px-4 py-3 text-sm leading-[1.5] text-admin-text"
         >
           {blocker}
         </p>
@@ -1907,7 +1907,7 @@ function WithdrawalSetupView({
         <p className={muted}>Resultado em verificação. Consulte a situação.</p>
       )}
       {preview && (
-        <div className="grid min-w-0 gap-3 border-t border-admin-beige pt-[18px]">
+        <div className="grid min-w-0 gap-3 border-t border-admin-subtle pt-[18px]">
           <AmountRows
             rows={withdrawalAmountRows(
               withdrawal?.settlement ? withdrawal : preview,
@@ -1923,8 +1923,8 @@ function WithdrawalSetupView({
               ["Validade da prévia", previewTime(preview.expiresAt)],
             ].map(([label, value]) => (
               <div key={label} className="flex min-w-0 justify-between gap-3">
-                <dt className="text-admin-muted">{label}</dt>
-                <dd className="m-0 text-right text-admin-ink [overflow-wrap:anywhere]">
+                <dt className="text-admin-text-secondary">{label}</dt>
+                <dd className="m-0 text-right text-admin-text [overflow-wrap:anywhere]">
                   {value}
                 </dd>
               </div>
@@ -1985,7 +1985,7 @@ function WithdrawalSetupView({
         state.request?.state !== "OPEN" &&
         (formOpen ? (
           <form
-            className="grid min-w-0 gap-4 border-t border-admin-beige pt-[18px]"
+            className="grid min-w-0 gap-4 border-t border-admin-subtle pt-[18px]"
             onSubmit={(event: FormEvent) => {
               event.preventDefault();
               void controller?.preview(amount);
@@ -1993,15 +1993,15 @@ function WithdrawalSetupView({
           >
             <div className="grid w-full max-w-[420px] gap-1.5">
               <label
-                className="text-sm font-bold text-admin-ink"
+                className="text-sm font-bold text-admin-text"
                 htmlFor="withdrawal-amount"
               >
                 Quanto quer sacar
               </label>
-              <div className="flex min-h-[52px] min-w-0 items-center overflow-hidden rounded-[10px] border border-admin-line-strong bg-white focus-within:border-2 focus-within:border-admin-terracotta focus-within:shadow-[0_0_0_3px_var(--color-admin-terracotta-wash)]">
+              <div className="flex min-h-[52px] min-w-0 items-center overflow-hidden rounded-[10px] border border-admin-border-strong bg-admin-surface focus-within:border-2 focus-within:border-admin-accent focus-within:shadow-[0_0_0_3px_var(--color-admin-accent-subtle)]">
                 <span
                   aria-hidden="true"
-                  className="flex h-full items-center self-stretch bg-admin-beige px-3.5 text-[15px] font-bold text-admin-graphite"
+                  className="flex h-full items-center self-stretch bg-admin-subtle px-3.5 text-[15px] font-bold text-admin-text"
                 >
                   R$
                 </span>
@@ -2015,7 +2015,7 @@ function WithdrawalSetupView({
                     setAmount(event.target.value);
                     controller?.resetConsent();
                   }}
-                  className="h-full min-w-0 flex-1 border-0 bg-transparent px-3.5 text-xl font-semibold text-admin-ink outline-none disabled:opacity-60"
+                  className="h-full min-w-0 flex-1 border-0 bg-transparent px-3.5 text-xl font-semibold text-admin-text outline-none disabled:opacity-60"
                 />
                 {typeof layout.availableCents === "number" &&
                   layout.availableCents > 0 && (
@@ -2030,7 +2030,7 @@ function WithdrawalSetupView({
                         );
                         controller?.resetConsent();
                       }}
-                      className="mr-1.5 min-h-9 shrink-0 rounded-lg border border-admin-line-strong bg-transparent px-3 text-[13px] font-semibold text-admin-graphite hover:bg-admin-canvas disabled:opacity-60"
+                      className="mr-1.5 min-h-9 shrink-0 rounded-lg border border-admin-border-strong bg-transparent px-3 text-[13px] font-semibold text-admin-text hover:bg-admin-canvas disabled:opacity-60"
                     >
                       Sacar tudo
                     </button>
@@ -2115,8 +2115,8 @@ function WithdrawalSetupView({
         </div>
       )}
       {pendingRequests.length > 0 && (
-        <div className="grid min-w-0 gap-2 border-t border-admin-beige pt-[18px]">
-          <h3 className="m-0 text-[15px] font-bold text-admin-ink">
+        <div className="grid min-w-0 gap-2 border-t border-admin-subtle pt-[18px]">
+          <h3 className="m-0 text-[15px] font-bold text-admin-text">
             Solicitações para acompanhar
           </h3>
           <ul className="m-0 grid list-none gap-2 p-0">
@@ -2127,7 +2127,7 @@ function WithdrawalSetupView({
                 className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2 rounded-xl bg-admin-canvas px-4 py-3"
               >
                 <span className="grid min-w-0 flex-1 gap-1">
-                  <strong className="text-[15px] text-admin-ink">
+                  <strong className="text-[15px] text-admin-text">
                     {request.state === "EXISTING"
                       ? money.format(request.withdrawal.amountCents / 100)
                       : request.state === "OPEN"
@@ -2135,7 +2135,7 @@ function WithdrawalSetupView({
                         : "Em verificação"}
                   </strong>
                   {request.state === "EXISTING" && (
-                    <span className="text-xs text-admin-muted">
+                    <span className="text-xs text-admin-text-secondary">
                       {new Date(request.withdrawal.createdAt).toLocaleString(
                         "pt-BR",
                         {
@@ -2158,7 +2158,9 @@ function WithdrawalSetupView({
                         : "Em acompanhamento"}
                 </ToneBadge>
                 {request.requestId === state.request?.requestId ? (
-                  <span className="text-sm text-admin-muted">Selecionada</span>
+                  <span className="text-sm text-admin-text-secondary">
+                    Selecionada
+                  </span>
                 ) : (
                   <button
                     type="button"
@@ -2259,7 +2261,7 @@ function WithdrawalActions({
   return (
     <div className="grid min-w-0 gap-3">
       {countdown !== null && (
-        <p className="m-0 text-[13px] text-admin-muted">
+        <p className="m-0 text-[13px] text-admin-text-secondary">
           Prévia válida por{" "}
           <span
             role="timer"
@@ -2275,13 +2277,13 @@ function WithdrawalActions({
       {expired && (
         <p
           role="status"
-          className="m-0 text-sm font-semibold text-admin-danger-ink"
+          className="m-0 text-sm font-semibold text-admin-danger-text"
         >
           Prévia expirada. Encerre a solicitação para consultar uma nova prévia.
         </p>
       )}
       {request.state === "EXISTING" && (
-        <p className="m-0 text-sm leading-[1.5] text-admin-muted">
+        <p className="m-0 text-sm leading-[1.5] text-admin-text-secondary">
           Continuamos esta mesma solicitação. Se o Pix já foi enviado, apenas
           estamos verificando o andamento.
         </p>
@@ -2312,7 +2314,7 @@ function WithdrawalActions({
           );
         }}
       >
-        <label className="flex max-w-[420px] cursor-pointer items-start gap-2.5 text-sm leading-[1.5] text-admin-body">
+        <label className="flex max-w-[420px] cursor-pointer items-start gap-2.5 text-sm leading-[1.5] text-admin-text">
           <input
             type="checkbox"
             required
@@ -2320,7 +2322,7 @@ function WithdrawalActions({
             checked={confirmed}
             disabled={expired || state.busy}
             onChange={(event) => setConfirmed(event.target.checked)}
-            className="mt-0.5 size-[18px] shrink-0 accent-admin-terracotta"
+            className="mt-0.5 size-[18px] shrink-0 accent-admin-accent"
           />
           Confirmo os termos originais exibidos desta solicitação.
         </label>

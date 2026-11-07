@@ -81,7 +81,7 @@ export function AdminShell({
       <aside
         id="admin-primary-nav"
         className={cn(
-          "sticky top-0 flex h-screen w-full min-w-0 flex-col overflow-x-hidden border-r border-admin-line bg-admin-surface pt-[30px] pb-[22px] transition-[padding] duration-200 ease-out motion-reduce:transition-none [@media(max-width:760px)]:hidden",
+          "sticky top-0 flex h-screen w-full min-w-0 flex-col overflow-x-hidden border-r border-admin-border bg-admin-surface pt-[30px] pb-[22px] transition-[padding] duration-200 ease-out motion-reduce:transition-none [@media(max-width:760px)]:hidden",
           expanded ? "px-5" : "px-2",
         )}
         aria-label="Navegação principal"
@@ -127,7 +127,7 @@ export function AdminShell({
             type="button"
             variant="ghost"
             size="icon-sm"
-            className="size-8 shrink-0 justify-self-center text-admin-muted hover:bg-admin-terracotta-wash hover:text-admin-terracotta-deep"
+            className="size-8 shrink-0 justify-self-center text-admin-text-secondary hover:bg-admin-accent-subtle hover:text-admin-accent-hover"
             aria-expanded={expanded}
             aria-controls="admin-primary-nav"
             aria-label={expanded ? "Recolher navegação" : "Expandir navegação"}
@@ -160,12 +160,12 @@ export function AdminShell({
           )}
         >
           <div className="min-h-0 overflow-hidden">
-            <span className="text-[0.7rem] font-bold uppercase tracking-[0.13em] leading-[1.3] text-admin-muted">
+            <span className="text-[0.7rem] font-bold uppercase tracking-[0.13em] leading-[1.3] text-admin-text-secondary">
               Painel de casamentos
             </span>
             {siteId && (
-              <div className="mt-[30px] grid gap-2 rounded-xl border border-admin-line bg-admin-canvas p-[15px]">
-                <span className="text-[0.7rem] font-bold uppercase tracking-[0.13em] leading-[1.3] text-admin-muted">
+              <div className="mt-[30px] grid gap-2 rounded-xl border border-admin-border bg-admin-canvas p-[15px]">
+                <span className="text-[0.7rem] font-bold uppercase tracking-[0.13em] leading-[1.3] text-admin-text-secondary">
                   Casamento atual
                 </span>
                 {siteName && <strong className="truncate">{siteName}</strong>}
@@ -216,9 +216,9 @@ export function AdminShell({
       </aside>
 
       <div className="flex min-h-screen min-w-0 flex-col">
-        <header className="mx-auto flex w-full max-w-[1700px] items-center justify-end gap-[18px] border-b border-admin-line px-[42px] py-2.5 [@media(max-width:760px)]:px-5 [@media(max-width:760px)]:py-2 [@media(min-width:761px)_and_(max-width:1060px)]:px-7">
+        <header className="mx-auto flex w-full max-w-[1700px] items-center justify-end gap-[18px] border-b border-admin-border px-[42px] py-2.5 [@media(max-width:760px)]:px-5 [@media(max-width:760px)]:py-2 [@media(min-width:761px)_and_(max-width:1060px)]:px-7">
           <Link
-            className="mr-auto hidden items-center gap-2 font-admin-display text-[1.45rem] tracking-[-0.03em] text-admin-graphite no-underline [@media(max-width:760px)]:flex"
+            className="mr-auto hidden items-center gap-2 font-admin-display text-[1.45rem] tracking-[-0.03em] text-admin-text no-underline [@media(max-width:760px)]:flex"
             to="/"
           >
             <img
@@ -230,8 +230,8 @@ export function AdminShell({
             />
             Entrelaços
           </Link>
-          <div className="mr-auto flex items-center gap-2 text-[0.85rem] text-admin-muted [@media(max-width:760px)]:hidden">
-            <span className="text-[0.7rem] font-bold uppercase tracking-[0.13em] leading-[1.3] text-admin-muted">
+          <div className="mr-auto flex items-center gap-2 text-[0.85rem] text-admin-text-secondary [@media(max-width:760px)]:hidden">
+            <span className="text-[0.7rem] font-bold uppercase tracking-[0.13em] leading-[1.3] text-admin-text-secondary">
               {role === "OWNER" ? "Conta proprietária" : "Acesso de equipe"}
             </span>
           </div>
@@ -245,7 +245,7 @@ export function AdminShell({
         <main className="mx-auto w-full max-w-[1700px] px-[42px] pt-6 pb-6 [@media(max-width:760px)]:px-5 [@media(max-width:760px)]:pt-5 [@media(max-width:760px)]:pb-6 [@media(min-width:761px)_and_(max-width:1060px)]:px-7">
           {children}
         </main>
-        <footer className="mx-auto mt-auto flex w-full max-w-[1700px] justify-between gap-6 border-t border-admin-line px-[42px] pt-6 pb-7 text-[0.78rem] text-admin-muted [@media(max-width:760px)]:hidden [@media(min-width:761px)_and_(max-width:1060px)]:px-7">
+        <footer className="mx-auto mt-auto flex w-full max-w-[1700px] justify-between gap-6 border-t border-admin-border px-[42px] pt-6 pb-7 text-[0.78rem] text-admin-text-secondary [@media(max-width:760px)]:hidden [@media(min-width:761px)_and_(max-width:1060px)]:px-7">
           <span className="flex items-center gap-2">
             <img
               src="/brand/entrelacos-mark.svg"
@@ -262,7 +262,7 @@ export function AdminShell({
 
       {siteId && (
         <nav
-          className="fixed right-0 bottom-0 left-0 z-[8] hidden border-t border-admin-line bg-[rgb(255_253_249_/_96%)] px-2.5 pt-2 pb-[calc(8px+env(safe-area-inset-bottom))] shadow-[0_-8px_24px_rgb(68_49_36_/_8%)] [@media(max-width:760px)]:block"
+          className="fixed right-0 bottom-0 left-0 z-[8] hidden border-t border-admin-border bg-admin-surface/96 px-2.5 pt-2 pb-[calc(8px+env(safe-area-inset-bottom))] shadow-admin-dock [@media(max-width:760px)]:block"
           aria-label="Navegação do casamento no celular"
         >
           <MobileNavigation area={navigationArea} items={navigation} />
@@ -319,13 +319,13 @@ function navigationLinkClass(
 ) {
   return cn(
     mobile
-      ? "grid min-h-[54px] flex-1 basis-0 place-items-center gap-[3px] px-[3px] py-1.5 text-center text-[0.65rem] text-admin-muted no-underline"
-      : "grid min-h-[42px] items-center overflow-hidden rounded-[9px] py-2 text-[0.9rem] text-admin-muted no-underline transition-[grid-template-columns,gap,padding,background,color] duration-200 ease-out motion-reduce:transition-none hover:bg-admin-terracotta-wash hover:text-admin-terracotta-deep",
+      ? "grid min-h-[54px] flex-1 basis-0 place-items-center gap-[3px] px-[3px] py-1.5 text-center text-[0.65rem] text-admin-text-secondary no-underline"
+      : "grid min-h-[42px] items-center overflow-hidden rounded-[9px] py-2 text-[0.9rem] text-admin-text-secondary no-underline transition-[grid-template-columns,gap,padding,background,color] duration-200 ease-out motion-reduce:transition-none hover:bg-admin-accent-subtle hover:text-admin-accent-hover",
     !mobile &&
       (collapsed
         ? "grid-cols-[1fr_0fr] justify-items-center gap-0 px-0"
         : "grid-cols-[auto_minmax(0,1fr)] gap-3 px-3"),
-    active && "bg-admin-terracotta-wash font-bold text-admin-terracotta-deep",
+    active && "bg-admin-accent-subtle font-bold text-admin-accent-hover",
   );
 }
 
@@ -399,7 +399,7 @@ function MobileNavigation({
           <PopoverContent
             side="top"
             align="end"
-            className="z-20 w-[min(260px,calc(100vw-24px))] rounded-xl border border-admin-line bg-admin-surface p-2 shadow-admin"
+            className="z-20 w-[min(260px,calc(100vw-24px))] rounded-xl border border-admin-border bg-admin-surface p-2 shadow-admin"
           >
             <nav
               aria-label="Outras páginas do casamento"
@@ -445,30 +445,30 @@ function AccountMenu({
     <Popover>
       <PopoverTrigger
         aria-label={`Abrir menu de ${actor.user.name}`}
-        className="grid size-[42px] shrink-0 place-items-center rounded-full border border-[rgb(142_58_42_/_22%)] bg-admin-terracotta-wash text-[0.78rem] font-extrabold tracking-[0.04em] text-admin-terracotta-deep transition-colors motion-reduce:transition-none hover:border-admin-terracotta hover:bg-admin-terracotta hover:text-[#fffaf6] aria-expanded:border-admin-terracotta aria-expanded:bg-admin-terracotta aria-expanded:text-[#fffaf6]"
+        className="grid size-[42px] shrink-0 place-items-center rounded-full border border-admin-accent-hover/22 bg-admin-accent-subtle text-[0.78rem] font-extrabold tracking-[0.04em] text-admin-accent-hover transition-colors motion-reduce:transition-none hover:border-admin-accent hover:bg-admin-accent hover:text-admin-on-accent aria-expanded:border-admin-accent aria-expanded:bg-admin-accent aria-expanded:text-admin-on-accent"
         render={<button type="button" />}
       >
         {initials}
       </PopoverTrigger>
       <PopoverContent
         align="end"
-        className="z-10 w-[min(320px,calc(100vw-32px))] rounded-[14px] border border-admin-line bg-admin-surface p-[18px] shadow-admin"
+        className="z-10 w-[min(320px,calc(100vw-32px))] rounded-[14px] border border-admin-border bg-admin-surface p-[18px] shadow-admin"
       >
         <div className="flex items-center gap-3">
           <span
-            className="grid size-12 shrink-0 place-items-center rounded-full border border-[rgb(142_58_42_/_22%)] bg-admin-terracotta-wash text-[0.78rem] font-extrabold tracking-[0.04em] text-admin-terracotta-deep"
+            className="grid size-12 shrink-0 place-items-center rounded-full border border-admin-accent-hover/22 bg-admin-accent-subtle text-[0.78rem] font-extrabold tracking-[0.04em] text-admin-accent-hover"
             aria-hidden="true"
           >
             {initials}
           </span>
           <div className="grid min-w-0 gap-[3px]">
             <strong className="truncate">{actor.user.name}</strong>
-            <span className="truncate text-[0.82rem] text-admin-muted">
+            <span className="truncate text-[0.82rem] text-admin-text-secondary">
               {actor.user.email}
             </span>
           </div>
         </div>
-        <div className="my-4 border-t border-admin-line pt-3.5 text-[0.78rem] text-admin-muted">
+        <div className="my-4 border-t border-admin-border pt-3.5 text-[0.78rem] text-admin-text-secondary">
           {role === "OWNER"
             ? "Proprietário"
             : role === "SITE_ASSISTANT"
@@ -476,7 +476,7 @@ function AccountMenu({
               : "Administrador do casamento"}
         </div>
         <button
-          className="min-h-[38px] w-full rounded-lg border border-admin-line bg-transparent px-3 py-2 text-left text-admin-terracotta-deep hover:bg-admin-terracotta-wash"
+          className="min-h-[38px] w-full rounded-lg border border-admin-border bg-transparent px-3 py-2 text-left text-admin-accent-hover hover:bg-admin-accent-subtle"
           type="button"
           onClick={onLogout}
         >
@@ -489,7 +489,7 @@ function AccountMenu({
 
 export function ShellLoading({ children }: { children: ReactNode }) {
   return (
-    <main className="grid min-h-screen place-items-center bg-admin-canvas p-6 text-admin-muted">
+    <main className="grid min-h-screen place-items-center bg-admin-canvas p-6 text-admin-text-secondary">
       {children}
     </main>
   );
