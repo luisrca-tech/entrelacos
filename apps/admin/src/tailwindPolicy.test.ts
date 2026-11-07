@@ -236,4 +236,16 @@ describe("admin Tailwind policy", () => {
   it("styles selected toggles with the accent-subtle pattern instead of a dark pill", () => {
     expect(findAll(/\?\s*"default"\s*:\s*"(?:ghost|outline)"/g)).toEqual([]);
   });
+
+  it("resolves the shared primary, link and focus colors to the admin accent", () => {
+    expect(tailwindSource).toContain(
+      "--color-primary: var(--color-admin-accent);",
+    );
+    expect(tailwindSource).toContain(
+      "--color-primary-foreground: var(--color-admin-on-accent);",
+    );
+    expect(tailwindSource).toContain(
+      "--color-ring: var(--color-admin-accent);",
+    );
+  });
 });

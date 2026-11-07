@@ -60,3 +60,14 @@
   --shadow-admin: 0 18px 50px rgb(68 49 36 / 8%);
   --shadow-admin-dock: 0 -8px 24px rgb(68 49 36 / 8%);
 }
+
+/*
+ * Admin-only resolution of the shared packages/ui tokens. This stylesheet is
+ * compiled only for the admin, so the public sites keep the shared defaults
+ * while ui focus rings, links, checkboxes and calendars follow the accent.
+ */
+@theme inline {
+  --color-primary: var(--color-admin-accent);
+  --color-primary-foreground: var(--color-admin-on-accent);
+  --color-ring: var(--color-admin-accent);
+}
