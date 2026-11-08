@@ -17,7 +17,7 @@ import { DEMO_SITE_ID, provisionDemoEnvironment } from "./environmentProvision";
 const prefix = `invitation-provision-${process.pid}-${randomUUID().slice(0, 8)}`;
 const ownerEmail = `${prefix}@example.test`;
 const sentinelSiteId = `${prefix}-sentinel`;
-const publicUrl = "https://demo-dev.entrelacos.workers.dev/";
+const publicUrl = "https://demo-botanico-dev.entrelacosbr.site/";
 const owner = {
   email: ownerEmail,
   name: "Integration Owner",

@@ -7,7 +7,21 @@
   },
   "env": {
     "dev": {
-      "name": "demo-cartas-dev"
+      "name": "demo-cartas-dev",
+      "workers_dev": true,
+      "routes": [
+        {
+          "pattern": "demo-cartas-dev.entrelacosbr.site",
+          "custom_domain": true
+        }
+      ]
     }
-  }
+  },
+  "workers_dev": true,
+  "routes": [
+    {
+      "pattern": "demo-cartas.entrelacosbr.site",
+      "custom_domain": true
+    }
+  ]
 }

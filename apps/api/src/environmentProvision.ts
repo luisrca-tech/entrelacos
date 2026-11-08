@@ -43,8 +43,8 @@ function expectedPublicUrl(
   target: EnvironmentProvisionInput["target"],
 ): string {
   return target === "production"
-    ? "https://demo.entrelacos.workers.dev/"
-    : "https://demo-dev.entrelacos.workers.dev/";
+    ? "https://demo-botanico.entrelacosbr.site/"
+    : "https://demo-botanico-dev.entrelacosbr.site/";
 }
 
 function validatePublicUrl(

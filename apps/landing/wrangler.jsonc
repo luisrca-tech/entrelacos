@@ -7,7 +7,21 @@
   },
   "env": {
     "dev": {
-      "name": "entrelacos-dev"
+      "name": "entrelacos-dev",
+      "workers_dev": true,
+      "routes": [
+        {
+          "pattern": "dev.entrelacosbr.site",
+          "custom_domain": true
+        }
+      ]
     }
-  }
+  },
+  "workers_dev": true,
+  "routes": [
+    {
+      "pattern": "entrelacosbr.site",
+      "custom_domain": true
+    }
+  ]
 }
