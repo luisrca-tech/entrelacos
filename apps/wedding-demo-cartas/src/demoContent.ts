@@ -6,8 +6,7 @@ export const access = {
 };
 export const site = { name: "Marina & Caio", href: "/" };
 const siteUrl =
-  import.meta.env.PUBLIC_SITE_URL ??
-  "https://demo-cartas.entrelacos.workers.dev";
+  import.meta.env.PUBLIC_SITE_URL ?? "https://demo-cartas.entrelacosbr.site";
 export const seo = {
   title: "Cartas do Nosso Sim — Marina & Caio | EntreLaços",
   description:

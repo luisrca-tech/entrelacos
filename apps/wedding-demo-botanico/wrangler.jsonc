@@ -7,7 +7,21 @@
   },
   "env": {
     "dev": {
-      "name": "demo-botanico-dev"
+      "name": "demo-botanico-dev",
+      "workers_dev": true,
+      "routes": [
+        {
+          "pattern": "demo-botanico-dev.entrelacosbr.site",
+          "custom_domain": true
+        }
+      ]
     }
-  }
+  },
+  "workers_dev": true,
+  "routes": [
+    {
+      "pattern": "demo-botanico.entrelacosbr.site",
+      "custom_domain": true
+    }
+  ]
 }

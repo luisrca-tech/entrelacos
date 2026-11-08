@@ -19,9 +19,9 @@ bun run test apps/landing/src scripts/landingIntegration.test.ts
 Production builds require public destinations:
 
 ```sh
-PUBLIC_SITE_URL=https://entrelacos.entrelacos.workers.dev/ \
-PUBLIC_BOTANICAL_DEMO_URL=https://demo.entrelacos.workers.dev/ \
-PUBLIC_LETTERS_DEMO_URL=https://demo-cartas.entrelacos.workers.dev/ \
+PUBLIC_SITE_URL=https://entrelacosbr.site/ \
+PUBLIC_BOTANICAL_DEMO_URL=https://demo-botanico.entrelacosbr.site/ \
+PUBLIC_LETTERS_DEMO_URL=https://demo-cartas.entrelacosbr.site/ \
 bun run --cwd apps/landing build
 bun run check:public-builds
 ```
