@@ -17,12 +17,12 @@ function showcaseOrigin(
     return null;
   const host =
     siteId === "demo-wedding"
-      ? "demo"
+      ? "demo-botanico"
       : siteId === "demo-wedding-cartas"
         ? "demo-cartas"
         : null;
   return host
-    ? `https://${host}${environment === "development" ? "-dev" : ""}.entrelacos.workers.dev/`
+    ? `https://${host}${environment === "development" ? "-dev" : ""}.entrelacosbr.site/`
     : null;
 }
 
@@ -38,11 +38,22 @@ export function allowsShowcaseCatalog(
   environment: Environment,
 ): boolean {
   const origin = showcaseOrigin(identity.id, environment);
+  // Keep exact legacy aliases during the staged domain migration.
+  const legacyOrigin = origin?.replace(
+    ".entrelacosbr.site/",
+    ".entrelacos.workers.dev/",
+  );
+  const originalBotanicalOrigin =
+    identity.id === "demo-wedding"
+      ? legacyOrigin?.replace("https://demo-botanico", "https://demo")
+      : undefined;
   return (
     origin !== null &&
     identity.isDemo === true &&
     identity.repositorySlug === identity.id &&
-    identity.publicUrl === origin
+    (identity.publicUrl === origin ||
+      identity.publicUrl === legacyOrigin ||
+      identity.publicUrl === originalBotanicalOrigin)
   );
 }
 

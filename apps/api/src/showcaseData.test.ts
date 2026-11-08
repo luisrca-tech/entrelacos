@@ -16,7 +16,7 @@ const source = {
   event_date: "2027-09-18",
   lifecycle: "ACTIVE",
   publication_state: "PUBLISHED",
-  public_url: "https://demo-dev.entrelacos.workers.dev/",
+  public_url: "https://demo-botanico-dev.entrelacosbr.site/",
 };
 describe("controlled showcase population", () => {
   it("keeps environment URLs and identities distinct", () => {
@@ -25,14 +25,14 @@ describe("controlled showcase population", () => {
         "development",
         "POPULATE development EntreLacos showcases",
       ).lettersOrigin,
-    ).toBe("https://demo-cartas-dev.entrelacos.workers.dev");
+    ).toBe("https://demo-cartas-dev.entrelacosbr.site");
     expect(
       showcaseConfiguration(
         "production",
         "POPULATE production EntreLacos showcases",
         true,
       ).lettersOrigin,
-    ).toBe("https://demo-cartas.entrelacos.workers.dev");
+    ).toBe("https://demo-cartas.entrelacosbr.site");
     expect(() =>
       showcaseConfiguration(
         "production",
@@ -73,7 +73,7 @@ describe("controlled showcase population", () => {
       { event_date: "2028-01-01" },
       { lifecycle: "INACTIVE" },
       { publication_state: "UNPUBLISHED" },
-      { public_url: "https://demo.entrelacos.workers.dev/" },
+      { public_url: "https://demo-botanico.entrelacosbr.site/" },
     ])
       expect(() =>
         assertShowcaseSource({ ...source, ...patch }, config),
