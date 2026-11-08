@@ -9,10 +9,9 @@ const navigationLinks = [
   ["#convidados", "Convidados"],
   ["#detalhes", "Dúvidas"],
 ];
-const headerAction = {
-  href: config.contactUrl ?? "#modelos",
-  label: config.contactUrl ? "Solicitar proposta" : "Ver modelos",
-};
+const contactLabel = new URL(config.contactUrl).hostname === "wa.me"
+  ? "Falar no WhatsApp"
+  : "Solicitar proposta";
 const questions = [
   ["Podemos personalizar o site?", "Sim. Escolhemos o modelo e organizamos as fotos, os textos e as informações do casamento com vocês. O Entrelaços cuida da montagem e da publicação; vocês cuidam dos convidados pelo painel."],
   ["O que podemos gerenciar pelo painel?", "Vocês podem cadastrar famílias e convidados, acompanhar confirmações, moderar o mural e gerenciar a lista de presentes. Os recebimentos ficam disponíveis conforme a configuração da conta do casamento."],
@@ -75,14 +74,14 @@ const questions = [
       <nav class="masthead-links" aria-label="Navegação principal">
         {navigationLinks.map(([href, label]) => <a href={href}>{label}</a>)}
       </nav>
-      <a class="header-cta" href={headerAction.href}>{headerAction.label}<span aria-hidden="true">↗</span></a>
+      <a class="header-cta" href={config.contactUrl}>{contactLabel}<span aria-hidden="true">↗</span></a>
       <details class="masthead-menu">
         <summary aria-label="Menu principal">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" /></svg>
         </summary>
         <nav aria-label="Navegação principal">
           {navigationLinks.map(([href, label]) => <a href={href}>{label}</a>)}
-          {config.contactUrl && <a href={headerAction.href}>{headerAction.label}<span aria-hidden="true"> ↗</span></a>}
+          <a href={config.contactUrl}>{contactLabel}<span aria-hidden="true"> ↗</span></a>
         </nav>
       </details>
     </header>
@@ -158,7 +157,7 @@ const questions = [
 
       <section id="detalhes" class="faq chapter" aria-labelledby="faq-title"><div class="faq-intro"><h2 id="faq-title">Dúvidas frequentes</h2></div><div class="faq-list">{questions.map(([question, answer]) => <details><summary>{question}<span aria-hidden="true">+</span></summary><p>{answer}</p></details>)}</div></section>
 
-      <section id="comecar" class="closing" aria-labelledby="closing-title"><h2 id="closing-title" class="reveal">Vamos preparar<br /><em>o site de vocês?</em></h2><div class="closing-actions reveal"><a class="button button-ivory" href={config.contactUrl ?? "#modelos"}>{config.contactUrl ? "Solicitar proposta" : "Comparar os modelos"}<span aria-hidden="true">↗</span></a><p>{config.contactUrl ? "Contem a data do casamento e o modelo que vocês gostaram." : "Escolham um modelo e falem com quem enviou este site para combinar valores e prazo."}</p></div></section>
+      <section id="comecar" class="closing" aria-labelledby="closing-title"><h2 id="closing-title" class="reveal">Vamos preparar<br /><em>o site de vocês?</em></h2><div class="closing-actions reveal"><a class="button button-ivory" href={config.contactUrl}>{contactLabel}<span aria-hidden="true">↗</span></a><p>Contem a data do casamento e o modelo que vocês gostaram.</p></div></section>
     </main>
     <footer class="site-footer"><a class="wordmark" href="#inicio" aria-label="Entrelaços, início"><img class="brand-mark" src="/brand/entrelacos-mark.svg" width="44" height="41" alt="" aria-hidden="true" />Entrelaços</a><p>Sites de casamento<br />preparados para vocês.</p><div><a href={config.botanicalUrl} target="_blank" rel="noopener noreferrer">Cinema Botânico ↗</a><a href={config.lettersUrl} target="_blank" rel="noopener noreferrer">Cartas do Nosso Sim ↗</a></div><small>© {new Date().getFullYear()} Entrelaços.</small></footer>
     <script>

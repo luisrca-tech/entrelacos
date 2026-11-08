@@ -1,5 +1,9 @@
 type Environment = Record<string, string | undefined>;
 
+const contactMessage =
+  "Olá! Vim pelo site do Entrelaços e queria saber mais sobre o site para o nosso casamento.";
+const defaultContactUrl = `https://wa.me/5562981848515?text=${encodeURIComponent(contactMessage)}`;
+
 function destination(
   value: string | undefined,
   key: string,
@@ -44,8 +48,10 @@ export function landingConfig(env: Environment, production: boolean) {
   );
   if (botanicalUrl === lettersUrl)
     throw new Error("Template destinations must remain independent.");
-  const contactUrl = env.PUBLIC_CONTACT_URL
-    ? destination(env.PUBLIC_CONTACT_URL, "PUBLIC_CONTACT_URL", production)
-    : null;
+  const contactUrl = destination(
+    env.PUBLIC_CONTACT_URL || defaultContactUrl,
+    "PUBLIC_CONTACT_URL",
+    production,
+  );
   return { siteUrl, botanicalUrl, lettersUrl, contactUrl };
 }
