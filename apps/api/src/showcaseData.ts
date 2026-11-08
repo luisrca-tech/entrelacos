@@ -16,8 +16,8 @@ export function showcaseConfiguration(
     target: target as "development" | "production",
     botanicalSiteId: "demo-wedding",
     lettersSiteId: "demo-wedding-cartas",
-    botanicalOrigin: `https://demo${suffix}.entrelacos.workers.dev`,
-    lettersOrigin: `https://demo-cartas${suffix}.entrelacos.workers.dev`,
+    botanicalOrigin: `https://demo-botanico${suffix}.entrelacosbr.site`,
+    lettersOrigin: `https://demo-cartas${suffix}.entrelacosbr.site`,
   };
 }
 

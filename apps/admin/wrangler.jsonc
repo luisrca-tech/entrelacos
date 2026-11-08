@@ -10,7 +10,21 @@
   },
   "env": {
     "dev": {
-      "name": "admin-dev"
+      "name": "admin-dev",
+      "workers_dev": true,
+      "routes": [
+        {
+          "pattern": "admin-dev.entrelacosbr.site",
+          "custom_domain": true
+        }
+      ]
     }
-  }
+  },
+  "workers_dev": true,
+  "routes": [
+    {
+      "pattern": "admin.entrelacosbr.site",
+      "custom_domain": true
+    }
+  ]
 }

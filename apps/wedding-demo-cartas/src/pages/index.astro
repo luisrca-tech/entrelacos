@@ -53,6 +53,6 @@ const letterSchedule = { ...schedule, title: "Programação" };
     </div>
     <DemoFeatures />
   </Fragment>}
-  <Fragment slot="footer-attribution"><a class="underline-offset-4 hover:underline focus-visible:underline" href="https://entrelacos.entrelacos.workers.dev/">{footer.attribution}</a></Fragment>
+  <Fragment slot="footer-attribution"><a class="underline-offset-4 hover:underline focus-visible:underline" href={import.meta.env.PUBLIC_LANDING_URL ?? "https://entrelacosbr.site/"}>{footer.attribution}</a></Fragment>
   <Fragment slot="admin-access">{!inactive && access.siteId && access.apiOrigin && access.panelOrigin && <AdminRecognition {...access} client:load />}</Fragment>
 </WeddingLayout>
