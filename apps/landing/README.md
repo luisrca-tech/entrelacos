@@ -27,10 +27,9 @@ bun run check:public-builds
 ```
 
 These are prepared destinations, not publication evidence. Development defaults
-are localhost ports 4323, 4321 and 4322. Optional `PUBLIC_CONTACT_URL` accepts a
-verified HTTPS commercial destination. Without it, conversion buttons link to the
-models and ask visitors to reply to the person who shared the page. No phone or
-sales email is inferred from account credentials.
+are localhost ports 4323, 4321 and 4322. The contact buttons open the approved
+Entrelaços WhatsApp number with a prefilled message. Set `PUBLIC_CONTACT_URL` to
+override that link with a verified HTTPS contact destination.
 
 Production builds reject missing, invalid, credential-bearing or loopback URLs.
 Demo URLs must differ. No database, payment, Cloudflare or authentication secrets
@@ -87,12 +86,12 @@ The user asked for a stronger general introduction without the fictional couple.
 The revised opening uses an encounter between bands, followed by the identities,
 guests, shared plans and organization. CSS 3D avoids another rendering engine;
 the existing pinned Lenis version handles smooth scrolling. Personal wedding
-examples stay in the separate demos. Contact remains configurable rather than
-invented. Independent visual QA and the reviewed production release remain open.
+examples stay in the separate demos. Independent visual QA and the reviewed
+production release remain open.
 
 ## Editorial structure
 
-The landing has seven main sections: introduction, models, guest organization and mural, gifts, preparation, FAQ, and the final action. The model links consistently name the demonstration, and operational copy uses "painel do casal". The existing `experiencia` and `dashboard` anchors remain on the combined guest section for inbound links. Contact actions still require the configured, verified `PUBLIC_CONTACT_URL`; no destination is invented.
+The landing has seven main sections: introduction, models, guest organization and mural, gifts, preparation, FAQ, and the final action. The model links consistently name the demonstration, and operational copy uses "painel do casal". The existing `experiencia` and `dashboard` anchors remain on the combined guest section for inbound links. The WhatsApp contact appears in the desktop header, the mobile menu, and the closing section.
 
 ### Listening
 

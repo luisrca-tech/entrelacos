@@ -6,7 +6,6 @@ describe("landing public destinations", () => {
     const config = landingConfig({}, false);
     expect(config.botanicalUrl).toBe("http://localhost:4321/");
     expect(config.lettersUrl).toBe("http://localhost:4322/");
-    expect(config.contactUrl).toBeNull();
   });
   it("requires verified destinations before production", () => {
     expect(() => landingConfig({}, true)).toThrow("PUBLIC_SITE_URL");
@@ -17,11 +16,10 @@ describe("landing public destinations", () => {
     PUBLIC_LETTERS_DEMO_URL: "https://cartas.example/",
   };
   it("preserves exact HTTPS destinations", () => {
-    expect(landingConfig(env, true)).toEqual({
+    expect(landingConfig(env, true)).toMatchObject({
       siteUrl: env.PUBLIC_SITE_URL,
       botanicalUrl: env.PUBLIC_BOTANICAL_DEMO_URL,
       lettersUrl: env.PUBLIC_LETTERS_DEMO_URL,
-      contactUrl: null,
     });
   });
   it.each([
@@ -52,10 +50,20 @@ describe("landing public destinations", () => {
       ).contactUrl,
     ).toBe("https://wa.me/5562999999999");
   });
-  it("never guesses a contact from account data", () => {
-    expect(
-      landingConfig({ ...env, OWNER_EMAIL: "private@example.com" }, true)
-        .contactUrl,
-    ).toBeNull();
-  });
+  it.each([false, true])(
+    "defaults to the approved WhatsApp contact (production: %s)",
+    (production) => {
+      const { contactUrl } = landingConfig(
+        { ...env, OWNER_EMAIL: "private@example.com" },
+        production,
+      );
+      const contact = new URL(contactUrl);
+      expect(`${contact.origin}${contact.pathname}`).toBe(
+        "https://wa.me/5562981848515",
+      );
+      expect(contact.searchParams.get("text")).toBe(
+        "Olá! Vim pelo site do Entrelaços e queria saber mais sobre o site para o nosso casamento.",
+      );
+    },
+  );
 });
