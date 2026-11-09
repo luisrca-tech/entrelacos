@@ -361,7 +361,7 @@ function AdvanceCard({
 const moneyPath = [
   "O convidado escolhe um presente no site e paga.",
   "O valor entra na sua conta Asaas, aberta no seu nome.",
-  "Você saca aqui no EntreLaços para a chave Pix do seu banco.",
+  "Você saca aqui no EntreLaços para a chave Pix do seu banco. Os saques via Pix são gratuitos e ilimitados para contas recebedoras de pessoa física (PF) e MEI.",
 ];
 
 const commonQuestions = [
