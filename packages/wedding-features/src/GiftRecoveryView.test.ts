@@ -171,7 +171,7 @@ describe("gift recovery view", () => {
       expect(html).not.toMatch(
         /\b(?:R\$|BRL|total|pago|pagamento confirmado)\b/i,
       );
-      expect(html).not.toMatch(/token|hash|Asaas|banco|payer|provider key/i);
+      expect(html).not.toMatch(/token|hash|payer|provider key/i);
 
       if (state === "CLOSED_UNPAID") {
         expect(html).not.toContain("Continuar para pagamento");
@@ -226,7 +226,12 @@ describe("gift recovery view", () => {
 
     expect(html).toContain("Continuar para pagamento");
     expect(html).not.toContain("https://checkout.example.test/pay/private");
-    expect(html).not.toContain("href=");
+    expect(
+      Array.from(
+        html.matchAll(/<a\b[^>]*href="([^"]*)"/g),
+        (match) => match[1],
+      ),
+    ).toEqual(["https://asaas.com", "mailto:contato@asaas.com.br"]);
     expect(noHandler).not.toContain("Continuar para pagamento");
 
     const invalidCheckout = {

@@ -34,8 +34,8 @@ export function AsaasDisclosure() {
         >
           contato@asaas.com.br
         </a>
-        . Telefone 0800 009 0037 (somente pessoa jurídica); mensagens para
-        0800 009 0037.
+        . Telefone 0800 009 0037 (somente pessoa jurídica); mensagens para 0800
+        009 0037.
       </p>
     </section>
   );
