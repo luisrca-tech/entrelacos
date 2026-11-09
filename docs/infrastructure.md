@@ -9,13 +9,13 @@ No real provider resource was created, configured or mutated by the scaffold. Do
 | Node / Bun | Scaffold | Node 24; Bun pinned by packageManager; registry access | Frozen install and all local checks |
 | Neon development | Persistence/admin block | Dedicated PostgreSQL URL; selected project/branch/database; TLS configuration | Apply reviewed migrations and test connection without printing URL |
 | Neon main | Production preparation | Separate production URL with controlled access | Explicitly verify destination, migration plan and rollback/recovery procedure |
-| Neon disposable test resource | Database acceptance / CI | Test-only URL and explicit test resource identity; temporary provisioning permissions if automated | Reject development/main targets; sentinel isolation tests; cleanup restricted to disposable resource |
+| Disposable PostgreSQL | Database acceptance / CI | Local Docker Compose or GitHub Actions service | Verify the test database and apply reviewed migrations before the suite |
 | Better Auth | Admin authentication | Server-only high-entropy secret; admin/API origins and auth base URL; controlled owner bootstrap capability | Activation/recovery, token hash storage, 24h idle/7d absolute expiry, revocation and no public signup |
 | Cross-origin browser topology | Authentication spike | Distinct panel/API/site origins, local equivalents initially and eventual provider URLs | Actual independent-origin/mobile tests; first-party cookies/BFF and narrow site handoff decisions recorded |
 | Cloudflare | Manual publication | Account ownership, approved worker names, deploy capability, admin compatibility settings, static assets config | Manual deploy, public URL, HTTPS, fallback/static routing; no fabricated account ID |
 | Railway | API publication | Project/service access, root build context, PORT, server environment variables | API liveness; later authenticated readiness/integration evidence separately |
 | Domain / DNS | Optional custom domain task | Client domain ownership/access, domain provider account, DNS control, renewal responsibility | Verify correct deployment target and TLS; domain renewal remains external |
-| Repository CI | CI publication | GitHub repository if selected later, runner access, read-only default workflow permissions | Frozen install/check; no main migration/deploy jobs; add test-only secrets with database suite |
+| Repository CI/CD | GitHub validation and deployment migrations | Runner access, read-only workflow permissions, environment-scoped Neon credentials for CD | Validate with disposable PostgreSQL, then migrate the environment selected by the deployment branch |
 | AI imagery | Media production task | Approved fictional couple reference, prompts, approved generation tool and usage terms | Consistent characters, approved crop/poster, no claim that generated photos depict the real venue |
 | AI video | Hero media task | Provider/tool selection, access/key if needed, cost ceiling, input rights and export formats | Short muted loop, matching poster, mobile/reduced-motion fallback and performance checks |
 | Recovery | Launch readiness | Neon plan/history limits, retention configuration, backup/restore permissions and operator availability | Measured restore drill against RPO<=1h/RTO<=8h targets; document any gap |
@@ -27,14 +27,16 @@ Names below reflect the PIN-only runtime. Messages and reports add no secret or 
 
 API URL examples use the origin `http://localhost:8080`; `/v1` belongs to the HTTP route path. The panel remains on `http://localhost:3000`, and the public demo remains on `http://localhost:4321`. `PUBLIC_SITE_ID=demo-wedding` is the deterministic environment-local demo identifier created by the provisioning command; it is not an authorization value.
 
-Database integration tests use `DATABASE_URL_TEST` exclusively and verify the endpoint, database, and role before proceeding. The endpoint must differ from development. `DATABASE_PROJECT_ID`, `DATABASE_DEVELOPMENT_BRANCH_ID`, `DATABASE_TEST_BRANCH_ID`, and `DATABASE_NAME` are optional identity checks. Production uses only `DATABASE_URL` and derives its endpoint, database, and role checks from that URL. Block 2 validation status is recorded in `docs/block2Validation.md`; Block 4 and Block 5 execution status is recorded in their respective validation documents.
+Database integration tests use the isolated `DATABASE_URL_TEST` and verify its identity before running. The normal local and CI flow uses disposable PostgreSQL and applies migrations before the tests. See the [database operations guide](../packages/database/README.md) for Neon-specific test and deployment settings. Production API connections derive their endpoint, database, and role checks from `DATABASE_URL`.
 
 | Variable | Consumer | Classification |
 | --- | --- | --- |
 | `PORT` | Node API | Server runtime port |
 | `APP_ENV` | API configuration outside Railway production | Explicit environment selector; Railway production derives it from `RAILWAY_ENVIRONMENT_NAME` |
-| `DATABASE_URL` | API / manually selected migration process | Secret; never frontend |
-| `DATABASE_URL_TEST` | Test API / integration tests / test migrations | Secret; isolated disposable database only, with no development fallback |
+| `DATABASE_URL` | API / migration destination check | Secret on deployed environments |
+| `DATABASE_DIRECT_URL` | Migration process | Direct connection with a migration role |
+| `DATABASE_URL_TEST` | Test API / integration tests | Isolated disposable database |
+| `DATABASE_MIGRATION_HOST` | Deployment migration destination check | Expected direct Neon hostname |
 | `BETTER_AUTH_SECRET` | API | Secret; separate per environment |
 | `BETTER_AUTH_URL` | API outside Railway | Auth endpoint base URL; Railway derives it from `RAILWAY_PUBLIC_DOMAIN` |
 | `ADMIN_ORIGIN` | API | Explicit trusted admin origin |
@@ -104,7 +106,7 @@ Do not copy development secrets or database rows to main. A stable repository we
 ## Manual launch checklist
 
 1. Prepare the main wedding record through the authorized API workflow; do not import development guests or sessions.
-2. Review and execute production migrations separately from deployments.
+2. Review production migrations and verify the Database CD run for the release commit before publishing the API.
 3. Build and publish the site/panel/API manually with the correct public configuration and server secrets.
 4. Register exact URLs/origins and owner-entered status in the central panel when that feature exists.
 5. Issue the bride's activation link. Production review is public; remind admins not to circulate the link yet.
@@ -113,7 +115,7 @@ Do not copy development secrets or database rows to main. A stable repository we
 
 ## Open engineering inputs
 
-The invitation access policy is 10 phone/PIN attempts per IP per 15 minutes, with a per-invitation cooldown after repeated incorrect PINs. The site-scoped registered phone and six-digit manual PIN grant access; no guest name or SMS lookup is required. Integration tests require a verified, isolated `DATABASE_URL_TEST`; no migration runs automatically. Apply reviewed migrations to test first, then development only after separate review; production remains a separate manual decision. The guest browser transport is an `Authorization` bearer held only in site-namespaced `sessionStorage`; the separate admin-to-public handoff remains a later cross-origin decision.
+The invitation access policy is 10 phone/PIN attempts per IP per 15 minutes, with a per-invitation cooldown after repeated incorrect PINs. The site-scoped registered phone and six-digit manual PIN grant access without a guest name or SMS lookup. The guest browser transport is an `Authorization` bearer held only in site-namespaced `sessionStorage`. The separate admin-to-public handoff remains a later cross-origin decision.
 
 ## Listening
 

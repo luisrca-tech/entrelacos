@@ -17,6 +17,10 @@ const productionUrl =
   "postgresql://user:production-secret@ep-production-pooler.example.neon.tech/neondb?sslmode=require";
 const migrationUrl =
   "postgresql://migration-role:migration-secret@ep-development.example.neon.tech/neondb?sslmode=require";
+const localDevelopmentUrl =
+  "postgresql://entrelacos:local@127.0.0.1:55432/entrelacos_dev";
+const localTestUrl =
+  "postgresql://entrelacos:local@127.0.0.1:55432/entrelacos_test";
 
 const expectedEnvironment = {
   DATABASE_URL: developmentUrl,
@@ -29,6 +33,53 @@ const expectedEnvironment = {
 };
 
 describe("database connection guards", () => {
+  it("supports separate local development and test databases on the same server", () => {
+    const env = {
+      DATABASE_URL: localDevelopmentUrl,
+      DATABASE_URL_TEST: localTestUrl,
+    };
+    for (const [target, url, databaseName] of [
+      ["development", localDevelopmentUrl, "entrelacos_dev"],
+      ["test", localTestUrl, "entrelacos_test"],
+    ] as const) {
+      const config = resolveDatabaseConfig(target, env);
+      expect(config.url).toBe(`${url}?sslmode=disable`);
+      expect(config.expectedIdentity).toEqual({
+        databaseName,
+        userName: "entrelacos",
+      });
+    }
+  });
+
+  it("rejects using the local development database for integration tests", () => {
+    expect(() =>
+      resolveDatabaseConfig("test", {
+        DATABASE_URL: localDevelopmentUrl,
+        DATABASE_URL_TEST: localDevelopmentUrl.replace(
+          "127.0.0.1",
+          "localhost",
+        ),
+      }),
+    ).toThrow(/disposable.*test database/i);
+  });
+
+  it("requires a remote development reference before accepting a remote test URL", () => {
+    expect(() =>
+      resolveDatabaseConfig("test", {
+        DATABASE_URL: localDevelopmentUrl,
+        DATABASE_URL_TEST: testUrl,
+      }),
+    ).toThrow(/remote development database/i);
+  });
+
+  it("rejects connection parameters that can override the checked host", () => {
+    expect(() =>
+      resolveDatabaseConfig("development", {
+        DATABASE_URL: `${localDevelopmentUrl}?host=remote.example`,
+      }),
+    ).toThrow("Invalid database connection URL");
+  });
+
   it("does not expose a malformed private URL in configuration errors", () => {
     try {
       resolveDatabaseConfig("test", {
@@ -244,6 +295,34 @@ describe("database connection guards", () => {
 });
 
 describe("migration connection url", () => {
+  it("allows local migrations and checks the local port", () => {
+    expect(
+      resolveMigrationConnectionUrl({
+        DATABASE_URL: localDevelopmentUrl,
+        DATABASE_DIRECT_URL: localDevelopmentUrl,
+      }),
+    ).toBe(`${localDevelopmentUrl}?sslmode=disable`);
+    expect(() =>
+      resolveMigrationConnectionUrl({
+        DATABASE_URL: localDevelopmentUrl,
+        DATABASE_DIRECT_URL: localDevelopmentUrl.replace("55432", "5432"),
+      }),
+    ).toThrow(/match the development endpoint/);
+  });
+
+  it.each(["ep-production.example.neon.tech", " "])(
+    "rejects deployment credentials with an incorrect or blank configured endpoint (%s)",
+    (expectedHost) => {
+      expect(() =>
+        resolveMigrationConnectionUrl({
+          DATABASE_URL: developmentUrl,
+          DATABASE_DIRECT_URL: migrationUrl,
+          DATABASE_MIGRATION_HOST: expectedHost,
+        }),
+      ).toThrow(/configured deployment endpoint/);
+    },
+  );
+
   it("uses the direct URL and permits a different role on the same destination", () => {
     expect(
       resolveMigrationConnectionUrl({

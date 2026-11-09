@@ -16,10 +16,14 @@ Managed wedding websites in a TypeScript Turborepo. The product interview is com
 
 ## Prerequisites and commands
 
-Use Node.js 24 and Bun 1.3.14 (pinned in `packageManager`). Credential-free checks need no provider access. Running the API requires the guarded Neon development/test configuration and an auth secret. The database suite requires the isolated test connection.
+Use Node.js 24 and Bun 1.3.14 (pinned in `packageManager`). Use Docker Compose for the local API database and PostgreSQL integration tests. The API also requires local auth configuration.
 
 ```sh
 bun install --frozen-lockfile
+cp -n packages/database/.env.example packages/database/.env
+docker compose up -d --wait
+bun run db:migrate
+bun run test:db
 bun run check
 bun run dev
 ```
@@ -36,9 +40,9 @@ Install the pinned Bun version using the [official installation instructions](ht
 
 Run individual apps with `bun run --filter @entrelacos/admin dev`, `bun run --filter @entrelacos/api dev` or `bun run --filter @entrelacos/wedding-demo-botanico dev`.
 
-`bun run lint`, `bun run typecheck`, `bun run test` and `bun run build` are separate checks. `bun run check` runs all four. Biome handles supported source formats; Astro performs its own syntax/type validation. `bun run test:db` runs the real, serialized PostgreSQL acceptance suite against the verified test branch. CI runs the same credential-free checks; it does not deploy or migrate main.
+`bun run lint`, `bun run typecheck`, `bun run test` and `bun run build` are separate checks. `bun run check` runs all four. Biome handles supported source formats. Astro performs its own syntax and type validation. `bun run test:db` migrates the isolated local test database and runs the serialized PostgreSQL acceptance suite. CI uses disposable PostgreSQL. After validation, Database CD migrates the corresponding Neon environment on pushes to `development` and `main`.
 
-Use `bun db:generate` to generate a migration without connecting to a database, then review its SQL. Use `bun db:migrate` to apply reviewed migrations to the database selected by `packages/database/.env` (or an explicit `DATABASE_URL` in the shell). The migration command does not infer development versus production; see the [database operations guide](packages/database/README.md) before running it.
+Use `bun run db:generate` to generate a migration offline, then review its SQL. `bun run db:migrate` uses the direct connection configured in `packages/database/.env` or the shell. See the [database operations guide](packages/database/README.md) for local and deployment settings.
 
 ## Workspace
 
