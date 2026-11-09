@@ -3,7 +3,7 @@ import { faqPricingExamples } from "../faqPricingExample";
 const currency = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 const money = (cents: number) => currency.format(cents / 100);
 ---
-<div class="pricing-example">
+<div class="pricing-example" data-faq-reveal>
   <h3 id="pricing-example-title">Um presente de R$ 100 na prática</h3>
   <p id="pricing-example-note">Exemplo ilustrativo, sem promoção, com referência consultada em 9 de novembro de 2026. As condições podem mudar e variar conforme a conta. Para simular com as tarifas atualizadas do seu casamento, consulte o painel. O convidado confere o total final antes de pagar.</p>
   <p class="pricing-scroll-hint">Deslize a tabela para comparar todos os valores.</p>
