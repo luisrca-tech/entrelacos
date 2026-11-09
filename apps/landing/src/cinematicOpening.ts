@@ -59,6 +59,11 @@ export function mountCinematicOpening(
     return controller;
   }
   try {
+    try {
+      browser.sessionStorage.setItem("entrelacos-opening", "seen");
+    } catch {
+      // Referrer and navigation checks still prevent internal replays without storage.
+    }
     root.dataset.opening = "playing";
     root.setAttribute("inert", "");
     browser.dispatchEvent(new Event("opening:ready"));

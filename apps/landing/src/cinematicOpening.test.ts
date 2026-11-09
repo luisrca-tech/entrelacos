@@ -104,6 +104,10 @@ describe("continuous cinematic opening", () => {
     expect(document.querySelector("[data-opening-overlay]")).toBeNull();
     expect(document.activeElement?.tagName).toBe("BODY");
   });
+  it("records that the introduction has started in this tab", () => {
+    setup();
+    expect(sessionStorage.getItem("entrelacos-opening")).toBe("seen");
+  });
   it("settles safely on page hide", () => {
     const { scene } = setup();
     window.dispatchEvent(new Event("pagehide"));
@@ -273,6 +277,9 @@ describe("early page arming and runtime handoff", () => {
   }
   it("arms same-session reload and survives the first frame until the module is ready", () => {
     sessionStorage.setItem("entrelacos-opening", "seen");
+    vi.stubGlobal("performance", {
+      getEntriesByType: () => [{ type: "reload" }],
+    });
     arm();
     vi.advanceTimersByTime(32);
     expect(document.documentElement.dataset.opening).toBe("armed");
@@ -289,6 +296,36 @@ describe("early page arming and runtime handoff", () => {
       expect(document.documentElement.dataset.opening).toBeUndefined();
     },
   );
+  it("does not arm a normal navigation after the introduction was shown", () => {
+    sessionStorage.setItem("entrelacos-opening", "seen");
+    arm();
+    expect(document.documentElement.dataset.opening).toBeUndefined();
+    expect(document.documentElement.hasAttribute("inert")).toBe(false);
+  });
+  it("does not arm when following a link from the FAQ, even on the first home visit", () => {
+    vi.spyOn(document, "referrer", "get").mockReturnValue(
+      new URL("/duvidas", location.href).href,
+    );
+    arm();
+    expect(document.documentElement.dataset.opening).toBeUndefined();
+  });
+  it("still arms a deliberate reload after navigating from the FAQ", () => {
+    vi.spyOn(document, "referrer", "get").mockReturnValue(
+      new URL("/duvidas", location.href).href,
+    );
+    vi.stubGlobal("performance", {
+      getEntriesByType: () => [{ type: "reload" }],
+    });
+    arm();
+    expect(document.documentElement.dataset.opening).toBe("armed");
+  });
+  it("still arms a first visit from another website", () => {
+    vi.spyOn(document, "referrer", "get").mockReturnValue(
+      "https://example.com/",
+    );
+    arm();
+    expect(document.documentElement.dataset.opening).toBe("armed");
+  });
   it("lets the runtime decide hero visibility after scroll restoration", () => {
     document.body.innerHTML = '<section class="hero"></section>';
     vi.stubGlobal("scrollY", 120);
