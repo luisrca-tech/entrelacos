@@ -61,7 +61,6 @@ const description = "Tire suas dúvidas sobre personalização do site de casame
           {faqTopics.map((topic) => (
             <section class="faq-topic" data-faq-sequence="280" id={topic.id} aria-labelledby={`${topic.id}-title`}>
               <h2 id={`${topic.id}-title`} data-faq-reveal>{topic.title}</h2>
-              {topic.id === "taxas" && <PricingExample />}
               <div class="faq-list">
                 {topic.questions.map((item) => (
                   <details name="public-faq" data-faq-accordion data-faq-reveal>
@@ -70,6 +69,7 @@ const description = "Tire suas dúvidas sobre personalização do site de casame
                   </details>
                 ))}
               </div>
+              {topic.id === "taxas" && <PricingExample />}
             </section>
           ))}
           <aside class="faq-contact" data-faq-sequence="0" aria-labelledby="faq-contact-title">
