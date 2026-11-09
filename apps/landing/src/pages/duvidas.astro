@@ -1,0 +1,70 @@
+---
+import PublicHeader from "../components/PublicHeader.astro";
+import PublicFooter from "../components/PublicFooter.astro";
+import { faqTopics } from "../faqContent";
+import { landingConfig } from "../landingConfig";
+import "../styles/landing.css";
+import "../styles/faq.css";
+const config = landingConfig(import.meta.env, import.meta.env.PROD);
+const canonical = new URL("/duvidas", config.siteUrl).href;
+const description = "Tire suas dúvidas sobre personalização do site de casamento, presentes, taxas, parcelamento, conta Asaas, recebimentos e saques no Entrelaços.";
+---
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#f5f0e7" />
+    <title>Dúvidas frequentes — Entrelaços</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonical} />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="robots" content="index, follow" />
+    <meta property="og:type" content="website" />
+    <meta property="og:locale" content="pt_BR" />
+    <meta property="og:title" content="Dúvidas frequentes — Entrelaços" />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:image" content={new URL("/social-card.png", config.siteUrl).href} />
+    <meta property="og:image:alt" content="Duas alianças entrelaçadas, símbolo do Entrelaços." />
+    <meta name="twitter:card" content="summary_large_image" />
+  </head>
+  <body>
+    <a href="#conteudo" class="skip-link">Pular para o conteúdo</a>
+    <PublicHeader contactUrl={config.contactUrl} />
+    <main id="conteudo" tabindex="-1" class="faq-page">
+      <header class="faq-heading">
+        <a href="/" class="faq-back"><span aria-hidden="true">←</span> Voltar ao início</a>
+        <h1>Dúvidas <em>frequentes.</em></h1>
+        <p>Da personalização do site ao dinheiro dos presentes. Encontre as orientações para cada etapa.</p>
+      </header>
+      <div class="faq-layout">
+        <nav class="faq-topics" aria-label="Assuntos das dúvidas frequentes">
+          <p>Escolha um assunto</p>
+          {faqTopics.map((topic) => <a href={`#${topic.id}`}>{topic.title}<span aria-hidden="true">↗</span></a>)}
+        </nav>
+        <div class="faq-answers">
+          {faqTopics.map((topic) => (
+            <section class="faq-topic" id={topic.id} aria-labelledby={`${topic.id}-title`}>
+              <h2 id={`${topic.id}-title`}>{topic.title}</h2>
+              <div class="faq-list">
+                {topic.questions.map((item) => (
+                  <details>
+                    <summary>{item.question}<span aria-hidden="true">+</span></summary>
+                    <p>{item.answer}{item.reference && <><br /><a class="faq-reference" href={item.reference.href} target="_blank" rel="noopener noreferrer">{item.reference.label}<span class="faq-sr-only"> (abre em nova aba)</span></a></>}</p>
+                  </details>
+                ))}
+              </div>
+            </section>
+          ))}
+          <aside class="faq-contact" aria-labelledby="faq-contact-title">
+            <h2 id="faq-contact-title">Quer conversar sobre o seu casamento?</h2>
+            <p>Conte o que vocês têm em mente ou mande a dúvida que ficou. A equipe do Entrelaços ajuda a alinhar os próximos passos.</p>
+            <a class="button button-wine" href={config.contactUrl}>Ainda tenho uma dúvida <span aria-hidden="true">↗</span></a>
+          </aside>
+        </div>
+      </div>
+    </main>
+    <PublicFooter config={config} />
+  </body>
+</html>

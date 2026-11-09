@@ -3,6 +3,7 @@ import { cn, Popover, PopoverContent, PopoverTrigger } from "@entrelacos/ui";
 import { Link } from "@tanstack/react-router";
 import {
   BookOpen,
+  CircleHelp,
   Gift,
   House,
   Mail,
@@ -235,6 +236,9 @@ export function AdminShell({
             </Link>
           </nav>
         )}
+        <div className="mt-auto border-t border-admin-border pt-3">
+          <PublicFaqLink collapsed={!expanded} />
+        </div>
       </aside>
 
       <div className="flex min-h-screen min-w-0 flex-col">
@@ -262,6 +266,7 @@ export function AdminShell({
             role={role}
             initials={initials}
             onLogout={onLogout}
+            showFaq={!siteId}
           />
         </header>
         <main className="mx-auto w-full max-w-[1700px] px-[42px] pt-6 pb-6 [@media(max-width:760px)]:px-5 [@media(max-width:760px)]:pt-5 [@media(max-width:760px)]:pb-6 [@media(min-width:761px)_and_(max-width:1060px)]:px-7">
@@ -292,6 +297,31 @@ export function AdminShell({
         </nav>
       )}
     </div>
+  );
+}
+
+function PublicFaqLink({
+  collapsed = false,
+  onClick,
+}: {
+  collapsed?: boolean;
+  onClick?: () => void;
+}) {
+  return (
+    <a
+      href="https://entrelacosbr.site/duvidas"
+      target="_blank"
+      rel="noopener noreferrer"
+      className={navigationLinkClass(false, collapsed, false)}
+      title="Dúvidas frequentes (abre em nova aba)"
+      aria-label="Dúvidas frequentes (abre em nova aba)"
+      onClick={onClick}
+    >
+      <CircleHelp className="size-5" aria-hidden="true" />
+      <NavigationLabel collapsed={collapsed}>
+        Dúvidas frequentes
+      </NavigationLabel>
+    </a>
   );
 }
 
@@ -409,50 +439,46 @@ function MobileNavigation({
       <div className="min-w-0 flex-1">
         <AdminNavigation items={primary} area={area} mobile />
       </div>
-      {more.length > 0 && (
-        <Popover open={open} onOpenChange={setOpen}>
-          <PopoverTrigger
-            aria-label="Mais páginas"
-            aria-current={selected ? "page" : undefined}
-            render={<button type="button" />}
-            className={cn(
-              navigationLinkClass(selected, false, true),
-              "max-w-[20%] min-w-[54px]",
-            )}
-          >
-            <MoreHorizontal className="size-5" aria-hidden="true" />
-            <span>Mais</span>
-          </PopoverTrigger>
-          <PopoverContent
-            side="top"
-            align="end"
-            className="z-20 w-[min(260px,calc(100vw-24px))] rounded-xl border border-admin-border bg-admin-surface p-2 shadow-admin"
-          >
-            <nav
-              aria-label="Outras páginas do casamento"
-              className="grid gap-1"
-            >
-              {more.map((item) => (
-                <Link
-                  key={item.area}
-                  to={item.href}
-                  activeOptions={{ exact: true }}
-                  aria-current={item.area === area ? "page" : undefined}
-                  className={navigationLinkClass(
-                    item.area === area,
-                    false,
-                    false,
-                  )}
-                  onClick={() => setOpen(false)}
-                >
-                  {navigationIcon(item.area)}
-                  <span>{item.label}</span>
-                </Link>
-              ))}
-            </nav>
-          </PopoverContent>
-        </Popover>
-      )}
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger
+          aria-label="Mais páginas"
+          aria-current={selected ? "page" : undefined}
+          render={<button type="button" />}
+          className={cn(
+            navigationLinkClass(selected, false, true),
+            "max-w-[20%] min-w-[54px]",
+          )}
+        >
+          <MoreHorizontal className="size-5" aria-hidden="true" />
+          <span>Mais</span>
+        </PopoverTrigger>
+        <PopoverContent
+          side="top"
+          align="end"
+          className="z-20 w-[min(260px,calc(100vw-24px))] rounded-xl border border-admin-border bg-admin-surface p-2 shadow-admin"
+        >
+          <nav aria-label="Outras páginas do casamento" className="grid gap-1">
+            {more.map((item) => (
+              <Link
+                key={item.area}
+                to={item.href}
+                activeOptions={{ exact: true }}
+                aria-current={item.area === area ? "page" : undefined}
+                className={navigationLinkClass(
+                  item.area === area,
+                  false,
+                  false,
+                )}
+                onClick={() => setOpen(false)}
+              >
+                {navigationIcon(item.area)}
+                <span>{item.label}</span>
+              </Link>
+            ))}
+            <PublicFaqLink onClick={() => setOpen(false)} />
+          </nav>
+        </PopoverContent>
+      </Popover>
     </div>
   );
 }
@@ -462,11 +488,13 @@ function AccountMenu({
   role,
   initials,
   onLogout,
+  showFaq,
 }: {
   actor: MeResponse;
   role: AdminRole;
   initials: string;
   onLogout: () => void;
+  showFaq: boolean;
 }) {
   return (
     <Popover>
@@ -502,6 +530,7 @@ function AccountMenu({
               ? "Assessor do casamento"
               : "Administrador do casamento"}
         </div>
+        {showFaq && <PublicFaqLink />}
         <button
           className="min-h-[38px] w-full rounded-lg border border-admin-border bg-transparent px-3 py-2 text-left text-admin-accent-hover hover:bg-admin-accent-subtle"
           type="button"

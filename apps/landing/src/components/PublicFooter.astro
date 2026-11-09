@@ -1,0 +1,9 @@
+---
+import type { landingConfig } from "../landingConfig";
+interface Props {
+  config: ReturnType<typeof landingConfig>;
+  home?: boolean;
+}
+const { config, home = false } = Astro.props;
+---
+    <footer class="site-footer"><a class="wordmark" href={home ? "#inicio" : "/"} aria-label="Entrelaços, início"><img class="brand-mark" src="/brand/entrelacos-mark.svg" width="44" height="41" alt="" aria-hidden="true" />Entrelaços</a><p>Sites de casamento<br />preparados para vocês.</p><div><a href="/duvidas">Dúvidas frequentes</a><a href={config.botanicalUrl} target="_blank" rel="noopener noreferrer">Cinema Botânico ↗</a><a href={config.lettersUrl} target="_blank" rel="noopener noreferrer">Cartas do Nosso Sim ↗</a></div><small>© {new Date().getFullYear()} Entrelaços.</small></footer>
