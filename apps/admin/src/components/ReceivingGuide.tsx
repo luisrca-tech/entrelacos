@@ -299,9 +299,10 @@ export function ReceivingGuide({
           acontecer antes de o dinheiro ficar disponível.
         </p>
         <p className="m-0">
-          O Asaas oferece transferências Pix gratuitas para contas de pessoa
-          física e MEI. Confira as condições da sua conta e a prévia antes de
-          solicitar o saque.
+          <strong>Saques via Pix são gratuitos e ilimitados</strong> para contas
+          recebedoras cadastradas como pessoa física (PF) ou MEI. O EntreLaços
+          não cobra taxa adicional pelo saque. Para outros tipos de empresa,
+          confira as condições da conta e as taxas na prévia antes de confirmar.
         </p>
         <p className="m-0">
           <OfficialLink href="https://central.ajuda.asaas.com/hc/pt-br/articles/32059618254875-Como-funcionam-as-taxas-e-a-gratuidade-para-transfer%C3%AAncias-Pix-no-Asaas">

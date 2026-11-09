@@ -18,6 +18,7 @@ import {
   OverviewNotice,
 } from "../features/finance/FinancialOverviewCard";
 import { destinationKeyLabel } from "../features/receiving/ReceivingStatusCard";
+import { adminStyles } from "../lib/adminStyles";
 import { AdminButton } from "./AdminButton";
 import { formatCents } from "./financialFlow";
 import {
@@ -250,6 +251,11 @@ export function FinanceSection({
           }
           paymentsLink={links?.("payments", "Ver pagamentos")}
         />
+        <p className={`m-0 text-sm ${adminStyles.notice}`}>
+          <strong>Saques via Pix gratuitos para PF e MEI.</strong> Sem limite de
+          quantidade para contas recebedoras cadastradas nessas categorias. Para
+          outros tipos de empresa, consulte as taxas na prévia do saque.
+        </p>
         {eligible && (
           <div className="grid min-w-0 items-start gap-5 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
             <RecentGifts
@@ -339,6 +345,11 @@ export function FinanceSection({
             >
               Como funciona o saque
             </h2>
+            <p className="m-0 text-sm leading-[1.5] text-admin-text">
+              <strong>Saques via Pix gratuitos e ilimitados</strong> para contas
+              recebedoras de pessoa física (PF) e MEI. Para outros tipos de
+              empresa, consulte as taxas na prévia.
+            </p>
             <ol className="m-0 grid list-decimal gap-2 pl-[18px] text-sm leading-[1.5] text-admin-text marker:text-admin-text-secondary">
               <li>Escolha o valor e confira a prévia.</li>
               <li>Confirme com sua senha do EntreLaços.</li>
