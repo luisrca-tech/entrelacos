@@ -13,6 +13,7 @@ export {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "./components/alert-dialog";
+export { AsaasDisclosure } from "./components/asaas-disclosure";
 export { Badge, badgeVariants } from "./components/badge";
 export { Button, buttonVariants } from "./components/button";
 export { Calendar, CalendarDayButton } from "./components/calendar";
