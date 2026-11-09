@@ -1,4 +1,5 @@
 ---
+import PricingExample from "../components/PricingExample.astro";
 import PublicHeader from "../components/PublicHeader.astro";
 import PublicFooter from "../components/PublicFooter.astro";
 import { faqTopics } from "../faqContent";
@@ -34,31 +35,32 @@ const description = "Tire suas dúvidas sobre personalização do site de casame
     <a href="#conteudo" class="skip-link">Pular para o conteúdo</a>
     <PublicHeader contactUrl={config.contactUrl} />
     <main id="conteudo" tabindex="-1" class="faq-page">
-      <header class="faq-heading">
+      <header class="faq-heading" data-faq-reveal>
         <a href="/" class="faq-back"><span aria-hidden="true">←</span> Voltar ao início</a>
         <h1>Dúvidas <em>frequentes.</em></h1>
         <p>Da personalização do site ao dinheiro dos presentes. Encontre as orientações para cada etapa.</p>
       </header>
       <div class="faq-layout">
-        <nav class="faq-topics" aria-label="Assuntos das dúvidas frequentes">
+        <nav class="faq-topics" data-faq-reveal aria-label="Assuntos das dúvidas frequentes">
           <p>Escolha um assunto</p>
           {faqTopics.map((topic) => <a href={`#${topic.id}`}>{topic.title}<span aria-hidden="true">↗</span></a>)}
         </nav>
         <div class="faq-answers">
           {faqTopics.map((topic) => (
-            <section class="faq-topic" id={topic.id} aria-labelledby={`${topic.id}-title`}>
+            <section class="faq-topic" data-faq-reveal id={topic.id} aria-labelledby={`${topic.id}-title`}>
               <h2 id={`${topic.id}-title`}>{topic.title}</h2>
+              {topic.id === "taxas" && <PricingExample />}
               <div class="faq-list">
                 {topic.questions.map((item) => (
-                  <details>
+                  <details name="public-faq" data-faq-accordion>
                     <summary>{item.question}<span aria-hidden="true">+</span></summary>
-                    <p>{item.answer}{item.reference && <><br /><a class="faq-reference" href={item.reference.href} target="_blank" rel="noopener noreferrer">{item.reference.label}<span class="faq-sr-only"> (abre em nova aba)</span></a></>}</p>
+                    <div class="faq-answer"><p>{item.answer}{item.reference && <><br /><a class="faq-reference" href={item.reference.href} target="_blank" rel="noopener noreferrer">{item.reference.label}<span class="faq-sr-only"> (abre em nova aba)</span></a></>}</p></div>
                   </details>
                 ))}
               </div>
             </section>
           ))}
-          <aside class="faq-contact" aria-labelledby="faq-contact-title">
+          <aside class="faq-contact" data-faq-reveal aria-labelledby="faq-contact-title">
             <h2 id="faq-contact-title">Quer conversar sobre o seu casamento?</h2>
             <p>Conte o que vocês têm em mente ou mande a dúvida que ficou. A equipe do Entrelaços ajuda a alinhar os próximos passos.</p>
             <a class="button button-wine" href={config.contactUrl}>Ainda tenho uma dúvida <span aria-hidden="true">↗</span></a>
@@ -67,5 +69,9 @@ const description = "Tire suas dúvidas sobre personalização do site de casame
       </div>
     </main>
     <PublicFooter config={config} />
+    <script>
+      import { mountFaqMotion } from "../faqMotion";
+      mountFaqMotion(document, window, window.matchMedia("(prefers-reduced-motion: reduce)"));
+    </script>
   </body>
 </html>
