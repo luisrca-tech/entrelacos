@@ -23,13 +23,17 @@ import {
   readDatabaseTimestamp,
 } from "./databaseTimestamp";
 import type { FinancialAccountBinding } from "./financialOverview";
+import {
+  financialInboxDueAt,
+  readFinancialWorkDueAt,
+} from "./financialWorkSchedule";
 import { serializeBrlCents } from "./giftMoney";
 import type { GiftPaymentWorker } from "./giftPaymentWorker";
 import { allowsLiveSite, type LiveSitePolicy } from "./liveSitePolicy";
 
 interface Options extends LiveSitePolicy {
   applicationEnvironment?: "development" | "test" | "production";
-  db: Pick<DatabaseConnection["db"], "transaction">;
+  db: Pick<DatabaseConnection["db"], "transaction" | "execute">;
   environment: "sandbox" | "live";
   instanceId: string;
   reader: Pick<
@@ -160,6 +164,8 @@ export function checkoutPaymentFacts(
 export function createGiftCheckoutLifecycleWorker(
   options: Options,
 ): GiftPaymentWorker & {
+  nextDueAt(): Promise<number | null>;
+  nextExpiryDueAt(): Promise<number | null>;
   expireNextUnpaidInstallment: GiftPaymentWorker["processNextReceivedPayment"];
 } {
   const { db, environment, instanceId, reader, now } = options;
@@ -178,20 +184,7 @@ export function createGiftCheckoutLifecycleWorker(
     typeof now !== "function"
   )
     return unavailable();
-  async function claim(): Promise<Claim | "DEAD_LETTER" | null> {
-    const started = time(now());
-    return db.transaction(async (tx) => {
-      const result =
-        await tx.execute(sql`SELECT e.id AS "eventId", e.site_id AS "siteId", e.account_id AS "accountId", e.environment,
-        e.event_type AS "eventType", e.payload, e.payload_hash AS "payloadHash", e.provider_event_reference AS "providerEventReference",
-        e.received_at AS "receivedAt", e.authenticated_at AS "authenticatedAt", e.state, e.attempts, e.next_attempt_at AS "nextAttemptAt",
-        e.lease_owner AS "leaseOwner", e.lease_token AS "leaseToken", e.lease_expires_at AS "leaseExpiresAt", e.processed_at AS "processedAt",
-        account.provider, account.account_reference AS "accountReference", st.is_demo AS "isDemo",
-        a.id AS "attemptId", a.order_id AS "orderId", a.provider_reference AS "checkoutReference",
-        op.state AS "operationState", op.provider_operation_reference AS "operationReference",
-        q.snapshot->'receiving'->>'accountReference' AS "quoteAccountReference",
-        q.snapshot->'quote'->'installmentCount' AS "installmentCount"
-        FROM ${financialEventInbox} e
+  const eligibleEvents = sql`FROM ${financialEventInbox} e
         INNER JOIN ${receivingAccount} account ON account.id=e.account_id AND account.site_id=e.site_id AND account.environment=e.environment
         INNER JOIN ${site} st ON st.id=e.site_id
         INNER JOIN ${giftCheckoutAttempt} a ON a.site_id=e.site_id AND a.account_id=e.account_id AND a.environment=e.environment AND (
@@ -205,6 +198,21 @@ export function createGiftCheckoutLifecycleWorker(
         WHERE e.environment=${environment} AND account.provider='ASAAS' AND (${environment}<>'live' OR st.is_demo=false OR st.id=${liveDemoSiteId})
           AND e.event_type IN ('CHECKOUT_CREATED','CHECKOUT_PAID','CHECKOUT_CANCELED','CHECKOUT_EXPIRED','PAYMENT_DELETED') AND e.authenticated_at IS NOT NULL
           AND (e.event_type<>'PAYMENT_DELETED' OR (q.method='CREDIT_CARD' AND q.snapshot->'quote'->>'settlementVersion'='PLATFORM_FEE_GUARANTEE_V1'))
+    AND e.state IN ('RECEIVED','RETRY','CLAIMED')`;
+  async function claim(): Promise<Claim | "DEAD_LETTER" | null> {
+    const started = time(now());
+    return db.transaction(async (tx) => {
+      const result =
+        await tx.execute(sql`SELECT e.id AS "eventId", e.site_id AS "siteId", e.account_id AS "accountId", e.environment,
+        e.event_type AS "eventType", e.payload, e.payload_hash AS "payloadHash", e.provider_event_reference AS "providerEventReference",
+        e.received_at AS "receivedAt", e.authenticated_at AS "authenticatedAt", e.state, e.attempts, e.next_attempt_at AS "nextAttemptAt",
+        e.lease_owner AS "leaseOwner", e.lease_token AS "leaseToken", e.lease_expires_at AS "leaseExpiresAt", e.processed_at AS "processedAt",
+        account.provider, account.account_reference AS "accountReference", st.is_demo AS "isDemo",
+        a.id AS "attemptId", a.order_id AS "orderId", a.provider_reference AS "checkoutReference",
+        op.state AS "operationState", op.provider_operation_reference AS "operationReference",
+        q.snapshot->'receiving'->>'accountReference' AS "quoteAccountReference",
+        q.snapshot->'quote'->'installmentCount' AS "installmentCount"
+        ${eligibleEvents}
           AND ((e.state IN ('RECEIVED','RETRY') AND e.next_attempt_at<=${started.toISOString()}::timestamptz AND e.next_attempt_at<=clock_timestamp())
             OR (e.state='CLAIMED' AND e.lease_expires_at<=${started.toISOString()}::timestamptz AND e.lease_expires_at<=clock_timestamp()))
         ORDER BY e.next_attempt_at,e.id LIMIT 1 FOR UPDATE OF e SKIP LOCKED`);
@@ -348,15 +356,8 @@ export function createGiftCheckoutLifecycleWorker(
       return processed;
     });
   }
-  async function claimExpiredPlan() {
-    const started = time(now());
-    return db.transaction(async (tx) => {
-      const result =
-        await tx.execute(sql`SELECT a.id AS "attemptId", o.id AS "orderId", a.site_id AS "siteId",
-        a.account_id AS "accountId", a.provider_reference AS "checkoutReference", account.account_reference AS "accountReference",
-        q.snapshot->'quote' AS quote, op.updated_at AS "createdAt", op.last_error_code AS "lastErrorCode",
-        a.installment_expiry_payment_references AS "expiryPaymentReferences"
-        FROM ${giftCheckoutAttempt} a
+  const expiryAt = sql`op.updated_at+(${giftInstallmentExpiryMinutes}::int * interval '1 minute')`;
+  const eligibleExpiries = sql`FROM ${giftCheckoutAttempt} a
         JOIN ${giftOrder} o ON o.id=a.order_id AND o.site_id=a.site_id AND o.account_id=a.account_id AND o.environment=a.environment
         JOIN ${giftQuoteRecord} q ON q.id=o.quote_id AND q.site_id=o.site_id AND q.account_id=o.account_id AND q.environment=o.environment
         JOIN ${financialOperation} op ON op.id=a.id AND op.id=a.operation_id AND op.order_id=a.order_id AND op.site_id=a.site_id
@@ -368,8 +369,6 @@ export function createGiftCheckoutLifecycleWorker(
           AND a.hosted_url IS NOT NULL AND op.state='SUCCEEDED' AND op.provider_operation_reference=a.provider_reference
           AND q.method='CREDIT_CARD' AND q.snapshot->'quote'->>'settlementVersion'='PLATFORM_FEE_GUARANTEE_V1'
           AND q.snapshot->'quote'->'installmentCount' BETWEEN '2'::jsonb AND '12'::jsonb
-          AND op.updated_at+(${giftInstallmentExpiryMinutes}::int * interval '1 minute')<=LEAST(${started.toISOString()}::timestamptz,clock_timestamp())
-          AND op.next_attempt_at<=clock_timestamp()
           AND (op.last_error_code IS NULL OR op.last_error_code=${expiryDispatched})
           AND NOT EXISTS (${checkoutPaymentFacts({
             siteId: sql`a.site_id`,
@@ -382,7 +381,18 @@ export function createGiftCheckoutLifecycleWorker(
           AND NOT EXISTS (SELECT 1 FROM ${financialEventInbox} e
             WHERE e.site_id=a.site_id AND e.account_id=a.account_id AND e.environment=a.environment
               AND e.payload->>'externalReference'=a.id AND e.payload->>'installmentId'=a.provider_reference
-              AND e.event_type='PAYMENT_DELETED' AND e.state='PROCESSED' AND e.last_error_code='PAYMENT_DELETED_INSTALLMENT_EMPTY')
+              AND e.event_type='PAYMENT_DELETED' AND e.state='PROCESSED' AND e.last_error_code='PAYMENT_DELETED_INSTALLMENT_EMPTY')`;
+  async function claimExpiredPlan() {
+    const started = time(now());
+    return db.transaction(async (tx) => {
+      const result =
+        await tx.execute(sql`SELECT a.id AS "attemptId", o.id AS "orderId", a.site_id AS "siteId",
+        a.account_id AS "accountId", a.provider_reference AS "checkoutReference", account.account_reference AS "accountReference",
+        q.snapshot->'quote' AS quote, op.updated_at AS "createdAt", op.last_error_code AS "lastErrorCode",
+        a.installment_expiry_payment_references AS "expiryPaymentReferences"
+        ${eligibleExpiries}
+          AND ${expiryAt}<=LEAST(${started.toISOString()}::timestamptz,clock_timestamp())
+          AND op.next_attempt_at<=clock_timestamp()
         ORDER BY op.next_attempt_at, a.id LIMIT 1 FOR UPDATE OF o SKIP LOCKED`);
       const row = result.rows[0];
       if (!row) return null;
@@ -523,6 +533,14 @@ export function createGiftCheckoutLifecycleWorker(
   }
 
   return {
+    nextDueAt: () =>
+      readFinancialWorkDueAt(db, financialInboxDueAt, eligibleEvents),
+    nextExpiryDueAt: () =>
+      readFinancialWorkDueAt(
+        db,
+        sql`GREATEST(${expiryAt},op.next_attempt_at)`,
+        eligibleExpiries,
+      ),
     async expireNextUnpaidInstallment() {
       if (
         environment === "live" &&

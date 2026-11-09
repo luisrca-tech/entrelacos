@@ -1,0 +1,42 @@
+name: Database CD
+
+on:
+  push:
+    branches: [development, main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: database-cd-${{ github.ref_name }}
+  queue: max
+
+jobs:
+  validate:
+    uses: ./.github/workflows/ci.yml
+
+  migrate:
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: ${{ github.ref_name == 'main' && 'production' || 'development' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+      - run: bun install --frozen-lockfile
+      - name: Apply reviewed migrations
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DATABASE_DIRECT_URL: ${{ secrets.DATABASE_DIRECT_URL }}
+          DATABASE_MIGRATION_HOST: ${{ vars.DATABASE_MIGRATION_HOST }}
+        shell: bash
+        run: |
+          : "${DATABASE_URL:?Missing environment runtime database URL}"
+          : "${DATABASE_DIRECT_URL:?Missing environment migration database URL}"
+          : "${DATABASE_MIGRATION_HOST:?Missing environment migration endpoint hostname}"
+          bun run db:migrate

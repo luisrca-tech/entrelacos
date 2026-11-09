@@ -73,7 +73,13 @@ export async function createGiftApplication(
       ]).then(() => {});
       return closing;
     };
-    payments.start();
+    if (
+      config.target === "production" ||
+      (config.giftPayment.mode !== "disabled" &&
+        config.giftPayment.backgroundProcessing)
+    ) {
+      payments.start();
+    }
     return Object.assign(application, { close });
   } catch {
     await Promise.allSettled([

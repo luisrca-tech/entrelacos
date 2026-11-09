@@ -2,6 +2,16 @@
 
 This operation configures payment and checkout notifications for one existing receiving subaccount. It does not create a subaccount, create a Pix key, initiate a payment or withdrawal, or configure the separate withdrawal-authorization security callback.
 
+## Background processing
+
+The API wakes its financial worker after a webhook insert, hosted checkout save or withdrawal dispatch authorization commits. Inbox events, operation deadlines and payment adjustment deadlines live in PostgreSQL. The worker drains due work on startup and reloads its next deadline from those records. An empty queue sleeps for 30 minutes between safety sweeps. This bounds recovery of a missed signal while the API and database are available and gives Neon time to suspend between sweeps.
+
+Production starts the worker whenever live payments are enabled. Development and test environments start it only with `ASAAS_BACKGROUND_PROCESSING=true` and payments enabled. Run routine integration tests against the local PostgreSQL service.
+
+Withdrawal recovery starts after the original dispatch lease expires. It reserves the next observation for up to five minutes while reading the original transfer, then reschedules unresolved withdrawals. It checks again in 30 seconds during the first ten minutes, in ten minutes during the first hour, and in 30 minutes for older withdrawals. A withdrawal that still requires the first dispatch uses the existing protected confirmation or recovery flow.
+
+When checking Neon suspension, observe compute state in the Neon console without sending SQL to the endpoint. Close public mural and authenticated showcase tabs, since those features still refresh while open. Check that the next actual operation resumes processing and measure network transfer separately.
+
 ## Prerequisites
 
 1. Verify the production database identity, Railway environment, receiving site and subaccount. Production accepts a regular site or the exact showcase selected through `ASAAS_LIVE_DEMO_SITE_ID` while `APP_ENV=production` and `ASAAS_MODE=live`. The showcase keeps `is_demo=true`; the opt-in does not authorize other demos or simulated evidence. The compatibility Sandbox operation requires a development demo.

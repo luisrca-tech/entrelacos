@@ -29,6 +29,7 @@ export interface DatabaseConfig {
 export interface DatabaseEnvironment extends NodeJS.ProcessEnv {
   DATABASE_URL?: string;
   DATABASE_DIRECT_URL?: string;
+  DATABASE_MIGRATION_HOST?: string;
   DATABASE_URL_TEST?: string;
   DATABASE_URL_PRODUCTION?: string;
   DATABASE_TEST_BRANCH_ID?: string;
@@ -76,11 +77,23 @@ function requiredEnvironmentValue(
 function parseDatabaseUrl(value: string): URL {
   try {
     const url = new URL(value);
-    if (!["postgres:", "postgresql:"].includes(url.protocol)) throw new Error();
+    if (
+      !["postgres:", "postgresql:"].includes(url.protocol) ||
+      url.searchParams.has("host") ||
+      url.searchParams.has("port")
+    ) {
+      throw new Error();
+    }
     return url;
   } catch {
     throw new Error("Invalid database connection URL");
   }
+}
+
+export function isLocalDatabaseUrl(value: string): boolean {
+  return ["127.0.0.1", "localhost"].includes(
+    parseDatabaseUrl(value).hostname.toLowerCase(),
+  );
 }
 
 function endpointIdFromUrl(value: string): string {
@@ -104,7 +117,10 @@ function databaseNameFromUrl(value: string): string {
 
 export function normalizeDatabaseUrl(value: string): string {
   const url = parseDatabaseUrl(value);
-  url.searchParams.set("sslmode", "verify-full");
+  url.searchParams.set(
+    "sslmode",
+    isLocalDatabaseUrl(value) ? "disable" : "verify-full",
+  );
   return url.toString();
 }
 
@@ -129,14 +145,36 @@ export function resolveDatabaseConfig(
   const urlVariable = target === "test" ? "DATABASE_URL_TEST" : "DATABASE_URL";
   const rawUrl = requiredEnvironmentValue(env, urlVariable);
   const endpoint = normalizeNeonEndpoint(rawUrl);
+  const local = isLocalDatabaseUrl(rawUrl);
+
+  if (target === "production" && local) {
+    throw new Error("Production requires a remote database");
+  }
 
   if (target === "test") {
     const developmentUrl = requiredEnvironmentValue(env, "DATABASE_URL");
-    const developmentEndpoint = normalizeNeonEndpoint(developmentUrl);
-    if (endpoint === developmentEndpoint) {
-      throw new Error(
-        "Test database endpoint must be distinct from development",
-      );
+    if (local) {
+      const databaseName = databaseNameFromUrl(rawUrl);
+      if (
+        !databaseName.endsWith("_test") ||
+        (isLocalDatabaseUrl(developmentUrl) &&
+          databaseName === databaseNameFromUrl(developmentUrl))
+      ) {
+        throw new Error(
+          "Local integration tests require a disposable _test database",
+        );
+      }
+    } else {
+      if (isLocalDatabaseUrl(developmentUrl)) {
+        throw new Error(
+          "Remote tests require a remote development database reference",
+        );
+      }
+      if (endpoint === normalizeNeonEndpoint(developmentUrl)) {
+        throw new Error(
+          "Test database endpoint must be distinct from development",
+        );
+      }
     }
 
     const productionUrl = env.DATABASE_URL_PRODUCTION?.trim();
@@ -147,13 +185,13 @@ export function resolveDatabaseConfig(
     }
   }
 
-  if (target !== "test") {
+  if (target !== "test" || local) {
     return {
       target,
       url: normalizeDatabaseUrl(rawUrl),
       endpoint,
       expectedIdentity: {
-        endpointId: endpointIdFromUrl(rawUrl),
+        ...(!local && { endpointId: endpointIdFromUrl(rawUrl) }),
         databaseName: databaseNameFromUrl(rawUrl),
         userName: userNameFromUrl(rawUrl),
       },
@@ -286,21 +324,34 @@ export function resolveMigrationConnectionUrl(
 ): string {
   const directUrl = requiredEnvironmentValue(env, "DATABASE_DIRECT_URL");
   const url = parseDatabaseUrl(directUrl);
+  const hostname = url.hostname.toLowerCase();
+  const expectedHost = env.DATABASE_MIGRATION_HOST?.trim().toLowerCase();
   if (
-    url.hostname.toLowerCase().endsWith(".neon.tech") &&
-    /-pooler$/i.test(url.hostname.split(".")[0])
+    hostname.endsWith(".neon.tech") &&
+    hostname.split(".")[0].endsWith("-pooler")
   ) {
     throw new Error("Migration connection must use a direct Neon endpoint");
+  }
+  if (
+    expectedHost !== undefined &&
+    (hostname !== expectedHost || !hostname.endsWith(".neon.tech"))
+  ) {
+    throw new Error(
+      "Migration connection must match the configured deployment endpoint",
+    );
   }
 
   const runtimeUrl = env.DATABASE_URL?.trim();
   let databaseName: string;
   let runtimeDatabaseName: string | undefined;
+  let runtimePort: string | undefined;
   try {
     if (!url.hostname) throw new Error();
     databaseName = databaseNameFromUrl(directUrl);
     if (runtimeUrl) {
-      if (!parseDatabaseUrl(runtimeUrl).hostname) throw new Error();
+      const runtime = parseDatabaseUrl(runtimeUrl);
+      if (!runtime.hostname) throw new Error();
+      runtimePort = runtime.port;
       runtimeDatabaseName = databaseNameFromUrl(runtimeUrl);
     }
   } catch {
@@ -309,7 +360,8 @@ export function resolveMigrationConnectionUrl(
 
   if (runtimeUrl) {
     if (
-      normalizeNeonEndpoint(directUrl) !== normalizeNeonEndpoint(runtimeUrl)
+      normalizeNeonEndpoint(directUrl) !== normalizeNeonEndpoint(runtimeUrl) ||
+      (url.port || "5432") !== (runtimePort || "5432")
     ) {
       throw new Error(
         "Migration connection must match the development endpoint",

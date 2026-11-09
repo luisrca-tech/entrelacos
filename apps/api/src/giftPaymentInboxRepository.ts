@@ -10,6 +10,10 @@ import {
   databaseTimestampEpochMicroseconds,
   readDatabaseTimestamp,
 } from "./databaseTimestamp";
+import {
+  financialInboxDueAt,
+  readFinancialWorkDueAt,
+} from "./financialWorkSchedule";
 import type { GiftPaymentPostingClaim } from "./giftPaymentPostingRepository";
 import { allowsLiveSite, type LiveSitePolicy } from "./liveSitePolicy";
 
@@ -110,7 +114,7 @@ function storedRow<T extends ClaimRow>(value: unknown): T {
   } as unknown as T;
 }
 export function createGiftPaymentInboxRepository(
-  db: Pick<DatabaseConnection["db"], "transaction">,
+  db: Pick<DatabaseConnection["db"], "transaction" | "execute">,
   options: GiftPaymentInboxOptions,
 ) {
   if (
@@ -139,7 +143,14 @@ export function createGiftPaymentInboxRepository(
   })
     ? options.liveDemoSiteId
     : null;
+  const eligibleEvents = sql`FROM ${financialEventInbox} e INNER JOIN ${receivingAccount} a ON a.site_id=e.site_id AND a.id=e.account_id AND a.environment=e.environment
+          INNER JOIN ${site} st ON st.id=e.site_id
+          WHERE e.environment=${options.environment} AND a.provider='ASAAS' AND a.account_reference IS NOT NULL AND length(trim(a.account_reference))>0
+            AND (${options.environment}<>'live' OR st.is_demo=false OR st.id=${liveDemoSiteId}) AND e.authenticated_at IS NOT NULL AND e.event_type IN ('PAYMENT_RECEIVED','PAYMENT_CONFIRMED','PAYMENT_SPLIT_DONE')
+    AND e.state IN ('RECEIVED','RETRY','CLAIMED')`;
   return {
+    nextDueAt: () =>
+      readFinancialWorkDueAt(db, financialInboxDueAt, eligibleEvents),
     async deferClaim(
       claim: GiftPaymentInboxClaim,
       reason: GiftPaymentInboxDeferReason,
@@ -280,10 +291,7 @@ export function createGiftPaymentInboxRepository(
           a.site_id AS "bindingSiteId",a.id AS "bindingAccountId",a.environment AS "bindingEnvironment",a.provider AS "bindingProvider",
           a.account_reference AS "providerAccountReference",e.authenticated_at AS "authenticatedAt",e.received_at AS "receivedAt",
           e.attempts,e.payload,e.state,e.lease_owner AS "leaseOwner",e.lease_token AS "leaseToken",e.lease_expires_at AS "leaseExpiresAt",e.next_attempt_at AS "nextAttemptAt"
-          FROM ${financialEventInbox} e INNER JOIN ${receivingAccount} a ON a.site_id=e.site_id AND a.id=e.account_id AND a.environment=e.environment
-          INNER JOIN ${site} st ON st.id=e.site_id
-          WHERE e.environment=${options.environment} AND a.provider='ASAAS' AND a.account_reference IS NOT NULL AND length(trim(a.account_reference))>0
-            AND (${options.environment}<>'live' OR st.is_demo=false OR st.id=${liveDemoSiteId}) AND e.authenticated_at IS NOT NULL AND e.event_type IN ('PAYMENT_RECEIVED','PAYMENT_CONFIRMED','PAYMENT_SPLIT_DONE')
+          ${eligibleEvents}
             AND ((e.state IN ('RECEIVED','RETRY') AND e.next_attempt_at<=${clock.toISOString()}::timestamptz AND e.next_attempt_at<=clock_timestamp())
               OR (e.state='CLAIMED' AND e.lease_expires_at<=${clock.toISOString()}::timestamptz AND e.lease_expires_at<=clock_timestamp()))
           ORDER BY e.next_attempt_at,e.id LIMIT 1 FOR UPDATE OF e SKIP LOCKED`);
