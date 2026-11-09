@@ -8,6 +8,7 @@ export type GiftPaymentConfig =
   | {
       readonly mode: "sandbox" | "live";
       readonly applicationEnvironment: DatabaseTarget;
+      readonly backgroundProcessing?: true;
       readonly liveDemoSiteId?: string;
       readonly sandboxBuyerGrossUpSiteId?: string;
       readonly platformApiKey: string;
@@ -75,6 +76,7 @@ export function readGiftPaymentConfig(
   applicationEnvironment: DatabaseTarget,
 ): GiftPaymentConfig {
   const mode = env.ASAAS_MODE ?? "disabled";
+  const backgroundProcessing = env.ASAAS_BACKGROUND_PROCESSING;
   const liveDemoSiteId = env.ASAAS_LIVE_DEMO_SITE_ID;
   const sandboxBuyerGrossUpSiteId = env.ASAAS_SANDBOX_BUYER_GROSS_UP_SITE_ID;
   if (
@@ -95,7 +97,10 @@ export function readGiftPaymentConfig(
   if (
     (mode !== "sandbox" && mode !== "live") ||
     !["development", "test", "production"].includes(applicationEnvironment) ||
-    (mode === "live") !== (applicationEnvironment === "production")
+    (mode === "live") !== (applicationEnvironment === "production") ||
+    (backgroundProcessing !== undefined &&
+      backgroundProcessing !== "true" &&
+      backgroundProcessing !== "false")
   )
     invalid();
   const platformApiKey = required(env.ASAAS_API_KEY);
@@ -117,6 +122,7 @@ export function readGiftPaymentConfig(
   return {
     mode,
     applicationEnvironment,
+    ...(backgroundProcessing === "true" ? { backgroundProcessing: true } : {}),
     ...(liveDemoSiteId === undefined ? {} : { liveDemoSiteId }),
     ...(sandboxBuyerGrossUpSiteId === undefined
       ? {}

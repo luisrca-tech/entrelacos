@@ -142,6 +142,13 @@ export function createGiftPaymentComposition(
     expiredUrl: callback,
   };
   const instanceId = randomUUID();
+  function wakeWorker() {
+    try {
+      loop.wake();
+    } catch {
+      // The startup and safety sweeps recover work if the local signal fails.
+    }
+  }
   const receiving = Object.freeze({
     mode: environment,
     ...liveSitePolicy,
@@ -162,6 +169,7 @@ export function createGiftPaymentComposition(
     db,
     now,
     fetch,
+    wakeWorker,
     ...(options.refreshReceiving
       ? { refreshReceiving: options.refreshReceiving }
       : {}),
@@ -459,7 +467,14 @@ export function createGiftPaymentComposition(
         return false;
       }
     },
-    repository: checkoutRepository,
+    repository: {
+      ...checkoutRepository,
+      async saveHostedCheckout(outcome) {
+        const stored = await checkoutRepository.saveHostedCheckout(outcome);
+        wakeWorker();
+        return stored;
+      },
+    },
     loadReceivingContext: context,
     findPublishedGift: gift,
     createHostedCheckout,
@@ -521,7 +536,13 @@ export function createGiftPaymentComposition(
     mode: environment,
     ...liveSitePolicy,
     resolveBinding: webhookRepository.resolveBinding,
-    repository: webhookRepository,
+    repository: {
+      async append(input) {
+        const result = await webhookRepository.append(input);
+        if (result === "INSERTED") wakeWorker();
+        return result;
+      },
+    },
     now,
     generateId: () => randomUUID(),
   });
@@ -584,21 +605,40 @@ export function createGiftPaymentComposition(
           adjustments.processNextReceivedPayment(),
           withdrawals.reconcilePending(),
         ]);
-        if (results.some((result) => result.status === "rejected"))
-          return { kind: "RETRY" };
-        const completed = results
-          .slice(0, 5)
-          .flatMap((result) =>
-            result.status === "fulfilled" && result.value ? [result.value] : [],
-          );
+        const completed = results.flatMap((result) =>
+          result.status === "fulfilled" ? [result.value] : [],
+        );
+        if (results.some(({ status }) => status === "rejected")) {
+          completed.push({ kind: "RETRY" });
+        }
         return (
-          completed.find((result) => result.kind !== "IDLE") ?? { kind: "IDLE" }
+          completed.find(
+            ({ kind }) => !["IDLE", "RETRY", "UNRESOLVED"].includes(kind),
+          ) ??
+          completed.find(({ kind }) => kind !== "IDLE") ?? { kind: "IDLE" }
         );
       },
     },
-    idleDelayMs: 1_000,
+    async nextDueAt() {
+      const deadlines = await Promise.allSettled([
+        inbox.nextDueAt(),
+        lifecycle.nextDueAt(),
+        lifecycle.nextExpiryDueAt(),
+        restrictions.nextDueAt(),
+        adjustments.nextDueAt(),
+        withdrawals.nextRecoveryDueAt(),
+      ]);
+      let earliest = Infinity;
+      for (const deadline of deadlines) {
+        if (deadline.status === "rejected") throw deadline.reason;
+        if (deadline.value !== null)
+          earliest = Math.min(earliest, deadline.value);
+      }
+      return earliest === Infinity ? null : earliest;
+    },
+    idleDelayMs: 30 * 60_000,
     retryDelayMs: 5_000,
-    maxRetryDelayMs: 30_000,
+    maxRetryDelayMs: 30 * 60_000,
   });
   const financeRepository = createFinancialOverviewRepository(db, {
     ...liveSitePolicy,

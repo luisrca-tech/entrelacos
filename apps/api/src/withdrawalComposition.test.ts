@@ -281,15 +281,24 @@ describe("composed withdrawal admission and recovery ownership", () => {
       f.composition.service?.readContext({ actor: null, access: null }),
     ).rejects.toThrow("closed");
   });
-  it("bounds recovery scans to one every30 seconds and only reads existing attempted operations", async () => {
+  it("discovers the persisted deadline and claims only due, already armed withdrawals", async () => {
     const f = enabledFixture();
-    await f.composition.reconcilePending();
-    await f.composition.reconcilePending();
-    expect(f.execute).toHaveBeenCalledTimes(1);
+    const dueAt = +f.clock.value + 30_000;
+    f.execute.mockResolvedValueOnce({ rows: [{ dueAt }] });
+    await expect(f.composition.nextRecoveryDueAt()).resolves.toBe(dueAt);
+    await expect(f.composition.reconcilePending()).resolves.toEqual({
+      kind: "IDLE",
+    });
+    const [schedule, claim] = f.execute.mock.calls.map(
+      ([statement]) => new PgDialect().sqlToQuery(statement).sql,
+    );
+    expect(schedule).toContain(
+      "GREATEST(op.next_attempt_at,op.lease_expires_at)",
+    );
+    expect(claim).toContain("FOR UPDATE OF op SKIP LOCKED");
+    expect(claim).toContain("UPDATE financial_operation");
+    expect(claim).toContain("op.attempts=1");
     expect(f.fetch).not.toHaveBeenCalled();
-    f.clock.value = new Date(+f.clock.value + 30001);
-    await f.composition.reconcilePending();
-    expect(f.execute).toHaveBeenCalledTimes(2);
     await f.composition.close();
   });
   it("retains MAXIMUM semantics for a pending history item without manufacturing a settlement", async () => {

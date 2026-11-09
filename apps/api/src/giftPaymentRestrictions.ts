@@ -17,6 +17,10 @@ import {
   compareDatabaseTimestamps,
   readDatabaseTimestamp,
 } from "./databaseTimestamp";
+import {
+  financialInboxDueAt,
+  readFinancialWorkDueAt,
+} from "./financialWorkSchedule";
 import type { GiftPaymentInboxClaim } from "./giftPaymentInboxRepository";
 import type { GiftPaymentWorker } from "./giftPaymentWorker";
 import { allowsLiveSite, type LiveSitePolicy } from "./liveSitePolicy";
@@ -32,7 +36,7 @@ export const giftPaymentRestrictionEvents = Object.freeze([
 
 interface Options extends LiveSitePolicy {
   applicationEnvironment?: "development" | "test" | "production";
-  db: Pick<DatabaseConnection["db"], "transaction">;
+  db: Pick<DatabaseConnection["db"], "transaction" | "execute">;
   environment: "sandbox" | "live";
   instanceId: string;
   reader: Pick<AsaasStoredAccountReader, "getPayment">;
@@ -66,7 +70,7 @@ function after(left: unknown, right: unknown): boolean {
 // writer exists. Observing them must never alter an immutable receipt or clear a hold.
 export function createGiftPaymentRestrictionWorker(
   options: Options,
-): GiftPaymentWorker {
+): GiftPaymentWorker & { nextDueAt(): Promise<number | null> } {
   const { db, environment, instanceId, reader, now } = options;
   const liveDemoSiteId = allowsLiveSite({
     siteId: options.liveDemoSiteId ?? "",
@@ -84,6 +88,12 @@ export function createGiftPaymentRestrictionWorker(
     typeof reader?.getPayment !== "function"
   )
     return unavailable();
+  const eligibleEvents = sql`FROM ${financialEventInbox} e INNER JOIN ${receivingAccount} a ON a.id=e.account_id AND a.site_id=e.site_id AND a.environment=e.environment
+        INNER JOIN ${site} st ON st.id=e.site_id
+        WHERE e.environment=${environment} AND a.provider='ASAAS' AND (${environment}<>'live' OR st.is_demo=false OR st.id=${liveDemoSiteId})
+          AND e.event_type IN ('PAYMENT_REFUNDED','PAYMENT_PARTIALLY_REFUNDED','PAYMENT_REFUND_IN_PROGRESS','PAYMENT_CHARGEBACK_REQUESTED','PAYMENT_CHARGEBACK_DISPUTE','PAYMENT_AWAITING_CHARGEBACK_REVERSAL')
+          AND e.authenticated_at IS NOT NULL AND e.processed_at IS NULL
+    AND e.state IN ('RECEIVED','RETRY','CLAIMED')`;
   async function claim(): Promise<RestrictionClaim | "DEAD_LETTER" | null> {
     const started = readDatabaseTimestamp(now());
     return db.transaction(async (tx) => {
@@ -92,11 +102,7 @@ export function createGiftPaymentRestrictionWorker(
         e.event_type AS "eventType", e.payload, e.payload_hash AS "payloadHash", e.provider_event_reference AS "providerEventReference",
         e.received_at AS "receivedAt", e.authenticated_at AS "authenticatedAt", e.state, e.attempts, e.next_attempt_at AS "nextAttemptAt",
         e.lease_expires_at AS "leaseExpiresAt", e.processed_at AS "processedAt", a.provider, a.account_reference AS "accountReference", st.is_demo AS "isDemo"
-        FROM ${financialEventInbox} e INNER JOIN ${receivingAccount} a ON a.id=e.account_id AND a.site_id=e.site_id AND a.environment=e.environment
-        INNER JOIN ${site} st ON st.id=e.site_id
-        WHERE e.environment=${environment} AND a.provider='ASAAS' AND (${environment}<>'live' OR st.is_demo=false OR st.id=${liveDemoSiteId})
-          AND e.event_type IN ('PAYMENT_REFUNDED','PAYMENT_PARTIALLY_REFUNDED','PAYMENT_REFUND_IN_PROGRESS','PAYMENT_CHARGEBACK_REQUESTED','PAYMENT_CHARGEBACK_DISPUTE','PAYMENT_AWAITING_CHARGEBACK_REVERSAL')
-          AND e.authenticated_at IS NOT NULL AND e.processed_at IS NULL
+        ${eligibleEvents}
           AND ((e.state IN ('RECEIVED','RETRY') AND e.next_attempt_at<=${started.toISOString()}::timestamptz AND e.next_attempt_at<=clock_timestamp())
             OR (e.state='CLAIMED' AND e.lease_expires_at<=${started.toISOString()}::timestamptz AND e.lease_expires_at<=clock_timestamp()))
         ORDER BY e.next_attempt_at,e.id LIMIT 1 FOR UPDATE OF e SKIP LOCKED`);
@@ -180,6 +186,8 @@ export function createGiftPaymentRestrictionWorker(
     });
   }
   return {
+    nextDueAt: () =>
+      readFinancialWorkDueAt(db, financialInboxDueAt, eligibleEvents),
     async processNextReceivedPayment() {
       const event = await claim();
       if (!event) return { kind: "IDLE" };

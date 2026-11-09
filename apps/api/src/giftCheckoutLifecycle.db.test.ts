@@ -134,6 +134,14 @@ it("fences expiry with durable payment references across a lost provider respons
       assert.deepEqual(await worker.expireNextUnpaidInstallment(), {
         kind: "IDLE",
       });
+      const expectedExpiry = await client.query(
+        `SELECT ceil(extract(epoch FROM updated_at+interval '60 minutes')*1000)::float8 AS deadline
+         FROM financial_operation`,
+      );
+      assert.equal(
+        await worker.nextExpiryDueAt(),
+        expectedExpiry.rows[0].deadline,
+      );
       assert.equal(nativeReads, 0);
       await client.query(
         "UPDATE financial_operation SET updated_at=clock_timestamp()-interval '61 minutes'",
@@ -215,6 +223,7 @@ it("fences expiry with durable payment references across a lost provider respons
       assert.deepEqual(await worker.expireNextUnpaidInstallment(), {
         kind: "IDLE",
       });
+      assert.equal(await worker.nextExpiryDueAt(), null);
       assert.equal(removalCount, 1);
       assert.equal(
         (await client.query("SELECT last_error_code FROM financial_operation"))

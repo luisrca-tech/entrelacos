@@ -19,8 +19,10 @@ import {
   createAsaasWithdrawalAuthorization,
 } from "./asaasWithdrawalAuthorization";
 import { createAsaasWithdrawalCustody } from "./asaasWithdrawalCustody";
+import { readFinancialWorkDueAt } from "./financialWorkSchedule";
 import { parseBrlCents } from "./giftMoney";
 import type { GiftPaymentConfig } from "./giftPaymentConfig";
+import type { GiftPaymentWorkerResult } from "./giftPaymentWorker";
 import { decryptProviderCredential } from "./providerCredentials";
 import type { ReceivingPixConfiguration } from "./receivingPixDestinationSetup";
 import { evaluateReceivingReadiness } from "./receivingReadiness";
@@ -70,11 +72,13 @@ export interface WithdrawalCompositionOptions {
   now?(): Date;
   fetch?: typeof globalThis.fetch;
   refreshReceiving?(siteId: string): Promise<void>;
+  wakeWorker?(): void;
 }
 export interface WithdrawalComposition {
   authorization?: AsaasWithdrawalAuthorizationReceiver;
   service?: WithdrawalReservationService;
-  reconcilePending(): Promise<void>;
+  nextRecoveryDueAt(): Promise<number | null>;
+  reconcilePending(): Promise<GiftPaymentWorkerResult>;
   decorateIntent(intent: WithdrawalIntent): Promise<WithdrawalIntent>;
   loadTerminalFailureInTransaction?(
     tx: ReceivingTransaction,
@@ -221,7 +225,12 @@ export function createWithdrawalComposition(
       config.applicationEnvironment === "production")
   )
     return {
-      async reconcilePending() {},
+      async nextRecoveryDueAt() {
+        return null;
+      },
+      async reconcilePending() {
+        return { kind: "IDLE" };
+      },
       async decorateIntent(intent) {
         return intent;
       },
@@ -253,7 +262,6 @@ export function createWithdrawalComposition(
   );
   let closed = false;
   const pending = new Set<Promise<unknown>>();
-  let nextRecoveryAt = 0;
   function own<T>(operation: () => Promise<T>): Promise<T> {
     if (closed)
       return Promise.reject(new Error("Withdrawal composition closed"));
@@ -911,7 +919,14 @@ export function createWithdrawalComposition(
     applicationEnvironment,
     maxAuthAgeMs: 300000,
     now,
-    repository: posting,
+    repository: {
+      ...posting,
+      async armExisting(attempt) {
+        const armed = await posting.armExisting(attempt);
+        if (armed.outcome === "ARMED") options.wakeWorker?.();
+        return armed;
+      },
+    },
     dispatch: adapter,
     lookup: adapter,
   });
@@ -1048,6 +1063,16 @@ export function createWithdrawalComposition(
           : result;
       }),
   };
+  const recoveryDueAt = sql`GREATEST(op.next_attempt_at,op.lease_expires_at)`;
+  const eligibleRecoveries = sql`
+    FROM financial_operation op
+    JOIN withdrawal_intent w ON w.id=op.withdrawal_intent_id AND w.site_id=op.site_id
+      AND w.account_id=op.account_id AND w.environment=op.environment
+    JOIN site st ON st.id=w.site_id
+    WHERE op.environment=${mode} AND op.kind='WITHDRAWAL' AND op.attempts=1
+      AND op.state IN ('PROCESSING','UNKNOWN') AND w.state IN ('PROCESSING','UNKNOWN')
+      AND (${mode}<>'live' OR NOT st.is_demo OR st.id=${liveDemoSiteId ?? null})
+  `;
   return {
     service,
     ...(authorization
@@ -1068,20 +1093,42 @@ export function createWithdrawalComposition(
         reference,
         true,
       ) as Promise<WithdrawalTerminalFailureProof | null>,
-    async reconcilePending() {
-      if (now().getTime() < nextRecoveryAt) return;
-      nextRecoveryAt = now().getTime() + 30000;
-      return own(async () => {
-        const rows = await db.execute(
-          sql`SELECT w.site_id AS "siteId",w.request_id AS "requestId" FROM withdrawal_intent w JOIN financial_operation op ON op.withdrawal_intent_id=w.id AND op.site_id=w.site_id AND op.account_id=w.account_id AND op.environment=w.environment AND op.kind='WITHDRAWAL' WHERE w.environment=${mode} AND w.state IN ('PROCESSING','UNKNOWN') AND op.attempts=1 ORDER BY w.updated_at LIMIT 20`,
-        );
-        for (const row of rows.rows)
-          await execution.reconcileExisting({
-            siteId: String(row.siteId),
-            requestId: String(row.requestId),
-          });
-      });
-    },
+    nextRecoveryDueAt: () =>
+      own(() => readFinancialWorkDueAt(db, recoveryDueAt, eligibleRecoveries)),
+    reconcilePending: () =>
+      own(async () => {
+        // Commit the next observation time before calling the provider.
+        const claimed = await db.execute(sql`
+          WITH candidate AS (
+            SELECT op.id,w.site_id,w.request_id
+            ${eligibleRecoveries}
+              AND ${recoveryDueAt}<=clock_timestamp()
+            ORDER BY ${recoveryDueAt},op.id
+            LIMIT 1 FOR UPDATE OF op SKIP LOCKED
+          )
+          UPDATE financial_operation op SET next_attempt_at=clock_timestamp()+interval '5 minutes'
+          FROM candidate c WHERE op.id=c.id
+          RETURNING op.id,c.site_id AS "siteId",c.request_id AS "requestId",
+            op.next_attempt_at::text AS "recoveryLease"
+        `);
+        const row = claimed.rows[0];
+        if (!row) return { kind: "IDLE" };
+        await execution.reconcileExisting({
+          siteId: String(row.siteId),
+          requestId: String(row.requestId),
+        });
+        await db.execute(sql`
+          UPDATE financial_operation op SET next_attempt_at=clock_timestamp()+CASE
+            WHEN op.lease_expires_at>clock_timestamp()-interval '10 minutes' THEN interval '30 seconds'
+            WHEN op.lease_expires_at>clock_timestamp()-interval '1 hour' THEN interval '10 minutes'
+            ELSE interval '30 minutes'
+          END
+          WHERE op.id=${row.id} AND op.environment=${mode} AND op.kind='WITHDRAWAL'
+            AND op.attempts=1 AND op.state IN ('PROCESSING','UNKNOWN')
+            AND op.next_attempt_at=${row.recoveryLease}::timestamptz
+        `);
+        return { kind: "OBSERVED" };
+      }),
     async close() {
       closed = true;
       await Promise.allSettled([...pending]);
