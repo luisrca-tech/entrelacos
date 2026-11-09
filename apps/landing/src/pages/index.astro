@@ -74,14 +74,14 @@ const questions = [
       <nav class="masthead-links" aria-label="Navegação principal">
         {navigationLinks.map(([href, label]) => <a href={href}>{label}</a>)}
       </nav>
-      <a class="header-cta" href={config.contactUrl}>{contactLabel}<span aria-hidden="true">↗</span></a>
+      <a class="button button-wine header-cta" href={config.contactUrl}>{contactLabel}<span aria-hidden="true">↗</span></a>
       <details class="masthead-menu">
         <summary aria-label="Menu principal">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" /></svg>
         </summary>
         <nav aria-label="Navegação principal">
           {navigationLinks.map(([href, label]) => <a href={href}>{label}</a>)}
-          <a href={config.contactUrl}>{contactLabel}<span aria-hidden="true"> ↗</span></a>
+          <a class="button button-wine" href={config.contactUrl}>{contactLabel}<span aria-hidden="true">↗</span></a>
         </nav>
       </details>
     </header>
@@ -92,7 +92,10 @@ const questions = [
 
           <h1 id="hero-title" tabindex="-1" class="entrance">O site do seu<br /><em>casamento.</em></h1>
           <p class="hero-description entrance">Fotos, informações e confirmações em um só lugar. Nós preparamos o site; vocês acompanham os convidados pelo painel.</p>
-          <div class="hero-actions entrance"><a href="#modelos" class="button button-wine">Conhecer os modelos <span aria-hidden="true">↗</span></a></div>
+          <div class="hero-actions entrance">
+            <a class="button button-wine" href={config.contactUrl}>{contactLabel}<span aria-hidden="true">↗</span></a>
+            <a class="button button-outline" href="#modelos">Explorar modelos <span aria-hidden="true">↗</span></a>
+          </div>
 
         </div>
         <div class="union-art" aria-hidden="true">

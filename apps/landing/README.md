@@ -91,7 +91,7 @@ production release remain open.
 
 ## Editorial structure
 
-The landing has seven main sections: introduction, models, guest organization and mural, gifts, preparation, FAQ, and the final action. The model links consistently name the demonstration, and operational copy uses "painel do casal". The existing `experiencia` and `dashboard` anchors remain on the combined guest section for inbound links. The WhatsApp contact appears in the desktop header, the mobile menu, and the closing section.
+The landing has seven main sections: introduction, models, guest organization and mural, gifts, preparation, FAQ, and the final action. The model links consistently name the demonstration, and operational copy uses "painel do casal". The existing `experiencia` and `dashboard` anchors remain on the combined guest section for inbound links. The WhatsApp contact appears in the desktop header, the mobile menu, the introduction, and the closing section.
 
 ### Listening
 
