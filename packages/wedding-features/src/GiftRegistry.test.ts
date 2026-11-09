@@ -189,6 +189,12 @@ describe("mounted server catalog runtime", () => {
       await flush();
     });
   }
+  async function refocus() {
+    await act(async () => {
+      window.dispatchEvent(new Event("focus"));
+      await flush();
+    });
+  }
   async function click(surface: HTMLElement, label: string) {
     const b = Array.from(surface.querySelectorAll("button")).find(
       (b) => b.textContent === label,
@@ -215,7 +221,7 @@ describe("mounted server catalog runtime", () => {
     expect(surface.textContent).toContain("Página 2 de 2");
     expect(surface.textContent).toContain("Dinner 20");
   });
-  it("keeps the rendered cards during a slow or failed background refresh", async () => {
+  it("keeps the rendered cards during a slow or failed refresh on focus", async () => {
     let resolve!: (response: Response) => void;
     const waiting = new Promise<Response>((done) => {
       resolve = done;
@@ -238,7 +244,9 @@ describe("mounted server catalog runtime", () => {
     const card = surface.querySelector("article");
     expect(card).not.toBeNull();
 
-    await advance(30000);
+    await advance(10 * 60_000);
+    expect(fetcher).toHaveBeenCalledOnce();
+    await refocus();
     expect(fetcher).toHaveBeenCalledTimes(2);
     expect(surface.querySelector("article")).toBe(card);
     expect(surface.textContent).not.toContain("Carregando presentes");
@@ -250,11 +258,11 @@ describe("mounted server catalog runtime", () => {
     expect(surface.querySelector("article")).toBe(card);
     expect(surface.hidden).toBe(false);
 
-    await advance(30000);
+    await refocus();
     expect(surface.hidden).toBe(true);
     expect(surface.querySelector("article")).toBeNull();
   });
-  it("holds the 30s refresh until the in-flight page request settles", async () => {
+  it("skips a focus refresh while a page request is in flight", async () => {
     let resolve!: (r: Response) => void;
     const waiting = new Promise<Response>((r) => {
       resolve = r;
@@ -270,7 +278,7 @@ describe("mounted server catalog runtime", () => {
       await click(surface, "Próxima página");
       expect(fetcher).toHaveBeenCalledTimes(2);
       expect(query(fetcher.mock.calls[1][0])).toMatchObject({ page: 2, q: "" });
-      await advance(30000);
+      await refocus();
       expect(fetcher).toHaveBeenCalledTimes(2);
       await act(async () => {
         resolve(reply(page("wedding-a", 2)));
@@ -387,7 +395,7 @@ describe("mounted server catalog runtime", () => {
     const { surface } = await mount(fetcher);
     await click(surface, "Escolher presente");
     expect(surface.querySelector("dialog")?.open).toBe(true);
-    await advance(30000);
+    await refocus();
     expect(surface.querySelector("dialog")?.open).toBe(true);
   });
   it("preserves the exact UNKNOWN marker and checkout locks through catalog intents", async () => {
@@ -807,14 +815,14 @@ describe("mounted server catalog runtime", () => {
       });
       const { surface } = await mount(fetcher);
       failed = true;
-      await advance(30000);
+      await refocus();
       expect(notify).toHaveBeenCalledTimes(1);
       expect((notify.mock.calls[0][0] as CustomEvent).detail).toEqual({
         kind: "error",
         message: "Não foi possível carregar os presentes agora.",
       });
       expect(surface.querySelector('[role="alert"]')).toBeNull();
-      await advance(30000);
+      await refocus();
       expect(notify).toHaveBeenCalledTimes(1);
     } finally {
       window.removeEventListener("entrelacos:toast", notify);

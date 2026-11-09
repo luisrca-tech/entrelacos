@@ -25,6 +25,7 @@ function fixture() {
     .mockResolvedValue({ kind: "IDLE" });
   const options: GiftPaymentWorkerLoopOptions = {
     worker: { processNextReceivedPayment },
+    nextDueAt: vi.fn(async (): Promise<number | null> => null),
     idleDelayMs: 100,
     retryDelayMs: 20,
     maxRetryDelayMs: 50,
@@ -49,6 +50,78 @@ describe("private received payment worker loop", () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.useRealTimers();
+  });
+
+  it("waits for the persisted deadline after a retry and reloads it on restart", async () => {
+    const values = fixture();
+    const dueAt = Date.now() + 70;
+    const attempt = vi.fn();
+    values.options.nextDueAt = async () => dueAt;
+    values.processNextReceivedPayment.mockImplementation(async () => {
+      if (Date.now() < dueAt) return { kind: "RETRY" };
+      attempt();
+      return { kind: "IDLE" };
+    });
+    const first = createGiftPaymentWorkerLoop(values.options);
+    first.start();
+    await vi.advanceTimersByTimeAsync(30);
+    expect(values.processNextReceivedPayment).toHaveBeenCalledTimes(1);
+    await first.stop();
+
+    const restarted = createGiftPaymentWorkerLoop(values.options);
+    restarted.start();
+    await vi.advanceTimersByTimeAsync(39);
+    expect(values.processNextReceivedPayment).toHaveBeenCalledTimes(2);
+    expect(attempt).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(attempt).toHaveBeenCalledOnce();
+    await restarted.stop();
+  });
+
+  it("coalesces signals received during a stale deadline read", async () => {
+    const values = fixture();
+    const due = deferred<number | null>();
+    values.options.nextDueAt = vi
+      .fn()
+      .mockReturnValueOnce(due.promise)
+      .mockResolvedValue(null);
+    const loop = createGiftPaymentWorkerLoop(values.options);
+    loop.start();
+    await settle();
+    loop.wake();
+    loop.wake();
+    due.resolve(null);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(values.processNextReceivedPayment).toHaveBeenCalledTimes(2);
+    await loop.stop();
+  });
+
+  it("recovers a durable operation without a signal on the next safety sweep", async () => {
+    const values = fixture();
+    values.options.idleDelayMs = 1_800_000;
+    let persisted = false;
+    const processed = vi.fn();
+    values.processNextReceivedPayment.mockImplementation(async () => {
+      if (persisted) {
+        processed();
+        persisted = false;
+      }
+      return { kind: "IDLE" };
+    });
+    const loop = createGiftPaymentWorkerLoop(values.options);
+    loop.start();
+    await settle();
+    persisted = true;
+    await vi.advanceTimersByTimeAsync(1_799_999);
+    expect(values.processNextReceivedPayment).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(processed).toHaveBeenCalledOnce();
+    loop.wake();
+    loop.wake();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(values.processNextReceivedPayment).toHaveBeenCalledTimes(3);
+    expect(processed).toHaveBeenCalledOnce();
+    await loop.stop();
   });
 
   it("does not dispatch or schedule work during construction or stop before start", async () => {

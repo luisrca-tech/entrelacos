@@ -16,6 +16,7 @@ import {
   readAsaasTransferEffectiveDate,
 } from "./asaasHttpClient";
 import type { AsaasStoredAccountReader } from "./asaasStoredAccountReader";
+import { readFinancialWorkDueAt } from "./financialWorkSchedule";
 import { parseBrlCents, serializeBrlCents } from "./giftMoney";
 import {
   giftPaymentTerms,
@@ -283,7 +284,7 @@ export function createGiftPaymentAdjustmentWorker(
         "hasInternalTransferCredit" | "hasUnrestrictedGiftPayment"
       >;
     },
-): GiftPaymentWorker {
+): GiftPaymentWorker & { nextDueAt(): Promise<number | null> } {
   const provider = createAsaasGiftAdjustmentPort(options);
   const { environment, liveDemoSiteId, platformWalletId, reader } = options;
   const restricted = sql`EXISTS (
@@ -293,14 +294,7 @@ export function createGiftPaymentAdjustmentWorker(
       AND (e.event_type LIKE 'PAYMENT_REFUND%' OR e.event_type LIKE 'PAYMENT_CHARGEBACK%'
         OR e.event_type IN ('PAYMENT_DELETED','PAYMENT_AWAITING_CHARGEBACK_REVERSAL','PAYMENT_SPLIT_CANCELLED'))
   )`;
-  // The receipt transaction establishes the obligation. A claim defers other
-  // workers and the separate dispatch fence is committed before the single POST.
-  return {
-    async processNextReceivedPayment() {
-      const claimed = await db.execute(sql`WITH candidate AS (
-        SELECT p.id, p.site_id, p.account_id, p.environment, a.recipient_reference AS wallet, a.account_reference AS account_reference,
-          q.snapshot->'quote' AS quote, l.amount_cents AS credit_cents, l.effect_key
-        FROM ${giftPaymentRecord} p
+  const eligibleAdjustments = sql`FROM ${giftPaymentRecord} p
         JOIN ${receivingAccount} a ON a.id=p.account_id AND a.site_id=p.site_id AND a.environment=p.environment
         JOIN ${site} st ON st.id=p.site_id
         JOIN ${giftOrder} o ON o.id=p.order_id AND o.site_id=p.site_id AND o.account_id=p.account_id AND o.environment=p.environment
@@ -309,12 +303,26 @@ export function createGiftPaymentAdjustmentWorker(
           AND l.kind='GIFT_RECEIVED' AND l.direction='CREDIT' AND l.currency='BRL' AND l.amount_cents=p.recipient_net_cents
         WHERE p.environment=${environment} AND (${environment} <> 'live' OR NOT st.is_demo OR st.id=${liveDemoSiteId ?? null})
           AND p.platform_adjustment_cents > 0 AND p.platform_adjustment_funded_at IS NULL
-          AND (p.platform_adjustment_next_attempt_at IS NULL OR p.platform_adjustment_next_attempt_at <= clock_timestamp())
           AND p.verification_status='VERIFIED' AND p.provider_status='RECEIVED' AND p.currency='BRL'
           AND a.provider='ASAAS' AND a.recipient_reference=q.snapshot->'receiving'->>'recipientReference'
           AND a.account_reference=q.snapshot->'receiving'->>'accountReference'
           AND q.snapshot->'quote'->>'settlementVersion'='PLATFORM_FEE_GUARANTEE_V1'
-          AND (p.platform_adjustment_dispatch_at IS NOT NULL OR NOT ${restricted})
+          AND (p.platform_adjustment_dispatch_at IS NOT NULL OR NOT ${restricted})`;
+  // The receipt transaction establishes the obligation. A claim defers other
+  // workers and the separate dispatch fence is committed before the single POST.
+  return {
+    nextDueAt: () =>
+      readFinancialWorkDueAt(
+        db,
+        sql`COALESCE(p.platform_adjustment_next_attempt_at,'epoch'::timestamptz)`,
+        eligibleAdjustments,
+      ),
+    async processNextReceivedPayment() {
+      const claimed = await db.execute(sql`WITH candidate AS (
+        SELECT p.id, p.site_id, p.account_id, p.environment, a.recipient_reference AS wallet, a.account_reference AS account_reference,
+          q.snapshot->'quote' AS quote, l.amount_cents AS credit_cents, l.effect_key
+        ${eligibleAdjustments}
+          AND (p.platform_adjustment_next_attempt_at IS NULL OR p.platform_adjustment_next_attempt_at <= clock_timestamp())
         ORDER BY p.platform_adjustment_next_attempt_at NULLS FIRST, p.created_at, p.id
         LIMIT 1 FOR UPDATE OF p SKIP LOCKED
       )

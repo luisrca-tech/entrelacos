@@ -1,9 +1,12 @@
+import { createHash } from "node:crypto";
 import type { DatabaseConnection } from "@entrelacos/database";
 import type { SQL } from "drizzle-orm";
 import { PgDialect } from "drizzle-orm/pg-core";
 import { describe, expect, it, vi } from "vitest";
+import * as webhookRepository from "./asaasWebhookRepository";
 import { createGiftPaymentComposition } from "./giftPaymentComposition";
 import type { GiftPaymentConfig } from "./giftPaymentConfig";
+import { createGiftPaymentWorkerLoop } from "./giftPaymentWorkerLoop";
 import type { GiftQuoteSnapshot } from "./giftQuotes";
 import { encryptProviderCredential } from "./providerCredentials";
 
@@ -193,6 +196,7 @@ function fixture() {
   const completion = deferred();
   const loop = {
     start: vi.fn(() => completion.promise),
+    wake: vi.fn(),
     stop: vi.fn(() => completion.promise),
   };
   const createWorkerLoop = vi.fn(() => loop);
@@ -806,6 +810,102 @@ describe("gift payment composition", () => {
     await expect(
       composition.ports.asaasWebhook?.receive("a".repeat(32), "{}"),
     ).rejects.toThrow("Gift payment composition unavailable");
+  });
+
+  it("signals only committed new deliveries and acknowledges them even when signaling fails", async () => {
+    const values = fixture();
+    const token = "fixture-webhook-token-with-enough-entropy";
+    let commit!: (result: "INSERTED") => void;
+    const append = vi
+      .fn<
+        ReturnType<
+          typeof webhookRepository.createAsaasWebhookRepository
+        >["append"]
+      >()
+      .mockRejectedValueOnce(new Error("Storage unavailable"))
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          commit = resolve;
+        }),
+      )
+      .mockResolvedValueOnce("DUPLICATE");
+    const repository = vi
+      .spyOn(webhookRepository, "createAsaasWebhookRepository")
+      .mockReturnValue({
+        resolveBinding: vi.fn().mockResolvedValue({
+          siteId: "site-one",
+          accountId: "account-one",
+          provider: "ASAAS",
+          providerAccountReference: "remote-one",
+          environment: "sandbox",
+          webhookTokenHash: createHash("sha256").update(token).digest("hex"),
+          isDemo: false,
+        }),
+        append,
+      });
+    const composition = createGiftPaymentComposition(configuration(), values);
+    const body = JSON.stringify({
+      id: "event-one",
+      event: "PAYMENT_RECEIVED",
+      payment: { id: "pay_one", externalReference: "attempt-one" },
+    });
+    try {
+      await expect(
+        composition.ports.asaasWebhook?.receive(token, body),
+      ).rejects.toThrow();
+      expect(values.loop.wake).not.toHaveBeenCalled();
+
+      const received = composition.ports.asaasWebhook?.receive(token, body);
+      await vi.waitFor(() => expect(append).toHaveBeenCalledTimes(2));
+      expect(values.loop.wake).not.toHaveBeenCalled();
+      values.loop.wake.mockImplementationOnce(() => {
+        throw new Error("Signal lost");
+      });
+      commit("INSERTED");
+      await expect(received).resolves.toEqual({ accepted: true });
+      await expect(
+        composition.ports.asaasWebhook?.receive(token, body),
+      ).resolves.toEqual({ accepted: true });
+      expect(values.loop.wake).toHaveBeenCalledOnce();
+    } finally {
+      commit("INSERTED");
+      await composition.close();
+      repository.mockRestore();
+    }
+  });
+
+  it("issues no SQL during an empty queue's first 29 minutes of sleep", async () => {
+    vi.useFakeTimers();
+    const dialect = new PgDialect();
+    const execute = vi.fn(async (statement: SQL) => ({
+      rows: dialect.sqlToQuery(statement).sql.includes('AS "dueAt"')
+        ? [{ dueAt: null }]
+        : [],
+    }));
+    const db = {
+      execute,
+      transaction: async (
+        callback: (tx: { execute: typeof execute }) => unknown,
+      ) => callback({ execute }),
+    } as unknown as DatabaseConnection["db"];
+    const composition = createGiftPaymentComposition(configuration(), {
+      db,
+      publicOrigin: "http://localhost:4321",
+      createWorkerLoop: createGiftPaymentWorkerLoop,
+    });
+    try {
+      composition.start();
+      await vi.advanceTimersByTimeAsync(0);
+      const startupQueries = execute.mock.calls.length;
+      expect(startupQueries).toBeGreaterThan(0);
+      await vi.advanceTimersByTimeAsync(29 * 60_000);
+      expect(execute).toHaveBeenCalledTimes(startupQueries);
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(execute).toHaveBeenCalledTimes(2 * startupQueries);
+    } finally {
+      await composition.close();
+      vi.useRealTimers();
+    }
   });
 
   it("retains ownership of the actual worker run when stop reports failure", async () => {

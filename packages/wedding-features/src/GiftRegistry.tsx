@@ -267,17 +267,18 @@ function GiftRegistryRuntime({
         run();
       },
     };
-    run();
-    const interval = window.setInterval(() => {
+    const refresh = () => {
       if (!owner.active) run();
-    }, 30000);
+    };
+    run();
+    window.addEventListener("focus", refresh);
     return () => {
       active = false;
       catalogGeneration.current++;
       catalogActions.current = null;
       if (owner.pending === run) owner.pending = null;
       owner.controller?.abort();
-      window.clearInterval(interval);
+      window.removeEventListener("focus", refresh);
     };
   }, [api, catalogOwner]);
 

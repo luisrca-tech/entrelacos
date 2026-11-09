@@ -122,12 +122,14 @@ it("applies the migration, funds one adjustment and fences an inconclusive trans
           hasUnrestrictedGiftPayment: vi.fn(async () => unrestricted),
         },
       });
+      await expect(worker.nextDueAt()).resolves.toBe(0);
       await expect(worker.processNextReceivedPayment()).resolves.toEqual({
         kind: "POSTED",
       });
       await expect(worker.processNextReceivedPayment()).resolves.toEqual({
         kind: "IDLE",
       });
+      await expect(worker.nextDueAt()).resolves.toBeNull();
       const settled =
         await tx.execute(sql`SELECT platform_adjustment_transfer_reference AS reference,
         platform_adjustment_funded_at IS NOT NULL AS funded FROM gift_payment_record WHERE id='payment-one'`);
@@ -140,6 +142,11 @@ it("applies the migration, funds one adjustment and fences an inconclusive trans
       await expect(worker.processNextReceivedPayment()).rejects.toThrow(
         "Simulated response loss",
       );
+      const retry = await tx.execute(
+        sql`SELECT ceil(extract(epoch FROM platform_adjustment_next_attempt_at)*1000)::float8 AS deadline
+            FROM gift_payment_record WHERE id='payment-two'`,
+      );
+      await expect(worker.nextDueAt()).resolves.toBe(retry.rows[0].deadline);
       await tx.execute(
         sql`UPDATE gift_payment_record SET platform_adjustment_next_attempt_at=NULL WHERE id='payment-two'`,
       );
@@ -184,6 +191,10 @@ it("applies the migration, funds one adjustment and fences an inconclusive trans
         FROM gift_payment_record WHERE id='payment-three'`);
       expect(parked.rows).toEqual([{ owed: true, parked: true }]);
       expect(countPosts()).toBe(3);
+      await tx.execute(
+        sql`UPDATE gift_payment_record SET platform_adjustment_next_attempt_at='infinity'`,
+      );
+      await expect(worker.nextDueAt()).resolves.toBeNull();
     });
   } finally {
     await connection.close();

@@ -12,6 +12,24 @@ const configured = {
 };
 
 describe("gift payment runtime configuration", () => {
+  it("opts non-production environments into background processing explicitly", () => {
+    expect(readGiftPaymentConfig(configured, "development")).not.toHaveProperty(
+      "backgroundProcessing",
+    );
+    expect(
+      readGiftPaymentConfig(
+        { ...configured, ASAAS_BACKGROUND_PROCESSING: "true" },
+        "development",
+      ),
+    ).toMatchObject({ backgroundProcessing: true });
+    expect(() =>
+      readGiftPaymentConfig(
+        { ...configured, ASAAS_BACKGROUND_PROCESSING: "typo" },
+        "development",
+      ),
+    ).toThrow();
+  });
+
   it("enables a separate Sandbox withdrawal authorization endpoint only with its own token", () => {
     const authorizationToken = "fixture-withdrawal-authorization-secret";
     const result = readGiftPaymentConfig(
