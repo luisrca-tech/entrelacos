@@ -985,10 +985,10 @@ summary:focus-visible {
 .faq-list {
   border-top: 1px solid var(--line);
 }
-.faq details {
+.faq-list details {
   border-bottom: 1px solid var(--line);
 }
-.faq summary {
+.faq-list summary {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -999,18 +999,18 @@ summary:focus-visible {
   line-height: 1.5;
   list-style: none;
 }
-.faq summary::-webkit-details-marker {
+.faq-list summary::-webkit-details-marker {
   display: none;
 }
-.faq summary > span {
+.faq-list summary > span {
   font-size: 1.5rem;
   color: var(--wine);
   transition: transform 0.2s;
 }
-.faq details[open] summary > span {
+.faq-list details[open] summary > span {
   transform: rotate(45deg);
 }
-.faq details > p {
+.faq-list details > p {
   font-size: 0.8rem;
   color: var(--muted);
   padding: 0 2rem 1.5rem 0;
@@ -1580,11 +1580,11 @@ summary:focus-visible {
   .process-list p {
     font-size: 0.75rem;
   }
-  .faq summary {
+  .faq-list summary {
     font-size: 0.8rem;
     gap: 1rem;
   }
-  .faq details > p {
+  .faq-list details > p {
     font-size: 0.75rem;
   }
   .closing {
@@ -1919,4 +1919,16 @@ summary:focus-visible {
       #000 calc(100% - 11px)
     );
   }
+}
+
+.faq-more {
+  display: inline-flex;
+  align-items: center;
+  gap: 1rem;
+  margin-top: 1.5rem;
+  padding-block: 0.75rem;
+  color: var(--wine);
+  text-decoration: underline;
+  text-underline-offset: 0.3em;
+  font-size: 0.85rem;
 }
