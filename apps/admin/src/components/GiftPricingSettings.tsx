@@ -1,12 +1,18 @@
 import {
+  giftInstallmentOptionSchema,
+  giftMaximumInstallments,
+} from "@entrelacos/contracts";
+import {
   createContext,
   type ReactNode,
   useContext,
   useEffect,
+  useId,
   useMemo,
   useState,
 } from "react";
 import { z } from "zod";
+import { receivingField } from "./receivingUi";
 
 const feeAllocation = "BUYER_GROSS_UP";
 const cents = z.number().int().nonnegative().safe();
@@ -25,6 +31,11 @@ const previewSchema = z.object({
         processingCents: cents.nullable(),
         totalCents: cents.nullable(),
         recipientNetCents: cents.nullable(),
+        installmentOptions: z
+          .array(giftInstallmentOptionSchema)
+          .min(1)
+          .max(giftMaximumInstallments)
+          .optional(),
       }),
     )
     .length(2),
@@ -38,14 +49,38 @@ export function parsePricingPreview(
   if (
     parsed.siteId !== siteId ||
     new Set(parsed.methods.map((m) => m.method)).size !== 2 ||
-    parsed.methods.some(
-      (m) =>
+    parsed.methods.some((m) => {
+      if (
         m.nominalCents !== nominalCents ||
         (!m.available &&
           (m.processingCents !== null ||
             m.totalCents !== null ||
-            m.recipientNetCents !== null)),
-    )
+            m.recipientNetCents !== null))
+      )
+        return true;
+      const options = m.installmentOptions;
+      if (!options) return false;
+      if (
+        m.method !== "CREDIT_CARD" ||
+        !m.available ||
+        m.totalCents === null ||
+        m.recipientNetCents === null
+      )
+        return true;
+      const total = m.totalCents;
+      const minimumTotal = m.recipientNetCents + m.commissionCents;
+      return (
+        options[0].installmentCount !== 1 ||
+        options[0].totalCents !== total ||
+        options.some(
+          (option, index) =>
+            option.installmentSurchargeCents !== option.totalCents - total ||
+            option.totalCents < minimumTotal ||
+            (index > 0 &&
+              option.installmentCount <= options[index - 1].installmentCount),
+        )
+      );
+    })
   )
     throw new Error("Invalid pricing preview");
   return parsed;
@@ -165,7 +200,16 @@ export function GiftPricingPreview({
   estimate: GiftPricingEstimate | null;
   title?: string;
 }) {
+  const id = useId();
+  const [installmentCount, setInstallmentCount] = useState(1);
   if (useContext(PricingContext) === null) return null;
+  const cardOptions = estimate?.methods.find(
+    (method) => method.method === "CREDIT_CARD",
+  )?.installmentOptions;
+  const cardSelection =
+    cardOptions?.find(
+      (option) => option.installmentCount === installmentCount,
+    ) ?? cardOptions?.[0];
   return (
     <div
       aria-live="polite"
@@ -179,34 +223,112 @@ export function GiftPricingPreview({
       ) : (
         (["PIX", "CREDIT_CARD"] as const).map((method) => {
           const item = estimate?.methods.find((m) => m.method === method);
+          const selected = method === "CREDIT_CARD" ? cardSelection : undefined;
+          const installments =
+            selected && selected.installmentCount > 1 ? selected : null;
+          const amounts = installments?.installmentCents;
+          const adjustedLast =
+            amounts && amounts[0] !== amounts[amounts.length - 1];
           return (
             <section
               key={method}
-              aria-label={method === "PIX" ? "Pix" : "Cartão à vista"}
+              aria-label={method === "PIX" ? "Pix" : "Cartão"}
               className="grid min-w-0 gap-1.5"
             >
               <h4 className="m-0 text-xs font-bold uppercase tracking-[0.06em] text-admin-text-secondary">
-                {method === "PIX" ? "Pix" : "Cartão à vista"}
+                {method === "PIX" ? "Pix" : "Cartão"}
               </h4>
+              {method === "CREDIT_CARD" &&
+                cardOptions &&
+                cardOptions.length > 1 && (
+                  <div className="mb-2 grid gap-2">
+                    <label
+                      htmlFor={`${id}-installments`}
+                      className="font-semibold text-admin-text"
+                    >
+                      Parcelamento
+                    </label>
+                    <select
+                      id={`${id}-installments`}
+                      className={receivingField}
+                      value={cardSelection?.installmentCount ?? 1}
+                      onChange={(event) =>
+                        setInstallmentCount(Number(event.target.value))
+                      }
+                    >
+                      {cardOptions.map((option) => (
+                        <option
+                          key={option.installmentCount}
+                          value={option.installmentCount}
+                        >
+                          {option.installmentCount === 1
+                            ? "À vista"
+                            : `${option.installmentCount} parcelas`}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              {method === "CREDIT_CARD" && cardOptions?.length === 1 && (
+                <p className="m-0 text-xs text-admin-text-secondary">
+                  Somente cartão à vista disponível nesta simulação.
+                </p>
+              )}
               <dl className="m-0 grid gap-1.5">
                 <PreviewRow
                   label="Valor cadastrado"
                   value={money(nominalCents)}
                 />
                 <PreviewRow
-                  label="Taxas"
+                  label={installments ? "Taxas à vista" : "Taxas"}
                   value={money(
                     item?.processingCents == null
                       ? null
                       : item.commissionCents + item.processingCents,
                   )}
                 />
+                {installments && (
+                  <PreviewRow
+                    label={
+                      installments.installmentSurchargeCents < 0
+                        ? "Desconto no parcelamento"
+                        : "Acréscimo do parcelamento"
+                    }
+                    value={money(
+                      Math.abs(installments.installmentSurchargeCents),
+                    )}
+                  />
+                )}
                 <div className="my-0.5 border-t border-admin-border" />
                 <PreviewRow
                   label="Total do convidado"
-                  value={money(item?.totalCents ?? null)}
+                  value={money(
+                    selected?.totalCents ?? item?.totalCents ?? null,
+                  )}
                   strong
                 />
+                {amounts &&
+                  (adjustedLast ? (
+                    <>
+                      <PreviewRow
+                        label={
+                          amounts.length === 2
+                            ? "Primeira parcela"
+                            : `Primeiras ${amounts.length - 1} parcelas`
+                        }
+                        value={`${money(amounts[0])}${amounts.length === 2 ? "" : " cada"}`}
+                      />
+                      <PreviewRow
+                        label="Última parcela"
+                        value={money(amounts[amounts.length - 1])}
+                      />
+                    </>
+                  ) : (
+                    <PreviewRow
+                      label="Parcelas"
+                      value={`${amounts.length}x de ${money(amounts[0])}`}
+                    />
+                  ))}
                 <PreviewRow
                   label="Líquido do casal"
                   value={money(item?.recipientNetCents ?? null)}
@@ -219,7 +341,9 @@ export function GiftPricingPreview({
         })
       )}
       <p className="m-0 text-xs leading-[1.5] text-admin-text-secondary">
-        {giftFeeExplanation} A simulação mostra os valores à vista.
+        {giftFeeExplanation} O acréscimo do parcelamento já está incluído no
+        total. O líquido do casal fica disponível conforme a liberação dos
+        pagamentos ou das parcelas.
       </p>
     </div>
   );
