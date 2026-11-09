@@ -1,0 +1,31 @@
+---
+interface Props {
+  contactUrl: string;
+  home?: boolean;
+}
+const { contactUrl, home = false } = Astro.props;
+const navigationLinks = [
+  [home ? "#modelos" : "/#modelos", "Modelos"],
+  [home ? "#convidados" : "/#convidados", "Convidados"],
+  ["/duvidas", "Dúvidas frequentes"],
+];
+const contactLabel = new URL(contactUrl).hostname === "wa.me"
+  ? "Falar no WhatsApp"
+  : "Solicitar proposta";
+---
+    <header class="masthead">
+      <a href={home ? "#inicio" : "/"} class="wordmark" aria-label="Entrelaços, início"><img class="brand-mark" src="/brand/entrelacos-mark.svg" width="44" height="41" alt="" aria-hidden="true" />Entrelaços</a>
+      <nav class="masthead-links" aria-label="Navegação principal">
+        {navigationLinks.map(([href, label]) => <a href={href}>{label}</a>)}
+      </nav>
+      <a class="button button-wine header-cta" href={contactUrl}>{contactLabel}<span aria-hidden="true">↗</span></a>
+      <details class="masthead-menu">
+        <summary aria-label="Menu principal">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" /></svg>
+        </summary>
+        <nav aria-label="Navegação principal">
+          {navigationLinks.map(([href, label]) => <a href={href}>{label}</a>)}
+          <a class="button button-wine" href={contactUrl}>{contactLabel}<span aria-hidden="true">↗</span></a>
+        </nav>
+      </details>
+    </header>

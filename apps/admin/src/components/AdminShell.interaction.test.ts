@@ -28,6 +28,76 @@ const actor: MeResponse = {
   siteId: "wedding-a",
 };
 describe("mobile panel navigation", () => {
+  it.each(["SITE_ADMIN", "SITE_ASSISTANT", "OWNER"] as const)(
+    "opens the public FAQ in a new tab from the sidebar and More menu for %s",
+    async (role) => {
+      Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+      const node = document.createElement("div");
+      document.body.append(node);
+      const root = createRoot(node);
+      try {
+        await act(async () =>
+          root.render(
+            createElement(AdminShell, {
+              actor: { ...actor, user: { ...actor.user, role } },
+              siteId: "wedding-a",
+              onLogout: vi.fn(),
+            }),
+          ),
+        );
+        const sidebar = node.querySelector(
+          '#admin-primary-nav a[href="https://entrelacosbr.site/duvidas"]',
+        );
+        expect(sidebar?.textContent).toContain("Dúvidas frequentes");
+        expect(sidebar?.getAttribute("target")).toBe("_blank");
+        expect(sidebar?.getAttribute("rel")).toBe("noopener noreferrer");
+        const more = node.querySelector<HTMLButtonElement>(
+          'button[aria-label="Mais páginas"]',
+        );
+        expect(more).not.toBeNull();
+        await act(async () => more?.click());
+        const link = document.querySelector(
+          'nav[aria-label="Outras páginas do casamento"] a[href="https://entrelacosbr.site/duvidas"]',
+        );
+        expect(link?.textContent).toContain("Dúvidas frequentes");
+        expect(link?.getAttribute("target")).toBe("_blank");
+        expect(link?.getAttribute("rel")).toBe("noopener noreferrer");
+      } finally {
+        await act(async () => root.unmount());
+        node.remove();
+      }
+    },
+  );
+
+  it("keeps the FAQ accessible from the account menu without a selected wedding", async () => {
+    Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+    const node = document.createElement("div");
+    document.body.append(node);
+    const root = createRoot(node);
+    try {
+      await act(async () =>
+        root.render(createElement(AdminShell, { actor, onLogout: vi.fn() })),
+      );
+      await act(async () =>
+        node
+          .querySelector<HTMLButtonElement>(
+            'button[aria-label="Abrir menu de Ana"]',
+          )
+          ?.click(),
+      );
+      const links = document.querySelectorAll(
+        'a[href="https://entrelacosbr.site/duvidas"]',
+      );
+      expect(links).toHaveLength(2);
+      expect(
+        [...links].every((link) => link.getAttribute("target") === "_blank"),
+      ).toBe(true);
+    } finally {
+      await act(async () => root.unmount());
+      node.remove();
+    }
+  });
+
   it("keeps four main destinations and opens the other pages on demand", async () => {
     (
       globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -124,7 +194,7 @@ describe("mobile panel navigation", () => {
         'nav[aria-label="Navegação do casamento no celular"]',
       );
       expect(mobile?.querySelectorAll("a")).toHaveLength(4);
-      expect(mobile?.textContent).not.toContain("Mais");
+      expect(mobile?.textContent).toContain("Mais");
       expect(mobile?.textContent).not.toContain("Recebimentos");
     } finally {
       await act(async () => root.unmount());
