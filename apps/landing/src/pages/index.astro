@@ -26,7 +26,11 @@ const questions = [
       // Release the opening lock if the deferred module cannot start.
       try {
         const navigation = performance.getEntriesByType?.("navigation")[0];
-        if (!location.hash && navigation?.type !== "back_forward" &&
+        let seen = false;
+        try { seen = sessionStorage.getItem("entrelacos-opening") === "seen"; } catch {}
+        const internalVisit = document.referrer && new URL(document.referrer).origin === location.origin;
+        const returning = navigation?.type !== "reload" && (seen || internalVisit);
+        if (!returning && !location.hash && navigation?.type !== "back_forward" &&
             !matchMedia("(prefers-reduced-motion: reduce)").matches) {
           const root = document.documentElement;
           const listeners = new AbortController();
