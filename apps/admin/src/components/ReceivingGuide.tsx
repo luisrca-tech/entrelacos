@@ -2,7 +2,7 @@ import {
   giftInstallmentExpiryMinutes,
   giftMinimumNominalCents,
 } from "@entrelacos/contracts";
-import { showSandboxNotice } from "@entrelacos/ui";
+import { AsaasDisclosure, showSandboxNotice } from "@entrelacos/ui";
 import { Link } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import { adminStyles } from "../lib/adminStyles";
@@ -57,6 +57,7 @@ export function ReceivingGuide({
       >
         ← Voltar para Recebimentos
       </Link>
+      <AsaasDisclosure />
       <p className="m-0 max-w-3xl text-base">
         O Entrelacos organiza os presentes e os pedidos de saque. O Asaas mantém
         a conta do recebedor e faz as verificações e transferências. Siga estas

@@ -82,7 +82,11 @@ describe("gift quote view", () => {
     expect(html).toContain("página segura de pagamento");
     expect(html).not.toContain("Pagamento confirmado");
     expect(html).not.toContain('name="card"');
-    expect(html).not.toMatch(/token|hash|Asaas|banco|payer|provider key/i);
+    expect(html).not.toMatch(/token|hash|payer|provider key/i);
+    expect(html).toContain('alt="Serviços financeiros Asaas"');
+    expect(html).toContain('href="https://asaas.com"');
+    expect(html).not.toContain(quote.id);
+    expect(html).not.toContain(quote.siteId);
   });
 
   it("charges the configured gift price without exposing recipient deductions", () => {

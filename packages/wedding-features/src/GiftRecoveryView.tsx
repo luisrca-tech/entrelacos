@@ -2,7 +2,7 @@ import {
   type CheckoutStatus,
   checkoutStatusSchema,
 } from "@entrelacos/contracts";
-import { showSandboxNotice } from "@entrelacos/ui";
+import { AsaasDisclosure, showSandboxNotice } from "@entrelacos/ui";
 
 export type GiftRecoveryViewProps = {
   siteId: string;
@@ -57,6 +57,7 @@ export function GiftRecoveryView({
       aria-label="Acompanhamento do pagamento"
       className="grid min-w-0 gap-5 text-template-ink"
     >
+      <AsaasDisclosure />
       {showSandboxNotice(currentStatus?.mode) && (
         <p
           role="status"

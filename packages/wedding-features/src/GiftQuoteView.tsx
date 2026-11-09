@@ -3,7 +3,7 @@ import {
   type GiftQuote,
   giftInstallmentExpiryMinutes,
 } from "@entrelacos/contracts";
-import { showSandboxNotice } from "@entrelacos/ui";
+import { AsaasDisclosure, showSandboxNotice } from "@entrelacos/ui";
 import { useEffect, useId, useState } from "react";
 import { scheduleGiftQuoteExpiry } from "./giftQuoteExpiry";
 
@@ -115,6 +115,7 @@ export function GiftQuoteView({
             Ao confirmar, você continuará em uma página segura de pagamento.
           </p>
         </header>
+        <AsaasDisclosure />
 
         {showSandboxNotice(quote?.mode) && (
           <p
