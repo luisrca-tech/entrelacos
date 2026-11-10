@@ -419,8 +419,10 @@ function WithdrawalBalance({
       <BalanceFigure overview={overview} size="md" />
       {overview.awaitingReleaseCents > 0 && (
         <p className="m-0 text-[13px] text-admin-text-secondary">
-          {formatCents(overview.awaitingReleaseCents)} ainda aguardando
-          liberação
+          Dos pagamentos confirmados,{" "}
+          {formatCents(overview.awaitingReleaseCents)} ainda aguardam liberação
+          pelo Asaas. No cartão parcelado, cada parcela é liberada
+          separadamente.
         </p>
       )}
     </div>

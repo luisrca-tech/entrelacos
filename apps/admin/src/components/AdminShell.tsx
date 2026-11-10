@@ -1,5 +1,11 @@
 import type { MeResponse, SiteAccess } from "@entrelacos/contracts";
-import { cn, Popover, PopoverContent, PopoverTrigger } from "@entrelacos/ui";
+import {
+  AsaasDisclosure,
+  cn,
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@entrelacos/ui";
 import { Link } from "@tanstack/react-router";
 import {
   BookOpen,
@@ -272,19 +278,26 @@ export function AdminShell({
         <main className="mx-auto w-full max-w-[1700px] px-[42px] pt-6 pb-6 [@media(max-width:760px)]:px-5 [@media(max-width:760px)]:pt-5 [@media(max-width:760px)]:pb-6 [@media(min-width:761px)_and_(max-width:1060px)]:px-7">
           {children}
         </main>
-        <footer className="mx-auto mt-auto flex w-full max-w-[1700px] justify-between gap-6 border-t border-admin-border px-[42px] pt-6 pb-7 text-[0.78rem] text-admin-text-secondary [@media(max-width:760px)]:hidden [@media(min-width:761px)_and_(max-width:1060px)]:px-7">
-          <span className="flex items-center gap-2">
-            <img
-              src="/brand/entrelacos-mark.svg"
-              width="24"
-              height="22"
-              alt=""
-              aria-hidden="true"
-            />
-            Entrelaços · Painel administrativo
-          </span>
-          <span>Feito para cuidar de cada detalhe.</span>
-        </footer>
+        <div className="mt-auto">
+          {navigationArea === "receiving" && (
+            <div className="mx-auto w-full max-w-[1700px] px-[42px] pb-6 [@media(max-width:760px)]:px-5 [@media(min-width:761px)_and_(max-width:1060px)]:px-7">
+              <AsaasDisclosure />
+            </div>
+          )}
+          <footer className="mx-auto flex w-full max-w-[1700px] justify-between gap-6 border-t border-admin-border px-[42px] pt-6 pb-7 text-[0.78rem] text-admin-text-secondary [@media(max-width:760px)]:hidden [@media(min-width:761px)_and_(max-width:1060px)]:px-7">
+            <span className="flex items-center gap-2">
+              <img
+                src="/brand/entrelacos-mark.svg"
+                width="24"
+                height="22"
+                alt=""
+                aria-hidden="true"
+              />
+              Entrelaços · Painel administrativo
+            </span>
+            <span>Feito para cuidar de cada detalhe.</span>
+          </footer>
+        </div>
       </div>
 
       {siteId && (

@@ -3,6 +3,13 @@ import {
   giftMaximumInstallments,
 } from "@entrelacos/contracts";
 import {
+  Dialog,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@entrelacos/ui";
+import {
   createContext,
   type ReactNode,
   useContext,
@@ -12,6 +19,8 @@ import {
   useState,
 } from "react";
 import { z } from "zod";
+import { AdminButton } from "./AdminButton";
+import { AdminDialogContent } from "./AdminDialog";
 import { receivingField } from "./receivingUi";
 
 const feeAllocation = "BUYER_GROSS_UP";
@@ -200,9 +209,49 @@ export function GiftPricingPreview({
   estimate: GiftPricingEstimate | null;
   title?: string;
 }) {
+  if (useContext(PricingContext) === null) return null;
+  return (
+    <Dialog>
+      <DialogTrigger
+        render={
+          <AdminButton
+            type="button"
+            tone="secondary"
+            className="w-fit max-w-full whitespace-normal"
+          />
+        }
+      >
+        Simular taxas e parcelamento
+      </DialogTrigger>
+      <AdminDialogContent>
+        <DialogHeader>
+          <DialogTitle>Simulação de taxas e parcelamento</DialogTitle>
+          <DialogDescription>
+            A seleção vale só para esta simulação. O convidado escolhe o
+            parcelamento na hora de pagar.
+          </DialogDescription>
+        </DialogHeader>
+        <PricingComparison
+          nominalCents={nominalCents}
+          estimate={estimate}
+          title={title}
+        />
+      </AdminDialogContent>
+    </Dialog>
+  );
+}
+
+function PricingComparison({
+  nominalCents,
+  estimate,
+  title,
+}: {
+  nominalCents: number | null;
+  estimate: GiftPricingEstimate | null;
+  title?: string;
+}) {
   const id = useId();
   const [installmentCount, setInstallmentCount] = useState(1);
-  if (useContext(PricingContext) === null) return null;
   const cardOptions = estimate?.methods.find(
     (method) => method.method === "CREDIT_CARD",
   )?.installmentOptions;
@@ -235,9 +284,9 @@ export function GiftPricingPreview({
               aria-label={method === "PIX" ? "Pix" : "Cartão"}
               className="grid min-w-0 gap-1.5"
             >
-              <h4 className="m-0 text-xs font-bold uppercase tracking-[0.06em] text-admin-text-secondary">
+              <h3 className="m-0 text-xs font-bold uppercase tracking-[0.06em] text-admin-text-secondary">
                 {method === "PIX" ? "Pix" : "Cartão"}
-              </h4>
+              </h3>
               {method === "CREDIT_CARD" &&
                 cardOptions &&
                 cardOptions.length > 1 && (
@@ -246,7 +295,7 @@ export function GiftPricingPreview({
                       htmlFor={`${id}-installments`}
                       className="font-semibold text-admin-text"
                     >
-                      Parcelamento
+                      Parcelas para simular
                     </label>
                     <select
                       id={`${id}-installments`}
@@ -341,9 +390,9 @@ export function GiftPricingPreview({
         })
       )}
       <p className="m-0 text-xs leading-[1.5] text-admin-text-secondary">
-        {giftFeeExplanation} O acréscimo do parcelamento já está incluído no
-        total. O líquido do casal fica disponível conforme a liberação dos
-        pagamentos ou das parcelas.
+        As taxas e o ajuste do parcelamento já estão incluídos no total do
+        convidado. O líquido do casal fica disponível conforme o Asaas libera o
+        pagamento ou as parcelas.
       </p>
     </div>
   );
