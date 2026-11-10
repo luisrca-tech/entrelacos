@@ -1,6 +1,7 @@
 ---
 import { GiftSection, WeddingHome, WeddingLayout } from "@entrelacos/template-cinema-botanico/v1";
 import { AdminRecognition, GiftRegistry, GuestAccess, MessageMural } from "@entrelacos/wedding-features";
+import FeatureFallback from "@entrelacos/wedding-features/FeatureFallback.astro";
 import "../styles/tailwind.css";
 
 const inactive = import.meta.env.PUBLIC_SITE_INACTIVE === "true";
@@ -301,7 +302,7 @@ const guestAccess = {
         aria-label="Confirmação de presença"
       >
         <GuestAccess {...guestAccess} client:only="react">
-          <p slot="fallback" class="m-0 max-w-[38rem] border border-template-line p-5 leading-[1.6] text-template-muted">Esta área interativa precisa de JavaScript. Ative-o para encontrar seu convite e responder à confirmação.</p>
+          <FeatureFallback slot="fallback" loading="Carregando confirmação de presença…" unavailable="A confirmação de presença está indisponível no momento." />
         </GuestAccess>
       </section>
       <div
@@ -309,7 +310,7 @@ const guestAccess = {
         class="border-t border-template-line bg-template-ivory px-[var(--template-page-inset)] py-[clamp(4rem,8vw,7rem)] [&_[data-slot=message-mural]]:p-0"
       >
         <MessageMural {...guestAccess} client:only="react">
-          <p slot="fallback" class="m-0 max-w-[38rem] border border-template-line p-5 leading-[1.6] text-template-muted">Esta área interativa precisa de JavaScript. Ative-o para consultar o mural.</p>
+          <FeatureFallback slot="fallback" loading="Carregando mural…" unavailable="O mural está indisponível no momento." />
         </MessageMural>
       </div>
     </Fragment>

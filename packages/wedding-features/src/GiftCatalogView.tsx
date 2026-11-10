@@ -9,7 +9,6 @@ type Props = {
   gifts: PublicGiftItem[];
   mode: "disabled" | "sandbox" | "live" | "demonstration";
   busy: boolean;
-  actionLabel?: string;
   recoveryOnly?: boolean;
   onSelect: (gift: PublicGiftItem) => void;
   paging?: {
@@ -35,7 +34,6 @@ export function GiftCatalogView({
   gifts,
   mode,
   busy,
-  actionLabel,
   recoveryOnly = false,
   onSelect,
   paging,
@@ -155,14 +153,14 @@ export function GiftCatalogView({
                       )}
                     </p>
                   )}
-                  {mode !== "demonstration" && (
+                  {mode !== "demonstration" && !recoveryOnly && (
                     <button
                       type="button"
                       className={giftActionButtonClass}
-                      disabled={busy || (!recoveryOnly && priceUnavailable)}
+                      disabled={busy || priceUnavailable}
                       onClick={() => onSelect(gift)}
                     >
-                      {busy ? "Aguarde…" : (actionLabel ?? "Escolher presente")}
+                      {busy ? "Aguarde…" : "Escolher presente"}
                     </button>
                   )}
                 </div>
