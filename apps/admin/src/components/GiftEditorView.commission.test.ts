@@ -81,6 +81,27 @@ function requiredElement<T extends Element = Element>(
 function amounts(section: Element): string[] {
   return [...section.querySelectorAll("dd")].map((element) => text(element));
 }
+async function simulate(form: Element) {
+  const trigger = requiredElement<HTMLButtonElement>(
+    form,
+    '[data-slot="dialog-trigger"]',
+  );
+  await act(async () => trigger.click());
+  return requiredElement(document.body, '[role="dialog"]');
+}
+async function dismissSimulation(dialog: Element) {
+  const close = requiredElement<HTMLButtonElement>(
+    dialog,
+    '[data-slot="dialog-close"]',
+  );
+  await act(async () => close.click());
+}
+async function simulatedAmounts(form: Element) {
+  const dialog = await simulate(form);
+  const values = amounts(dialog);
+  await dismissSimulation(dialog);
+  return values;
+}
 describe("private gift pricing preview", () => {
   it("shows the configured net and preserves it on create when the guest total is unavailable", async () => {
     const v = await mount();
@@ -91,9 +112,10 @@ describe("private gift pricing preview", () => {
     );
     await enter(input, "100,00");
     expect(text(form)).toContain("Quanto vocês querem receber");
-    expect(text(form)).toContain("Taxas");
-    expect(text(form)).toContain("Líquido do casal");
-    expect(amounts(form)).toEqual([
+    expect(amounts(form)).toHaveLength(0);
+    const dialog = await simulate(form);
+    expect(text(dialog)).toContain("Líquido do casal");
+    expect(amounts(dialog)).toEqual([
       "R$ 100,00",
       "Indisponível",
       "Indisponível",
@@ -103,10 +125,8 @@ describe("private gift pricing preview", () => {
       "Indisponível",
       "Indisponível",
     ]);
-    expect(text(form)).toContain("Indisponível");
-    expect(text(form)).toContain(
-      "As taxas estão incluídas no preço que o convidado vê.",
-    );
+    expect(text(dialog)).toContain("Indisponível");
+    await dismissSimulation(dialog);
     expect(input.value).toBe("100,00");
     expect(v.callbacks.onCreate).not.toHaveBeenCalled();
     await enter(
@@ -162,7 +182,7 @@ describe("private gift pricing preview", () => {
       form,
       'input[name="nominalPrice"]',
     );
-    expect(amounts(form)).toEqual([
+    expect(await simulatedAmounts(form)).toEqual([
       "R$ 123,45",
       "Indisponível",
       "Indisponível",
@@ -173,7 +193,7 @@ describe("private gift pricing preview", () => {
       "Indisponível",
     ]);
     await enter(input, "25,25");
-    expect(amounts(form)).toEqual([
+    expect(await simulatedAmounts(form)).toEqual([
       "R$ 25,25",
       "Indisponível",
       "Indisponível",
@@ -202,10 +222,13 @@ describe("private gift pricing preview", () => {
       'input[name="nominalPrice"]',
     );
     await enter(input, "100");
-    expect(amounts(form)).toHaveLength(8);
+    expect(await simulatedAmounts(form)).toHaveLength(8);
     for (const value of ["", "0", "1,001", "not-a-price"]) {
       await enter(input, value);
-      expect(amounts(form)).toHaveLength(0);
+      const dialog = await simulate(form);
+      expect(amounts(dialog)).toHaveLength(0);
+      expect(text(dialog)).toContain("Informe um valor válido para simular.");
+      await dismissSimulation(dialog);
     }
     expect(v.callbacks.onCreate).not.toHaveBeenCalled();
   });
@@ -219,7 +242,9 @@ describe("private gift pricing preview", () => {
       "100",
     );
     await v.render([{ ...gift }]);
-    expect(amounts(requiredElement(v.container, "article form"))).toEqual([
+    expect(
+      await simulatedAmounts(requiredElement(v.container, "article form")),
+    ).toEqual([
       "R$ 100,00",
       "Indisponível",
       "Indisponível",
@@ -230,7 +255,9 @@ describe("private gift pricing preview", () => {
       "Indisponível",
     ]);
     await v.render([{ ...gift, nominalCents: 20000 }]);
-    expect(amounts(requiredElement(v.container, "article form"))).toEqual([
+    expect(
+      await simulatedAmounts(requiredElement(v.container, "article form")),
+    ).toEqual([
       "R$ 200,00",
       "Indisponível",
       "Indisponível",

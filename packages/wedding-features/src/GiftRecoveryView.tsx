@@ -57,7 +57,6 @@ export function GiftRecoveryView({
       aria-label="Acompanhamento do pagamento"
       className="grid min-w-0 gap-5 text-template-ink"
     >
-      <AsaasDisclosure />
       {showSandboxNotice(currentStatus?.mode) && (
         <p
           role="status"
@@ -105,6 +104,7 @@ export function GiftRecoveryView({
           Consultar pagamento
         </button>
       )}
+      <AsaasDisclosure />
     </section>
   );
 }

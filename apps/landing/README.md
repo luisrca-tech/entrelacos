@@ -39,6 +39,20 @@ The static Worker configurations prepare `entrelacos` and `entrelacos-dev`.
 The deployment coordinator must select the verified EntreLaços account explicitly.
 The public artifact gate includes this app and both independent demos.
 
+Set the Cloudflare Workers Builds root directory to the repository root (`/`)
+for production builds and branch previews. Use the build command for the
+target Worker so the artifact gets the correct canonical and demo URLs.
+
+| Worker | Production branch | Build command |
+| --- | --- | --- |
+| `entrelacos` | `main` | `bun scripts/buildShowcase.ts landing production` |
+| `entrelacos-dev` | `development` | `bun scripts/buildShowcase.ts landing development` |
+
+For a branch preview, run
+`node apps/landing/node_modules/wrangler/bin/wrangler.js preview --config apps/landing/wrangler.jsonc`.
+Append `--env dev` for `entrelacos-dev`. Existing previews keep their own
+settings, so check them individually after a change to the preview defaults.
+
 ## Story and motion
 
 The encounter joins two original CSS 3D gold bands. That shared thread introduces

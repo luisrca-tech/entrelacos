@@ -4,13 +4,13 @@ const currency = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "
 const money = (cents: number) => currency.format(cents / 100);
 ---
 <div class="pricing-example" data-faq-reveal>
-  <h3 id="pricing-example-title">Um presente de R$ 100 na prática</h3>
-  <p id="pricing-example-note">Exemplo ilustrativo, sem promoção, com referência consultada em 9 de novembro de 2026. As condições podem mudar e variar conforme a conta. Para simular com as tarifas atualizadas do seu casamento, consulte o painel. O convidado confere o total final antes de pagar.</p>
+  <h3 id="pricing-example-title">Um presente de R$ 100: cenário antecipado</h3>
+  <p id="pricing-example-note">Valores ilustrativos, sem promoção, com referências de 9 de novembro de 2026. No cartão, este exemplo considera uma hipótese de liberação antecipada. As condições para a conta do casal ainda dependem de confirmação do Asaas. Consulte o painel para simular as opções disponíveis no seu casamento.</p>
   <p class="pricing-scroll-hint">Deslize a tabela para comparar todos os valores.</p>
   <div class="pricing-table-scroll" role="region" aria-labelledby="pricing-example-title" tabindex="0">
     <table aria-describedby="pricing-example-note pricing-example-explanation">
-      <caption class="faq-sr-only">Comparação de pagamentos para um presente de R$ 100 líquidos para o casal.</caption>
-      <thead><tr><th scope="col">Pagamento</th><th scope="col">Valor das parcelas</th><th scope="col">Taxas</th><th scope="col">Acréscimo do parcelamento</th><th scope="col">Convidado paga</th><th scope="col">Casal recebe</th></tr></thead>
+      <caption class="faq-sr-only">Simulação hipotética de pagamentos para um presente de R$ 100 líquidos para o casal, com liberação antecipada no cartão sujeita à aprovação.</caption>
+      <thead><tr><th scope="col">Pagamento</th><th scope="col">Valor das parcelas</th><th scope="col">Taxas e acréscimos</th><th scope="col">Convidado paga</th><th scope="col">Casal recebe</th></tr></thead>
       <tbody>
         {faqPricingExamples.map((row) => {
           const count = row.installmentCents.length;
@@ -19,14 +19,13 @@ const money = (cents: number) => currency.format(cents / 100);
           return <tr>
             <th scope="row">{row.label}</th>
             <td>{first === last ? `${count}× ${money(first)}` : <>{count - 1}× {money(first)}<small>+ 1× {money(last)}</small></>}</td>
-            <td>{money(row.totalCents - 10000 - row.installmentSurchargeCents)}</td>
-            <td>{money(row.installmentSurchargeCents)}</td>
+            <td>{money(row.combinedFeesCents)}</td>
             <td><strong>{money(row.totalCents)}</strong></td>
-            <td>{money(10000)}</td>
+            <td>{money(row.recipientNetCents)}</td>
           </tr>;
         })}
       </tbody>
     </table>
   </div>
-  <p id="pricing-example-explanation" class="pricing-explanation">As taxas e o acréscimo já estão incluídos no total do convidado. O acréscimo compara o parcelamento ao cartão à vista; o valor fixo é cobrado uma vez por compra, não por parcela. O líquido é o valor do pagamento para o casal — a disponibilidade para saque depende da liberação.</p>
+  <p id="pricing-example-explanation" class="pricing-explanation">As taxas e os acréscimos estão somados e incluídos no total do convidado. O valor fixo é considerado uma vez por compra, não por parcela. No cartão, a simulação usa intervalos de 30 dias; as datas e condições reais podem alterar os valores. Receber o líquido integral antecipadamente depende da aprovação e da efetivação da antecipação.</p>
 </div>

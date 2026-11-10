@@ -82,6 +82,7 @@ function mount(
 ) {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   const container = document.createElement("div");
+  document.body.append(container);
   const root = createRoot(container);
   const isCurrent = () => true;
   return {
@@ -99,11 +100,50 @@ function mount(
           }),
         ),
       ),
-    close: () => act(async () => root.unmount()),
+    openSimulation: async () => {
+      await act(async () => container.querySelector("button")?.click());
+      const dialog = document.querySelector('[role="dialog"]');
+      if (!dialog) throw new Error("Missing pricing dialog");
+      return dialog;
+    },
+    close: async () => {
+      await act(async () => root.unmount());
+      container.remove();
+    },
   };
 }
 
 describe("gift pricing preview", () => {
+  it("keeps the installment selector in a simulation dialog with a non-submitting trigger", async () => {
+    const view = mount(async () => installmentResponse());
+    try {
+      await view.render(10000);
+      expect(view.container.querySelector("select")).toBeNull();
+      const trigger = view.container.querySelector("button");
+      expect(trigger?.textContent).toBe("Simular taxas e parcelamento");
+      expect(trigger?.type).toBe("button");
+      const dialog = await view.openSimulation();
+      expect(dialog.textContent).toContain(
+        "A seleção vale só para esta simulação.",
+      );
+      expect(dialog.textContent).toContain(
+        "O convidado escolhe o parcelamento na hora de pagar.",
+      );
+      expect(dialog.querySelector("select")?.name).toBe("");
+      await selectInstallments(dialog, 12);
+      await act(async () =>
+        dialog
+          .querySelector<HTMLButtonElement>('[data-slot="dialog-close"]')
+          ?.click(),
+      );
+      expect(document.querySelector('[role="dialog"]')).toBeNull();
+      const reopened = await view.openSimulation();
+      expect(reopened.querySelector("select")?.value).toBe("1");
+    } finally {
+      await view.close();
+    }
+  });
+
   it("retains the server installment options in the parsed preview", () => {
     const preview = installmentResponse();
     expect(parsePricingPreview(preview, "site-a", 10000).methods[1]).toEqual(
@@ -153,13 +193,12 @@ describe("gift pricing preview", () => {
     const view = mount(request);
     try {
       await view.render(10000);
+      const dialog = await view.openSimulation();
       expect(
-        [...view.container.querySelectorAll("option")].map(
-          (option) => option.value,
-        ),
+        [...dialog.querySelectorAll("option")].map((option) => option.value),
       ).toEqual(["1", "2", "12"]);
-      await selectInstallments(view.container, 12);
-      const card = view.container.querySelector('section[aria-label="Cartão"]');
+      await selectInstallments(dialog, 12);
+      const card = dialog.querySelector('section[aria-label="Cartão"]');
       expect(rowValue(card, "Taxas à vista")).toBe("R$ 5,65");
       expect(rowValue(card, "Acréscimo do parcelamento")).toBe("R$ 1,10");
       expect(rowValue(card, "Total do convidado")).toBe("R$ 106,75");
@@ -168,15 +207,15 @@ describe("gift pricing preview", () => {
       expect(rowValue(card, "Líquido do casal")).toBe("R$ 100,00");
       expect(
         rowValue(
-          view.container.querySelector('section[aria-label="Pix"]'),
+          dialog.querySelector('section[aria-label="Pix"]'),
           "Total do convidado",
         ),
       ).toBe("R$ 105,65");
-      await selectInstallments(view.container, 2);
+      await selectInstallments(dialog, 2);
       expect(rowValue(card, "Parcelas")).toBe("2x de R$ 53,10");
       expect(rowValue(card, "Última parcela")).toBeUndefined();
       expect(rowValue(card, "Total do convidado")).toBe("R$ 106,20");
-      await selectInstallments(view.container, 1);
+      await selectInstallments(dialog, 1);
       expect(rowValue(card, "Total do convidado")).toBe("R$ 105,65");
       expect(rowValue(card, "Acréscimo do parcelamento")).toBeUndefined();
       expect(request).toHaveBeenCalledTimes(1);
@@ -210,11 +249,12 @@ describe("gift pricing preview", () => {
     const view = mount(request);
     try {
       await view.render(10000);
-      await selectInstallments(view.container, 12);
+      const dialog = await view.openSimulation();
+      await selectInstallments(dialog, 12);
       await view.render(500);
-      expect(view.container.querySelector("select")).toBeNull();
-      expect(view.container.textContent).not.toContain("R$ 106,75");
-      expect(view.container.textContent).toContain(
+      expect(dialog.querySelector("select")).toBeNull();
+      expect(dialog.textContent).not.toContain("R$ 106,75");
+      expect(dialog.textContent).toContain(
         "Somente cartão à vista disponível nesta simulação.",
       );
     } finally {
@@ -241,10 +281,9 @@ describe("gift pricing preview", () => {
       const view = mount(async () => preview);
       try {
         await view.render(10000);
-        await selectInstallments(view.container, 2);
-        const card = view.container.querySelector(
-          'section[aria-label="Cartão"]',
-        );
+        const dialog = await view.openSimulation();
+        await selectInstallments(dialog, 2);
+        const card = dialog.querySelector('section[aria-label="Cartão"]');
         expect(rowValue(card, label)).toBe(adjustment);
         expect(rowValue(card, "Líquido do casal")).toBe("R$ 100,00");
         if (surcharge > 0) {
@@ -272,6 +311,7 @@ describe("gift pricing preview", () => {
       const view = mount(request);
       try {
         await view.render(10000);
+        const dialog = await view.openSimulation();
         expect(request).toHaveBeenCalledExactlyOnceWith(
           "/v1/sites/site-a/gift-pricing-preview",
           expect.objectContaining({
@@ -279,17 +319,15 @@ describe("gift pricing preview", () => {
             body: { nominalCents: 10000, feeAllocation: "BUYER_GROSS_UP" },
           }),
         );
-        const rows = [...view.container.querySelectorAll("dt")].filter(
+        const rows = [...dialog.querySelectorAll("dt")].filter(
           (node) => node.textContent === "Taxas",
         );
         expect(rows.map((row) => row.nextElementSibling?.textContent)).toEqual([
           label,
           label,
         ]);
-        expect(view.container.textContent).not.toMatch(
-          /Comissão|Processamento Asaas/,
-        );
-        expect(view.container.querySelector("button, input")).toBeNull();
+        expect(dialog.textContent).not.toMatch(/Comissão|Processamento Asaas/);
+        expect(dialog.querySelector("input, form")).toBeNull();
       } finally {
         await view.close();
       }
@@ -308,10 +346,11 @@ describe("gift pricing preview", () => {
     const view = mount(request);
     try {
       await view.render(10000);
+      const dialog = await view.openSimulation();
       await view.render(20000);
       await act(async () => resolveOld(response(10000, 199)));
-      expect(view.container.textContent).toContain("R$ 202,00");
-      expect(view.container.textContent).not.toContain("R$ 103,99");
+      expect(dialog.textContent).toContain("R$ 202,00");
+      expect(dialog.textContent).not.toContain("R$ 103,99");
     } finally {
       await view.close();
     }

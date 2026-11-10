@@ -1704,19 +1704,24 @@ export function FeesStep({
           <StepHeading number={5} title="Taxas dos presentes">
             <p className={receivingBody}>{giftFeeExplanation}</p>
           </StepHeading>
-          <div className="grid min-w-0 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,420px)]">
-            <div className="grid gap-3">
-              <p className={receivingBody}>
-                Cadastre quanto vocês querem receber por cada presente. Ao
-                parcelar no cartão, o convidado vê o acréscimo e o total antes
-                de pagar.
-              </p>
-              <p className={receivingBody}>
-                O EntreLaços cobre diferenças de tarifa acima do previsto. O
-                dinheiro fica disponível conforme a liberação dos pagamentos.
-              </p>
-            </div>
+          <div className="grid min-w-0 gap-3">
+            <p className={receivingBody}>
+              Cadastre quanto vocês querem receber por cada presente. Se
+              parcelar no cartão, o convidado confere as parcelas e o total
+              antes de pagar.
+            </p>
+            <p className={receivingBody}>
+              O EntreLaços cobre diferenças de tarifa acima do previsto.
+            </p>
             {pricingEnabled && <FeesExample />}
+            <Link
+              to="/sites/$siteId/receiving-guide"
+              params={{ siteId }}
+              hash="receiving-guide-credit"
+              className="w-fit text-sm font-semibold text-admin-accent-hover underline underline-offset-4"
+            >
+              Veja quando o dinheiro fica disponível
+            </Link>
           </div>
           <div className="border-t border-admin-border pt-6">
             <Link

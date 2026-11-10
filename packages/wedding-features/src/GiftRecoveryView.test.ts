@@ -250,6 +250,19 @@ describe("gift recovery view", () => {
     expect(onContinue).toHaveBeenCalledWith(status.checkout);
   });
 
+  it("places the disclosure after the recovery action", () => {
+    const html = renderRecovery({
+      error: true,
+      canRetry: true,
+      onRetry: vi.fn(),
+    });
+    const disclosure = html.indexOf(
+      'aria-label="Prestador dos serviços financeiros"',
+    );
+    expect(html).toContain("Consultar pagamento");
+    expect(disclosure).toBeGreaterThan(html.indexOf("Consultar pagamento"));
+  });
+
   it("shows retry only when permitted and disables it while loading", () => {
     const onRetry = vi.fn();
     const allowed = renderRecovery({ canRetry: true, onRetry });
