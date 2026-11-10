@@ -2,7 +2,7 @@ import {
   giftInstallmentExpiryMinutes,
   giftMinimumNominalCents,
 } from "@entrelacos/contracts";
-import { AsaasDisclosure, showSandboxNotice } from "@entrelacos/ui";
+import { showSandboxNotice } from "@entrelacos/ui";
 import { Link } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import { adminStyles } from "../lib/adminStyles";
@@ -57,7 +57,6 @@ export function ReceivingGuide({
       >
         ← Voltar para Recebimentos
       </Link>
-      <AsaasDisclosure />
       <p className="m-0 max-w-3xl text-base">
         O Entrelacos organiza os presentes e os pedidos de saque. O Asaas mantém
         a conta do recebedor e faz as verificações e transferências. Siga estas
@@ -295,10 +294,43 @@ export function ReceivingGuide({
         </p>
         <p className="m-0">
           O EntreLaços cobre a diferença quando a tarifa de um novo pagamento
-          supera a prevista. O saldo disponível para saque acompanha a liberação
-          de cada pagamento ou parcela pelo Asaas. A confirmação da compra pode
-          acontecer antes de o dinheiro ficar disponível.
+          supera a prevista.
         </p>
+        <h3
+          id="receiving-guide-credit"
+          className="m-0 text-base font-bold text-admin-text"
+        >
+          Quando o dinheiro fica disponível
+        </h3>
+        <p className="m-0">
+          A confirmação indica que o convidado pagou. O valor fica aguardando
+          liberação até o Asaas creditá-lo. Depois do crédito, ele pode compor o
+          saldo disponível para saque.
+        </p>
+        <p className="m-0">
+          No Pix, o valor costuma ficar disponível na conta Asaas em alguns
+          instantes após o pagamento. Confiram a atualização do saldo no painel.
+        </p>
+        <p className="m-0">
+          No prazo padrão do cartão, o pagamento à vista é liberado em até 32
+          dias corridos. Em compras parceladas, o Asaas libera uma parcela a
+          cada 32 dias corridos. A compensação ocorre em dias úteis.
+        </p>
+        <p className="m-0">
+          A antecipação depende da elegibilidade da conta e da aprovação pelo
+          Asaas. O valor antecipado só entra no saldo após o crédito.
+        </p>
+        <div className="flex flex-wrap gap-x-4 gap-y-2">
+          <OfficialLink href="https://central.ajuda.asaas.com/hc/pt-br/articles/53178101435163-Qual-%C3%A9-o-prazo-de-compensa%C3%A7%C3%A3o-de-cart%C3%A3o-de-cr%C3%A9dito-no-Asaas">
+            Prazos de liberação no cartão
+          </OfficialLink>
+          <OfficialLink href="https://central.ajuda.asaas.com/hc/pt-br/articles/53178520388507-Como-acompanhar-o-andamento-do-meu-pedido-de-antecipa%C3%A7%C3%A3o">
+            Como acompanhar a análise de antecipação
+          </OfficialLink>
+        </div>
+        <h3 className="m-0 text-base font-bold text-admin-text">
+          Saques e estornos
+        </h3>
         <p className="m-0">
           <strong>Saques via Pix são gratuitos e ilimitados</strong> para contas
           recebedoras cadastradas como pessoa física (PF) ou MEI. O EntreLaços
@@ -309,6 +341,12 @@ export function ReceivingGuide({
           <OfficialLink href="https://central.ajuda.asaas.com/hc/pt-br/articles/32059618254875-Como-funcionam-as-taxas-e-a-gratuidade-para-transfer%C3%AAncias-Pix-no-Asaas">
             Consulte as condições das transferências Pix
           </OfficialLink>
+        </p>
+        <p className="m-0">
+          Após a efetivação do saque via Pix, o dinheiro costuma chegar ao banco
+          em alguns instantes. Antes do envio, o pedido pode aguardar
+          autorização ou análise de segurança. Acompanhem a conclusão no
+          histórico.
         </p>
         <p className="m-0">
           Para tratar um estorno, confira o pagamento no Asaas. O andamento

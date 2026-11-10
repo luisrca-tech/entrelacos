@@ -2,6 +2,7 @@
 import type { MeResponse, SiteAccess } from "@entrelacos/contracts";
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
+import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { AdminShell } from "./AdminShell";
 
@@ -27,6 +28,43 @@ const actor: MeResponse = {
   session: { id: "session-a", expiresAt: "2027-01-01T00:00:00Z" },
   siteId: "wedding-a",
 };
+
+describe("Asaas financial disclosure", () => {
+  it.each(["receiving", "receiving-guide"] as const)(
+    "places a single disclosure between the %s content and the footer",
+    (area) => {
+      const node = document.createElement("div");
+      node.innerHTML = renderToStaticMarkup(
+        createElement(
+          AdminShell,
+          { actor, area, siteId: "wedding-a", onLogout: vi.fn() },
+          createElement("h1", null, "Page content"),
+        ),
+      );
+      const disclosures = node.querySelectorAll(
+        '[aria-label="Prestador dos serviços financeiros"]',
+      );
+      const footer = node.querySelector("footer");
+      const lastBlock = footer?.previousElementSibling;
+      expect(disclosures).toHaveLength(1);
+      expect(lastBlock?.contains(disclosures[0])).toBe(true);
+      expect(node.querySelector("main")?.textContent).toBe("Page content");
+    },
+  );
+
+  it("keeps the disclosure off unrelated pages", () => {
+    const html = renderToStaticMarkup(
+      createElement(AdminShell, {
+        actor,
+        area: "gifts",
+        siteId: "wedding-a",
+        onLogout: vi.fn(),
+      }),
+    );
+    expect(html).not.toContain('alt="Serviços financeiros Asaas"');
+  });
+});
+
 describe("mobile panel navigation", () => {
   it.each(["SITE_ADMIN", "SITE_ASSISTANT", "OWNER"] as const)(
     "opens the public FAQ in a new tab from the sidebar and More menu for %s",
