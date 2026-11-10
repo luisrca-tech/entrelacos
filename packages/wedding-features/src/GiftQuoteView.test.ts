@@ -226,6 +226,11 @@ it("shows the exact installment schedule, surcharge and total of the selected qu
   expect(html).toContain("60 minutos");
   expect(html).toContain("aguarde a confirmação do encerramento");
   expect(html).not.toContain("Taxa de processamento");
+  const disclosure = html.indexOf(
+    'aria-label="Prestador dos serviços financeiros"',
+  );
+  expect(disclosure).toBeGreaterThan(html.indexOf("</form>"));
+  expect(disclosure).toBeLessThan(html.indexOf("<footer"));
 });
 
 it("does not offer installments when the server returns only an upfront quote", () => {

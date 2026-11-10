@@ -1,5 +1,4 @@
 import type { ReceivingReadiness, SiteAccess } from "@entrelacos/contracts";
-import { AsaasDisclosure } from "@entrelacos/ui";
 import { Link } from "@tanstack/react-router";
 import { ChevronRight, Landmark, Percent, UserRound } from "lucide-react";
 import { type ReactNode, useContext, useEffect, useState } from "react";
@@ -249,7 +248,6 @@ export function ReceivingSectionView({
   );
   return (
     <div className="grid min-w-0 gap-6">
-      <AsaasDisclosure />
       {platformOwner && !currentAccess ? (
         <section className="grid gap-3 rounded-2xl border border-admin-border bg-admin-surface p-6">
           <p role={failed ? "alert" : "status"}>

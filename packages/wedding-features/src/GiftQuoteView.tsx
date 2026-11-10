@@ -115,8 +115,6 @@ export function GiftQuoteView({
             Ao confirmar, você continuará em uma página segura de pagamento.
           </p>
         </header>
-        <AsaasDisclosure />
-
         {showSandboxNotice(quote?.mode) && (
           <p
             role="status"
@@ -308,6 +306,8 @@ export function GiftQuoteView({
             </fieldset>
           </form>
         )}
+
+        <AsaasDisclosure />
       </div>
 
       <footer className="flex min-w-0 flex-wrap gap-3 border-t border-template-line px-[clamp(1.25rem,4vw,2.5rem)] pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">

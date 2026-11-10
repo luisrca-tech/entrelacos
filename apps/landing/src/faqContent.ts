@@ -111,7 +111,7 @@ export const faqTopics: FaqTopic[] = [
       {
         question: "Podemos simular quanto o convidado vai pagar?",
         answer:
-          "Sim. No cadastro ou na edição do presente e na tela de taxas do painel, vocês podem comparar Pix, cartão à vista e as opções de parcelamento disponíveis. A prévia mostra as taxas, o acréscimo do parcelamento, os valores das parcelas, o total do convidado e o líquido do casal. As condições finais são confirmadas no checkout.",
+          "Sim. No cadastro ou na edição do presente e na tela de taxas, abram “Simular taxas e parcelamento”. A simulação mostra parcelas, taxas, acréscimo, total do convidado e líquido do casal. Escolher uma quantidade de parcelas nessa janela não altera o presente nem define como ele será pago: o convidado escolhe no checkout, onde confere as condições finais.",
       },
       {
         question: "As taxas e promoções são sempre as mesmas?",
@@ -145,6 +145,29 @@ export const faqTopics: FaqTopic[] = [
         answer:
           "São etapas diferentes. Um pagamento pode estar confirmado e ainda aguardar liberação. No cartão parcelado, o saldo fica disponível conforme a liberação de cada parcela pelo Asaas. O painel distingue os valores recebidos, os que aguardam liberação e o saldo disponível para saque.",
       },
+      {
+        question: "Em quanto tempo um presente pago fica disponível?",
+        answer:
+          "No Pix, o Asaas informa que o valor costuma ficar disponível em alguns instantes após o pagamento. No cartão à vista, o prazo padrão é de até 32 dias corridos após a operação, com compensação em dias úteis. A aprovação no cartão confirma o pagamento, mas não libera o dinheiro imediatamente para saque. Acompanhem a situação no painel.",
+        reference: {
+          label: "Consultar o prazo de compensação do cartão",
+          href: "https://central.ajuda.asaas.com/hc/pt-br/articles/53178101435163-Qual-%C3%A9-o-prazo-de-compensa%C3%A7%C3%A3o-de-cart%C3%A3o-de-cr%C3%A9dito-no-Asaas",
+        },
+      },
+      {
+        question: "Se o convidado parcelar, recebemos tudo de uma vez?",
+        answer:
+          "No fluxo padrão, o casal recebe conforme a liberação de cada parcela. O recebimento integral antes dessas datas exige uma antecipação aprovada e efetivada pelo Asaas. O parcelamento escolhido pelo convidado não ativa esse serviço automaticamente. As condições de antecipação para as contas dos casais ainda estão em confirmação; por enquanto, não contem com a liberação integral antecipada.",
+      },
+      {
+        question: "Como funciona a antecipação dos recebimentos?",
+        answer:
+          "A antecipação permite liberar valores de cartão antes do prazo padrão, quando disponível e aprovada para a conta. Ela tem custo próprio, que depende do tempo antecipado de cada parcela e precisa entrar no cálculo do total. Ter limite informado ou cadastro aprovado não garante a operação. O saldo só pode ser tratado como disponível após a confirmação do crédito pelo Asaas.",
+        reference: {
+          label: "Entender as condições de antecipação",
+          href: "https://www.asaas.com/antecipacao-de-recebiveis",
+        },
+      },
     ],
   },
   {
@@ -169,6 +192,15 @@ export const faqTopics: FaqTopic[] = [
         question: "Como solicitamos e acompanhamos um saque?",
         answer:
           "Com saldo disponível, o titular escolhe o valor, confere o destinatário e a prévia e confirma o pedido com sua senha do Entrelaços. O andamento aparece no histórico. Se houver uma confirmação adicional exigida pelo Asaas, sigam as instruções apresentadas. Solicitar o saque não significa que a transferência já foi concluída.",
+      },
+      {
+        question: "Quanto tempo demora um saque via Pix?",
+        answer:
+          "Depois que a transferência é efetivada pelo Asaas, o dinheiro costuma chegar à conta de destino em alguns instantes. O pedido pode aguardar autorização ou análise de segurança antes do envio. Acompanhem o status no histórico: saque solicitado ainda não significa transferência concluída. É necessário ter saldo disponível e a conta liberada para movimentação.",
+        reference: {
+          label: "Consultar os prazos de transferência",
+          href: "https://central.ajuda.asaas.com/hc/pt-br/articles/52772307878811-Quanto-tempo-demora-para-cair-a-transfer%C3%AAncia-de-saque-da-minha-conta",
+        },
       },
       {
         question: "Como pedir ajuda com um pagamento, saque ou estorno?",
