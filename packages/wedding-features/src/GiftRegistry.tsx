@@ -13,6 +13,7 @@ import { toast } from "@entrelacos/ui/toast";
 import { useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { GiftCatalogView } from "./GiftCatalogView";
 import { GiftQuoteView } from "./GiftQuoteView";
+import { GiftRecoveryView } from "./GiftRecoveryView";
 import { recoverGiftCheckout } from "./giftCheckoutRecovery";
 import {
   createGiftCheckoutState,
@@ -20,7 +21,6 @@ import {
 } from "./giftCheckoutState";
 import {
   createGiftCheckoutRecoveryToken,
-  hasUnresolvedGiftCheckout,
   loadPendingGiftCheckout,
   writePendingGiftCheckout,
 } from "./giftCheckoutStorage";
@@ -33,8 +33,6 @@ import {
 import { SiteDialog } from "./SiteDialog";
 
 type Catalog = PublicGiftCatalogPageResponse;
-const recoveryFailureMessage =
-  "Não foi possível consultar o status do pagamento. Não inicie outro pagamento enquanto a verificação estiver pendente.";
 type CatalogOwner = {
   active: boolean;
   controller: AbortController | null;
@@ -108,10 +106,8 @@ function GiftRegistryRuntime({
   const root = useRef<HTMLDivElement>(null);
   const inFlight = useRef(false);
   const recoveryInFlight = useRef(false);
-  const recoveryNotifyRequested = useRef(false);
   const currentRecoveredStatus = useRef<CheckoutStatus | null>(null);
   const recoveryEpoch = useRef(0);
-  const lastRecoveryNotice = useRef("");
   const recoveryAction = useRef<() => Promise<string | undefined>>(
     async () => undefined,
   );
@@ -146,14 +142,15 @@ function GiftRegistryRuntime({
   );
   const [dialogOpen, setDialogOpen] = useState(false);
   const [operationError, setOperationError] = useState("");
+  const [recoveryLoading, setRecoveryLoading] = useState(false);
+  const [recoveryError, setRecoveryError] = useState(false);
+  const recovering = state.phase === "UNKNOWN";
   const currentCatalog = catalog?.api === api ? catalog.value : null;
   const outcomePending =
-    state.phase === "UNKNOWN" ||
-    state.phase === "CREATING" ||
-    state.phase === "REDIRECTING";
+    recovering || state.phase === "CREATING" || state.phase === "REDIRECTING";
   const visible =
     (catalogShown && currentCatalog?.mode !== "disabled") ||
-    state.phase === "UNKNOWN" ||
+    recovering ||
     state.checkoutStatus !== null;
 
   useEffect(() => {
@@ -165,20 +162,14 @@ function GiftRegistryRuntime({
   }, [visible]);
 
   useEffect(() => {
-    if (hasUnresolvedGiftCheckout(() => window.sessionStorage, siteId)) {
-      try {
-        const pending = loadPendingGiftCheckout(
-          () => window.sessionStorage,
-          siteId,
-        );
-        dispatch({
-          type: "RESTORE_UNKNOWN",
-          siteId,
-          pending: pending ?? undefined,
-        });
-      } catch {
-        dispatch({ type: "RESTORE_UNKNOWN" });
-      }
+    try {
+      const pending = loadPendingGiftCheckout(
+        () => window.sessionStorage,
+        siteId,
+      );
+      if (pending) dispatch({ type: "RESTORE_UNKNOWN", siteId, pending });
+    } catch {
+      dispatch({ type: "RESTORE_UNKNOWN" });
     }
   }, [siteId]);
 
@@ -332,10 +323,6 @@ function GiftRegistryRuntime({
   }, []);
 
   function chooseGift(gift: PublicGiftItem) {
-    if (state.phase === "UNKNOWN") {
-      void recover(true);
-      return;
-    }
     if (
       outcomePending ||
       catalogLoading ||
@@ -354,15 +341,13 @@ function GiftRegistryRuntime({
     setOperationError("");
     dispatch({ type: "SELECT_METHOD", method, installmentCount });
   }
-  async function recover(notify = false) {
-    if (!api || state.phase !== "UNKNOWN" || !state.pending) {
-      if (notify) toast.error(recoveryFailureMessage);
+  async function recover(manual = false) {
+    if (!api || !recovering || !state.pending || recoveryInFlight.current)
       return;
-    }
-    if (notify) recoveryNotifyRequested.current = true;
-    if (recoveryInFlight.current) return;
     recoveryInFlight.current = true;
     currentRecoveredStatus.current = null;
+    setRecoveryLoading(true);
+    if (manual) setRecoveryError(false);
     const requestApi = api;
     const epoch = recoveryEpoch.current;
     const current = () =>
@@ -376,90 +361,39 @@ function GiftRegistryRuntime({
         () => window.sessionStorage,
         current,
       );
-      if (event && current() && event.type === "STATUS_RESOLVED") {
+      if (!current()) return;
+      if (event?.type === "STATUS_RESOLVED") {
         dispatch(event);
         currentRecoveredStatus.current = event.status;
-        const status = event.status.state;
-        if (
-          recoveryNotifyRequested.current ||
-          lastRecoveryNotice.current !== status
-        ) {
-          lastRecoveryNotice.current = status;
-          switch (status) {
-            case "CONFIRMED":
-              toast.success(
-                "Pagamento aprovado. Aguardando liberação do valor.",
-              );
-              break;
-            case "RECEIVED":
-              toast.success("Recebimento confirmado.");
-              break;
-            case "REFUNDED":
-              toast.success("Reembolso confirmado.");
-              break;
-            case "CLOSED_UNPAID":
-              toast.warning(
-                "Pagamento encerrado sem recebimento. Você pode escolher um presente novamente.",
-              );
-              break;
-            case "AWAITING_PAYMENT": {
-              const checkout = event.status.checkout;
-              toast.warning(
-                "Pagamento aguardando conclusão.",
-                checkout
-                  ? {
-                      action: {
-                        label: "Continuar pagamento",
-                        onClick: () => {
-                          const latest = currentRecoveredStatus.current;
-                          if (
-                            !current() ||
-                            recoveryInFlight.current ||
-                            latest?.state !== "AWAITING_PAYMENT" ||
-                            !latest.checkout ||
-                            latest.siteId !== event.status.siteId ||
-                            latest.quoteId !== event.status.quoteId ||
-                            latest.requestId !== event.status.requestId ||
-                            latest.orderId !== event.status.orderId ||
-                            latest.attemptId !== event.status.attemptId ||
-                            latest.method !== event.status.method ||
-                            latest.mode !== event.status.mode ||
-                            latest.checkout.hostedUrl !== checkout.hostedUrl
-                          )
-                            return;
-                          window.location.assign(checkout.hostedUrl);
-                        },
-                      },
-                    }
-                  : undefined,
-              );
-              break;
-            }
-            default:
-              toast.warning(
-                "O pagamento ainda está em verificação. Não inicie outro pagamento enquanto o status estiver pendente.",
-              );
-          }
-        }
-        return status;
+        setRecoveryError(false);
+        return event.status.state;
       }
-      if (current() && recoveryNotifyRequested.current)
-        toast.error(recoveryFailureMessage);
+      setRecoveryError(true);
     } catch {
-      if (current()) {
-        if (
-          recoveryNotifyRequested.current ||
-          lastRecoveryNotice.current !== "ERROR"
-        ) {
-          lastRecoveryNotice.current = "ERROR";
-          toast.error(recoveryFailureMessage);
-        }
-      }
+      if (current()) setRecoveryError(true);
     } finally {
       recoveryInFlight.current = false;
-      recoveryNotifyRequested.current = false;
+      if (current()) setRecoveryLoading(false);
     }
   }
+
+  function continuePayment(checkout: NonNullable<CheckoutStatus["checkout"]>) {
+    const latest = currentRecoveredStatus.current;
+    if (
+      !mounted.current ||
+      recoveryInFlight.current ||
+      latest?.state !== "AWAITING_PAYMENT" ||
+      latest.checkout?.hostedUrl !== checkout.hostedUrl ||
+      latest.quoteId !== checkout.quoteId ||
+      latest.orderId !== checkout.orderId ||
+      latest.attemptId !== checkout.attemptId ||
+      latest.method !== checkout.method ||
+      latest.mode !== checkout.mode
+    )
+      return;
+    window.location.assign(checkout.hostedUrl);
+  }
+
   recoveryAction.current = recover;
   const pendingRequestId = state.pending?.requestId;
   useEffect(() => {
@@ -558,19 +492,23 @@ function GiftRegistryRuntime({
 
   return (
     <div ref={root} data-gift-runtime className="grid min-w-0 gap-5">
+      {(recovering || state.checkoutStatus) && (
+        <GiftRecoveryView
+          siteId={siteId}
+          status={state.checkoutStatus}
+          loading={recoveryLoading}
+          error={recovering && (!api || !state.pending || recoveryError)}
+          canRetry={recovering && !!api && !!state.pending}
+          onRetry={() => void recover(true)}
+          onContinue={continuePayment}
+        />
+      )}
       {currentCatalog && (
         <GiftCatalogView
-          recoveryOnly={state.phase === "UNKNOWN"}
+          recoveryOnly={recovering}
           gifts={currentCatalog.gifts}
           mode={currentCatalog.mode}
-          busy={
-            (outcomePending && state.phase !== "UNKNOWN") ||
-            catalogLoading ||
-            catalogError
-          }
-          actionLabel={
-            state.phase === "UNKNOWN" ? "Consultar pagamento" : undefined
-          }
+          busy={outcomePending || catalogLoading || catalogError}
           onSelect={chooseGift}
           paging={
             catalogShown

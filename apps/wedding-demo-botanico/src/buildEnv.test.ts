@@ -44,14 +44,16 @@ describe("progressive enhancement", () => {
     expect(astroConfig).toContain('noExternal: ["@entrelacos/ui"]');
   });
 
-  it("provides an honest host-owned fallback for interactive guest areas", () => {
+  it("provides section-specific loading states for interactive guest areas", () => {
     const source = readFileSync(
       resolve(import.meta.dirname, "pages/index.astro"),
       "utf8",
     );
     expect(source).toContain('client:only="react"');
     expect(source).toContain('slot="fallback"');
-    expect(source).toContain("Esta área interativa precisa de JavaScript");
+    expect(source).toContain("Carregando confirmação de presença…");
+    expect(source).toContain("Carregando mural…");
+    expect(source).not.toContain("Esta área interativa precisa de JavaScript");
   });
 
   it("uses the guest confirmation feature as the only section heading", () => {

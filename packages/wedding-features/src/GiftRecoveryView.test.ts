@@ -191,16 +191,19 @@ describe("gift recovery view", () => {
       recoveryToken: "private-token-value",
     } as unknown as CheckoutStatus;
     const cases = [
-      renderRecovery(),
-      renderRecovery({ loading: true }),
-      renderRecovery({ error: true }),
-      renderRecovery({ status: wrongSite }),
-      renderRecovery({ status: contradictory }),
-      renderRecovery({ status: extraField }),
+      [renderRecovery(), "Pagamento em verificação"],
+      [renderRecovery({ loading: true }), "Consultando pagamento…"],
+      [
+        renderRecovery({ error: true }),
+        "Não foi possível consultar o pagamento agora.",
+      ],
+      [renderRecovery({ status: wrongSite }), "Pagamento em verificação"],
+      [renderRecovery({ status: contradictory }), "Pagamento em verificação"],
+      [renderRecovery({ status: extraField }), "Pagamento em verificação"],
     ];
 
-    for (const html of cases) {
-      expect(html).toContain("Pagamento em verificação");
+    for (const [html, label] of cases) {
+      expect(html).toContain(label);
       expect(html).not.toContain("Recebimento confirmado");
       expect(html).not.toContain("Reembolso confirmado");
       expect(html).not.toContain("private-token-value");
@@ -211,7 +214,7 @@ describe("gift recovery view", () => {
       status: makeStatus("RECEIVED"),
       loading: true,
     });
-    expect(sandboxLoading).toContain("Pagamento em verificação");
+    expect(sandboxLoading).toContain("Consultando pagamento…");
     expect(sandboxLoading).toContain(
       "Ambiente de testes — sem pagamentos reais.",
     );

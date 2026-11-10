@@ -19,7 +19,7 @@ const gift: PublicGiftItem = {
 };
 
 describe("gift catalog view", () => {
-  it("allows recovery of an issued payment after buyer pricing has been paused", () => {
+  it("hides card actions while recovery is shown separately", () => {
     const html = renderToStaticMarkup(
       createElement(GiftCatalogView, {
         gifts: [
@@ -31,11 +31,10 @@ describe("gift catalog view", () => {
         mode: "live",
         busy: false,
         recoveryOnly: true,
-        actionLabel: "Consultar pagamento",
         onSelect: vi.fn(),
       }),
     );
-    expect(html).toContain("Consultar pagamento");
+    expect(html).not.toContain("Escolher presente");
     expect(html).not.toContain("123,45");
     expect(html).not.toContain('disabled=""');
   });
