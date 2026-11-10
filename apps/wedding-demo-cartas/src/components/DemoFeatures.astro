@@ -1,12 +1,13 @@
 ---
 import { GiftSection } from "@entrelacos/template-cartas-do-nosso-sim/v1";
 import { GiftRegistry, GuestAccess, MessageMural } from "@entrelacos/wedding-features";
+import FeatureFallback from "@entrelacos/wedding-features/FeatureFallback.astro";
 import { guestAccess } from "../demoContent";
 ---
 
 <section id="guest-access" class="demo-reply [padding:clamp(3rem,_6vw,_6rem)_var(--template-page-inset)] [border-top:1px_solid_var(--template-line)] [&_[data-slot='guest-access']]:[padding:0] [&_[data-slot='guest-access']]:[background:transparent]" aria-label="Confirmação de presença">
   <GuestAccess {...guestAccess} client:only="react">
-    <p slot="fallback" class="feature-fallback [max-width:38rem] m-0 [border:1px_solid_var(--template-line)] [padding:1.25rem] [line-height:1.65]">Esta área interativa precisa de JavaScript. Ative-o para encontrar seu convite e responder à confirmação.</p>
+    <FeatureFallback slot="fallback" loading="Carregando confirmação de presença…" unavailable="A confirmação de presença está indisponível no momento." />
   </GuestAccess>
 </section>
 <GiftSection content={{ id: "gifts", title: "Lista de presentes", description: "Se quiser nos presentear, você pode contribuir com os planos da nossa casa e da lua de mel." }}>
@@ -14,6 +15,6 @@ import { guestAccess } from "../demoContent";
 </GiftSection>
 <section id="mural" class="demo-mural [padding:clamp(3rem,_6vw,_6rem)_var(--template-page-inset)] [border-top:1px_solid_var(--template-line)] [&_[data-slot='message-mural']]:[padding:0] [&_[data-slot='message-mural']]:[background:transparent]" aria-label="Mural dos convidados">
   <MessageMural {...guestAccess} client:only="react">
-    <p slot="fallback" class="feature-fallback [max-width:38rem] m-0 [border:1px_solid_var(--template-line)] [padding:1.25rem] [line-height:1.65]">Esta área interativa precisa de JavaScript. Ative-o para consultar o mural.</p>
+    <FeatureFallback slot="fallback" loading="Carregando mural…" unavailable="O mural está indisponível no momento." />
   </MessageMural>
 </section>

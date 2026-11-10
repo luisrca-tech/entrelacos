@@ -1,0 +1,48 @@
+---
+interface Props {
+  loading: string;
+  unavailable: string;
+}
+
+const { loading, unavailable } = Astro.props;
+---
+
+<div class="feature-fallback">
+  <p class="loading" data-feature-fallback-state role="status">{loading}</p>
+  <div class="unavailable" data-feature-fallback-state>
+    <p>{unavailable}</p>
+    <a href={Astro.url.pathname}>Recarregar página</a>
+  </div>
+</div>
+
+<style>
+  .feature-fallback {
+    display: grid;
+    max-width: 38rem;
+    border: 1px solid var(--template-line);
+    padding: 1.25rem;
+    color: var(--template-muted);
+    line-height: 1.65;
+  }
+
+  .feature-fallback > * { grid-area: 1 / 1; }
+  p { margin: 0; }
+  a { color: var(--template-ink); text-decoration: underline; }
+  .loading { visibility: hidden; }
+
+  @media (scripting: enabled) {
+    /* The message can change even if the feature script never loads. */
+    .loading { animation: hide 8s steps(1, end) both; }
+    .unavailable { animation: show 8s steps(1, end) both; }
+  }
+
+  @keyframes hide {
+    from { visibility: visible; }
+    to { visibility: hidden; }
+  }
+
+  @keyframes show {
+    from { visibility: hidden; }
+    to { visibility: visible; }
+  }
+</style>
