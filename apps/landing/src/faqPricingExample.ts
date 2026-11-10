@@ -1,8 +1,3 @@
-import {
-  getGiftCommissionCents,
-  simulateGiftAnticipation,
-} from "@entrelacos/contracts";
-
 export type FaqPricingExample = {
   label: string;
   method: "PIX" | "CREDIT_CARD";
@@ -12,59 +7,41 @@ export type FaqPricingExample = {
   recipientNetCents: number;
 };
 
-// Planning references from the platform account, not approved receiver tariffs.
-// Keep this hypothetical scenario separate from live checkout quotes.
-export const faqPricingScenario = {
-  planningOnly: true,
-  nominalCents: 10000,
-  commissionBasisPoints: 200,
-  cardFixedCents: 49,
-  cardMonthlyBasisPoints: { single: 115, installments: 160 },
-  pixFixedCents: 199,
-} as const;
-
-const pixFeesCents =
-  getGiftCommissionCents(faqPricingScenario.nominalCents) +
-  faqPricingScenario.pixFixedCents;
-const pixTotalCents = faqPricingScenario.nominalCents + pixFeesCents;
-
+// Standard account references checked on 2026-11-09, without promotions or anticipation.
+// scripts/faqPricingExample.test.ts verifies these fixtures against actual checkout math.
 export const faqPricingExamples: FaqPricingExample[] = [
   {
     label: "Pix",
     method: "PIX",
-    totalCents: pixTotalCents,
-    installmentCents: [pixTotalCents],
-    combinedFeesCents: pixFeesCents,
-    recipientNetCents: faqPricingScenario.nominalCents,
+    totalCents: 10399,
+    installmentCents: [10399],
+    combinedFeesCents: 399,
+    recipientNetCents: 10000,
   },
-  ...(
-    [
-      { count: 1, processingBasisPoints: 299, label: "Cartão à vista" },
-      { count: 6, processingBasisPoints: 349, label: "Cartão em 6x" },
-      { count: 12, processingBasisPoints: 399, label: "Cartão em 12x" },
-    ] as const
-  ).map(({ count, processingBasisPoints, label }) => {
-    const example = simulateGiftAnticipation({
-      nominalCents: faqPricingScenario.nominalCents,
-      commissionBasisPoints: faqPricingScenario.commissionBasisPoints,
-      processingBasisPoints,
-      fixedCents: faqPricingScenario.cardFixedCents,
-      monthlyAnticipationBasisPoints:
-        count === 1
-          ? faqPricingScenario.cardMonthlyBasisPoints.single
-          : faqPricingScenario.cardMonthlyBasisPoints.installments,
-      installmentDays: Array.from(
-        { length: count },
-        (_, index) => (index + 1) * 30,
-      ),
-    });
-    return {
-      label,
-      method: "CREDIT_CARD" as const,
-      totalCents: example.totalCents,
-      installmentCents: example.installmentCents,
-      combinedFeesCents: example.surchargeCents,
-      recipientNetCents: example.netCoupleCents,
-    };
-  }),
+  {
+    label: "Cartão à vista",
+    method: "CREDIT_CARD",
+    totalCents: 10565,
+    installmentCents: [10565],
+    combinedFeesCents: 565,
+    recipientNetCents: 10000,
+  },
+  {
+    label: "Cartão em 6x",
+    method: "CREDIT_CARD",
+    totalCents: 10620,
+    installmentCents: [1770, 1770, 1770, 1770, 1770, 1770],
+    combinedFeesCents: 620,
+    recipientNetCents: 10000,
+  },
+  {
+    label: "Cartão em 12x",
+    method: "CREDIT_CARD",
+    totalCents: 10675,
+    installmentCents: [
+      889, 889, 889, 889, 889, 889, 889, 889, 889, 889, 889, 896,
+    ],
+    combinedFeesCents: 675,
+    recipientNetCents: 10000,
+  },
 ];

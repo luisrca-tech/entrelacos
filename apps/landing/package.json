@@ -10,7 +10,6 @@
     "typecheck": "astro check"
   },
   "dependencies": {
-    "@entrelacos/contracts": "workspace:*",
     "astro": "7.3.2",
     "lenis": "1.3.26"
   },
