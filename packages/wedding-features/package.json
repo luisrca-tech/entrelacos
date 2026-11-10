@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./FeatureFallback.astro": "./src/FeatureFallback.astro",
     "./theme.css": "./src/theme.css"
   },
   "scripts": {
