@@ -205,11 +205,11 @@ export function FinancialOverviewCard({
           )}
           {(current.platformAdjustmentOwedCents ?? 0) > 0 && (
             <p className="m-0 text-sm leading-[1.55] text-admin-text">
-              O EntreLaços vai creditar{" "}
+              Ajuste pendente de{" "}
               <strong>
                 {formatCents(current.platformAdjustmentOwedCents ?? 0)}
               </strong>{" "}
-              para cobrir diferenças de tarifa.
+              em pagamentos anteriores, a ser creditado pelo EntreLaços.
             </p>
           )}
           <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2">
@@ -252,12 +252,12 @@ export function FinancialOverviewCard({
             {formatCents(flow.releasedGrossCents)}
           </p>
           <p className="m-0 text-sm leading-[1.5] text-admin-text">
-            pagos pelos convidados em presentes já liberados.
+            em presentes já liberados: você recebe 100% do presente.
             {current.awaitingReleaseCents > 0 && (
               <>
                 {" "}
-                Mais {formatCents(current.awaitingReleaseCents)}, já sem as
-                taxas, aguardando liberação.
+                Mais {formatCents(current.awaitingReleaseCents)} aguardando
+                liberação.
               </>
             )}
           </p>

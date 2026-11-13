@@ -40,6 +40,7 @@ import {
   setNavigationExpanded,
   useNavigationExpanded,
 } from "./navigationPreference";
+import { OwnerFinanceAlertBadge } from "./OwnerFinance";
 
 type AdminShellProps = {
   actor: MeResponse;
@@ -537,11 +538,16 @@ function AccountMenu({
           </div>
         </div>
         <div className="my-4 border-t border-admin-border pt-3.5 text-[0.78rem] text-admin-text-secondary">
-          {role === "OWNER"
-            ? "Proprietário"
-            : role === "SITE_ASSISTANT"
-              ? "Assessor do casamento"
-              : "Administrador do casamento"}
+          {role === "OWNER" ? (
+            <>
+              Proprietário
+              <OwnerFinanceAlertBadge />
+            </>
+          ) : role === "SITE_ASSISTANT" ? (
+            "Assessor do casamento"
+          ) : (
+            "Administrador do casamento"
+          )}
         </div>
         {showFaq && <PublicFaqLink />}
         <button

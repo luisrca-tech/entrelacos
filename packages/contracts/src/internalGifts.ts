@@ -1404,6 +1404,10 @@ export const giftPurchaseHistoryPaymentSchema = z
     installmentNumber: giftInstallmentCountSchema.optional(),
     platformAdjustmentOwedCents: giftCentsSchema.optional(),
     platformAdjustmentFundedCents: giftCentsSchema.optional(),
+    /** V2 only: couple split frozen with the quote for this installment. */
+    expectedRecipientSplitCents: giftCentsSchema.optional(),
+    /** V2 only: Asaas blocked the split (divergence); under operator review. */
+    splitDivergenceBlocked: z.literal(true).optional(),
   })
   .strict()
   .refine(

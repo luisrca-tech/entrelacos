@@ -544,6 +544,7 @@ function GiftRegistryRuntime({
                 state.phase === "CREATING" || state.phase === "REDIRECTING"
               }
               error={operationError || state.error || undefined}
+              notice={state.notice ?? undefined}
               onSelectMethod={chooseMethod}
               onConfirm={(payer) => void checkout(payer)}
               onCancel={requestClose}

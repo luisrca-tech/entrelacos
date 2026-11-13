@@ -991,6 +991,18 @@ export function createGiftPaymentHistoryRepository(
             commissionCents: payment.commission_cents,
             recipientNetCents: payment.recipient_net_cents,
             ...(installmentNumber === null ? {} : { installmentNumber }),
+            ...(plan.snapshot.settlement
+              ? {
+                  expectedRecipientSplitCents:
+                    plan.snapshot.settlement.recipientSplitCents[
+                      Number(installmentNumber ?? 1) - 1
+                    ],
+                }
+              : {}),
+            ...(plan.snapshot.settlement &&
+            payment.split_divergence_blocked_at != null
+              ? { splitDivergenceBlocked: true as const }
+              : {}),
             ...(adjustment === 0
               ? {}
               : funded

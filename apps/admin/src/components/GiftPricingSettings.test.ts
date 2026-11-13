@@ -57,18 +57,35 @@ function installmentResponse() {
 
 function rowValue(section: Element | null, label: string) {
   if (!section) throw new Error("Missing pricing section");
-  return [...section.querySelectorAll("dt")].find(
-    (row) => row.textContent === label,
-  )?.nextElementSibling?.textContent;
+  return [...section.querySelectorAll("dt")]
+    .find((row) => row.textContent?.startsWith(label))
+    ?.nextElementSibling?.textContent?.replace(/\s+/g, " ");
 }
 
-async function selectInstallments(container: Element, count: number) {
-  const select = container.querySelector("select");
-  if (!select) throw new Error("Missing installment selector");
-  await act(async () => {
-    select.value = String(count);
-    select.dispatchEvent(new Event("change", { bubbles: true }));
+// V2 quote for a R$100,00 gift: the guest pays every fee, the couple gets 100%.
+function v2Response() {
+  const preview = response(10000, 365);
+  const option = (installmentCount: number, totalCents: number) => ({
+    installmentCount,
+    totalCents,
+    installmentSurchargeCents: totalCents - 10688,
+    installmentCents: [
+      ...Array<number>(installmentCount - 1).fill(
+        Math.floor(totalCents / installmentCount),
+      ),
+      totalCents -
+        Math.floor(totalCents / installmentCount) * (installmentCount - 1),
+    ],
   });
+  const card = {
+    ...preview.methods[1],
+    totalCents: 10688,
+    installmentOptions: [option(1, 10688), option(6, 11247), option(12, 11909)],
+  };
+  return {
+    ...preview,
+    methods: [{ ...preview.methods[0], totalCents: 10399 }, card] as const,
+  };
 }
 
 function Preview({ nominalCents }: { nominalCents: number }) {
@@ -114,7 +131,7 @@ function mount(
 }
 
 describe("gift pricing preview", () => {
-  it("keeps the installment selector in a simulation dialog with a non-submitting trigger", async () => {
+  it("keeps the simulation in a dialog with a non-submitting trigger and no installment selector", async () => {
     const view = mount(async () => installmentResponse());
     try {
       await view.render(10000);
@@ -124,21 +141,15 @@ describe("gift pricing preview", () => {
       expect(trigger?.type).toBe("button");
       const dialog = await view.openSimulation();
       expect(dialog.textContent).toContain(
-        "A seleção vale só para esta simulação.",
+        "O convidado escolhe a forma de pagamento e o parcelamento na hora de pagar.",
       );
-      expect(dialog.textContent).toContain(
-        "O convidado escolhe o parcelamento na hora de pagar.",
-      );
-      expect(dialog.querySelector("select")?.name).toBe("");
-      await selectInstallments(dialog, 12);
+      expect(dialog.querySelector("select")).toBeNull();
       await act(async () =>
         dialog
           .querySelector<HTMLButtonElement>('[data-slot="dialog-close"]')
           ?.click(),
       );
       expect(document.querySelector('[role="dialog"]')).toBeNull();
-      const reopened = await view.openSimulation();
-      expect(reopened.querySelector("select")?.value).toBe("1");
     } finally {
       await view.close();
     }
@@ -188,43 +199,47 @@ describe("gift pricing preview", () => {
     expect(() => parsePricingPreview(preview, "site-a", 10000)).toThrow();
   });
 
-  it("shows only quoted plans and updates the surcharge, total, exact installments and unchanged recipient net", async () => {
-    const request = vi.fn(async () => installmentResponse());
-    const view = mount(request);
+  it("shows what the couple receives, the guest totals and a single fee line", async () => {
+    const view = mount(async () => v2Response());
     try {
       await view.render(10000);
       const dialog = await view.openSimulation();
+      expect(rowValue(dialog, "Você recebe")).toBe("R$ 100,00 (100%)");
+      expect(rowValue(dialog, "Pix")).toBe("R$ 103,99");
+      expect(rowValue(dialog, "Cartão à vista")).toBe("R$ 106,88");
+      expect(rowValue(dialog, "Cartão em 6x")).toBe("R$ 112,47");
+      expect(rowValue(dialog, "Cartão em 12x")).toBe("R$ 119,09");
+      expect(rowValue(dialog, "Taxas pagas pelo convidado")).toBe(
+        "de R$ 3,99 a R$ 19,09",
+      );
       expect(
-        [...dialog.querySelectorAll("option")].map((option) => option.value),
-      ).toEqual(["1", "2", "12"]);
-      await selectInstallments(dialog, 12);
-      const card = dialog.querySelector('section[aria-label="Cartão"]');
-      expect(rowValue(card, "Taxas à vista")).toBe("R$ 5,65");
-      expect(rowValue(card, "Acréscimo do parcelamento")).toBe("R$ 1,10");
-      expect(rowValue(card, "Total do convidado")).toBe("R$ 106,75");
-      expect(rowValue(card, "Primeiras 11 parcelas")).toBe("R$ 8,89 cada");
-      expect(rowValue(card, "Última parcela")).toBe("R$ 8,96");
-      expect(rowValue(card, "Líquido do casal")).toBe("R$ 100,00");
+        dialog.querySelector("dt button")?.getAttribute("aria-label"),
+      ).toBe("Inclui antecipação para você receber de uma vez");
       expect(
-        rowValue(
-          dialog.querySelector('section[aria-label="Pix"]'),
-          "Total do convidado",
+        [...dialog.querySelectorAll("dt")].filter((row) =>
+          row.textContent?.startsWith("Taxas"),
         ),
-      ).toBe("R$ 105,65");
-      await selectInstallments(dialog, 2);
-      expect(rowValue(card, "Parcelas")).toBe("2x de R$ 53,10");
-      expect(rowValue(card, "Última parcela")).toBeUndefined();
-      expect(rowValue(card, "Total do convidado")).toBe("R$ 106,20");
-      await selectInstallments(dialog, 1);
-      expect(rowValue(card, "Total do convidado")).toBe("R$ 105,65");
-      expect(rowValue(card, "Acréscimo do parcelamento")).toBeUndefined();
-      expect(request).toHaveBeenCalledTimes(1);
+      ).toHaveLength(1);
+      expect(dialog.textContent).not.toMatch(/Líquido do casal|Comissão/);
     } finally {
       await view.close();
     }
   });
 
-  it("drops an unavailable selection when a smaller gift only permits an upfront payment", async () => {
+  it("lists only the installment plans the server quoted", async () => {
+    const view = mount(async () => installmentResponse());
+    try {
+      await view.render(10000);
+      const dialog = await view.openSimulation();
+      expect(rowValue(dialog, "Cartão em 6x")).toBeUndefined();
+      expect(rowValue(dialog, "Cartão em 12x")).toBe("R$ 106,75");
+      expect(rowValue(dialog, "Cartão à vista")).toBe("R$ 105,65");
+    } finally {
+      await view.close();
+    }
+  });
+
+  it("drops installment rows when a smaller gift only permits an upfront payment", async () => {
     const smaller = response(500, 65);
     const request = vi
       .fn()
@@ -250,10 +265,9 @@ describe("gift pricing preview", () => {
     try {
       await view.render(10000);
       const dialog = await view.openSimulation();
-      await selectInstallments(dialog, 12);
+      expect(rowValue(dialog, "Cartão em 12x")).toBe("R$ 106,75");
       await view.render(500);
-      expect(dialog.querySelector("select")).toBeNull();
-      expect(dialog.textContent).not.toContain("R$ 106,75");
+      expect(rowValue(dialog, "Cartão em 12x")).toBeUndefined();
       expect(dialog.textContent).toContain(
         "Somente cartão à vista disponível nesta simulação.",
       );
@@ -263,46 +277,8 @@ describe("gift pricing preview", () => {
   });
 
   it.each([
-    [10621, 56, [5310, 5311], "Acréscimo do parcelamento", "R$ 0,56"],
-    [10200, -365, [5100, 5100], "Desconto no parcelamento", "R$ 3,65"],
-  ] as const)(
-    "presents the exact two-payment adjustment for a total of %i cents",
-    async (total, surcharge, amounts, label, adjustment) => {
-      const preview = installmentResponse();
-      preview.methods[1].installmentOptions = [
-        preview.methods[1].installmentOptions[0],
-        {
-          installmentCount: 2,
-          totalCents: total,
-          installmentSurchargeCents: surcharge,
-          installmentCents: [...amounts],
-        },
-      ];
-      const view = mount(async () => preview);
-      try {
-        await view.render(10000);
-        const dialog = await view.openSimulation();
-        await selectInstallments(dialog, 2);
-        const card = dialog.querySelector('section[aria-label="Cartão"]');
-        expect(rowValue(card, label)).toBe(adjustment);
-        expect(rowValue(card, "Líquido do casal")).toBe("R$ 100,00");
-        if (surcharge > 0) {
-          expect(rowValue(card, "Primeira parcela")).toBe("R$ 53,10");
-          expect(rowValue(card, "Última parcela")).toBe("R$ 53,11");
-          expect(rowValue(card, "Total do convidado")).toBe("R$ 106,21");
-        } else {
-          expect(rowValue(card, "Parcelas")).toBe("2x de R$ 51,00");
-          expect(rowValue(card, "Total do convidado")).toBe("R$ 102,00");
-        }
-      } finally {
-        await view.close();
-      }
-    },
-  );
-
-  it.each([
-    [199, "R$ 3,99"],
-    [0, "R$ 2,00"],
+    [199, "R$ 3,99"],
+    [0, "R$ 2,00"],
     [null, "Indisponível"],
   ])(
     "combines fees without treating missing processing as zero: %s",
@@ -319,13 +295,7 @@ describe("gift pricing preview", () => {
             body: { nominalCents: 10000, feeAllocation: "BUYER_GROSS_UP" },
           }),
         );
-        const rows = [...dialog.querySelectorAll("dt")].filter(
-          (node) => node.textContent === "Taxas",
-        );
-        expect(rows.map((row) => row.nextElementSibling?.textContent)).toEqual([
-          label,
-          label,
-        ]);
+        expect(rowValue(dialog, "Taxas pagas pelo convidado")).toBe(label);
         expect(dialog.textContent).not.toMatch(/Comissão|Processamento Asaas/);
         expect(dialog.querySelector("input, form")).toBeNull();
       } finally {

@@ -465,7 +465,7 @@ function ReceivingSettings({
     {
       page: "fees",
       title: "Taxas",
-      text: "As taxas estão incluídas no preço que o convidado vê.",
+      text: "O convidado paga as taxas: você recebe 100% do valor do presente.",
       icon: <Percent className="size-[18px]" />,
     },
     {

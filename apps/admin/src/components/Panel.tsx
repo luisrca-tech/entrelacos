@@ -7,6 +7,7 @@ import { apiRequest } from "../lib/apiClient";
 import { AdminButton } from "./AdminButton";
 import { AdminShell, ShellLoading } from "./AdminShell";
 import { resolveSiteArea, type SiteArea } from "./adminNavigation";
+import { OwnerFinance } from "./OwnerFinance";
 import { OwnerSites } from "./OwnerSites";
 import {
   createPanelAuthenticationActions,
@@ -201,7 +202,10 @@ export function PanelSessionView({
       ) : landing.kind === "SELECT" ? (
         <AssignedSites key={sessionEpoch} actor={actor} />
       ) : (
-        <OwnerSites key={sessionEpoch} />
+        <>
+          <OwnerSites key={sessionEpoch} />
+          <OwnerFinance key={`finance-${sessionEpoch}`} />
+        </>
       )}
     </AdminShell>
   );
