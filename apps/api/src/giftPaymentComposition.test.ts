@@ -364,7 +364,7 @@ describe("gift payment composition", () => {
         { nominalCents: 10000, method: "CREDIT_CARD", policy: card.policy },
         12,
       ).totalCents,
-    ).toBe(11909);
+    ).toBe(10675);
     expect(values.fetch).not.toHaveBeenCalled();
     await composition.close();
   });
@@ -755,6 +755,8 @@ describe("gift payment composition", () => {
           isDemo: false,
         }),
         append,
+        routePlatformEvent: vi.fn().mockResolvedValue(null),
+        recordUnroutable: vi.fn().mockResolvedValue(undefined),
       });
     const composition = createGiftPaymentComposition(configuration(), values);
     const body = JSON.stringify({

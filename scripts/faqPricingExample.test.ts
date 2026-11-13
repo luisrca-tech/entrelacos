@@ -2,12 +2,12 @@ import { describe, expect, it } from "vitest";
 import { faqPricingExamples } from "../apps/landing/src/faqPricingExample";
 import { quoteGiftV2 } from "../packages/contracts/src/giftPricingV2";
 
-describe("public R$100 illustration with automatic anticipation (V2)", () => {
+describe("public R$100 illustration without anticipation (V2)", () => {
   it.each([
     ["PIX", 1, 10399],
-    ["CREDIT_CARD", 1, 10688],
-    ["CREDIT_CARD", 6, 11247],
-    ["CREDIT_CARD", 12, 11909],
+    ["CREDIT_CARD", 1, 10565],
+    ["CREDIT_CARD", 6, 10620],
+    ["CREDIT_CARD", 12, 10675],
   ] as const)(
     "matches V2 checkout pricing and preserves cents for %s in %i payments",
     (method, count, total) => {
