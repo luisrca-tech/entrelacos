@@ -5,7 +5,25 @@ import {
   giftQuoteSchema,
 } from "@entrelacos/contracts";
 import { parseBrlCents } from "./giftMoney";
-import type { GiftQuoteSnapshot } from "./giftQuotes";
+import { type GiftQuoteSnapshot, readGiftV2Settlement } from "./giftQuotes";
+
+/** Payment events the receipt worker claims for every settlement version. */
+export const giftPaymentInboxEvents = [
+  "PAYMENT_RECEIVED",
+  "PAYMENT_CONFIRMED",
+  "PAYMENT_SPLIT_DONE",
+] as const;
+
+/** Platform-account (V2) events the receipt worker also claims for V2 attempts. */
+export const giftPaymentV2OnlyInboxEvents = [
+  "PAYMENT_ANTICIPATED",
+  "PAYMENT_SPLIT_CANCELLED",
+  "PAYMENT_SPLIT_DIVERGENCE_BLOCK",
+  "PAYMENT_SPLIT_DIVERGENCE_BLOCK_FINISHED",
+  "RECEIVABLE_ANTICIPATION_CREDITED",
+  "RECEIVABLE_ANTICIPATION_DENIED",
+  "RECEIVABLE_ANTICIPATION_CANCELLED",
+] as const;
 
 export interface StoredGiftPaymentCheckoutBinding {
   siteId: string;
@@ -522,6 +540,392 @@ export function reconcileGiftPaymentObservation(
         : {}),
       effect: {
         effectKey: giftReceivedEffectKey(payment.providerPaymentReference),
+        kind: "GIFT_RECEIVED",
+        direction: "CREDIT",
+        currency: "BRL",
+        amountCents: recipientNetCents,
+      },
+    };
+  } catch (error) {
+    if (error instanceof GiftPaymentReconciliationServiceError) throw error;
+    return invalid();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// PLATFORM_ACCOUNT_SPLIT_V2: the platform account charges the buyer and a fixed
+// split per charge pays the couple wallet. Only PAYMENT_SPLIT_DONE credits.
+
+export type GiftOperatorAlertKindV2 =
+  | "SPLIT_DIVERGENCE_BLOCK"
+  | "SPLIT_CANCELLED"
+  | "ANTICIPATION_DENIED"
+  | "PAYMENT_RESTRICTION";
+
+export interface GiftOperatorAlertEffect {
+  kind: GiftOperatorAlertKindV2;
+  severity: "warning" | "critical";
+  details: Record<string, string | number | boolean | null>;
+}
+
+export interface ObservedGiftPaymentRecordV2 extends ObservedGiftPaymentRecord {
+  platformNetCents: number | null;
+  anticipationCents: number | null;
+  anticipationReference: string | null;
+  splitDivergenceBlocked: boolean;
+}
+
+export interface GiftPaymentReconciliationV2Input
+  extends GiftPaymentReconciliationInput {
+  eventType: string;
+  /** Set by the divergence fix: the part of the split moved to a platform top-up. */
+  splitTopUpCents?: number | null;
+}
+
+export type GiftPaymentReconciliationV2Reason =
+  | "PAYMENT_NOT_RECEIVED"
+  | "PAYMENT_RESTRICTED"
+  | "SPLIT_NOT_SETTLED"
+  | "SPLIT_MISMATCH"
+  | "ALLOCATION_MISMATCH";
+
+export type GiftPaymentReconciliationV2Result =
+  | {
+      // Only PAYMENT_SPLIT_DONE with a settled couple split of the frozen value.
+      outcome: "RECEIVED";
+      reason: null;
+      payment: ObservedGiftPaymentRecordV2;
+      effect: GiftReceiptEffect;
+      alert: null;
+    }
+  | {
+      // Recorded; the event completes without a credit.
+      outcome: "OBSERVED";
+      reason: null;
+      payment: ObservedGiftPaymentRecordV2;
+      effect: null;
+      alert: GiftOperatorAlertEffect | null;
+    }
+  | {
+      // A receipt event the provider state does not honour (yet); retried.
+      outcome: "PENDING";
+      reason: GiftPaymentReconciliationV2Reason;
+      payment: ObservedGiftPaymentRecordV2;
+      effect: null;
+      alert: GiftOperatorAlertEffect | null;
+    }
+  | {
+      outcome: "NO_REGRESSION";
+      reason: "TERMINAL_PAYMENT";
+      payment: null;
+      effect: null;
+      alert: null;
+    };
+
+const restrictedV2Status =
+  /^(REFUND|CHARGEBACK)|^(DELETED|DISPUTED|AWAITING_CHARGEBACK_REVERSAL)$/;
+
+export function reconcileGiftPaymentObservationV2(
+  input: GiftPaymentReconciliationV2Input,
+): GiftPaymentReconciliationV2Result {
+  try {
+    const quoted = giftQuoteSchema.safeParse(input.quoteSnapshot.quote);
+    const created = giftQuoteSchema.shape.expiresAt.safeParse(
+      input.quoteSnapshot.createdAt,
+    );
+    if (
+      !quoted.success ||
+      !created.success ||
+      quoted.data.settlementVersion !== "PLATFORM_ACCOUNT_SPLIT_V2"
+    )
+      throw new GiftPaymentReconciliationServiceError(
+        409,
+        "PAYMENT_QUOTE_INVALID",
+      );
+    const quote = quoted.data;
+    let recipientSplitCents: readonly number[] = [];
+    try {
+      recipientSplitCents =
+        readGiftV2Settlement(quote, input.quoteSnapshot.settlement)
+          ?.recipientSplitCents ?? [];
+    } catch {
+      recipientSplitCents = [];
+    }
+    if (!recipientSplitCents.length)
+      throw new GiftPaymentReconciliationServiceError(
+        409,
+        "PAYMENT_QUOTE_INVALID",
+      );
+    const binding = input.checkout;
+    const receiving = input.quoteSnapshot.receiving;
+    const observation = input.observation;
+    const coupleWallet = receiving.recipientReference;
+    if (
+      ![
+        binding.siteId,
+        binding.accountId,
+        binding.orderId,
+        binding.attemptId,
+      ].every(localId) ||
+      ![
+        binding.providerCheckoutReference,
+        binding.accountReference,
+        input.platformWalletId,
+      ].every(isReference) ||
+      (binding.environment !== "sandbox" && binding.environment !== "live") ||
+      quote.siteId !== binding.siteId ||
+      quote.mode !== binding.environment ||
+      receiving.siteId !== binding.siteId ||
+      receiving.environment !== binding.environment ||
+      receiving.provider !== "ASAAS" ||
+      receiving.accountReference !== binding.accountReference ||
+      !isReference(coupleWallet) ||
+      input.platformWalletId === coupleWallet ||
+      observation.source !== "provider" ||
+      observation.provider !== "ASAAS" ||
+      observation.currency !== "BRL" ||
+      observation.siteId !== binding.siteId ||
+      observation.accountReference !== binding.accountReference ||
+      observation.environment !== binding.environment ||
+      typeof input.eventType !== "string" ||
+      !/^[A-Z][A-Z0-9_]{1,63}$/.test(input.eventType)
+    )
+      return bindingMismatch();
+    const observed = observationTime(observation.observedAt, input.now);
+    if (observed < new Date(created.data).getTime()) return invalid();
+    const raw = record(observation.payment);
+    const paymentReference = reference(raw.id);
+    const status = providerStatus(raw.status);
+    const installmentCount = quote.installmentCount ?? 1;
+    const installment =
+      installmentCount > 1 ? reference(raw.installment) : null;
+    const installmentNumber =
+      installmentCount > 1 ? raw.installmentNumber : null;
+    const terms = giftPaymentTerms(quote, installmentNumber);
+    const splitCents =
+      recipientSplitCents[
+        typeof installmentNumber === "number" ? installmentNumber - 1 : 0
+      ];
+    if (
+      !terms ||
+      splitCents === undefined ||
+      recipientSplitCents.length !== installmentCount ||
+      (installment === null &&
+        raw.installmentNumber != null &&
+        raw.installmentNumber !== 1)
+    )
+      return bindingMismatch();
+    const checkoutReference = installment ?? reference(raw.checkoutSession);
+    if (
+      raw.externalReference !== undefined &&
+      raw.externalReference !== null &&
+      !localId(raw.externalReference)
+    )
+      return invalid();
+    if (
+      checkoutReference !== binding.providerCheckoutReference ||
+      (installment !== null &&
+        (raw.checkoutSession != null ||
+          raw.externalReference !== binding.attemptId)) ||
+      reference(raw.billingType) !== quote.method ||
+      (raw.currency !== undefined && raw.currency !== "BRL") ||
+      (raw.externalReference !== undefined &&
+        raw.externalReference !== null &&
+        raw.externalReference !== binding.attemptId)
+    )
+      return bindingMismatch();
+    if (input.existingTerminal !== undefined) {
+      const terminal = input.existingTerminal;
+      if (
+        !terminal ||
+        !["REFUNDED", "DISPUTED", "CANCELLED"].includes(terminal.state)
+      )
+        return invalid();
+      if (terminal.providerPaymentReference !== paymentReference)
+        return bindingMismatch();
+      observationTime(terminal.observedAt, input.now);
+      return {
+        outcome: "NO_REGRESSION",
+        reason: "TERMINAL_PAYMENT",
+        payment: null,
+        effect: null,
+        alert: null,
+      };
+    }
+    const topUp = input.splitTopUpCents ?? 0;
+    if (!Number.isSafeInteger(topUp) || topUp < 0 || topUp >= splitCents)
+      return invalid();
+    // A divergence fix lowers the couple split; the platform tops up the rest.
+    const coupleSplitCents = splitCents - topUp;
+    const gross = cents(raw.value);
+    const net =
+      raw.netValue === undefined || raw.netValue === null
+        ? null
+        : cents(raw.netValue);
+    if (gross === 0 || (net !== null && net > gross)) return invalid();
+    if (
+      (raw.deleted !== undefined &&
+        raw.deleted !== null &&
+        typeof raw.deleted !== "boolean") ||
+      (raw.refunds !== undefined &&
+        raw.refunds !== null &&
+        !Array.isArray(raw.refunds)) ||
+      (raw.split !== undefined &&
+        raw.split !== null &&
+        !Array.isArray(raw.split))
+    )
+      return invalid();
+    const payment: ObservedGiftPaymentRecordV2 = {
+      siteId: binding.siteId,
+      accountId: binding.accountId,
+      environment: binding.environment,
+      orderId: binding.orderId,
+      attemptId: binding.attemptId,
+      providerPaymentReference: paymentReference,
+      providerStatus: status,
+      verificationStatus: "VERIFIED",
+      observedAt: new Date(observed),
+      currency: "BRL",
+      grossCents: gross,
+      processingCents:
+        net === null ? null : Number(BigInt(gross) - BigInt(net)),
+      commissionCents: null,
+      recipientNetCents: null,
+      splitProviderReference: null,
+      splitFixedCents: null,
+      platformNetCents: null,
+      anticipationCents: null,
+      anticipationReference: null,
+      splitDivergenceBlocked: false,
+      ...(installment === null
+        ? {}
+        : {
+            providerInstallmentReference: installment,
+            installmentNumber: installmentNumber as number,
+          }),
+    };
+    const details = {
+      eventType: input.eventType,
+      providerStatus: status,
+      installmentNumber: payment.installmentNumber ?? null,
+      splitCents,
+    };
+
+    // Anticipation is reconciliation data only; it never changes the couple split.
+    const anticipation =
+      raw.anticipation === undefined || raw.anticipation === null
+        ? null
+        : record(raw.anticipation);
+    if (anticipation?.status === "CREDITED") {
+      payment.anticipationReference = reference(anticipation.id);
+      payment.anticipationCents = cents(anticipation.fee);
+    }
+
+    const splits = Array.isArray(raw.split) ? raw.split.map(record) : [];
+    const couple = splits.filter((split) => split.walletId === coupleWallet);
+    const split = splits.length === 1 && couple.length === 1 ? couple[0] : null;
+    const splitStatus = couple.length === 1 ? String(couple[0].status) : null;
+    if (split && isReference(split.id)) {
+      payment.splitProviderReference = split.id;
+      if (split.fixedValue != null)
+        payment.splitFixedCents = cents(split.fixedValue);
+    }
+    const settled =
+      split !== null &&
+      splitStatus === "DONE" &&
+      split.percentualValue == null &&
+      split.totalValue != null &&
+      cents(split.totalValue) === coupleSplitCents &&
+      (split.fixedValue == null ||
+        cents(split.fixedValue) === coupleSplitCents);
+    if (settled && net !== null && net >= coupleSplitCents) {
+      payment.recipientNetCents = coupleSplitCents;
+      payment.platformNetCents = net - coupleSplitCents;
+      payment.commissionCents = net - coupleSplitCents;
+    }
+
+    const restricted =
+      raw.deleted === true ||
+      (Array.isArray(raw.refunds) && raw.refunds.length > 0) ||
+      raw.chargeback != null ||
+      raw.custody != null ||
+      restrictedV2Status.test(status);
+    let alert: GiftOperatorAlertEffect | null = null;
+    if (restricted)
+      alert = { kind: "PAYMENT_RESTRICTION", severity: "critical", details };
+    else if (
+      input.eventType === "PAYMENT_SPLIT_DIVERGENCE_BLOCK" ||
+      splitStatus === "BLOCKED_BY_VALUE_DIVERGENCE"
+    ) {
+      payment.splitDivergenceBlocked = true;
+      alert = {
+        kind: "SPLIT_DIVERGENCE_BLOCK",
+        severity: "critical",
+        details: { ...details, netCents: net },
+      };
+    } else if (
+      input.eventType === "PAYMENT_SPLIT_CANCELLED" ||
+      input.eventType === "PAYMENT_SPLIT_DIVERGENCE_BLOCK_FINISHED" ||
+      splitStatus === "CANCELLED" ||
+      splitStatus === "REFUSED"
+    )
+      alert = {
+        kind: "SPLIT_CANCELLED",
+        severity: "critical",
+        details: { ...details, splitStatus },
+      };
+    else if (
+      input.eventType === "RECEIVABLE_ANTICIPATION_DENIED" ||
+      input.eventType === "RECEIVABLE_ANTICIPATION_CANCELLED"
+    )
+      alert = {
+        kind: "ANTICIPATION_DENIED",
+        severity: "warning",
+        details: {
+          ...details,
+          anticipationStatus:
+            anticipation === null ? null : String(anticipation.status),
+        },
+      };
+
+    if (input.eventType !== "PAYMENT_SPLIT_DONE")
+      return { outcome: "OBSERVED", reason: null, payment, effect: null, alert };
+    const pending = (
+      reason: GiftPaymentReconciliationV2Reason,
+    ): GiftPaymentReconciliationV2Result => ({
+      outcome: "PENDING",
+      reason,
+      payment,
+      effect: null,
+      alert,
+    });
+    if (restricted) return pending("PAYMENT_RESTRICTED");
+    if (status !== "CONFIRMED" && status !== "RECEIVED")
+      return pending("PAYMENT_NOT_RECEIVED");
+    if (split === null) return pending("SPLIT_MISMATCH");
+    if (splitStatus !== "DONE" || split.totalValue == null)
+      return pending("SPLIT_NOT_SETTLED");
+    if (!settled) return pending("SPLIT_MISMATCH");
+    const { processingCents, commissionCents, recipientNetCents } = payment;
+    if (
+      processingCents === null ||
+      commissionCents === null ||
+      recipientNetCents === null ||
+      gross !== terms.grossCents ||
+      recipientNetCents <= 0 ||
+      BigInt(gross) !==
+        BigInt(processingCents) +
+          BigInt(commissionCents) +
+          BigInt(recipientNetCents)
+    )
+      return pending("ALLOCATION_MISMATCH");
+    return {
+      outcome: "RECEIVED",
+      reason: null,
+      payment,
+      alert: null,
+      effect: {
+        effectKey: giftReceivedEffectKey(paymentReference),
         kind: "GIFT_RECEIVED",
         direction: "CREDIT",
         currency: "BRL",

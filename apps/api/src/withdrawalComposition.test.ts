@@ -200,6 +200,7 @@ function enabledFixture(
     platformApiKey: "$aact_hmlg_offline-platform-token",
     platformAccountId: "platform-1",
     platformWalletId: "wallet-platform-1",
+    platformWebhookTokenHash: "a".repeat(64),
     credentialKeyId: "key-1",
     credentialKeyring: new Map([["key-1", key]]),
     webhookPublicOrigin: "https://webhook.example.test",

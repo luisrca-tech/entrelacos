@@ -170,6 +170,7 @@ function configuration(): GiftPaymentConfig {
     platformApiKey: "$aact_hmlg_platform",
     platformAccountId: "platform-account",
     platformWalletId: "platform-wallet",
+    platformWebhookTokenHash: "a".repeat(64),
     credentialKeyId: "development-key",
     credentialKeyring: new Map([
       ["development-key", new Uint8Array(32).fill(1)],
