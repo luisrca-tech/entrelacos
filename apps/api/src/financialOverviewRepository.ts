@@ -459,7 +459,11 @@ function payment(row: Row, binding: FinancialAccountBinding, observedAt: Date) {
   if (!allocation.success || quote.feeAllocation !== policy.feeAllocation)
     unavailable();
   const guaranteed = quote.settlementVersion === "PLATFORM_FEE_GUARANTEE_V1";
-  const verifiedQuote = guaranteed ? giftQuoteSchema.parse(quote) : null;
+  // V2 (platform-account split): the guest pays every fee and the couple gets
+  // the nominal value through a fixed split, so there is never an adjustment.
+  const splitV2 = quote.settlementVersion === "PLATFORM_ACCOUNT_SPLIT_V2";
+  const verifiedQuote =
+    guaranteed || splitV2 ? giftQuoteSchema.parse(quote) : null;
   const terms = giftPaymentTerms(
     verifiedQuote ?? {
       totalCents: total,
@@ -489,7 +493,15 @@ function payment(row: Row, binding: FinancialAccountBinding, observedAt: Date) {
         BigInt(total) > BigInt(commission) + BigInt(processing)
       : BigInt(total) ===
         BigInt(nominal) + BigInt(commission) + BigInt(processing);
-  if (
+  if (splitV2) {
+    if (
+      !quoteAllocated ||
+      cents(row.grossCents, true) !== terms.grossCents ||
+      recipientNet > terms.nominalCents ||
+      row.platformAdjustmentCents != null
+    )
+      unavailable();
+  } else if (
     row.quoteCommissionBasisPoints !== 200 ||
     BigInt(commission) !== (BigInt(nominal) * 200n + 5000n) / 10000n ||
     !quoteAllocated ||

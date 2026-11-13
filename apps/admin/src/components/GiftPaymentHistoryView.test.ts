@@ -17,7 +17,10 @@ import {
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { GiftPaymentHistoryView } from "./GiftPaymentHistoryView";
+import {
+  GiftPaymentHistoryView,
+  historySampleStatus,
+} from "./GiftPaymentHistoryView";
 import type { HistoryPorts } from "./giftPaymentHistory";
 import { createPanelActorOwner } from "./panelActor";
 
@@ -454,9 +457,7 @@ describe("mounted gift history", () => {
     expect(document.body.textContent).toMatch(
       /Pago pelos convidadosR\$\s10,00/,
     );
-    expect(document.body.textContent).toMatch(
-      /Para vocês, depois das taxasR\$\s534,81/,
-    );
+    expect(document.body.textContent).toMatch(/Você recebeR\$\s534,81/);
   });
   it("does not traverse empty fresh cursors automatically", async () => {
     const f = await mounted();
@@ -522,4 +523,37 @@ it("keeps payment filters local and refreshes only through the refresh action", 
   expect(f.node.textContent).toContain("Lua de mel privada");
   await click(f.node, "Todos");
   expect(f.request).toHaveBeenCalledTimes(2);
+});
+
+describe("history sample status (split V2)", () => {
+  const base = {
+    recordedState: "CONFIRMED",
+    recipientNetCents: null,
+    expectedRecipientSplitCents: 10000,
+    splitDivergenceBlocked: false,
+  } as unknown as Parameters<typeof historySampleStatus>[0];
+  it("waits for release while the split has not been settled", () => {
+    expect(historySampleStatus(base)).toBe("Aguardando liberação");
+    expect(historySampleStatus({ ...base, recordedState: "RECEIVED" })).toBe(
+      "Aguardando liberação",
+    );
+  });
+  it("shows a payment under review when restricted or blocked by a divergence", () => {
+    expect(historySampleStatus({ ...base, recordedState: "RESTRICTED" })).toBe(
+      "Em análise",
+    );
+    expect(historySampleStatus({ ...base, splitDivergenceBlocked: true })).toBe(
+      "Em análise",
+    );
+  });
+  it("keeps the regular label once the split is recorded or for older payments", () => {
+    const released = historySampleStatus({ ...base, recipientNetCents: 10000 });
+    expect(released).not.toBe("Aguardando liberação");
+    const legacy = {
+      recordedState: "CONFIRMED",
+      recipientNetCents: null,
+    } as unknown as Parameters<typeof historySampleStatus>[0];
+    expect(historySampleStatus(legacy)).not.toBe("Aguardando liberação");
+    expect(historySampleStatus(legacy)).not.toBe("Em análise");
+  });
 });

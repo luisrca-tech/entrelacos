@@ -1,53 +1,36 @@
 import { describe, expect, it } from "vitest";
-import { quoteGiftPurchaseAmounts } from "../apps/api/src/giftMoney";
 import { faqPricingExamples } from "../apps/landing/src/faqPricingExample";
+import { quoteGiftV2 } from "../packages/contracts/src/giftPricingV2";
 
-describe("public R$100 illustration without anticipation", () => {
+describe("public R$100 illustration with automatic anticipation (V2)", () => {
   it.each([
     ["PIX", 1, 10399],
-    ["CREDIT_CARD", 1, 10565],
-    ["CREDIT_CARD", 6, 10620],
-    ["CREDIT_CARD", 12, 10675],
+    ["CREDIT_CARD", 1, 10688],
+    ["CREDIT_CARD", 6, 11247],
+    ["CREDIT_CARD", 12, 11909],
   ] as const)(
-    "matches current checkout pricing and preserves cents for %s in %i payments",
+    "matches V2 checkout pricing and preserves cents for %s in %i payments",
     (method, count, total) => {
       const row = faqPricingExamples.find(
         (example) =>
           example.method === method &&
           example.installmentCents.length === count,
       );
-      const quote = quoteGiftPurchaseAmounts(
-        {
-          nominalCents: 10000,
-          method,
-          policy: {
-            version: "public-reference-2026-11-09",
-            method,
-            commissionBasisPoints: 200,
-            processingBasisPoints: method === "PIX" ? 0 : 299,
-            processingFixedCents: method === "PIX" ? 199 : 49,
-            cardInstallmentBasisPoints: { upToSix: 349, upToTwelve: 399 },
-            rounding: "CEILING",
-            feeAllocation: "BUYER_GROSS_UP",
-          },
-        },
-        count,
-      );
+      const quote = quoteGiftV2(10000, method, count);
       expect(row?.totalCents).toBe(total);
       expect(row?.totalCents).toBe(quote.totalCents);
-      expect(row?.installmentCents).toEqual(
-        quote.installmentCents ?? [quote.totalCents],
-      );
+      expect(row?.installmentCents).toEqual(quote.installmentCents);
       expect(
         row?.installmentCents.reduce((sum, amount) => sum + amount, 0),
       ).toBe(total);
+      // The guest pays every fee; the couple receives the full nominal value.
       expect(row?.combinedFeesCents).toBe(
-        quote.commissionCents + quote.processingCents,
+        quote.commissionCents + quote.processingCents + quote.anticipationCents,
       );
       expect(row?.recipientNetCents).toBe(10000);
-      expect(
-        quote.totalCents - quote.commissionCents - quote.processingCents,
-      ).toBe(10000);
+      expect(quote.recipientSplitCents.reduce((sum, v) => sum + v, 0)).toBe(
+        10000,
+      );
     },
   );
 });

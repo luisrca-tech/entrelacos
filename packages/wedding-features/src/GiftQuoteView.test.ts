@@ -174,13 +174,15 @@ describe("gift quote view", () => {
 beforeEach(() => vi.stubGlobal("__APP_ENV__", "development"));
 afterEach(() => vi.unstubAllGlobals());
 
-it("shows the guest total and hides the couple net in Sandbox", () => {
+it("shows gift, fees and total without exposing recipient deductions in Sandbox", () => {
   const html = renderQuote({
     quote: { ...quote, feeAllocation: "BUYER_GROSS_UP" },
   });
   expect(html).not.toContain("Líquido pretendido do casal");
-  expect(html).not.toContain("100,00");
   expect(html).not.toContain("sem garantia de líquido");
+  expect(html).not.toContain("recipientSplit");
+  expect(html).toContain("Presente");
+  expect(html).toContain("Taxas e serviço");
   expect(html).toContain("105,21");
 });
 
@@ -215,11 +217,10 @@ it("shows the exact installment schedule, surcharge and total of the selected qu
   });
   expect(html).toContain("Parcelas");
   expect(html).toMatch(/À vista · R\$\s*105,21/);
-  expect(html).toMatch(/3x de R\$\s*35,33\*/);
-  expect(html).toContain("A última parcela tem ajuste de centavos");
-  expect(html).toMatch(/2x de R\$\s*35,33 \+ 1x de R\$\s*35,35/);
-  expect(html).toContain("Acréscimo do parcelamento");
-  expect(html).toMatch(/R\$\s*0,80/);
+  expect(html).toMatch(/3x de R\$\s*35,33 \(última R\$\s*35,35\)/);
+  expect(html).not.toContain("A última parcela tem ajuste de centavos");
+  expect(html).not.toContain("Acréscimo do parcelamento");
+  expect(html).toContain("Taxas e serviço");
   expect(html).toMatch(/R\$\s*106,01/);
   expect(html).toContain("Dados do pagador");
   expect(html).toContain("continuar a mesma cobrança");

@@ -9,6 +9,7 @@ export * from "./giftImageAlt";
 export * from "./giftPricingV2";
 export * from "./giftTariffs";
 export * from "./internalGifts";
+export * from "./ownerFinance";
 
 const strictObject = <T extends z.ZodRawShape>(shape: T) =>
   z.object(shape).strict();

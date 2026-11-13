@@ -1,3 +1,5 @@
+import { listGiftV2Options } from "../../../packages/contracts/src/giftPricingV2";
+
 export type FaqPricingExample = {
   label: string;
   method: "PIX" | "CREDIT_CARD";
@@ -7,41 +9,31 @@ export type FaqPricingExample = {
   recipientNetCents: number;
 };
 
-// Standard account references checked on 2026-11-09, without promotions or anticipation.
-// scripts/faqPricingExample.test.ts verifies these fixtures against actual checkout math.
+const nominalCents = 10000;
+const options = listGiftV2Options(nominalCents);
+const example = (
+  label: string,
+  quote: (typeof options)["pix"],
+): FaqPricingExample => ({
+  label,
+  method: quote.method,
+  totalCents: quote.totalCents,
+  installmentCents: quote.installmentCents,
+  // Commission, processing and anticipation are paid by the guest.
+  combinedFeesCents: quote.totalCents - nominalCents,
+  recipientNetCents: nominalCents,
+});
+const card = (count: number) => {
+  const quote = options.card.find((entry) => entry.installmentCount === count);
+  if (!quote) throw new Error(`Missing ${count}x option`);
+  return quote;
+};
+
+// Derived from the same V2 pricing the checkout uses (platform tariff table),
+// so the public example cannot drift from the guest total.
 export const faqPricingExamples: FaqPricingExample[] = [
-  {
-    label: "Pix",
-    method: "PIX",
-    totalCents: 10399,
-    installmentCents: [10399],
-    combinedFeesCents: 399,
-    recipientNetCents: 10000,
-  },
-  {
-    label: "Cartão à vista",
-    method: "CREDIT_CARD",
-    totalCents: 10565,
-    installmentCents: [10565],
-    combinedFeesCents: 565,
-    recipientNetCents: 10000,
-  },
-  {
-    label: "Cartão em 6x",
-    method: "CREDIT_CARD",
-    totalCents: 10620,
-    installmentCents: [1770, 1770, 1770, 1770, 1770, 1770],
-    combinedFeesCents: 620,
-    recipientNetCents: 10000,
-  },
-  {
-    label: "Cartão em 12x",
-    method: "CREDIT_CARD",
-    totalCents: 10675,
-    installmentCents: [
-      889, 889, 889, 889, 889, 889, 889, 889, 889, 889, 889, 896,
-    ],
-    combinedFeesCents: 675,
-    recipientNetCents: 10000,
-  },
+  example("Pix", options.pix),
+  example("Cartão à vista", card(1)),
+  example("Cartão em 6x", card(6)),
+  example("Cartão em 12x", card(12)),
 ];

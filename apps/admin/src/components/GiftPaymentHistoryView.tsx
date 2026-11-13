@@ -64,6 +64,26 @@ const sampleLabels: Record<
   RECEIVED: "Pagamento recebido",
   RESTRICTED: "Pagamento com restrição no Asaas",
 };
+// Status shown for a payment sample. V2 payments distinguish money still
+// waiting for the split from payments held for review.
+export function historySampleStatus(
+  sample: GiftPurchaseHistoryPayment,
+): string {
+  const v2 = sample.expectedRecipientSplitCents !== undefined;
+  if (
+    v2 &&
+    (sample.recordedState === "RESTRICTED" || sample.splitDivergenceBlocked)
+  )
+    return "Em análise";
+  if (
+    v2 &&
+    (sample.recordedState === "CONFIRMED" ||
+      sample.recordedState === "RECEIVED") &&
+    sample.recipientNetCents === null
+  )
+    return "Aguardando liberação";
+  return sampleLabels[sample.recordedState];
+}
 const sampleDots: Record<GiftPurchaseHistoryPayment["recordedState"], string> =
   {
     UNKNOWN: "bg-admin-border-strong",
@@ -205,7 +225,7 @@ function Totals({
           tone: flow ? "text-admin-text" : "text-xl text-admin-text-secondary",
         },
         {
-          label: "Para vocês, depois das taxas",
+          label: "Você recebe",
           value: flow ? formatCents(flow.netForCoupleCents) : pending,
           hint: flow
             ? (totals?.overview?.platformAdjustmentOwedCents ?? 0) > 0
@@ -534,10 +554,21 @@ export function GiftPaymentHistoryView(
                     "Total da compra",
                     formatCents(detail.purchase.quoted.totalCents),
                   ],
-                  [
-                    "Taxas",
-                    `− ${formatCents(detail.purchase.quoted.commissionCents + detail.purchase.quoted.processingCents)}`,
-                  ],
+                  detail.samples.some(
+                    (sample) =>
+                      sample.expectedRecipientSplitCents !== undefined,
+                  )
+                    ? [
+                        "Taxas pagas pelo convidado",
+                        formatCents(
+                          detail.purchase.quoted.commissionCents +
+                            detail.purchase.quoted.processingCents,
+                        ),
+                      ]
+                    : [
+                        "Taxas",
+                        `− ${formatCents(detail.purchase.quoted.commissionCents + detail.purchase.quoted.processingCents)}`,
+                      ],
                 ].map(([label, value]) => (
                   <div key={label} className="flex justify-between gap-3">
                     <dt className="text-admin-text">{label}</dt>
@@ -575,12 +606,15 @@ export function GiftPaymentHistoryView(
                         <strong className="text-sm text-admin-text">
                           {sample.installmentNumber &&
                             `Parcela ${sample.installmentNumber} · `}
-                          {sampleLabels[sample.recordedState]}
+                          {historySampleStatus(sample)}
                         </strong>
                         <span className="text-[13px] text-admin-text-secondary">
                           {instant(sample.observedAtMicros)}
-                          {sample.recipientNetCents !== null &&
-                            ` · ${amount(sample.recipientNetCents)} para vocês`}
+                          {sample.recipientNetCents !== null
+                            ? ` · ${amount(sample.recipientNetCents)} para vocês`
+                            : sample.expectedRecipientSplitCents !== undefined
+                              ? ` · ${formatCents(sample.expectedRecipientSplitCents)} previsto para vocês`
+                              : ""}
                         </span>
                       </div>
                     </li>

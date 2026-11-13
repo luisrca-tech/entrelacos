@@ -20,6 +20,7 @@ const quoteExpiredMessage =
   "O valor precisa ser atualizado. Escolha novamente a forma de pagamento.";
 const unknownCheckoutMessage =
   "O pagamento ainda está sendo verificado. Aguarde antes de tentar novamente.";
+export const pricesUpdatedMessage = "Os valores foram atualizados.";
 const failedCheckoutMessage =
   "Não foi possível concluir agora. Tente novamente.";
 
@@ -44,6 +45,7 @@ export type GiftCheckoutState = {
   pendingSiteId: string | null;
   checkoutStatus: CheckoutStatus | null;
   error: string | null;
+  notice: string | null;
 };
 
 export type GiftCheckoutEvent =
@@ -68,6 +70,8 @@ export type GiftCheckoutEvent =
       message: string;
       unknown: boolean;
       invalidateQuote?: boolean;
+      /** Old (V1) reservation refused: silently fetch a fresh quote. */
+      requote?: boolean;
     }
   | { type: "CLOSE" }
   | { type: "RESTORE_UNKNOWN"; siteId?: string; pending?: PendingGiftCheckout }
@@ -88,6 +92,7 @@ export function createGiftCheckoutState(): GiftCheckoutState {
     pendingSiteId: null,
     checkoutStatus: null,
     error: null,
+    notice: null,
   };
 }
 
@@ -143,6 +148,7 @@ export function giftCheckoutReducer(
         pendingSiteId: null,
         checkoutStatus: null,
         error: null,
+        notice: null,
       };
     }
     case "QUOTE_RESOLVED": {
@@ -251,6 +257,22 @@ export function giftCheckoutReducer(
           phase: "UNKNOWN",
           checkout: null,
           error: event.message || unknownCheckoutMessage,
+        };
+      }
+      if (event.requote && event.invalidateQuote && state.method) {
+        return {
+          ...state,
+          phase: "QUOTING",
+          revision: state.revision + 1,
+          quote: null,
+          checkout: null,
+          requestId: null,
+          recoveryToken: null,
+          pending: null,
+          pendingSiteId: null,
+          checkoutStatus: null,
+          error: null,
+          notice: event.message || pricesUpdatedMessage,
         };
       }
       return {

@@ -114,17 +114,8 @@ describe("private gift pricing preview", () => {
     expect(text(form)).toContain("Quanto vocês querem receber");
     expect(amounts(form)).toHaveLength(0);
     const dialog = await simulate(form);
-    expect(text(dialog)).toContain("Líquido do casal");
-    expect(amounts(dialog)).toEqual([
-      "R$ 100,00",
-      "Indisponível",
-      "Indisponível",
-      "Indisponível",
-      "R$ 100,00",
-      "Indisponível",
-      "Indisponível",
-      "Indisponível",
-    ]);
+    expect(text(dialog)).toContain("Você recebe");
+    expect(amounts(dialog)).toEqual(["R$ 100,00 (100%)", "Indisponível"]);
     expect(text(dialog)).toContain("Indisponível");
     await dismissSimulation(dialog);
     expect(input.value).toBe("100,00");
@@ -183,24 +174,12 @@ describe("private gift pricing preview", () => {
       'input[name="nominalPrice"]',
     );
     expect(await simulatedAmounts(form)).toEqual([
-      "R$ 123,45",
-      "Indisponível",
-      "Indisponível",
-      "Indisponível",
-      "R$ 123,45",
-      "Indisponível",
-      "Indisponível",
+      "R$ 123,45 (100%)",
       "Indisponível",
     ]);
     await enter(input, "25,25");
     expect(await simulatedAmounts(form)).toEqual([
-      "R$ 25,25",
-      "Indisponível",
-      "Indisponível",
-      "Indisponível",
-      "R$ 25,25",
-      "Indisponível",
-      "Indisponível",
+      "R$ 25,25 (100%)",
       "Indisponível",
     ]);
     expect(v.callbacks.onUpdate).not.toHaveBeenCalled();
@@ -222,7 +201,7 @@ describe("private gift pricing preview", () => {
       'input[name="nominalPrice"]',
     );
     await enter(input, "100");
-    expect(await simulatedAmounts(form)).toHaveLength(8);
+    expect(await simulatedAmounts(form)).toHaveLength(2);
     for (const value of ["", "0", "1,001", "not-a-price"]) {
       await enter(input, value);
       const dialog = await simulate(form);
@@ -244,28 +223,10 @@ describe("private gift pricing preview", () => {
     await v.render([{ ...gift }]);
     expect(
       await simulatedAmounts(requiredElement(v.container, "article form")),
-    ).toEqual([
-      "R$ 100,00",
-      "Indisponível",
-      "Indisponível",
-      "Indisponível",
-      "R$ 100,00",
-      "Indisponível",
-      "Indisponível",
-      "Indisponível",
-    ]);
+    ).toEqual(["R$ 100,00 (100%)", "Indisponível"]);
     await v.render([{ ...gift, nominalCents: 20000 }]);
     expect(
       await simulatedAmounts(requiredElement(v.container, "article form")),
-    ).toEqual([
-      "R$ 200,00",
-      "Indisponível",
-      "Indisponível",
-      "Indisponível",
-      "R$ 200,00",
-      "Indisponível",
-      "Indisponível",
-      "Indisponível",
-    ]);
+    ).toEqual(["R$ 200,00 (100%)", "Indisponível"]);
   });
 });
