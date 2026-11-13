@@ -78,6 +78,7 @@ function fixture() {
     platformApiKey: "platform-secret",
     platformAccountId: "parent-account",
     platformWalletId: "parent-wallet",
+    platformWebhookTokenHash: "a".repeat(64),
     credentialKeyId: "key-one",
     webhookPublicOrigin: "https://tunnel.example.test",
     webhookUrl: "https://tunnel.example.test/v1/webhooks/asaas",
