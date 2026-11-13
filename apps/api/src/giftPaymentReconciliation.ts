@@ -900,8 +900,9 @@ export function reconcileGiftPaymentObservationV2(
       alert,
     });
     if (restricted) return pending("PAYMENT_RESTRICTED");
-    if (status !== "CONFIRMED" && status !== "RECEIVED")
-      return pending("PAYMENT_NOT_RECEIVED");
+    // Without anticipation the split is credited per charge only once Asaas
+    // releases it; a CONFIRMED card charge has not been received yet.
+    if (status !== "RECEIVED") return pending("PAYMENT_NOT_RECEIVED");
     if (split === null) return pending("SPLIT_MISMATCH");
     if (splitStatus !== "DONE" || split.totalValue == null)
       return pending("SPLIT_NOT_SETTLED");

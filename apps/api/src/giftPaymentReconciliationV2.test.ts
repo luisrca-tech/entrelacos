@@ -160,21 +160,27 @@ describe("V2 platform-account split reconciliation", () => {
     );
   });
 
-  it("credits an installment split for a CONFIRMED anticipated charge", () => {
+  it("credits a card installment only once Asaas releases it (RECEIVED)", () => {
     const quote = v2Quote(10_000, "CREDIT_CARD", 3);
-    const input = fixture(quote, {
-      status: "CONFIRMED",
-      anticipation: { id: "ant-1", status: "CREDITED", fee: "1.23" },
-    });
-    expect(reconcileGiftPaymentObservationV2(input)).toMatchObject({
+    const received = fixture(quote);
+    expect(reconcileGiftPaymentObservationV2(received)).toMatchObject({
       outcome: "RECEIVED",
-      effect: { amountCents: input.splitCents },
+      effect: { amountCents: received.splitCents },
       payment: {
         installmentNumber: 1,
         providerInstallmentReference: "plan-1",
-        anticipationCents: 123,
-        anticipationReference: "ant-1",
+        recipientNetCents: received.splitCents,
       },
+    });
+    // Without anticipation a CONFIRMED installment has not been credited yet.
+    expect(
+      reconcileGiftPaymentObservationV2(
+        fixture(quote, { status: "CONFIRMED" }),
+      ),
+    ).toMatchObject({
+      outcome: "PENDING",
+      reason: "PAYMENT_NOT_RECEIVED",
+      effect: null,
     });
   });
 
