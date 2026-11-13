@@ -14,10 +14,7 @@ import { and, eq } from "drizzle-orm";
 import type { ApiOptions } from "./app";
 import { createAsaasCheckoutClient } from "./asaasCheckoutClient";
 import { readAsaasCheckoutCallbacks } from "./asaasCheckoutPayload";
-import {
-  type AsaasFeeQuotesOptions,
-  createAsaasFeeQuotes,
-} from "./asaasFeeQuotes";
+import type { AsaasFeeQuotesOptions } from "./asaasFeeQuotes";
 import { createAsaasStoredAccountReader } from "./asaasStoredAccountReader";
 import { createAsaasWebhookReceiver } from "./asaasWebhook";
 import { createAsaasWebhookRepository } from "./asaasWebhookRepository";
@@ -33,7 +30,7 @@ import {
   type GiftCheckoutProviderCommand,
   GiftCheckoutServiceError,
 } from "./giftCheckouts";
-import { quoteGiftPurchaseAmounts } from "./giftMoney";
+import { platformTariffPolicy, quoteGiftPurchaseAmounts } from "./giftMoney";
 import { createGiftPaymentAdjustmentWorker } from "./giftPaymentAdjustmentWorker";
 import { createGiftPaymentCheckoutLookup } from "./giftPaymentCheckoutLookup";
 import type { GiftPaymentConfig } from "./giftPaymentConfig";
@@ -62,10 +59,6 @@ import {
   readReceivingReadiness,
 } from "./receivingRepository";
 import { allowsSandboxBuyerGrossUp } from "./sandboxBuyerGrossUp";
-import {
-  loadLiveReceivingPricing,
-  loadSandboxDemoPricing,
-} from "./sandboxDemoPricing";
 import { createWithdrawalComposition } from "./withdrawalComposition";
 import { createWithdrawalHistoryRepository } from "./withdrawalHistoryRepository";
 
@@ -174,14 +167,6 @@ export function createGiftPaymentComposition(
       ? { refreshReceiving: options.refreshReceiving }
       : {}),
   });
-  const fees = createAsaasFeeQuotes({
-    readAccountFees: reader.getAccountFees,
-    // Account fees alone cannot establish consent or a future contractual guarantee.
-    resolveFeeProfile: options.resolveFeeProfile ?? (async () => null),
-    now,
-    pricingFreshnessMs: 300_000,
-    withdrawalFreshnessMs: 60_000,
-  });
   const context = (siteId: string) =>
     loadReceivingContext(db, siteId, receiving);
   const gift = (siteId: string, giftId: string) =>
@@ -194,66 +179,30 @@ export function createGiftPaymentComposition(
     sandboxBuyerGrossUpSiteId: config.sandboxBuyerGrossUpSiteId,
     findPublishedGift: gift,
     loadReceivingContext: context,
+    // PLATFORM_ACCOUNT_SPLIT_V2: every new quote is priced from the local
+    // platform tariff table (giftTariffs.ts), without a provider fee read.
     async loadPricingPolicy(scope) {
+      const selected = await storedAccount(
+        scope.siteId,
+        scope.accountReference,
+      );
       if (
-        config.applicationEnvironment === "development" &&
-        environment === "sandbox"
-      ) {
-        const selected = await storedAccount(
-          scope.siteId,
-          scope.accountReference,
-        );
-        if (selected.isDemo) {
-          if (
-            selected.account.operatorReference !== scope.operatorReference ||
-            selected.account.recipientReference !== scope.recipientReference
-          )
-            return null;
-          return loadSandboxDemoPricing(
-            scope,
-            {
-              provider: "ASAAS",
-              siteId: scope.siteId,
-              accountBindingId: selected.account.id,
-              accountReference: scope.accountReference,
-              environment: "sandbox",
-              isDemo: true,
-              applicationEnvironment: "development",
-              sandboxBuyerGrossUpSiteId: config.sandboxBuyerGrossUpSiteId,
-            },
-            { readAccountFees: reader.getAccountFees, now },
-          );
-        }
-      }
-      if (
-        environment === "live" &&
-        config.applicationEnvironment === "production"
-      ) {
-        const selected = await storedAccount(
-          scope.siteId,
-          scope.accountReference,
-        );
-        if (
-          selected.account.operatorReference !== scope.operatorReference ||
-          selected.account.recipientReference !== scope.recipientReference
-        )
-          return null;
-        return loadLiveReceivingPricing(
-          scope,
-          {
-            provider: "ASAAS",
-            siteId: scope.siteId,
-            accountBindingId: selected.account.id,
-            accountReference: scope.accountReference,
-            environment: "live",
-            isDemo: selected.isDemo,
-            applicationEnvironment: "production",
-            liveDemoSiteId: liveSitePolicy.liveDemoSiteId,
-          },
-          { readAccountFees: reader.getAccountFees, now },
-        );
-      }
-      return fees.loadPricingPolicy(scope);
+        selected.account.operatorReference !== scope.operatorReference ||
+        selected.account.recipientReference !== scope.recipientReference ||
+        scope.recipientReference === config.platformWalletId ||
+        (scope.feeAllocation !== undefined &&
+          scope.feeAllocation !== "BUYER_GROSS_UP")
+      )
+        return null;
+      const observedAt = now();
+      return {
+        ...scope,
+        verification: "verified",
+        provenance: "platform-tariff-table",
+        observedAt,
+        expiresAt: new Date(observedAt.getTime() + 300_000),
+        policy: platformTariffPolicy(scope.method),
+      };
     },
     repository: createGiftQuoteRepository(db, { now }),
     now,
@@ -461,6 +410,10 @@ export function createGiftPaymentComposition(
             "title",
             "installmentCount",
             "installmentCents",
+            // A not-yet-issued V1 reservation never matches a new V2 quote,
+            // so the guest is sent back for fresh V2 terms (spec e.3).
+            "settlementVersion",
+            "anticipationCents",
           ] as const
         ).every((key) => isDeepStrictEqual(current[key], snapshot.quote[key]));
       } catch {

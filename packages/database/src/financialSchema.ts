@@ -932,8 +932,19 @@ export const giftPaymentRecord = pgTable(
     platformAdjustmentFundedAt: timestamp("platform_adjustment_funded_at", {
       withTimezone: true,
     }),
+    // PLATFORM_ACCOUNT_SPLIT_V2 reconciliation (platform account charges).
+    anticipationCents: integer("anticipation_cents"),
+    anticipationReference: text("anticipation_reference"),
+    platformNetCents: integer("platform_net_cents"),
+    splitDivergenceBlockedAt: timestamp("split_divergence_blocked_at", {
+      withTimezone: true,
+    }),
   },
   (table): PgTableExtraConfigValue[] => [
+    check(
+      "gift_payment_anticipation_check",
+      sql`(${table.anticipationCents} IS NULL OR ${table.anticipationCents} BETWEEN 0 AND 2147483647) AND (${table.anticipationReference} IS NULL OR length(trim(${table.anticipationReference})) > 0)`,
+    ),
     unique("gift_payment_scope_key").on(
       table.siteId,
       table.accountId,
@@ -1018,6 +1029,66 @@ export const giftPaymentRecord = pgTable(
     check(
       "gift_payment_verified_check",
       sql`${table.verificationStatus} <> 'VERIFIED' OR (${table.observedAt} IS NOT NULL AND ${table.providerStatus} IS NOT NULL AND ${table.grossCents} IS NOT NULL)`,
+    ),
+  ],
+);
+
+export const financialOperatorAlertKinds = [
+  "SPLIT_DIVERGENCE_BLOCK",
+  "SPLIT_CANCELLED",
+  "ANTICIPATION_DENIED",
+  "PAYMENT_RESTRICTION",
+  "UNROUTABLE_PLATFORM_EVENT",
+  "SPLIT_SETUP_FAILED",
+] as const;
+
+// Operator-facing alerts for the platform account split (V2). Site and account
+// are optional because an unroutable platform event has neither.
+export const financialOperatorAlert = pgTable(
+  "financial_operator_alert",
+  {
+    id: text("id").primaryKey(),
+    kind: text("kind").notNull(),
+    severity: text("severity").notNull(),
+    environment: financialEnvironment("environment").notNull(),
+    siteId: text("site_id").references(() => site.id, {
+      onDelete: "restrict",
+    }),
+    accountId: text("account_id"),
+    paymentReference: text("payment_reference"),
+    checkoutAttemptId: text("checkout_attempt_id"),
+    details: jsonb("details")
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+    resolvedNote: text("resolved_note"),
+  },
+  (table) => [
+    uniqueIndex("financial_operator_alert_open_key")
+      .on(table.environment, table.kind, table.paymentReference)
+      .where(sql`${table.resolvedAt} IS NULL`),
+    index("financial_operator_alert_open_idx")
+      .on(table.environment, table.createdAt)
+      .where(sql`${table.resolvedAt} IS NULL`),
+    check(
+      "financial_operator_alert_kind_check",
+      sql`${table.kind} IN ('SPLIT_DIVERGENCE_BLOCK','SPLIT_CANCELLED','ANTICIPATION_DENIED','PAYMENT_RESTRICTION','UNROUTABLE_PLATFORM_EVENT','SPLIT_SETUP_FAILED')`,
+    ),
+    check(
+      "financial_operator_alert_severity_check",
+      sql`${table.severity} IN ('warning','critical')`,
+    ),
+    check(
+      "financial_operator_alert_resolution_check",
+      sql`(${table.resolvedAt} IS NULL AND ${table.resolvedNote} IS NULL) OR (${table.resolvedAt} IS NOT NULL AND ${table.resolvedAt} >= ${table.createdAt})`,
+    ),
+    check(
+      "financial_operator_alert_reference_check",
+      sql`${table.paymentReference} IS NULL OR length(trim(${table.paymentReference})) > 0`,
     ),
   ],
 );

@@ -4,6 +4,11 @@ import type { SQL } from "drizzle-orm";
 import { PgDialect } from "drizzle-orm/pg-core";
 import { describe, expect, it, vi } from "vitest";
 import * as webhookRepository from "./asaasWebhookRepository";
+import {
+  type GiftProcessingPolicy,
+  platformTariffPolicy,
+  quoteGiftPurchaseAmounts,
+} from "./giftMoney";
 import { createGiftPaymentComposition } from "./giftPaymentComposition";
 import type { GiftPaymentConfig } from "./giftPaymentConfig";
 import { createGiftPaymentWorkerLoop } from "./giftPaymentWorkerLoop";
@@ -313,128 +318,57 @@ describe("gift payment composition", () => {
     expect(values.fetch).not.toHaveBeenCalled();
   });
 
-  it("preserves observed real Sandbox quota and promotion conditions through the native fee reader", async () => {
+  it("prices new quotes from the platform tariff table without reading provider fees", async () => {
     const values = checkoutFixture();
     values.rows.splice(
       0,
       values.rows.length,
-      [{ account: values.account, isDemo: true }],
-      [{ account: values.account, isDemo: true }],
+      [{ account: values.account, isDemo: false }],
+      [{ account: values.account, isDemo: false }],
     );
     values.db.execute = vi.fn(async () => ({
       rows: [
         {
           ...values.account,
           accountBindingId: values.account.id,
-          isDemo: true,
+          isDemo: false,
         },
       ],
     })) as never;
-    values.fetch.mockImplementation(async () =>
-      Response.json({
-        payment: {
-          pix: {
-            type: "FIXED",
-            fixedFeeValue: 1.99,
-            fixedFeeValueWithDiscount: 0.99,
-            discountExpiration: "2027-01-16 00:00:00",
-            percentageFee: null,
-            minimumFeeValue: null,
-            maximumFeeValue: null,
-            monthlyCreditsWithoutFee: 100,
-            creditsReceivedOfCurrentMonth: 0,
-          },
-          creditCard: {
-            operationValue: 0.49,
-            oneInstallmentPercentage: 2.99,
-            discountOneInstallmentPercentage: 1.99,
-            hasValidDiscount: true,
-            discountExpiration: "2027-01-16 00:00:00",
-          },
-        },
-      }),
-    );
     const composition = createGiftPaymentComposition(values.config, values);
+    // The mocked quote service returns the pricing evidence it was given.
+    const pix = (await composition.ports.giftPayments?.createQuote("site-one", {
+      ...values.snapshot.receiving,
+      method: "PIX",
+    })) as unknown as { policy: GiftProcessingPolicy };
+    expect(pix).toMatchObject({
+      provenance: "platform-tariff-table",
+      verification: "verified",
+      policy: platformTariffPolicy("PIX"),
+    });
     expect(
-      await composition.ports.giftPayments?.createQuote("site-one", {
-        ...values.snapshot.receiving,
+      quoteGiftPurchaseAmounts({
+        nominalCents: 10000,
         method: "PIX",
+        policy: pix.policy,
       }),
-    ).toMatchObject({
-      provenance: "provider",
-      policy: {
-        processingFixedCents: 0,
-        processingBasisPoints: 0,
-        feeBasis: "OBSERVED_ESTIMATE",
-        feeAllocation: "RECIPIENT_DEDUCTED",
-      },
-    });
-    expect(
-      await composition.ports.giftPayments?.createQuote("site-one", {
-        ...values.snapshot.receiving,
-        method: "CREDIT_CARD",
-      }),
-    ).toMatchObject({
-      provenance: "provider",
-      policy: {
-        processingFixedCents: 49,
-        processingBasisPoints: 199,
-        feeBasis: "OBSERVED_ESTIMATE",
-        feeAllocation: "RECIPIENT_DEDUCTED",
-      },
-    });
-    await composition.close();
-  });
-  it("automatically prices only persisted development Sandbox demo accounts using their actual fee response", async () => {
-    const values = checkoutFixture();
-    values.db.execute = vi.fn(async () => ({
-      rows: [
-        {
-          ...values.account,
-          accountBindingId: values.account.id,
-          isDemo: true,
-        },
-      ],
-    })) as never;
-    values.fetch.mockResolvedValue(
-      new Response(
-        JSON.stringify({
-          payment: {
-            pix: {
-              fixedFeeValue: 0.99,
-              percentageFee: 0,
-              minimumFeeValue: 0,
-              maximumFeeValue: 0,
-              monthlyCreditsWithoutFee: 0,
-            },
-          },
-        }),
-        { headers: { "content-type": "application/json" } },
-      ),
-    );
-    const composition = createGiftPaymentComposition(values.config, values);
-    const result = await composition.ports.giftPayments?.createQuote(
+    ).toMatchObject({ totalCents: 10399, anticipationCents: 0 });
+    const card = (await composition.ports.giftPayments?.createQuote(
       "site-one",
-      { ...values.snapshot.receiving, method: "PIX" },
-    );
-    expect(result).toMatchObject({
-      provenance: "provider",
-      policy: {
-        processingFixedCents: 99,
-        processingBasisPoints: 0,
-        commissionBasisPoints: 200,
-      },
-    });
-    expect(String(values.fetch.mock.calls[0][0])).toBe(
-      "https://api-sandbox.asaas.com/v3/myAccount/fees/",
-    );
+      { ...values.snapshot.receiving, method: "CREDIT_CARD" },
+    )) as unknown as { policy: GiftProcessingPolicy };
+    expect(card.policy).toEqual(platformTariffPolicy("CREDIT_CARD"));
     expect(
-      new Headers(values.fetch.mock.calls[0][1]?.headers).get("access_token"),
-    ).toBe("$aact_hmlg_subaccount-secret");
+      quoteGiftPurchaseAmounts(
+        { nominalCents: 10000, method: "CREDIT_CARD", policy: card.policy },
+        12,
+      ).totalCents,
+    ).toBe(11909);
+    expect(values.fetch).not.toHaveBeenCalled();
     await composition.close();
   });
 
-  it("prices a production recipient from bound native fees without an unimplemented fee-profile service", async () => {
+  it("prices a production recipient from the same tariff table without provider fee reads", async () => {
     const values = checkoutFixture();
     const config = {
       ...values.config,
@@ -470,38 +404,17 @@ describe("gift payment composition", () => {
         },
       ],
     })) as never;
-    values.fetch.mockResolvedValue(
-      Response.json({
-        payment: {
-          pix: {
-            type: "FIXED",
-            fixedFeeValue: 1.99,
-            percentageFee: null,
-            minimumFeeValue: null,
-            maximumFeeValue: null,
-            monthlyCreditsWithoutFee: 0,
-          },
-        },
-      }),
-    );
     const composition = createGiftPaymentComposition(config, values);
     const result = await composition.ports.giftPayments?.createQuote(
       "site-one",
       { ...values.snapshot.receiving, environment: "live", method: "PIX" },
     );
     expect(result).toMatchObject({
-      provenance: "provider",
       environment: "live",
-      policy: {
-        feeAllocation: "RECIPIENT_DEDUCTED",
-        feeBasis: "OBSERVED_ESTIMATE",
-        processingFixedCents: 199,
-        processingBasisPoints: 0,
-      },
+      provenance: "platform-tariff-table",
+      policy: platformTariffPolicy("PIX"),
     });
-    expect(String(values.fetch.mock.calls[0][0])).toBe(
-      "https://api.asaas.com/v3/myAccount/fees/",
-    );
+    expect(values.fetch).not.toHaveBeenCalled();
     await composition.close();
   });
 
@@ -628,13 +541,14 @@ describe("gift payment composition", () => {
     );
     await composition.close();
   });
-  it("does not give non-demo Sandbox accounts a demo pricing policy", async () => {
+  it("refuses tariff-table pricing when the recipient is the platform wallet", async () => {
     const values = checkoutFixture();
-    values.rows[0] = [{ account: values.account, isDemo: false }];
+    Object.assign(values.account, { recipientReference: "platform-wallet" });
     const composition = createGiftPaymentComposition(values.config, values);
     expect(
       await composition.ports.giftPayments?.createQuote("site-one", {
         ...values.snapshot.receiving,
+        recipientReference: "platform-wallet",
         method: "PIX",
       }),
     ).toBeNull();
@@ -642,15 +556,13 @@ describe("gift payment composition", () => {
     await composition.close();
   });
 
-  it("keeps the automatic demo pricing path disabled outside development", async () => {
+  it("refuses tariff-table pricing for a scope that does not match the stored account", async () => {
     const values = checkoutFixture();
-    const composition = createGiftPaymentComposition(
-      { ...values.config, applicationEnvironment: "test" },
-      values,
-    );
+    const composition = createGiftPaymentComposition(values.config, values);
     expect(
       await composition.ports.giftPayments?.createQuote("site-one", {
         ...values.snapshot.receiving,
+        operatorReference: "operator-other",
         method: "PIX",
       }),
     ).toBeNull();
