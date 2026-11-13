@@ -107,6 +107,8 @@ export interface GiftCheckoutEligibility {
 
 export interface GiftHostedCheckout {
   providerReference: string;
+  // PLATFORM_ACCOUNT_SPLIT_V2 installment plans: verified child payment IDs.
+  installmentPaymentReferences?: string[];
   checkout: CheckoutResult;
 }
 
@@ -851,6 +853,12 @@ export function createGiftCheckoutService(
             orderId: record.orderId,
             attemptId: record.attemptId,
             providerReference: hosted.providerReference,
+            ...(hosted.installmentPaymentReferences
+              ? {
+                  installmentPaymentReferences:
+                    hosted.installmentPaymentReferences,
+                }
+              : {}),
             checkout,
             observedAt: clock(dependencies).toISOString(),
           });

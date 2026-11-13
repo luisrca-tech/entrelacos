@@ -6,7 +6,11 @@ import {
   quoteGiftPurchaseAmounts,
   serializeBrlCents,
 } from "./giftMoney";
-import type { GiftQuoteSnapshot } from "./giftQuotes";
+import {
+  type GiftQuoteSnapshot,
+  isPlatformAccountSplit,
+  readGiftV2Settlement,
+} from "./giftQuotes";
 import { allowsSandboxBuyerGrossUp } from "./sandboxBuyerGrossUp";
 
 export interface AsaasCheckoutPayload {
@@ -105,6 +109,13 @@ export function readAsaasCheckoutTerms(
     const binding = snapshot.receiving;
     const pricing = snapshot.pricing;
     const demo = options.sandboxDemoPricing;
+    // PLATFORM_ACCOUNT_SPLIT_V2 is priced only from the local tariff table;
+    // that provenance is never accepted for a V1 quote.
+    const platformSplit = isPlatformAccountSplit({ quote });
+    const tariffPricing =
+      pricing.provenance === "platform-tariff-table" &&
+      pricing.policy.feeBasis === "PLATFORM_TARIFF_TABLE";
+    if (platformSplit !== tariffPricing) unavailable();
     const localTestPricing =
       pricing.provenance === "local-test" &&
       options.environment === "sandbox" &&
@@ -144,7 +155,7 @@ export function readAsaasCheckoutTerms(
       options.minutesToExpire < 10 ||
       options.minutesToExpire > 1440 ||
       pricing.verification !== "verified" ||
-      (pricing.provenance !== "provider" && !localTestPricing)
+      (pricing.provenance !== "provider" && !localTestPricing && !tariffPricing)
     )
       unavailable();
     for (const field of [
@@ -171,11 +182,17 @@ export function readAsaasCheckoutTerms(
       if (!isDeepStrictEqual(amount, quote[field as keyof typeof quote]))
         unavailable();
     }
+    const settlement = readGiftV2Settlement(quote, snapshot.settlement);
     const callback = readAsaasCheckoutCallbacks(
       options.publicOrigin,
       options.callbacks,
     );
-    return { quote, callback };
+    return {
+      quote,
+      callback,
+      recipientReference: binding.recipientReference,
+      ...(settlement ? { settlement } : {}),
+    };
   } catch {
     return unavailable();
   }
@@ -185,8 +202,15 @@ export function buildAsaasCheckoutPayload(
   command: Parameters<typeof readAsaasCheckoutTerms>[0],
   options: AsaasCheckoutPayloadOptions,
 ): AsaasCheckoutPayload {
-  const { quote, callback } = readAsaasCheckoutTerms(command, options);
+  const { quote, callback, recipientReference, settlement } =
+    readAsaasCheckoutTerms(command, options);
   if ((quote.installmentCount ?? 1) > 1) unavailable();
+  if (
+    settlement &&
+    (settlement.recipientSplitCents.length !== 1 ||
+      settlement.recipientSplitCents[0] !== quote.nominalCents)
+  )
+    unavailable();
   return {
     billingTypes: [quote.method],
     chargeTypes: ["DETACHED"],
@@ -200,8 +224,16 @@ export function buildAsaasCheckoutPayload(
         value: Number(serializeBrlCents(quote.totalCents)),
       },
     ],
-    splits:
-      quote.commissionCents === 0
+    splits: settlement
+      ? // V2: charged in the main account; the couple receives the nominal
+        // and the commission stays with the platform (no platform split).
+        [
+          {
+            walletId: recipientReference,
+            fixedValue: Number(serializeBrlCents(quote.nominalCents)),
+          },
+        ]
+      : quote.commissionCents === 0
         ? []
         : [
             {

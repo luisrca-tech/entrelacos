@@ -45,6 +45,7 @@ import { createGiftQuoteRepository } from "./giftQuoteRepository";
 import {
   createGiftQuoteService,
   type GiftQuoteServiceDependencies,
+  isPlatformAccountSplit,
   loadGiftPricingEvidence,
 } from "./giftQuotes";
 import { allowsLiveSite } from "./liveSitePolicy";
@@ -310,14 +311,18 @@ export function createGiftPaymentComposition(
         ))
     )
       return unavailable();
+    // PLATFORM_ACCOUNT_SPLIT_V2 charges in the platform account; the
+    // sub-account credential is neither required nor decrypted.
+    const platformSplit = isPlatformAccountSplit(command.quoteSnapshot);
     if (
       account.operatorReference !== binding.operatorReference ||
       account.recipientReference !== binding.recipientReference ||
-      account.credentialVersion !== 1 ||
-      !account.credentialKeyId ||
-      !account.credentialNonce ||
-      !account.credentialCiphertext ||
-      !account.credentialTag
+      (!platformSplit &&
+        (account.credentialVersion !== 1 ||
+          !account.credentialKeyId ||
+          !account.credentialNonce ||
+          !account.credentialCiphertext ||
+          !account.credentialTag))
     )
       return unavailable();
     const origins = await db
@@ -331,27 +336,38 @@ export function createGiftPaymentComposition(
       )
       .limit(1);
     if (origins[0]?.origin !== publicOrigin) return unavailable();
-    const credentialContext: ProviderCredentialContext = {
-      provider: "ASAAS",
-      siteId: command.siteId,
-      accountBindingId: account.id,
-      environment,
-    };
-    const accessToken = decryptProviderCredential(
-      {
-        version: 1,
-        keyId: account.credentialKeyId,
-        nonce: account.credentialNonce,
-        ciphertext: account.credentialCiphertext,
-        tag: account.credentialTag,
-      },
-      credentialContext,
-      keyring,
-    );
+    let credentials: Parameters<
+      typeof createAsaasCheckoutClient
+    >[0]["credentials"];
+    if (platformSplit) {
+      credentials = {
+        kind: "PLATFORM_ACCOUNT",
+        accessToken: config.platformApiKey,
+      };
+    } else {
+      const credentialContext: ProviderCredentialContext = {
+        provider: "ASAAS",
+        siteId: command.siteId,
+        accountBindingId: account.id,
+        environment,
+      };
+      const accessToken = decryptProviderCredential(
+        {
+          version: 1,
+          keyId: account.credentialKeyId as string,
+          nonce: account.credentialNonce as string,
+          ciphertext: account.credentialCiphertext as string,
+          tag: account.credentialTag as string,
+        },
+        credentialContext,
+        keyring,
+      );
+      credentials = { context: credentialContext, accessToken };
+    }
     return createAsaasCheckoutClient({
       mode: environment,
       binding: { ...binding, accountBindingId: account.id },
-      credentials: { context: credentialContext, accessToken },
+      credentials,
       fetch,
       timeoutMs: 15_000,
       maxResponseBytes: 262_144,

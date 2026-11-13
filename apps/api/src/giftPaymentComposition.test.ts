@@ -12,7 +12,7 @@ import {
 import { createGiftPaymentComposition } from "./giftPaymentComposition";
 import type { GiftPaymentConfig } from "./giftPaymentConfig";
 import { createGiftPaymentWorkerLoop } from "./giftPaymentWorkerLoop";
-import type { GiftQuoteSnapshot } from "./giftQuotes";
+import { buildGiftV2Settlement, type GiftQuoteSnapshot } from "./giftQuotes";
 import { encryptProviderCredential } from "./providerCredentials";
 
 // Exercise the composition's private provider boundary; checkout reservation logic
@@ -873,6 +873,51 @@ describe("gift payment composition", () => {
       { walletId: "platform-wallet", fixedValue: 2 },
     ]);
     expect(JSON.stringify(body)).not.toContain(values.config.platformApiKey);
+    await composition.close();
+  });
+
+  it("charges PLATFORM_ACCOUNT_SPLIT_V2 quotes with the platform key and never decrypts the sub-account credential", async () => {
+    const values = checkoutFixture();
+    const snapshot = values.snapshot;
+    snapshot.pricing.provenance = "platform-tariff-table";
+    snapshot.pricing.policy = platformTariffPolicy("PIX");
+    Object.assign(snapshot.quote, {
+      settlementVersion: "PLATFORM_ACCOUNT_SPLIT_V2",
+      ...quoteGiftPurchaseAmounts(
+        { nominalCents: 10000, method: "PIX", policy: snapshot.pricing.policy },
+        undefined,
+      ),
+    });
+    Object.assign(snapshot, {
+      settlement: buildGiftV2Settlement(snapshot.quote),
+    });
+    // No usable sub-account credential: decryption would fail if attempted.
+    Object.assign(values.account, {
+      credentialVersion: null,
+      credentialKeyId: null,
+      credentialNonce: null,
+      credentialCiphertext: null,
+      credentialTag: null,
+    });
+    const composition = createGiftPaymentComposition(values.config, values);
+    const checkout = await composition.ports.giftPayments?.createCheckout(
+      "site-one",
+      values.command,
+    );
+    expect(checkout?.hostedUrl).toBe(
+      "https://sandbox.asaas.com/checkoutSession/show/checkout-one",
+    );
+    expect(values.fetch).toHaveBeenCalledTimes(1);
+    const [url, init] = values.fetch.mock.calls[0];
+    expect(url).toBe("https://api-sandbox.asaas.com/v3/checkouts");
+    expect(new Headers(init?.headers).get("access_token")).toBe(
+      values.config.platformApiKey,
+    );
+    const body = JSON.parse(String(init?.body));
+    expect(body.splits).toEqual([
+      { walletId: "recipient-one", fixedValue: 100 },
+    ]);
+    expect(JSON.stringify(body)).not.toContain("platform-wallet");
     await composition.close();
   });
 

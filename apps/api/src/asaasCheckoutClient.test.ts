@@ -445,7 +445,10 @@ describe("native Asaas hosted checkout creation", () => {
     "rejects a foreign credential %s before dispatch",
     async (field) => {
       const values = fixture();
-      Object.assign(values.options.credentials.context, { [field]: "other" });
+      Object.assign(
+        (values.options.credentials as { context: object }).context,
+        { [field]: "other" },
+      );
       expect(() => createAsaasCheckoutClient(values.options)).toThrow(
         AsaasCheckoutClientError,
       );
