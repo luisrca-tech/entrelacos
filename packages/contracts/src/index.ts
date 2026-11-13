@@ -6,6 +6,8 @@ export * from "./adminOrigin";
 export * from "./giftAnticipationSimulation";
 export * from "./giftCommission";
 export * from "./giftImageAlt";
+export * from "./giftPricingV2";
+export * from "./giftTariffs";
 export * from "./internalGifts";
 
 const strictObject = <T extends z.ZodRawShape>(shape: T) =>
