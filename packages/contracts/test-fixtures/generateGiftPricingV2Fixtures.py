@@ -3,6 +3,8 @@
 Run from this folder: python3 generateGiftPricingV2Fixtures.py
 The committed JSON is what the TypeScript test reads; tests never run Python.
 Rule (spec b.2): total == ceil(round(sim * 100, 6)).
+Anticipation rate (mrate) is 0 in every case: Asaas does not anticipate gift
+charges (addendum of 2026-11-13).
 """
 import contextlib
 import io
@@ -17,10 +19,10 @@ NOMINALS = [500, 1000, 1234, 5000, 9999, 10000, 30000, 100000, 500000]
 
 def tier(n):
     if n == 1:
-        return (0.0299, 0.49, 0.0115)
+        return (0.0299, 0.49, 0)
     if n <= 6:
-        return (0.0349, 0.49, 0.016)
-    return (0.0399, 0.49, 0.016)
+        return (0.0349, 0.49, 0)
+    return (0.0399, 0.49, 0)
 
 
 rows = []

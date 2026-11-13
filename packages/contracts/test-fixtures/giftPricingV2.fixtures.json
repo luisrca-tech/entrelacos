@@ -9,73 +9,73 @@
     "nominalCents": 500,
     "method": "CREDIT_CARD",
     "installmentCount": 1,
-    "totalCents": 583
+    "totalCents": 577
   },
   {
     "nominalCents": 500,
     "method": "CREDIT_CARD",
     "installmentCount": 2,
-    "totalCents": 593
+    "totalCents": 580
   },
   {
     "nominalCents": 500,
     "method": "CREDIT_CARD",
     "installmentCount": 3,
-    "totalCents": 597
+    "totalCents": 580
   },
   {
     "nominalCents": 500,
     "method": "CREDIT_CARD",
     "installmentCount": 4,
-    "totalCents": 602
+    "totalCents": 580
   },
   {
     "nominalCents": 500,
     "method": "CREDIT_CARD",
     "installmentCount": 5,
-    "totalCents": 606
+    "totalCents": 580
   },
   {
     "nominalCents": 500,
     "method": "CREDIT_CARD",
     "installmentCount": 6,
-    "totalCents": 611
+    "totalCents": 580
   },
   {
     "nominalCents": 500,
     "method": "CREDIT_CARD",
     "installmentCount": 7,
-    "totalCents": 619
+    "totalCents": 583
   },
   {
     "nominalCents": 500,
     "method": "CREDIT_CARD",
     "installmentCount": 8,
-    "totalCents": 624
+    "totalCents": 583
   },
   {
     "nominalCents": 500,
     "method": "CREDIT_CARD",
     "installmentCount": 9,
-    "totalCents": 629
+    "totalCents": 583
   },
   {
     "nominalCents": 500,
     "method": "CREDIT_CARD",
     "installmentCount": 10,
-    "totalCents": 634
+    "totalCents": 583
   },
   {
     "nominalCents": 500,
     "method": "CREDIT_CARD",
     "installmentCount": 11,
-    "totalCents": 639
+    "totalCents": 583
   },
   {
     "nominalCents": 500,
     "method": "CREDIT_CARD",
     "installmentCount": 12,
-    "totalCents": 644
+    "totalCents": 583
   },
   {
     "nominalCents": 1000,
@@ -87,73 +87,73 @@
     "nominalCents": 1000,
     "method": "CREDIT_CARD",
     "installmentCount": 1,
-    "totalCents": 1115
+    "totalCents": 1102
   },
   {
     "nominalCents": 1000,
     "method": "CREDIT_CARD",
     "installmentCount": 2,
-    "totalCents": 1134
+    "totalCents": 1108
   },
   {
     "nominalCents": 1000,
     "method": "CREDIT_CARD",
     "installmentCount": 3,
-    "totalCents": 1143
+    "totalCents": 1108
   },
   {
     "nominalCents": 1000,
     "method": "CREDIT_CARD",
     "installmentCount": 4,
-    "totalCents": 1152
+    "totalCents": 1108
   },
   {
     "nominalCents": 1000,
     "method": "CREDIT_CARD",
     "installmentCount": 5,
-    "totalCents": 1161
+    "totalCents": 1108
   },
   {
     "nominalCents": 1000,
     "method": "CREDIT_CARD",
     "installmentCount": 6,
-    "totalCents": 1171
+    "totalCents": 1108
   },
   {
     "nominalCents": 1000,
     "method": "CREDIT_CARD",
     "installmentCount": 7,
-    "totalCents": 1187
+    "totalCents": 1114
   },
   {
     "nominalCents": 1000,
     "method": "CREDIT_CARD",
     "installmentCount": 8,
-    "totalCents": 1196
+    "totalCents": 1114
   },
   {
     "nominalCents": 1000,
     "method": "CREDIT_CARD",
     "installmentCount": 9,
-    "totalCents": 1206
+    "totalCents": 1114
   },
   {
     "nominalCents": 1000,
     "method": "CREDIT_CARD",
     "installmentCount": 10,
-    "totalCents": 1216
+    "totalCents": 1114
   },
   {
     "nominalCents": 1000,
     "method": "CREDIT_CARD",
     "installmentCount": 11,
-    "totalCents": 1227
+    "totalCents": 1114
   },
   {
     "nominalCents": 1000,
     "method": "CREDIT_CARD",
     "installmentCount": 12,
-    "totalCents": 1237
+    "totalCents": 1114
   },
   {
     "nominalCents": 1234,
@@ -165,73 +165,73 @@
     "nominalCents": 1234,
     "method": "CREDIT_CARD",
     "installmentCount": 1,
-    "totalCents": 1364
+    "totalCents": 1349
   },
   {
     "nominalCents": 1234,
     "method": "CREDIT_CARD",
     "installmentCount": 2,
-    "totalCents": 1388
+    "totalCents": 1356
   },
   {
     "nominalCents": 1234,
     "method": "CREDIT_CARD",
     "installmentCount": 3,
-    "totalCents": 1399
+    "totalCents": 1356
   },
   {
     "nominalCents": 1234,
     "method": "CREDIT_CARD",
     "installmentCount": 4,
-    "totalCents": 1410
+    "totalCents": 1356
   },
   {
     "nominalCents": 1234,
     "method": "CREDIT_CARD",
     "installmentCount": 5,
-    "totalCents": 1422
+    "totalCents": 1356
   },
   {
     "nominalCents": 1234,
     "method": "CREDIT_CARD",
     "installmentCount": 6,
-    "totalCents": 1433
+    "totalCents": 1356
   },
   {
     "nominalCents": 1234,
     "method": "CREDIT_CARD",
     "installmentCount": 7,
-    "totalCents": 1453
+    "totalCents": 1363
   },
   {
     "nominalCents": 1234,
     "method": "CREDIT_CARD",
     "installmentCount": 8,
-    "totalCents": 1465
+    "totalCents": 1363
   },
   {
     "nominalCents": 1234,
     "method": "CREDIT_CARD",
     "installmentCount": 9,
-    "totalCents": 1477
+    "totalCents": 1363
   },
   {
     "nominalCents": 1234,
     "method": "CREDIT_CARD",
     "installmentCount": 10,
-    "totalCents": 1489
+    "totalCents": 1363
   },
   {
     "nominalCents": 1234,
     "method": "CREDIT_CARD",
     "installmentCount": 11,
-    "totalCents": 1502
+    "totalCents": 1363
   },
   {
     "nominalCents": 1234,
     "method": "CREDIT_CARD",
     "installmentCount": 12,
-    "totalCents": 1515
+    "totalCents": 1363
   },
   {
     "nominalCents": 5000,
@@ -243,73 +243,73 @@
     "nominalCents": 5000,
     "method": "CREDIT_CARD",
     "installmentCount": 1,
-    "totalCents": 5369
+    "totalCents": 5308
   },
   {
     "nominalCents": 5000,
     "method": "CREDIT_CARD",
     "installmentCount": 2,
-    "totalCents": 5466
+    "totalCents": 5336
   },
   {
     "nominalCents": 5000,
     "method": "CREDIT_CARD",
     "installmentCount": 3,
-    "totalCents": 5510
+    "totalCents": 5336
   },
   {
     "nominalCents": 5000,
     "method": "CREDIT_CARD",
     "installmentCount": 4,
-    "totalCents": 5556
+    "totalCents": 5336
   },
   {
     "nominalCents": 5000,
     "method": "CREDIT_CARD",
     "installmentCount": 5,
-    "totalCents": 5602
+    "totalCents": 5336
   },
   {
     "nominalCents": 5000,
     "method": "CREDIT_CARD",
     "installmentCount": 6,
-    "totalCents": 5649
+    "totalCents": 5336
   },
   {
     "nominalCents": 5000,
     "method": "CREDIT_CARD",
     "installmentCount": 7,
-    "totalCents": 5727
+    "totalCents": 5363
   },
   {
     "nominalCents": 5000,
     "method": "CREDIT_CARD",
     "installmentCount": 8,
-    "totalCents": 5776
+    "totalCents": 5363
   },
   {
     "nominalCents": 5000,
     "method": "CREDIT_CARD",
     "installmentCount": 9,
-    "totalCents": 5825
+    "totalCents": 5363
   },
   {
     "nominalCents": 5000,
     "method": "CREDIT_CARD",
     "installmentCount": 10,
-    "totalCents": 5876
+    "totalCents": 5363
   },
   {
     "nominalCents": 5000,
     "method": "CREDIT_CARD",
     "installmentCount": 11,
-    "totalCents": 5928
+    "totalCents": 5363
   },
   {
     "nominalCents": 5000,
     "method": "CREDIT_CARD",
     "installmentCount": 12,
-    "totalCents": 5980
+    "totalCents": 5363
   },
   {
     "nominalCents": 9999,
@@ -321,73 +321,73 @@
     "nominalCents": 9999,
     "method": "CREDIT_CARD",
     "installmentCount": 1,
-    "totalCents": 10687
+    "totalCents": 10564
   },
   {
     "nominalCents": 9999,
     "method": "CREDIT_CARD",
     "installmentCount": 2,
-    "totalCents": 10879
+    "totalCents": 10619
   },
   {
     "nominalCents": 9999,
     "method": "CREDIT_CARD",
     "installmentCount": 3,
-    "totalCents": 10968
+    "totalCents": 10619
   },
   {
     "nominalCents": 9999,
     "method": "CREDIT_CARD",
     "installmentCount": 4,
-    "totalCents": 11059
+    "totalCents": 10619
   },
   {
     "nominalCents": 9999,
     "method": "CREDIT_CARD",
     "installmentCount": 5,
-    "totalCents": 11152
+    "totalCents": 10619
   },
   {
     "nominalCents": 9999,
     "method": "CREDIT_CARD",
     "installmentCount": 6,
-    "totalCents": 11246
+    "totalCents": 10619
   },
   {
     "nominalCents": 9999,
     "method": "CREDIT_CARD",
     "installmentCount": 7,
-    "totalCents": 11401
+    "totalCents": 10674
   },
   {
     "nominalCents": 9999,
     "method": "CREDIT_CARD",
     "installmentCount": 8,
-    "totalCents": 11499
+    "totalCents": 10674
   },
   {
     "nominalCents": 9999,
     "method": "CREDIT_CARD",
     "installmentCount": 9,
-    "totalCents": 11598
+    "totalCents": 10674
   },
   {
     "nominalCents": 9999,
     "method": "CREDIT_CARD",
     "installmentCount": 10,
-    "totalCents": 11699
+    "totalCents": 10674
   },
   {
     "nominalCents": 9999,
     "method": "CREDIT_CARD",
     "installmentCount": 11,
-    "totalCents": 11802
+    "totalCents": 10674
   },
   {
     "nominalCents": 9999,
     "method": "CREDIT_CARD",
     "installmentCount": 12,
-    "totalCents": 11907
+    "totalCents": 10674
   },
   {
     "nominalCents": 10000,
@@ -399,73 +399,73 @@
     "nominalCents": 10000,
     "method": "CREDIT_CARD",
     "installmentCount": 1,
-    "totalCents": 10688
+    "totalCents": 10565
   },
   {
     "nominalCents": 10000,
     "method": "CREDIT_CARD",
     "installmentCount": 2,
-    "totalCents": 10880
+    "totalCents": 10620
   },
   {
     "nominalCents": 10000,
     "method": "CREDIT_CARD",
     "installmentCount": 3,
-    "totalCents": 10970
+    "totalCents": 10620
   },
   {
     "nominalCents": 10000,
     "method": "CREDIT_CARD",
     "installmentCount": 4,
-    "totalCents": 11060
+    "totalCents": 10620
   },
   {
     "nominalCents": 10000,
     "method": "CREDIT_CARD",
     "installmentCount": 5,
-    "totalCents": 11153
+    "totalCents": 10620
   },
   {
     "nominalCents": 10000,
     "method": "CREDIT_CARD",
     "installmentCount": 6,
-    "totalCents": 11247
+    "totalCents": 10620
   },
   {
     "nominalCents": 10000,
     "method": "CREDIT_CARD",
     "installmentCount": 7,
-    "totalCents": 11402
+    "totalCents": 10675
   },
   {
     "nominalCents": 10000,
     "method": "CREDIT_CARD",
     "installmentCount": 8,
-    "totalCents": 11500
+    "totalCents": 10675
   },
   {
     "nominalCents": 10000,
     "method": "CREDIT_CARD",
     "installmentCount": 9,
-    "totalCents": 11599
+    "totalCents": 10675
   },
   {
     "nominalCents": 10000,
     "method": "CREDIT_CARD",
     "installmentCount": 10,
-    "totalCents": 11701
+    "totalCents": 10675
   },
   {
     "nominalCents": 10000,
     "method": "CREDIT_CARD",
     "installmentCount": 11,
-    "totalCents": 11804
+    "totalCents": 10675
   },
   {
     "nominalCents": 10000,
     "method": "CREDIT_CARD",
     "installmentCount": 12,
-    "totalCents": 11909
+    "totalCents": 10675
   },
   {
     "nominalCents": 30000,
@@ -477,73 +477,73 @@
     "nominalCents": 30000,
     "method": "CREDIT_CARD",
     "installmentCount": 1,
-    "totalCents": 31961
+    "totalCents": 31594
   },
   {
     "nominalCents": 30000,
     "method": "CREDIT_CARD",
     "installmentCount": 2,
-    "totalCents": 32538
+    "totalCents": 31758
   },
   {
     "nominalCents": 30000,
     "method": "CREDIT_CARD",
     "installmentCount": 3,
-    "totalCents": 32806
+    "totalCents": 31758
   },
   {
     "nominalCents": 30000,
     "method": "CREDIT_CARD",
     "installmentCount": 4,
-    "totalCents": 33079
+    "totalCents": 31758
   },
   {
     "nominalCents": 30000,
     "method": "CREDIT_CARD",
     "installmentCount": 5,
-    "totalCents": 33356
+    "totalCents": 31758
   },
   {
     "nominalCents": 30000,
     "method": "CREDIT_CARD",
     "installmentCount": 6,
-    "totalCents": 33639
+    "totalCents": 31758
   },
   {
     "nominalCents": 30000,
     "method": "CREDIT_CARD",
     "installmentCount": 7,
-    "totalCents": 34102
+    "totalCents": 31923
   },
   {
     "nominalCents": 30000,
     "method": "CREDIT_CARD",
     "installmentCount": 8,
-    "totalCents": 34396
+    "totalCents": 31923
   },
   {
     "nominalCents": 30000,
     "method": "CREDIT_CARD",
     "installmentCount": 9,
-    "totalCents": 34695
+    "totalCents": 31923
   },
   {
     "nominalCents": 30000,
     "method": "CREDIT_CARD",
     "installmentCount": 10,
-    "totalCents": 34999
+    "totalCents": 31923
   },
   {
     "nominalCents": 30000,
     "method": "CREDIT_CARD",
     "installmentCount": 11,
-    "totalCents": 35308
+    "totalCents": 31923
   },
   {
     "nominalCents": 30000,
     "method": "CREDIT_CARD",
     "installmentCount": 12,
-    "totalCents": 35623
+    "totalCents": 31923
   },
   {
     "nominalCents": 100000,
@@ -555,73 +555,73 @@
     "nominalCents": 100000,
     "method": "CREDIT_CARD",
     "installmentCount": 1,
-    "totalCents": 106418
+    "totalCents": 105195
   },
   {
     "nominalCents": 100000,
     "method": "CREDIT_CARD",
     "installmentCount": 2,
-    "totalCents": 108339
+    "totalCents": 105740
   },
   {
     "nominalCents": 100000,
     "method": "CREDIT_CARD",
     "installmentCount": 3,
-    "totalCents": 109234
+    "totalCents": 105740
   },
   {
     "nominalCents": 100000,
     "method": "CREDIT_CARD",
     "installmentCount": 4,
-    "totalCents": 110143
+    "totalCents": 105740
   },
   {
     "nominalCents": 100000,
     "method": "CREDIT_CARD",
     "installmentCount": 5,
-    "totalCents": 111069
+    "totalCents": 105740
   },
   {
     "nominalCents": 100000,
     "method": "CREDIT_CARD",
     "installmentCount": 6,
-    "totalCents": 112009
+    "totalCents": 105740
   },
   {
     "nominalCents": 100000,
     "method": "CREDIT_CARD",
     "installmentCount": 7,
-    "totalCents": 113555
+    "totalCents": 106290
   },
   {
     "nominalCents": 100000,
     "method": "CREDIT_CARD",
     "installmentCount": 8,
-    "totalCents": 114533
+    "totalCents": 106290
   },
   {
     "nominalCents": 100000,
     "method": "CREDIT_CARD",
     "installmentCount": 9,
-    "totalCents": 115529
+    "totalCents": 106290
   },
   {
     "nominalCents": 100000,
     "method": "CREDIT_CARD",
     "installmentCount": 10,
-    "totalCents": 116542
+    "totalCents": 106290
   },
   {
     "nominalCents": 100000,
     "method": "CREDIT_CARD",
     "installmentCount": 11,
-    "totalCents": 117572
+    "totalCents": 106290
   },
   {
     "nominalCents": 100000,
     "method": "CREDIT_CARD",
     "installmentCount": 12,
-    "totalCents": 118622
+    "totalCents": 106290
   },
   {
     "nominalCents": 500000,
@@ -633,72 +633,72 @@
     "nominalCents": 500000,
     "method": "CREDIT_CARD",
     "installmentCount": 1,
-    "totalCents": 531886
+    "totalCents": 525770
   },
   {
     "nominalCents": 500000,
     "method": "CREDIT_CARD",
     "installmentCount": 2,
-    "totalCents": 541488
+    "totalCents": 528494
   },
   {
     "nominalCents": 500000,
     "method": "CREDIT_CARD",
     "installmentCount": 3,
-    "totalCents": 545963
+    "totalCents": 528494
   },
   {
     "nominalCents": 500000,
     "method": "CREDIT_CARD",
     "installmentCount": 4,
-    "totalCents": 550512
+    "totalCents": 528494
   },
   {
     "nominalCents": 500000,
     "method": "CREDIT_CARD",
     "installmentCount": 5,
-    "totalCents": 555138
+    "totalCents": 528494
   },
   {
     "nominalCents": 500000,
     "method": "CREDIT_CARD",
     "installmentCount": 6,
-    "totalCents": 559842
+    "totalCents": 528494
   },
   {
     "nominalCents": 500000,
     "method": "CREDIT_CARD",
     "installmentCount": 7,
-    "totalCents": 567567
+    "totalCents": 531246
   },
   {
     "nominalCents": 500000,
     "method": "CREDIT_CARD",
     "installmentCount": 8,
-    "totalCents": 572460
+    "totalCents": 531246
   },
   {
     "nominalCents": 500000,
     "method": "CREDIT_CARD",
     "installmentCount": 9,
-    "totalCents": 577437
+    "totalCents": 531246
   },
   {
     "nominalCents": 500000,
     "method": "CREDIT_CARD",
     "installmentCount": 10,
-    "totalCents": 582502
+    "totalCents": 531246
   },
   {
     "nominalCents": 500000,
     "method": "CREDIT_CARD",
     "installmentCount": 11,
-    "totalCents": 587656
+    "totalCents": 531246
   },
   {
     "nominalCents": 500000,
     "method": "CREDIT_CARD",
     "installmentCount": 12,
-    "totalCents": 592903
+    "totalCents": 531246
   }
 ]

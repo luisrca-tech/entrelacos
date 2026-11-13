@@ -6,13 +6,12 @@ import { GIFT_COMMISSION_BASIS_POINTS } from "./giftCommission";
  *
  * Card percentages and fixed fees are the platform (main) account contract.
  *
- * Anticipation rates are the AUTOMATIC credit-card anticipation rates of the
- * platform account: 1.15%/month for one-shot card and 1.60%/month for
- * installments. `GET /v3/myAccount/fees/` reports 1.25%/1.70%, but those are
- * the detached (on-demand) anticipation rates; the account uses automatic
- * anticipation. The Slice 0 Sandbox probe confirmed automatic anticipations
- * charged at exactly 1.15% and 1.60% per month over the card net value
- * (docs/plans/asaas-platform-split-probe.md).
+ * Anticipation rates are 0 on purpose (2026-11-13): Asaas confirmed it does
+ * not anticipate gift or donation charges, so the couple receives each card
+ * installment when the card settles it (about 32 days per installment) and the
+ * guest does not pay for anticipation. The fields stay so the rates can be
+ * restored by changing values only if Asaas ever approves anticipation for
+ * gifts; this is not a feature flag.
  */
 export const GIFT_PLATFORM_TARIFFS = {
   version: "platform-tariffs-2026-11-13",
@@ -21,26 +20,26 @@ export const GIFT_PLATFORM_TARIFFS = {
   card1: {
     basisPoints: 299,
     fixedCents: 49,
-    anticipationMonthlyBasisPoints: 115,
+    anticipationMonthlyBasisPoints: 0,
   },
   card2to6: {
     basisPoints: 349,
     fixedCents: 49,
-    anticipationMonthlyBasisPoints: 160,
+    anticipationMonthlyBasisPoints: 0,
   },
   card7to12: {
     basisPoints: 399,
     fixedCents: 49,
-    anticipationMonthlyBasisPoints: 160,
+    anticipationMonthlyBasisPoints: 0,
   },
   minimumInstallmentCents: 500,
   maxInstallments: 12,
   /**
-   * Conservative anticipation days used only to distribute the couple split
-   * across installments: installment i is assumed to be anticipated for
-   * `splitScheduleDaysPerInstallment * i + splitScheduleExtraDays` days. The
-   * Sandbox probe observed 32, 66, 96, 129 … 384 days for a 12x purchase, so
-   * the extra days absorb weekend/holiday shifts of the credit date.
+   * Anticipation days used only to distribute the couple split across
+   * installments when an anticipation rate is non-zero: installment i is
+   * assumed to be anticipated for
+   * `splitScheduleDaysPerInstallment * i + splitScheduleExtraDays` days.
+   * With every anticipation rate at 0 they have no effect.
    */
   splitScheduleDaysPerInstallment: 32,
   splitScheduleExtraDays: 3,

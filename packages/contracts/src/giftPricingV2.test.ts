@@ -19,18 +19,19 @@ const columns: Column[] = [
   ["CREDIT_CARD", 12],
 ];
 
-// Spec b.2 fixture table (cents).
+// Spec b.2 columns recomputed with sim.py and mrate = 0 (addendum
+// 2026-11-13: no anticipation). Cents.
 const specTotals: Record<number, number[]> = {
-  500: [709, 583, 593, 597, 611, 619, 644],
-  1000: [1219, 1115, 1134, 1143, 1171, 1187, 1237],
-  5000: [5299, 5369, 5466, 5510, 5649, 5727, 5980],
-  10000: [10399, 10688, 10880, 10970, 11247, 11402, 11909],
-  30000: [30799, 31961, 32538, 32806, 33639, 34102, 35623],
-  100000: [102199, 106418, 108339, 109234, 112009, 113555, 118622],
-  500000: [510199, 531886, 541488, 545963, 559842, 567567, 592903],
+  500: [709, 577, 580, 580, 580, 583, 583],
+  1000: [1219, 1102, 1108, 1108, 1108, 1114, 1114],
+  5000: [5299, 5308, 5336, 5336, 5336, 5363, 5363],
+  10000: [10399, 10565, 10620, 10620, 10620, 10675, 10675],
+  30000: [30799, 31594, 31758, 31758, 31758, 31923, 31923],
+  100000: [102199, 105195, 105740, 105740, 105740, 106290, 106290],
+  500000: [510199, 525770, 528494, 528494, 528494, 531246, 531246],
 };
 
-// [nominal, method, n, processing, anticipation] from the spec table.
+// [nominal, method, n, processing, anticipation]: anticipation is always 0.
 const specBreakdowns: [
   number,
   "PIX" | "CREDIT_CARD",
@@ -39,25 +40,14 @@ const specBreakdowns: [
   number,
 ][] = [
   [500, "PIX", 1, 199, 0],
-  [500, "CREDIT_CARD", 1, 67, 6],
-  [500, "CREDIT_CARD", 2, 70, 13],
-  [500, "CREDIT_CARD", 3, 70, 17],
-  [500, "CREDIT_CARD", 6, 71, 30],
-  [500, "CREDIT_CARD", 7, 74, 35],
-  [500, "CREDIT_CARD", 12, 75, 59],
-  [1000, "CREDIT_CARD", 1, 83, 12],
-  [1000, "CREDIT_CARD", 12, 99, 118],
-  [10000, "CREDIT_CARD", 1, 369, 119],
-  [10000, "CREDIT_CARD", 2, 429, 251],
-  [10000, "CREDIT_CARD", 3, 432, 338],
-  [10000, "CREDIT_CARD", 6, 442, 605],
-  [10000, "CREDIT_CARD", 7, 504, 698],
-  [10000, "CREDIT_CARD", 12, 525, 1184],
-  [30000, "CREDIT_CARD", 1, 1005, 356],
-  [30000, "CREDIT_CARD", 6, 1224, 1815],
-  [30000, "CREDIT_CARD", 12, 1471, 3552],
-  [100000, "CREDIT_CARD", 1, 3231, 1187],
-  [100000, "CREDIT_CARD", 12, 4783, 11839],
+  [500, "CREDIT_CARD", 1, 67, 0],
+  [500, "CREDIT_CARD", 12, 73, 0],
+  [10000, "PIX", 1, 199, 0],
+  [10000, "CREDIT_CARD", 1, 365, 0],
+  [10000, "CREDIT_CARD", 6, 420, 0],
+  [10000, "CREDIT_CARD", 12, 475, 0],
+  [30000, "CREDIT_CARD", 1, 994, 0],
+  [100000, "CREDIT_CARD", 12, 4290, 0],
 ];
 
 describe("gift pricing V2 (guest pays every fee)", () => {
@@ -97,16 +87,16 @@ describe("gift pricing V2 (guest pays every fee)", () => {
     },
   );
 
-  it("keeps the brief and landing examples", () => {
-    expect(getGiftV2TotalCents(30000, "CREDIT_CARD", 1)).toBe(31961);
+  it("keeps the landing examples without anticipation", () => {
     expect(getGiftV2TotalCents(10000, "PIX", 1)).toBe(10399);
-    expect(getGiftV2TotalCents(10000, "CREDIT_CARD", 1)).toBe(10688);
+    expect(getGiftV2TotalCents(10000, "CREDIT_CARD", 1)).toBe(10565);
+    expect(getGiftV2TotalCents(30000, "CREDIT_CARD", 1)).toBe(31594);
     expect(quoteGiftV2(10000, "CREDIT_CARD", 6).installmentCents).toEqual([
-      1874, 1874, 1874, 1874, 1874, 1877,
+      1770, 1770, 1770, 1770, 1770, 1770,
     ]);
     expect(quoteGiftV2(10000, "CREDIT_CARD", 12).installmentCents).toEqual([
-      ...Array.from({ length: 11 }, () => 992),
-      997,
+      ...Array.from({ length: 11 }, () => 889),
+      896,
     ]);
   });
 
@@ -116,7 +106,7 @@ describe("gift pricing V2 (guest pays every fee)", () => {
         const counts = method === "PIX" ? [1] : [1, 2, 3, 4, 6, 7, 9, 12];
         for (const count of counts) {
           const quote = quoteGiftV2(nominal, method, count);
-          expect(quote.anticipationCents).toBeGreaterThanOrEqual(0);
+          expect(quote.anticipationCents).toBe(0);
           expect(
             quote.nominalCents +
               quote.commissionCents +
@@ -126,14 +116,13 @@ describe("gift pricing V2 (guest pays every fee)", () => {
           expect(quote.installmentCents.reduce((a, b) => a + b, 0)).toBe(
             quote.totalCents,
           );
-          if (method === "PIX") expect(quote.anticipationCents).toBe(0);
         }
       }
     }
   });
 
   it("does not offer installments below the minimum installment amount", () => {
-    // R$ 5 in 2x = 593 → 296 per installment, below R$ 5.
+    // R$ 5 in 2x = 580 → 290 per installment, below R$ 5.
     expect(quoteGiftV2(500, "CREDIT_CARD", 2).offered).toBe(false);
     expect(quoteGiftV2(500, "CREDIT_CARD", 1).offered).toBe(true);
     const options = listGiftV2Options(1000);
@@ -165,15 +154,15 @@ describe("gift V2 split schedule", () => {
     ]);
   });
 
-  it("decreases the split per installment (prorated fixed fee, +3 days)", () => {
+  it("matches the per-installment split accepted by the Slice 0 probe", () => {
     expect(quoteGiftV2(30000, "CREDIT_CARD", 3).recipientSplitCents).toEqual([
-      10177, 10000, 9823,
+      10000, 10000, 10000,
     ]);
     const twelve = quoteGiftV2(10000, "CREDIT_CARD", 12);
     expect(twelve.recipientSplitCents).toEqual([
-      921, 905, 889, 873, 857, 841, 825, 809, 793, 777, 761, 749,
+      833, 833, 833, 833, 833, 833, 833, 833, 833, 832, 832, 839,
     ]);
-    expect(Math.min(...twelve.splitSlackCents)).toBe(6);
+    expect(Math.min(...twelve.splitSlackCents)).toBe(15);
   });
 
   it("is feasible, conserves the nominal and leaves nonnegative slack", () => {
@@ -194,10 +183,14 @@ describe("gift V2 split schedule", () => {
         expect(schedule.recipientSplitCents.reduce((a, b) => a + b, 0)).toBe(
           nominal,
         );
-        for (let index = 1; index < count; index += 1)
-          expect(schedule.recipientSplitCents[index]).toBeLessThanOrEqual(
-            (schedule.recipientSplitCents[index - 1] ?? 0) + 1,
-          );
+        const installments = quoteGiftV2(
+          nominal,
+          "CREDIT_CARD",
+          count,
+        ).installmentCents;
+        schedule.recipientSplitCents.forEach((split, index) => {
+          expect(split).toBeLessThan(installments[index] ?? 0);
+        });
         minimumSlack = Math.min(minimumSlack, ...schedule.splitSlackCents);
       }
     }

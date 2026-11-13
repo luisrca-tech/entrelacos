@@ -17,7 +17,7 @@ export interface GiftV2Quote {
   commissionCents: number;
   /** Card or Pix processing fee (percentage + fixed). */
   processingCents: number;
-  /** Estimated automatic anticipation cost (0 for Pix). */
+  /** Estimated anticipation cost; 0 while the tariff table has no anticipation. */
   anticipationCents: number;
   totalCents: number;
   installmentCents: number[];
@@ -91,11 +91,10 @@ export function getGiftV2TotalCents(
 /**
  * Per-installment couple split for card installments.
  *
- * Asaas fixes the split per child charge, while automatic anticipation makes
- * later installments net less. The split is therefore distributed with the
+ * Asaas fixes the split per child charge. The split is distributed with the
  * largest-remainder method proportionally to a conservative estimate of each
- * installment net value:
- *   fee_i  = ceil(inst_i·p/10000) + ceil(f/n)   (Sandbox: 0.49 is prorated)
+ * installment net value (equal shares when there is no anticipation):
+ *   fee_i  = ceil(inst_i·p/10000) + ceil(f/n)   (Slice 0: 0.49 is prorated)
  *   card_i = inst_i − fee_i
  *   net_i  = card_i − ceil(card_i·m·days_i / (10000·30))
  *   days_i = D·i + extra
@@ -165,11 +164,17 @@ export function quoteGiftV2(
     installmentCount,
   );
   const commissionCents = getGiftCommissionCents(nominalCents);
+  const guestFeesCents = totalCents - nominalCents - commissionCents;
+  // Without anticipation the single-ceiling rounding residue belongs to the
+  // processing fee, so new quotes always store anticipation = 0.
   const processingCents =
-    tariff.fixedCents +
-    Number(ceilDiv(BigInt(totalCents) * BigInt(tariff.basisPoints), 10000n));
-  const anticipationCents =
-    totalCents - nominalCents - commissionCents - processingCents;
+    tariff.anticipationMonthlyBasisPoints === 0
+      ? guestFeesCents
+      : tariff.fixedCents +
+        Number(
+          ceilDiv(BigInt(totalCents) * BigInt(tariff.basisPoints), 10000n),
+        );
+  const anticipationCents = guestFeesCents - processingCents;
   if (anticipationCents < 0)
     throw new RangeError("Gift V2 quote produced negative anticipation");
   const installmentCents = allocateInstallments(totalCents, installmentCount);

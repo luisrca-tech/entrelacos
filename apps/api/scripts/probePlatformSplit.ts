@@ -8,7 +8,9 @@
  * automatic anticipation and split settlement.
  *
  * Usage (from apps/api):
- *   tsx --env-file-if-exists=.env scripts/probePlatformSplit.ts [discover|run|observe <file>]
+ *   tsx --env-file-if-exists=.env scripts/probePlatformSplit.ts <mode>
+ *   modes: discover | run | pix | confirm <paymentId> | observe <file>
+ *          | disable-automatic-anticipation
  * Env:
  *   ASAAS_API_KEY                 Sandbox key of the platform account
  *   PROBE_RECIPIENT_WALLET_ID     optional couple wallet; defaults to first sub-account
@@ -115,6 +117,19 @@ async function main(mode: string, arg?: string) {
     return;
   }
 
+  if (mode === "disable-automatic-anticipation") {
+    // The V2 model does not use anticipation (Asaas does not anticipate gift
+    // charges, 2026-11-13); the Sandbox must mirror that.
+    await call("PUT", "/anticipations/configurations", {
+      creditCardAutomaticEnabled: false,
+    });
+    await call("GET", "/anticipations/configurations");
+    save(`anticipation-config-${Date.now()}.json`, log);
+    for (const c of log)
+      console.log(c.method, c.path, c.status, JSON.stringify(c.body));
+    return;
+  }
+
   if (mode === "enable-automatic-anticipation") {
     // Mirrors the production account setup the spec assumes ([LUIS]).
     await call("POST", "/anticipations/configurations", {
@@ -159,6 +174,72 @@ async function main(mode: string, arg?: string) {
     return;
   }
 
+  if (mode === "confirm") {
+    // Sandbox-only: settles a payment so the split can reach DONE.
+    if (!arg) throw new Error("confirm needs a payment id");
+    const confirm = await call("POST", `/sandbox/payment/${arg}/confirm`);
+    const after = (await call("GET", `/payments/${arg}`)).body;
+    const summary = {
+      confirmStatus: confirm.status,
+      confirmErrors: confirm.body.errors,
+      status: after.status,
+      value: after.value,
+      netValue: after.netValue,
+      creditDate: after.creditDate,
+      split: after.split,
+    };
+    save(`confirm-${arg}-${Date.now()}.json`, { summary, log });
+    console.log(JSON.stringify(summary, null, 2));
+    return;
+  }
+
+  if (mode === "pix") {
+    let pixWallet = process.env.PROBE_RECIPIENT_WALLET_ID;
+    if (!pixWallet) {
+      const accounts = (await call("GET", "/accounts?limit=10")).body
+        .data as Json[];
+      pixWallet = accounts?.find((a) => typeof a.walletId === "string")
+        ?.walletId as string | undefined;
+    }
+    if (!pixWallet) throw new Error("No sub-account wallet available");
+    const customer = (
+      await call("POST", "/customers", {
+        name: holder.name,
+        cpfCnpj: holder.cpfCnpj,
+        email: holder.email,
+        notificationDisabled: true,
+      })
+    ).body;
+    // Pix R$100 -> R$103,99 with a fixed R$100 split to the couple.
+    const pix = (
+      await call("POST", "/payments", {
+        customer: customer.id,
+        billingType: "PIX",
+        value: 103.99,
+        dueDate: today(1),
+        description: "probe pix",
+        externalReference: "probe-pix",
+        split: [{ walletId: pixWallet, fixedValue: 100 }],
+      })
+    ).body;
+    const confirm = await call("POST", `/sandbox/payment/${pix.id}/confirm`);
+    const after = (await call("GET", `/payments/${pix.id}`)).body;
+    const summary = {
+      id: pix.id,
+      createdStatus: pix.status,
+      confirmStatus: confirm.status,
+      confirmErrors: confirm.body.errors,
+      status: after.status,
+      value: after.value,
+      netValue: after.netValue,
+      creditDate: after.creditDate,
+      split: after.split,
+    };
+    save(`pix-${Date.now()}.json`, { summary, log });
+    console.log(JSON.stringify(summary, null, 2));
+    return;
+  }
+
   if (mode !== "run") throw new Error(`Unknown mode ${mode}`);
 
   let wallet = process.env.PROBE_RECIPIENT_WALLET_ID;
@@ -185,16 +266,17 @@ async function main(mode: string, arg?: string) {
 
   const count = Number(process.env.PROBE_INSTALLMENTS ?? 12);
   const nominal = Number(process.env.PROBE_NOMINAL_CENTS ?? 10000);
-  const total = Number(process.env.PROBE_TOTAL_CENTS ?? 11909);
+  // Values without anticipation (sim.py with mrate = 0): R$100 12x = R$106,75.
+  const total = Number(process.env.PROBE_TOTAL_CENTS ?? 10675);
   const skipOneShot = process.env.PROBE_SKIP_ONESHOT === "1";
 
-  // A) 1x R$106,88 paid immediately with card, fixed split R$100 to the couple.
+  // A) 1x R$105,65 paid immediately with card, fixed split R$100 to the couple.
   const oneShot = skipOneShot
     ? { status: 0, body: {} as Json }
     : await call("POST", "/payments", {
         customer: customerId,
         billingType: "CREDIT_CARD",
-        value: 106.88,
+        value: 105.65,
         dueDate: today(1),
         description: "probe 1x",
         externalReference: "probe-1x",
@@ -250,11 +332,22 @@ async function main(mode: string, arg?: string) {
       externalReference: c.externalReference,
       dueDate: c.dueDate,
     }));
-    // Decreasing split summing to the nominal (spec example 12x R$100 starts 878, ends 753).
-    const weights = children.map((_, i) => 1 - i * 0.013);
-    const sumW = weights.reduce((a, b) => a + b, 0);
-    const split = weights.map((w) => Math.floor((nominal * w) / sumW));
-    split[0] = (split[0] ?? 0) + nominal - split.reduce((a, b) => a + b, 0);
+    // Split proportional to the net value Asaas reports for each child
+    // (largest remainder), so the PUT never exceeds what the child nets.
+    const nets = children.map((c) => cents(c.netValue));
+    const sumNet = nets.reduce((a, b) => a + b, 0);
+    const raw = nets.map((n) => (nominal * n) / sumNet);
+    const split = raw.map(Math.floor);
+    let rest = nominal - split.reduce((a, b) => a + b, 0);
+    for (const i of raw
+      .map((v, i) => ({ i, r: v - Math.floor(v) }))
+      .sort((a, b) => b.r - a.r || a.i - b.i)
+      .map((x) => x.i)) {
+      if (rest <= 0) break;
+      split[i] = (split[i] ?? 0) + 1;
+      rest -= 1;
+    }
+    result.childNetCents = nets;
     result.plannedSplitCents = split;
     const puts = [];
     for (const [i, child] of children.entries()) {
