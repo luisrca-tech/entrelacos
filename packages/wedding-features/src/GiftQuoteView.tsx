@@ -42,8 +42,7 @@ function formatCents(cents: number): string {
   return currencyFormatter.format(cents / 100);
 }
 
-const feesTooltip =
-  "Inclui taxa do meio de pagamento, antecipação do parcelamento e serviço Entrelaços";
+const feesTooltip = "Inclui a taxa do meio de pagamento e o serviço Entrelaços";
 
 /** "3x de R$35,33 (última R$35,35)"; the last installment only when it differs. */
 function formatInstallmentLabel(amounts: number[]): string {

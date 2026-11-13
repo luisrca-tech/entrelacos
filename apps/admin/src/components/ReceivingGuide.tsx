@@ -304,22 +304,13 @@ export function ReceivingGuide({
           saldo disponível para saque.
         </p>
         <p className="m-0">
-          No Pix, o valor costuma ficar disponível na conta Asaas em alguns
-          instantes após o pagamento. Confiram a atualização do saldo no painel.
-        </p>
-        <p className="m-0">
-          <strong>Pix:</strong> na hora.{" "}
-          <strong>Cartão (à vista ou parcelado):</strong> o valor inteiro de uma
-          vez, normalmente em até 2 dias úteis após a confirmação. Em situações
-          pontuais, como análise do pagamento, o presente fica como aguardando
-          liberação.
+          Vocês recebem o valor de cada parcela conforme o cartão libera,
+          normalmente em até 32 dias por parcela; no Pix, assim que o pagamento
+          é confirmado. Confiram a atualização do saldo no painel.
         </p>
         <div className="flex flex-wrap gap-x-4 gap-y-2">
           <OfficialLink href="https://central.ajuda.asaas.com/hc/pt-br/articles/53178101435163-Qual-%C3%A9-o-prazo-de-compensa%C3%A7%C3%A3o-de-cart%C3%A3o-de-cr%C3%A9dito-no-Asaas">
             Prazos de liberação no cartão
-          </OfficialLink>
-          <OfficialLink href="https://central.ajuda.asaas.com/hc/pt-br/articles/53178520388507-Como-acompanhar-o-andamento-do-meu-pedido-de-antecipa%C3%A7%C3%A3o">
-            Como acompanhar a análise de antecipação
           </OfficialLink>
         </div>
         <h3 className="m-0 text-base font-bold text-admin-text">

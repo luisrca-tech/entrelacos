@@ -5,11 +5,11 @@ const money = (cents: number) => currency.format(cents / 100);
 ---
 <div class="pricing-example" data-faq-reveal>
   <h3 id="pricing-example-title">Um presente de R$ 100 na prática</h3>
-  <p id="pricing-example-note">Valores ilustrativos, sem promoção, com antecipação, para o casal receber tudo de uma vez. As tarifas podem mudar. Consulte o painel para simular as condições atualizadas do seu casamento. O convidado confere o total final antes de pagar.</p>
+  <p id="pricing-example-note">Valores ilustrativos, sem promoção. As tarifas podem mudar. Consulte o painel para simular as condições atualizadas do seu casamento. O convidado confere o total final antes de pagar.</p>
   <p class="pricing-scroll-hint">Deslize a tabela para comparar todos os valores.</p>
   <div class="pricing-table-scroll" role="region" aria-labelledby="pricing-example-title" tabindex="0">
     <table aria-describedby="pricing-example-note pricing-example-explanation">
-      <caption class="faq-sr-only">Comparação de pagamentos para um presente de R$ 100 recebidos pelo casal, com antecipação e sem promoção.</caption>
+      <caption class="faq-sr-only">Comparação de pagamentos para um presente de R$ 100 recebidos pelo casal, sem promoção.</caption>
       <thead><tr><th scope="col">Pagamento</th><th scope="col">Valor das parcelas</th><th scope="col">Taxas pagas pelo convidado</th><th scope="col">Convidado paga</th><th scope="col">Casal recebe</th></tr></thead>
       <tbody>
         {faqPricingExamples.map((row) => {
@@ -27,5 +27,5 @@ const money = (cents: number) => currency.format(cents / 100);
       </tbody>
     </table>
   </div>
-  <p id="pricing-example-explanation" class="pricing-explanation">A taxa do meio de pagamento, a antecipação do parcelamento e o serviço Entrelaços são pagos pelo convidado e já estão no total. Com antecipação, o casal recebe tudo de uma vez: os R$ 100,00 inteiros, normalmente em até 2 dias úteis após a confirmação.</p>
+  <p id="pricing-example-explanation" class="pricing-explanation">A taxa do meio de pagamento e o serviço Entrelaços são pagos pelo convidado e já estão no total. O casal recebe os R$ 100,00 inteiros: no cartão, cada parcela conforme o cartão libera, normalmente em até 32 dias por parcela; no Pix, assim que o pagamento é confirmado.</p>
 </div>

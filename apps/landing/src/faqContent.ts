@@ -101,7 +101,7 @@ export const faqTopics: FaqTopic[] = [
       {
         question: "Quanto o casal recebe?",
         answer:
-          "Em um novo presente cadastrado por R$ 100,00, o casal recebe R$ 100,00 inteiros: as taxas, o serviço Entrelaços e a antecipação do parcelamento são pagos pelo convidado e já aparecem no total. Com antecipação, o casal recebe tudo de uma vez. Estornos, contestações e eventuais tarifas de saque são movimentações separadas.",
+          "Em um novo presente cadastrado por R$ 100,00, o casal recebe R$ 100,00 inteiros: a taxa do meio de pagamento e o serviço Entrelaços são pagos pelo convidado e já aparecem no total. Estornos, contestações e eventuais tarifas de saque são movimentações separadas.",
       },
       {
         question: "Como funciona o parcelamento no cartão?",
@@ -148,21 +148,12 @@ export const faqTopics: FaqTopic[] = [
       {
         question: "Em quanto tempo um presente pago fica disponível?",
         answer:
-          "No Pix, o Asaas informa que o valor costuma ficar disponível em alguns instantes após o pagamento. No cartão, à vista ou parcelado, o valor inteiro do presente chega de uma vez, com antecipação, normalmente em até 2 dias úteis após a confirmação. Em situações pontuais, como análise do pagamento, o presente fica como aguardando liberação. Acompanhem a situação no painel.",
+          "No Pix, vocês recebem assim que o pagamento é confirmado. No cartão, à vista ou parcelado, recebem o valor de cada parcela conforme o cartão libera, normalmente em até 32 dias por parcela. Em situações pontuais, como análise do pagamento, o presente fica como aguardando liberação. Acompanhem a situação no painel.",
       },
       {
         question: "Se o convidado parcelar, recebemos tudo de uma vez?",
         answer:
-          "Sim. Com antecipação, o casal recebe o valor inteiro do presente de uma vez, mesmo que o convidado parcele no cartão. O custo da antecipação está incluído no total pago pelo convidado.",
-      },
-      {
-        question: "Como funciona a antecipação dos recebimentos?",
-        answer:
-          "A antecipação libera os valores de cartão antes do prazo padrão para que o casal receba tudo de uma vez. Ela tem custo próprio, pago pelo convidado e já incluído no total. O saldo só pode ser tratado como disponível após a confirmação do crédito pelo Asaas.",
-        reference: {
-          label: "Entender as condições de antecipação",
-          href: "https://www.asaas.com/antecipacao-de-recebiveis",
-        },
+          "Não. Cada parcela chega conforme o cartão a libera, normalmente em até 32 dias por parcela. Mesmo assim, o casal recebe 100% do presente: as taxas do parcelamento são pagas pelo convidado.",
       },
     ],
   },

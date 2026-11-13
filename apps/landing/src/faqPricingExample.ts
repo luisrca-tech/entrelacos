@@ -19,7 +19,7 @@ const example = (
   method: quote.method,
   totalCents: quote.totalCents,
   installmentCents: quote.installmentCents,
-  // Commission, processing and anticipation are paid by the guest.
+  // The guest pays the payment-method fee and the Entrelaços service.
   combinedFeesCents: quote.totalCents - nominalCents,
   recipientNetCents: nominalCents,
 });

@@ -251,7 +251,7 @@ export function GiftPricingPreview({
   );
 }
 
-const feesTooltip = "Inclui antecipação para você receber de uma vez";
+const feesTooltip = "Inclui a taxa do meio de pagamento e o serviço Entrelaços";
 // Installment plans shown in the simulation; the guest still picks any plan.
 const simulatedInstallments = [1, 6, 12];
 
@@ -348,8 +348,9 @@ function PricingComparison({
         </>
       )}
       <p className="m-0 text-xs leading-[1.5] text-admin-text-secondary">
-        O convidado paga as taxas e você recebe o valor inteiro do presente de
-        uma vez.
+        Você recebe o valor de cada parcela conforme o cartão libera,
+        normalmente em até 32 dias por parcela; no Pix, assim que o pagamento é
+        confirmado.
       </p>
     </div>
   );

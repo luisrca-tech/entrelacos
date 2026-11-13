@@ -65,7 +65,8 @@ const sampleLabels: Record<
   RESTRICTED: "Pagamento com restrição no Asaas",
 };
 // Status shown for a payment sample. V2 payments distinguish money still
-// waiting for the split from payments held for review.
+// waiting for the split (the normal state for card installments until each
+// one is credited by the card schedule) from payments held for review.
 export function historySampleStatus(
   sample: GiftPurchaseHistoryPayment,
 ): string {
