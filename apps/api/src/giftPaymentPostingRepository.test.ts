@@ -1753,9 +1753,10 @@ describe("PLATFORM_ACCOUNT_SPLIT_V2 receipt posting", () => {
         },
       ],
     });
-    await createGiftPaymentPostingRepository(v.db, v.options).postReceivedPayment(
-      v.input,
-    );
+    await createGiftPaymentPostingRepository(
+      v.db,
+      v.options,
+    ).postReceivedPayment(v.input);
     expect(v.tables.financial_ledger_entry).toEqual([]);
     expect(v.tables.gift_payment_record[0]).toMatchObject({
       providerStatus: "CONFIRMED",
