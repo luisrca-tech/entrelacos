@@ -888,6 +888,19 @@ export function reconcileGiftPaymentObservationV2(
         },
       };
 
+    // A paid charge whose split matches the frozen amount is awaiting release:
+    // the couple's share is known before Asaas settles it. Only the ledger
+    // credit (PAYMENT_SPLIT_DONE + RECEIVED) makes it available.
+    if (
+      payment.recipientNetCents === null &&
+      alert === null &&
+      split !== null &&
+      split.percentualValue == null &&
+      payment.splitFixedCents === coupleSplitCents &&
+      (status === "CONFIRMED" || status === "RECEIVED")
+    )
+      payment.recipientNetCents = coupleSplitCents;
+
     if (input.eventType !== "PAYMENT_SPLIT_DONE")
       return {
         outcome: "OBSERVED",

@@ -1732,6 +1732,31 @@ describe("PLATFORM_ACCOUNT_SPLIT_V2 receipt posting", () => {
     expect(result.outcome).toBe("OBSERVED");
     expect(v.tables.financial_event_inbox[0].state).toBe("PROCESSED");
     expect(v.tables.financial_ledger_entry).toEqual([]);
+    // Awaiting release: the couple share is known, commission only after DONE.
+    expect(v.tables.gift_payment_record[0]).toMatchObject({
+      providerStatus: "CONFIRMED",
+      recipientNetCents: 10000,
+      commissionCents: null,
+    });
+  });
+
+  it("keeps the couple share unknown when the confirmed split differs from the quote", async () => {
+    const v = v2Fixture("PAYMENT_CONFIRMED", {
+      status: "CONFIRMED",
+      split: [
+        {
+          id: "split-couple",
+          walletId: "recipient-one",
+          fixedValue: "99.00",
+          totalValue: "99.00",
+          status: "AWAITING_CREDIT",
+        },
+      ],
+    });
+    await createGiftPaymentPostingRepository(v.db, v.options).postReceivedPayment(
+      v.input,
+    );
+    expect(v.tables.financial_ledger_entry).toEqual([]);
     expect(v.tables.gift_payment_record[0]).toMatchObject({
       providerStatus: "CONFIRMED",
       recipientNetCents: null,

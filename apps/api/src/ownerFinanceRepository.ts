@@ -10,6 +10,7 @@ import type {
   OwnerFinanceSummaryQuery,
 } from "@entrelacos/contracts";
 import {
+  financialLedgerEntry,
   financialOperatorAlert,
   giftOrder,
   giftPaymentRecord,
@@ -83,6 +84,10 @@ function where(conditions: (SQL | undefined)[]): SQL {
 const restrictedStatus =
   "^(REFUND|CHARGEBACK)|^(DELETED|DISPUTED|AWAITING_CHARGEBACK_REVERSAL)$";
 
+const credited = sql`EXISTS (SELECT 1 FROM ${financialLedgerEntry} l WHERE l.payment_id = p.id
+  AND l.site_id = p.site_id AND l.account_id = p.account_id AND l.environment = p.environment
+  AND l.kind = 'GIFT_RECEIVED' AND l.direction = 'CREDIT')`;
+
 // One row per paid V2 gift order, with its couple credit, commissions and status.
 function paidGifts(filters: OwnerFinanceSummaryQuery): SQL {
   const inner = sql`SELECT o.id AS order_id, o.site_id, o.environment, s.display_name AS site_name,
@@ -105,8 +110,11 @@ function paidGifts(filters: OwnerFinanceSummaryQuery): SQL {
       SELECT
         MIN(p.observed_at) FILTER (WHERE p.verification_status = 'VERIFIED'
           AND p.provider_status IN ('CONFIRMED', 'RECEIVED')) AS paid_at,
-        COALESCE(SUM(p.recipient_net_cents), 0) AS credited_cents,
-        COUNT(p.recipient_net_cents) AS credited_installments,
+        -- Credited only once the couple ledger has the GIFT_RECEIVED entry;
+        -- a confirmed charge already carries its expected split (awaiting).
+        COALESCE(SUM(p.recipient_net_cents + CASE WHEN p.platform_adjustment_funded_at IS NOT NULL
+          THEN COALESCE(p.platform_adjustment_cents, 0) ELSE 0 END) FILTER (WHERE ${credited}), 0) AS credited_cents,
+        COUNT(*) FILTER (WHERE ${credited}) AS credited_installments,
         SUM(p.platform_net_cents) AS platform_net_cents,
         COALESCE(bool_or(p.split_divergence_blocked_at IS NOT NULL
           OR COALESCE(p.provider_status, '') ~ ${restrictedStatus}

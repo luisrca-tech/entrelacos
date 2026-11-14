@@ -84,6 +84,12 @@ async function seed(tx: Executor) {
         ${input.status}, 'VERIFIED', ${input.observedAt}::timestamptz, ${input.gross},
         ${input.recipientNet ?? null}, ${input.platformNet ?? null},
         ${input.installment ? "installment" : null}, ${input.installment ?? null})`);
+    // A settled split (platform net known) is the one credited to the couple.
+    if (input.platformNet !== undefined && input.recipientNet !== undefined)
+      await tx.execute(sql`INSERT INTO financial_ledger_entry (id, site_id, account_id, environment,
+        effect_key, kind, direction, currency, amount_cents, payment_id, created_at)
+        VALUES (${`ledger-${input.id}`}, ${input.siteId}, 'account', 'sandbox', ${`effect-${input.id}`},
+          'GIFT_RECEIVED', 'CREDIT', 'BRL', ${input.recipientNet}, ${input.id}, ${input.observedAt}::timestamptz)`);
   }
 
   await order({
