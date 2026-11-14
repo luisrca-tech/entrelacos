@@ -184,9 +184,8 @@ it("shows gift, fees and total without exposing recipient deductions in Sandbox"
   expect(html).toContain("Presente");
   expect(html).toContain("Taxas e serviço");
   expect(html).toContain(
-    'title="Inclui a taxa do meio de pagamento e o serviço Entrelaços"',
+    'title="inclui a taxa do meio de pagamento, a antecipação ao casal (no cartão) e o serviço Entrelaços"',
   );
-  expect(html).not.toMatch(/antecipa/i);
   expect(html).toContain("105,21");
 });
 

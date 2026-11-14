@@ -251,7 +251,9 @@ export function GiftPricingPreview({
   );
 }
 
-const feesTooltip = "Inclui a taxa do meio de pagamento e o serviço Entrelaços";
+// The couple never sees the Entrelaços service fee, so it is not named here.
+const feesTooltip =
+  "Inclui a taxa do meio de pagamento e, no cartão, a antecipação";
 // Installment plans shown in the simulation; the guest still picks any plan.
 const simulatedInstallments = [1, 6, 12];
 
@@ -348,9 +350,9 @@ function PricingComparison({
         </>
       )}
       <p className="m-0 text-xs leading-[1.5] text-admin-text-secondary">
-        Você recebe o valor de cada parcela conforme o cartão libera,
-        normalmente em até 32 dias por parcela; no Pix, assim que o pagamento é
-        confirmado.
+        No Pix, você recebe assim que o pagamento é confirmado. No cartão, mesmo
+        parcelado, o valor é antecipado e normalmente chega em até 2 dias úteis,
+        sujeito à análise do Asaas.
       </p>
     </div>
   );
