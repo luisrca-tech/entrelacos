@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { addBusinessDays } from "./ownerFinanceRepository";
+import {
+  addBusinessDays,
+  decodeOwnerFinanceCursor,
+  encodeOwnerFinanceCursor,
+} from "./ownerFinanceRepository";
 
 describe("addBusinessDays", () => {
   it("counts Monday to Friday only", () => {
@@ -24,5 +28,22 @@ describe("addBusinessDays", () => {
     const start = new Date("2026-10-14T12:00:00.000Z");
     expect(addBusinessDays(start, 0).getTime()).toBe(start.getTime());
     expect(start.toISOString()).toBe("2026-10-14T12:00:00.000Z");
+  });
+});
+
+describe("owner finance cursor", () => {
+  it("round-trips the keyset position, including ids with separators", () => {
+    const cursor = encodeOwnerFinanceCursor("1760097600123456", "order_a-1");
+    expect(cursor).toBe("1760097600123456_order_a-1");
+    expect(decodeOwnerFinanceCursor(cursor)).toEqual({
+      micros: "1760097600123456",
+      id: "order_a-1",
+    });
+  });
+
+  it("rejects malformed cursors", () => {
+    expect(decodeOwnerFinanceCursor("abc_order")).toBeNull();
+    expect(decodeOwnerFinanceCursor("123_")).toBeNull();
+    expect(decodeOwnerFinanceCursor("123")).toBeNull();
   });
 });

@@ -202,12 +202,67 @@ export function PanelSessionView({
       ) : landing.kind === "SELECT" ? (
         <AssignedSites key={sessionEpoch} actor={actor} />
       ) : (
-        <>
-          <OwnerSites key={sessionEpoch} />
-          <OwnerFinance key={`finance-${sessionEpoch}`} />
-        </>
+        <OwnerHome sessionEpoch={sessionEpoch} />
       )}
     </AdminShell>
+  );
+}
+
+export const ownerFinanceHash = "#financeiro";
+
+function subscribeToHash(onChange: () => void) {
+  window.addEventListener("hashchange", onChange);
+  return () => window.removeEventListener("hashchange", onChange);
+}
+
+// Owner-only landing: the wedding list or the platform finance screen,
+// selected by the URL hash so the account menu can link to finance.
+function OwnerHome({ sessionEpoch }: { sessionEpoch: number }) {
+  const finance = useSyncExternalStore(
+    subscribeToHash,
+    () => window.location.hash === ownerFinanceHash,
+    () => false,
+  );
+  const select = (next: boolean) => {
+    if (next === finance) return;
+    window.history.pushState(
+      null,
+      "",
+      `${window.location.pathname}${window.location.search}${next ? ownerFinanceHash : ""}`,
+    );
+    window.dispatchEvent(new HashChangeEvent("hashchange"));
+  };
+  return (
+    <>
+      <nav
+        aria-label="Área do proprietário"
+        className="mb-7 flex w-fit flex-wrap gap-1 rounded-xl border border-admin-border bg-admin-surface p-1"
+      >
+        {(
+          [
+            [false, "Casamentos"],
+            [true, "Financeiro Entrelaços"],
+          ] as const
+        ).map(([value, label]) => (
+          <AdminButton
+            key={label}
+            type="button"
+            size="sm"
+            tone="ghost"
+            aria-current={finance === value ? "page" : undefined}
+            className={`h-9 px-3 text-sm font-semibold ${finance === value ? adminStyles.selected : "text-admin-text-secondary"}`}
+            onClick={() => select(value)}
+          >
+            {label}
+          </AdminButton>
+        ))}
+      </nav>
+      {finance ? (
+        <OwnerFinance key={`finance-${sessionEpoch}`} />
+      ) : (
+        <OwnerSites key={sessionEpoch} />
+      )}
+    </>
   );
 }
 

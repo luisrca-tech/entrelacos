@@ -2,6 +2,9 @@ import {
   ownerFinanceAlertListQuerySchema,
   ownerFinanceAlertListResponseSchema,
   ownerFinanceAlertResolveInputSchema,
+  ownerFinanceGiftListQuerySchema,
+  ownerFinanceGiftListResponseSchema,
+  ownerFinanceSiteListResponseSchema,
   ownerFinanceSummaryQuerySchema,
   ownerFinanceSummarySchema,
 } from "@entrelacos/contracts";
@@ -11,19 +14,28 @@ import type { AuthHttpOptions } from "./authHttp";
 import { AdminSessionRequiredError, requireAdminSession } from "./authHttp";
 import {
   listOwnerFinanceAlerts,
+  listOwnerFinanceGifts,
+  listOwnerFinanceSites,
   readOwnerFinanceSummary,
   resolveOwnerFinanceAlert,
 } from "./ownerFinanceRepository";
+
+export const ownerFinanceHttpPaths = {
+  summary: "/v1/owner/finance/summary",
+  gifts: "/v1/owner/finance/gifts",
+  sites: "/v1/owner/finance/sites",
+  alerts: "/v1/owner/finance/alerts",
+  resolveAlert: "/v1/owner/finance/alerts/:id/resolve",
+} as const;
+
+const noStore = { "Cache-Control": "no-store" };
 
 function problem(status: number, code: string, title: string): Response {
   return new Response(
     JSON.stringify({ type: "about:blank", title, status, code }),
     {
       status,
-      headers: {
-        "Cache-Control": "no-store",
-        "Content-Type": "application/problem+json",
-      },
+      headers: { ...noStore, "Content-Type": "application/problem+json" },
     },
   );
 }
@@ -45,6 +57,20 @@ async function requireOwner(
       return problem(401, "UNAUTHORIZED", "Authentication required");
     throw error;
   }
+}
+
+/**
+ * Query string as an object for Zod: `siteId` may repeat and stays a list;
+ * any other repeated key is kept as a list so the strict schema rejects it.
+ */
+function queryInput(url: string): Record<string, string | string[]> {
+  const params = new URL(url).searchParams;
+  const input: Record<string, string | string[]> = {};
+  for (const key of new Set(params.keys())) {
+    const values = params.getAll(key);
+    input[key] = key === "siteId" || values.length > 1 ? values : values[0];
+  }
+  return input;
 }
 
 async function readObject(request: Request): Promise<unknown> {
@@ -69,39 +95,64 @@ export function createOwnerFinanceHttpRouter(options: AuthHttpOptions): Hono {
     problem(503, "SERVICE_UNAVAILABLE", "Service unavailable"),
   );
 
-  router.get("/v1/owner/finance/summary", async (context) => {
+  router.get(ownerFinanceHttpPaths.summary, async (context) => {
     const denied = await requireOwner(context.req.raw, options);
     if (denied) return denied;
-    const query = ownerFinanceSummaryQuerySchema.safeParse(context.req.query());
+    const query = ownerFinanceSummaryQuerySchema.safeParse(
+      queryInput(context.req.url),
+    );
     if (!query.success)
       return problem(400, "VALIDATION_ERROR", "Invalid query");
-    const summary = await readOwnerFinanceSummary(options.db, {
-      from: query.data.from ? new Date(query.data.from) : undefined,
-      to: query.data.to ? new Date(query.data.to) : undefined,
-      now: now(),
-    });
-    return context.json(ownerFinanceSummarySchema.parse(summary), 200, {
-      "Cache-Control": "no-store",
-    });
+    const summary = await readOwnerFinanceSummary(options.db, query.data);
+    return context.json(ownerFinanceSummarySchema.parse(summary), 200, noStore);
   });
 
-  router.get("/v1/owner/finance/alerts", async (context) => {
+  router.get(ownerFinanceHttpPaths.gifts, async (context) => {
+    const denied = await requireOwner(context.req.raw, options);
+    if (denied) return denied;
+    const query = ownerFinanceGiftListQuerySchema.safeParse(
+      queryInput(context.req.url),
+    );
+    if (!query.success)
+      return problem(400, "VALIDATION_ERROR", "Invalid query");
+    const page = await listOwnerFinanceGifts(options.db, query.data);
+    return context.json(
+      ownerFinanceGiftListResponseSchema.parse(page),
+      200,
+      noStore,
+    );
+  });
+
+  router.get(ownerFinanceHttpPaths.sites, async (context) => {
+    const denied = await requireOwner(context.req.raw, options);
+    if (denied) return denied;
+    if (new URL(context.req.url).search)
+      return problem(400, "VALIDATION_ERROR", "Invalid query");
+    const sites = await listOwnerFinanceSites(options.db);
+    return context.json(
+      ownerFinanceSiteListResponseSchema.parse(sites),
+      200,
+      noStore,
+    );
+  });
+
+  router.get(ownerFinanceHttpPaths.alerts, async (context) => {
     const denied = await requireOwner(context.req.raw, options);
     if (denied) return denied;
     const query = ownerFinanceAlertListQuerySchema.safeParse(
-      context.req.query(),
+      queryInput(context.req.url),
     );
     if (!query.success)
       return problem(400, "VALIDATION_ERROR", "Invalid query");
-    const alerts = await listOwnerFinanceAlerts(options.db, query.data.status);
+    const page = await listOwnerFinanceAlerts(options.db, query.data);
     return context.json(
-      ownerFinanceAlertListResponseSchema.parse({ alerts }),
+      ownerFinanceAlertListResponseSchema.parse(page),
       200,
-      { "Cache-Control": "no-store" },
+      noStore,
     );
   });
 
-  router.post("/v1/owner/finance/alerts/:id/resolve", async (context) => {
+  router.post(ownerFinanceHttpPaths.resolveAlert, async (context) => {
     const denied = await requireOwner(context.req.raw, options);
     if (denied) return denied;
     const body = ownerFinanceAlertResolveInputSchema.safeParse(
@@ -114,7 +165,7 @@ export function createOwnerFinanceHttpRouter(options: AuthHttpOptions): Hono {
       now: now(),
     });
     if (!resolved) return problem(404, "NOT_FOUND", "Alert not found");
-    return context.body(null, 204, { "Cache-Control": "no-store" });
+    return context.body(null, 204, noStore);
   });
 
   return router;
