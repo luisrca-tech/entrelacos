@@ -895,6 +895,17 @@ export function createGiftPaymentHistoryRepository(
         let guaranteedAttempt: string | undefined;
         const guaranteed =
           plan.snapshot.quote.settlementVersion === "PLATFORM_FEE_GUARANTEE_V1";
+        // V2: each charge owes the couple its frozen split (Σ = nominal); a
+        // divergence top-up pays the part the provider split could not.
+        const splitV2 =
+          plan.snapshot.quote.settlementVersion === "PLATFORM_ACCOUNT_SPLIT_V2";
+        const v2Split = (installmentNumber: unknown): number | null => {
+          const split =
+            plan.snapshot.settlement?.recipientSplitCents[
+              typeof installmentNumber === "number" ? installmentNumber - 1 : 0
+            ];
+          return splitV2 && typeof split === "number" ? split : null;
+        };
         for (const payment of payments) {
           scoped(payment, scope, id(plan.account.id));
           if (
@@ -944,11 +955,13 @@ export function createGiftPaymentHistoryRepository(
               ((guaranteedAttempt !== undefined &&
                 guaranteedAttempt !== attempt.id) ||
                 installmentNumbers.has(installmentNumber))) ||
+            (splitV2 && v2Split(installmentNumber) === null) ||
             (adjustment > 0 &&
-              (!guaranteed ||
+              (!(guaranteed || splitV2) ||
                 typeof payment.recipient_net_cents !== "number" ||
                 adjustment !==
-                  terms.nominalCents - payment.recipient_net_cents)) ||
+                  (v2Split(installmentNumber) ?? terms.nominalCents) -
+                    payment.recipient_net_cents)) ||
             (funded &&
               (adjustment === 0 ||
                 payment.platform_adjustment_transfer_reference == null ||
@@ -991,6 +1004,18 @@ export function createGiftPaymentHistoryRepository(
             commissionCents: payment.commission_cents,
             recipientNetCents: payment.recipient_net_cents,
             ...(installmentNumber === null ? {} : { installmentNumber }),
+            ...(plan.snapshot.settlement
+              ? {
+                  expectedRecipientSplitCents:
+                    plan.snapshot.settlement.recipientSplitCents[
+                      Number(installmentNumber ?? 1) - 1
+                    ],
+                }
+              : {}),
+            ...(plan.snapshot.settlement &&
+            payment.split_divergence_blocked_at != null
+              ? { splitDivergenceBlocked: true as const }
+              : {}),
             ...(adjustment === 0
               ? {}
               : funded
@@ -1061,14 +1086,25 @@ export function createGiftPaymentHistoryRepository(
             payment.verification_status !== "VERIFIED" ||
             payment.observed_at === null ||
             payment.gross_cents !== terms.grossCents ||
-            BigInt(terms.grossCents) !==
-              BigInt(actualProcessing) +
-                BigInt(terms.commissionCents) +
-                BigInt(recipientNet) ||
-            payment.commission_cents !== terms.commissionCents ||
-            payment.split_fixed_cents !== terms.commissionCents ||
-            (terms.commissionCents > 0 &&
-              !ref(payment.split_provider_reference))
+            (splitV2
+              ? // The couple split is the credit; the platform keeps the rest.
+                (payment.platform_adjustment_cents ?? 0) !==
+                  (v2Split(payment.installment_number) ?? -1) - recipientNet ||
+                typeof payment.commission_cents !== "number" ||
+                BigInt(terms.grossCents) !==
+                  BigInt(actualProcessing) +
+                    BigInt(payment.commission_cents) +
+                    BigInt(recipientNet) ||
+                payment.split_fixed_cents !== recipientNet ||
+                !ref(payment.split_provider_reference)
+              : BigInt(terms.grossCents) !==
+                  BigInt(actualProcessing) +
+                    BigInt(terms.commissionCents) +
+                    BigInt(recipientNet) ||
+                payment.commission_cents !== terms.commissionCents ||
+                payment.split_fixed_cents !== terms.commissionCents ||
+                (terms.commissionCents > 0 &&
+                  !ref(payment.split_provider_reference)))
           )
             return historyUnavailable();
           const observed = within(

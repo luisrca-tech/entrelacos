@@ -421,8 +421,7 @@ function WithdrawalBalance({
         <p className="m-0 text-[13px] text-admin-text-secondary">
           Dos pagamentos confirmados,{" "}
           {formatCents(overview.awaitingReleaseCents)} ainda aguardam liberação
-          pelo Asaas. No cartão parcelado, cada parcela é liberada
-          separadamente.
+          pelo Asaas. Você recebe 100% do valor de cada presente.
         </p>
       )}
     </div>

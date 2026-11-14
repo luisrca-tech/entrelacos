@@ -16,6 +16,7 @@ type Props = {
   loading: boolean;
   pending: boolean;
   error?: string;
+  notice?: string;
   onSelectMethod: (method: PaymentMethod, installmentCount?: number) => void;
   onConfirm: (payer?: CheckoutCreateInput["payer"]) => void;
   onCancel: () => void;
@@ -41,8 +42,14 @@ function formatCents(cents: number): string {
   return currencyFormatter.format(cents / 100);
 }
 
-function hasRoundingAdjustment(amounts: number[]): boolean {
-  return amounts.some((cents) => cents !== amounts[0]);
+const feesTooltip = "Inclui a taxa do meio de pagamento e o serviço Entrelaços";
+
+/** "3x de R$35,33 (última R$35,35)"; the last installment only when it differs. */
+function formatInstallmentLabel(amounts: number[]): string {
+  const first = amounts[0] ?? 0;
+  const last = amounts[amounts.length - 1] ?? first;
+  const suffix = last !== first ? ` (última ${formatCents(last)})` : "";
+  return `${amounts.length}x de ${formatCents(first)}${suffix}`;
 }
 
 export function GiftQuoteView({
@@ -52,6 +59,7 @@ export function GiftQuoteView({
   loading,
   pending,
   error,
+  notice,
   onSelectMethod,
   onConfirm,
   onCancel,
@@ -62,7 +70,6 @@ export function GiftQuoteView({
     "id" | "expiresAt"
   > | null>(null);
   const payerFormId = useId();
-  const roundingHintId = useId();
   const quoteId = quote?.id;
   const expiresAt = quote?.expiresAt;
   useEffect(() => {
@@ -86,14 +93,13 @@ export function GiftQuoteView({
     quoteMatchesSelection && quoteIsCurrent && !loading && !pending;
   const methodsDisabled = loading || pending;
   const options = method === "CREDIT_CARD" ? quote?.installmentOptions : null;
-  const hasRoundedOption = options?.some((option) =>
-    hasRoundingAdjustment(option.installmentCents),
-  );
   const hasPayerForm = quoteMatchesSelection && installmentCount > 1;
   const installmentAmounts = quoteMatchesSelection
     ? quote.installmentCents
     : null;
   const surcharge = quote?.installmentSurchargeCents ?? 0;
+  // V2 quotes are always buyer-pays-all: show gift, one fees line and total.
+  const showFeeBreakdown = quote?.feeAllocation === "BUYER_GROSS_UP";
 
   return (
     <section
@@ -154,7 +160,6 @@ export function GiftQuoteView({
             <select
               className={fieldClass}
               disabled={methodsDisabled}
-              aria-describedby={hasRoundedOption ? roundingHintId : undefined}
               value={installmentCount}
               onChange={(event) =>
                 onSelectMethod("CREDIT_CARD", Number(event.currentTarget.value))
@@ -167,21 +172,21 @@ export function GiftQuoteView({
                 >
                   {option.installmentCount === 1
                     ? `À vista · ${formatCents(option.totalCents)}`
-                    : `${option.installmentCount}x de ${formatCents(option.installmentCents[0])}${hasRoundingAdjustment(option.installmentCents) ? "*" : ""}`}
+                    : formatInstallmentLabel(option.installmentCents)}
                 </option>
               ))}
             </select>
-            {hasRoundedOption && (
-              <span id={roundingHintId} className="text-sm text-template-muted">
-                * A última parcela tem ajuste de centavos, detalhado no resumo.
-              </span>
-            )}
           </label>
         )}
 
         {error && (
           <p role="alert" className="m-0 border border-template-line p-4">
             {error}
+          </p>
+        )}
+        {notice && !error && (
+          <p role="status" className="m-0 border border-template-line p-4">
+            {notice}
           </p>
         )}
         {loading && (
@@ -198,26 +203,50 @@ export function GiftQuoteView({
         {quoteMatchesSelection && (
           <section aria-label="Resumo da cotação" className={quoteCardClass}>
             <dl className="m-0 grid min-w-0 gap-3">
+              {showFeeBreakdown && (
+                <>
+                  <div className="flex min-w-0 flex-wrap justify-between gap-x-4 gap-y-1">
+                    <dt className="text-template-muted">Presente</dt>
+                    <dd className="m-0">{formatCents(quote.nominalCents)}</dd>
+                  </div>
+                  <div className="flex min-w-0 flex-wrap justify-between gap-x-4 gap-y-1">
+                    <dt className="text-template-muted">
+                      Taxas e serviço{" "}
+                      <button
+                        type="button"
+                        aria-label={feesTooltip}
+                        title={feesTooltip}
+                        className="cursor-help rounded-full border border-template-line px-1.5 text-xs"
+                      >
+                        i
+                      </button>
+                    </dt>
+                    <dd className="m-0">
+                      {formatCents(quote.totalCents - quote.nominalCents)}
+                    </dd>
+                  </div>
+                </>
+              )}
               {installmentAmounts && installmentAmounts.length > 1 && (
                 <>
                   <div className="flex min-w-0 flex-wrap justify-between gap-x-4 gap-y-1">
                     <dt className="text-template-muted">Valor das parcelas</dt>
                     <dd className="m-0">
-                      {installmentAmounts.every(
-                        (cents) => cents === installmentAmounts[0],
-                      )
-                        ? `${installmentAmounts.length}x de ${formatCents(installmentAmounts[0])}`
-                        : `${installmentAmounts.length - 1}x de ${formatCents(installmentAmounts[0])} + 1x de ${formatCents(installmentAmounts[installmentAmounts.length - 1])}`}
+                      {formatInstallmentLabel(installmentAmounts)}
                     </dd>
                   </div>
-                  <div className="flex min-w-0 flex-wrap justify-between gap-x-4 gap-y-1">
-                    <dt className="text-template-muted">
-                      {surcharge < 0
-                        ? "Desconto no parcelamento"
-                        : "Acréscimo do parcelamento"}
-                    </dt>
-                    <dd className="m-0">{formatCents(Math.abs(surcharge))}</dd>
-                  </div>
+                  {!showFeeBreakdown && (
+                    <div className="flex min-w-0 flex-wrap justify-between gap-x-4 gap-y-1">
+                      <dt className="text-template-muted">
+                        {surcharge < 0
+                          ? "Desconto no parcelamento"
+                          : "Acréscimo do parcelamento"}
+                      </dt>
+                      <dd className="m-0">
+                        {formatCents(Math.abs(surcharge))}
+                      </dd>
+                    </div>
+                  )}
                 </>
               )}
               <div className="flex min-w-0 flex-wrap justify-between gap-x-4 gap-y-1 border-t border-template-line pt-3 font-bold">
@@ -227,11 +256,12 @@ export function GiftQuoteView({
                 </dd>
               </div>
             </dl>
-            {quote.feeAllocation !== "RECIPIENT_DEDUCTED" && (
-              <p className="m-0 text-sm text-template-muted">
-                Taxas incluídas no valor
-              </p>
-            )}
+            {quote.feeAllocation !== "RECIPIENT_DEDUCTED" &&
+              !showFeeBreakdown && (
+                <p className="m-0 text-sm text-template-muted">
+                  Taxas incluídas no valor
+                </p>
+              )}
             {!quoteIsCurrent && (
               <p role="status" className="m-0 text-sm text-template-muted">
                 Selecione novamente a forma de pagamento para atualizar os

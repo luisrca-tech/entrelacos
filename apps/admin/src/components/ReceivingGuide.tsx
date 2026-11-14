@@ -280,9 +280,9 @@ export function ReceivingGuide({
         <p className="m-0">
           Os presentes são contribuições em dinheiro, sem envio de produtos.
           Vocês cadastram quanto querem receber, a partir de{" "}
-          {formatCents(giftMinimumNominalCents)} por presente. O convidado vê o
-          preço com as taxas incluídas. Se escolher parcelar no cartão, vê o
-          valor das parcelas, o acréscimo e o total antes de pagar.
+          {formatCents(giftMinimumNominalCents)} por presente. O convidado paga
+          as taxas, então vocês recebem 100% do valor do presente. Se escolher
+          parcelar no cartão, vê o valor das parcelas e o total antes de pagar.
         </p>
         <p className="m-0">
           Ao abrir uma cobrança, o convidado ainda precisa concluir o pagamento
@@ -291,10 +291,6 @@ export function ReceivingGuide({
           {giftInstallmentExpiryMinutes} minutos a partir da emissão. Após esse
           prazo, o convidado pode tentar novamente quando o Asaas confirmar o
           encerramento da cobrança anterior.
-        </p>
-        <p className="m-0">
-          O EntreLaços cobre a diferença quando a tarifa de um novo pagamento
-          supera a prevista.
         </p>
         <h3
           id="receiving-guide-credit"
@@ -308,24 +304,13 @@ export function ReceivingGuide({
           saldo disponível para saque.
         </p>
         <p className="m-0">
-          No Pix, o valor costuma ficar disponível na conta Asaas em alguns
-          instantes após o pagamento. Confiram a atualização do saldo no painel.
-        </p>
-        <p className="m-0">
-          No prazo padrão do cartão, o pagamento à vista é liberado em até 32
-          dias corridos. Em compras parceladas, o Asaas libera uma parcela a
-          cada 32 dias corridos. A compensação ocorre em dias úteis.
-        </p>
-        <p className="m-0">
-          A antecipação depende da elegibilidade da conta e da aprovação pelo
-          Asaas. O valor antecipado só entra no saldo após o crédito.
+          Vocês recebem o valor de cada parcela conforme o cartão libera,
+          normalmente em até 32 dias por parcela; no Pix, assim que o pagamento
+          é confirmado. Confiram a atualização do saldo no painel.
         </p>
         <div className="flex flex-wrap gap-x-4 gap-y-2">
           <OfficialLink href="https://central.ajuda.asaas.com/hc/pt-br/articles/53178101435163-Qual-%C3%A9-o-prazo-de-compensa%C3%A7%C3%A3o-de-cart%C3%A3o-de-cr%C3%A9dito-no-Asaas">
             Prazos de liberação no cartão
-          </OfficialLink>
-          <OfficialLink href="https://central.ajuda.asaas.com/hc/pt-br/articles/53178520388507-Como-acompanhar-o-andamento-do-meu-pedido-de-antecipa%C3%A7%C3%A3o">
-            Como acompanhar a análise de antecipação
           </OfficialLink>
         </div>
         <h3 className="m-0 text-base font-bold text-admin-text">

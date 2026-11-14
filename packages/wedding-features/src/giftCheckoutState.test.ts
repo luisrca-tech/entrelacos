@@ -119,6 +119,24 @@ describe("gift checkout selection and quotation", () => {
       pendingSiteId: null,
       checkoutStatus: null,
       error: null,
+      notice: null,
+    });
+  });
+
+  it("re-quotes with a notice when a V1 reservation is refused", () => {
+    const state = giftCheckoutReducer(creating(), {
+      type: "CHECKOUT_FAILED",
+      message: "Os valores foram atualizados.",
+      unknown: false,
+      invalidateQuote: true,
+      requote: true,
+    });
+    expect(state).toMatchObject({
+      phase: "QUOTING",
+      quote: null,
+      error: null,
+      notice: "Os valores foram atualizados.",
+      revision: creating().revision + 1,
     });
   });
 

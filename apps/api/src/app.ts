@@ -45,6 +45,7 @@ import {
   type ObservabilityOptions,
   type ObservabilityVariables,
 } from "./observability";
+import { createOwnerFinanceHttpRouter } from "./ownerFinanceHttp";
 import { createReceivingHttpRouter } from "./receivingHttp";
 import type { ReceivingNominationService } from "./receivingNomination";
 import {
@@ -142,6 +143,7 @@ export function createApp(
         : readReceivingReadiness(options.db, siteId, options.receiving);
     app.route("/", createAuthHttpRouter(options));
     app.route("/", createAdminAccessHttpRouter(options));
+    app.route("/", createOwnerFinanceHttpRouter(options));
     app.route("/", createSitesHttpRouter(options));
     const teamRouter = createSiteTeamHttpRouter(options);
     // Dispatch only team contracts so its private middleware cannot guard guest routes.

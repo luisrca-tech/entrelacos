@@ -30,6 +30,7 @@ function fixture(mode: "sandbox" | "live" = "sandbox") {
     platformApiKey: "private-platform-key",
     platformAccountId: "platform-account",
     platformWalletId: "platform-wallet",
+    platformWebhookTokenHash: "a".repeat(64),
     credentialKeyId: "sandbox-v1",
     credentialKeyring: keyring,
     webhookPublicOrigin: "https://tunnel.example.test",

@@ -57,6 +57,56 @@ Unrelated or conflicting native webhooks are rejected. Never overwrite another s
 
 Do not restore a database checkpoint over financial events accepted after that checkpoint. Native payments and transfers survive a database rewind. Preserve event evidence, stop new financial commands when necessary, and reconcile or repair forward.
 
+## Platform-account webhook (PLATFORM_ACCOUNT_SPLIT_V2)
+
+Gift charges created under `PLATFORM_ACCOUNT_SPLIT_V2` belong to the platform (main) Asaas account and split a fixed value to the couple sub-account wallet. Their notifications come from one webhook registered on the platform account. It targets the same route, `POST ${ASAAS_WEBHOOK_PUBLIC_ORIGIN}/v1/webhooks/asaas`, as the sub-account webhooks.
+
+### Environment
+
+| Variable | Meaning |
+| --- | --- |
+| `ASAAS_API_KEY` | Platform account key. Sandbox keys start with `$aact_hmlg_` and live keys with `$aact_prod_`. Registration refuses a key whose prefix does not match `ASAAS_MODE`. |
+| `ASAAS_PLATFORM_ACCOUNT_ID` | Native ID of the platform account. Platform events whose `account.id` differs are rejected with `400`. |
+| `ASAAS_PLATFORM_WALLET_ID` | Platform wallet ID. Registration only proceeds if the key's `GET /v3/wallets` lists this wallet, so a couple sub-account key cannot be used by mistake. |
+| `ASAAS_PLATFORM_WEBHOOK_TOKEN` | Webhook `authToken`: 32–255 printable ASCII characters with no spaces. Generate a distinct random value for each environment, for example `openssl rand -base64 48`. It must not be an Asaas API key. The API retains only its SHA-256 hash. |
+| `ASAAS_WEBHOOK_NOTIFICATION_EMAIL` | Optional notification destination. Sent as `email` when present. Asaas documents `email` as required, so set it if creation is rejected. |
+
+Rotating `ASAAS_PLATFORM_WEBHOOK_TOKEN` requires deploying the API with the new value and then running the registration again with `--apply`. Platform deliveries fail with `401` until both steps are complete.
+
+### Register
+
+`.env` values start with `$aact_`, and Bun's dotenv loader expands `$`. Run the script through tsx with Node's `--env-file`, never with `bun run`. From `apps/api`, a dry run lists the platform webhooks and prints whether it would `CREATE` or `UPDATE`:
+
+```sh
+node_modules/.bin/tsx --env-file=.env scripts/registerPlatformAsaasWebhook.ts
+node_modules/.bin/tsx --env-file=.env scripts/registerPlatformAsaasWebhook.ts --apply
+```
+
+`--apply` updates the webhook that matches the URL or the name `entrelacos-platform-<mode>` with `PUT`, or creates it with `POST`. It then reads the configuration back. More than one match is refused. `REGISTERED` means the stored configuration matches. `UNKNOWN` exits with status 1. In that case, run the dry run before another `--apply`, because an uncertain `POST` may have created the webhook. Failures print a sanitized code, such as `PROVIDER_HTTP_400_POST:<asaas error codes>`, and never the key, token or email. In production, inject the environment from the secret store with `APP_ENV=production` and `ASAAS_MODE=live` instead of using a file.
+
+### Events
+
+The list is defined once as `platformWebhookEvents` in `apps/api/src/platformWebhookRegistration.ts`:
+
+`PAYMENT_CONFIRMED`, `PAYMENT_RECEIVED`, `PAYMENT_ANTICIPATED`, `PAYMENT_SPLIT_DONE`, `PAYMENT_SPLIT_CANCELLED`, `PAYMENT_SPLIT_DIVERGENCE_BLOCK`, `PAYMENT_SPLIT_DIVERGENCE_BLOCK_FINISHED`, `PAYMENT_DELETED`, `PAYMENT_REFUNDED`, `PAYMENT_PARTIALLY_REFUNDED`, `PAYMENT_REFUND_IN_PROGRESS`, `PAYMENT_CHARGEBACK_REQUESTED`, `PAYMENT_CHARGEBACK_DISPUTE`, `PAYMENT_AWAITING_CHARGEBACK_REVERSAL`, `PAYMENT_REPROVED_BY_RISK_ANALYSIS`, `CHECKOUT_CREATED`, `CHECKOUT_CANCELED`, `CHECKOUT_EXPIRED`, `CHECKOUT_PAID`, `RECEIVABLE_ANTICIPATION_CREDITED`, `RECEIVABLE_ANTICIPATION_DENIED`, `RECEIVABLE_ANTICIPATION_CANCELLED`.
+
+### Routing
+
+- A request is a platform event when the SHA-256 of its `asaas-access-token` header equals the hash of `ASAAS_PLATFORM_WEBHOOK_TOKEN`. Any other token is resolved against the sub-account bindings, as before.
+- The event's `account.id` must equal `ASAAS_PLATFORM_ACCOUNT_ID`.
+- The charge's `externalReference` is the gift checkout attempt ID. The event is routed to that attempt's site and receiving account. A routed attempt must agree with the `externalReference`.
+- An event that cannot be routed is still acknowledged with `200`, so Asaas does not interrupt the queue. The API also opens an `UNROUTABLE_PLATFORM_EVENT` operator alert in `financial_operator_alert`. Investigate each alert.
+
+### Coexistence with V1
+
+Sub-account webhooks keep running. Charges created before the switch (`PLATFORM_FEE_GUARANTEE_V1`) live in the couple sub-accounts and still settle through those webhooks and the platform-adjustment worker. Do not disable or delete a sub-account webhook while the V1 inventory still lists open attempts for that account. To list them, run from `apps/api`:
+
+```sh
+node_modules/.bin/tsx --env-file-if-exists=../../packages/database/.env --env-file-if-exists=.env scripts/listV1OpenSettlements.ts [--environment sandbox|live]
+```
+
+The inventory runs in a read-only transaction. It lists attempts with installment plans that are not fully received, unfunded platform adjustments, or hosted checkouts that are still open. It prints only IDs, counts and amounts.
+
 ## Listening
 
 Webhook setup remains an explicit operator action because a read or refresh must not create provider resources. The generic operation reuses the existing durable registration protocol and retains the development-only wrapper for historical tooling. Incoming Pix-key preparation belongs to the authenticated holder activation flow and its separate durable dispatch fence. Account-status subscriptions remain excluded; missing native prerequisites continue to block readiness.

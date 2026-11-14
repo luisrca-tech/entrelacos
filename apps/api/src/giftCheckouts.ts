@@ -12,10 +12,11 @@ import {
   publicGiftItemSchema,
 } from "@entrelacos/contracts";
 import { quoteGiftAmounts, quoteGiftPurchaseAmounts } from "./giftMoney";
-import type {
-  GiftQuoteReceivingContext,
-  GiftQuoteSnapshot,
-  StoredGiftForQuote,
+import {
+  type GiftQuoteReceivingContext,
+  type GiftQuoteSnapshot,
+  readGiftV2Settlement,
+  type StoredGiftForQuote,
 } from "./giftQuotes";
 import {
   assertReceivingReady,
@@ -106,6 +107,8 @@ export interface GiftCheckoutEligibility {
 
 export interface GiftHostedCheckout {
   providerReference: string;
+  // PLATFORM_ACCOUNT_SPLIT_V2 installment plans: verified child payment IDs.
+  installmentPaymentReferences?: string[];
   checkout: CheckoutResult;
 }
 
@@ -325,8 +328,14 @@ export function readGiftQuoteSnapshot(
     quote.data.feeAllocation !== pricing.policy.feeAllocation ||
     !sameBinding(binding, pricing) ||
     pricing.verification !== "verified" ||
-    !["provider", "local-test"].includes(pricing.provenance) ||
-    (binding.environment === "live" && pricing.provenance !== "provider") ||
+    !["provider", "local-test", "platform-tariff-table"].includes(
+      pricing.provenance,
+    ) ||
+    (pricing.provenance === "platform-tariff-table") !==
+      (pricing.policy.feeBasis === "PLATFORM_TARIFF_TABLE") ||
+    (binding.environment === "live" &&
+      pricing.provenance !== "provider" &&
+      pricing.provenance !== "platform-tariff-table") ||
     !time.safeParse(value.createdAt).success ||
     !time.safeParse(value.expiresAt).success ||
     !time.safeParse(pricing.observedAt).success ||
@@ -352,6 +361,12 @@ export function readGiftQuoteSnapshot(
     )
   )
     return fail("QUOTE_INVALID");
+  let settlement: ReturnType<typeof readGiftV2Settlement>;
+  try {
+    settlement = readGiftV2Settlement(quote.data, value.settlement);
+  } catch {
+    return fail("QUOTE_INVALID");
+  }
   const receiving = {
     siteId: binding.siteId,
     provider: binding.provider,
@@ -408,6 +423,7 @@ export function readGiftQuoteSnapshot(
           : {}),
       },
     },
+    ...(settlement ? { settlement } : {}),
     createdAt: value.createdAt,
     expiresAt: value.expiresAt,
   });
@@ -837,6 +853,12 @@ export function createGiftCheckoutService(
             orderId: record.orderId,
             attemptId: record.attemptId,
             providerReference: hosted.providerReference,
+            ...(hosted.installmentPaymentReferences
+              ? {
+                  installmentPaymentReferences:
+                    hosted.installmentPaymentReferences,
+                }
+              : {}),
             checkout,
             observedAt: clock(dependencies).toISOString(),
           });

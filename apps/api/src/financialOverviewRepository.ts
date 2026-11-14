@@ -1,4 +1,5 @@
 import {
+  type GiftQuote,
   giftCentsSchema,
   giftQuoteSchema,
   siteIdSchema,
@@ -32,6 +33,10 @@ import {
   giftReceivedEffectKey,
   isGiftReceiptEvent,
 } from "./giftPaymentReconciliation";
+import {
+  type GiftV2SettlementSnapshot,
+  readGiftV2Settlement,
+} from "./giftQuotes";
 import { allowsLiveSite, type LiveSitePolicy } from "./liveSitePolicy";
 import type { ReceivingTransaction } from "./receivingRepository";
 import {
@@ -459,8 +464,12 @@ function payment(row: Row, binding: FinancialAccountBinding, observedAt: Date) {
   if (!allocation.success || quote.feeAllocation !== policy.feeAllocation)
     unavailable();
   const guaranteed = quote.settlementVersion === "PLATFORM_FEE_GUARANTEE_V1";
-  const verifiedQuote = guaranteed ? giftQuoteSchema.parse(quote) : null;
-  const terms = giftPaymentTerms(
+  // V2 (platform-account split): the guest pays every fee and the couple gets
+  // the nominal value through a fixed split, so there is never an adjustment.
+  const splitV2 = quote.settlementVersion === "PLATFORM_ACCOUNT_SPLIT_V2";
+  const verifiedQuote =
+    guaranteed || splitV2 ? giftQuoteSchema.parse(quote) : null;
+  const quotedTerms = giftPaymentTerms(
     verifiedQuote ?? {
       totalCents: total,
       nominalCents: nominal,
@@ -468,6 +477,19 @@ function payment(row: Row, binding: FinancialAccountBinding, observedAt: Date) {
     },
     row.installmentNumber,
   );
+  // V2: what the couple is owed per charge is the frozen split, which may
+  // differ by a few cents from the even nominal share of an installment.
+  const terms =
+    splitV2 && verifiedQuote && quotedTerms
+      ? {
+          ...quotedTerms,
+          nominalCents: v2RecipientSplitCents(
+            verifiedQuote,
+            snapshot.settlement,
+            row.installmentNumber,
+          ),
+        }
+      : quotedTerms;
   if (
     !terms ||
     (row.installmentNumber == null
@@ -489,7 +511,14 @@ function payment(row: Row, binding: FinancialAccountBinding, observedAt: Date) {
         BigInt(total) > BigInt(commission) + BigInt(processing)
       : BigInt(total) ===
         BigInt(nominal) + BigInt(commission) + BigInt(processing);
-  if (
+  if (splitV2) {
+    if (
+      !quoteAllocated ||
+      cents(row.grossCents, true) !== terms.grossCents ||
+      recipientNet > terms.nominalCents
+    )
+      unavailable();
+  } else if (
     row.quoteCommissionBasisPoints !== 200 ||
     BigInt(commission) !== (BigInt(nominal) * 200n + 5000n) / 10000n ||
     !quoteAllocated ||
@@ -513,7 +542,7 @@ function payment(row: Row, binding: FinancialAccountBinding, observedAt: Date) {
   const funded = row.platformAdjustmentFundedAt != null;
   if (
     (adjustment > 0 &&
-      (!guaranteed ||
+      (!(guaranteed || splitV2) ||
         adjustment !== Math.max(0, terms.nominalCents - recipientNet))) ||
     (row.platformAdjustmentTransferReference != null &&
       (!reference(row.platformAdjustmentTransferReference) ||
@@ -528,7 +557,26 @@ function payment(row: Row, binding: FinancialAccountBinding, observedAt: Date) {
     if (funded)
       after(storedTime(row.platformAdjustmentFundedAt, observedAt), dispatched);
   }
-  return { ...terms, guaranteed, adjustment, funded };
+  // A V2 divergence top-up is owed and counted exactly like a V1 adjustment.
+  return { ...terms, guaranteed: guaranteed || splitV2, adjustment, funded };
+}
+function v2RecipientSplitCents(
+  quote: GiftQuote,
+  settlement: unknown,
+  installmentNumber: unknown,
+): number {
+  let split: number | undefined;
+  try {
+    split = readGiftV2Settlement(
+      quote,
+      settlement as GiftV2SettlementSnapshot | undefined,
+    )?.recipientSplitCents[
+      typeof installmentNumber === "number" ? installmentNumber - 1 : 0
+    ];
+  } catch {
+    return unavailable();
+  }
+  return split === undefined ? unavailable() : split;
 }
 function ledger(row: Row, observedAt: Date): void {
   cents(row.amountCents, true);

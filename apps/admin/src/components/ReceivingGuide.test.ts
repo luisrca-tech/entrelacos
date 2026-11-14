@@ -122,6 +122,15 @@ describe("receiving guide environment boundaries", () => {
     expect(html).toContain("60 minutos");
     expect(html).toContain("Asaas confirmar o encerramento");
   });
+  it("explains per-installment card release without promising anticipation", () => {
+    const text = render()
+      .replace(/<[^>]+>/g, "")
+      .replace(/\s+/g, " ");
+    expect(text).toContain(
+      "Vocês recebem o valor de cada parcela conforme o cartão libera, normalmente em até 32 dias por parcela; no Pix, assim que o pagamento é confirmado.",
+    );
+    expect(text).not.toMatch(/antecipa|de uma vez|dias úteis/i);
+  });
   it("explains activation, Pix destinations and optional official apps", () => {
     const html = render();
     expect(html).toContain("enviado automaticamente");

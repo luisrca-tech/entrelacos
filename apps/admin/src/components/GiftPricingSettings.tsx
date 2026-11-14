@@ -14,14 +14,12 @@ import {
   type ReactNode,
   useContext,
   useEffect,
-  useId,
   useMemo,
   useState,
 } from "react";
 import { z } from "zod";
 import { AdminButton } from "./AdminButton";
 import { AdminDialogContent } from "./AdminDialog";
-import { receivingField } from "./receivingUi";
 
 const feeAllocation = "BUYER_GROSS_UP";
 const cents = z.number().int().nonnegative().safe();
@@ -114,7 +112,7 @@ export const money = (value: number | null) =>
         currency: "BRL",
       }).format(value / 100);
 export const giftFeeExplanation =
-  "As taxas estão incluídas no preço que o convidado vê.";
+  "O convidado paga as taxas: você recebe 100% do valor do presente.";
 
 export function GiftPricingSettings({
   enabled = true,
@@ -180,16 +178,28 @@ function PreviewRow({
   value,
   strong = false,
   tone,
+  hint,
 }: {
   label: string;
   value: string;
   strong?: boolean;
   tone?: "success";
+  hint?: string;
 }) {
   return (
     <div className="flex min-w-0 flex-wrap justify-between gap-x-3 gap-y-0.5">
       <dt className={strong ? "font-bold text-admin-text" : "text-admin-text"}>
         {label}
+        {hint && (
+          <button
+            type="button"
+            aria-label={hint}
+            title={hint}
+            className="ml-1 cursor-help rounded-full border border-admin-border px-1.5 text-xs font-normal"
+          >
+            i
+          </button>
+        )}
       </dt>
       <dd
         className={`m-0 text-right ${strong ? "font-bold" : ""} ${tone === "success" ? "text-admin-success-text" : "text-admin-text"}`}
@@ -227,8 +237,8 @@ export function GiftPricingPreview({
         <DialogHeader>
           <DialogTitle>Simulação de taxas e parcelamento</DialogTitle>
           <DialogDescription>
-            A seleção vale só para esta simulação. O convidado escolhe o
-            parcelamento na hora de pagar.
+            O convidado escolhe a forma de pagamento e o parcelamento na hora de
+            pagar.
           </DialogDescription>
         </DialogHeader>
         <PricingComparison
@@ -241,6 +251,10 @@ export function GiftPricingPreview({
   );
 }
 
+const feesTooltip = "Inclui a taxa do meio de pagamento e o serviço Entrelaços";
+// Installment plans shown in the simulation; the guest still picks any plan.
+const simulatedInstallments = [1, 6, 12];
+
 function PricingComparison({
   nominalCents,
   estimate,
@@ -250,15 +264,42 @@ function PricingComparison({
   estimate: GiftPricingEstimate | null;
   title?: string;
 }) {
-  const id = useId();
-  const [installmentCount, setInstallmentCount] = useState(1);
-  const cardOptions = estimate?.methods.find(
+  const pix = estimate?.methods.find((method) => method.method === "PIX");
+  const card = estimate?.methods.find(
     (method) => method.method === "CREDIT_CARD",
-  )?.installmentOptions;
-  const cardSelection =
-    cardOptions?.find(
-      (option) => option.installmentCount === installmentCount,
-    ) ?? cardOptions?.[0];
+  );
+  const rows =
+    nominalCents === null || !estimate
+      ? []
+      : [
+          {
+            label: "Pix",
+            totalCents: pix?.available ? pix.totalCents : null,
+          },
+          ...simulatedInstallments.flatMap((count) => {
+            const option = card?.installmentOptions?.find(
+              (candidate) => candidate.installmentCount === count,
+            );
+            if (!option && count !== 1) return [];
+            return [
+              {
+                label: count === 1 ? "Cartão à vista" : `Cartão em ${count}x`,
+                totalCents: option?.totalCents ?? card?.totalCents ?? null,
+              },
+            ];
+          }),
+        ];
+  const fees = rows.flatMap((row) =>
+    row.totalCents === null || nominalCents === null
+      ? []
+      : [row.totalCents - nominalCents],
+  );
+  const feeRange =
+    fees.length === 0
+      ? null
+      : Math.min(...fees) === Math.max(...fees)
+        ? money(fees[0])
+        : `de ${money(Math.min(...fees))} a ${money(Math.max(...fees))}`;
   return (
     <div
       aria-live="polite"
@@ -270,129 +311,46 @@ function PricingComparison({
           Informe um valor válido para simular.
         </p>
       ) : (
-        (["PIX", "CREDIT_CARD"] as const).map((method) => {
-          const item = estimate?.methods.find((m) => m.method === method);
-          const selected = method === "CREDIT_CARD" ? cardSelection : undefined;
-          const installments =
-            selected && selected.installmentCount > 1 ? selected : null;
-          const amounts = installments?.installmentCents;
-          const adjustedLast =
-            amounts && amounts[0] !== amounts[amounts.length - 1];
-          return (
-            <section
-              key={method}
-              aria-label={method === "PIX" ? "Pix" : "Cartão"}
-              className="grid min-w-0 gap-1.5"
-            >
-              <h3 className="m-0 text-xs font-bold uppercase tracking-[0.06em] text-admin-text-secondary">
-                {method === "PIX" ? "Pix" : "Cartão"}
-              </h3>
-              {method === "CREDIT_CARD" &&
-                cardOptions &&
-                cardOptions.length > 1 && (
-                  <div className="mb-2 grid gap-2">
-                    <label
-                      htmlFor={`${id}-installments`}
-                      className="font-semibold text-admin-text"
-                    >
-                      Parcelas para simular
-                    </label>
-                    <select
-                      id={`${id}-installments`}
-                      className={receivingField}
-                      value={cardSelection?.installmentCount ?? 1}
-                      onChange={(event) =>
-                        setInstallmentCount(Number(event.target.value))
-                      }
-                    >
-                      {cardOptions.map((option) => (
-                        <option
-                          key={option.installmentCount}
-                          value={option.installmentCount}
-                        >
-                          {option.installmentCount === 1
-                            ? "À vista"
-                            : `${option.installmentCount} parcelas`}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-              {method === "CREDIT_CARD" && cardOptions?.length === 1 && (
-                <p className="m-0 text-xs text-admin-text-secondary">
-                  Somente cartão à vista disponível nesta simulação.
-                </p>
-              )}
-              <dl className="m-0 grid gap-1.5">
+        <>
+          <dl className="m-0 grid gap-1.5">
+            <PreviewRow
+              label="Você recebe"
+              value={`${money(nominalCents)} (100%)`}
+              strong
+              tone="success"
+            />
+          </dl>
+          <section aria-label="Total do convidado" className="grid gap-1.5">
+            <h3 className="m-0 text-xs font-bold uppercase tracking-[0.06em] text-admin-text-secondary">
+              O convidado paga
+            </h3>
+            <dl className="m-0 grid gap-1.5">
+              {rows.map((row) => (
                 <PreviewRow
-                  label="Valor cadastrado"
-                  value={money(nominalCents)}
+                  key={row.label}
+                  label={row.label}
+                  value={money(row.totalCents)}
                 />
-                <PreviewRow
-                  label={installments ? "Taxas à vista" : "Taxas"}
-                  value={money(
-                    item?.processingCents == null
-                      ? null
-                      : item.commissionCents + item.processingCents,
-                  )}
-                />
-                {installments && (
-                  <PreviewRow
-                    label={
-                      installments.installmentSurchargeCents < 0
-                        ? "Desconto no parcelamento"
-                        : "Acréscimo do parcelamento"
-                    }
-                    value={money(
-                      Math.abs(installments.installmentSurchargeCents),
-                    )}
-                  />
-                )}
-                <div className="my-0.5 border-t border-admin-border" />
-                <PreviewRow
-                  label="Total do convidado"
-                  value={money(
-                    selected?.totalCents ?? item?.totalCents ?? null,
-                  )}
-                  strong
-                />
-                {amounts &&
-                  (adjustedLast ? (
-                    <>
-                      <PreviewRow
-                        label={
-                          amounts.length === 2
-                            ? "Primeira parcela"
-                            : `Primeiras ${amounts.length - 1} parcelas`
-                        }
-                        value={`${money(amounts[0])}${amounts.length === 2 ? "" : " cada"}`}
-                      />
-                      <PreviewRow
-                        label="Última parcela"
-                        value={money(amounts[amounts.length - 1])}
-                      />
-                    </>
-                  ) : (
-                    <PreviewRow
-                      label="Parcelas"
-                      value={`${amounts.length}x de ${money(amounts[0])}`}
-                    />
-                  ))}
-                <PreviewRow
-                  label="Líquido do casal"
-                  value={money(item?.recipientNetCents ?? null)}
-                  strong
-                  tone="success"
-                />
-              </dl>
-            </section>
-          );
-        })
+              ))}
+              <div className="my-0.5 border-t border-admin-border" />
+              <PreviewRow
+                label="Taxas pagas pelo convidado"
+                value={feeRange ?? "Indisponível"}
+                hint={feesTooltip}
+              />
+            </dl>
+          </section>
+          {card?.installmentOptions?.length === 1 && (
+            <p className="m-0 text-xs text-admin-text-secondary">
+              Somente cartão à vista disponível nesta simulação.
+            </p>
+          )}
+        </>
       )}
       <p className="m-0 text-xs leading-[1.5] text-admin-text-secondary">
-        As taxas e o ajuste do parcelamento já estão incluídos no total do
-        convidado. O líquido do casal fica disponível conforme o Asaas libera o
-        pagamento ou as parcelas.
+        Você recebe o valor de cada parcela conforme o cartão libera,
+        normalmente em até 32 dias por parcela; no Pix, assim que o pagamento é
+        confirmado.
       </p>
     </div>
   );

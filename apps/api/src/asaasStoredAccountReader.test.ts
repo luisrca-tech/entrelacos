@@ -120,6 +120,7 @@ function fixture(
     status: 200,
     duplicate: false,
     override: {} as Row,
+    platformAttempt: false,
   };
   const query = vi.fn(
     async (statement: string | { text: string }, params: unknown[] = []) => {
@@ -128,6 +129,8 @@ function fixture(
       if (faults.sql) throw new Error("private-database-envelope-detail");
       if (!/^SELECT/i.test(sql))
         throw new Error("Reader cannot mutate stored data");
+      if (/FROM "gift_checkout_attempt" a/i.test(sql))
+        return { rows: faults.platformAttempt ? [{ "?column?": 1 }] : [] };
       const parameter = (alias: string, column: string) => {
         const match = sql.match(
           new RegExp(`${alias}\\.${column}\\s*=\\s*\\$(\\d+)`),
@@ -282,6 +285,54 @@ async function rejectsSafely(
     expect(serialized).not.toContain(secret);
 }
 afterEach(() => vi.useRealTimers());
+describe("PLATFORM_ACCOUNT_SPLIT_V2 reads", () => {
+  const platformKey = "$aact_hmlg_offline-platform-account-token";
+  it.each([
+    [true, platformKey],
+    [false, syntheticSandboxToken],
+  ])(
+    "reads a payment of a V2 attempt (%s) with the matching account key",
+    async (platformAttempt, expectedKey) => {
+      const values = fixture();
+      values.faults.platformAttempt = platformAttempt;
+      const reader = createAsaasStoredAccountReader(values.db, {
+        ...values.options,
+        platformApiKey: platformKey,
+      });
+      const observed = await reader.getPayment(values.claim);
+      // The observation stays bound to the couple account it was routed to.
+      expect(observed.accountReference).toBe(
+        values.claim.providerAccountReference,
+      );
+      const [, request] = values.fetch.mock.calls[0];
+      expect(new Headers(request?.headers).get("access_token")).toBe(
+        expectedKey,
+      );
+      const lookup = values.queries.find((query) =>
+        query.sql.includes('"gift_checkout_attempt"'),
+      );
+      expect(lookup?.sql).toContain("PLATFORM_ACCOUNT_SPLIT_V2");
+      expect(lookup?.params).toEqual(
+        expect.arrayContaining([
+          values.claim.paymentReference,
+          values.claim.eventId,
+        ]),
+      );
+    },
+  );
+
+  it("never looks up V2 attempts without a platform key", async () => {
+    const values = fixture();
+    values.faults.platformAttempt = true;
+    await values.reader.getPayment(values.claim);
+    expect(
+      values.queries.some((query) =>
+        query.sql.includes('"gift_checkout_attempt"'),
+      ),
+    ).toBe(false);
+  });
+});
+
 describe("server-only stored Asaas account reads", () => {
   it("reads a payment for an original confirmed event claim with the same stored account and lease", async () => {
     const values = fixture();

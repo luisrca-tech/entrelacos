@@ -17,6 +17,10 @@ import {
 } from "./databaseTimestamp";
 import type { GiftPaymentInboxClaim } from "./giftPaymentInboxRepository";
 import type { StoredGiftPaymentCheckoutBinding } from "./giftPaymentReconciliation";
+import {
+  giftPaymentInboxEvents,
+  giftPaymentV2OnlyInboxEvents,
+} from "./giftPaymentReconciliation";
 
 export interface GiftPaymentCheckoutLookup {
   loadCheckout(
@@ -131,7 +135,7 @@ export function createGiftPaymentCheckoutLookup(
           LEFT JOIN ${financialOperation} op ON op.id=a.operation_id AND op.order_id=o.id AND op.kind=a.operation_kind AND op.site_id=a.site_id AND op.account_id=a.account_id AND op.environment=a.environment
           WHERE e.id=${claim.eventId} AND e.site_id=${claim.siteId} AND e.account_id=${claim.accountId} AND e.environment=${claim.environment}
             AND e.lease_owner=${claim.leaseOwner} AND e.lease_token=${claim.leaseToken} AND e.attempts=${claim.attempts}
-            AND e.state='CLAIMED' AND e.event_type IN ('PAYMENT_RECEIVED','PAYMENT_CONFIRMED','PAYMENT_SPLIT_DONE') AND e.processed_at IS NULL
+            AND e.state='CLAIMED' AND e.event_type IN ('PAYMENT_RECEIVED','PAYMENT_CONFIRMED','PAYMENT_SPLIT_DONE','PAYMENT_ANTICIPATED','PAYMENT_SPLIT_CANCELLED','PAYMENT_SPLIT_DIVERGENCE_BLOCK','PAYMENT_SPLIT_DIVERGENCE_BLOCK_FINISHED','RECEIVABLE_ANTICIPATION_CREDITED','RECEIVABLE_ANTICIPATION_DENIED','RECEIVABLE_ANTICIPATION_CANCELLED') AND e.processed_at IS NULL
             AND e.authenticated_at<=clock_timestamp() AND e.received_at<=e.authenticated_at AND e.lease_expires_at>=clock_timestamp()`);
         if (result.rows.length !== 1) return unavailable();
         const row = result.rows[0] as Record<string, unknown>;
@@ -143,11 +147,12 @@ export function createGiftPaymentCheckoutLookup(
           !scope(row, "stored", claim) ||
           row.provider !== "ASAAS" ||
           row.accountReference !== claim.providerAccountReference ||
-          ![
-            "PAYMENT_RECEIVED",
-            "PAYMENT_CONFIRMED",
-            "PAYMENT_SPLIT_DONE",
-          ].includes(row.eventType as string) ||
+          !(
+            [
+              ...giftPaymentInboxEvents,
+              ...giftPaymentV2OnlyInboxEvents,
+            ] as readonly string[]
+          ).includes(row.eventType as string) ||
           row.state !== "CLAIMED" ||
           row.processedAt !== null ||
           row.leaseOwner !== claim.leaseOwner ||

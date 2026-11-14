@@ -23,6 +23,7 @@ import {
   giftReceivedEffectKey,
 } from "./giftPaymentReconciliation";
 import type { GiftPaymentWorker } from "./giftPaymentWorker";
+import { type GiftQuoteSnapshot, readGiftV2Settlement } from "./giftQuotes";
 import type { LiveSitePolicy } from "./liveSitePolicy";
 
 interface AsaasAdjustmentOptions {
@@ -37,7 +38,12 @@ interface AdjustmentCommand {
   externalReference: string;
   walletId: string;
   amountCents: number;
+  /** Sent only for V2 split-divergence top-ups; V1 fee transfers omit it. */
+  description?: string;
 }
+
+/** Transfer reason for a V2 top-up recorded by scripts/fixSplitDivergence.ts. */
+export const SPLIT_DIVERGENCE_TOPUP = "SPLIT_DIVERGENCE_TOPUP";
 
 function unavailable(): never {
   throw new Error("Gift fee adjustment unavailable");
@@ -199,6 +205,9 @@ export function createAsaasGiftAdjustmentPort(options: AsaasAdjustmentOptions) {
           walletId: command.walletId,
           externalReference: command.externalReference,
           value: Number(serializeBrlCents(command.amountCents)),
+          ...(command.description === undefined
+            ? {}
+            : { description: command.description }),
         }),
         decodeAsaasTransfers,
       );
@@ -306,8 +315,11 @@ export function createGiftPaymentAdjustmentWorker(
           AND p.verification_status='VERIFIED' AND p.provider_status='RECEIVED' AND p.currency='BRL'
           AND a.provider='ASAAS' AND a.recipient_reference=q.snapshot->'receiving'->>'recipientReference'
           AND a.account_reference=q.snapshot->'receiving'->>'accountReference'
-          AND q.snapshot->'quote'->>'settlementVersion'='PLATFORM_FEE_GUARANTEE_V1'
+          AND q.snapshot->'quote'->>'settlementVersion' IN ('PLATFORM_FEE_GUARANTEE_V1','PLATFORM_ACCOUNT_SPLIT_V2')
           AND (p.platform_adjustment_dispatch_at IS NOT NULL OR NOT ${restricted})`;
+  // V1: the receipt transaction establishes the fee guarantee obligation
+  // (nominal - credit). V2: the split-divergence fix records the top-up
+  // (frozen split - lowered credit) before the SPLIT_DONE receipt posts.
   // The receipt transaction establishes the obligation. A claim defers other
   // workers and the separate dispatch fence is committed before the single POST.
   return {
@@ -320,7 +332,7 @@ export function createGiftPaymentAdjustmentWorker(
     async processNextReceivedPayment() {
       const claimed = await db.execute(sql`WITH candidate AS (
         SELECT p.id, p.site_id, p.account_id, p.environment, a.recipient_reference AS wallet, a.account_reference AS account_reference,
-          q.snapshot->'quote' AS quote, l.amount_cents AS credit_cents, l.effect_key
+          q.snapshot->'quote' AS quote, q.snapshot->'settlement' AS settlement, l.amount_cents AS credit_cents, l.effect_key
         ${eligibleAdjustments}
           AND (p.platform_adjustment_next_attempt_at IS NULL OR p.platform_adjustment_next_attempt_at <= clock_timestamp())
         ORDER BY p.platform_adjustment_next_attempt_at NULLS FIRST, p.created_at, p.id
@@ -331,7 +343,7 @@ export function createGiftPaymentAdjustmentWorker(
       RETURNING p.id, p.site_id AS "siteId", p.account_id AS "accountId", p.installment_number AS "installmentNumber",
         p.provider_payment_reference AS "paymentReference", p.platform_adjustment_cents AS "amountCents",
         p.platform_adjustment_dispatch_at AS "dispatchedAt", p.platform_adjustment_transfer_reference AS "transferReference",
-        c.wallet, c.account_reference AS "accountReference", c.quote, c.credit_cents AS "creditCents", c.effect_key AS "effectKey"`);
+        c.wallet, c.account_reference AS "accountReference", c.quote, c.settlement, c.credit_cents AS "creditCents", c.effect_key AS "effectKey"`);
       if (claimed.rows.length === 0) return { kind: "IDLE" };
       if (claimed.rows.length !== 1) return unavailable();
       const row = claimed.rows[0];
@@ -341,14 +353,26 @@ export function createGiftPaymentAdjustmentWorker(
       const walletId = reference(row.wallet);
       const amountCents = giftCentsSchema.parse(row.amountCents);
       const creditCents = giftCentsSchema.parse(row.creditCents);
+      const topUp = quote.settlementVersion === "PLATFORM_ACCOUNT_SPLIT_V2";
+      // V1 guarantees the nominal; V2 guarantees the frozen per-charge split.
+      const promisedCents = !terms
+        ? undefined
+        : topUp
+          ? readGiftV2Settlement(
+              quote,
+              (row.settlement ?? undefined) as GiftQuoteSnapshot["settlement"],
+            )?.recipientSplitCents[Number(row.installmentNumber ?? 1) - 1]
+          : quote.settlementVersion === "PLATFORM_FEE_GUARANTEE_V1"
+            ? terms.nominalCents
+            : undefined;
       if (
         !terms ||
+        promisedCents === undefined ||
         quote.siteId !== row.siteId ||
         quote.mode !== environment ||
-        quote.settlementVersion !== "PLATFORM_FEE_GUARANTEE_V1" ||
         walletId === platformWalletId ||
         amountCents <= 0 ||
-        amountCents !== terms.nominalCents - creditCents ||
+        amountCents !== promisedCents - creditCents ||
         row.effectKey !== giftReceivedEffectKey(reference(row.paymentReference))
       )
         return unavailable();
@@ -359,22 +383,30 @@ export function createGiftPaymentAdjustmentWorker(
         accountReference: reference(row.accountReference),
         environment,
       };
-      const command = {
-        externalReference: `gift_fee_${createHash("sha256")
-          .update(
-            JSON.stringify([
-              environment,
-              row.siteId,
-              row.accountId,
-              paymentId,
-              walletId,
-              amountCents,
-            ]),
-          )
-          .digest("hex")}`,
+      const identity = [
+        environment,
+        row.siteId,
+        row.accountId,
+        paymentId,
         walletId,
         amountCents,
-      };
+      ];
+      const command: AdjustmentCommand = topUp
+        ? {
+            externalReference: `gift_topup_${createHash("sha256")
+              .update(JSON.stringify([...identity, SPLIT_DIVERGENCE_TOPUP]))
+              .digest("hex")}`,
+            walletId,
+            amountCents,
+            description: SPLIT_DIVERGENCE_TOPUP,
+          }
+        : {
+            externalReference: `gift_fee_${createHash("sha256")
+              .update(JSON.stringify(identity))
+              .digest("hex")}`,
+            walletId,
+            amountCents,
+          };
       const scope = sql`p.id=${paymentId} AND p.site_id=${row.siteId} AND p.account_id=${row.accountId}
         AND p.environment=${environment} AND p.platform_adjustment_cents=${amountCents} AND p.platform_adjustment_funded_at IS NULL`;
       let result: Awaited<ReturnType<typeof provider.dispatch>> | null;

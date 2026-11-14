@@ -1,0 +1,704 @@
+[
+  {
+    "nominalCents": 500,
+    "method": "PIX",
+    "installmentCount": 1,
+    "totalCents": 709
+  },
+  {
+    "nominalCents": 500,
+    "method": "CREDIT_CARD",
+    "installmentCount": 1,
+    "totalCents": 577
+  },
+  {
+    "nominalCents": 500,
+    "method": "CREDIT_CARD",
+    "installmentCount": 2,
+    "totalCents": 580
+  },
+  {
+    "nominalCents": 500,
+    "method": "CREDIT_CARD",
+    "installmentCount": 3,
+    "totalCents": 580
+  },
+  {
+    "nominalCents": 500,
+    "method": "CREDIT_CARD",
+    "installmentCount": 4,
+    "totalCents": 580
+  },
+  {
+    "nominalCents": 500,
+    "method": "CREDIT_CARD",
+    "installmentCount": 5,
+    "totalCents": 580
+  },
+  {
+    "nominalCents": 500,
+    "method": "CREDIT_CARD",
+    "installmentCount": 6,
+    "totalCents": 580
+  },
+  {
+    "nominalCents": 500,
+    "method": "CREDIT_CARD",
+    "installmentCount": 7,
+    "totalCents": 583
+  },
+  {
+    "nominalCents": 500,
+    "method": "CREDIT_CARD",
+    "installmentCount": 8,
+    "totalCents": 583
+  },
+  {
+    "nominalCents": 500,
+    "method": "CREDIT_CARD",
+    "installmentCount": 9,
+    "totalCents": 583
+  },
+  {
+    "nominalCents": 500,
+    "method": "CREDIT_CARD",
+    "installmentCount": 10,
+    "totalCents": 583
+  },
+  {
+    "nominalCents": 500,
+    "method": "CREDIT_CARD",
+    "installmentCount": 11,
+    "totalCents": 583
+  },
+  {
+    "nominalCents": 500,
+    "method": "CREDIT_CARD",
+    "installmentCount": 12,
+    "totalCents": 583
+  },
+  {
+    "nominalCents": 1000,
+    "method": "PIX",
+    "installmentCount": 1,
+    "totalCents": 1219
+  },
+  {
+    "nominalCents": 1000,
+    "method": "CREDIT_CARD",
+    "installmentCount": 1,
+    "totalCents": 1102
+  },
+  {
+    "nominalCents": 1000,
+    "method": "CREDIT_CARD",
+    "installmentCount": 2,
+    "totalCents": 1108
+  },
+  {
+    "nominalCents": 1000,
+    "method": "CREDIT_CARD",
+    "installmentCount": 3,
+    "totalCents": 1108
+  },
+  {
+    "nominalCents": 1000,
+    "method": "CREDIT_CARD",
+    "installmentCount": 4,
+    "totalCents": 1108
+  },
+  {
+    "nominalCents": 1000,
+    "method": "CREDIT_CARD",
+    "installmentCount": 5,
+    "totalCents": 1108
+  },
+  {
+    "nominalCents": 1000,
+    "method": "CREDIT_CARD",
+    "installmentCount": 6,
+    "totalCents": 1108
+  },
+  {
+    "nominalCents": 1000,
+    "method": "CREDIT_CARD",
+    "installmentCount": 7,
+    "totalCents": 1114
+  },
+  {
+    "nominalCents": 1000,
+    "method": "CREDIT_CARD",
+    "installmentCount": 8,
+    "totalCents": 1114
+  },
+  {
+    "nominalCents": 1000,
+    "method": "CREDIT_CARD",
+    "installmentCount": 9,
+    "totalCents": 1114
+  },
+  {
+    "nominalCents": 1000,
+    "method": "CREDIT_CARD",
+    "installmentCount": 10,
+    "totalCents": 1114
+  },
+  {
+    "nominalCents": 1000,
+    "method": "CREDIT_CARD",
+    "installmentCount": 11,
+    "totalCents": 1114
+  },
+  {
+    "nominalCents": 1000,
+    "method": "CREDIT_CARD",
+    "installmentCount": 12,
+    "totalCents": 1114
+  },
+  {
+    "nominalCents": 1234,
+    "method": "PIX",
+    "installmentCount": 1,
+    "totalCents": 1458
+  },
+  {
+    "nominalCents": 1234,
+    "method": "CREDIT_CARD",
+    "installmentCount": 1,
+    "totalCents": 1349
+  },
+  {
+    "nominalCents": 1234,
+    "method": "CREDIT_CARD",
+    "installmentCount": 2,
+    "totalCents": 1356
+  },
+  {
+    "nominalCents": 1234,
+    "method": "CREDIT_CARD",
+    "installmentCount": 3,
+    "totalCents": 1356
+  },
+  {
+    "nominalCents": 1234,
+    "method": "CREDIT_CARD",
+    "installmentCount": 4,
+    "totalCents": 1356
+  },
+  {
+    "nominalCents": 1234,
+    "method": "CREDIT_CARD",
+    "installmentCount": 5,
+    "totalCents": 1356
+  },
+  {
+    "nominalCents": 1234,
+    "method": "CREDIT_CARD",
+    "installmentCount": 6,
+    "totalCents": 1356
+  },
+  {
+    "nominalCents": 1234,
+    "method": "CREDIT_CARD",
+    "installmentCount": 7,
+    "totalCents": 1363
+  },
+  {
+    "nominalCents": 1234,
+    "method": "CREDIT_CARD",
+    "installmentCount": 8,
+    "totalCents": 1363
+  },
+  {
+    "nominalCents": 1234,
+    "method": "CREDIT_CARD",
+    "installmentCount": 9,
+    "totalCents": 1363
+  },
+  {
+    "nominalCents": 1234,
+    "method": "CREDIT_CARD",
+    "installmentCount": 10,
+    "totalCents": 1363
+  },
+  {
+    "nominalCents": 1234,
+    "method": "CREDIT_CARD",
+    "installmentCount": 11,
+    "totalCents": 1363
+  },
+  {
+    "nominalCents": 1234,
+    "method": "CREDIT_CARD",
+    "installmentCount": 12,
+    "totalCents": 1363
+  },
+  {
+    "nominalCents": 5000,
+    "method": "PIX",
+    "installmentCount": 1,
+    "totalCents": 5299
+  },
+  {
+    "nominalCents": 5000,
+    "method": "CREDIT_CARD",
+    "installmentCount": 1,
+    "totalCents": 5308
+  },
+  {
+    "nominalCents": 5000,
+    "method": "CREDIT_CARD",
+    "installmentCount": 2,
+    "totalCents": 5336
+  },
+  {
+    "nominalCents": 5000,
+    "method": "CREDIT_CARD",
+    "installmentCount": 3,
+    "totalCents": 5336
+  },
+  {
+    "nominalCents": 5000,
+    "method": "CREDIT_CARD",
+    "installmentCount": 4,
+    "totalCents": 5336
+  },
+  {
+    "nominalCents": 5000,
+    "method": "CREDIT_CARD",
+    "installmentCount": 5,
+    "totalCents": 5336
+  },
+  {
+    "nominalCents": 5000,
+    "method": "CREDIT_CARD",
+    "installmentCount": 6,
+    "totalCents": 5336
+  },
+  {
+    "nominalCents": 5000,
+    "method": "CREDIT_CARD",
+    "installmentCount": 7,
+    "totalCents": 5363
+  },
+  {
+    "nominalCents": 5000,
+    "method": "CREDIT_CARD",
+    "installmentCount": 8,
+    "totalCents": 5363
+  },
+  {
+    "nominalCents": 5000,
+    "method": "CREDIT_CARD",
+    "installmentCount": 9,
+    "totalCents": 5363
+  },
+  {
+    "nominalCents": 5000,
+    "method": "CREDIT_CARD",
+    "installmentCount": 10,
+    "totalCents": 5363
+  },
+  {
+    "nominalCents": 5000,
+    "method": "CREDIT_CARD",
+    "installmentCount": 11,
+    "totalCents": 5363
+  },
+  {
+    "nominalCents": 5000,
+    "method": "CREDIT_CARD",
+    "installmentCount": 12,
+    "totalCents": 5363
+  },
+  {
+    "nominalCents": 9999,
+    "method": "PIX",
+    "installmentCount": 1,
+    "totalCents": 10398
+  },
+  {
+    "nominalCents": 9999,
+    "method": "CREDIT_CARD",
+    "installmentCount": 1,
+    "totalCents": 10564
+  },
+  {
+    "nominalCents": 9999,
+    "method": "CREDIT_CARD",
+    "installmentCount": 2,
+    "totalCents": 10619
+  },
+  {
+    "nominalCents": 9999,
+    "method": "CREDIT_CARD",
+    "installmentCount": 3,
+    "totalCents": 10619
+  },
+  {
+    "nominalCents": 9999,
+    "method": "CREDIT_CARD",
+    "installmentCount": 4,
+    "totalCents": 10619
+  },
+  {
+    "nominalCents": 9999,
+    "method": "CREDIT_CARD",
+    "installmentCount": 5,
+    "totalCents": 10619
+  },
+  {
+    "nominalCents": 9999,
+    "method": "CREDIT_CARD",
+    "installmentCount": 6,
+    "totalCents": 10619
+  },
+  {
+    "nominalCents": 9999,
+    "method": "CREDIT_CARD",
+    "installmentCount": 7,
+    "totalCents": 10674
+  },
+  {
+    "nominalCents": 9999,
+    "method": "CREDIT_CARD",
+    "installmentCount": 8,
+    "totalCents": 10674
+  },
+  {
+    "nominalCents": 9999,
+    "method": "CREDIT_CARD",
+    "installmentCount": 9,
+    "totalCents": 10674
+  },
+  {
+    "nominalCents": 9999,
+    "method": "CREDIT_CARD",
+    "installmentCount": 10,
+    "totalCents": 10674
+  },
+  {
+    "nominalCents": 9999,
+    "method": "CREDIT_CARD",
+    "installmentCount": 11,
+    "totalCents": 10674
+  },
+  {
+    "nominalCents": 9999,
+    "method": "CREDIT_CARD",
+    "installmentCount": 12,
+    "totalCents": 10674
+  },
+  {
+    "nominalCents": 10000,
+    "method": "PIX",
+    "installmentCount": 1,
+    "totalCents": 10399
+  },
+  {
+    "nominalCents": 10000,
+    "method": "CREDIT_CARD",
+    "installmentCount": 1,
+    "totalCents": 10565
+  },
+  {
+    "nominalCents": 10000,
+    "method": "CREDIT_CARD",
+    "installmentCount": 2,
+    "totalCents": 10620
+  },
+  {
+    "nominalCents": 10000,
+    "method": "CREDIT_CARD",
+    "installmentCount": 3,
+    "totalCents": 10620
+  },
+  {
+    "nominalCents": 10000,
+    "method": "CREDIT_CARD",
+    "installmentCount": 4,
+    "totalCents": 10620
+  },
+  {
+    "nominalCents": 10000,
+    "method": "CREDIT_CARD",
+    "installmentCount": 5,
+    "totalCents": 10620
+  },
+  {
+    "nominalCents": 10000,
+    "method": "CREDIT_CARD",
+    "installmentCount": 6,
+    "totalCents": 10620
+  },
+  {
+    "nominalCents": 10000,
+    "method": "CREDIT_CARD",
+    "installmentCount": 7,
+    "totalCents": 10675
+  },
+  {
+    "nominalCents": 10000,
+    "method": "CREDIT_CARD",
+    "installmentCount": 8,
+    "totalCents": 10675
+  },
+  {
+    "nominalCents": 10000,
+    "method": "CREDIT_CARD",
+    "installmentCount": 9,
+    "totalCents": 10675
+  },
+  {
+    "nominalCents": 10000,
+    "method": "CREDIT_CARD",
+    "installmentCount": 10,
+    "totalCents": 10675
+  },
+  {
+    "nominalCents": 10000,
+    "method": "CREDIT_CARD",
+    "installmentCount": 11,
+    "totalCents": 10675
+  },
+  {
+    "nominalCents": 10000,
+    "method": "CREDIT_CARD",
+    "installmentCount": 12,
+    "totalCents": 10675
+  },
+  {
+    "nominalCents": 30000,
+    "method": "PIX",
+    "installmentCount": 1,
+    "totalCents": 30799
+  },
+  {
+    "nominalCents": 30000,
+    "method": "CREDIT_CARD",
+    "installmentCount": 1,
+    "totalCents": 31594
+  },
+  {
+    "nominalCents": 30000,
+    "method": "CREDIT_CARD",
+    "installmentCount": 2,
+    "totalCents": 31758
+  },
+  {
+    "nominalCents": 30000,
+    "method": "CREDIT_CARD",
+    "installmentCount": 3,
+    "totalCents": 31758
+  },
+  {
+    "nominalCents": 30000,
+    "method": "CREDIT_CARD",
+    "installmentCount": 4,
+    "totalCents": 31758
+  },
+  {
+    "nominalCents": 30000,
+    "method": "CREDIT_CARD",
+    "installmentCount": 5,
+    "totalCents": 31758
+  },
+  {
+    "nominalCents": 30000,
+    "method": "CREDIT_CARD",
+    "installmentCount": 6,
+    "totalCents": 31758
+  },
+  {
+    "nominalCents": 30000,
+    "method": "CREDIT_CARD",
+    "installmentCount": 7,
+    "totalCents": 31923
+  },
+  {
+    "nominalCents": 30000,
+    "method": "CREDIT_CARD",
+    "installmentCount": 8,
+    "totalCents": 31923
+  },
+  {
+    "nominalCents": 30000,
+    "method": "CREDIT_CARD",
+    "installmentCount": 9,
+    "totalCents": 31923
+  },
+  {
+    "nominalCents": 30000,
+    "method": "CREDIT_CARD",
+    "installmentCount": 10,
+    "totalCents": 31923
+  },
+  {
+    "nominalCents": 30000,
+    "method": "CREDIT_CARD",
+    "installmentCount": 11,
+    "totalCents": 31923
+  },
+  {
+    "nominalCents": 30000,
+    "method": "CREDIT_CARD",
+    "installmentCount": 12,
+    "totalCents": 31923
+  },
+  {
+    "nominalCents": 100000,
+    "method": "PIX",
+    "installmentCount": 1,
+    "totalCents": 102199
+  },
+  {
+    "nominalCents": 100000,
+    "method": "CREDIT_CARD",
+    "installmentCount": 1,
+    "totalCents": 105195
+  },
+  {
+    "nominalCents": 100000,
+    "method": "CREDIT_CARD",
+    "installmentCount": 2,
+    "totalCents": 105740
+  },
+  {
+    "nominalCents": 100000,
+    "method": "CREDIT_CARD",
+    "installmentCount": 3,
+    "totalCents": 105740
+  },
+  {
+    "nominalCents": 100000,
+    "method": "CREDIT_CARD",
+    "installmentCount": 4,
+    "totalCents": 105740
+  },
+  {
+    "nominalCents": 100000,
+    "method": "CREDIT_CARD",
+    "installmentCount": 5,
+    "totalCents": 105740
+  },
+  {
+    "nominalCents": 100000,
+    "method": "CREDIT_CARD",
+    "installmentCount": 6,
+    "totalCents": 105740
+  },
+  {
+    "nominalCents": 100000,
+    "method": "CREDIT_CARD",
+    "installmentCount": 7,
+    "totalCents": 106290
+  },
+  {
+    "nominalCents": 100000,
+    "method": "CREDIT_CARD",
+    "installmentCount": 8,
+    "totalCents": 106290
+  },
+  {
+    "nominalCents": 100000,
+    "method": "CREDIT_CARD",
+    "installmentCount": 9,
+    "totalCents": 106290
+  },
+  {
+    "nominalCents": 100000,
+    "method": "CREDIT_CARD",
+    "installmentCount": 10,
+    "totalCents": 106290
+  },
+  {
+    "nominalCents": 100000,
+    "method": "CREDIT_CARD",
+    "installmentCount": 11,
+    "totalCents": 106290
+  },
+  {
+    "nominalCents": 100000,
+    "method": "CREDIT_CARD",
+    "installmentCount": 12,
+    "totalCents": 106290
+  },
+  {
+    "nominalCents": 500000,
+    "method": "PIX",
+    "installmentCount": 1,
+    "totalCents": 510199
+  },
+  {
+    "nominalCents": 500000,
+    "method": "CREDIT_CARD",
+    "installmentCount": 1,
+    "totalCents": 525770
+  },
+  {
+    "nominalCents": 500000,
+    "method": "CREDIT_CARD",
+    "installmentCount": 2,
+    "totalCents": 528494
+  },
+  {
+    "nominalCents": 500000,
+    "method": "CREDIT_CARD",
+    "installmentCount": 3,
+    "totalCents": 528494
+  },
+  {
+    "nominalCents": 500000,
+    "method": "CREDIT_CARD",
+    "installmentCount": 4,
+    "totalCents": 528494
+  },
+  {
+    "nominalCents": 500000,
+    "method": "CREDIT_CARD",
+    "installmentCount": 5,
+    "totalCents": 528494
+  },
+  {
+    "nominalCents": 500000,
+    "method": "CREDIT_CARD",
+    "installmentCount": 6,
+    "totalCents": 528494
+  },
+  {
+    "nominalCents": 500000,
+    "method": "CREDIT_CARD",
+    "installmentCount": 7,
+    "totalCents": 531246
+  },
+  {
+    "nominalCents": 500000,
+    "method": "CREDIT_CARD",
+    "installmentCount": 8,
+    "totalCents": 531246
+  },
+  {
+    "nominalCents": 500000,
+    "method": "CREDIT_CARD",
+    "installmentCount": 9,
+    "totalCents": 531246
+  },
+  {
+    "nominalCents": 500000,
+    "method": "CREDIT_CARD",
+    "installmentCount": 10,
+    "totalCents": 531246
+  },
+  {
+    "nominalCents": 500000,
+    "method": "CREDIT_CARD",
+    "installmentCount": 11,
+    "totalCents": 531246
+  },
+  {
+    "nominalCents": 500000,
+    "method": "CREDIT_CARD",
+    "installmentCount": 12,
+    "totalCents": 531246
+  }
+]

@@ -17,6 +17,7 @@ import {
   compareDatabaseTimestamps,
   readDatabaseTimestamp,
 } from "./databaseTimestamp";
+import { insertFinancialOperatorAlert } from "./financialOperatorAlertRepository";
 import {
   financialInboxDueAt,
   readFinancialWorkDueAt,
@@ -194,6 +195,11 @@ export function createGiftPaymentRestrictionWorker(
       if (event === "DEAD_LETTER") return { kind: "DEAD_LETTER" };
       let observed = false;
       let code = "PAYMENT_RESTRICTION_PROVIDER_UNAVAILABLE";
+      let platformRestriction: {
+        attemptId: string;
+        paymentReference: string;
+        status: string;
+      } | null = null;
       try {
         const {
           eventType: _type,
@@ -230,7 +236,8 @@ export function createGiftPaymentRestrictionWorker(
         )
           return unavailable();
         const correlated = await db.transaction(async (tx) =>
-          tx.execute(sql`SELECT a.id AS "attemptId", a.provider_reference AS "checkoutReference", account.account_reference AS "accountReference"
+          tx.execute(sql`SELECT a.id AS "attemptId", a.provider_reference AS "checkoutReference", account.account_reference AS "accountReference",
+          q.snapshot->'quote'->>'settlementVersion' AS "settlementVersion"
           FROM ${giftCheckoutAttempt} a INNER JOIN ${receivingAccount} account ON account.id=a.account_id AND account.site_id=a.site_id AND account.environment=a.environment
           INNER JOIN ${giftOrder} o ON o.id=a.order_id AND o.site_id=a.site_id AND o.account_id=a.account_id AND o.environment=a.environment
           INNER JOIN ${giftQuoteRecord} q ON q.id=o.quote_id AND q.site_id=o.site_id AND q.account_id=o.account_id AND q.environment=o.environment
@@ -240,7 +247,7 @@ export function createGiftPaymentRestrictionWorker(
             AND account.provider='ASAAS' AND account.account_reference=${event.providerAccountReference}
             AND q.snapshot->'receiving'->>'accountReference'=${event.providerAccountReference}
             AND (NOT ${directInstallment} OR (a.id=${payment.externalReference ?? null}
-              AND q.method='CREDIT_CARD' AND q.snapshot->'quote'->>'settlementVersion'='PLATFORM_FEE_GUARANTEE_V1'
+              AND q.method='CREDIT_CARD' AND q.snapshot->'quote'->>'settlementVersion' IN ('PLATFORM_FEE_GUARANTEE_V1','PLATFORM_ACCOUNT_SPLIT_V2')
               AND (q.snapshot->'quote'->>'installmentCount')::int BETWEEN GREATEST(2,${installmentNumber}::int) AND 12))
             LIMIT 2`),
         );
@@ -265,6 +272,15 @@ export function createGiftPaymentRestrictionWorker(
         code = observed
           ? "PAYMENT_RESTRICTION_RECONCILIATION_REQUIRED"
           : "PAYMENT_RESTRICTION_NOT_OBSERVED";
+        if (
+          observed &&
+          binding.settlementVersion === "PLATFORM_ACCOUNT_SPLIT_V2"
+        )
+          platformRestriction = {
+            attemptId: binding.attemptId,
+            paymentReference: payment.id,
+            status: payment.status,
+          };
       } catch {
         /* The authenticated event continues to inhibit financial availability. */
       }
@@ -282,6 +298,21 @@ export function createGiftPaymentRestrictionWorker(
             AND e.lease_expires_at>=${clock.toISOString()}::timestamptz AND e.lease_expires_at>=clock_timestamp() RETURNING e.id`);
         if (saved.rows.length !== 1 || saved.rows[0]?.id !== event.eventId)
           return unavailable();
+        // V2 money left the platform account: the operator must act (runbook).
+        if (platformRestriction)
+          await insertFinancialOperatorAlert(tx, {
+            kind: "PAYMENT_RESTRICTION",
+            severity: "critical",
+            environment,
+            siteId: event.siteId,
+            accountId: event.accountId,
+            checkoutAttemptId: platformRestriction.attemptId,
+            paymentReference: platformRestriction.paymentReference,
+            details: {
+              eventType: event.eventType,
+              providerStatus: platformRestriction.status,
+            },
+          });
       });
       return { kind: observed ? "DEAD_LETTER" : "RETRY" };
     },

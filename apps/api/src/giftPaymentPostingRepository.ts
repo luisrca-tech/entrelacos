@@ -17,19 +17,26 @@ import {
   databaseTimestampEpochMicroseconds,
   readDatabaseTimestamp,
 } from "./databaseTimestamp";
+import { insertFinancialOperatorAlert } from "./financialOperatorAlertRepository";
 import { readGiftQuoteSnapshot } from "./giftCheckouts";
 import {
+  type GiftOperatorAlertEffect,
   type GiftPaymentReconciliationResult,
   type GiftPaymentTerminalEvidence,
   type GiftProviderPaymentObservation,
+  type GiftReceiptEffect,
+  giftPaymentInboxEvents,
   giftPaymentTerms,
+  giftPaymentV2OnlyInboxEvents,
   giftReceivedEffectKey,
   isGiftReceiptEvent,
   type ObservedGiftPaymentRecord,
+  type ObservedGiftPaymentRecordV2,
   reconcileGiftPaymentObservation,
+  reconcileGiftPaymentObservationV2,
   type StoredGiftPaymentCheckoutBinding,
 } from "./giftPaymentReconciliation";
-import type { GiftQuoteSnapshot } from "./giftQuotes";
+import { type GiftQuoteSnapshot, isPlatformAccountSplit } from "./giftQuotes";
 
 export interface GiftPaymentPostingClaim {
   eventId: string;
@@ -81,6 +88,28 @@ type RetryReason =
   | Exclude<GiftPaymentReconciliationResult["reason"], null>
   | "PAYMENT_RECEIPT_MISMATCH"
   | "PAYMENT_OBSERVATION_STALE";
+// One shape for both settlement versions; V2 adds its record fields and alert.
+type PostingDecision =
+  | {
+      outcome: "NO_REGRESSION";
+      reason: "TERMINAL_PAYMENT";
+      payment: null;
+      effect: null;
+    }
+  | {
+      outcome: Exclude<
+        GiftPaymentReconciliationResult["outcome"] | "OBSERVED" | "PENDING",
+        "NO_REGRESSION"
+      >;
+      reason: Exclude<RetryReason, "TERMINAL_PAYMENT"> | null;
+      payment: ObservedGiftPaymentRecord;
+      effect: GiftReceiptEffect | null;
+      platformAdjustmentCents?: number;
+      v2?: {
+        payment: ObservedGiftPaymentRecordV2;
+        alert: GiftOperatorAlertEffect | null;
+      };
+    };
 interface BindingRow extends StoredGiftPaymentCheckoutBinding {
   quoteId: string;
   operationId: string;
@@ -263,6 +292,7 @@ async function readEvent(
   binding: BindingRow,
   observation: GiftProviderPaymentObservation,
   clock: Date,
+  acceptedEvents: readonly string[],
 ) {
   const result =
     await tx.execute(sql`SELECT e.id, e.site_id AS "siteId", e.account_id AS "accountId", e.environment, e.provider_event_reference AS "providerEventReference",
@@ -284,9 +314,7 @@ async function readEvent(
     !event ||
     !sameScope(event, claim) ||
     event.id !== claim.eventId ||
-    !["PAYMENT_RECEIVED", "PAYMENT_CONFIRMED", "PAYMENT_SPLIT_DONE"].includes(
-      event.eventType,
-    ) ||
+    !acceptedEvents.includes(event.eventType) ||
     event.leaseOwner !== claim.leaseOwner ||
     event.leaseToken !== claim.leaseToken ||
     !["CLAIMED", "RETRY", "PROCESSED"].includes(event.state) ||
@@ -435,7 +463,11 @@ async function currentReceipt(
       payment.processingCents === null ||
       !Number.isSafeInteger(payment.processingCents) ||
       payment.processingCents < 0 ||
-      payment.commissionCents !== terms.commissionCents ||
+      payment.commissionCents === null ||
+      (isPlatformAccountSplit(snapshot)
+        ? payment.splitFixedCents !== payment.recipientNetCents ||
+          !reference(payment.splitProviderReference)
+        : payment.commissionCents !== terms.commissionCents) ||
       payment.recipientNetCents === null ||
       (snapshot.quote.settlementVersion === "PLATFORM_FEE_GUARANTEE_V1" &&
         (payment.platformAdjustmentCents ?? 0) !==
@@ -444,8 +476,10 @@ async function currentReceipt(
         BigInt(payment.processingCents) +
           BigInt(payment.commissionCents) +
           BigInt(payment.recipientNetCents) ||
-      payment.splitFixedCents !== terms.commissionCents ||
-      (terms.commissionCents > 0 && !reference(payment.splitProviderReference)))
+      (!isPlatformAccountSplit(snapshot) &&
+        (payment.splitFixedCents !== terms.commissionCents ||
+          (terms.commissionCents > 0 &&
+            !reference(payment.splitProviderReference)))))
   )
     return unavailable();
   if (ledger.eventId !== null) {
@@ -601,12 +635,16 @@ export function createGiftPaymentPostingRepository(
         return await db.transaction<GiftPaymentPostingResult>(
           async (tx) => {
             const binding = await readBinding(tx, value);
+            const platformSplit = isPlatformAccountSplit(binding.snapshot);
             const event = await readEvent(
               tx,
               claim,
               binding.row,
               value.observation,
               date(options.now()),
+              platformSplit
+                ? [...giftPaymentInboxEvents, ...giftPaymentV2OnlyInboxEvents]
+                : giftPaymentInboxEvents,
             );
             const raw = value.observation.payment as Record<string, unknown>;
             if (!raw || !reference(raw.id)) return unavailable();
@@ -627,14 +665,35 @@ export function createGiftPaymentPostingRepository(
                   date(options.now()),
                 )
               : null;
-            const decision = reconcileGiftPaymentObservation({
+            const reconciliation = {
               quoteSnapshot: binding.snapshot,
               checkout: binding.checkout,
               platformWalletId: options.platformWalletId,
               observation: value.observation,
               now: date(options.now()),
               existingTerminal: terminalEvidence(existing),
-            });
+            };
+            let decision: PostingDecision;
+            if (platformSplit) {
+              const v2 = reconcileGiftPaymentObservationV2({
+                ...reconciliation,
+                eventType: event.eventType,
+                // V2 reuses platform_adjustment_cents for the divergence-fix
+                // top-up (scripts/fixSplitDivergence.ts): the couple split was
+                // lowered by this amount and the platform transfers the rest.
+                splitTopUpCents: existing?.platformAdjustmentCents ?? null,
+              });
+              decision =
+                v2.outcome === "NO_REGRESSION"
+                  ? v2
+                  : {
+                      outcome: v2.outcome,
+                      reason: v2.reason,
+                      payment: v2.payment,
+                      effect: v2.effect,
+                      v2: { payment: v2.payment, alert: v2.alert },
+                    };
+            } else decision = reconcileGiftPaymentObservation(reconciliation);
             if (decision.outcome === "NO_REGRESSION") {
               if (!existing) return unavailable();
               if (event.state === "CLAIMED")
@@ -764,6 +823,32 @@ export function createGiftPaymentPostingRepository(
               existing,
               options,
             );
+            if (decision.v2) {
+              const extra = decision.v2.payment;
+              const updated =
+                await tx.execute(sql`UPDATE ${giftPaymentRecord} SET platform_net_cents = COALESCE(${extra.platformNetCents}::integer, platform_net_cents),
+              anticipation_cents = COALESCE(${extra.anticipationCents}::integer, anticipation_cents),
+              anticipation_reference = COALESCE(${extra.anticipationReference}::text, anticipation_reference),
+              split_divergence_blocked_at = CASE WHEN ${extra.splitDivergenceBlocked} THEN COALESCE(split_divergence_blocked_at, clock_timestamp()) ELSE split_divergence_blocked_at END
+              WHERE id = ${paymentId} AND site_id = ${claim.siteId} AND account_id = ${claim.accountId} AND environment = ${claim.environment} RETURNING id`);
+              if (
+                updated.rows.length !== 1 ||
+                updated.rows[0]?.id !== paymentId
+              )
+                return unavailable();
+              const alert = decision.v2.alert;
+              if (alert)
+                await insertFinancialOperatorAlert(tx, {
+                  kind: alert.kind,
+                  severity: alert.severity,
+                  environment: claim.environment,
+                  siteId: claim.siteId,
+                  accountId: claim.accountId,
+                  checkoutAttemptId: payment.attemptId,
+                  paymentReference: payment.providerPaymentReference,
+                  details: alert.details,
+                });
+            }
             let ledgerEntryId: string | null = null;
             if (decision.effect && isGiftReceiptEvent(event.eventType)) {
               ledgerEntryId = options.generateId("ledger");

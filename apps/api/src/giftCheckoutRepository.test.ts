@@ -12,10 +12,11 @@ import {
   type GiftCheckoutHostedOutcome,
   type GiftCheckoutReservation,
 } from "./giftCheckouts";
-import { quoteGiftPurchaseAmounts } from "./giftMoney";
-import type {
-  GiftQuoteReceivingContext,
-  StoredGiftForQuote,
+import { platformTariffPolicy, quoteGiftPurchaseAmounts } from "./giftMoney";
+import {
+  buildGiftV2Settlement,
+  type GiftQuoteReceivingContext,
+  type StoredGiftForQuote,
 } from "./giftQuotes";
 
 vi.mock("./giftQuoteLookup", () => ({ findPublishedGiftForQuote: vi.fn() }));
@@ -320,6 +321,13 @@ function fixture(rawTimestamps = false) {
           const match = text.match(new RegExp(`${column} = \\$(\\d+)`));
           if (match) attempt[camel(column)] = params[Number(match[1]) - 1];
         }
+        const references = text.match(
+          /installment_expiry_payment_references = ARRAY\[([^\]]*)\]::text\[\]/,
+        );
+        if (references)
+          attempt.installmentExpiryPaymentReferences = (
+            references[1]?.match(/\$\d+/g) ?? []
+          ).map((placeholder) => params[Number(placeholder.slice(1)) - 1]);
         return { rows: [{ id: attempt.id }] };
       }
       if (/FROM "gift_order" o/i.test(text)) {
@@ -647,6 +655,44 @@ async function hostedInstallment() {
   hosted.checkout.method = "CREDIT_CARD";
   await repository.saveHostedCheckout(hosted);
   return { values, repository, hosted, quote };
+}
+
+async function hostedV2Installment(installmentPaymentReferences?: string[]) {
+  const values = fixture();
+  const snapshot = values.input.quoteSnapshot;
+  snapshot.pricing.provenance = "platform-tariff-table";
+  snapshot.pricing.policy = platformTariffPolicy("CREDIT_CARD");
+  Object.assign(snapshot.quote, {
+    method: "CREDIT_CARD",
+    settlementVersion: "PLATFORM_ACCOUNT_SPLIT_V2",
+    ...quoteGiftPurchaseAmounts(
+      {
+        nominalCents: 10_000,
+        method: "CREDIT_CARD",
+        policy: snapshot.pricing.policy,
+      },
+      3,
+    ),
+  });
+  Object.assign(snapshot, {
+    settlement: buildGiftV2Settlement(snapshot.quote),
+  });
+  const quote = snapshot.quote;
+  Object.assign(values.tables.gift_quote_record[0], {
+    method: quote.method,
+    commissionCents: quote.commissionCents,
+    processingCents: quote.processingCents,
+    totalCents: quote.totalCents,
+    policyVersion: snapshot.pricing.policy.version,
+    snapshot: structuredClone(snapshot),
+  });
+  const repository = createGiftCheckoutRepository(values.db, values.options);
+  await repository.reserve(values.input, () => {});
+  const hosted = outcome();
+  hosted.checkout.method = "CREDIT_CARD";
+  if (installmentPaymentReferences)
+    hosted.installmentPaymentReferences = installmentPaymentReferences;
+  return { values, repository, hosted };
 }
 
 async function confirmedCard() {
@@ -1358,6 +1404,45 @@ describe("PostgreSQL gift checkout repository", () => {
         providerPaymentReference: "provider-payment-one",
       },
     });
+  });
+
+  it("persists the verified V2 child payments of a hosted installment plan, sorted", async () => {
+    const { values, repository, hosted } = await hostedV2Installment([
+      "pay_3",
+      "pay_1",
+      "pay_2",
+    ]);
+    await expect(repository.saveHostedCheckout(hosted)).resolves.toMatchObject({
+      state: "AWAITING_PAYMENT",
+    });
+    expect(values.tables.gift_checkout_attempt[0]).toMatchObject({
+      providerReference: "provider-checkout-one",
+      installmentExpiryPaymentReferences: ["pay_1", "pay_2", "pay_3"],
+    });
+  });
+
+  it.each([
+    ["too few children", ["pay_1", "pay_2"]],
+    ["duplicate children", ["pay_1", "pay_1", "pay_2"]],
+    ["unsafe child reference", ["pay_1", "pay_2", "pay 3"]],
+  ])("rejects V2 child payments with %s", async (_, references) => {
+    const { values, repository, hosted } =
+      await hostedV2Installment(references);
+    await expect(repository.saveHostedCheckout(hosted)).rejects.toMatchObject({
+      code: "EXTERNAL_OUTCOME_UNKNOWN",
+    });
+    expect(values.tables.gift_checkout_attempt[0]).toMatchObject({
+      providerReference: null,
+    });
+  });
+
+  it("never stores child payments for a V1 hosted checkout", async () => {
+    const values = await reserved();
+    const hosted = outcome();
+    hosted.installmentPaymentReferences = ["pay_1", "pay_2"];
+    await expect(
+      values.repository.saveHostedCheckout(hosted),
+    ).rejects.toMatchObject({ code: "EXTERNAL_OUTCOME_UNKNOWN" });
   });
 
   it("closes an invoice only after verified terminal deletion of the installment plan", async () => {

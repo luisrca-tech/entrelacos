@@ -1,13 +1,19 @@
 import {
   allocateGiftInstallmentCents,
+  GIFT_PLATFORM_TARIFFS,
   type GiftInstallmentOption,
   type GiftQuote,
+  type GiftV2Quote,
   getGiftCommissionCents,
+  getGiftTariff,
+  getGiftTariffTier,
   giftCentsSchema,
   giftMaximumInstallments,
   giftMinimumInstallmentCents,
   giftPaymentMethodSchema,
   giftQuoteSchema,
+  listGiftV2Options,
+  quoteGiftV2,
 } from "@entrelacos/contracts";
 
 export interface GiftProcessingPolicy {
@@ -21,7 +27,8 @@ export interface GiftProcessingPolicy {
   feeBasis?:
     | "OBSERVED_ESTIMATE"
     | "SANDBOX_BUYER_ESTIMATE"
-    | "ACCOUNT_BUYER_ESTIMATE";
+    | "ACCOUNT_BUYER_ESTIMATE"
+    | "PLATFORM_TARIFF_TABLE";
   cardInstallmentBasisPoints?: { upToSix?: number; upToTwelve?: number };
 }
 
@@ -212,7 +219,10 @@ export function quoteGiftPurchaseAmounts(
     | "installmentCents"
     | "installmentSurchargeCents"
     | "installmentOptions"
+    | "anticipationCents"
   > {
+  if (input.policy?.feeBasis === "PLATFORM_TARIFF_TABLE")
+    return quoteGiftV2PurchaseAmounts(input, installmentCount);
   const base = quoteGiftAmounts(input);
   if (input.method !== "CREDIT_CARD" || !input.policy) return base;
   const options = quoteGiftCardInstallments(base, input.policy);
@@ -253,4 +263,89 @@ export function parseBrlCents(value: string): number {
     return quoteInvalid();
   }
   return result.data;
+}
+
+function quoteGiftV2PurchaseAmounts(
+  input: QuoteGiftAmountsInput,
+  installmentCount?: number,
+): ReturnType<typeof quoteGiftPurchaseAmounts> {
+  const nominalResult = giftCentsSchema.safeParse(input.nominalCents);
+  if (
+    !nominalResult.success ||
+    nominalResult.data === 0 ||
+    !giftPaymentMethodSchema.safeParse(input.method).success ||
+    (input.method === "PIX" && installmentCount !== undefined)
+  )
+    return quoteInvalid();
+  const policy = input.policy;
+  if (
+    !policy ||
+    policy.method !== input.method ||
+    policy.commissionBasisPoints !== 200 ||
+    policy.feeAllocation !== "BUYER_GROSS_UP" ||
+    policy.version !== GIFT_PLATFORM_TARIFFS.version
+  )
+    return policyUnavailable();
+  const fromQuote = (quote: GiftV2Quote) => ({
+    nominalCents: quote.nominalCents,
+    commissionCents: quote.commissionCents,
+    // Anticipation is carried inside processing so allocation checks hold.
+    processingCents: quote.processingCents + quote.anticipationCents,
+    anticipationCents: quote.anticipationCents,
+    totalCents: quote.totalCents,
+    policyVersion: policy.version,
+    feeAllocation: "BUYER_GROSS_UP" as const,
+  });
+  if (input.method === "PIX")
+    return fromQuote(quoteGiftV2(nominalResult.data, "PIX", 1));
+  const card = listGiftV2Options(nominalResult.data).card;
+  const first = card[0];
+  const selected = card.find(
+    (quote) => quote.installmentCount === (installmentCount ?? 1),
+  );
+  if (!first || first.installmentCount !== 1) return policyUnavailable();
+  if (!selected) return quoteInvalid();
+  const installmentOptions = card.map((quote) => ({
+    installmentCount: quote.installmentCount,
+    totalCents: quote.totalCents,
+    installmentSurchargeCents: quote.totalCents - first.totalCents,
+    installmentCents: quote.installmentCents,
+  }));
+  return {
+    ...fromQuote(selected),
+    installmentCount: selected.installmentCount,
+    installmentSurchargeCents: selected.totalCents - first.totalCents,
+    installmentCents: selected.installmentCents,
+    installmentOptions,
+  };
+}
+
+/** Policy used for every new quote: the platform tariff table, no network. */
+export function platformTariffPolicy(
+  method: GiftQuote["method"],
+): GiftProcessingPolicy {
+  const tariff = getGiftTariff(getGiftTariffTier(method, 1));
+  return {
+    version: GIFT_PLATFORM_TARIFFS.version,
+    method,
+    commissionBasisPoints: 200,
+    processingBasisPoints: tariff.basisPoints,
+    processingFixedCents: tariff.fixedCents,
+    rounding: "CEILING",
+    feeAllocation: "BUYER_GROSS_UP",
+    feeBasis: "PLATFORM_TARIFF_TABLE",
+  };
+}
+
+/** Frozen per-installment couple split for a V2 quote (sums to the nominal). */
+export function giftV2RecipientSplitCents(
+  quote: Pick<GiftQuote, "nominalCents" | "method" | "installmentCount">,
+): number[] {
+  const v2 = quoteGiftV2(
+    quote.nominalCents,
+    quote.method,
+    quote.installmentCount ?? 1,
+  );
+  if (!v2.offered) return policyUnavailable();
+  return v2.recipientSplitCents;
 }

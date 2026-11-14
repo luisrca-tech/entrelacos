@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { readGiftPaymentConfig } from "./giftPaymentConfig";
 
@@ -9,7 +10,11 @@ const configured = {
   ASAAS_CREDENTIAL_KEY_ID: "sandbox-v1",
   ASAAS_CREDENTIAL_KEY: Buffer.alloc(32, 19).toString("base64"),
   ASAAS_WEBHOOK_PUBLIC_ORIGIN: "https://webhook.example.test",
+  ASAAS_PLATFORM_WEBHOOK_TOKEN: "fixture-platform-webhook-token-0123456789",
 };
+const platformWebhookTokenHash = createHash("sha256")
+  .update(configured.ASAAS_PLATFORM_WEBHOOK_TOKEN)
+  .digest("hex");
 
 describe("gift payment runtime configuration", () => {
   it("opts non-production environments into background processing explicitly", () => {
@@ -177,6 +182,7 @@ describe("gift payment runtime configuration", () => {
         platformApiKey: configured.ASAAS_API_KEY,
         platformAccountId: "platform-account",
         platformWalletId: "platform-wallet",
+        platformWebhookTokenHash,
         credentialKeyId: "sandbox-v1",
         credentialKeyring: new Map([["sandbox-v1", Buffer.alloc(32, 19)]]),
         webhookPublicOrigin: "https://webhook.example.test",
@@ -184,6 +190,20 @@ describe("gift payment runtime configuration", () => {
       });
     },
   );
+
+  it("keeps only the platform webhook token hash, never the raw token", () => {
+    const result = readGiftPaymentConfig(configured, "development");
+    expect(result).toMatchObject({ platformWebhookTokenHash });
+    expect(JSON.stringify(result)).not.toContain(
+      configured.ASAAS_PLATFORM_WEBHOOK_TOKEN,
+    );
+    expect(
+      readGiftPaymentConfig(
+        { ASAAS_PLATFORM_WEBHOOK_TOKEN: undefined },
+        "development",
+      ),
+    ).toEqual({ mode: "disabled" });
+  });
 
   it("allows live only in production and sandbox only outside production", () => {
     expect(
@@ -248,6 +268,9 @@ describe("gift payment runtime configuration", () => {
     },
     { ASAAS_WEBHOOK_PUBLIC_ORIGIN: "https://webhook.example.test." },
     { ASAAS_WEBHOOK_PUBLIC_ORIGIN: " https://webhook.example.test" },
+    { ASAAS_PLATFORM_WEBHOOK_TOKEN: "short" },
+    { ASAAS_PLATFORM_WEBHOOK_TOKEN: "x".repeat(256) },
+    { ASAAS_PLATFORM_WEBHOOK_TOKEN: `${"x".repeat(32)} y` },
   ])("rejects invalid settings with a sanitized error (%#)", (override) => {
     try {
       readGiftPaymentConfig({ ...configured, ...override }, "development");

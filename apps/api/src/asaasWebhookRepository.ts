@@ -1,17 +1,28 @@
 import type { DatabaseConnection } from "@entrelacos/database";
 import {
   financialEventInbox,
+  giftCheckoutAttempt,
+  giftOrder,
+  giftPaymentRecord,
+  giftQuoteRecord,
   receivingAccount,
   site,
 } from "@entrelacos/database/schema";
-import { and, eq } from "drizzle-orm";
+import { and, eq, type SQL, sql } from "drizzle-orm";
 import {
   type AsaasInboxEvent,
+  type AsaasPlatformEventReferences,
+  type AsaasPlatformEventRoute,
+  type AsaasUnroutablePlatformEvent,
   type AsaasWebhookBinding,
   hashAsaasEventIdentity,
 } from "./asaasWebhook";
+import { insertFinancialOperatorAlert } from "./financialOperatorAlertRepository";
 
-type WebhookDatabase = Pick<DatabaseConnection["db"], "select" | "transaction">;
+type WebhookDatabase = Pick<
+  DatabaseConnection["db"],
+  "select" | "transaction" | "execute"
+>;
 
 export class AsaasWebhookRepositoryError extends Error {
   readonly status = 503;
@@ -109,6 +120,84 @@ export function createAsaasWebhookRepository(
 ) {
   if (environment !== "sandbox" && environment !== "live") unavailable();
   return {
+    // Routes a platform-account (V2) notification to the one V2 checkout attempt
+    // its references name. Ambiguous or unknown references are never guessed.
+    async routePlatformEvent(
+      references: AsaasPlatformEventReferences,
+    ): Promise<AsaasPlatformEventRoute | null> {
+      const providerReferences = references.providerReferences.filter((value) =>
+        reference(value),
+      );
+      const matches: SQL[] = [];
+      if (reference(references.externalReference, 200))
+        matches.push(sql`a.id = ${references.externalReference}`);
+      if (providerReferences.length)
+        matches.push(
+          sql`a.provider_reference = ANY(${sql.param(providerReferences)}::text[])`,
+        );
+      if (reference(references.paymentId)) {
+        matches.push(
+          sql`${references.paymentId} = ANY(a.installment_expiry_payment_references)`,
+        );
+        matches.push(sql`EXISTS (SELECT 1 FROM ${giftPaymentRecord} p WHERE p.site_id = a.site_id AND p.account_id = a.account_id
+          AND p.environment = a.environment AND p.attempt_id = a.id AND p.provider_payment_reference = ${references.paymentId})`);
+      }
+      if (!matches.length) return null;
+      try {
+        const result =
+          await db.execute(sql`SELECT DISTINCT a.id AS "attemptId", a.site_id AS "siteId", a.account_id AS "accountId",
+          account.account_reference AS "providerAccountReference", s.is_demo AS "isDemo"
+          FROM ${giftCheckoutAttempt} a
+          INNER JOIN ${giftOrder} o ON o.id = a.order_id AND o.site_id = a.site_id AND o.account_id = a.account_id AND o.environment = a.environment
+          INNER JOIN ${giftQuoteRecord} q ON q.id = o.quote_id AND q.site_id = o.site_id AND q.account_id = o.account_id AND q.environment = o.environment
+          INNER JOIN ${receivingAccount} account ON account.id = a.account_id AND account.site_id = a.site_id AND account.environment = a.environment
+          INNER JOIN ${site} s ON s.id = a.site_id
+          WHERE a.environment = ${environment} AND account.provider = 'ASAAS'
+            AND q.snapshot->'quote'->>'settlementVersion' = 'PLATFORM_ACCOUNT_SPLIT_V2'
+            AND (${sql.join(matches, sql` OR `)})
+          LIMIT 2`);
+        const row = result.rows[0] as Record<string, unknown> | undefined;
+        if (
+          result.rows.length !== 1 ||
+          !row ||
+          !reference(row.attemptId) ||
+          !reference(row.siteId) ||
+          !reference(row.accountId) ||
+          !reference(row.providerAccountReference) ||
+          typeof row.isDemo !== "boolean"
+        )
+          return null;
+        return {
+          siteId: row.siteId,
+          accountId: row.accountId,
+          providerAccountReference: row.providerAccountReference,
+          environment,
+          attemptId: row.attemptId,
+          isDemo: row.isDemo,
+        };
+      } catch {
+        return unavailable();
+      }
+    },
+
+    async recordUnroutable(event: AsaasUnroutablePlatformEvent): Promise<void> {
+      if (event.environment !== environment) unavailable();
+      try {
+        await insertFinancialOperatorAlert(db, {
+          kind: "UNROUTABLE_PLATFORM_EVENT",
+          severity: "warning",
+          environment,
+          paymentReference: event.paymentReference,
+          details: {
+            eventType: event.eventType,
+            providerEventId: event.providerEventId,
+          },
+        });
+      } catch {
+        unavailable();
+      }
+    },
+
     async resolveBinding(
       tokenHash: string,
     ): Promise<AsaasWebhookBinding | null> {
