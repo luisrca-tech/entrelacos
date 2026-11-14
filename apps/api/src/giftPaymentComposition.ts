@@ -158,6 +158,8 @@ export function createGiftPaymentComposition(
     timeoutMs: 15_000,
     maxResponseBytes: 262_144,
     now,
+    // V2 charges live in the platform account (see asaasStoredAccountReader).
+    platformApiKey: config.platformApiKey,
   });
   const withdrawals = createWithdrawalComposition(config, {
     db,
@@ -505,6 +507,12 @@ export function createGiftPaymentComposition(
     mode: environment,
     ...liveSitePolicy,
     resolveBinding: webhookRepository.resolveBinding,
+    platform: {
+      webhookTokenHash: config.platformWebhookTokenHash,
+      accountReference: config.platformAccountId,
+      route: webhookRepository.routePlatformEvent,
+      recordUnroutable: webhookRepository.recordUnroutable,
+    },
     repository: {
       async append(input) {
         const result = await webhookRepository.append(input);

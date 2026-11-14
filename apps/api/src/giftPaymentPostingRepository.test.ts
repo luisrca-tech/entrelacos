@@ -1,13 +1,17 @@
 import { drizzle, type NodePgClient } from "drizzle-orm/node-postgres";
 import { describe, expect, it, vi } from "vitest";
 import { hashAsaasEventIdentity } from "./asaasWebhook";
-import { quoteGiftPurchaseAmounts, serializeBrlCents } from "./giftMoney";
+import {
+  platformTariffPolicy,
+  quoteGiftPurchaseAmounts,
+  serializeBrlCents,
+} from "./giftMoney";
 import {
   createGiftPaymentPostingRepository,
   type GiftPaymentPostingInput,
   type GiftPaymentPostingOptions,
 } from "./giftPaymentPostingRepository";
-import type { GiftQuoteSnapshot } from "./giftQuotes";
+import { buildGiftV2Settlement, type GiftQuoteSnapshot } from "./giftQuotes";
 
 const time = new Date("2026-10-12T17:05:00.000Z");
 const scope = {
@@ -180,6 +184,7 @@ function fixture(rawTimestamps = false) {
     gift_payment_record: [],
     financial_ledger_entry: [],
     financial_event_inbox: [inbox],
+    financial_operator_alert: [],
   };
   const queries: Array<{ sql: string; params: unknown[] }> = [];
   const faults = { failInsert: "", casMiss: false, commitAfterApplied: false };
@@ -349,6 +354,40 @@ function fixture(rawTimestamps = false) {
                 : params[Number(match[1]) - 1];
         }
         return { rows: [{ id: event.id }] };
+      }
+      if (/UPDATE "gift_payment_record" SET platform_net_cents/i.test(text)) {
+        const [platformNet, anticipation, anticipationReference, blocked, id] =
+          params;
+        const payment = tables.gift_payment_record.find((row) => row.id === id);
+        if (!payment) return { rows: [] };
+        if (platformNet != null) payment.platformNetCents = platformNet;
+        if (anticipation != null) payment.anticipationCents = anticipation;
+        if (anticipationReference != null)
+          payment.anticipationReference = anticipationReference;
+        if (blocked) payment.splitDivergenceBlockedAt ??= new Date(clock.value);
+        return { rows: [{ id }] };
+      }
+      if (/INSERT INTO "financial_operator_alert"/i.test(text)) {
+        const [id, kind, severity, environment, siteId, accountId, paymentRef] =
+          params;
+        if (
+          tables.financial_operator_alert.some(
+            (row) => row.kind === kind && row.paymentReference === paymentRef,
+          )
+        )
+          return { rows: [] };
+        tables.financial_operator_alert.push({
+          id,
+          kind,
+          severity,
+          environment,
+          siteId,
+          accountId,
+          paymentReference: paymentRef,
+          checkoutAttemptId: params[7],
+          details: JSON.parse(String(params[8])),
+        });
+        return { rows: [{ id }] };
       }
       if (
         /UPDATE "gift_payment_record" SET platform_adjustment_cents/i.test(text)
@@ -1583,4 +1622,168 @@ it("posts each installment once without multiplying the fixed commission", async
   expect(
     f.tables.financial_ledger_entry.map((entry) => entry.amountCents),
   ).toEqual([5000, 5000]);
+});
+
+describe("PLATFORM_ACCOUNT_SPLIT_V2 receipt posting", () => {
+  // The V1 fixture rebound to a V2 Pix quote charged in the platform account,
+  // with a fixed split of the whole nominal to the couple wallet.
+  function v2Fixture(eventType: string, payment: Record<string, unknown> = {}) {
+    const values = fixture();
+    const snapshot = values.binding.snapshot;
+    const quote = {
+      ...snapshot.quote,
+      settlementVersion: "PLATFORM_ACCOUNT_SPLIT_V2" as const,
+      ...quoteGiftPurchaseAmounts({
+        nominalCents: 10_000,
+        method: "PIX",
+        policy: platformTariffPolicy("PIX"),
+      }),
+    };
+    const mutable = snapshot as {
+      -readonly [K in keyof typeof snapshot]: (typeof snapshot)[K];
+    };
+    mutable.quote = quote;
+    mutable.settlement = buildGiftV2Settlement(quote);
+    mutable.pricing = {
+      ...snapshot.pricing,
+      provenance: "platform-tariff-table",
+      policy: platformTariffPolicy("PIX"),
+    } as typeof snapshot.pricing;
+    Object.assign(values.binding, {
+      commissionCents: quote.commissionCents,
+      processingCents: quote.processingCents,
+      totalCents: quote.totalCents,
+      policyVersion: quote.policyVersion,
+    });
+    const event = values.tables.financial_event_inbox[0];
+    event.eventType = eventType;
+    event.providerEventReference = `evt_${eventType.toLowerCase()}`;
+    event.payloadHash = hashAsaasEventIdentity(
+      String(event.providerEventReference),
+      eventType,
+      "provider-account-one",
+      event.payload as Record<string, string>,
+    );
+    values.input.observation.payment = {
+      id: "pay_one",
+      checkoutSession: "checkout-one",
+      externalReference: "attempt-one",
+      billingType: "PIX",
+      status: "RECEIVED",
+      value: serializeBrlCents(quote.totalCents),
+      netValue: serializeBrlCents(quote.totalCents - 199),
+      split: [
+        {
+          id: "split-couple",
+          walletId: "recipient-one",
+          fixedValue: "100.00",
+          totalValue: "100.00",
+          status: "DONE",
+        },
+      ],
+      ...payment,
+    } as unknown as typeof values.input.observation.payment;
+    return values;
+  }
+
+  it("credits the couple split once on PAYMENT_SPLIT_DONE and records the platform net", async () => {
+    const v = v2Fixture("PAYMENT_SPLIT_DONE");
+    const repository = createGiftPaymentPostingRepository(v.db, v.options);
+    expect((await repository.postReceivedPayment(v.input)).outcome).toBe(
+      "POSTED",
+    );
+    expect(v.tables.financial_ledger_entry).toEqual([
+      expect.objectContaining({ kind: "GIFT_RECEIVED", amountCents: 10_000 }),
+    ]);
+    expect(v.tables.gift_payment_record[0]).toMatchObject({
+      recipientNetCents: 10_000,
+      splitFixedCents: 10_000,
+      platformNetCents: 200,
+      commissionCents: 200,
+      processingCents: 199,
+    });
+    expect(v.tables.gift_payment_record[0].platformAdjustmentCents).toBe(
+      undefined,
+    );
+    expect((await repository.postReceivedPayment(v.input)).outcome).toBe(
+      "DUPLICATE",
+    );
+    expect(v.tables.financial_ledger_entry).toHaveLength(1);
+    expect(v.tables.financial_operator_alert).toEqual([]);
+  });
+
+  it("records a confirmed card charge without crediting before Asaas releases it", async () => {
+    const v = v2Fixture("PAYMENT_CONFIRMED", {
+      status: "CONFIRMED",
+      split: [
+        {
+          id: "split-couple",
+          walletId: "recipient-one",
+          fixedValue: "100.00",
+          totalValue: "100.00",
+          status: "AWAITING_CREDIT",
+        },
+      ],
+    });
+    const result = await createGiftPaymentPostingRepository(
+      v.db,
+      v.options,
+    ).postReceivedPayment(v.input);
+    expect(result.outcome).toBe("OBSERVED");
+    expect(v.tables.financial_event_inbox[0].state).toBe("PROCESSED");
+    expect(v.tables.financial_ledger_entry).toEqual([]);
+    expect(v.tables.gift_payment_record[0]).toMatchObject({
+      providerStatus: "CONFIRMED",
+      recipientNetCents: null,
+    });
+  });
+
+  it("opens one critical alert for a split divergence block and never credits", async () => {
+    const v = v2Fixture("PAYMENT_SPLIT_DIVERGENCE_BLOCK", {
+      split: [
+        {
+          id: "split-couple",
+          walletId: "recipient-one",
+          fixedValue: "100.00",
+          totalValue: "100.00",
+          status: "BLOCKED_BY_VALUE_DIVERGENCE",
+        },
+      ],
+    });
+    const result = await createGiftPaymentPostingRepository(
+      v.db,
+      v.options,
+    ).postReceivedPayment(v.input);
+    expect(result.outcome).toBe("OBSERVED");
+    expect(v.tables.financial_ledger_entry).toEqual([]);
+    expect(v.tables.financial_operator_alert).toEqual([
+      expect.objectContaining({
+        kind: "SPLIT_DIVERGENCE_BLOCK",
+        severity: "critical",
+        paymentReference: "pay_one",
+        checkoutAttemptId: "attempt-one",
+      }),
+    ]);
+    expect(
+      v.tables.gift_payment_record[0].splitDivergenceBlockedAt,
+    ).toBeInstanceOf(Date);
+  });
+
+  it("refuses platform-only events for a V1 quote", async () => {
+    const v = fixture();
+    const event = v.tables.financial_event_inbox[0];
+    event.eventType = "PAYMENT_SPLIT_DIVERGENCE_BLOCK";
+    event.payloadHash = hashAsaasEventIdentity(
+      String(event.providerEventReference),
+      "PAYMENT_SPLIT_DIVERGENCE_BLOCK",
+      "provider-account-one",
+      event.payload as Record<string, string>,
+    );
+    await expect(
+      createGiftPaymentPostingRepository(v.db, v.options).postReceivedPayment(
+        v.input,
+      ),
+    ).rejects.toThrow();
+    expect(v.tables.gift_payment_record).toEqual([]);
+  });
 });
