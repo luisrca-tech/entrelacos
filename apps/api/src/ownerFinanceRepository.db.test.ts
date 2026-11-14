@@ -48,11 +48,15 @@ async function seed(tx: Executor) {
     total: number;
     installments?: number;
     version?: string;
+    anticipation?: number;
   }) {
     const quote = {
       title: `Presente ${input.id}`,
       settlementVersion: input.version ?? "PLATFORM_ACCOUNT_SPLIT_V2",
       ...(input.installments ? { installmentCount: input.installments } : {}),
+      ...(input.anticipation === undefined
+        ? {}
+        : { anticipationCents: input.anticipation }),
     };
     await tx.execute(sql`INSERT INTO gift_quote_record (id, site_id, account_id, environment, gift_id,
       destination_version, method, nominal_cents, commission_cents, processing_cents, total_cents,
@@ -75,17 +79,26 @@ async function seed(tx: Executor) {
     gross: number;
     recipientNet?: number;
     platformNet?: number;
+    anticipation?: number;
     installment?: number;
+    // Defaults to credited whenever the split settled (both nets known).
+    credited?: boolean;
   }) {
     await tx.execute(sql`INSERT INTO gift_payment_record (id, site_id, account_id, environment, order_id,
       attempt_id, provider_payment_reference, provider_status, verification_status, observed_at,
-      gross_cents, recipient_net_cents, platform_net_cents, provider_installment_reference, installment_number)
+      gross_cents, recipient_net_cents, platform_net_cents, anticipation_cents, anticipation_reference,
+      provider_installment_reference, installment_number)
       VALUES (${input.id}, ${input.siteId}, 'account', 'sandbox', ${input.orderId}, 'attempt', ${`pay_${input.id}`},
         ${input.status}, 'VERIFIED', ${input.observedAt}::timestamptz, ${input.gross},
-        ${input.recipientNet ?? null}, ${input.platformNet ?? null},
+        ${input.recipientNet ?? null}, ${input.platformNet ?? null}, ${input.anticipation ?? null},
+        ${input.anticipation === undefined ? null : `ant_${input.id}`},
         ${input.installment ? "installment" : null}, ${input.installment ?? null})`);
     // A settled split (platform net known) is the one credited to the couple.
-    if (input.platformNet !== undefined && input.recipientNet !== undefined)
+    if (
+      (input.credited ?? true) &&
+      input.platformNet !== undefined &&
+      input.recipientNet !== undefined
+    )
       await tx.execute(sql`INSERT INTO financial_ledger_entry (id, site_id, account_id, environment,
         effect_key, kind, direction, currency, amount_cents, payment_id, created_at)
         VALUES (${`ledger-${input.id}`}, ${input.siteId}, 'account', 'sandbox', ${`effect-${input.id}`},
@@ -97,6 +110,7 @@ async function seed(tx: Executor) {
     siteId: "site-a",
     method: "PIX",
     total: 10239,
+    anticipation: 0,
   });
   await payment({
     id: "p-pix",
@@ -114,11 +128,21 @@ async function seed(tx: Executor) {
     method: "CREDIT_CARD",
     total: 10600,
     installments: 3,
+    anticipation: 300,
   });
-  for (const [installment, recipientNet, platformNet] of [
-    [1, 3334, 60],
-    [2, undefined, undefined],
-    [3, undefined, undefined],
+  // Installment 1: credited, real anticipation 95 already deducted from its
+  // platform net. Installment 2: anticipated and settled by the provider but
+  // not yet credited to the couple, so its platform net is not counted.
+  for (const [
+    installment,
+    recipientNet,
+    platformNet,
+    anticipation,
+    credited,
+  ] of [
+    [1, 3334, 60, 95, true],
+    [2, 3333, 50, 90, false],
+    [3, undefined, undefined, undefined, true],
   ] as const)
     await payment({
       id: `p-card-${installment}`,
@@ -129,6 +153,8 @@ async function seed(tx: Executor) {
       gross: 3534,
       recipientNet,
       platformNet,
+      anticipation,
+      credited,
       installment,
     });
   await order({
@@ -246,9 +272,21 @@ it("lists, totals and pages paid V2 gifts and alerts with owner filters", async 
         creditedInstallments: 1,
         estimatedCommissionCents: 200,
         netCommissionCents: 60,
+        estimatedAnticipationCents: 300,
+        realAnticipationCents: 185,
         status: "PARTIALLY_RECEIVED",
       });
-      expect(all.gifts[0].netCommissionCents).toBeNull();
+      expect(all.gifts[0]).toMatchObject({
+        netCommissionCents: null,
+        estimatedAnticipationCents: 0,
+        realAnticipationCents: null,
+      });
+      expect(all.gifts[3]).toMatchObject({
+        orderId: "order-pix",
+        netCommissionCents: 180,
+        estimatedAnticipationCents: 0,
+        realAnticipationCents: null,
+      });
 
       const first = await listOwnerFinanceGifts(db, { limit: 2 });
       expect(first.gifts.map((gift) => gift.orderId)).toEqual([
@@ -296,9 +334,12 @@ it("lists, totals and pages paid V2 gifts and alerts with owner filters", async 
         grossChargedCents: 10239 * 3 + 10600,
         coupleCreditedCents: 13334,
         estimatedCommissionCents: 800,
+        // Credited payments only: 180 (Pix) + 60 (card installment 1).
         netCommissionCents: 240,
         // Only the fully received Pix gift: 200 estimated - 180 real.
         commissionDifferenceCents: 20,
+        estimatedAnticipationCents: 300,
+        realAnticipationCents: 185,
       });
       await expect(
         readOwnerFinanceSummary(db, { siteId: ["site-b"] }),
@@ -306,6 +347,35 @@ it("lists, totals and pages paid V2 gifts and alerts with owner filters", async 
         giftCount: 2,
         coupleCreditedCents: 0,
         netCommissionCents: 0,
+        estimatedAnticipationCents: 0,
+        realAnticipationCents: 0,
+      });
+      await expect(
+        readOwnerFinanceSummary(db, { method: "PIX" }),
+      ).resolves.toMatchObject({
+        giftCount: 3,
+        netCommissionCents: 180,
+        estimatedAnticipationCents: 0,
+        realAnticipationCents: 0,
+      });
+      await expect(
+        readOwnerFinanceSummary(db, { status: "PARTIALLY_RECEIVED" }),
+      ).resolves.toMatchObject({
+        giftCount: 1,
+        netCommissionCents: 60,
+        estimatedAnticipationCents: 300,
+        realAnticipationCents: 185,
+      });
+      await expect(
+        readOwnerFinanceSummary(db, {
+          from: "2026-10-01T00:00:00.000Z",
+          to: "2026-10-08T00:00:00.000Z",
+        }),
+      ).resolves.toMatchObject({
+        giftCount: 1,
+        netCommissionCents: 180,
+        estimatedAnticipationCents: 0,
+        realAnticipationCents: 0,
       });
 
       const open = await listOwnerFinanceAlerts(db, {

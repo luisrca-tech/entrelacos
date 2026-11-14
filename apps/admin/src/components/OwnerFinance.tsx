@@ -65,6 +65,43 @@ export function formatPaymentMethod(
   return gift.method === "PIX" ? "Pix" : `Cartão ${gift.installmentCount}x`;
 }
 
+/**
+ * Anticipation fee quoted to the guest beside the fee the provider charged.
+ * Null when the gift has neither (Pix or a card paid without anticipation).
+ */
+export function formatAnticipation(
+  gift: Pick<
+    OwnerFinanceGift,
+    "estimatedAnticipationCents" | "realAnticipationCents"
+  >,
+): { estimated: string; real: string } | null {
+  if (
+    gift.estimatedAnticipationCents === 0 &&
+    gift.realAnticipationCents === null
+  )
+    return null;
+  return {
+    estimated: `${formatCents(gift.estimatedAnticipationCents)} est.`,
+    real:
+      gift.realAnticipationCents === null
+        ? "pendente"
+        : `${formatCents(gift.realAnticipationCents)} real`,
+  };
+}
+
+function AnticipationCell({ gift }: { gift: OwnerFinanceGift }) {
+  const anticipation = formatAnticipation(gift);
+  if (!anticipation) return "—";
+  return (
+    <>
+      {anticipation.estimated}
+      <span className="block text-xs text-admin-text-secondary">
+        {anticipation.real}
+      </span>
+    </>
+  );
+}
+
 export interface GiftFilters {
   siteIds: string[];
   /** `YYYY-MM-DD` dates in Brasília time; empty means open-ended. */
@@ -426,11 +463,22 @@ function GiftsPanel({
           <MetricCard
             label="Comissão líquida real"
             value={formatCents(summary.netCommissionCents)}
+            hint="Parcelas creditadas, já sem a antecipação real"
           />
           <MetricCard
             label="Diferença"
             value={formatCents(summary.commissionDifferenceCents)}
             hint="Estimada menos real, nos presentes recebidos"
+          />
+          <MetricCard
+            label="Antecipação estimada"
+            value={formatCents(summary.estimatedAnticipationCents)}
+            hint="Cobrada dos convidados no cartão"
+          />
+          <MetricCard
+            label="Antecipação real"
+            value={formatCents(summary.realAnticipationCents)}
+            hint="Taxa cobrada pelo Asaas até agora"
           />
         </dl>
       )}
@@ -452,6 +500,9 @@ function GiftsPanel({
               <TableHead className="text-right">Repassado ao casal</TableHead>
               <TableHead className="text-right">Comissão estimada</TableHead>
               <TableHead className="text-right">Comissão líquida</TableHead>
+              <TableHead className="text-right">
+                Antecipação (estimada × real)
+              </TableHead>
               <TableHead className="pr-4">Situação</TableHead>
             </TableRow>
           </TableHeader>
@@ -459,7 +510,7 @@ function GiftsPanel({
             {!loading && gifts.length === 0 && (
               <TableRow>
                 <TableCell
-                  colSpan={9}
+                  colSpan={10}
                   className="px-4 py-5 text-admin-text-secondary"
                 >
                   Nenhum presente pago encontrado com estes filtros.
@@ -504,6 +555,9 @@ function GiftsPanel({
                   {gift.netCommissionCents === null
                     ? "—"
                     : formatCents(gift.netCommissionCents)}
+                </TableCell>
+                <TableCell className="text-right whitespace-nowrap">
+                  <AnticipationCell gift={gift} />
                 </TableCell>
                 <TableCell className="pr-4">
                   <ToneBadge tone={giftStatusTone[gift.status]}>

@@ -37,6 +37,8 @@ const summary = {
   estimatedCommissionCents: 200,
   netCommissionCents: 200,
   commissionDifferenceCents: 0,
+  estimatedAnticipationCents: 300,
+  realAnticipationCents: 285,
 };
 const gift = {
   orderId: "order-1",
@@ -53,6 +55,8 @@ const gift = {
   creditedInstallments: 1,
   estimatedCommissionCents: 200,
   netCommissionCents: 120,
+  estimatedAnticipationCents: 300,
+  realAnticipationCents: null,
   status: "PARTIALLY_RECEIVED",
 };
 
@@ -217,6 +221,16 @@ describe("owner finance HTTP boundary", () => {
     const response = await call(`/v1/owner/finance/gifts?${query}`);
     expect(response.status).toBe(400);
     expect(repository.listOwnerFinanceGifts).not.toHaveBeenCalled();
+  });
+
+  it("does not serve a gift without its anticipation fields", async () => {
+    const { realAnticipationCents: _, ...incomplete } = gift;
+    repository.listOwnerFinanceGifts.mockResolvedValue({
+      gifts: [incomplete],
+      nextCursor: null,
+    });
+    const response = await call("/v1/owner/finance/gifts");
+    expect(response.status).toBe(503);
   });
 
   it("rejects an invalid summary period", async () => {

@@ -7,10 +7,12 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { apiRequest } from "../lib/apiClient";
+import { formatCents } from "./financialFlow";
 import {
   alertListPath,
   emptyGiftFilters,
   formatAlertDate,
+  formatAnticipation,
   formatPaymentMethod,
   giftFilterParams,
   OwnerFinance,
@@ -38,6 +40,8 @@ const gift: OwnerFinanceGift = {
   creditedInstallments: 1,
   estimatedCommissionCents: 200,
   netCommissionCents: 60,
+  estimatedAnticipationCents: 300,
+  realAnticipationCents: 185,
   status: "PARTIALLY_RECEIVED",
 };
 
@@ -70,6 +74,30 @@ describe("owner finance helpers", () => {
     expect(
       formatPaymentMethod({ method: "CREDIT_CARD", installmentCount: 3 }),
     ).toBe("Cartão 3x");
+  });
+
+  it("pairs estimated and real anticipation, pending until reported", () => {
+    expect(
+      formatAnticipation({
+        estimatedAnticipationCents: 0,
+        realAnticipationCents: null,
+      }),
+    ).toBeNull();
+    expect(
+      formatAnticipation({
+        estimatedAnticipationCents: 300,
+        realAnticipationCents: null,
+      }),
+    ).toEqual({ estimated: `${formatCents(300)} est.`, real: "pendente" });
+    expect(
+      formatAnticipation({
+        estimatedAnticipationCents: 300,
+        realAnticipationCents: 185,
+      }),
+    ).toEqual({
+      estimated: `${formatCents(300)} est.`,
+      real: `${formatCents(185)} real`,
+    });
   });
 
   it("builds gift filters with whole Brasília days and repeated sites", () => {
@@ -112,6 +140,8 @@ describe("OwnerFinance screen", () => {
           estimatedCommissionCents: 200,
           netCommissionCents: 60,
           commissionDifferenceCents: 0,
+          estimatedAnticipationCents: 300,
+          realAnticipationCents: 185,
         };
       if (path.startsWith("/v1/owner/finance/gifts"))
         return { gifts: [gift], nextCursor: null };
@@ -158,7 +188,7 @@ describe("OwnerFinance screen", () => {
     );
   }
 
-  it("shows paid gifts with filtered totals and no anticipation column", async () => {
+  it("shows paid gifts with filtered totals and estimated versus real anticipation", async () => {
     await act(async () => root.render(createElement(OwnerFinance)));
     const text = container.textContent ?? "";
     expect(text).toContain("Financeiro Entrelaços");
@@ -167,7 +197,12 @@ describe("OwnerFinance screen", () => {
     expect(text).toContain("1/3 parcelas");
     expect(text).toContain("Recebido parcialmente");
     expect(text).toContain("Comissão líquida real");
-    expect(text.toLowerCase()).not.toContain("antecipação");
+    expect(text).toContain("Antecipação (estimada × real)");
+    expect(text).toContain("Antecipação estimada");
+    expect(text).toContain("Antecipação real");
+    const row = container.querySelector("tbody tr")?.textContent ?? "";
+    expect(row).toContain(`${formatCents(300)} est.`);
+    expect(row).toContain(`${formatCents(185)} real`);
 
     await select("Forma de pagamento", "CREDIT_CARD");
     await select("Situação", "IN_REVIEW");
