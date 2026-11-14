@@ -22,9 +22,9 @@ import { readGiftQuoteSnapshot } from "./giftCheckouts";
 import {
   type GiftOperatorAlertEffect,
   type GiftPaymentReconciliationResult,
-  type GiftReceiptEffect,
   type GiftPaymentTerminalEvidence,
   type GiftProviderPaymentObservation,
+  type GiftReceiptEffect,
   giftPaymentInboxEvents,
   giftPaymentTerms,
   giftPaymentV2OnlyInboxEvents,
@@ -678,6 +678,10 @@ export function createGiftPaymentPostingRepository(
               const v2 = reconcileGiftPaymentObservationV2({
                 ...reconciliation,
                 eventType: event.eventType,
+                // V2 reuses platform_adjustment_cents for the divergence-fix
+                // top-up (scripts/fixSplitDivergence.ts): the couple split was
+                // lowered by this amount and the platform transfers the rest.
+                splitTopUpCents: existing?.platformAdjustmentCents ?? null,
               });
               decision =
                 v2.outcome === "NO_REGRESSION"

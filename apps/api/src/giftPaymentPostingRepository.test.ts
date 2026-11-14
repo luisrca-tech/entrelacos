@@ -1769,6 +1769,75 @@ describe("PLATFORM_ACCOUNT_SPLIT_V2 receipt posting", () => {
     ).toBeInstanceOf(Date);
   });
 
+  it("credits only the lowered split after a divergence fix recorded a platform top-up", async () => {
+    const lowered = {
+      split: [
+        {
+          id: "split-couple",
+          walletId: "recipient-one",
+          fixedValue: "90.00",
+          totalValue: "90.00",
+          status: "DONE",
+        },
+      ],
+    };
+    const seed = {
+      ...scope,
+      id: "payment-existing",
+      orderId: "order-one",
+      attemptId: "attempt-one",
+      providerPaymentReference: "pay_one",
+      providerStatus: null,
+      verificationStatus: "UNVERIFIED",
+      observedAt: null,
+      currency: "BRL",
+      grossCents: null,
+      processingCents: null,
+      commissionCents: null,
+      recipientNetCents: null,
+      splitFixedCents: null,
+      splitProviderReference: null,
+    };
+    // Without the persisted top-up the lowered split never matches the quote.
+    const unfixed = v2Fixture("PAYMENT_SPLIT_DONE", lowered);
+    unfixed.tables.gift_payment_record.push({ ...seed });
+    expect(
+      (
+        await createGiftPaymentPostingRepository(
+          unfixed.db,
+          unfixed.options,
+        ).postReceivedPayment(unfixed.input)
+      ).outcome,
+    ).toBe("OBSERVED");
+    expect(unfixed.tables.financial_ledger_entry).toEqual([]);
+    expect(unfixed.tables.financial_event_inbox[0]).toMatchObject({
+      state: "RETRY",
+      lastErrorCode: "SPLIT_MISMATCH",
+    });
+
+    const v = v2Fixture("PAYMENT_SPLIT_DONE", lowered);
+    v.tables.gift_payment_record.push({
+      ...seed,
+      platformAdjustmentCents: 1000,
+    });
+    expect(
+      (
+        await createGiftPaymentPostingRepository(
+          v.db,
+          v.options,
+        ).postReceivedPayment(v.input)
+      ).outcome,
+    ).toBe("POSTED");
+    expect(v.tables.financial_ledger_entry).toEqual([
+      expect.objectContaining({ kind: "GIFT_RECEIVED", amountCents: 9_000 }),
+    ]);
+    expect(v.tables.gift_payment_record[0]).toMatchObject({
+      recipientNetCents: 9_000,
+      splitFixedCents: 9_000,
+      platformAdjustmentCents: 1000,
+    });
+  });
+
   it("refuses platform-only events for a V1 quote", async () => {
     const v = fixture();
     const event = v.tables.financial_event_inbox[0];
