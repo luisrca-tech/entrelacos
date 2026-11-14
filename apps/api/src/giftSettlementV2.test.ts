@@ -38,9 +38,9 @@ function v2Quote(
 
 describe("V2 platform tariff pricing", () => {
   it.each([
-    [30000, "CREDIT_CARD", 1, 31594],
+    [30000, "CREDIT_CARD", 1, 31961],
     [10000, "PIX", undefined, 10399],
-    [10000, "CREDIT_CARD", 12, 10675],
+    [10000, "CREDIT_CARD", 12, 11909],
   ] as const)(
     "prices %i %s x%s to %i cents",
     (nominal, method, count, total) => {
@@ -51,13 +51,15 @@ describe("V2 platform tariff pricing", () => {
       expect(amounts.totalCents).toBe(total);
       expect(amounts.policyVersion).toBe(GIFT_PLATFORM_TARIFFS.version);
       expect(amounts.feeAllocation).toBe("BUYER_GROSS_UP");
-      // No anticipation: processing holds every guest fee besides commission.
+      // Processing carries the card anticipation (none on Pix) so the
+      // allocation nominal + commission + processing still equals the total.
       expect(
         amounts.nominalCents +
           amounts.commissionCents +
           amounts.processingCents,
       ).toBe(total);
-      expect(amounts.anticipationCents ?? 0).toBe(0);
+      if (method === "PIX") expect(amounts.anticipationCents ?? 0).toBe(0);
+      else expect(amounts.anticipationCents ?? 0).toBeGreaterThan(0);
     },
   );
 

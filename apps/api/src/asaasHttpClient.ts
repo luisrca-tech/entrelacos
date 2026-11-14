@@ -110,6 +110,10 @@ export interface AsaasPaymentForReconciliation {
   chargeback?: { status?: string } | null;
   refunds?: { status?: string; value?: string | null }[] | null;
   custody?: Record<string, never> | null;
+  /** Asaas flag: the receivable of this payment was anticipated. */
+  anticipated?: boolean;
+  /** Real anticipation of this payment, read only when `anticipated`. */
+  anticipation?: { id: string; status: string; fee: string | null } | null;
 }
 
 export interface AsaasPaymentObservation
@@ -654,12 +658,40 @@ function normalizePayment(
                 : { value: optionalMoney(refund.value) }),
             };
           });
+  if (raw.anticipated !== undefined) {
+    if (raw.anticipated !== null && typeof raw.anticipated !== "boolean")
+      return unavailable();
+    if (raw.anticipated !== null) payment.anticipated = raw.anticipated;
+  }
   // Only existence of a custody restriction matters to reconciliation.
   if (raw.custody !== undefined) {
     if (raw.custody !== null) record(raw.custody);
     payment.custody = raw.custody === null ? null : {};
   }
   return payment;
+}
+
+// Prefers the credited anticipation; any other one only reports its status.
+function normalizeAnticipation(
+  raw: Record<string, unknown>,
+  paymentReference: string,
+): AsaasPaymentForReconciliation["anticipation"] {
+  const entries = boundedArray(raw.data).map(record);
+  if (entries.some((entry) => entry.payment !== paymentReference))
+    return unavailable();
+  const chosen =
+    entries.find((entry) => entry.status === "CREDITED") ?? entries[0];
+  if (!chosen) return null;
+  if (
+    typeof chosen.status !== "string" ||
+    !/^[A-Z_]{1,40}$/.test(chosen.status)
+  )
+    return unavailable();
+  return {
+    id: reference(chosen.id),
+    status: chosen.status,
+    fee: chosen.fee === undefined ? null : optionalMoney(chosen.fee),
+  };
 }
 
 // Native transfer amounts are read from original JSON tokens, before Number rounding.
@@ -1463,6 +1495,16 @@ export function createAsaasHttpClient(
           const response = await request(
             `/payments/${encodeURIComponent(requested)}`,
           );
+          const payment = normalizePayment(response, requested);
+          // The anticipation fee is not on the payment; read it so the real
+          // platform net can deduct what Asaas charged for anticipating.
+          if (payment.anticipated === true)
+            payment.anticipation = normalizeAnticipation(
+              await request(
+                `/anticipations?payment=${encodeURIComponent(requested)}&limit=10`,
+              ),
+              requested,
+            );
           return {
             source: "provider",
             provider: binding.provider,
@@ -1471,7 +1513,7 @@ export function createAsaasHttpClient(
             environment: binding.environment,
             currency: "BRL",
             observedAt: observedAt(),
-            payment: normalizePayment(response, requested),
+            payment,
           };
         } catch {
           return unavailable();

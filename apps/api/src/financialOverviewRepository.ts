@@ -558,7 +558,13 @@ function payment(row: Row, binding: FinancialAccountBinding, observedAt: Date) {
       after(storedTime(row.platformAdjustmentFundedAt, observedAt), dispatched);
   }
   // A V2 divergence top-up is owed and counted exactly like a V1 adjustment.
-  return { ...terms, guaranteed: guaranteed || splitV2, adjustment, funded };
+  return {
+    ...terms,
+    guaranteed: guaranteed || splitV2,
+    splitV2,
+    adjustment,
+    funded,
+  };
 }
 function v2RecipientSplitCents(
   quote: GiftQuote,
@@ -834,6 +840,11 @@ function aggregate(
       credited.has(String(p.id)) ||
       p.providerStatus === "REFUNDED" ||
       (p.providerStatus !== "RECEIVED" &&
+        // An anticipated V2 charge is credited while still CONFIRMED.
+        !(
+          p.providerStatus === "CONFIRMED" &&
+          data.paymentAllocations.get(String(p.id))?.splitV2 === true
+        ) &&
         !restrictiveStatus.test(String(p.providerStatus)))
     )
       return unavailable();

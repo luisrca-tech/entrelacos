@@ -364,7 +364,7 @@ describe("gift payment composition", () => {
         { nominalCents: 10000, method: "CREDIT_CARD", policy: card.policy },
         12,
       ).totalCents,
-    ).toBe(10675);
+    ).toBe(11909);
     expect(values.fetch).not.toHaveBeenCalled();
     await composition.close();
   });

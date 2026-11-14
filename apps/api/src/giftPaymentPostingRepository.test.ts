@@ -1712,6 +1712,33 @@ describe("PLATFORM_ACCOUNT_SPLIT_V2 receipt posting", () => {
     expect(v.tables.financial_operator_alert).toEqual([]);
   });
 
+  it("credits an anticipated CONFIRMED charge once on PAYMENT_SPLIT_DONE and books the real anticipation fee", async () => {
+    const v = v2Fixture("PAYMENT_SPLIT_DONE", {
+      status: "CONFIRMED",
+      anticipated: true,
+      anticipation: { id: "ant-one", status: "CREDITED", fee: "0.85" },
+    });
+    const repository = createGiftPaymentPostingRepository(v.db, v.options);
+    expect((await repository.postReceivedPayment(v.input)).outcome).toBe(
+      "POSTED",
+    );
+    expect(v.tables.financial_ledger_entry).toEqual([
+      expect.objectContaining({ kind: "GIFT_RECEIVED", amountCents: 10_000 }),
+    ]);
+    expect(v.tables.gift_payment_record[0]).toMatchObject({
+      providerStatus: "CONFIRMED",
+      recipientNetCents: 10_000,
+      commissionCents: 200,
+      platformNetCents: 115,
+      anticipationCents: 85,
+      anticipationReference: "ant-one",
+    });
+    expect((await repository.postReceivedPayment(v.input)).outcome).toBe(
+      "DUPLICATE",
+    );
+    expect(v.tables.financial_ledger_entry).toHaveLength(1);
+  });
+
   it("records a confirmed card charge without crediting before Asaas releases it", async () => {
     const v = v2Fixture("PAYMENT_CONFIRMED", {
       status: "CONFIRMED",
