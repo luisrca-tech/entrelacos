@@ -2,6 +2,10 @@ import { giftQuoteSchema } from "@entrelacos/contracts";
 import type { DatabaseConnection } from "@entrelacos/database";
 import {
   financialEventInbox,
+  giftCheckoutAttempt,
+  giftOrder,
+  giftPaymentRecord,
+  giftQuoteRecord,
   receivingAccount,
   site,
 } from "@entrelacos/database/schema";
@@ -32,6 +36,17 @@ export interface AsaasStoredAccountReaderOptions extends LiveSitePolicy {
   timeoutMs: number;
   maxResponseBytes: number;
   now(): Date;
+  /**
+   * Platform (main) account key. PLATFORM_ACCOUNT_SPLIT_V2 charges live in the
+   * platform account, so reads and removals of a V2 attempt's checkout,
+   * installment plan or payments use this key instead of the sub-account one.
+   */
+  platformApiKey?: string;
+}
+// Provider references that may belong to a V2 checkout attempt.
+interface PlatformScope {
+  reference?: string;
+  eventId?: string;
 }
 export interface AsaasStoredAccountReader {
   hasInternalTransferCredit(
@@ -167,6 +182,32 @@ export function createAsaasStoredAccountReader(
       keyring.set(keyId, Buffer.from(key));
     }
     const execute = db.execute.bind(db);
+    const platformApiKey = options.platformApiKey;
+    if (platformApiKey !== undefined && typeof platformApiKey !== "string")
+      return unavailable();
+    // True only when the reference (or the attempt named by the claimed
+    // event) belongs to a V2 attempt of this exact receiving account.
+    async function chargedInPlatformAccount(
+      binding: FinancialAccountBinding,
+      scope: PlatformScope,
+    ): Promise<boolean> {
+      if (!platformApiKey) return false;
+      const reference = scope.reference ?? null;
+      const eventId = scope.eventId ?? null;
+      if (reference === null && eventId === null) return false;
+      const result = await execute(sql`SELECT 1 FROM ${giftCheckoutAttempt} a
+        INNER JOIN ${giftOrder} o ON o.id=a.order_id AND o.site_id=a.site_id AND o.account_id=a.account_id AND o.environment=a.environment
+        INNER JOIN ${giftQuoteRecord} q ON q.id=o.quote_id AND q.site_id=o.site_id AND q.account_id=o.account_id AND q.environment=o.environment
+        WHERE a.site_id=${binding.siteId} AND a.account_id=${binding.accountBindingId} AND a.environment=${binding.environment}
+          AND q.snapshot->'quote'->>'settlementVersion'='PLATFORM_ACCOUNT_SPLIT_V2'
+          AND (a.provider_reference=${reference}::text OR ${reference}::text=ANY(a.installment_expiry_payment_references)
+            OR EXISTS (SELECT 1 FROM ${giftPaymentRecord} p WHERE p.site_id=a.site_id AND p.account_id=a.account_id
+              AND p.environment=a.environment AND p.attempt_id=a.id AND p.provider_payment_reference=${reference}::text)
+            OR a.id=(SELECT e.payload->>'externalReference' FROM ${financialEventInbox} e WHERE e.id=${eventId}::text
+              AND e.site_id=a.site_id AND e.account_id=a.account_id AND e.environment=a.environment))
+        LIMIT 1`);
+      return result.rows.length === 1;
+    }
     function activeMode(): "sandbox" | "live" {
       if (
         mode === "disabled" ||
@@ -235,13 +276,14 @@ export function createAsaasStoredAccountReader(
     async function loadClient(
       binding: FinancialAccountBinding,
       claim?: GiftPaymentInboxClaim,
+      platformScope?: PlatformScope,
     ) {
       const observed = clock(now);
       const originalClaim = claim
         ? sql`AND EXISTS (SELECT 1 FROM ${financialEventInbox} e WHERE e.id=${claim.eventId}
         AND e.site_id=a.site_id AND e.account_id=a.id AND e.environment=a.environment
         AND e.lease_owner=${claim.leaseOwner} AND e.lease_token=${claim.leaseToken} AND e.attempts=${claim.attempts}
-        AND e.payload->>'paymentId'=${claim.paymentReference} AND e.state='CLAIMED' AND e.event_type IN ('PAYMENT_RECEIVED','PAYMENT_CONFIRMED','PAYMENT_SPLIT_DONE','PAYMENT_REFUNDED','PAYMENT_PARTIALLY_REFUNDED','PAYMENT_REFUND_IN_PROGRESS','PAYMENT_CHARGEBACK_REQUESTED','PAYMENT_CHARGEBACK_DISPUTE','PAYMENT_AWAITING_CHARGEBACK_REVERSAL') AND e.processed_at IS NULL
+        AND e.payload->>'paymentId'=${claim.paymentReference} AND e.state='CLAIMED' AND e.event_type IN ('PAYMENT_RECEIVED','PAYMENT_CONFIRMED','PAYMENT_SPLIT_DONE','PAYMENT_ANTICIPATED','PAYMENT_SPLIT_CANCELLED','PAYMENT_SPLIT_DIVERGENCE_BLOCK','PAYMENT_SPLIT_DIVERGENCE_BLOCK_FINISHED','RECEIVABLE_ANTICIPATION_CREDITED','RECEIVABLE_ANTICIPATION_DENIED','RECEIVABLE_ANTICIPATION_CANCELLED','PAYMENT_REFUNDED','PAYMENT_PARTIALLY_REFUNDED','PAYMENT_REFUND_IN_PROGRESS','PAYMENT_CHARGEBACK_REQUESTED','PAYMENT_CHARGEBACK_DISPUTE','PAYMENT_AWAITING_CHARGEBACK_REVERSAL') AND e.processed_at IS NULL
         AND e.authenticated_at<=${observed.toISOString()}::timestamptz AND e.authenticated_at<=clock_timestamp() AND e.received_at<=e.authenticated_at
         AND e.lease_expires_at>=${observed.toISOString()}::timestamptz AND e.lease_expires_at>=clock_timestamp())`
         : sql``;
@@ -295,6 +337,11 @@ export function createAsaasStoredAccountReader(
         context,
         keyring,
       );
+      // V2 charges were created with the platform key in the platform
+      // account; observations keep the couple binding they were routed to.
+      const platform =
+        platformScope !== undefined &&
+        (await chargedInPlatformAccount(binding, platformScope));
       // Provisioning binds this stored remote reference to its key; decryption does not prove remote ownership or account approval.
       return createAsaasHttpClient({
         mode: activeMode(),
@@ -302,7 +349,10 @@ export function createAsaasStoredAccountReader(
           ...context,
           accountReference: row.accountReference as string,
         },
-        credentials: { context, accessToken },
+        credentials: {
+          context,
+          accessToken: platform ? (platformApiKey as string) : accessToken,
+        },
         fetch,
         timeoutMs,
         maxResponseBytes,
@@ -324,7 +374,9 @@ export function createAsaasStoredAccountReader(
         );
       },
       async hasUnrestrictedGiftPayment(value, paymentReference) {
-        const client = await loadClient(readBinding(value));
+        const client = await loadClient(readBinding(value), undefined, {
+          reference: paymentReference,
+        });
         const { payment } = await client.getPayment(paymentReference);
         return (
           payment.status === "RECEIVED" &&
@@ -335,11 +387,15 @@ export function createAsaasStoredAccountReader(
         );
       },
       async listInstallmentPayments(value, installmentReference) {
-        const client = await loadClient(readBinding(value));
+        const client = await loadClient(readBinding(value), undefined, {
+          reference: installmentReference,
+        });
         return client.listInstallmentPayments(installmentReference);
       },
       async removeInstallment(value, installmentReference) {
-        const client = await loadClient(readBinding(value));
+        const client = await loadClient(readBinding(value), undefined, {
+          reference: installmentReference,
+        });
         return client.removeInstallment(installmentReference);
       },
       async getInstallmentRemoval(value, installmentReference) {
@@ -347,7 +403,9 @@ export function createAsaasStoredAccountReader(
           activeMode();
           const binding = readBinding(value);
           if (!providerId(installmentReference)) return unavailable();
-          const client = await loadClient(binding);
+          const client = await loadClient(binding, undefined, {
+            reference: installmentReference,
+          });
           return await client.getInstallmentRemoval(installmentReference);
         } catch {
           return unavailable();
@@ -358,7 +416,9 @@ export function createAsaasStoredAccountReader(
           activeMode();
           const binding = readBinding(value);
           if (!providerId(checkoutReference)) return unavailable();
-          const client = await loadClient(binding);
+          const client = await loadClient(binding, undefined, {
+            reference: checkoutReference,
+          });
           return await client.listCheckoutPayments(checkoutReference);
         } catch {
           return unavailable();
@@ -390,7 +450,10 @@ export function createAsaasStoredAccountReader(
             accountReference: claim.providerAccountReference,
             environment: claim.environment,
           };
-          const client = await loadClient(binding, claim);
+          const client = await loadClient(binding, claim, {
+            reference: claim.paymentReference,
+            eventId: claim.eventId,
+          });
           return await client.getPayment(claim.paymentReference);
         } catch {
           return unavailable();

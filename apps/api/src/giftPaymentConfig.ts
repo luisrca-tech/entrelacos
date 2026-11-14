@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { isIP } from "node:net";
 import { siteIdSchema } from "@entrelacos/contracts";
 import type { DatabaseTarget } from "@entrelacos/database";
@@ -14,6 +15,8 @@ export type GiftPaymentConfig =
       readonly platformApiKey: string;
       readonly platformAccountId: string;
       readonly platformWalletId: string;
+      /** sha256 hex of ASAAS_PLATFORM_WEBHOOK_TOKEN; the raw token is not retained. */
+      readonly platformWebhookTokenHash: string;
       readonly credentialKeyId: string;
       readonly credentialKeyring: ProviderCredentialKeyring;
       readonly webhookPublicOrigin: string;
@@ -107,6 +110,11 @@ export function readGiftPaymentConfig(
   if (Buffer.byteLength(platformApiKey) > 8192) invalid();
   const platformAccountId = reference(env.ASAAS_PLATFORM_ACCOUNT_ID);
   const platformWalletId = reference(env.ASAAS_PLATFORM_WALLET_ID);
+  const platformWebhookToken = required(env.ASAAS_PLATFORM_WEBHOOK_TOKEN);
+  if (!/^[!-~]{32,255}$/.test(platformWebhookToken)) invalid();
+  const platformWebhookTokenHash = createHash("sha256")
+    .update(platformWebhookToken)
+    .digest("hex");
   const credentialKeyId = required(env.ASAAS_CREDENTIAL_KEY_ID);
   if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(credentialKeyId)) invalid();
   const encodedKey = required(env.ASAAS_CREDENTIAL_KEY);
@@ -130,6 +138,7 @@ export function readGiftPaymentConfig(
     platformApiKey,
     platformAccountId,
     platformWalletId,
+    platformWebhookTokenHash,
     credentialKeyId,
     credentialKeyring: new Map([[credentialKeyId, key]]),
     webhookPublicOrigin,

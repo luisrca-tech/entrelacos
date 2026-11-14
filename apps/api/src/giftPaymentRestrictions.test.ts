@@ -55,6 +55,8 @@ function fixture(
       if (/^SELECT a\./.test(sql)) return { rows: [binding] };
       if (/^UPDATE/.test(sql))
         return { rows: lostFence ? [] : [{ id: row.eventId }] };
+      if (/^INSERT INTO "financial_operator_alert"/.test(sql))
+        return { rows: [{ id: params[0] }] };
       throw new Error("Unexpected restriction SQL");
     },
   );
@@ -237,4 +239,32 @@ it("recognizes a restricted credit card installment bound to the stored plan and
   await expect(f.worker.processNextReceivedPayment()).resolves.toEqual({
     kind: "DEAD_LETTER",
   });
+});
+
+it("opens a critical operator alert when a V2 platform charge is restricted", async () => {
+  const f = fixture();
+  Object.assign(f.binding, { settlementVersion: "PLATFORM_ACCOUNT_SPLIT_V2" });
+  await expect(f.worker.processNextReceivedPayment()).resolves.toEqual({
+    kind: "DEAD_LETTER",
+  });
+  const alert = f.statements.find(({ sql }) =>
+    sql.startsWith('INSERT INTO "financial_operator_alert"'),
+  );
+  expect(alert?.params).toEqual(
+    expect.arrayContaining([
+      "PAYMENT_RESTRICTION",
+      "critical",
+      "pay_one",
+      "attempt-one",
+    ]),
+  );
+});
+
+it("keeps V1 restrictions free of operator alerts", async () => {
+  const f = fixture();
+  Object.assign(f.binding, { settlementVersion: "PLATFORM_FEE_GUARANTEE_V1" });
+  await f.worker.processNextReceivedPayment();
+  expect(
+    f.statements.some(({ sql }) => sql.includes("financial_operator_alert")),
+  ).toBe(false);
 });

@@ -1,5 +1,8 @@
 import type { CheckoutCreateInput, GiftQuote } from "@entrelacos/contracts";
-import type { GiftCheckoutEvent } from "./giftCheckoutState";
+import {
+  type GiftCheckoutEvent,
+  pricesUpdatedMessage,
+} from "./giftCheckoutState";
 import {
   clearPendingGiftCheckout,
   type PendingGiftCheckout,
@@ -54,13 +57,23 @@ export async function submitGiftCheckout(
         known = false;
       }
     }
+    // A reservation issued before the V2 cut-over is refused on revalidation:
+    // quote again instead of showing an error screen.
+    const requote =
+      known &&
+      !quote.settlementVersion &&
+      error instanceof WeddingGiftsApiError &&
+      (error.code === "QUOTE_INVALID" || error.code === "QUOTE_EXPIRED");
     return {
       type: "CHECKOUT_FAILED",
       unknown: !known,
       invalidateQuote: known,
-      message: known
-        ? getGiftErrorMessage(error)
-        : "Não foi possível confirmar o resultado. Aguarde antes de iniciar outro pagamento.",
+      ...(requote ? { requote: true } : {}),
+      message: requote
+        ? pricesUpdatedMessage
+        : known
+          ? getGiftErrorMessage(error)
+          : "Não foi possível confirmar o resultado. Aguarde antes de iniciar outro pagamento.",
     };
   }
 }

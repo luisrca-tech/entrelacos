@@ -17,13 +17,24 @@ import {
   readGiftQuoteSnapshot,
 } from "./giftCheckouts";
 import { serializeBrlCents } from "./giftMoney";
-import type { GiftQuoteSnapshot } from "./giftQuotes";
+import { type GiftQuoteSnapshot, isPlatformAccountSplit } from "./giftQuotes";
+
+// PLATFORM_ACCOUNT_SPLIT_V2 charges are created in the platform (main)
+// account with its own API key; no sub-account credential is involved.
+export interface AsaasPlatformCheckoutCredentials {
+  kind: "PLATFORM_ACCOUNT";
+  accessToken: string;
+}
 
 // Reconstruct these options from stored server bindings. Matching credential
 // metadata alone cannot establish remote ownership, approval or commercial fees.
 export interface AsaasCheckoutClientOptions
-  extends Omit<AsaasHttpClientOptions, "binding"> {
+  extends Omit<AsaasHttpClientOptions, "binding" | "credentials"> {
   binding: GiftQuoteSnapshot["receiving"] & { accountBindingId: string };
+  // Sub-account credentials for V1 quotes; the platform key for V2 quotes.
+  credentials:
+    | AsaasHttpClientOptions["credentials"]
+    | AsaasPlatformCheckoutCredentials;
   payload: AsaasCheckoutPayloadOptions;
 }
 
@@ -226,8 +237,22 @@ export function createAsaasCheckoutClient(
       ...receivingFields,
       "accountBindingId",
     ]);
-    const context = exactRecord(options.credentials.context, contextFields);
-    const accessToken = options.credentials.accessToken;
+    const credentials = record(options.credentials);
+    const platformAccount = credentials.kind !== undefined;
+    if (
+      platformAccount &&
+      (exactRecord(credentials, ["kind", "accessToken"]).kind !==
+        "PLATFORM_ACCOUNT" ||
+        Object.hasOwn(credentials, "context"))
+    )
+      return unavailable();
+    const context = platformAccount
+      ? undefined
+      : exactRecord(credentials.context, contextFields);
+    const accessToken =
+      typeof credentials.accessToken === "string"
+        ? credentials.accessToken
+        : unavailable();
     const fetch = options.fetch;
     const timeoutMs = options.timeoutMs;
     const maxResponseBytes = options.maxResponseBytes;
@@ -236,9 +261,10 @@ export function createAsaasCheckoutClient(
     if (
       suppliedBinding.provider !== "ASAAS" ||
       suppliedBinding.environment !== mode ||
-      contextFields.some(
-        (field) => context[field] !== suppliedBinding[field],
-      ) ||
+      (context !== undefined &&
+        contextFields.some(
+          (field) => context[field] !== suppliedBinding[field],
+        )) ||
       typeof fetch !== "function" ||
       typeof clock !== "function" ||
       !Number.isSafeInteger(timeoutMs) ||
@@ -285,6 +311,9 @@ export function createAsaasCheckoutClient(
     async function request(
       path: string,
       payload?: object,
+      method: "GET" | "POST" | "PUT" | "DELETE" = payload === undefined
+        ? "GET"
+        : "POST",
     ): Promise<Record<string, unknown>> {
       const url = `${base}${path}`;
       const bodyText =
@@ -338,7 +367,7 @@ export function createAsaasCheckoutClient(
         const operation = (async () => {
           // No retry, alternative endpoint or undocumented idempotency header.
           const response = await fetch(url, {
-            method: payload === undefined ? "GET" : "POST",
+            method,
             redirect: "error",
             credentials: "omit",
             cache: "no-store",
@@ -533,6 +562,196 @@ export function createAsaasCheckoutClient(
       return { providerReference, hostedUrl };
     }
 
+    // PLATFORM_ACCOUNT_SPLIT_V2 card installments. Asaas applies one equal
+    // fixed split to every child, which the anticipation of later
+    // installments cannot cover, so each child receives its frozen share of
+    // the nominal instead. The plan is created with the nominal as
+    // totalFixedValue, every child split is updated, and the plan is re-read
+    // and verified before an invoice is returned. Any failure after creation
+    // removes the whole plan.
+    async function createInstallmentInvoiceV2(
+      command: GiftCheckoutProviderCommand,
+      startedAt: number,
+    ) {
+      const payer = checkoutCreateInputSchema.shape.payer.parse(command.payer);
+      if (!payer) return unavailable();
+      const { quote, recipientReference, settlement } = readAsaasCheckoutTerms(
+        command,
+        payloadOptions,
+      );
+      const { installmentCount, installmentCents } = quote;
+      const recipientSplit = settlement?.recipientSplitCents;
+      if (
+        !installmentCount ||
+        installmentCount < 2 ||
+        installmentCents?.length !== installmentCount ||
+        recipientSplit?.length !== installmentCount ||
+        recipientSplit.reduce((sum, cents) => sum + cents, 0) !==
+          quote.nominalCents ||
+        recipientReference !== binding.recipientReference
+      )
+        return unavailable();
+      const brl = (cents: number | undefined) =>
+        cents === undefined ? unavailable() : Number(serializeBrlCents(cents));
+      const customerResponse = await request("/customers", {
+        ...payer,
+        notificationDisabled: true,
+        externalReference: command.attemptId,
+      });
+      const customer = reference(customerResponse.id);
+      if (
+        !customer.startsWith("cus_") ||
+        (customerResponse.externalReference !== undefined &&
+          customerResponse.externalReference !== command.attemptId)
+      )
+        return unavailable();
+      const currentTime = observedAt();
+      if (currentTime < startedAt) return unavailable();
+      const first = await request("/payments", {
+        customer,
+        billingType: "CREDIT_CARD",
+        dueDate: new Intl.DateTimeFormat("sv-SE", {
+          timeZone: "America/Sao_Paulo",
+        }).format(new Date(currentTime)),
+        description: quote.title,
+        externalReference: command.attemptId,
+        installmentCount,
+        totalValue: brl(quote.totalCents),
+        // Account-wide late fees must not change the amount the guest accepted.
+        interest: { value: 0 },
+        fine: { value: 0 },
+        split: [
+          {
+            walletId: recipientReference,
+            totalFixedValue: brl(quote.nominalCents),
+          },
+        ],
+      });
+      const providerReference = reference(first.installment);
+      try {
+        const firstId = reference(first.id);
+        const hostedUrl = hostedCheckoutUrl(
+          first.invoiceUrl,
+          payloadOptions.environment,
+          firstId,
+        );
+        const invoice = new URL(hostedUrl);
+        if (
+          invoice.search ||
+          !/^\/i\/[A-Za-z0-9_-]{1,128}$/.test(invoice.pathname)
+        )
+          return unavailable();
+        const zeroCharge = (value: unknown) =>
+          value == null || record(value).value === 0;
+        // Returns the plan's children ordered by installment number.
+        const readPlan = async () => {
+          const plan = await request(
+            `/installments/${providerReference}/payments?limit=100&offset=0`,
+          );
+          if (
+            plan.hasMore !== false ||
+            plan.totalCount !== installmentCount ||
+            !Array.isArray(plan.data) ||
+            plan.data.length !== installmentCount
+          )
+            return unavailable();
+          const ordered: Array<{
+            id: string;
+            dueDate: string;
+            split: unknown;
+          }> = [];
+          for (const raw of plan.data) {
+            const payment = record(raw);
+            const id = reference(payment.id);
+            const count = payment.installmentNumber;
+            if (
+              typeof count !== "number" ||
+              !Number.isInteger(count) ||
+              count < 1 ||
+              count > installmentCount ||
+              ordered[count - 1] !== undefined ||
+              ordered.some((entry) => entry?.id === id) ||
+              payment.installment !== providerReference ||
+              payment.customer !== customer ||
+              payment.externalReference !== command.attemptId ||
+              payment.billingType !== "CREDIT_CARD" ||
+              payment.status !== "PENDING" ||
+              (payment.deleted !== undefined && payment.deleted !== false) ||
+              payment.value !== brl(installmentCents[count - 1]) ||
+              typeof payment.dueDate !== "string" ||
+              !/^\d{4}-\d{2}-\d{2}$/.test(payment.dueDate) ||
+              !zeroCharge(payment.fine) ||
+              !zeroCharge(payment.interest) ||
+              (count === 1 &&
+                (id !== firstId || payment.invoiceUrl !== hostedUrl))
+            )
+              return unavailable();
+            ordered[count - 1] = {
+              id,
+              dueDate: payment.dueDate,
+              split: payment.split,
+            };
+          }
+          return ordered;
+        };
+        const created = await readPlan();
+        for (const [index, child] of created.entries()) {
+          const updated = await request(
+            `/payments/${child.id}`,
+            {
+              billingType: "CREDIT_CARD",
+              value: brl(installmentCents[index]),
+              dueDate: child.dueDate,
+              split: [
+                {
+                  walletId: recipientReference,
+                  fixedValue: brl(recipientSplit[index]),
+                },
+              ],
+            },
+            "PUT",
+          );
+          if (updated.id !== child.id) return unavailable();
+        }
+        // Never redirect the guest before the provider confirms every split.
+        const verified = await readPlan();
+        for (const [index, child] of verified.entries()) {
+          const split = child.split;
+          if (
+            child.id !== created[index]?.id ||
+            child.dueDate !== created[index]?.dueDate ||
+            !Array.isArray(split) ||
+            split.length !== 1
+          )
+            return unavailable();
+          const entry = record(split[0]);
+          if (
+            entry.walletId !== recipientReference ||
+            entry.fixedValue !== brl(recipientSplit[index]) ||
+            entry.percentualValue != null
+          )
+            return unavailable();
+        }
+        return {
+          providerReference,
+          hostedUrl,
+          installmentPaymentReferences: verified.map(({ id }) => id).sort(),
+        };
+      } catch {
+        try {
+          // Same removal as installment expiry: the plan and all its children.
+          await request(
+            `/installments/${providerReference}`,
+            undefined,
+            "DELETE",
+          );
+        } catch {
+          // The plan may remain PENDING; no invoice is ever returned for it.
+        }
+        return unavailable();
+      }
+    }
+
     return {
       async createHostedCheckout(command): Promise<GiftHostedCheckout> {
         try {
@@ -567,19 +786,31 @@ export function createAsaasCheckoutClient(
             Date.parse(snapshot.pricing.expiresAt) <= startedAt
           )
             return unavailable();
+          // V2 quotes are charged only with the platform key; V1 quotes only
+          // with the bound sub-account credential.
+          const platformSplit = isPlatformAccountSplit(snapshot);
+          if (platformSplit !== platformAccount) return unavailable();
           let providerReference: string;
           let hostedUrl: string;
+          let installmentPaymentReferences: string[] | undefined;
           if ((snapshot.quote.installmentCount ?? 1) > 1) {
-            ({ providerReference, hostedUrl } = await createInstallmentInvoice(
-              {
-                ...identity,
-                quoteSnapshot: snapshot,
-                payer: checkoutCreateInputSchema.shape.payer.parse(
-                  supplied.payer,
-                ),
-              },
-              startedAt,
-            ));
+            const installmentCommand = {
+              ...identity,
+              quoteSnapshot: snapshot,
+              payer: checkoutCreateInputSchema.shape.payer.parse(
+                supplied.payer,
+              ),
+            };
+            if (platformSplit) {
+              ({ providerReference, hostedUrl, installmentPaymentReferences } =
+                await createInstallmentInvoiceV2(
+                  installmentCommand,
+                  startedAt,
+                ));
+            } else {
+              ({ providerReference, hostedUrl } =
+                await createInstallmentInvoice(installmentCommand, startedAt));
+            }
           } else {
             if (Object.hasOwn(supplied, "payer")) return unavailable();
             const payload = buildAsaasCheckoutPayload(
@@ -598,6 +829,9 @@ export function createAsaasCheckoutClient(
           if (observedAt() < startedAt) return unavailable();
           return {
             providerReference,
+            ...(installmentPaymentReferences
+              ? { installmentPaymentReferences }
+              : {}),
             checkout: checkoutResultSchema.parse({
               orderId: identity.orderId,
               attemptId: identity.attemptId,

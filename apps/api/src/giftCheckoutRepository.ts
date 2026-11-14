@@ -48,9 +48,10 @@ import {
   isGiftReceiptEvent,
 } from "./giftPaymentReconciliation";
 import { findPublishedGiftForQuote } from "./giftQuoteLookup";
-import type {
-  GiftQuoteReceivingContext,
-  GiftQuoteSnapshot,
+import {
+  type GiftQuoteReceivingContext,
+  type GiftQuoteSnapshot,
+  isPlatformAccountSplit,
 } from "./giftQuotes";
 import {
   assertReceivingReady,
@@ -1540,6 +1541,28 @@ export function createGiftCheckoutRepository(
           async (tx) => {
             const { record, row } = await lockedRecord(tx, input, options);
             const clock = now(options);
+            // PLATFORM_ACCOUNT_SPLIT_V2 plans arrive with their verified
+            // children, stored where installment expiry keeps them.
+            let childReferences: string[] | null = null;
+            if (input.installmentPaymentReferences !== undefined) {
+              let snapshot: GiftQuoteSnapshot;
+              try {
+                snapshot = readGiftQuoteSnapshot(
+                  row.snapshot as unknown as GiftQuoteSnapshot,
+                );
+              } catch {
+                return fail("EXTERNAL_OUTCOME_UNKNOWN");
+              }
+              const count = snapshot.quote.installmentCount ?? 1;
+              childReferences =
+                isPlatformAccountSplit(snapshot) && count > 1
+                  ? readInstallmentExpiryPaymentReferences(
+                      input.installmentPaymentReferences,
+                      count,
+                    )
+                  : null;
+              if (!childReferences) return fail("EXTERNAL_OUTCOME_UNKNOWN");
+            }
             if (
               parsed.data.method !== row.method ||
               parsed.data.mode !== row.environment ||
@@ -1569,7 +1592,14 @@ export function createGiftCheckoutRepository(
             )
               return fail("EXTERNAL_OUTCOME_UNKNOWN");
             const attempt =
-              await tx.execute(sql`UPDATE ${giftCheckoutAttempt} a SET provider_reference = ${input.providerReference}, hosted_url = ${parsed.data.hostedUrl}
+              await tx.execute(sql`UPDATE ${giftCheckoutAttempt} a SET provider_reference = ${input.providerReference}, hosted_url = ${parsed.data.hostedUrl}${
+                childReferences
+                  ? sql`, installment_expiry_payment_references = ARRAY[${sql.join(
+                      childReferences.map((ref) => sql`${ref}`),
+                      sql`, `,
+                    )}]::text[]`
+                  : sql``
+              }
           WHERE a.id = ${input.attemptId} AND a.site_id = ${input.siteId} AND a.account_id = ${row.accountId}
             AND a.environment = ${row.environment} AND a.order_id = ${input.orderId} AND a.operation_id = ${input.attemptId}
             AND a.operation_kind = 'CHECKOUT_CREATE' AND a.provider_reference IS NULL AND a.hosted_url IS NULL RETURNING a.id`);

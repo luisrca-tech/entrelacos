@@ -236,7 +236,7 @@ function nextCopy(context: ReceivingStepsContext, tasks: AsaasTasks) {
       };
     case "fees":
       return {
-        text: "Entenda as taxas incluídas nos presentes.",
+        text: "Veja como o convidado paga as taxas e você recebe 100% do presente.",
         action: "Entender as taxas",
       };
     default:
@@ -348,7 +348,7 @@ function AdvanceCard({
                 {step.number} ·{" "}
                 {step.id === "account"
                   ? "Cadastrar a conta para saque"
-                  : "Escolher quem paga as taxas"}
+                  : "Entender as taxas dos presentes"}
               </Link>
             </li>
           ))}
@@ -1711,7 +1711,8 @@ export function FeesStep({
               antes de pagar.
             </p>
             <p className={receivingBody}>
-              O EntreLaços cobre diferenças de tarifa acima do previsto.
+              O convidado paga as taxas e você recebe o valor inteiro de cada
+              presente.
             </p>
             {pricingEnabled && <FeesExample />}
             <Link

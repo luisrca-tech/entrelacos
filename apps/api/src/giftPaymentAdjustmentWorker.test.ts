@@ -127,3 +127,26 @@ it("requires transfer read permission before consuming the dispatch opportunity"
     fetch.mock.calls.every(([, options]) => options?.method === "GET"),
   ).toBe(true);
 });
+
+it("labels a V2 split-divergence top-up transfer with its reason", async () => {
+  const topUp = {
+    ...command,
+    externalReference: "gift-topup-fixture",
+    description: "SPLIT_DIVERGENCE_TOPUP",
+  };
+  const { port, fetch } = createPort({
+    ...transfer,
+    externalReference: topUp.externalReference,
+    description: topUp.description,
+  });
+  await expect(port.dispatch(topUp)).resolves.toEqual({
+    reference: "transfer_one",
+    funded: true,
+  });
+  expect(JSON.parse(String(fetch.mock.calls[0]?.[1]?.body))).toEqual({
+    walletId: command.walletId,
+    externalReference: topUp.externalReference,
+    value: 0.03,
+    description: "SPLIT_DIVERGENCE_TOPUP",
+  });
+});

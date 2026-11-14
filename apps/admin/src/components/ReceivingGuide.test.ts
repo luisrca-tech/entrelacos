@@ -122,6 +122,19 @@ describe("receiving guide environment boundaries", () => {
     expect(html).toContain("60 minutos");
     expect(html).toContain("Asaas confirmar o encerramento");
   });
+  it("explains card anticipation timing and the per-installment fallback", () => {
+    const text = render()
+      .replace(/<[^>]+>/g, "")
+      .replace(/\s+/g, " ");
+    expect(text).toContain("Pix: assim que o pagamento é confirmado.");
+    expect(text).toContain(
+      "o valor inteiro é antecipado e normalmente chega em até 2 dias úteis após o pagamento, sujeito à análise do Asaas.",
+    );
+    expect(text).toContain(
+      "Se o Asaas não antecipar, cada parcela chega quando o cartão a libera, cerca de 32 dias por parcela.",
+    );
+    expect(text).not.toMatch(/serviço Entrelaços|comiss/i);
+  });
   it("explains activation, Pix destinations and optional official apps", () => {
     const html = render();
     expect(html).toContain("enviado automaticamente");

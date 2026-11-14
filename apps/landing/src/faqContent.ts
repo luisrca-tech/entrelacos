@@ -101,7 +101,7 @@ export const faqTopics: FaqTopic[] = [
       {
         question: "Quanto o casal recebe?",
         answer:
-          "Em um novo presente cadastrado por R$ 100,00, o cálculo é feito para que o casal receba R$ 100,00 líquidos do pagamento, com as taxas incluídas no preço do convidado. O Entrelaços cobre a diferença quando a tarifa efetiva supera a prevista. Estornos, contestações e eventuais tarifas de saque são movimentações separadas.",
+          "Em um novo presente cadastrado por R$ 100,00, o casal recebe R$ 100,00 inteiros: a taxa do meio de pagamento, a antecipação (no cartão) e o serviço Entrelaços são pagos pelo convidado e já aparecem no total. Estornos, contestações e eventuais tarifas de saque são movimentações separadas.",
       },
       {
         question: "Como funciona o parcelamento no cartão?",
@@ -111,7 +111,7 @@ export const faqTopics: FaqTopic[] = [
       {
         question: "Podemos simular quanto o convidado vai pagar?",
         answer:
-          "Sim. No cadastro ou na edição do presente e na tela de taxas, abram “Simular taxas e parcelamento”. A simulação mostra parcelas, taxas, acréscimo, total do convidado e líquido do casal. Escolher uma quantidade de parcelas nessa janela não altera o presente nem define como ele será pago: o convidado escolhe no checkout, onde confere as condições finais.",
+          "Sim. No cadastro ou na edição do presente e na tela de taxas, abram “Simular taxas e parcelamento”. A simulação mostra quanto vocês recebem (100% do presente), o total que o convidado paga no Pix e no cartão à vista, em 6x e em 12x, e as taxas pagas pelo convidado. Escolher uma quantidade de parcelas nessa janela não altera o presente nem define como ele será pago: o convidado escolhe no checkout, onde confere as condições finais.",
       },
       {
         question: "As taxas e promoções são sempre as mesmas?",
@@ -143,26 +143,22 @@ export const faqTopics: FaqTopic[] = [
       {
         question: "Pagamento confirmado significa saldo disponível?",
         answer:
-          "São etapas diferentes. Um pagamento pode estar confirmado e ainda aguardar liberação. No cartão parcelado, o saldo fica disponível conforme a liberação de cada parcela pelo Asaas. O painel distingue os valores recebidos, os que aguardam liberação e o saldo disponível para saque.",
+          "São etapas diferentes. Um pagamento pode estar confirmado e ainda aguardar liberação. O painel distingue os valores recebidos, os que aguardam liberação e o saldo disponível para saque.",
       },
       {
         question: "Em quanto tempo um presente pago fica disponível?",
         answer:
-          "No Pix, o Asaas informa que o valor costuma ficar disponível em alguns instantes após o pagamento. No cartão à vista, o prazo padrão é de até 32 dias corridos após a operação, com compensação em dias úteis. A aprovação no cartão confirma o pagamento, mas não libera o dinheiro imediatamente para saque. Acompanhem a situação no painel.",
-        reference: {
-          label: "Consultar o prazo de compensação do cartão",
-          href: "https://central.ajuda.asaas.com/hc/pt-br/articles/53178101435163-Qual-%C3%A9-o-prazo-de-compensa%C3%A7%C3%A3o-de-cart%C3%A3o-de-cr%C3%A9dito-no-Asaas",
-        },
+          "No Pix, vocês recebem assim que o pagamento é confirmado. No cartão, à vista ou parcelado, o valor é antecipado e normalmente chega em até 2 dias úteis após o pagamento, sujeito à análise do Asaas. Acompanhem a situação no painel.",
       },
       {
         question: "Se o convidado parcelar, recebemos tudo de uma vez?",
         answer:
-          "No fluxo padrão, o casal recebe conforme a liberação de cada parcela. O recebimento integral antes dessas datas exige uma antecipação aprovada e efetivada pelo Asaas. O parcelamento escolhido pelo convidado não ativa esse serviço automaticamente. As condições de antecipação para as contas dos casais ainda estão em confirmação; por enquanto, não contem com a liberação integral antecipada.",
+          "Normalmente, sim. Os pagamentos no cartão são antecipados automaticamente, todas as parcelas, mesmo que o convidado parcele. O custo da antecipação já está no total pago pelo convidado, e o casal recebe 100% do presente.",
       },
       {
-        question: "Como funciona a antecipação dos recebimentos?",
+        question: "E se o Asaas não antecipar um pagamento?",
         answer:
-          "A antecipação permite liberar valores de cartão antes do prazo padrão, quando disponível e aprovada para a conta. Ela tem custo próprio, que depende do tempo antecipado de cada parcela e precisa entrar no cálculo do total. Ter limite informado ou cadastro aprovado não garante a operação. O saldo só pode ser tratado como disponível após a confirmação do crédito pelo Asaas.",
+          "A antecipação passa por análise do Asaas e pode ser recusada. Nesse caso, o presente não se perde: cada parcela chega quando o cartão a libera, cerca de 32 dias por parcela. O painel mostra o que já foi recebido e o que ainda aguarda liberação.",
         reference: {
           label: "Entender as condições de antecipação",
           href: "https://www.asaas.com/antecipacao-de-recebiveis",

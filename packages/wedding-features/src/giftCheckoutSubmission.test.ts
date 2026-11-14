@@ -91,6 +91,38 @@ describe("checkout submission ownership", () => {
       invalidateQuote: true,
     });
   });
+  it("asks for a silent re-quote when a V1 reservation is refused", async () => {
+    const result = await submitGiftCheckout(
+      {
+        createCheckout: vi
+          .fn()
+          .mockRejectedValue(new WeddingGiftsApiError(409, "QUOTE_INVALID")),
+      },
+      quote,
+      pending,
+      () => storage(),
+    );
+    expect(result).toMatchObject({
+      type: "CHECKOUT_FAILED",
+      unknown: false,
+      invalidateQuote: true,
+      requote: true,
+      message: "Os valores foram atualizados.",
+    });
+  });
+  it("does not re-quote a refused V2 quote", async () => {
+    const result = await submitGiftCheckout(
+      {
+        createCheckout: vi
+          .fn()
+          .mockRejectedValue(new WeddingGiftsApiError(409, "QUOTE_EXPIRED")),
+      },
+      { ...quote, settlementVersion: "PLATFORM_ACCOUNT_SPLIT_V2" } as GiftQuote,
+      pending,
+      () => storage(),
+    );
+    expect(result).not.toHaveProperty("requote");
+  });
   it.each(["replaced", "corrupt", "missing", "denied"])(
     "keeps a known refusal locked when recovery storage is %s",
     async (scenario) => {

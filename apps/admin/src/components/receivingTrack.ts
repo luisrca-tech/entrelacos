@@ -48,7 +48,7 @@ export const receivingSteps: readonly {
     id: "fees",
     title: "Taxas e presentes",
     short: "Taxas e presentes",
-    summary: "Entenda as taxas incluídas no preço e revise a lista.",
+    summary: "Veja que o convidado paga as taxas e revise a lista.",
   },
 ];
 

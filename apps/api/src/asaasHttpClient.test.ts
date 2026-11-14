@@ -860,6 +860,51 @@ describe("native Asaas read client", () => {
   });
 });
 
+describe("Asaas payment anticipation", () => {
+  it("attaches the real anticipation of an anticipated payment", async () => {
+    const values = fixture(json(payment({ anticipated: true })));
+    values.fetch
+      .mockResolvedValueOnce(json(payment({ anticipated: true })))
+      .mockResolvedValueOnce(
+        json({
+          hasMore: false,
+          totalCount: 2,
+          data: [
+            { id: "ant-denied", status: "DENIED", fee: 0.9, payment: "pay_1" },
+            {
+              id: "ant-1",
+              status: "CREDITED",
+              fee: 0.85,
+              payment: "pay_1",
+              customer: "private",
+            },
+          ],
+        }),
+      );
+    const result = await createAsaasHttpClient(values.options).getPayment(
+      "pay_1",
+    );
+    expect(result.payment).toMatchObject({
+      anticipated: true,
+      anticipation: { id: "ant-1", status: "CREDITED", fee: "0.85" },
+    });
+    expect(String(values.fetch.mock.calls[1]?.[0])).toBe(
+      "https://api-sandbox.asaas.com/v3/anticipations?payment=pay_1&limit=10",
+    );
+    expect(JSON.stringify(result)).not.toMatch(/private/);
+  });
+
+  it("does not look up anticipations of a payment that was not anticipated", async () => {
+    const values = fixture(json(payment({ anticipated: false })));
+    const result = await createAsaasHttpClient(values.options).getPayment(
+      "pay_1",
+    );
+    expect(result.payment.anticipated).toBe(false);
+    expect(result.payment).not.toHaveProperty("anticipation");
+    expect(values.fetch).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("Asaas GET actual completion ownership", () => {
   const methods = ["balance", "payment"] as const;
   type Method = (typeof methods)[number];

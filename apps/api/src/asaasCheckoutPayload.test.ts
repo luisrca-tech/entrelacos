@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { buildAsaasCheckoutPayload } from "./asaasCheckoutPayload";
-import type { GiftQuoteSnapshot } from "./giftQuotes";
+import {
+  buildAsaasCheckoutPayload,
+  readAsaasCheckoutTerms,
+} from "./asaasCheckoutPayload";
+import { platformTariffPolicy, quoteGiftPurchaseAmounts } from "./giftMoney";
+import { buildGiftV2Settlement, type GiftQuoteSnapshot } from "./giftQuotes";
 
 function fixture() {
   const binding = {
@@ -366,5 +370,97 @@ describe("Sandbox buyer homologation payload", () => {
           ...change,
         } as never),
       ).toThrow();
+  });
+});
+
+function v2Fixture(method: "PIX" | "CREDIT_CARD", installmentCount?: number) {
+  const values = fixture();
+  const policy = platformTariffPolicy(method);
+  const amounts = quoteGiftPurchaseAmounts(
+    { nominalCents: 10000, method, policy },
+    installmentCount,
+  );
+  Object.assign(values.snapshot.quote, {
+    method,
+    settlementVersion: "PLATFORM_ACCOUNT_SPLIT_V2",
+    ...amounts,
+  });
+  values.snapshot.pricing.provenance = "platform-tariff-table";
+  values.snapshot.pricing.policy = policy as never;
+  Object.assign(values.snapshot, {
+    settlement: buildGiftV2Settlement(values.snapshot.quote),
+  });
+  return values;
+}
+
+describe("PLATFORM_ACCOUNT_SPLIT_V2 hosted checkout payload", () => {
+  it.each(["PIX", "CREDIT_CARD"] as const)(
+    "splits the full nominal to the couple wallet for %s and keeps the commission in the main account",
+    (method) => {
+      const values = v2Fixture(method);
+      const payload = buildAsaasCheckoutPayload(values.command, values.options);
+      expect(payload.items[0].value).toBe(
+        values.snapshot.quote.totalCents / 100,
+      );
+      expect(payload.splits).toEqual([
+        { walletId: "recipient-one", fixedValue: 100 },
+      ]);
+      expect(JSON.stringify(payload)).not.toContain("platform-wallet");
+    },
+  );
+
+  it("still refuses a platform wallet equal to the couple wallet", () => {
+    const values = v2Fixture("PIX");
+    expect(() =>
+      buildAsaasCheckoutPayload(values.command, {
+        ...values.options,
+        platformWalletId: "recipient-one",
+      }),
+    ).toThrow("Checkout payload unavailable");
+  });
+
+  it("refuses tariff-table provenance for a V1 quote and provider provenance for a V2 quote", () => {
+    const v1 = fixture();
+    v1.snapshot.pricing.provenance = "platform-tariff-table";
+    expect(() => buildAsaasCheckoutPayload(v1.command, v1.options)).toThrow(
+      "Checkout payload unavailable",
+    );
+    const v2 = v2Fixture("PIX");
+    v2.snapshot.pricing.provenance = "provider";
+    expect(() => buildAsaasCheckoutPayload(v2.command, v2.options)).toThrow(
+      "Checkout payload unavailable",
+    );
+  });
+
+  it("refuses a V2 quote whose frozen settlement is missing or altered", () => {
+    const missing = v2Fixture("PIX");
+    Object.assign(missing.snapshot, { settlement: undefined });
+    expect(() =>
+      buildAsaasCheckoutPayload(missing.command, missing.options),
+    ).toThrow("Checkout payload unavailable");
+    const altered = v2Fixture("PIX");
+    Object.assign(altered.snapshot, {
+      settlement: {
+        ...altered.snapshot.settlement,
+        recipientSplitCents: [9999],
+      },
+    });
+    expect(() =>
+      buildAsaasCheckoutPayload(altered.command, altered.options),
+    ).toThrow("Checkout payload unavailable");
+  });
+
+  it("returns the frozen per-installment couple split for an installment quote but refuses a hosted payload", () => {
+    const values = v2Fixture("CREDIT_CARD", 3);
+    const terms = readAsaasCheckoutTerms(values.command, values.options);
+    expect(terms.settlement?.recipientSplitCents).toEqual(
+      values.snapshot.settlement?.recipientSplitCents,
+    );
+    expect(
+      terms.settlement?.recipientSplitCents.reduce((a, b) => a + b, 0),
+    ).toBe(10000);
+    expect(() =>
+      buildAsaasCheckoutPayload(values.command, values.options),
+    ).toThrow("Checkout payload unavailable");
   });
 });

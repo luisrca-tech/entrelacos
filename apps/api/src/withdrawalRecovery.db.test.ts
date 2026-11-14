@@ -58,6 +58,7 @@ it("persists a recovery deadline before provider I/O and resumes it across worke
             platformApiKey: "$aact_hmlg_fixture",
             platformAccountId: "platform-one",
             platformWalletId: "wallet-one",
+            platformWebhookTokenHash: "a".repeat(64),
             credentialKeyId: "test-key",
             credentialKeyring: new Map([["test-key", new Uint8Array(32)]]),
             webhookPublicOrigin: "https://webhook.example.test",

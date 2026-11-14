@@ -1,6 +1,8 @@
 import {
   type GiftItem,
   type GiftQuote,
+  type GiftTariffTier,
+  getGiftTariffTier,
   giftMinimumNominalCents,
   giftQuoteInputSchema,
   giftQuoteSchema,
@@ -9,6 +11,7 @@ import {
 } from "@entrelacos/contracts";
 import {
   type GiftProcessingPolicy,
+  giftV2RecipientSplitCents,
   quoteGiftPurchaseAmounts,
 } from "./giftMoney";
 import { allowsLiveSite } from "./liveSitePolicy";
@@ -45,7 +48,8 @@ export interface GiftQuoteReceivingBinding extends ReceivingProviderBinding {
 
 export interface GiftPricingEvidence extends GiftQuoteReceivingBinding {
   verification: "verified" | "unverified";
-  provenance: "provider" | "local-test";
+  // platform-tariff-table: V2 local tariff table (giftTariffs.ts), no network.
+  provenance: "provider" | "local-test" | "platform-tariff-table";
   observedAt: Date | null;
   expiresAt: Date | null;
   policy: GiftProcessingPolicy;
@@ -60,8 +64,73 @@ export interface GiftQuoteSnapshot {
     observedAt: string;
     expiresAt: string;
   };
+  /** PLATFORM_ACCOUNT_SPLIT_V2 only: frozen settlement terms. */
+  readonly settlement?: GiftV2SettlementSnapshot;
   readonly createdAt: string;
   readonly expiresAt: string;
+}
+
+export interface GiftV2SettlementSnapshot {
+  readonly version: "PLATFORM_ACCOUNT_SPLIT_V2";
+  readonly tariffVersion: string;
+  readonly tier: GiftTariffTier;
+  readonly anticipationCents: number;
+  /** Fixed split to the couple wallet per installment; sums to the nominal. */
+  readonly recipientSplitCents: readonly number[];
+}
+
+/** Single dispatch point between V1 and V2 settlement (spec e.5). */
+export function getSettlementVersion(source: {
+  quote: Pick<GiftQuote, "settlementVersion">;
+}): GiftQuote["settlementVersion"] {
+  return source.quote.settlementVersion;
+}
+
+export function isPlatformAccountSplit(source: {
+  quote: Pick<GiftQuote, "settlementVersion">;
+}): boolean {
+  return getSettlementVersion(source) === "PLATFORM_ACCOUNT_SPLIT_V2";
+}
+
+/** Recomputes and checks the V2 settlement terms frozen with a quote. */
+export function buildGiftV2Settlement(
+  quote: GiftQuote,
+): GiftV2SettlementSnapshot {
+  if (quote.settlementVersion !== "PLATFORM_ACCOUNT_SPLIT_V2")
+    throw new Error("Quote is not a V2 quote");
+  const count = quote.installmentCount ?? 1;
+  return {
+    version: "PLATFORM_ACCOUNT_SPLIT_V2",
+    tariffVersion: quote.policyVersion,
+    tier: getGiftTariffTier(quote.method, count),
+    anticipationCents: quote.anticipationCents ?? 0,
+    recipientSplitCents: giftV2RecipientSplitCents(quote),
+  };
+}
+
+export function readGiftV2Settlement(
+  quote: GiftQuote,
+  settlement: GiftV2SettlementSnapshot | undefined,
+): GiftV2SettlementSnapshot | undefined {
+  if (quote.settlementVersion !== "PLATFORM_ACCOUNT_SPLIT_V2") {
+    if (settlement !== undefined) throw new Error("Unexpected V2 settlement");
+    return undefined;
+  }
+  const expected = buildGiftV2Settlement(quote);
+  if (
+    !settlement ||
+    settlement.version !== expected.version ||
+    settlement.tariffVersion !== expected.tariffVersion ||
+    settlement.tier !== expected.tier ||
+    settlement.anticipationCents !== expected.anticipationCents ||
+    settlement.recipientSplitCents.length !==
+      expected.recipientSplitCents.length ||
+    settlement.recipientSplitCents.some(
+      (cents, index) => cents !== expected.recipientSplitCents[index],
+    )
+  )
+    throw new Error("V2 settlement does not match the quote");
+  return expected;
 }
 
 export interface GiftQuoteServiceDependencies {
@@ -232,6 +301,14 @@ export async function loadGiftPricingEvidence(
       pricing.provenance !== "provider")
   )
     return policyUnavailable();
+  if (
+    (pricing.policy.feeBasis === "PLATFORM_TARIFF_TABLE") !==
+      (pricing.provenance === "platform-tariff-table") ||
+    (pricing.policy.feeBasis === "PLATFORM_TARIFF_TABLE" &&
+      (pricing.policy.feeAllocation !== "BUYER_GROSS_UP" ||
+        (feeAllocation !== undefined && feeAllocation !== "BUYER_GROSS_UP")))
+  )
+    return policyUnavailable();
   const { now, nowTime, deadlineTime, createdAt } =
     readQuoteClock(dependencies);
   // An asynchronous pricing read must not extend old receiving evidence.
@@ -243,6 +320,7 @@ export async function loadGiftPricingEvidence(
   if (
     pricing.verification !== "verified" ||
     (pricing.provenance !== "provider" &&
+      pricing.provenance !== "platform-tariff-table" &&
       (pricing.provenance !== "local-test" ||
         context.isDemo !== true ||
         context.environment === "production" ||
@@ -348,11 +426,18 @@ export function createGiftQuoteService(
         method: body.data.method,
         currency: gift.data.currency,
         commissionBasisPoints: 200,
-        settlementVersion: "PLATFORM_FEE_GUARANTEE_V1",
+        settlementVersion:
+          policy.feeBasis === "PLATFORM_TARIFF_TABLE"
+            ? "PLATFORM_ACCOUNT_SPLIT_V2"
+            : "PLATFORM_FEE_GUARANTEE_V1",
         expiresAt,
         mode: readiness.mode,
       });
       if (!quote.success) return quoteInvalid();
+      const settlement =
+        quote.data.settlementVersion === "PLATFORM_ACCOUNT_SPLIT_V2"
+          ? buildGiftV2Settlement(quote.data)
+          : undefined;
       const snapshot = freezeSnapshot<GiftQuoteSnapshot>(
         structuredClone({
           quote: quote.data,
@@ -391,6 +476,7 @@ export function createGiftQuoteService(
             observedAt: pricingObservedAt,
             expiresAt: pricingExpiresAt,
           },
+          ...(settlement ? { settlement } : {}),
           createdAt,
           expiresAt,
         }),

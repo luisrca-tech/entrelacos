@@ -366,6 +366,26 @@ describe("durable gift checkout orchestration", () => {
     expect(v.dependencies.createHostedCheckout).toHaveBeenCalledOnce();
   });
 
+  it("passes verified installment child payments through to the durable outcome", async () => {
+    const v = fixture();
+    const create = vi.mocked(v.dependencies.createHostedCheckout);
+    const original = create.getMockImplementation();
+    if (!original) throw new Error("Missing provider fake");
+    create.mockImplementation(async (command) => ({
+      ...(await original(command)),
+      installmentPaymentReferences: ["pay_1", "pay_2"],
+    }));
+    await createGiftCheckoutService(v.dependencies).createCheckout(
+      "site-one",
+      body,
+    );
+    expect(v.dependencies.repository.saveHostedCheckout).toHaveBeenCalledWith(
+      expect.objectContaining({
+        installmentPaymentReferences: ["pay_1", "pay_2"],
+      }),
+    );
+  });
+
   it("requires another confirmation when authoritative pricing no longer matches", async () => {
     const v = fixture();
     Object.assign(v.dependencies, {

@@ -19,6 +19,7 @@ describe("API runtime configuration", () => {
       ASAAS_CREDENTIAL_KEY_ID: "local-v1",
       ASAAS_CREDENTIAL_KEY: Buffer.alloc(32, 1).toString("base64"),
       ASAAS_WEBHOOK_PUBLIC_ORIGIN: "https://fixture.trycloudflare.com",
+      ASAAS_PLATFORM_WEBHOOK_TOKEN: "fixture-platform-webhook-token-0123456789",
     });
     expect(config).toMatchObject({
       giftPayment: {

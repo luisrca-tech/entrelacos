@@ -471,6 +471,12 @@ export const giftInstallmentOptionSchema = z
   }, "Installments must conserve the total and meet the minimum amount");
 export type GiftInstallmentOption = z.infer<typeof giftInstallmentOptionSchema>;
 
+export const giftSettlementVersionSchema = z.enum([
+  "PLATFORM_FEE_GUARANTEE_V1",
+  "PLATFORM_ACCOUNT_SPLIT_V2",
+]);
+export type GiftSettlementVersion = z.infer<typeof giftSettlementVersionSchema>;
+
 export const giftQuoteSchema = z
   .object({
     id,
@@ -488,7 +494,9 @@ export const giftQuoteSchema = z
     policyVersion: id,
     expiresAt: instant,
     mode: receivingModeSchema,
-    settlementVersion: z.literal("PLATFORM_FEE_GUARANTEE_V1").optional(),
+    settlementVersion: giftSettlementVersionSchema.optional(),
+    /** V2 only: estimated automatic anticipation, already inside processing. */
+    anticipationCents: giftCentsSchema.optional(),
     installmentCount: giftInstallmentCountSchema.optional(),
     installmentSurchargeCents: giftInstallmentSurchargeSchema.optional(),
     installmentCents: giftInstallmentCentsSchema.optional(),
@@ -508,6 +516,14 @@ export const giftQuoteSchema = z
           value.nominalCents + value.commissionCents + value.processingCents) &&
       value.commissionCents === Math.round((value.nominalCents * 200) / 10000),
     "Quote allocation does not match the nominal commission",
+  )
+  .refine(
+    (quote) =>
+      quote.anticipationCents === undefined ||
+      (quote.settlementVersion === "PLATFORM_ACCOUNT_SPLIT_V2" &&
+        quote.anticipationCents <= quote.processingCents &&
+        (quote.method === "CREDIT_CARD" || quote.anticipationCents === 0)),
+    "Anticipation must be part of the V2 processing amount",
   )
   .refine((quote) => {
     if (quote.settlementVersion && quote.feeAllocation !== "BUYER_GROSS_UP")
@@ -1388,6 +1404,10 @@ export const giftPurchaseHistoryPaymentSchema = z
     installmentNumber: giftInstallmentCountSchema.optional(),
     platformAdjustmentOwedCents: giftCentsSchema.optional(),
     platformAdjustmentFundedCents: giftCentsSchema.optional(),
+    /** V2 only: couple split frozen with the quote for this installment. */
+    expectedRecipientSplitCents: giftCentsSchema.optional(),
+    /** V2 only: Asaas blocked the split (divergence); under operator review. */
+    splitDivergenceBlocked: z.literal(true).optional(),
   })
   .strict()
   .refine(
