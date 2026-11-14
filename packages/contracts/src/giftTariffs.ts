@@ -6,43 +6,48 @@ import { GIFT_COMMISSION_BASIS_POINTS } from "./giftCommission";
  *
  * Card percentages and fixed fees are the platform (main) account contract.
  *
- * Anticipation rates are 0 on purpose (2026-11-13): Asaas confirmed it does
- * not anticipate gift or donation charges, so the couple receives each card
- * installment when the card settles it (about 32 days per installment) and the
- * guest does not pay for anticipation. The fields stay so the rates can be
- * restored by changing values only if Asaas ever approves anticipation for
- * gifts; this is not a feature flag.
+ * Anticipation (decision of 2026-11-14): the platform account has AUTOMATIC
+ * credit-card anticipation enabled with a special rate of 1.15% a month for
+ * one-off charges and 1.6% a month for installments; Pix is never
+ * anticipated. The guest pays the payment-method fee, the anticipation fee
+ * and the 2% Entrelaços service, so the couple receives 100% of the gift,
+ * usually about 2 business days after the card payment. Asaas charges the
+ * anticipation on each installment net value for the days until its credit
+ * date. If Asaas does not anticipate a charge, each installment still settles
+ * normally and the couple split is unchanged.
  */
 export const GIFT_PLATFORM_TARIFFS = {
-  version: "platform-tariffs-2026-11-13",
+  version: "platform-tariffs-2026-11-14",
   commissionBasisPoints: GIFT_COMMISSION_BASIS_POINTS,
   pix: { basisPoints: 0, fixedCents: 199, anticipationMonthlyBasisPoints: 0 },
   card1: {
     basisPoints: 299,
     fixedCents: 49,
-    anticipationMonthlyBasisPoints: 0,
+    anticipationMonthlyBasisPoints: 115,
   },
   card2to6: {
     basisPoints: 349,
     fixedCents: 49,
-    anticipationMonthlyBasisPoints: 0,
+    anticipationMonthlyBasisPoints: 160,
   },
   card7to12: {
     basisPoints: 399,
     fixedCents: 49,
-    anticipationMonthlyBasisPoints: 0,
+    anticipationMonthlyBasisPoints: 160,
   },
   minimumInstallmentCents: 500,
   maxInstallments: 12,
   /**
-   * Anticipation days used only to distribute the couple split across
-   * installments when an anticipation rate is non-zero: installment i is
-   * assumed to be anticipated for
-   * `splitScheduleDaysPerInstallment * i + splitScheduleExtraDays` days.
-   * With every anticipation rate at 0 they have no effect.
+   * Conservative anticipation days used only to distribute the couple split
+   * across installments: installment i is assumed to be anticipated for
+   * `splitScheduleDaysPerInstallment * i + splitScheduleExtraDays` days from
+   * the payment date. Sandbox credit dates (2026-11-13 probe) reached
+   * 32, 66, 96, …, 290, …, 384 days for a 12x charge; 33·i + 5 keeps 5 to 17
+   * days of margin for weekends and holidays, so net_i never drops below the
+   * couple split of that installment.
    */
-  splitScheduleDaysPerInstallment: 32,
-  splitScheduleExtraDays: 3,
+  splitScheduleDaysPerInstallment: 33,
+  splitScheduleExtraDays: 5,
 } as const;
 
 export type GiftTariffTier = "pix" | "card1" | "card2to6" | "card7to12";

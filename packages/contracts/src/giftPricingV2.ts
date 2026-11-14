@@ -17,7 +17,7 @@ export interface GiftV2Quote {
   commissionCents: number;
   /** Card or Pix processing fee (percentage + fixed). */
   processingCents: number;
-  /** Estimated anticipation cost; 0 while the tariff table has no anticipation. */
+  /** Estimated anticipation cost (card only; Pix is never anticipated). */
   anticipationCents: number;
   totalCents: number;
   installmentCents: number[];
