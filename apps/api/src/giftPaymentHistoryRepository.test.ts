@@ -3,8 +3,10 @@ import { drizzle, type NodePgClient } from "drizzle-orm/node-postgres";
 import { describe, expect, it, vi } from "vitest";
 import { hashAsaasEventIdentity } from "./asaasWebhook";
 import { databaseTimestampEpochMicroseconds } from "./databaseTimestamp";
+import { platformTariffPolicy, quoteGiftPurchaseAmounts } from "./giftMoney";
 import type { GiftPaymentHistoryReadScope } from "./giftPaymentHistory";
 import { giftReceivedEffectKey } from "./giftPaymentReconciliation";
+import { buildGiftV2Settlement } from "./giftQuotes";
 import { readReceivingProvisioningRecord } from "./receivingNomination";
 
 async function fixture() {
@@ -738,6 +740,52 @@ describe("bounded historical purchase stored reader", () => {
       detail.history.validatedHistoricalReceipts[0].recipientCreditCents,
     ).toBe(9701);
     expect(snapshot).toEqual(frozen);
+    await v.repository.close();
+  });
+
+  it("validates a PLATFORM_ACCOUNT_SPLIT_V2 credit of the frozen couple split", async () => {
+    const v = await fixture();
+    const stored = v.tables.gift_quote_record[0];
+    const snapshot = stored.snapshot as Record<string, unknown> & {
+      quote: Record<string, unknown>;
+      pricing: Record<string, unknown>;
+    };
+    const amounts = quoteGiftPurchaseAmounts({
+      nominalCents: 10000,
+      method: "PIX",
+      policy: platformTariffPolicy("PIX"),
+    });
+    Object.assign(snapshot.quote, amounts, {
+      settlementVersion: "PLATFORM_ACCOUNT_SPLIT_V2",
+    });
+    snapshot.settlement = buildGiftV2Settlement(snapshot.quote as never);
+    Object.assign(snapshot.pricing, {
+      provenance: "platform-tariff-table",
+      policy: platformTariffPolicy("PIX"),
+    });
+    Object.assign(stored, {
+      commission_cents: amounts.commissionCents,
+      processing_cents: amounts.processingCents,
+      total_cents: amounts.totalCents,
+      policy_version: amounts.policyVersion,
+    });
+    // The platform account nets total − Pix fee; the couple split is 10000.
+    Object.assign(v.tables.gift_payment_record[0], {
+      gross_cents: 10399,
+      processing_cents: 199,
+      commission_cents: 200,
+      recipient_net_cents: 10000,
+      split_fixed_cents: 10000,
+    });
+    v.tables.financial_ledger_entry[0].amount_cents = 10000;
+    const detail = await v.repository.readPurchaseDetailPage(
+      v.scope,
+      "order-one",
+      null,
+    );
+    expect(
+      detail.history.validatedHistoricalReceipts[0].recipientCreditCents,
+    ).toBe(10000);
     await v.repository.close();
   });
 

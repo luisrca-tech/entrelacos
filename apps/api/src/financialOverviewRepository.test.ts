@@ -6,7 +6,9 @@ import {
   loadFinancialOverview,
 } from "./financialOverview";
 import { createFinancialOverviewRepository } from "./financialOverviewRepository";
+import { platformTariffPolicy, quoteGiftPurchaseAmounts } from "./giftMoney";
 import { giftReceivedEffectKey } from "./giftPaymentReconciliation";
+import { buildGiftV2Settlement } from "./giftQuotes";
 import { withdrawalCompletedEffectKey } from "./withdrawalExecution";
 
 type Row = Record<string, unknown>;
@@ -1534,5 +1536,101 @@ it("attributes only received installment shares and keeps confirmed funds awaiti
       awaitingReleaseCents: 5000,
       platformAdjustmentOwedCents: 1,
     },
+  });
+});
+
+describe("PLATFORM_ACCOUNT_SPLIT_V2 installment totals", () => {
+  // The third installment of a R$150 gift in 3x: its frozen couple split is
+  // 5001 cents, one cent above the even nominal share (5000).
+  function v2Installment(
+    values: ReturnType<typeof fixture>,
+    recipientNetCents: number,
+    adjustment?: { cents: number; funded: boolean },
+  ) {
+    const rows = received(values, "v2");
+    const quote = {
+      id: rows.q.id as string,
+      siteId: values.binding.siteId,
+      giftId: "gift-v2",
+      title: "Café da manhã a dois",
+      method: "CREDIT_CARD" as const,
+      currency: "BRL" as const,
+      commissionBasisPoints: 200,
+      expiresAt: "2026-10-12T18:55:00.000Z",
+      mode: values.binding.environment,
+      settlementVersion: "PLATFORM_ACCOUNT_SPLIT_V2" as const,
+      ...quoteGiftPurchaseAmounts(
+        {
+          nominalCents: 15000,
+          method: "CREDIT_CARD",
+          policy: platformTariffPolicy("CREDIT_CARD"),
+        },
+        3,
+      ),
+    };
+    const settlement = buildGiftV2Settlement(quote as never);
+    expect(settlement.recipientSplitCents).toEqual([5000, 4999, 5001]);
+    Object.assign(rows.q, {
+      nominal_cents: quote.nominalCents,
+      commission_cents: quote.commissionCents,
+      processing_cents: quote.processingCents,
+      total_cents: quote.totalCents,
+    });
+    Object.assign(rows.q.snapshot as Row, {
+      quote,
+      settlement,
+      pricing: { policy: platformTariffPolicy("CREDIT_CARD") },
+    });
+    const gross = 5303;
+    const net = 5155;
+    Object.assign(rows.p, {
+      gross_cents: gross,
+      processing_cents: gross - net,
+      commission_cents: net - recipientNetCents,
+      recipient_net_cents: recipientNetCents,
+      split_fixed_cents: recipientNetCents,
+      installment_number: 3,
+      provider_installment_reference: rows.a.provider_reference,
+      ...(adjustment
+        ? {
+            platform_adjustment_cents: adjustment.cents,
+            platform_adjustment_dispatch_at: new Date(
+              "2026-10-12T18:57:00.000Z",
+            ),
+            platform_adjustment_transfer_reference: "transfer_v2",
+            platform_adjustment_funded_at: adjustment.funded
+              ? new Date("2026-10-12T18:58:00.000Z")
+              : null,
+          }
+        : {}),
+    });
+    rows.l.amount_cents = recipientNetCents;
+    return rows;
+  }
+
+  it("counts an installment whose frozen split is above the even share", async () => {
+    const values = fixture();
+    v2Installment(values, 5001);
+    const result = await values.repository.loadStoredTotals(values.binding);
+    expect(result?.totals).toMatchObject({
+      nominalReceivedCents: 5001,
+      netReceivedCents: 5001,
+    });
+  });
+
+  it("adds a funded divergence top-up to what the couple received", async () => {
+    const values = fixture();
+    v2Installment(values, 4900, { cents: 101, funded: true });
+    const result = await values.repository.loadStoredTotals(values.binding);
+    expect(result?.totals).toMatchObject({
+      nominalReceivedCents: 5001,
+      netReceivedCents: 5001,
+    });
+  });
+
+  it("rejects a top-up that does not close the frozen split", async () => {
+    const values = fixture();
+    v2Installment(values, 4900, { cents: 100, funded: true });
+    await denied(values);
   });
 });
