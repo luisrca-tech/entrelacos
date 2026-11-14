@@ -1,6 +1,9 @@
 import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
-import { createAsaasWebhookReceiver, hashAsaasEventIdentity } from "./asaasWebhook";
+import {
+  createAsaasWebhookReceiver,
+  hashAsaasEventIdentity,
+} from "./asaasWebhook";
 
 const token = "a-realistic-local-test-token-of-48-characters-only";
 const tokenHash = createHash("sha256").update(token).digest("hex");
@@ -423,20 +426,20 @@ describe("Asaas platform-account (V2) webhook binding", () => {
     expect(v.platform.recordUnroutable).not.toHaveBeenCalled();
   });
 
-  it.each([
-    { id: "other-account" },
-    undefined,
-  ])("rejects the platform token for a foreign or missing account (%#)", async (account) => {
-    const v = platformFixture();
-    await expect(
-      v.receiver.receive(
-        platformToken,
-        JSON.stringify({ ...splitDone, account }),
-      ),
-    ).rejects.toMatchObject({ status: 400, code: "WEBHOOK_INVALID" });
-    expect(v.platform.route).not.toHaveBeenCalled();
-    expect(v.append).not.toHaveBeenCalled();
-  });
+  it.each([{ id: "other-account" }, undefined])(
+    "rejects the platform token for a foreign or missing account (%#)",
+    async (account) => {
+      const v = platformFixture();
+      await expect(
+        v.receiver.receive(
+          platformToken,
+          JSON.stringify({ ...splitDone, account }),
+        ),
+      ).rejects.toMatchObject({ status: 400, code: "WEBHOOK_INVALID" });
+      expect(v.platform.route).not.toHaveBeenCalled();
+      expect(v.append).not.toHaveBeenCalled();
+    },
+  );
 
   it("keeps the subaccount (V1) flow for every other token", async () => {
     const v = platformFixture();

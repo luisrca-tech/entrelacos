@@ -889,7 +889,13 @@ export function reconcileGiftPaymentObservationV2(
       };
 
     if (input.eventType !== "PAYMENT_SPLIT_DONE")
-      return { outcome: "OBSERVED", reason: null, payment, effect: null, alert };
+      return {
+        outcome: "OBSERVED",
+        reason: null,
+        payment,
+        effect: null,
+        alert,
+      };
     const pending = (
       reason: GiftPaymentReconciliationV2Reason,
     ): GiftPaymentReconciliationV2Result => ({

@@ -7,10 +7,6 @@ import {
 } from "@entrelacos/database/schema";
 import { sql } from "drizzle-orm";
 import {
-  giftPaymentInboxEvents,
-  giftPaymentV2OnlyInboxEvents,
-} from "./giftPaymentReconciliation";
-import {
   databaseTimestampEpochMicroseconds,
   readDatabaseTimestamp,
 } from "./databaseTimestamp";
@@ -19,6 +15,10 @@ import {
   readFinancialWorkDueAt,
 } from "./financialWorkSchedule";
 import type { GiftPaymentPostingClaim } from "./giftPaymentPostingRepository";
+import {
+  giftPaymentInboxEvents,
+  giftPaymentV2OnlyInboxEvents,
+} from "./giftPaymentReconciliation";
 import { allowsLiveSite, type LiveSitePolicy } from "./liveSitePolicy";
 
 export interface GiftPaymentInboxClaim extends GiftPaymentPostingClaim {

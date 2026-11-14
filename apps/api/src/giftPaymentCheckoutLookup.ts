@@ -10,10 +10,6 @@ import {
   receivingAccount,
 } from "@entrelacos/database/schema";
 import { sql } from "drizzle-orm";
-import {
-  giftPaymentInboxEvents,
-  giftPaymentV2OnlyInboxEvents,
-} from "./giftPaymentReconciliation";
 import { hashAsaasEventIdentity } from "./asaasWebhook";
 import {
   databaseTimestampEpochMicroseconds,
@@ -21,6 +17,10 @@ import {
 } from "./databaseTimestamp";
 import type { GiftPaymentInboxClaim } from "./giftPaymentInboxRepository";
 import type { StoredGiftPaymentCheckoutBinding } from "./giftPaymentReconciliation";
+import {
+  giftPaymentInboxEvents,
+  giftPaymentV2OnlyInboxEvents,
+} from "./giftPaymentReconciliation";
 
 export interface GiftPaymentCheckoutLookup {
   loadCheckout(

@@ -184,20 +184,19 @@ describe("V2 platform-account split reconciliation", () => {
     });
   });
 
-  it.each([
-    "PAYMENT_CONFIRMED",
-    "PAYMENT_RECEIVED",
-    "PAYMENT_ANTICIPATED",
-  ])("only records %s", (eventType) => {
-    const result = reconcileGiftPaymentObservationV2(
-      fixture(undefined, {}, eventType),
-    );
-    expect(result).toMatchObject({
-      outcome: "OBSERVED",
-      effect: null,
-      alert: null,
-    });
-  });
+  it.each(["PAYMENT_CONFIRMED", "PAYMENT_RECEIVED", "PAYMENT_ANTICIPATED"])(
+    "only records %s",
+    (eventType) => {
+      const result = reconcileGiftPaymentObservationV2(
+        fixture(undefined, {}, eventType),
+      );
+      expect(result).toMatchObject({
+        outcome: "OBSERVED",
+        effect: null,
+        alert: null,
+      });
+    },
+  );
 
   it("retries SPLIT_DONE while the split or payment is not settled", () => {
     const pending = (payment: Record<string, unknown>) =>
@@ -373,9 +372,11 @@ describe("V2 platform-account split reconciliation", () => {
 
   it("leaves the V1 reconciler unaware of V2 split semantics", () => {
     // V1 expects the platform wallet split; the couple split is a mismatch there.
-    const { eventType: _event, splitCents: _split, ...input } = fixture(
-      v2Quote(10_000, "PIX"),
-    );
+    const {
+      eventType: _event,
+      splitCents: _split,
+      ...input
+    } = fixture(v2Quote(10_000, "PIX"));
     expect(reconcileGiftPaymentObservation(input)).toMatchObject({
       outcome: "DIVERGENT",
       reason: "SPLIT_MISMATCH",

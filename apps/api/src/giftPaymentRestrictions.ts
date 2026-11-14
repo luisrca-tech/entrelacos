@@ -13,11 +13,11 @@ import {
 import { sql } from "drizzle-orm";
 import type { AsaasStoredAccountReader } from "./asaasStoredAccountReader";
 import { hashAsaasEventIdentity } from "./asaasWebhook";
-import { insertFinancialOperatorAlert } from "./financialOperatorAlertRepository";
 import {
   compareDatabaseTimestamps,
   readDatabaseTimestamp,
 } from "./databaseTimestamp";
+import { insertFinancialOperatorAlert } from "./financialOperatorAlertRepository";
 import {
   financialInboxDueAt,
   readFinancialWorkDueAt,

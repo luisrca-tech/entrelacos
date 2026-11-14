@@ -58,7 +58,9 @@ export interface AsaasPlatformWebhookBinding {
   route(
     references: Readonly<AsaasPlatformEventReferences>,
   ): Promise<AsaasPlatformEventRoute | null>;
-  recordUnroutable(event: Readonly<AsaasUnroutablePlatformEvent>): Promise<void>;
+  recordUnroutable(
+    event: Readonly<AsaasUnroutablePlatformEvent>,
+  ): Promise<void>;
 }
 
 export interface AsaasWebhookDependencies extends LiveSitePolicy {
@@ -142,7 +144,6 @@ export function hashAsaasEventIdentity(
     )
     .digest("hex");
 }
-
 
 type ParsedEvent = Record<string, unknown> & { id: string; event: string };
 
@@ -241,7 +242,9 @@ function platformReferences(
     ...(payload.externalReference === undefined
       ? {}
       : { externalReference: payload.externalReference }),
-    ...(payload.paymentId === undefined ? {} : { paymentId: payload.paymentId }),
+    ...(payload.paymentId === undefined
+      ? {}
+      : { paymentId: payload.paymentId }),
     providerReferences,
   };
 }
@@ -341,7 +344,9 @@ export function createAsaasWebhookReceiver(
           providerEventId: event.id,
           eventType: event.event,
           paymentReference:
-            references.paymentId ?? references.providerReferences[0] ?? event.id,
+            references.paymentId ??
+            references.providerReferences[0] ??
+            event.id,
         }),
       );
       return { accepted: true };
