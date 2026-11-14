@@ -840,8 +840,11 @@ export function reconcileGiftPaymentObservationV2(
         cents(split.fixedValue) === coupleSplitCents);
     if (settled && net !== null && net >= coupleSplitCents) {
       payment.recipientNetCents = coupleSplitCents;
-      payment.platformNetCents = net - coupleSplitCents;
+      // commission keeps gross = processing + commission + couple share; the
+      // real platform net also pays the anticipation fee once it is known.
       payment.commissionCents = net - coupleSplitCents;
+      payment.platformNetCents =
+        net - coupleSplitCents - (payment.anticipationCents ?? 0);
     }
 
     const restricted =
@@ -919,9 +922,13 @@ export function reconcileGiftPaymentObservationV2(
       alert,
     });
     if (restricted) return pending("PAYMENT_RESTRICTED");
-    // Without anticipation the split is credited per charge only once Asaas
-    // releases it; a CONFIRMED card charge has not been received yet.
-    if (status !== "RECEIVED") return pending("PAYMENT_NOT_RECEIVED");
+    // An anticipated card charge pays the split when Asaas processes the
+    // anticipation (still CONFIRMED); otherwise the split waits for RECEIVED.
+    if (
+      status !== "RECEIVED" &&
+      !(status === "CONFIRMED" && raw.anticipated === true)
+    )
+      return pending("PAYMENT_NOT_RECEIVED");
     if (split === null) return pending("SPLIT_MISMATCH");
     if (splitStatus !== "DONE" || split.totalValue == null)
       return pending("SPLIT_NOT_SETTLED");

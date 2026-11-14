@@ -199,8 +199,8 @@ export function FinancialOverviewCard({
           {current.awaitingReleaseCents > 0 && (
             <p className="m-0 text-sm leading-[1.55] text-admin-text">
               Mais <strong>{formatCents(current.awaitingReleaseCents)}</strong>{" "}
-              aguardando liberação do Asaas. Pagamentos com cartão ficam
-              disponíveis conforme a liberação de cada parcela.
+              aguardando liberação do Asaas. No cartão, o valor é antecipado e
+              normalmente chega em até 2 dias úteis, sujeito à análise do Asaas.
             </p>
           )}
           {(current.platformAdjustmentOwedCents ?? 0) > 0 && (

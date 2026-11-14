@@ -68,7 +68,7 @@ function v2Response() {
   const option = (installmentCount: number, totalCents: number) => ({
     installmentCount,
     totalCents,
-    installmentSurchargeCents: totalCents - 10565,
+    installmentSurchargeCents: totalCents - 10688,
     installmentCents: [
       ...Array<number>(installmentCount - 1).fill(
         Math.floor(totalCents / installmentCount),
@@ -79,8 +79,8 @@ function v2Response() {
   });
   const card = {
     ...preview.methods[1],
-    totalCents: 10565,
-    installmentOptions: [option(1, 10565), option(6, 10620), option(12, 10675)],
+    totalCents: 10688,
+    installmentOptions: [option(1, 10688), option(6, 11247), option(12, 11909)],
   };
   return {
     ...preview,
@@ -206,25 +206,26 @@ describe("gift pricing preview", () => {
       const dialog = await view.openSimulation();
       expect(rowValue(dialog, "Você recebe")).toBe("R$ 100,00 (100%)");
       expect(rowValue(dialog, "Pix")).toBe("R$ 103,99");
-      expect(rowValue(dialog, "Cartão à vista")).toBe("R$ 105,65");
-      expect(rowValue(dialog, "Cartão em 6x")).toBe("R$ 106,20");
-      expect(rowValue(dialog, "Cartão em 12x")).toBe("R$ 106,75");
+      expect(rowValue(dialog, "Cartão à vista")).toBe("R$ 106,88");
+      expect(rowValue(dialog, "Cartão em 6x")).toBe("R$ 112,47");
+      expect(rowValue(dialog, "Cartão em 12x")).toBe("R$ 119,09");
       expect(rowValue(dialog, "Taxas pagas pelo convidado")).toBe(
-        "de R$ 3,99 a R$ 6,75",
+        "de R$ 3,99 a R$ 19,09",
       );
       expect(
         dialog.querySelector("dt button")?.getAttribute("aria-label"),
-      ).toBe("Inclui a taxa do meio de pagamento e o serviço Entrelaços");
+      ).toBe("Inclui a taxa do meio de pagamento e, no cartão, a antecipação");
       expect(
         [...dialog.querySelectorAll("dt")].filter((row) =>
           row.textContent?.startsWith("Taxas"),
         ),
       ).toHaveLength(1);
+      // The service fee is never shown to the couple.
       expect(dialog.textContent).not.toMatch(
-        /Líquido do casal|Comissão|antecipa|de uma vez/i,
+        /Líquido do casal|Comissão|serviço Entrelaços|32 dias/i,
       );
       expect(dialog.textContent).toContain(
-        "normalmente em até 32 dias por parcela",
+        "normalmente chega em até 2 dias úteis, sujeito à análise do Asaas",
       );
     } finally {
       await view.close();

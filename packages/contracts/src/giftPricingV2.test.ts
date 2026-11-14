@@ -19,19 +19,19 @@ const columns: Column[] = [
   ["CREDIT_CARD", 12],
 ];
 
-// Spec b.2 columns recomputed with sim.py and mrate = 0 (addendum
-// 2026-11-13: no anticipation). Cents.
+// Spec b.2 columns recomputed with sim.py and the automatic anticipation
+// rates of 2026-11-14 (1x 1.15%/month, 2x..12x 1.6%/month, Pix none). Cents.
 const specTotals: Record<number, number[]> = {
-  500: [709, 577, 580, 580, 580, 583, 583],
-  1000: [1219, 1102, 1108, 1108, 1108, 1114, 1114],
-  5000: [5299, 5308, 5336, 5336, 5336, 5363, 5363],
-  10000: [10399, 10565, 10620, 10620, 10620, 10675, 10675],
-  30000: [30799, 31594, 31758, 31758, 31758, 31923, 31923],
-  100000: [102199, 105195, 105740, 105740, 105740, 106290, 106290],
-  500000: [510199, 525770, 528494, 528494, 528494, 531246, 531246],
+  500: [709, 583, 593, 597, 611, 619, 644],
+  1000: [1219, 1115, 1134, 1143, 1171, 1187, 1237],
+  5000: [5299, 5369, 5466, 5510, 5649, 5727, 5980],
+  10000: [10399, 10688, 10880, 10970, 11247, 11402, 11909],
+  30000: [30799, 31961, 32538, 32806, 33639, 34102, 35623],
+  100000: [102199, 106418, 108339, 109234, 112009, 113555, 118622],
+  500000: [510199, 531886, 541488, 545963, 559842, 567567, 592903],
 };
 
-// [nominal, method, n, processing, anticipation]: anticipation is always 0.
+// [nominal, method, n, processing, anticipation]: Pix has no anticipation.
 const specBreakdowns: [
   number,
   "PIX" | "CREDIT_CARD",
@@ -40,15 +40,45 @@ const specBreakdowns: [
   number,
 ][] = [
   [500, "PIX", 1, 199, 0],
-  [500, "CREDIT_CARD", 1, 67, 0],
-  [500, "CREDIT_CARD", 12, 73, 0],
+  [500, "CREDIT_CARD", 1, 67, 6],
+  [500, "CREDIT_CARD", 12, 75, 59],
   [10000, "PIX", 1, 199, 0],
-  [10000, "CREDIT_CARD", 1, 365, 0],
-  [10000, "CREDIT_CARD", 6, 420, 0],
-  [10000, "CREDIT_CARD", 12, 475, 0],
-  [30000, "CREDIT_CARD", 1, 994, 0],
-  [100000, "CREDIT_CARD", 12, 4290, 0],
+  [10000, "CREDIT_CARD", 1, 369, 119],
+  [10000, "CREDIT_CARD", 6, 442, 605],
+  [10000, "CREDIT_CARD", 12, 525, 1184],
+  [15000, "CREDIT_CARD", 3, 623, 506],
+  [30000, "CREDIT_CARD", 1, 1005, 356],
+  [100000, "CREDIT_CARD", 12, 4783, 11839],
 ];
+
+/**
+ * Days from payment to each installment credit date reported by the Asaas
+ * Sandbox for a 12x charge paid on 2026-11-13 (Slice 0 probe).
+ */
+const sandboxCreditDays = [
+  32, 66, 96, 129, 160, 192, 224, 256, 290, 320, 353, 384,
+];
+
+/** Asaas anticipation of one installment: card fee, then fee for the days. */
+function asaasAnticipatedNet(
+  installment: number,
+  count: number,
+  index: number,
+): number {
+  const tier = count === 1 ? "card1" : count <= 6 ? "card2to6" : "card7to12";
+  const tariff = GIFT_PLATFORM_TARIFFS[tier];
+  const card =
+    installment -
+    Math.round((installment * tariff.basisPoints) / 10000) -
+    Math.round(tariff.fixedCents / count);
+  const days = sandboxCreditDays[index] ?? 0;
+  return (
+    card -
+    Math.round(
+      (card * tariff.anticipationMonthlyBasisPoints * days) / (10000 * 30),
+    )
+  );
+}
 
 describe("gift pricing V2 (guest pays every fee)", () => {
   it.each(
@@ -87,26 +117,29 @@ describe("gift pricing V2 (guest pays every fee)", () => {
     },
   );
 
-  it("keeps the landing examples without anticipation", () => {
+  it("keeps the landing examples", () => {
     expect(getGiftV2TotalCents(10000, "PIX", 1)).toBe(10399);
-    expect(getGiftV2TotalCents(10000, "CREDIT_CARD", 1)).toBe(10565);
-    expect(getGiftV2TotalCents(30000, "CREDIT_CARD", 1)).toBe(31594);
+    expect(getGiftV2TotalCents(10000, "CREDIT_CARD", 1)).toBe(10688);
+    expect(getGiftV2TotalCents(30000, "CREDIT_CARD", 1)).toBe(31961);
     expect(quoteGiftV2(10000, "CREDIT_CARD", 6).installmentCents).toEqual([
-      1770, 1770, 1770, 1770, 1770, 1770,
+      1874, 1874, 1874, 1874, 1874, 1877,
     ]);
     expect(quoteGiftV2(10000, "CREDIT_CARD", 12).installmentCents).toEqual([
-      ...Array.from({ length: 11 }, () => 889),
-      896,
+      ...Array.from({ length: 11 }, () => 992),
+      997,
     ]);
   });
 
-  it("conserves the total and never produces negative anticipation", () => {
+  it("conserves the total and charges anticipation on card only", () => {
     for (let nominal = 1; nominal <= 600_000; nominal += 1_013) {
       for (const method of ["PIX", "CREDIT_CARD"] as const) {
         const counts = method === "PIX" ? [1] : [1, 2, 3, 4, 6, 7, 9, 12];
         for (const count of counts) {
           const quote = quoteGiftV2(nominal, method, count);
-          expect(quote.anticipationCents).toBe(0);
+          if (method === "PIX") expect(quote.anticipationCents).toBe(0);
+          else if (nominal >= 1_000)
+            expect(quote.anticipationCents).toBeGreaterThan(0);
+          expect(quote.anticipationCents).toBeGreaterThanOrEqual(0);
           expect(
             quote.nominalCents +
               quote.commissionCents +
@@ -122,7 +155,7 @@ describe("gift pricing V2 (guest pays every fee)", () => {
   });
 
   it("does not offer installments below the minimum installment amount", () => {
-    // R$ 5 in 2x = 580 → 290 per installment, below R$ 5.
+    // R$ 5 in 2x = 593 → 296 per installment, below R$ 5.
     expect(quoteGiftV2(500, "CREDIT_CARD", 2).offered).toBe(false);
     expect(quoteGiftV2(500, "CREDIT_CARD", 1).offered).toBe(true);
     const options = listGiftV2Options(1000);
@@ -154,15 +187,34 @@ describe("gift V2 split schedule", () => {
     ]);
   });
 
-  it("matches the per-installment split accepted by the Slice 0 probe", () => {
-    expect(quoteGiftV2(30000, "CREDIT_CARD", 3).recipientSplitCents).toEqual([
-      10000, 10000, 10000,
-    ]);
+  it("front-loads the split because later installments cost more to anticipate", () => {
+    const three = quoteGiftV2(15000, "CREDIT_CARD", 3);
+    expect(three.installmentCents).toEqual([5476, 5476, 5477]);
+    expect(three.recipientSplitCents).toEqual([5091, 5000, 4909]);
     const twelve = quoteGiftV2(10000, "CREDIT_CARD", 12);
-    expect(twelve.recipientSplitCents).toEqual([
-      833, 833, 833, 833, 833, 833, 833, 833, 833, 832, 832, 839,
-    ]);
-    expect(Math.min(...twelve.splitSlackCents)).toBe(15);
+    expect(twelve.recipientSplitCents.reduce((a, b) => a + b, 0)).toBe(10000);
+    twelve.recipientSplitCents.slice(1).forEach((split, index) => {
+      expect(split).toBeLessThanOrEqual(twelve.recipientSplitCents[index] ?? 0);
+    });
+  });
+
+  it("covers every split with the anticipated net at sandbox credit dates", () => {
+    for (const nominal of [5000, 15000, 50000, 200000]) {
+      for (const count of [1, 2, 3, 6, 7, 12]) {
+        const quote = quoteGiftV2(nominal, "CREDIT_CARD", count);
+        // R$ 50 in 12x is 5980 / 12 = 498 per installment, below R$ 5.
+        expect(quote.offered).toBe(!(nominal === 5000 && count === 12));
+        if (!quote.offered) continue;
+        quote.recipientSplitCents.forEach((split, index) => {
+          const net = asaasAnticipatedNet(
+            quote.installmentCents[index] ?? 0,
+            count,
+            index,
+          );
+          expect(net).toBeGreaterThanOrEqual(split);
+        });
+      }
+    }
   });
 
   it("is feasible, conserves the nominal and leaves nonnegative slack", () => {

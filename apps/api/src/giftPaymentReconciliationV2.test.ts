@@ -160,7 +160,7 @@ describe("V2 platform-account split reconciliation", () => {
     );
   });
 
-  it("credits a card installment only once Asaas releases it (RECEIVED)", () => {
+  it("credits a card installment that was not anticipated once Asaas releases it (RECEIVED)", () => {
     const quote = v2Quote(10_000, "CREDIT_CARD", 3);
     const received = fixture(quote);
     expect(reconcileGiftPaymentObservationV2(received)).toMatchObject({
@@ -172,7 +172,7 @@ describe("V2 platform-account split reconciliation", () => {
         recipientNetCents: received.splitCents,
       },
     });
-    // Without anticipation a CONFIRMED installment has not been credited yet.
+    // A CONFIRMED installment that Asaas did not anticipate waits for RECEIVED.
     expect(
       reconcileGiftPaymentObservationV2(
         fixture(quote, { status: "CONFIRMED" }),
@@ -182,6 +182,104 @@ describe("V2 platform-account split reconciliation", () => {
       reason: "PAYMENT_NOT_RECEIVED",
       effect: null,
     });
+  });
+
+  it("credits an anticipated card installment once its split is done and deducts the real fee", () => {
+    const quote = v2Quote(15_000, "CREDIT_CARD", 3);
+    const input = fixture(quote, {
+      status: "CONFIRMED",
+      anticipated: true,
+      anticipation: { id: "ant-1", status: "CREDITED", fee: "0.85" },
+    });
+    const gross = quote.installmentCents?.[0] as number;
+    expect(reconcileGiftPaymentObservationV2(input)).toMatchObject({
+      outcome: "RECEIVED",
+      effect: { kind: "GIFT_RECEIVED", amountCents: input.splitCents },
+      payment: {
+        providerStatus: "CONFIRMED",
+        recipientNetCents: input.splitCents,
+        // Conservation stays gross = processing + commission + couple share.
+        commissionCents: gross - 100 - input.splitCents,
+        anticipationCents: 85,
+        anticipationReference: "ant-1",
+        // The real platform net pays the anticipation fee.
+        platformNetCents: gross - 100 - input.splitCents - 85,
+      },
+    });
+  });
+
+  it("keeps the real platform net unknown-fee safe until the anticipation is credited", () => {
+    const quote = v2Quote(15_000, "CREDIT_CARD", 3);
+    const input = fixture(quote, {
+      status: "CONFIRMED",
+      anticipated: true,
+      anticipation: { id: "ant-1", status: "PENDING", fee: "0.85" },
+    });
+    const gross = quote.installmentCents?.[0] as number;
+    expect(reconcileGiftPaymentObservationV2(input)).toMatchObject({
+      outcome: "RECEIVED",
+      payment: {
+        anticipationCents: null,
+        platformNetCents: gross - 100 - input.splitCents,
+      },
+    });
+  });
+
+  it("records a credited anticipation on a later anticipation event without a new credit", () => {
+    const quote = v2Quote(15_000, "CREDIT_CARD", 3);
+    const result = reconcileGiftPaymentObservationV2(
+      fixture(
+        quote,
+        {
+          status: "CONFIRMED",
+          anticipated: true,
+          anticipation: { id: "ant-1", status: "CREDITED", fee: "0.85" },
+        },
+        "RECEIVABLE_ANTICIPATION_CREDITED",
+      ),
+    );
+    expect(result).toMatchObject({
+      outcome: "OBSERVED",
+      effect: null,
+      alert: null,
+      payment: { anticipationCents: 85, anticipationReference: "ant-1" },
+    });
+  });
+
+  it("warns on a denied anticipation and keeps the installment on the normal release", () => {
+    const quote = v2Quote(15_000, "CREDIT_CARD", 3);
+    const denied = reconcileGiftPaymentObservationV2(
+      fixture(
+        quote,
+        {
+          status: "CONFIRMED",
+          anticipated: false,
+          anticipation: { id: "ant-1", status: "DENIED", fee: null },
+          split: [
+            {
+              id: "split-1",
+              walletId: "couple-wallet-1",
+              fixedValue: "50.91",
+              totalValue: "50.91",
+              status: "AWAITING_CREDIT",
+            },
+          ],
+        },
+        "RECEIVABLE_ANTICIPATION_DENIED",
+      ),
+    );
+    expect(denied).toMatchObject({
+      outcome: "OBSERVED",
+      effect: null,
+      alert: { kind: "ANTICIPATION_DENIED", severity: "warning" },
+      payment: { anticipationCents: null },
+    });
+    // The split still settles with the installment; the couple loses nothing.
+    expect(
+      reconcileGiftPaymentObservationV2(
+        fixture(quote, { status: "RECEIVED", anticipated: false }),
+      ),
+    ).toMatchObject({ outcome: "RECEIVED", effect: { kind: "GIFT_RECEIVED" } });
   });
 
   it.each(["PAYMENT_CONFIRMED", "PAYMENT_RECEIVED", "PAYMENT_ANTICIPATED"])(

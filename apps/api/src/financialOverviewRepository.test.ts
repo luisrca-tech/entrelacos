@@ -1540,8 +1540,9 @@ it("attributes only received installment shares and keeps confirmed funds awaiti
 });
 
 describe("PLATFORM_ACCOUNT_SPLIT_V2 installment totals", () => {
-  // The third installment of a R$150 gift in 3x: its frozen couple split is
-  // 5001 cents, one cent above the even nominal share (5000).
+  // The first installment of a R$150 gift in 3x: its frozen couple split is
+  // 5091 cents, above the even nominal share (5000), because later
+  // installments cost more to anticipate.
   function v2Installment(
     values: ReturnType<typeof fixture>,
     recipientNetCents: number,
@@ -1569,7 +1570,7 @@ describe("PLATFORM_ACCOUNT_SPLIT_V2 installment totals", () => {
       ),
     };
     const settlement = buildGiftV2Settlement(quote as never);
-    expect(settlement.recipientSplitCents).toEqual([5000, 4999, 5001]);
+    expect(settlement.recipientSplitCents).toEqual([5091, 5000, 4909]);
     Object.assign(rows.q, {
       nominal_cents: quote.nominalCents,
       commission_cents: quote.commissionCents,
@@ -1581,15 +1582,15 @@ describe("PLATFORM_ACCOUNT_SPLIT_V2 installment totals", () => {
       settlement,
       pricing: { policy: platformTariffPolicy("CREDIT_CARD") },
     });
-    const gross = 5303;
-    const net = 5155;
+    const gross = 5476;
+    const net = 5269;
     Object.assign(rows.p, {
       gross_cents: gross,
       processing_cents: gross - net,
       commission_cents: net - recipientNetCents,
       recipient_net_cents: recipientNetCents,
       split_fixed_cents: recipientNetCents,
-      installment_number: 3,
+      installment_number: 1,
       provider_installment_reference: rows.a.provider_reference,
       ...(adjustment
         ? {
@@ -1610,27 +1611,39 @@ describe("PLATFORM_ACCOUNT_SPLIT_V2 installment totals", () => {
 
   it("counts an installment whose frozen split is above the even share", async () => {
     const values = fixture();
-    v2Installment(values, 5001);
+    v2Installment(values, 5091);
     const result = await values.repository.loadStoredTotals(values.binding);
     expect(result?.totals).toMatchObject({
-      nominalReceivedCents: 5001,
-      netReceivedCents: 5001,
+      nominalReceivedCents: 5091,
+      netReceivedCents: 5091,
+    });
+  });
+
+  it("counts a credited anticipated installment that is still CONFIRMED as received", async () => {
+    const values = fixture();
+    const rows = v2Installment(values, 5091);
+    Object.assign(rows.p, { provider_status: "CONFIRMED" });
+    const result = await values.repository.loadStoredTotals(values.binding);
+    expect(result?.totals).toMatchObject({
+      nominalReceivedCents: 5091,
+      netReceivedCents: 5091,
+      awaitingReleaseCents: 0,
     });
   });
 
   it("adds a funded divergence top-up to what the couple received", async () => {
     const values = fixture();
-    v2Installment(values, 4900, { cents: 101, funded: true });
+    v2Installment(values, 4990, { cents: 101, funded: true });
     const result = await values.repository.loadStoredTotals(values.binding);
     expect(result?.totals).toMatchObject({
-      nominalReceivedCents: 5001,
-      netReceivedCents: 5001,
+      nominalReceivedCents: 5091,
+      netReceivedCents: 5091,
     });
   });
 
   it("rejects a top-up that does not close the frozen split", async () => {
     const values = fixture();
-    v2Installment(values, 4900, { cents: 100, funded: true });
+    v2Installment(values, 4990, { cents: 100, funded: true });
     await denied(values);
   });
 });

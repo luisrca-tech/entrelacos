@@ -68,9 +68,13 @@ export const ownerFinanceSummarySchema = z
     grossChargedCents: cents,
     coupleCreditedCents: cents,
     estimatedCommissionCents: cents,
+    // Real platform net of credited payments, after the real anticipation fee.
     netCommissionCents: cents,
     // Over fully received gifts only: estimated minus real net commission.
     commissionDifferenceCents: cents,
+    // Anticipation fee quoted to guests versus the fee the provider charged.
+    estimatedAnticipationCents: cents,
+    realAnticipationCents: cents,
   })
   .strict();
 
@@ -89,8 +93,13 @@ export const ownerFinanceGiftSchema = z
     coupleExpectedCents: cents,
     creditedInstallments: count,
     estimatedCommissionCents: cents,
-    // Null until the provider reports a settled split.
+    // Real platform net (after the real anticipation fee) of the payments
+    // credited to the couple; null until one is credited.
     netCommissionCents: cents.nullable(),
+    // Quoted anticipation fee; 0 for Pix and quotes without anticipation.
+    estimatedAnticipationCents: cents,
+    // Fee the provider charged; null until an anticipation is reported.
+    realAnticipationCents: cents.nullable(),
     status: z.enum(ownerFinanceGiftStatuses),
   })
   .strict();

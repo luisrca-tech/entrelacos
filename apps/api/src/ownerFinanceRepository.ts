@@ -94,8 +94,10 @@ function paidGifts(filters: OwnerFinanceSummaryQuery): SQL {
       q.snapshot->'quote'->>'title' AS gift_title, q.method::text AS method,
       COALESCE((q.snapshot->'quote'->>'installmentCount')::int, 1) AS installment_count,
       q.total_cents, q.nominal_cents, q.commission_cents,
+      COALESCE((q.snapshot->'quote'->>'anticipationCents')::int, 0) AS estimated_anticipation_cents,
       COALESCE(pay.paid_at, o.created_at) AS paid_at,
       pay.credited_cents, pay.credited_installments, pay.platform_net_cents,
+      pay.anticipation_cents,
       CASE
         WHEN pay.review THEN 'IN_REVIEW'
         WHEN pay.credited_installments >= COALESCE((q.snapshot->'quote'->>'installmentCount')::int, 1) THEN 'RECEIVED'
@@ -115,7 +117,12 @@ function paidGifts(filters: OwnerFinanceSummaryQuery): SQL {
         COALESCE(SUM(p.recipient_net_cents + CASE WHEN p.platform_adjustment_funded_at IS NOT NULL
           THEN COALESCE(p.platform_adjustment_cents, 0) ELSE 0 END) FILTER (WHERE ${credited}), 0) AS credited_cents,
         COUNT(*) FILTER (WHERE ${credited}) AS credited_installments,
-        SUM(p.platform_net_cents) AS platform_net_cents,
+        -- Real net commission: platform_net_cents already deducts the real
+        -- anticipation fee (commission_cents does not), and only payments
+        -- credited to the couple count as settled.
+        SUM(p.platform_net_cents) FILTER (WHERE ${credited}) AS platform_net_cents,
+        -- Real anticipation fee; null while no payment reports one.
+        SUM(p.anticipation_cents) AS anticipation_cents,
         COALESCE(bool_or(p.split_divergence_blocked_at IS NOT NULL
           OR COALESCE(p.provider_status, '') ~ ${restrictedStatus}
           OR EXISTS (SELECT 1 FROM ${financialOperatorAlert} a
@@ -154,7 +161,9 @@ export async function readOwnerFinanceSummary(
       COALESCE(SUM(f.commission_cents), 0) AS estimated,
       COALESCE(SUM(f.platform_net_cents), 0) AS net,
       COALESCE(SUM(f.commission_cents - COALESCE(f.platform_net_cents, 0))
-        FILTER (WHERE f.status = 'RECEIVED'), 0) AS difference
+        FILTER (WHERE f.status = 'RECEIVED'), 0) AS difference,
+      COALESCE(SUM(f.estimated_anticipation_cents), 0) AS estimated_anticipation,
+      COALESCE(SUM(f.anticipation_cents), 0) AS real_anticipation
     FROM (${paidGifts(filters)}) f`);
   const totals = (result.rows[0] ?? {}) as Row;
   return {
@@ -164,6 +173,8 @@ export async function readOwnerFinanceSummary(
     estimatedCommissionCents: number(totals.estimated),
     netCommissionCents: number(totals.net),
     commissionDifferenceCents: number(totals.difference),
+    estimatedAnticipationCents: number(totals.estimated_anticipation),
+    realAnticipationCents: number(totals.real_anticipation),
   };
 }
 
@@ -195,6 +206,8 @@ export async function listOwnerFinanceGifts(
     creditedInstallments: number(row.credited_installments),
     estimatedCommissionCents: number(row.commission_cents),
     netCommissionCents: nullableNumber(row.platform_net_cents),
+    estimatedAnticipationCents: number(row.estimated_anticipation_cents),
+    realAnticipationCents: nullableNumber(row.anticipation_cents),
     status: row.status as OwnerFinanceGift["status"],
   }));
   const last = page.at(-1);
