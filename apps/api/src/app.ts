@@ -156,7 +156,11 @@ export function createApp(
       internalGiftsEndpointPaths.teamAccept,
     ]) {
       const [method, path] = endpoint.split(" ");
-      app.on(method, path, (context) => teamRouter.fetch(context.req.raw));
+      app.on(method, path, (context) =>
+        teamRouter.fetch(context.req.raw, {
+          observabilityEmit: context.get("observabilityEmit"),
+        }),
+      );
     }
     app.route(
       "/",
