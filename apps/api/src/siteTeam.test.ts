@@ -609,3 +609,66 @@ describe("site-scoped team revocation and listing", () => {
     expect(memberQuery?.params).toContain(siteId);
   });
 });
+
+describe("driver timestamp representation", () => {
+  // drizzle's node-postgres driver returns timestamptz as raw text in db.execute
+  const textInvitation = {
+    ...invitation,
+    expiresAt: "2026-10-13 12:00:00+00",
+    createdAt: "2026-10-12 12:00:00+00",
+    revokedAt: null,
+    consumedAt: null,
+  } as unknown as Record<string, unknown>;
+
+  it("lists invitations whose timestamps arrive as text", async () => {
+    const { db } = fixture({ invitation: textInvitation });
+    const result = await listSiteTeam(db, actor, siteId);
+    expect(result.invitations).toEqual([
+      expect.objectContaining({
+        id: invitation.id,
+        expiresAt: "2026-10-13T12:00:00.000Z",
+        revokedAt: null,
+      }),
+    ]);
+  });
+
+  it("lists revoked text timestamps as ISO instants", async () => {
+    const { db } = fixture({
+      invitation: { ...textInvitation, revokedAt: "2026-10-12 13:30:00.5+00" },
+    });
+    const result = await listSiteTeam(db, actor, siteId);
+    expect(result.invitations[0]?.revokedAt).toBe("2026-10-12T13:30:00.500Z");
+  });
+
+  it("lists revoked members whose timestamps arrive as text", async () => {
+    const { db } = fixture({
+      invitation: null,
+      membership: {
+        userId: existingUser.id,
+        siteId,
+        name: existingUser.name,
+        email,
+        membershipRole: "SITE_ASSISTANT",
+        revokedAt: "2026-10-12 09:00:00+00",
+      },
+    });
+    const result = await listSiteTeam(db, actor, siteId);
+    expect(result.members[0]?.revokedAt).toBe("2026-10-12T09:00:00.000Z");
+  });
+
+  it("accepts an invitation whose expiry arrives as text", async () => {
+    const { db } = fixture({ invitation: textInvitation });
+    await expect(
+      acceptSiteAssessorInvitation(db, { token }, existingActor(), now),
+    ).resolves.toEqual({ siteId });
+  });
+
+  it("rejects an expired invitation whose expiry arrives as text", async () => {
+    const { db } = fixture({
+      invitation: { ...textInvitation, expiresAt: "2026-10-12 11:59:59+00" },
+    });
+    await expect(
+      acceptSiteAssessorInvitation(db, { token }, existingActor(), now),
+    ).rejects.toMatchObject({ code: "TEAM_INVITATION_INVALID" });
+  });
+});

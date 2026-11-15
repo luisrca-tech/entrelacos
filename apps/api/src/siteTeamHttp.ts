@@ -56,15 +56,42 @@ async function readBody(request: Request): Promise<unknown> {
   return request.json().catch(() => undefined);
 }
 
+/** Parent request context forwarded through teamRouter.fetch(request, env). */
+export interface SiteTeamHttpBindings {
+  observabilityEmit?: (event: unknown) => void;
+}
+
+const SQLSTATE = /^[0-9A-Z]{5}$/;
+
+/** Only class names and SQLSTATE codes leave this boundary; messages may hold personal data. */
+function unexpectedErrorCode(error: unknown): string {
+  for (const candidate of [error, (error as { cause?: unknown })?.cause]) {
+    const code = (candidate as { code?: unknown } | undefined)?.code;
+    if (typeof code === "string" && SQLSTATE.test(code)) return `pg.${code}`;
+  }
+  return error instanceof Error ? error.name : "UNKNOWN";
+}
+
 export function createSiteTeamHttpRouter(options: AuthHttpOptions) {
-  const router = new Hono<{ Variables: { actor: SiteAccessActor } }>();
-  router.onError((error) => {
+  const router = new Hono<{
+    Bindings: SiteTeamHttpBindings;
+    Variables: { actor: SiteAccessActor };
+  }>();
+  router.onError((error, context) => {
     if (error instanceof AdminSessionRequiredError)
       return problem(401, "UNAUTHORIZED", "Authentication required");
     if (error instanceof SiteAccessDeniedError)
       return problem(403, "MEMBERSHIP_DENIED", "Site membership denied");
     if (error instanceof SiteTeamServiceError)
       return problem(error.status, error.code, "Team operation rejected");
+    context.env?.observabilityEmit?.({
+      level: "error",
+      event: "site_team.unexpected_error",
+      operation: "site_team",
+      result: "failure",
+      status: 503,
+      errorCode: unexpectedErrorCode(error),
+    });
     return problem(503, "SERVICE_UNAVAILABLE", "Team service unavailable");
   });
   router.use("*", async (context, next) => {

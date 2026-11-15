@@ -281,3 +281,50 @@ describe("site team HTTP boundary", () => {
     expect(await response.text()).not.toContain(token);
   });
 });
+
+describe("site team unexpected failures", () => {
+  it("emits a sanitized error event without leaking details", async () => {
+    const emit = vi.fn();
+    mocks.list.mockRejectedValue(
+      new TypeError("row.expiresAt.toISOString is not a function"),
+    );
+    const response = await router().request(
+      request("/v1/sites/wedding-a/team"),
+      undefined,
+      { observabilityEmit: emit },
+    );
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({
+      code: "SERVICE_UNAVAILABLE",
+    });
+    expect(emit).toHaveBeenCalledWith({
+      level: "error",
+      event: "site_team.unexpected_error",
+      operation: "site_team",
+      result: "failure",
+      status: 503,
+      errorCode: "TypeError",
+    });
+  });
+
+  it("reports the database SQLSTATE of a wrapped driver error", async () => {
+    const emit = vi.fn();
+    mocks.list.mockRejectedValue(
+      new Error("Failed query", { cause: { code: "23505" } }),
+    );
+    await router().request(request("/v1/sites/wedding-a/team"), undefined, {
+      observabilityEmit: emit,
+    });
+    expect(emit).toHaveBeenCalledWith(
+      expect.objectContaining({ errorCode: "pg.23505" }),
+    );
+  });
+
+  it("still answers 503 when no observability sink is bound", async () => {
+    mocks.list.mockRejectedValue(new Error("boom"));
+    const response = await router().request(
+      request("/v1/sites/wedding-a/team"),
+    );
+    expect(response.status).toBe(503);
+  });
+});

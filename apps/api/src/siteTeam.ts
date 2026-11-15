@@ -22,6 +22,7 @@ import {
   normalizeCredentialEmail,
   withCredentialAdvisoryLock,
 } from "./credentialLock";
+import { readDatabaseTimestamp } from "./databaseTimestamp";
 import {
   requireSiteCapability,
   type SiteAccessActor,
@@ -112,6 +113,20 @@ const invitationColumns = sql`
   consumed_at AS "consumedAt", revoked_at AS "revokedAt",
   invited_by_user_id AS "invitedByUserId", created_at AS "createdAt"
 `;
+
+/** db.execute returns timestamptz columns as text; normalize them before use. */
+function storedInvitation(row: unknown): InvitationRow {
+  const value = row as Record<string, unknown>;
+  const optional = (field: unknown) =>
+    field === null || field === undefined ? null : readDatabaseTimestamp(field);
+  return {
+    ...(value as InvitationRow),
+    expiresAt: readDatabaseTimestamp(value.expiresAt),
+    createdAt: readDatabaseTimestamp(value.createdAt),
+    consumedAt: optional(value.consumedAt),
+    revokedAt: optional(value.revokedAt),
+  };
+}
 
 function publicInvitation(row: InvitationRow): SiteTeamInvitation {
   return siteTeamInvitationSchema.parse({
@@ -207,9 +222,14 @@ export async function listSiteTeam(
   return siteTeamResponseSchema.parse({
     members: members.rows.map((row) => ({
       ...row,
-      revokedAt: (row.revokedAt as Date | null)?.toISOString() ?? null,
+      revokedAt:
+        row.revokedAt === null || row.revokedAt === undefined
+          ? null
+          : readDatabaseTimestamp(row.revokedAt).toISOString(),
     })),
-    invitations: (invitations.rows as InvitationRow[]).map(publicInvitation),
+    invitations: invitations.rows.map((row) =>
+      publicInvitation(storedInvitation(row)),
+    ),
   });
 }
 
@@ -228,7 +248,10 @@ export async function revokeSiteAssessorInvitation(
       SELECT ${invitationColumns} FROM site_assessor_invitation
       WHERE id = ${invitationId} AND site_id = ${siteId} FOR UPDATE
     `);
-    const invitation = result.rows[0] as InvitationRow | undefined;
+    const invitation =
+      result.rows[0] === undefined
+        ? undefined
+        : storedInvitation(result.rows[0]);
     if (invitation?.role !== "SITE_ASSISTANT" || invitation.consumedAt)
       invalid();
     if (!invitation.revokedAt) {
@@ -291,7 +314,9 @@ async function invitationForToken(
     SELECT ${invitationColumns} FROM site_assessor_invitation
     WHERE token_hash = ${tokenHash} ${lock ? sql`FOR UPDATE` : sql``}
   `);
-  return result.rows[0] as InvitationRow | undefined;
+  return result.rows[0] === undefined
+    ? undefined
+    : storedInvitation(result.rows[0]);
 }
 
 export async function acceptSiteAssessorInvitation(
