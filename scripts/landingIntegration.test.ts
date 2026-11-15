@@ -36,6 +36,8 @@ describe("landing workspace integration", () => {
         "PUBLIC_BOTANICAL_DEMO_URL",
         "PUBLIC_LETTERS_DEMO_URL",
         "PUBLIC_CONTACT_URL",
+        "PUBLIC_META_PIXEL_ID",
+        "PUBLIC_GA4_MEASUREMENT_ID",
       ]),
     );
   });

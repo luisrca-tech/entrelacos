@@ -1,6 +1,7 @@
 ---
 import PublicHeader from "../components/PublicHeader.astro";
 import PublicFooter from "../components/PublicFooter.astro";
+import LandingTracking from "../components/LandingTracking.astro";
 import "../styles/landing.css";
 import "../styles/cinematic.css";
 import "lenis/dist/lenis.css";
@@ -70,6 +71,7 @@ const questions = [
   </head>
   <body>
     <a href="#conteudo" class="skip-link">Pular para o conteúdo</a>
+    <LandingTracking config={config} />
     <PublicHeader contactUrl={config.contactUrl} home />
     <main id="conteudo" tabindex="-1">
 
@@ -78,7 +80,7 @@ const questions = [
 
           <h1 id="hero-title" tabindex="-1" class="entrance">O site do seu<br /><em>casamento.</em></h1>
           <p class="hero-description entrance">Fotos, informações e confirmações em um só lugar. Nós preparamos o site; vocês acompanham os convidados pelo painel.</p>
-          <div class="hero-actions entrance">
+          <div class="hero-actions entrance" data-track-position="inicio">
             <a class="button button-wine" href={config.contactUrl}>{contactLabel}<span aria-hidden="true">↗</span></a>
             <a class="button button-outline" href="#modelos">Explorar modelos <span aria-hidden="true">↗</span></a>
           </div>
@@ -146,7 +148,7 @@ const questions = [
 
       <section id="detalhes" class="faq chapter" aria-labelledby="faq-title"><div class="faq-intro"><h2 id="faq-title">Dúvidas frequentes</h2><a class="faq-more" href="/duvidas">Ver todas as dúvidas <span aria-hidden="true">↗</span></a></div><div class="faq-list">{questions.map(([question, answer]) => <details><summary>{question}<span aria-hidden="true">+</span></summary><p>{answer}</p></details>)}</div></section>
 
-      <section id="comecar" class="closing" aria-labelledby="closing-title"><h2 id="closing-title" class="reveal">Vamos preparar<br /><em>o site de vocês?</em></h2><div class="closing-actions reveal"><a class="button button-ivory" href={config.contactUrl}>{contactLabel}<span aria-hidden="true">↗</span></a><p>Contem a data do casamento e o modelo que vocês gostaram.</p></div></section>
+      <section id="comecar" class="closing" aria-labelledby="closing-title"><h2 id="closing-title" class="reveal">Vamos preparar<br /><em>o site de vocês?</em></h2><div class="closing-actions reveal" data-track-position="fechamento"><a class="button button-ivory" href={config.contactUrl}>{contactLabel}<span aria-hidden="true">↗</span></a><p>Contem a data do casamento e o modelo que vocês gostaram.</p></div></section>
     </main>
     <PublicFooter config={config} home />
     <script>

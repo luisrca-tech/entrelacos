@@ -12,6 +12,8 @@
         "PUBLIC_BOTANICAL_DEMO_URL",
         "PUBLIC_LETTERS_DEMO_URL",
         "PUBLIC_CONTACT_URL",
+        "PUBLIC_META_PIXEL_ID",
+        "PUBLIC_GA4_MEASUREMENT_ID",
         "PUBLIC_SITE_ID",
         "PUBLIC_LIVE_DEMO_SITE_ID",
         "PUBLIC_ADMIN_ORIGIN",
@@ -19,7 +21,10 @@
         "VITE_API_URL"
       ]
     },
-    "typecheck": { "dependsOn": ["^build"], "outputs": [] },
+    "typecheck": {
+      "dependsOn": ["^build"],
+      "outputs": []
+    },
     "dev": {
       "dependsOn": ["^build"],
       "cache": false,

@@ -1,0 +1,31 @@
+---
+import type { landingConfig } from "../landingConfig";
+import { trackingIds } from "../landingTracking";
+interface Props {
+  config: ReturnType<typeof landingConfig>;
+}
+const { config } = Astro.props;
+const ids = trackingIds(import.meta.env);
+const settings = {
+  ...ids,
+  botanicalUrl: config.botanicalUrl,
+  lettersUrl: config.lettersUrl,
+  contactUrl: config.contactUrl,
+};
+const enabled = Boolean(ids.metaPixelId || ids.ga4Id);
+---
+<script type="application/json" id="landing-tracking" set:html={JSON.stringify(settings).replace(/</g, "\\u003c")} />
+{enabled && (
+  <aside class="consent-notice" aria-label="Aviso de cookies" hidden>
+    <p>Usamos cookies da Meta e do Google para medir nossos anúncios e visitas. Eles só são ativados se você aceitar.</p>
+    <div class="consent-actions">
+      <button type="button" class="consent-button consent-accept" data-consent="granted">Aceitar</button>
+      <button type="button" class="consent-button" data-consent="denied">Recusar</button>
+    </div>
+  </aside>
+)}
+<script>
+  import { mountLandingTracking } from "../landingTracking";
+  const data = document.getElementById("landing-tracking")?.textContent;
+  if (data) mountLandingTracking(document, window, JSON.parse(data));
+</script>

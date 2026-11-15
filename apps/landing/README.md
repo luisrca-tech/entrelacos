@@ -71,8 +71,104 @@ blocks access to the content. Shorter chapter spacing reduces page length.
 
 Core content and links remain server-rendered and visible without JavaScript or
 IntersectionObserver. Native FAQ controls, skip navigation and visible keyboard
-focus remain available. No analytics, lead submission, payment initiation or
-embedded remote demo runs on this page.
+focus remain available. No lead submission, payment initiation or embedded
+remote demo runs on this page. Optional, consent-gated measurement is described
+below.
+
+## Medição de anúncios (Meta Pixel e GA4)
+
+A landing (e só ela: nunca os sites dos casais, os demos ou o admin) pode
+carregar o Meta Pixel, que cobre Instagram e Facebook, e o Google Analytics 4.
+Tudo fica em `src/landingTracking.ts` e `src/components/LandingTracking.astro`,
+incluído em `index.astro` e `duvidas.astro`.
+
+| Variável | Formato | Efeito quando vazia |
+| --- | --- | --- |
+| `PUBLIC_META_PIXEL_ID` | só dígitos, ex.: `123456789012345` | Meta Pixel não carrega |
+| `PUBLIC_GA4_MEASUREMENT_ID` | `G-XXXXXXX` | GA4 não carrega |
+
+As duas são opcionais e não entram em `landingConfig`: sem nenhuma delas, a
+página não mostra o aviso de cookies nem carrega script de terceiros. Um valor
+preenchido com formato inválido falha o build, para não publicar um ID com erro
+de digitação. Os IDs são públicos por natureza, mas não devem ser commitados.
+
+### Onde configurar no Cloudflare
+
+Os valores são lidos no build (o Astro embute variáveis `PUBLIC_*` no HTML),
+então são **variáveis de build**, não `vars` do `wrangler.jsonc`. No painel:
+Workers & Pages → Worker → Settings → Build → Variables and secrets.
+
+- Produção: Worker `entrelacos` (branch `main`).
+- Desenvolvimento: Worker `entrelacos-dev` (`env.dev`, branch `development`).
+  Use um pixel/stream de teste ou o mesmo ID, sabendo que o tráfego de
+  `dev.entrelacosbr.site` entra nos relatórios.
+
+Depois de alterar uma variável, dispare um novo build. Para builds locais ou
+`wrangler preview`, exporte as variáveis antes de
+`bun scripts/buildShowcase.ts landing <ambiente>`; o Turbo já as inclui na
+chave de cache.
+
+### Consentimento (LGPD)
+
+O aviso aparece no rodapé da janela só quando há pelo menos um ID. Meta e GA4
+carregam apenas depois de "Aceitar"; "Recusar" não carrega nada. A escolha fica
+em `localStorage` (`entrelacos-tracking-consent`). Para rever o aviso, apague
+essa chave nas ferramentas do navegador. Ainda não há página de política de
+privacidade; quando existir, inclua o link no aviso.
+
+### Eventos
+
+| Interação | Meta Pixel | GA4 | `content_name` |
+| --- | --- | --- | --- |
+| Carregar a página | `fbq('track', 'PageView')` | `page_view` (via `gtag('config', id)`) | — |
+| Link para o Botânico | `fbq('track', 'ViewContent', …)` | `gtag('event', 'view_demo', …)` | `Cinema Botânico` |
+| Link para as Cartas ou o mural | `fbq('track', 'ViewContent', …)` | `gtag('event', 'view_demo', …)` | `Cartas do Nosso Sim` |
+| Link de contato (WhatsApp) | `fbq('track', 'Contact', …)` | `gtag('event', 'contact_whatsapp', …)` | `cabecalho`, `menu`, `inicio`, `fechamento` ou `duvidas` |
+
+A posição vem do atributo `data-track-position` mais próximo do link. O evento é
+registrado na fase de captura do clique, sem `preventDefault`, então a navegação
+não espera a rede; o envio depende do próprio `fbevents.js`/`gtag.js`. Marque
+`Contact` como conversão no Gerenciador de Eventos e `contact_whatsapp` como
+evento principal no GA4.
+
+### Origem do anúncio no WhatsApp
+
+Se a URL de entrada tiver `utm_source`, `utm_campaign` ou `fbclid`, os links
+`wa.me` ganham um código no fim da mensagem pré-preenchida, ex.:
+`(ref: ig-noivas-2027)`. `instagram`/`ig` vira `ig`, `facebook`/`fb` vira `fb`,
+só `fbclid` vira `meta`, e o nome da campanha é normalizado (minúsculas, sem
+acento, até 40 caracteres). O código vale para a aba inteira (`sessionStorage`),
+inclusive em `/duvidas`. Sem esses parâmetros a mensagem fica idêntica. Isso
+independe do consentimento: o texto é visível ao visitante antes de enviar.
+
+Padrão sugerido para os anúncios:
+
+```text
+utm_source=instagram&utm_medium=paid&utm_campaign=<nome>
+utm_source=facebook&utm_medium=paid&utm_campaign=<nome>
+```
+
+No Gerenciador de Anúncios também funciona
+`utm_source={{site_source_name}}&utm_medium=paid&utm_campaign={{campaign.name}}`
+(`ig` e `fb` são reconhecidos).
+
+### Como testar
+
+1. Faça o build com IDs de teste e sirva `dist`, ou use o ambiente dev.
+2. Meta: com a extensão Meta Pixel Helper, aceite o aviso e confira `PageView`,
+   depois clique em um demo (`ViewContent`) e no WhatsApp (`Contact`). No
+   Gerenciador de Eventos → fonte de dados → "Testar eventos", informe a URL e
+   veja os eventos chegando com `content_name`.
+3. GA4: abra a página pelo Tag Assistant (tagassistant.google.com), que ativa o
+   modo de depuração, e acompanhe em Administrador → DebugView os eventos
+   `page_view`, `view_demo` e `contact_whatsapp`.
+4. Recuse o aviso em outra janela anônima e confirme na aba Rede que nenhuma
+   requisição a `connect.facebook.net` ou `googletagmanager.com` acontece.
+5. Abra `/?utm_source=instagram&utm_campaign=teste` e passe o mouse no botão de
+   WhatsApp: a mensagem termina com `(ref: ig-teste)`.
+
+Próximo passo: a API de Conversões (CAPI) da Meta, enviando `Contact` pelo
+servidor para reduzir a perda por bloqueadores. Não faz parte desta entrega.
 
 ## Assets
 

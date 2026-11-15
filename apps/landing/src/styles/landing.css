@@ -1932,3 +1932,82 @@ summary:focus-visible {
   text-underline-offset: 0.3em;
   font-size: 0.85rem;
 }
+.consent-notice {
+  position: fixed;
+  right: var(--inset);
+  bottom: 1rem;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  max-width: 34rem;
+  padding: 1rem 1.15rem;
+  border: 1px solid var(--line);
+  background: var(--paper);
+  box-shadow: 0 18px 40px -24px rgb(48 43 40 / 0.45);
+  font-size: 0.78rem;
+}
+.consent-notice p {
+  line-height: 1.55;
+  color: var(--muted);
+}
+.consent-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 0.5rem;
+}
+.consent-button {
+  min-width: 5.5rem;
+  min-height: 2.75rem;
+  padding: 0.5rem 0.9rem;
+  border: 0;
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--wine);
+  color: var(--wine);
+  font-size: 0.78rem;
+  cursor: pointer;
+  transition: background 0.25s;
+}
+.consent-button:hover {
+  background: var(--line);
+}
+.consent-accept {
+  background: var(--wine);
+  color: var(--paper);
+}
+.consent-accept:hover {
+  background: var(--wine-dark);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .consent-notice:not([hidden]) {
+    animation: consent-in 0.4s ease-out both;
+  }
+}
+@keyframes consent-in {
+  from {
+    opacity: 0;
+    translate: 0 0.75rem;
+  }
+}
+/* Keep the closing calls to action reachable above the notice. */
+body:has(.consent-notice:not([hidden])) {
+  padding-bottom: 6rem;
+}
+@media (max-width: 760px) {
+  .consent-notice {
+    right: 0.75rem;
+    bottom: 0.75rem;
+    left: 0.75rem;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.6rem;
+    padding: 0.8rem 0.9rem;
+    font-size: 0.74rem;
+  }
+  .consent-actions .consent-button {
+    flex: 1;
+  }
+  body:has(.consent-notice:not([hidden])) {
+    padding-bottom: 9.5rem;
+  }
+}
