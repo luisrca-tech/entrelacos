@@ -2,6 +2,7 @@
 import PricingExample from "../components/PricingExample.astro";
 import PublicHeader from "../components/PublicHeader.astro";
 import PublicFooter from "../components/PublicFooter.astro";
+import LandingTracking from "../components/LandingTracking.astro";
 import { faqTopics } from "../faqContent";
 import { landingConfig } from "../landingConfig";
 import "../styles/landing.css";
@@ -45,6 +46,7 @@ const description = "Tire suas dúvidas sobre personalização do site de casame
   </head>
   <body>
     <a href="#conteudo" class="skip-link">Pular para o conteúdo</a>
+    <LandingTracking config={config} />
     <PublicHeader contactUrl={config.contactUrl} />
     <main id="conteudo" tabindex="-1" class="faq-page">
       <header class="faq-heading" data-faq-sequence="0">
@@ -72,7 +74,7 @@ const description = "Tire suas dúvidas sobre personalização do site de casame
               {topic.id === "taxas" && <PricingExample />}
             </section>
           ))}
-          <aside class="faq-contact" data-faq-sequence="0" aria-labelledby="faq-contact-title">
+          <aside class="faq-contact" data-faq-sequence="0" data-track-position="duvidas" aria-labelledby="faq-contact-title">
             <h2 id="faq-contact-title" data-faq-reveal>Quer conversar sobre o seu casamento?</h2>
             <p data-faq-reveal>Conte o que vocês têm em mente ou mande a dúvida que ficou. A equipe do Entrelaços ajuda a alinhar os próximos passos.</p>
             <a class="button button-wine" href={config.contactUrl} data-faq-reveal>Ainda tenho uma dúvida <span aria-hidden="true">↗</span></a>
