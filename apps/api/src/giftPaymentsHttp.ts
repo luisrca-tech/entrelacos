@@ -35,7 +35,7 @@ export type GiftPaymentsHttpOptions = AuthHttpOptions & {
 
 function problem(
   context: Context,
-  status: 400 | 403 | 409 | 503,
+  status: 400 | 403 | 409 | 422 | 503,
   code: string,
 ): Response {
   return context.newResponse(

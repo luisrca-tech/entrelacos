@@ -3,6 +3,7 @@ import {
   type AsaasCheckoutClientOptions,
   createAsaasCheckoutClient,
 } from "./asaasCheckoutClient";
+import { GiftCheckoutProviderRejectedError } from "./giftCheckouts";
 import { platformTariffPolicy, quoteGiftPurchaseAmounts } from "./giftMoney";
 import { buildGiftV2Settlement, type GiftQuoteSnapshot } from "./giftQuotes";
 
@@ -393,6 +394,29 @@ describe("PLATFORM_ACCOUNT_SPLIT_V2 checkout creation", () => {
     expect(fake.isDeleted()).toBe(true);
     expect(
       calls(values.fetch).filter(([, method]) => method === "PUT"),
+    ).toEqual([]);
+  });
+
+  it("reports a refused plan creation as a definitive rejection without touching children", async () => {
+    const values = v2Fixture("CREDIT_CARD", 3);
+    fakeAsaas(values);
+    const fake = values.fetch.getMockImplementation();
+    values.fetch.mockImplementation(async (url, init) =>
+      init?.method === "POST" &&
+      new URL(String(url)).pathname === "/v3/payments"
+        ? json(
+            { errors: [{ code: "invalid_creditCard", description: "x" }] },
+            400,
+          )
+        : (fake as typeof globalThis.fetch)(url, init),
+    );
+    const error = await createAsaasCheckoutClient(values.options)
+      .createHostedCheckout({ ...values.command, payer })
+      .catch((error: unknown) => error);
+    expect(error).toBeInstanceOf(GiftCheckoutProviderRejectedError);
+    expect(error).toMatchObject({ providerCodes: ["invalid_creditCard"] });
+    expect(
+      calls(values.fetch).filter(([, method]) => method !== "POST"),
     ).toEqual([]);
   });
 

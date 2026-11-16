@@ -36,6 +36,38 @@ export class WeddingGiftsApiError extends Error {
   }
 }
 
+export const giftPaymentRejectionCodes = [
+  "PIX_UNAVAILABLE",
+  "PAYMENT_METHOD_UNAVAILABLE",
+] as const;
+export type GiftPaymentRejectionCode =
+  (typeof giftPaymentRejectionCodes)[number];
+
+/**
+ * The payment provider definitively refused to open the checkout: nothing was
+ * charged and the attempt is closed server-side, so the guest may retry or
+ * choose another method right away.
+ */
+export class WeddingGiftsPaymentRejectedError extends WeddingGiftsApiError {
+  declare readonly code: GiftPaymentRejectionCode;
+  constructor(code: GiftPaymentRejectionCode) {
+    super(422, code);
+    this.name = "WeddingGiftsPaymentRejectedError";
+  }
+}
+
+function paymentRejectionCode(
+  status: number,
+  value: unknown,
+): GiftPaymentRejectionCode | null {
+  if (status !== 422 || !value || typeof value !== "object") return null;
+  const problem = value as { status?: unknown; code?: unknown };
+  return problem.status === 422 &&
+    giftPaymentRejectionCodes.includes(problem.code as GiftPaymentRejectionCode)
+    ? (problem.code as GiftPaymentRejectionCode)
+    : null;
+}
+
 export class WeddingGiftsApi {
   private readonly apiOrigin: string;
   private readonly siteId: string;
@@ -297,11 +329,16 @@ export class WeddingGiftsApi {
     if (catalog?.signal?.aborted)
       throw new WeddingGiftsApiError(502, "INVALID_API_RESPONSE");
     if (!response.ok) {
-      if (resource === "gift-checkouts")
+      if (resource === "gift-checkouts") {
+        // Only an explicit provider rejection is definitive; any other
+        // creation failure may have charged and stays unknown.
+        const rejection = paymentRejectionCode(response.status, value);
+        if (rejection) throw new WeddingGiftsPaymentRejectedError(rejection);
         throw new WeddingGiftsApiError(
           response.status,
           "EXTERNAL_OUTCOME_UNKNOWN",
         );
+      }
       const code =
         value &&
         typeof value === "object" &&
@@ -330,6 +367,10 @@ export function getGiftErrorMessage(error: unknown): string {
       return "Os presentes ainda não estão disponíveis para pagamento.";
     if (error.code === "QUOTE_EXPIRED" || error.code === "QUOTE_INVALID")
       return "O valor precisa ser atualizado. Escolha novamente a forma de pagamento.";
+    if (error.code === "PIX_UNAVAILABLE")
+      return "Não foi possível abrir o Pix. Tente novamente ou use cartão.";
+    if (error.code === "PAYMENT_METHOD_UNAVAILABLE")
+      return "Não foi possível abrir o pagamento. Tente novamente ou escolha outra forma.";
     if (error.code === "EXTERNAL_OUTCOME_UNKNOWN")
       return "O pagamento ainda está sendo verificado. Aguarde antes de tentar novamente.";
     if (error.code === "SITE_INACTIVE" || error.code === "SITE_EXPIRED")

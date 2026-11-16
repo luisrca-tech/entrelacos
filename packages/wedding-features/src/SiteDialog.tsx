@@ -64,6 +64,7 @@ export function SiteDialog({
       className={cn(siteDialogClass, className)}
       data-lenis-prevent
       aria-labelledby={labelledBy}
+      aria-modal="true"
       onCancel={(event) => {
         event.preventDefault();
         requestClose();

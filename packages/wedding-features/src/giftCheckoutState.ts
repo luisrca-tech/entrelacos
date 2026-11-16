@@ -72,10 +72,14 @@ export type GiftCheckoutEvent =
       invalidateQuote?: boolean;
       /** Old (V1) reservation refused: silently fetch a fresh quote. */
       requote?: boolean;
+      /** The provider definitively refused it; nothing was charged. */
+      rejected?: boolean;
     }
   | { type: "CLOSE" }
   | { type: "RESTORE_UNKNOWN"; siteId?: string; pending?: PendingGiftCheckout }
-  | { type: "STATUS_RESOLVED"; status: CheckoutStatus };
+  | { type: "STATUS_RESOLVED"; status: CheckoutStatus }
+  /** Leaves a verified payment or refund so the list returns to normal. */
+  | { type: "SETTLED" };
 
 export function createGiftCheckoutState(): GiftCheckoutState {
   return {
@@ -214,6 +218,7 @@ export function giftCheckoutReducer(
         recoveryToken: request.data.recoveryToken,
         pending: {
           ...request.data,
+          giftId: parsed.data.giftId,
           method: parsed.data.method,
           mode: parsed.data.mode,
         },
@@ -259,6 +264,8 @@ export function giftCheckoutReducer(
           error: event.message || unknownCheckoutMessage,
         };
       }
+      if (event.rejected && event.invalidateQuote)
+        return { ...createGiftCheckoutState(), revision: state.revision + 1 };
       if (event.requote && event.invalidateQuote && state.method) {
         return {
           ...state,
@@ -288,6 +295,18 @@ export function giftCheckoutReducer(
         error: event.message || failedCheckoutMessage,
       };
     }
+    case "SETTLED":
+      return state.phase === "UNKNOWN" &&
+        state.checkoutStatus &&
+        ["CONFIRMED", "RECEIVED", "REFUNDED"].includes(
+          state.checkoutStatus.state,
+        )
+        ? {
+            ...createGiftCheckoutState(),
+            revision: state.revision + 1,
+            checkoutStatus: state.checkoutStatus,
+          }
+        : state;
     case "CLOSE":
       return locked
         ? state

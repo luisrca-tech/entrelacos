@@ -10,6 +10,8 @@ import {
 export const pendingGiftCheckoutSchema = checkoutCreateInputSchema
   .omit({ payer: true })
   .extend({
+    // Binds the attempt to its gift card; absent on markers saved before it existed.
+    giftId: checkoutCreateInputSchema.shape.quoteId.optional(),
     method: giftPaymentMethodSchema,
     mode: receivingModeSchema,
     terminalStatus: checkoutStatusSchema.optional(),
@@ -110,6 +112,35 @@ export function clearPendingGiftCheckout(
     storage.removeItem(giftPendingStorageKey(siteId));
   } catch {
     throw new Error("Checkout recovery could not be cleared.");
+  }
+}
+/**
+ * Forgets a settled attempt (verified payment, refund or closed unpaid) so the
+ * guest list returns to normal. Unlike `clearPendingGiftCheckout`, retained
+ * status history does not keep the marker alive; only the operation identity
+ * must match. An already absent marker is fine.
+ */
+export function discardPendingGiftCheckout(
+  getStorage: () => Pick<Storage, "getItem" | "removeItem">,
+  siteId: string,
+  expected: Pick<
+    PendingGiftCheckout,
+    "quoteId" | "requestId" | "recoveryToken"
+  >,
+): void {
+  try {
+    const storage = getStorage();
+    const current = readPendingGiftCheckout(storage, siteId);
+    if (!current) return;
+    if (
+      current.quoteId !== expected.quoteId ||
+      current.requestId !== expected.requestId ||
+      current.recoveryToken !== expected.recoveryToken
+    )
+      throw new Error("Checkout recovery identity changed.");
+    storage.removeItem(giftPendingStorageKey(siteId));
+  } catch {
+    throw new Error("Checkout recovery could not be discarded.");
   }
 }
 export function writePendingGiftCheckout(

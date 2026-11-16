@@ -13,6 +13,7 @@ import {
 import type { AsaasHttpClientOptions } from "./asaasHttpClient";
 import {
   type GiftCheckoutProviderCommand,
+  GiftCheckoutProviderRejectedError,
   type GiftHostedCheckout,
   readGiftQuoteSnapshot,
 } from "./giftCheckouts";
@@ -59,6 +60,20 @@ export class AsaasCheckoutClientError extends Error {
 
 function unavailable(): never {
   throw new AsaasCheckoutClientError();
+}
+
+// A 400 validation refusal names its reasons in `errors[]`; keep codes only.
+function providerRejection(body: Record<string, unknown>): never {
+  const errors = body.errors;
+  if (!Array.isArray(errors) || errors.length === 0 || errors.length > 20)
+    return unavailable();
+  const codes = errors.map((entry) => {
+    const code = record(entry).code;
+    return typeof code === "string" ? code : "";
+  });
+  const rejection = new GiftCheckoutProviderRejectedError(codes);
+  if (rejection.providerCodes.length === 0) return unavailable();
+  throw rejection;
 }
 
 function record(value: unknown): Record<string, unknown> {
@@ -314,6 +329,8 @@ export function createAsaasCheckoutClient(
       method: "GET" | "POST" | "PUT" | "DELETE" = payload === undefined
         ? "GET"
         : "POST",
+      // Only a call that cannot leave a charge behind may report a refusal.
+      rejectable = false,
     ): Promise<Record<string, unknown>> {
       const url = `${base}${path}`;
       const bodyText =
@@ -382,8 +399,9 @@ export function createAsaasCheckoutClient(
           });
           body = response.body;
           assertDeadline();
+          const refused = rejectable && response.status === 400;
           if (
-            response.status !== 200 ||
+            (response.status !== 200 && !refused) ||
             response.redirected ||
             (response.url && response.url !== url) ||
             !/^application\/json(?:\s*;\s*charset=(?:utf-8|"utf-8"))?\s*$/i.test(
@@ -419,6 +437,7 @@ export function createAsaasCheckoutClient(
             const result = record(JSON.parse(text));
             assertDeadline();
             complete = true;
+            if (refused) return providerRejection(result);
             return result;
           } finally {
             if (!complete) cancel();
@@ -428,7 +447,8 @@ export function createAsaasCheckoutClient(
         const result = await Promise.race([operation, deadline]);
         assertDeadline();
         return result;
-      } catch {
+      } catch (error) {
+        if (error instanceof GiftCheckoutProviderRejectedError) throw error;
         return unavailable();
       } finally {
         if (timer !== undefined) clearTimeout(timer);
@@ -446,11 +466,16 @@ export function createAsaasCheckoutClient(
       const { installmentCount, installmentCents } = quote;
       if (!installmentCount || installmentCount < 2 || !installmentCents)
         return unavailable();
-      const customerResponse = await request("/customers", {
-        ...payer,
-        notificationDisabled: true,
-        externalReference: command.attemptId,
-      });
+      const customerResponse = await request(
+        "/customers",
+        {
+          ...payer,
+          notificationDisabled: true,
+          externalReference: command.attemptId,
+        },
+        "POST",
+        true,
+      );
       const customer = reference(customerResponse.id);
       if (
         !customer.startsWith("cus_") ||
@@ -461,31 +486,36 @@ export function createAsaasCheckoutClient(
       const currentTime = observedAt();
       // Expiry applies when the reserved operation starts, before creating its customer.
       if (currentTime < startedAt) return unavailable();
-      const first = await request("/payments", {
-        customer,
-        billingType: "CREDIT_CARD",
-        dueDate: new Intl.DateTimeFormat("sv-SE", {
-          timeZone: "America/Sao_Paulo",
-        }).format(new Date(currentTime)),
-        description: quote.title,
-        externalReference: command.attemptId,
-        installmentCount,
-        totalValue: Number(serializeBrlCents(quote.totalCents)),
-        // Account-wide late fees must not change the amount the guest accepted.
-        interest: { value: 0 },
-        fine: { value: 0 },
-        split:
-          quote.commissionCents === 0
-            ? []
-            : [
-                {
-                  walletId: payloadOptions.platformWalletId,
-                  totalFixedValue: Number(
-                    serializeBrlCents(quote.commissionCents),
-                  ),
-                },
-              ],
-      });
+      const first = await request(
+        "/payments",
+        {
+          customer,
+          billingType: "CREDIT_CARD",
+          dueDate: new Intl.DateTimeFormat("sv-SE", {
+            timeZone: "America/Sao_Paulo",
+          }).format(new Date(currentTime)),
+          description: quote.title,
+          externalReference: command.attemptId,
+          installmentCount,
+          totalValue: Number(serializeBrlCents(quote.totalCents)),
+          // Account-wide late fees must not change the amount the guest accepted.
+          interest: { value: 0 },
+          fine: { value: 0 },
+          split:
+            quote.commissionCents === 0
+              ? []
+              : [
+                  {
+                    walletId: payloadOptions.platformWalletId,
+                    totalFixedValue: Number(
+                      serializeBrlCents(quote.commissionCents),
+                    ),
+                  },
+                ],
+        },
+        "POST",
+        true,
+      );
       const providerReference = reference(first.installment);
       const firstId = reference(first.id);
       const hostedUrl = hostedCheckoutUrl(
@@ -593,11 +623,16 @@ export function createAsaasCheckoutClient(
         return unavailable();
       const brl = (cents: number | undefined) =>
         cents === undefined ? unavailable() : Number(serializeBrlCents(cents));
-      const customerResponse = await request("/customers", {
-        ...payer,
-        notificationDisabled: true,
-        externalReference: command.attemptId,
-      });
+      const customerResponse = await request(
+        "/customers",
+        {
+          ...payer,
+          notificationDisabled: true,
+          externalReference: command.attemptId,
+        },
+        "POST",
+        true,
+      );
       const customer = reference(customerResponse.id);
       if (
         !customer.startsWith("cus_") ||
@@ -607,26 +642,31 @@ export function createAsaasCheckoutClient(
         return unavailable();
       const currentTime = observedAt();
       if (currentTime < startedAt) return unavailable();
-      const first = await request("/payments", {
-        customer,
-        billingType: "CREDIT_CARD",
-        dueDate: new Intl.DateTimeFormat("sv-SE", {
-          timeZone: "America/Sao_Paulo",
-        }).format(new Date(currentTime)),
-        description: quote.title,
-        externalReference: command.attemptId,
-        installmentCount,
-        totalValue: brl(quote.totalCents),
-        // Account-wide late fees must not change the amount the guest accepted.
-        interest: { value: 0 },
-        fine: { value: 0 },
-        split: [
-          {
-            walletId: recipientReference,
-            totalFixedValue: brl(quote.nominalCents),
-          },
-        ],
-      });
+      const first = await request(
+        "/payments",
+        {
+          customer,
+          billingType: "CREDIT_CARD",
+          dueDate: new Intl.DateTimeFormat("sv-SE", {
+            timeZone: "America/Sao_Paulo",
+          }).format(new Date(currentTime)),
+          description: quote.title,
+          externalReference: command.attemptId,
+          installmentCount,
+          totalValue: brl(quote.totalCents),
+          // Account-wide late fees must not change the amount the guest accepted.
+          interest: { value: 0 },
+          fine: { value: 0 },
+          split: [
+            {
+              walletId: recipientReference,
+              totalFixedValue: brl(quote.nominalCents),
+            },
+          ],
+        },
+        "POST",
+        true,
+      );
       const providerReference = reference(first.installment);
       try {
         const firstId = reference(first.id);
@@ -818,7 +858,7 @@ export function createAsaasCheckoutClient(
               payloadOptions,
             );
             payload.items[0].name = providerItemName(payload.items[0].name);
-            const response = await request("/checkouts", payload);
+            const response = await request("/checkouts", payload, "POST", true);
             providerReference = checkoutReference(response, payload);
             hostedUrl = hostedCheckoutUrl(
               response.link,
@@ -841,7 +881,8 @@ export function createAsaasCheckoutClient(
               hostedUrl,
             }),
           };
-        } catch {
+        } catch (error) {
+          if (error instanceof GiftCheckoutProviderRejectedError) throw error;
           return unavailable();
         }
       },

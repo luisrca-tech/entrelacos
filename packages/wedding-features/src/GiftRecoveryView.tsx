@@ -3,6 +3,7 @@ import {
   checkoutStatusSchema,
 } from "@entrelacos/contracts";
 import { AsaasDisclosure, showSandboxNotice } from "@entrelacos/ui";
+import { siteDialogCloseClass } from "./SiteDialog";
 
 export type GiftRecoveryViewProps = {
   siteId: string;
@@ -12,6 +13,10 @@ export type GiftRecoveryViewProps = {
   canRetry?: boolean;
   onRetry?: () => void;
   onContinue?: (checkout: NonNullable<CheckoutStatus["checkout"]>) => void;
+  /** Renders a dialog header labelled by this id. */
+  headingId?: string;
+  giftTitle?: string;
+  onClose?: () => void;
 };
 
 const primaryButtonClass =
@@ -43,6 +48,9 @@ export function GiftRecoveryView({
   canRetry = false,
   onRetry,
   onContinue,
+  headingId,
+  giftTitle,
+  onClose,
 }: GiftRecoveryViewProps) {
   const parsed =
     status === null ? null : checkoutStatusSchema.safeParse(status);
@@ -61,8 +69,37 @@ export function GiftRecoveryView({
   return (
     <section
       aria-label="Acompanhamento do pagamento"
-      className="grid min-w-0 max-w-2xl gap-3 rounded-xl border border-template-line bg-template-surface p-4 text-template-ink sm:p-5"
+      className={
+        headingId
+          ? "grid min-w-0 gap-4 text-template-ink"
+          : "grid min-w-0 max-w-2xl gap-3 rounded-xl border border-template-line bg-template-surface p-4 text-template-ink sm:p-5"
+      }
     >
+      {headingId && (
+        <header className="flex min-w-0 items-start justify-between gap-4">
+          <div className="grid min-w-0 gap-1">
+            <h2
+              id={headingId}
+              className="m-0 font-template-serif text-[clamp(1.6rem,4vw,2.1rem)] font-normal leading-tight"
+            >
+              Acompanhar pagamento
+            </h2>
+            {giftTitle && (
+              <p className="m-0 break-words text-template-muted">{giftTitle}</p>
+            )}
+          </div>
+          {onClose && (
+            <button
+              type="button"
+              className={siteDialogCloseClass}
+              data-dialog-initial
+              onClick={onClose}
+            >
+              Fechar
+            </button>
+          )}
+        </header>
+      )}
       {showSandboxNotice(currentStatus?.mode) && (
         <p role="status" className="m-0 text-sm text-template-muted">
           Ambiente de testes — sem pagamentos reais.
