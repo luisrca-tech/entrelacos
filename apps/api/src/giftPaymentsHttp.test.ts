@@ -99,6 +99,24 @@ describe("public gift payment transport", () => {
     });
   });
 
+  it.each(["PIX_UNAVAILABLE", "PAYMENT_METHOD_UNAVAILABLE"] as const)(
+    "reports a definitive provider rejection as 422 %s without provider text",
+    async (code) => {
+      const values = fixture();
+      values.giftPayments.createCheckout.mockRejectedValue(
+        new GiftCheckoutServiceError(code),
+      );
+      const response = await values.post("gift-checkouts", recovery);
+      expect(response.status).toBe(422);
+      expect(await response.json()).toEqual({
+        type: "about:blank",
+        status: 422,
+        code,
+        title: "Gift payment request rejected",
+      });
+    },
+  );
+
   it("validates a stored registered origin and dispatches only strict server inputs without guest session", async () => {
     const values = fixture();
     const response = await values.post("gift-quotes", {

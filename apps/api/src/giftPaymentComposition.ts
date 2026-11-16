@@ -50,6 +50,7 @@ import {
 } from "./giftQuotes";
 import { allowsLiveSite } from "./liveSitePolicy";
 import { mapWithConcurrency } from "./mapWithConcurrency";
+import { logObservabilityEvent } from "./observability";
 import {
   decryptProviderCredential,
   type ProviderCredentialContext,
@@ -398,6 +399,7 @@ export function createGiftPaymentComposition(
   }
   const checkoutService = createGiftCheckoutService({
     sandboxBuyerGrossUpSiteId: config.sandboxBuyerGrossUpSiteId,
+    observe: logObservabilityEvent,
     assertProviderConfiguration() {
       try {
         readAsaasCheckoutCallbacks(publicOrigin, callbacks);

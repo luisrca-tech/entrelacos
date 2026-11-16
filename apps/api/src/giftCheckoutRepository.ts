@@ -586,6 +586,40 @@ async function readRecord(
     if (
       paymentRows.length === 0 &&
       ledgerRows.length === 0 &&
+      attempt.operationState === "FAILED" &&
+      attempt.operationLastErrorCode === "PROVIDER_REJECTED" &&
+      attempt.operationAttempts === 1 &&
+      attempt.attemptNumber === 1 &&
+      attempt.providerReference === null &&
+      attempt.hostedUrl === null &&
+      attempt.providerOperationReference === null
+    ) {
+      // The provider refused the creating call, so no charge exists.
+      const observedAt = instant(attempt.updatedAt);
+      return {
+        ...record,
+        state: "CLOSED_UNPAID",
+        observedAt,
+        closedReason: "FAILED",
+        checkout: null,
+        evidence: {
+          source: "backend",
+          kind: "PROVIDER_REJECTION",
+          siteId: record.siteId,
+          quoteId: record.quoteId,
+          requestId: record.requestId,
+          orderId: record.orderId,
+          attemptId: record.attemptId,
+          recoveryTokenHash: record.recoveryTokenHash,
+          observedAt,
+          noProviderCharge: true,
+          closedReason: "FAILED",
+        },
+      };
+    }
+    if (
+      paymentRows.length === 0 &&
+      ledgerRows.length === 0 &&
       attempt.operationState === "PROCESSING" &&
       attempt.operationAttempts === 1 &&
       attempt.attemptNumber === 1 &&
@@ -1642,6 +1676,42 @@ export function createGiftCheckoutRepository(
               return fail("EXTERNAL_OUTCOME_UNKNOWN");
             await tx.execute(sql`UPDATE ${financialOperation} op SET state = 'UNKNOWN', last_error_code = 'EXTERNAL_OUTCOME_UNKNOWN',
           updated_at = ${clock.toISOString()}::timestamptz WHERE ${originalFence(row, record, options)} AND ${noPaymentEffects(row, input)} RETURNING op.id`);
+          },
+          { isolationLevel: "read committed" },
+        );
+      }),
+    markProviderRejected: (
+      identity: GiftCheckoutIdentity,
+      observedAt: string,
+    ) =>
+      guarded(async () => {
+        const input = structuredClone(identity);
+        validIdentity(input);
+        if (!giftQuoteSchema.shape.expiresAt.safeParse(observedAt).success)
+          return fail("EXTERNAL_OUTCOME_UNKNOWN");
+        await db.transaction(
+          async (tx) => {
+            const { record, row } = await lockedRecord(tx, input, options);
+            const clock = now(options);
+            if (
+              record.state !== "CREATING" ||
+              Date.parse(observedAt) < Date.parse(record.createdAt) ||
+              Date.parse(observedAt) > clock.getTime()
+            )
+              return fail("EXTERNAL_OUTCOME_UNKNOWN");
+            // Only the still-dispatching original creator may close it, and
+            // only while nothing from the provider was ever stored for it.
+            const closed =
+              await tx.execute(sql`UPDATE ${financialOperation} op SET state = 'FAILED', last_error_code = 'PROVIDER_REJECTED',
+          updated_at = ${clock.toISOString()}::timestamptz WHERE ${originalFence(row, record, options)} AND ${noPaymentEffects(row, input)}
+            AND op.provider_operation_reference IS NULL
+            AND NOT EXISTS (SELECT 1 FROM ${giftCheckoutAttempt} a WHERE a.operation_id = op.id AND a.site_id = op.site_id
+              AND (a.provider_reference IS NOT NULL OR a.hosted_url IS NOT NULL)) RETURNING op.id`);
+            if (
+              closed.rows.length !== 1 ||
+              closed.rows[0]?.id !== input.attemptId
+            )
+              return fail("EXTERNAL_OUTCOME_UNKNOWN");
           },
           { isolationLevel: "read committed" },
         );
