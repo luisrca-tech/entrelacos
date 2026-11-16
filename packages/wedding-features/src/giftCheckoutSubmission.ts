@@ -11,6 +11,7 @@ import {
   getGiftErrorMessage,
   type WeddingGiftsApi,
   WeddingGiftsApiError,
+  WeddingGiftsPaymentRejectedError,
 } from "./gifts";
 
 const knownCheckoutRefusals = new Set([
@@ -47,9 +48,11 @@ export async function submitGiftCheckout(
     return isCurrent() ? { type: "CHECKOUT_RESOLVED", checkout } : null;
   } catch (error) {
     if (!isCurrent()) return null;
+    const rejected = error instanceof WeddingGiftsPaymentRejectedError;
     let known =
-      error instanceof WeddingGiftsApiError &&
-      knownCheckoutRefusals.has(error.code);
+      rejected ||
+      (error instanceof WeddingGiftsApiError &&
+        knownCheckoutRefusals.has(error.code));
     if (known) {
       try {
         clearPendingGiftCheckout(getStorage, quote.siteId, pending);
@@ -64,6 +67,14 @@ export async function submitGiftCheckout(
       !quote.settlementVersion &&
       error instanceof WeddingGiftsApiError &&
       (error.code === "QUOTE_INVALID" || error.code === "QUOTE_EXPIRED");
+    if (known && rejected)
+      return {
+        type: "CHECKOUT_FAILED",
+        unknown: false,
+        rejected: true,
+        invalidateQuote: true,
+        message: getGiftErrorMessage(error),
+      };
     return {
       type: "CHECKOUT_FAILED",
       unknown: !known,
