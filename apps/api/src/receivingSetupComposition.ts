@@ -75,9 +75,9 @@ export function createReceivingSetupComposition(
     return unavailable();
   const mode = config.mode;
   const liveSitePolicy =
-    config.liveDemoSiteId === undefined
+    config.liveDemoSiteIds === undefined
       ? {}
-      : { liveDemoSiteId: config.liveDemoSiteId };
+      : { liveDemoSiteIds: config.liveDemoSiteIds };
   const {
     applicationEnvironment,
     credentialKeyId,

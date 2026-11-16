@@ -128,7 +128,7 @@ export function createReceivingAccountProvisioningRepository(
     return unavailable();
   const { mode, applicationEnvironment, maxAuthAgeMs, now, readCurrentPolicy } =
     options;
-  const liveDemoSiteId = options.liveDemoSiteId;
+  const liveDemoSiteIds = options.liveDemoSiteIds;
   async function clock(tx: Transaction): Promise<bigint> {
     const value = await tx.execute(
       sql`SELECT clock_timestamp() AS "currentTime"`,
@@ -156,7 +156,7 @@ export function createReceivingAccountProvisioningRepository(
           isDemo: locked.rows[0].isDemo as boolean,
           mode,
           applicationEnvironment,
-          liveDemoSiteId: liveDemoSiteId,
+          liveDemoSiteIds: liveDemoSiteIds,
         }))
     )
       return unavailable();

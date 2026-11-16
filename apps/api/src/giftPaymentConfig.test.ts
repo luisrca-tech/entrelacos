@@ -105,26 +105,45 @@ describe("gift payment runtime configuration", () => {
     expect(config).toMatchObject({
       mode: "live",
       applicationEnvironment: "production",
-      liveDemoSiteId: "demo-wedding",
+      liveDemoSiteIds: ["demo-wedding"],
     });
     expect(
       readGiftPaymentConfig(
         { ...configured, ASAAS_MODE: "live" },
         "production",
       ),
-    ).not.toHaveProperty("liveDemoSiteId");
+    ).not.toHaveProperty("liveDemoSiteIds");
   });
-  it.each(["", " demo-wedding", "demo-wedding/other", "demo-wedding,other"])(
-    "rejects invalid showcase IDs (%#)",
-    (ASAAS_LIVE_DEMO_SITE_ID) => {
-      expect(() =>
-        readGiftPaymentConfig(
-          { ...configured, ASAAS_MODE: "live", ASAAS_LIVE_DEMO_SITE_ID },
-          "production",
-        ),
-      ).toThrow("Gift payment configuration is invalid");
-    },
-  );
+  it("loads a comma-separated list of production live showcases", () => {
+    expect(
+      readGiftPaymentConfig(
+        {
+          ...configured,
+          ASAAS_MODE: "live",
+          ASAAS_LIVE_DEMO_SITE_ID: "demo-wedding, demo-wedding-cartas",
+        },
+        "production",
+      ),
+    ).toMatchObject({
+      liveDemoSiteIds: ["demo-wedding", "demo-wedding-cartas"],
+    });
+  });
+  it.each([
+    "",
+    " ",
+    "demo-wedding/other",
+    "demo-wedding,",
+    ",demo-wedding",
+    "demo-wedding,,demo-wedding-cartas",
+    "demo-wedding,demo-wedding",
+  ])("rejects invalid showcase IDs (%#)", (ASAAS_LIVE_DEMO_SITE_ID) => {
+    expect(() =>
+      readGiftPaymentConfig(
+        { ...configured, ASAAS_MODE: "live", ASAAS_LIVE_DEMO_SITE_ID },
+        "production",
+      ),
+    ).toThrow("Gift payment configuration is invalid");
+  });
   it.each(["development", "test"] as const)(
     "rejects showcase opt-in outside live production (%s)",
     (target) => {

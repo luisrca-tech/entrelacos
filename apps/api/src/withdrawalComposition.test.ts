@@ -196,7 +196,7 @@ function enabledFixture(
   const config = {
     mode: live ? ("live" as const) : ("sandbox" as const),
     applicationEnvironment: live ? ("production" as const) : ("test" as const),
-    ...(live ? { liveDemoSiteId: "demo-wedding" } : {}),
+    ...(live ? { liveDemoSiteIds: ["demo-wedding"] } : {}),
     platformApiKey: "$aact_hmlg_offline-platform-token",
     platformAccountId: "platform-1",
     platformWalletId: "wallet-platform-1",
@@ -1402,7 +1402,7 @@ it("propagates the exact showcase policy to every withdrawal factory without cha
       ).toMatchObject({
         mode: "live",
         applicationEnvironment: "production",
-        liveDemoSiteId: "demo-wedding",
+        liveDemoSiteIds: ["demo-wedding"],
       });
     expect(f.execute).not.toHaveBeenCalled();
     expect(f.fetch).not.toHaveBeenCalled();

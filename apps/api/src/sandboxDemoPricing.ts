@@ -107,7 +107,7 @@ export async function loadLiveReceivingPricing(
       isDemo: authorization.isDemo,
       mode: scope.environment,
       applicationEnvironment: authorization.applicationEnvironment,
-      liveDemoSiteId: authorization.liveDemoSiteId,
+      liveDemoSiteIds: authorization.liveDemoSiteIds,
     }) ||
     authorization.applicationEnvironment !== "production" ||
     authorization.environment !== "live" ||

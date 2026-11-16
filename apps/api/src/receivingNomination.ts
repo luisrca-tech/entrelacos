@@ -901,7 +901,7 @@ export function createReceivingNominationService(
   options: ReceivingNominationOptions,
 ): ReceivingNominationService {
   try {
-    const liveDemoSiteId = options.liveDemoSiteId;
+    const liveDemoSiteIds = options.liveDemoSiteIds;
     const raw = captureDataProperties(options, [
       "mode",
       "applicationEnvironment",
@@ -1037,7 +1037,7 @@ export function createReceivingNominationService(
               isDemo: site.isDemo,
               mode,
               applicationEnvironment,
-              liveDemoSiteId: liveDemoSiteId,
+              liveDemoSiteIds: liveDemoSiteIds,
             })
           )
             throw new ReceivingNominationServiceError(

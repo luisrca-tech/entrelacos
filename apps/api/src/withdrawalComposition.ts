@@ -23,6 +23,7 @@ import { readFinancialWorkDueAt } from "./financialWorkSchedule";
 import { parseBrlCents } from "./giftMoney";
 import type { GiftPaymentConfig } from "./giftPaymentConfig";
 import type { GiftPaymentWorkerResult } from "./giftPaymentWorker";
+import { liveDemoSiteIdsSql } from "./liveSitePolicy";
 import { decryptProviderCredential } from "./providerCredentials";
 import type { ReceivingPixConfiguration } from "./receivingPixDestinationSetup";
 import { evaluateReceivingReadiness } from "./receivingReadiness";
@@ -240,7 +241,7 @@ export function createWithdrawalComposition(
   const platformAccountId = config.platformAccountId;
   const mode = config.mode;
   const applicationEnvironment = config.applicationEnvironment;
-  const liveDemoSiteId = config.liveDemoSiteId;
+  const liveDemoSiteIds = config.liveDemoSiteIds;
   const now = options.now ?? (() => new Date());
   const fetch = options.fetch ?? globalThis.fetch;
   const keyring = new Map(
@@ -276,7 +277,7 @@ export function createWithdrawalComposition(
   const receiving = {
     mode,
     applicationEnvironment,
-    liveDemoSiteId,
+    liveDemoSiteIds,
     freshnessMs: withdrawalFreshnessMs,
     now,
     ...(options.refreshReceiving ? { refresh: options.refreshReceiving } : {}),
@@ -284,7 +285,7 @@ export function createWithdrawalComposition(
   const reader = createAsaasStoredAccountReader(db, {
     mode,
     applicationEnvironment,
-    liveDemoSiteId,
+    liveDemoSiteIds,
     keyring,
     fetch,
     timeoutMs: 15000,
@@ -294,7 +295,7 @@ export function createWithdrawalComposition(
   const basePresentation = createWithdrawalStoredPresentationLoader({
     mode,
     applicationEnvironment,
-    liveDemoSiteId,
+    liveDemoSiteIds,
     freshnessMs: receiving.freshnessMs,
     now,
   });
@@ -440,7 +441,7 @@ export function createWithdrawalComposition(
       },
       readiness: evaluateReceivingReadiness({
         ...loaded,
-        liveDemoSiteId,
+        liveDemoSiteIds,
         siteId,
         now: now(),
       }),
@@ -449,7 +450,7 @@ export function createWithdrawalComposition(
   const reservationRepository = createWithdrawalReservationRepository(db, {
     mode,
     applicationEnvironment,
-    liveDemoSiteId,
+    liveDemoSiteIds,
     maxAuthAgeMs: 300000,
     freshnessMs: withdrawalFreshnessMs,
     now,
@@ -458,7 +459,7 @@ export function createWithdrawalComposition(
   const reservation = createWithdrawalReservationService({
     mode,
     applicationEnvironment,
-    liveDemoSiteId,
+    liveDemoSiteIds,
     maxAuthAgeMs: 300000,
     freshnessMs: withdrawalFreshnessMs,
     now,
@@ -548,7 +549,7 @@ export function createWithdrawalComposition(
   const posting = createWithdrawalPostingRepository(db, {
     mode,
     applicationEnvironment,
-    liveDemoSiteId,
+    liveDemoSiteIds,
     maxAuthAgeMs: 300000,
     freshnessMs: withdrawalFreshnessMs,
     leaseOwner: `withdrawal-${randomUUID()}`,
@@ -1071,7 +1072,7 @@ export function createWithdrawalComposition(
     JOIN site st ON st.id=w.site_id
     WHERE op.environment=${mode} AND op.kind='WITHDRAWAL' AND op.attempts=1
       AND op.state IN ('PROCESSING','UNKNOWN') AND w.state IN ('PROCESSING','UNKNOWN')
-      AND (${mode}<>'live' OR NOT st.is_demo OR st.id=${liveDemoSiteId ?? null})
+      AND (${mode}<>'live' OR NOT st.is_demo OR st.id = ANY(${liveDemoSiteIdsSql(liveDemoSiteIds)}))
   `;
   return {
     service,

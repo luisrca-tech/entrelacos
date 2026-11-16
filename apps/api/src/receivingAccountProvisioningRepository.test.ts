@@ -357,15 +357,16 @@ describe("locked original account provisioning repository", () => {
   );
   it.each(["site-one", "other-site"])(
     "claims original live showcase provisioning only under exact policy (%s)",
-    async (liveDemoSiteId) => {
+    async (liveDemoSiteIds) => {
       const v = fixture("live");
       v.state.demo = true;
       const repository = createReceivingAccountProvisioningRepository(v.db, {
         ...v.options,
-        liveDemoSiteId,
+        liveDemoSiteIds:
+          liveDemoSiteIds === undefined ? undefined : [liveDemoSiteIds],
       });
       const claim = repository.claimOriginal(v.claimInput, v.authorization);
-      if (liveDemoSiteId === "site-one")
+      if (liveDemoSiteIds === "site-one")
         await expect(claim).resolves.toMatchObject({
           nomination: { environment: "live" },
         });

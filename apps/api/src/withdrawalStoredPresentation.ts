@@ -11,7 +11,7 @@ import {
   databaseTimestampEpochMicroseconds,
   readDatabaseTimestamp,
 } from "./databaseTimestamp";
-import { allowsLiveSite } from "./liveSitePolicy";
+import { allowsLiveSite, isLiveDemoSiteIds } from "./liveSitePolicy";
 import { evaluateReceivingReadiness } from "./receivingReadiness";
 import type { ReceivingTransaction } from "./receivingRepository";
 import type { WithdrawalStoredPresentationLoader } from "./withdrawalReservationRepository";
@@ -27,7 +27,7 @@ export type WithdrawalStoredPresentationOptions =
   | {
       mode: "sandbox" | "live";
       applicationEnvironment: "development" | "test" | "production";
-      liveDemoSiteId?: string;
+      liveDemoSiteIds?: readonly string[];
       freshnessMs: number;
       now(): Date;
     };
@@ -220,14 +220,14 @@ export function createWithdrawalStoredPresentationLoader(
       "applicationEnvironment",
       "freshnessMs",
       "now",
-      ...(Object.hasOwn(configured, "liveDemoSiteId")
-        ? ["liveDemoSiteId"]
+      ...(Object.hasOwn(configured, "liveDemoSiteIds")
+        ? ["liveDemoSiteIds"]
         : []),
     ]);
     if (
       (configured.mode !== "sandbox" && configured.mode !== "live") ||
-      (configured.liveDemoSiteId !== undefined &&
-        typeof configured.liveDemoSiteId !== "string") ||
+      (configured.liveDemoSiteIds !== undefined &&
+        !isLiveDemoSiteIds(configured.liveDemoSiteIds)) ||
       typeof configured.applicationEnvironment !== "string" ||
       !["development", "test", "production"].includes(
         configured.applicationEnvironment,
@@ -244,7 +244,10 @@ export function createWithdrawalStoredPresentationLoader(
       | "development"
       | "test"
       | "production";
-    const liveDemoSiteId = configured.liveDemoSiteId as string | undefined;
+    const liveDemoSiteIds =
+      configured.liveDemoSiteIds === undefined
+        ? undefined
+        : Object.freeze([...(configured.liveDemoSiteIds as readonly string[])]);
     const freshnessMs = Number(configured.freshnessMs);
     const now = configured.now.bind(Object.freeze(configured));
 
@@ -335,7 +338,7 @@ export function createWithdrawalStoredPresentationLoader(
               isDemo: row.isDemo,
               mode,
               applicationEnvironment,
-              liveDemoSiteId,
+              liveDemoSiteIds,
             })) ||
           row.accountIsCurrent !== true ||
           row.destinationIsCurrent !== true ||
@@ -409,7 +412,7 @@ export function createWithdrawalStoredPresentationLoader(
           siteId: scope.siteId,
           isDemo: row.isDemo,
           environment: applicationEnvironment,
-          liveDemoSiteId,
+          liveDemoSiteIds,
           mode,
           providerBinding: binding,
           evidence: {

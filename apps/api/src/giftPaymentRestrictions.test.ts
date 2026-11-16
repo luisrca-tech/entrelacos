@@ -210,13 +210,14 @@ describe("payment restriction safety observations", () => {
 
 it.each([undefined, "foreign-site", "site-one"])(
   "processes only the designated live showcase event (%s)",
-  async (liveDemoSiteId) => {
+  async (liveDemoSiteIds) => {
     const v = fixture("PAYMENT_REFUNDED", {
       environment: "live",
       applicationEnvironment: "production",
-      liveDemoSiteId,
+      liveDemoSiteIds:
+        liveDemoSiteIds === undefined ? undefined : [liveDemoSiteIds],
     });
-    if (liveDemoSiteId === "site-one") {
+    if (liveDemoSiteIds === "site-one") {
       expect(await v.worker.processNextReceivedPayment()).toMatchObject({
         kind: "DEAD_LETTER",
       });

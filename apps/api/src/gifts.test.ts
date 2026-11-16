@@ -954,7 +954,7 @@ describe("catalog receiving and authorization gates", () => {
 
   it.each([undefined, "foreign-site", siteId])(
     "admits a live showcase catalog only under exact production opt-in (%s)",
-    async (liveDemoSiteId) => {
+    async (liveDemoSiteIds) => {
       const v = fixture({
         site: { ...site, isDemo: true },
         readiness: { ...ready, mode: "live" },
@@ -962,9 +962,10 @@ describe("catalog receiving and authorization gates", () => {
       const options = {
         ...v.options,
         applicationEnvironment: "production" as const,
-        liveDemoSiteId,
+        liveDemoSiteIds:
+          liveDemoSiteIds === undefined ? undefined : [liveDemoSiteIds],
       };
-      if (liveDemoSiteId === siteId) {
+      if (liveDemoSiteIds === siteId) {
         expect(
           (await createSiteGift(v.db, actor, siteId, input, options)).gift
             .nominalCents,
@@ -1614,7 +1615,7 @@ describe("explicit server-scoped showcase catalogs", () => {
       (
         await readPublicGifts(f.db, f.context.id, {
           ...f.options,
-          liveDemoSiteId: f.context.id,
+          liveDemoSiteIds: [f.context.id],
         })
       ).mode,
     ).toBe("live");
@@ -1622,7 +1623,7 @@ describe("explicit server-scoped showcase catalogs", () => {
       (
         await lookupPublishedGift(f.db, f.context.id, gift.id, {
           ...f.options,
-          liveDemoSiteId: f.context.id,
+          liveDemoSiteIds: [f.context.id],
         })
       ).siteId,
     ).toBe(f.context.id);

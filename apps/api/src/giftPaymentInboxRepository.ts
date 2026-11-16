@@ -19,7 +19,11 @@ import {
   giftPaymentInboxEvents,
   giftPaymentV2OnlyInboxEvents,
 } from "./giftPaymentReconciliation";
-import { allowsLiveSite, type LiveSitePolicy } from "./liveSitePolicy";
+import {
+  allowedLiveDemoSiteIds,
+  type LiveSitePolicy,
+  liveDemoSiteIdsSql,
+} from "./liveSitePolicy";
 
 export interface GiftPaymentInboxClaim extends GiftPaymentPostingClaim {
   paymentReference: string;
@@ -138,19 +142,15 @@ export function createGiftPaymentInboxRepository(
   )
     unavailable();
   options = Object.freeze({ ...options });
-  const liveDemoSiteId = allowsLiveSite({
-    siteId: options.liveDemoSiteId ?? "",
-    isDemo: true,
+  const liveDemoSiteIds = allowedLiveDemoSiteIds({
     mode: options.environment,
     applicationEnvironment: options.applicationEnvironment ?? "test",
-    liveDemoSiteId: options.liveDemoSiteId,
-  })
-    ? options.liveDemoSiteId
-    : null;
+    liveDemoSiteIds: options.liveDemoSiteIds,
+  });
   const eligibleEvents = sql`FROM ${financialEventInbox} e INNER JOIN ${receivingAccount} a ON a.site_id=e.site_id AND a.id=e.account_id AND a.environment=e.environment
           INNER JOIN ${site} st ON st.id=e.site_id
           WHERE e.environment=${options.environment} AND a.provider='ASAAS' AND a.account_reference IS NOT NULL AND length(trim(a.account_reference))>0
-            AND (${options.environment}<>'live' OR st.is_demo=false OR st.id=${liveDemoSiteId}) AND e.authenticated_at IS NOT NULL AND e.event_type IN ('PAYMENT_RECEIVED','PAYMENT_CONFIRMED','PAYMENT_SPLIT_DONE','PAYMENT_ANTICIPATED','PAYMENT_SPLIT_CANCELLED','PAYMENT_SPLIT_DIVERGENCE_BLOCK','PAYMENT_SPLIT_DIVERGENCE_BLOCK_FINISHED','RECEIVABLE_ANTICIPATION_CREDITED','RECEIVABLE_ANTICIPATION_DENIED','RECEIVABLE_ANTICIPATION_CANCELLED')
+            AND (${options.environment}<>'live' OR st.is_demo=false OR st.id = ANY(${liveDemoSiteIdsSql(liveDemoSiteIds)})) AND e.authenticated_at IS NOT NULL AND e.event_type IN ('PAYMENT_RECEIVED','PAYMENT_CONFIRMED','PAYMENT_SPLIT_DONE','PAYMENT_ANTICIPATED','PAYMENT_SPLIT_CANCELLED','PAYMENT_SPLIT_DIVERGENCE_BLOCK','PAYMENT_SPLIT_DIVERGENCE_BLOCK_FINISHED','RECEIVABLE_ANTICIPATION_CREDITED','RECEIVABLE_ANTICIPATION_DENIED','RECEIVABLE_ANTICIPATION_CANCELLED')
     AND e.state IN ('RECEIVED','RETRY','CLAIMED')`;
   return {
     nextDueAt: () =>

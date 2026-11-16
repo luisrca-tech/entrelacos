@@ -517,15 +517,16 @@ describe("locked immutable receiving verification repository", () => {
   );
   it.each(["site-one", "other-site"])(
     "locks native production showcase verification under exact policy (%s)",
-    async (liveDemoSiteId) => {
+    async (liveDemoSiteIds) => {
       const v = fixture("live");
       v.state.demo = true;
       const repository = createReceivingVerificationRepository(v.db, {
         ...v.options,
-        liveDemoSiteId,
+        liveDemoSiteIds:
+          liveDemoSiteIds === undefined ? undefined : [liveDemoSiteIds],
       });
       const capture = repository.captureSelection(v.scope(), v.authorization);
-      if (liveDemoSiteId === "site-one") {
+      if (liveDemoSiteIds === "site-one") {
         const fence = await capture;
         await repository.selectDestination(
           fence,

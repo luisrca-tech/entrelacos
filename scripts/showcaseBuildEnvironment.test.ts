@@ -2,26 +2,29 @@ import { describe, expect, it } from "vitest";
 import { showcaseBuildEnvironment } from "./showcaseBuildEnvironment";
 
 describe("reviewed showcase build environments", () => {
-  it("enables only the authorized production Botanical tenant", () => {
-    const env = showcaseBuildEnvironment("botanical", "production");
-    expect(env).toMatchObject({
-      APP_ENV: "production",
-      PUBLIC_SITE_ID: "demo-wedding",
-      PUBLIC_LIVE_DEMO_SITE_ID: "demo-wedding",
-      PUBLIC_API_URL: "https://api.entrelacosbr.site",
-    });
-  });
-  it("keeps DEV sandbox and Letters without a live opt-in", () => {
+  it.each([
+    ["botanical", "demo-wedding"],
+    ["letters", "demo-wedding-cartas"],
+  ])(
+    "binds the %s production build to its own showcase only",
+    (app, siteId) => {
+      expect(showcaseBuildEnvironment(app, "production")).toMatchObject({
+        APP_ENV: "production",
+        PUBLIC_SITE_ID: siteId,
+        PUBLIC_LIVE_DEMO_SITE_ID: siteId,
+        PUBLIC_API_URL: "https://api.entrelacosbr.site",
+      });
+    },
+  );
+  it("keeps every DEV showcase and the landing in sandbox without a live opt-in", () => {
+    for (const app of ["botanical", "letters"])
+      expect(
+        showcaseBuildEnvironment(app, "development").PUBLIC_LIVE_DEMO_SITE_ID,
+      ).toBe("");
     expect(
-      showcaseBuildEnvironment("botanical", "development")
+      showcaseBuildEnvironment("landing", "production")
         .PUBLIC_LIVE_DEMO_SITE_ID,
     ).toBe("");
-    for (const environment of ["development", "production"]) {
-      expect(showcaseBuildEnvironment("letters", environment)).toMatchObject({
-        PUBLIC_SITE_ID: "demo-wedding-cartas",
-        PUBLIC_LIVE_DEMO_SITE_ID: "",
-      });
-    }
   });
   it.each([
     ["botanical", "development", "demo-botanico-dev"],

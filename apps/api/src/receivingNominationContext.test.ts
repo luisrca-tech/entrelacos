@@ -227,7 +227,7 @@ describe("read-only canonical receiving nomination context", () => {
   });
   it.each(["site-one", "other-site"])(
     "opens live showcase nomination context only with matching server policy (%s)",
-    async (liveDemoSiteId) => {
+    async (liveDemoSiteIds) => {
       const v = fixture();
       Object.assign(v.options.configuration, {
         mode: "live",
@@ -239,10 +239,11 @@ describe("read-only canonical receiving nomination context", () => {
       });
       const service = createReceivingNominationContext({
         ...v.options,
-        liveDemoSiteId,
+        liveDemoSiteIds:
+          liveDemoSiteIds === undefined ? undefined : [liveDemoSiteIds],
       });
       const result = service.readContext({ actor: v.actor, access: v.access });
-      if (liveDemoSiteId === "site-one") {
+      if (liveDemoSiteIds === "site-one") {
         await expect(result).resolves.toMatchObject({
           state: "AVAILABLE",
           mode: "live",

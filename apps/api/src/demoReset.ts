@@ -247,7 +247,7 @@ export async function assertDemoResetAllowed(
       "DEMO_REAL_ACTIVITY_PROTECTED",
       "A site with real receiving activity cannot be reset",
     );
-  if (policy.liveDemoSiteId === siteId) return protectedSite();
+  if (policy.liveDemoSiteIds?.includes(siteId)) return protectedSite();
   const relations = await tx.execute(
     sql`SELECT to_regclass('public.receiving_setup_holder') IS NOT NULL AS holders,to_regclass('public.receiving_account') IS NOT NULL AS accounts`,
   );

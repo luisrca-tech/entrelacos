@@ -569,11 +569,15 @@ describe("explicit production Asaas webhook registration", () => {
   });
   it.each([undefined, "foreign-site", "site-one"])(
     "registers a showcase live webhook only for the designated production site (%s)",
-    async (liveDemoSiteId) => {
+    async (liveDemoSiteIds) => {
       const v = fixture("live");
       v.row.isDemo = true;
-      const config = { ...v.config, liveDemoSiteId };
-      if (liveDemoSiteId === "site-one")
+      const config = {
+        ...v.config,
+        liveDemoSiteIds:
+          liveDemoSiteIds === undefined ? undefined : [liveDemoSiteIds],
+      };
+      if (liveDemoSiteIds === "site-one")
         expect(
           await registerAsaasWebhook(v.db, config, v.input, { fetch: v.fetch }),
         ).toMatchObject({ state: "REGISTERED" });

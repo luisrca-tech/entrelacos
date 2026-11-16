@@ -289,7 +289,7 @@ export async function loadGiftPricingEvidence(
           isDemo: context.isDemo,
           mode: context.mode,
           applicationEnvironment: context.environment,
-          liveDemoSiteId: context.liveDemoSiteId,
+          liveDemoSiteIds: context.liveDemoSiteIds,
         }) &&
         pricing.provenance === "provider")
     )

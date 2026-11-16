@@ -29,7 +29,11 @@ import {
 } from "./financialWorkSchedule";
 import { serializeBrlCents } from "./giftMoney";
 import type { GiftPaymentWorker } from "./giftPaymentWorker";
-import { allowsLiveSite, type LiveSitePolicy } from "./liveSitePolicy";
+import {
+  allowedLiveDemoSiteIds,
+  type LiveSitePolicy,
+  liveDemoSiteIdsSql,
+} from "./liveSitePolicy";
 
 interface Options extends LiveSitePolicy {
   applicationEnvironment?: "development" | "test" | "production";
@@ -169,15 +173,11 @@ export function createGiftCheckoutLifecycleWorker(
   expireNextUnpaidInstallment: GiftPaymentWorker["processNextReceivedPayment"];
 } {
   const { db, environment, instanceId, reader, now } = options;
-  const liveDemoSiteId = allowsLiveSite({
-    siteId: options.liveDemoSiteId ?? "",
-    isDemo: true,
+  const liveDemoSiteIds = allowedLiveDemoSiteIds({
     mode: environment,
     applicationEnvironment: options.applicationEnvironment ?? "test",
-    liveDemoSiteId: options.liveDemoSiteId,
-  })
-    ? options.liveDemoSiteId
-    : null;
+    liveDemoSiteIds: options.liveDemoSiteIds,
+  });
   if (
     !["sandbox", "live"].includes(environment) ||
     !id(instanceId) ||
@@ -195,7 +195,7 @@ export function createGiftCheckoutLifecycleWorker(
         INNER JOIN ${giftQuoteRecord} q ON q.id=o.quote_id AND q.site_id=o.site_id AND q.account_id=o.account_id AND q.environment=o.environment
         INNER JOIN ${financialOperation} op ON op.id=a.operation_id AND op.site_id=a.site_id AND op.account_id=a.account_id AND op.environment=a.environment
           AND op.order_id=a.order_id AND op.kind=a.operation_kind AND op.kind='CHECKOUT_CREATE'
-        WHERE e.environment=${environment} AND account.provider='ASAAS' AND (${environment}<>'live' OR st.is_demo=false OR st.id=${liveDemoSiteId})
+        WHERE e.environment=${environment} AND account.provider='ASAAS' AND (${environment}<>'live' OR st.is_demo=false OR st.id = ANY(${liveDemoSiteIdsSql(liveDemoSiteIds)}))
           AND e.event_type IN ('CHECKOUT_CREATED','CHECKOUT_PAID','CHECKOUT_CANCELED','CHECKOUT_EXPIRED','PAYMENT_DELETED') AND e.authenticated_at IS NOT NULL
           AND (e.event_type<>'PAYMENT_DELETED' OR (q.method='CREDIT_CARD' AND q.snapshot->'quote'->>'settlementVersion'='PLATFORM_FEE_GUARANTEE_V1'))
     AND e.state IN ('RECEIVED','RETRY','CLAIMED')`;
@@ -233,7 +233,7 @@ export function createGiftCheckoutLifecycleWorker(
         typeof row.isDemo !== "boolean" ||
         (environment === "live" &&
           row.isDemo &&
-          row.siteId !== liveDemoSiteId) ||
+          !liveDemoSiteIds.includes(row.siteId as string)) ||
         !reference(row.accountReference) ||
         !reference(row.checkoutReference) ||
         row.operationState !== "SUCCEEDED" ||
@@ -364,7 +364,7 @@ export function createGiftCheckoutLifecycleWorker(
           AND op.account_id=a.account_id AND op.environment=a.environment AND op.kind=a.operation_kind AND op.kind='CHECKOUT_CREATE'
         JOIN ${receivingAccount} account ON account.id=a.account_id AND account.site_id=a.site_id AND account.environment=a.environment
         JOIN ${site} st ON st.id=a.site_id
-        WHERE a.environment=${environment} AND (${environment}<>'live' OR NOT st.is_demo OR st.id=${liveDemoSiteId})
+        WHERE a.environment=${environment} AND (${environment}<>'live' OR NOT st.is_demo OR st.id = ANY(${liveDemoSiteIdsSql(liveDemoSiteIds)}))
           AND account.provider='ASAAS' AND account.account_reference=q.snapshot->'receiving'->>'accountReference'
           AND a.hosted_url IS NOT NULL AND op.state='SUCCEEDED' AND op.provider_operation_reference=a.provider_reference
           AND q.method='CREDIT_CARD' AND q.snapshot->'quote'->>'settlementVersion'='PLATFORM_FEE_GUARANTEE_V1'

@@ -15,16 +15,17 @@ export function showcaseBuildEnvironment(
     environment === "production"
       ? "https://entrelacosbr.site/"
       : "https://dev.entrelacosbr.site/";
+  const siteId = app === "letters" ? "demo-wedding-cartas" : "demo-wedding";
   return {
     APP_ENV: environment,
     PUBLIC_SITE_INACTIVE: "false",
     PUBLIC_API_URL: `https://api${suffix}.entrelacosbr.site`,
     PUBLIC_ADMIN_ORIGIN: `https://admin${suffix}.entrelacosbr.site`,
-    PUBLIC_SITE_ID: app === "letters" ? "demo-wedding-cartas" : "demo-wedding",
-    // This public opt-in authorizes only the existing Botanical production tenant.
-    // Backend receiving readiness and all checkout guards remain authoritative.
+    PUBLIC_SITE_ID: siteId,
+    // Each production showcase opts in only its own tenant. The backend list in
+    // ASAAS_LIVE_DEMO_SITE_ID, receiving readiness and checkout guards stay authoritative.
     PUBLIC_LIVE_DEMO_SITE_ID:
-      app === "botanical" && environment === "production" ? "demo-wedding" : "",
+      app !== "landing" && environment === "production" ? siteId : "",
     PUBLIC_LANDING_URL: landing,
     PUBLIC_SITE_URL:
       app === "landing" ? landing : app === "letters" ? letters : botanical,

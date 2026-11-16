@@ -189,7 +189,7 @@ export function createReceivingNominationRepository(
   db: Database,
   options: Options,
 ): ReceivingNominationRepository {
-  const liveDemoSiteId = options.liveDemoSiteId;
+  const liveDemoSiteIds = options.liveDemoSiteIds;
   const raw = captureDataProperties(options, [
     "mode",
     "applicationEnvironment",
@@ -264,7 +264,7 @@ export function createReceivingNominationRepository(
                     isDemo: storedSite.isDemo,
                     mode,
                     applicationEnvironment,
-                    liveDemoSiteId: liveDemoSiteId,
+                    liveDemoSiteIds: liveDemoSiteIds,
                   })
                 )
                   fail(409, "PROVIDER_MODE_UNAVAILABLE");
@@ -439,7 +439,7 @@ export function createReceivingNominationRepository(
                   isDemo: lockedSite.rows[0].isDemo as boolean,
                   mode,
                   applicationEnvironment,
-                  liveDemoSiteId: liveDemoSiteId,
+                  liveDemoSiteIds: liveDemoSiteIds,
                 })
               )
                 fail(409, "PROVIDER_MODE_UNAVAILABLE");

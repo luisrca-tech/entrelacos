@@ -35,7 +35,7 @@ function deny(
 export function createReceivingPixDestinationSetupRepository(
   db: Database,
   options: {
-    liveDemoSiteId?: string;
+    liveDemoSiteIds?: readonly string[];
     mode: "sandbox" | "live";
     applicationEnvironment: "development" | "test" | "production";
     now(): Date;
@@ -53,7 +53,7 @@ export function createReceivingPixDestinationSetupRepository(
     maxAge > 300000
   )
     return deny();
-  const liveDemoSiteId = options.liveDemoSiteId;
+  const liveDemoSiteIds = options.liveDemoSiteIds;
   const now = options.now.bind(options),
     generateId = options.generateId ?? randomUUID;
   async function clock(tx: Transaction) {
@@ -80,7 +80,7 @@ export function createReceivingPixDestinationSetupRepository(
           isDemo: sites.rows[0].isDemo as boolean,
           mode,
           applicationEnvironment,
-          liveDemoSiteId: liveDemoSiteId,
+          liveDemoSiteIds: liveDemoSiteIds,
         }))
     )
       return deny();

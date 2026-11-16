@@ -102,7 +102,7 @@ export function createReceivingSetupRepository(
     maxAuthAgeMs > 300000
   )
     return deny();
-  const liveDemoSiteId = options.liveDemoSiteId;
+  const liveDemoSiteIds = options.liveDemoSiteIds;
   const now = options.now.bind(options);
   function clock() {
     const value = now();
@@ -223,7 +223,7 @@ export function createReceivingSetupRepository(
           isDemo: result.rows[0].isDemo as boolean,
           mode,
           applicationEnvironment,
-          liveDemoSiteId: liveDemoSiteId,
+          liveDemoSiteIds: liveDemoSiteIds,
         }))
     )
       return deny("PROVIDER_MODE_UNAVAILABLE", 409);

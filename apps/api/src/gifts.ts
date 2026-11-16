@@ -203,7 +203,7 @@ function assertMode(
       isDemo: context.isDemo,
       mode: readiness.mode,
       applicationEnvironment: options.applicationEnvironment ?? "test",
-      liveDemoSiteId: options.liveDemoSiteId,
+      liveDemoSiteIds: options.liveDemoSiteIds,
     })
   )
     receivingNotReady();

@@ -270,7 +270,7 @@ describe("gift payment composition", () => {
       ).resolves.toEqual([]);
       expect(execute).toHaveBeenCalledTimes(1);
       const query = new PgDialect().sqlToQuery(execute.mock.calls[0][0]);
-      expect(query.params).toEqual([mode, "site-one", mode, null]);
+      expect(query.params).toEqual([mode, "site-one", mode, []]);
       expect(values.db.select).not.toHaveBeenCalled();
       expect(values.fetch).not.toHaveBeenCalled();
       await composition.close();
@@ -488,7 +488,7 @@ describe("gift payment composition", () => {
       ...values.config,
       mode: "live",
       applicationEnvironment: "production",
-      liveDemoSiteId: "site-one",
+      liveDemoSiteIds: ["site-one"],
     } as const;
     if (config.credentialKeyring === undefined)
       throw new Error("Missing test keyring");

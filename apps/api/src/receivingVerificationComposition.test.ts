@@ -18,7 +18,7 @@ import { createReceivingVerificationComposition } from "./receivingVerificationC
 function fixture(
   native = false,
   mode: "sandbox" | "live" = "sandbox",
-  liveDemoSiteId?: string,
+  liveDemoSiteIds?: string,
   actualPreparation = false,
 ) {
   const row = {
@@ -119,7 +119,8 @@ function fixture(
   });
   const composition = createReceivingVerificationComposition({
     db: { execute } as never,
-    liveDemoSiteId,
+    liveDemoSiteIds:
+      liveDemoSiteIds === undefined ? undefined : [liveDemoSiteIds],
     mode,
     applicationEnvironment: mode === "live" ? "production" : "development",
     platformAccountReference: "parent-one",

@@ -56,7 +56,7 @@ export type GiftsHttpOptions = AuthHttpOptions & {
   sandboxBuyerGrossUpAvailable?: (siteId: string) => Promise<boolean>;
 } & Pick<
     GiftServiceOptions,
-    "readReadiness" | "applicationEnvironment" | "liveDemoSiteId"
+    "readReadiness" | "applicationEnvironment" | "liveDemoSiteIds"
   >;
 
 function problem(
@@ -123,7 +123,7 @@ export function createGiftsHttpRouter(options: GiftsHttpOptions) {
   const services: GiftServiceOptions = {
     readReadiness: options.readReadiness,
     applicationEnvironment: options.applicationEnvironment,
-    liveDemoSiteId: options.liveDemoSiteId,
+    liveDemoSiteIds: options.liveDemoSiteIds,
     now: options.now,
   };
   router.onError((error, context) => {

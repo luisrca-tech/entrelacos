@@ -245,7 +245,7 @@ export function createReceivingVerificationRepository(
       consultObservation: deny,
     });
   let mode: "sandbox" | "live";
-  let liveDemoSiteId: string | undefined;
+  let liveDemoSiteIds: readonly string[] | undefined;
   let environment: ReceivingVerificationRepositoryOptions["applicationEnvironment"];
   let maxAge: number;
   let now: () => Date;
@@ -254,7 +254,7 @@ export function createReceivingVerificationRepository(
     ReceivingVerificationRepositoryOptions["readCurrentPolicy"]
   >;
   try {
-    liveDemoSiteId = options.liveDemoSiteId;
+    liveDemoSiteIds = options.liveDemoSiteIds;
     const configuredPolicy = options.readCurrentPolicy;
     if (typeof configuredPolicy !== "function") return inactive();
     mode = options.mode;
@@ -313,7 +313,7 @@ export function createReceivingVerificationRepository(
           isDemo: result.rows[0].isDemo as boolean,
           mode,
           applicationEnvironment: environment,
-          liveDemoSiteId: liveDemoSiteId,
+          liveDemoSiteIds: liveDemoSiteIds,
         })) ||
       (options.allowSandboxSimulationHistory === true &&
         result.rows[0].isDemo !== true)

@@ -247,7 +247,7 @@ export function createGiftMediaHttpRouter(options: GiftMediaHttpOptions) {
         decode: options.decode,
         readReadiness: options.readReadiness,
         applicationEnvironment: options.applicationEnvironment,
-        liveDemoSiteId: options.liveDemoSiteId,
+        liveDemoSiteIds: options.liveDemoSiteIds,
         now: options.now,
         generateId: options.generateId,
         authorize: async (db = options.db) => {

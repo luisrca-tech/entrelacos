@@ -3232,11 +3232,12 @@ it.each(["FAILED", "CANCELLED"])(
 describe("live showcase transactional withdrawal reservation", () => {
   it.each([undefined, "site-other", "site-1"])(
     "reserves only a provider-backed enabled showcase %s",
-    async (liveDemoSiteId) => {
+    async (liveDemoSiteIds) => {
       const f = fixture(true);
       const repository = createWithdrawalReservationRepository(f.db, {
         ...f.options,
-        liveDemoSiteId,
+        liveDemoSiteIds:
+          liveDemoSiteIds === undefined ? undefined : [liveDemoSiteIds],
       });
       const operation = repository.reserveWithdrawal(
         f.snapshot,
@@ -3244,7 +3245,7 @@ describe("live showcase transactional withdrawal reservation", () => {
         f.authorization,
         f.confirmation,
       );
-      if (liveDemoSiteId === "site-1") {
+      if (liveDemoSiteIds === "site-1") {
         expect((await operation).intent.mode).toBe("live");
         expect(f.site.isDemo).toBe(true);
         expect(await repository.readContext?.(requestAttempt(f))).toMatchObject(

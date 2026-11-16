@@ -167,9 +167,9 @@ export function createDemoResetHttpRouter(
           siteId,
           {
             clock: { now: () => options.now?.() ?? new Date() },
-            ...(options.liveDemoSiteId === undefined
+            ...(options.liveDemoSiteIds === undefined
               ? {}
-              : { liveDemoSiteId: options.liveDemoSiteId }),
+              : { liveDemoSiteIds: options.liveDemoSiteIds }),
           },
         ),
       );

@@ -152,7 +152,7 @@ export function createAsaasStoredAccountReader(
     const {
       mode,
       applicationEnvironment,
-      liveDemoSiteId,
+      liveDemoSiteIds,
       fetch,
       timeoutMs,
       maxResponseBytes,
@@ -310,7 +310,7 @@ export function createAsaasStoredAccountReader(
             isDemo: row.isDemo,
             mode,
             applicationEnvironment,
-            liveDemoSiteId,
+            liveDemoSiteIds,
           })) ||
         row.credentialVersion !== 1 ||
         !localId(row.credentialKeyId) ||

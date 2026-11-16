@@ -372,15 +372,16 @@ async function denied(values: ReturnType<typeof fixture>) {
 }
 it.each([undefined, "foreign-site", "site-one"])(
   "reads live showcase totals only with the same production site opt-in (%s)",
-  async (liveDemoSiteId) => {
+  async (liveDemoSiteIds) => {
     const v = fixture(true);
     v.site.is_demo = true;
     const repository = createFinancialOverviewRepository(v.db, {
       ...v.options,
       applicationEnvironment: "production",
-      liveDemoSiteId,
+      liveDemoSiteIds:
+        liveDemoSiteIds === undefined ? undefined : [liveDemoSiteIds],
     });
-    if (liveDemoSiteId === v.binding.siteId)
+    if (liveDemoSiteIds === v.binding.siteId)
       expect(await repository.loadStoredTotals(v.binding)).not.toBeNull();
     else await expect(repository.loadStoredTotals(v.binding)).rejects.toThrow();
   },

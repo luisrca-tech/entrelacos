@@ -336,7 +336,7 @@ describe("live recipient-deducted pricing from bound account observations", () =
     const authorization = {
       ...v.authorization,
       isDemo: true,
-      liveDemoSiteId: v.scope.siteId,
+      liveDemoSiteIds: [v.scope.siteId],
     };
     expect(
       await loadLiveReceivingPricing(v.scope, authorization, v),

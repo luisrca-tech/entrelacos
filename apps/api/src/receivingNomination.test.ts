@@ -909,7 +909,7 @@ describe("explicit initial receiving nomination", () => {
       values.options.mode = "live";
       values.options.applicationEnvironment = "production";
       Object.assign(values.options, {
-        liveDemoSiteId: isDemo ? "site-1" : undefined,
+        liveDemoSiteIds: isDemo ? ["site-1"] : undefined,
       });
       values.loadSite.mockResolvedValueOnce({ siteId: "site-1", isDemo });
       values.input.requestId = deriveReceivingNominationRequestId({

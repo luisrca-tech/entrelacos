@@ -244,7 +244,7 @@ async function loadBinding(
         isDemo: row.isDemo,
         mode: binding.environment,
         applicationEnvironment: policy.applicationEnvironment ?? "test",
-        liveDemoSiteId: policy.liveDemoSiteId,
+        liveDemoSiteIds: policy.liveDemoSiteIds,
       }))
   )
     return unavailable();

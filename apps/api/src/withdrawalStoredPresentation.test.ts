@@ -558,7 +558,7 @@ describe("live showcase stored withdrawal presentation", () => {
     f.row.isDemo = true;
     const loader = createWithdrawalStoredPresentationLoader({
       ...f.options,
-      liveDemoSiteId: scope.siteId,
+      liveDemoSiteIds: [scope.siteId],
     });
     expect(await loader(f.tx, scope)).toMatchObject({
       siteId: scope.siteId,
@@ -568,12 +568,13 @@ describe("live showcase stored withdrawal presentation", () => {
   });
   it.each([undefined, "other-site"])(
     "denies a demo live presentation with opt-in %s",
-    async (liveDemoSiteId) => {
+    async (liveDemoSiteIds) => {
       const f = fixture();
       f.row.isDemo = true;
       const loader = createWithdrawalStoredPresentationLoader({
         ...f.options,
-        liveDemoSiteId,
+        liveDemoSiteIds:
+          liveDemoSiteIds === undefined ? undefined : [liveDemoSiteIds],
       });
       expect(await loader(f.tx, scope)).toBeNull();
     },
@@ -585,7 +586,7 @@ describe("live showcase stored withdrawal presentation", () => {
     expect(
       await createWithdrawalStoredPresentationLoader({
         ...f.options,
-        liveDemoSiteId: scope.siteId,
+        liveDemoSiteIds: [scope.siteId],
       })(f.tx, scope),
     ).toBeNull();
   });

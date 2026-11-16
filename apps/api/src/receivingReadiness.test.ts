@@ -71,10 +71,14 @@ describe("receiving readiness", () => {
   });
 
   it("allows native live evidence only for the exact opted-in production showcase", () => {
-    const input = { ...readyInput(), isDemo: true, liveDemoSiteId: "site-one" };
+    const input = {
+      ...readyInput(),
+      isDemo: true,
+      liveDemoSiteIds: ["site-one"],
+    };
     expect(evaluateReceivingReadiness(input).state).toBe("READY");
     expect(
-      evaluateReceivingReadiness({ ...input, liveDemoSiteId: "other-site" })
+      evaluateReceivingReadiness({ ...input, liveDemoSiteIds: ["other-site"] })
         .state,
     ).toBe("BLOCKED");
     expect(

@@ -125,7 +125,7 @@ export async function loadReceivingContextInTransaction(
     applicationEnvironment,
     freshnessMs,
     now: clock,
-    liveDemoSiteId,
+    liveDemoSiteIds,
   } = options;
   try {
     const [storedSite] = await tx
@@ -141,9 +141,9 @@ export async function loadReceivingContextInTransaction(
       return null;
     const context: GiftQuoteReceivingContext = {
       isDemo: storedSite.isDemo,
-      ...(liveDemoSiteId === undefined
+      ...(liveDemoSiteIds === undefined
         ? {}
-        : { liveDemoSiteId: liveDemoSiteId }),
+        : { liveDemoSiteIds: liveDemoSiteIds }),
       environment: applicationEnvironment,
       mode,
       freshnessMs,

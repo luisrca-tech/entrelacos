@@ -24,7 +24,11 @@ import {
 } from "./financialWorkSchedule";
 import type { GiftPaymentInboxClaim } from "./giftPaymentInboxRepository";
 import type { GiftPaymentWorker } from "./giftPaymentWorker";
-import { allowsLiveSite, type LiveSitePolicy } from "./liveSitePolicy";
+import {
+  allowedLiveDemoSiteIds,
+  type LiveSitePolicy,
+  liveDemoSiteIdsSql,
+} from "./liveSitePolicy";
 
 export const giftPaymentRestrictionEvents = Object.freeze([
   "PAYMENT_REFUNDED",
@@ -73,15 +77,11 @@ export function createGiftPaymentRestrictionWorker(
   options: Options,
 ): GiftPaymentWorker & { nextDueAt(): Promise<number | null> } {
   const { db, environment, instanceId, reader, now } = options;
-  const liveDemoSiteId = allowsLiveSite({
-    siteId: options.liveDemoSiteId ?? "",
-    isDemo: true,
+  const liveDemoSiteIds = allowedLiveDemoSiteIds({
     mode: environment,
     applicationEnvironment: options.applicationEnvironment ?? "test",
-    liveDemoSiteId: options.liveDemoSiteId,
-  })
-    ? options.liveDemoSiteId
-    : null;
+    liveDemoSiteIds: options.liveDemoSiteIds,
+  });
   if (
     !["sandbox", "live"].includes(environment) ||
     !id(instanceId) ||
@@ -91,7 +91,7 @@ export function createGiftPaymentRestrictionWorker(
     return unavailable();
   const eligibleEvents = sql`FROM ${financialEventInbox} e INNER JOIN ${receivingAccount} a ON a.id=e.account_id AND a.site_id=e.site_id AND a.environment=e.environment
         INNER JOIN ${site} st ON st.id=e.site_id
-        WHERE e.environment=${environment} AND a.provider='ASAAS' AND (${environment}<>'live' OR st.is_demo=false OR st.id=${liveDemoSiteId})
+        WHERE e.environment=${environment} AND a.provider='ASAAS' AND (${environment}<>'live' OR st.is_demo=false OR st.id = ANY(${liveDemoSiteIdsSql(liveDemoSiteIds)}))
           AND e.event_type IN ('PAYMENT_REFUNDED','PAYMENT_PARTIALLY_REFUNDED','PAYMENT_REFUND_IN_PROGRESS','PAYMENT_CHARGEBACK_REQUESTED','PAYMENT_CHARGEBACK_DISPUTE','PAYMENT_AWAITING_CHARGEBACK_REVERSAL')
           AND e.authenticated_at IS NOT NULL AND e.processed_at IS NULL
     AND e.state IN ('RECEIVED','RETRY','CLAIMED')`;
@@ -119,7 +119,7 @@ export function createGiftPaymentRestrictionWorker(
         typeof row.isDemo !== "boolean" ||
         (environment === "live" &&
           row.isDemo &&
-          row.siteId !== liveDemoSiteId) ||
+          !liveDemoSiteIds.includes(row.siteId as string)) ||
         !reference(row.accountReference) ||
         !giftPaymentRestrictionEvents.includes(
           row.eventType as (typeof giftPaymentRestrictionEvents)[number],
