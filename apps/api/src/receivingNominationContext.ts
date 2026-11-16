@@ -39,7 +39,7 @@ export function createReceivingNominationContext(
   options: ReceivingNominationContextOptions,
 ): ReceivingNominationContextService {
   try {
-    const liveDemoSiteId = options.liveDemoSiteId;
+    const liveDemoSiteIds = options.liveDemoSiteIds;
     const configuration = readReceivingNominationConfiguration(
       options.configuration,
     );
@@ -133,7 +133,7 @@ export function createReceivingNominationContext(
               isDemo: storedSite.isDemo,
               mode: configuration.mode,
               applicationEnvironment: configuration.applicationEnvironment,
-              liveDemoSiteId: liveDemoSiteId,
+              liveDemoSiteIds: liveDemoSiteIds,
             })
           )
             throw new ReceivingNominationServiceError(

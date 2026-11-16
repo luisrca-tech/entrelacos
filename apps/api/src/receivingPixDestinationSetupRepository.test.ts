@@ -11,7 +11,7 @@ const actor = {
 };
 function fixture(
   mode: "sandbox" | "live" = "sandbox",
-  liveDemoSiteId?: string,
+  liveDemoSiteIds?: string,
 ) {
   const scope = {
     provider: "ASAAS" as const,
@@ -231,7 +231,8 @@ function fixture(
     {
       mode,
       applicationEnvironment: mode === "live" ? "production" : "development",
-      liveDemoSiteId,
+      liveDemoSiteIds:
+        liveDemoSiteIds === undefined ? undefined : [liveDemoSiteIds],
       now: () => at,
       generateId: () => "destination-two",
     },
@@ -241,10 +242,10 @@ function fixture(
 describe("locked Pix destination configuration", () => {
   it.each(["site-one", "other-site"])(
     "reads real Pix destination for exact production showcase (%s)",
-    async (liveDemoSiteId) => {
-      const v = fixture("live", liveDemoSiteId);
+    async (liveDemoSiteIds) => {
+      const v = fixture("live", liveDemoSiteIds);
       const read = v.repository.snapshot(actor, true);
-      if (liveDemoSiteId === "site-one")
+      if (liveDemoSiteIds === "site-one")
         await expect(read).resolves.toMatchObject({
           current: { id: "destination-one" },
         });

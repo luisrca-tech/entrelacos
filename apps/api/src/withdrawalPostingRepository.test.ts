@@ -2203,17 +2203,18 @@ it.each([
 describe("live showcase single-attempt dispatch", () => {
   it.each([undefined, "site-other", "site-1"])(
     "admits only the exact server-authorized showcase %s",
-    async (liveDemoSiteId) => {
+    async (liveDemoSiteIds) => {
       const f = fixture(true, true, true);
       f.tables.site[0].isDemo = true;
       f.authority.context.isDemo = true;
       const repository = createWithdrawalPostingRepository(f.db, {
         ...f.options,
-        liveDemoSiteId,
+        liveDemoSiteIds:
+          liveDemoSiteIds === undefined ? undefined : [liveDemoSiteIds],
       });
       const armed = await repository.armExisting(f.attempt);
       expect(armed.outcome).toBe(
-        liveDemoSiteId === "site-1" ? "ARMED" : "DENIED",
+        liveDemoSiteIds === "site-1" ? "ARMED" : "DENIED",
       );
       expect(f.tables.site[0].isDemo).toBe(true);
       expect(f.authority.context.isDemo).toBe(true);
@@ -2225,7 +2226,7 @@ describe("live showcase single-attempt dispatch", () => {
     f.authority.context.isDemo = true;
     const repository = createWithdrawalPostingRepository(f.db, {
       ...f.options,
-      liveDemoSiteId: "site-1",
+      liveDemoSiteIds: ["site-1"],
     });
     const armed = await repository.armExisting(f.attempt);
     expect(armed.outcome).toBe("ARMED");

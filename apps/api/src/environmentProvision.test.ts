@@ -93,7 +93,7 @@ describe("demo environment provisioning", () => {
         runtimeEnvironment: "production",
         productionAuthorized: true,
         resetAuthorized: true,
-        liveDemoSiteId: "demo-wedding",
+        liveDemoSiteIds: ["demo-wedding"],
         publicUrl: "https://demo-botanico.entrelacosbr.site/",
         owner: {
           email: "owner@example.test",

@@ -14,14 +14,15 @@ import {
 type Row = Record<string, unknown>;
 it.each([undefined, "foreign-site", "site-one"])(
   "reads a live showcase native account only for its exact production opt-in (%s)",
-  async (liveDemoSiteId) => {
+  async (liveDemoSiteIds) => {
     const v = fixture("live", "production", "site-one");
     v.site.is_demo = true;
     const reader = createAsaasStoredAccountReader(v.db, {
       ...v.options,
-      liveDemoSiteId,
+      liveDemoSiteIds:
+        liveDemoSiteIds === undefined ? undefined : [liveDemoSiteIds],
     });
-    if (liveDemoSiteId === v.binding.siteId)
+    if (liveDemoSiteIds === v.binding.siteId)
       expect((await reader.getBalance(v.binding)).environment).toBe("live");
     else {
       await expect(reader.getBalance(v.binding)).rejects.toThrow();

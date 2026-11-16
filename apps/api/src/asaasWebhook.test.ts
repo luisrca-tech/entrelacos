@@ -50,16 +50,17 @@ function fixture() {
 
 it.each([undefined, "foreign-site", "site-one"])(
   "admits a live showcase webhook only for the designated site (%s)",
-  async (liveDemoSiteId) => {
+  async (liveDemoSiteIds) => {
     const v = fixture();
     Object.assign(v.binding, { environment: "live", isDemo: true });
     const receiver = createAsaasWebhookReceiver({
       ...v.dependencies,
       mode: "live",
       applicationEnvironment: "production",
-      liveDemoSiteId,
+      liveDemoSiteIds:
+        liveDemoSiteIds === undefined ? undefined : [liveDemoSiteIds],
     });
-    if (liveDemoSiteId === "site-one") {
+    if (liveDemoSiteIds === "site-one") {
       await expect(
         receiver.receive(token, JSON.stringify(event)),
       ).resolves.toEqual({ accepted: true });

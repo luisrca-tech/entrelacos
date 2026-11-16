@@ -213,7 +213,7 @@ export async function provisionDemoEnvironment(
       "Explicit production provisioning authorization is required",
     );
   }
-  if (input.liveDemoSiteId === DEMO_SITE_ID)
+  if (input.liveDemoSiteIds?.includes(DEMO_SITE_ID))
     throw new Error(
       "A production showcase with real receiving cannot be reprovisioned",
     );

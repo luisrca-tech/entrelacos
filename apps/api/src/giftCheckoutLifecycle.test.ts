@@ -226,13 +226,14 @@ describe("durable checkout lifecycle", () => {
 
 it.each([undefined, "foreign-site", "site-one"])(
   "processes only the designated live showcase event (%s)",
-  async (liveDemoSiteId) => {
+  async (liveDemoSiteIds) => {
     const v = fixture("CHECKOUT_CANCELED", {
       environment: "live",
       applicationEnvironment: "production",
-      liveDemoSiteId,
+      liveDemoSiteIds:
+        liveDemoSiteIds === undefined ? undefined : [liveDemoSiteIds],
     });
-    if (liveDemoSiteId === "site-one") {
+    if (liveDemoSiteIds === "site-one") {
       expect(await v.worker.processNextReceivedPayment()).toMatchObject({
         kind: "OBSERVED",
       });

@@ -3,6 +3,27 @@ import { describe, expect, it, vi } from "vitest";
 import { assertDemoResetAllowed, resetDemoSite } from "./demoReset";
 
 describe("real showcase reset protection", () => {
+  it.each(["demo-wedding", "demo-wedding-cartas"])(
+    "blocks every opted-in showcase in a multi-site list (%s)",
+    async (siteId) => {
+      const execute = vi.fn(async () => ({
+        rows: [{ id: siteId, is_demo: true }],
+      }));
+      const remove = vi.fn();
+      const transaction = vi.fn(async (work: (tx: unknown) => unknown) =>
+        work({ execute, delete: remove }),
+      );
+      await expect(
+        resetDemoSite(
+          { transaction } as never,
+          { userId: "owner-one", role: "OWNER" },
+          siteId,
+          { liveDemoSiteIds: ["demo-wedding", "demo-wedding-cartas"] },
+        ),
+      ).rejects.toMatchObject({ code: "DEMO_REAL_ACTIVITY_PROTECTED" });
+      expect(remove).not.toHaveBeenCalled();
+    },
+  );
   it("blocks the opted-in showcase after locking its site and before any deletion", async () => {
     const execute = vi.fn(async () => ({
       rows: [{ id: "demo-wedding", is_demo: true }],
@@ -16,7 +37,7 @@ describe("real showcase reset protection", () => {
         { transaction } as never,
         { userId: "owner-one", role: "OWNER" },
         "demo-wedding",
-        { liveDemoSiteId: "demo-wedding" },
+        { liveDemoSiteIds: ["demo-wedding"] },
       ),
     ).rejects.toMatchObject({
       status: 409,

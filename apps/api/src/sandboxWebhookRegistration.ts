@@ -102,7 +102,7 @@ export async function registerAsaasWebhook(
       return unavailable();
     const mode = config.mode;
     const applicationEnvironment = config.applicationEnvironment;
-    const liveDemoSiteId = config.liveDemoSiteId;
+    const liveDemoSiteIds = config.liveDemoSiteIds;
     const origin = new URL(config.webhookPublicOrigin);
     if (
       origin.protocol !== "https:" ||
@@ -148,7 +148,7 @@ export async function registerAsaasWebhook(
               isDemo: row.isDemo as boolean,
               mode,
               applicationEnvironment,
-              liveDemoSiteId,
+              liveDemoSiteIds,
             })) ||
         !reference(row.accountReference) ||
         row.accountReference === platformAccountId ||

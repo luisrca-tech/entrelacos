@@ -98,18 +98,24 @@ function fixture(rawTimestamps = false) {
 }
 describe("durable received-payment inbox claims", () => {
   it.each([
-    ["production", "demo-wedding", "demo-wedding"],
-    ["production", "another-site", "another-site"],
-    ["production", undefined, null],
-    ["development", "demo-wedding", null],
-    ["test", "demo-wedding", null],
-    [undefined, "demo-wedding", null],
-    ["production", "demo-wedding,another-site", null],
-    ["production", " demo-wedding", null],
-    ["production", "demo-wedding/other", null],
+    ["production", ["demo-wedding"], ["demo-wedding"]],
+    ["production", ["another-site"], ["another-site"]],
+    [
+      "production",
+      ["demo-wedding", "demo-wedding-cartas"],
+      ["demo-wedding", "demo-wedding-cartas"],
+    ],
+    ["production", undefined, []],
+    ["production", [], []],
+    ["development", ["demo-wedding"], []],
+    ["test", ["demo-wedding"], []],
+    [undefined, ["demo-wedding"], []],
+    ["production", ["demo-wedding,another-site"], []],
+    ["production", [" demo-wedding"], []],
+    ["production", ["demo-wedding/other", "demo-wedding"], ["demo-wedding"]],
   ] as const)(
-    "binds only the configured production showcase in native claim SQL (%s, %s)",
-    async (applicationEnvironment, liveDemoSiteId, expectedSiteId) => {
+    "binds only the configured production showcases in native claim SQL (%s, %s)",
+    async (applicationEnvironment, liveDemoSiteIds, expectedSiteIds) => {
       const queries: Array<{ sql: string; params: unknown[] }> = [];
       const db = drizzle({
         query: async (
@@ -127,15 +133,19 @@ describe("durable received-payment inbox claims", () => {
         ...fixture().options,
         environment: "live",
         applicationEnvironment,
-        liveDemoSiteId,
+        liveDemoSiteIds,
       });
       expect(await repository.claimNextReceivedPayment()).toBeNull();
       const selection = queries.find(({ sql }) => sql.startsWith("SELECT"));
       if (!selection) throw new Error("Expected the native claim selection");
-      const parameter = /OR st\.id=\$(\d+)/.exec(selection.sql);
+      const parameter = /OR st\.id = ANY\(\$(\d+)::text\[\]\)/.exec(
+        selection.sql,
+      );
       expect(parameter).not.toBeNull();
-      expect(selection.params[Number(parameter?.[1]) - 1]).toBe(expectedSiteId);
-      expect(selection.sql).toContain("st.is_demo=false OR st.id=");
+      expect(selection.params[Number(parameter?.[1]) - 1]).toEqual(
+        expectedSiteIds,
+      );
+      expect(selection.sql).toContain("st.is_demo=false OR st.id = ANY(");
       expect(selection.sql).toContain("FOR UPDATE OF e SKIP LOCKED");
       expect(queries.some(({ sql }) => /^UPDATE/i.test(sql))).toBe(false);
     },

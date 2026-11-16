@@ -119,7 +119,7 @@ export function createGiftPaymentComposition(
   const environment = config.mode;
   const liveSitePolicy = Object.freeze({
     applicationEnvironment: config.applicationEnvironment,
-    liveDemoSiteId: config.liveDemoSiteId,
+    liveDemoSiteIds: config.liveDemoSiteIds,
   });
   const keyring = new Map(
     [...config.credentialKeyring].map(([id, key]) => [id, new Uint8Array(key)]),

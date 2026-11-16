@@ -155,24 +155,24 @@ describe("stored receiving context", () => {
     const v = fixture({ site: [{ id: siteId, isDemo: true }] });
     const context = await loadReceivingContext(v.db, siteId, {
       ...options,
-      liveDemoSiteId: siteId,
+      liveDemoSiteIds: [siteId],
     });
     expect(context).toMatchObject({
       isDemo: true,
-      liveDemoSiteId: siteId,
+      liveDemoSiteIds: [siteId],
       mode: "live",
       environment: "production",
     });
     await expect(
       readReceivingReadiness(v.db, siteId, {
         ...options,
-        liveDemoSiteId: siteId,
+        liveDemoSiteIds: [siteId],
       }),
     ).resolves.toMatchObject({ state: "READY", mode: "live" });
     await expect(
       readReceivingReadiness(v.db, siteId, {
         ...options,
-        liveDemoSiteId: "other-site",
+        liveDemoSiteIds: ["other-site"],
       }),
     ).resolves.toMatchObject({ state: "BLOCKED" });
   });

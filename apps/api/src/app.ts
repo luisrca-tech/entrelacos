@@ -127,7 +127,7 @@ export function createApp(
       applicationEnvironment:
         options.applicationEnvironment ??
         options.receiving?.applicationEnvironment,
-      liveDemoSiteId: options.receiving?.liveDemoSiteId,
+      liveDemoSiteIds: options.receiving?.liveDemoSiteIds,
     };
     const readReadiness = (
       siteId: string,

@@ -445,7 +445,7 @@ export type WithdrawalReservationOptions =
   | {
       mode: Environment;
       applicationEnvironment: "development" | "test" | "production";
-      liveDemoSiteId?: string;
+      liveDemoSiteIds?: readonly string[];
       maxAuthAgeMs: number;
       freshnessMs: number;
       now(): Date;
@@ -821,7 +821,7 @@ function contextScope(
   siteId: string,
   mode: Environment,
   applicationEnvironment: "development" | "test" | "production",
-  liveDemoSiteId?: string,
+  liveDemoSiteIds?: readonly string[],
 ): WithdrawalReservationContext {
   const raw = record(value);
   if (
@@ -838,7 +838,7 @@ function contextScope(
       isDemo: raw.isDemo,
       mode,
       applicationEnvironment,
-      liveDemoSiteId,
+      liveDemoSiteIds,
     })
   )
     return deny("PROVIDER_MODE_UNAVAILABLE", 409);
@@ -1131,7 +1131,7 @@ export function createWithdrawalReservationService(
       };
     const mode = options.mode;
     const applicationEnvironment = options.applicationEnvironment;
-    const liveDemoSiteId = options.liveDemoSiteId;
+    const liveDemoSiteIds = options.liveDemoSiteIds;
     if (
       (mode !== "sandbox" && mode !== "live") ||
       (mode === "live" && applicationEnvironment !== "production")
@@ -1303,7 +1303,7 @@ export function createWithdrawalReservationService(
             selected.actor.siteId,
             mode,
             applicationEnvironment,
-            liveDemoSiteId,
+            liveDemoSiteIds,
           );
           const at = clock();
           const binding = context.recipientBinding;
@@ -1569,7 +1569,7 @@ export function createWithdrawalReservationService(
               currentActor.siteId,
               mode,
               applicationEnvironment,
-              liveDemoSiteId,
+              liveDemoSiteIds,
             );
             const scope = receivingScope(
               context,
@@ -1705,7 +1705,7 @@ export function createWithdrawalReservationService(
                 currentActor.siteId,
                 mode,
                 applicationEnvironment,
-                liveDemoSiteId,
+                liveDemoSiteIds,
               );
               const scope = receivingScope(
                 lockedContext,

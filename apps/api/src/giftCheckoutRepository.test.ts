@@ -1158,7 +1158,7 @@ describe("PostgreSQL gift checkout repository", () => {
       isDemo: true,
       environment: "production",
       mode: "live",
-      liveDemoSiteId: "site-one",
+      liveDemoSiteIds: ["site-one"],
     });
     values.input.quoteSnapshot.quote.mode = "live";
     values.input.quoteSnapshot.receiving.environment = "live";
@@ -1180,7 +1180,7 @@ describe("PostgreSQL gift checkout repository", () => {
       "gift-one",
       expect.objectContaining({
         applicationEnvironment: "production",
-        liveDemoSiteId: "site-one",
+        liveDemoSiteIds: ["site-one"],
       }),
     );
     expect(values.context.isDemo).toBe(true);

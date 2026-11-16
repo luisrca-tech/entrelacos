@@ -254,7 +254,7 @@ export function createAsaasWebhookReceiver(
 ) {
   const mode = dependencies.mode;
   const environment = dependencies.applicationEnvironment;
-  const liveDemoSiteId = dependencies.liveDemoSiteId;
+  const liveDemoSiteIds = dependencies.liveDemoSiteIds;
   const platform = dependencies.platform;
 
   function admitsSite(siteId: string, isDemo: boolean): boolean {
@@ -266,7 +266,7 @@ export function createAsaasWebhookReceiver(
         isDemo,
         mode,
         applicationEnvironment: environment,
-        liveDemoSiteId,
+        liveDemoSiteIds,
       })
     );
   }

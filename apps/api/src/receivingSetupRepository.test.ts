@@ -167,7 +167,7 @@ describe("receiving holder and consent custody", () => {
   });
   it.each(["site-one", "other-site"])(
     "retains actual holder authentication for exact production showcase (%s)",
-    async (liveDemoSiteId) => {
+    async (liveDemoSiteIds) => {
       const createdAt = new Date(at.getTime() - 3600000),
         expiresAt = new Date(at.getTime() + 3600000);
       const v = fixture(
@@ -178,10 +178,15 @@ describe("receiving holder and consent custody", () => {
           [{ id: "membership-one" }],
           [{ ...holder, environment: "live" }],
         ],
-        { mode: "live", applicationEnvironment: "production", liveDemoSiteId },
+        {
+          mode: "live",
+          applicationEnvironment: "production",
+          liveDemoSiteIds:
+            liveDemoSiteIds === undefined ? undefined : [liveDemoSiteIds],
+        },
       );
       const read = v.repository.readSessionAuthentication(actor);
-      if (liveDemoSiteId === "site-one")
+      if (liveDemoSiteIds === "site-one")
         await expect(read).resolves.toMatchObject({
           proofKind: "SESSION_AUTHENTICATION",
           userId: actor.userId,

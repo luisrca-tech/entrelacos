@@ -24,7 +24,7 @@ import {
 } from "./giftPaymentReconciliation";
 import type { GiftPaymentWorker } from "./giftPaymentWorker";
 import { type GiftQuoteSnapshot, readGiftV2Settlement } from "./giftQuotes";
-import type { LiveSitePolicy } from "./liveSitePolicy";
+import { type LiveSitePolicy, liveDemoSiteIdsSql } from "./liveSitePolicy";
 
 interface AsaasAdjustmentOptions {
   environment: "sandbox" | "live";
@@ -295,7 +295,7 @@ export function createGiftPaymentAdjustmentWorker(
     },
 ): GiftPaymentWorker & { nextDueAt(): Promise<number | null> } {
   const provider = createAsaasGiftAdjustmentPort(options);
-  const { environment, liveDemoSiteId, platformWalletId, reader } = options;
+  const { environment, liveDemoSiteIds, platformWalletId, reader } = options;
   const restricted = sql`EXISTS (
     SELECT 1 FROM ${financialEventInbox} e
     WHERE e.site_id=p.site_id AND e.account_id=p.account_id AND e.environment=p.environment
@@ -310,7 +310,7 @@ export function createGiftPaymentAdjustmentWorker(
         JOIN ${giftQuoteRecord} q ON q.id=o.quote_id AND q.site_id=p.site_id AND q.account_id=p.account_id AND q.environment=p.environment
         JOIN ${financialLedgerEntry} l ON l.payment_id=p.id AND l.site_id=p.site_id AND l.account_id=p.account_id AND l.environment=p.environment
           AND l.kind='GIFT_RECEIVED' AND l.direction='CREDIT' AND l.currency='BRL' AND l.amount_cents=p.recipient_net_cents
-        WHERE p.environment=${environment} AND (${environment} <> 'live' OR NOT st.is_demo OR st.id=${liveDemoSiteId ?? null})
+        WHERE p.environment=${environment} AND (${environment} <> 'live' OR NOT st.is_demo OR st.id = ANY(${liveDemoSiteIdsSql(liveDemoSiteIds)}))
           AND p.platform_adjustment_cents > 0 AND p.platform_adjustment_funded_at IS NULL
           AND p.verification_status='VERIFIED' AND p.provider_status='RECEIVED' AND p.currency='BRL'
           AND a.provider='ASAAS' AND a.recipient_reference=q.snapshot->'receiving'->>'recipientReference'

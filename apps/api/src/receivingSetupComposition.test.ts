@@ -138,16 +138,16 @@ describe("receiving setup composition", () => {
         ...v.config,
         mode: "live",
         applicationEnvironment: "production",
-        liveDemoSiteId: "site-one",
+        liveDemoSiteIds: ["site-one"],
       },
       v.options,
     );
     expect(mocks.setupRepository.mock.calls[0][1]).toMatchObject({
-      liveDemoSiteId: "site-one",
+      liveDemoSiteIds: ["site-one"],
       mode: "live",
     });
     expect(mocks.nomination.mock.calls[0][0]).toMatchObject({
-      liveDemoSiteId: "site-one",
+      liveDemoSiteIds: ["site-one"],
     });
     expect(
       Object.keys(mocks.nomination.mock.calls[0][0].configuration),

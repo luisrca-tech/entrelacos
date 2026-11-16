@@ -4,7 +4,7 @@ import type { DatabaseConnection } from "@entrelacos/database";
 import { sql } from "drizzle-orm";
 import { createAsaasReceivingVerification } from "./asaasReceivingVerification";
 import type { FinancialActor } from "./financialAuthorization";
-import { allowsLiveSite } from "./liveSitePolicy";
+import { allowsLiveSite, liveDemoSiteIdsSql } from "./liveSitePolicy";
 import {
   decryptProviderCredential,
   type ProviderCredentialKeyring,
@@ -27,7 +27,7 @@ import {
 import { createReceivingVerificationRepository } from "./receivingVerificationRepository";
 
 export function createReceivingVerificationComposition(options: {
-  liveDemoSiteId?: string;
+  liveDemoSiteIds?: readonly string[];
   db: DatabaseConnection["db"];
   mode: "sandbox" | "live";
   applicationEnvironment: "development" | "test" | "production";
@@ -51,7 +51,7 @@ export function createReceivingVerificationComposition(options: {
     scope: ReceivingVerificationScope,
   ) => Promise<IncomingPixPreparation>;
 }) {
-  const liveDemoSiteId = options.liveDemoSiteId;
+  const liveDemoSiteIds = options.liveDemoSiteIds;
   const sandboxSimulation =
     options.mode === "sandbox" &&
     options.applicationEnvironment === "development";
@@ -115,9 +115,9 @@ export function createReceivingVerificationComposition(options: {
     ...native,
     repository: createReceivingVerificationRepository(options.db, {
       mode: options.mode,
-      ...(liveDemoSiteId === undefined
+      ...(liveDemoSiteIds === undefined
         ? {}
-        : { liveDemoSiteId: liveDemoSiteId }),
+        : { liveDemoSiteIds: liveDemoSiteIds }),
       applicationEnvironment: options.applicationEnvironment,
       maxAuthAgeMs: 300000,
       now: options.now,
@@ -147,7 +147,7 @@ export function createReceivingVerificationComposition(options: {
     if (!supported || closed)
       throw new ReceivingSetupError(503, "RECEIVING_VERIFICATION_UNAVAILABLE");
     const result = await options.db.execute(
-      sql`SELECT st.is_demo AS "isDemo",a.site_id AS "siteId",a.id AS "accountId",a.operator_user_id AS "operatorUserId",a.operator_reference AS "operatorReference",a.account_reference AS "accountReference",a.recipient_reference AS "recipientReference",EXISTS(SELECT 1 FROM receiving_destination d WHERE d.site_id=a.site_id AND d.account_id=a.id AND d.environment=a.environment AND d.is_current=true AND starts_with(d.bank_reference,'asaas-bank-')) AS "nativeDestination" FROM receiving_account a JOIN site st ON st.id=a.site_id WHERE a.site_id=${siteId} AND a.environment=${options.mode} AND a.provider='ASAAS' AND a.is_current=true AND (st.is_demo=${sandboxSimulation} OR (${options.mode}='live' AND st.id=${liveDemoSiteId ?? null})) LIMIT 2`,
+      sql`SELECT st.is_demo AS "isDemo",a.site_id AS "siteId",a.id AS "accountId",a.operator_user_id AS "operatorUserId",a.operator_reference AS "operatorReference",a.account_reference AS "accountReference",a.recipient_reference AS "recipientReference",EXISTS(SELECT 1 FROM receiving_destination d WHERE d.site_id=a.site_id AND d.account_id=a.id AND d.environment=a.environment AND d.is_current=true AND starts_with(d.bank_reference,'asaas-bank-')) AS "nativeDestination" FROM receiving_account a JOIN site st ON st.id=a.site_id WHERE a.site_id=${siteId} AND a.environment=${options.mode} AND a.provider='ASAAS' AND a.is_current=true AND (st.is_demo=${sandboxSimulation} OR (${options.mode}='live' AND st.id = ANY(${liveDemoSiteIdsSql(liveDemoSiteIds)}))) LIMIT 2`,
     );
     const row = result.rows[0];
     if (
@@ -160,7 +160,7 @@ export function createReceivingVerificationComposition(options: {
             isDemo: row.isDemo as boolean,
             mode: options.mode,
             applicationEnvironment: options.applicationEnvironment,
-            liveDemoSiteId: liveDemoSiteId,
+            liveDemoSiteIds: liveDemoSiteIds,
           })) ||
       typeof row.nativeDestination !== "boolean"
     )
@@ -251,9 +251,9 @@ export function createReceivingVerificationComposition(options: {
         ((siteId) =>
           readReceivingReadiness(options.db, siteId, {
             mode: options.mode,
-            ...(liveDemoSiteId === undefined
+            ...(liveDemoSiteIds === undefined
               ? {}
-              : { liveDemoSiteId: liveDemoSiteId }),
+              : { liveDemoSiteIds: liveDemoSiteIds }),
             applicationEnvironment: options.applicationEnvironment,
             freshnessMs: 300000,
             now: options.now,

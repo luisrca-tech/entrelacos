@@ -299,7 +299,7 @@ describe("immutable gift quote creation", () => {
   it("keeps a real showcase quote provider-bound under the live-site opt-in", async () => {
     const v = fixture();
     v.context.isDemo = true;
-    Object.assign(v.context, { liveDemoSiteId: "site-one" });
+    Object.assign(v.context, { liveDemoSiteIds: ["site-one"] });
     v.pricing.policy.feeBasis = "ACCOUNT_BUYER_ESTIMATE";
     v.pricing.policy.feeAllocation = "BUYER_GROSS_UP";
     expect(

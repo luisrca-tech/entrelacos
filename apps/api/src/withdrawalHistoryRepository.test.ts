@@ -77,15 +77,16 @@ function fixture(
       const siteId = params[Number(requestedSite[1]) - 1];
       const env = params[Number(environment[1]) - 1];
       const sources: Array<{ st: Row; w: Row | null; a: Row | null }> = [];
-      const sitePredicates = [...sql.matchAll(/st\.id\s*=\s*\$(\d+)/g)];
-      const approvedDemo =
-        sitePredicates.length > 1
-          ? params[Number(sitePredicates.at(-1)?.[1]) - 1]
-          : null;
+      const demoPredicate = /st\.id = ANY\(\$(\d+)::text\[\]\)/.exec(sql);
+      const approvedDemos = demoPredicate
+        ? (params[Number(demoPredicate[1]) - 1] as string[])
+        : [];
       for (const st of tables.sites.filter(
         (row) =>
           row.id === siteId &&
-          (env !== "live" || row.is_demo === false || row.id === approvedDemo),
+          (env !== "live" ||
+            row.is_demo === false ||
+            approvedDemos.includes(row.id as string)),
       )) {
         const withdrawals = tables.withdrawals.filter(
           (w) => w.site_id === st.id && w.environment === env,
@@ -465,7 +466,7 @@ describe("stored withdrawal history", () => {
 describe("live showcase withdrawal history", () => {
   it.each([undefined, "site-other", "demo-wedding"])(
     "reads only the configured live demo scope %s",
-    async (liveDemoSiteId) => {
+    async (liveDemoSiteIds) => {
       const f = fixture("live");
       f.site.id = "demo-wedding";
       f.site.is_demo = true;
@@ -480,9 +481,10 @@ describe("live showcase withdrawal history", () => {
       const repository = createWithdrawalHistoryRepository(f.db, {
         mode: "live",
         applicationEnvironment: "production",
-        liveDemoSiteId,
+        liveDemoSiteIds:
+          liveDemoSiteIds === undefined ? undefined : [liveDemoSiteIds],
       });
-      if (liveDemoSiteId === "demo-wedding")
+      if (liveDemoSiteIds === "demo-wedding")
         expect(await repository.listWithdrawals("demo-wedding")).toHaveLength(
           2,
         );

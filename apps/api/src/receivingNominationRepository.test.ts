@@ -558,21 +558,23 @@ describe("durable initial receiving nomination", () => {
   );
   it.each(["site-one", "other-site"])(
     "reads a production showcase scope only under exact policy (%s)",
-    async (liveDemoSiteId) => {
+    async (liveDemoSiteIds) => {
       const v = fixture();
       v.state.isDemo = true;
       const repository = createReceivingNominationRepository(v.db, {
         ...v.options,
         mode: "live",
         applicationEnvironment: "production",
-        liveDemoSiteId,
+        liveDemoSiteIds:
+          liveDemoSiteIds === undefined ? undefined : [liveDemoSiteIds],
       });
       const read = repository.readNominationScope({
         siteId: "site-one",
         operatorUserId: "user-one",
         environment: "live",
       });
-      if (liveDemoSiteId === "site-one") await expect(read).resolves.toBeNull();
+      if (liveDemoSiteIds === "site-one")
+        await expect(read).resolves.toBeNull();
       else
         await expect(read).rejects.toMatchObject({
           code: "PROVIDER_MODE_UNAVAILABLE",

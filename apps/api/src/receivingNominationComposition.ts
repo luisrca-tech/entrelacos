@@ -97,9 +97,9 @@ export function createReceivingNominationComposition(
     const financialReauthentication =
       createFinancialReauthentication(proofOptions);
     const liveSitePolicy =
-      options.liveDemoSiteId === undefined
+      options.liveDemoSiteIds === undefined
         ? {}
-        : { liveDemoSiteId: options.liveDemoSiteId };
+        : { liveDemoSiteIds: options.liveDemoSiteIds };
     const receivingNomination = createReceivingNominationService({
       ...liveSitePolicy,
       mode: configuration.mode,

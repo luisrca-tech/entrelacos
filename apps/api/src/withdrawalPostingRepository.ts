@@ -21,7 +21,7 @@ import {
   readDatabaseTimestamp,
 } from "./databaseTimestamp";
 import { assertRecipientFinancialAction } from "./financialAuthorization";
-import { allowsLiveSite } from "./liveSitePolicy";
+import { allowsLiveSite, isLiveDemoSiteIds } from "./liveSitePolicy";
 import type { ReceivingTransaction } from "./receivingRepository";
 import { logWithdrawalFailure } from "./withdrawalDiagnostics";
 import {
@@ -93,7 +93,7 @@ export type WithdrawalPostingRepositoryOptions =
   | {
       mode: "sandbox" | "live";
       applicationEnvironment: "development" | "test" | "production";
-      liveDemoSiteId?: string;
+      liveDemoSiteIds?: readonly string[];
       maxAuthAgeMs: number;
       freshnessMs: number;
       leaseOwner: string;
@@ -175,7 +175,7 @@ export function createWithdrawalPostingRepository(
     const mode: unknown = fields.mode?.value;
     const applicationEnvironment: unknown =
       fields.applicationEnvironment?.value;
-    const liveDemoSiteId: unknown = fields.liveDemoSiteId?.value;
+    const liveDemoSiteIds: unknown = fields.liveDemoSiteIds?.value;
     const maxAuthAgeMs: unknown = fields.maxAuthAgeMs?.value;
     const freshnessMs: unknown = fields.freshnessMs?.value;
     const leaseOwner: unknown = fields.leaseOwner?.value;
@@ -185,7 +185,7 @@ export function createWithdrawalPostingRepository(
         (mode === "sandbox" &&
           (applicationEnvironment === "development" ||
             applicationEnvironment === "test"))) &&
-      (liveDemoSiteId === undefined || typeof liveDemoSiteId === "string") &&
+      (liveDemoSiteIds === undefined || isLiveDemoSiteIds(liveDemoSiteIds)) &&
       typeof maxAuthAgeMs === "number" &&
       typeof freshnessMs === "number" &&
       typeof leaseDurationMs === "number" &&
@@ -198,7 +198,10 @@ export function createWithdrawalPostingRepository(
       configuration = {
         mode,
         applicationEnvironment,
-        liveDemoSiteId,
+        liveDemoSiteIds:
+          liveDemoSiteIds === undefined
+            ? undefined
+            : Object.freeze([...liveDemoSiteIds]),
         maxAuthAgeMs,
         freshnessMs,
         leaseOwner: owner,
@@ -801,7 +804,7 @@ export function createWithdrawalPostingRepository(
               isDemo: authority.context.isDemo,
               mode: c!.mode,
               applicationEnvironment: c!.applicationEnvironment,
-              liveDemoSiteId: c!.liveDemoSiteId,
+              liveDemoSiteIds: c!.liveDemoSiteIds,
             }))
         )
           deny();

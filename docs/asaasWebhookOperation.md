@@ -14,7 +14,7 @@ When checking Neon suspension, observe compute state in the Neon console without
 
 ## Prerequisites
 
-1. Verify the production database identity, Railway environment, receiving site and subaccount. Production accepts a regular site or the exact showcase selected through `ASAAS_LIVE_DEMO_SITE_ID` while `APP_ENV=production` and `ASAAS_MODE=live`. The showcase keeps `is_demo=true`; the opt-in does not authorize other demos or simulated evidence. The compatibility Sandbox operation requires a development demo.
+1. Verify the production database identity, Railway environment, receiving site and subaccount. Production accepts a regular site or one of the exact showcases listed (comma-separated) in `ASAAS_LIVE_DEMO_SITE_ID` while `APP_ENV=production` and `ASAAS_MODE=live`. Each listed showcase keeps `is_demo=true`; the opt-in does not authorize unlisted demos or simulated evidence. The compatibility Sandbox operation requires a development demo.
 2. Preserve a verified recoverable database checkpoint before the first production configuration. Keep the stable credential key and key ID available so stored subaccount credentials and webhook tokens remain decryptable.
 3. Complete the holder's account onboarding and confirm the native account and wallet match the saved receiving binding. The authenticated holder activation flow prepares the incoming Pix key automatically after approval and proof of life; this webhook registrar never creates a key.
 4. Deploy the HTTPS API receiver at the configured `ASAAS_WEBHOOK_PUBLIC_ORIGIN` plus `/v1/webhooks/asaas`. Confirm the callback is reachable and its database schema is current. Do not use a development tunnel for production.
@@ -26,7 +26,7 @@ Inject production secrets directly into the operator process through the approve
 
 The process requires `APP_ENV=production`, `ASAAS_MODE=live`, the production `DATABASE_URL`, and the complete Asaas runtime contract from `apps/api/.env.example`. If `RAILWAY_ENVIRONMENT_NAME` is present, it must equal `production`.
 
-For the production showcase, inject `ASAAS_LIVE_DEMO_SITE_ID` with its exact site ID. All account, fee, payment and withdrawal evidence must come from the live provider. Production UI must not show Sandbox or no-real-charge copy. The opt-in does not permit resetting operational data or reseeding fixtures.
+For the production showcases, inject `ASAAS_LIVE_DEMO_SITE_ID` with their exact site IDs, comma-separated (currently `demo-wedding,demo-wedding-cartas`). All account, fee, payment and withdrawal evidence must come from the live provider. Production UI must not show Sandbox or no-real-charge copy. The opt-in does not permit resetting operational data or reseeding fixtures.
 
 Supply these operation-specific settings:
 

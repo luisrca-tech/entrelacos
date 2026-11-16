@@ -81,7 +81,7 @@ export type WithdrawalReservationRepositoryOptions =
   | {
       mode: "sandbox" | "live";
       applicationEnvironment: "development" | "test" | "production";
-      liveDemoSiteId?: string;
+      liveDemoSiteIds?: readonly string[];
       maxAuthAgeMs: number;
       freshnessMs: number;
       now(): Date;
@@ -687,7 +687,7 @@ async function requestAuthority(
       isDemo: sites.rows[0].isDemo as boolean,
       mode: options.mode,
       applicationEnvironment: options.applicationEnvironment,
-      liveDemoSiteId: options.liveDemoSiteId,
+      liveDemoSiteIds: options.liveDemoSiteIds,
     })
   )
     return fail("PROVIDER_MODE_UNAVAILABLE", 409);
@@ -900,7 +900,7 @@ async function currentPresentation(
     return fail("DESTINATION_UNVERIFIED", 409);
   const readiness = evaluateReceivingReadiness({
     ...loaded,
-    liveDemoSiteId: options.liveDemoSiteId,
+    liveDemoSiteIds: options.liveDemoSiteIds,
     siteId: scope.siteId,
     now: new Date(at.getTime()),
   });
@@ -1131,7 +1131,7 @@ async function readCurrentPresentation(
   const loaded = await loadReceivingContextInTransaction(tx, scope.siteId, {
     mode: options.mode,
     applicationEnvironment: options.applicationEnvironment,
-    liveDemoSiteId: options.liveDemoSiteId,
+    liveDemoSiteIds: options.liveDemoSiteIds,
     freshnessMs: options.freshnessMs,
     now: () => new Date(at.getTime()),
   });
@@ -1146,7 +1146,7 @@ async function readCurrentPresentation(
     loaded.providerBinding.destinationVersion !== scope.destinationVersion ||
     evaluateReceivingReadiness({
       ...loaded,
-      liveDemoSiteId: options.liveDemoSiteId,
+      liveDemoSiteIds: options.liveDemoSiteIds,
       siteId: scope.siteId,
       now: new Date(at.getTime()),
     }).state !== "READY" ||
@@ -1280,7 +1280,7 @@ export function createWithdrawalReservationRepository(
       applicationEnvironment,
       maxAuthAgeMs,
       freshnessMs,
-      liveDemoSiteId,
+      liveDemoSiteIds,
     } = options;
     if (
       !["sandbox", "live"].includes(mode) ||
@@ -1301,7 +1301,7 @@ export function createWithdrawalReservationRepository(
     const requestOptions: EnabledOptions = Object.freeze({
       mode,
       applicationEnvironment,
-      liveDemoSiteId,
+      liveDemoSiteIds,
       maxAuthAgeMs,
       freshnessMs,
       now,
@@ -1814,7 +1814,7 @@ export function createWithdrawalReservationRepository(
                 isDemo,
                 mode,
                 applicationEnvironment,
-                liveDemoSiteId,
+                liveDemoSiteIds,
               })
             )
               return fail("PROVIDER_MODE_UNAVAILABLE", 409);
@@ -2117,7 +2117,7 @@ export function createWithdrawalReservationRepository(
                 {
                   mode,
                   applicationEnvironment,
-                  liveDemoSiteId,
+                  liveDemoSiteIds,
                   freshnessMs,
                   now: () => new Date(databaseNow.getTime()),
                 },
@@ -2143,7 +2143,7 @@ export function createWithdrawalReservationRepository(
                 return fail("DESTINATION_UNVERIFIED", 409);
               const readiness = evaluateReceivingReadiness({
                 ...loaded,
-                liveDemoSiteId,
+                liveDemoSiteIds,
                 siteId: actor.siteId,
                 now: new Date(databaseNow.getTime()),
               });
@@ -2233,7 +2233,7 @@ export function createWithdrawalReservationRepository(
                 requireReceivingTimes(at);
                 const currentReadiness = evaluateReceivingReadiness({
                   ...loaded,
-                  liveDemoSiteId,
+                  liveDemoSiteIds,
                   siteId: actor.siteId,
                   now: new Date(at.getTime()),
                 });

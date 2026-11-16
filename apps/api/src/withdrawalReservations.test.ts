@@ -1921,7 +1921,7 @@ describe("explicit live showcase withdrawal authority", () => {
   }
   it("accepts provider-backed withdrawal consent only for the configured showcase without changing isDemo", async () => {
     const f = liveDemo();
-    Object.assign(f.options, { liveDemoSiteId: f.actor.siteId });
+    Object.assign(f.options, { liveDemoSiteIds: [f.actor.siteId] });
     registerAcceptedConsent(f);
     await expect(create(f)).resolves.toMatchObject({
       mode: "live",
@@ -1932,9 +1932,9 @@ describe("explicit live showcase withdrawal authority", () => {
   });
   it.each([undefined, "site-other"])(
     "denies an unmatched showcase opt-in %s before provider reads",
-    async (liveDemoSiteId) => {
+    async (liveDemoSiteIds) => {
       const f = liveDemo();
-      Object.assign(f.options, { liveDemoSiteId });
+      Object.assign(f.options, { liveDemoSiteIds });
       registerAcceptedConsent(f);
       await rejected(create(f), "PROVIDER_MODE_UNAVAILABLE", 409);
       expect(f.quoteWithdrawal).not.toHaveBeenCalled();
@@ -1943,7 +1943,7 @@ describe("explicit live showcase withdrawal authority", () => {
   );
   it("keeps simulated live fee authority forbidden even with an exact showcase opt-in", async () => {
     const f = liveDemo();
-    Object.assign(f.options, { liveDemoSiteId: f.actor.siteId });
+    Object.assign(f.options, { liveDemoSiteIds: [f.actor.siteId] });
     registerAcceptedConsent(f);
     f.fee.provenance = "simulation";
     await rejected(create(f), "FEE_QUOTE_UNAVAILABLE", 409);
