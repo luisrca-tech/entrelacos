@@ -127,6 +127,7 @@ describe("mounted server catalog runtime", () => {
     window.sessionStorage.clear();
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
     vi.useRealTimers();
     (
       globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -496,6 +497,51 @@ describe("mounted server catalog runtime", () => {
     });
     return badge;
   }
+
+  describe("with money gifts switched off", () => {
+    beforeEach(() => vi.stubEnv("PUBLIC_GIFT_PAYMENTS_ENABLED", undefined));
+
+    it("keeps the gifts listed with a disabled button that opens nothing", async () => {
+      const fetcher = paymentFetcher(async () =>
+        reply({ status: paymentStatus("OUTCOME_UNKNOWN") }),
+      );
+      const { surface } = await mount(fetcher);
+      expect(surface.hidden).toBe(false);
+      expect(surface.querySelectorAll("article")).toHaveLength(20);
+      expect(surface.textContent).toContain("Dinner 0");
+      const purchase =
+        surface.querySelector<HTMLButtonElement>("article button");
+      expect(purchase?.textContent).toBe("Escolher presente");
+      expect(purchase?.disabled).toBe(true);
+      expect(purchase?.getAttribute("aria-disabled")).toBe("true");
+      const notice = document.getElementById(
+        purchase?.getAttribute("aria-describedby") ?? "",
+      );
+      expect(notice?.textContent).toBe(
+        "Os presentes em dinheiro estarão disponíveis em breve.",
+      );
+      await act(async () => {
+        purchase?.click();
+        await flush();
+      });
+      expect(surface.querySelector("dialog")?.open).not.toBe(true);
+      expect(fetcher).toHaveBeenCalledTimes(1);
+      expect(fetcher.mock.calls[0][1]?.method).toBe("GET");
+    });
+
+    it("never resumes a saved checkout attempt", async () => {
+      writePendingGiftCheckout(window.sessionStorage, "wedding-a", pendingCard);
+      const fetcher = paymentFetcher(async () =>
+        reply({ status: paymentStatus("OUTCOME_UNKNOWN") }),
+      );
+      const { surface } = await mount(fetcher);
+      await advance(60_000);
+      expect(statusCalls(fetcher)).toHaveLength(0);
+      expect(surface.textContent).not.toContain("Ver pagamento");
+      expect(surface.querySelector("[data-gift-payment-fallback]")).toBeNull();
+      expect(window.sessionStorage.getItem(pendingKey)).not.toBeNull();
+    });
+  });
 
   it("marks only the gift with a saved attempt instead of a block above the list", async () => {
     writePendingGiftCheckout(window.sessionStorage, "wedding-a", pendingCard);

@@ -3,6 +3,7 @@ import type {
   SiteAccess,
   SiteRecord,
 } from "@entrelacos/contracts";
+import { giftPaymentsEnabled } from "@entrelacos/ui";
 import { getSiteNavigation, type SiteArea } from "./adminNavigation";
 
 type HomeSite = Pick<SiteRecord, "id" | "lifecycle" | "publicationState">;
@@ -57,9 +58,10 @@ export function buildSiteHomePlan({
     }));
   const base = `/sites/${encodeURIComponent(site.id)}`;
   const receivingAllowed =
-    owner ||
-    (access?.membershipRole === "SITE_ADMIN" &&
-      access.capabilities.configureReceiving);
+    giftPaymentsEnabled() &&
+    (owner ||
+      (access?.membershipRole === "SITE_ADMIN" &&
+        access.capabilities.configureReceiving));
   const current =
     receivingAllowed && readiness?.siteId === site.id ? readiness : null;
   const receivingLabel = !receivingAllowed

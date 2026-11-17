@@ -1,3 +1,7 @@
+import {
+  giftPaymentsComingSoonMessage,
+  giftPaymentsEnabled,
+} from "@entrelacos/ui";
 import { Gift, LockKeyhole } from "lucide-react";
 import type { ReactNode } from "react";
 
@@ -8,6 +12,29 @@ export function GiftsLocked({
   receivingAction?: ReactNode;
   reason?: string;
 }) {
+  // While money gifts are off, the receiving setup is hidden: do not send
+  // admins there, just say the list opens later.
+  if (!giftPaymentsEnabled())
+    return (
+      <section
+        className="rounded-2xl border border-admin-border bg-admin-surface p-6 sm:p-8"
+        aria-labelledby="gifts-locked-title"
+        data-area="gifts"
+      >
+        <div className="mb-5 flex size-12 items-center justify-center rounded-xl bg-admin-subtle">
+          <Gift aria-hidden="true" className="size-6 text-admin-accent" />
+        </div>
+        <h2
+          id="gifts-locked-title"
+          className="font-admin-display text-2xl text-admin-text"
+        >
+          Lista de presentes em breve
+        </h2>
+        <p className="mt-3 max-w-xl text-sm leading-relaxed text-admin-text-secondary">
+          {giftPaymentsComingSoonMessage}
+        </p>
+      </section>
+    );
   return (
     <section
       className="rounded-2xl border border-admin-border bg-admin-surface p-6 sm:p-8"

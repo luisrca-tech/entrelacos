@@ -10,3 +10,12 @@ features, including Motion and reduced-motion support. The package owns the
 shared full-name-and-phone lookup, six-digit PIN confirmation, family session,
 RSVP, and message presentation used by wedding sites. It does not send SMS or
 integrate with a messaging provider.
+
+## Money gifts switch
+
+`GiftRegistry` lists gifts but keeps checkout off unless the site is built with
+`PUBLIC_GIFT_PAYMENTS_ENABLED=true` (read through `giftPaymentsEnabled` in
+`@entrelacos/ui`). While off, the purchase button stays visible but disabled
+with a short "coming soon" note, and a checkout attempt saved in the browser is
+neither resumed nor discarded. The admin panel reads the same variable to hide
+its receiving area. The API is unaffected.

@@ -9,6 +9,7 @@ import {
   checkoutCreateInputSchema,
   publicGiftCatalogQuerySchema,
 } from "@entrelacos/contracts";
+import { giftPaymentsEnabled } from "@entrelacos/ui";
 import { toast } from "@entrelacos/ui/toast";
 import { useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { GiftCatalogView } from "./GiftCatalogView";
@@ -167,6 +168,8 @@ function GiftRegistryRuntime({
   const [operationError, setOperationError] = useState("");
   const [recoveryLoading, setRecoveryLoading] = useState(false);
   const [recoveryError, setRecoveryError] = useState(false);
+  // Build-time switch: when off, gifts stay listed but no checkout starts or resumes.
+  const paymentsEnabled = giftPaymentsEnabled();
   const recovering = state.phase === "UNKNOWN";
   const currentCatalog = catalog?.api === api ? catalog.value : null;
   const pendingGiftId = recovering ? (state.pending?.giftId ?? null) : null;
@@ -191,6 +194,8 @@ function GiftRegistryRuntime({
   }, [visible]);
 
   useEffect(() => {
+    // The saved attempt stays untouched so it resumes once payments return.
+    if (!paymentsEnabled) return;
     try {
       const pending = loadPendingGiftCheckout(
         () => window.sessionStorage,
@@ -200,7 +205,7 @@ function GiftRegistryRuntime({
     } catch {
       dispatch({ type: "RESTORE_UNKNOWN" });
     }
-  }, [siteId]);
+  }, [siteId, paymentsEnabled]);
 
   useEffect(() => {
     setCatalog(null);
@@ -353,6 +358,7 @@ function GiftRegistryRuntime({
 
   function chooseGift(gift: PublicGiftItem) {
     if (
+      !paymentsEnabled ||
       outcomePending ||
       catalogLoading ||
       catalogError ||
@@ -580,6 +586,7 @@ function GiftRegistryRuntime({
           gifts={currentCatalog.gifts}
           mode={currentCatalog.mode}
           busy={outcomePending || catalogLoading || catalogError}
+          paymentsDisabled={!paymentsEnabled}
           onSelect={chooseGift}
           paging={
             catalogShown

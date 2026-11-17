@@ -22,6 +22,7 @@ import {
   DialogClose,
   DialogDescription,
   DialogTitle,
+  giftPaymentsEnabled,
   Input,
   Select,
   SelectContent,
@@ -548,6 +549,7 @@ export function SiteWorkspace({
             (access?.siteId === site.id && access.capabilities.manageCatalog)
           }
           receivingAction={
+            giftPaymentsEnabled() &&
             access?.siteId === site.id &&
             access.capabilities.configureReceiving ? (
               <Link
@@ -561,16 +563,17 @@ export function SiteWorkspace({
           }
         />
       )}
-      {(area === "receiving" || area === "receiving-guide") && (
-        <ReceivingSection
-          key={`${site.id}:${sessionEpoch}`}
-          siteId={site.id}
-          access={access}
-          platformOwner={owner}
-          guide={area === "receiving-guide"}
-          sessionEpoch={sessionEpoch}
-        />
-      )}
+      {(area === "receiving" || area === "receiving-guide") &&
+        giftPaymentsEnabled() && (
+          <ReceivingSection
+            key={`${site.id}:${sessionEpoch}`}
+            siteId={site.id}
+            access={access}
+            platformOwner={owner}
+            guide={area === "receiving-guide"}
+            sessionEpoch={sessionEpoch}
+          />
+        )}
       {area === "team" && (
         <SiteTeamSection
           key={site.id}

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   getInitials,
   getMobileNavigation,
@@ -94,5 +94,30 @@ describe("admin shell navigation", () => {
         getSiteNavigation("SITE_ADMIN", "wedding-a"),
       ).more.map((x) => x.area),
     ).toEqual(["messages", "team"]);
+  });
+});
+
+describe("navigation with money gifts switched off", () => {
+  afterEach(() => vi.unstubAllEnvs());
+  it("drops the receiving area from every menu and redirects its links home", () => {
+    vi.stubEnv("PUBLIC_GIFT_PAYMENTS_ENABLED", undefined);
+    for (const role of ["OWNER", "SITE_ADMIN", "SITE_ASSISTANT"] as const) {
+      const areas = getSiteNavigation(role, "site-1").map((item) => item.area);
+      expect(areas).not.toContain("receiving");
+      expect(areas).toContain("gifts");
+      expect(resolveSiteArea(role, "receiving")).toBe("home");
+      expect(resolveSiteArea(role, "receiving-guide")).toBe("home");
+    }
+    const mobile = getMobileNavigation(getSiteNavigation("OWNER", "site-1"));
+    expect(
+      [...mobile.primary, ...mobile.more].map((item) => item.area),
+    ).not.toContain("receiving");
+  });
+  it("keeps the receiving area when the flag is on", () => {
+    vi.stubEnv("PUBLIC_GIFT_PAYMENTS_ENABLED", "true");
+    expect(
+      getSiteNavigation("SITE_ADMIN", "site-1").map((item) => item.area),
+    ).toContain("receiving");
+    expect(resolveSiteArea("OWNER", "receiving-guide")).toBe("receiving-guide");
   });
 });

@@ -4,6 +4,7 @@ import type {
   SiteRecord,
 } from "@entrelacos/contracts";
 import {
+  giftPaymentsEnabled,
   Input,
   Table,
   TableBody,
@@ -323,7 +324,7 @@ function OwnerSitesRuntime({
                 <TableHead className="px-[22px]">Casamento</TableHead>
                 <TableHead>Data</TableHead>
                 <TableHead>Situação</TableHead>
-                <TableHead>Recebimentos</TableHead>
+                {giftPaymentsEnabled() && <TableHead>Recebimentos</TableHead>}
                 <TableHead>Site e casal</TableHead>
                 <TableHead aria-label="Ação" />
               </TableRow>
@@ -347,9 +348,11 @@ function OwnerSitesRuntime({
                   <TableCell>
                     <LifecycleBadge lifecycle={site.lifecycle} />
                   </TableCell>
-                  <TableCell>
-                    <ReceivingAccountBadge state={site.receivingAccount} />
-                  </TableCell>
+                  {giftPaymentsEnabled() && (
+                    <TableCell>
+                      <ReceivingAccountBadge state={site.receivingAccount} />
+                    </TableCell>
+                  )}
                   <TableCell>
                     <SiteAndCouple site={site} />
                   </TableCell>
@@ -387,10 +390,12 @@ function OwnerSitesRuntime({
                 {site.coupleNames.join(" & ")} ·{" "}
                 {formatBrazilianDate(site.eventDate)}
               </span>
-              <div className="flex flex-wrap items-center gap-2 text-[13px] text-admin-text-secondary">
-                Recebimentos
-                <ReceivingAccountBadge state={site.receivingAccount} />
-              </div>
+              {giftPaymentsEnabled() && (
+                <div className="flex flex-wrap items-center gap-2 text-[13px] text-admin-text-secondary">
+                  Recebimentos
+                  <ReceivingAccountBadge state={site.receivingAccount} />
+                </div>
+              )}
               <SiteAndCouple site={site} />
             </Link>
           ))}
