@@ -3,13 +3,19 @@ import {
   giftImageAlt,
   type PublicGiftItem,
 } from "@entrelacos/contracts";
-import type { CSSProperties } from "react";
+import { giftPaymentsComingSoonMessage } from "@entrelacos/ui";
+import { type CSSProperties, useId } from "react";
 
 type Props = {
   gifts: PublicGiftItem[];
   mode: "disabled" | "sandbox" | "live" | "demonstration";
   busy: boolean;
+  /** Money gifts are switched off: keep the button visible but inert. */
+  paymentsDisabled?: boolean;
   recoveryOnly?: boolean;
+  /** Gift whose payment attempt is saved in this browser. */
+  paymentGiftId?: string | null;
+  onViewPayment?: () => void;
   onSelect: (gift: PublicGiftItem) => void;
   paging?: {
     page: number;
@@ -23,6 +29,8 @@ type Props = {
 
 const giftActionButtonClass =
   "min-h-11 cursor-pointer rounded-full border border-template-ink bg-template-ink px-5 py-3 text-template-ivory font-[inherit] text-sm font-medium transition-[background-color,box-shadow,transform] duration-200 ease-out hover:-translate-y-0.5 hover:bg-template-olive hover:shadow-sm focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-template-ink disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transform-none motion-reduce:transition-none w-full";
+export const paymentBadgeClass =
+  "inline-flex min-h-11 w-fit cursor-pointer items-center gap-2 rounded-full border border-template-line bg-transparent px-4 py-2 text-template-ink font-[inherit] text-sm font-medium transition-[border-color,background-color] duration-200 ease-out hover:border-template-ink focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-template-ink motion-reduce:transition-none";
 const pageButtonClass =
   "min-h-11 cursor-pointer rounded-full border border-template-line bg-transparent px-5 py-3 text-template-ink font-[inherit] text-sm font-medium transition-[background-color,color,border-color,transform] duration-200 ease-out hover:-translate-y-0.5 hover:border-template-ink hover:bg-template-ink hover:text-template-ivory focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-template-ink disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transform-none motion-reduce:transition-none";
 const currencyFormatter = new Intl.NumberFormat("pt-BR", {
@@ -34,10 +42,14 @@ export function GiftCatalogView({
   gifts,
   mode,
   busy,
+  paymentsDisabled = false,
   recoveryOnly = false,
+  paymentGiftId = null,
+  onViewPayment,
   onSelect,
   paging,
 }: Props) {
+  const comingSoonId = useId();
   if (mode === "disabled" || (gifts.length === 0 && !paging)) return null;
   const firstPosition = paging
     ? (paging.page - 1) * giftCatalogLimits.pageSize + 1
@@ -153,15 +165,54 @@ export function GiftCatalogView({
                       )}
                     </p>
                   )}
-                  {mode !== "demonstration" && !recoveryOnly && (
+                  {mode !== "demonstration" &&
+                  onViewPayment &&
+                  paymentGiftId === gift.id ? (
                     <button
                       type="button"
-                      className={giftActionButtonClass}
-                      disabled={busy || priceUnavailable}
-                      onClick={() => onSelect(gift)}
+                      className={paymentBadgeClass}
+                      aria-haspopup="dialog"
+                      aria-label={`Ver pagamento de ${gift.title}`}
+                      onClick={onViewPayment}
                     >
-                      {busy ? "Aguarde…" : "Escolher presente"}
+                      <span
+                        aria-hidden="true"
+                        className="size-2 shrink-0 rounded-full bg-template-olive motion-safe:animate-pulse"
+                      />
+                      Ver pagamento
                     </button>
+                  ) : mode !== "demonstration" &&
+                    !recoveryOnly &&
+                    paymentsDisabled ? (
+                    <div className="mt-auto grid w-full gap-2">
+                      <button
+                        type="button"
+                        className={giftActionButtonClass}
+                        disabled
+                        aria-disabled="true"
+                        aria-describedby={`${comingSoonId}-${index}`}
+                      >
+                        Escolher presente
+                      </button>
+                      <p
+                        id={`${comingSoonId}-${index}`}
+                        className="m-0 text-center text-xs text-template-muted"
+                      >
+                        {giftPaymentsComingSoonMessage}
+                      </p>
+                    </div>
+                  ) : (
+                    mode !== "demonstration" &&
+                    !recoveryOnly && (
+                      <button
+                        type="button"
+                        className={giftActionButtonClass}
+                        disabled={busy || priceUnavailable}
+                        onClick={() => onSelect(gift)}
+                      >
+                        {busy ? "Aguarde…" : "Escolher presente"}
+                      </button>
+                    )
                   )}
                 </div>
               </article>

@@ -83,6 +83,16 @@ export type GiftCheckoutEvidence =
       noProviderCall: true;
       closedReason: "EXPIRED" | "CANCELED";
       providerCheckoutReference?: never;
+    })
+  | (GiftCheckoutIdentity & {
+      source: "backend";
+      kind: "PROVIDER_REJECTION";
+      recoveryTokenHash: string;
+      observedAt: string;
+      // The provider refused the creating call, so no charge exists.
+      noProviderCharge: true;
+      closedReason: "FAILED";
+      providerCheckoutReference?: never;
     });
 
 export interface GiftCheckoutReservation extends GiftCheckoutIdentity {
@@ -152,6 +162,12 @@ export interface GiftCheckoutRepository {
     identity: GiftCheckoutIdentity,
     observedAt: string,
   ): Promise<void>;
+  // Only CREATING may close here, after the provider refused the creating call
+  // (no charge exists); the order then allows a new attempt.
+  markProviderRejected(
+    identity: GiftCheckoutIdentity,
+    observedAt: string,
+  ): Promise<void>;
 }
 
 export interface GiftCheckoutServiceDependencies {
@@ -172,6 +188,24 @@ export interface GiftCheckoutServiceDependencies {
   ): Promise<GiftHostedCheckout>;
   now(): Date;
   generateId(kind: "order" | "attempt"): string;
+  /** Structured, sanitized operational events (never payer data). */
+  observe?(event: Record<string, string>): void;
+}
+
+/**
+ * The provider definitively refused a creating call (validation error with
+ * `errors[]`), so no charge exists. Only sanitized provider codes are kept.
+ */
+export class GiftCheckoutProviderRejectedError extends Error {
+  readonly providerCodes: readonly string[];
+
+  constructor(providerCodes: readonly string[]) {
+    super("Provider rejected the checkout");
+    this.name = "GiftCheckoutProviderRejectedError";
+    this.providerCodes = providerCodes
+      .filter((code) => /^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(code))
+      .slice(0, 5);
+  }
 }
 
 type CheckoutErrorCode =
@@ -179,10 +213,12 @@ type CheckoutErrorCode =
   | "QUOTE_EXPIRED"
   | "REQUEST_CONFLICT"
   | "CHECKOUT_CONFIGURATION_INVALID"
-  | "EXTERNAL_OUTCOME_UNKNOWN";
+  | "EXTERNAL_OUTCOME_UNKNOWN"
+  | "PIX_UNAVAILABLE"
+  | "PAYMENT_METHOD_UNAVAILABLE";
 
 export class GiftCheckoutServiceError extends Error {
-  readonly status: 400 | 409 | 503;
+  readonly status: 400 | 409 | 422 | 503;
   readonly title: string;
 
   constructor(readonly code: CheckoutErrorCode) {
@@ -193,6 +229,8 @@ export class GiftCheckoutServiceError extends Error {
       CHECKOUT_CONFIGURATION_INVALID:
         "Gift checkout configuration is unavailable",
       EXTERNAL_OUTCOME_UNKNOWN: "Gift checkout outcome is unresolved",
+      PIX_UNAVAILABLE: "Pix is unavailable for this gift",
+      PAYMENT_METHOD_UNAVAILABLE: "This payment method is unavailable",
     }[code];
     super(title);
     this.name = "GiftCheckoutServiceError";
@@ -202,7 +240,9 @@ export class GiftCheckoutServiceError extends Error {
         ? 400
         : code === "CHECKOUT_CONFIGURATION_INVALID"
           ? 503
-          : 409;
+          : code === "PIX_UNAVAILABLE" || code === "PAYMENT_METHOD_UNAVAILABLE"
+            ? 422
+            : 409;
   }
 }
 
@@ -474,6 +514,30 @@ function projectStatus(record: GiftCheckoutRecord, now: Date): CheckoutStatus {
   const evidence = record.evidence;
   if (record.state === "CREATING" || record.state === "OUTCOME_UNKNOWN") {
     if (evidence !== null) return fail("EXTERNAL_OUTCOME_UNKNOWN");
+    return result.data;
+  }
+  if (
+    evidence?.source === "backend" &&
+    evidence.kind === "PROVIDER_REJECTION"
+  ) {
+    if (
+      record.state !== "CLOSED_UNPAID" ||
+      record.checkout !== null ||
+      evidence.noProviderCharge !== true ||
+      evidence.siteId !== record.siteId ||
+      evidence.quoteId !== record.quoteId ||
+      evidence.requestId !== record.requestId ||
+      evidence.orderId !== record.orderId ||
+      evidence.attemptId !== record.attemptId ||
+      evidence.recoveryTokenHash !== record.recoveryTokenHash ||
+      evidence.observedAt !== record.observedAt ||
+      evidence.closedReason !== "FAILED" ||
+      record.closedReason !== "FAILED" ||
+      evidence.providerCheckoutReference !== undefined ||
+      record.observedAt === null ||
+      Date.parse(record.observedAt) < Date.parse(record.createdAt)
+    )
+      return fail("EXTERNAL_OUTCOME_UNKNOWN");
     return result.data;
   }
   if (evidence?.source === "backend") {
@@ -886,22 +950,49 @@ export function createGiftCheckoutService(
             clock(dependencies),
             body.data.recoveryToken,
           );
-        } catch {
+        } catch (error) {
           let observedAt = record.createdAt;
           try {
             observedAt = clock(dependencies).toISOString();
           } catch {}
-          await dependencies.repository
-            .markOutcomeUnknown(
-              {
+          const identity = {
+            siteId: record.siteId,
+            requestId: record.requestId,
+            quoteId: record.quoteId,
+            orderId: record.orderId,
+            attemptId: record.attemptId,
+          };
+          const method = record.quoteSnapshot.quote.method;
+          let rejected = false;
+          if (error instanceof GiftCheckoutProviderRejectedError) {
+            try {
+              await dependencies.repository.markProviderRejected(
+                identity,
+                observedAt,
+              );
+              rejected = true;
+            } catch {}
+            try {
+              dependencies.observe?.({
+                level: "warn",
+                event: rejected
+                  ? "gift_checkout.provider_rejected"
+                  : "gift_checkout.provider_rejection_unrecorded",
                 siteId: record.siteId,
-                requestId: record.requestId,
-                quoteId: record.quoteId,
-                orderId: record.orderId,
                 attemptId: record.attemptId,
-              },
-              observedAt,
-            )
+                paymentMethod: method,
+                errorCode: error.providerCodes[0] ?? "UNKNOWN",
+              });
+            } catch {}
+          }
+          if (rejected)
+            return fail(
+              method === "PIX"
+                ? "PIX_UNAVAILABLE"
+                : "PAYMENT_METHOD_UNAVAILABLE",
+            );
+          await dependencies.repository
+            .markOutcomeUnknown(identity, observedAt)
             .catch(() => {});
           return fail("EXTERNAL_OUTCOME_UNKNOWN");
         }

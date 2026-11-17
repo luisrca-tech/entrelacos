@@ -507,3 +507,23 @@ it("shows lifecycle and stored receiving account state as badges with an outline
   );
   expect(footer?.textContent).toContain("Carregar mais");
 });
+
+it("hides the receiving account column while money gifts are switched off", async () => {
+  vi.stubEnv("PUBLIC_GIFT_PAYMENTS_ENABLED", undefined);
+  try {
+    await verify();
+    request.mockResolvedValueOnce({
+      sites: [{ ...sites[0], receivingAccount: "CREATED" }],
+      nextCursor: null,
+    });
+    await mount();
+    const headers = [...container.querySelectorAll("th")].map(
+      (cell) => cell.textContent,
+    );
+    expect(headers).not.toContain("Recebimentos");
+    expect(container.textContent).not.toContain("Conta criada");
+    expect(container.textContent).toContain("Ana e João");
+  } finally {
+    vi.unstubAllEnvs();
+  }
+});

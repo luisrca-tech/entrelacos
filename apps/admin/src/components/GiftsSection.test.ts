@@ -94,3 +94,29 @@ it("opens the editor only for the matching server demonstration grant while fina
   expect(render("foreign")).not.toContain("Adicionar presente");
   expect(render(locked.siteId)).not.toContain("Recebimentos verificados");
 });
+
+describe("locked gifts with money gifts switched off", () => {
+  afterEach(() => vi.unstubAllEnvs());
+  it("announces the pause instead of sending admins to the receiving setup", () => {
+    vi.stubEnv("PUBLIC_GIFT_PAYMENTS_ENABLED", undefined);
+    const html = renderToStaticMarkup(
+      createElement(GiftsReadinessView, {
+        siteId: "wedding-a",
+        readiness: locked,
+        onRetry: vi.fn(),
+        receivingAction: createElement(
+          "a",
+          { href: "/sites/wedding-a/receiving" },
+          "Ver recebimentos",
+        ),
+      }),
+    );
+    expect(html).toContain(
+      "Os presentes em dinheiro estarão disponíveis em breve.",
+    );
+    expect(html).not.toContain("Configure os recebimentos primeiro");
+    expect(html).not.toContain("conta de destino");
+    expect(html).not.toContain("Ver recebimentos");
+    expect(html).not.toContain("/receiving");
+  });
+});

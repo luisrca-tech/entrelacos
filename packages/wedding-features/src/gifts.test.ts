@@ -11,7 +11,12 @@ import {
   writePendingGiftCheckout,
 } from "./giftCheckoutStorage";
 import { submitGiftCheckout } from "./giftCheckoutSubmission";
-import { WeddingGiftsApi, WeddingGiftsApiError } from "./gifts";
+import {
+  getGiftErrorMessage,
+  WeddingGiftsApi,
+  WeddingGiftsApiError,
+  WeddingGiftsPaymentRejectedError,
+} from "./gifts";
 
 const gift = {
   id: "gift-a",
@@ -566,6 +571,93 @@ describe("failed checkout wire responses preserve the original operation", () =>
       } finally {
         create.mockRestore();
       }
+    },
+  );
+  it.each([
+    [
+      "PIX_UNAVAILABLE",
+      "Não foi possível abrir o Pix. Tente novamente ou use cartão.",
+    ],
+    [
+      "PAYMENT_METHOD_UNAVAILABLE",
+      "Não foi possível abrir o pagamento. Tente novamente ou escolha outra forma.",
+    ],
+  ] as const)(
+    "treats a definitive 422 %s as a typed rejection that releases the attempt",
+    async (code, message) => {
+      const fetcher = vi.fn<typeof fetch>(async () =>
+        Response.json(
+          {
+            type: "about:blank",
+            status: 422,
+            code,
+            title: "Gift payment request rejected",
+          },
+          { status: 422 },
+        ),
+      );
+      const f = submissionFixture(fetcher);
+      const create = vi.spyOn(f.client, "createCheckout");
+      try {
+        const event = await submitGiftCheckout(
+          f.client,
+          f.currentQuote,
+          f.pending,
+          () => f.storage,
+        );
+        const error = await create.mock.results[0].value.catch(
+          (cause: unknown) => cause,
+        );
+        expect(error).toBeInstanceOf(WeddingGiftsPaymentRejectedError);
+        expect(error).toBeInstanceOf(WeddingGiftsApiError);
+        expect(error).toMatchObject({ status: 422, code });
+        expect(getGiftErrorMessage(error)).toBe(message);
+        expect(f.values.has(f.key)).toBe(false);
+        expect(event).toEqual({
+          type: "CHECKOUT_FAILED",
+          unknown: false,
+          rejected: true,
+          invalidateQuote: true,
+          message,
+        });
+        if (!event) throw new Error("Expected a rejection event");
+        const next = giftCheckoutReducer(f.state, event);
+        expect(next.phase).toBe("IDLE");
+        expect(next.pending).toBeNull();
+        expect(next.requestId).toBeNull();
+        expect(next.error).toBeNull();
+        expect(
+          giftCheckoutReducer(next, {
+            type: "SELECT_GIFT",
+            gift: publicGiftItemSchema.parse(gift),
+          }).phase,
+        ).toBe("SELECTED");
+      } finally {
+        create.mockRestore();
+      }
+    },
+  );
+  it.each([
+    { label: "non-422 status", status: 409, body: { status: 409 } },
+    { label: "mismatched problem status", status: 422, body: { status: 400 } },
+    { label: "missing problem status", status: 422, body: {} },
+  ])(
+    "keeps a rejection code with a $label unknown",
+    async ({ status, body }) => {
+      const fetcher = vi.fn<typeof fetch>(async () =>
+        Response.json(
+          { type: "about:blank", code: "PIX_UNAVAILABLE", ...body },
+          { status },
+        ),
+      );
+      const f = submissionFixture(fetcher);
+      const event = await submitGiftCheckout(
+        f.client,
+        f.currentQuote,
+        f.pending,
+        () => f.storage,
+      );
+      assertUnknown(f, event);
     },
   );
   it.each([

@@ -5,7 +5,7 @@ import {
   type SiteRecord,
   siteHomeSummarySchema,
 } from "@entrelacos/contracts";
-import { Badge, toast } from "@entrelacos/ui";
+import { Badge, giftPaymentsEnabled, toast } from "@entrelacos/ui";
 import { Link } from "@tanstack/react-router";
 import {
   ArrowRight,
@@ -57,6 +57,7 @@ export async function readHomeReceiving(
   receive: (readiness: ReceivingReadiness | null, failed: boolean) => void,
   isActive: () => boolean = () => true,
 ) {
+  if (!giftPaymentsEnabled()) return;
   const captured = panelActorOwner.getSnapshot();
   const membership = captured.actor?.memberships?.find(
     (item) =>

@@ -10,6 +10,7 @@ import {
 import {
   clearPendingGiftCheckout,
   createGiftCheckoutRecoveryToken,
+  discardPendingGiftCheckout,
   giftPendingStorageKey,
   hasUnresolvedGiftCheckout,
   loadPendingGiftCheckout,
@@ -245,6 +246,36 @@ describe("pending checkout recovery storage", () => {
       clearPendingGiftCheckout(() => target, "wedding-a", pending),
     ).toThrow();
     expect(target.removeItem).not.toHaveBeenCalled();
+  });
+  it("remembers which gift the saved attempt belongs to", () => {
+    const target = storage();
+    writePendingGiftCheckout(target, "wedding-a", {
+      ...pending,
+      giftId: "gift-a",
+    });
+    expect(readPendingGiftCheckout(target, "wedding-a")?.giftId).toBe("gift-a");
+    expect(() =>
+      writePendingGiftCheckout(target, "wedding-a", {
+        ...pending,
+        giftId: "../gift",
+      }),
+    ).toThrow();
+  });
+  it("discards a settled attempt, including retained history, only for the same operation", () => {
+    const target = storage();
+    writePendingGiftCheckout(target, "wedding-a", withHistory);
+    expect(() =>
+      discardPendingGiftCheckout(() => target, "wedding-a", {
+        ...pending,
+        requestId: "request-b",
+      }),
+    ).toThrow();
+    expect(target.removeItem).not.toHaveBeenCalled();
+    discardPendingGiftCheckout(() => target, "wedding-a", pending);
+    expect(readPendingGiftCheckout(target, "wedding-a")).toBeNull();
+    expect(() =>
+      discardPendingGiftCheckout(() => target, "wedding-a", pending),
+    ).not.toThrow();
   });
   it("reports inaccessible removal without exposing storage errors", () => {
     const target = storage();

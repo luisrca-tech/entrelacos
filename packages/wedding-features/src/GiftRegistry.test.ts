@@ -127,6 +127,7 @@ describe("mounted server catalog runtime", () => {
     window.sessionStorage.clear();
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
     vi.useRealTimers();
     (
       globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -414,11 +415,10 @@ describe("mounted server catalog runtime", () => {
     const { surface } = await mount(fetcher);
     expect(surface.textContent).not.toContain("Não inicie outro pagamento");
     expect(surface.textContent).not.toContain("Escolher presente");
+    // A legacy attempt without a gift binding stays reachable discreetly.
     expect(
-      Array.from(surface.querySelectorAll("button")).some(
-        (button) => button.textContent === "Consultar pagamento",
-      ),
-    ).toBe(true);
+      surface.querySelector("[data-gift-payment-fallback] button")?.textContent,
+    ).toBe("Ver pagamento");
     await click(surface, "Próxima página");
     expect(JSON.stringify({ ...window.sessionStorage })).toBe(snapshot);
     expect(surface.textContent).not.toContain("Não inicie outro pagamento");
@@ -431,22 +431,25 @@ describe("mounted server catalog runtime", () => {
       ),
     ).toBe(true);
   });
+
   const pendingCard = {
     quoteId: "quote-a",
     requestId: "request-a",
     recoveryToken: "A".repeat(43),
     method: "CREDIT_CARD",
     mode: "sandbox",
+    giftId: "gift-1",
   } as const;
   const paymentStatus = (state = "CONFIRMED") => ({
     siteId: "wedding-a",
     ...pendingCard,
     recoveryToken: undefined,
+    giftId: undefined,
     orderId: "order-a",
     attemptId: "attempt-a",
     state,
     observedAt: "2026-10-19T12:00:00.000Z",
-    closedReason: state === "CLOSED_UNPAID" ? "CANCELED" : null,
+    closedReason: state === "CLOSED_UNPAID" ? "FAILED" : null,
     mayStartNewAttempt: state === "CLOSED_UNPAID",
     checkout: null,
   });
@@ -461,48 +464,207 @@ describe("mounted server catalog runtime", () => {
     fetcher.mock.calls.filter(([url]) =>
       String(url).endsWith("gift-checkouts/status"),
     );
-
-  it("shows a slow consultation independently of the catalog and recovers after a reload", async () => {
-    writePendingGiftCheckout(window.sessionStorage, "wedding-a", pendingCard);
-    let finishStatus!: (response: Response) => void;
-    const slow = new Promise<Response>((resolve) => {
-      finishStatus = resolve;
-    });
-    const fetcher = vi.fn<typeof fetch>((url) =>
-      String(url).endsWith("gift-checkouts/status")
-        ? slow
-        : new Promise<Response>(() => {}),
+  const pendingKey = "entrelacos:pending-gift-checkout:wedding-a";
+  const toastLog: Array<{ kind: string; message: string }> = [];
+  const recordToast = (event: Event) =>
+    toastLog.push(
+      (event as CustomEvent<{ kind: string; message: string }>).detail,
     );
-    const first = await mount(fetcher);
-    expect(first.surface.hidden).toBe(false);
-    expect(first.surface.textContent).toContain("Consultando pagamento…");
-    expect(first.surface.textContent).not.toContain("Escolher presente");
+  beforeEach(() => {
+    toastLog.length = 0;
+    window.addEventListener("entrelacos:toast", recordToast);
+  });
+  afterEach(() => window.removeEventListener("entrelacos:toast", recordToast));
+  const paymentDialog = (surface: HTMLElement) =>
+    surface.querySelector<HTMLDialogElement>(
+      'dialog[aria-labelledby="gift-payment-heading"]',
+    );
+  const cardActions = (surface: HTMLElement) =>
+    Array.from(surface.querySelectorAll("article"), (card) =>
+      Array.from(card.querySelectorAll("button"), (b) => b.textContent).join(
+        "|",
+      ),
+    );
+  async function openPayment(surface: HTMLElement) {
+    const badge = Array.from(surface.querySelectorAll("button")).find(
+      (b) => b.textContent === "Ver pagamento",
+    );
+    if (!badge) throw new Error("Missing payment badge");
     await act(async () => {
-      finishStatus(reply({ code: "UNAVAILABLE" }, 503));
+      badge.focus();
+      badge.click();
       await flush();
     });
-    expect(first.surface.textContent).toContain(
-      "Não foi possível consultar o pagamento agora.",
-    );
-    await act(async () => {
-      first.root.unmount();
-      first.active = false;
+    return badge;
+  }
+
+  describe("with money gifts switched off", () => {
+    beforeEach(() => vi.stubEnv("PUBLIC_GIFT_PAYMENTS_ENABLED", undefined));
+
+    it("keeps the gifts listed with a disabled button that opens nothing", async () => {
+      const fetcher = paymentFetcher(async () =>
+        reply({ status: paymentStatus("OUTCOME_UNKNOWN") }),
+      );
+      const { surface } = await mount(fetcher);
+      expect(surface.hidden).toBe(false);
+      expect(surface.querySelectorAll("article")).toHaveLength(20);
+      expect(surface.textContent).toContain("Dinner 0");
+      const purchase =
+        surface.querySelector<HTMLButtonElement>("article button");
+      expect(purchase?.textContent).toBe("Escolher presente");
+      expect(purchase?.disabled).toBe(true);
+      expect(purchase?.getAttribute("aria-disabled")).toBe("true");
+      const notice = document.getElementById(
+        purchase?.getAttribute("aria-describedby") ?? "",
+      );
+      expect(notice?.textContent).toBe(
+        "Os presentes em dinheiro estarão disponíveis em breve.",
+      );
+      await act(async () => {
+        purchase?.click();
+        await flush();
+      });
+      expect(surface.querySelector("dialog")?.open).not.toBe(true);
+      expect(fetcher).toHaveBeenCalledTimes(1);
+      expect(fetcher.mock.calls[0][1]?.method).toBe("GET");
     });
-    const recovered = paymentFetcher(async () =>
-      reply({ status: paymentStatus("CONFIRMED") }),
-    );
-    const { surface } = await mount(recovered);
-    expect(statusCalls(recovered)).toHaveLength(1);
-    expect(surface.textContent).toContain("Pagamento aprovado");
-    expect(surface.textContent).not.toContain("Escolher presente");
+
+    it("never resumes a saved checkout attempt", async () => {
+      writePendingGiftCheckout(window.sessionStorage, "wedding-a", pendingCard);
+      const fetcher = paymentFetcher(async () =>
+        reply({ status: paymentStatus("OUTCOME_UNKNOWN") }),
+      );
+      const { surface } = await mount(fetcher);
+      await advance(60_000);
+      expect(statusCalls(fetcher)).toHaveLength(0);
+      expect(surface.textContent).not.toContain("Ver pagamento");
+      expect(surface.querySelector("[data-gift-payment-fallback]")).toBeNull();
+      expect(window.sessionStorage.getItem(pendingKey)).not.toBeNull();
+    });
   });
 
-  it.each([
-    ["CONFIRMED", "Pagamento aprovado. Aguardando liberação do valor."],
-    ["RECEIVED", "Recebimento confirmado"],
-  ])(
-    "shows the verified %s outcome in the list without creating payment",
-    async (state, message) => {
+  it("marks only the gift with a saved attempt instead of a block above the list", async () => {
+    writePendingGiftCheckout(window.sessionStorage, "wedding-a", pendingCard);
+    const fetcher = paymentFetcher(async () =>
+      reply({ status: paymentStatus("OUTCOME_UNKNOWN") }),
+    );
+    const { surface } = await mount(fetcher);
+    expect(statusCalls(fetcher)).toHaveLength(1);
+    expect(
+      surface.querySelector('[aria-label="Acompanhamento do pagamento"]'),
+    ).toBeNull();
+    expect(surface.textContent).not.toMatch(
+      /Pagamento em verificação|Consultar pagamento/,
+    );
+    expect(surface.querySelector("[data-gift-payment-fallback]")).toBeNull();
+    const actions = cardActions(surface);
+    expect(actions[1]).toBe("Ver pagamento");
+    expect(actions.filter((action) => action !== "")).toEqual([
+      "Ver pagamento",
+    ]);
+    expect(
+      surface
+        .querySelectorAll("article")[1]
+        .querySelector("button")
+        ?.getAttribute("aria-haspopup"),
+    ).toBe("dialog");
+  });
+
+  it("opens an accessible payment modal that polls with backoff only while open", async () => {
+    writePendingGiftCheckout(window.sessionStorage, "wedding-a", pendingCard);
+    const fetcher = paymentFetcher(async () =>
+      reply({ status: paymentStatus("OUTCOME_UNKNOWN") }),
+    );
+    const { surface } = await mount(fetcher);
+    expect(statusCalls(fetcher)).toHaveLength(1);
+    await advance(600000);
+    expect(statusCalls(fetcher)).toHaveLength(1);
+
+    const badge = await openPayment(surface);
+    const dialog = paymentDialog(surface);
+    expect(dialog?.open).toBe(true);
+    expect(dialog?.getAttribute("aria-modal")).toBe("true");
+    expect(document.getElementById("gift-payment-heading")?.textContent).toBe(
+      "Acompanhar pagamento",
+    );
+    expect(dialog?.textContent).toContain("Dinner 1");
+    expect(dialog?.querySelector('[role="status"]')?.textContent).toBe(
+      "Pagamento em verificação",
+    );
+    expect(dialog?.textContent).toContain("Consultar pagamento");
+    expect(dialog?.querySelector("summary")?.textContent).toBe(
+      "Sobre o pagamento",
+    );
+    expect(dialog?.textContent).not.toContain("Continuar para pagamento");
+    expect(statusCalls(fetcher)).toHaveLength(2);
+
+    for (const [wait, total] of [
+      [2999, 2],
+      [1, 3],
+      [6000, 4],
+      [12000, 5],
+      [24000, 6],
+      [48000, 7],
+      [60000, 8],
+    ])
+      await advance(wait).then(() =>
+        expect(statusCalls(fetcher)).toHaveLength(total),
+      );
+    for (let i = 0; i < 20; i++) await advance(60000);
+    expect(statusCalls(fetcher)).toHaveLength(11);
+
+    await act(async () => {
+      dialog?.dispatchEvent(new Event("cancel", { cancelable: true }));
+      await flush();
+    });
+    expect(dialog?.open).toBe(false);
+    expect(document.activeElement).toBe(badge);
+    expect(window.sessionStorage.getItem(pendingKey)).not.toBeNull();
+
+    await openPayment(surface);
+    expect(statusCalls(fetcher)).toHaveLength(12);
+    await act(async () => {
+      paymentDialog(surface)?.dispatchEvent(
+        new Event("cancel", { cancelable: true }),
+      );
+      await flush();
+    });
+    for (let i = 0; i < 10; i++) await advance(60000);
+    expect(statusCalls(fetcher)).toHaveLength(12);
+  });
+
+  it("stops polling, clears the attempt and thanks the guest once the payment is confirmed", async () => {
+    writePendingGiftCheckout(window.sessionStorage, "wedding-a", pendingCard);
+    let approved = false;
+    const fetcher = paymentFetcher(async () =>
+      reply({
+        status: paymentStatus(approved ? "CONFIRMED" : "OUTCOME_UNKNOWN"),
+      }),
+    );
+    const { surface } = await mount(fetcher);
+    await openPayment(surface);
+    expect(statusCalls(fetcher)).toHaveLength(2);
+    approved = true;
+    await advance(3000);
+    expect(statusCalls(fetcher)).toHaveLength(3);
+    expect(paymentDialog(surface)?.open).toBe(false);
+    expect(toastLog).toEqual([
+      {
+        kind: "success",
+        message: "Pagamento confirmado. Obrigado pelo presente!",
+      },
+    ]);
+    expect(window.sessionStorage.getItem(pendingKey)).toBeNull();
+    expect(cardActions(surface)[1]).toBe("Escolher presente");
+    for (let i = 0; i < 10; i++) await advance(60000);
+    await refocus();
+    expect(statusCalls(fetcher)).toHaveLength(3);
+    expect(toastLog).toHaveLength(1);
+  });
+
+  it.each(["CONFIRMED", "RECEIVED"])(
+    "settles a %s attempt found on return without showing a payment block",
+    async (state) => {
       writePendingGiftCheckout(window.sessionStorage, "wedding-a", pendingCard);
       const fetcher = paymentFetcher(async () =>
         reply({ status: paymentStatus(state) }),
@@ -514,46 +676,52 @@ describe("mounted server catalog runtime", () => {
         requestId: pendingCard.requestId,
         recoveryToken: pendingCard.recoveryToken,
       });
-      expect(
-        fetcher.mock.calls.every(
-          ([url]) =>
-            String(url).endsWith("gift-checkouts/status") ||
-            new URL(String(url)).pathname.endsWith("/gifts"),
-        ),
-      ).toBe(true);
-      expect(
-        surface.querySelector('[aria-label="Acompanhamento do pagamento"]')
-          ?.textContent,
-      ).toContain(message);
+      expect(toastLog).toEqual([
+        {
+          kind: "success",
+          message: "Pagamento confirmado. Obrigado pelo presente!",
+        },
+      ]);
+      expect(window.sessionStorage.getItem(pendingKey)).toBeNull();
+      expect(surface.textContent).not.toMatch(
+        /Ver pagamento|Recebimento confirmado|Pagamento aprovado/,
+      );
+      expect(cardActions(surface).every((a) => a === "Escolher presente")).toBe(
+        true,
+      );
       await refocus();
-      expect(statusCalls(fetcher)).toHaveLength(2);
-      expect(surface.textContent).toContain(message);
+      expect(statusCalls(fetcher)).toHaveLength(1);
     },
   );
 
-  it("keeps uncertain payments locked and consults directly without opening a recovery modal", async () => {
+  it("clears a closed unpaid attempt so its badge does not come back", async () => {
     writePendingGiftCheckout(window.sessionStorage, "wedding-a", pendingCard);
     const fetcher = paymentFetcher(async () =>
-      reply({ status: paymentStatus("OUTCOME_UNKNOWN") }),
+      reply({ status: paymentStatus("CLOSED_UNPAID") }),
     );
+    const first = await mount(fetcher);
+    expect(statusCalls(fetcher)).toHaveLength(1);
+    expect(window.sessionStorage.getItem(pendingKey)).toBeNull();
+    expect(toastLog).toEqual([
+      {
+        kind: "warning",
+        message: "O pagamento não foi concluído. Você pode tentar novamente.",
+      },
+    ]);
+    expect(first.surface.textContent).not.toMatch(
+      /Ver pagamento|Pagamento encerrado/,
+    );
+    expect(cardActions(first.surface)[1]).toBe("Escolher presente");
+    await act(async () => {
+      first.root.unmount();
+      first.active = false;
+    });
     const { surface } = await mount(fetcher);
     expect(statusCalls(fetcher)).toHaveLength(1);
-    await click(surface, "Consultar pagamento");
-    expect(surface.querySelector("dialog")?.open).toBe(false);
-    expect(statusCalls(fetcher)).toHaveLength(2);
-    expect(surface.textContent).not.toContain("Escolha como presentear");
-    expect(window.sessionStorage.length).toBe(1);
-    for (let i = 0; i < 15; i++) await advance(3000);
-    expect(statusCalls(fetcher).length).toBeLessThanOrEqual(11);
-    expect(statusCalls(fetcher).length).toBeGreaterThan(1);
-    expect(
-      fetcher.mock.calls.every(
-        ([url]) => !String(url).endsWith("gift-checkouts"),
-      ),
-    ).toBe(true);
+    expect(surface.textContent).not.toContain("Ver pagamento");
   });
 
-  it("keeps a failed consultation in the list and retries only the existing attempt", async () => {
+  it("keeps a failed consultation inside the modal and retries only the existing attempt", async () => {
     writePendingGiftCheckout(window.sessionStorage, "wedding-a", pendingCard);
     let unavailable = true;
     const fetcher = paymentFetcher(async () =>
@@ -562,20 +730,41 @@ describe("mounted server catalog runtime", () => {
         : reply({ status: paymentStatus("OUTCOME_UNKNOWN") }),
     );
     const { surface } = await mount(fetcher);
-    expect(surface.querySelector('[role="alert"]')?.textContent).toBe(
+    expect(statusCalls(fetcher)).toHaveLength(1);
+    await openPayment(surface);
+    const dialog = paymentDialog(surface);
+    expect(dialog?.querySelector('[role="alert"]')?.textContent).toBe(
       "Não foi possível consultar o pagamento agora.",
     );
-    expect(surface.textContent).not.toMatch(
-      /Recebimento confirmado|Escolher presente/,
-    );
-    await advance(3000);
-    expect(surface.querySelectorAll('[role="alert"]')).toHaveLength(1);
-    expect(window.sessionStorage.length).toBe(1);
     unavailable = false;
     await click(surface, "Consultar pagamento");
-    expect(surface.querySelector('[role="alert"]')).toBeNull();
-    expect(surface.textContent).toContain("Pagamento em verificação");
+    expect(dialog?.querySelector('[role="status"]')?.textContent).toBe(
+      "Pagamento em verificação",
+    );
     expect(statusCalls(fetcher)).toHaveLength(3);
+    expect(
+      statusCalls(fetcher).every(
+        ([, init]) =>
+          JSON.parse(String(init?.body)).requestId === pendingCard.requestId,
+      ),
+    ).toBe(true);
+    expect(toastLog).toEqual([]);
+  });
+
+  it("shows a slow consultation in the modal even before the catalog arrives", async () => {
+    writePendingGiftCheckout(window.sessionStorage, "wedding-a", pendingCard);
+    const fetcher = vi.fn<typeof fetch>((url) =>
+      String(url).endsWith("gift-checkouts/status")
+        ? new Promise<Response>(() => {})
+        : new Promise<Response>(() => {}),
+    );
+    const { surface } = await mount(fetcher);
+    expect(surface.hidden).toBe(false);
+    expect(surface.textContent).not.toContain("Consultando pagamento…");
+    await openPayment(surface);
+    expect(
+      paymentDialog(surface)?.querySelector('[role="status"]')?.textContent,
+    ).toBe("Consultando pagamento…");
   });
 
   it("disposes pending status outcomes and timers on unmount", async () => {
@@ -615,52 +804,22 @@ describe("mounted server catalog runtime", () => {
     }
   });
 
-  it("polls a pending card until verified approval, then stops automatic checks", async () => {
-    writePendingGiftCheckout(window.sessionStorage, "wedding-a", pendingCard);
-    let approved = false;
-    const fetcher = paymentFetcher(async () =>
-      reply({
-        status: paymentStatus(approved ? "CONFIRMED" : "OUTCOME_UNKNOWN"),
-      }),
-    );
-    const { surface } = await mount(fetcher);
-    expect(statusCalls(fetcher)).toHaveLength(1);
-    approved = true;
-    await advance(3000);
-    expect(statusCalls(fetcher)).toHaveLength(2);
-    await advance(30000);
-    expect(statusCalls(fetcher)).toHaveLength(2);
-    await click(surface, "Consultar pagamento");
-    expect(surface.querySelector("dialog")?.open).toBe(false);
-    expect(statusCalls(fetcher)).toHaveLength(3);
-    expect(surface.textContent).toContain(
-      "Pagamento aprovado. Aguardando liberação do valor.",
-    );
-    expect(surface.textContent).not.toContain("Recebimento confirmado");
-  });
-
   it("shows an unavailable consultation when the saved attempt is unreadable", async () => {
-    window.sessionStorage.setItem(
-      "entrelacos:pending-gift-checkout:wedding-a",
-      "broken",
-    );
+    window.sessionStorage.setItem(pendingKey, "broken");
     const fetcher = paymentFetcher(async () =>
       reply({ status: paymentStatus() }),
     );
     const { surface } = await mount(fetcher);
-    expect(surface.textContent).toContain(
+    expect(surface.textContent).not.toContain("Escolher presente");
+    await openPayment(surface);
+    const dialog = paymentDialog(surface);
+    expect(dialog?.textContent).toContain(
       "Não foi possível consultar o pagamento agora.",
     );
-    expect(surface.textContent).not.toMatch(
-      /Consultar pagamento|Escolher presente/,
-    );
-    expect(surface.querySelector("dialog")?.open).toBe(false);
+    expect(dialog?.textContent).not.toContain("Consultar pagamento");
+    expect(surface.querySelectorAll("dialog")[0]?.open).toBe(false);
     expect(statusCalls(fetcher)).toHaveLength(0);
-    expect(
-      window.sessionStorage.getItem(
-        "entrelacos:pending-gift-checkout:wedding-a",
-      ),
-    ).toBe("broken");
+    expect(window.sessionStorage.getItem(pendingKey)).toBe("broken");
   });
 
   it("offers hosted continuation only while the payment is awaiting completion", async () => {
@@ -696,14 +855,140 @@ describe("mounted server catalog runtime", () => {
       }),
     );
     const { surface } = await mount(fetcher);
+    expect(surface.textContent).not.toContain("Continuar para pagamento");
+    await openPayment(surface);
+    expect(
+      paymentDialog(surface)?.querySelector('[role="status"]')?.textContent,
+    ).toBe("Pagamento aguardando conclusão");
     await click(surface, "Continuar para pagamento");
     expect(navigate).toHaveBeenCalledExactlyOnceWith(
       "https://checkout.example.test/pay/existing",
     );
     nextState = "CONFIRMED";
     await click(surface, "Consultar pagamento");
+    expect(paymentDialog(surface)?.open).toBe(false);
     expect(surface.textContent).not.toContain("Continuar para pagamento");
-    expect(surface.textContent).toContain("Pagamento aprovado");
+    expect(toastLog.map((t) => t.message)).toEqual([
+      "Pagamento confirmado. Obrigado pelo presente!",
+    ]);
+  });
+
+  const checkoutQuote = (giftId: string, method: string) => ({
+    id: "quote-new",
+    giftId,
+    siteId: "wedding-a",
+    title: "Dinner 0",
+    method,
+    currency: "BRL",
+    nominalCents: 10000,
+    commissionBasisPoints: 200,
+    commissionCents: 200,
+    processingCents: 150,
+    totalCents: 10350,
+    policyVersion: "test-v1",
+    expiresAt: "2099-01-01T00:00:00.000Z",
+    mode: "sandbox",
+  });
+  function checkoutFetcher(create: () => Response) {
+    return vi.fn<typeof fetch>(async (url, init) => {
+      const path = new URL(String(url)).pathname;
+      if (path.endsWith("/gift-quotes")) {
+        const body = JSON.parse(String(init?.body));
+        return reply({ quote: checkoutQuote(body.giftId, body.method) });
+      }
+      if (path.endsWith("/gift-checkouts")) return create();
+      if (path.endsWith("/gift-checkouts/status"))
+        return reply({ status: paymentStatus("OUTCOME_UNKNOWN") });
+      const q = query(url);
+      return reply(page(q.siteId, q.page, q.q));
+    });
+  }
+  async function payWithPix(surface: HTMLElement) {
+    await click(surface, "Escolher presente");
+    await click(surface, "Pix");
+    await click(surface, "Continuar para pagamento");
+  }
+
+  it.each([
+    [
+      "PIX_UNAVAILABLE",
+      "Não foi possível abrir o Pix. Tente novamente ou use cartão.",
+    ],
+    [
+      "PAYMENT_METHOD_UNAVAILABLE",
+      "Não foi possível abrir o pagamento. Tente novamente ou escolha outra forma.",
+    ],
+  ])(
+    "returns the gift to normal after a definitive %s rejection",
+    async (code, message) => {
+      const fetcher = checkoutFetcher(() =>
+        reply(
+          {
+            type: "about:blank",
+            status: 422,
+            code,
+            title: "Gift payment request rejected",
+          },
+          422,
+        ),
+      );
+      const { surface } = await mount(fetcher);
+      await payWithPix(surface);
+      expect(
+        fetcher.mock.calls.filter(([url]) =>
+          String(url).endsWith("/gift-checkouts"),
+        ),
+      ).toHaveLength(1);
+      expect(toastLog).toEqual([{ kind: "error", message }]);
+      expect(window.sessionStorage.getItem(pendingKey)).toBeNull();
+      expect(surface.querySelector("dialog")?.open).toBe(false);
+      expect(surface.textContent).not.toMatch(
+        /verificação|Ver pagamento|Aguarde…/,
+      );
+      expect(cardActions(surface).every((a) => a === "Escolher presente")).toBe(
+        true,
+      );
+      expect(
+        Array.from(surface.querySelectorAll("article button")).some(
+          (button) => (button as HTMLButtonElement).disabled,
+        ),
+      ).toBe(false);
+      expect(
+        fetcher.mock.calls.some(([url]) =>
+          String(url).endsWith("gift-checkouts/status"),
+        ),
+      ).toBe(false);
+      await click(surface, "Escolher presente");
+      expect(surface.querySelector("dialog")?.open).toBe(true);
+      await click(surface, "Cartão de crédito");
+      expect(
+        surface.querySelector<HTMLButtonElement>('button[aria-pressed="true"]')
+          ?.textContent,
+      ).toBe("Cartão de crédito");
+    },
+  );
+
+  it("moves an unknown checkout outcome to a discreet badge on the chosen gift", async () => {
+    const fetcher = checkoutFetcher(() =>
+      reply({ code: "EXTERNAL_OUTCOME_UNKNOWN" }, 409),
+    );
+    const { surface } = await mount(fetcher);
+    await payWithPix(surface);
+    expect(surface.querySelector("dialog")?.open).toBe(false);
+    expect(
+      JSON.parse(window.sessionStorage.getItem(pendingKey) ?? "null")?.giftId,
+    ).toBe("gift-0");
+    expect(cardActions(surface)[0]).toBe("Ver pagamento");
+    expect(toastLog).toEqual([
+      {
+        kind: "warning",
+        message:
+          "Pagamento em verificação. Acompanhe pelo botão “Ver pagamento”.",
+      },
+    ]);
+    expect(statusCalls(fetcher)).toHaveLength(1);
+    for (let i = 0; i < 10; i++) await advance(60000);
+    expect(statusCalls(fetcher)).toHaveLength(1);
   });
 
   it("ignores an old site's receipt after the runtime scope is replaced", async () => {

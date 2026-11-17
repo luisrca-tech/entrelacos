@@ -9,6 +9,7 @@ import {
   checkoutCreateInputSchema,
   publicGiftCatalogQuerySchema,
 } from "@entrelacos/contracts";
+import { giftPaymentsEnabled } from "@entrelacos/ui";
 import { toast } from "@entrelacos/ui/toast";
 import { useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { GiftCatalogView } from "./GiftCatalogView";
@@ -21,6 +22,7 @@ import {
 } from "./giftCheckoutState";
 import {
   createGiftCheckoutRecoveryToken,
+  discardPendingGiftCheckout,
   loadPendingGiftCheckout,
   writePendingGiftCheckout,
 } from "./giftCheckoutStorage";
@@ -39,6 +41,27 @@ type CatalogOwner = {
   pending: (() => void) | null;
 };
 export type GiftRegistryProps = WeddingGiftsApiOptions;
+
+const finalPaymentStates = new Set([
+  "CONFIRMED",
+  "RECEIVED",
+  "REFUNDED",
+  "CLOSED_UNPAID",
+]);
+/** Status checks per opening of the payment dialog. */
+const maxPaymentChecks = 10;
+/** 3s, 6s, 12s… between checks while the payment dialog stays open. */
+export function paymentCheckDelay(completedChecks: number): number {
+  return Math.min(3000 * 2 ** (completedChecks - 1), 60000);
+}
+const paymentConfirmedMessage = "Pagamento confirmado. Obrigado pelo presente!";
+const paymentRefundedMessage = "Este pagamento foi reembolsado.";
+const paymentClosedMessage =
+  "O pagamento não foi concluído. Você pode tentar novamente.";
+const paymentUnknownMessage =
+  "Pagamento em verificação. Acompanhe pelo botão “Ver pagamento”.";
+const paymentFallbackButtonClass =
+  "cursor-pointer border-0 bg-transparent p-0 font-[inherit] font-medium text-template-ink underline underline-offset-[0.2rem] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-template-ink";
 
 const fetcherIds = new WeakMap<typeof fetch, number>();
 let nextFetcherId = 1;
@@ -141,11 +164,20 @@ function GiftRegistryRuntime({
     createGiftCheckoutState,
   );
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [paymentOpen, setPaymentOpen] = useState(false);
   const [operationError, setOperationError] = useState("");
   const [recoveryLoading, setRecoveryLoading] = useState(false);
   const [recoveryError, setRecoveryError] = useState(false);
+  // Build-time switch: when off, gifts stay listed but no checkout starts or resumes.
+  const paymentsEnabled = giftPaymentsEnabled();
   const recovering = state.phase === "UNKNOWN";
   const currentCatalog = catalog?.api === api ? catalog.value : null;
+  const pendingGiftId = recovering ? (state.pending?.giftId ?? null) : null;
+  const pendingGift =
+    (pendingGiftId &&
+      currentCatalog?.mode !== "demonstration" &&
+      currentCatalog?.gifts.find((gift) => gift.id === pendingGiftId)) ||
+    null;
   const outcomePending =
     recovering || state.phase === "CREATING" || state.phase === "REDIRECTING";
   const visible =
@@ -162,6 +194,8 @@ function GiftRegistryRuntime({
   }, [visible]);
 
   useEffect(() => {
+    // The saved attempt stays untouched so it resumes once payments return.
+    if (!paymentsEnabled) return;
     try {
       const pending = loadPendingGiftCheckout(
         () => window.sessionStorage,
@@ -171,7 +205,7 @@ function GiftRegistryRuntime({
     } catch {
       dispatch({ type: "RESTORE_UNKNOWN" });
     }
-  }, [siteId]);
+  }, [siteId, paymentsEnabled]);
 
   useEffect(() => {
     setCatalog(null);
@@ -324,6 +358,7 @@ function GiftRegistryRuntime({
 
   function chooseGift(gift: PublicGiftItem) {
     if (
+      !paymentsEnabled ||
       outcomePending ||
       catalogLoading ||
       catalogError ||
@@ -349,6 +384,7 @@ function GiftRegistryRuntime({
     setRecoveryLoading(true);
     if (manual) setRecoveryError(false);
     const requestApi = api;
+    const pending = state.pending;
     const epoch = recoveryEpoch.current;
     const current = () =>
       mounted.current &&
@@ -366,6 +402,7 @@ function GiftRegistryRuntime({
         dispatch(event);
         currentRecoveredStatus.current = event.status;
         setRecoveryError(false);
+        settle(event.status, pending);
         return event.status.state;
       }
       setRecoveryError(true);
@@ -375,6 +412,28 @@ function GiftRegistryRuntime({
       recoveryInFlight.current = false;
       if (current()) setRecoveryLoading(false);
     }
+  }
+
+  // A final outcome leaves the list: forget the attempt and say so once.
+  function settle(
+    status: CheckoutStatus,
+    pending: NonNullable<typeof state.pending>,
+  ) {
+    if (!finalPaymentStates.has(status.state)) return;
+    setPaymentOpen(false);
+    if (status.state === "CLOSED_UNPAID") {
+      // The recovery step already removed the marker.
+      toast.warning(paymentClosedMessage);
+      return;
+    }
+    try {
+      discardPendingGiftCheckout(() => window.sessionStorage, siteId, pending);
+    } catch {
+      // A stale marker is checked once more on the next visit.
+    }
+    dispatch({ type: "SETTLED" });
+    if (status.state === "REFUNDED") toast.warning(paymentRefundedMessage);
+    else toast.success(paymentConfirmedMessage);
   }
 
   function continuePayment(checkout: NonNullable<CheckoutStatus["checkout"]>) {
@@ -398,9 +457,18 @@ function GiftRegistryRuntime({
   const pendingRequestId = state.pending?.requestId;
   useEffect(() => {
     if (state.phase === "UNKNOWN") setDialogOpen(false);
+    else setPaymentOpen(false);
   }, [state.phase]);
+  // One check when an attempt becomes pending: page load with a saved
+  // attempt, return from the hosted checkout, or an unknown creation outcome.
   useEffect(() => {
     if (!api || state.phase !== "UNKNOWN" || !pendingRequestId) return;
+    void recoveryAction.current();
+  }, [api, state.phase, pendingRequestId]);
+  // Further checks only while the guest keeps the payment dialog open.
+  useEffect(() => {
+    if (!api || !paymentOpen || state.phase !== "UNKNOWN" || !pendingRequestId)
+      return;
     let active = true;
     let timer: number | undefined;
     let checks = 0;
@@ -408,24 +476,18 @@ function GiftRegistryRuntime({
       const status = await recoveryAction.current();
       if (!active) return;
       checks++;
-      if (
-        checks < 10 &&
-        !["CONFIRMED", "RECEIVED", "REFUNDED", "CLOSED_UNPAID"].includes(
-          status ?? "",
-        )
-      ) {
-        timer = window.setTimeout(() => void check(), 3000);
-      }
+      if (checks < maxPaymentChecks && !finalPaymentStates.has(status ?? ""))
+        timer = window.setTimeout(
+          () => void check(),
+          paymentCheckDelay(checks),
+        );
     };
-    const recheck = () => void recoveryAction.current();
     void check();
-    window.addEventListener("focus", recheck);
     return () => {
       active = false;
       window.clearTimeout(timer);
-      window.removeEventListener("focus", recheck);
     };
-  }, [api, state.phase, pendingRequestId]);
+  }, [api, paymentOpen, state.phase, pendingRequestId]);
 
   async function checkout(payer?: CheckoutCreateInput["payer"]) {
     if (!api || state.phase !== "READY" || !state.quote || inFlight.current)
@@ -453,6 +515,7 @@ function GiftRegistryRuntime({
         quoteId: quote.id,
         requestId,
         recoveryToken,
+        giftId: quote.giftId,
         method: quote.method,
         mode: quote.mode,
       };
@@ -480,7 +543,14 @@ function GiftRegistryRuntime({
         current,
         payer,
       );
-      if (result && current()) dispatch(result);
+      if (result && current()) {
+        dispatch(result);
+        if (result.type === "CHECKOUT_FAILED" && result.rejected) {
+          setDialogOpen(false);
+          toast.error(result.message);
+        } else if (result.type === "CHECKOUT_FAILED" && result.unknown)
+          toast.warning(paymentUnknownMessage);
+      }
     } catch {
       setOperationError(
         "Não foi possível preparar o pagamento com segurança. Tente novamente neste navegador.",
@@ -492,23 +562,31 @@ function GiftRegistryRuntime({
 
   return (
     <div ref={root} data-gift-runtime className="grid min-w-0 gap-5">
-      {(recovering || state.checkoutStatus) && (
-        <GiftRecoveryView
-          siteId={siteId}
-          status={state.checkoutStatus}
-          loading={recoveryLoading}
-          error={recovering && (!api || !state.pending || recoveryError)}
-          canRetry={recovering && !!api && !!state.pending}
-          onRetry={() => void recover(true)}
-          onContinue={continuePayment}
-        />
+      {recovering && !pendingGift && (
+        <p
+          data-gift-payment-fallback
+          className="m-0 text-sm text-template-muted"
+        >
+          Há um pagamento em andamento neste navegador.{" "}
+          <button
+            type="button"
+            className={paymentFallbackButtonClass}
+            aria-haspopup="dialog"
+            onClick={() => setPaymentOpen(true)}
+          >
+            Ver pagamento
+          </button>
+        </p>
       )}
       {currentCatalog && (
         <GiftCatalogView
           recoveryOnly={recovering}
+          paymentGiftId={pendingGift?.id ?? null}
+          onViewPayment={() => setPaymentOpen(true)}
           gifts={currentCatalog.gifts}
           mode={currentCatalog.mode}
           busy={outcomePending || catalogLoading || catalogError}
+          paymentsDisabled={!paymentsEnabled}
           onSelect={chooseGift}
           paging={
             catalogShown
@@ -550,6 +628,29 @@ function GiftRegistryRuntime({
               onCancel={requestClose}
             />
           )
+        }
+      </SiteDialog>
+      <SiteDialog
+        open={paymentOpen && recovering}
+        labelledBy="gift-payment-heading"
+        className="w-[min(32rem,calc(100vw-2rem))] [@media(max-width:560px)]:m-auto [@media(max-width:560px)]:h-auto [@media(max-width:560px)]:max-h-[calc(100dvh-2rem)] [@media(max-width:560px)]:w-[calc(100vw-2rem)] [@media(max-width:560px)]:rounded-2xl"
+        onClose={() => setPaymentOpen(false)}
+      >
+        {(requestClose) =>
+          paymentOpen && recovering ? (
+            <GiftRecoveryView
+              siteId={siteId}
+              status={state.checkoutStatus}
+              loading={recoveryLoading}
+              error={!api || !state.pending || recoveryError}
+              canRetry={!!api && !!state.pending}
+              onRetry={() => void recover(true)}
+              onContinue={continuePayment}
+              headingId="gift-payment-heading"
+              giftTitle={pendingGift?.title}
+              onClose={requestClose}
+            />
+          ) : null
         }
       </SiteDialog>
     </div>

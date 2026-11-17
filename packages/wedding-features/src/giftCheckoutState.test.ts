@@ -1249,3 +1249,71 @@ it("recovers the same operation after a back-forward cache restore", () => {
   const idle = createGiftCheckoutState();
   expect(giftCheckoutReducer(idle, { type: "CHECKOUT_RETURNED" })).toBe(idle);
 });
+
+describe("guest-facing payment follow-up", () => {
+  const restoredWith = (status: CheckoutStatus) =>
+    giftCheckoutReducer(
+      giftCheckoutReducer(createGiftCheckoutState(), {
+        type: "RESTORE_UNKNOWN",
+        siteId: gift.siteId,
+        pending,
+      }),
+      { type: "STATUS_RESOLVED", status },
+    );
+  const settledStatus = (state: "CONFIRMED" | "RECEIVED" | "REFUNDED") => ({
+    ...awaitingStatus,
+    state,
+    checkout: null,
+  });
+
+  it("binds the saved attempt to the chosen gift", () => {
+    expect(creating().pending).toMatchObject({ ...pending, giftId: gift.id });
+  });
+
+  it("releases the list when the provider definitively rejects the attempt", () => {
+    const state = giftCheckoutReducer(creating(), {
+      type: "CHECKOUT_FAILED",
+      unknown: false,
+      rejected: true,
+      invalidateQuote: true,
+      message: "Não foi possível abrir o Pix. Tente novamente ou use cartão.",
+    });
+    expect(state).toMatchObject({
+      phase: "IDLE",
+      gift: null,
+      quote: null,
+      pending: null,
+      requestId: null,
+      recoveryToken: null,
+      error: null,
+    });
+    expect(
+      giftCheckoutReducer(state, { type: "SELECT_GIFT", gift }).phase,
+    ).toBe("SELECTED");
+  });
+
+  it.each(["CONFIRMED", "RECEIVED", "REFUNDED"] as const)(
+    "settles a verified %s attempt back to the normal list",
+    (paymentState) => {
+      const resolved = restoredWith(settledStatus(paymentState));
+      expect(resolved.phase).toBe("UNKNOWN");
+      const settled = giftCheckoutReducer(resolved, { type: "SETTLED" });
+      expect(settled.phase).toBe("IDLE");
+      expect(settled.pending).toBeNull();
+      expect(settled.checkoutStatus?.state).toBe(paymentState);
+    },
+  );
+
+  it("does not settle an attempt that is still pending", () => {
+    const awaiting = restoredWith(awaitingStatus);
+    expect(giftCheckoutReducer(awaiting, { type: "SETTLED" })).toBe(awaiting);
+    const unresolved = giftCheckoutReducer(createGiftCheckoutState(), {
+      type: "RESTORE_UNKNOWN",
+      siteId: gift.siteId,
+      pending,
+    });
+    expect(giftCheckoutReducer(unresolved, { type: "SETTLED" })).toBe(
+      unresolved,
+    );
+  });
+});

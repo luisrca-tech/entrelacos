@@ -7,6 +7,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   createGiftCheckoutService,
   type GiftCheckoutEvidence,
+  GiftCheckoutProviderRejectedError,
   type GiftCheckoutRecord,
   type GiftCheckoutServiceDependencies,
   GiftCheckoutServiceError,
@@ -219,6 +220,29 @@ function fixture() {
         records.set(key(saved.siteId, saved.requestId), saved);
         return saved;
       }),
+      markProviderRejected: vi.fn(async (identity, observedAt) => {
+        const record = records.get(key(identity.siteId, identity.requestId));
+        if (record?.state !== "CREATING") throw new Error("Not creating");
+        records.set(key(identity.siteId, identity.requestId), {
+          ...record,
+          state: "CLOSED_UNPAID",
+          observedAt,
+          closedReason: "FAILED",
+          evidence: {
+            source: "backend",
+            kind: "PROVIDER_REJECTION",
+            siteId: record.siteId,
+            quoteId: record.quoteId,
+            requestId: record.requestId,
+            orderId: record.orderId,
+            attemptId: record.attemptId,
+            recoveryTokenHash: record.recoveryTokenHash,
+            observedAt,
+            noProviderCharge: true,
+            closedReason: "FAILED",
+          },
+        });
+      }),
       markOutcomeUnknown: vi.fn(async (identity, observedAt) => {
         const record = records.get(key(identity.siteId, identity.requestId));
         if (record?.state === "CREATING") {
@@ -364,6 +388,55 @@ describe("durable gift checkout orchestration", () => {
     expect(assertProviderConfiguration).toHaveBeenCalledOnce();
     expect(v.dependencies.repository.reserve).toHaveBeenCalledOnce();
     expect(v.dependencies.createHostedCheckout).toHaveBeenCalledOnce();
+  });
+
+  it("closes a definitive provider rejection so the guest can start a new attempt", async () => {
+    const v = fixture();
+    const observe = vi.fn();
+    Object.assign(v.dependencies, { observe });
+    vi.mocked(v.dependencies.createHostedCheckout).mockRejectedValue(
+      new GiftCheckoutProviderRejectedError(["invalid_billingType"]),
+    );
+    const service = createGiftCheckoutService(v.dependencies);
+    await expect(
+      service.createCheckout("site-one", body),
+    ).rejects.toMatchObject({ code: "PIX_UNAVAILABLE", status: 422 });
+    expect(
+      v.dependencies.repository.markProviderRejected,
+    ).toHaveBeenCalledOnce();
+    expect(v.dependencies.repository.markOutcomeUnknown).not.toHaveBeenCalled();
+    expect(observe).toHaveBeenCalledWith({
+      level: "warn",
+      event: "gift_checkout.provider_rejected",
+      siteId: "site-one",
+      attemptId: "attempt-one",
+      paymentMethod: "PIX",
+      errorCode: "invalid_billingType",
+    });
+    expect(JSON.stringify(observe.mock.calls)).not.toMatch(/payer|cpf|email/i);
+    const status = await service.getStatus("site-one", body);
+    expect(status).toMatchObject({
+      state: "CLOSED_UNPAID",
+      closedReason: "FAILED",
+      mayStartNewAttempt: true,
+      checkout: null,
+    });
+    expect(checkoutStatusSchema.safeParse(status).success).toBe(true);
+  });
+
+  it("keeps the outcome unknown when a provider rejection cannot be closed durably", async () => {
+    const v = fixture();
+    vi.mocked(v.dependencies.createHostedCheckout).mockRejectedValue(
+      new GiftCheckoutProviderRejectedError(["invalid_billingType"]),
+    );
+    vi.mocked(v.dependencies.repository.markProviderRejected).mockRejectedValue(
+      new Error("database unavailable"),
+    );
+    const service = createGiftCheckoutService(v.dependencies);
+    await expect(
+      service.createCheckout("site-one", body),
+    ).rejects.toMatchObject({ code: "EXTERNAL_OUTCOME_UNKNOWN" });
+    expect(v.dependencies.repository.markOutcomeUnknown).toHaveBeenCalledOnce();
   });
 
   it("passes verified installment child payments through to the durable outcome", async () => {

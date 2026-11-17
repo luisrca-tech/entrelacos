@@ -1,5 +1,5 @@
 import type { ReceivingReadiness } from "@entrelacos/contracts";
-import { showSandboxNotice } from "@entrelacos/ui";
+import { giftPaymentsEnabled, showSandboxNotice } from "@entrelacos/ui";
 import { type ReactNode, useCallback, useEffect, useState } from "react";
 import { displayHeading } from "../lib/adminStyles";
 import { AdminButton } from "./AdminButton";
@@ -109,8 +109,9 @@ export function GiftsReadinessView({
       <div className="grid gap-4">
         <GiftsPageHeader />
         <p role="alert" className="m-0 text-admin-text-secondary">
-          Não foi possível verificar os recebimentos. Os presentes continuam
-          bloqueados.
+          {giftPaymentsEnabled()
+            ? "Não foi possível verificar os recebimentos. Os presentes continuam bloqueados."
+            : "Não foi possível carregar a lista de presentes."}
         </p>
         <div>
           <AdminButton type="button" tone="secondary" onClick={onRetry}>
@@ -125,7 +126,9 @@ export function GiftsReadinessView({
       <div className="grid gap-4">
         <GiftsPageHeader />
         <p role="status" className="m-0 text-admin-text-secondary">
-          Verificando os recebimentos…
+          {giftPaymentsEnabled()
+            ? "Verificando os recebimentos…"
+            : "Carregando a lista de presentes…"}
         </p>
       </div>
     );

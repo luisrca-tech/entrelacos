@@ -22,6 +22,8 @@ export interface ObservabilityEvent {
   datasetVersion?: string;
   count?: number;
   errorCode?: string;
+  attemptId?: string;
+  paymentMethod?: string;
 }
 
 export type ObservabilitySink = (event: ObservabilityEvent) => void;
@@ -55,6 +57,8 @@ const ALLOWED_FIELDS = [
   "datasetVersion",
   "count",
   "errorCode",
+  "attemptId",
+  "paymentMethod",
 ] as const satisfies readonly (keyof ObservabilityEvent)[];
 
 const TOKEN_PATTERN = /^[A-Za-z][A-Za-z0-9_.:-]{0,63}$/;
@@ -111,7 +115,7 @@ function safeFieldValue(
       ? value
       : undefined;
   }
-  if (field === "requestId") return boundedUuid(value);
+  if (field === "requestId" || field === "attemptId") return boundedUuid(value);
   if (field === "routeTemplate") return boundedRoute(value);
   if (field === "method") {
     return typeof value === "string" && /^[A-Z]{3,7}$/.test(value)
@@ -168,6 +172,14 @@ export function emitObservabilityEvent(
 
 function defaultSink(event: ObservabilityEvent): void {
   console.info(JSON.stringify(event));
+}
+
+/** Emits a sanitized event to the default structured log. */
+export function logObservabilityEvent(input: unknown): void {
+  emitObservabilityEvent(defaultSink, {
+    timestamp: new Date().toISOString(),
+    ...(input as object),
+  });
 }
 
 function getRouteTemplate(routePath: unknown): string | undefined {

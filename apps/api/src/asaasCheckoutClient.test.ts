@@ -8,6 +8,7 @@ import {
 import { buildAsaasCheckoutPayload } from "./asaasCheckoutPayload";
 import {
   createGiftCheckoutService,
+  GiftCheckoutProviderRejectedError,
   type GiftCheckoutRecord,
   type GiftCheckoutServiceDependencies,
 } from "./giftCheckouts";
@@ -763,6 +764,42 @@ describe("native Asaas hosted checkout creation", () => {
     },
   );
 
+  it("reports a 400 validation refusal of the creating call as a definitive rejection with codes only", async () => {
+    const values = fixture();
+    values.fetch.mockResolvedValue(
+      json(
+        {
+          errors: [
+            { code: "invalid_billingType", description: "private payer text" },
+          ],
+        },
+        { status: 400 },
+      ),
+    );
+    const error = await createAsaasCheckoutClient(values.options)
+      .createHostedCheckout(values.command)
+      .catch((error: unknown) => error);
+    expect(error).toBeInstanceOf(GiftCheckoutProviderRejectedError);
+    expect(error).toMatchObject({ providerCodes: ["invalid_billingType"] });
+    expect(JSON.stringify(error)).not.toMatch(/private|aact_/);
+    expect(values.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    [400, { message: "no errors array" }],
+    [400, { errors: [] }],
+    [500, { errors: [{ code: "internal_error", description: "x" }] }],
+    [401, { errors: [{ code: "invalid_access_token", description: "x" }] }],
+  ])("keeps HTTP %s %j as an unknown outcome", async (status, body) => {
+    const values = fixture();
+    values.fetch.mockResolvedValue(json(body, { status }));
+    await expect(
+      createAsaasCheckoutClient(values.options).createHostedCheckout(
+        values.command,
+      ),
+    ).rejects.toMatchObject(unavailable);
+  });
+
   it.each([201, 204, 302, 400, 401, 429, 500])(
     "rejects unsupported HTTP status %s without retry",
     async (status) => {
@@ -1104,6 +1141,9 @@ function serviceFixture() {
       markOutcomeUnknown: async (_identity, observedAt) => {
         if (record?.state === "CREATING")
           record = { ...record, state: "OUTCOME_UNKNOWN", observedAt };
+      },
+      markProviderRejected: async () => {
+        throw new Error("Not expected in this transport fixture");
       },
     },
     loadReceivingContext: async () => context,

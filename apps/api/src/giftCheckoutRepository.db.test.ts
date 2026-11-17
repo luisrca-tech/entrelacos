@@ -29,6 +29,7 @@ import {
 } from "./giftCheckoutRepository";
 import {
   createGiftCheckoutService,
+  GiftCheckoutProviderRejectedError,
   type GiftCheckoutReservation,
 } from "./giftCheckouts";
 import { beforeWriteCommitDatabase } from "./giftCheckoutTestBarrier";
@@ -944,6 +945,73 @@ describe("checkout reserve and pre-dispatch seal PostgreSQL acceptance", () => {
       release.release();
       await Promise.all(pending);
     }
+  });
+
+  it("closes a definitive provider rejection as unpaid and lets the guest pay again", async () => {
+    const value = await fixture();
+    const db = database();
+    const repository = createGiftCheckoutRepository(db, options());
+    const { checkout, provider } = service(value, repository);
+    provider.mockRejectedValueOnce(
+      new GiftCheckoutProviderRejectedError(["invalid_billingType"]),
+    );
+    await expect(
+      checkout.createCheckout(value.siteId, value.body),
+    ).rejects.toMatchObject({ code: "PIX_UNAVAILABLE", status: 422 });
+    expect(await checkout.getStatus(value.siteId, value.body)).toMatchObject({
+      state: "CLOSED_UNPAID",
+      closedReason: "FAILED",
+      mayStartNewAttempt: true,
+      checkout: null,
+    });
+    const operations = await db
+      .select()
+      .from(financialOperation)
+      .where(eq(financialOperation.siteId, value.siteId));
+    expect(operations).toMatchObject([
+      { state: "FAILED", lastErrorCode: "PROVIDER_REJECTED" },
+    ]);
+    // The refused request never dispatches again.
+    await checkout.createCheckout(value.siteId, value.body).catch(() => null);
+    expect(provider).toHaveBeenCalledOnce();
+    const readReadiness = (siteId: string) =>
+      readReceivingReadiness(db, siteId, receivingOptions());
+    const quote = await createGiftQuoteService({
+      findPublishedGift: (siteId, giftId) =>
+        findPublishedGiftForQuote(db, siteId, giftId, {
+          readReadiness,
+          applicationEnvironment: "test",
+        }),
+      loadReceivingContext: (siteId) =>
+        loadReceivingContext(db, siteId, receivingOptions()),
+      loadPricingPolicy: async (scope) => ({
+        ...scope,
+        verification: "verified",
+        provenance: "local-test",
+        policy: value.snapshot.pricing.policy,
+        observedAt: new Date(),
+        expiresAt: new Date(Date.now() + 30_000),
+      }),
+      repository: createGiftQuoteRepository(db, { now: () => new Date() }),
+      now: () => new Date(),
+      generateId: () => randomUUID(),
+      quoteTtlMs: 30000,
+      pricingFreshnessMs: 30000,
+    }).createQuote(value.siteId, { giftId: value.giftId, method: "PIX" });
+    const retry = await service(
+      { ...value, quoteId: quote.id },
+      repository,
+    ).checkout.createCheckout(value.siteId, {
+      quoteId: quote.id,
+      requestId: randomUUID(),
+      recoveryToken: randomBytes(32).toString("base64url"),
+    });
+    expect(retry).toMatchObject({
+      quoteId: quote.id,
+      method: "PIX",
+      hostedUrl: "https://sandbox.example.test/local-fixture",
+    });
+    expect(provider).toHaveBeenCalledOnce();
   });
 
   it("retains an ambiguous committed reservation without retrying the provider", async () => {
