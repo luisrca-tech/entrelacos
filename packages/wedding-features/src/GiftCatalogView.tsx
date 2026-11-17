@@ -3,12 +3,15 @@ import {
   giftImageAlt,
   type PublicGiftItem,
 } from "@entrelacos/contracts";
-import type { CSSProperties } from "react";
+import { giftPaymentsComingSoonMessage } from "@entrelacos/ui";
+import { type CSSProperties, useId } from "react";
 
 type Props = {
   gifts: PublicGiftItem[];
   mode: "disabled" | "sandbox" | "live" | "demonstration";
   busy: boolean;
+  /** Money gifts are switched off: keep the button visible but inert. */
+  paymentsDisabled?: boolean;
   recoveryOnly?: boolean;
   /** Gift whose payment attempt is saved in this browser. */
   paymentGiftId?: string | null;
@@ -39,12 +42,14 @@ export function GiftCatalogView({
   gifts,
   mode,
   busy,
+  paymentsDisabled = false,
   recoveryOnly = false,
   paymentGiftId = null,
   onViewPayment,
   onSelect,
   paging,
 }: Props) {
+  const comingSoonId = useId();
   if (mode === "disabled" || (gifts.length === 0 && !paging)) return null;
   const firstPosition = paging
     ? (paging.page - 1) * giftCatalogLimits.pageSize + 1
@@ -176,6 +181,26 @@ export function GiftCatalogView({
                       />
                       Ver pagamento
                     </button>
+                  ) : mode !== "demonstration" &&
+                    !recoveryOnly &&
+                    paymentsDisabled ? (
+                    <div className="mt-auto grid w-full gap-2">
+                      <button
+                        type="button"
+                        className={giftActionButtonClass}
+                        disabled
+                        aria-disabled="true"
+                        aria-describedby={`${comingSoonId}-${index}`}
+                      >
+                        Escolher presente
+                      </button>
+                      <p
+                        id={`${comingSoonId}-${index}`}
+                        className="m-0 text-center text-xs text-template-muted"
+                      >
+                        {giftPaymentsComingSoonMessage}
+                      </p>
+                    </div>
                   ) : (
                     mode !== "demonstration" &&
                     !recoveryOnly && (

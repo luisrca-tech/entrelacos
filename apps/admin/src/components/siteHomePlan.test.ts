@@ -1,5 +1,5 @@
 import type { ReceivingReadiness, SiteAccess } from "@entrelacos/contracts";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildSiteHomePlan } from "./siteHomePlan";
 
 const access: SiteAccess = {
@@ -197,4 +197,25 @@ it("counts calendar days in São Paulo across UTC midnight", async () => {
   expect(daysUntilWedding("2027-03-14", new Date("2027-03-15T03:00:00Z"))).toBe(
     -1,
   );
+});
+
+describe("site home with money gifts switched off", () => {
+  afterEach(() => vi.unstubAllEnvs());
+  it("hides receiving cards, labels and next steps", () => {
+    vi.stubEnv("PUBLIC_GIFT_PAYMENTS_ENABLED", undefined);
+    for (const readiness of [
+      null,
+      pending,
+      {
+        ...pending,
+        state: "BLOCKED" as const,
+        reason: "ACCOUNT_BLOCKED" as const,
+      },
+    ]) {
+      const plan = buildSiteHomePlan({ site, access, owner: true, readiness });
+      expect(plan.sections.map((x) => x.id)).not.toContain("receiving");
+      expect(plan.receivingLabel).toBeNull();
+      expect(plan.next?.href ?? "").not.toContain("receiving");
+    }
+  });
 });

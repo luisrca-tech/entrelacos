@@ -1,3 +1,5 @@
+import { giftPaymentsEnabled } from "@entrelacos/ui";
+
 export type AdminRole = "OWNER" | "SITE_ADMIN" | "SITE_ASSISTANT";
 
 export const siteAreas = [
@@ -45,7 +47,8 @@ export function getSiteNavigation(
 ): SiteNavigationItem[] {
   const encodedSiteId = encodeURIComponent(siteId);
   const areas: SiteArea[] = ["home", "invitations", "messages", "gifts"];
-  if (role === "SITE_ADMIN" || role === "OWNER") areas.push("receiving");
+  if ((role === "SITE_ADMIN" || role === "OWNER") && giftPaymentsEnabled())
+    areas.push("receiving");
   if (role !== "SITE_ASSISTANT") areas.push("team");
   if (role === "OWNER") areas.push("settings");
   return areas.map((area) => ({
@@ -66,7 +69,7 @@ export function resolveSiteArea(
   if (requestedArea === "settings" && role !== "OWNER") return "home";
   if (
     (requestedArea === "receiving" || requestedArea === "receiving-guide") &&
-    role === "SITE_ASSISTANT"
+    (role === "SITE_ASSISTANT" || !giftPaymentsEnabled())
   )
     return "home";
   if (requestedArea === "team" && role === "SITE_ASSISTANT") return "home";
