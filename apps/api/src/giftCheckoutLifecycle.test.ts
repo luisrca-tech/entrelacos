@@ -49,6 +49,9 @@ const pix: GiftCheckoutOrderBinding = {
   pixExpiresAt: "2026-11-18T12:30:00.000Z",
 };
 const now = new Date("2026-11-18T12:10:00.000Z");
+type ChargeJson = Record<string, unknown> & {
+  last_transaction: Record<string, unknown>;
+};
 
 describe("gift order lifecycle", () => {
   it("keeps a waiting Pix order pending", () => {
@@ -113,6 +116,68 @@ describe("gift order lifecycle", () => {
     expect(
       decideGiftOrderTransition(card, order("order-card-chargedback"), now),
     ).toMatchObject({ kind: "REVERSED", reversal: "CHARGEBACK" });
+  });
+
+  it("reads a paid card charge canceled by DELETE /charges as a refund", () => {
+    // Pagar.me v5 charge statuses have no `refunded`: a captured card charge
+    // that is cancelled comes back as `canceled` with a refunded transaction.
+    const canceled = order("order-card-refunded", (raw) => {
+      const charge = (raw.charges as ChargeJson[])[0];
+      charge.status = "canceled";
+    });
+    expect(decideGiftOrderTransition(card, canceled, now)).toMatchObject({
+      kind: "REVERSED",
+      reversal: "REFUND",
+      chargeId: "ch_fixtureCharge002",
+    });
+    const onlyCanceledAmount = order("order-card-refunded", (raw) => {
+      const charge = (raw.charges as ChargeJson[])[0];
+      charge.status = "canceled";
+      charge.last_transaction.status = "voided";
+    });
+    expect(decideGiftOrderTransition(card, onlyCanceledAmount, now).kind).toBe(
+      "REVERSED",
+    );
+  });
+
+  it("never auto-debits a partial refund or cancellation", () => {
+    for (const change of [
+      (charge: ChargeJson) => {
+        charge.status = "partial_refunded";
+      },
+      (charge: ChargeJson) => {
+        charge.status = "canceled";
+        charge.canceled_amount = 5000;
+      },
+      (charge: ChargeJson) => {
+        charge.status = "paid";
+        charge.last_transaction.status = "partial_refunded";
+        charge.canceled_amount = 100;
+      },
+    ]) {
+      const partial = order("order-card-refunded", (raw) => {
+        change((raw.charges as ChargeJson[])[0]);
+      });
+      expect(decideGiftOrderTransition(card, partial, now)).toEqual({
+        kind: "MISMATCH",
+        reason: "PARTIAL_REVERSAL",
+      });
+    }
+  });
+
+  it("keeps an unpaid canceled card charge closed, not reversed", () => {
+    const unpaid = order("order-card-refunded", (raw) => {
+      const charge = (raw.charges as ChargeJson[])[0];
+      charge.status = "canceled";
+      delete charge.paid_amount;
+      delete charge.paid_at;
+      delete charge.canceled_amount;
+      charge.last_transaction.status = "voided";
+    });
+    expect(decideGiftOrderTransition(card, unpaid, now)).toEqual({
+      kind: "CLOSED",
+      reason: "CANCELED",
+    });
   });
 
   it.each<[string, (raw: Record<string, unknown>) => void]>([

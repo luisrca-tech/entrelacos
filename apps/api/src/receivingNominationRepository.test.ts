@@ -326,14 +326,19 @@ function fixture(rawTimestamps = false) {
         };
       if (/FROM "receiving_account" a/.test(text))
         return {
-          rows: tables.accounts.map((a) => ({
-            ...a,
-            hasProviderBinding:
-              a.accountReference !== null ||
-              a.operatorReference !== null ||
-              a.recipientReference !== null ||
-              a.providerAccountState !== "UNVERIFIED",
-          })),
+          rows: tables.accounts
+            .filter(
+              (a) =>
+                !/a\.provider='PAGARME'/.test(text) || a.provider === "PAGARME",
+            )
+            .map((a) => ({
+              ...a,
+              hasProviderBinding:
+                a.accountReference !== null ||
+                a.operatorReference !== null ||
+                a.recipientReference !== null ||
+                a.providerAccountState !== "UNVERIFIED",
+            })),
         };
       if (/FROM "financial_operation" op/.test(text))
         return {
@@ -355,6 +360,16 @@ function fixture(rawTimestamps = false) {
             })),
         };
       if (/pg_advisory_xact_lock/.test(text)) return { rows: [] };
+      if (/^update "receiving_account" set is_current=false/i.test(text)) {
+        for (const a of tables.accounts)
+          if (
+            a.siteId === params[0] &&
+            a.environment === params[1] &&
+            a.provider !== "PAGARME"
+          )
+            a.isCurrent = false;
+        return { rows: [] };
+      }
       const insert = text.match(
         /^insert into "([a-z_]+)" \((.*?)\) values \((.*?)\)/i,
       );
@@ -829,6 +844,40 @@ describe("durable initial receiving nomination", () => {
     });
     expect(v.authorize).toHaveBeenCalledOnce();
     expect(v.queries.at(-1)?.sql).toBe("commit");
+  });
+  it("nominates a Pagar.me recipient next to a legacy-provider account, keeping its data", async () => {
+    const v = fixture();
+    v.tables.accounts.push({
+      id: "legacy-account",
+      siteId: "site-one",
+      environment: "sandbox",
+      provider: "PREVIOUS_PROVIDER",
+      operatorUserId: "user-one",
+      operatorReference: null,
+      accountReference: "acc_legacy",
+      recipientReference: null,
+      providerAccountState: "APPROVED",
+      isCurrent: true,
+      credentialCiphertext: "kept-ciphertext",
+    });
+    const result = await v.repository.reserveNomination(
+      v.snapshot,
+      v.authorize,
+      v.authorization,
+    );
+    expect(result).toEqual(v.snapshot);
+    expect(v.tables.accounts).toHaveLength(2);
+    expect(v.tables.accounts[0]).toMatchObject({
+      id: "legacy-account",
+      isCurrent: false,
+      accountReference: "acc_legacy",
+      credentialCiphertext: "kept-ciphertext",
+    });
+    expect(v.tables.accounts[1]).toMatchObject({
+      id: "account-one",
+      provider: "PAGARME",
+      isCurrent: true,
+    });
   });
   it("revalidates a new current session while preserving the original replay audit", async () => {
     const v = fixture();

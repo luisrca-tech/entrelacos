@@ -248,7 +248,12 @@ function fakeDatabase(f: ReturnType<typeof fixture>) {
 }
 
 function setup(
-  options: { live?: boolean; withdrawal?: PagarmeWithdrawal } = {},
+  options: {
+    live?: boolean;
+    withdrawal?: PagarmeWithdrawal;
+    listed?: PagarmeWithdrawal[];
+    elapsedMs?: number;
+  } = {},
 ) {
   const f = fixture(options);
   const database = fakeDatabase(f);
@@ -268,15 +273,22 @@ function setup(
     getWithdrawal: vi.fn(
       async () => options.withdrawal ?? withdrawalFixture("pending"),
     ),
+    listWithdrawals: vi.fn(
+      async (): Promise<PagarmeWithdrawal[]> => options.listed ?? [],
+    ),
   };
+  const alerts: string[] = [];
   const adapter = createPagarmeWithdrawalAdapter({
     mode,
     applicationEnvironment,
-    now: () => new Date(),
+    now: () => new Date(Date.now() + (options.elapsedMs ?? 0)),
     client,
     custody,
+    async onUnresolved(_original, reason) {
+      alerts.push(reason);
+    },
   });
-  return { ...f, ...database, custody, client, adapter };
+  return { ...f, ...database, custody, client, adapter, alerts };
 }
 
 describe("Pagar.me withdrawal dispatch", () => {
@@ -479,6 +491,7 @@ describe("Pagar.me withdrawal dispatch", () => {
         return withdrawalFixture("pending");
       }),
       getWithdrawal: vi.fn(),
+      listWithdrawals: vi.fn(),
     };
     const adapter = createPagarmeWithdrawalAdapter({
       mode: "sandbox",
@@ -495,6 +508,72 @@ describe("Pagar.me withdrawal dispatch", () => {
     });
     await adapter.dispatch(f.original, f.fence);
     expect(order).toEqual(["guard", "post", "released"]);
+  });
+});
+
+describe("Pagar.me withdrawal dispatch guard", () => {
+  it("fails a withdrawal the guard refused before sending, releasing the hold, and never POSTs", async () => {
+    const f = fixture();
+    const database = fakeDatabase(f);
+    const client = {
+      createWithdrawal: vi.fn(),
+      getWithdrawal: vi.fn(),
+      listWithdrawals: vi.fn(),
+    };
+    const adapter = createPagarmeWithdrawalAdapter({
+      mode: "sandbox",
+      applicationEnvironment: "test",
+      now: () => new Date(),
+      client,
+      custody: createPagarmeWithdrawalCustody(database.db as never, {
+        mode: "sandbox",
+        applicationEnvironment: "test",
+        now: () => new Date(),
+      }),
+      async guardDispatch() {
+        throw new Error("destination changed");
+      },
+    });
+    const observation = await adapter.dispatch(f.original, f.fence);
+    expect(observation).toMatchObject({
+      outcome: "REJECTED",
+      reason: "PAGARME_WITHDRAWAL_NOT_SENT",
+      proofReference: expect.stringMatching(/^pagarme-withdrawal:/),
+      providerReference: expect.stringMatching(/^rejected_/),
+    });
+    expect(client.createWithdrawal).not.toHaveBeenCalled();
+    // A later lookup never replays the POST either.
+    await adapter.lookup(f.original, f.fence, null);
+    expect(client.createWithdrawal).not.toHaveBeenCalled();
+  });
+
+  it("keeps the outcome unknown when the guard fails after the POST left", async () => {
+    const f = fixture();
+    const database = fakeDatabase(f);
+    const client = {
+      createWithdrawal: vi.fn(async () => withdrawalFixture("pending")),
+      getWithdrawal: vi.fn(),
+      listWithdrawals: vi.fn(),
+    };
+    const adapter = createPagarmeWithdrawalAdapter({
+      mode: "sandbox",
+      applicationEnvironment: "test",
+      now: () => new Date(),
+      client,
+      custody: createPagarmeWithdrawalCustody(database.db as never, {
+        mode: "sandbox",
+        applicationEnvironment: "test",
+        now: () => new Date(),
+      }),
+      async guardDispatch(_original, _fence, send) {
+        await send();
+        throw new Error("commit lost");
+      },
+    });
+    await expect(adapter.dispatch(f.original, f.fence)).resolves.toMatchObject({
+      outcome: "UNRESOLVED",
+    });
+    expect(client.createWithdrawal).toHaveBeenCalledOnce();
   });
 });
 
@@ -520,37 +599,58 @@ describe("Pagar.me withdrawal lookup", () => {
     });
   });
 
-  it("replays an unknown dispatch with the same idempotency key", async () => {
-    const s = setup();
-    await s.adapter.lookup(s.original, s.fence, null);
-    expect(s.client.createWithdrawal).toHaveBeenCalledExactlyOnceWith(
+  it("recovers a lost POST response from the withdrawal list, never replaying the POST", async () => {
+    const pending = withdrawalFixture("pending");
+    const s = setup({
+      listed: [
+        { ...pending, id: "with_otherAmount01", amountCents: 1_000 },
+        pending,
+      ],
+    });
+    const found = await s.adapter.lookup(s.original, s.fence, null);
+    expect(s.client.createWithdrawal).not.toHaveBeenCalled();
+    expect(s.client.listWithdrawals).toHaveBeenCalledExactlyOnceWith(
       recipient,
-      9_633,
-      pagarmeWithdrawalIdempotencyKey(s.original.correlation),
+      expect.any(String),
     );
-    expect(s.client.getWithdrawal).not.toHaveBeenCalled();
+    expect(found).toMatchObject({
+      outcome: "FOUND",
+      observation: { providerReference: "with_fixtureWithdraw01" },
+    });
   });
 
-  it("does not replay an unknown dispatch after the idempotency window", async () => {
-    const f = fixture();
-    const database = fakeDatabase(f);
-    const client = { createWithdrawal: vi.fn(), getWithdrawal: vi.fn() };
-    const adapter = createPagarmeWithdrawalAdapter({
-      mode: "sandbox",
-      applicationEnvironment: "test",
-      now: () => new Date(),
-      client,
-      custody: createPagarmeWithdrawalCustody(database.db as never, {
-        mode: "sandbox",
-        applicationEnvironment: "test",
-        now: () => new Date(),
-      }),
-      replayWindowMs: 1,
-    });
-    await expect(adapter.lookup(f.original, f.fence, null)).resolves.toEqual({
+  it("stays unresolved, without alerting, while the list may still lag", async () => {
+    const s = setup({ listed: [] });
+    await expect(s.adapter.lookup(s.original, s.fence, null)).resolves.toEqual({
       outcome: "UNRESOLVED",
     });
-    expect(client.createWithdrawal).not.toHaveBeenCalled();
+    expect(s.alerts).toEqual([]);
+    expect(s.client.createWithdrawal).not.toHaveBeenCalled();
+  });
+
+  it("alerts an operator once the window passed with no single match", async () => {
+    const pending = withdrawalFixture("pending");
+    for (const listed of [[], [pending, { ...pending, id: "with_twin0001" }]]) {
+      const s = setup({ listed, elapsedMs: 2 * 60 * 60_000 });
+      await expect(
+        s.adapter.lookup(s.original, s.fence, null),
+      ).resolves.toEqual({ outcome: "UNRESOLVED" });
+      expect(s.alerts).toEqual([
+        listed.length ? "AMBIGUOUS_PROVIDER_MATCH" : "NO_PROVIDER_MATCH",
+      ]);
+      expect(s.client.createWithdrawal).not.toHaveBeenCalled();
+    }
+  });
+
+  it("keeps the hold when reading the list is refused (4xx)", async () => {
+    const s = setup();
+    s.client.listWithdrawals.mockRejectedValueOnce(
+      new PagarmeRejectedError(422, "validation_error", "Invalid filter"),
+    );
+    await expect(s.adapter.lookup(s.original, s.fence, null)).resolves.toEqual({
+      outcome: "UNRESOLVED",
+    });
+    expect(s.stored.size).toBe(0);
   });
 
   it("rejects a foreign withdrawal returned for the stored reference", async () => {

@@ -26,11 +26,14 @@ export interface GiftPaymentWorkerResult {
 
 export interface GiftPaymentWorker {
   processNextReceivedPayment(): Promise<GiftPaymentWorkerResult>;
+  /** Processes one specific inbox event now (e.g. the checkout's own re-read). */
+  processDelivery?(deliveryId: string): Promise<GiftPaymentWorkerResult>;
 }
 
 export interface GiftPaymentWorkerOptions {
   inbox: {
     claimNext(): Promise<GiftPaymentInboxClaim | null>;
+    claimDelivery?(deliveryId: string): Promise<GiftPaymentInboxClaim | null>;
     complete(
       claim: GiftPaymentInboxClaim,
       paymentId: string | null,
@@ -132,48 +135,55 @@ export function createGiftPaymentWorker(
     return result;
   }
 
-  return {
-    async processNextReceivedPayment() {
-      let claim: GiftPaymentInboxClaim | null;
-      try {
-        claim = await options.inbox.claimNext();
-      } catch {
-        return { kind: "RETRY" };
-      }
-      if (claim === null) return { kind: "IDLE" };
-      try {
-        if (claim.eventType === "RECIPIENT_UPDATED") {
-          if (!options.refreshReceiving)
-            throw new Deferred("RECEIVING_REFRESH_UNAVAILABLE");
-          try {
-            await options.refreshReceiving(claim.siteId);
-          } catch {
-            throw new Deferred("PROVIDER_READ_UNAVAILABLE");
-          }
-          await options.inbox.complete(claim, null);
-          return { kind: "OBSERVED" };
-        }
-        const result = await processOrder(claim);
-        await options.inbox.complete(claim, result?.paymentId ?? null);
-        if (result?.outcome === "POSTED") return { kind: "POSTED" };
-        if (result?.outcome === "UNCHANGED") return { kind: "DUPLICATE" };
-        return { kind: "OBSERVED" };
-      } catch (error) {
-        const code =
-          error instanceof Deferred
-            ? error.code
-            : "PAYMENT_POSTING_UNAVAILABLE";
+  async function run(
+    take: () => Promise<GiftPaymentInboxClaim | null>,
+  ): Promise<GiftPaymentWorkerResult> {
+    let claim: GiftPaymentInboxClaim | null;
+    try {
+      claim = await take();
+    } catch {
+      return { kind: "RETRY" };
+    }
+    if (claim === null) return { kind: "IDLE" };
+    try {
+      if (claim.eventType === "RECIPIENT_UPDATED") {
+        if (!options.refreshReceiving)
+          throw new Deferred("RECEIVING_REFRESH_UNAVAILABLE");
         try {
-          return {
-            kind:
-              (await options.inbox.defer(claim, code)) === "DEAD_LETTER"
-                ? "DEAD_LETTER"
-                : "RETRY",
-          };
+          await options.refreshReceiving(claim.siteId);
         } catch {
-          return { kind: "UNRESOLVED" };
+          throw new Deferred("PROVIDER_READ_UNAVAILABLE");
         }
+        await options.inbox.complete(claim, null);
+        return { kind: "OBSERVED" };
       }
+      const result = await processOrder(claim);
+      await options.inbox.complete(claim, result?.paymentId ?? null);
+      if (result?.outcome === "POSTED") return { kind: "POSTED" };
+      if (result?.outcome === "UNCHANGED") return { kind: "DUPLICATE" };
+      return { kind: "OBSERVED" };
+    } catch (error) {
+      const code =
+        error instanceof Deferred ? error.code : "PAYMENT_POSTING_UNAVAILABLE";
+      try {
+        return {
+          kind:
+            (await options.inbox.defer(claim, code)) === "DEAD_LETTER"
+              ? "DEAD_LETTER"
+              : "RETRY",
+        };
+      } catch {
+        return { kind: "UNRESOLVED" };
+      }
+    }
+  }
+
+  return {
+    processNextReceivedPayment: () => run(() => options.inbox.claimNext()),
+    async processDelivery(deliveryId) {
+      const claimDelivery = options.inbox.claimDelivery;
+      if (!claimDelivery) return { kind: "IDLE" };
+      return run(() => claimDelivery(deliveryId));
     },
   };
 }

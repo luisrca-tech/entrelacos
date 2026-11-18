@@ -4,7 +4,7 @@ import {
 } from "@entrelacos/contracts";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { GiftRecoveryView } from "./GiftRecoveryView";
 
 const pix = {
@@ -45,6 +45,14 @@ function render(props: Partial<Parameters<typeof GiftRecoveryView>[0]>) {
 }
 
 describe("Pix payment in the payment dialog", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-10-12T15:00:00.000Z"));
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("shows the QR code, the copy-and-paste code and the expiry while awaiting payment", () => {
     const html = render({ status: status("AWAITING_PAYMENT") });
     expect(html).toContain("Pagar com Pix");
@@ -70,5 +78,14 @@ describe("Pix payment in the payment dialog", () => {
     const html = render({ status: status("RECEIVED"), pix });
     expect(html).not.toContain("Pix copia e cola");
     expect(html).toContain("Recebimento confirmado");
+  });
+
+  it("stops asking for payment once the Pix deadline has passed", () => {
+    vi.setSystemTime(new Date("2026-10-12T15:31:00.000Z"));
+    const html = render({ status: status("AWAITING_PAYMENT") });
+    expect(html).not.toContain("Pague até");
+    expect(html).not.toContain("Copiar código");
+    expect(html).not.toContain(pix.qrCode);
+    expect(html).toMatch(/prazo deste Pix terminou/);
   });
 });

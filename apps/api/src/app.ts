@@ -80,6 +80,7 @@ export type ApiOptions = GiftPaymentsHttpOptions &
     receivingNomination?: ReceivingNominationService;
     receivingSetup?: ReceivingSetupService;
     receivingVerification?: ReceivingSetupHttpOptions["receivingVerification"];
+    kycRateLimit?: ReceivingSetupHttpOptions["kycRateLimit"];
     giftMediaAuth?: GiftMediaHttpOptions["auth"];
     giftPaymentHistory?: GiftPaymentHistoryHttpOptions["giftPaymentHistory"];
     previewPricing?: (siteId: string, input: unknown) => Promise<unknown>;

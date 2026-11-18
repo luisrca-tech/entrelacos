@@ -401,10 +401,22 @@ export type GiftCreateInput = z.infer<typeof giftCreateInputSchema>;
 export type GiftUpdateInput = z.infer<typeof giftUpdateInputSchema>;
 
 export const giftPaymentMethodSchema = z.enum(["PIX", "CREDIT_CARD"]);
-export const giftMaximumInstallments = 12;
+/** Card installments a guest can choose (D7: 1x to 6x). */
+export const giftMaximumInstallments = 6;
+/**
+ * Upper bound for stored records: quotes and payments written before the
+ * Pagar.me switch could have up to 12 installments and must stay readable.
+ */
+const giftStoredMaximumInstallments = 12;
 export const giftMinimumInstallmentCents = 500;
 export const giftInstallmentExpiryMinutes = 60;
 const giftInstallmentCountSchema = z
+  .number()
+  .int()
+  .min(1)
+  .max(giftStoredMaximumInstallments);
+/** What a guest may request now. */
+const giftInstallmentRequestSchema = z
   .number()
   .int()
   .min(1)
@@ -413,7 +425,7 @@ export const giftQuoteInputSchema = z
   .object({
     giftId: id,
     method: giftPaymentMethodSchema,
-    installmentCount: giftInstallmentCountSchema.optional(),
+    installmentCount: giftInstallmentRequestSchema.optional(),
   })
   .strict()
   .refine(
@@ -440,7 +452,7 @@ export function allocateGiftInstallmentCents(
 const giftInstallmentCentsSchema = z
   .array(giftCentsSchema)
   .min(1)
-  .max(giftMaximumInstallments);
+  .max(giftStoredMaximumInstallments);
 const giftInstallmentSurchargeSchema = z
   .number()
   .int()
@@ -503,7 +515,7 @@ export const giftQuoteSchema = z
     installmentOptions: z
       .array(giftInstallmentOptionSchema)
       .min(1)
-      .max(giftMaximumInstallments)
+      .max(giftStoredMaximumInstallments)
       .optional(),
   })
   .strict()
@@ -607,7 +619,7 @@ export const giftCheckoutCreateInputSchema = z
   .object({
     ...giftCheckoutStatusInputSchema.shape,
     method: giftPaymentMethodSchema,
-    installments: giftInstallmentCountSchema,
+    installments: giftInstallmentRequestSchema,
     cardToken: giftCheckoutCardTokenSchema.optional(),
     buyer: giftCheckoutBuyerSchema,
   })

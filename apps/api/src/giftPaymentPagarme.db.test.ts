@@ -20,9 +20,11 @@ import {
 } from "@entrelacos/database/schema";
 import { and, eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { resolveFinancialOperatorAlert } from "./financialOperatorAlertRepository";
 import { createFinancialOverviewRepository } from "./financialOverviewRepository";
 import { createGiftPaymentComposition } from "./giftPaymentComposition";
 import type { GiftPaymentConfig } from "./giftPaymentConfig";
+import { unresolvedGiftPaymentSql } from "./giftPaymentRestrictions";
 import type { GiftPaymentWorker } from "./giftPaymentWorker";
 
 // End to end against the test PostgreSQL with Pagar.me answered by v5
@@ -95,7 +97,9 @@ function fakePagarme() {
         const template = fixtureJson(
           payment.payment_method === "pix"
             ? "order-pix-pending"
-            : "order-card-paid",
+            : payment.credit_card?.card_token === "token_declined"
+              ? "order-card-failed"
+              : "order-card-paid",
         ) as Order;
         const id = `or_${randomUUID().replaceAll("-", "")}`;
         const charge = template.charges[0];
@@ -297,6 +301,7 @@ async function checkout(
   siteId: string,
   giftId: string,
   method: "PIX" | "CREDIT_CARD" = "PIX",
+  cardToken = "token_fixture123",
 ) {
   const installments = method === "PIX" ? 1 : 6;
   const quote = await app.payments.createQuote(siteId, {
@@ -313,7 +318,7 @@ async function checkout(
     ...recovery,
     method,
     installments,
-    ...(method === "CREDIT_CARD" ? { cardToken: "token_fixture123" } : {}),
+    ...(method === "CREDIT_CARD" ? { cardToken } : {}),
     buyer,
   });
   const providerOrderId = [...app.pagarme.orders.values()].find(
@@ -501,7 +506,12 @@ describe("Pagar.me checkout, webhook and ledger on PostgreSQL", () => {
     expect(await ledger(fixture.siteId)).toHaveLength(1);
     const order = app.pagarme.orders.get(providerOrderId) as Order;
     const chargeId = String(order.charges[0].id);
-    app.pagarme.setStatus(providerOrderId, "canceled", "refunded");
+    // Documented v5 shape: the charge reads `canceled`, its last
+    // transaction `refunded` (there is no `refunded` charge status).
+    app.pagarme.setStatus(providerOrderId, "canceled", "canceled");
+    order.charges[0].canceled_amount = order.amount;
+    (order.charges[0].last_transaction as Record<string, unknown>).status =
+      "refunded";
     await app.webhook.receive(
       authorization,
       event("charge.refunded", providerOrderId, created.checkoutId, chargeId),
@@ -536,6 +546,74 @@ describe("Pagar.me checkout, webhook and ledger on PostgreSQL", () => {
     expect(
       await app.payments.getStatus(fixture.siteId, recovery),
     ).toMatchObject({ state: "REFUNDED" });
+
+    // The compensated refund no longer blocks withdrawals or the overview.
+    const blocking = async () =>
+      Number(
+        (
+          await database().execute(sql`SELECT COUNT(*)::int AS n
+            FROM ${giftPaymentRecord} p WHERE p.site_id = ${fixture.siteId}
+              AND ${unresolvedGiftPaymentSql}`)
+        ).rows[0].n,
+      );
+    expect(await blocking()).toBe(0);
+    const overview = createFinancialOverviewRepository(database(), {
+      environment: "sandbox",
+      applicationEnvironment: "test",
+      now: () => new Date(),
+    });
+    const totals = await overview.loadStoredTotals({
+      provider: "PAGARME",
+      siteId: fixture.siteId,
+      accountBindingId: fixture.accountId,
+      accountReference: fixture.recipientId,
+      environment: "sandbox",
+    });
+    expect(totals?.unresolvedFinancialEventCount).toBe(0);
+    expect(totals?.totals).toMatchObject({
+      netReceivedCents: 10_000,
+      refundedCents: 10_000,
+    });
+
+    // The couple had already spent the money: the account ledger is negative
+    // and the refund blocks again until the balance is covered.
+    const [payment] = await database()
+      .select({ id: giftPaymentRecord.id })
+      .from(giftPaymentRecord)
+      .where(eq(giftPaymentRecord.siteId, fixture.siteId));
+    const shortfall = randomUUID();
+    await database()
+      .insert(financialLedgerEntry)
+      .values({
+        id: shortfall,
+        siteId: fixture.siteId,
+        accountId: fixture.accountId,
+        environment: "sandbox",
+        effectKey: `TEST_SHORTFALL:${shortfall}`,
+        kind: "TEST_SHORTFALL",
+        direction: "DEBIT",
+        currency: "BRL",
+        amountCents: 5_000,
+        paymentId: payment.id,
+      });
+    expect(await blocking()).toBe(1);
+    // A later gift covers the shortfall: the block clears by itself.
+    await checkout(app, fixture.siteId, fixture.giftId, "CREDIT_CARD");
+    await drain(app.worker);
+    expect(await blocking()).toBe(0);
+    // Uncovered again: only an explicit operator decision clears it.
+    await database()
+      .update(financialLedgerEntry)
+      .set({ amountCents: 50_000 })
+      .where(eq(financialLedgerEntry.id, shortfall));
+    expect(await blocking()).toBe(1);
+    await resolveFinancialOperatorAlert(database(), {
+      environment: "sandbox",
+      kind: "GIFT_REFUNDED",
+      paymentReference: chargeId,
+      note: "Refund absorbed by the platform",
+    });
+    expect(await blocking()).toBe(0);
     await app.close();
   });
 
@@ -574,6 +652,111 @@ describe("Pagar.me checkout, webhook and ledger on PostgreSQL", () => {
       .from(financialOperatorAlert)
       .where(eq(financialOperatorAlert.paymentReference, chargeId));
     expect(alerts).toEqual([{ kind: "GIFT_CHARGEBACK", severity: "critical" }]);
+    await app.close();
+  });
+
+  it("answers the create call with the card decision, not AWAITING_PAYMENT", async () => {
+    const fixture = await receivingFixture();
+    const app = compose();
+    const paid = await checkout(
+      app,
+      fixture.siteId,
+      fixture.giftId,
+      "CREDIT_CARD",
+    );
+    expect(paid.created.status).toBe("RECEIVED");
+    const declined = await checkout(
+      app,
+      fixture.siteId,
+      fixture.giftId,
+      "CREDIT_CARD",
+      "token_declined",
+    );
+    expect(declined.created.status).toBe("CLOSED_UNPAID");
+    await app.close();
+  });
+
+  it("debits a chargeback.received event that only names the charge", async () => {
+    const fixture = await receivingFixture();
+    const app = compose();
+    const { providerOrderId } = await checkout(
+      app,
+      fixture.siteId,
+      fixture.giftId,
+      "CREDIT_CARD",
+    );
+    await drain(app.worker);
+    const order = app.pagarme.orders.get(providerOrderId) as Order;
+    const chargeId = String(order.charges[0].id);
+    app.pagarme.setStatus(providerOrderId, "paid", "chargedback");
+    await app.webhook.receive(
+      authorization,
+      JSON.stringify({
+        id: `hook_${randomUUID().replaceAll("-", "")}`,
+        type: "chargeback.received",
+        data: { disputeId: "12345", chargeId, status: "OPEN" },
+      }),
+    );
+    await drain(app.worker);
+    expect((await ledger(fixture.siteId)).map((entry) => entry.kind)).toEqual([
+      "GIFT_RECEIVED",
+      "GIFT_CHARGEBACK",
+    ]);
+    const alerts = await database()
+      .select({ kind: financialOperatorAlert.kind })
+      .from(financialOperatorAlert)
+      .where(eq(financialOperatorAlert.paymentReference, chargeId));
+    expect(alerts).toEqual([{ kind: "GIFT_CHARGEBACK" }]);
+    await app.close();
+  });
+
+  it("finds a chargeback on a paid order whose webhook never arrived", async () => {
+    const fixture = await receivingFixture();
+    const app = compose();
+    const { created, providerOrderId } = await checkout(
+      app,
+      fixture.siteId,
+      fixture.giftId,
+      "CREDIT_CARD",
+    );
+    await drain(app.worker);
+    expect(await ledger(fixture.siteId)).toHaveLength(1);
+    const order = app.pagarme.orders.get(providerOrderId) as Order;
+    const chargeId = String(order.charges[0].id);
+    app.pagarme.setStatus(providerOrderId, "paid", "chargedback");
+    // Paid two days ago; put this operation first in the sweep order.
+    await database().execute(sql`UPDATE ${giftPaymentRecord}
+      SET created_at = now() - interval '2 days', observed_at = now() - interval '2 days'
+      WHERE site_id = ${fixture.siteId}`);
+    await database().execute(sql`UPDATE financial_operation
+      SET next_attempt_at = '2000-01-01T00:00:00Z'
+      WHERE id = ${created.checkoutId} AND site_id = ${fixture.siteId}`);
+    const mine = () =>
+      app.pagarme.calls.filter((call) => call.includes(providerOrderId));
+    app.pagarme.calls.length = 0;
+    await drain(app.worker);
+    expect(mine()).toContain(`GET /core/v5/orders/${providerOrderId}`);
+    expect(
+      (await ledger(fixture.siteId)).map((entry) => [
+        entry.kind,
+        entry.direction,
+      ]),
+    ).toEqual([
+      ["GIFT_RECEIVED", "CREDIT"],
+      ["GIFT_CHARGEBACK", "DEBIT"],
+    ]);
+    const alerts = await database()
+      .select({ kind: financialOperatorAlert.kind })
+      .from(financialOperatorAlert)
+      .where(eq(financialOperatorAlert.paymentReference, chargeId));
+    expect(alerts).toEqual([{ kind: "GIFT_CHARGEBACK" }]);
+    // Reversed: the daily sweep stops re-reading it.
+    await database().execute(sql`UPDATE financial_operation
+      SET next_attempt_at = '2000-01-01T00:00:00Z'
+      WHERE id = ${created.checkoutId} AND site_id = ${fixture.siteId}`);
+    app.pagarme.calls.length = 0;
+    await drain(app.worker);
+    expect(mine()).toEqual([]);
     await app.close();
   });
 
@@ -658,6 +841,7 @@ describe("Pagar.me checkout, webhook and ledger on PostgreSQL", () => {
     await drain(app.worker);
     expect(app.refreshReceiving).toHaveBeenCalledWith(fixture.siteId);
     const unroutable = `hook_${randomUUID().replaceAll("-", "")}`;
+    const foreignOrder = `or_${randomUUID().replaceAll("-", "")}`;
     await expect(
       app.webhook.receive(
         authorization,
@@ -665,18 +849,55 @@ describe("Pagar.me checkout, webhook and ledger on PostgreSQL", () => {
           id: unroutable,
           type: "order.paid",
           data: {
-            id: "or_unknownOrder01",
+            id: foreignOrder,
             code: "unknown-checkout",
             charges: [],
           },
         }),
       ),
     ).resolves.toEqual({ accepted: true });
+    // A second event for the same foreign order does not open another alert.
+    await app.webhook.receive(
+      authorization,
+      JSON.stringify({
+        id: `hook_${randomUUID().replaceAll("-", "")}`,
+        type: "order.canceled",
+        data: { id: foreignOrder, code: "unknown-checkout", charges: [] },
+      }),
+    );
     const alerts = await database()
-      .select({ kind: financialOperatorAlert.kind })
+      .select({
+        kind: financialOperatorAlert.kind,
+        details: financialOperatorAlert.details,
+      })
       .from(financialOperatorAlert)
-      .where(eq(financialOperatorAlert.paymentReference, unroutable));
-    expect(alerts).toEqual([{ kind: "UNROUTABLE_PLATFORM_EVENT" }]);
+      .where(
+        and(
+          eq(financialOperatorAlert.paymentReference, foreignOrder),
+          sql`${financialOperatorAlert.resolvedAt} IS NULL`,
+        ),
+      );
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0].kind).toBe("UNROUTABLE_PLATFORM_EVENT");
+    // The platform's own recipient is not a site event: no alert.
+    const platformEvent = `hook_${randomUUID().replaceAll("-", "")}`;
+    await app.webhook.receive(
+      authorization,
+      JSON.stringify({
+        id: platformEvent,
+        type: "recipient.updated",
+        data: { id: config.platformRecipientId, status: "active" },
+      }),
+    );
+    expect(
+      await database()
+        .select({ id: financialOperatorAlert.id })
+        .from(financialOperatorAlert)
+        .where(
+          sql`${financialOperatorAlert.details}->>'eventId' = ${platformEvent}`,
+        ),
+    ).toEqual([]);
+    expect(unroutable).toMatch(/^hook_/);
     await app.close();
   });
 });

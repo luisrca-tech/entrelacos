@@ -31,7 +31,8 @@ function fixture() {
   const designate = vi.fn(async () => {}),
     read = vi.fn(),
     submit = vi.fn(async () => ({ state: "STORED" })),
-    createKycLink = vi.fn(async () => kycLink);
+    createKycLink = vi.fn(async () => kycLink),
+    kycRateLimit = { consume: vi.fn(async (_siteId: string) => true) };
   const verifyIncoming = vi.fn(async () => ({
     siteId: "site-one",
     mode: "sandbox" as const,
@@ -47,8 +48,17 @@ function fixture() {
     adminOrigin: origin,
     receivingSetup: { read, designate, submit, createKycLink } as never,
     receivingVerification: { verify: verifyIncoming },
+    kycRateLimit,
   });
-  return { router, verifyIncoming, designate, read, submit, createKycLink };
+  return {
+    router,
+    verifyIncoming,
+    designate,
+    read,
+    submit,
+    createKycLink,
+    kycRateLimit,
+  };
 }
 function request(path = "setup", body?: unknown, suppliedOrigin = origin) {
   return new Request(
@@ -112,7 +122,7 @@ describe("receiving setup HTTP boundary", () => {
       account: {
         name: "Maria da Silva",
         email: "maria@example.test",
-        cpf: "26224451990",
+        cpf: "12345678909",
         mobilePhone: "21994647568",
         birthDate: "1990-04-12",
         monthlyIncomeCents: 500000,
@@ -272,6 +282,14 @@ describe("receiving identity verification link", () => {
       { userId: "bride-one", sessionId: "session-one", siteId: "site-one" },
       "SITE_ADMIN",
     );
+  });
+  it("limits identity links per site and answers 429 without calling Pagar.me", async () => {
+    const v = fixture();
+    v.kycRateLimit.consume.mockResolvedValueOnce(false);
+    const response = await v.router.request(kycRequest());
+    expect(response.status).toBe(429);
+    expect(v.createKycLink).not.toHaveBeenCalled();
+    expect(v.kycRateLimit.consume).toHaveBeenCalledWith("site-one");
   });
   it("refuses another administrator of the site", async () => {
     const v = fixture();

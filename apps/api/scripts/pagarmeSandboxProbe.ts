@@ -146,7 +146,7 @@ export async function runPagarmeSandboxProbe(
     const created = await recipients.createRecipient(code, {
       name: "Recebedor Sandbox Entrelacos",
       email: `${code}@example.com`,
-      cpf: "26224451990",
+      cpf: "12345678909",
       mobilePhone: "11987654321",
       birthDate: "1990-05-20",
       monthlyIncomeCents: 500_000,

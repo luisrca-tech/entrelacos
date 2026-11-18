@@ -84,7 +84,7 @@ function fixture() {
   const input = {
     name: "MARIA DA SILVA",
     email: "maria@example.test",
-    cpf: "26224451990",
+    cpf: "12345678909",
     mobilePhone: "21994647568",
     birthDate: "1990-04-12",
     monthlyIncomeCents: 500000,
@@ -328,7 +328,7 @@ describe("completion-owned original account provisioning", () => {
           "rp_platformRecipient",
           "MARIA DA SILVA",
           "maria@example.test",
-          "26224451990",
+          "12345678909",
           "21994647568",
           "1990-04-12",
           500000,
@@ -353,7 +353,7 @@ describe("completion-owned original account provisioning", () => {
     expect(context.provider).toBe("PAGARME");
     expect(context.inputFingerprint).toBe(expected);
     expect(JSON.stringify(context)).not.toMatch(
-      /MARIA|26224451990|maria@example|12345/,
+      /MARIA|12345678909|maria@example|12345/,
     );
     expect(
       deriveReceivingProvisioningContext(
@@ -405,7 +405,7 @@ describe("completion-owned original account provisioning", () => {
         type: "individual",
         name: "MARIA DA SILVA",
         email: "maria@example.test",
-        document: "26224451990",
+        document: "12345678909",
         birthdate: "1990-04-12T00:00:00",
         monthly_income: 500000,
         professional_occupation: "Professora",
@@ -421,7 +421,7 @@ describe("completion-owned original account provisioning", () => {
         },
       },
       default_bank_account: {
-        holder_document: "26224451990",
+        holder_document: "12345678909",
         bank: "341",
         branch_number: "1234",
         branch_check_digit: "6",

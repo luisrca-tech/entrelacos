@@ -24,6 +24,8 @@ import { resolveSiteAccess } from "./siteAccess";
 
 export type ReceivingSetupHttpOptions = AuthHttpOptions & {
   receivingSetup?: ReceivingSetupService;
+  /** A few identity links per site and minute (each one calls Pagar.me). */
+  kycRateLimit?: { consume(siteId: string): Promise<boolean> };
   receivingVerification?: {
     verify(
       actor: import("./financialAuthorization").FinancialActor,
@@ -256,6 +258,8 @@ export function createReceivingSetupHttpRouter(
     }
     if (!options.receivingSetup)
       return problem(503, "RECEIVING_SETUP_UNAVAILABLE");
+    if (options.kycRateLimit && !(await options.kycRateLimit.consume(siteId)))
+      return problem(429, "RATE_LIMITED");
     const link = receivingKycLinkSchema.parse(
       await options.receivingSetup.createKycLink(
         { userId: current.user.id, sessionId: current.session.id, siteId },

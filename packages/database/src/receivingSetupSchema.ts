@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import {
   check,
+  jsonb,
   pgTable,
   text,
   timestamp,
@@ -33,6 +34,8 @@ export const receivingSetupHolder = pgTable(
     consentAuthenticatedAt: timestamp("consent_authenticated_at", {
       withTimezone: true,
     }),
+    // Legacy incoming-Pix consent from the previous provider; kept, never read.
+    pixPreparationConsent: jsonb("pix_preparation_consent"),
   },
   (table) => [
     uniqueIndex("receiving_setup_holder_site_environment_idx").on(

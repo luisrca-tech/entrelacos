@@ -21,11 +21,37 @@ export const receivingSetupDisclosure = {
   text: "O recebedor será cadastrado na Pagar.me em meu nome, com a minha conta bancária. Autorizo o envio dos dados deste formulário à Pagar.me para cadastro e verificação de identidade. A aprovação e eventuais documentos serão solicitados pela Pagar.me. Esta confirmação não libera pagamentos ou saques. Em teste, as operações não movimentam dinheiro real.",
 } as const;
 const digits = (pattern: RegExp) => z.string().regex(pattern);
+
+/** CPF check digits (punctuation ignored); repeated digits are invalid. */
+export function isValidCpf(value: string): boolean {
+  const cpf = value.replace(/[^0-9]/g, "");
+  if (cpf.length !== 11 || /^(\d)\1{10}$/.test(cpf)) return false;
+  for (const length of [9, 10]) {
+    let sum = 0;
+    for (let index = 0; index < length; index++)
+      sum += Number(cpf[index]) * (length + 1 - index);
+    if (((sum * 10) % 11) % 10 !== Number(cpf[length])) return false;
+  }
+  return true;
+}
+
+/** Whole years between a YYYY-MM-DD birth date and today (UTC). */
+function ageInYears(birthDate: string, today = new Date()): number {
+  const [year, month, day] = birthDate.split("-").map(Number);
+  let age = today.getUTCFullYear() - year;
+  const beforeBirthday =
+    today.getUTCMonth() + 1 < month ||
+    (today.getUTCMonth() + 1 === month && today.getUTCDate() < day);
+  if (beforeBirthday) age--;
+  return age;
+}
+/** Pagar.me only registers adult individual recipients. */
+const minimumRecipientAge = 18;
 export const receivingSetupAccountSchema = z
   .object({
     name: text(128),
     email: z.email().max(254),
-    cpf: digits(/^\d{11}$/),
+    cpf: digits(/^\d{11}$/).refine(isValidCpf),
     mobilePhone: digits(/^\d{10,11}$/),
     birthDate: z
       .string()
@@ -33,7 +59,9 @@ export const receivingSetupAccountSchema = z
       .refine(
         (value) =>
           Number.isFinite(Date.parse(value)) &&
-          new Date(value).toISOString().slice(0, 10) === value,
+          new Date(value).toISOString().slice(0, 10) === value &&
+          ageInYears(value) >= minimumRecipientAge &&
+          ageInYears(value) <= 120,
       ),
     monthlyIncomeCents: z.number().int().nonnegative().max(2_147_483_647),
     professionalOccupation: text(128),

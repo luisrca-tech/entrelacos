@@ -3,7 +3,6 @@ import { z } from "zod";
 import { siteAccessSchema } from "./internalGifts";
 
 export * from "./adminOrigin";
-export * from "./giftAnticipationSimulation";
 export * from "./giftCommission";
 export * from "./giftImageAlt";
 export * from "./giftPricingV2";

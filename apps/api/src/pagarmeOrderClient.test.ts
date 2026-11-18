@@ -141,7 +141,9 @@ describe("Pagar.me order client", () => {
     ).toBe("refund-op-1");
     expect(charge).toMatchObject({
       id: "ch_fixtureCharge002",
-      status: "refunded",
+      status: "canceled",
+      transactionStatus: "refunded",
+      canceledAmountCents: 11890,
     });
   });
 

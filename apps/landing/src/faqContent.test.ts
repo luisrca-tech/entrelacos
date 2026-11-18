@@ -41,7 +41,9 @@ describe("public FAQ payment content", () => {
 
   it("explains card and Pix release times", () => {
     expect(text).toMatch(/cerca de 2 dias/);
-    expect(text).toMatch(/Pix[^.]*imediat/);
+    // The Pix settlement time is not in the proposal: no promise of "immediately".
+    expect(text).toMatch(/Pix[^.]*quando a Pagar.me libera/);
+    expect(text).not.toMatch(/imediat/);
   });
 
   it("explains identity verification before receiving", () => {

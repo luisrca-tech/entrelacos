@@ -3,7 +3,7 @@
   "code": "checkout-fixture-2",
   "amount": 11890,
   "canceled_amount": 11890,
-  "status": "refunded",
+  "status": "canceled",
   "currency": "BRL",
   "payment_method": "credit_card",
   "canceled_at": "2026-11-19T09:00:00Z",

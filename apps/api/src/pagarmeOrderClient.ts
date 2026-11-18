@@ -24,6 +24,10 @@ export interface PagarmeChargeObservation {
   readonly status: string;
   readonly amountCents: number;
   readonly paidAmountCents: number | null;
+  /** Amount cancelled or refunded on the charge, when reported. */
+  readonly canceledAmountCents: number | null;
+  /** Raw status of the last transaction (e.g. `refunded` on a cancelled card charge). */
+  readonly transactionStatus: string | null;
   readonly paymentMethod: string;
   readonly installments: number | null;
   readonly pix: PagarmePixData | null;
@@ -135,6 +139,12 @@ export function readPagarmeCharge(value: unknown): PagarmeChargeObservation {
     amountCents: cents(charge.amount),
     paidAmountCents:
       charge.paid_amount == null ? null : cents(charge.paid_amount),
+    canceledAmountCents:
+      charge.canceled_amount == null ? null : cents(charge.canceled_amount),
+    transactionStatus:
+      transaction.status == null
+        ? null
+        : text(transaction.status, /^[a-z_]{1,64}$/),
     paymentMethod: text(charge.payment_method, /^[a-z_]{1,64}$/),
     installments:
       installments == null

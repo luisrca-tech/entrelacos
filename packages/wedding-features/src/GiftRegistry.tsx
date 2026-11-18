@@ -472,6 +472,14 @@ function GiftRegistryRuntime({
     const quote = state.quote;
     const requestApi = api;
     const current = () => mounted.current && activeApi.current === requestApi;
+    // Until the create request is sent, a failure returns to the form.
+    let started = false;
+    let sent = false;
+    const backToForm = (message: string) => {
+      if (!current()) return;
+      dispatch({ type: "CHECKOUT_FAILED", message, unknown: false });
+      setDialogOpen(true);
+    };
     try {
       const requestId = state.requestId ?? crypto.randomUUID();
       const recoveryToken =
@@ -488,6 +496,10 @@ function GiftRegistryRuntime({
       }
       if ((quote.method === "CREDIT_CARD") !== (input.card !== undefined))
         return;
+      // Lock the attempt before tokenizing: closing the dialog can no longer
+      // reset it, so an order created afterwards is always shown.
+      dispatch(event);
+      started = true;
       // Tokenize first: nothing is reserved or charged if the card is refused
       // here, and only the token travels on to the Entrelaços API.
       let cardToken: string | undefined;
@@ -496,16 +508,14 @@ function GiftRegistryRuntime({
         try {
           cardToken = await createPagarmeCardToken(input.card, {
             publicKey,
-            fetcher,
           });
         } catch (error) {
-          if (current())
-            setOperationError(
-              error instanceof PagarmeCardTokenError &&
-                error.code === "CARD_INVALID"
-                ? "Confira os dados do cartão."
-                : "Não foi possível validar o cartão agora. Tente novamente ou use Pix.",
-            );
+          backToForm(
+            error instanceof PagarmeCardTokenError &&
+              error.code === "CARD_INVALID"
+              ? "Confira os dados do cartão."
+              : "Não foi possível validar o cartão agora. Tente novamente ou use Pix.",
+          );
           return;
         } finally {
           if (current()) setPreparing(false);
@@ -526,11 +536,11 @@ function GiftRegistryRuntime({
           giftCheckoutRequest(quote, pending, payment),
         ).success
       ) {
-        setOperationError("Confira os seus dados e tente novamente.");
+        backToForm("Confira os seus dados e tente novamente.");
         return;
       }
       writePendingGiftCheckout(window.sessionStorage, siteId, pending);
-      dispatch(event);
+      sent = true;
       const result = await submitGiftCheckout(
         api,
         quote,
@@ -547,11 +557,13 @@ function GiftRegistryRuntime({
           toast.error(result.message);
         } else if (result.type === "CHECKOUT_FAILED" && result.unknown)
           toast.warning(paymentUnknownMessage);
+        else if (result.type === "CHECKOUT_FAILED") setDialogOpen(true);
       }
     } catch {
-      setOperationError(
-        "Não foi possível preparar o pagamento com segurança. Tente novamente neste navegador.",
-      );
+      const message =
+        "Não foi possível preparar o pagamento com segurança. Tente novamente neste navegador.";
+      if (started && !sent) backToForm(message);
+      else setOperationError(message);
     } finally {
       inFlight.current = false;
     }
@@ -602,6 +614,7 @@ function GiftRegistryRuntime({
       <SiteDialog
         open={dialogOpen && !!state.gift && state.phase !== "UNKNOWN"}
         labelledBy="gift-quote-heading"
+        locked={state.phase === "CREATING" || preparing}
         className="overflow-hidden p-0 [@media(max-width:760px)]:fixed [@media(max-width:760px)]:inset-0 [@media(max-width:760px)]:m-0 [@media(max-width:760px)]:h-dvh [@media(max-width:760px)]:max-h-dvh [@media(max-width:760px)]:w-full [@media(max-width:760px)]:max-w-none [@media(max-width:760px)]:rounded-none"
         onClose={() => {
           setDialogOpen(false);

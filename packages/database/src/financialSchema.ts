@@ -11,6 +11,7 @@ import {
   type PgTableExtraConfigValue,
   pgEnum,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   unique,
@@ -176,6 +177,18 @@ export const receivingAccount = pgTable(
     commercialEnabled: boolean("commercial_enabled").notNull().default(false),
     // Current selection never establishes receiving or bank approval.
     isCurrent: boolean("is_current").notNull().default(false),
+    // Legacy sub-account credentials and webhook state from the previous
+    // provider. Kept (never read) so existing balances stay recoverable by an
+    // operator; Pagar.me accounts leave them null.
+    credentialVersion: integer("credential_version"),
+    credentialKeyId: text("credential_key_id"),
+    credentialNonce: text("credential_nonce"),
+    credentialCiphertext: text("credential_ciphertext"),
+    credentialTag: text("credential_tag"),
+    webhookTokenHash: text("webhook_token_hash"),
+    webhookRegistration: jsonb("webhook_registration").$type<
+      Record<string, unknown>
+    >(),
     observedAt: timestamp("observed_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
@@ -195,6 +208,7 @@ export const receivingAccount = pgTable(
       table.environment,
       table.accountReference,
     ),
+    unique("receiving_account_webhook_hash_key").on(table.webhookTokenHash),
     uniqueIndex("receiving_account_current_idx")
       .on(table.siteId, table.environment)
       .where(sql`${table.isCurrent} = true`),
@@ -205,6 +219,14 @@ export const receivingAccount = pgTable(
     check(
       "receiving_account_references_check",
       sql`(${table.operatorReference} IS NULL OR length(trim(${table.operatorReference})) > 0) AND (${table.accountReference} IS NULL OR length(trim(${table.accountReference})) > 0) AND (${table.recipientReference} IS NULL OR length(trim(${table.recipientReference})) > 0)`,
+    ),
+    check(
+      "receiving_account_credentials_check",
+      sql`num_nonnulls(${table.credentialVersion}, ${table.credentialKeyId}, ${table.credentialNonce}, ${table.credentialCiphertext}, ${table.credentialTag}) = 0 OR (num_nonnulls(${table.credentialVersion}, ${table.credentialKeyId}, ${table.credentialNonce}, ${table.credentialCiphertext}, ${table.credentialTag}) = 5 AND ${table.credentialVersion} = 1 AND length(trim(${table.credentialKeyId})) > 0 AND length(${table.credentialNonce}) > 0 AND length(${table.credentialCiphertext}) > 0 AND length(${table.credentialTag}) > 0)`,
+    ),
+    check(
+      "receiving_account_webhook_hash_check",
+      sql`${table.webhookTokenHash} IS NULL OR ${table.webhookTokenHash} ~ '^[a-f0-9]{64}$'`,
     ),
   ],
 );
@@ -1031,6 +1053,7 @@ export const financialOperatorAlertKinds = [
   "GIFT_REFUNDED",
   "GIFT_CHARGEBACK",
   "ORDER_MISMATCH",
+  "WITHDRAWAL_UNRESOLVED",
 ] as const;
 
 // Operator-facing alerts for the platform account split (V2). Site and account
@@ -1067,7 +1090,7 @@ export const financialOperatorAlert = pgTable(
       .where(sql`${table.resolvedAt} IS NULL`),
     check(
       "financial_operator_alert_kind_check",
-      sql`${table.kind} IN ('SPLIT_DIVERGENCE_BLOCK','SPLIT_CANCELLED','ANTICIPATION_DENIED','PAYMENT_RESTRICTION','UNROUTABLE_PLATFORM_EVENT','SPLIT_SETUP_FAILED','GIFT_REFUNDED','GIFT_CHARGEBACK','ORDER_MISMATCH')`,
+      sql`${table.kind} IN ('SPLIT_DIVERGENCE_BLOCK','SPLIT_CANCELLED','ANTICIPATION_DENIED','PAYMENT_RESTRICTION','UNROUTABLE_PLATFORM_EVENT','SPLIT_SETUP_FAILED','GIFT_REFUNDED','GIFT_CHARGEBACK','ORDER_MISMATCH','WITHDRAWAL_UNRESOLVED')`,
     ),
     check(
       "financial_operator_alert_severity_check",
@@ -1355,6 +1378,9 @@ export const withdrawalProviderObservation = pgTable(
     })
       .onDelete("restrict")
       .onUpdate("restrict"),
+    // Created NOT VALID by migration 0031 (rows from before the switch keep
+    // their identifiers). Drizzle cannot express NOT VALID: apply schema
+    // changes with `db:migrate` only, never `drizzle-kit push`.
     check(
       "withdrawal_observation_hash_check",
       sql`${table.payloadHash} ~ '^[a-f0-9]{64}$' AND ${table.id} = 'pagarme-withdrawal:' || ${table.payloadHash}`,
@@ -1370,6 +1396,138 @@ export const withdrawalProviderObservation = pgTable(
     check(
       "withdrawal_observation_provider_check",
       sql`${table.providerReference} ~ '^[A-Za-z0-9_-]{1,128}$'`,
+    ),
+  ],
+);
+
+// Legacy withdrawal-authorization custody from the previous provider; never
+// written since the Pagar.me switch and kept so no existing row is lost.
+export const withdrawalAuthorizationCandidate = pgTable(
+  "withdrawal_authorization_candidate",
+  {
+    environment: financialEnvironment("environment").notNull(),
+    providerReference: text("provider_reference").notNull(),
+    siteId: text("site_id").notNull(),
+    accountId: text("account_id").notNull(),
+    operationId: text("operation_id").notNull(),
+    payloadHash: text("payload_hash").notNull(),
+    payload: jsonb("payload").$type<Record<string, unknown>>().notNull(),
+    recordedAt: timestamp("recorded_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.environment, table.providerReference] }),
+    unique("withdrawal_authorization_operation_unique").on(
+      table.environment,
+      table.operationId,
+    ),
+    foreignKey({
+      name: "withdrawal_authorization_operation_fk",
+      columns: [
+        table.siteId,
+        table.accountId,
+        table.environment,
+        table.operationId,
+      ],
+      foreignColumns: [
+        financialOperation.siteId,
+        financialOperation.accountId,
+        financialOperation.environment,
+        financialOperation.id,
+      ],
+    })
+      .onDelete("restrict")
+      .onUpdate("restrict"),
+    check(
+      "withdrawal_authorization_candidate_environment_check",
+      sql`${table.environment} IN ('sandbox', 'live')`,
+    ),
+    check(
+      "withdrawal_authorization_candidate_hash_check",
+      sql`${table.payloadHash} ~ '^[a-f0-9]{64}$'`,
+    ),
+    check(
+      "withdrawal_authorization_candidate_provider_check",
+      sql`${table.providerReference} ~ '^[A-Za-z0-9_-]{1,128}$'`,
+    ),
+    check(
+      "withdrawal_authorization_candidate_payload_check",
+      sql`jsonb_typeof(${table.payload}) = 'object' AND octet_length(${table.payload}::text) <= 32768`,
+    ),
+  ],
+);
+export const withdrawalAuthorizationDecision = pgTable(
+  "withdrawal_authorization_decision",
+  {
+    environment: financialEnvironment("environment").notNull(),
+    providerReference: text("provider_reference").notNull(),
+    payloadHash: text("payload_hash").notNull(),
+    status: text("status").notNull(),
+    recordedAt: timestamp("recorded_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.environment, table.providerReference] }),
+    foreignKey({
+      name: "withdrawal_authorization_candidate_fk",
+      columns: [table.environment, table.providerReference],
+      foreignColumns: [
+        withdrawalAuthorizationCandidate.environment,
+        withdrawalAuthorizationCandidate.providerReference,
+      ],
+    })
+      .onDelete("restrict")
+      .onUpdate("restrict"),
+    check(
+      "withdrawal_authorization_decision_hash_check",
+      sql`${table.payloadHash} ~ '^[a-f0-9]{64}$'`,
+    ),
+    check(
+      "withdrawal_authorization_decision_status_check",
+      sql`${table.status} = 'APPROVED'`,
+    ),
+  ],
+);
+
+// Legacy incoming-Pix preparation fences; kept read-only since the Pagar.me switch.
+export const receivingPixPreparation = pgTable(
+  "receiving_pix_preparation",
+  {
+    accountId: text("account_id").primaryKey(),
+    siteId: text("site_id").notNull(),
+    environment: financialEnvironment("environment").notNull(),
+    attemptId: text("attempt_id").notNull().unique(),
+    actorUserId: text("actor_user_id")
+      .notNull()
+      .references(() => user.id),
+    sessionId: text("session_id").notNull(),
+    consentId: text("consent_id").notNull(),
+    state: text("state").notNull(),
+    attempts: integer("attempts").notNull(),
+    attemptedAt: timestamp("attempted_at", { withTimezone: true }).notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    foreignKey({
+      name: "receiving_pix_preparation_account_fk",
+      columns: [table.siteId, table.accountId, table.environment],
+      foreignColumns: [
+        receivingAccount.siteId,
+        receivingAccount.id,
+        receivingAccount.environment,
+      ],
+    })
+      .onDelete("restrict")
+      .onUpdate("restrict"),
+    check(
+      "receiving_pix_preparation_state_check",
+      sql`${table.state} IN ('ARMED','SUBMITTED','REJECTED','UNKNOWN')`,
+    ),
+    check(
+      "receiving_pix_preparation_attempt_check",
+      sql`${table.attempts} > 0 AND ${table.updatedAt} >= ${table.attemptedAt}`,
     ),
   ],
 );

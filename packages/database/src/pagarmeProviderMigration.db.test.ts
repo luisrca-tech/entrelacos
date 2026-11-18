@@ -15,7 +15,7 @@ afterAll(async () => {
 });
 
 describe("0031 Pagar.me provider migration", () => {
-  it("removes the previous provider's tables", async () => {
+  it("keeps the previous provider's tables", async () => {
     const result = await connection.pool.query(
       "SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_name = ANY($1)",
       [
@@ -26,14 +26,14 @@ describe("0031 Pagar.me provider migration", () => {
         ],
       ],
     );
-    expect(result.rows).toEqual([]);
+    expect(result.rows).toHaveLength(3);
   });
 
-  it("removes stored sub-account credentials and webhook state", async () => {
+  it("keeps stored sub-account credentials and webhook state", async () => {
     const result = await connection.pool.query(
       "SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND ((table_name='receiving_account' AND (column_name LIKE 'credential_%' OR column_name LIKE 'webhook_%')) OR (table_name='receiving_setup_holder' AND column_name='pix_preparation_consent'))",
     );
-    expect(result.rows).toEqual([]);
+    expect(result.rows).toHaveLength(8);
   });
 
   it("accepts only pagarme-withdrawal observation identifiers", async () => {

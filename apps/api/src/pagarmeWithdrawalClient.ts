@@ -34,7 +34,8 @@ import {
 /** Fixed-fee policy recorded on every Pagar.me withdrawal intent. */
 export const PAGARME_WITHDRAWAL_POLICY_VERSION = `pagarme-withdrawal-fixed-v1-${PAGARME_WITHDRAWAL_FEE_CENTS}`;
 const observationReference = /^pagarme-withdrawal:[a-f0-9]{64}$/;
-// Assumed lower bound of Pagar.me idempotency-key retention. [To confirm in sandbox]
+// After this long an unknown withdrawal missing from the provider list is
+// handed to an operator.
 const defaultReplayWindowMs = 60 * 60_000;
 
 /** Provider-neutral available balance used by withdrawals and the overview. */
@@ -205,7 +206,10 @@ export interface PagarmeWithdrawalAdapterOptions {
   mode: Mode;
   applicationEnvironment: ApplicationEnvironment;
   now(): Date;
-  client: Pick<PagarmeRecipientClient, "createWithdrawal" | "getWithdrawal">;
+  client: Pick<
+    PagarmeRecipientClient,
+    "createWithdrawal" | "getWithdrawal" | "listWithdrawals"
+  >;
   custody: PagarmeWithdrawalCustody;
   /**
    * Runs the provider POST under the composition's current dispatch authority
@@ -216,8 +220,16 @@ export interface PagarmeWithdrawalAdapterOptions {
     fence: DispatchFence,
     send: () => Promise<PagarmeWithdrawal>,
   ): Promise<PagarmeWithdrawal>;
-  /** How long after creation an unknown dispatch may be replayed. */
+  /**
+   * How long after creation a dispatch with a lost response may still be
+   * missing from the provider list before an operator is alerted.
+   */
   replayWindowMs?: number;
+  /** Opens an operator alert for a withdrawal recovery cannot settle. */
+  onUnresolved?(
+    original: OriginalWithdrawal,
+    reason: "NO_PROVIDER_MATCH" | "AMBIGUOUS_PROVIDER_MATCH",
+  ): Promise<void>;
 }
 
 export function createPagarmeWithdrawalAdapter(
@@ -246,18 +258,25 @@ export function createPagarmeWithdrawalAdapter(
         !definitiveRejections.has(error.status)
       )
         throw error;
-      return {
-        id: `rejected_${createHash("sha256").update(key).digest("hex").slice(0, 32)}`,
-        amountCents: pagarmeWithdrawalTransferCents(c.amountCents),
-        status: "failed",
-        updatedAt: now().toISOString(),
-      };
+      return localRejection(original);
     }
+  }
+  /** A failed withdrawal that exists only locally: nothing reached Pagar.me. */
+  function localRejection(original: OriginalWithdrawal): PagarmeWithdrawal {
+    const c = original.correlation;
+    const key = pagarmeWithdrawalIdempotencyKey(c);
+    return {
+      id: `rejected_${createHash("sha256").update(key).digest("hex").slice(0, 32)}`,
+      amountCents: pagarmeWithdrawalTransferCents(c.amountCents),
+      status: "failed",
+      updatedAt: now().toISOString(),
+    };
   }
   async function observe(
     original: OriginalWithdrawal,
     fence: DispatchFence,
     withdrawal: PagarmeWithdrawal,
+    notSent = false,
   ): Promise<WithdrawalDispatchObservation> {
     const c = original.correlation;
     const observation = capturePagarmeWithdrawal(
@@ -286,8 +305,9 @@ export function createPagarmeWithdrawalAdapter(
       return {
         ...identity,
         outcome: "REJECTED",
-        reason:
-          status === "failed"
+        reason: notSent
+          ? "PAGARME_WITHDRAWAL_NOT_SENT"
+          : status === "failed"
             ? "PAGARME_WITHDRAWAL_FAILED"
             : "PAGARME_WITHDRAWAL_CANCELLED",
         proofReference: reference,
@@ -318,11 +338,22 @@ export function createPagarmeWithdrawalAdapter(
           fenceInput,
         );
         if (Date.parse(fence.leaseExpiresAt) <= now().getTime()) unavailable();
-        const withdrawal = await guard(original, fence, () => {
-          if (Date.parse(fence.leaseExpiresAt) <= now().getTime())
-            unavailable();
-          return send(original);
-        });
+        // `sent` flips right before the POST. A guard refusal before it
+        // (budget, destination, consent, stale quote, lease) is a local,
+        // provable rejection that releases the hold; recovery never replays.
+        let sent = false;
+        let withdrawal: PagarmeWithdrawal;
+        try {
+          withdrawal = await guard(original, fence, () => {
+            if (Date.parse(fence.leaseExpiresAt) <= now().getTime())
+              unavailable();
+            sent = true;
+            return send(original);
+          });
+        } catch (error) {
+          if (sent) throw error;
+          return await observe(original, fence, localRejection(original), true);
+        }
         return await observe(original, fence, withdrawal);
       } catch {
         // An unknown or unverifiable outcome keeps the hold for lookup.
@@ -351,14 +382,35 @@ export function createPagarmeWithdrawalAdapter(
           );
           if (withdrawal.id !== providerReference) unavailable();
         } else {
-          // The POST response was lost: replaying the same idempotent command
-          // returns the original withdrawal instead of creating another one.
-          if (
-            now().getTime() - Date.parse(original.snapshot.intent.createdAt) >
-            replayWindowMs
-          )
+          // The POST response was lost (or it was never sent). Replaying the
+          // POST here would skip the dispatch guard, so the withdrawal is
+          // looked up in the provider list instead: one match by net amount
+          // since the intent was created. No match or several after the
+          // window go to an operator; the hold is never released blindly.
+          const createdAt = original.snapshot.intent.createdAt;
+          const listed = await client.listWithdrawals(
+            c.accountReference,
+            new Date(Date.parse(createdAt) - 60_000).toISOString(),
+          );
+          const matches = listed.filter(
+            (item) =>
+              item.amountCents ===
+              pagarmeWithdrawalTransferCents(c.amountCents),
+          );
+          if (matches.length !== 1) {
+            if (
+              now().getTime() - Date.parse(createdAt) > replayWindowMs &&
+              options.onUnresolved
+            )
+              await options.onUnresolved(
+                original,
+                matches.length === 0
+                  ? "NO_PROVIDER_MATCH"
+                  : "AMBIGUOUS_PROVIDER_MATCH",
+              );
             return { outcome: "UNRESOLVED" };
-          withdrawal = await send(original);
+          }
+          withdrawal = matches[0];
         }
         return {
           outcome: "FOUND",

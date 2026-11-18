@@ -45,7 +45,7 @@ function call(fetch: ReturnType<typeof respond>, index = 0) {
 const input: PagarmeRecipientInput = {
   name: "MARIA DA SILVA",
   email: "maria@example.test",
-  cpf: "26224451990",
+  cpf: "12345678909",
   mobilePhone: "21994647568",
   birthDate: "1990-04-12",
   monthlyIncomeCents: 500000,
@@ -90,7 +90,7 @@ describe("Pagar.me recipient client", () => {
         type: "individual",
         name: "MARIA DA SILVA",
         email: "maria@example.test",
-        document: "26224451990",
+        document: "12345678909",
         birthdate: "1990-04-12T00:00:00",
         monthly_income: 500000,
         professional_occupation: "Professora",
@@ -109,7 +109,7 @@ describe("Pagar.me recipient client", () => {
       default_bank_account: {
         holder_name: "MARIA DA SILVA",
         holder_type: "individual",
-        holder_document: "26224451990",
+        holder_document: "12345678909",
         bank: "341",
         branch_number: "1234",
         branch_check_digit: "6",
@@ -133,10 +133,10 @@ describe("Pagar.me recipient client", () => {
       id: "rp_fixtureRecipient01",
       code: "receiving-account-1",
       status: "registration",
-      document: "26224451990",
+      document: "12345678909",
       bankAccount: {
         id: "ba_fixtureBankAcct01",
-        holderDocument: "26224451990",
+        holderDocument: "12345678909",
         maskedAccount: "Conta **** 3456",
       },
     });
@@ -305,6 +305,28 @@ describe("Pagar.me recipient client", () => {
       `${PAGARME_API_BASE_URL}/recipients/rp_fixtureRecipient01/withdrawals/with_fixtureWithdraw01`,
     );
     expect(withdrawal.status).toBe("transferred");
+  });
+
+  it("lists withdrawals created since an instant (bare or paginated list)", async () => {
+    const pending = fixture("recipient-withdrawal-pending");
+    for (const body of [`[${pending}]`, `{"data":[${pending}]}`]) {
+      const fetch = respond([200, body]);
+      const listed = await createPagarmeRecipientClient({
+        secretKey,
+        fetch,
+      }).listWithdrawals("rp_fixtureRecipient01", "2026-11-20T09:59:00.000Z");
+      expect(call(fetch).url).toBe(
+        `${PAGARME_API_BASE_URL}/recipients/rp_fixtureRecipient01/withdrawals?created_since=2026-11-20T09%3A59%3A00.000Z`,
+      );
+      expect(listed).toEqual([
+        {
+          id: "with_fixtureWithdraw01",
+          amountCents: 9633,
+          status: "pending",
+          updatedAt: "2026-11-20T10:00:00.000Z",
+        },
+      ]);
+    }
   });
 
   it("lists payables of one recipient, optionally for one charge", async () => {

@@ -45,10 +45,10 @@ function installmentResponse() {
         installmentCents: [5310, 5310],
       },
       {
-        installmentCount: 12,
+        installmentCount: 3,
         totalCents: 10675,
         installmentSurchargeCents: 110,
-        installmentCents: [...Array<number>(11).fill(889), 896],
+        installmentCents: [3558, 3558, 3559],
       },
     ],
   };
@@ -80,7 +80,7 @@ function v2Response() {
   const card = {
     ...preview.methods[1],
     totalCents: 10688,
-    installmentOptions: [option(1, 10688), option(6, 11247), option(12, 11909)],
+    installmentOptions: [option(1, 10688), option(3, 11054), option(6, 11247)],
   };
   return {
     ...preview,
@@ -207,10 +207,12 @@ describe("gift pricing preview", () => {
       expect(rowValue(dialog, "Você recebe")).toBe("R$ 100,00 (100%)");
       expect(rowValue(dialog, "Pix")).toBe("R$ 103,99");
       expect(rowValue(dialog, "Cartão à vista")).toBe("R$ 106,88");
+      expect(rowValue(dialog, "Cartão em 3x")).toBe("R$ 110,54");
       expect(rowValue(dialog, "Cartão em 6x")).toBe("R$ 112,47");
-      expect(rowValue(dialog, "Cartão em 12x")).toBe("R$ 119,09");
+      // D7: card goes up to 6x only.
+      expect(rowValue(dialog, "Cartão em 12x")).toBeUndefined();
       expect(rowValue(dialog, "Taxas pagas pelo convidado")).toBe(
-        "de R$ 3,99 a R$ 19,09",
+        "de R$ 3,99 a R$ 12,47",
       );
       expect(
         dialog.querySelector("dt button")?.getAttribute("aria-label"),
@@ -238,7 +240,7 @@ describe("gift pricing preview", () => {
       await view.render(10000);
       const dialog = await view.openSimulation();
       expect(rowValue(dialog, "Cartão em 6x")).toBeUndefined();
-      expect(rowValue(dialog, "Cartão em 12x")).toBe("R$ 106,75");
+      expect(rowValue(dialog, "Cartão em 3x")).toBe("R$ 106,75");
       expect(rowValue(dialog, "Cartão à vista")).toBe("R$ 105,65");
     } finally {
       await view.close();
@@ -271,9 +273,9 @@ describe("gift pricing preview", () => {
     try {
       await view.render(10000);
       const dialog = await view.openSimulation();
-      expect(rowValue(dialog, "Cartão em 12x")).toBe("R$ 106,75");
+      expect(rowValue(dialog, "Cartão em 3x")).toBe("R$ 106,75");
       await view.render(500);
-      expect(rowValue(dialog, "Cartão em 12x")).toBeUndefined();
+      expect(rowValue(dialog, "Cartão em 3x")).toBeUndefined();
       expect(dialog.textContent).toContain(
         "Somente cartão à vista disponível nesta simulação.",
       );

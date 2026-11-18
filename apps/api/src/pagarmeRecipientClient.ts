@@ -124,6 +124,11 @@ export interface PagarmeRecipientClient {
     recipientId: string,
     withdrawalId: string,
   ): Promise<PagarmeWithdrawal>;
+  /** GET /recipients/{id}/withdrawals?created_since=: recovers a lost POST response. */
+  listWithdrawals(
+    recipientId: string,
+    createdSince: string,
+  ): Promise<PagarmeWithdrawal[]>;
   listPayables(
     recipientId: string,
     filter?: { chargeId?: string },
@@ -443,6 +448,20 @@ export function createPagarmeRecipientClient(
       );
       if (withdrawal.id !== wid) return invalid();
       return withdrawal;
+    },
+    async listWithdrawals(recipientId, createdSince) {
+      const id = readPagarmeRecipientId(recipientId);
+      const query = new URLSearchParams({
+        created_since: instant(createdSince),
+      });
+      const raw = await http.request(
+        "GET",
+        `/recipients/${id}/withdrawals?${query}`,
+      );
+      // The reference shows a bare array; paginated lists wrap it in `data`.
+      const list = Array.isArray(raw) ? raw : record(raw).data;
+      if (!Array.isArray(list) || list.length > 1_000) return invalid();
+      return list.map(readWithdrawal);
     },
     async listPayables(recipientId, filter = {}) {
       const id = readPagarmeRecipientId(recipientId);

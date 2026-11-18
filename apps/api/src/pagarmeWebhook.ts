@@ -2,8 +2,10 @@ import { createHash, timingSafeEqual } from "node:crypto";
 
 /**
  * Pagar.me webhook types we act on, normalized to the inbox event types.
- * `charge.chargeback` is accepted alongside the documented
- * `charge.chargedback` until the dashboard spelling is confirmed (spec D9).
+ * `chargeback.received` replaces the discontinued `charge.chargedback`
+ * (migration deadline 2026-09-30 in the webhook event reference); the legacy
+ * spellings stay accepted. `charge.partial_canceled` is read as a refund
+ * event: the re-read order decides (a partial reversal goes to an operator).
  */
 export const pagarmeWebhookEventTypes = Object.freeze({
   "order.paid": "ORDER_PAID",
@@ -11,8 +13,10 @@ export const pagarmeWebhookEventTypes = Object.freeze({
   "order.canceled": "ORDER_CANCELED",
   "charge.paid": "CHARGE_PAID",
   "charge.refunded": "CHARGE_REFUNDED",
+  "charge.partial_canceled": "CHARGE_REFUNDED",
   "charge.chargedback": "CHARGE_CHARGEDBACK",
   "charge.chargeback": "CHARGE_CHARGEDBACK",
+  "chargeback.received": "CHARGE_CHARGEDBACK",
   "recipient.updated": "RECIPIENT_UPDATED",
 } as const);
 
@@ -162,6 +166,35 @@ export function parsePagarmeWebhookEvent(
       orderId: required(data.id, orderIdPattern),
       orderCode: optional(data.code, codePattern),
       chargeId: first ? optional(first.id, chargeIdPattern) : null,
+      recipientId: null,
+    };
+  }
+  if (providerType === "chargeback.received") {
+    // The event carries a dispute, not a charge. The documented dispute
+    // object references the charge as `chargeId`; snake_case and nested
+    // shapes are accepted too. The worker re-reads the order by charge.
+    const charge =
+      data.charge && typeof data.charge === "object" ? object(data.charge) : {};
+    const chargeRef =
+      data.chargeId ??
+      data.charge_id ??
+      charge.id ??
+      (typeof data.id === "string" && data.id.startsWith("ch_")
+        ? data.id
+        : undefined);
+    const nested = data.order ?? charge.order;
+    const order =
+      nested && typeof nested === "object" ? object(nested) : undefined;
+    return {
+      eventId,
+      providerType,
+      eventType,
+      orderId: optional(
+        order?.id ?? data.orderId ?? data.order_id ?? charge.order_id,
+        orderIdPattern,
+      ),
+      orderCode: optional(order?.code, codePattern),
+      chargeId: required(chargeRef, chargeIdPattern),
       recipientId: null,
     };
   }

@@ -383,13 +383,6 @@ export function readGiftQuoteSnapshot(
                         pricing.policy.cardInstallmentBasisPoints.upToSix,
                     }
                   : {}),
-                ...(pricing.policy.cardInstallmentBasisPoints.upToTwelve !==
-                undefined
-                  ? {
-                      upToTwelve:
-                        pricing.policy.cardInstallmentBasisPoints.upToTwelve,
-                    }
-                  : {}),
               },
             }
           : {}),
@@ -528,10 +521,18 @@ export function createGiftCheckoutService(
     ): Promise<GiftCheckoutCreateResult> {
       try {
         const site = giftQuoteSchema.shape.siteId.safeParse(siteId);
+        // More than 6x is a clear 422, not a malformed request (D7).
+        const requested =
+          input && typeof input === "object" && "installments" in input
+            ? input.installments
+            : undefined;
+        if (
+          Number.isSafeInteger(requested) &&
+          (requested as number) > GIFT_PLATFORM_TARIFFS.maxInstallments
+        )
+          return fail("INSTALLMENTS_UNAVAILABLE");
         const body = giftCheckoutCreateInputSchema.safeParse(input);
         if (!site.success || !body.success) return fail("QUOTE_INVALID");
-        if (body.data.installments > GIFT_PLATFORM_TARIFFS.maxInstallments)
-          return fail("INSTALLMENTS_UNAVAILABLE");
         const tokenHash = createHash("sha256")
           .update(body.data.recoveryToken, "utf8")
           .digest();

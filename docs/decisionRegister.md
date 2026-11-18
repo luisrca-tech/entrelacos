@@ -52,6 +52,8 @@ Gift payments, couple receiving and withdrawals move from Asaas to Pagar.me v5 c
 
 Operational details: [Pagar.me operation](pagarmeOperation.md), [gift pricing](giftPricingPanel.md), [settlement](giftPricingSettlement.md). Open points to confirm in the sandbox: gateway fee on Pix, whether a flat card split applies per charge or per installment, and the exact chargeback webhook event name.
 
+Review fixes (2026-11-18): rows written before the switch are kept rather than dropped (0031 only replaces constraints; 0033 restores the objects on local databases that ran an earlier draft). The unused `receiving_pix_destination` table and the `split_divergence_blocked_at` column stay for now because historical rows and history views still read them; dropping them is a later, explicit migration. Chargebacks are read from `chargeback.received` as well as the legacy names, and paid orders are re-read daily for 120 days. A compensated refund or chargeback clears the withdrawal block once the ledger is covered again, or when an operator resolves its alert.
+
 ## Confirmed technical boundaries
 
 - Public sites use Astro static builds on Cloudflare Workers Static Assets.

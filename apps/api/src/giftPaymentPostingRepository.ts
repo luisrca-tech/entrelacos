@@ -212,8 +212,32 @@ export function createGiftPaymentPostingRepository(
                 };
               }
               case "CLOSED": {
+                if (await anyPayment(tx, binding)) {
+                  // A paid order never closes: a cancel the lifecycle could
+                  // not read as a refund goes to an operator, never silence.
+                  const alerted = await insertFinancialOperatorAlert(
+                    tx,
+                    {
+                      kind: "ORDER_MISMATCH",
+                      severity: "critical",
+                      environment: binding.environment,
+                      siteId: binding.siteId,
+                      accountId: binding.accountId,
+                      checkoutAttemptId: binding.attemptId,
+                      paymentReference: input.providerOrderId,
+                      details: {
+                        reason: `CLOSED_AFTER_PAYMENT_${transition.reason}`,
+                      },
+                    },
+                    options.generateId("alert"),
+                  );
+                  return {
+                    outcome: alerted ? "MISMATCH" : "UNCHANGED",
+                    paymentId: null,
+                    ledgerEntryId: null,
+                  };
+                }
                 if (
-                  (await anyPayment(tx, binding)) ||
                   !["SUCCEEDED", "PROCESSING", "UNKNOWN"].includes(
                     operation.state,
                   )

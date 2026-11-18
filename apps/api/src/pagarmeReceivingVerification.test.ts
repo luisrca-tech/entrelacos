@@ -56,7 +56,7 @@ function fixture(environment: "sandbox" | "live" = "live") {
     {
       name: "MARIA DA SILVA",
       email: "maria@example.test",
-      cpf: "26224451990",
+      cpf: "12345678909",
       mobilePhone: "21994647568",
       birthDate: "1990-04-12",
       monthlyIncomeCents: 500000,
@@ -116,10 +116,10 @@ function fixture(environment: "sandbox" | "live" = "live") {
     id: "rp_fixtureRecipient01",
     code: "account-one",
     status: "active",
-    document: "26224451990",
+    document: "12345678909",
     bankAccount: {
       id: "ba_fixtureBankAcct01",
-      holderDocument: "26224451990",
+      holderDocument: "12345678909",
       maskedAccount: "Conta **** 3456",
     },
   };
@@ -170,6 +170,44 @@ describe("Pagar.me recipient receiving verification", () => {
         operatorReference: `pagarme-holder-${v.provision.inputFingerprint}`,
       },
     });
+  });
+  it("keeps the CPF out of the stored mapping reference (no brute-forceable hash)", () => {
+    const v = fixture();
+    const first = preparePagarmeReceivingVerification(
+      v.fence,
+      v.recipient,
+      observedAt,
+    ).candidate.mappingReference;
+    const otherCpf = preparePagarmeReceivingVerification(
+      v.fence,
+      {
+        ...v.recipient,
+        document: "52998224725",
+        bankAccount: {
+          ...(v.recipient.bankAccount as NonNullable<
+            PagarmeRecipient["bankAccount"]
+          >),
+          holderDocument: "52998224725",
+        },
+      },
+      observedAt,
+    ).candidate.mappingReference;
+    expect(otherCpf).toBe(first);
+    // A different holder on the bank account still changes the reference.
+    const foreignHolder = preparePagarmeReceivingVerification(
+      v.fence,
+      {
+        ...v.recipient,
+        bankAccount: {
+          ...(v.recipient.bankAccount as NonNullable<
+            PagarmeRecipient["bankAccount"]
+          >),
+          holderDocument: "52998224725",
+        },
+      },
+      observedAt,
+    ).candidate.mappingReference;
+    expect(foreignHolder).not.toBe(first);
   });
   it("approves an active recipient whose bank holder is the recipient", () => {
     const v = fixture();

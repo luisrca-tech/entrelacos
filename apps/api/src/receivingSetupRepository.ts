@@ -336,7 +336,7 @@ export function createReceivingSetupRepository(
       siteId: string,
     ): Promise<ReceivingSetupAccountRecord | null> {
       const loaded = await db.execute(
-        sql`SELECT a.id AS "accountId",a.operator_user_id AS "operatorUserId",a.account_reference AS "accountReference",a.recipient_reference AS "recipientReference",op.state,op.request_snapshot AS "requestSnapshot" FROM receiving_account a INNER JOIN financial_operation op ON op.account_id=a.id AND op.site_id=a.site_id AND op.environment=a.environment AND op.kind='ACCOUNT_CREATE' WHERE a.site_id=${siteId} AND a.environment=${mode} AND a.is_current=true`,
+        sql`SELECT a.id AS "accountId",a.operator_user_id AS "operatorUserId",a.account_reference AS "accountReference",a.recipient_reference AS "recipientReference",op.state,op.request_snapshot AS "requestSnapshot" FROM receiving_account a INNER JOIN financial_operation op ON op.account_id=a.id AND op.site_id=a.site_id AND op.environment=a.environment AND op.kind='ACCOUNT_CREATE' WHERE a.site_id=${siteId} AND a.environment=${mode} AND a.provider='PAGARME' AND a.is_current=true`,
       );
       if (loaded.rows.length === 0) return null;
       if (loaded.rows.length !== 1) return deny();
@@ -393,7 +393,7 @@ export function createReceivingSetupRepository(
           return;
         }
         const accounts = await tx.execute(
-          sql`SELECT id FROM receiving_account WHERE site_id=${actor.siteId} AND environment=${mode} LIMIT 1`,
+          sql`SELECT id FROM receiving_account WHERE site_id=${actor.siteId} AND environment=${mode} AND provider='PAGARME' LIMIT 1`,
         );
         if (accounts.rows.length) return deny("RECEIVING_BINDING_EXISTS", 409);
         await tx.execute(

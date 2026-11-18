@@ -139,7 +139,7 @@ export function ReceivingGuide({
           Quando o dinheiro fica disponível
         </h3>
         <p className="m-0">
-          <strong>Pix:</strong> assim que o pagamento é confirmado.{" "}
+          <strong>Pix:</strong> quando a Pagar.me libera o pagamento confirmado.{" "}
           <strong>Cartão (à vista ou parcelado):</strong> o valor inteiro é
           antecipado e fica disponível em cerca de 2 dias.
         </p>

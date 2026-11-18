@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildPagarmeOrderRequest,
   type PagarmeOrderCommand,
+  pagarmeSplitAmounts,
 } from "./pagarmeOrderPayload";
 
 const now = new Date("2026-11-18T12:00:00.000Z");
@@ -116,11 +117,7 @@ describe("Pagar.me order payload", () => {
   });
 
   it("keeps the two flat split amounts equal to the guest total", () => {
-    for (const command of [
-      pix,
-      card,
-      { ...card, splitMode: "per_installment" as const },
-    ]) {
+    for (const command of [pix, card]) {
       const [payment] = buildPagarmeOrderRequest(command).body.payments;
       expect(payment.split.reduce((sum, rule) => sum + rule.amount, 0)).toBe(
         command.totalCents,
@@ -129,14 +126,47 @@ describe("Pagar.me order payload", () => {
     }
   });
 
-  it("sends ceil(C / n) to the couple in per_installment mode", () => {
+  it("states both rules per installment in per_installment mode", () => {
     const [payment] = buildPagarmeOrderRequest({
       ...card,
       splitMode: "per_installment",
     }).body.payments;
+    // Each installment is ceil(G / n); the couple gets ceil(C / n) of it.
     expect(payment.split[1].amount).toBe(Math.ceil(11031 / 6));
-    expect(payment.split[0].amount).toBe(11890 - Math.ceil(11031 / 6));
+    expect(payment.split[0].amount).toBe(
+      Math.ceil(11890 / 6) - Math.ceil(11031 / 6),
+    );
   });
+
+  it.each([1, 2, 3, 4, 5, 6])(
+    "pays each recipient C and G − C across %ix under either split mode",
+    (installments) => {
+      const command = { ...card, installments };
+      const whole = pagarmeSplitAmounts({
+        ...command,
+        splitMode: "charge_total",
+      });
+      expect(whole).toEqual({
+        platformCents: 11890 - 11031,
+        coupleCents: 11031,
+        ruleTotalCents: 11890,
+      });
+      const each = pagarmeSplitAmounts({
+        ...command,
+        splitMode: "per_installment",
+      });
+      const coupleReceives = each.coupleCents * installments;
+      const platformReceives = each.platformCents * installments;
+      // Rounding up per installment only ever favours the couple (< n cents)
+      // and the platform rule absorbs the remainder fee.
+      expect(coupleReceives - 11031).toBeGreaterThanOrEqual(0);
+      expect(coupleReceives - 11031).toBeLessThan(installments);
+      expect(Math.abs(platformReceives - (11890 - 11031))).toBeLessThan(
+        2 * installments,
+      );
+      expect(each.platformCents + each.coupleCents).toBe(each.ruleTotalCents);
+    },
+  );
 
   it("rounds the Pix expiry down to whole seconds", () => {
     const [payment] = buildPagarmeOrderRequest({

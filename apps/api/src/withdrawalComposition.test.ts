@@ -301,7 +301,7 @@ describe("withdrawal history ports", () => {
       ).resolves.toEqual([]);
       expect(execute).toHaveBeenCalledOnce();
       const query = new PgDialect().sqlToQuery(execute.mock.calls[0][0]);
-      expect(query.sql).toContain("a.provider='PAGARME'");
+      expect(query.sql).toContain('LEFT JOIN "receiving_account" a');
       expect(query.params).toEqual([mode, "site-1", mode, []]);
       expect(fetch).not.toHaveBeenCalled();
       await composition.close();

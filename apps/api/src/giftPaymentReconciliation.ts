@@ -108,23 +108,41 @@ export interface GiftPaymentReconciliationOptions {
   onEnqueued?(): void;
 }
 
-function stale(environment: string, now: string, staleAfterMs: number) {
-  const window = GIFT_PAYMENT_RECONCILE_WINDOW_MS;
+/**
+ * Paid orders are re-read once a day for this long, so a refund or chargeback
+ * whose webhook was lost (or sent under a name we do not read) still posts
+ * its debit and operator alert. Card chargebacks can arrive up to ~120 days.
+ */
+export const GIFT_PAYMENT_REVERSAL_SWEEP_EVERY_MS = 24 * 60 * 60_000;
+export const GIFT_PAYMENT_REVERSAL_WINDOW_MS = 120 * 24 * 60 * 60_000;
+
+const secs = (ms: number) => ms / 1000;
+
+/** Payment rows of the operation's order (none until the order is paid). */
+const paymentOf = sql`LEFT JOIN LATERAL (SELECT min(p.created_at) AS "paidAt",
+    bool_or(p.provider_status = 'RECEIVED') AS "open"
+  FROM ${giftPaymentRecord} p
+  WHERE p.order_id = op.order_id AND p.site_id = op.site_id AND p.account_id = op.account_id
+    AND p.environment = op.environment) pay ON true`;
+
+function eligible(environment: string, now: string, staleAfterMs: number) {
   return sql`op.environment = ${environment} AND op.kind = 'CHECKOUT_CREATE'
-    AND op.created_at <= ${now}::timestamptz - make_interval(secs => ${staleAfterMs / 1000})
-    AND op.created_at > ${now}::timestamptz - make_interval(secs => ${window / 1000})
-    AND (op.state = 'UNKNOWN'
-      OR (op.state = 'PROCESSING' AND op.lease_expires_at <= ${now}::timestamptz)
-      OR (op.state = 'SUCCEEDED' AND NOT EXISTS (SELECT 1 FROM ${giftPaymentRecord} p
-        WHERE p.order_id = op.order_id AND p.site_id = op.site_id AND p.account_id = op.account_id
-          AND p.environment = op.environment)))`;
+    AND (
+      (pay."paidAt" IS NULL
+        AND op.created_at <= ${now}::timestamptz - make_interval(secs => ${secs(staleAfterMs)})
+        AND op.created_at > ${now}::timestamptz - make_interval(secs => ${secs(GIFT_PAYMENT_RECONCILE_WINDOW_MS)})
+        AND (op.state IN ('UNKNOWN', 'SUCCEEDED')
+          OR (op.state = 'PROCESSING' AND op.lease_expires_at <= ${now}::timestamptz)))
+      OR (op.state = 'SUCCEEDED' AND pay."open" = true
+        AND pay."paidAt" <= ${now}::timestamptz - make_interval(secs => ${secs(GIFT_PAYMENT_REVERSAL_SWEEP_EVERY_MS)})
+        AND op.created_at > ${now}::timestamptz - make_interval(secs => ${secs(GIFT_PAYMENT_REVERSAL_WINDOW_MS)})))`;
 }
 
 /**
  * Sweeps checkouts still pending more than ten minutes after creation (lost
- * webhooks, unknown creation outcomes) and hands each one to the payment
- * worker, which re-reads the order from Pagar.me before posting anything.
- * Each checkout is reconsidered at most once per `staleAfterMs`.
+ * webhooks, unknown creation outcomes) and, once a day for 120 days, paid
+ * orders not yet reversed (lost refund/chargeback events). Each one goes to
+ * the payment worker, which re-reads the order from Pagar.me before posting.
  */
 export function createGiftPaymentReconciliation(
   db: Database,
@@ -140,17 +158,23 @@ export function createGiftPaymentReconciliation(
       const inserted = await db.transaction(async (tx) => {
         const result =
           await tx.execute(sql`SELECT op.id AS "attemptId", op.site_id AS "siteId",
-            op.account_id AS "accountId", op.environment, op.provider_operation_reference AS "providerOrderId"
+            op.account_id AS "accountId", op.environment, op.provider_operation_reference AS "providerOrderId",
+            (pay."paidAt" IS NOT NULL) AS "paid"
           FROM ${financialOperation} op
           INNER JOIN ${giftCheckoutAttempt} a ON a.id = op.id AND a.operation_id = op.id AND a.site_id = op.site_id
-          WHERE ${stale(options.environment, now, staleAfterMs)}
+          ${paymentOf}
+          WHERE ${eligible(options.environment, now, staleAfterMs)}
             AND op.next_attempt_at <= ${now}::timestamptz
           ORDER BY op.next_attempt_at, op.id
           LIMIT 1 FOR UPDATE OF op SKIP LOCKED`);
         const row = result.rows[0];
         if (!row) return null;
+        const every =
+          row.paid === true
+            ? GIFT_PAYMENT_REVERSAL_SWEEP_EVERY_MS
+            : staleAfterMs;
         await tx.execute(sql`UPDATE ${financialOperation}
-          SET next_attempt_at = ${now}::timestamptz + make_interval(secs => ${staleAfterMs / 1000})
+          SET next_attempt_at = ${now}::timestamptz + make_interval(secs => ${secs(every)})
           WHERE id = ${String(row.attemptId)} AND site_id = ${String(row.siteId)}`);
         return options.enqueue(
           tx,
@@ -162,7 +186,7 @@ export function createGiftPaymentReconciliation(
             providerOrderId:
               row.providerOrderId === null ? null : String(row.providerOrderId),
           },
-          String(Math.floor(at.getTime() / staleAfterMs)),
+          String(Math.floor(at.getTime() / every)),
         );
       });
       if (inserted === null) return { kind: "IDLE" };
@@ -177,13 +201,15 @@ export function createGiftPaymentReconciliation(
       const now = options.now().toISOString();
       return readFinancialWorkDueAt(
         db,
-        sql`GREATEST(op.next_attempt_at, op.created_at + make_interval(secs => ${staleAfterMs / 1000}))`,
-        sql`FROM ${financialOperation} op WHERE op.environment = ${options.environment}
-          AND op.kind = 'CHECKOUT_CREATE'
-          AND op.created_at > ${now}::timestamptz - make_interval(secs => ${GIFT_PAYMENT_RECONCILE_WINDOW_MS / 1000})
-          AND (op.state IN ('UNKNOWN', 'PROCESSING') OR (op.state = 'SUCCEEDED' AND NOT EXISTS (
-            SELECT 1 FROM ${giftPaymentRecord} p WHERE p.order_id = op.order_id AND p.site_id = op.site_id
-              AND p.account_id = op.account_id AND p.environment = op.environment)))`,
+        sql`CASE WHEN pay."paidAt" IS NULL
+          THEN GREATEST(op.next_attempt_at, op.created_at + make_interval(secs => ${secs(staleAfterMs)}))
+          ELSE GREATEST(op.next_attempt_at, pay."paidAt" + make_interval(secs => ${secs(GIFT_PAYMENT_REVERSAL_SWEEP_EVERY_MS)})) END`,
+        sql`FROM ${financialOperation} op ${paymentOf}
+          WHERE op.environment = ${options.environment} AND op.kind = 'CHECKOUT_CREATE'
+          AND ((pay."paidAt" IS NULL AND op.state IN ('UNKNOWN', 'PROCESSING', 'SUCCEEDED')
+              AND op.created_at > ${now}::timestamptz - make_interval(secs => ${secs(GIFT_PAYMENT_RECONCILE_WINDOW_MS)}))
+            OR (op.state = 'SUCCEEDED' AND pay."open" = true
+              AND op.created_at > ${now}::timestamptz - make_interval(secs => ${secs(GIFT_PAYMENT_REVERSAL_WINDOW_MS)})))`,
       );
     },
   };

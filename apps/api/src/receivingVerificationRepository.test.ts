@@ -54,7 +54,7 @@ function fixture(mode: "sandbox" | "live" = "sandbox") {
   const input = {
     name: "MARIA DA SILVA",
     email: "maria@example.test",
-    cpf: "26224451990",
+    cpf: "12345678909",
     mobilePhone: "21994647568",
     birthDate: "1990-04-12",
     monthlyIncomeCents: 500000,

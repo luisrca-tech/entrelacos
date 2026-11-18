@@ -111,6 +111,59 @@ describe("Pagar.me webhook events", () => {
     });
   });
 
+  it("reads chargeback.received (dispute shape, no order reference)", () => {
+    expect(
+      parsePagarmeWebhookEvent(fixture("webhook-chargeback-received")),
+    ).toEqual({
+      eventId: "hook_fixtureHook0005",
+      providerType: "chargeback.received",
+      eventType: "CHARGE_CHARGEDBACK",
+      orderId: null,
+      orderCode: null,
+      chargeId: "ch_fixtureCharge002",
+      recipientId: null,
+    });
+    for (const data of [
+      { charge_id: "ch_fixtureCharge002", order_id: "or_fixtureOrder0002" },
+      {
+        charge: {
+          id: "ch_fixtureCharge002",
+          order: { id: "or_fixtureOrder0002" },
+        },
+      },
+      { id: "ch_fixtureCharge002", order: { id: "or_fixtureOrder0002" } },
+    ])
+      expect(
+        parsePagarmeWebhookEvent(
+          JSON.stringify({ id: "hook_cb1", type: "chargeback.received", data }),
+        ),
+      ).toMatchObject({
+        eventType: "CHARGE_CHARGEDBACK",
+        chargeId: "ch_fixtureCharge002",
+        orderId: "or_fixtureOrder0002",
+      });
+    expect(() =>
+      parsePagarmeWebhookEvent(
+        JSON.stringify({
+          id: "hook_cb2",
+          type: "chargeback.received",
+          data: { disputeId: "1" },
+        }),
+      ),
+    ).toThrow(PagarmeWebhookError);
+  });
+
+  it("reads partial cancellations as refund events (re-read decides)", () => {
+    expect(
+      parsePagarmeWebhookEvent(
+        fixture("webhook-charge-refunded").replace(
+          '"charge.refunded"',
+          '"charge.partial_canceled"',
+        ),
+      ),
+    ).toMatchObject({ eventType: "CHARGE_REFUNDED" });
+  });
+
   it("reads recipient updates", () => {
     expect(
       parsePagarmeWebhookEvent(fixture("webhook-recipient-updated")),

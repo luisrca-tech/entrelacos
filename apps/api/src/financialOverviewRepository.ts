@@ -9,6 +9,7 @@ import {
   financialEventInbox,
   financialLedgerEntry,
   financialOperation,
+  financialOperatorAlert,
   giftCheckoutAttempt,
   giftOrder,
   giftPaymentRecord,
@@ -33,10 +34,15 @@ import {
   isGiftReceiptEvent,
 } from "./giftPaymentReconciliation";
 import {
+  giftReversalEffectKey,
+  isGiftReversalResolved,
+} from "./giftPaymentRestrictions";
+import {
   type GiftV2SettlementSnapshot,
   readGiftV2Settlement,
 } from "./giftQuotes";
 import { allowsLiveSite, type LiveSitePolicy } from "./liveSitePolicy";
+import { hashFinancialEventIdentity } from "./pagarmeWebhook";
 import type { ReceivingTransaction } from "./receivingRepository";
 import {
   type WithdrawalCompletionProof,
@@ -78,6 +84,8 @@ type Row = Record<string, unknown>;
 interface Facts {
   payments: Row[];
   ledgers: Row[];
+  /** Reversal alerts an operator resolved (explicit write-off). */
+  resolvedAlerts: Row[];
   events: Row[];
   withdrawals: Row[];
   operations: Row[];
@@ -122,8 +130,15 @@ const pendingPaymentStates = [
   "AWAITING_RISK_ANALYSIS",
   "DUNNING_REQUESTED",
 ];
+// Pagar.me CHARGE_REFUNDED/CHARGE_CHARGEDBACK are written with a reviewed
+// compensation (giftPaymentRestrictions); only legacy reversals stay unsupported.
 const unsupportedReversalEvent =
-  /^(REFUND|TRANSFER)_|^PAYMENT_(REFUND|CHARGEBACK)|^CHARGE_(REFUNDED|CHARGEDBACK)/;
+  /^(REFUND|TRANSFER)_|^PAYMENT_(REFUND|CHARGEBACK)/;
+const reversalKinds: Record<string, "REFUND" | "CHARGEBACK"> = {
+  GIFT_REFUNDED: "REFUND",
+  GIFT_CHARGEBACK: "CHARGEBACK",
+};
+const reversalStatuses = { REFUND: "REFUNDED", CHARGEBACK: "CHARGEBACK" };
 
 function unavailable(): never {
   throw new FinancialOverviewRepositoryError();
@@ -253,7 +268,7 @@ async function loadFacts(
   tx: Transaction,
   b: FinancialAccountBinding,
 ): Promise<Facts> {
-  const [payments, ledgers, events, withdrawals, operations] =
+  const [payments, ledgers, events, withdrawals, operations, resolvedAlerts] =
     await Promise.all([
       rows(
         tx,
@@ -289,8 +304,14 @@ async function loadFacts(
         sql`SELECT op.id AS "id", op.site_id AS "siteId", op.account_id AS "accountId", op.environment AS "environment", op.kind AS "kind", op.state AS "state", op.order_id AS "orderId", op.withdrawal_intent_id AS "withdrawalIntentId", op.payment_id AS "paymentId", op.provider_operation_reference AS "providerOperationReference", op.created_at AS "createdAt", op.updated_at AS "updatedAt"
       FROM ${financialOperation} op WHERE op.site_id = ${b.siteId} AND op.account_id = ${b.accountBindingId} AND op.environment = ${b.environment}`,
       ),
+      rows(
+        tx,
+        sql`SELECT al.kind AS "kind", al.payment_reference AS "paymentReference"
+      FROM ${financialOperatorAlert} al WHERE al.site_id = ${b.siteId} AND al.account_id = ${b.accountBindingId} AND al.environment = ${b.environment}
+        AND al.kind IN ('GIFT_REFUNDED', 'GIFT_CHARGEBACK') AND al.resolved_at IS NOT NULL`,
+      ),
     ]);
-  return { payments, ledgers, events, withdrawals, operations };
+  return { payments, ledgers, events, withdrawals, operations, resolvedAlerts };
 }
 function eventPayload(
   event: Row,
@@ -327,9 +348,19 @@ function eventPayload(
       return unavailable();
   }
   // The inbox writer verifies the provider identity before storing the hash.
+  // Pagar.me rows are re-hashed here; rows written before the switch keep
+  // their own (format-checked) hash scheme.
   if (
     typeof event.payloadHash !== "string" ||
     !/^[a-f0-9]{64}$/.test(event.payloadHash) ||
+    (/^(ORDER|CHARGE|RECIPIENT)_/.test(String(event.eventType)) &&
+      event.payloadHash !==
+        hashFinancialEventIdentity(
+          String(event.providerEventReference),
+          String(event.eventType),
+          binding.accountReference,
+          payload as Record<string, string>,
+        )) ||
     (payload.accountId !== undefined &&
       payload.accountId !== binding.accountReference)
   )
@@ -614,6 +645,11 @@ function indexed(
     events: scoped(facts.events, binding),
     withdrawals: scoped(facts.withdrawals, binding),
     operations: scoped(facts.operations, binding),
+    resolvedAlerts: new Set(
+      facts.resolvedAlerts.map(
+        (alert) => `${String(alert.kind)}:${String(alert.paymentReference)}`,
+      ),
+    ),
   };
   const providerPayments = new Set<string>();
   const paymentAllocations = new Map<string, ReturnType<typeof payment>>();
@@ -698,7 +734,75 @@ function indexed(
   }
   return { ...maps, payloads, paymentAllocations };
 }
+/**
+ * Payment ids whose couple credit carries a valid reversal debit (same amount,
+ * kind matching the payment status, canonical effect key). In strict mode a
+ * malformed reversal debit makes the snapshot unavailable; otherwise it only
+ * leaves its payment uncompensated (still blocking).
+ */
+function compensatedPayments(
+  data: ReturnType<typeof indexed>,
+  strict: boolean,
+): Set<string> {
+  const compensated = new Set<string>();
+  const invalid = strict ? unavailable : () => null;
+  for (const entry of data.ledgers.values()) {
+    const reversal = reversalKinds[String(entry.kind)];
+    if (!reversal) continue;
+    const p = data.payments.get(String(entry.paymentId));
+    const original = data.ledgers.get(String(entry.compensatesEntryId));
+    if (
+      !p ||
+      !original ||
+      entry.direction !== "DEBIT" ||
+      entry.currency !== "BRL" ||
+      entry.withdrawalIntentId !== null ||
+      original.kind !== "GIFT_RECEIVED" ||
+      original.direction !== "CREDIT" ||
+      original.paymentId !== p.id ||
+      entry.amountCents !== original.amountCents ||
+      !giftCentsSchema.safeParse(entry.amountCents).success ||
+      p.providerStatus !== reversalStatuses[reversal] ||
+      entry.effectKey !==
+        giftReversalEffectKey(reversal, String(p.providerPaymentReference)) ||
+      compensated.has(String(p.id))
+    ) {
+      invalid();
+      continue;
+    }
+    compensated.add(String(p.id));
+  }
+  return compensated;
+}
+function ledgerBalanceCents(data: ReturnType<typeof indexed>): bigint {
+  let balance = 0n;
+  for (const entry of data.ledgers.values())
+    balance +=
+      entry.direction === "CREDIT"
+        ? BigInt(cents(entry.amountCents))
+        : -BigInt(cents(entry.amountCents));
+  return balance;
+}
+function reversalResolved(
+  data: ReturnType<typeof indexed>,
+  p: Row,
+  compensated: Set<string>,
+  balance: bigint,
+): boolean {
+  const kind =
+    p.providerStatus === "REFUNDED" ? "GIFT_REFUNDED" : "GIFT_CHARGEBACK";
+  return isGiftReversalResolved({
+    providerStatus: String(p.providerStatus),
+    compensated: compensated.has(String(p.id)),
+    ledgerBalanceCents: balance,
+    alertResolved: data.resolvedAlerts.has(
+      `${kind}:${String(p.providerPaymentReference)}`,
+    ),
+  });
+}
 function unresolved(data: ReturnType<typeof indexed>): number {
+  const compensated = compensatedPayments(data, false);
+  const balance = ledgerBalanceCents(data);
   let count = 0;
   // Count unresolved facts, not deduplicated monetary actions. Any positive count
   // denies availability; processed reversals lack a reviewed compensation writer.
@@ -716,10 +820,11 @@ function unresolved(data: ReturnType<typeof indexed>): number {
     if (row.state === "UNKNOWN" || row.kind === "REFUND") count++;
   for (const row of data.payments.values())
     if (
-      restrictiveStatus.test(String(row.providerStatus)) ||
-      !["RECEIVED", "CONFIRMED", ...pendingPaymentStates].includes(
-        String(row.providerStatus),
-      )
+      (restrictiveStatus.test(String(row.providerStatus)) ||
+        !["RECEIVED", "CONFIRMED", ...pendingPaymentStates].includes(
+          String(row.providerStatus),
+        )) &&
+      !reversalResolved(data, row, compensated, balance)
     )
       count++;
   for (const row of data.withdrawals.values())
@@ -736,6 +841,7 @@ function aggregate(
     bigint
   >;
   const credited = new Set<string>();
+  const compensated = compensatedPayments(data, true);
   let platformAdjustmentOwed = 0n;
   let platformAdjustmentFunded = 0n;
   const completedWithdrawals = new Set<string>();
@@ -811,6 +917,18 @@ function aggregate(
       sums.withdrawnCents += BigInt(proof.totalDebitCents);
       continue;
     }
+    if (reversalKinds[String(entry.kind)]) {
+      // Validated by compensatedPayments: the couple credit stays in the
+      // receipts and the reversal is reported as refunded money.
+      const original = data.ledgers.get(String(entry.compensatesEntryId));
+      if (!original) return unavailable();
+      after(
+        storedTime(entry.createdAt, observedAt),
+        storedTime(original.createdAt, observedAt),
+      );
+      sums.refundedCents += BigInt(cents(entry.amountCents, true));
+      continue;
+    }
     const p = data.payments.get(String(entry.paymentId));
     const e = data.events.get(String(entry.eventId));
     const payload = data.payloads.get(String(entry.eventId));
@@ -838,7 +956,7 @@ function aggregate(
       (payload.checkoutId !== undefined &&
         payload.checkoutId !== p.providerCheckoutReference) ||
       credited.has(String(p.id)) ||
-      p.providerStatus === "REFUNDED" ||
+      (p.providerStatus === "REFUNDED" && !compensated.has(String(p.id))) ||
       (p.providerStatus !== "RECEIVED" &&
         // An anticipated V2 charge is credited while still CONFIRMED.
         !(

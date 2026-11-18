@@ -232,6 +232,13 @@
       "when": 1794975354719,
       "tag": "0032_pagarme_orders",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1794981074439,
+      "tag": "0033_legacy_data_and_alerts",
+      "breakpoints": true
     }
   ]
 }

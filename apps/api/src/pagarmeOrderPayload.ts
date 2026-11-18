@@ -99,6 +99,42 @@ function cents(value: number, label: string): number {
 }
 
 /**
+ * Amounts of the two flat split rules (spec D6). In `charge_total` mode the
+ * rules apply to the whole charge: couple C, platform G − C. In
+ * `per_installment` mode [to confirm in the sandbox] Pagar.me applies each
+ * flat rule to every installment, so both are stated per installment: the
+ * installment is ceil(G / n), the couple gets ceil(C / n) of it and the
+ * platform the rest.
+ */
+export function pagarmeSplitAmounts(input: {
+  method: "PIX" | "CREDIT_CARD";
+  totalCents: number;
+  coupleSplitCents: number;
+  installments: number;
+  splitMode?: CouplesSplitMode;
+}): { platformCents: number; coupleCents: number; ruleTotalCents: number } {
+  const mode = input.splitMode ?? GIFT_PLATFORM_TARIFFS.couplesSplitMode;
+  const perInstallment =
+    input.method === "CREDIT_CARD" && mode === "per_installment";
+  const ruleTotalCents = perInstallment
+    ? Math.ceil(input.totalCents / input.installments)
+    : input.totalCents;
+  const coupleCents =
+    input.method === "CREDIT_CARD"
+      ? couplesSplitAmountCents(
+          input.coupleSplitCents,
+          input.installments,
+          mode,
+        )
+      : input.coupleSplitCents;
+  return {
+    platformCents: ruleTotalCents - coupleCents,
+    coupleCents,
+    ruleTotalCents,
+  };
+}
+
+/**
  * Builds POST /orders for a frozen quote (spec D2): the platform recipient is
  * liable and absorbs processing and remainder fees; the couple receives a flat
  * amount with every option off. Both flat rules always add up to G.
@@ -127,11 +163,14 @@ export function buildPagarmeOrderRequest(
     installments > GIFT_PLATFORM_TARIFFS.maxInstallments
   )
     invalid("installments");
-  const coupleAmount =
-    command.method === "CREDIT_CARD"
-      ? couplesSplitAmountCents(couple, installments, command.splitMode)
-      : couple;
-  const platformAmount = total - coupleAmount;
+  const { coupleCents: coupleAmount, platformCents: platformAmount } =
+    pagarmeSplitAmounts({
+      method: command.method,
+      totalCents: total,
+      coupleSplitCents: couple,
+      installments,
+      ...(command.splitMode ? { splitMode: command.splitMode } : {}),
+    });
   if (platformAmount < 1) invalid("split exceeds the total");
   const split: PagarmeSplitRule[] = [
     {

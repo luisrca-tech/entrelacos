@@ -140,12 +140,14 @@ describe("financial receiving account schema", () => {
     expect(keys.every((key) => key.onDelete === "restrict")).toBe(true);
   });
 
-  it("keeps no provider credentials or per-account webhook state on Pagar.me recipients", () => {
+  it("never stores plaintext credentials and keeps legacy encrypted ones intact", () => {
     const config = getTableConfig(receivingAccount);
     const names = config.columns.map((column) => column.name);
-    for (const removed of [
-      "api_key",
-      "credential_plaintext",
+    for (const absent of ["api_key", "credential_plaintext"])
+      expect(names).not.toContain(absent);
+    // Rows from the previous provider keep their encrypted sub-account
+    // credentials and webhook state; Pagar.me rows leave them null.
+    for (const legacy of [
       "credential_version",
       "credential_key_id",
       "credential_nonce",
@@ -153,13 +155,14 @@ describe("financial receiving account schema", () => {
       "credential_tag",
       "webhook_token_hash",
       "webhook_registration",
-    ])
-      expect(names).not.toContain(removed);
-    expect(config.checks.map((entry) => entry.name)).not.toContain(
+    ]) {
+      expect(names).toContain(legacy);
+      expect(
+        config.columns.find((column) => column.name === legacy)?.notNull,
+      ).toBe(false);
+    }
+    expect(config.checks.map((entry) => entry.name)).toContain(
       "receiving_account_credentials_check",
-    );
-    expect(config.uniqueConstraints.map((entry) => entry.name)).not.toContain(
-      "receiving_account_webhook_hash_key",
     );
   });
 });

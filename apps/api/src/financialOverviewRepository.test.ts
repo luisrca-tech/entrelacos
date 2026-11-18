@@ -8,7 +8,9 @@ import {
 import { createFinancialOverviewRepository } from "./financialOverviewRepository";
 import { platformTariffPolicy, quoteGiftPurchaseAmounts } from "./giftMoney";
 import { giftReceivedEffectKey } from "./giftPaymentReconciliation";
+import { giftReversalEffectKey } from "./giftPaymentRestrictions";
 import { buildGiftV2Settlement } from "./giftQuotes";
+import { hashFinancialEventIdentity } from "./pagarmeWebhook";
 import { withdrawalCompletedEffectKey } from "./withdrawalExecution";
 
 // Stored inbox hashes are verified by the provider-specific inbox writer.
@@ -67,6 +69,8 @@ function fixture(live = false) {
     ledgers: [],
     events: [],
     withdrawals: [],
+    // Only operator-resolved reversal alerts (the query filters the rest).
+    resolvedAlerts: [],
   };
   const clock = { value: new Date(instant), database: instant as unknown };
   const faults = {
@@ -157,7 +161,7 @@ function fixture(live = false) {
         }
       } else {
         const matched = sql.match(
-          /FROM "(financial_ledger_entry|financial_event_inbox|financial_operation|withdrawal_intent)" (l|e|op|w)/,
+          /FROM "(financial_ledger_entry|financial_event_inbox|financial_operation|withdrawal_intent|financial_operator_alert)" (al|l|e|op|w)\b/,
         );
         if (!matched) throw new Error("Unexpected totals table");
         const table = (
@@ -166,6 +170,7 @@ function fixture(live = false) {
             financial_event_inbox: "events",
             financial_operation: "operations",
             withdrawal_intent: "withdrawals",
+            financial_operator_alert: "resolvedAlerts",
           } as Record<string, string>
         )[matched[1]];
         const alias = matched[2];
@@ -481,7 +486,7 @@ describe("authoritative stored financial overview totals", () => {
     );
     expect(values.queries.at(-1)?.sql).toBe("commit");
     expect(values.queries.filter((q) => /^SELECT/i.test(q.sql))).toHaveLength(
-      6,
+      7,
     );
     expect(
       values.queries.every(
@@ -514,7 +519,7 @@ describe("authoritative stored financial overview totals", () => {
     });
     expect(result?.unresolvedFinancialEventCount).toBe(0);
     expect(values.queries.filter((q) => /^SELECT/i.test(q.sql))).toHaveLength(
-      6,
+      7,
     );
   });
   it.each(
@@ -673,6 +678,106 @@ describe("authoritative stored financial overview totals", () => {
       compensates_entry_id: rows.l.id,
     });
     await denied(values);
+  });
+  it.each([
+    ["REFUND", "REFUNDED", "GIFT_REFUNDED"],
+    ["CHARGEBACK", "CHARGEBACK", "GIFT_CHARGEBACK"],
+  ] as const)(
+    "accepts a compensated Pagar.me %s and clears the block once the balance covers it",
+    async (reversal, status, kind) => {
+      const values = fixture();
+      const rows = received(values);
+      rows.p.provider_status = status;
+      const eventType =
+        reversal === "REFUND" ? "CHARGE_REFUNDED" : "CHARGE_CHARGEDBACK";
+      values.tables.events.push({
+        ...rows.e,
+        id: "processed-reversal",
+        provider_event_reference: "hook_reversal",
+        event_type: eventType,
+        payload_hash: hashFinancialEventIdentity(
+          "hook_reversal",
+          eventType,
+          values.binding.accountReference,
+          rows.e.payload as Record<string, string>,
+        ),
+      });
+      const reversalDebit: Row = {
+        ...rows.l,
+        id: "reversal-one",
+        effect_key: giftReversalEffectKey(reversal, "pay_one"),
+        kind,
+        direction: "DEBIT",
+        compensates_entry_id: rows.l.id,
+        event_id: "processed-reversal",
+      };
+      values.tables.ledgers.push(reversalDebit);
+      const stored = await values.repository.loadStoredTotals(values.binding);
+      expect(stored?.totals).toMatchObject({
+        netReceivedCents: 10000,
+        refundedCents: 10000,
+      });
+      expect(stored?.unresolvedFinancialEventCount).toBe(0);
+      // Money already withdrawn: the ledger is negative and it blocks again.
+      values.tables.ledgers.push({
+        ...reversalDebit,
+        id: "shortfall",
+        effect_key: "SHORTFALL:one",
+        kind: "SHORTFALL",
+        compensates_entry_id: null,
+        amount_cents: 1,
+      });
+      expect((await consistency(values))?.unresolvedFinancialEventCount).toBe(
+        1,
+      );
+      // An operator write-off (resolved alert) clears it explicitly.
+      values.tables.resolvedAlerts.push({
+        ...values.scope,
+        id: "alert-one",
+        kind,
+        payment_reference: "pay_one",
+      });
+      expect((await consistency(values))?.unresolvedFinancialEventCount).toBe(
+        0,
+      );
+    },
+  );
+  it("re-hashes Pagar.me inbox rows instead of trusting the stored hash format", async () => {
+    const values = fixture();
+    const rows = received(values);
+    const forged = {
+      ...rows.e,
+      id: "forged-event",
+      provider_event_reference: "hook_forged",
+      event_type: "CHARGE_REFUNDED",
+      payload_hash: "a".repeat(64),
+    };
+    values.tables.events.push(forged);
+    await denied(values);
+    forged.payload_hash = hashFinancialEventIdentity(
+      "hook_forged",
+      "CHARGE_REFUNDED",
+      values.binding.accountReference,
+      rows.e.payload as Record<string, string>,
+    );
+    await expect(
+      values.repository.loadStoredTotals(values.binding),
+    ).resolves.toMatchObject({ totals: { netReceivedCents: 10000 } });
+  });
+  it("rejects a reversal debit that does not match the payment status", async () => {
+    const values = fixture();
+    const rows = received(values);
+    rows.p.provider_status = "CHARGEBACK";
+    values.tables.ledgers.push({
+      ...rows.l,
+      id: "reversal-one",
+      effect_key: giftReversalEffectKey("REFUND", "pay_one"),
+      kind: "GIFT_REFUNDED",
+      direction: "DEBIT",
+      compensates_entry_id: rows.l.id,
+    });
+    await denied(values);
+    expect((await consistency(values))?.unresolvedFinancialEventCount).toBe(1);
   });
   it("does not turn a raw REFUNDED provider status into a known refund amount", async () => {
     const values = fixture();
@@ -1045,7 +1150,7 @@ describe("stored balance consistency after the provider GET", () => {
       /begin isolation level repeatable read read only/i,
     );
     expect(values.queries.filter((q) => /^SELECT/i.test(q.sql))).toHaveLength(
-      6,
+      7,
     );
   });
   it("reads after GET rather than reusing the earlier totals snapshot", async () => {

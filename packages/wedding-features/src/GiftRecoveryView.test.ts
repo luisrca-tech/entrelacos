@@ -15,7 +15,7 @@ const identifiers = ["site-1", "quote-1", "request-1", "checkout-1"];
 const pix = {
   qrCode: "00020126580014br.gov.bcb.pix0136checkout",
   qrCodeUrl: "https://pix.example.test/qr.png",
-  expiresAt: "2026-10-12T12:30:00.000Z",
+  expiresAt: "2099-10-12T12:30:00.000Z",
 };
 
 function makeStatus(

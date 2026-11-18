@@ -68,7 +68,8 @@ export async function createPagarmeCardToken(
         method: "POST",
         credentials: "omit",
         cache: "no-store",
-        referrerPolicy: "no-referrer",
+        // Pagar.me matches the site domain registered in the dashboard.
+        referrerPolicy: "strict-origin",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           type: "card",
@@ -85,7 +86,9 @@ export async function createPagarmeCardToken(
   } catch {
     throw new PagarmeCardTokenError("TOKENIZATION_UNAVAILABLE");
   }
-  if (response.status >= 400 && response.status < 500)
+  // Only a validation answer is about the card; 401/403 (key or domain) and
+  // 429 are ours to fix, so the guest is not told to check the card.
+  if (response.status === 400 || response.status === 422)
     throw new PagarmeCardTokenError("CARD_INVALID");
   if (!response.ok) throw new PagarmeCardTokenError("TOKENIZATION_UNAVAILABLE");
   const value: unknown = await response.json().catch(() => null);

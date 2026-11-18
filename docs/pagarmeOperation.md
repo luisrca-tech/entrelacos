@@ -18,14 +18,14 @@ How the API takes guest payments through Pagar.me v5, what the operator configur
    - local: `https://<cloudflared tunnel>/v1/webhooks/pagarme`
    - dev / prod: `https://<api host>/v1/webhooks/pagarme`
 2. Enable HTTP Basic authentication with the user and password from the table above.
-3. Subscribe to: `order.paid`, `order.payment_failed`, `order.canceled`, `charge.paid`, `charge.refunded`, `charge.chargedback` (the API also accepts `charge.chargeback`; confirm which spelling the dashboard lists) and `recipient.updated`.
+3. Subscribe to: `order.paid`, `order.payment_failed`, `order.canceled`, `charge.paid`, `charge.refunded`, `charge.partial_canceled`, `chargeback.received` and `recipient.updated`. `chargeback.received` replaces `charge.chargedback`, which the Pagar.me event reference marks as discontinued (migration by 2026-09-30); the API still accepts `charge.chargedback` and `charge.chargeback`. A `chargeback.received` body carries a dispute that names the charge (`chargeId`); the API routes it through the stored payment of that charge. Confirm the body shape once in the sandbox.
 
 What the endpoint does:
 
 - Missing or wrong credentials → `401` (constant-time comparison of digests). Nothing is stored.
 - Events of other types → `200`, ignored.
 - Each event is stored once in `financial_event_inbox`, keyed by the Pagar.me event id. A redelivery returns `200` and posts nothing new.
-- An event that matches no checkout or recipient → `200` plus an open `UNROUTABLE_PLATFORM_EVENT` operator alert.
+- An event that matches no checkout or recipient → `200` plus one open `UNROUTABLE_PLATFORM_EVENT` operator alert per foreign order, charge or recipient (not per event). `recipient.updated` for the platform recipient is ignored.
 - Storage failure → `503`, so Pagar.me retries.
 - The webhook body is never trusted for money or status. The worker re-reads `GET /orders/{id}` (or the recipient) and only then writes the ledger.
 
@@ -37,7 +37,7 @@ The API sends `POST /orders` with `code = checkoutId` and `Idempotency-Key = che
 
 - One item of `G` (the frozen quote total), customer `individual` with CPF and mobile phone, `closed: true`.
 - Pix: `pix.expires_in` = seconds left on the quote. Card: `card_token`, `installments` (1–6), `statement_descriptor: "ENTRELACOS"`, `operation_type: "auth_and_capture"`.
-- Split: the platform recipient gets `G − couple` (`liable`, `charge_processing_fee`, `charge_remainder_fee` on), and the couple recipient gets the flat couple amount with every option off. The two always add up to `G`. The couple amount is `C` (`charge_total`) or `ceil(C / n)` (`per_installment`), switched by `GIFT_PLATFORM_TARIFFS.couplesSplitMode`.
+- Split: the platform recipient gets the rest of the charge (`liable`, `charge_processing_fee`, `charge_remainder_fee` on), and the couple recipient gets the flat couple amount with every option off. In `charge_total` mode the rules are `G − C` and `C`. In `per_installment` mode both rules are stated per installment: the installment is `ceil(G / n)`, the couple gets `ceil(C / n)` of it and the platform the rest. `GIFT_PLATFORM_TARIFFS.couplesSplitMode` switches the mode; reconciliation expects the same amounts.
 
 Refused before dispatch: expired quote (`409 QUOTE_EXPIRED`), quote from another provider (`409 PROVIDER_UNAVAILABLE`), more than 6 installments (`422 INSTALLMENTS_UNAVAILABLE`), method or installments differing from the quote (`422 QUOTE_MISMATCH`), and a couple recipient that is missing, not active or equal to the platform recipient (`409 RECEIVING_NOT_READY`). A Pagar.me `4xx` closes the attempt (`422`). A `5xx` or timeout leaves it `OUTCOME_UNKNOWN` for reconciliation.
 
@@ -46,29 +46,43 @@ Refused before dispatch: expired quote (`409 QUOTE_EXPIRED`), quote from another
 | Re-read order/charge | Effect |
 |---|---|
 | `paid` with the expected amount and couple split | One `gift_payment_record` per charge (gross `G`, commission, couple net `V`, couple rule amount, platform share `G − C`) and one `GIFT_RECEIVED` credit of `V`. |
-| `failed` / `canceled` | Checkout closes unpaid (`FAILED`, `CANCELED`, or `EXPIRED` for a Pix past its expiry). No ledger entry. |
-| `refunded` / `chargedback` | Payment marked `REFUNDED` / `CHARGEBACK`, one `GIFT_REFUNDED` / `GIFT_CHARGEBACK` debit compensating the credit, and an operator alert (refund: warning; chargeback: critical). |
+| `failed` / `canceled`, never paid | Checkout closes unpaid (`FAILED`, `CANCELED`, or `EXPIRED` for a Pix past its expiry). No ledger entry. |
+| `canceled` after payment (v5 has no `refunded` charge status: the last transaction reads `refunded`), `refunded`, `chargedback` | Payment marked `REFUNDED` / `CHARGEBACK`, one `GIFT_REFUNDED` / `GIFT_CHARGEBACK` debit compensating the credit, and an operator alert (refund: warning; chargeback: critical). |
+| Partial refund or cancel (`partial_refunded`, `partial_canceled`, `canceled_amount` below the total) | No automatic debit. `ORDER_MISMATCH` critical alert (`PARTIAL_REVERSAL`); the operator decides the couple debit. |
+| A paid order later read as closed | No change. `ORDER_MISMATCH` critical alert (`CLOSED_AFTER_PAYMENT_*`). |
 | Different code, amount, installments or split | No credit. Opens an `ORDER_MISMATCH` critical alert. |
 
 ### Reconciliation
 
-Every checkout still unresolved 10 minutes after creation (pending order, unknown creation outcome or lost dispatch lease) gets an `ORDER_RECONCILE` inbox event, at most once every 10 minutes for 7 days. The worker re-reads `GET /orders/{id}`, or `GET /orders?code=<checkoutId>` when the order id is unknown, and applies the table above. An attempt with no order 10 minutes after its quote expired is closed as `FAILED` (`ORDER_NOT_FOUND`).
+Every checkout still unresolved 10 minutes after creation (pending order, unknown creation outcome or lost dispatch lease) gets an `ORDER_RECONCILE` inbox event, at most once every 10 minutes for 7 days. Every paid order not yet reversed is re-read once a day for 120 days, so a refund or chargeback whose webhook was lost still posts its debit and alert. The worker re-reads `GET /orders/{id}`, or `GET /orders?code=<checkoutId>` when the order id is unknown, and applies the table above. An attempt with no order 10 minutes after its quote expired is closed as `FAILED` (`ORDER_NOT_FOUND`).
+
+A card decided in the creating call (paid or declined) is applied before the create response, so the guest sees the decision right away.
 
 ## KYC
 
-The owner, or the recipient operator, calls `POST /v1/owner/sites/:siteId/receiving/kyc-link`. The API calls `POST /recipients/{id}/kyc_link` and returns the URL and QR code once. They are valid for about 20 minutes and never stored. Status changes arrive through `recipient.updated`, and the worker re-reads `GET /recipients/{id}`.
+The owner, or the recipient operator, calls `POST /v1/owner/sites/:siteId/receiving/kyc-link` (at most 3 links per site per minute; more answer `429`). The API calls `POST /recipients/{id}/kyc_link` and returns the URL and QR code once. They are valid for about 20 minutes and never stored. The panel opens the tab inside the click and fills in the URL when the API answers, so pop-up blockers allow it; the QR image type (PNG or SVG) is read from its bytes. Status changes arrive through `recipient.updated`, and the worker re-reads `GET /recipients/{id}`.
+
+Recipient data is checked before Pagar.me is called: valid CPF check digits and an adult holder (18+).
 
 ## Withdrawals
 
 - Fee: R$ 3,67 per withdrawal, shown before confirming and recorded with the withdrawal.
-- `POST /recipients/{id}/withdrawals` is sent with `Idempotency-Key = withdrawal:<operationId>`. A retry of an unknown outcome reuses the same key for up to 1 hour after the withdrawal was requested. **To confirm in the sandbox:** the Pagar.me v5 reference does not state how long it keeps an idempotency key. If it turns out to be shorter than 1 hour, lower the replay window in `pagarmeWithdrawalClient.ts`.
+- `POST /recipients/{id}/withdrawals` is sent with `Idempotency-Key = withdrawal:<operationId>`, only from inside the dispatch guard (locks, budget, destination, consent, quote and lease). If the guard refuses before the POST leaves, the withdrawal fails with a local `rejected_<hash>` proof and the hold is released.
+- Recovery never replays the POST. A withdrawal whose response was lost is looked up in `GET /recipients/{id}/withdrawals?created_since=` (one match by net amount since it was requested). With no single match after 1 hour, the hold stays and a `WITHDRAWAL_UNRESOLVED` critical alert opens for an operator.
 - A definitive refusal (`400`, `404`, `412`, `422`) fails the withdrawal and releases the reserved balance. Pagar.me created nothing in that case, so the failure proof carries a local `rejected_<hash>` reference. `401`, `403`, `409`, `429`, `5xx` and timeouts keep the hold until a lookup resolves it.
 
 ## Refunds and chargebacks
 
 - Refunds are operator-only and refund the whole charge: `DELETE /charges/{chargeId}` (`createPagarmeOrderClient(...).cancelCharge(chargeId, "refund:<chargeId>")`). Do not refund from the dashboard without opening the matching alert.
-- Chargebacks are absorbed by the platform recipient (`liable`). The debit and the alert appear automatically. If the couple already withdrew, settle the difference manually and resolve the alert with a note.
+- Chargebacks are absorbed by the platform recipient (`liable`). The debit and the alert appear automatically.
+- A refunded or charged-back payment stops blocking withdrawals and the finance overview once its debit is in the ledger and the account ledger is not negative. If the couple already withdrew and the ledger is negative, withdrawals stay blocked until later gifts cover it, or until an operator settles the difference and resolves the `GIFT_REFUNDED` / `GIFT_CHARGEBACK` alert with a note (`resolved_at` set), which is the explicit write-off.
 - Open alerts: `SELECT * FROM financial_operator_alert WHERE resolved_at IS NULL ORDER BY created_at;`
+
+## Database migrations
+
+Apply schema changes only with `bun run db:migrate`, never `drizzle-kit push`. Migration 0031 adds the Pagar.me withdrawal-observation check as `NOT VALID` so rows written before the switch keep their identifiers; Drizzle cannot express `NOT VALID`, and a push would try to validate it against those rows.
+
+Rows from before the switch are kept: the previous provider's receiving accounts (with their encrypted sub-account credentials and webhook state), withdrawal-authorization custody and Pix preparation rows. Code reads only `PAGARME` accounts for setup and nomination; naming a new holder turns the old account into history (`is_current = false`). Withdrawal history still lists withdrawals made through the old account, and recovery leaves its in-flight withdrawals to an operator. Before running 0031 in production, confirm the old sub-account balances are zero or export the encrypted credentials.
 
 ## Sandbox
 

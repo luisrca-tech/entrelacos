@@ -8,6 +8,7 @@ import {
 import type { DatabaseConnection } from "@entrelacos/database";
 import { sql } from "drizzle-orm";
 import type { ApiOptions } from "./app";
+import { insertFinancialOperatorAlert } from "./financialOperatorAlertRepository";
 import {
   type FinancialAccountBinding,
   FinancialOverviewServiceError,
@@ -625,6 +626,18 @@ export function createWithdrawalComposition(
     client: recipients,
     custody,
     guardDispatch,
+    async onUnresolved(original, reason) {
+      const c = original.correlation;
+      await insertFinancialOperatorAlert(db, {
+        kind: "WITHDRAWAL_UNRESOLVED",
+        severity: "critical",
+        environment: c.environment,
+        siteId: c.siteId,
+        accountId: c.accountId,
+        paymentReference: `withdrawal:${c.operationId}`,
+        details: { reason, withdrawalId: c.withdrawalId },
+      });
+    },
   });
   let loop: ReturnType<typeof createGiftPaymentWorkerLoop> | undefined;
   const execution = createWithdrawalExecutionService({
@@ -835,11 +848,15 @@ export function createWithdrawalComposition(
     });
   }
   const recoveryDueAt = sql`GREATEST(op.next_attempt_at,op.lease_expires_at)`;
+  // In-flight withdrawals of the previous provider's account are left to an
+  // operator: only Pagar.me accounts are recovered here.
   const eligibleRecoveries = sql`
     FROM financial_operation op
     JOIN withdrawal_intent w ON w.id=op.withdrawal_intent_id AND w.site_id=op.site_id
       AND w.account_id=op.account_id AND w.environment=op.environment
     JOIN site st ON st.id=w.site_id
+    JOIN receiving_account ra ON ra.id=w.account_id AND ra.site_id=w.site_id
+      AND ra.environment::text=w.environment::text AND ra.provider='PAGARME'
     WHERE op.environment=${mode} AND op.kind='WITHDRAWAL' AND op.attempts=1
       AND op.state IN ('PROCESSING','UNKNOWN') AND w.state IN ('PROCESSING','UNKNOWN')
       AND (${mode}<>'live' OR NOT st.is_demo OR st.id = ANY(${liveDemoSiteIdsSql(liveDemoSiteIds)}))

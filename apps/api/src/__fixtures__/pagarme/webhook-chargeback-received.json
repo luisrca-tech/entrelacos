@@ -1,0 +1,22 @@
+{
+  "id": "hook_fixtureHook0005",
+  "account": {
+    "id": "acc_fixtureAccount1",
+    "name": "Entrelacos"
+  },
+  "type": "chargeback.received",
+  "created_at": "2026-12-01T09:00:01Z",
+  "data": {
+    "disputeId": "12345",
+    "transactionId": "67890",
+    "chargeId": "ch_fixtureCharge002",
+    "createdAt": "2026-12-01T09:00:00Z",
+    "chargebackAmount": {
+      "amount": "118.90",
+      "currencyCode": "BRL"
+    },
+    "status": "OPEN",
+    "stage": "CHARGEBACK",
+    "cycle": "FIRST"
+  }
+}

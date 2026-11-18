@@ -827,7 +827,7 @@ describe("mounted server catalog runtime", () => {
     const pix = {
       qrCode: "00020126580014br.gov.bcb.pix0136checkout-a",
       qrCodeUrl: "https://pix.example.test/checkout-a.png",
-      expiresAt: "2026-10-19T12:30:00.000Z",
+      expiresAt: "2099-10-19T12:30:00.000Z",
     };
     let nextState = "AWAITING_PAYMENT";
     const fetcher = paymentFetcher(async () =>

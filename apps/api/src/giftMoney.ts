@@ -29,7 +29,7 @@ export interface GiftProcessingPolicy {
     | "SANDBOX_BUYER_ESTIMATE"
     | "ACCOUNT_BUYER_ESTIMATE"
     | "PLATFORM_TARIFF_TABLE";
-  cardInstallmentBasisPoints?: { upToSix?: number; upToTwelve?: number };
+  cardInstallmentBasisPoints?: { upToSix?: number };
 }
 
 export interface QuoteGiftAmountsInput {
@@ -170,11 +170,10 @@ function quoteGiftCardInstallments(
     },
   ];
   for (const { start, end, rate } of [
-    { start: 2, end: 6, rate: policy.cardInstallmentBasisPoints?.upToSix },
     {
-      start: 7,
+      start: 2,
       end: giftMaximumInstallments,
-      rate: policy.cardInstallmentBasisPoints?.upToTwelve,
+      rate: policy.cardInstallmentBasisPoints?.upToSix,
     },
   ]) {
     if (rate === undefined) continue;

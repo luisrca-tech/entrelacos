@@ -406,6 +406,9 @@ async function receivingHttpBridge(
       return { rows: [] };
     }
     if (/pg_advisory_xact_lock/.test(sql)) return { rows: [] };
+    // Retiring a previous provider's account: none exists in these fixtures.
+    if (/^UPDATE "receiving_account" SET is_current=false/i.test(sql))
+      return { rows: [] };
     if (/SELECT clock_timestamp/.test(sql))
       return { rows: [{ currentTime: new Date(Date.now()) }] };
     if (/^select .*from "session" inner join "user"/i.test(sql)) {

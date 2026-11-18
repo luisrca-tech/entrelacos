@@ -1,5 +1,5 @@
 import type { GiftCheckoutPix } from "@entrelacos/contracts";
-import { type ReactNode, useId, useState } from "react";
+import { type ReactNode, useEffect, useId, useState } from "react";
 
 const expiryFormatter = new Intl.DateTimeFormat("pt-BR", {
   day: "2-digit",
@@ -23,6 +23,38 @@ export function GiftPixPayment({
 }) {
   const codeId = useId();
   const [copied, setCopied] = useState<boolean | null>(null);
+  const deadline = Date.parse(pix.expiresAt);
+  const [expired, setExpired] = useState(() => Date.now() >= deadline);
+  useEffect(() => {
+    const left = deadline - Date.now();
+    if (left <= 0) {
+      setExpired(true);
+      return;
+    }
+    setExpired(false);
+    // Browsers cap timers near 24.8 days; a Pix never lives that long.
+    const timer = window.setTimeout(
+      () => setExpired(true),
+      Math.min(left, 2_147_483_647),
+    );
+    return () => window.clearTimeout(timer);
+  }, [deadline]);
+  if (expired)
+    return (
+      <section aria-label="Pix" className="grid min-w-0 gap-2">
+        <p
+          role="status"
+          className="m-0 text-center text-sm text-template-muted"
+        >
+          O prazo deste Pix terminou em{" "}
+          <time dateTime={pix.expiresAt}>
+            {expiryFormatter.format(new Date(pix.expiresAt))}
+          </time>
+          . Se você já pagou, a confirmação aparece aqui; se não, escolha o
+          presente de novo para gerar outro Pix.
+        </p>
+      </section>
+    );
   return (
     <section
       aria-label="Pix"

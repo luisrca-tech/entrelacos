@@ -2068,6 +2068,12 @@
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
+        },
+        "pix_preparation_consent": {
+          "name": "pix_preparation_consent",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {
@@ -5478,6 +5484,48 @@
           "notNull": true,
           "default": false
         },
+        "credential_version": {
+          "name": "credential_version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "credential_key_id": {
+          "name": "credential_key_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "credential_nonce": {
+          "name": "credential_nonce",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "credential_ciphertext": {
+          "name": "credential_ciphertext",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "credential_tag": {
+          "name": "credential_tag",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "webhook_token_hash": {
+          "name": "webhook_token_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "webhook_registration": {
+          "name": "webhook_registration",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
         "observed_at": {
           "name": "observed_at",
           "type": "timestamp with time zone",
@@ -5554,6 +5602,11 @@
           "name": "receiving_account_provider_key",
           "nullsNotDistinct": false,
           "columns": ["provider", "environment", "account_reference"]
+        },
+        "receiving_account_webhook_hash_key": {
+          "name": "receiving_account_webhook_hash_key",
+          "nullsNotDistinct": false,
+          "columns": ["webhook_token_hash"]
         }
       },
       "policies": {},
@@ -5565,6 +5618,14 @@
         "receiving_account_references_check": {
           "name": "receiving_account_references_check",
           "value": "(\"receiving_account\".\"operator_reference\" IS NULL OR length(trim(\"receiving_account\".\"operator_reference\")) > 0) AND (\"receiving_account\".\"account_reference\" IS NULL OR length(trim(\"receiving_account\".\"account_reference\")) > 0) AND (\"receiving_account\".\"recipient_reference\" IS NULL OR length(trim(\"receiving_account\".\"recipient_reference\")) > 0)"
+        },
+        "receiving_account_credentials_check": {
+          "name": "receiving_account_credentials_check",
+          "value": "num_nonnulls(\"receiving_account\".\"credential_version\", \"receiving_account\".\"credential_key_id\", \"receiving_account\".\"credential_nonce\", \"receiving_account\".\"credential_ciphertext\", \"receiving_account\".\"credential_tag\") = 0 OR (num_nonnulls(\"receiving_account\".\"credential_version\", \"receiving_account\".\"credential_key_id\", \"receiving_account\".\"credential_nonce\", \"receiving_account\".\"credential_ciphertext\", \"receiving_account\".\"credential_tag\") = 5 AND \"receiving_account\".\"credential_version\" = 1 AND length(trim(\"receiving_account\".\"credential_key_id\")) > 0 AND length(\"receiving_account\".\"credential_nonce\") > 0 AND length(\"receiving_account\".\"credential_ciphertext\") > 0 AND length(\"receiving_account\".\"credential_tag\") > 0)"
+        },
+        "receiving_account_webhook_hash_check": {
+          "name": "receiving_account_webhook_hash_check",
+          "value": "\"receiving_account\".\"webhook_token_hash\" IS NULL OR \"receiving_account\".\"webhook_token_hash\" ~ '^[a-f0-9]{64}$'"
         }
       },
       "isRLSEnabled": false
@@ -5860,6 +5921,120 @@
       },
       "isRLSEnabled": false
     },
+    "public.receiving_pix_preparation": {
+      "name": "receiving_pix_preparation",
+      "schema": "",
+      "columns": {
+        "account_id": {
+          "name": "account_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "site_id": {
+          "name": "site_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "environment": {
+          "name": "environment",
+          "type": "financial_environment",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "attempt_id": {
+          "name": "attempt_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "actor_user_id": {
+          "name": "actor_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "session_id": {
+          "name": "session_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "consent_id": {
+          "name": "consent_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "state": {
+          "name": "state",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "attempts": {
+          "name": "attempts",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "attempted_at": {
+          "name": "attempted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "receiving_pix_preparation_actor_user_id_user_id_fk": {
+          "name": "receiving_pix_preparation_actor_user_id_user_id_fk",
+          "tableFrom": "receiving_pix_preparation",
+          "tableTo": "user",
+          "columnsFrom": ["actor_user_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "receiving_pix_preparation_account_fk": {
+          "name": "receiving_pix_preparation_account_fk",
+          "tableFrom": "receiving_pix_preparation",
+          "tableTo": "receiving_account",
+          "columnsFrom": ["site_id", "account_id", "environment"],
+          "columnsTo": ["site_id", "id", "environment"],
+          "onDelete": "restrict",
+          "onUpdate": "restrict"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "receiving_pix_preparation_attempt_id_unique": {
+          "name": "receiving_pix_preparation_attempt_id_unique",
+          "nullsNotDistinct": false,
+          "columns": ["attempt_id"]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "receiving_pix_preparation_state_check": {
+          "name": "receiving_pix_preparation_state_check",
+          "value": "\"receiving_pix_preparation\".\"state\" IN ('ARMED','SUBMITTED','REJECTED','UNKNOWN')"
+        },
+        "receiving_pix_preparation_attempt_check": {
+          "name": "receiving_pix_preparation_attempt_check",
+          "value": "\"receiving_pix_preparation\".\"attempts\" > 0 AND \"receiving_pix_preparation\".\"updated_at\" >= \"receiving_pix_preparation\".\"attempted_at\""
+        }
+      },
+      "isRLSEnabled": false
+    },
     "public.receiving_verification_evidence": {
       "name": "receiving_verification_evidence",
       "schema": "",
@@ -6057,6 +6232,181 @@
         "receiving_evidence_time_check": {
           "name": "receiving_evidence_time_check",
           "value": "(\"receiving_verification_evidence\".\"observed_at\" IS NULL OR \"receiving_verification_evidence\".\"observed_at\" <= \"receiving_verification_evidence\".\"created_at\") AND (\"receiving_verification_evidence\".\"bank_observed_at\" IS NULL OR \"receiving_verification_evidence\".\"bank_observed_at\" <= \"receiving_verification_evidence\".\"created_at\")"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.withdrawal_authorization_candidate": {
+      "name": "withdrawal_authorization_candidate",
+      "schema": "",
+      "columns": {
+        "environment": {
+          "name": "environment",
+          "type": "financial_environment",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "provider_reference": {
+          "name": "provider_reference",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "site_id": {
+          "name": "site_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "account_id": {
+          "name": "account_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "operation_id": {
+          "name": "operation_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "payload_hash": {
+          "name": "payload_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "payload": {
+          "name": "payload",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "recorded_at": {
+          "name": "recorded_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "withdrawal_authorization_operation_fk": {
+          "name": "withdrawal_authorization_operation_fk",
+          "tableFrom": "withdrawal_authorization_candidate",
+          "tableTo": "financial_operation",
+          "columnsFrom": [
+            "site_id",
+            "account_id",
+            "environment",
+            "operation_id"
+          ],
+          "columnsTo": ["site_id", "account_id", "environment", "id"],
+          "onDelete": "restrict",
+          "onUpdate": "restrict"
+        }
+      },
+      "compositePrimaryKeys": {
+        "withdrawal_authorization_candidate_environment_provider_reference_pk": {
+          "name": "withdrawal_authorization_candidate_environment_provider_reference_pk",
+          "columns": ["environment", "provider_reference"]
+        }
+      },
+      "uniqueConstraints": {
+        "withdrawal_authorization_operation_unique": {
+          "name": "withdrawal_authorization_operation_unique",
+          "nullsNotDistinct": false,
+          "columns": ["environment", "operation_id"]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "withdrawal_authorization_candidate_environment_check": {
+          "name": "withdrawal_authorization_candidate_environment_check",
+          "value": "\"withdrawal_authorization_candidate\".\"environment\" IN ('sandbox', 'live')"
+        },
+        "withdrawal_authorization_candidate_hash_check": {
+          "name": "withdrawal_authorization_candidate_hash_check",
+          "value": "\"withdrawal_authorization_candidate\".\"payload_hash\" ~ '^[a-f0-9]{64}$'"
+        },
+        "withdrawal_authorization_candidate_provider_check": {
+          "name": "withdrawal_authorization_candidate_provider_check",
+          "value": "\"withdrawal_authorization_candidate\".\"provider_reference\" ~ '^[A-Za-z0-9_-]{1,128}$'"
+        },
+        "withdrawal_authorization_candidate_payload_check": {
+          "name": "withdrawal_authorization_candidate_payload_check",
+          "value": "jsonb_typeof(\"withdrawal_authorization_candidate\".\"payload\") = 'object' AND octet_length(\"withdrawal_authorization_candidate\".\"payload\"::text) <= 32768"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.withdrawal_authorization_decision": {
+      "name": "withdrawal_authorization_decision",
+      "schema": "",
+      "columns": {
+        "environment": {
+          "name": "environment",
+          "type": "financial_environment",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "provider_reference": {
+          "name": "provider_reference",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "payload_hash": {
+          "name": "payload_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "recorded_at": {
+          "name": "recorded_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "withdrawal_authorization_candidate_fk": {
+          "name": "withdrawal_authorization_candidate_fk",
+          "tableFrom": "withdrawal_authorization_decision",
+          "tableTo": "withdrawal_authorization_candidate",
+          "columnsFrom": ["environment", "provider_reference"],
+          "columnsTo": ["environment", "provider_reference"],
+          "onDelete": "restrict",
+          "onUpdate": "restrict"
+        }
+      },
+      "compositePrimaryKeys": {
+        "withdrawal_authorization_decision_environment_provider_reference_pk": {
+          "name": "withdrawal_authorization_decision_environment_provider_reference_pk",
+          "columns": ["environment", "provider_reference"]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "withdrawal_authorization_decision_hash_check": {
+          "name": "withdrawal_authorization_decision_hash_check",
+          "value": "\"withdrawal_authorization_decision\".\"payload_hash\" ~ '^[a-f0-9]{64}$'"
+        },
+        "withdrawal_authorization_decision_status_check": {
+          "name": "withdrawal_authorization_decision_status_check",
+          "value": "\"withdrawal_authorization_decision\".\"status\" = 'APPROVED'"
         }
       },
       "isRLSEnabled": false

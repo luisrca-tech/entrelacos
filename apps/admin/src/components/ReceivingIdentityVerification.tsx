@@ -18,7 +18,12 @@ export type IdentityVerificationRequest = (
   path: string,
   options: { method: string; body: unknown },
 ) => Promise<unknown>;
-type OpenWindow = (url: string, target: string, features: string) => unknown;
+/** A tab opened during the click, before the link exists (pop-up blockers). */
+export interface VerificationTab {
+  navigate(url: string): void;
+  close(): void;
+}
+type OpenTab = () => VerificationTab | null;
 
 const expiryFormatter = new Intl.DateTimeFormat("pt-BR", {
   timeStyle: "short",
@@ -39,21 +44,40 @@ export async function requestIdentityVerificationLink(
   );
 }
 
-function browserOpen(url: string, target: string, features: string) {
-  return typeof window === "undefined"
-    ? null
-    : window.open(url, target, features);
+function browserOpenTab(): VerificationTab | null {
+  if (typeof window === "undefined") return null;
+  // Opened synchronously in the click so blockers allow it; the Pagar.me URL
+  // is set once the API answers. The opener link is cut before navigating.
+  const tab = window.open("about:blank", "_blank");
+  if (!tab) return null;
+  try {
+    tab.opener = null;
+  } catch {}
+  return {
+    navigate: (url) => tab.location.replace(url),
+    close: () => tab.close(),
+  };
+}
+
+/** The KYC QR arrives as base64 PNG or SVG; declare the matching type. */
+export function kycQrImageSource(base64: string): string {
+  const type = /^(PD94|PHN2)/.test(base64)
+    ? "image/svg+xml"
+    : base64.startsWith("/9j/")
+      ? "image/jpeg"
+      : "image/png";
+  return `data:${type};base64,${base64}`;
 }
 
 export function ReceivingIdentityVerification({
   siteId,
   request,
-  openWindow = browserOpen,
+  openTab = browserOpenTab,
   disabled = false,
 }: {
   siteId: string;
   request?: IdentityVerificationRequest;
-  openWindow?: OpenWindow;
+  openTab?: OpenTab;
   disabled?: boolean;
 }) {
   const [state, setState] = useState<{
@@ -63,13 +87,18 @@ export function ReceivingIdentityVerification({
   const attempt = useRef(0);
   async function generate() {
     const current = ++attempt.current;
+    const tab = openTab();
     setState({ status: "loading", link: null });
     try {
       const link = await requestIdentityVerificationLink(siteId, request);
-      if (attempt.current !== current) return;
-      openWindow(link.url, "_blank", "noopener,noreferrer");
+      if (attempt.current !== current) {
+        tab?.close();
+        return;
+      }
+      tab?.navigate(link.url);
       setState({ status: "ready", link });
     } catch {
+      tab?.close();
       if (attempt.current === current)
         setState({ status: "error", link: null });
     }
@@ -111,7 +140,7 @@ export function ReceivingIdentityVerification({
           className="flex min-w-0 flex-wrap items-center gap-5 rounded-[14px] border border-admin-border bg-admin-canvas p-5"
         >
           <img
-            src={`data:image/png;base64,${link.base64QrCode}`}
+            src={kycQrImageSource(link.base64QrCode)}
             alt="QR Code para verificar a identidade no celular"
             width={168}
             height={168}

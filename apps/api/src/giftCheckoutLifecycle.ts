@@ -1,8 +1,5 @@
-import {
-  couplesSplitAmountCents,
-  GIFT_PLATFORM_TARIFFS,
-} from "@entrelacos/contracts";
 import type { PagarmeOrderObservation } from "./pagarmeOrderClient";
+import { pagarmeSplitAmounts } from "./pagarmeOrderPayload";
 
 /**
  * Everything the backend froze for one checkout attempt; a re-read Pagar.me
@@ -49,20 +46,29 @@ export type GiftOrderTransition =
     }
   | { kind: "MISMATCH"; reason: string };
 
+/** Split rule amounts as built by pagarmeOrderPayload for this binding. */
+function expectedSplit(
+  binding: Pick<
+    GiftCheckoutOrderBinding,
+    "method" | "coupleSplitCents" | "installments" | "totalCents"
+  >,
+) {
+  return pagarmeSplitAmounts({
+    method: binding.method,
+    totalCents: binding.totalCents,
+    coupleSplitCents: binding.coupleSplitCents,
+    installments: binding.installments,
+  });
+}
+
 /** Couple amount on the order split, as built by pagarmeOrderPayload. */
 export function expectedCoupleSplitCents(
   binding: Pick<
     GiftCheckoutOrderBinding,
-    "method" | "coupleSplitCents" | "installments"
+    "method" | "coupleSplitCents" | "installments" | "totalCents"
   >,
 ): number {
-  return binding.method === "CREDIT_CARD"
-    ? couplesSplitAmountCents(
-        binding.coupleSplitCents,
-        binding.installments,
-        GIFT_PLATFORM_TARIFFS.couplesSplitMode,
-      )
-    : binding.coupleSplitCents;
+  return expectedSplit(binding).coupleCents;
 }
 
 /**
@@ -93,7 +99,8 @@ export function decideGiftOrderTransition(
     charge.paymentMethod !== method
   )
     return mismatch("CHARGE");
-  const expectedCouple = expectedCoupleSplitCents(binding);
+  const expected = expectedSplit(binding);
+  const expectedCouple = expected.coupleCents;
   const settled = () => {
     const paid = charge.paidAmountCents ?? charge.amountCents;
     if (paid !== binding.totalCents) return "CHARGE_PAID_AMOUNT";
@@ -105,7 +112,7 @@ export function decideGiftOrderTransition(
         return "SPLIT";
       if (
         charge.split.reduce((sum, rule) => sum + rule.amountCents, 0) !==
-        binding.totalCents
+        expected.ruleTotalCents
       )
         return "SPLIT_TOTAL";
     }
@@ -117,7 +124,26 @@ export function decideGiftOrderTransition(
       return "INSTALLMENTS";
     return null;
   };
-  if (["refunded", "partial_refunded", "chargedback"].includes(charge.status)) {
+  // Pagar.me v5 charge statuses have no `refunded`: a captured charge that is
+  // cancelled (DELETE /charges/{id}) reads `canceled` with a refunded last
+  // transaction. Once money was paid, a cancel is a refund, never a close.
+  const wasPaid = (charge.paidAmountCents ?? 0) > 0;
+  const canceledCents = charge.canceledAmountCents ?? 0;
+  const partial =
+    ["partial_refunded", "partial_canceled"].includes(charge.status) ||
+    charge.transactionStatus === "partial_refunded" ||
+    (wasPaid && canceledCents > 0 && canceledCents < binding.totalCents);
+  if (charge.status !== "chargedback" && partial)
+    // D11 only allows total refunds: an operator decides the couple debit.
+    return mismatch("PARTIAL_REVERSAL");
+  const refunded =
+    charge.status === "refunded" ||
+    (charge.status === "canceled" &&
+      (wasPaid ||
+        ["refunded", "partial_refunded"].includes(
+          charge.transactionStatus ?? "",
+        )));
+  if (charge.status === "chargedback" || refunded) {
     const problem = settled();
     if (problem) return mismatch(problem);
     return {

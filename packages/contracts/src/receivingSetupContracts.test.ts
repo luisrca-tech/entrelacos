@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  isValidCpf,
   ownerFinanceAlertSchema,
   receivingKycLinkSchema,
   receivingSetupConsentVersion,
@@ -11,7 +12,7 @@ import {
 const account = {
   name: "Maria da Silva",
   email: "maria@example.test",
-  cpf: "26224451990",
+  cpf: "12345678909",
   mobilePhone: "21994647568",
   birthDate: "1990-04-12",
   monthlyIncomeCents: 500000,
@@ -85,6 +86,40 @@ describe("Pagar.me receiving setup contracts", () => {
         account: { ...account, ...patch },
       }).success,
     ).toBe(false);
+  });
+
+  it.each([
+    ["CPF check digits", { cpf: "12345678900" }],
+    ["repeated-digit CPF", { cpf: "11111111111" }],
+    [
+      "holder under 18",
+      {
+        birthDate: new Date(Date.now() - 17 * 366 * 24 * 60 * 60_000)
+          .toISOString()
+          .slice(0, 10),
+      },
+    ],
+    ["future birth date", { birthDate: "2999-01-01" }],
+  ])(
+    "rejects a recipient with an invalid %s before calling Pagar.me",
+    (_label, patch) => {
+      expect(
+        receivingSetupInputSchema.safeParse({
+          policyVersion: "receiving-setup-v1",
+          consentVersion: receivingSetupConsentVersion,
+          confirmHolder: true,
+          consentToProvider: true,
+          account: { ...account, ...patch },
+        }).success,
+      ).toBe(false);
+    },
+  );
+
+  it("validates CPF check digits", () => {
+    expect(isValidCpf("12345678909")).toBe(true);
+    expect(isValidCpf("529.982.247-25")).toBe(true);
+    expect(isValidCpf("12345678900")).toBe(false);
+    expect(isValidCpf("00000000000")).toBe(false);
   });
 
   it("exposes the recipient status mapped onto the receiving account state", () => {

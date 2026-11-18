@@ -105,12 +105,14 @@ export function createWithdrawalHistoryRepository(
           )`
           : sql.empty();
       const limit = page ? sql`${page.limit + 1}` : sql`1001`;
+      // Withdrawals of every account of the site, including those made through
+      // the previous provider: history stays readable after the switch.
       const selected =
         await db.execute(sql`SELECT w.id AS "id", st.id AS "siteId", w.amount_cents AS "amountCents", w.fee_cents AS "feeCents",
           w.net_cents AS "netCents", w.currency AS "currency", w.destination_version AS "destinationVersion", w.state AS "state",
           w.created_at AS "createdAt", w.updated_at AS "updatedAt", w.environment AS "mode", a.id IS NOT NULL AS "accountMatches"
           FROM ${site} st LEFT JOIN ${withdrawalIntent} w ON w.site_id=st.id AND w.environment=${mode} ${boundary}
-          LEFT JOIN ${receivingAccount} a ON a.id=w.account_id AND a.site_id=w.site_id AND a.environment=w.environment AND a.provider='PAGARME'
+          LEFT JOIN ${receivingAccount} a ON a.id=w.account_id AND a.site_id=w.site_id AND a.environment=w.environment
           WHERE st.id=${siteId} AND (${mode}<>'live' OR st.is_demo=false OR st.id = ANY(${liveDemoSiteIdsSql(approvedDemoSiteIds)}))
           ORDER BY ${createdAt} DESC, w.id COLLATE "C" ASC LIMIT ${limit}`);
       if (selected.rows.length === 0 || selected.rows.length > 1000)

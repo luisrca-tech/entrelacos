@@ -10,7 +10,7 @@ describe("receiving setup form", () => {
   const masked = {
     name: "  Ana Souza ",
     email: "ana@example.test",
-    cpf: "123.456.789-00",
+    cpf: "123.456.789-09",
     mobilePhone: "(11) 98765-4321",
     birthDate: "1990-05-20",
     monthlyIncome: "R$ 3.500,50",
@@ -36,7 +36,7 @@ describe("receiving setup form", () => {
     expect(account).toEqual({
       name: "Ana Souza",
       email: "ana@example.test",
-      cpf: "12345678900",
+      cpf: "12345678909",
       mobilePhone: "11987654321",
       birthDate: "1990-05-20",
       monthlyIncomeCents: 350050,

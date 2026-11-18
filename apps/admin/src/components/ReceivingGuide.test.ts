@@ -66,7 +66,11 @@ describe("receiving guide on Pagar.me", () => {
   it("states the withdrawal fee from the tariff table and when money is available", () => {
     const content = text(render());
     expect(content).toContain("R$ 3,67");
-    expect(content).toContain("Pix: assim que o pagamento é confirmado.");
+    // Settlement time of Pix is not in the proposal: no "immediately".
+    expect(content).toContain(
+      "Pix: quando a Pagar.me libera o pagamento confirmado.",
+    );
+    expect(content).not.toMatch(/imediat|assim que/i);
     expect(content).toContain("fica disponível em cerca de 2 dias");
     expect(content).toContain("até 6x");
     expect(content).not.toMatch(/serviço Entrelaços|comiss/i);

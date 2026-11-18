@@ -36,6 +36,9 @@ describe("Pagar.me card tokenization", () => {
     );
     expect(init?.method).toBe("POST");
     expect(init?.credentials).toBe("omit");
+    // Pagar.me checks the site domain registered in the dashboard: send the
+    // origin (never the page path).
+    expect(init?.referrerPolicy).toBe("strict-origin");
     expect(JSON.parse(String(init?.body))).toEqual({
       type: "card",
       card: {
@@ -64,6 +67,11 @@ describe("Pagar.me card tokenization", () => {
     const warn = vi.spyOn(console, "warn");
     const cases = [
       [Response.json({ message: "invalid" }, { status: 422 }), "CARD_INVALID"],
+      [Response.json({ message: "invalid" }, { status: 400 }), "CARD_INVALID"],
+      // Key or domain refused, or throttled: not the guest's card.
+      [Response.json({}, { status: 401 }), "TOKENIZATION_UNAVAILABLE"],
+      [Response.json({}, { status: 403 }), "TOKENIZATION_UNAVAILABLE"],
+      [Response.json({}, { status: 429 }), "TOKENIZATION_UNAVAILABLE"],
       [Response.json({}, { status: 500 }), "TOKENIZATION_UNAVAILABLE"],
       [Response.json({ id: "not-a-token" }), "TOKENIZATION_UNAVAILABLE"],
     ] as const;

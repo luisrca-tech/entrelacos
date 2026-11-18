@@ -117,6 +117,7 @@ async function readScope(
 ): Promise<ReceivingNominationSnapshot | null> {
   // Inspect both sides before filtering operator/current/kind. An orphan or
   // historical row must never become permission to create a new recipient.
+  // Rows of the previous provider (and their operations) are history only.
   const result = await reader.execute(sql`SELECT
     (a.operator_reference IS NOT NULL OR a.account_reference IS NOT NULL OR a.recipient_reference IS NOT NULL
      OR a.provider_account_state<>'UNVERIFIED' OR a.receiving_capability OR a.withdrawal_capability OR a.commercial_enabled OR a.observed_at IS NOT NULL) AS "hasProviderBinding",
@@ -124,7 +125,9 @@ async function readScope(
     op.id AS "operationId",op.site_id AS "operationSiteId",op.account_id AS "operationAccountId",op.environment AS "operationEnvironment",op.kind AS "kind",op.state AS "state",op.request_id AS "requestId",op.request_hash AS "requestHash",op.request_snapshot AS "requestSnapshot",
     op.order_id AS "orderId",op.payment_id AS "paymentId",op.withdrawal_intent_id AS "withdrawalIntentId",op.provider_operation_reference AS "providerOperationReference",op.lease_owner AS "leaseOwner",op.lease_token AS "leaseToken",op.lease_expires_at AS "leaseExpiresAt",op.attempts AS "attempts",op.last_error_code AS "lastErrorCode",op.next_attempt_at AS "nextAttemptAt",op.created_at AS "operationCreatedAt",op.updated_at AS "operationUpdatedAt"
     FROM ${receivingAccount} a FULL OUTER JOIN ${financialOperation} op ON op.account_id=a.id AND op.site_id=a.site_id AND op.environment=a.environment
-    WHERE (a.site_id=${selected.siteId} AND a.environment=${selected.environment}) OR (op.site_id=${selected.siteId} AND op.environment=${selected.environment})
+    WHERE (a.site_id=${selected.siteId} AND a.environment=${selected.environment} AND a.provider='PAGARME')
+      OR (op.site_id=${selected.siteId} AND op.environment=${selected.environment} AND NOT EXISTS (SELECT 1 FROM ${receivingAccount} l
+        WHERE l.id=op.account_id AND l.site_id=op.site_id AND l.environment=op.environment AND l.provider<>'PAGARME'))
     ORDER BY a.id,op.id LIMIT 2`);
   if (result.rows.length === 0) return null;
   if (result.rows.length !== 1) fail(409, "RECEIVING_BINDING_EXISTS");
@@ -543,7 +546,7 @@ export function createReceivingNominationRepository(
                 await execute(sql`SELECT a.id,a.site_id AS "siteId",a.environment,a.provider,a.operator_user_id AS "operatorUserId",a.is_current AS "isCurrent",
       (a.operator_reference IS NOT NULL OR a.account_reference IS NOT NULL OR a.recipient_reference IS NOT NULL OR a.provider_account_state<>'UNVERIFIED'
        OR a.receiving_capability OR a.withdrawal_capability OR a.commercial_enabled OR a.observed_at IS NOT NULL) AS "hasProviderBinding"
-      FROM ${receivingAccount} a WHERE a.site_id=${snapshot.siteId} AND a.environment=${mode} ORDER BY a.id LIMIT 2 FOR UPDATE OF a`);
+      FROM ${receivingAccount} a WHERE a.site_id=${snapshot.siteId} AND a.environment=${mode} AND a.provider='PAGARME' ORDER BY a.id LIMIT 2 FOR UPDATE OF a`);
               if (accounts.rows.length > 1)
                 fail(409, "RECEIVING_BINDING_EXISTS");
               const account = accounts.rows[0];
@@ -668,6 +671,10 @@ export function createReceivingNominationRepository(
               requireAuthorityTime(admissionTime);
               requireAuthorityTime(applicationClock());
               const createdAt = new Date(snapshot.createdAt);
+              // An account of the previous provider stays as history (its
+              // data is kept) but stops being the current one.
+              await execute(sql`UPDATE ${receivingAccount} SET is_current=false
+                WHERE site_id=${snapshot.siteId} AND environment=${mode} AND provider<>'PAGARME' AND is_current=true`);
               const savedAccount = await insert(receivingAccount)
                 .values({
                   id: snapshot.accountId,

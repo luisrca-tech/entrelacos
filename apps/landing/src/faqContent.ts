@@ -154,7 +154,7 @@ export const faqTopics: FaqTopic[] = [
       {
         question: "Em quanto tempo um presente pago fica disponível?",
         answer:
-          "No Pix, o valor fica disponível imediatamente após a confirmação. No cartão, fica disponível em cerca de 2 dias, inteiro, seja qual for o número de parcelas escolhido pelo convidado.",
+          "No Pix, o valor fica disponível quando a Pagar.me libera o pagamento confirmado. No cartão, fica disponível em cerca de 2 dias, inteiro, seja qual for o número de parcelas escolhido pelo convidado.",
       },
     ],
   },

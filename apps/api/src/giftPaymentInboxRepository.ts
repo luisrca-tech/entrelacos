@@ -3,6 +3,7 @@ import type { DatabaseConnection } from "@entrelacos/database";
 import {
   financialEventInbox,
   giftCheckoutAttempt,
+  giftPaymentRecord,
   receivingAccount,
 } from "@entrelacos/database/schema";
 import { sql } from "drizzle-orm";
@@ -18,6 +19,14 @@ import {
   type PagarmeWebhookAppendResult,
   type PagarmeWebhookEvent,
 } from "./pagarmeWebhook";
+
+/** Delivery id of an internal reconciliation event for one checkout. */
+export function giftReconcileDeliveryId(
+  attemptId: string,
+  sequence: string,
+): string {
+  return `reconcile:${attemptId}:${sequence}`;
+}
 
 /** Event types this worker claims; rows of other types are never touched. */
 export const giftPaymentInboxEventTypes: readonly PagarmeInboxEventType[] =
@@ -61,6 +70,8 @@ export interface GiftPaymentInboxOptions {
   leaseMs: number;
   maxAttempts: number;
   retryDelayMs: number;
+  /** Our own recipient: its `recipient.updated` events are not site events. */
+  platformRecipientId?: string;
   now(): Date;
   generateId(): string;
 }
@@ -157,6 +168,42 @@ export function createGiftPaymentInboxRepository(
     return result.rows.length === 1 ? "INSERTED" : "DUPLICATE";
   }
 
+  async function claim(
+    deliveryId: string | null,
+  ): Promise<GiftPaymentInboxClaim | null> {
+    const now = options.now().toISOString();
+    const leaseToken = createHash("sha256")
+      .update(`${options.instanceId}:${options.generateId()}`)
+      .digest("hex")
+      .slice(0, 48);
+    const result = await db.execute(sql`UPDATE ${financialEventInbox} e
+      SET state = 'CLAIMED', lease_owner = ${options.instanceId}, lease_token = ${leaseToken},
+        lease_expires_at = ${now}::timestamptz + make_interval(secs => ${options.leaseMs / 1000}),
+        attempts = e.attempts + 1
+      WHERE e.id = (
+        SELECT c.id FROM ${financialEventInbox} c
+        WHERE c.environment = ${environment} AND c.event_type IN (${eventTypeList})
+          AND (${deliveryId}::text IS NULL OR c.delivery_id = ${deliveryId})
+          AND ((c.state IN ('RECEIVED', 'RETRY') AND c.next_attempt_at <= ${now}::timestamptz)
+            OR (c.state = 'CLAIMED' AND c.lease_expires_at <= ${now}::timestamptz))
+        ORDER BY c.next_attempt_at, c.id
+        LIMIT 1 FOR UPDATE SKIP LOCKED)
+      RETURNING e.id AS "eventId", e.site_id AS "siteId", e.account_id AS "accountId", e.environment,
+        e.event_type AS "eventType", e.payload, e.attempts`);
+    const row = result.rows[0];
+    if (!row) return null;
+    return {
+      eventId: String(row.eventId),
+      siteId: String(row.siteId),
+      accountId: String(row.accountId),
+      environment,
+      eventType: row.eventType as PagarmeInboxEventType,
+      payload: readPayload(row.payload),
+      leaseToken,
+      attempts: Number(row.attempts),
+    };
+  }
+
   return {
     /** Routes an authenticated webhook to its site/account; dedupes by event id. */
     async append(
@@ -171,6 +218,19 @@ export function createGiftPaymentInboxRepository(
               NULL AS "attemptId" FROM ${receivingAccount} r
             WHERE r.environment = ${environment} AND r.provider = 'PAGARME' AND r.is_current = true
               AND r.recipient_reference = ${event.recipientId} LIMIT 2`);
+          if (result.rows.length === 1) scope = result.rows[0];
+        } else if (event.orderId === null && event.chargeId !== null) {
+          // chargeback.received references only the charge: route through
+          // the payment it was posted as.
+          const result =
+            await tx.execute(sql`SELECT a.site_id AS "siteId", a.account_id AS "accountId", a.id AS "attemptId",
+              r.account_reference AS "accountReference", a.provider_reference AS "orderId"
+            FROM ${giftPaymentRecord} p
+            INNER JOIN ${giftCheckoutAttempt} a ON a.id = p.attempt_id AND a.site_id = p.site_id
+              AND a.account_id = p.account_id AND a.environment = p.environment
+            INNER JOIN ${receivingAccount} r ON r.id = a.account_id AND r.site_id = a.site_id AND r.environment = a.environment
+            WHERE p.environment = ${environment} AND p.provider_payment_reference = ${event.chargeId}
+            LIMIT 2`);
           if (result.rows.length === 1) scope = result.rows[0];
         } else {
           const result =
@@ -189,14 +249,26 @@ export function createGiftPaymentInboxRepository(
           typeof scope.accountId !== "string" ||
           typeof scope.accountReference !== "string"
         ) {
+          if (
+            event.recipientId !== null &&
+            event.recipientId === options.platformRecipientId
+          )
+            return "UNROUTABLE";
+          // One open alert per foreign order/charge/recipient, not per event.
           await insertFinancialOperatorAlert(tx, {
             kind: "UNROUTABLE_PLATFORM_EVENT",
             severity: "warning",
             environment,
-            paymentReference: event.eventId,
+            paymentReference:
+              event.orderId ??
+              event.chargeId ??
+              event.recipientId ??
+              event.eventId,
             details: {
               type: event.providerType,
+              eventId: event.eventId,
               orderId: event.orderId,
+              chargeId: event.chargeId,
               recipientId: event.recipientId,
             },
           });
@@ -209,7 +281,12 @@ export function createGiftPaymentInboxRepository(
           deliveryId: event.eventId,
           eventType: event.eventType,
           payload: payloadFor(
-            event,
+            {
+              ...event,
+              orderId:
+                event.orderId ??
+                (typeof scope.orderId === "string" ? scope.orderId : null),
+            },
             typeof scope.attemptId === "string" ? scope.attemptId : null,
           ),
           authenticatedAt,
@@ -233,7 +310,7 @@ export function createGiftPaymentInboxRepository(
         siteId: target.siteId,
         accountId: target.accountId,
         accountReference,
-        deliveryId: `reconcile:${target.attemptId}:${sequence}`,
+        deliveryId: giftReconcileDeliveryId(target.attemptId, sequence),
         eventType: "ORDER_RECONCILE",
         payload: payloadFor(
           {
@@ -248,36 +325,14 @@ export function createGiftPaymentInboxRepository(
     },
 
     async claimNext(): Promise<GiftPaymentInboxClaim | null> {
-      const now = options.now().toISOString();
-      const leaseToken = createHash("sha256")
-        .update(`${options.instanceId}:${options.generateId()}`)
-        .digest("hex")
-        .slice(0, 48);
-      const result = await db.execute(sql`UPDATE ${financialEventInbox} e
-        SET state = 'CLAIMED', lease_owner = ${options.instanceId}, lease_token = ${leaseToken},
-          lease_expires_at = ${now}::timestamptz + make_interval(secs => ${options.leaseMs / 1000}),
-          attempts = e.attempts + 1
-        WHERE e.id = (
-          SELECT c.id FROM ${financialEventInbox} c
-          WHERE c.environment = ${environment} AND c.event_type IN (${eventTypeList})
-            AND ((c.state IN ('RECEIVED', 'RETRY') AND c.next_attempt_at <= ${now}::timestamptz)
-              OR (c.state = 'CLAIMED' AND c.lease_expires_at <= ${now}::timestamptz))
-          ORDER BY c.next_attempt_at, c.id
-          LIMIT 1 FOR UPDATE SKIP LOCKED)
-        RETURNING e.id AS "eventId", e.site_id AS "siteId", e.account_id AS "accountId", e.environment,
-          e.event_type AS "eventType", e.payload, e.attempts`);
-      const row = result.rows[0];
-      if (!row) return null;
-      return {
-        eventId: String(row.eventId),
-        siteId: String(row.siteId),
-        accountId: String(row.accountId),
-        environment,
-        eventType: row.eventType as PagarmeInboxEventType,
-        payload: readPayload(row.payload),
-        leaseToken,
-        attempts: Number(row.attempts),
-      };
+      return claim(null);
+    },
+
+    /** Claims one specific event (by delivery id) when it is due. */
+    async claimDelivery(
+      deliveryId: string,
+    ): Promise<GiftPaymentInboxClaim | null> {
+      return claim(deliveryId);
     },
 
     async complete(

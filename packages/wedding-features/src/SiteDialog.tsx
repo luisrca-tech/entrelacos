@@ -16,6 +16,8 @@ type SiteDialogProps = {
   open: boolean;
   labelledBy: string;
   className?: string;
+  /** While true, Esc and other cancel requests are ignored (payment in flight). */
+  locked?: boolean;
   onClose: () => void;
   children: (requestClose: () => void) => ReactNode;
 };
@@ -24,6 +26,7 @@ export function SiteDialog({
   open,
   labelledBy,
   className,
+  locked = false,
   onClose,
   children,
 }: SiteDialogProps) {
@@ -67,7 +70,7 @@ export function SiteDialog({
       aria-modal="true"
       onCancel={(event) => {
         event.preventDefault();
-        requestClose();
+        if (!locked) requestClose();
       }}
       onClose={handleDialogClose}
     >

@@ -12,7 +12,10 @@ import { createGiftCheckoutRepository } from "./giftCheckoutRepository";
 import { createGiftCheckoutService } from "./giftCheckouts";
 import { platformTariffPolicy, quoteGiftPurchaseAmounts } from "./giftMoney";
 import type { GiftPaymentConfig } from "./giftPaymentConfig";
-import { createGiftPaymentInboxRepository } from "./giftPaymentInboxRepository";
+import {
+  createGiftPaymentInboxRepository,
+  giftReconcileDeliveryId,
+} from "./giftPaymentInboxRepository";
 import { createGiftPaymentPostingRepository } from "./giftPaymentPostingRepository";
 import { createGiftPaymentReconciliation } from "./giftPaymentReconciliation";
 import { createGiftPaymentWorker } from "./giftPaymentWorker";
@@ -199,6 +202,7 @@ export function createGiftPaymentComposition(
     leaseMs: 60_000,
     maxAttempts: 12,
     retryDelayMs: 5_000,
+    platformRecipientId: config.platformRecipientId,
     now,
     generateId: () => randomUUID(),
   });
@@ -276,7 +280,16 @@ export function createGiftPaymentComposition(
           "created",
         ),
       );
-      if (result === "INSERTED") wakeWorker();
+      if (result !== "INSERTED") return;
+      // Apply the decided card now so the create response already says paid
+      // or declined; on any failure the woken worker retries it.
+      try {
+        await worker.processDelivery?.(
+          giftReconcileDeliveryId(binding.attemptId, "created"),
+        );
+      } finally {
+        wakeWorker();
+      }
     },
     now,
     generateId: () => randomUUID(),

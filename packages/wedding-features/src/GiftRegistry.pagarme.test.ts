@@ -165,6 +165,9 @@ afterEach(async () => {
 });
 
 async function mount(fetch: typeof globalThis.fetch) {
+  // Tokenization never reuses the site's API fetcher: it goes to Pagar.me
+  // through the browser's own fetch.
+  vi.stubGlobal("fetch", fetch);
   await act(async () =>
     root.render(
       createElement(GiftRegistry, {
@@ -283,5 +286,166 @@ describe("transparent checkout on the couple site", () => {
         "requestId",
       ].sort(),
     );
+  });
+
+  async function fillCard() {
+    await type("Número do cartão", "4000 0000 0000 0010");
+    await type("Nome impresso no cartão", "ANA SOUZA");
+    await type("Validade", "12/30");
+    await type("CVV", "123");
+  }
+  function quoteDialog() {
+    return surface.querySelector<HTMLDialogElement>(
+      'dialog[aria-labelledby="gift-quote-heading"]',
+    );
+  }
+  async function pressEscape(dialog: HTMLDialogElement | null) {
+    await act(async () => {
+      dialog?.dispatchEvent(new Event("cancel", { cancelable: true }));
+    });
+    await settle();
+  }
+  function delayed(
+    base: ReturnType<typeof fetcher>,
+    matches: (url: string) => boolean,
+  ) {
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) => {
+      if (matches(String(input))) await gate;
+      return base(input, init);
+    });
+    return { fetch, release: () => release() };
+  }
+
+  it("keeps the dialog and the attempt when Esc is pressed during card tokenization", async () => {
+    statusState = "AWAITING_PAYMENT";
+    const slow = delayed(
+      fetcher({ checkoutStatus: "AWAITING_PAYMENT" }),
+      (url) => url.startsWith("https://api.pagar.me/"),
+    );
+    await mount(slow.fetch);
+    await clickButton("Escolher presente");
+    await clickButton("Cartão de crédito");
+    await fillBuyer();
+    await fillCard();
+    await submit();
+    await pressEscape(quoteDialog());
+    expect(quoteDialog()?.open).toBe(true);
+    await act(async () => slow.release());
+    await settle();
+    const created = calls.filter((call) =>
+      call.url.endsWith("/gift-checkouts"),
+    );
+    expect(created).toHaveLength(1);
+    // The created order is remembered and its status is shown.
+    const stored = JSON.parse(
+      window.sessionStorage.getItem(
+        "entrelacos:pending-gift-checkout:wedding-a",
+      ) ?? "{}",
+    );
+    expect(stored.requestId).toBe(
+      JSON.parse(String(created[0].init?.body)).requestId,
+    );
+    expect(
+      surface.querySelector<HTMLDialogElement>(
+        'dialog[aria-labelledby="gift-payment-heading"]',
+      )?.open,
+    ).toBe(true);
+  });
+
+  it("shows the result of an order created after the dialog was closed during submission", async () => {
+    statusState = "AWAITING_PAYMENT";
+    const slow = delayed(
+      fetcher({ checkoutStatus: "AWAITING_PAYMENT" }),
+      (url) => url.endsWith("/gift-checkouts"),
+    );
+    await mount(slow.fetch);
+    await clickButton("Escolher presente");
+    await clickButton("Cartão de crédito");
+    await fillBuyer();
+    await fillCard();
+    await submit();
+    await pressEscape(quoteDialog());
+    expect(quoteDialog()?.open).toBe(true);
+    // Even a forced close (no cancel event) keeps the attempt.
+    await act(async () => quoteDialog()?.close());
+    await settle();
+    await act(async () => slow.release());
+    await settle();
+    expect(
+      calls.filter((call) => call.url.endsWith("/gift-checkouts")),
+    ).toHaveLength(1);
+    expect(
+      window.sessionStorage.getItem(
+        "entrelacos:pending-gift-checkout:wedding-a",
+      ),
+    ).not.toBeNull();
+    expect(
+      surface.querySelector<HTMLDialogElement>(
+        'dialog[aria-labelledby="gift-payment-heading"]',
+      )?.open,
+    ).toBe(true);
+  });
+
+  it("never calls our API when tokenization fails, and tokenizes again on retry", async () => {
+    let tokenCalls = 0;
+    const base = fetcher({ checkoutStatus: "AWAITING_PAYMENT" });
+    const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) => {
+      if (String(input).startsWith("https://api.pagar.me/")) {
+        tokenCalls++;
+        calls.push({ url: String(input), init });
+        if (tokenCalls === 1)
+          return Response.json({ message: "invalid card" }, { status: 422 });
+      }
+      return base(input, init);
+    });
+    await mount(fetch);
+    await clickButton("Escolher presente");
+    await clickButton("Cartão de crédito");
+    await fillBuyer();
+    await fillCard();
+    await submit();
+    expect(calls.some((call) => call.url.endsWith("/gift-checkouts"))).toBe(
+      false,
+    );
+    expect(quoteDialog()?.textContent).toContain("Confira os dados do cartão.");
+    await fillCard();
+    await submit();
+    expect(tokenCalls).toBe(2);
+    expect(
+      calls.filter((call) => call.url.endsWith("/gift-checkouts")),
+    ).toHaveLength(1);
+  });
+
+  it("does not reuse the site's API fetcher for the Pagar.me host", async () => {
+    statusState = "AWAITING_PAYMENT";
+    const site = fetcher({ checkoutStatus: "AWAITING_PAYMENT" });
+    const browser = vi.fn<typeof globalThis.fetch>(async () =>
+      Response.json({ id: "token_card123", type: "card" }),
+    );
+    await act(async () =>
+      root.render(
+        createElement(GiftRegistry, {
+          siteId,
+          apiOrigin,
+          fetcher: site,
+          pagarmePublicKey: "pk_test_public1",
+        }),
+      ),
+    );
+    vi.stubGlobal("fetch", browser);
+    await settle();
+    await clickButton("Escolher presente");
+    await clickButton("Cartão de crédito");
+    await fillBuyer();
+    await fillCard();
+    await submit();
+    expect(String(browser.mock.calls[0]?.[0])).toContain("api.pagar.me");
+    expect(
+      site.mock.calls.some(([input]) => String(input).includes("api.pagar.me")),
+    ).toBe(false);
   });
 });

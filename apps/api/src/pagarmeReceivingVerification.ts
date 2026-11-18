@@ -60,7 +60,17 @@ export function preparePagarmeReceivingVerification(
       scope.operatorReference ??
       `pagarme-holder-${original.provision.inputFingerprint}`,
   };
-  const source = `pr-${hash([boundScope, recipient.status, recipient.document ?? null, bank, observedAt])}`;
+  // The stored reference never hashes the CPF (about 10^9 values, so an
+  // unkeyed hash could be reversed): only whether the bank holder matches.
+  const { holderDocument: _holderDocument, ...bankWithoutDocument } = bank;
+  const source = `pr-${hash([
+    boundScope,
+    recipient.status,
+    typeof recipient.document === "string",
+    bank.holderDocument === recipient.document,
+    bankWithoutDocument,
+    observedAt,
+  ])}`;
   const candidate = readReceivingVerificationCandidate({
     kind: "DESTINATION",
     profile: "rv1",
