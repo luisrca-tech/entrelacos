@@ -16,13 +16,15 @@ import {
   site,
 } from "@entrelacos/database/schema";
 import { type SQL, sql } from "drizzle-orm";
-import type { AsaasStoredAccountReader } from "./asaasStoredAccountReader";
+import type {
+  AsaasAccountBinding,
+  AsaasStoredAccountReader,
+} from "./asaasHttpClient";
 import { hashAsaasEventIdentity } from "./asaasWebhook";
 import {
   compareDatabaseTimestamps,
   readDatabaseTimestamp,
 } from "./databaseTimestamp";
-import type { FinancialAccountBinding } from "./financialOverview";
 import {
   financialInboxDueAt,
   readFinancialWorkDueAt,
@@ -455,7 +457,7 @@ export function createGiftCheckoutLifecycleWorker(
   }
 
   async function readRemovedPlan(
-    binding: FinancialAccountBinding,
+    binding: AsaasAccountBinding,
     installmentReference: string,
     since: Date,
   ) {

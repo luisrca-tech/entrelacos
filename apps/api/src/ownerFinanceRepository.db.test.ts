@@ -391,7 +391,7 @@ it("lists, totals and pages paid V2 gifts and alerts with owner filters", async 
         siteName: "Caio & Duda",
         amountCents: 10239,
         dueAt: "2026-10-14T13:00:00.000Z",
-        asaasPaymentUrl: null,
+        providerPaymentUrl: null,
       });
       const resolved = await listOwnerFinanceAlerts(db, {
         status: "resolved",

@@ -23,7 +23,6 @@ import {
 import { assertRecipientFinancialAction } from "./financialAuthorization";
 import { allowsLiveSite, isLiveDemoSiteIds } from "./liveSitePolicy";
 import type { ReceivingTransaction } from "./receivingRepository";
-import { logWithdrawalFailure } from "./withdrawalDiagnostics";
 import {
   captureDispatchFence,
   captureOriginalHolderBinding,
@@ -350,7 +349,7 @@ export function createWithdrawalPostingRepository(
       account.id !== row.accountId ||
       account.siteId !== row.siteId ||
       account.environment !== row.environment ||
-      account.provider !== "ASAAS"
+      account.provider !== "PAGARME"
     )
       deny();
     return account;
@@ -1203,7 +1202,6 @@ export function createWithdrawalPostingRepository(
         const attempt = captureWithdrawalValue(input);
         return await arm(attempt);
       } catch (error) {
-        logWithdrawalFailure(error);
         return {
           outcome:
             error instanceof Denied ||
@@ -1262,7 +1260,7 @@ export function createWithdrawalPostingRepository(
             if (
               !retained ||
               !["FAILED", "CANCELLED"].includes(retained.outcome) ||
-              observation.reason !== `ASAAS_TRANSFER_${retained.outcome}` ||
+              observation.reason !== `PAGARME_WITHDRAWAL_${retained.outcome}` ||
               retained.providerReference !== provider ||
               retained.proofReference !== observation.proofReference ||
               retained.observedAt !== observation.observedAt ||

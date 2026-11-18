@@ -1,9 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import {
-  type ReceivingIncomingPixConsent,
-  receivingIncomingPixConsentSchema,
-  receivingIncomingPixDisclosure,
   receivingSetupConsentVersion,
   receivingSetupDisclosure,
 } from "@entrelacos/contracts";
@@ -30,10 +27,6 @@ import {
   readReceivingProvisioningRecord,
   readReceivingProvisioningResult,
 } from "./receivingNomination";
-import type {
-  IncomingPixBinding,
-  IncomingPixOutcome,
-} from "./receivingPixPreparation";
 
 type Database = Pick<DatabaseConnection["db"], "execute" | "transaction">;
 type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
@@ -51,7 +44,6 @@ export interface ReceivingSetupHolderRecord {
   consentAt: Date | null;
   consentSessionId: string | null;
   consentAuthenticatedAt: Date | null;
-  pixConsent: ReceivingIncomingPixConsent | null;
 }
 export class ReceivingSetupError extends Error {
   constructor(
@@ -120,7 +112,7 @@ export function createReceivingSetupRepository(
     lock = false,
   ): Promise<ReceivingSetupHolderRecord | null> {
     const result = await reader.execute(
-      sql`SELECT h.id,h.site_id AS "siteId",h.environment,h.holder_user_id AS "holderUserId",u.name AS "holderName",h.designated_by_user_id AS "designatedByUserId",h.designated_at AS "designatedAt",h.consent_id AS "consentId",h.consent_version AS "consentVersion",h.consent_at AS "consentAt",h.consent_session_id AS "consentSessionId",h.consent_authenticated_at AS "consentAuthenticatedAt",h.pix_preparation_consent AS "pixConsent" FROM ${receivingSetupHolder} h INNER JOIN "user" u ON u.id=h.holder_user_id WHERE h.site_id=${siteId} AND h.environment=${mode} ${lock ? sql`FOR UPDATE OF h` : sql``}`,
+      sql`SELECT h.id,h.site_id AS "siteId",h.environment,h.holder_user_id AS "holderUserId",u.name AS "holderName",h.designated_by_user_id AS "designatedByUserId",h.designated_at AS "designatedAt",h.consent_id AS "consentId",h.consent_version AS "consentVersion",h.consent_at AS "consentAt",h.consent_session_id AS "consentSessionId",h.consent_authenticated_at AS "consentAuthenticatedAt" FROM ${receivingSetupHolder} h INNER JOIN "user" u ON u.id=h.holder_user_id WHERE h.site_id=${siteId} AND h.environment=${mode} ${lock ? sql`FOR UPDATE OF h` : sql``}`,
     );
     if (result.rows.length > 1) return deny();
     const row = result.rows[0] as unknown as
@@ -138,10 +130,6 @@ export function createReceivingSetupRepository(
     try {
       return {
         ...row,
-        pixConsent:
-          row.pixConsent == null
-            ? null
-            : receivingIncomingPixConsentSchema.parse(row.pixConsent),
         designatedAt: readDatabaseTimestamp(row.designatedAt),
         consentAt:
           row.consentAt === null ? null : readDatabaseTimestamp(row.consentAt),
@@ -317,97 +305,6 @@ export function createReceivingSetupRepository(
     admission,
     readHolder,
     requireHolder,
-    async consentIncomingPix(
-      actor: FinancialActor,
-      accountId: string,
-      version: string,
-    ) {
-      if (version !== receivingIncomingPixDisclosure.version)
-        return deny("PIX_PREPARATION_CONSENT_REQUIRED", 403);
-      await db.transaction(async (tx) => {
-        await currentSite(tx, actor.siteId);
-        const session = await currentActor(tx, actor, false);
-        const holder = requireConsent(await requireHolder(actor, tx, true));
-        const account = await tx.execute(
-          sql`SELECT id FROM receiving_account WHERE id=${accountId} AND site_id=${actor.siteId} AND environment=${mode} AND provider='ASAAS' AND operator_user_id=${actor.userId} AND is_current=true FOR UPDATE`,
-        );
-        if (account.rows.length !== 1 || account.rows[0].id !== accountId)
-          return deny("RECEIVING_ACCOUNT_REQUIRED", 409);
-        if (holder.pixConsent) {
-          if (
-            holder.pixConsent.accountId !== accountId ||
-            holder.pixConsent.userId !== actor.userId
-          )
-            return deny("PIX_PREPARATION_CONSENT_CONFLICT", 409);
-          return;
-        }
-        const record = receivingIncomingPixConsentSchema.parse({
-          id: randomUUID(),
-          version,
-          accountId,
-          userId: actor.userId,
-          sessionId: actor.sessionId,
-          authenticatedAt: readDatabaseTimestamp(
-            session.createdAt,
-          ).toISOString(),
-          acceptedAt: clock().toISOString(),
-        });
-        const saved = await tx.execute(
-          sql`UPDATE ${receivingSetupHolder} SET pix_preparation_consent=${JSON.stringify(record)}::jsonb WHERE id=${holder.id} AND pix_preparation_consent IS NULL RETURNING id`,
-        );
-        if (saved.rows.length !== 1 || saved.rows[0].id !== holder.id)
-          return deny();
-      });
-    },
-    async armIncomingPix(
-      actor: FinancialActor,
-      binding: IncomingPixBinding,
-    ): Promise<string | null> {
-      if (
-        actor.siteId !== binding.siteId ||
-        binding.environment !== mode ||
-        binding.provider !== "ASAAS"
-      )
-        return deny("MEMBERSHIP_DENIED", 403);
-      return db.transaction(async (tx) => {
-        await currentSite(tx, actor.siteId);
-        await currentActor(tx, actor, false);
-        const holder = requireConsent(await requireHolder(actor, tx, true));
-        if (
-          !holder.pixConsent ||
-          holder.pixConsent.accountId !== binding.accountBindingId ||
-          holder.pixConsent.userId !== actor.userId ||
-          Date.parse(holder.pixConsent.acceptedAt) > clock().getTime() ||
-          Date.parse(holder.pixConsent.authenticatedAt) >
-            Date.parse(holder.pixConsent.acceptedAt)
-        )
-          return deny("PIX_PREPARATION_CONSENT_REQUIRED", 403);
-        const account = await tx.execute(
-          sql`SELECT a.id FROM receiving_account a WHERE a.id=${binding.accountBindingId} AND a.site_id=${actor.siteId} AND a.environment=${mode} AND a.provider='ASAAS' AND a.is_current=true AND a.operator_user_id=${actor.userId} AND a.account_reference=${binding.accountReference} AND a.recipient_reference=${binding.recipientReference} AND a.credential_version=1 AND EXISTS(SELECT 1 FROM financial_operation op WHERE op.account_id=a.id AND op.site_id=a.site_id AND op.environment=a.environment AND op.kind='ACCOUNT_CREATE' AND op.state='SUCCEEDED') FOR UPDATE OF a`,
-        );
-        if (
-          account.rows.length !== 1 ||
-          account.rows[0].id !== binding.accountBindingId
-        )
-          return deny("RECEIVING_ACCOUNT_REQUIRED", 409);
-        const time = clock(),
-          attemptId = randomUUID();
-        const result = await tx.execute(
-          sql`INSERT INTO receiving_pix_preparation (account_id,site_id,environment,attempt_id,actor_user_id,session_id,consent_id,state,attempts,attempted_at,updated_at) VALUES (${binding.accountBindingId},${actor.siteId},${mode},${attemptId},${actor.userId},${actor.sessionId},${holder.pixConsent.id},'ARMED',1,${time},${time}) ON CONFLICT (account_id) DO UPDATE SET attempt_id=EXCLUDED.attempt_id,actor_user_id=EXCLUDED.actor_user_id,session_id=EXCLUDED.session_id,consent_id=EXCLUDED.consent_id,state='ARMED',attempts=receiving_pix_preparation.attempts+1,attempted_at=EXCLUDED.attempted_at,updated_at=EXCLUDED.updated_at WHERE receiving_pix_preparation.site_id=EXCLUDED.site_id AND receiving_pix_preparation.environment=EXCLUDED.environment AND receiving_pix_preparation.state='REJECTED' AND receiving_pix_preparation.attempted_at<=${new Date(time.getTime() - 60000)} RETURNING attempt_id AS "attemptId"`,
-        );
-        return result.rows.length === 1 &&
-          typeof result.rows[0].attemptId === "string"
-          ? result.rows[0].attemptId
-          : null;
-      });
-    },
-    async settleIncomingPix(attemptId: string, outcome: IncomingPixOutcome) {
-      if (!["SUBMITTED", "REJECTED", "UNKNOWN"].includes(outcome))
-        return deny();
-      await db.execute(
-        sql`UPDATE receiving_pix_preparation SET state=${outcome},updated_at=${clock()} WHERE attempt_id=${attemptId} AND environment=${mode} AND state='ARMED'`,
-      );
-    },
     async readSessionAuthentication(
       actor: FinancialActor,
     ): Promise<ReceivingAuthenticationEvidence> {
@@ -439,7 +336,7 @@ export function createReceivingSetupRepository(
       siteId: string,
     ): Promise<ReceivingSetupAccountRecord | null> {
       const loaded = await db.execute(
-        sql`SELECT a.id AS "accountId",a.operator_user_id AS "operatorUserId",a.account_reference AS "accountReference",a.recipient_reference AS "recipientReference",a.credential_version AS "credentialVersion",a.credential_key_id AS "credentialKeyId",a.credential_nonce AS "credentialNonce",a.credential_ciphertext AS "credentialCiphertext",a.credential_tag AS "credentialTag",op.state,op.request_snapshot AS "requestSnapshot" FROM receiving_account a INNER JOIN financial_operation op ON op.account_id=a.id AND op.site_id=a.site_id AND op.environment=a.environment AND op.kind='ACCOUNT_CREATE' WHERE a.site_id=${siteId} AND a.environment=${mode} AND a.is_current=true`,
+        sql`SELECT a.id AS "accountId",a.operator_user_id AS "operatorUserId",a.account_reference AS "accountReference",a.recipient_reference AS "recipientReference",op.state,op.request_snapshot AS "requestSnapshot" FROM receiving_account a INNER JOIN financial_operation op ON op.account_id=a.id AND op.site_id=a.site_id AND op.environment=a.environment AND op.kind='ACCOUNT_CREATE' WHERE a.site_id=${siteId} AND a.environment=${mode} AND a.is_current=true`,
       );
       if (loaded.rows.length === 0) return null;
       if (loaded.rows.length !== 1) return deny();
@@ -469,13 +366,6 @@ export function createReceivingSetupRepository(
           ? readReceivingProvisioningResult({
               accountReference: row.accountReference,
               recipientReference: row.recipientReference,
-              credential: {
-                version: row.credentialVersion,
-                keyId: row.credentialKeyId,
-                nonce: row.credentialNonce,
-                ciphertext: row.credentialCiphertext,
-                tag: row.credentialTag,
-              },
             })
           : null;
       return {

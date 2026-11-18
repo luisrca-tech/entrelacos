@@ -1,5 +1,6 @@
 import { receivingSetupConsentVersion } from "@entrelacos/contracts";
 import { describe, expect, it, vi } from "vitest";
+import { PagarmeRejectedError } from "./pagarmeHttpClient";
 import { createReceivingSetupService } from "./receivingSetup";
 
 const actor = {
@@ -16,6 +17,20 @@ const holder = {
   consentId: "consent-one",
   consentVersion: receivingSetupConsentVersion,
 };
+const createdAccount = {
+  accountId: "binding-one",
+  operatorUserId: actor.userId,
+  state: "SUCCEEDED" as const,
+  result: {
+    accountReference: "rp_fixtureRecipient01",
+    recipientReference: "rp_fixtureRecipient01",
+  },
+};
+const kycLink = {
+  url: "https://exemplo.com/kyc?token=eyWfwqrnqwrnfoqwntoqwntqw",
+  base64QrCode: "PD94bWwgdmVyc2lvbj0iMS4wIj8+PHN2Zy8+",
+  expiresAt: "2026-11-18T12:20:00.000Z",
+};
 function fixture() {
   const sessionAuthentication = {
     ...actor,
@@ -30,11 +45,11 @@ function fixture() {
     policyVersion: "policy-v1",
     readHolder: vi.fn(async () => holder),
     requireHolder: vi.fn(async () => holder),
-    readAccount: vi.fn(async () => null),
+    readAccount: vi.fn(async (): Promise<unknown> => null),
     consent: vi.fn(async () => {}),
-    consentIncomingPix: vi.fn(async () => {}),
     designate: vi.fn(async () => {}),
     readSessionAuthentication: vi.fn(async () => sessionAuthentication),
+    listHolderCandidates: vi.fn(async () => []),
   };
   const nomination = { accountId: "binding-one", operatorUserId: actor.userId };
   const nominate = vi.fn(async () => nomination);
@@ -44,18 +59,25 @@ function fixture() {
     completion,
     cancel: vi.fn(),
   }));
-  const observe = vi.fn();
+  const observe = vi.fn(async () => ({
+    recipientId: "rp_fixtureRecipient01",
+    status: "active",
+    observedAt: "2026-11-18T12:00:00.000Z",
+  }));
+  const recipients = { createKycLink: vi.fn(async () => kycLink) };
   const options = {
     repository,
     nomination: { nominate },
     provisioning: { begin },
     observe,
+    recipients,
   } as unknown as Parameters<typeof createReceivingSetupService>[0];
   return {
     repository,
     nominate,
     begin,
     observe,
+    recipients,
     service: createReceivingSetupService(options),
   };
 }
@@ -63,39 +85,37 @@ const input = {
   policyVersion: "policy-v1",
   consentVersion: receivingSetupConsentVersion,
   confirmHolder: true as const,
-  consentToAsaas: true as const,
+  consentToProvider: true as const,
   account: {
-    name: "Fictional Person",
-    email: "person@example.test",
-    cpfCnpj: "12345678909",
-    mobilePhone: "11999999999",
-    incomeValue: 1000,
-    address: "Fictional Road",
-    addressNumber: "1",
-    province: "District",
-    postalCode: "12345678",
-    birthDate: "1990-01-01",
+    name: "Maria da Silva",
+    email: "maria@example.test",
+    cpf: "26224451990",
+    mobilePhone: "21994647568",
+    birthDate: "1990-04-12",
+    monthlyIncomeCents: 500000,
+    professionalOccupation: "Professora",
+    address: {
+      street: "Av. General Justo",
+      streetNumber: "375",
+      neighborhood: "Centro",
+      city: "Rio de Janeiro",
+      state: "RJ",
+      zipCode: "20021130",
+      referencePoint: "Ao lado da banca",
+    },
+    bankAccount: {
+      bank: "341",
+      branchNumber: "1234",
+      accountNumber: "12345",
+      accountCheckDigit: "6",
+      type: "checking" as const,
+    },
   },
 };
 const authorization = { actor } as Parameters<
   ReturnType<typeof createReceivingSetupService>["submit"]
 >[1];
 describe("receiving setup orchestration", () => {
-  it("records the explicitly accepted Pix disclosure before original provider creation", async () => {
-    const v = fixture();
-    await v.service.submit(
-      { ...input, pixConsentVersion: "asaas-incoming-pix-v1" },
-      authorization,
-    );
-    expect(v.repository.consentIncomingPix).toHaveBeenCalledExactlyOnceWith(
-      actor,
-      "binding-one",
-      "asaas-incoming-pix-v1",
-    );
-    expect(
-      v.repository.consentIncomingPix.mock.invocationCallOrder[0],
-    ).toBeLessThan(v.begin.mock.invocationCallOrder[0]);
-  });
   it("shows a designation as distinct from consent and account creation", async () => {
     const values = fixture();
     expect(await values.service.read(actor)).toMatchObject({
@@ -106,6 +126,62 @@ describe("receiving setup orchestration", () => {
       providerStatus: null,
     });
     expect(values.begin).not.toHaveBeenCalled();
+    expect(values.observe).not.toHaveBeenCalled();
+  });
+  it.each([
+    ["registration", "ONBOARDING", false],
+    ["affiliation", "UNDER_REVIEW", false],
+    ["active", "APPROVED", true],
+    ["refused", "BLOCKED", false],
+    ["suspended", "SUSPENDED", false],
+  ] as const)(
+    "reports the Pagar.me recipient status %s as %s",
+    async (status, accountState, receivingEnabled) => {
+      const values = fixture();
+      values.repository.readAccount.mockResolvedValue(createdAccount);
+      values.observe.mockResolvedValueOnce({
+        recipientId: "rp_fixtureRecipient01",
+        status,
+        observedAt: "2026-11-18T12:00:00.000Z",
+      });
+      expect((await values.service.read(actor)).providerStatus).toEqual({
+        recipientStatus: status,
+        accountState,
+        receivingEnabled,
+        observedAt: "2026-11-18T12:00:00.000Z",
+      });
+      expect(values.observe).toHaveBeenCalledExactlyOnceWith(
+        "site-one",
+        createdAccount,
+      );
+    },
+  );
+  it("keeps an unknown provider status unverified without a recipient status", async () => {
+    const values = fixture();
+    values.repository.readAccount.mockResolvedValue(createdAccount);
+    values.observe.mockResolvedValueOnce({
+      recipientId: "rp_fixtureRecipient01",
+      status: "mystery",
+      observedAt: "2026-11-18T12:00:00.000Z",
+    });
+    expect((await values.service.read(actor)).providerStatus).toEqual({
+      recipientStatus: null,
+      accountState: "UNVERIFIED",
+      receivingEnabled: false,
+      observedAt: "2026-11-18T12:00:00.000Z",
+    });
+  });
+  it("never reports the status of another recipient", async () => {
+    const values = fixture();
+    values.repository.readAccount.mockResolvedValue(createdAccount);
+    values.observe.mockResolvedValueOnce({
+      recipientId: "rp_otherRecipient",
+      status: "active",
+      observedAt: "2026-11-18T12:00:00.000Z",
+    });
+    const context = await values.service.read(actor);
+    expect(context.accountState).toBe("CREATED");
+    expect(context.providerStatus).toBeNull();
   });
   it("never exposes the account registration action to another site administrator", async () => {
     const values = fixture();
@@ -124,7 +200,7 @@ describe("receiving setup orchestration", () => {
     expect(values.repository.consent).not.toHaveBeenCalled();
     expect(values.begin).not.toHaveBeenCalled();
   });
-  it("persists the holder consent before nomination and one-time original provisioning", async () => {
+  it("persists the holder consent before nomination and one-time recipient provisioning", async () => {
     const values = fixture();
     expect(await values.service.submit(input, authorization)).toEqual({
       state: "STORED",
@@ -139,7 +215,7 @@ describe("receiving setup orchestration", () => {
       expect.objectContaining({
         action: "CREATE",
         confirmNativeCreation: true,
-        input: { ...input.account, name: "FICTIONAL PERSON" },
+        input: { ...input.account, name: "MARIA DA SILVA" },
       }),
     );
     expect(
@@ -154,12 +230,23 @@ describe("receiving setup orchestration", () => {
       },
     });
   });
+  it("rejects the former provider and Pix consent fields", async () => {
+    const values = fixture();
+    const { consentToProvider: _consent, ...legacy } = input;
+    await expect(
+      values.service.submit(
+        { ...legacy, legacyProviderConsent: true, pixConsentVersion: "v1" },
+        authorization,
+      ),
+    ).rejects.toMatchObject({ code: "RECEIVING_SETUP_INVALID_INPUT" });
+    expect(values.begin).not.toHaveBeenCalled();
+  });
   it("does not create another provider account when a previous dispatch is uncertain", async () => {
     const values = fixture();
     values.repository.readAccount.mockResolvedValueOnce({
       state: "CLAIMED",
       operatorUserId: actor.userId,
-    } as never);
+    });
     expect(await values.service.submit(input, authorization)).toEqual({
       state: "UNKNOWN",
     });
@@ -177,16 +264,88 @@ describe("receiving setup orchestration", () => {
     expect(values.repository.consent).not.toHaveBeenCalled();
     expect(values.begin).not.toHaveBeenCalled();
   });
-  it("does not repeat successful provisioning", async () => {
+  it("does not create the recipient again on a second submit for the same site", async () => {
     const values = fixture();
-    values.repository.readAccount.mockResolvedValueOnce({
-      state: "SUCCEEDED",
-      operatorUserId: actor.userId,
-    } as never);
+    values.repository.readAccount.mockResolvedValueOnce(createdAccount);
     expect(await values.service.submit(input, authorization)).toEqual({
       state: "STORED",
     });
     expect(values.nominate).not.toHaveBeenCalled();
     expect(values.begin).not.toHaveBeenCalled();
+  });
+});
+
+describe("receiving identity verification link", () => {
+  it.each([
+    ["the platform owner", { ...actor, userId: "owner-one" }, "OWNER"],
+    ["the account operator", actor, "SITE_ADMIN"],
+  ] as const)(
+    "returns a fresh link for %s without writing it anywhere",
+    async (_label, requester, role) => {
+      const values = fixture();
+      values.repository.readAccount.mockResolvedValue(createdAccount);
+      const log = vi.spyOn(console, "log");
+      const info = vi.spyOn(console, "info");
+      expect(await values.service.createKycLink(requester, role)).toEqual(
+        kycLink,
+      );
+      expect(values.recipients.createKycLink).toHaveBeenCalledExactlyOnceWith(
+        "rp_fixtureRecipient01",
+      );
+      expect(values.repository.consent).not.toHaveBeenCalled();
+      expect(values.repository.designate).not.toHaveBeenCalled();
+      expect(values.begin).not.toHaveBeenCalled();
+      expect(log).not.toHaveBeenCalled();
+      expect(info).not.toHaveBeenCalled();
+      log.mockRestore();
+      info.mockRestore();
+    },
+  );
+  it("refuses another site administrator", async () => {
+    const values = fixture();
+    values.repository.readAccount.mockResolvedValue(createdAccount);
+    await expect(
+      values.service.createKycLink(
+        { ...actor, userId: "planner-one" },
+        "SITE_ADMIN",
+      ),
+    ).rejects.toMatchObject({ status: 403 });
+    expect(values.recipients.createKycLink).not.toHaveBeenCalled();
+  });
+  it("reports a provider refusal as an unavailable link without provider details", async () => {
+    const values = fixture();
+    values.repository.readAccount.mockResolvedValue(createdAccount);
+    values.recipients.createKycLink.mockRejectedValue(
+      new PagarmeRejectedError(
+        404,
+        null,
+        "no kyc with partially_denied status",
+      ),
+    );
+    const error = await values.service
+      .createKycLink({ ...actor, userId: "owner-one" }, "OWNER")
+      .catch((reason: unknown) => reason);
+    expect(error).toMatchObject({
+      status: 409,
+      code: "RECEIVING_KYC_LINK_UNAVAILABLE",
+    });
+    expect(String((error as Error).message)).not.toContain("partially_denied");
+  });
+  it.each([
+    ["no account", null],
+    [
+      "a pending account",
+      { ...createdAccount, state: "UNKNOWN", result: null },
+    ],
+  ])("requires a created recipient (%s)", async (_label, account) => {
+    const values = fixture();
+    values.repository.readAccount.mockResolvedValue(account);
+    await expect(
+      values.service.createKycLink({ ...actor, userId: "owner-one" }, "OWNER"),
+    ).rejects.toMatchObject({
+      status: 409,
+      code: "RECEIVING_ACCOUNT_REQUIRED",
+    });
+    expect(values.recipients.createKycLink).not.toHaveBeenCalled();
   });
 });

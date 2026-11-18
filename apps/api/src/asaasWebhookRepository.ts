@@ -201,53 +201,10 @@ export function createAsaasWebhookRepository(
     async resolveBinding(
       tokenHash: string,
     ): Promise<AsaasWebhookBinding | null> {
+      // Per-account webhook tokens were dropped with the Asaas sub-accounts
+      // (migration 0031); no stored account can match one any more.
       if (!/^[a-f0-9]{64}$/.test(tokenHash)) return null;
-      try {
-        const rows = await db
-          .select({
-            siteId: receivingAccount.siteId,
-            accountId: receivingAccount.id,
-            provider: receivingAccount.provider,
-            providerAccountReference: receivingAccount.accountReference,
-            environment: receivingAccount.environment,
-            webhookTokenHash: receivingAccount.webhookTokenHash,
-            isDemo: site.isDemo,
-          })
-          .from(receivingAccount)
-          .innerJoin(site, eq(site.id, receivingAccount.siteId))
-          .where(
-            and(
-              eq(receivingAccount.webhookTokenHash, tokenHash),
-              eq(receivingAccount.environment, environment),
-              eq(receivingAccount.provider, "ASAAS"),
-            ),
-          )
-          .limit(2);
-        const row = rows[0];
-        if (
-          rows.length !== 1 ||
-          !row ||
-          row.provider !== "ASAAS" ||
-          row.environment !== environment ||
-          row.webhookTokenHash !== tokenHash ||
-          !reference(row.siteId) ||
-          !reference(row.accountId) ||
-          !reference(row.providerAccountReference) ||
-          typeof row.isDemo !== "boolean"
-        )
-          return null;
-        return {
-          siteId: row.siteId,
-          accountId: row.accountId,
-          provider: "ASAAS",
-          providerAccountReference: row.providerAccountReference,
-          environment,
-          webhookTokenHash: tokenHash,
-          isDemo: row.isDemo,
-        };
-      } catch {
-        return unavailable();
-      }
+      return null;
     },
 
     async append(

@@ -706,7 +706,7 @@ function AlertsPanel({
               <TableHead className="text-right">Valor</TableHead>
               <TableHead>Criado em</TableHead>
               <TableHead>Prazo</TableHead>
-              <TableHead>Asaas</TableHead>
+              <TableHead>Pagar.me</TableHead>
               <TableHead className="pr-4">Resolução</TableHead>
             </TableRow>
           </TableHeader>
@@ -743,14 +743,14 @@ function AlertsPanel({
                   {formatAlertDate(alert.dueAt)}
                 </TableCell>
                 <TableCell>
-                  {alert.asaasPaymentUrl ? (
+                  {alert.providerPaymentUrl ? (
                     <a
-                      href={alert.asaasPaymentUrl}
+                      href={alert.providerPaymentUrl}
                       target="_blank"
                       rel="noreferrer noopener"
                       className="text-admin-accent-hover"
                     >
-                      Abrir no Asaas
+                      Abrir na Pagar.me
                     </a>
                   ) : (
                     "—"

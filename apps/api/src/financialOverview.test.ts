@@ -1,16 +1,16 @@
 import { financialOverviewSchema } from "@entrelacos/contracts";
 import { describe, expect, it, vi } from "vitest";
-import type { AsaasBalanceObservation } from "./asaasHttpClient";
 import {
   type FinancialOverviewInput,
   FinancialOverviewServiceError,
   loadFinancialOverview,
   type StoredFinancialTotalsSnapshot,
 } from "./financialOverview";
+import type { ProviderBalanceObservation } from "./pagarmeWithdrawalClient";
 
 const now = new Date("2026-10-12T12:00:00.000Z");
 const binding = {
-  provider: "ASAAS" as const,
+  provider: "PAGARME" as const,
   siteId: "site-1",
   accountBindingId: "account-1",
   accountReference: "remote-account-1",
@@ -28,8 +28,8 @@ const totals = {
 };
 
 function observation(
-  overrides: Partial<AsaasBalanceObservation> = {},
-): AsaasBalanceObservation {
+  overrides: Partial<ProviderBalanceObservation> = {},
+): ProviderBalanceObservation {
   return {
     source: "provider",
     ...binding,

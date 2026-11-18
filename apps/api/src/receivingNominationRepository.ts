@@ -103,7 +103,7 @@ async function find(
     row.accountOperatorUserId !== snapshot.operatorUserId ||
     row.accountSiteId !== siteId ||
     row.accountEnvironment !== snapshot.environment ||
-    row.accountProvider !== "ASAAS"
+    row.accountProvider !== "PAGARME"
   )
     fail();
   if (row.state !== "REQUESTED") fail(409, "RECEIVING_BINDING_EXISTS");
@@ -118,8 +118,7 @@ async function readScope(
   // Inspect both sides before filtering operator/current/kind. An orphan or
   // historical row must never become permission to create a new recipient.
   const result = await reader.execute(sql`SELECT
-    (a.operator_reference IS NOT NULL OR a.webhook_token_hash IS NOT NULL OR a.account_reference IS NOT NULL OR a.recipient_reference IS NOT NULL
-     OR a.credential_version IS NOT NULL OR a.credential_key_id IS NOT NULL OR a.credential_nonce IS NOT NULL OR a.credential_ciphertext IS NOT NULL OR a.credential_tag IS NOT NULL
+    (a.operator_reference IS NOT NULL OR a.account_reference IS NOT NULL OR a.recipient_reference IS NOT NULL
      OR a.provider_account_state<>'UNVERIFIED' OR a.receiving_capability OR a.withdrawal_capability OR a.commercial_enabled OR a.observed_at IS NOT NULL) AS "hasProviderBinding",
     a.id AS "accountId",a.site_id AS "accountSiteId",a.environment AS "accountEnvironment",a.provider AS "accountProvider",a.operator_user_id AS "operatorUserId",a.is_current AS "isCurrent",a.created_at AS "accountCreatedAt",a.updated_at AS "accountUpdatedAt",
     op.id AS "operationId",op.site_id AS "operationSiteId",op.account_id AS "operationAccountId",op.environment AS "operationEnvironment",op.kind AS "kind",op.state AS "state",op.request_id AS "requestId",op.request_hash AS "requestHash",op.request_snapshot AS "requestSnapshot",
@@ -135,7 +134,7 @@ async function readScope(
     row.operationId === null ||
     row.accountSiteId !== selected.siteId ||
     row.accountEnvironment !== selected.environment ||
-    row.accountProvider !== "ASAAS" ||
+    row.accountProvider !== "PAGARME" ||
     typeof row.hasProviderBinding !== "boolean" ||
     typeof row.isCurrent !== "boolean"
   )
@@ -542,7 +541,7 @@ export function createReceivingNominationRepository(
                 fail(403, "MEMBERSHIP_DENIED");
               const accounts =
                 await execute(sql`SELECT a.id,a.site_id AS "siteId",a.environment,a.provider,a.operator_user_id AS "operatorUserId",a.is_current AS "isCurrent",
-      (a.operator_reference IS NOT NULL OR a.webhook_token_hash IS NOT NULL OR a.account_reference IS NOT NULL OR a.recipient_reference IS NOT NULL OR a.credential_version IS NOT NULL OR a.provider_account_state<>'UNVERIFIED'
+      (a.operator_reference IS NOT NULL OR a.account_reference IS NOT NULL OR a.recipient_reference IS NOT NULL OR a.provider_account_state<>'UNVERIFIED'
        OR a.receiving_capability OR a.withdrawal_capability OR a.commercial_enabled OR a.observed_at IS NOT NULL) AS "hasProviderBinding"
       FROM ${receivingAccount} a WHERE a.site_id=${snapshot.siteId} AND a.environment=${mode} ORDER BY a.id LIMIT 2 FOR UPDATE OF a`);
               if (accounts.rows.length > 1)
@@ -552,7 +551,7 @@ export function createReceivingNominationRepository(
                 account &&
                 (account.siteId !== snapshot.siteId ||
                   account.environment !== mode ||
-                  account.provider !== "ASAAS" ||
+                  account.provider !== "PAGARME" ||
                   typeof account.hasProviderBinding !== "boolean")
               )
                 fail();
@@ -674,7 +673,7 @@ export function createReceivingNominationRepository(
                   id: snapshot.accountId,
                   siteId: snapshot.siteId,
                   environment: mode,
-                  provider: "ASAAS",
+                  provider: "PAGARME",
                   operatorUserId: actor.userId,
                   operatorReference: null,
                   accountReference: null,
@@ -684,12 +683,6 @@ export function createReceivingNominationRepository(
                   withdrawalCapability: false,
                   commercialEnabled: false,
                   isCurrent: true,
-                  credentialVersion: null,
-                  credentialKeyId: null,
-                  credentialNonce: null,
-                  credentialCiphertext: null,
-                  credentialTag: null,
-                  webhookTokenHash: null,
                   observedAt: null,
                   createdAt,
                   updatedAt: createdAt,

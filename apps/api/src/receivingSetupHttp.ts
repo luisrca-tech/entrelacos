@@ -1,11 +1,7 @@
 import {
   type ReceivingReadiness,
   receivingIncomingVerificationInputSchema,
-  receivingPixDestinationConfirmationInputSchema,
-  receivingPixDestinationInputSchema,
-  receivingPixDestinationReviewSchema,
-  receivingPixDestinationSavedResponseSchema,
-  receivingPixDestinationSavedSchema,
+  receivingKycLinkSchema,
   receivingReadinessSchema,
   receivingSetupHolderInputSchema,
   receivingSetupInputSchema,
@@ -20,24 +16,17 @@ import {
   type AuthHttpOptions,
   requireAdminSession,
 } from "./authHttp";
-import {
-  type FinancialReauthentication,
-  FinancialReauthenticationError,
-} from "./financialReauthentication";
+import { FinancialReauthenticationError } from "./financialReauthentication";
 import { ReceivingNominationServiceError } from "./receivingNomination";
-import { ReceivingPixDestinationError } from "./receivingPixDestination";
-import { ReceivingPixDestinationSetupError } from "./receivingPixDestinationSetup";
 import type { ReceivingSetupService } from "./receivingSetup";
 import { ReceivingSetupError } from "./receivingSetupRepository";
 import { resolveSiteAccess } from "./siteAccess";
 
 export type ReceivingSetupHttpOptions = AuthHttpOptions & {
   receivingSetup?: ReceivingSetupService;
-  financialReauthentication?: FinancialReauthentication;
   receivingVerification?: {
     verify(
       actor: import("./financialAuthorization").FinancialActor,
-      pixConsentVersion?: string,
     ): Promise<ReceivingReadiness>;
   };
 };
@@ -100,9 +89,7 @@ export function createReceivingSetupHttpRouter(
       return problem(401, "UNAUTHORIZED");
     if (
       error instanceof ReceivingSetupError ||
-      error instanceof ReceivingPixDestinationSetupError ||
       error instanceof FinancialReauthenticationError ||
-      error instanceof ReceivingPixDestinationError ||
       error instanceof ReceivingNominationServiceError
     )
       return problem(error.status, error.code);
@@ -169,123 +156,6 @@ export function createReceivingSetupHttpRouter(
     return context.json(output.data, 200, { "Cache-Control": "no-store" });
   });
   router.post(
-    "/v1/sites/:siteId/receiving/pix-destination/preview",
-    async (context) => {
-      const current = await requireAdminSession(context.req.raw, options);
-      const siteId = context.req.param("siteId");
-      const access = await resolveSiteAccess(options.db, {
-        userId: current.user.id,
-        platformRole: current.user.role,
-        siteId,
-      });
-      if (
-        current.user.role !== "SITE_ADMIN" ||
-        !access ||
-        access.membershipRole !== "SITE_ADMIN" ||
-        !access.capabilities.configureReceiving
-      )
-        return problem(403, "MEMBERSHIP_DENIED");
-      const input = receivingPixDestinationInputSchema.safeParse(
-        await body(context.req.raw),
-      );
-      if (!input.success) return problem(400, "VALIDATION_ERROR");
-      if (!options.receivingSetup)
-        return problem(503, "PIX_DESTINATION_UNAVAILABLE");
-      const result = receivingPixDestinationReviewSchema.parse(
-        await options.receivingSetup.lookupPixDestination(
-          { userId: current.user.id, sessionId: current.session.id, siteId },
-          input.data,
-        ),
-      );
-      if (result.siteId !== siteId)
-        return problem(503, "PIX_DESTINATION_UNAVAILABLE");
-      return context.json(result, 200, { "Cache-Control": "no-store" });
-    },
-  );
-  router.get("/v1/sites/:siteId/receiving/pix-destination", async (context) => {
-    const current = await requireAdminSession(context.req.raw, options);
-    const siteId = context.req.param("siteId");
-    const access = await resolveSiteAccess(options.db, {
-      userId: current.user.id,
-      platformRole: current.user.role,
-      siteId,
-    });
-    if (
-      !access ||
-      access.siteId !== siteId ||
-      access.userId !== current.user.id ||
-      !access.capabilities.readFinance ||
-      (current.user.role !== "OWNER" &&
-        (current.user.role !== "SITE_ADMIN" ||
-          access.membershipRole !== "SITE_ADMIN"))
-    )
-      return problem(403, "MEMBERSHIP_DENIED");
-    if (!options.receivingSetup)
-      return problem(503, "PIX_DESTINATION_UNAVAILABLE");
-    const actor = {
-      userId: current.user.id,
-      siteId,
-      sessionId: current.session.id,
-    };
-    const output = receivingPixDestinationSavedResponseSchema.parse(
-      options.receivingSetup.readPixDestinationSnapshot
-        ? await options.receivingSetup.readPixDestinationSnapshot(actor)
-        : {
-            destination: await options.receivingSetup.readPixDestination(actor),
-          },
-    );
-    if (
-      (output.destination && output.destination.siteId !== siteId) ||
-      output.recentDestinations.some(
-        (destination) => destination.siteId !== siteId,
-      )
-    )
-      return problem(503, "PIX_DESTINATION_UNAVAILABLE");
-    return context.json(output, 200, { "Cache-Control": "no-store" });
-  });
-  router.post(
-    "/v1/sites/:siteId/receiving/pix-destination/confirm",
-    async (context) => {
-      const current = await requireAdminSession(context.req.raw, options);
-      const siteId = context.req.param("siteId");
-      const access = await resolveSiteAccess(options.db, {
-        userId: current.user.id,
-        platformRole: current.user.role,
-        siteId,
-      });
-      if (
-        current.user.role !== "SITE_ADMIN" ||
-        !access ||
-        access.membershipRole !== "SITE_ADMIN" ||
-        !access.capabilities.configureReceiving
-      )
-        return problem(403, "MEMBERSHIP_DENIED");
-      const parsed = receivingPixDestinationConfirmationInputSchema.safeParse(
-        await body(context.req.raw),
-      );
-      if (!parsed.success) return problem(400, "VALIDATION_ERROR");
-      if (!options.receivingSetup || !options.financialReauthentication)
-        return problem(503, "PIX_DESTINATION_UNAVAILABLE");
-      const actor = {
-        userId: current.user.id,
-        siteId,
-        sessionId: current.session.id,
-      };
-      const { reauthenticationToken, ...input } = parsed.data;
-      const proof = options.financialReauthentication.readProof(
-        actor,
-        "CONFIGURE_RECEIVING",
-        reauthenticationToken,
-      );
-      const result = receivingPixDestinationSavedSchema.parse(
-        await options.receivingSetup.confirmPixDestination(actor, input, proof),
-      );
-      if (result.siteId !== siteId)
-        return problem(503, "PIX_DESTINATION_UNAVAILABLE");
-      return context.json(result, 200, { "Cache-Control": "no-store" });
-    },
-  );
-  router.post(
     "/v1/sites/:siteId/receiving/incoming-verification",
     async (context) => {
       const current = await requireAdminSession(context.req.raw, options);
@@ -314,12 +184,7 @@ export function createReceivingSetupHttpRouter(
         sessionId: current.session.id,
       };
       const readiness = receivingReadinessSchema.parse(
-        input.data.pixConsentVersion === undefined
-          ? await options.receivingVerification.verify(actor)
-          : await options.receivingVerification.verify(
-              actor,
-              input.data.pixConsentVersion,
-            ),
+        await options.receivingVerification.verify(actor),
       );
       if (readiness.siteId !== siteId)
         return problem(503, "RECEIVING_VERIFICATION_UNAVAILABLE");
@@ -361,6 +226,43 @@ export function createReceivingSetupHttpRouter(
     return context.json(result, result.state === "STORED" ? 200 : 202, {
       "Cache-Control": "no-store",
     });
+  });
+  // The owner or the recipient operator may open the provider's identity
+  // check; the short-lived link goes to the response only.
+  router.post("/v1/owner/sites/:siteId/receiving/kyc-link", async (context) => {
+    if (!trustedAdminOrigin(context.req.header("origin"), options.adminOrigin))
+      return problem(403, "FORBIDDEN");
+    const siteId = context.req.param("siteId");
+    if (
+      !siteIdSchema.safeParse(siteId).success ||
+      new URL(context.req.url).search
+    )
+      return problem(400, "VALIDATION_ERROR");
+    const current = await requireAdminSession(context.req.raw, options);
+    if (current.user.role !== "OWNER") {
+      const access = await resolveSiteAccess(options.db, {
+        userId: current.user.id,
+        platformRole: current.user.role,
+        siteId,
+      });
+      if (
+        current.user.role !== "SITE_ADMIN" ||
+        !access ||
+        access.siteId !== siteId ||
+        access.userId !== current.user.id ||
+        access.membershipRole !== "SITE_ADMIN"
+      )
+        return problem(403, "MEMBERSHIP_DENIED");
+    }
+    if (!options.receivingSetup)
+      return problem(503, "RECEIVING_SETUP_UNAVAILABLE");
+    const link = receivingKycLinkSchema.parse(
+      await options.receivingSetup.createKycLink(
+        { userId: current.user.id, sessionId: current.session.id, siteId },
+        current.user.role,
+      ),
+    );
+    return context.json(link, 200, { "Cache-Control": "no-store" });
   });
   return router;
 }

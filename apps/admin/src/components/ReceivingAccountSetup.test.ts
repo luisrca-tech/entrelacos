@@ -121,7 +121,6 @@ describe("receiving account setup", () => {
     ...setup,
     accountState: "CREATED",
     consentRecorded: true,
-    pixConsentRecorded: true,
   };
   const readiness = {
     siteId: "site-one",
@@ -133,11 +132,9 @@ describe("receiving account setup", () => {
     mode: "sandbox",
   } as const;
   const approved = {
-    commercialInfo: "APPROVED",
-    bankAccountInfo: "PENDING",
-    documentation: "APPROVED",
-    general: "APPROVED",
-    commercialInfoExpired: false,
+    recipientStatus: "active",
+    accountState: "APPROVED",
+    receivingEnabled: true,
     observedAt: "2026-10-16T12:00:00.000Z",
   } as const;
   it("retains the known account after a temporary incoming verification failure", async () => {
@@ -190,68 +187,39 @@ describe("receiving account setup", () => {
     });
     v.controller.dispose();
   });
-  it("sends and records the specific Pix authorization only after its explicit action", async () => {
-    vi.stubGlobal("__APP_ENV__", "production");
-    const legacy = {
-      ...createdSetup,
-      mode: "live" as const,
-      pixConsentRecorded: false,
-      providerStatus: approved,
-    };
-    const v = fixture(legacy);
-    const original = v.request.getMockImplementation();
-    assert(original);
-    v.request.mockImplementation(async (path, options) => {
-      if (path.endsWith("/incoming-verification")) {
-        legacy.pixConsentRecorded = true;
-        return { readiness: { ...readiness, mode: "live" } };
-      }
-      return original(path, options);
-    });
-    await v.controller.refresh();
-    await v.controller.verifyIncoming(true);
-    expect(v.request).toHaveBeenCalledWith(
-      "/v1/sites/site-one/receiving/incoming-verification",
-      {
-        method: "POST",
-        body: {
-          confirmIncomingAccount: true,
-          pixConsentVersion: "asaas-incoming-pix-v1",
-        },
-      },
-    );
-    expect(v.controller.getState().setup?.pixConsentRecorded).toBe(true);
-    v.controller.dispose();
-  });
-  it("requires specific Pix authorization for legacy accounts before automatic preparation", async () => {
-    vi.stubGlobal("__APP_ENV__", "production");
-    const v = fixture({
-      ...createdSetup,
-      mode: "live",
-      pixConsentRecorded: false,
-      providerStatus: approved,
-    });
-    await v.controller.refresh();
-    expect(
-      v.request.mock.calls.some(([path]) =>
-        path.endsWith("/incoming-verification"),
-      ),
-    ).toBe(false);
-    const html = renderToStaticMarkup(
-      createElement(ReceivingAccountSetupView, {
-        scope: v.scope,
-        state: v.controller.getState(),
-        incomingGuard: v.controller.incomingGuard,
-        onAuthorizePix: vi.fn(),
-      }),
-    );
-    expect(html).toContain(
-      "Autorizo o EntreLaços a criar automaticamente uma chave Pix aleatória",
-    );
-    expect(html).toContain("Autorizar preparação automática do Pix");
-    v.controller.dispose();
-  });
-  it("keeps production registration free of Sandbox copy and includes specific Pix consent", async () => {
+  it.each([
+    "UNVERIFIED",
+    "ONBOARDING",
+    "UNDER_REVIEW",
+    "BLOCKED",
+    "SUSPENDED",
+  ] as const)(
+    "does not prepare incoming payments while the Pagar.me account is %s",
+    async (accountState) => {
+      vi.stubGlobal("__APP_ENV__", "production");
+      const v = fixture({
+        ...createdSetup,
+        mode: "live",
+        providerStatus: { ...approved, accountState, receivingEnabled: false },
+      });
+      await v.controller.refresh();
+      expect(
+        v.request.mock.calls.some(([path]) =>
+          path.endsWith("/incoming-verification"),
+        ),
+      ).toBe(false);
+      const html = renderToStaticMarkup(
+        createElement(ReceivingAccountSetupView, {
+          scope: v.scope,
+          state: v.controller.getState(),
+          incomingGuard: v.controller.incomingGuard,
+        }),
+      );
+      expect(html).not.toContain("Autorizar preparação automática do Pix");
+      v.controller.dispose();
+    },
+  );
+  it("keeps production registration free of Sandbox copy and without a separate Pix consent", async () => {
     vi.stubGlobal("__APP_ENV__", "production");
     const v = fixture({ ...setup, mode: "live" });
     await v.controller.refresh();
@@ -265,9 +233,9 @@ describe("receiving account setup", () => {
     );
     expect(html).not.toContain("Sandbox");
     expect(html).not.toContain("operações são de teste");
-    expect(html).toContain(
-      "Autorizo o EntreLaços a criar automaticamente uma chave Pix aleatória",
-    );
+    expect(html).not.toContain("Em teste, as operações");
+    expect(html).toContain("Pagar.me");
+    expect(html).not.toContain("chave Pix aleatória");
     v.controller.dispose();
   });
   it("automatically prepares an approved holder account after loading, without requiring a second setup action", async () => {
@@ -320,7 +288,7 @@ describe("receiving account setup", () => {
         setup: { accountState: "CREATED" },
       });
       expect(v.controller.getState().message).toContain(
-        state === "PENDING" ? "liberação do Asaas" : "em verificação",
+        state === "PENDING" ? "liberação da Pagar.me" : "em verificação",
       );
       expect(
         v.request.mock.calls.filter(([path]) =>
@@ -391,7 +359,7 @@ describe("receiving account setup", () => {
         (position, index) => index === 0 || position > positions[index - 1],
       ),
     ).toBe(true);
-    expect(guidance).toContain("selfie, quando solicitado");
+    expect(guidance).toContain("documento e uma selfie");
     expect(html).not.toContain('autocomplete="one-time-code"');
     expect(html).not.toContain("Sandbox");
     expect(values.request).not.toHaveBeenCalled();
@@ -645,15 +613,16 @@ describe("receiving account setup", () => {
     );
     const afterForm = html.slice(html.indexOf("</form>"));
     expect(afterForm).toContain("O que vem depois");
-    expect(afterForm).toContain("E-mail do Asaas");
-    expect(afterForm).toContain("confirmar o celular");
-    expect(afterForm).toContain("documento e a selfie");
+    expect(afterForm).toContain("Verificação de identidade");
+    expect(afterForm).toContain("documento e selfie");
+    expect(afterForm).toContain("Análise da Pagar.me");
     expect(afterForm).toContain("Seus dados ficam seguros");
-    expect(html).toContain("Criar minha conta no Asaas");
+    expect(html).toContain("Enviar cadastro à Pagar.me");
     expect(html).toContain("Ler o termo completo");
     expect(html).toContain(
-      receivingSetupDisclosure.text.split(" Em Sandbox,")[0],
+      receivingSetupDisclosure.text.split(" Em teste,")[0],
     );
+    expect(html).not.toContain("Em teste, as operações");
     expect(
       values.request.mock.calls.some(
         ([, options]) => options?.method === "POST",
@@ -685,7 +654,7 @@ describe("receiving account setup", () => {
       }),
     );
     expect(html).toContain("Marina");
-    expect(html).not.toContain('name="cpfCnpj"');
+    expect(html).not.toContain('name="cpf"');
     values.controller.dispose();
   });
   it("discards a context that arrives after actor identity changed", async () => {
@@ -740,40 +709,42 @@ describe("receiving account setup", () => {
       expect(render(other)).not.toContain("Recebimentos liberados");
     values.controller.dispose();
   });
-  it("shows native rejected and expired status as actionable without claiming readiness", () => {
-    const values = fixture();
-    const html = renderToStaticMarkup(
-      createElement(ReceivingAccountSetupView, {
-        scope: values.scope,
-        state: {
-          status: "ready",
-          setup: {
-            ...setup,
-            accountState: "CREATED",
-            providerStatus: {
-              commercialInfo: "REJECTED",
-              bankAccountInfo: "PENDING",
-              documentation: "PENDING",
-              general: "PENDING",
-              commercialInfoExpired: true,
-              observedAt: "2026-10-16T12:00:00.000Z",
+  it.each(["BLOCKED", "SUSPENDED"] as const)(
+    "shows a %s Pagar.me recipient as actionable without claiming readiness",
+    (accountState) => {
+      const values = fixture();
+      const html = renderToStaticMarkup(
+        createElement(ReceivingAccountSetupView, {
+          scope: values.scope,
+          state: {
+            status: "ready",
+            setup: {
+              ...setup,
+              accountState: "CREATED",
+              providerStatus: {
+                recipientStatus: "blocked",
+                accountState,
+                receivingEnabled: false,
+                observedAt: "2026-10-16T12:00:00.000Z",
+              },
             },
+            message: null,
           },
-          message: null,
-        },
-      }),
-    );
-    expect(html).toContain("rejeitados");
-    expect(html).toContain("expirados");
-    expect(html).not.toContain("Pronto para receber");
-    values.controller.dispose();
-  });
+        }),
+      );
+      expect(html).toContain("A Pagar.me bloqueou ou suspendeu o recebedor.");
+      expect(html).toContain("Bloqueada</span>");
+      expect(html).not.toContain("Pronto para receber");
+      values.controller.dispose();
+    },
+  );
   it.each([
-    ["PENDING", "Aguardando envio"],
-    ["AWAITING_APPROVAL", "Em análise"],
+    ["UNVERIFIED", "Verificação pendente"],
+    ["ONBOARDING", "Verificação pendente"],
+    ["UNDER_REVIEW", "Em análise"],
   ] as const)(
     "shows %s without implying an unsubmitted account is under review",
-    (general, label) => {
+    (accountState, label) => {
       const values = fixture();
       const html = renderToStaticMarkup(
         createElement(ReceivingAccountSetupView, {
@@ -783,12 +754,9 @@ describe("receiving account setup", () => {
             setup: {
               ...createdSetup,
               providerStatus: {
-                commercialInfo: "APPROVED",
-                bankAccountInfo: "PENDING",
-                documentation:
-                  general === "PENDING" ? "PENDING" : "AWAITING_APPROVAL",
-                general,
-                commercialInfoExpired: false,
+                recipientStatus: "registration",
+                accountState,
+                receivingEnabled: false,
                 observedAt: "2026-10-16T12:00:00.000Z",
               },
             },
@@ -797,19 +765,18 @@ describe("receiving account setup", () => {
         }),
       );
       expect(html).toContain(`${label}</span>`);
-      if (general === "PENDING") expect(html).not.toContain("Em análise");
+      if (accountState !== "UNDER_REVIEW")
+        expect(html).not.toContain("Em análise");
       values.controller.dispose();
     },
   );
-  it("keeps access activation unconfirmed even when all registration checks are approved", async () => {
+  it("keeps access activation unconfirmed even when the Pagar.me recipient is approved", async () => {
     const values = fixture({
       ...createdSetup,
       providerStatus: {
-        commercialInfo: "APPROVED",
-        bankAccountInfo: "APPROVED",
-        documentation: "APPROVED",
-        general: "APPROVED",
-        commercialInfoExpired: false,
+        recipientStatus: "active",
+        accountState: "APPROVED",
+        receivingEnabled: true,
         observedAt: "2026-10-16T12:00:00.000Z",
       },
     });
@@ -866,7 +833,9 @@ describe("receiving account setup", () => {
           "entre no Asaas Sandbox com o e-mail cadastrado para o recebedor",
         ),
       ).toBe(visible);
-      expect(html).toContain("Não foi possível consultar as verificações");
+      expect(html).toContain(
+        "Não foi possível consultar a verificação na Pagar.me",
+      );
       expect(html).not.toContain("E-mail não enviado");
       expect(values.request).not.toHaveBeenCalled();
       values.controller.dispose();
@@ -906,7 +875,7 @@ describe("receiving account setup", () => {
       }),
     );
     expect(html).toContain("incerto");
-    expect(html).not.toContain('name="cpfCnpj"');
+    expect(html).not.toContain('name="cpf"');
     values.controller.dispose();
   });
   it("shows a named holder selection to an owner without a membership", () => {
@@ -937,21 +906,34 @@ describe("receiving account setup", () => {
     expect(html).toContain("Marina");
     expect(html).toContain("marina@example.test");
     expect(html).not.toContain("ID da conta");
-    expect(html).not.toContain('name="cpfCnpj"');
+    expect(html).not.toContain('name="cpf"');
   });
   it("sends the validated initial setup after rechecking holder and policy without password confirmation", async () => {
     const values = fixture();
     const account = {
       name: "Fictional Person",
       email: "person@example.test",
-      cpfCnpj: "12345678909",
+      cpf: "12345678909",
       mobilePhone: "11999999999",
-      incomeValue: 1000,
-      address: "Fictional Road",
-      addressNumber: "1",
-      province: "District",
-      postalCode: "12345678",
       birthDate: "1990-01-01",
+      monthlyIncomeCents: 100000,
+      professionalOccupation: "Engineer",
+      address: {
+        street: "Fictional Road",
+        streetNumber: "1",
+        neighborhood: "District",
+        city: "Fictional City",
+        state: "SP",
+        zipCode: "12345678",
+        referencePoint: "Near the park",
+      },
+      bankAccount: {
+        bank: "341",
+        branchNumber: "1234",
+        accountNumber: "12345",
+        accountCheckDigit: "6",
+        type: "checking",
+      },
     };
     const original = values.request.getMockImplementation();
     values.request.mockImplementation(async (path, options) =>
@@ -970,9 +952,8 @@ describe("receiving account setup", () => {
           account,
           policyVersion: "policy-v1",
           consentVersion: receivingSetupDisclosure.version,
-          pixConsentVersion: "asaas-incoming-pix-v1",
           confirmHolder: true,
-          consentToAsaas: true,
+          consentToProvider: true,
         },
       },
     );
@@ -1030,7 +1011,7 @@ describe("receiving account setup", () => {
       }),
     );
     expect(html).not.toMatch(
-      /name="cpfCnpj"|type="password"|Enviar cadastro ao Asaas/,
+      /name="cpf"|type="password"|Enviar cadastro à Pagar.me/,
     );
     values.controller.dispose();
   });
@@ -1049,8 +1030,30 @@ describe("receiving account setup", () => {
         section: "details",
       }),
     );
-    expect(html).toContain('name="cpfCnpj"');
+    for (const field of [
+      "cpf",
+      "monthlyIncome",
+      "professionalOccupation",
+      "street",
+      "streetNumber",
+      "complement",
+      "neighborhood",
+      "city",
+      "state",
+      "zipCode",
+      "referencePoint",
+      "bank",
+      "branchNumber",
+      "branchCheckDigit",
+      "accountNumber",
+      "accountCheckDigit",
+      "accountType",
+    ])
+      expect(html).toContain(`name="${field}"`);
+    expect(html).toMatch(/<select[^>]*name="accountType"/);
+    expect(html).toMatch(/name="complement"(?![^>]*required)[^>]*>/);
     expect(html).toContain('name="consent"');
+    expect(html.match(/type="checkbox"/g)).toHaveLength(1);
     // The Asaas password is only mentioned as a later step, never requested.
     expect(html).not.toMatch(
       /type="password"|reauthenticationToken|Sua senha do EntreLaços/,

@@ -147,6 +147,42 @@ describe("API composition", () => {
     });
   });
 
+  it("mounts the owner identity verification link route", async () => {
+    vi.spyOn(authHttp, "requireAdminSession").mockResolvedValue({
+      user: { id: "owner-one", role: "OWNER" },
+      session: { id: "owner-session" },
+    } as never);
+    const link = {
+      url: "https://exemplo.com/kyc?token=eyWfwqrnqwrnfoqwntoqwntqw",
+      base64QrCode: "PD94bWwgdmVyc2lvbj0iMS4wIj8+PHN2Zy8+",
+      expiresAt: "2026-11-18T12:20:00.000Z",
+    };
+    const createKycLink = vi.fn(async () => link);
+    const api = createApp(
+      {
+        auth: {} as never,
+        db: {} as never,
+        adminOrigin: "http://localhost:3001",
+        receivingSetup: { createKycLink } as never,
+      },
+      { sink: () => {} },
+    );
+    const response = await api.request(
+      "/v1/owner/sites/site-one/receiving/kyc-link",
+      { method: "POST", headers: { origin: "http://localhost:3001" } },
+    );
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(await response.json()).toEqual(link);
+    expect(
+      (
+        await api.request("/v1/sites/site-one/receiving/pix-destination", {
+          headers: { origin: "http://localhost:3001" },
+        })
+      ).status,
+    ).toBe(404);
+  });
+
   it("mounts receiving holder designation without leaking its private middleware to the webhook", async () => {
     vi.spyOn(authHttp, "requireAdminSession").mockResolvedValue({
       user: { id: "owner-one", role: "OWNER" },

@@ -1,0 +1,15 @@
+{
+  "currency": "BRL",
+  "available_amount": 25000,
+  "waiting_funds_amount": 12000,
+  "transferred_amount": 0,
+  "recipient": {
+    "id": "rp_fixtureRecipient01",
+    "name": "MARIA DA SILVA",
+    "email": "maria@example.test",
+    "document": "26224451990",
+    "type": "individual",
+    "status": "active",
+    "created_at": "2026-11-18T12:00:00Z"
+  }
+}

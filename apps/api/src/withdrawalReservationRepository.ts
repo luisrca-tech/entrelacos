@@ -50,7 +50,6 @@ import {
   type ReceivingTransaction,
 } from "./receivingRepository";
 import { resolveSiteAccess, SiteAccessDeniedError } from "./siteAccess";
-import { logWithdrawalFailure } from "./withdrawalDiagnostics";
 import {
   captureWithdrawalPresentation,
   hashWithdrawalConsentSnapshot,
@@ -340,7 +339,6 @@ function safeCount(value: unknown): number {
   return Number(integer);
 }
 function safeError(error: unknown): never {
-  logWithdrawalFailure(error);
   if (
     error instanceof WithdrawalReservationServiceError &&
     [400, 403, 409, 503].includes(error.status) &&
@@ -449,7 +447,7 @@ function validateNative(
     row.accountId !== snapshot.accountId ||
     row.environment !== snapshot.environment ||
     row.operatorUserId !== snapshot.operatorUserId ||
-    row.accountProvider !== "ASAAS" ||
+    row.accountProvider !== "PAGARME" ||
     row.accountOperatorUserId !== snapshot.operatorUserId ||
     row.destinationVersion !== snapshot.intent.destinationVersion ||
     row.requestHash !== snapshot.requestHash ||
@@ -798,7 +796,7 @@ async function requestPair(
       account.id !== accountId ||
       account.siteId !== authority.actor.siteId ||
       account.environment !== mode ||
-      account.provider !== "ASAAS" ||
+      account.provider !== "PAGARME" ||
       account.operatorUserId !== authority.actor.userId
     )
       return fail("RECIPIENT_REQUIRED", 403);
@@ -842,7 +840,7 @@ async function currentPresentation(
     a.id !== scope.accountId ||
     a.siteId !== scope.siteId ||
     a.environment !== scope.environment ||
-    a.provider !== "ASAAS" ||
+    a.provider !== "PAGARME" ||
     a.operatorUserId !== authority.actor.userId ||
     a.isCurrent !== true ||
     a.accountReference !== scope.accountReference ||
@@ -891,7 +889,7 @@ async function currentPresentation(
     !loaded ||
     loaded.isDemo !== authority.isDemo ||
     loaded.evidence?.provenance !== "provider" ||
-    loaded.providerBinding?.provider !== "ASAAS" ||
+    loaded.providerBinding?.provider !== "PAGARME" ||
     loaded.providerBinding.accountReference !== scope.accountReference ||
     loaded.providerBinding.recipientReference !== consent.recipientReference ||
     loaded.providerBinding.bankReference !== scope.bankReference ||
@@ -1080,7 +1078,7 @@ async function readCurrentPresentation(
   if (
     a.siteId !== authority.actor.siteId ||
     a.environment !== options.mode ||
-    a.provider !== "ASAAS" ||
+    a.provider !== "PAGARME" ||
     a.isCurrent !== true
   )
     return fail();
@@ -1139,7 +1137,7 @@ async function readCurrentPresentation(
     !loaded ||
     loaded.isDemo !== authority.isDemo ||
     loaded.evidence?.provenance !== "provider" ||
-    loaded.providerBinding?.provider !== "ASAAS" ||
+    loaded.providerBinding?.provider !== "PAGARME" ||
     loaded.providerBinding.accountReference !== scope.accountReference ||
     loaded.providerBinding.recipientReference !== a.recipientReference ||
     loaded.providerBinding.bankReference !== scope.bankReference ||
@@ -1908,7 +1906,7 @@ export function createWithdrawalReservationRepository(
               return fail("REQUEST_CONFLICT", 409);
             const snapshot = preliminary?.snapshot ?? candidate;
             const accounts = await execute(
-              sql`SELECT a.id,a.site_id AS "siteId",a.environment,a.provider,a.operator_user_id AS "operatorUserId",a.operator_reference AS "operatorReference",a.account_reference AS "accountReference",a.recipient_reference AS "recipientReference",a.is_current AS "isCurrent",a.observed_at AS "observedAt" FROM ${receivingAccount} a WHERE a.id=${snapshot.accountId} AND a.site_id=${actor.siteId} AND a.environment=${snapshot.environment} AND a.provider='ASAAS' FOR UPDATE OF a`,
+              sql`SELECT a.id,a.site_id AS "siteId",a.environment,a.provider,a.operator_user_id AS "operatorUserId",a.operator_reference AS "operatorReference",a.account_reference AS "accountReference",a.recipient_reference AS "recipientReference",a.is_current AS "isCurrent",a.observed_at AS "observedAt" FROM ${receivingAccount} a WHERE a.id=${snapshot.accountId} AND a.site_id=${actor.siteId} AND a.environment=${snapshot.environment} AND a.provider='PAGARME' FOR UPDATE OF a`,
             );
             if (accounts.rows.length !== 1) return fail();
             const account = record(accounts.rows[0]);
@@ -1916,7 +1914,7 @@ export function createWithdrawalReservationRepository(
               account.id !== snapshot.accountId ||
               account.siteId !== actor.siteId ||
               account.environment !== snapshot.environment ||
-              account.provider !== "ASAAS" ||
+              account.provider !== "PAGARME" ||
               account.operatorUserId !== snapshot.operatorUserId ||
               account.operatorUserId !== actor.userId
             )
@@ -2128,7 +2126,7 @@ export function createWithdrawalReservationRepository(
                 !loaded ||
                 loaded.isDemo !== isDemo ||
                 loaded.evidence?.provenance !== "provider" ||
-                loaded.providerBinding?.provider !== "ASAAS" ||
+                loaded.providerBinding?.provider !== "PAGARME" ||
                 loaded.providerBinding.accountReference !==
                   snapshot.accountReference ||
                 loaded.providerBinding.recipientReference !==

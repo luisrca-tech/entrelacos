@@ -18,7 +18,7 @@ function fixture(
     id: "account.old",
     site_id: site.id,
     environment: "sandbox",
-    provider: "ASAAS",
+    provider: "PAGARME",
     is_current: false,
     provider_account_state: "BLOCKED",
     receiving_capability: false,
@@ -98,7 +98,7 @@ function fixture(
                   a.id === w.account_id &&
                   a.site_id === w.site_id &&
                   a.environment === w.environment &&
-                  a.provider === "ASAAS",
+                  a.provider === "PAGARME",
               )
             : [];
           for (const a of accounts.length ? accounts : [null])
@@ -260,7 +260,7 @@ describe("stored withdrawal history", () => {
     expect(values.queries[0].sql).not.toMatch(
       /FOR UPDATE|BEGIN|credential|account_reference|provider_reference|authorization_reference|request_hash|receipt_reference|is_current|receiving_capability|lifecycle/,
     );
-    expect(values.queries[0].sql).toContain("a.provider='ASAAS'");
+    expect(values.queries[0].sql).toContain("a.provider='PAGARME'");
   });
   it("returns an empty list only for an existing site's authoritative empty history", async () => {
     const values = fixture();

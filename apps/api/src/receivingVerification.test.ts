@@ -22,7 +22,7 @@ async function flush() {
 }
 function serviceFixture() {
   const scope = {
-    provider: "ASAAS" as const,
+    provider: "PAGARME" as const,
     siteId: "site-one",
     accountId: "account-one",
     operatorUserId: "operator-one",

@@ -1,0 +1,21 @@
+{
+  "id": "with_fixtureWithdraw01",
+  "amount": 9633,
+  "status": "transferred",
+  "created_at": "2026-11-20T10:00:00Z",
+  "updated_at": "2026-11-20T15:00:00Z",
+  "bank_account": {
+    "id": "ba_fixtureBankAcct01",
+    "holder_name": "MARIA DA SILVA",
+    "holder_type": "individual",
+    "holder_document": "26224451990",
+    "bank": "341",
+    "branch_number": "1234",
+    "branch_check_digit": "6",
+    "account_number": "12345",
+    "account_check_digit": "6",
+    "type": "checking",
+    "status": "active"
+  },
+  "metadata": {}
+}

@@ -30,7 +30,7 @@ export const receivingSteps: readonly {
     id: "details",
     title: "Seus dados",
     short: "Seus dados",
-    summary: "CPF, celular e endereço para abrir a conta no Asaas.",
+    summary: "CPF, endereço e conta bancária para o cadastro na Pagar.me.",
   },
   {
     id: "activation",
@@ -55,7 +55,7 @@ export const receivingSteps: readonly {
 export const receivingStepStatusLabel: Record<ReceivingStepStatus, string> = {
   done: "Concluída",
   current: "Agora",
-  review: "Em análise pelo Asaas",
+  review: "Em análise pela Pagar.me",
   attention: "Precisa de ajuste",
   available: "Pode fazer já",
   locked: "Depois",
@@ -81,19 +81,10 @@ type BaseStatus = "done" | "todo" | "review" | "attention" | "locked";
 
 function activationStatus(input: ReceivingTrackInput): BaseStatus {
   if (input.accountState !== "CREATED") return "locked";
-  if (input.ready || input.provider?.general === "APPROVED") return "done";
-  const provider = input.provider;
-  if (
-    provider &&
-    (provider.commercialInfoExpired === true ||
-      [
-        provider.commercialInfo,
-        provider.documentation,
-        provider.general,
-      ].includes("REJECTED"))
-  )
-    return "attention";
-  if (provider?.general === "AWAITING_APPROVAL") return "review";
+  const state = input.provider?.accountState;
+  if (input.ready || state === "APPROVED") return "done";
+  if (state === "BLOCKED" || state === "SUSPENDED") return "attention";
+  if (state === "UNDER_REVIEW") return "review";
   return "todo";
 }
 

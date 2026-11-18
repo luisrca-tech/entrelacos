@@ -6,11 +6,9 @@ import {
 } from "./receivingTrack";
 
 const provider: NonNullable<ReceivingTrackInput["provider"]> = {
-  commercialInfo: "APPROVED",
-  bankAccountInfo: "PENDING",
-  documentation: "PENDING",
-  general: "PENDING",
-  commercialInfoExpired: false,
+  recipientStatus: "registration",
+  accountState: "ONBOARDING",
+  receivingEnabled: false,
 };
 const base: ReceivingTrackInput = {
   holder: true,
@@ -64,7 +62,7 @@ describe("receiving guided track", () => {
     expect(track.next?.id).toBe("details");
   });
 
-  it("applies the fixed gift fee rule as soon as the Asaas account exists", () => {
+  it("applies the fixed gift fee rule as soon as the Pagar.me recipient exists", () => {
     const track = deriveReceivingTrack(base);
     expect(track.steps.map(({ status }) => status)).toEqual([
       "done",
@@ -77,14 +75,10 @@ describe("receiving guided track", () => {
     expect(track.completed).toBe(3);
   });
 
-  it("moves the next step forward while Asaas reviews the account", () => {
+  it("moves the next step forward while Pagar.me reviews the account", () => {
     const track = deriveReceivingTrack({
       ...base,
-      provider: {
-        ...provider,
-        documentation: "AWAITING_APPROVAL",
-        general: "AWAITING_APPROVAL",
-      },
+      provider: { ...provider, accountState: "UNDER_REVIEW" },
     });
     expect(track.steps[2].status).toBe("review");
     expect(track.next?.id).toBe("account");
@@ -92,11 +86,33 @@ describe("receiving guided track", () => {
     expect(track.steps[4].status).toBe("done");
   });
 
-  it("asks for a fix when Asaas rejects data or it expires", () => {
-    for (const adjusted of [
-      { ...provider, documentation: "REJECTED" as const },
-      { ...provider, commercialInfoExpired: true },
-    ]) {
+  it("keeps activation current while identity verification is pending", () => {
+    for (const accountState of ["UNVERIFIED", "ONBOARDING"] as const) {
+      const track = deriveReceivingTrack({
+        ...base,
+        provider: { ...provider, accountState },
+      });
+      expect(track.steps[2].status).toBe("current");
+      expect(track.next?.id).toBe("activation");
+    }
+  });
+
+  it("marks activation done once Pagar.me approves the recipient", () => {
+    const track = deriveReceivingTrack({
+      ...base,
+      provider: {
+        recipientStatus: "active",
+        accountState: "APPROVED",
+        receivingEnabled: true,
+      },
+    });
+    expect(track.steps[2].status).toBe("done");
+    expect(track.next?.id).toBe("account");
+  });
+
+  it("asks for attention when Pagar.me blocks or suspends the recipient", () => {
+    for (const accountState of ["BLOCKED", "SUSPENDED"] as const) {
+      const adjusted = { ...provider, accountState };
       const track = deriveReceivingTrack({ ...base, provider: adjusted });
       expect(track.steps[2].status).toBe("attention");
       expect(track.next?.id).toBe("activation");
@@ -106,7 +122,7 @@ describe("receiving guided track", () => {
   it("counts saved destination and the fixed fees as done", () => {
     const track = deriveReceivingTrack({
       ...base,
-      provider: { ...provider, general: "AWAITING_APPROVAL" },
+      provider: { ...provider, accountState: "UNDER_REVIEW" },
       destinationSaved: true,
     });
     expect(track.completed).toBe(4);
@@ -117,7 +133,11 @@ describe("receiving guided track", () => {
   it("finishes when receiving is ready", () => {
     const track = deriveReceivingTrack({
       ...base,
-      provider: { ...provider, general: "APPROVED" },
+      provider: {
+        ...provider,
+        accountState: "APPROVED",
+        receivingEnabled: true,
+      },
       ready: true,
       destinationSaved: true,
     });
@@ -129,7 +149,7 @@ describe("receiving guided track", () => {
     expect(receivingStepStatusLabel).toEqual({
       done: "Concluída",
       current: "Agora",
-      review: "Em análise pelo Asaas",
+      review: "Em análise pela Pagar.me",
       attention: "Precisa de ajuste",
       available: "Pode fazer já",
       locked: "Depois",

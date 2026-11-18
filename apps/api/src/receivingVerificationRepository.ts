@@ -339,7 +339,7 @@ export function createReceivingVerificationRepository(
       account.id !== scope.accountId ||
       account.site_id !== scope.siteId ||
       account.environment !== mode ||
-      account.provider !== "ASAAS" ||
+      account.provider !== "PAGARME" ||
       account.operator_user_id !== scope.operatorUserId ||
       account.operator_reference !== scope.operatorReference ||
       account.account_reference !== scope.accountReference ||
@@ -363,13 +363,6 @@ export function createReceivingVerificationRepository(
     readReceivingProvisioningResult({
       accountReference: account.account_reference,
       recipientReference: account.recipient_reference,
-      credential: {
-        version: account.credential_version,
-        keyId: account.credential_key_id,
-        nonce: account.credential_nonce,
-        ciphertext: account.credential_ciphertext,
-        tag: account.credential_tag,
-      },
     });
     const original = readReceivingProvisioningRecord(
         operation.request_snapshot,
@@ -749,7 +742,7 @@ export function createReceivingVerificationRepository(
       scope = fence.scope;
     const result = changes.observation
       ? await tx.execute(
-          sql`UPDATE ${receivingAccount} a SET provider_account_state=${changes.observation.account.state},receiving_capability=${changes.observation.account.receiving},withdrawal_capability=${changes.observation.account.withdrawal},commercial_enabled=${changes.observation.account.commercial},observed_at=${changes.observation.account.observedAt}::timestamptz,updated_at=${verificationTimestamp(at)}::timestamptz WHERE id=${scope.accountId} AND site_id=${scope.siteId} AND environment=${mode} AND provider='ASAAS' AND operator_user_id=${scope.operatorUserId} AND account_reference=${scope.accountReference} AND recipient_reference=${scope.recipientReference} AND to_jsonb(a)=${JSON.stringify(row)}::jsonb RETURNING id`,
+          sql`UPDATE ${receivingAccount} a SET provider_account_state=${changes.observation.account.state},receiving_capability=${changes.observation.account.receiving},withdrawal_capability=${changes.observation.account.withdrawal},commercial_enabled=${changes.observation.account.commercial},observed_at=${changes.observation.account.observedAt}::timestamptz,updated_at=${verificationTimestamp(at)}::timestamptz WHERE id=${scope.accountId} AND site_id=${scope.siteId} AND environment=${mode} AND provider='PAGARME' AND operator_user_id=${scope.operatorUserId} AND account_reference=${scope.accountReference} AND recipient_reference=${scope.recipientReference} AND to_jsonb(a)=${JSON.stringify(row)}::jsonb RETURNING id`,
         )
       : await tx.execute(
           sql`UPDATE ${receivingAccount} a SET operator_reference=${changes.operatorReference},updated_at=${verificationTimestamp(at)}::timestamptz WHERE id=${scope.accountId} AND site_id=${scope.siteId} AND environment=${mode} AND operator_reference IS NULL AND to_jsonb(a)=${JSON.stringify(row)}::jsonb RETURNING id`,

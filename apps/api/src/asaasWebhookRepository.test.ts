@@ -1,10 +1,7 @@
 import { createHash } from "node:crypto";
 import { drizzle, type NodePgClient } from "drizzle-orm/node-postgres";
 import { describe, expect, it, vi } from "vitest";
-import {
-  type AsaasInboxEvent,
-  createAsaasWebhookReceiver,
-} from "./asaasWebhook";
+import type { AsaasInboxEvent } from "./asaasWebhook";
 import { createAsaasWebhookRepository } from "./asaasWebhookRepository";
 
 const webhookToken = "local-test-webhook-token-for-durable-inbox";
@@ -130,90 +127,11 @@ function fixture() {
 }
 
 describe("Asaas stored webhook binding and inbox repository", () => {
-  it("composes receiver and SQL inbox without accepting before transaction commit", async () => {
+  it("resolves no per-account binding once sub-account webhook tokens were dropped", async () => {
     const values = fixture();
-    const receiver = createAsaasWebhookReceiver({
-      mode: "sandbox",
-      applicationEnvironment: "test",
-      resolveBinding: values.repository.resolveBinding,
-      repository: values.repository,
-      now: () => new Date(event().receivedAt),
-      generateId: () => "inbox-one",
-    });
-    const gate = values.holdCommit();
-    let accepted = false;
-    const pending = receiver
-      .receive(
-        webhookToken,
-        JSON.stringify({
-          id: "evt_one&123",
-          event: "PAYMENT_RECEIVED",
-          account: { id: account.accountReference },
-          payment: {
-            id: "pay_one",
-            externalReference: "attempt-one",
-            creditCardToken: "private-card-token",
-            value: 100,
-          },
-        }),
-      )
-      .then((result) => {
-        accepted = true;
-        return result;
-      });
-    await gate.started;
-    expect(accepted).toBe(false);
-    const insert = values.queries.find((query) =>
-      query.sql.startsWith('insert into "financial_event_inbox"'),
-    );
-    expect(JSON.stringify(insert?.params)).not.toContain(webhookToken);
-    expect(JSON.stringify(insert?.params)).not.toContain("private-card-token");
-    gate.release();
-    expect(await pending).toEqual({ accepted: true });
+    expect(await values.repository.resolveBinding(tokenHash)).toBeNull();
+    expect(values.queries).toHaveLength(0);
   });
-
-  it("does not acknowledge a composed receiver when commit fails", async () => {
-    const values = fixture();
-    values.failure("commit");
-    const receiver = createAsaasWebhookReceiver({
-      mode: "sandbox",
-      applicationEnvironment: "test",
-      resolveBinding: values.repository.resolveBinding,
-      repository: values.repository,
-      now: () => new Date(event().receivedAt),
-      generateId: () => "inbox-one",
-    });
-    await expect(
-      receiver.receive(
-        webhookToken,
-        JSON.stringify({
-          id: "evt_one&123",
-          event: "PAYMENT_RECEIVED",
-          account: { id: account.accountReference },
-          payment: { id: "pay_one", externalReference: "attempt-one" },
-        }),
-      ),
-    ).rejects.toMatchObject({ code: "WEBHOOK_UNAVAILABLE", status: 503 });
-  });
-  it("resolves a unique stored hash/account/environment without selecting credentials or current readiness", async () => {
-    const values = fixture();
-    expect(await values.repository.resolveBinding(tokenHash)).toEqual({
-      siteId: "site-one",
-      accountId: "account-one",
-      provider: "ASAAS",
-      providerAccountReference: "remote-account-one",
-      environment: "sandbox",
-      webhookTokenHash: tokenHash,
-      isDemo: false,
-    });
-    const query = values.queries[0];
-    expect(query.params).toContain(tokenHash);
-    expect(query.params).toContain("sandbox");
-    expect(query.sql).not.toMatch(
-      /credential|is_current|receiving_capability|bank_state|lifecycle/,
-    );
-  });
-
   it("inserts scoped authenticated safe correlation before commit and deduplicates unchanged delivery", async () => {
     const values = fixture();
     expect(await values.repository.append(event())).toBe("INSERTED");

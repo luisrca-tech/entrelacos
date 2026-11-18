@@ -63,7 +63,7 @@ const bridgeRequestId = `nr1_${createHash("sha256")
       "receiving.self-nomination.request.v1",
       "wedding-a",
       "admin-a",
-      "ASAAS",
+      "PAGARME",
       "sandbox",
     ]),
   )
@@ -571,14 +571,8 @@ async function receivingHttpBridge(
                     ? null
                     : [
                         "operatorReference",
-                        "webhookTokenHash",
                         "accountReference",
                         "recipientReference",
-                        "credentialVersion",
-                        "credentialKeyId",
-                        "credentialNonce",
-                        "credentialCiphertext",
-                        "credentialTag",
                         "observedAt",
                       ].some((key) => source.a?.[key] !== null) ||
                       source.a.providerAccountState !== "UNVERIFIED" ||

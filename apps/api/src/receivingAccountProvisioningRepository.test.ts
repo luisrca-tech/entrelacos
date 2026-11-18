@@ -2,7 +2,6 @@ import { createHash } from "node:crypto";
 import { drizzle, type NodePgClient } from "drizzle-orm/node-postgres";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { readDatabaseTimestamp } from "./databaseTimestamp";
-import { encryptProviderCredential } from "./providerCredentials";
 import { deriveReceivingProvisioningContext } from "./receivingAccountProvisioning";
 import { createReceivingAccountProvisioningRepository } from "./receivingAccountProvisioningRepository";
 import {
@@ -72,20 +71,33 @@ function fixture(mode: "sandbox" | "live" = "sandbox") {
     },
   };
   const input = {
-    name: "Fictional Operator",
-    email: "fictional@example.test",
-    cpfCnpj: "12345678909",
-    mobilePhone: "11999999999",
-    incomeValue: 1000,
-    address: "Fictional Street",
-    addressNumber: "1",
-    province: "Fictional District",
-    postalCode: "12345678",
-    birthDate: "1990-01-01",
+    name: "MARIA DA SILVA",
+    email: "maria@example.test",
+    cpf: "26224451990",
+    mobilePhone: "21994647568",
+    birthDate: "1990-04-12",
+    monthlyIncomeCents: 500000,
+    professionalOccupation: "Professora",
+    address: {
+      street: "Av. General Justo",
+      streetNumber: "375",
+      neighborhood: "Centro",
+      city: "Rio de Janeiro",
+      state: "RJ",
+      zipCode: "20021130",
+      referencePoint: "Ao lado da banca",
+    },
+    bankAccount: {
+      bank: "341",
+      branchNumber: "1234",
+      accountNumber: "12345",
+      accountCheckDigit: "6",
+      type: "checking" as const,
+    },
   };
   const provision = deriveReceivingProvisioningContext(
     nomination,
-    "fictional-parent",
+    "rp_platformRecipient",
     "fp-v1",
     input,
     new Map([["fp-v1", new Uint8Array(32).fill(8)]]),
@@ -102,7 +114,7 @@ function fixture(mode: "sandbox" | "live" = "sandbox") {
         id: "account-one",
         site_id: "site-one",
         environment: mode,
-        provider: "ASAAS",
+        provider: "PAGARME",
         operator_user_id: "operator-one",
         is_current: true,
         provider_account_state: "UNVERIFIED",
@@ -110,15 +122,9 @@ function fixture(mode: "sandbox" | "live" = "sandbox") {
         withdrawal_capability: false,
         commercial_enabled: false,
         operator_reference: null,
-        webhook_token_hash: null,
         observed_at: null,
         account_reference: null,
         recipient_reference: null,
-        credential_version: null,
-        credential_key_id: null,
-        credential_nonce: null,
-        credential_ciphertext: null,
-        credential_tag: null,
         created_at: nomination.createdAt,
         updated_at: nomination.createdAt,
       },
@@ -286,19 +292,8 @@ function fixture(mode: "sandbox" | "live" = "sandbox") {
   };
   const repository = createReceivingAccountProvisioningRepository(db, options);
   const result = {
-    accountReference: "fictional-child",
-    recipientReference: "fictional-wallet",
-    credential: encryptProviderCredential(
-      "fictional-child-key",
-      {
-        provider: "ASAAS",
-        siteId: nomination.siteId,
-        accountBindingId: nomination.accountId,
-        environment: mode,
-      },
-      new Map([["credential-v1", new Uint8Array(32).fill(21)]]),
-      "credential-v1",
-    ),
+    accountReference: "rp_fixtureRecipient01",
+    recipientReference: "rp_fixtureRecipient01",
   };
   const armed = (
     claim: ReceivingProvisioningRecord,
@@ -442,7 +437,7 @@ describe("locked original account provisioning repository", () => {
     const claim = await values.arm();
     expect(values.tables.operations[0].state).toBe("UNKNOWN");
     expect(values.tables.operations[0].attempts).toBe(1);
-    expect(values.tables.accounts[0].credential_version).toBeNull();
+    expect(values.tables.accounts[0].recipient_reference).toBeNull();
     await expect(
       values.repository.armOriginal(claim, values.authorization),
     ).rejects.toThrow();
@@ -539,10 +534,10 @@ describe("locked original account provisioning repository", () => {
           values.authorization,
         ),
       ).rejects.toThrow();
-      expect(values.tables.accounts[0].credential_version).toBeNull();
+      expect(values.tables.accounts[0].recipient_reference).toBeNull();
     },
   );
-  it.each(["history", "orphan", "foreign", "partial-key", "binding"])(
+  it.each(["history", "orphan", "foreign", "partial-binding", "binding"])(
     "unfiltered %s topology cannot become an initial claim",
     async (caseName) => {
       const values = fixture();
@@ -555,8 +550,8 @@ describe("locked original account provisioning repository", () => {
       if (caseName === "orphan") values.tables.accounts = [];
       if (caseName === "foreign")
         values.tables.operations[0].account_id = "foreign";
-      if (caseName === "partial-key")
-        values.tables.accounts[0].credential_key_id = "foreign";
+      if (caseName === "partial-binding")
+        values.tables.accounts[0].recipient_reference = "rp_foreign";
       if (caseName === "binding")
         values.tables.accounts[0].account_reference = "foreign";
       await expect(
@@ -579,7 +574,7 @@ describe("locked original account provisioning repository", () => {
     expect(
       (await values.repository.consultOriginal(claim, values.result))?.result,
     ).toEqual(values.result);
-    expect(values.tables.accounts[0].credential_version).toBeNull();
+    expect(values.tables.accounts[0].recipient_reference).toBeNull();
     await expect(
       values.repository.attachOriginal(
         claim,
@@ -603,16 +598,13 @@ describe("locked original account provisioning repository", () => {
       ).sealedResult,
     ).toBeNull();
   });
-  it("a conflicting random-nonce envelope never overwrites original custody", async () => {
+  it("a conflicting recipient never overwrites original custody", async () => {
     const values = fixture();
     const claim = await values.arm();
     await values.repository.quarantineOriginal(claim, values.result);
     const conflicting = {
-      ...values.result,
-      credential: {
-        ...values.result.credential,
-        nonce: Buffer.alloc(12, 7).toString("base64url"),
-      },
+      accountReference: "rp_conflictingRecipient",
+      recipientReference: "rp_conflictingRecipient",
     };
     await expect(
       values.repository.quarantineOriginal(claim, conflicting),
@@ -621,7 +613,7 @@ describe("locked original account provisioning repository", () => {
       (await values.repository.consultOriginal(claim, values.result))?.result,
     ).toEqual(values.result);
   });
-  it("fresh-authorized attachment settles an expired original lease atomically with all five fields", async () => {
+  it("fresh-authorized attachment settles an expired original lease atomically with the recipient id", async () => {
     const values = fixture();
     const claim = await values.arm();
     await values.repository.quarantineOriginal(claim, values.result);
@@ -632,13 +624,8 @@ describe("locked original account provisioning repository", () => {
       values.authorization,
     );
     expect(values.tables.accounts[0]).toMatchObject({
-      account_reference: "fictional-child",
-      recipient_reference: "fictional-wallet",
-      credential_version: 1,
-      credential_key_id: "credential-v1",
-      credential_nonce: values.result.credential.nonce,
-      credential_ciphertext: values.result.credential.ciphertext,
-      credential_tag: values.result.credential.tag,
+      account_reference: "rp_fixtureRecipient01",
+      recipient_reference: "rp_fixtureRecipient01",
       provider_account_state: "UNVERIFIED",
       receiving_capability: false,
       withdrawal_capability: false,
@@ -647,7 +634,7 @@ describe("locked original account provisioning repository", () => {
     });
     expect(values.tables.operations[0]).toMatchObject({
       state: "SUCCEEDED",
-      provider_operation_reference: "fictional-child",
+      provider_operation_reference: "rp_fixtureRecipient01",
       request_hash: values.nomination.requestHash,
     });
     expect(
@@ -660,7 +647,7 @@ describe("locked original account provisioning repository", () => {
       (await values.repository.consultOriginal(claim, values.result))?.result,
     ).toEqual(values.result);
   });
-  it("an operation failure rolls back all canonical credential writes and capsule removal", async () => {
+  it("an operation failure rolls back the recipient binding and capsule removal", async () => {
     const values = fixture();
     const claim = await values.arm();
     await values.repository.quarantineOriginal(claim, values.result);
@@ -672,7 +659,7 @@ describe("locked original account provisioning repository", () => {
         values.authorization,
       ),
     ).rejects.toThrow();
-    expect(values.tables.accounts[0].credential_version).toBeNull();
+    expect(values.tables.accounts[0].recipient_reference).toBeNull();
     expect(
       (
         values.tables.operations[0]
@@ -701,8 +688,8 @@ describe("locked original account provisioning repository", () => {
     expect(observed?.result).toEqual(values.result);
     await expect(
       values.repository.consultOriginal(claim, {
-        ...values.result,
-        accountReference: "foreign",
+        accountReference: "rp_foreign",
+        recipientReference: "rp_foreign",
       }),
     ).rejects.toThrow();
   });

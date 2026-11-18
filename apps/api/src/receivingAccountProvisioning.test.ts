@@ -1,9 +1,12 @@
 import { createHash, createHmac, hkdfSync } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createAsaasAccountProvisioningClient } from "./asaasAccountProvisioningClient";
+import { createPagarmeRecipientClient } from "./pagarmeRecipientClient";
 import {
   createReceivingAccountProvisioning,
+  deriveReceivingFingerprintKey,
   deriveReceivingProvisioningContext,
+  RECEIVING_FINGERPRINT_KEY_ID,
 } from "./receivingAccountProvisioning";
 import {
   type ReceivingProvisioningRecord,
@@ -27,6 +30,16 @@ function deferred<T = void>() {
     resolve = yes;
   });
   return { promise, resolve };
+}
+const createdRecipient = readFileSync(
+  new URL("./__fixtures__/pagarme/recipient-created.json", import.meta.url),
+  "utf8",
+).replace('"code": "receiving-account-1"', '"code": "account-one"');
+function created() {
+  return new Response(createdRecipient, {
+    status: 200,
+    headers: { "content-type": "application/json" },
+  });
 }
 async function flush() {
   for (let index = 0; index < 24; index++) await Promise.resolve();
@@ -69,16 +82,30 @@ function fixture() {
     },
   });
   const input = {
-    name: "Fictional Operator",
-    email: "fictional@example.test",
-    cpfCnpj: "12345678909",
-    mobilePhone: "11999999999",
-    incomeValue: 1000,
-    address: "Fictional Street",
-    addressNumber: "1",
-    province: "Fictional District",
-    postalCode: "12345678",
-    birthDate: "1990-01-01",
+    name: "MARIA DA SILVA",
+    email: "maria@example.test",
+    cpf: "26224451990",
+    mobilePhone: "21994647568",
+    birthDate: "1990-04-12",
+    monthlyIncomeCents: 500000,
+    professionalOccupation: "Professora",
+    address: {
+      street: "Av. General Justo",
+      streetNumber: "375",
+      neighborhood: "Centro",
+      city: "Rio de Janeiro",
+      state: "RJ",
+      zipCode: "20021130",
+      referencePoint: "Ao lado da banca",
+    },
+    bankAccount: {
+      bank: "341",
+      branchNumber: "1234",
+      branchCheckDigit: "6",
+      accountNumber: "12345",
+      accountCheckDigit: "6",
+      type: "checking" as const,
+    },
   };
   const authorization = {
     actor: {
@@ -194,38 +221,17 @@ function fixture() {
       },
     ),
   };
-  const fetchOriginal = vi.fn(async () => new Response("{}", { status: 201 }));
+  const fetchOriginal = vi.fn<typeof fetch>(async () => created());
   const fingerprintKeys = new Map([["fp-v1", new Uint8Array(32).fill(8)]]);
-  const credentialKeys = new Map([
-    ["credential-v1", new Uint8Array(32).fill(21)],
-  ]);
   const provider = {
     approved: true as const,
     environment: "sandbox" as const,
-    parentAccountReference: "fictional-parent",
+    parentAccountReference: "rp_platformRecipient",
     policyVersion: scope.policyVersion,
-    createClient: vi.fn(
-      (context: {
-        provider: "ASAAS";
-        siteId: string;
-        accountBindingId: string;
-        environment: "sandbox" | "live";
-      }) =>
-        createAsaasAccountProvisioningClient({
-          environment: context.environment,
-          parentAccountReference: "fictional-parent",
-          parentCredential: "fictional-parent-key",
-          credentialContext: context,
-          credentialKeys,
-          activeCredentialKeyId: "credential-v1",
-          fetch: fetchOriginal as unknown as typeof fetch,
-          normalizeOriginalResult: async () => ({
-            accountReference: "fictional-child",
-            recipientReference: "fictional-wallet",
-            credential: "fictional-child-key",
-          }),
-        }),
-    ),
+    recipients: createPagarmeRecipientClient({
+      secretKey: "sk_test_fixtureSecret0123456789",
+      fetch: fetchOriginal,
+    }),
   };
   const options = {
     repository: repository as never,
@@ -288,11 +294,11 @@ describe("completion-owned original account provisioning", () => {
     expect(values.repository.claimOriginal).not.toHaveBeenCalled();
     expect(values.fetchOriginal).not.toHaveBeenCalled();
   });
-  it("pins a versioned HKDF/HMAC identity over exact original scope and normalized input", () => {
+  it("pins a versioned HKDF/HMAC identity over exact original scope and normalized recipient input", () => {
     const values = fixture();
     const context = deriveReceivingProvisioningContext(
       values.nomination,
-      "fictional-parent",
+      "rp_platformRecipient",
       "fp-v1",
       values.input,
       values.fingerprintKeys,
@@ -307,10 +313,10 @@ describe("completion-owned original account provisioning", () => {
     const expected = createHmac("sha256", Buffer.from(derived))
       .update(
         JSON.stringify([
-          "entrelacos.receiving-provisioning.input.v1",
+          "entrelacos.receiving-provisioning.input.v2",
           "hkdf-hmac-sha256-v1",
           "fp-v1",
-          "ASAAS",
+          "PAGARME",
           "site-one",
           "account-one",
           "operation-one",
@@ -319,28 +325,40 @@ describe("completion-owned original account provisioning", () => {
           "operator-one",
           "sandbox",
           "policy-one",
-          "fictional-parent",
-          "Fictional Operator",
-          "fictional@example.test",
-          "12345678909",
-          "11999999999",
-          1000,
-          "Fictional Street",
-          "1",
-          "Fictional District",
-          "12345678",
-          "1990-01-01",
+          "rp_platformRecipient",
+          "MARIA DA SILVA",
+          "maria@example.test",
+          "26224451990",
+          "21994647568",
+          "1990-04-12",
+          500000,
+          "Professora",
+          "Av. General Justo",
+          "375",
+          null,
+          "Centro",
+          "Rio de Janeiro",
+          "RJ",
+          "20021130",
+          "Ao lado da banca",
+          "341",
+          "1234",
+          "6",
+          "12345",
+          "6",
+          "checking",
         ]),
       )
       .digest("hex");
+    expect(context.provider).toBe("PAGARME");
     expect(context.inputFingerprint).toBe(expected);
     expect(JSON.stringify(context)).not.toMatch(
-      /Fictional Operator|12345678909|fictional@example/,
+      /MARIA|26224451990|maria@example|12345/,
     );
     expect(
       deriveReceivingProvisioningContext(
         values.nomination,
-        "other-parent",
+        "rp_otherPlatform",
         "fp-v1",
         values.input,
         values.fingerprintKeys,
@@ -349,12 +367,89 @@ describe("completion-owned original account provisioning", () => {
     expect(() =>
       deriveReceivingProvisioningContext(
         values.nomination,
-        "fictional-parent",
+        "rp_platformRecipient",
         "missing",
         values.input,
         values.fingerprintKeys,
       ),
     ).toThrow();
+  });
+  it("derives a stable 32-byte fingerprint key from the application secret", () => {
+    const key = deriveReceivingFingerprintKey("application-secret");
+    expect(RECEIVING_FINGERPRINT_KEY_ID).toBe("receiving-fingerprint-v1");
+    expect(key.byteLength).toBe(32);
+    expect(Buffer.from(key)).toEqual(
+      Buffer.from(deriveReceivingFingerprintKey("application-secret")),
+    );
+    expect(Buffer.from(key)).not.toEqual(
+      Buffer.from(deriveReceivingFingerprintKey("other-secret")),
+    );
+  });
+  it("creates the Pagar.me recipient with the full individual payload keyed by the account id", async () => {
+    const values = fixture();
+    const service = createReceivingAccountProvisioning(values.options);
+    const owner = service.begin(values.command);
+    expect((await owner.feedback).state).toBe("STORED");
+    await owner.completion;
+    await service.close();
+    expect(values.fetchOriginal).toHaveBeenCalledOnce();
+    const [url, init] = values.fetchOriginal.mock.calls[0];
+    expect(String(url)).toMatch(/\/recipients$/);
+    expect(init?.method).toBe("POST");
+    expect(new Headers(init?.headers).get("idempotency-key")).toBe(
+      "recipient:account-one",
+    );
+    expect(JSON.parse(String(init?.body))).toMatchObject({
+      code: "account-one",
+      register_information: {
+        type: "individual",
+        name: "MARIA DA SILVA",
+        email: "maria@example.test",
+        document: "26224451990",
+        birthdate: "1990-04-12T00:00:00",
+        monthly_income: 500000,
+        professional_occupation: "Professora",
+        phone_numbers: [{ ddd: "21", number: "994647568", type: "mobile" }],
+        address: {
+          street: "Av. General Justo",
+          street_number: "375",
+          neighborhood: "Centro",
+          city: "Rio de Janeiro",
+          state: "RJ",
+          zip_code: "20021130",
+          reference_point: "Ao lado da banca",
+        },
+      },
+      default_bank_account: {
+        holder_document: "26224451990",
+        bank: "341",
+        branch_number: "1234",
+        branch_check_digit: "6",
+        account_number: "12345",
+        account_check_digit: "6",
+        type: "checking",
+      },
+    });
+    expect(values.repository.attachOriginal.mock.calls[0][1]).toEqual({
+      accountReference: "rp_fixtureRecipient01",
+      recipientReference: "rp_fixtureRecipient01",
+    });
+  });
+  it("refuses a recipient whose code is not the receiving account id", async () => {
+    const values = fixture();
+    values.fetchOriginal.mockImplementation(
+      async () =>
+        new Response(
+          createdRecipient.replace('"code": "account-one"', '"code": "other"'),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+    );
+    const service = createReceivingAccountProvisioning(values.options);
+    const owner = service.begin(values.command);
+    expect((await owner.feedback).state).toBe("UNKNOWN");
+    await owner.completion;
+    await service.close();
+    expect(values.repository.attachOriginal).not.toHaveBeenCalled();
   });
   it("creates exactly once, preserves identity and atomically attaches only the original envelope", async () => {
     const values = fixture();
@@ -423,9 +518,11 @@ describe("completion-owned original account provisioning", () => {
     const owner = service.begin(values.command);
     await flush();
     expect(values.getState()).toBe("UNKNOWN");
-    response.resolve(new Response("{}", { status: 201 }));
+    response.resolve(created());
     await owner.completion;
-    expect(values.getRecord()?.sealedResult?.credential).toBeDefined();
+    expect(values.getRecord()?.sealedResult?.recipientReference).toBe(
+      "rp_fixtureRecipient01",
+    );
     expect((await owner.feedback).state).toBe("UNKNOWN");
     const repeated = service.begin(values.command);
     await repeated.completion;
@@ -455,7 +552,7 @@ describe("completion-owned original account provisioning", () => {
     void closing.then(() => {
       closed = true;
     });
-    response.resolve(new Response("{}", { status: 201 }));
+    response.resolve(created());
     await flush();
     expect(closed).toBe(false);
     expect(values.repository.attachOriginal).not.toHaveBeenCalled();
@@ -533,7 +630,10 @@ describe("completion-owned original account provisioning", () => {
       ...values.command,
       action: "SETTLE",
       record: claim,
-      input: { ...values.input, addressNumber: "2" },
+      input: {
+        ...values.input,
+        address: { ...values.input.address, streetNumber: "376" },
+      },
     });
     await settlement.completion;
     expect(values.repository.attachOriginal).toHaveBeenCalledTimes(calls);
@@ -581,7 +681,8 @@ describe("completion-owned original account provisioning", () => {
       ...record,
       sealedResult: {
         ...record.sealedResult,
-        accountReference: "foreign-child",
+        accountReference: "rp_foreignRecipient",
+        recipientReference: "rp_foreignRecipient",
       },
     };
     const count = values.repository.attachOriginal.mock.calls.length;
@@ -612,13 +713,13 @@ describe("completion-owned original account provisioning", () => {
       await vi.advanceTimersByTimeAsync(45000);
       expect((await owner.feedback).state).toBe("UNKNOWN");
       expect(complete).toBe(false);
-      response.resolve(new Response("{}", { status: 201 }));
+      response.resolve(created());
       await owner.completion;
       expect(values.getRecord()?.sealedResult).not.toBeNull();
       expect(values.repository.attachOriginal).not.toHaveBeenCalled();
       expect(values.fetchOriginal).toHaveBeenCalledOnce();
     } finally {
-      response.resolve(new Response("{}", { status: 201 }));
+      response.resolve(created());
       await owner.completion;
       await service.close();
       vi.useRealTimers();

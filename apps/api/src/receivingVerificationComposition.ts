@@ -2,18 +2,11 @@ import { randomUUID } from "node:crypto";
 import type { ReceivingReadiness } from "@entrelacos/contracts";
 import type { DatabaseConnection } from "@entrelacos/database";
 import { sql } from "drizzle-orm";
-import { createAsaasReceivingVerification } from "./asaasReceivingVerification";
 import type { FinancialActor } from "./financialAuthorization";
 import { allowsLiveSite, liveDemoSiteIdsSql } from "./liveSitePolicy";
-import {
-  decryptProviderCredential,
-  type ProviderCredentialKeyring,
-} from "./providerCredentials";
+import { createPagarmeReceivingVerification } from "./pagarmeReceivingVerification";
+import type { PagarmeRecipientClient } from "./pagarmeRecipientClient";
 import { readReceivingProvisioningRecord } from "./receivingNomination";
-import {
-  createReceivingPixPreparation,
-  type IncomingPixPreparation,
-} from "./receivingPixPreparation";
 import { readReceivingReadiness } from "./receivingRepository";
 import {
   ReceivingSetupError,
@@ -21,35 +14,31 @@ import {
 } from "./receivingSetupRepository";
 import {
   createReceivingVerification,
-  type ReceivingVerificationScope,
   readReceivingVerificationScope,
 } from "./receivingVerification";
 import { createReceivingVerificationRepository } from "./receivingVerificationRepository";
+
+// Pagar.me bank account ids (`ba_…`); anything else is a legacy or simulated destination.
+const RECIPIENT_BANK_PATTERN = "^(ba|bank)_[A-Za-z0-9]{1,128}$";
+function isRecipientBank(reference: string) {
+  return new RegExp(RECIPIENT_BANK_PATTERN).test(reference);
+}
 
 export function createReceivingVerificationComposition(options: {
   liveDemoSiteIds?: readonly string[];
   db: DatabaseConnection["db"];
   mode: "sandbox" | "live";
   applicationEnvironment: "development" | "test" | "production";
-  platformAccountReference: string;
-  keyring: ProviderCredentialKeyring;
+  platformRecipientId: string;
+  recipients: Pick<PagarmeRecipientClient, "getRecipient">;
   repository: Pick<
     ReceivingSetupRepository,
     | "requireHolder"
     | "readSessionAuthentication"
     | "readCurrentProvisioningPolicy"
-    | "readAccount"
-    | "armIncomingPix"
-    | "settleIncomingPix"
-    | "consentIncomingPix"
   >;
-  fetch: typeof globalThis.fetch;
   now(): Date;
   readReadiness?: (siteId: string) => Promise<ReceivingReadiness>;
-  prepareIncoming?: (
-    actor: FinancialActor,
-    scope: ReceivingVerificationScope,
-  ) => Promise<IncomingPixPreparation>;
 }) {
   const liveDemoSiteIds = options.liveDemoSiteIds;
   const sandboxSimulation =
@@ -59,56 +48,7 @@ export function createReceivingVerificationComposition(options: {
     sandboxSimulation ||
     (options.mode === "live" &&
       options.applicationEnvironment === "production");
-  const native = createAsaasReceivingVerification(options);
-  const pix = createReceivingPixPreparation({
-    repository: {
-      arm: (...args) => options.repository.armIncomingPix(...args),
-      settle: (...args) => options.repository.settleIncomingPix(...args),
-    },
-    fetch: options.fetch,
-    now: options.now,
-  });
-  async function prepareIncoming(
-    actor: FinancialActor,
-    scope: ReceivingVerificationScope,
-  ) {
-    const account = await options.repository.readAccount(actor.siteId);
-    if (
-      !account?.result ||
-      !account.record ||
-      account.state !== "SUCCEEDED" ||
-      account.accountId !== scope.accountId ||
-      account.operatorUserId !== actor.userId ||
-      account.result.accountReference !== scope.accountReference ||
-      account.result.recipientReference !== scope.recipientReference ||
-      scope.accountReference === options.platformAccountReference ||
-      account.record.provision.parentAccountReference !==
-        options.platformAccountReference
-    )
-      throw new ReceivingSetupError(409, "RECEIVING_ACCOUNT_REQUIRED");
-    const binding = {
-      provider: "ASAAS" as const,
-      siteId: scope.siteId,
-      accountBindingId: scope.accountId,
-      environment: options.mode,
-      accountReference: scope.accountReference,
-      recipientReference: scope.recipientReference,
-    };
-    return pix.prepare(
-      actor,
-      binding,
-      decryptProviderCredential(
-        account.result.credential,
-        {
-          provider: binding.provider,
-          siteId: binding.siteId,
-          accountBindingId: binding.accountBindingId,
-          environment: binding.environment,
-        },
-        options.keyring,
-      ),
-    );
-  }
+  const native = createPagarmeReceivingVerification(options);
   const verification = createReceivingVerification({
     profile: "rv1",
     setupSessionSelection: supported,
@@ -130,8 +70,7 @@ export function createReceivingVerificationComposition(options: {
         candidate,
       ) =>
         supported &&
-        (candidate === null ||
-          candidate.bankReference.startsWith("asaas-bank-")) &&
+        (candidate === null || isRecipientBank(candidate.bankReference)) &&
         options.repository.readCurrentProvisioningPolicy(
           readReceivingProvisioningRecord(fence.operation.request_snapshot),
           tx,
@@ -147,7 +86,7 @@ export function createReceivingVerificationComposition(options: {
     if (!supported || closed)
       throw new ReceivingSetupError(503, "RECEIVING_VERIFICATION_UNAVAILABLE");
     const result = await options.db.execute(
-      sql`SELECT st.is_demo AS "isDemo",a.site_id AS "siteId",a.id AS "accountId",a.operator_user_id AS "operatorUserId",a.operator_reference AS "operatorReference",a.account_reference AS "accountReference",a.recipient_reference AS "recipientReference",EXISTS(SELECT 1 FROM receiving_destination d WHERE d.site_id=a.site_id AND d.account_id=a.id AND d.environment=a.environment AND d.is_current=true AND starts_with(d.bank_reference,'asaas-bank-')) AS "nativeDestination" FROM receiving_account a JOIN site st ON st.id=a.site_id WHERE a.site_id=${siteId} AND a.environment=${options.mode} AND a.provider='ASAAS' AND a.is_current=true AND (st.is_demo=${sandboxSimulation} OR (${options.mode}='live' AND st.id = ANY(${liveDemoSiteIdsSql(liveDemoSiteIds)}))) LIMIT 2`,
+      sql`SELECT st.is_demo AS "isDemo",a.site_id AS "siteId",a.id AS "accountId",a.operator_user_id AS "operatorUserId",a.operator_reference AS "operatorReference",a.account_reference AS "accountReference",a.recipient_reference AS "recipientReference",EXISTS(SELECT 1 FROM receiving_destination d WHERE d.site_id=a.site_id AND d.account_id=a.id AND d.environment=a.environment AND d.is_current=true AND d.bank_reference ~ ${RECIPIENT_BANK_PATTERN}) AS "nativeDestination" FROM receiving_account a JOIN site st ON st.id=a.site_id WHERE a.site_id=${siteId} AND a.environment=${options.mode} AND a.provider='PAGARME' AND a.is_current=true AND (st.is_demo=${sandboxSimulation} OR (${options.mode}='live' AND st.id = ANY(${liveDemoSiteIdsSql(liveDemoSiteIds)}))) LIMIT 2`,
     );
     const row = result.rows[0];
     if (
@@ -169,7 +108,7 @@ export function createReceivingVerificationComposition(options: {
     return {
       scope: readReceivingVerificationScope({
         ...scope,
-        provider: "ASAAS",
+        provider: "PAGARME",
         environment: options.mode,
       }),
       nativeDestination,
@@ -201,10 +140,7 @@ export function createReceivingVerificationComposition(options: {
     }
   }
   return Object.freeze({
-    async verify(
-      actor: FinancialActor,
-      pixConsentVersion?: string,
-    ): Promise<ReceivingReadiness> {
+    async verify(actor: FinancialActor): Promise<ReceivingReadiness> {
       if (!supported || closed)
         throw new ReceivingSetupError(
           503,
@@ -222,21 +158,6 @@ export function createReceivingVerificationComposition(options: {
       const selected = await current(actor.siteId);
       if (selected.scope.operatorUserId !== actor.userId)
         throw new ReceivingSetupError(403, "RECEIVING_HOLDER_REQUIRED");
-      if (pixConsentVersion)
-        await options.repository.consentIncomingPix(
-          actor,
-          selected.scope.accountId,
-          pixConsentVersion,
-        );
-      const preparation = await (options.prepareIncoming ?? prepareIncoming)(
-        actor,
-        selected.scope,
-      );
-      if (preparation !== "READY")
-        throw new ReceivingSetupError(
-          409,
-          `RECEIVING_PIX_PREPARATION_${preparation}`,
-        );
       if (!selected.nativeDestination)
         await settle({
           action: "SELECT",
@@ -269,11 +190,7 @@ export function createReceivingVerificationComposition(options: {
     },
     async close() {
       closed = true;
-      await Promise.all([
-        verification.close(),
-        native.observer.close(),
-        pix.close(),
-      ]);
+      await Promise.all([verification.close(), native.observer.close()]);
       await Promise.allSettled(pending.values());
       pending.clear();
       refreshed.clear();

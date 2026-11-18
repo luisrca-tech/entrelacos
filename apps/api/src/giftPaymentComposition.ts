@@ -15,15 +15,10 @@ import type { ApiOptions } from "./app";
 import { createAsaasCheckoutClient } from "./asaasCheckoutClient";
 import { readAsaasCheckoutCallbacks } from "./asaasCheckoutPayload";
 import type { AsaasFeeQuotesOptions } from "./asaasFeeQuotes";
+import type { AsaasStoredAccountReader } from "./asaasHttpClient";
 import type { AsaasLegacyConfig } from "./asaasLegacyConfig";
-import { createAsaasStoredAccountReader } from "./asaasStoredAccountReader";
 import { createAsaasWebhookReceiver } from "./asaasWebhook";
 import { createAsaasWebhookRepository } from "./asaasWebhookRepository";
-import {
-  type FinancialAccountBinding,
-  loadFinancialOverview,
-} from "./financialOverview";
-import { createFinancialOverviewRepository } from "./financialOverviewRepository";
 import { createGiftCheckoutLifecycleWorker } from "./giftCheckoutLifecycle";
 import { createGiftCheckoutRepository } from "./giftCheckoutRepository";
 import {
@@ -49,23 +44,13 @@ import {
   loadGiftPricingEvidence,
 } from "./giftQuotes";
 import { allowsLiveSite } from "./liveSitePolicy";
-import { mapWithConcurrency } from "./mapWithConcurrency";
 import { logObservabilityEvent } from "./observability";
-import {
-  decryptProviderCredential,
-  type ProviderCredentialContext,
-} from "./providerCredentials";
 import {
   loadReceivingContext,
   loadReceivingContextInTransaction,
   readReceivingReadiness,
 } from "./receivingRepository";
 import { allowsSandboxBuyerGrossUp } from "./sandboxBuyerGrossUp";
-import { createWithdrawalComposition } from "./withdrawalComposition";
-import { createWithdrawalHistoryRepository } from "./withdrawalHistoryRepository";
-
-// Each withdrawal decoration opens its own transaction; cap them per request.
-const WITHDRAWAL_DECORATION_CONCURRENCY = 4;
 
 type PaymentPorts = Pick<
   ApiOptions,
@@ -75,9 +60,6 @@ type PaymentPorts = Pick<
   | "loadPublicGiftPrices"
   | "sandboxBuyerGrossUpAvailable"
   | "asaasWebhook"
-  | "asaasWithdrawalAuthorization"
-  | "finance"
-  | "withdrawalReservation"
 >;
 export interface GiftPaymentComposition {
   readonly ports: Readonly<PaymentPorts>;
@@ -96,6 +78,21 @@ export interface GiftPaymentCompositionOptions {
 }
 function unavailable(): never {
   throw new Error("Gift payment composition unavailable");
+}
+
+function inertAsaasReader(): AsaasStoredAccountReader {
+  const fail = async (): Promise<never> => unavailable();
+  return {
+    hasInternalTransferCredit: fail,
+    hasUnrestrictedGiftPayment: fail,
+    listInstallmentPayments: fail,
+    removeInstallment: fail,
+    getInstallmentRemoval: fail,
+    listCheckoutPayments: fail,
+    getAccountFees: fail,
+    getPayment: fail,
+    getBalance: fail,
+  };
 }
 
 export function createGiftPaymentComposition(
@@ -151,26 +148,9 @@ export function createGiftPaymentComposition(
     ...(options.refreshReceiving ? { refresh: options.refreshReceiving } : {}),
     now,
   });
-  const reader = createAsaasStoredAccountReader(db, {
-    mode: environment,
-    ...liveSitePolicy,
-    keyring,
-    fetch,
-    timeoutMs: 15_000,
-    maxResponseBytes: 262_144,
-    now,
-    // V2 charges live in the platform account (see asaasStoredAccountReader).
-    platformApiKey: config.platformApiKey,
-  });
-  const withdrawals = createWithdrawalComposition(config, {
-    db,
-    now,
-    fetch,
-    wakeWorker,
-    ...(options.refreshReceiving
-      ? { refreshReceiving: options.refreshReceiving }
-      : {}),
-  });
+  // The legacy Asaas account reader was removed with the Pagar.me withdrawal
+  // migration; this composition only ever receives the disabled config.
+  const reader = inertAsaasReader();
   const context = (siteId: string) =>
     loadReceivingContext(db, siteId, receiving);
   const gift = (siteId: string, giftId: string) =>
@@ -314,18 +294,12 @@ export function createGiftPaymentComposition(
         ))
     )
       return unavailable();
-    // PLATFORM_ACCOUNT_SPLIT_V2 charges in the platform account; the
-    // sub-account credential is neither required nor decrypted.
-    const platformSplit = isPlatformAccountSplit(command.quoteSnapshot);
+    // Sub-account credentials no longer exist: only platform-account
+    // (PLATFORM_ACCOUNT_SPLIT_V2) charges can be created until Phase 3.
     if (
+      !isPlatformAccountSplit(command.quoteSnapshot) ||
       account.operatorReference !== binding.operatorReference ||
-      account.recipientReference !== binding.recipientReference ||
-      (!platformSplit &&
-        (account.credentialVersion !== 1 ||
-          !account.credentialKeyId ||
-          !account.credentialNonce ||
-          !account.credentialCiphertext ||
-          !account.credentialTag))
+      account.recipientReference !== binding.recipientReference
     )
       return unavailable();
     const origins = await db
@@ -339,38 +313,13 @@ export function createGiftPaymentComposition(
       )
       .limit(1);
     if (origins[0]?.origin !== publicOrigin) return unavailable();
-    let credentials: Parameters<
-      typeof createAsaasCheckoutClient
-    >[0]["credentials"];
-    if (platformSplit) {
-      credentials = {
-        kind: "PLATFORM_ACCOUNT",
-        accessToken: config.platformApiKey,
-      };
-    } else {
-      const credentialContext: ProviderCredentialContext = {
-        provider: "ASAAS",
-        siteId: command.siteId,
-        accountBindingId: account.id,
-        environment,
-      };
-      const accessToken = decryptProviderCredential(
-        {
-          version: 1,
-          keyId: account.credentialKeyId as string,
-          nonce: account.credentialNonce as string,
-          ciphertext: account.credentialCiphertext as string,
-          tag: account.credentialTag as string,
-        },
-        credentialContext,
-        keyring,
-      );
-      credentials = { context: credentialContext, accessToken };
-    }
     return createAsaasCheckoutClient({
       mode: environment,
       binding: { ...binding, accountBindingId: account.id },
-      credentials,
+      credentials: {
+        kind: "PLATFORM_ACCOUNT",
+        accessToken: config.platformApiKey,
+      },
       fetch,
       timeoutMs: 15_000,
       maxResponseBytes: 262_144,
@@ -582,7 +531,6 @@ export function createGiftPaymentComposition(
           lifecycle.expireNextUnpaidInstallment(),
           restrictions.processNextReceivedPayment(),
           adjustments.processNextReceivedPayment(),
-          withdrawals.reconcilePending(),
         ]);
         const completed = results.flatMap((result) =>
           result.status === "fulfilled" ? [result.value] : [],
@@ -605,7 +553,6 @@ export function createGiftPaymentComposition(
         lifecycle.nextExpiryDueAt(),
         restrictions.nextDueAt(),
         adjustments.nextDueAt(),
-        withdrawals.nextRecoveryDueAt(),
       ]);
       let earliest = Infinity;
       for (const deadline of deadlines) {
@@ -619,29 +566,7 @@ export function createGiftPaymentComposition(
     retryDelayMs: 5_000,
     maxRetryDelayMs: 30 * 60_000,
   });
-  const financeRepository = createFinancialOverviewRepository(db, {
-    ...liveSitePolicy,
-    environment,
-    now,
-    ...(withdrawals.loadTerminalFailureInTransaction
-      ? {
-          loadWithdrawalTerminalFailureInTransaction:
-            withdrawals.loadTerminalFailureInTransaction,
-        }
-      : {}),
-    ...(withdrawals.loadCompletionProofInTransaction
-      ? {
-          loadWithdrawalCompletionProofInTransaction:
-            withdrawals.loadCompletionProofInTransaction,
-        }
-      : {}),
-  });
-  const withdrawalHistory = createWithdrawalHistoryRepository(db, {
-    ...liveSitePolicy,
-    mode: environment,
-  });
   let closing: Promise<void> | undefined;
-  const withdrawalAuthorization = withdrawals.authorization;
   let stopped = false;
   let started = false;
   let run: Promise<void> | undefined;
@@ -687,17 +612,6 @@ export function createGiftPaymentComposition(
         siteId: string,
         gifts: readonly Pick<PublicGiftItem, "id" | "nominalCents">[],
       ) => own(() => loadPublicGiftPrices(siteId, gifts)),
-      ...(withdrawals.service
-        ? { withdrawalReservation: withdrawals.service }
-        : {}),
-      ...(withdrawalAuthorization
-        ? {
-            asaasWithdrawalAuthorization: {
-              receive: (token: string, rawBody: string) =>
-                own(() => withdrawalAuthorization.receive(token, rawBody)),
-            },
-          }
-        : {}),
       giftPayments: {
         createQuote: (siteId: unknown, input: unknown) =>
           own(() => quoteService.createQuote(siteId, input)),
@@ -709,53 +623,6 @@ export function createGiftPaymentComposition(
       asaasWebhook: {
         receive: (token: unknown, rawBody: unknown) =>
           own(() => webhook.receive(token, rawBody)),
-      },
-      finance: {
-        listWithdrawals: (siteId: string) =>
-          own(async () =>
-            mapWithConcurrency(
-              await withdrawalHistory.listWithdrawals(siteId),
-              WITHDRAWAL_DECORATION_CONCURRENCY,
-              withdrawals.decorateIntent,
-            ),
-          ),
-        listWithdrawalPage: (
-          siteId: string,
-          query: import("@entrelacos/contracts").WithdrawalPageQuery,
-        ) =>
-          own(async () => {
-            const page = await withdrawalHistory.listWithdrawalPage(
-              siteId,
-              query,
-            );
-            return {
-              ...page,
-              withdrawals: await mapWithConcurrency(
-                page.withdrawals,
-                WITHDRAWAL_DECORATION_CONCURRENCY,
-                withdrawals.decorateIntent,
-              ),
-            };
-          }),
-        readOverview: (siteId: string) =>
-          own(async () => {
-            const { account } = await storedAccount(siteId);
-            const binding: FinancialAccountBinding = {
-              provider: "ASAAS",
-              siteId,
-              accountBindingId: account.id,
-              accountReference: account.accountReference as string,
-              environment,
-            };
-            return loadFinancialOverview({
-              mode: environment,
-              binding,
-              repository: financeRepository,
-              providerBalance: reader,
-              now,
-              freshnessMs: 60_000,
-            });
-          }),
       },
     }),
     start() {
@@ -777,7 +644,6 @@ export function createGiftPaymentComposition(
           Promise.allSettled([...pending]),
           Promise.allSettled(workerStopping),
         ]);
-        await withdrawals.close();
         for (const key of keyring.values()) key.fill(0);
         keyring.clear();
         if (settled.some((result) => result.status === "rejected"))

@@ -1,8 +1,7 @@
-import {
-  type GiftItem,
-  type ReceivingReadiness,
-  type ReceivingSetupContext,
-  receivingIncomingPixDisclosure,
+import type {
+  GiftItem,
+  ReceivingReadiness,
+  ReceivingSetupContext,
 } from "@entrelacos/contracts";
 import { showSandboxNotice } from "@entrelacos/ui";
 import { Link } from "@tanstack/react-router";
@@ -13,7 +12,6 @@ import {
   Check,
   Clock,
   Gift,
-  Mail,
   Plus,
   RefreshCw,
   Smartphone,
@@ -100,7 +98,6 @@ export type ReceivingStepsContext = {
   onSubmit?: (event: FormEvent<HTMLFormElement>) => void;
   onDesignate?: (holderUserId: string) => void;
   onVerifyIncoming?: () => void;
-  onAuthorizePix?: () => void;
 };
 
 const lastCheckFormatter = new Intl.DateTimeFormat("pt-BR", {
@@ -196,28 +193,27 @@ function nextCopy(context: ReceivingStepsContext, tasks: AsaasTasks) {
           }
         : {
             text: setup?.isHolder
-              ? "Preencha seus dados para abrirmos sua conta no Asaas, no seu nome."
-              : `${holderName} precisa preencher os dados para abrir a conta no Asaas.`,
+              ? "Preencha seus dados para cadastrarmos você como recebedor na Pagar.me, no seu nome."
+              : `${holderName} precisa preencher os dados para o cadastro na Pagar.me.`,
             action: setup?.isHolder ? "Preencher meus dados" : "Ver etapa",
           };
     case "activation": {
       if (next.status === "review")
         return {
-          text: "O Asaas está analisando a conta. Não há nada a fazer aqui agora.",
+          text: "A Pagar.me está analisando o cadastro. Não há nada a fazer aqui agora.",
           action: "Acompanhar análise",
         };
       if (next.status === "attention")
         return {
-          text: "O Asaas pediu um ajuste nos dados ou documentos. Confira no Asaas e envie de novo.",
+          text: "A Pagar.me bloqueou ou suspendeu o recebedor. Fale com o suporte para entender o que ajustar.",
           action: "Ver o que ajustar",
         };
       const done =
         Number(tasks.password) +
         Number(tasks.phone) +
         Number(
-          documentsTaskStatus(setup?.providerStatus?.documentation) ===
-            "done" ||
-            documentsTaskStatus(setup?.providerStatus?.documentation) ===
+          documentsTaskStatus(setup?.providerStatus?.accountState) === "done" ||
+            documentsTaskStatus(setup?.providerStatus?.accountState) ===
               "review",
         );
       const missing = 3 - done;
@@ -246,17 +242,17 @@ function nextCopy(context: ReceivingStepsContext, tasks: AsaasTasks) {
 
 function TaskQuickList({
   tasks,
-  documentation,
+  accountState,
   onToggle,
   disabled,
 }: {
   tasks: AsaasTasks;
-  documentation: Parameters<typeof documentsTaskStatus>[0];
+  accountState: Parameters<typeof documentsTaskStatus>[0];
   onToggle: (task: keyof AsaasTasks, value: boolean) => void;
   disabled: boolean;
 }) {
   const id = useId();
-  const documents = documentsTaskStatus(documentation);
+  const documents = documentsTaskStatus(accountState);
   return (
     <ul className="m-0 grid list-none gap-1 p-0">
       {(
@@ -329,7 +325,7 @@ function AdvanceCard({
         tone="accent"
         title={
           activation.status === "review"
-            ? "Enquanto o Asaas analisa"
+            ? "Enquanto a Pagar.me analisa"
             : "Já pode adiantar"
         }
       >
@@ -447,7 +443,7 @@ export function ReceivingOverviewTrack({
                   <div className="hidden [@media(max-width:760px)]:block">
                     <TaskQuickList
                       tasks={tasks}
-                      documentation={setup?.providerStatus?.documentation}
+                      accountState={setup?.providerStatus?.accountState}
                       onToggle={toggle}
                       disabled={context.busy}
                     />
@@ -696,6 +692,9 @@ const detailFields: {
   inputMode?: "numeric" | "decimal" | "tel" | "email";
   autoComplete?: string;
   wide?: boolean;
+  optional?: boolean;
+  maxLength?: number;
+  options?: readonly { value: string; label: string }[];
 }[] = [
   {
     name: "name",
@@ -706,7 +705,7 @@ const detailFields: {
     wide: true,
   },
   {
-    name: "cpfCnpj",
+    name: "cpf",
     label: "CPF",
     type: "text",
     placeholder: "000.000.000-00",
@@ -718,7 +717,6 @@ const detailFields: {
     label: "E-mail do titular",
     type: "email",
     placeholder: "nome@email.com",
-    hint: "O Asaas manda o link para criar a senha neste e-mail.",
     autoComplete: "email",
   },
   {
@@ -726,12 +724,25 @@ const detailFields: {
     label: "Celular com DDD",
     type: "tel",
     placeholder: "(11) 90000-0000",
-    hint: "Você vai receber um código por SMS.",
     inputMode: "tel",
     autoComplete: "tel-national",
   },
   {
-    name: "postalCode",
+    name: "monthlyIncome",
+    label: "Renda mensal aproximada",
+    type: "text",
+    placeholder: "R$ 0,00",
+    hint: "Exigida pela Pagar.me para cadastrar o recebedor.",
+    inputMode: "decimal",
+  },
+  {
+    name: "professionalOccupation",
+    label: "Profissão",
+    type: "text",
+    autoComplete: "organization-title",
+  },
+  {
+    name: "zipCode",
     label: "CEP",
     type: "text",
     placeholder: "00000-000",
@@ -739,40 +750,99 @@ const detailFields: {
     autoComplete: "postal-code",
   },
   {
-    name: "incomeValue",
-    label: "Renda mensal aproximada",
-    type: "text",
-    placeholder: "R$ 0,00",
-    hint: "Pedido pelo Asaas para abrir qualquer conta.",
-    inputMode: "decimal",
-  },
-  {
-    name: "address",
+    name: "street",
     label: "Endereço",
     type: "text",
     placeholder: "Rua, avenida…",
     autoComplete: "address-line1",
     wide: true,
   },
-  { name: "addressNumber", label: "Número", type: "text" },
-  { name: "province", label: "Bairro", type: "text" },
+  { name: "streetNumber", label: "Número", type: "text" },
+  {
+    name: "complement",
+    label: "Complemento (opcional)",
+    type: "text",
+    autoComplete: "address-line2",
+    optional: true,
+  },
+  { name: "neighborhood", label: "Bairro", type: "text" },
+  {
+    name: "city",
+    label: "Cidade",
+    type: "text",
+    autoComplete: "address-level2",
+  },
+  {
+    name: "state",
+    label: "Estado (UF)",
+    type: "text",
+    placeholder: "SP",
+    autoComplete: "address-level1",
+    maxLength: 2,
+  },
+  {
+    name: "referencePoint",
+    label: "Ponto de referência",
+    type: "text",
+    wide: true,
+  },
+  {
+    name: "bank",
+    label: "Código do banco",
+    type: "text",
+    placeholder: "000",
+    hint: "Os 3 dígitos do seu banco. Os saques vão para esta conta.",
+    inputMode: "numeric",
+    maxLength: 3,
+  },
+  {
+    name: "accountType",
+    label: "Tipo de conta",
+    type: "select",
+    options: [
+      { value: "checking", label: "Conta corrente" },
+      { value: "savings", label: "Conta poupança" },
+    ],
+  },
+  {
+    name: "branchNumber",
+    label: "Agência",
+    type: "text",
+    inputMode: "numeric",
+    maxLength: 4,
+  },
+  {
+    name: "branchCheckDigit",
+    label: "Dígito da agência (opcional)",
+    type: "text",
+    inputMode: "numeric",
+    maxLength: 1,
+    optional: true,
+  },
+  {
+    name: "accountNumber",
+    label: "Número da conta",
+    type: "text",
+    inputMode: "numeric",
+  },
+  {
+    name: "accountCheckDigit",
+    label: "Dígito da conta",
+    type: "text",
+    maxLength: 2,
+  },
 ];
 
 const nextSteps = [
   {
-    icon: Mail,
-    title: "E-mail do Asaas",
-    text: "Com o link para criar a sua senha.",
-  },
-  {
     icon: Smartphone,
-    title: "SMS e documentos",
-    text: "No Asaas: confirmar o celular, enviar o documento e a selfie.",
+    title: "Verificação de identidade",
+    text: "Na Pagar.me: foto do documento e selfie, por um link seguro.",
   },
   {
     icon: Clock,
-    title: "Análise do Asaas",
-    text: "O Asaas analisa a conta. Acompanhe a situação aqui em Recebimentos.",
+    title: "Análise da Pagar.me",
+    text: "A Pagar.me analisa o cadastro. Acompanhe a situação aqui em Recebimentos.",
   },
 ];
 
@@ -805,19 +875,19 @@ export function DetailsStep({ context }: { context: ReceivingStepsContext }) {
           </AsideCard>
           <AsideCard title="Seus dados ficam seguros">
             <p className="m-0 text-sm leading-[1.6] text-admin-text">
-              Os dados vão direto para o Asaas, a instituição de pagamento que
-              guarda os valores no seu nome. Não abra outra conta no Asaas por
-              conta própria: use a que criamos aqui.
+              Os dados vão direto para a Pagar.me, a instituição de pagamento
+              que processa os presentes e repassa os valores para a sua conta
+              bancária.
             </p>
           </AsideCard>
           <FaqList
             items={[
               {
-                question: "Por que o Asaas pede renda e endereço?",
+                question: "Por que a Pagar.me pede renda e endereço?",
                 answer: (
                   <p className="m-0">
-                    São exigências do Asaas para abrir qualquer conta de
-                    pagamento e verificar a identidade do titular.
+                    São exigências da Pagar.me para cadastrar qualquer recebedor
+                    e verificar a identidade do titular.
                   </p>
                 ),
               },
@@ -825,10 +895,9 @@ export function DetailsStep({ context }: { context: ReceivingStepsContext }) {
                 question: "O que eu autorizo ao continuar?",
                 answer: (
                   <p className="m-0">
-                    A abertura da conta no seu nome e a criação de uma chave Pix
-                    aleatória nessa conta, só para receber os presentes. Os dois
-                    aceites ficam registrados separadamente, cada um com a sua
-                    versão.
+                    O cadastro como recebedor na Pagar.me, no seu nome e com a
+                    sua conta bancária. O aceite fica registrado com a versão do
+                    termo.
                   </p>
                 ),
               },
@@ -842,7 +911,7 @@ export function DetailsStep({ context }: { context: ReceivingStepsContext }) {
       >
         <StepHeading number={2} title="Seus dados para abrir a conta">
           <p className={receivingBody}>
-            Usamos esses dados uma única vez para criar sua conta no Asaas
+            Usamos esses dados uma única vez para o cadastro na Pagar.me
             {setup?.holder ? (
               <>
                 , no nome de <strong>{setup.holder.name}</strong>, titular dos
@@ -871,8 +940,8 @@ export function DetailsStep({ context }: { context: ReceivingStepsContext }) {
           !setup.isHolder &&
           setup.accountState !== "CREATED" && (
             <p className={receivingBody}>
-              Somente o titular designado pode consentir e enviar o cadastro ao
-              Asaas. Administrar o casamento não autoriza abrir uma conta em
+              Somente o titular designado pode consentir e enviar o cadastro à
+              Pagar.me. Administrar o casamento não autoriza abrir uma conta em
               nome de outra pessoa.
             </p>
           )}
@@ -886,7 +955,7 @@ export function DetailsStep({ context }: { context: ReceivingStepsContext }) {
         )}
         {setup?.accountState === "PENDING" && !canSubmit && (
           <p role="status" className={receivingBody}>
-            Estamos abrindo sua conta no Asaas. Verifique a situação em
+            Estamos enviando seu cadastro à Pagar.me. Verifique a situação em
             instantes.
           </p>
         )}
@@ -894,7 +963,7 @@ export function DetailsStep({ context }: { context: ReceivingStepsContext }) {
           <div className="grid gap-4">
             <div className="flex flex-wrap items-center gap-3 rounded-[14px] bg-admin-canvas p-4">
               <p role="status" className="m-0 text-[0.95rem] text-admin-text">
-                Conta criada no Asaas
+                Cadastro criado na Pagar.me
                 {setup.holder ? ` em nome de ${setup.holder.name}` : ""}.
               </p>
               <StatusBadge status="done" />
@@ -927,20 +996,37 @@ export function DetailsStep({ context }: { context: ReceivingStepsContext }) {
                   >
                     {field.label}
                   </label>
-                  <input
-                    id={`${id}-${field.name}`}
-                    name={field.name}
-                    type={field.type}
-                    required
-                    disabled={busy}
-                    placeholder={field.placeholder}
-                    inputMode={field.inputMode}
-                    autoComplete={field.autoComplete ?? "off"}
-                    aria-describedby={
-                      field.hint ? `${id}-${field.name}-hint` : undefined
-                    }
-                    className={receivingField}
-                  />
+                  {field.options ? (
+                    <select
+                      id={`${id}-${field.name}`}
+                      name={field.name}
+                      required
+                      disabled={busy}
+                      className={receivingField}
+                    >
+                      {field.options.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      id={`${id}-${field.name}`}
+                      name={field.name}
+                      type={field.type}
+                      required={!field.optional}
+                      disabled={busy}
+                      placeholder={field.placeholder}
+                      inputMode={field.inputMode}
+                      maxLength={field.maxLength}
+                      autoComplete={field.autoComplete ?? "off"}
+                      aria-describedby={
+                        field.hint ? `${id}-${field.name}-hint` : undefined
+                      }
+                      className={receivingField}
+                    />
+                  )}
                   {field.hint && (
                     <p
                       id={`${id}-${field.name}-hint`}
@@ -959,15 +1045,11 @@ export function DetailsStep({ context }: { context: ReceivingStepsContext }) {
               </p>
               <ul className="m-0 grid list-disc gap-2 pl-5 text-sm leading-[1.55] text-admin-text">
                 <li>
-                  Abrir uma conta no Asaas no seu nome e verificar sua
-                  identidade.
+                  Cadastrar você como recebedor na Pagar.me, no seu nome, e
+                  verificar sua identidade.
                 </li>
                 <li>
-                  Criar nessa conta uma chave Pix aleatória só para receber os
-                  presentes.
-                </li>
-                <li>
-                  Sua chave do banco não muda; ela será só o destino dos saques.
+                  Usar a conta bancária informada como destino dos repasses.
                 </li>
               </ul>
               <details>
@@ -980,9 +1062,8 @@ export function DetailsStep({ context }: { context: ReceivingStepsContext }) {
                   <p className="m-0">
                     {showSandboxNotice(setup.mode)
                       ? setup.disclosure.text
-                      : setup.disclosure.text.split(" Em Sandbox,")[0]}
+                      : setup.disclosure.text.split(" Em teste,")[0]}
                   </p>
-                  <p className="m-0">{receivingIncomingPixDisclosure.text}</p>
                 </div>
               </details>
               <label className="mt-1 flex cursor-pointer items-start gap-3 text-[0.95rem] text-admin-text">
@@ -1003,7 +1084,7 @@ export function DetailsStep({ context }: { context: ReceivingStepsContext }) {
                 className={receivingPrimaryAction}
                 disabled={busy || !context.onSubmit}
               >
-                Criar minha conta no Asaas
+                Enviar cadastro à Pagar.me
               </button>
               <p className="m-0 text-[0.82rem] text-admin-text-secondary">
                 Depois disso, você segue para a ativação.
@@ -1152,19 +1233,13 @@ export function ActivationStep({
   );
   const [help, setHelp] = useState(false);
   const provider = setup?.providerStatus ?? null;
-  const documents = documentsTaskStatus(provider?.documentation);
+  const documents = documentsTaskStatus(provider?.accountState);
   const created = setup?.accountState === "CREATED";
   const taskOwner = !!setup?.isHolder && !owner;
-  const rejected =
-    provider &&
-    [
-      provider.commercialInfo,
-      provider.bankAccountInfo,
-      provider.documentation,
-      provider.general,
-    ].includes("REJECTED");
-  const consentsReady =
-    !!setup?.consentRecorded && setup.pixConsentRecorded === true;
+  const blocked =
+    provider?.accountState === "BLOCKED" ||
+    provider?.accountState === "SUSPENDED";
+  const consentsReady = !!setup?.consentRecorded;
   return (
     <StepFrame
       siteId={siteId}
@@ -1301,15 +1376,15 @@ export function ActivationStep({
                     : documents === "review"
                       ? "Em análise"
                       : documents === "attention"
-                        ? "Precisa reenviar"
-                        : "Aguardando envio"}
+                        ? "Bloqueada"
+                        : "Verificação pendente"}
                 </TaskBadge>
               }
-              description="No Asaas, envie a foto do documento e faça a selfie, quando solicitado, no próprio Asaas."
+              description="A Pagar.me verifica sua identidade com a foto do documento e uma selfie, no link seguro dela."
               note={
                 provider
-                  ? "Detectado automaticamente pelo Asaas."
-                  : "Não foi possível consultar as verificações do Asaas. Verifique a situação novamente."
+                  ? "Situação informada automaticamente pela Pagar.me."
+                  : "Não foi possível consultar a verificação na Pagar.me. Verifique a situação novamente."
               }
               control={
                 <span
@@ -1376,49 +1451,15 @@ export function ActivationStep({
           )}
         </section>
       )}
-      {rejected && (
+      {blocked && (
         <p
           role="alert"
           className="m-0 rounded-[14px] bg-admin-danger-subtle p-4 text-sm leading-[1.55] text-admin-danger-text"
         >
-          Há dados rejeitados pelo Asaas. O titular precisa corrigir as
-          pendências no fluxo de verificação do provedor.
+          A Pagar.me bloqueou ou suspendeu o recebedor. Fale com o suporte do
+          EntreLaços para entender o que ajustar.
         </p>
       )}
-      {provider?.commercialInfoExpired && (
-        <p
-          role="alert"
-          className="m-0 rounded-[14px] bg-admin-danger-subtle p-4 text-sm leading-[1.55] text-admin-danger-text"
-        >
-          Os dados comerciais estão expirados. Atualize ou confirme os dados com
-          o Asaas.
-        </p>
-      )}
-      {created &&
-        context.incomingAvailable &&
-        !receivingReady &&
-        taskOwner &&
-        setup?.consentRecorded &&
-        !setup.pixConsentRecorded &&
-        context.incomingGuard?.isCurrent() && (
-          <section
-            aria-label="Autorização para preparar o Pix"
-            className={`${receivingCard} grid gap-3 p-6`}
-          >
-            <p className="m-0 text-sm leading-[1.55] text-admin-text">
-              {receivingIncomingPixDisclosure.text}
-            </p>
-            <button
-              type="button"
-              className={receivingPrimaryAction}
-              disabled={busy || !context.onAuthorizePix}
-              onClick={context.onAuthorizePix}
-            >
-              Autorizar preparação automática do Pix
-            </button>
-          </section>
-        )}
-
       {created && (
         <section className={`${receivingCard} flex gap-4 p-6`}>
           <span

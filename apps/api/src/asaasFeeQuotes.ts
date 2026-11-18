@@ -1,8 +1,10 @@
 import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { giftCentsSchema, giftQuoteSchema } from "@entrelacos/contracts";
-import type { AsaasAccountFeesObservation } from "./asaasHttpClient";
-import type { FinancialAccountBinding } from "./financialOverview";
+import type {
+  AsaasAccountBinding,
+  AsaasAccountFeesObservation,
+} from "./asaasHttpClient";
 import { parseBrlCents } from "./giftMoney";
 import type { GiftQuoteServiceDependencies } from "./giftQuotes";
 import {
@@ -22,7 +24,7 @@ export type AsaasFeeProfileRequest =
 export interface AsaasTrustedFeeProfile {
   verification: "verified";
   request: AsaasFeeProfileRequest;
-  binding: FinancialAccountBinding;
+  binding: AsaasAccountBinding;
   operatorReference: string;
   recipientReference: string;
   holderReference: string;
@@ -58,7 +60,7 @@ export interface AsaasTrustedFeeProfile {
 
 export interface AsaasFeeQuotesOptions {
   readAccountFees(
-    binding: FinancialAccountBinding,
+    binding: AsaasAccountBinding,
   ): Promise<AsaasAccountFeesObservation>;
   resolveFeeProfile(
     request: AsaasFeeProfileRequest,

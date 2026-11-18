@@ -54,15 +54,12 @@ it("persists a recovery deadline before provider I/O and resumes it across worke
         createWithdrawalComposition(
           {
             mode: "sandbox",
+            providerMode: "test",
             applicationEnvironment: "test",
-            platformApiKey: "$aact_hmlg_fixture",
-            platformAccountId: "platform-one",
-            platformWalletId: "wallet-one",
-            platformWebhookTokenHash: "a".repeat(64),
-            credentialKeyId: "test-key",
-            credentialKeyring: new Map([["test-key", new Uint8Array(32)]]),
-            webhookPublicOrigin: "https://webhook.example.test",
-            webhookUrl: "https://webhook.example.test/v1/webhooks/asaas",
+            secretKey: "sk_test_fixture",
+            platformRecipientId: "rp_platform01",
+            webhookBasicUser: "webhook-user",
+            webhookCredentialsHash: "a".repeat(64),
           },
           { db: drizzle(client), fetch },
         );

@@ -18,7 +18,7 @@ const canonicalRequestId = `nr1_${createHash("sha256")
       "receiving.self-nomination.request.v1",
       "site-one",
       "user-one",
-      "ASAAS",
+      "PAGARME",
       "sandbox",
     ]),
     "utf8",
@@ -242,14 +242,8 @@ function fixture(rawTimestamps = false) {
                       ? null
                       : [
                           "operatorReference",
-                          "webhookTokenHash",
                           "accountReference",
                           "recipientReference",
-                          "credentialVersion",
-                          "credentialKeyId",
-                          "credentialNonce",
-                          "credentialCiphertext",
-                          "credentialTag",
                           "observedAt",
                         ].some((key) => source.a?.[key] !== null) ||
                         source.a.providerAccountState !== "UNVERIFIED" ||
@@ -337,8 +331,7 @@ function fixture(rawTimestamps = false) {
             hasProviderBinding:
               a.accountReference !== null ||
               a.operatorReference !== null ||
-              a.webhookTokenHash !== null ||
-              a.credentialVersion !== null ||
+              a.recipientReference !== null ||
               a.providerAccountState !== "UNVERIFIED",
           })),
         };
@@ -358,7 +351,7 @@ function fixture(rawTimestamps = false) {
               )?.operatorUserId,
               accountSiteId: "site-one",
               accountEnvironment: "sandbox",
-              accountProvider: "ASAAS",
+              accountProvider: "PAGARME",
             })),
         };
       if (/pg_advisory_xact_lock/.test(text)) return { rows: [] };
@@ -512,7 +505,7 @@ describe("durable initial receiving nomination", () => {
         version: "receiving.account-provisioning.v1",
         nomination: original,
         provision: {
-          provider: "ASAAS",
+          provider: "PAGARME",
           siteId: original.siteId,
           accountId: original.accountId,
           operationId: original.operationId,
@@ -641,7 +634,7 @@ describe("durable initial receiving nomination", () => {
     ).rejects.toMatchObject({ code: "RECEIVING_NOMINATION_UNAVAILABLE" });
     expect(v.tables.accounts).toHaveLength(0);
   });
-  it.each(["operatorReference", "webhookTokenHash"])(
+  it.each(["operatorReference", "recipientReference"])(
     "rejects a candidate with a stored provider marker %s",
     async (field) => {
       const v = fixture();
@@ -651,7 +644,7 @@ describe("durable initial receiving nomination", () => {
         v.authorization,
       );
       v.tables.accounts[0][field] =
-        field === "webhookTokenHash" ? "a".repeat(64) : "provider-operator";
+        field === "recipientReference" ? "rp_foreign" : "provider-operator";
       await expect(
         v.repository.reserveNomination(
           v.snapshot,
@@ -666,7 +659,7 @@ describe("durable initial receiving nomination", () => {
         v.queries.some(
           (q) =>
             /a\.operator_reference IS NOT NULL/.test(q.sql) &&
-            /a\.webhook_token_hash IS NOT NULL/.test(q.sql),
+            /a\.recipient_reference IS NOT NULL/.test(q.sql),
         ),
       ).toBe(true);
     },
@@ -817,7 +810,7 @@ describe("durable initial receiving nomination", () => {
     expect(v.tables.accounts[0]).toMatchObject({
       id: "account-one",
       operatorUserId: "user-one",
-      provider: "ASAAS",
+      provider: "PAGARME",
       environment: "sandbox",
       providerAccountState: "UNVERIFIED",
       isCurrent: true,
@@ -826,7 +819,7 @@ describe("durable initial receiving nomination", () => {
       commercialEnabled: false,
     });
     expect(v.tables.accounts[0].accountReference).toBeNull();
-    expect(v.tables.accounts[0].credentialVersion).toBeNull();
+    expect(v.tables.accounts[0].recipientReference).toBeNull();
     expect(v.tables.operations[0]).toMatchObject({
       kind: "ACCOUNT_CREATE",
       state: "REQUESTED",
@@ -1023,14 +1016,8 @@ describe("authoritative nomination scope recovery", () => {
   });
   it.each([
     "operatorReference",
-    "webhookTokenHash",
     "accountReference",
     "recipientReference",
-    "credentialVersion",
-    "credentialKeyId",
-    "credentialNonce",
-    "credentialCiphertext",
-    "credentialTag",
     "observedAt",
     "providerAccountState",
     "receivingCapability",

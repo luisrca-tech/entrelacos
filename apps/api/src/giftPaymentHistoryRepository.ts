@@ -232,7 +232,7 @@ function original(
     account = data.accounts.get(accountId);
   if (!quote || !account) return historyUnavailable();
   scoped(quote, scope, accountId);
-  if (account.id !== accountId || account.provider !== "ASAAS")
+  if (account.id !== accountId || account.provider !== "PAGARME")
     return historyUnavailable();
   const snapshot = readGiftQuoteSnapshot(
     object(quote.snapshot) as unknown as GiftQuoteSnapshot,
@@ -250,7 +250,7 @@ function original(
     q.siteId !== scope.siteId ||
     q.mode !== scope.mode ||
     q.giftId !== quote.gift_id ||
-    binding.provider !== "ASAAS" ||
+    binding.provider !== "PAGARME" ||
     binding.siteId !== scope.siteId ||
     binding.environment !== scope.mode ||
     binding.accountReference !== account.account_reference ||

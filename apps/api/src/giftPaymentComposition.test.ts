@@ -216,25 +216,23 @@ function fixture() {
   };
 }
 
-function emptyWithdrawalHistory(siteId = "site-one") {
-  return {
-    rows: [
-      {
-        id: null,
-        siteId,
-        amountCents: null,
-        feeCents: null,
-        netCents: null,
-        currency: null,
-        destinationVersion: null,
-        state: null,
-        createdAt: null,
-        updatedAt: null,
-        mode: null,
-        accountMatches: false,
-      },
-    ],
-  };
+// Sub-account credentials were dropped (migration 0031): only platform
+// account (PLATFORM_ACCOUNT_SPLIT_V2) checkouts remain until Phase 3.
+function usePlatformSplit(values: ReturnType<typeof checkoutFixture>) {
+  const snapshot = values.snapshot;
+  snapshot.pricing.provenance = "platform-tariff-table";
+  snapshot.pricing.policy = platformTariffPolicy("PIX");
+  Object.assign(snapshot.quote, {
+    settlementVersion: "PLATFORM_ACCOUNT_SPLIT_V2",
+    ...quoteGiftPurchaseAmounts(
+      { nominalCents: 10000, method: "PIX", policy: snapshot.pricing.policy },
+      undefined,
+    ),
+  });
+  Object.assign(snapshot, {
+    settlement: buildGiftV2Settlement(snapshot.quote),
+  });
+  return values;
 }
 
 describe("gift payment composition", () => {
@@ -254,69 +252,6 @@ describe("gift payment composition", () => {
     expect(values.db.select).not.toHaveBeenCalled();
     expect(values.fetch).not.toHaveBeenCalled();
     await composition.close();
-  });
-
-  it.each(["sandbox", "live"] as const)(
-    "reads actual empty withdrawal history without a receiving account in %s mode",
-    async (mode) => {
-      const values = fixture();
-      const execute = vi.fn(async (_query: SQL) => emptyWithdrawalHistory());
-      values.db.execute = execute as never;
-      const config = { ...configuration(), mode } as AsaasLegacyConfig;
-      const composition = createGiftPaymentComposition(config, values);
-      expect(composition.ports.finance?.listWithdrawals).toBeTypeOf("function");
-      await expect(
-        composition.ports.finance?.listWithdrawals?.("site-one"),
-      ).resolves.toEqual([]);
-      expect(execute).toHaveBeenCalledTimes(1);
-      const query = new PgDialect().sqlToQuery(execute.mock.calls[0][0]);
-      expect(query.params).toEqual([mode, "site-one", mode, []]);
-      expect(values.db.select).not.toHaveBeenCalled();
-      expect(values.fetch).not.toHaveBeenCalled();
-      await composition.close();
-    },
-  );
-
-  it("preserves stored withdrawal history site validation", async () => {
-    const values = fixture();
-    values.db.execute = vi.fn(async () =>
-      emptyWithdrawalHistory("another-site"),
-    ) as never;
-    const composition = createGiftPaymentComposition(configuration(), values);
-    expect(composition.ports.finance?.listWithdrawals).toBeTypeOf("function");
-    await expect(
-      composition.ports.finance?.listWithdrawals?.("site-one"),
-    ).rejects.toMatchObject({ code: "WITHDRAWAL_HISTORY_UNAVAILABLE" });
-    await composition.close();
-  });
-
-  it("drains withdrawal history reads before closing and rejects new reads after close", async () => {
-    const values = fixture();
-    const query = deferred();
-    values.db.execute = vi.fn(async () => {
-      await query.promise;
-      return emptyWithdrawalHistory();
-    }) as never;
-    const composition = createGiftPaymentComposition(configuration(), values);
-    expect(composition.ports.finance?.listWithdrawals).toBeTypeOf("function");
-    const reading = composition.ports.finance?.listWithdrawals?.("site-one");
-    await Promise.resolve();
-    expect(values.db.execute).toHaveBeenCalledTimes(1);
-    const closing = composition.close();
-    let closed = false;
-    void closing.then(() => {
-      closed = true;
-    });
-    await Promise.resolve();
-    expect(closed).toBe(false);
-    await expect(
-      composition.ports.finance?.listWithdrawals?.("site-one"),
-    ).rejects.toThrow("Gift payment composition unavailable");
-    query.resolve();
-    await expect(reading).resolves.toEqual([]);
-    await closing;
-    expect(closed).toBe(true);
-    expect(values.fetch).not.toHaveBeenCalled();
   });
 
   it("prices new quotes from the platform tariff table without reading provider fees", async () => {
@@ -419,129 +354,6 @@ describe("gift payment composition", () => {
     await composition.close();
   });
 
-  it("creates a live observed-price checkout for exactly the configured gift value", async () => {
-    const values = checkoutFixture();
-    values.publicOrigin = "https://wedding.example.test";
-    values.rows[1] = [{ origin: values.publicOrigin }];
-    const config = {
-      ...values.config,
-      mode: "live",
-      applicationEnvironment: "production",
-    } as const;
-    if (config.credentialKeyring === undefined)
-      throw new Error("Missing test keyring");
-    const envelope = encryptProviderCredential(
-      "$aact_prod_private-live-account-key",
-      {
-        provider: "ASAAS",
-        siteId: "site-one",
-        accountBindingId: "receiving-one",
-        environment: "live",
-      },
-      config.credentialKeyring,
-      config.credentialKeyId,
-    );
-    Object.assign(values.account, {
-      environment: "live",
-      credentialNonce: envelope.nonce,
-      credentialCiphertext: envelope.ciphertext,
-      credentialTag: envelope.tag,
-    });
-    values.rows[0] = [{ account: values.account, isDemo: false }];
-    values.snapshot.receiving.environment = "live" as never;
-    values.snapshot.pricing.environment = "live" as never;
-    values.snapshot.quote.mode = "live";
-    Object.assign(values.snapshot.pricing.policy, {
-      feeAllocation: "RECIPIENT_DEDUCTED",
-      feeBasis: "OBSERVED_ESTIMATE",
-    });
-    Object.assign(values.snapshot.quote, {
-      feeAllocation: "RECIPIENT_DEDUCTED",
-      totalCents: 10000,
-    });
-    const composition = createGiftPaymentComposition(config, values);
-    expect(
-      await composition.ports.giftPayments?.createCheckout(
-        "site-one",
-        values.command,
-      ),
-    ).toMatchObject({
-      hostedUrl: "https://asaas.com/checkoutSession/show?id=checkout-one",
-    });
-    const payload = JSON.parse(String(values.fetch.mock.calls[0][1]?.body));
-    expect(payload.items).toEqual([
-      { name: "Symbolic gift", quantity: 1, value: 100 },
-    ]);
-    expect(payload.splits).toEqual([
-      { walletId: "platform-wallet", fixedValue: 2 },
-    ]);
-    expect(String(values.fetch.mock.calls[0][0])).toBe(
-      "https://api.asaas.com/v3/checkouts",
-    );
-    await composition.close();
-  });
-  it("creates the exact-price real checkout for an opted-in production showcase", async () => {
-    const values = checkoutFixture();
-    values.publicOrigin = "https://wedding.example.test";
-    values.rows[1] = [{ origin: values.publicOrigin }];
-    const config = {
-      ...values.config,
-      mode: "live",
-      applicationEnvironment: "production",
-      liveDemoSiteIds: ["site-one"],
-    } as const;
-    if (config.credentialKeyring === undefined)
-      throw new Error("Missing test keyring");
-    const envelope = encryptProviderCredential(
-      "$aact_prod_private-live-account-key",
-      {
-        provider: "ASAAS",
-        siteId: "site-one",
-        accountBindingId: "receiving-one",
-        environment: "live",
-      },
-      config.credentialKeyring,
-      config.credentialKeyId,
-    );
-    Object.assign(values.account, {
-      environment: "live",
-      credentialNonce: envelope.nonce,
-      credentialCiphertext: envelope.ciphertext,
-      credentialTag: envelope.tag,
-    });
-    values.rows[0] = [{ account: values.account, isDemo: true }];
-    values.snapshot.receiving.environment = "live" as never;
-    values.snapshot.pricing.environment = "live" as never;
-    values.snapshot.quote.mode = "live";
-    Object.assign(values.snapshot.pricing.policy, {
-      feeAllocation: "RECIPIENT_DEDUCTED",
-      feeBasis: "OBSERVED_ESTIMATE",
-    });
-    Object.assign(values.snapshot.quote, {
-      feeAllocation: "RECIPIENT_DEDUCTED",
-      totalCents: 10000,
-    });
-    const composition = createGiftPaymentComposition(config, values);
-    expect(
-      await composition.ports.giftPayments?.createCheckout(
-        "site-one",
-        values.command,
-      ),
-    ).toMatchObject({
-      hostedUrl: "https://asaas.com/checkoutSession/show?id=checkout-one",
-    });
-    const payload = JSON.parse(String(values.fetch.mock.calls[0][1]?.body));
-    expect(payload.items).toEqual([
-      { name: "Symbolic gift", quantity: 1, value: 100 },
-    ]);
-    expect(payload.splits).toEqual([
-      { walletId: "platform-wallet", fixedValue: 2 },
-    ]);
-    expect(String(values.fetch.mock.calls[0][0])).toBe(
-      "https://api.asaas.com/v3/checkouts",
-    );
-    await composition.close();
-  });
   it("refuses tariff-table pricing when the recipient is the platform wallet", async () => {
     const values = checkoutFixture();
     Object.assign(values.account, { recipientReference: "platform-wallet" });
@@ -568,24 +380,6 @@ describe("gift payment composition", () => {
       }),
     ).toBeNull();
     expect(values.fetch).not.toHaveBeenCalled();
-    await composition.close();
-  });
-
-  it("creates the real hosted Sandbox checkout with local test evidence only after verifying the stored demo", async () => {
-    const values = checkoutFixture();
-    values.snapshot.pricing.provenance = "local-test";
-    const composition = createGiftPaymentComposition(values.config, values);
-    expect(
-      await composition.ports.giftPayments?.createCheckout(
-        "site-one",
-        values.command,
-      ),
-    ).toMatchObject({
-      hostedUrl: "https://sandbox.asaas.com/checkoutSession/show/checkout-one",
-    });
-    expect(String(values.fetch.mock.calls[0][1]?.body)).not.toMatch(
-      /sandboxDemoPricing|local-test|isDemo/,
-    );
     await composition.close();
   });
 
@@ -641,51 +435,16 @@ describe("gift payment composition", () => {
     const composition = createGiftPaymentComposition(configuration(), values);
     expect(Object.keys(composition.ports).sort()).toEqual([
       "asaasWebhook",
-      "finance",
       "giftPayments",
       "loadPublicGiftPrices",
       "previewPricing",
       "receiving",
       "sandboxBuyerGrossUpAvailable",
-      "withdrawalReservation",
     ]);
     expect(values.fetch).not.toHaveBeenCalled();
     expect(values.loop.start).not.toHaveBeenCalled();
     await composition.close();
     expect(values.loop.stop).not.toHaveBeenCalled();
-  });
-
-  it("composes an independent opt-in withdrawal authorization receiver and owns its lifecycle", async () => {
-    const values = fixture();
-    const authorizationToken = "fixture-withdrawal-authorization-secret";
-    const config = configuration();
-    if (config.mode === "disabled") throw new Error("Expected enabled fixture");
-    const composition = createGiftPaymentComposition(
-      {
-        ...config,
-        withdrawalAuthorization: {
-          token: authorizationToken,
-          url: "https://webhook.example.test/v1/webhooks/asaas/withdrawal-authorization",
-        },
-      },
-      values,
-    );
-    expect(composition.ports.asaasWithdrawalAuthorization).toBeDefined();
-    expect(values.fetch).not.toHaveBeenCalled();
-    await expect(
-      composition.ports.asaasWithdrawalAuthorization?.receive(
-        "different-fixture-authorization-token",
-        "{}",
-      ),
-    ).resolves.toEqual({ status: "REFUSED" });
-    expect(values.fetch).not.toHaveBeenCalled();
-    await composition.close();
-    await expect(
-      composition.ports.asaasWithdrawalAuthorization?.receive(
-        authorizationToken,
-        "{}",
-      ),
-    ).rejects.toThrow("Gift payment composition unavailable");
   });
 
   it("starts one owned worker and waits for its actual stop before finishing close", async () => {
@@ -850,35 +609,6 @@ describe("gift payment composition", () => {
       "Gift payment composition unavailable",
     );
   });
-  it("uses only the credential bound to the persisted site/account/environment and registered HTTPS callbacks", async () => {
-    const values = checkoutFixture();
-    const composition = createGiftPaymentComposition(values.config, values);
-    const checkout = await composition.ports.giftPayments?.createCheckout(
-      "site-one",
-      values.command,
-    );
-    expect(checkout?.hostedUrl).toBe(
-      "https://sandbox.asaas.com/checkoutSession/show/checkout-one",
-    );
-    expect(values.fetch).toHaveBeenCalledTimes(1);
-    const [url, init] = values.fetch.mock.calls[0];
-    expect(url).toBe("https://api-sandbox.asaas.com/v3/checkouts");
-    expect(new Headers(init?.headers).get("access_token")).toBe(
-      "$aact_hmlg_subaccount-secret",
-    );
-    const body = JSON.parse(String(init?.body));
-    expect(body.callback).toEqual({
-      successUrl: "https://wedding.example.test/",
-      cancelUrl: "https://wedding.example.test/",
-      expiredUrl: "https://wedding.example.test/",
-    });
-    expect(body.splits).toEqual([
-      { walletId: "platform-wallet", fixedValue: 2 },
-    ]);
-    expect(JSON.stringify(body)).not.toContain(values.config.platformApiKey);
-    await composition.close();
-  });
-
   it("charges PLATFORM_ACCOUNT_SPLIT_V2 quotes with the platform key and never decrypts the sub-account credential", async () => {
     const values = checkoutFixture();
     const snapshot = values.snapshot;
@@ -947,20 +677,6 @@ describe("gift payment composition", () => {
     },
   );
 
-  it("rejects ciphertext copied from a different local account binding", async () => {
-    const values = checkoutFixture();
-    values.account.id = "another-account";
-    const composition = createGiftPaymentComposition(values.config, values);
-    await expect(
-      composition.ports.giftPayments?.createCheckout(
-        "site-one",
-        values.command,
-      ),
-    ).rejects.toMatchObject({ code: "PROVIDER_CREDENTIAL_UNAVAILABLE" });
-    expect(values.fetch).not.toHaveBeenCalled();
-    await composition.close();
-  });
-
   it("rejects unregistered callback origins before provider dispatch", async () => {
     const values = checkoutFixture();
     values.rows[1] = [];
@@ -976,7 +692,7 @@ describe("gift payment composition", () => {
   });
 
   it("drains an in-flight provider request before closing and preserves the caller's credential key", async () => {
-    const values = checkoutFixture();
+    const values = usePlatformSplit(checkoutFixture());
     let respond!: (response: Response) => void;
     values.fetch.mockImplementation(
       () =>
@@ -1010,34 +726,4 @@ describe("gift payment composition", () => {
       new Uint8Array(32).fill(1),
     );
   });
-});
-
-describe("Sandbox buyer composition", () => {
-  it.each([true, false])(
-    "carries only the exact enabled site into the final provider boundary: %s",
-    async (enabled) => {
-      const v = checkoutFixture();
-      Object.assign(v.config, {
-        sandboxBuyerGrossUpSiteId: enabled ? "site-one" : "another",
-      });
-      v.snapshot.pricing.policy.feeBasis = "SANDBOX_BUYER_ESTIMATE";
-      v.snapshot.pricing.policy.feeAllocation = "BUYER_GROSS_UP";
-      v.snapshot.quote.feeAllocation = "BUYER_GROSS_UP";
-      const composition = createGiftPaymentComposition(v.config, v);
-      const payments = composition.ports.giftPayments;
-      if (!payments) throw new Error("Missing fixture payment port");
-      const result = payments.createCheckout("site-one", v.command);
-      if (enabled) {
-        await expect(result).resolves.toMatchObject({ mode: "sandbox" });
-        expect(v.fetch).toHaveBeenCalledTimes(1);
-        expect(String(v.fetch.mock.calls[0][0])).toBe(
-          "https://api-sandbox.asaas.com/v3/checkouts",
-        );
-      } else {
-        await expect(result).rejects.toThrow();
-        expect(v.fetch).not.toHaveBeenCalled();
-      }
-      await composition.close();
-    },
-  );
 });

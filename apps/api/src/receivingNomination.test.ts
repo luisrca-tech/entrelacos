@@ -37,7 +37,7 @@ describe("canonical nomination first request identity", () => {
   };
   it("uses the entire non-secret SHA256 tuple digest independent of session and policy", () => {
     expect(deriveReceivingNominationRequestId(scope)).toBe(
-      "nr1_rtG0OLUHajcG65fiQAt5LgqONiV-A0x7X4AWQFDTOyQ",
+      "nr1_yJ_ZoM2ufyMlrv_xJ8kL-0TPamjq85XsfYPShn2ru2o",
     );
     expect(deriveReceivingNominationRequestId({ ...scope })).toBe(
       deriveReceivingNominationRequestId(scope),
@@ -64,7 +64,7 @@ describe("private provisioning snapshot projection", () => {
       version: "receiving.account-provisioning.v1",
       nomination: original,
       provision: {
-        provider: "ASAAS",
+        provider: "PAGARME",
         siteId: original.siteId,
         accountId: original.accountId,
         operationId: original.operationId,
@@ -99,19 +99,12 @@ describe("private provisioning snapshot projection", () => {
       record.nomination,
     );
   });
-  it("projects the original nomination after private encrypted result custody", async () => {
+  it("projects the original nomination after private recipient result custody", async () => {
     const record = await wrapper();
     record.provision.dispatch.possibleDispatch = true;
     record.sealedResult = {
-      accountReference: "fictional-child",
-      recipientReference: "fictional-wallet",
-      credential: {
-        version: 1,
-        keyId: "credential-v1",
-        nonce: Buffer.alloc(12, 1).toString("base64url"),
-        ciphertext: Buffer.alloc(32, 2).toString("base64url"),
-        tag: Buffer.alloc(16, 3).toString("base64url"),
-      },
+      accountReference: "rp_fixtureRecipient01",
+      recipientReference: "rp_fixtureRecipient01",
     };
     expect(readReceivingNominationSnapshot(record)).toEqual(record.nomination);
   });
@@ -262,7 +255,7 @@ function fixture() {
     expiresAt: new Date("2026-10-12T12:04:30.000Z"),
   };
   const input = {
-    requestId: "nr1_rtG0OLUHajcG65fiQAt5LgqONiV-A0x7X4AWQFDTOyQ",
+    requestId: "nr1_yJ_ZoM2ufyMlrv_xJ8kL-0TPamjq85XsfYPShn2ru2o",
     confirmSelfAsRecipient: true,
     policyVersion: "receiving-intent-v1",
   };
@@ -588,7 +581,7 @@ describe("explicit initial receiving nomination", () => {
     { siteId: "other" },
     { accountId: "other" },
     { accountReference: "remote" },
-    { provider: "ASAAS" },
+    { provider: "PAGARME" },
     { approval: true },
     { credentials: "private" },
     { reauthenticationToken: "private" },

@@ -9,10 +9,6 @@ import {
   type AsaasWebhookHttpReceiver,
   createAsaasWebhookHttpRouter,
 } from "./asaasWebhookHttp";
-import {
-  type AsaasWithdrawalAuthorizationHttpReceiver,
-  createAsaasWithdrawalAuthorizationHttpRouter,
-} from "./asaasWithdrawalAuthorizationHttp";
 import { createAuthHttpRouter } from "./authHttp";
 import { createDemoResetHttpRouter } from "./demoResetHttp";
 import {
@@ -80,7 +76,6 @@ export type ApiOptions = GiftPaymentsHttpOptions &
     applicationEnvironment?: "development" | "test" | "production";
     receiving?: ReceivingRepositoryOptions;
     asaasWebhook?: AsaasWebhookHttpReceiver;
-    asaasWithdrawalAuthorization?: AsaasWithdrawalAuthorizationHttpReceiver;
     financialReauthentication?: FinancialReauthentication;
     receivingNomination?: ReceivingNominationService;
     receivingSetup?: ReceivingSetupService;
@@ -116,12 +111,6 @@ export function createApp(
   }
 
   if (options) {
-    app.route(
-      "/",
-      createAsaasWithdrawalAuthorizationHttpRouter(
-        options.asaasWithdrawalAuthorization,
-      ),
-    );
     app.route("/", createAsaasWebhookHttpRouter(options.asaasWebhook));
     const liveSitePolicy = {
       applicationEnvironment:
@@ -176,9 +165,7 @@ export function createApp(
       ["POST", "/v1/sites/:siteId/receiving/setup"],
       ["POST", "/v1/sites/:siteId/receiving/holder"],
       ["POST", "/v1/sites/:siteId/receiving/incoming-verification"],
-      ["POST", "/v1/sites/:siteId/receiving/pix-destination/preview"],
-      ["POST", "/v1/sites/:siteId/receiving/pix-destination/confirm"],
-      ["GET", "/v1/sites/:siteId/receiving/pix-destination"],
+      ["POST", "/v1/owner/sites/:siteId/receiving/kyc-link"],
     ]) {
       app.on(method, path, (context) =>
         receivingSetupRouter.fetch(context.req.raw),

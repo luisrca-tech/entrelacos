@@ -364,7 +364,7 @@ async function withdrawalHttpBridge(
     id: "account-bridge-a",
     siteId: access.siteId,
     environment: "sandbox",
-    provider: "ASAAS",
+    provider: "PAGARME",
     operatorUserId: storedUser.id,
     operatorReference: "fictional-operator",
     accountReference: "fictional-account",
@@ -1084,7 +1084,7 @@ async function withdrawalHttpBridge(
     balance: {
       getBalance: async (scope) => ({
         source: "provider",
-        provider: "ASAAS",
+        provider: "PAGARME",
         siteId: scope.siteId,
         accountBindingId: scope.accountId,
         accountReference: scope.accountReference,

@@ -1,4 +1,5 @@
 import { parseBrlCents, serializeBrlCents } from "./giftMoney";
+import type { GiftPaymentInboxClaim } from "./giftPaymentInboxRepository";
 import type { GiftProviderPaymentObservation } from "./giftPaymentReconciliation";
 import type { ProviderCredentialContext } from "./providerCredentials";
 
@@ -232,6 +233,49 @@ export interface AsaasCheckoutPaymentsObservation {
   }>;
 }
 
+/** Legacy Asaas account binding; removed with the Phase 3 checkout migration. */
+export interface AsaasAccountBinding {
+  provider: "ASAAS";
+  siteId: string;
+  accountBindingId: string;
+  accountReference: string;
+  environment: "sandbox" | "live";
+}
+/** Stored-account reads used by the legacy Asaas gift payment workers. */
+export interface AsaasStoredAccountReader {
+  hasInternalTransferCredit(
+    binding: AsaasAccountBinding,
+    transferReference: string,
+    amountCents: number,
+    effectiveDate: string,
+  ): Promise<boolean>;
+  hasUnrestrictedGiftPayment(
+    binding: AsaasAccountBinding,
+    paymentReference: string,
+  ): Promise<boolean>;
+  listInstallmentPayments(
+    binding: AsaasAccountBinding,
+    installmentReference: string,
+  ): Promise<AsaasInstallmentPaymentsObservation>;
+  removeInstallment(
+    binding: AsaasAccountBinding,
+    installmentReference: string,
+  ): Promise<void>;
+  getInstallmentRemoval(
+    binding: AsaasAccountBinding,
+    installmentReference: string,
+  ): Promise<AsaasInstallmentRemovalObservation>;
+  listCheckoutPayments(
+    binding: AsaasAccountBinding,
+    checkoutReference: string,
+  ): Promise<AsaasCheckoutPaymentsObservation>;
+  getAccountFees(
+    binding: AsaasAccountBinding,
+    options?: { purpose: "PIX_WITHDRAWAL" },
+  ): Promise<AsaasAccountFeesObservation>;
+  getPayment(claim: GiftPaymentInboxClaim): Promise<AsaasPaymentObservation>;
+  getBalance(binding: AsaasAccountBinding): Promise<AsaasBalanceObservation>;
+}
 export class AsaasHttpClientServiceError extends Error {
   readonly code = "PROVIDER_HTTP_UNAVAILABLE";
   readonly status = 503;

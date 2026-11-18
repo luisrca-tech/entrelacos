@@ -242,7 +242,7 @@ describe("panel session resume with a mounted receiving form", () => {
     const name =
       container.querySelector<HTMLInputElement>('input[name="name"]')!;
     const address = container.querySelector<HTMLInputElement>(
-      'input[name="address"]',
+      'input[name="street"]',
     )!;
     expect(name).not.toBeNull();
     name.value = "Filled holder";
@@ -277,14 +277,22 @@ describe("panel session resume with a mounted receiving form", () => {
     const values = {
       name: "Fictional Person",
       email: "person@example.test",
-      cpfCnpj: "12345678909",
+      cpf: "12345678909",
       mobilePhone: "11999999999",
-      incomeValue: "1000",
-      address: "Fictional Road",
-      addressNumber: "1",
-      province: "District",
-      postalCode: "12345678",
       birthDate: "1990-01-01",
+      monthlyIncome: "1000",
+      professionalOccupation: "Engineer",
+      zipCode: "12345678",
+      street: "Fictional Road",
+      streetNumber: "1",
+      neighborhood: "District",
+      city: "Fictional City",
+      state: "SP",
+      referencePoint: "Near the park",
+      bank: "341",
+      branchNumber: "1234",
+      accountNumber: "12345",
+      accountCheckDigit: "6",
     };
     for (const [key, value] of Object.entries(values)) {
       const input = container.querySelector<HTMLInputElement>(
@@ -366,14 +374,22 @@ describe("panel session resume with a mounted receiving form", () => {
       const values = {
         name: "Fictional Person",
         email: "person@example.test",
-        cpfCnpj: "12345678909",
+        cpf: "12345678909",
         mobilePhone: "11999999999",
-        incomeValue: "1000",
-        address: "Fictional Road",
-        addressNumber: "1",
-        province: "District",
-        postalCode: "12345678",
         birthDate: "1990-01-01",
+        monthlyIncome: "1000",
+        professionalOccupation: "Engineer",
+        zipCode: "12345678",
+        street: "Fictional Road",
+        streetNumber: "1",
+        neighborhood: "District",
+        city: "Fictional City",
+        state: "SP",
+        referencePoint: "Near the park",
+        bank: "341",
+        branchNumber: "1234",
+        accountNumber: "12345",
+        accountCheckDigit: "6",
       };
       for (const [key, value] of Object.entries(values))
         container.querySelector<HTMLInputElement>(

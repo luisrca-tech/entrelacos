@@ -4,12 +4,16 @@ const mocks = vi.hoisted(() => ({
   payment: vi.fn(),
   receiving: vi.fn(),
   history: vi.fn(),
+  withdrawals: vi.fn(),
 }));
 vi.mock("./giftPaymentComposition", () => ({
   createGiftPaymentComposition: mocks.payment,
 }));
 vi.mock("./receivingSetupComposition", () => ({
   createReceivingSetupComposition: mocks.receiving,
+}));
+vi.mock("./withdrawalComposition", () => ({
+  createWithdrawalComposition: mocks.withdrawals,
 }));
 vi.mock("./giftPaymentHistoryComposition", () => ({
   createGiftPaymentHistoryApplication: mocks.history,
@@ -38,6 +42,16 @@ describe("gift application integration", () => {
       const closeHistory = vi.fn(async () => {
         events.push("history-close");
       });
+      const finance = { finance: { fixture: "finance" } };
+      const startWithdrawals = vi.fn(() => events.push("withdrawals-start"));
+      const closeWithdrawals = vi.fn(async () => {
+        events.push("withdrawals-close");
+      });
+      mocks.withdrawals.mockReturnValue({
+        ports: finance,
+        start: startWithdrawals,
+        close: closeWithdrawals,
+      });
       const app = { fetch: vi.fn(), close: closeHistory };
       mocks.payment.mockReturnValue({
         ports: payment,
@@ -53,13 +67,19 @@ describe("gift application integration", () => {
         expect(args[2]).toMatchObject({
           ...receiving,
           ...payment,
+          ...finance,
           applicationEnvironment: target,
           auth: { fixture: "auth" },
         });
         events.push("app-created");
         return app;
       });
-      const config = {
+      const config: {
+        target: string;
+        giftPayment: unknown;
+        giftPublicOrigin: string;
+        giftPaymentHistory: unknown;
+      } = {
         target,
         giftPayment: {
           mode: target === "production" ? "live" : "sandbox",
@@ -67,21 +87,28 @@ describe("gift application integration", () => {
         },
         giftPublicOrigin: "http://localhost:4321",
         giftPaymentHistory: { mode: "sandbox" },
-      } as never;
+      };
       const application = await createGiftApplication(
-        config,
+        config as never,
         { db: {} } as never,
         { fixture: "auth" } as never,
         {},
       );
       expect(events).toEqual(
-        starts ? ["app-created", "start"] : ["app-created"],
+        starts
+          ? ["app-created", "start", "withdrawals-start"]
+          : ["app-created"],
       );
       expect(application.fetch).toBe(app.fetch);
       const closing = application.close();
       expect(application.close()).toBe(closing);
       await closing;
       expect(closePayments).toHaveBeenCalledOnce();
+      expect(closeWithdrawals).toHaveBeenCalledOnce();
+      expect(mocks.withdrawals).toHaveBeenLastCalledWith(
+        config.giftPayment,
+        expect.objectContaining({ db: {} }),
+      );
       expect(closeReceiving).toHaveBeenCalledOnce();
       expect(closeHistory).toHaveBeenCalledOnce();
     },

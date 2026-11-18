@@ -1,7 +1,12 @@
+import type { ReceivingSetupContext } from "@entrelacos/contracts";
 import { useCallback, useEffect, useState } from "react";
 
 export type AsaasTasks = { password: boolean; phone: boolean };
 type TaskStorage = Pick<Storage, "getItem" | "setItem">;
+
+type ReceivingProviderAccountState = NonNullable<
+  ReceivingSetupContext["providerStatus"]
+>["accountState"];
 
 const emptyTasks: AsaasTasks = { password: false, phone: false };
 
@@ -40,21 +45,21 @@ export function writeAsaasTasks(
   } catch {}
 }
 
+// Identity verification happens at Pagar.me; its account state drives the badge.
 export function documentsTaskStatus(
-  documentation:
-    | "PENDING"
-    | "AWAITING_APPROVAL"
-    | "APPROVED"
-    | "REJECTED"
-    | undefined,
+  accountState: ReceivingProviderAccountState | undefined,
 ) {
-  return documentation === "APPROVED"
-    ? "done"
-    : documentation === "AWAITING_APPROVAL"
-      ? "review"
-      : documentation === "REJECTED"
-        ? "attention"
-        : "waiting";
+  switch (accountState) {
+    case "APPROVED":
+      return "done";
+    case "UNDER_REVIEW":
+      return "review";
+    case "BLOCKED":
+    case "SUSPENDED":
+      return "attention";
+    default:
+      return "waiting";
+  }
 }
 
 function browserStorage(): TaskStorage | null {

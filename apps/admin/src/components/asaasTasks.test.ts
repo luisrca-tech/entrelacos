@@ -53,11 +53,13 @@ describe("Asaas activation tasks", () => {
     expect(readAsaasTasks(null, "k")).toEqual(empty);
   });
 
-  it("derives the documents task from the Asaas review", () => {
+  it("derives the identity verification task from the Pagar.me account state", () => {
     expect(documentsTaskStatus("APPROVED")).toBe("done");
-    expect(documentsTaskStatus("AWAITING_APPROVAL")).toBe("review");
-    expect(documentsTaskStatus("REJECTED")).toBe("attention");
-    expect(documentsTaskStatus("PENDING")).toBe("waiting");
+    expect(documentsTaskStatus("UNDER_REVIEW")).toBe("review");
+    expect(documentsTaskStatus("BLOCKED")).toBe("attention");
+    expect(documentsTaskStatus("SUSPENDED")).toBe("attention");
+    expect(documentsTaskStatus("ONBOARDING")).toBe("waiting");
+    expect(documentsTaskStatus("UNVERIFIED")).toBe("waiting");
     expect(documentsTaskStatus(undefined)).toBe("waiting");
   });
 });

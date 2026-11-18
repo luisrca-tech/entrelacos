@@ -18,7 +18,6 @@ import {
   withdrawalIntent,
 } from "@entrelacos/database/schema";
 import { sql } from "drizzle-orm";
-import { hashAsaasEventIdentity } from "./asaasWebhook";
 import {
   compareDatabaseTimestamps,
   readDatabaseTimestamp,
@@ -176,14 +175,14 @@ function bindingInput(
   if (
     Object.keys(raw).sort().join(",") !==
       "accountBindingId,accountReference,environment,provider,siteId" ||
-    raw.provider !== "ASAAS" ||
+    raw.provider !== "PAGARME" ||
     raw.environment !== environment
   )
     return unavailable();
   const storedSite = siteIdSchema.safeParse(raw.siteId);
   if (!storedSite.success) return unavailable();
   return {
-    provider: "ASAAS",
+    provider: "PAGARME",
     siteId: storedSite.data,
     accountBindingId: localId(raw.accountBindingId),
     accountReference: reference(raw.accountReference),
@@ -327,14 +326,10 @@ function eventPayload(
     )
       return unavailable();
   }
+  // The inbox writer verifies the provider identity before storing the hash.
   if (
-    event.payloadHash !==
-      hashAsaasEventIdentity(
-        event.providerEventReference,
-        event.eventType,
-        binding.accountReference,
-        payload as Record<string, string>,
-      ) ||
+    typeof event.payloadHash !== "string" ||
+    !/^[a-f0-9]{64}$/.test(event.payloadHash) ||
     (payload.accountId !== undefined &&
       payload.accountId !== binding.accountReference)
   )
@@ -397,7 +392,7 @@ function withdrawal(row: Row, observedAt: Date): void {
   optionalReference(row.providerReference);
   if (
     typeof row.receiptReference !== "string" ||
-    !/^asaas-transfer:[a-f0-9]{64}$/.test(row.receiptReference)
+    !/^pagarme-withdrawal:[a-f0-9]{64}$/.test(row.receiptReference)
   )
     optionalReference(row.receiptReference);
   if (heldStates.includes(String(row.state))) {
@@ -436,7 +431,7 @@ function payment(row: Row, binding: FinancialAccountBinding, observedAt: Date) {
     row.quoteAccountReference !== binding.accountReference ||
     row.quoteSiteId !== binding.siteId ||
     row.quoteEnvironment !== binding.environment ||
-    row.quoteProvider !== "ASAAS" ||
+    row.quoteProvider !== "PAGARME" ||
     row.currency !== "BRL" ||
     row.quoteCurrency !== "BRL" ||
     row.verificationStatus !== "VERIFIED" ||
@@ -791,10 +786,7 @@ function aggregate(
         entry.effectKey !== withdrawalCompletedEffectKey(c) ||
         cents(entry.amountCents, true) !== cents(proof.totalDebitCents, true) ||
         proof.totalDebitCents !== proof.netCents + proof.feeCents ||
-        (c.environment === "live" &&
-        c.policyVersion === `asaas-pix-gross-max-v1-${c.feeCents}`
-          ? proof.netCents < Number(w.netCents)
-          : proof.netCents !== w.netCents) ||
+        proof.netCents !== w.netCents ||
         cents(proof.feeCents) > Number(w.feeCents) ||
         proof.totalDebitCents > Number(w.amountCents)
       )

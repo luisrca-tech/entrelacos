@@ -1,6 +1,10 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
-import type { AsaasLegacyConfig } from "./asaasLegacyConfig";
-import { encryptProviderCredential } from "./providerCredentials";
+import type { GiftPaymentConfig } from "./giftPaymentConfig";
+import {
+  deriveReceivingFingerprintKey,
+  RECEIVING_FINGERPRINT_KEY_ID,
+} from "./receivingAccountProvisioning";
 import { createReceivingSetupComposition } from "./receivingSetupComposition";
 
 const mocks = vi.hoisted(() => ({
@@ -27,37 +31,23 @@ function deferred() {
   });
   return { promise, resolve };
 }
+function pagarmeFixture(name: string) {
+  return readFileSync(
+    new URL(`./__fixtures__/pagarme/${name}.json`, import.meta.url),
+    "utf8",
+  );
+}
 function fixture() {
   vi.clearAllMocks();
   const now = () => new Date("2026-10-16T15:00:00Z");
-  const keyring = new Map([["sandbox-v1", Buffer.alloc(32, 19)]]);
-  const config: AsaasLegacyConfig = {
+  const config: Extract<GiftPaymentConfig, { mode: "sandbox" | "live" }> = {
     mode: "sandbox",
+    providerMode: "test",
     applicationEnvironment: "test",
-    platformApiKey: "private-platform-key",
-    platformAccountId: "platform-account",
-    platformWalletId: "platform-wallet",
-    platformWebhookTokenHash: "a".repeat(64),
-    credentialKeyId: "sandbox-v1",
-    credentialKeyring: keyring,
-    webhookPublicOrigin: "https://tunnel.example.test",
-    webhookUrl: "https://tunnel.example.test/v1/webhooks/asaas",
-  };
-  const context = {
-    provider: "ASAAS" as const,
-    siteId: "site-one",
-    accountBindingId: "account-one",
-    environment: "sandbox" as const,
-  };
-  const result = {
-    accountReference: "recipient-account",
-    recipientReference: "recipient-wallet",
-    credential: encryptProviderCredential(
-      "private-subaccount-key",
-      context,
-      keyring,
-      "sandbox-v1",
-    ),
+    secretKey: "sk_test_fixtureSecret0123456789",
+    platformRecipientId: "rp_platformRecipient",
+    webhookBasicUser: "webhook-user",
+    webhookCredentialsHash: "a".repeat(64),
   };
   const account = {
     accountId: "account-one",
@@ -65,7 +55,10 @@ function fixture() {
     state: "SUCCEEDED",
     nomination: {},
     record: null,
-    result,
+    result: {
+      accountReference: "rp_fixtureRecipient01",
+      recipientReference: "rp_fixtureRecipient01",
+    },
   };
   const repository = {
     mode: "sandbox",
@@ -91,21 +84,15 @@ function fixture() {
   const db = { execute: vi.fn(), transaction: vi.fn() };
   const fetch = vi.fn<typeof globalThis.fetch>(async (url) => {
     const path = new URL(String(url)).pathname;
-    if (path === "/v3/wallets/")
-      return Response.json({
-        data: [{ id: "recipient-wallet" }],
-        hasMore: false,
+    const json = (body: string) =>
+      new Response(body, {
+        status: 200,
+        headers: { "content-type": "application/json" },
       });
-    if (path === "/v3/myAccount/status/")
-      return Response.json({
-        id: "status-one",
-        commercialInfo: "APPROVED",
-        bankAccountInfo: "APPROVED",
-        documentation: "APPROVED",
-        general: "APPROVED",
-      });
-    if (path === "/v3/myAccount/commercialInfo/")
-      return Response.json({ commercialInfoExpiration: { isExpired: false } });
+    if (path.endsWith("/recipients/rp_fixtureRecipient01"))
+      return json(pagarmeFixture("recipient-active"));
+    if (path.endsWith("/recipients/rp_fixtureRecipient01/kyc_link"))
+      return json(pagarmeFixture("recipient-kyc-link"));
     throw new Error("Unexpected network path");
   });
   const options = {
@@ -126,7 +113,6 @@ function fixture() {
     db,
     fetch,
     account,
-    context,
   };
 }
 
@@ -213,89 +199,9 @@ describe("receiving setup composition", () => {
     expect(values.fetch).not.toHaveBeenCalled();
     await composition.close();
   });
-  it("rejects a credential encrypted for another site before native status requests", async () => {
-    const values = fixture();
-    const composition = createReceivingSetupComposition(
-      values.config,
-      values.options,
-    );
-    const result = await composition.ports.receivingSetup?.read({
-      siteId: "another-site",
-      userId: "holder-one",
-      sessionId: "session-one",
-    });
-    expect(result?.providerStatus).toBeNull();
-    expect(values.fetch).not.toHaveBeenCalled();
-    values.drain.resolve();
-    await composition.close();
-  });
-
-  it("aborts native status observation and awaits owned database work during shutdown", async () => {
-    const values = fixture();
-    const database = deferred();
-    values.repository.designate.mockImplementation(() => database.promise);
-    values.fetch.mockImplementation(
-      async (_url, request) =>
-        new Promise<Response>((_resolve, reject) => {
-          request?.signal?.addEventListener(
-            "abort",
-            () => reject(new DOMException("Aborted", "AbortError")),
-            { once: true },
-          );
-        }),
-    );
-    const composition = createReceivingSetupComposition(
-      values.config,
-      values.options,
-    );
-    const read = composition.ports.receivingSetup?.read({
-      siteId: "site-one",
-      userId: "holder-one",
-      sessionId: "session-one",
-    });
-    const designate = composition.ports.receivingSetup?.designate(
-      { siteId: "site-one", userId: "owner-one", sessionId: "session-one" },
-      "holder-one",
-    );
-    await vi.waitFor(() => expect(values.fetch).toHaveBeenCalledOnce());
-    const closing = composition.close();
-    let closed = false;
-    void closing.then(() => {
-      closed = true;
-    });
-    values.drain.resolve();
-    await read;
-    expect(closed).toBe(false);
-    database.resolve();
-    await designate;
-    await closing;
-    expect(closed).toBe(true);
-  });
-  it("pins the selected platform account and active key before caller mutation", async () => {
-    const values = fixture();
-    const composition = createReceivingSetupComposition(
-      values.config,
-      values.options,
-    );
-    Object.assign(values.config, {
-      platformAccountId: "another-account",
-      credentialKeyId: "another-key",
-    });
-    const provider = await mocks.provisioning.mock.calls[0][0].readProvider({
-      siteId: "site-one",
-      environment: "sandbox",
-      policyVersion: values.repository.policyVersion,
-    });
-    expect(provider.parentAccountReference).toBe("platform-account");
-    const client = provider.createClient(values.context);
-    expect(client.available).toBe(true);
-    await client.close();
-    values.drain.resolve();
-    await composition.close();
-  });
   it("returns disabled before reading private configuration or dependencies", async () => {
     const config = { mode: "disabled" as const };
-    Object.defineProperty(config, "platformApiKey", {
+    Object.defineProperty(config, "secretKey", {
       get() {
         throw new Error("Private setting read");
       },
@@ -315,37 +221,39 @@ describe("receiving setup composition", () => {
     expect(composition.ports).toEqual({});
     await composition.close();
   });
-
-  it("assembles independent admission, shared reauthentication and native account provisioning without I/O", async () => {
+  it("pins the platform recipient and derives the fingerprint key from the application secret", async () => {
     const values = fixture();
     const composition = createReceivingSetupComposition(
       values.config,
       values.options,
     );
-    const nomination = mocks.nomination.mock.calls[0][0];
-    expect(nomination.nomination.admission).toBe(values.repository.admission);
-    expect(nomination.reauthentication.rateLimit.consume).toBeTypeOf(
-      "function",
+    Object.assign(values.config, { platformRecipientId: "rp_another" });
+    const provisioningOptions = mocks.provisioning.mock.calls[0][0];
+    expect(provisioningOptions.activeFingerprintKeyId).toBe(
+      RECEIVING_FINGERPRINT_KEY_ID,
     );
-    expect(nomination.reauthentication.password.verifyPassword).toBeTypeOf(
-      "function",
+    expect(
+      Buffer.from(
+        provisioningOptions.fingerprintKeys.get(RECEIVING_FINGERPRINT_KEY_ID),
+      ),
+    ).toEqual(
+      Buffer.from(deriveReceivingFingerprintKey(values.options.secret)),
     );
-    const provider = await mocks.provisioning.mock.calls[0][0].readProvider({
+    const provider = await provisioningOptions.readProvider({
       siteId: "site-one",
       environment: "sandbox",
       policyVersion: values.repository.policyVersion,
     });
-    expect(provider.parentAccountReference).toBe("platform-account");
-    const client = provider.createClient(values.context);
-    expect(client.available).toBe(true);
-    await client.close();
+    expect(provider.parentAccountReference).toBe("rp_platformRecipient");
+    expect(provider.recipients.createRecipient).toBeTypeOf("function");
+    const nomination = mocks.nomination.mock.calls[0][0];
+    expect(nomination.nomination.admission).toBe(values.repository.admission);
     expect(values.db.execute).not.toHaveBeenCalled();
     expect(values.fetch).not.toHaveBeenCalled();
     values.drain.resolve();
     await composition.close();
   });
-
-  it("decrypts only the bound subaccount credential for status reads and drains provisioning before close", async () => {
+  it("reads the recipient status with the platform secret key", async () => {
     const values = fixture();
     const composition = createReceivingSetupComposition(
       values.config,
@@ -356,22 +264,105 @@ describe("receiving setup composition", () => {
       userId: "holder-one",
       sessionId: "session-one",
     });
-    expect(result?.providerStatus?.general).toBe("APPROVED");
-    expect(values.fetch).toHaveBeenCalledTimes(3);
-    for (const [, request] of values.fetch.mock.calls)
-      expect(request?.headers).toMatchObject({
-        access_token: "private-subaccount-key",
-      });
+    expect(result?.providerStatus).toEqual({
+      recipientStatus: "active",
+      accountState: "APPROVED",
+      receivingEnabled: true,
+      observedAt: "2026-10-16T15:00:00.000Z",
+    });
+    expect(values.fetch).toHaveBeenCalledOnce();
+    const [url, init] = values.fetch.mock.calls[0];
+    expect(new URL(String(url)).pathname).toMatch(
+      /\/recipients\/rp_fixtureRecipient01$/,
+    );
+    expect(new Headers(init?.headers).get("authorization")).toBe(
+      `Basic ${Buffer.from("sk_test_fixtureSecret0123456789:").toString("base64")}`,
+    );
+    values.drain.resolve();
+    await composition.close();
+  });
+  it("keeps the provider status empty when Pagar.me cannot be read", async () => {
+    const values = fixture();
+    values.fetch.mockRejectedValue(new Error("network down"));
+    const composition = createReceivingSetupComposition(
+      values.config,
+      values.options,
+    );
+    const result = await composition.ports.receivingSetup?.read({
+      siteId: "site-one",
+      userId: "holder-one",
+      sessionId: "session-one",
+    });
+    expect(result?.accountState).toBe("CREATED");
+    expect(result?.providerStatus).toBeNull();
+    values.drain.resolve();
+    await composition.close();
+  });
+  it("creates a fresh identity verification link without touching the database", async () => {
+    const values = fixture();
+    const composition = createReceivingSetupComposition(
+      values.config,
+      values.options,
+    );
+    const link = await composition.ports.receivingSetup?.createKycLink(
+      { siteId: "site-one", userId: "owner-one", sessionId: "session-one" },
+      "OWNER",
+    );
+    expect(link).toEqual({
+      url: "https://exemplo.com/kyc?token=eyWfwqrnqwrnfoqwntoqwntqw",
+      base64QrCode: "PD94bWwgdmVyc2lvbj0iMS4wIj8+PHN2Zy8+",
+      expiresAt: "2026-11-18T12:20:00.000Z",
+    });
+    const [url, init] = values.fetch.mock.calls[0];
+    expect(new URL(String(url)).pathname).toMatch(
+      /\/recipients\/rp_fixtureRecipient01\/kyc_link$/,
+    );
+    expect(init?.method).toBe("POST");
+    expect(values.db.execute).not.toHaveBeenCalled();
+    expect(values.db.transaction).not.toHaveBeenCalled();
+    expect(values.repository.consent).not.toHaveBeenCalled();
+    expect(values.repository.designate).not.toHaveBeenCalled();
+    values.drain.resolve();
+    await composition.close();
+  });
+  it("awaits in-flight provider and database work before closing", async () => {
+    const values = fixture();
+    const database = deferred();
+    const provider = deferred();
+    values.repository.designate.mockImplementation(() => database.promise);
+    const respond = values.fetch.getMockImplementation();
+    values.fetch.mockImplementation(async (...args) => {
+      await provider.promise;
+      return respond?.(...args) as Promise<Response>;
+    });
+    const composition = createReceivingSetupComposition(
+      values.config,
+      values.options,
+    );
+    const read = composition.ports.receivingSetup?.read({
+      siteId: "site-one",
+      userId: "holder-one",
+      sessionId: "session-one",
+    });
+    const designate = composition.ports.receivingSetup?.designate(
+      { siteId: "site-one", userId: "owner-one", sessionId: "session-one" },
+      "holder-one",
+    );
+    await vi.waitFor(() => expect(values.fetch).toHaveBeenCalledOnce());
     const closing = composition.close();
     expect(composition.close()).toBe(closing);
     let closed = false;
     void closing.then(() => {
       closed = true;
     });
-    await Promise.resolve();
-    expect(closed).toBe(false);
     values.drain.resolve();
+    provider.resolve();
+    await read;
+    expect(closed).toBe(false);
+    database.resolve();
+    await designate;
     await closing;
+    expect(closed).toBe(true);
     await expect(
       composition.ports.receivingSetup?.read({
         siteId: "site-one",

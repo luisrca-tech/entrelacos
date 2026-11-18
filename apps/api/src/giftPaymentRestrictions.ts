@@ -11,7 +11,7 @@ import {
   site,
 } from "@entrelacos/database/schema";
 import { sql } from "drizzle-orm";
-import type { AsaasStoredAccountReader } from "./asaasStoredAccountReader";
+import type { AsaasStoredAccountReader } from "./asaasHttpClient";
 import { hashAsaasEventIdentity } from "./asaasWebhook";
 import {
   compareDatabaseTimestamps,

@@ -1,6 +1,6 @@
+import { createHash } from "node:crypto";
 import { drizzle, type NodePgClient } from "drizzle-orm/node-postgres";
 import { describe, expect, it, vi } from "vitest";
-import { hashAsaasEventIdentity } from "./asaasWebhook";
 import {
   type FinancialAccountBinding,
   loadFinancialOverview,
@@ -10,6 +10,11 @@ import { platformTariffPolicy, quoteGiftPurchaseAmounts } from "./giftMoney";
 import { giftReceivedEffectKey } from "./giftPaymentReconciliation";
 import { buildGiftV2Settlement } from "./giftQuotes";
 import { withdrawalCompletedEffectKey } from "./withdrawalExecution";
+
+// Stored inbox hashes are verified by the provider-specific inbox writer.
+function eventHash(...parts: unknown[]): string {
+  return createHash("sha256").update(JSON.stringify(parts)).digest("hex");
+}
 
 type Row = Record<string, unknown>;
 const instant = new Date("2026-10-12T19:00:00.000Z");
@@ -25,7 +30,7 @@ const zeros = {
 };
 function fixture(live = false) {
   const binding: FinancialAccountBinding = {
-    provider: "ASAAS",
+    provider: "PAGARME",
     siteId: "site-one",
     accountBindingId: "account-one",
     accountReference: "remote_one",
@@ -45,7 +50,7 @@ function fixture(live = false) {
     id: binding.accountBindingId,
     site_id: binding.siteId,
     environment: binding.environment,
-    provider: "ASAAS",
+    provider: "PAGARME",
     account_reference: binding.accountReference,
     is_current: false,
     provider_account_state: "BLOCKED",
@@ -265,7 +270,7 @@ function received(
       receiving: {
         siteId: values.binding.siteId,
         environment: values.binding.environment,
-        provider: "ASAAS",
+        provider: "PAGARME",
         accountReference: values.binding.accountReference,
       },
     },
@@ -301,7 +306,7 @@ function received(
     provider_event_reference: `evt_${suffix}`,
     event_type: "PAYMENT_RECEIVED",
     payload,
-    payload_hash: hashAsaasEventIdentity(
+    payload_hash: eventHash(
       `evt_${suffix}`,
       "PAYMENT_RECEIVED",
       values.binding.accountReference,
@@ -557,7 +562,7 @@ describe("authoritative stored financial overview totals", () => {
     if (kind === "account") values.binding.accountBindingId = newId;
     const payload = r.e.payload as Record<string, string>;
     if (kind === "attempt") payload.externalReference = newId;
-    r.e.payload_hash = hashAsaasEventIdentity(
+    r.e.payload_hash = eventHash(
       r.e.provider_event_reference as string,
       r.e.event_type as string,
       values.binding.accountReference,
@@ -682,7 +687,7 @@ describe("authoritative stored financial overview totals", () => {
       ...rows.e,
       id: "restrictive-event",
       provider_event_reference: "evt_restrictive",
-      payload_hash: hashAsaasEventIdentity(
+      payload_hash: eventHash(
         "evt_restrictive",
         "PAYMENT_RECEIVED",
         values.binding.accountReference,
@@ -734,7 +739,7 @@ describe("authoritative stored financial overview totals", () => {
         state: "DEAD_LETTER",
         processed_at: null,
         payment_id: null,
-        payload_hash: hashAsaasEventIdentity(
+        payload_hash: eventHash(
           rows.e.provider_event_reference as string,
           eventType,
           values.binding.accountReference,
@@ -775,7 +780,7 @@ describe("authoritative stored financial overview totals", () => {
       id: "processed-refund",
       provider_event_reference: "evt_refund",
       event_type: "PAYMENT_REFUNDED",
-      payload_hash: hashAsaasEventIdentity(
+      payload_hash: eventHash(
         "evt_refund",
         "PAYMENT_REFUNDED",
         values.binding.accountReference,
@@ -831,7 +836,7 @@ describe("authoritative stored financial overview totals", () => {
     if (change === "ledger-amount") rows.l.amount_cents = 9999;
     if (change === "effect") rows.l.effect_key = "arbitrary-credit";
     if (change === "receipt-event") rows.l.event_id = null;
-    if (change === "event-hash") rows.e.payload_hash = "a".repeat(64);
+    if (change === "event-hash") rows.e.payload_hash = "A".repeat(64);
     if (change === "event-payment") rows.e.payment_id = "other-payment";
     if (change === "event-auth") rows.e.authenticated_at = null;
     if (change === "scope") rows.o.account_id = "other-account";
@@ -1113,7 +1118,7 @@ describe("stored balance consistency after the provider GET", () => {
       provider_event_reference: "evt_later",
       state: "RETRY",
       processed_at: null,
-      payload_hash: hashAsaasEventIdentity(
+      payload_hash: eventHash(
         "evt_later",
         "PAYMENT_RECEIVED",
         values.binding.accountReference,
@@ -1144,7 +1149,7 @@ describe("stored balance consistency after the provider GET", () => {
       id: "processed-refund",
       provider_event_reference: "evt_refund",
       event_type: "PAYMENT_REFUNDED",
-      payload_hash: hashAsaasEventIdentity(
+      payload_hash: eventHash(
         "evt_refund",
         "PAYMENT_REFUNDED",
         values.binding.accountReference,
@@ -1315,7 +1320,7 @@ function completedWithdrawal(receiptReference: string, live = false) {
   return { f, w, proof, repository };
 }
 
-it.each(["proof-1", `asaas-transfer:${"a".repeat(64)}`])(
+it.each(["proof-1", `pagarme-withdrawal:${"a".repeat(64)}`])(
   "counts an immutable provider-proven withdrawal actual debit and releases its unused maximum with receipt %s",
   async (receiptReference) => {
     const { f, repository } = completedWithdrawal(receiptReference);
@@ -1330,12 +1335,12 @@ it.each(["proof-1", `asaas-transfer:${"a".repeat(64)}`])(
 
 it.each([
   `foreign-transfer:${"a".repeat(64)}`,
-  `asaas-transfer:${"a".repeat(63)}`,
-  `asaas-transfer:${"a".repeat(65)}`,
-  `asaas-transfer:${"A".repeat(64)}`,
-  `asaas-transfer:${"g".repeat(64)}`,
-  `asaas-transfer:${"a".repeat(64)}\n`,
-  `asaas-transfer:${"a".repeat(64)}\u0000`,
+  `pagarme-withdrawal:${"a".repeat(63)}`,
+  `pagarme-withdrawal:${"a".repeat(65)}`,
+  `pagarme-withdrawal:${"A".repeat(64)}`,
+  `pagarme-withdrawal:${"g".repeat(64)}`,
+  `pagarme-withdrawal:${"a".repeat(64)}\n`,
+  `pagarme-withdrawal:${"a".repeat(64)}\u0000`,
 ])("rejects a malformed custody receipt %j", async (receiptReference) => {
   const { f, repository } = completedWithdrawal(receiptReference);
   await expect(repository.loadStoredTotals(f.binding)).rejects.toMatchObject({
@@ -1347,7 +1352,7 @@ it.each(["proofReference", "receiptReference", "providerReference"] as const)(
   "rejects a native custody proof with a foreign %s",
   async (field) => {
     const { f, proof, repository } = completedWithdrawal(
-      `asaas-transfer:${"a".repeat(64)}`,
+      `pagarme-withdrawal:${"a".repeat(64)}`,
     );
     proof[field] = "foreign-reference";
     await expect(repository.loadStoredTotals(f.binding)).rejects.toMatchObject({
@@ -1356,26 +1361,22 @@ it.each(["proofReference", "receiptReference", "providerReference"] as const)(
   },
 );
 
-it("counts a live gross-budget debit with the native net above the frozen minimum", async () => {
+it("rejects a completed debit whose net differs from the fixed-fee net", async () => {
   const { f, proof, repository } = completedWithdrawal(
-    `asaas-transfer:${"a".repeat(64)}`,
+    `pagarme-withdrawal:${"a".repeat(64)}`,
     true,
   );
   Object.assign(proof, { totalDebitCents: 5000, netCents: 5000 });
-  Object.assign(proof.correlation, {
-    policyVersion: "asaas-pix-gross-max-v1-100",
-  });
   f.tables.ledgers[0].amount_cents = 5000;
-  expect((await repository.loadStoredTotals(f.binding))?.totals).toMatchObject({
-    withdrawnCents: 5000,
-    pendingCommitmentsCents: 0,
+  await expect(repository.loadStoredTotals(f.binding)).rejects.toMatchObject({
+    code: "FINANCIAL_OVERVIEW_REPOSITORY_UNAVAILABLE",
   });
 });
 it.each(["FAILED", "CANCELLED"])(
   "excludes only a custody-proven zero-fee %s released reserve",
   async (state) => {
     const { f, w, proof } = completedWithdrawal(
-      `asaas-transfer:${"a".repeat(64)}`,
+      `pagarme-withdrawal:${"a".repeat(64)}`,
     );
     w.state = state;
     w.reservation_state = "RELEASED";
@@ -1519,7 +1520,7 @@ it("attributes only received installment shares and keeps confirmed funds awaiti
     };
     entry.e.payload = payload;
     entry.e.event_type = pending ? "PAYMENT_CONFIRMED" : "PAYMENT_RECEIVED";
-    entry.e.payload_hash = hashAsaasEventIdentity(
+    entry.e.payload_hash = eventHash(
       String(entry.e.provider_event_reference),
       String(entry.e.event_type),
       f.binding.accountReference,

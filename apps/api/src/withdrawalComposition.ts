@@ -1,31 +1,36 @@
-import { createHash, hkdfSync, randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import {
-  receivingPixDestinationInputSchema,
   receivingSetupConsentVersion,
   type WithdrawalIntent,
+  type WithdrawalPageQuery,
 } from "@entrelacos/contracts";
 import type { DatabaseConnection } from "@entrelacos/database";
 import { sql } from "drizzle-orm";
+import type { ApiOptions } from "./app";
 import {
-  type AsaasAccountFeesObservation,
-  type AsaasBalanceObservation,
-  createAsaasHttpClient,
-} from "./asaasHttpClient";
-import type { AsaasLegacyConfig } from "./asaasLegacyConfig";
-import { createAsaasStoredAccountReader } from "./asaasStoredAccountReader";
-import { createAsaasWithdrawalTransferAdapter } from "./asaasTransferClient";
-import {
-  type AsaasWithdrawalAuthorizationReceiver,
-  createAsaasWithdrawalAuthorization,
-} from "./asaasWithdrawalAuthorization";
-import { createAsaasWithdrawalCustody } from "./asaasWithdrawalCustody";
+  type FinancialAccountBinding,
+  FinancialOverviewServiceError,
+  loadFinancialOverview,
+} from "./financialOverview";
+import { createFinancialOverviewRepository } from "./financialOverviewRepository";
 import { readFinancialWorkDueAt } from "./financialWorkSchedule";
-import { parseBrlCents } from "./giftMoney";
+import type { GiftPaymentConfig } from "./giftPaymentConfig";
 import type { GiftPaymentWorkerResult } from "./giftPaymentWorker";
+import { createGiftPaymentWorkerLoop } from "./giftPaymentWorkerLoop";
 import { liveDemoSiteIdsSql } from "./liveSitePolicy";
-import { decryptProviderCredential } from "./providerCredentials";
-import type { ReceivingPixConfiguration } from "./receivingPixDestinationSetup";
+import { mapWithConcurrency } from "./mapWithConcurrency";
+import {
+  createPagarmeRecipientClient,
+  PAGARME_WITHDRAWAL_FEE_CENTS,
+} from "./pagarmeRecipientClient";
+import {
+  createPagarmeWithdrawalAdapter,
+  createPagarmeWithdrawalCustody,
+  PAGARME_WITHDRAWAL_POLICY_VERSION,
+  type ProviderBalanceObservation,
+  readPagarmeBalanceObservation,
+} from "./pagarmeWithdrawalClient";
 import { evaluateReceivingReadiness } from "./receivingReadiness";
 import {
   loadReceivingContextInTransaction,
@@ -43,10 +48,7 @@ import {
   withdrawalCorrelation,
   withdrawalInstant,
 } from "./withdrawalExecution";
-import {
-  createWithdrawalPayoutBinding,
-  sameWithdrawalPayout,
-} from "./withdrawalPayout";
+import { createWithdrawalHistoryRepository } from "./withdrawalHistoryRepository";
 import { createWithdrawalPostingRepository } from "./withdrawalPostingRepository";
 import {
   createWithdrawalReservationRepository,
@@ -57,7 +59,6 @@ import {
   type WithdrawalConsentRecord,
   type WithdrawalFeeQuote,
   type WithdrawalFeeScope,
-  type WithdrawalPresentationScope,
   type WithdrawalProtectedRequestAttempt,
   type WithdrawalReservationContext,
   type WithdrawalReservationService,
@@ -67,16 +68,20 @@ import {
 import { createWithdrawalStoredPresentationLoader } from "./withdrawalStoredPresentation";
 
 const withdrawalFreshnessMs = 300_000;
+const balanceFreshnessMs = 60_000;
+// Each withdrawal decoration opens its own transaction; cap them per request.
+const withdrawalDecorationConcurrency = 4;
 
+type WithdrawalPorts = Pick<ApiOptions, "finance" | "withdrawalReservation">;
 export interface WithdrawalCompositionOptions {
   db: DatabaseConnection["db"];
   now?(): Date;
   fetch?: typeof globalThis.fetch;
   refreshReceiving?(siteId: string): Promise<void>;
-  wakeWorker?(): void;
+  createWorkerLoop?: typeof createGiftPaymentWorkerLoop;
 }
 export interface WithdrawalComposition {
-  authorization?: AsaasWithdrawalAuthorizationReceiver;
+  readonly ports: Readonly<WithdrawalPorts>;
   service?: WithdrawalReservationService;
   nextRecoveryDueAt(): Promise<number | null>;
   reconcilePending(): Promise<GiftPaymentWorkerResult>;
@@ -91,6 +96,8 @@ export interface WithdrawalComposition {
     withdrawalId: string,
     reference: string,
   ): Promise<WithdrawalCompletionProof | null>;
+  /** Starts the recovery worker for in-flight withdrawals. */
+  start(): void;
   close(): Promise<void>;
 }
 function unavailable(): never {
@@ -101,80 +108,53 @@ function one<T = Record<string, unknown>>(result: { rows: unknown[] }): T {
   return result.rows[0] as T;
 }
 
-export function quoteAsaasWithdrawalMaximumFee(
+/**
+ * Pagar.me charges a fixed fee on top of the transferred amount, so the gross
+ * amount is debited exactly and the recipient receives amount - fee.
+ */
+export function quotePagarmeWithdrawalFee(
   scope: WithdrawalFeeScope,
-  observation: AsaasAccountFeesObservation,
   now: Date,
 ): WithdrawalFeeQuote {
-  const base = observation.fees.transfer?.pix?.feeValue;
   if (
-    observation.source !== "provider" ||
-    observation.provider !== "ASAAS" ||
-    observation.currency !== "BRL" ||
-    observation.environment !== scope.environment ||
+    !Number.isSafeInteger(scope.amountCents) ||
+    scope.amountCents <= PAGARME_WITHDRAWAL_FEE_CENTS
+  )
+    throw new WithdrawalReservationServiceError(400, "WITHDRAWAL_INVALID");
+  if (
     !["sandbox", "live"].includes(scope.environment) ||
-    observation.siteId !== scope.siteId ||
-    observation.accountBindingId !== scope.accountId ||
-    observation.accountReference !== scope.accountReference ||
-    typeof base !== "string" ||
     !(now instanceof Date) ||
-    !Number.isFinite(now.getTime()) ||
-    !(observation.observedAt instanceof Date) ||
-    !(observation.completedAt instanceof Date) ||
-    !Number.isFinite(observation.observedAt.getTime()) ||
-    !Number.isFinite(observation.completedAt.getTime())
+    !Number.isFinite(now.getTime())
   )
     unavailable();
-  const baseFeeCents = parseBrlCents(base);
-  const feeCents =
-    scope.environment === "live" &&
-    (observation.pixTransferExemption === "PF" ||
-      observation.pixTransferExemption === "MEI")
-      ? 0
-      : baseFeeCents;
-  if (
-    feeCents >= scope.amountCents ||
-    now.getTime() < observation.completedAt.getTime() ||
-    observation.completedAt.getTime() < observation.observedAt.getTime() ||
-    now.getTime() - observation.observedAt.getTime() > 60000
-  )
-    unavailable();
-  // A verified PF/MEI category is exempt; unknown/PJ accounts retain the base ceiling.
-  // Monthly quota availability alone never establishes a future exemption.
   return {
     ...scope,
-    feeCents,
+    feeCents: PAGARME_WITHDRAWAL_FEE_CENTS,
     feeSemantics:
       scope.environment === "live" ? "MAXIMUM_WITH_MINIMUM_NET" : "MAXIMUM",
-    policyVersion:
-      scope.environment === "live"
-        ? `asaas-pix-gross-max-v1-${feeCents}`
-        : `asaas-pix-max-v1-${feeCents}`,
+    policyVersion: PAGARME_WITHDRAWAL_POLICY_VERSION,
     provenance: "provider",
     verification: "verified",
-    observedAt: new Date(observation.observedAt),
-    expiresAt: new Date(
-      observation.observedAt.getTime() + withdrawalFreshnessMs,
-    ),
+    observedAt: new Date(now),
+    expiresAt: new Date(now.getTime() + withdrawalFreshnessMs),
   };
 }
 
-export function verifyAsaasWithdrawalDispatchBudget(
+/** The available balance must still cover this hold and every other one. */
+export function verifyPagarmeWithdrawalDispatchBudget(
   original: OriginalWithdrawal,
-  fees: AsaasAccountFeesObservation,
-  balance: AsaasBalanceObservation,
+  balance: ProviderBalanceObservation,
   otherHeldCents: bigint,
   at: Date,
 ): void {
   const c = original.correlation;
-  const quote = quoteAsaasWithdrawalMaximumFee(c, fees, at);
   if (
-    quote.feeCents > c.feeCents ||
-    c.netCents + quote.feeCents > c.amountCents ||
+    c.feeCents !== PAGARME_WITHDRAWAL_FEE_CENTS ||
+    c.netCents + c.feeCents !== c.amountCents ||
     typeof otherHeldCents !== "bigint" ||
     otherHeldCents < 0n ||
     balance.source !== "provider" ||
-    balance.provider !== "ASAAS" ||
+    balance.provider !== "PAGARME" ||
     balance.currency !== "BRL" ||
     balance.environment !== c.environment ||
     balance.siteId !== c.siteId ||
@@ -183,7 +163,7 @@ export function verifyAsaasWithdrawalDispatchBudget(
     !(balance.observedAt instanceof Date) ||
     !Number.isFinite(balance.observedAt.getTime()) ||
     balance.observedAt.getTime() > at.getTime() ||
-    at.getTime() - balance.observedAt.getTime() > 60_000 ||
+    at.getTime() - balance.observedAt.getTime() > balanceFreshnessMs ||
     !Number.isSafeInteger(balance.balanceCents) ||
     balance.balanceCents < 0 ||
     BigInt(balance.balanceCents) < BigInt(c.amountCents) + otherHeldCents
@@ -201,11 +181,6 @@ interface StoredWithdrawalAccount {
   operator_user_id: string;
   is_current: boolean;
   isDemo: boolean;
-  credential_version: 1;
-  credential_key_id: string;
-  credential_nonce: string;
-  credential_ciphertext: string;
-  credential_tag: string;
 }
 interface StoredWithdrawalHolder {
   id: string;
@@ -214,8 +189,25 @@ interface StoredWithdrawalHolder {
   consentVersion: string;
   consentAt: Date | string;
 }
+function inertComposition(): WithdrawalComposition {
+  return {
+    ports: Object.freeze({}),
+    async nextRecoveryDueAt() {
+      return null;
+    },
+    async reconcilePending() {
+      return { kind: "IDLE" };
+    },
+    async decorateIntent(intent) {
+      return intent;
+    },
+    start() {},
+    async close() {},
+  };
+}
+
 export function createWithdrawalComposition(
-  config: AsaasLegacyConfig,
+  config: GiftPaymentConfig,
   options: WithdrawalCompositionOptions,
 ): WithdrawalComposition {
   if (
@@ -225,42 +217,18 @@ export function createWithdrawalComposition(
     (config.mode === "sandbox" &&
       config.applicationEnvironment === "production")
   )
-    return {
-      async nextRecoveryDueAt() {
-        return null;
-      },
-      async reconcilePending() {
-        return { kind: "IDLE" };
-      },
-      async decorateIntent(intent) {
-        return intent;
-      },
-      async close() {},
-    };
+    return inertComposition();
   const db = options.db;
-  const platformAccountId = config.platformAccountId;
+  const platformRecipientId = config.platformRecipientId;
   const mode = config.mode;
   const applicationEnvironment = config.applicationEnvironment;
   const liveDemoSiteIds = config.liveDemoSiteIds;
+  const liveSitePolicy = { applicationEnvironment, liveDemoSiteIds };
   const now = options.now ?? (() => new Date());
-  const fetch = options.fetch ?? globalThis.fetch;
-  const keyring = new Map(
-    [...config.credentialKeyring].map(([id, key]) => [id, new Uint8Array(key)]),
-  );
-  const destinationKeys = new Map(
-    [...keyring].map(([id, key]) => [
-      id,
-      new Uint8Array(
-        hkdfSync(
-          "sha256",
-          key,
-          "entrelacos.receiving-pix-destination.v1",
-          "destination",
-          32,
-        ),
-      ),
-    ]),
-  );
+  const recipients = createPagarmeRecipientClient({
+    secretKey: config.secretKey,
+    ...(options.fetch ? { fetch: options.fetch } : {}),
+  });
   let closed = false;
   const pending = new Set<Promise<unknown>>();
   function own<T>(operation: () => Promise<T>): Promise<T> {
@@ -282,23 +250,20 @@ export function createWithdrawalComposition(
     now,
     ...(options.refreshReceiving ? { refresh: options.refreshReceiving } : {}),
   };
-  const reader = createAsaasStoredAccountReader(db, {
-    mode,
-    applicationEnvironment,
-    liveDemoSiteIds,
-    keyring,
-    fetch,
-    timeoutMs: 15000,
-    maxResponseBytes: 262144,
-    now,
-  });
-  const basePresentation = createWithdrawalStoredPresentationLoader({
-    mode,
-    applicationEnvironment,
-    liveDemoSiteIds,
-    freshnessMs: receiving.freshnessMs,
-    now,
-  });
+  async function readBalance(binding: {
+    siteId: string;
+    accountBindingId: string;
+    accountReference: string;
+  }): Promise<ProviderBalanceObservation> {
+    // The platform recipient holds commissions; it is never a withdrawal source.
+    if (binding.accountReference === platformRecipientId) unavailable();
+    const balance = await recipients.getBalance(binding.accountReference);
+    return readPagarmeBalanceObservation(
+      { ...binding, environment: mode },
+      balance,
+      now(),
+    );
+  }
   async function account(
     tx: ReceivingTransaction,
     scope: { siteId: string; accountId?: string; accountReference?: string },
@@ -306,19 +271,19 @@ export function createWithdrawalComposition(
     lock = false,
   ) {
     const result = await tx.execute(
-      sql`SELECT a.*,st.is_demo AS "isDemo" FROM receiving_account a JOIN site st ON st.id=a.site_id WHERE a.site_id=${scope.siteId} AND a.environment=${mode} AND a.provider='ASAAS' ${scope.accountId ? sql`AND a.id=${scope.accountId}` : sql``} ${scope.accountReference ? sql`AND a.account_reference=${scope.accountReference}` : sql``} ${current ? sql`AND a.is_current=true` : sql``} LIMIT 2 ${lock ? sql`FOR UPDATE OF a` : sql``}`,
+      sql`SELECT a.id,a.site_id,a.environment,a.provider,a.account_reference,a.recipient_reference,a.operator_user_id,a.is_current,st.is_demo AS "isDemo" FROM receiving_account a JOIN site st ON st.id=a.site_id WHERE a.site_id=${scope.siteId} AND a.environment=${mode} AND a.provider='PAGARME' ${scope.accountId ? sql`AND a.id=${scope.accountId}` : sql``} ${scope.accountReference ? sql`AND a.account_reference=${scope.accountReference}` : sql``} ${current ? sql`AND a.is_current=true` : sql``} LIMIT 2 ${lock ? sql`FOR UPDATE OF a` : sql``}`,
     );
     const row = one<StoredWithdrawalAccount>(result);
     if (
       row.site_id !== scope.siteId ||
       row.environment !== mode ||
-      row.provider !== "ASAAS" ||
+      row.provider !== "PAGARME" ||
       (mode === "sandbox" && row.isDemo !== true) ||
       !row.account_reference ||
-      !row.recipient_reference ||
+      row.recipient_reference !== row.account_reference ||
       !row.operator_user_id ||
       (current && row.is_current !== true) ||
-      row.account_reference === platformAccountId
+      row.account_reference === platformRecipientId
     )
       unavailable();
     return row;
@@ -339,72 +304,22 @@ export function createWithdrawalComposition(
       unavailable();
     return h;
   }
-  async function payout(
+  const storedPresentation = createWithdrawalStoredPresentationLoader({
+    mode,
+    applicationEnvironment,
+    ...(liveDemoSiteIds ? { liveDemoSiteIds } : {}),
+    freshnessMs: withdrawalFreshnessMs,
+    now,
+  });
+  // Payouts go to the recipient's default bank account; only provider-verified
+  // destinations are presented ("Conta **** 1234").
+  const loadPresentation = (async (
     tx: ReceivingTransaction,
-    scope: WithdrawalPresentationScope,
-    expected?: OriginalWithdrawal["consent"]["snapshot"]["presentation"]["payout"],
-  ) {
-    const a = await account(tx, scope, true);
-    const h = await holder(tx, a);
-    const row = one<{
-      id: string;
-      version: number;
-      state: string;
-      isCurrent: boolean;
-      configuration: ReceivingPixConfiguration;
-    }>(
-      await tx.execute(
-        sql`SELECT id,version,state,is_current AS "isCurrent",pix_configuration AS configuration FROM receiving_pix_destination WHERE site_id=${scope.siteId} AND account_id=${scope.accountId} AND environment=${mode} AND is_current=true LIMIT 2`,
-      ),
-    );
-    if (row.isCurrent !== true || row.state !== "PENDING" || !row.configuration)
-      unavailable();
-    const bound = createWithdrawalPayoutBinding(
-      {
-        siteId: scope.siteId,
-        accountId: scope.accountId,
-        accountReference: scope.accountReference,
-        environment: mode,
-        operatorUserId: a.operator_user_id,
-        holderId: h.id,
-        holderConsentId: h.consentId,
-      },
-      {
-        id: row.id,
-        version: row.version,
-        configuration: row.configuration as ReceivingPixConfiguration,
-      },
-      now(),
-    );
-    if (expected && !sameWithdrawalPayout(expected, bound)) unavailable();
-    return {
-      account: a,
-      holder: h,
-      configuration: row.configuration as ReceivingPixConfiguration,
-      binding: bound,
-    };
-  }
-  async function presentation(
-    tx: ReceivingTransaction,
-    scope: WithdrawalFeeScope | WithdrawalPresentationScope,
-  ) {
-    const base =
-      "amountCents" in scope
-        ? await basePresentation(tx, scope)
-        : await basePresentation(tx, scope);
-    if (base?.provenance !== "provider") return null;
-    try {
-      const selected = await payout(tx, scope);
-      return {
-        ...base,
-        payout: selected.binding,
-        maskedDestination: `Pix ${selected.binding.keyType}: ${selected.binding.maskedKey}`,
-      };
-    } catch {
-      return null;
-    }
-  }
-  const loadPresentation = presentation as WithdrawalStoredPresentationLoader;
+    scope: WithdrawalFeeScope,
+  ) => {
+    const presented = await storedPresentation(tx, scope);
+    return presented?.provenance === "provider" ? presented : null;
+  }) as WithdrawalStoredPresentationLoader;
   async function context(
     tx: ReceivingTransaction,
     siteId: string,
@@ -472,32 +387,20 @@ export function createWithdrawalComposition(
       db.transaction((tx) => loadPresentation(tx, scope)),
     feeQuotes: {
       async quoteWithdrawal(scope) {
-        const observation = await reader.getAccountFees(
-          {
-            provider: "ASAAS",
-            siteId: scope.siteId,
-            accountBindingId: scope.accountId,
-            accountReference: scope.accountReference,
-            environment: mode,
-          },
-          { purpose: "PIX_WITHDRAWAL" },
-        );
-        return quoteAsaasWithdrawalMaximumFee(scope, observation, now());
+        return quotePagarmeWithdrawalFee(scope, now());
       },
     },
     balance: {
       getBalance: (scope) =>
-        reader.getBalance({
-          provider: "ASAAS",
+        readBalance({
           siteId: scope.siteId,
           accountBindingId: scope.accountId,
           accountReference: scope.accountReference,
-          environment: mode,
         }),
     },
     repository: reservationRepository,
   });
-  const custody = createAsaasWithdrawalCustody(db, {
+  const custody = createPagarmeWithdrawalCustody(db, {
     mode,
     applicationEnvironment,
     now,
@@ -517,12 +420,9 @@ export function createWithdrawalComposition(
       false,
     );
     const h = await holder(tx, a);
-    const frozen = consent.snapshot.presentation.payout;
     if (
-      !frozen ||
-      frozen.holderId !== h.id ||
-      frozen.holderConsentId !== h.consentId ||
-      a.operator_user_id !== snapshot.operatorUserId
+      a.operator_user_id !== snapshot.operatorUserId ||
+      h.holderUserId !== snapshot.operatorUserId
     )
       unavailable();
     return {
@@ -546,6 +446,58 @@ export function createWithdrawalComposition(
       verification: "verified" as const,
     };
   }
+  // The reviewed bank destination must still be the current one.
+  async function checkDestination(
+    tx: ReceivingTransaction,
+    original: OriginalWithdrawal,
+  ) {
+    const c = original.correlation;
+    const presented = original.consent.snapshot.presentation;
+    const destination = one<{
+      id: string;
+      version: number;
+      bankReference: string;
+      maskedDescriptor: string;
+    }>(
+      await tx.execute(
+        sql`SELECT id,version,bank_reference AS "bankReference",masked_descriptor AS "maskedDescriptor" FROM receiving_destination WHERE site_id=${c.siteId} AND account_id=${c.accountId} AND environment=${mode} AND is_current=true LIMIT 2`,
+      ),
+    );
+    if (
+      destination.id !== presented.destinationId ||
+      destination.version !== c.destinationVersion ||
+      destination.bankReference !== c.bankReference ||
+      destination.maskedDescriptor !== presented.maskedDestination
+    )
+      unavailable();
+  }
+  async function checkBudget(
+    tx: ReceivingTransaction,
+    original: OriginalWithdrawal,
+  ) {
+    const c = original.correlation;
+    const held = one<{ otherHeldCents: string }>(
+      await tx.execute(
+        sql`SELECT COALESCE(SUM(w.reserved_cents),0)::text AS "otherHeldCents" FROM withdrawal_intent w WHERE w.site_id=${c.siteId} AND w.account_id=${c.accountId} AND w.environment=${c.environment} AND w.reservation_state='HELD' AND w.id<>${c.withdrawalId}`,
+      ),
+    );
+    if (
+      typeof held.otherHeldCents !== "string" ||
+      !/^(0|[1-9]\d*)$/.test(held.otherHeldCents)
+    )
+      unavailable();
+    const balance = await readBalance({
+      siteId: c.siteId,
+      accountBindingId: c.accountId,
+      accountReference: c.accountReference,
+    });
+    verifyPagarmeWithdrawalDispatchBudget(
+      original,
+      balance,
+      BigInt(held.otherHeldCents),
+      now(),
+    );
+  }
   const posting = createWithdrawalPostingRepository(db, {
     mode,
     applicationEnvironment,
@@ -565,14 +517,7 @@ export function createWithdrawalComposition(
       async loadDispatchAuthorityInTransaction(tx, original, attempt) {
         const actor = attempt.actor;
         if (!actor) return null;
-        if (
-          usesAcceptedMaximumWithdrawalDispatch(
-            original,
-            applicationEnvironment,
-          )
-        ) {
-          await checkNativeBudget(tx, original);
-        }
+        await checkBudget(tx, original);
         const access = await resolveSiteAccess(tx, {
           userId: actor.userId,
           platformRole: "SITE_ADMIN",
@@ -583,12 +528,11 @@ export function createWithdrawalComposition(
           tx,
           original.consent.snapshot.scope,
         );
+        const frozen = original.consent.snapshot.presentation;
         if (
           !presented ||
-          !sameWithdrawalPayout(
-            presented.payout,
-            original.consent.snapshot.presentation.payout,
-          ) ||
+          presented.destinationId !== frozen.destinationId ||
+          presented.maskedDestination !== frozen.maskedDestination ||
           !attempt.recentAuth
         )
           return null;
@@ -607,314 +551,82 @@ export function createWithdrawalComposition(
       },
     },
   });
-  function decryptKey(selected: Awaited<ReturnType<typeof payout>>) {
-    const c = selected.configuration;
-    const plaintext = JSON.parse(
-      decryptProviderCredential(
-        c.key,
+  // Holds the site and account locks through the provider POST so reviewed
+  // destination changes and concurrent holds cannot race the dispatch.
+  async function guardDispatch<T>(
+    original: OriginalWithdrawal,
+    fence: DispatchFence,
+    send: () => Promise<T>,
+  ): Promise<T> {
+    return db.transaction(async (tx) => {
+      const c = original.correlation;
+      await tx.execute(
+        sql`SELECT id FROM site WHERE id=${c.siteId} FOR UPDATE`,
+      );
+      const a = await account(
+        tx,
         {
-          provider: "ASAAS",
-          siteId: selected.account.site_id,
-          accountBindingId: selected.account.id,
-          environment: mode,
-        },
-        destinationKeys,
-      ),
-    );
-    if (plaintext.purpose !== "receiving-pix-key.v1") unavailable();
-    const input = receivingPixDestinationInputSchema.parse({
-      type: plaintext.type,
-      key: plaintext.key,
-    });
-    if (input.type !== selected.binding.keyType) unavailable();
-    return input;
-  }
-  const authorization = config.withdrawalAuthorization
-    ? createAsaasWithdrawalAuthorization(db, {
-        mode,
-        applicationEnvironment,
-        token: config.withdrawalAuthorization.token,
-        now,
-        async verifyConsentInTransaction(tx, original) {
-          const c = original.correlation;
-          one(
-            await tx.execute(
-              sql`SELECT id FROM site WHERE id=${c.siteId} FOR UPDATE`,
-            ),
-          );
-          // Serialize with dispatch, receiving writers, and reconciliation before monetary locks.
-          await account(tx, c, true, true);
-          const access = await resolveSiteAccess(tx, {
-            userId: c.operatorUserId,
-            platformRole: "SITE_ADMIN",
-            siteId: c.siteId,
-          });
-          if (
-            access?.membershipRole !== "SITE_ADMIN" ||
-            !access.membershipId ||
-            !access.capabilities.readFinance
-          )
-            unavailable();
-          const eligible = one<{ id: string }>(
-            await tx.execute(
-              sql`SELECT u.id FROM "user" u INNER JOIN site_membership m ON m.user_id=u.id AND m.site_id=${c.siteId} WHERE u.id=${c.operatorUserId} AND u.role='SITE_ADMIN' AND u.state='ACTIVE' AND m.role='SITE_ADMIN' AND m.revoked_at IS NULL FOR UPDATE OF u,m`,
-            ),
-          );
-          if (eligible.id !== c.operatorUserId) unavailable();
-          const current = await context(tx, c.siteId);
-          if (
-            (mode === "sandbox" && current.isDemo !== true) ||
-            current.mode !== mode ||
-            current.verification !== "verified" ||
-            current.accountId !== c.accountId ||
-            current.bankReference !== c.bankReference ||
-            current.readiness?.state !== "READY" ||
-            current.readiness.mode !== mode ||
-            current.readiness.destinationVersion !== c.destinationVersion ||
-            !isDeepStrictEqual(current.recipientBinding, {
-              siteId: c.siteId,
-              operatorUserId: c.operatorUserId,
-              environment: c.environment,
-              accountReference: c.accountReference,
-              recipientReference: c.recipientReference,
-              destinationVersion: c.destinationVersion,
-            })
-          )
-            unavailable();
-          const binding = await originalHolder(
-            tx,
-            original.snapshot,
-            original.consent,
-          );
-          if (!isDeepStrictEqual(binding, original.holderBinding))
-            unavailable();
-          await payout(
-            tx,
-            original.consent.snapshot.scope,
-            original.consent.snapshot.presentation.payout,
-          );
-        },
-      })
-    : undefined;
-  async function dispatchCheck(
-    tx: ReceivingTransaction,
-    original: OriginalWithdrawal,
-    fence: DispatchFence,
-  ) {
-    const c = original.correlation;
-    await tx.execute(sql`SELECT id FROM site WHERE id=${c.siteId} FOR UPDATE`);
-    const a = await account(
-      tx,
-      {
-        siteId: c.siteId,
-        accountId: c.accountId,
-        accountReference: c.accountReference,
-      },
-      true,
-      true,
-    );
-    const op = one(
-      await tx.execute(
-        sql`SELECT request_hash AS "requestHash",request_snapshot AS "requestSnapshot",state,attempts,lease_token AS "leaseToken",lease_owner AS "leaseOwner",lease_expires_at AS "leaseExpiresAt" FROM financial_operation WHERE id=${c.operationId} AND site_id=${c.siteId} AND account_id=${c.accountId} AND environment=${mode} AND kind='WITHDRAWAL' AND withdrawal_intent_id=${c.withdrawalId} FOR UPDATE`,
-      ),
-    );
-    if (
-      op.requestHash !== c.requestHash ||
-      !isDeepStrictEqual(
-        op.requestSnapshot,
-        JSON.parse(JSON.stringify(original.snapshot)),
-      ) ||
-      op.state !== "PROCESSING" ||
-      op.attempts !== 1 ||
-      op.leaseToken !== fence.leaseToken ||
-      op.leaseOwner !== fence.leaseOwner ||
-      withdrawalInstant(op.leaseExpiresAt) !== fence.leaseExpiresAt ||
-      new Date(fence.leaseExpiresAt).getTime() <= now().getTime()
-    )
-      unavailable();
-    if (
-      a.operator_user_id !== c.operatorUserId ||
-      !original.consent.snapshot.presentation.payout ||
-      (!usesAcceptedMaximumWithdrawalDispatch(
-        original,
-        applicationEnvironment,
-      ) &&
-        (now().getTime() >= Date.parse(original.snapshot.feeQuote.expiresAt) ||
-          now().getTime() >=
-            Date.parse(original.consent.snapshot.preview.expiresAt)))
-    )
-      unavailable();
-    await originalHolder(tx, original.snapshot, original.consent);
-    const selected = await payout(
-      tx,
-      original.consent.snapshot.scope,
-      original.consent.snapshot.presentation.payout,
-    );
-    return { selected, key: decryptKey(selected) };
-  }
-  function nativeClient(
-    a: StoredWithdrawalAccount,
-    original: OriginalWithdrawal,
-  ) {
-    const c = original.correlation;
-    const credentialContext = {
-      provider: "ASAAS" as const,
-      siteId: c.siteId,
-      accountBindingId: c.accountId,
-      environment: mode,
-    };
-    const accessToken = decryptProviderCredential(
-      {
-        version: a.credential_version,
-        keyId: a.credential_key_id,
-        nonce: a.credential_nonce,
-        ciphertext: a.credential_ciphertext,
-        tag: a.credential_tag,
-      },
-      credentialContext,
-      keyring,
-    );
-    return createAsaasHttpClient({
-      mode,
-      binding: { ...credentialContext, accountReference: c.accountReference },
-      credentials: { context: credentialContext, accessToken },
-      fetch,
-      timeoutMs: 15000,
-      maxResponseBytes: 262144,
-      now,
-    });
-  }
-  async function checkNativeBudget(
-    tx: ReceivingTransaction,
-    original: OriginalWithdrawal,
-    client?: ReturnType<typeof nativeClient>,
-  ) {
-    const c = original.correlation;
-    const activeClient =
-      client ?? nativeClient(await account(tx, c, true), original);
-    const held = one<{ otherHeldCents: string }>(
-      await tx.execute(
-        sql`SELECT COALESCE(SUM(w.reserved_cents),0)::text AS "otherHeldCents" FROM withdrawal_intent w WHERE w.site_id=${c.siteId} AND w.account_id=${c.accountId} AND w.environment=${c.environment} AND w.reservation_state='HELD' AND w.id<>${c.withdrawalId}`,
-      ),
-    );
-    if (
-      typeof held.otherHeldCents !== "string" ||
-      !/^(0|[1-9]\d*)$/.test(held.otherHeldCents)
-    )
-      unavailable();
-    const fees = await activeClient.getAccountFees({
-      purpose: "PIX_WITHDRAWAL",
-    });
-    const balance = await activeClient.getBalance();
-    verifyAsaasWithdrawalDispatchBudget(
-      original,
-      fees,
-      balance,
-      BigInt(held.otherHeldCents),
-      now(),
-    );
-  }
-  async function loadClient(
-    original: OriginalWithdrawal,
-    fence: DispatchFence,
-  ) {
-    const c = original.correlation;
-    const a = await db.transaction((tx) => account(tx, c, false));
-    const client = nativeClient(a, original);
-    return {
-      getTransfer: client.getTransfer,
-      listTransfers: client.listTransfers,
-      async createPixTransfer(
-        command: Parameters<typeof client.createPixTransfer>[0],
-      ) {
-        // Retain the account lock through dispatch so reviewed payout changes cannot race the POST.
-        return db.transaction(async (tx) => {
-          const checked = await dispatchCheck(tx, original, fence);
-          if (
-            usesAcceptedMaximumWithdrawalDispatch(
-              original,
-              applicationEnvironment,
-            )
-          ) {
-            await checkNativeBudget(tx, original, client);
-          } else {
-            const freshFees = await client.getAccountFees();
-            const feeValue = freshFees.fees.transfer?.pix?.feeValue;
-            if (
-              typeof feeValue !== "string" ||
-              parseBrlCents(feeValue) > c.feeCents
-            )
-              unavailable();
-          }
-          // Provider GETs can outlive the fresh SQL dispatch authority.
-          const current = one<{ valid: boolean }>(
-            await tx.execute(
-              sql`SELECT lease_expires_at>clock_timestamp() AS valid FROM financial_operation WHERE id=${c.operationId} AND site_id=${c.siteId} AND account_id=${c.accountId} AND environment=${c.environment} AND state='PROCESSING' AND attempts=1 AND lease_owner=${fence.leaseOwner} AND lease_token=${fence.leaseToken} AND lease_expires_at=${fence.leaseExpiresAt}::timestamptz`,
-            ),
-          );
-          if (
-            current.valid !== true ||
-            now().getTime() >= Date.parse(fence.leaseExpiresAt)
-          )
-            unavailable();
-          if (
-            command.valueCents !==
-              (original.snapshot.feeQuote.feeSemantics ===
-              "MAXIMUM_WITH_MINIMUM_NET"
-                ? c.amountCents
-                : c.netCents) ||
-            command.externalReference !== c.operationId ||
-            command.pixAddressKey !== checked.key.key ||
-            command.pixAddressKeyType !== checked.key.type
-          )
-            unavailable();
-          const observation = await client.createPixTransfer(command);
-          if (authorization) {
-            // Publish authorization evidence with the POST response, before releasing dispatch locks.
-            await authorization.recordCandidateInTransaction(
-              tx,
-              original,
-              fence,
-              observation,
-              {
-                ...checked.key,
-                reviewedMaskedCpfCnpj:
-                  checked.selected.configuration.review.maskedCpfCnpj,
-              },
-            );
-          }
-          return observation;
-        });
-      },
-    };
-  }
-  const adapter = createAsaasWithdrawalTransferAdapter({
-    mode,
-    applicationEnvironment,
-    now,
-    custody,
-    loadClient,
-    async loadDestination(original, fence) {
-      return db.transaction(async (tx) => {
-        const checked = await dispatchCheck(tx, original, fence);
-        const c = original.correlation;
-        return {
           siteId: c.siteId,
           accountId: c.accountId,
           accountReference: c.accountReference,
-          environment: mode,
-          recipientReference: c.recipientReference,
-          bankReference: c.bankReference,
-          destinationVersion: c.destinationVersion,
-          pixAddressKey: checked.key.key,
-          pixAddressKeyType: checked.key.type,
-          provenance: "provider",
-          verification: "verified",
-          payout: checked.selected.binding,
-        };
-      });
-    },
+        },
+        true,
+        true,
+      );
+      const op = one(
+        await tx.execute(
+          sql`SELECT request_hash AS "requestHash",request_snapshot AS "requestSnapshot",state,attempts,lease_token AS "leaseToken",lease_owner AS "leaseOwner",lease_expires_at AS "leaseExpiresAt" FROM financial_operation WHERE id=${c.operationId} AND site_id=${c.siteId} AND account_id=${c.accountId} AND environment=${mode} AND kind='WITHDRAWAL' AND withdrawal_intent_id=${c.withdrawalId} FOR UPDATE`,
+        ),
+      );
+      if (
+        op.requestHash !== c.requestHash ||
+        !isDeepStrictEqual(
+          op.requestSnapshot,
+          JSON.parse(JSON.stringify(original.snapshot)),
+        ) ||
+        op.state !== "PROCESSING" ||
+        op.attempts !== 1 ||
+        op.leaseToken !== fence.leaseToken ||
+        op.leaseOwner !== fence.leaseOwner ||
+        withdrawalInstant(op.leaseExpiresAt) !== fence.leaseExpiresAt ||
+        new Date(fence.leaseExpiresAt).getTime() <= now().getTime() ||
+        a.operator_user_id !== c.operatorUserId ||
+        (!usesAcceptedMaximumWithdrawalDispatch(
+          original,
+          applicationEnvironment,
+        ) &&
+          (now().getTime() >=
+            Date.parse(original.snapshot.feeQuote.expiresAt) ||
+            now().getTime() >=
+              Date.parse(original.consent.snapshot.preview.expiresAt)))
+      )
+        unavailable();
+      await originalHolder(tx, original.snapshot, original.consent);
+      await checkDestination(tx, original);
+      await checkBudget(tx, original);
+      // Provider GETs can outlive the fresh SQL dispatch authority.
+      const current = one<{ valid: boolean }>(
+        await tx.execute(
+          sql`SELECT lease_expires_at>clock_timestamp() AS valid FROM financial_operation WHERE id=${c.operationId} AND site_id=${c.siteId} AND account_id=${c.accountId} AND environment=${c.environment} AND state='PROCESSING' AND attempts=1 AND lease_owner=${fence.leaseOwner} AND lease_token=${fence.leaseToken} AND lease_expires_at=${fence.leaseExpiresAt}::timestamptz`,
+        ),
+      );
+      if (
+        current.valid !== true ||
+        now().getTime() >= Date.parse(fence.leaseExpiresAt)
+      )
+        unavailable();
+      return send();
+    });
+  }
+  const adapter = createPagarmeWithdrawalAdapter({
+    mode,
+    applicationEnvironment,
+    now,
+    client: recipients,
+    custody,
+    guardDispatch,
   });
+  let loop: ReturnType<typeof createGiftPaymentWorkerLoop> | undefined;
   const execution = createWithdrawalExecutionService({
     mode,
     applicationEnvironment,
@@ -924,7 +636,13 @@ export function createWithdrawalComposition(
       ...posting,
       async armExisting(attempt) {
         const armed = await posting.armExisting(attempt);
-        if (armed.outcome === "ARMED") options.wakeWorker?.();
+        if (armed.outcome === "ARMED") {
+          try {
+            loop?.wake();
+          } catch {
+            // The safety sweep recovers work if the local signal fails.
+          }
+        }
         return armed;
       },
     },
@@ -973,8 +691,7 @@ export function createWithdrawalComposition(
         return { ...intent, feeSemantics: row.snapshot.feeQuote.feeSemantics };
       const proof = await loadProof(tx, intent.id, row.reference);
       if (
-        !proof ||
-        proof.outcome !== "COMPLETED" ||
+        proof?.outcome !== "COMPLETED" ||
         proof.correlation.siteId !== intent.siteId
       )
         unavailable();
@@ -1064,6 +781,59 @@ export function createWithdrawalComposition(
           : result;
       }),
   };
+  const loadCompletionProofInTransaction = (
+    tx: ReceivingTransaction,
+    id: string,
+    reference: string,
+  ) =>
+    loadProof(tx, id, reference) as Promise<WithdrawalCompletionProof | null>;
+  const loadTerminalFailureInTransaction = (
+    tx: ReceivingTransaction,
+    id: string,
+    reference: string,
+  ) =>
+    loadProof(
+      tx,
+      id,
+      reference,
+      true,
+    ) as Promise<WithdrawalTerminalFailureProof | null>;
+  const financeRepository = createFinancialOverviewRepository(db, {
+    ...liveSitePolicy,
+    environment: mode,
+    now,
+    loadWithdrawalTerminalFailureInTransaction:
+      loadTerminalFailureInTransaction,
+    loadWithdrawalCompletionProofInTransaction:
+      loadCompletionProofInTransaction,
+  });
+  const withdrawalHistory = createWithdrawalHistoryRepository(db, {
+    ...liveSitePolicy,
+    mode,
+  });
+  async function readOverview(siteId: string) {
+    let binding: FinancialAccountBinding;
+    try {
+      const a = await db.transaction((tx) => account(tx, { siteId }, true));
+      binding = {
+        provider: "PAGARME",
+        siteId,
+        accountBindingId: a.id,
+        accountReference: a.account_reference,
+        environment: mode,
+      };
+    } catch {
+      throw new FinancialOverviewServiceError();
+    }
+    return loadFinancialOverview({
+      mode,
+      binding,
+      repository: financeRepository,
+      providerBalance: { getBalance: readBalance },
+      now,
+      freshnessMs: balanceFreshnessMs,
+    });
+  }
   const recoveryDueAt = sql`GREATEST(op.next_attempt_at,op.lease_expires_at)`;
   const eligibleRecoveries = sql`
     FROM financial_operation op
@@ -1074,69 +844,108 @@ export function createWithdrawalComposition(
       AND op.state IN ('PROCESSING','UNKNOWN') AND w.state IN ('PROCESSING','UNKNOWN')
       AND (${mode}<>'live' OR NOT st.is_demo OR st.id = ANY(${liveDemoSiteIdsSql(liveDemoSiteIds)}))
   `;
+  const nextRecoveryDueAt = () =>
+    own(() => readFinancialWorkDueAt(db, recoveryDueAt, eligibleRecoveries));
+  const reconcilePending = () =>
+    own(async (): Promise<GiftPaymentWorkerResult> => {
+      // Commit the next observation time before calling the provider.
+      const claimed = await db.execute(sql`
+        WITH candidate AS (
+          SELECT op.id,w.site_id,w.request_id
+          ${eligibleRecoveries}
+            AND ${recoveryDueAt}<=clock_timestamp()
+          ORDER BY ${recoveryDueAt},op.id
+          LIMIT 1 FOR UPDATE OF op SKIP LOCKED
+        )
+        UPDATE financial_operation op SET next_attempt_at=clock_timestamp()+interval '5 minutes'
+        FROM candidate c WHERE op.id=c.id
+        RETURNING op.id,c.site_id AS "siteId",c.request_id AS "requestId",
+          op.next_attempt_at::text AS "recoveryLease"
+      `);
+      const row = claimed.rows[0];
+      if (!row) return { kind: "IDLE" };
+      await execution.reconcileExisting({
+        siteId: String(row.siteId),
+        requestId: String(row.requestId),
+      });
+      await db.execute(sql`
+        UPDATE financial_operation op SET next_attempt_at=clock_timestamp()+CASE
+          WHEN op.lease_expires_at>clock_timestamp()-interval '10 minutes' THEN interval '30 seconds'
+          WHEN op.lease_expires_at>clock_timestamp()-interval '1 hour' THEN interval '10 minutes'
+          ELSE interval '30 minutes'
+        END
+        WHERE op.id=${row.id} AND op.environment=${mode} AND op.kind='WITHDRAWAL'
+          AND op.attempts=1 AND op.state IN ('PROCESSING','UNKNOWN')
+          AND op.next_attempt_at=${row.recoveryLease}::timestamptz
+      `);
+      return { kind: "OBSERVED" };
+    });
+  loop = (options.createWorkerLoop ?? createGiftPaymentWorkerLoop)({
+    worker: { processNextReceivedPayment: reconcilePending },
+    nextDueAt: nextRecoveryDueAt,
+    idleDelayMs: 30 * 60_000,
+    retryDelayMs: 5_000,
+    maxRetryDelayMs: 30 * 60_000,
+  });
+  const worker = loop;
+  let started = false;
+  let run: Promise<void> | undefined;
+  let closing: Promise<void> | undefined;
   return {
+    ports: Object.freeze({
+      withdrawalReservation: service,
+      finance: {
+        listWithdrawals: (siteId: string) =>
+          own(async () =>
+            mapWithConcurrency(
+              await withdrawalHistory.listWithdrawals(siteId),
+              withdrawalDecorationConcurrency,
+              decorateIntent,
+            ),
+          ),
+        listWithdrawalPage: (siteId: string, query: WithdrawalPageQuery) =>
+          own(async () => {
+            const page = await withdrawalHistory.listWithdrawalPage(
+              siteId,
+              query,
+            );
+            return {
+              ...page,
+              withdrawals: await mapWithConcurrency(
+                page.withdrawals,
+                withdrawalDecorationConcurrency,
+                decorateIntent,
+              ),
+            };
+          }),
+        readOverview: (siteId: string) => own(() => readOverview(siteId)),
+      },
+    }),
     service,
-    ...(authorization
-      ? {
-          authorization: {
-            receive: (token: string, rawBody: string) =>
-              own(() => authorization.receive(token, rawBody)),
-          },
-        }
-      : {}),
     decorateIntent: (intent) => own(() => decorateIntent(intent)),
-    loadCompletionProofInTransaction: (tx, id, reference) =>
-      loadProof(tx, id, reference) as Promise<WithdrawalCompletionProof | null>,
-    loadTerminalFailureInTransaction: (tx, id, reference) =>
-      loadProof(
-        tx,
-        id,
-        reference,
-        true,
-      ) as Promise<WithdrawalTerminalFailureProof | null>,
-    nextRecoveryDueAt: () =>
-      own(() => readFinancialWorkDueAt(db, recoveryDueAt, eligibleRecoveries)),
-    reconcilePending: () =>
-      own(async () => {
-        // Commit the next observation time before calling the provider.
-        const claimed = await db.execute(sql`
-          WITH candidate AS (
-            SELECT op.id,w.site_id,w.request_id
-            ${eligibleRecoveries}
-              AND ${recoveryDueAt}<=clock_timestamp()
-            ORDER BY ${recoveryDueAt},op.id
-            LIMIT 1 FOR UPDATE OF op SKIP LOCKED
-          )
-          UPDATE financial_operation op SET next_attempt_at=clock_timestamp()+interval '5 minutes'
-          FROM candidate c WHERE op.id=c.id
-          RETURNING op.id,c.site_id AS "siteId",c.request_id AS "requestId",
-            op.next_attempt_at::text AS "recoveryLease"
-        `);
-        const row = claimed.rows[0];
-        if (!row) return { kind: "IDLE" };
-        await execution.reconcileExisting({
-          siteId: String(row.siteId),
-          requestId: String(row.requestId),
-        });
-        await db.execute(sql`
-          UPDATE financial_operation op SET next_attempt_at=clock_timestamp()+CASE
-            WHEN op.lease_expires_at>clock_timestamp()-interval '10 minutes' THEN interval '30 seconds'
-            WHEN op.lease_expires_at>clock_timestamp()-interval '1 hour' THEN interval '10 minutes'
-            ELSE interval '30 minutes'
-          END
-          WHERE op.id=${row.id} AND op.environment=${mode} AND op.kind='WITHDRAWAL'
-            AND op.attempts=1 AND op.state IN ('PROCESSING','UNKNOWN')
-            AND op.next_attempt_at=${row.recoveryLease}::timestamptz
-        `);
-        return { kind: "OBSERVED" };
-      }),
-    async close() {
+    loadCompletionProofInTransaction,
+    loadTerminalFailureInTransaction,
+    nextRecoveryDueAt,
+    reconcilePending,
+    start() {
+      if (closed) throw new Error("Withdrawal composition closed");
+      if (started) return;
+      started = true;
+      run = worker.start();
+      void run.catch(() => {});
+    },
+    close() {
+      if (closing) return closing;
       closed = true;
-      await Promise.allSettled([...pending]);
-      for (const key of [...keyring.values(), ...destinationKeys.values()])
-        key.fill(0);
-      keyring.clear();
-      destinationKeys.clear();
+      closing = (async () => {
+        if (started)
+          await Promise.allSettled([
+            Promise.resolve().then(() => worker.stop()),
+            run,
+          ]);
+        await Promise.allSettled([...pending]);
+      })();
+      return closing;
     },
   };
 }

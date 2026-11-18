@@ -48,15 +48,12 @@ const setup: ReceivingSetupContext = {
   holder: { userId: "holder-one", name: "Ana Souza" },
   isHolder: true,
   consentRecorded: true,
-  pixConsentRecorded: true,
   disclosure: receivingSetupDisclosure,
   accountState: "CREATED",
   providerStatus: {
-    commercialInfo: "APPROVED",
-    bankAccountInfo: "PENDING",
-    documentation: "PENDING",
-    general: "PENDING",
-    commercialInfoExpired: false,
+    recipientStatus: "registration",
+    accountState: "ONBOARDING",
+    receivingEnabled: false,
     observedAt: "2026-10-16T12:00:00.000Z",
   },
 };
@@ -106,10 +103,10 @@ describe("receiving guided track", () => {
     expect(html).toContain("Fazer agora");
     expect(html).toContain('href="/sites/site-one/receiving-guide"');
     expect(html).not.toContain("PENDING");
-    expect(html).not.toContain("AWAITING_APPROVAL");
+    expect(html).not.toContain("ONBOARDING");
   });
 
-  it("keeps account and fee information accessible while Asaas reviews", () => {
+  it("keeps account and fee information accessible while Pagar.me reviews", () => {
     const html = renderToStaticMarkup(
       createElement(ReceivingOverviewTrack, {
         context: context({
@@ -117,14 +114,14 @@ describe("receiving guided track", () => {
             ...(setup.providerStatus as NonNullable<
               ReceivingSetupContext["providerStatus"]
             >),
-            general: "AWAITING_APPROVAL",
+            accountState: "UNDER_REVIEW",
           },
         }),
       }),
     );
     expect(html).toContain("Próximo passo · Etapa 4 de 5");
-    expect(html).toContain("Enquanto o Asaas analisa");
-    expect(html).toContain("Em análise pelo Asaas");
+    expect(html).toContain("Enquanto a Pagar.me analisa");
+    expect(html).toContain("Em análise pela Pagar.me");
   });
 
   it("offers the Asaas checklist, the missing e-mail help and support", () => {
@@ -147,6 +144,35 @@ describe("receiving guided track", () => {
     expect(html).toContain(
       'href="https://sandbox.asaas.com/login/auth?customerSignUpOriginChannel=HOME"',
     );
+    expect(html).toContain("Verificação pendente");
+    expect(html).not.toContain('role="alert"');
+  });
+
+  it("derives the identity badge from the Pagar.me account state", () => {
+    const status = (
+      accountState: NonNullable<
+        ReceivingSetupContext["providerStatus"]
+      >["accountState"],
+    ) =>
+      renderToStaticMarkup(
+        createElement(ActivationStep, {
+          context: context({
+            providerStatus: {
+              ...(setup.providerStatus as NonNullable<
+                ReceivingSetupContext["providerStatus"]
+              >),
+              accountState,
+            },
+          }),
+        }),
+      );
+    expect(status("UNDER_REVIEW")).toContain("Em análise");
+    expect(status("APPROVED")).toContain("Feito");
+    for (const state of ["BLOCKED", "SUSPENDED"] as const) {
+      const html = status(state);
+      expect(html).toContain("Bloqueada");
+      expect(html).toContain("A Pagar.me bloqueou ou suspendeu o recebedor.");
+    }
   });
 
   it("keeps the Asaas tasks read-only for someone who is not the holder", () => {

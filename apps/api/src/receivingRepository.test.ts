@@ -22,7 +22,7 @@ const account = {
   id: "account-1",
   siteId,
   environment: "live",
-  provider: "ASAAS",
+  provider: "PAGARME",
   operatorUserId: "user-1",
   operatorReference: "operator-1",
   accountReference: "remote-account-1",
@@ -378,7 +378,7 @@ describe("stored receiving context", () => {
     const context = await loadReceivingContext(db, siteId, options);
     expect(context?.providerBinding).toEqual({
       siteId,
-      provider: "ASAAS",
+      provider: "PAGARME",
       operatorReference: "operator-1",
       environment: "live",
       accountReference: "remote-account-1",

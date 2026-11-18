@@ -51,7 +51,7 @@ function fixture(maximum = false, reviewedPayout = false, live = false) {
   const feeQuote = {
     feeCents: 500,
     ...(maximum ? { feeSemantics: semantics } : {}),
-    policyVersion: live ? "asaas-pix-gross-max-v1-500" : "fee-v1",
+    policyVersion: "fee-v1",
     provenance: "provider" as const,
     observedAt: time.toISOString(),
     expiresAt: new Date(+time + 60000).toISOString(),
@@ -95,22 +95,6 @@ function fixture(maximum = false, reviewedPayout = false, live = false) {
   };
   const presentation = {
     ...scope,
-    ...(reviewedPayout
-      ? {
-          payout: {
-            destinationId: "pix-destination-1",
-            destinationVersion: 1,
-            configurationHash: "c".repeat(64),
-            reviewId: "review-1",
-            holderId: "bride-1",
-            holderConsentId: "holder-consent-1",
-            acceptThirdParty: false,
-            keyType: "EVP" as const,
-            maskedKey: "***1234",
-            ownerName: "Original Operator",
-          },
-        }
-      : {}),
     source: "stored" as const,
     verification: "verified" as const,
     provenance: "provider" as const,
@@ -122,7 +106,7 @@ function fixture(maximum = false, reviewedPayout = false, live = false) {
     evidenceObservedAt: new Date(time),
     bankObservedAt: new Date(time),
     operatorProfileUpdatedAt: new Date(time),
-    maskedDestination: reviewedPayout ? "Pix EVP: ***1234" : "Bank **** 1234",
+    maskedDestination: "Conta **** 1234",
     operatorDisplayName: "Original Operator",
   };
   const consentSnapshot = readWithdrawalConsentSnapshot({
@@ -138,7 +122,6 @@ function fixture(maximum = false, reviewedPayout = false, live = false) {
       destinationVersion: 3,
       maskedDestination: presentation.maskedDestination,
       operatorDisplayName: presentation.operatorDisplayName,
-      ...(reviewedPayout ? { payoutRecipientName: "Original Operator" } : {}),
       policyVersion: feeQuote.policyVersion,
       issuedAt: time.toISOString(),
       expiresAt: feeQuote.expiresAt,
@@ -273,7 +256,7 @@ function fixture(maximum = false, reviewedPayout = false, live = false) {
         id: "account-1",
         siteId: actor.siteId,
         environment: mode,
-        provider: "ASAAS",
+        provider: "PAGARME",
         operatorUserId: actor.userId,
         accountReference: "acct-1",
         recipientReference: "recipient-1",
@@ -713,7 +696,6 @@ describe("private withdrawal posting repository", () => {
   it.each([
     "profile",
     "profileTime",
-    "payout",
     "destination",
     "holder",
     "proof",
@@ -730,8 +712,6 @@ describe("private withdrawal posting repository", () => {
         f.authority.presentation.operatorDisplayName = "Changed Operator";
       if (kind === "profileTime")
         f.authority.presentation.operatorProfileUpdatedAt = new Date(f.time);
-      if (kind === "payout")
-        f.authority.presentation.payout!.reviewId = "changed-review";
       if (kind === "destination")
         f.authority.presentation.destinationId = "changed-destination";
       if (kind === "holder")
@@ -771,10 +751,10 @@ describe("private withdrawal posting repository", () => {
     };
     expect((await f.repository.armExisting(f.attempt)).outcome).toBe("ARMED");
   });
-  it.each(["exact", "unreviewedMaximum"])(
+  it.each(["exact"])(
     "keeps the original expiry strict for %s withdrawals",
-    async (kind) => {
-      const f = fixture(kind === "unreviewedMaximum", kind === "exact");
+    async () => {
+      const f = fixture(false, true);
       f.time.setTime(+f.time + 60001);
       f.sqlClock.value = f.time.toISOString();
       expect((await f.repository.armExisting(f.attempt)).outcome).toBe(
@@ -2053,7 +2033,7 @@ describe("immutable native terminal failure release", () => {
     async (state) => {
       const f = fixture(true, true);
       const armed = await f.arm();
-      const reference = `asaas-transfer:${"a".repeat(64)}`;
+      const reference = `pagarme-withdrawal:${"a".repeat(64)}`;
       f.terminalProof = {
         outcome: state,
         feeCents: 0,
@@ -2073,7 +2053,7 @@ describe("immutable native terminal failure release", () => {
         correlation: armed.original.correlation,
         holderBinding: armed.original.holderBinding,
         fence: armed.fence,
-        reason: `ASAAS_TRANSFER_${state}`,
+        reason: `PAGARME_WITHDRAWAL_${state}`,
         proofReference: reference,
         providerReference: "transfer-1",
         observedAt: f.time.toISOString(),
@@ -2115,7 +2095,7 @@ describe("immutable native terminal failure release", () => {
         correlation: armed.original.correlation,
         holderBinding: armed.original.holderBinding,
         fence: armed.fence,
-        reason: "ASAAS_TRANSFER_FAILED",
+        reason: "PAGARME_WITHDRAWAL_FAILED",
       },
     );
     expect(result).toMatchObject({
@@ -2151,7 +2131,7 @@ it.each([
   async (fault) => {
     const f = fixture(true, true);
     const armed = await f.arm();
-    const reference = `asaas-transfer:${"a".repeat(64)}`;
+    const reference = `pagarme-withdrawal:${"a".repeat(64)}`;
     const proof = {
       outcome: "FAILED",
       feeCents: 0,
@@ -2181,7 +2161,7 @@ it.each([
         correlation: armed.original.correlation,
         holderBinding: armed.original.holderBinding,
         fence: armed.fence,
-        reason: "ASAAS_TRANSFER_FAILED",
+        reason: "PAGARME_WITHDRAWAL_FAILED",
         proofReference: reference,
         providerReference: "transfer-1",
         observedAt: f.time.toISOString(),

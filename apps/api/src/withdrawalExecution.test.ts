@@ -1,6 +1,5 @@
 import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
-import * as diagnostics from "./withdrawalDiagnostics";
 import {
   captureOriginalWithdrawal,
   createWithdrawalExecutionService,
@@ -83,20 +82,7 @@ function fixture(maximum = false, environment: "sandbox" | "live" = "sandbox") {
     amountCents: 10000,
     currency: "BRL" as const,
   };
-  const payout = {
-    destinationId: "pix-1",
-    destinationVersion: 1,
-    configurationHash: "c".repeat(64),
-    reviewId: "review-1",
-    holderId: "holder-1",
-    holderConsentId: "holder-consent-1",
-    acceptThirdParty: false,
-    keyType: "EMAIL" as const,
-    maskedKey: "o***@example.test",
-    ownerName: "Original Operator",
-  };
   const presentation = {
-    ...(maximum ? { payout } : {}),
     ...scope,
     source: "stored",
     verification: "verified",
@@ -109,9 +95,7 @@ function fixture(maximum = false, environment: "sandbox" | "live" = "sandbox") {
     evidenceObservedAt: time.toISOString(),
     bankObservedAt: time.toISOString(),
     operatorProfileUpdatedAt: time.toISOString(),
-    maskedDestination: maximum
-      ? "Pix EMAIL: o***@example.test"
-      : "Bank **** 1234",
+    maskedDestination: "Conta **** 1234",
     operatorDisplayName: "Original Operator",
   };
   const consentSnapshot = readWithdrawalConsentSnapshot({
@@ -121,12 +105,7 @@ function fixture(maximum = false, environment: "sandbox" | "live" = "sandbox") {
       mode: environment,
       amountCents: 10000,
       feeCents: 500,
-      ...(maximum
-        ? {
-            feeSemantics: "MAXIMUM" as const,
-            payoutRecipientName: payout.ownerName,
-          }
-        : {}),
+      ...(maximum ? { feeSemantics: "MAXIMUM" as const } : {}),
       netCents: 9500,
       currency: "BRL",
       destinationVersion: 3,
@@ -859,29 +838,27 @@ describe("accepted maximum withdrawal dispatch authority", () => {
       usesAcceptedMaximumWithdrawalDispatch(fixture().original, "test"),
     ).toBe(false);
   });
-  it.each([
-    "revision",
-    "state",
-    "payout",
-    "provenance",
-    "acceptance",
-    "issuedAt",
-  ])("denies invalid renewal qualification: %s", (kind) => {
-    const f = fixture(true);
-    const original = structuredClone(f.original) as any;
-    if (kind === "revision") original.consent.requestRevision = "1";
-    if (kind === "state") original.consent.state = "OPEN";
-    if (kind === "payout") delete original.consent.snapshot.presentation.payout;
-    if (kind === "provenance")
-      original.snapshot.feeQuote.provenance = "simulation";
-    if (kind === "acceptance")
-      original.snapshot.intent.createdAt = original.snapshot.feeQuote.expiresAt;
-    if (kind === "issuedAt")
-      original.consent.snapshot.preview.issuedAt = new Date(
-        +f.time + 1,
-      ).toISOString();
-    expect(usesAcceptedMaximumWithdrawalDispatch(original, "test")).toBe(false);
-  });
+  it.each(["revision", "state", "provenance", "acceptance", "issuedAt"])(
+    "denies invalid renewal qualification: %s",
+    (kind) => {
+      const f = fixture(true);
+      const original = structuredClone(f.original) as any;
+      if (kind === "revision") original.consent.requestRevision = "1";
+      if (kind === "state") original.consent.state = "OPEN";
+      if (kind === "provenance")
+        original.snapshot.feeQuote.provenance = "simulation";
+      if (kind === "acceptance")
+        original.snapshot.intent.createdAt =
+          original.snapshot.feeQuote.expiresAt;
+      if (kind === "issuedAt")
+        original.consent.snapshot.preview.issuedAt = new Date(
+          +f.time + 1,
+        ).toISOString();
+      expect(usesAcceptedMaximumWithdrawalDispatch(original, "test")).toBe(
+        false,
+      );
+    },
+  );
   it("dispatches an accepted expired maximum preview under a fresh short authority without changing consent", async () => {
     const f = fixture(true);
     const now = new Date(+f.time + 61_000);
@@ -953,24 +930,17 @@ describe("accepted maximum withdrawal dispatch authority", () => {
   );
 });
 
-it("reports a caught arm failure through existing safe diagnostics without changing denial", async () => {
-  const diagnostic = vi
-    .spyOn(diagnostics, "logWithdrawalFailure")
-    .mockImplementation(() => {});
-  try {
-    const f = fixture();
-    const failure = new Error("synthetic private failure");
-    vi.mocked(f.repository.armExisting).mockRejectedValue(failure);
-    expect(
-      await createWithdrawalExecutionService(f.options).executeExisting(
-        f.attempt,
-      ),
-    ).toEqual({ outcome: "DENIED" });
-    expect(diagnostic).toHaveBeenCalledWith(failure);
-    expect(f.dispatch.dispatch).not.toHaveBeenCalled();
-  } finally {
-    diagnostic.mockRestore();
-  }
+it("denies a caught arm failure without dispatching", async () => {
+  const f = fixture();
+  vi.mocked(f.repository.armExisting).mockRejectedValue(
+    new Error("synthetic private failure"),
+  );
+  expect(
+    await createWithdrawalExecutionService(f.options).executeExisting(
+      f.attempt,
+    ),
+  ).toEqual({ outcome: "DENIED" });
+  expect(f.dispatch.dispatch).not.toHaveBeenCalled();
 });
 
 function confirmationWithFreshQuote(
@@ -1069,30 +1039,6 @@ it.each([
     original.snapshot.intent.updatedAt = original.snapshot.intent.createdAt;
   }
   expect(() => captureOriginalWithdrawal(original)).toThrow();
-});
-
-it("does not infer reviewed maximum acceptance without frozen payout custody", () => {
-  const { original } = confirmationWithFreshQuote();
-  const presentation = { ...original.consent.snapshot.presentation };
-  delete presentation.payout;
-  const consentSnapshot = readWithdrawalConsentSnapshot({
-    ...original.consent.snapshot,
-    preview: {
-      ...original.consent.snapshot.preview,
-      maskedDestination: "Bank **** 1234",
-      payoutRecipientName: undefined,
-    },
-    presentation: { ...presentation, maskedDestination: "Bank **** 1234" },
-  });
-  const previewHash = hashWithdrawalConsentSnapshot(consentSnapshot);
-  const withoutPayout = {
-    ...original,
-    consent: { ...original.consent, snapshot: consentSnapshot, previewHash },
-    holderBinding: { ...original.holderBinding, consentHash: previewHash },
-  };
-  expect(() => captureOriginalWithdrawal(withoutPayout)).toThrow(
-    "Invalid original withdrawal consent",
-  );
 });
 
 it("retains strict fee quote timestamp equality for otherwise valid live maximum consent", () => {

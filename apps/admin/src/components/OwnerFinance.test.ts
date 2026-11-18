@@ -56,7 +56,7 @@ const alert: OwnerFinanceAlert = {
   amountCents: 10239,
   createdAt: "2026-10-14T12:00:00.000Z",
   dueAt: "2026-10-16T12:00:00.000Z",
-  asaasPaymentUrl: "https://www.asaas.com/payment/show/123",
+  providerPaymentUrl: "https://dashboard.pagar.me/orders/or_123",
   resolvedAt: null,
   resolvedNote: null,
 };

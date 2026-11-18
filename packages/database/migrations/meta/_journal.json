@@ -218,6 +218,13 @@
       "when": 1794593431713,
       "tag": "0030_platform_account_split",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1794972606433,
+      "tag": "0031_pagarme_provider",
+      "breakpoints": true
     }
   ]
 }
