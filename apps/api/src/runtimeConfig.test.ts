@@ -30,11 +30,11 @@ describe("API runtime configuration", () => {
     });
   });
 
-  it("ignores legacy Asaas settings", () => {
+  it("ignores settings of other payment providers", () => {
     const config = readRuntimeConfig({
       ...settings,
-      ASAAS_MODE: "sandbox",
-      ASAAS_API_KEY: "$aact_hmlg_fixture",
+      LEGACY_PROVIDER_MODE: "sandbox",
+      LEGACY_PROVIDER_API_KEY: "legacy_fixture",
     });
     expect(config.giftPayment).toEqual({ mode: "disabled" });
     expect(config.giftPublicOrigin).toBeUndefined();

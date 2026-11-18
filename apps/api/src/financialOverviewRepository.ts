@@ -123,7 +123,7 @@ const pendingPaymentStates = [
   "DUNNING_REQUESTED",
 ];
 const unsupportedReversalEvent =
-  /^(REFUND|TRANSFER)_|^PAYMENT_(REFUND|CHARGEBACK)/;
+  /^(REFUND|TRANSFER)_|^PAYMENT_(REFUND|CHARGEBACK)|^CHARGE_(REFUNDED|CHARGEDBACK)/;
 
 function unavailable(): never {
   throw new FinancialOverviewRepositoryError();
@@ -568,12 +568,15 @@ function v2RecipientSplitCents(
 ): number {
   let split: number | undefined;
   try {
-    split = readGiftV2Settlement(
+    const splits = readGiftV2Settlement(
       quote,
       settlement as GiftV2SettlementSnapshot | undefined,
-    )?.recipientSplitCents[
-      typeof installmentNumber === "number" ? installmentNumber - 1 : 0
-    ];
+    )?.recipientSplitCents;
+    // One Pagar.me charge per order (installment null) owes the whole nominal.
+    split =
+      typeof installmentNumber === "number"
+        ? splits?.[installmentNumber - 1]
+        : splits?.reduce((sum, cents) => sum + cents, 0);
   } catch {
     return unavailable();
   }
@@ -702,7 +705,9 @@ function unresolved(data: ReturnType<typeof indexed>): number {
   for (const row of data.events.values())
     if (
       (row.state !== "PROCESSED" &&
-        /^(PAYMENT|CHECKOUT|TRANSFER|REFUND)_/.test(String(row.eventType))) ||
+        /^(PAYMENT|CHECKOUT|TRANSFER|REFUND|ORDER|CHARGE)_/.test(
+          String(row.eventType),
+        )) ||
       (row.state === "PROCESSED" &&
         unsupportedReversalEvent.test(String(row.eventType)))
     )
@@ -824,7 +829,10 @@ function aggregate(
       e.state !== "PROCESSED" ||
       !isGiftReceiptEvent(e.eventType) ||
       e.paymentId !== p.id ||
-      payload.paymentId !== p.providerPaymentReference ||
+      (payload.paymentId === undefined
+        ? payload.checkoutId !== p.providerCheckoutReference &&
+          payload.externalReference !== p.attemptId
+        : payload.paymentId !== p.providerPaymentReference) ||
       (payload.externalReference !== undefined &&
         payload.externalReference !== p.attemptId) ||
       (payload.checkoutId !== undefined &&

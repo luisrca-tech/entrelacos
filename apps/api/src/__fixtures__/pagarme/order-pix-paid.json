@@ -1,0 +1,70 @@
+{
+  "id": "or_fixtureOrder0001",
+  "code": "checkout-fixture-1",
+  "amount": 10369,
+  "currency": "BRL",
+  "closed": true,
+  "status": "paid",
+  "items": [
+    {
+      "id": "oi_fixtureItem0001",
+      "description": "Jogo de jantar",
+      "amount": 10369,
+      "quantity": 1,
+      "status": "active",
+      "code": "gift-fixture-1"
+    }
+  ],
+  "charges": [
+    {
+      "id": "ch_fixtureCharge001",
+      "code": "checkout-fixture-1",
+      "amount": 10369,
+      "status": "paid",
+      "currency": "BRL",
+      "payment_method": "pix",
+      "last_transaction": {
+        "id": "tran_fixtureTx0001",
+        "transaction_type": "pix",
+        "amount": 10369,
+        "status": "paid",
+        "success": true,
+        "qr_code": "00020101021226820014br.gov.bcb.pix2560fixture",
+        "qr_code_url": "https://api.pagar.me/core/v5/transactions/tran_fixtureTx0001/qrcode?payment_method=pix",
+        "expires_at": "2026-11-18T12:30:00Z",
+        "split": [
+          {
+            "id": "sr_fixturePlatform02",
+            "type": "flat",
+            "amount": 369,
+            "recipient": {
+              "id": "rp_platformFixture01"
+            },
+            "options": {
+              "liable": true,
+              "charge_processing_fee": true,
+              "charge_remainder_fee": true
+            }
+          },
+          {
+            "id": "sr_fixtureCouple0002",
+            "type": "flat",
+            "amount": 10000,
+            "recipient": {
+              "id": "rp_fixtureRecipient01"
+            },
+            "options": {
+              "liable": false,
+              "charge_processing_fee": false,
+              "charge_remainder_fee": false
+            }
+          }
+        ]
+      },
+      "paid_amount": 10369,
+      "paid_at": "2026-11-18T12:03:00Z"
+    }
+  ],
+  "created_at": "2026-11-18T12:00:00Z",
+  "updated_at": "2026-11-18T12:03:00Z"
+}

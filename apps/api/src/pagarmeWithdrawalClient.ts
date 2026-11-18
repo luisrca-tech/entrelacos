@@ -7,6 +7,7 @@ import {
 } from "@entrelacos/database/schema";
 import { sql } from "drizzle-orm";
 import { databaseTimestampEpochMicroseconds } from "./databaseTimestamp";
+import { PagarmeRejectedError } from "./pagarmeHttpClient";
 import {
   PAGARME_WITHDRAWAL_FEE_CENTS,
   type PagarmeRecipientBalance,
@@ -77,6 +78,15 @@ export function readPagarmeBalanceObservation(
     balanceCents: balance.availableCents,
   };
 }
+
+/**
+ * Local reference of a withdrawal Pagar.me refused outright (4xx): no
+ * provider withdrawal exists, so the hold is released with a failure proof
+ * bound to this command instead of waiting for a lookup that can never match.
+ */
+const rejectedWithdrawalReference = /^rejected_[a-f0-9]{32}$/;
+/** 4xx that answer the command itself; auth, conflict and throttling do not. */
+const definitiveRejections = new Set([400, 404, 412, 422]);
 
 /** One key per withdrawal operation; every retry of it reuses the key. */
 export function pagarmeWithdrawalIdempotencyKey(
@@ -157,7 +167,10 @@ export function capturePagarmeWithdrawal(
     input.environment !== c.environment ||
     !w ||
     typeof w.id !== "string" ||
-    !/^(?:with|tran)_[A-Za-z0-9]{1,128}$/.test(w.id) ||
+    !(
+      /^(?:with|tran)_[A-Za-z0-9]{1,128}$/.test(w.id) ||
+      (rejectedWithdrawalReference.test(w.id) && w.status === "failed")
+    ) ||
     w.amountCents !== pagarmeWithdrawalTransferCents(c.amountCents) ||
     w.amountCents !== c.netCents ||
     !(pagarmeWithdrawalStatuses as readonly string[]).includes(w.status) ||
@@ -216,13 +229,30 @@ export function createPagarmeWithdrawalAdapter(
     options.guardDispatch ??
     ((_original, _fence, send: () => Promise<PagarmeWithdrawal>) => send());
   const replayWindowMs = options.replayWindowMs ?? defaultReplayWindowMs;
-  function send(original: OriginalWithdrawal) {
+  async function send(
+    original: OriginalWithdrawal,
+  ): Promise<PagarmeWithdrawal> {
     const c = original.correlation;
-    return client.createWithdrawal(
-      c.accountReference,
-      pagarmeWithdrawalTransferCents(c.amountCents),
-      pagarmeWithdrawalIdempotencyKey(c),
-    );
+    const key = pagarmeWithdrawalIdempotencyKey(c);
+    try {
+      return await client.createWithdrawal(
+        c.accountReference,
+        pagarmeWithdrawalTransferCents(c.amountCents),
+        key,
+      );
+    } catch (error) {
+      if (
+        !(error instanceof PagarmeRejectedError) ||
+        !definitiveRejections.has(error.status)
+      )
+        throw error;
+      return {
+        id: `rejected_${createHash("sha256").update(key).digest("hex").slice(0, 32)}`,
+        amountCents: pagarmeWithdrawalTransferCents(c.amountCents),
+        status: "failed",
+        updatedAt: now().toISOString(),
+      };
+    }
   }
   async function observe(
     original: OriginalWithdrawal,
@@ -309,6 +339,11 @@ export function createPagarmeWithdrawalAdapter(
         );
         const c = original.correlation;
         let withdrawal: PagarmeWithdrawal;
+        if (
+          providerReference !== null &&
+          rejectedWithdrawalReference.test(providerReference)
+        )
+          return { outcome: "UNRESOLVED" };
         if (providerReference !== null) {
           withdrawal = await client.getWithdrawal(
             c.accountReference,

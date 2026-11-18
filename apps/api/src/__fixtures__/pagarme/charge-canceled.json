@@ -1,0 +1,17 @@
+{
+  "id": "ch_fixtureCharge002",
+  "code": "checkout-fixture-2",
+  "amount": 11890,
+  "canceled_amount": 11890,
+  "status": "refunded",
+  "currency": "BRL",
+  "payment_method": "credit_card",
+  "canceled_at": "2026-11-19T09:00:00Z",
+  "last_transaction": {
+    "id": "tran_fixtureTx0004",
+    "transaction_type": "credit_card",
+    "amount": 11890,
+    "status": "refunded",
+    "success": true
+  }
+}

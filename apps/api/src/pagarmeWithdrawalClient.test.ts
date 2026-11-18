@@ -3,7 +3,10 @@ import { readFileSync } from "node:fs";
 import type { SQL } from "drizzle-orm";
 import { PgDialect } from "drizzle-orm/pg-core";
 import { describe, expect, it, vi } from "vitest";
-import { PagarmeUnknownOutcomeError } from "./pagarmeHttpClient";
+import {
+  PagarmeRejectedError,
+  PagarmeUnknownOutcomeError,
+} from "./pagarmeHttpClient";
 import type { PagarmeWithdrawal } from "./pagarmeRecipientClient";
 import {
   createPagarmeWithdrawalAdapter,
@@ -374,6 +377,55 @@ describe("Pagar.me withdrawal dispatch", () => {
       outcome: "REJECTED",
       reason: "PAGARME_WITHDRAWAL_CANCELLED",
     });
+  });
+
+  it("fails a withdrawal Pagar.me refused (4xx) with a terminal proof that releases the hold", async () => {
+    const s = setup();
+    s.client.createWithdrawal.mockRejectedValueOnce(
+      new PagarmeRejectedError(422, "invalid_amount", "Saldo insuficiente"),
+    );
+    const observation = await s.adapter.dispatch(s.original, s.fence);
+    expect(observation).toMatchObject({
+      outcome: "REJECTED",
+      reason: "PAGARME_WITHDRAWAL_FAILED",
+      providerReference: expect.stringMatching(/^rejected_[a-f0-9]{32}$/),
+    });
+    const reference =
+      observation.outcome === "REJECTED" ? observation.proofReference : "";
+    await expect(
+      s.custody.loadTerminalFailureInTransaction(
+        s.tx as never,
+        s.original,
+        s.fence,
+        reference as string,
+      ),
+    ).resolves.toMatchObject({
+      outcome: "FAILED",
+      feeCents: 0,
+      proofReference: reference,
+    });
+    // The same refused command always maps to the same local reference.
+    s.client.createWithdrawal.mockRejectedValueOnce(
+      new PagarmeRejectedError(422, "invalid_amount", null),
+    );
+    const again = await s.adapter.dispatch(s.original, s.fence);
+    expect(again).toMatchObject({
+      providerReference:
+        observation.outcome === "REJECTED" ? observation.providerReference : "",
+    });
+  });
+
+  it("keeps a 401/403/429 refusal unresolved (configuration or throttling, not a final answer)", async () => {
+    for (const status of [401, 403, 429]) {
+      const s = setup();
+      s.client.createWithdrawal.mockRejectedValueOnce(
+        new PagarmeRejectedError(status, null, null),
+      );
+      await expect(
+        s.adapter.dispatch(s.original, s.fence),
+      ).resolves.toMatchObject({ outcome: "UNRESOLVED" });
+      expect(s.stored.size).toBe(0);
+    }
   });
 
   it("keeps an unknown provider outcome unresolved without recording custody", async () => {

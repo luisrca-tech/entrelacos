@@ -569,6 +569,11 @@ export const checkoutRecoveryTokenSchema = z
   .string()
   .length(43)
   .regex(/^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$/);
+/**
+ * @deprecated Hosted-checkout contract still read by the couple sites until
+ * they move to the transparent Pagar.me checkout. The API speaks
+ * `giftCheckoutCreateInputSchema` / `giftCheckoutStatusSchema`.
+ */
 export const checkoutCreateInputSchema = z
   .object({
     quoteId: id,
@@ -661,6 +666,105 @@ export const checkoutStatusSchema = z
 export type CheckoutStatus = z.infer<typeof checkoutStatusSchema>;
 export const checkoutStatusResponseSchema = z
   .object({ status: checkoutStatusSchema })
+  .strict();
+
+/**
+ * Transparent Pagar.me checkout. The card is tokenized in the browser with the
+ * public key, so the API only ever receives `cardToken`; the strict object
+ * rejects any raw card field (number, cvv, holder, expiry). `requestId` and
+ * `recoveryToken` make retries idempotent and authorize status polling.
+ */
+export const giftCheckoutBuyerSchema = z
+  .object({
+    name: z.string().trim().min(2).max(64),
+    email: z.string().trim().max(64).email(),
+    cpf: z.string().regex(/^[0-9]{11}$/),
+    /** DDD + number, digits only. */
+    phone: z.string().regex(/^[1-9][0-9][0-9]{8,9}$/),
+  })
+  .strict();
+export type GiftCheckoutBuyer = z.infer<typeof giftCheckoutBuyerSchema>;
+export const giftCheckoutCardTokenSchema = z
+  .string()
+  .regex(/^token_[A-Za-z0-9]{1,128}$/);
+export const giftCheckoutCreateInputSchema = z
+  .object({
+    quoteId: id,
+    requestId: id,
+    recoveryToken: checkoutRecoveryTokenSchema,
+    method: giftPaymentMethodSchema,
+    installments: giftInstallmentCountSchema,
+    cardToken: giftCheckoutCardTokenSchema.optional(),
+    buyer: giftCheckoutBuyerSchema,
+  })
+  .strict()
+  .refine(
+    (value) =>
+      value.method === "CREDIT_CARD"
+        ? value.cardToken !== undefined
+        : value.cardToken === undefined && value.installments === 1,
+    "Card checkouts need a card token; Pix is a single payment",
+  );
+export type GiftCheckoutCreateInput = z.infer<
+  typeof giftCheckoutCreateInputSchema
+>;
+export const giftCheckoutStateSchema = z.enum([
+  "CREATING",
+  "OUTCOME_UNKNOWN",
+  "AWAITING_PAYMENT",
+  "RECEIVED",
+  "CLOSED_UNPAID",
+  "REFUNDED",
+]);
+export type GiftCheckoutState = z.infer<typeof giftCheckoutStateSchema>;
+export const giftCheckoutPixSchema = z
+  .object({
+    qrCode: z.string().min(1).max(4096),
+    qrCodeUrl: z
+      .string()
+      .url()
+      .max(2048)
+      .refine((value) => new URL(value).protocol === "https:"),
+    expiresAt: instant,
+  })
+  .strict();
+export type GiftCheckoutPix = z.infer<typeof giftCheckoutPixSchema>;
+export const giftCheckoutCreateResultSchema = z
+  .object({
+    checkoutId: id,
+    status: giftCheckoutStateSchema,
+    pix: giftCheckoutPixSchema.optional(),
+  })
+  .strict();
+export type GiftCheckoutCreateResult = z.infer<
+  typeof giftCheckoutCreateResultSchema
+>;
+export const giftCheckoutStatusSchema = z
+  .object({
+    siteId: id,
+    quoteId: id,
+    requestId: id,
+    checkoutId: id,
+    method: giftPaymentMethodSchema,
+    mode: z.enum(["sandbox", "live"]),
+    state: giftCheckoutStateSchema,
+    observedAt: instant.nullable(),
+    closedReason: z.enum(["FAILED", "EXPIRED", "CANCELED"]).nullable(),
+    mayStartNewAttempt: z.boolean(),
+    pix: giftCheckoutPixSchema.nullable(),
+  })
+  .strict()
+  .refine(
+    (value) =>
+      value.mayStartNewAttempt === (value.state === "CLOSED_UNPAID") &&
+      (value.closedReason !== null) === (value.state === "CLOSED_UNPAID") &&
+      (value.pix === null ||
+        (value.method === "PIX" && value.state === "AWAITING_PAYMENT")),
+    "Contradictory checkout status",
+  );
+export type GiftCheckoutStatus = z.infer<typeof giftCheckoutStatusSchema>;
+export const giftCheckoutStatusResponseSchema = z
+  .object({ status: giftCheckoutStatusSchema })
   .strict();
 
 export const financialOverviewSchema = z
@@ -1246,7 +1350,7 @@ export const internalGiftsProblemCodeSchema = z.enum([
   "RECEIVING_NOMINATION_UNAVAILABLE",
 ]);
 export const internalGiftsEndpointPaths = {
-  asaasWebhook: "POST /v1/webhooks/asaas",
+  pagarmeWebhook: "POST /v1/webhooks/pagarme",
   readiness: "GET /v1/sites/:siteId/receiving/readiness",
   financialReauthentication:
     "POST /v1/sites/:siteId/financial-reauthentication",
@@ -1276,7 +1380,7 @@ export const internalGiftsEndpointPaths = {
   withdrawalCreate: "POST /v1/sites/:siteId/withdrawals",
 } as const;
 
-export const asaasWebhookAcceptanceSchema = z
+export const pagarmeWebhookAcceptanceSchema = z
   .object({ accepted: z.literal(true) })
   .strict();
 
@@ -1406,7 +1510,7 @@ export const giftPurchaseHistoryPaymentSchema = z
     platformAdjustmentFundedCents: giftCentsSchema.optional(),
     /** V2 only: couple split frozen with the quote for this installment. */
     expectedRecipientSplitCents: giftCentsSchema.optional(),
-    /** V2 only: Asaas blocked the split (divergence); under operator review. */
+    /** V2 only: the provider blocked the split; under operator review. */
     splitDivergenceBlocked: z.literal(true).optional(),
   })
   .strict()
@@ -1586,12 +1690,21 @@ export const giftPurchaseHistoryDetailPageSchema = z
       return false;
     const installmentCount = purchase.installmentCount ?? 1;
     const installmentNumbers = new Set<number>();
+    // A Pagar.me order is one charge for the whole quote even in installments;
+    // numbered rows are per-installment payments recorded before the switch.
+    const wholeOrder = payments.filter(
+      (payment) => payment.installmentNumber === undefined,
+    ).length;
+    if (
+      installmentCount > 1 &&
+      (wholeOrder > 1 || (wholeOrder === 1 && payments.length > 1))
+    )
+      return false;
     for (const payment of payments) {
       if (installmentCount === 1) {
         if (payment.installmentNumber !== undefined) return false;
-      } else {
+      } else if (payment.installmentNumber !== undefined) {
         if (
-          payment.installmentNumber === undefined ||
           payment.installmentNumber > installmentCount ||
           installmentNumbers.has(payment.installmentNumber)
         )
@@ -1621,9 +1734,11 @@ export const giftPurchaseHistoryDetailPageSchema = z
         (item) => item.paymentId === receipt.paymentId,
       );
       const portion = (amount: number) =>
-        allocateGiftInstallmentCents(amount, installmentCount)[
-          (payment?.installmentNumber ?? 1) - 1
-        ];
+        payment?.installmentNumber === undefined
+          ? amount
+          : allocateGiftInstallmentCents(amount, installmentCount)[
+              payment.installmentNumber - 1
+            ];
       return (
         !payment ||
         (payment.recordedState === "RECEIVED" &&

@@ -789,6 +789,9 @@ export const giftCheckoutAttempt = pgTable(
     installmentExpiryPaymentReferences: text(
       "installment_expiry_payment_references",
     ).array(),
+    // Pix copy-and-paste code and QR image URL shown to the guest; not secret.
+    pixQrCode: text("pix_qr_code"),
+    pixQrCodeUrl: text("pix_qr_code_url"),
   },
   (table): PgTableExtraConfigValue[] => [
     unique("gift_checkout_attempt_scope_key").on(
@@ -865,6 +868,10 @@ export const giftCheckoutAttempt = pgTable(
     check(
       "gift_checkout_attempt_expiry_payment_references_check",
       sql`${table.installmentExpiryPaymentReferences} IS NULL OR (cardinality(${table.installmentExpiryPaymentReferences}) BETWEEN 2 AND 12 AND array_position(${table.installmentExpiryPaymentReferences}, NULL) IS NULL)`,
+    ),
+    check(
+      "gift_checkout_attempt_pix_check",
+      sql`(${table.pixQrCode} IS NULL AND ${table.pixQrCodeUrl} IS NULL) OR (length(${table.pixQrCode}) BETWEEN 1 AND 4096 AND ${table.pixQrCodeUrl} ~ '^https://' AND length(${table.pixQrCodeUrl}) <= 2048 AND ${table.expiresAt} IS NOT NULL AND ${table.providerReference} IS NOT NULL)`,
     ),
     check(
       "gift_checkout_attempt_number_check",
@@ -1021,6 +1028,9 @@ export const financialOperatorAlertKinds = [
   "PAYMENT_RESTRICTION",
   "UNROUTABLE_PLATFORM_EVENT",
   "SPLIT_SETUP_FAILED",
+  "GIFT_REFUNDED",
+  "GIFT_CHARGEBACK",
+  "ORDER_MISMATCH",
 ] as const;
 
 // Operator-facing alerts for the platform account split (V2). Site and account
@@ -1057,7 +1067,7 @@ export const financialOperatorAlert = pgTable(
       .where(sql`${table.resolvedAt} IS NULL`),
     check(
       "financial_operator_alert_kind_check",
-      sql`${table.kind} IN ('SPLIT_DIVERGENCE_BLOCK','SPLIT_CANCELLED','ANTICIPATION_DENIED','PAYMENT_RESTRICTION','UNROUTABLE_PLATFORM_EVENT','SPLIT_SETUP_FAILED')`,
+      sql`${table.kind} IN ('SPLIT_DIVERGENCE_BLOCK','SPLIT_CANCELLED','ANTICIPATION_DENIED','PAYMENT_RESTRICTION','UNROUTABLE_PLATFORM_EVENT','SPLIT_SETUP_FAILED','GIFT_REFUNDED','GIFT_CHARGEBACK','ORDER_MISMATCH')`,
     ),
     check(
       "financial_operator_alert_severity_check",

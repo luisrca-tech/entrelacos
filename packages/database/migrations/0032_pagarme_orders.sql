@@ -1,0 +1,5 @@
+ALTER TABLE "financial_operator_alert" DROP CONSTRAINT "financial_operator_alert_kind_check";--> statement-breakpoint
+ALTER TABLE "gift_checkout_attempt" ADD COLUMN "pix_qr_code" text;--> statement-breakpoint
+ALTER TABLE "gift_checkout_attempt" ADD COLUMN "pix_qr_code_url" text;--> statement-breakpoint
+ALTER TABLE "financial_operator_alert" ADD CONSTRAINT "financial_operator_alert_kind_check" CHECK ("financial_operator_alert"."kind" IN ('SPLIT_DIVERGENCE_BLOCK','SPLIT_CANCELLED','ANTICIPATION_DENIED','PAYMENT_RESTRICTION','UNROUTABLE_PLATFORM_EVENT','SPLIT_SETUP_FAILED','GIFT_REFUNDED','GIFT_CHARGEBACK','ORDER_MISMATCH'));--> statement-breakpoint
+ALTER TABLE "gift_checkout_attempt" ADD CONSTRAINT "gift_checkout_attempt_pix_check" CHECK (("gift_checkout_attempt"."pix_qr_code" IS NULL AND "gift_checkout_attempt"."pix_qr_code_url" IS NULL) OR (length("gift_checkout_attempt"."pix_qr_code") BETWEEN 1 AND 4096 AND "gift_checkout_attempt"."pix_qr_code_url" ~ '^https://' AND length("gift_checkout_attempt"."pix_qr_code_url") <= 2048 AND "gift_checkout_attempt"."expires_at" IS NOT NULL AND "gift_checkout_attempt"."provider_reference" IS NOT NULL));

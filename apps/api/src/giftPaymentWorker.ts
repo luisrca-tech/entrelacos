@@ -1,38 +1,16 @@
-import { giftQuoteSchema } from "@entrelacos/contracts";
-import type { AsaasPaymentObservation } from "./asaasHttpClient";
-import type {
-  GiftPaymentInboxClaim,
-  GiftPaymentInboxClaimResult,
-  GiftPaymentInboxDeferReason,
-  GiftPaymentInboxDeferResult,
-} from "./giftPaymentInboxRepository";
+import {
+  decideGiftOrderTransition,
+  type GiftCheckoutOrderBinding,
+} from "./giftCheckoutLifecycle";
+import type { GiftCheckoutIdentity } from "./giftCheckouts";
+import type { GiftPaymentInboxClaim } from "./giftPaymentInboxRepository";
 import type { GiftPaymentPostingRepository } from "./giftPaymentPostingRepository";
-import type { StoredGiftPaymentCheckoutBinding } from "./giftPaymentReconciliation";
-
-export type GiftPaymentWorkerDeferralReason = GiftPaymentInboxDeferReason;
-
-export interface GiftPaymentWorkerInboxPort {
-  claimNextReceivedPayment(): Promise<GiftPaymentInboxClaimResult>;
-  deferClaim(
-    claim: GiftPaymentInboxClaim,
-    reason: GiftPaymentWorkerDeferralReason,
-  ): Promise<GiftPaymentInboxDeferResult>;
-}
-
-// Ports are selected by the server from persisted account/lease bindings.
-// No default clients, browser evidence or scheduler are created by this worker.
-export interface GiftPaymentWorkerOptions {
-  environment: "sandbox" | "live";
-  inbox: GiftPaymentWorkerInboxPort;
-  loadCheckout(
-    claim: GiftPaymentInboxClaim,
-    observedCheckoutReference?: string,
-  ): Promise<StoredGiftPaymentCheckoutBinding | null>;
-  reader: {
-    getPayment(claim: GiftPaymentInboxClaim): Promise<AsaasPaymentObservation>;
-  };
-  posting: GiftPaymentPostingRepository;
-}
+import { GIFT_PAYMENT_RECONCILE_AFTER_MS } from "./giftPaymentReconciliation";
+import { PagarmeRejectedError } from "./pagarmeHttpClient";
+import type {
+  PagarmeOrderClient,
+  PagarmeOrderObservation,
+} from "./pagarmeOrderClient";
 
 export interface GiftPaymentWorkerResult {
   kind:
@@ -50,308 +28,152 @@ export interface GiftPaymentWorker {
   processNextReceivedPayment(): Promise<GiftPaymentWorkerResult>;
 }
 
-export class GiftPaymentWorkerServiceError extends Error {
-  readonly status = 503;
-  readonly code = "PAYMENT_WORKER_UNAVAILABLE";
-  readonly title = "Payment worker is unavailable";
+export interface GiftPaymentWorkerOptions {
+  inbox: {
+    claimNext(): Promise<GiftPaymentInboxClaim | null>;
+    complete(
+      claim: GiftPaymentInboxClaim,
+      paymentId: string | null,
+    ): Promise<void>;
+    defer(
+      claim: GiftPaymentInboxClaim,
+      errorCode: string,
+    ): Promise<"RETRY" | "DEAD_LETTER">;
+  };
+  checkouts: {
+    loadBinding(identity: {
+      siteId: string;
+      attemptId: string;
+    }): Promise<GiftCheckoutOrderBinding | null>;
+    /** Binds an order recovered by code to an attempt whose outcome was unknown. */
+    bindRecoveredOrder(
+      binding: GiftCheckoutOrderBinding,
+      order: PagarmeOrderObservation,
+      observedAt: string,
+    ): Promise<void>;
+    /** Closes an attempt Pagar.me never created (no order with its code). */
+    closeMissingOrder(
+      binding: GiftCheckoutOrderBinding,
+      observedAt: string,
+    ): Promise<void>;
+  };
+  orders: Pick<PagarmeOrderClient, "getOrder" | "findOrderByCode">;
+  posting: GiftPaymentPostingRepository;
+  /** Re-reads the recipient (GET /recipients/{id}) and stores its state. */
+  refreshReceiving?(siteId: string): Promise<void>;
+  now(): Date;
+}
 
-  constructor() {
-    super("Payment worker is unavailable");
-    this.name = "GiftPaymentWorkerServiceError";
+export type { GiftCheckoutIdentity };
+
+class Deferred extends Error {
+  constructor(readonly code: string) {
+    super(code);
   }
 }
 
-function unavailable(): never {
-  throw new GiftPaymentWorkerServiceError();
-}
-
-function record(value: unknown): Record<string, unknown> {
-  if (!value || typeof value !== "object" || Array.isArray(value))
-    return unavailable();
-  const prototype = Object.getPrototypeOf(value);
-  if (prototype !== Object.prototype && prototype !== null)
-    return unavailable();
-  return value as Record<string, unknown>;
-}
-
-function exactRecord(
-  value: unknown,
-  fields: readonly string[],
-): Record<string, unknown> {
-  const raw = record(value);
-  const keys = Reflect.ownKeys(raw);
-  if (
-    keys.length !== fields.length ||
-    keys.some((key) => typeof key !== "string" || !fields.includes(key))
-  )
-    return unavailable();
-  return raw;
-}
-
-function id(value: unknown): string {
-  const parsed = giftQuoteSchema.shape.siteId.safeParse(value);
-  if (!parsed.success) return unavailable();
-  return parsed.data;
-}
-
-function reference(value: unknown): string {
-  if (typeof value !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(value))
-    return unavailable();
-  return value;
-}
-
-function readClaim(
-  value: unknown,
-  environment: GiftPaymentWorkerOptions["environment"],
-): GiftPaymentInboxClaim {
-  const raw = exactRecord(value, [
-    "eventId",
-    "siteId",
-    "accountId",
-    "environment",
-    "leaseOwner",
-    "leaseToken",
-    "paymentReference",
-    "providerAccountReference",
-    "attempts",
-  ]);
-  if (
-    raw.environment !== environment ||
-    typeof raw.attempts !== "number" ||
-    !Number.isSafeInteger(raw.attempts) ||
-    raw.attempts < 1
-  )
-    return unavailable();
-  return Object.freeze({
-    eventId: id(raw.eventId),
-    siteId: id(raw.siteId),
-    accountId: id(raw.accountId),
-    environment,
-    leaseOwner: id(raw.leaseOwner),
-    leaseToken: id(raw.leaseToken),
-    paymentReference: reference(raw.paymentReference),
-    providerAccountReference: reference(raw.providerAccountReference),
-    attempts: raw.attempts,
-  });
-}
-
-function readCheckout(
-  value: unknown,
-  claim: GiftPaymentInboxClaim,
-): StoredGiftPaymentCheckoutBinding {
-  const raw = exactRecord(value, [
-    "siteId",
-    "accountId",
-    "environment",
-    "orderId",
-    "attemptId",
-    "providerCheckoutReference",
-    "accountReference",
-  ]);
-  if (
-    raw.siteId !== claim.siteId ||
-    raw.accountId !== claim.accountId ||
-    raw.environment !== claim.environment ||
-    raw.accountReference !== claim.providerAccountReference
-  )
-    return unavailable();
-  return Object.freeze({
-    siteId: id(raw.siteId),
-    accountId: id(raw.accountId),
-    environment: claim.environment,
-    orderId: id(raw.orderId),
-    attemptId: id(raw.attemptId),
-    providerCheckoutReference: reference(raw.providerCheckoutReference),
-    accountReference: reference(raw.accountReference),
-  });
-}
-
-function paymentCorrelationReference(payment: Record<string, unknown>): string {
-  return reference(payment.checkoutSession ?? payment.installment);
-}
-
-function readObservation(
-  value: unknown,
-  claim: GiftPaymentInboxClaim,
-  checkout?: StoredGiftPaymentCheckoutBinding,
-): AsaasPaymentObservation {
-  const copy: unknown = structuredClone(value);
-  const raw = exactRecord(copy, [
-    "source",
-    "provider",
-    "siteId",
-    "accountReference",
-    "environment",
-    "currency",
-    "observedAt",
-    "payment",
-  ]);
-  const payment = record(raw.payment);
-  if (
-    raw.source !== "provider" ||
-    raw.provider !== "ASAAS" ||
-    raw.siteId !== claim.siteId ||
-    raw.accountReference !== claim.providerAccountReference ||
-    raw.environment !== claim.environment ||
-    raw.currency !== "BRL" ||
-    !(raw.observedAt instanceof Date) ||
-    !Number.isFinite(raw.observedAt.getTime()) ||
-    !giftQuoteSchema.shape.expiresAt.safeParse(raw.observedAt.toISOString())
-      .success ||
-    reference(payment.id) !== claim.paymentReference ||
-    (payment.checkoutSession == null && payment.externalReference == null) ||
-    (checkout !== undefined &&
-      paymentCorrelationReference(payment) !==
-        checkout.providerCheckoutReference) ||
-    (payment.externalReference !== undefined &&
-      payment.externalReference !== null &&
-      (!id(payment.externalReference) ||
-        (checkout !== undefined &&
-          payment.externalReference !== checkout.attemptId))) ||
-    (payment.currency !== undefined && payment.currency !== "BRL")
-  )
-    return unavailable();
-  paymentCorrelationReference(payment);
-  // Posting owns money/status reconciliation and atomic lease/commit checks. In
-  // particular, a received event does not mask a newer refund or pending split.
-  return copy as AsaasPaymentObservation;
-}
-
-function postingOutcome(value: unknown): GiftPaymentWorkerResult {
-  const raw = exactRecord(value, ["outcome", "paymentId", "ledgerEntryId"]);
-  if (raw.paymentId !== null) id(raw.paymentId);
-  if (raw.ledgerEntryId !== null) id(raw.ledgerEntryId);
-  if (
-    raw.outcome !== "POSTED" &&
-    raw.outcome !== "OBSERVED" &&
-    raw.outcome !== "DUPLICATE" &&
-    raw.outcome !== "NO_REGRESSION"
-  )
-    return unavailable();
-  return { kind: raw.outcome };
-}
-
+/**
+ * Claims one inbox event at a time. Webhook bodies are never trusted: order
+ * and charge events re-read GET /orders/{id} (or GET /orders?code= when the
+ * creation outcome is unknown) and recipient events re-read the recipient
+ * before anything is posted.
+ */
 export function createGiftPaymentWorker(
   options: GiftPaymentWorkerOptions,
 ): GiftPaymentWorker {
-  try {
-    const environment = options.environment;
-    if (
-      (environment !== "sandbox" && environment !== "live") ||
-      typeof options.inbox?.claimNextReceivedPayment !== "function" ||
-      typeof options.inbox?.deferClaim !== "function" ||
-      typeof options.loadCheckout !== "function" ||
-      typeof options.reader?.getPayment !== "function" ||
-      typeof options.posting?.postReceivedPayment !== "function"
-    )
-      return unavailable();
-    const claimNextReceivedPayment =
-      options.inbox.claimNextReceivedPayment.bind(options.inbox);
-    const deferClaim = options.inbox.deferClaim.bind(options.inbox);
-    const loadCheckout = options.loadCheckout.bind(options);
-    const getPayment = options.reader.getPayment.bind(options.reader);
-    const postReceivedPayment = options.posting.postReceivedPayment.bind(
-      options.posting,
-    );
-
-    async function defer(
-      claim: GiftPaymentInboxClaim,
-      reason: GiftPaymentWorkerDeferralReason,
-    ): Promise<GiftPaymentWorkerResult> {
-      try {
-        const result = exactRecord(await deferClaim(claim, reason), ["kind"]);
-        if (result.kind !== "RETRY" && result.kind !== "DEAD_LETTER")
-          return { kind: "UNRESOLVED" };
-        return { kind: result.kind };
-      } catch {
-        // A failed or lost defer acknowledgment never proves a durable retry.
-        return { kind: "UNRESOLVED" };
-      }
+  async function processOrder(claim: GiftPaymentInboxClaim) {
+    const attemptId = claim.payload.externalReference;
+    if (!attemptId) throw new Deferred("PAYMENT_CORRELATION_INVALID");
+    const binding = await options.checkouts.loadBinding({
+      siteId: claim.siteId,
+      attemptId,
+    });
+    if (!binding || binding.accountId !== claim.accountId)
+      throw new Deferred("CHECKOUT_BINDING_UNAVAILABLE");
+    const orderId = claim.payload.checkoutId ?? binding.providerOrderId;
+    let order: PagarmeOrderObservation | null;
+    try {
+      order = orderId
+        ? await options.orders.getOrder(orderId)
+        : await options.orders.findOrderByCode(binding.attemptId);
+    } catch (error) {
+      throw new Deferred(
+        error instanceof PagarmeRejectedError
+          ? "PROVIDER_READ_REJECTED"
+          : "PROVIDER_READ_UNAVAILABLE",
+      );
     }
-
-    return {
-      async processNextReceivedPayment() {
-        let claim: GiftPaymentInboxClaim;
-        try {
-          const result = await claimNextReceivedPayment();
-          if (result === null) return { kind: "IDLE" };
-          const raw = record(result);
-          if (raw.kind === "DEAD_LETTER") {
-            const result = exactRecord(raw, ["kind", "eventId", "errorCode"]);
-            id(result.eventId);
-            if (
-              result.errorCode !== "FINANCIAL_ATTEMPT_LIMIT" &&
-              result.errorCode !== "PAYMENT_CORRELATION_INVALID"
-            )
-              return unavailable();
-            return { kind: "DEAD_LETTER" };
-          }
-          const claimed = exactRecord(raw, ["kind", "claim"]);
-          if (claimed.kind !== "CLAIMED") return unavailable();
-          claim = readClaim(claimed.claim, environment);
-        } catch {
-          return unavailable();
-        }
-        let checkout: StoredGiftPaymentCheckoutBinding | null;
-        try {
-          const stored = await loadCheckout(claim);
-          checkout = stored === null ? null : readCheckout(stored, claim);
-        } catch {
-          return defer(claim, "CHECKOUT_BINDING_UNAVAILABLE");
-        }
-        let observation: AsaasPaymentObservation;
-        try {
-          observation = readObservation(
-            await getPayment(claim),
-            claim,
-            checkout ?? undefined,
-          );
-        } catch {
-          return defer(claim, "PROVIDER_READ_UNAVAILABLE");
-        }
-        if (checkout === null) {
-          // Hosted payments can omit externalReference; recheck the lease and
-          // stored checkout using the session returned by the scoped provider GET.
-          try {
-            checkout = readCheckout(
-              await loadCheckout(
-                claim,
-                paymentCorrelationReference(
-                  observation.payment as unknown as Record<string, unknown>,
-                ),
-              ),
-              claim,
-            );
-          } catch {
-            return defer(claim, "CHECKOUT_BINDING_UNAVAILABLE");
-          }
-          try {
-            observation = readObservation(observation, claim, checkout);
-          } catch {
-            return defer(claim, "PROVIDER_READ_UNAVAILABLE");
-          }
-        }
-        try {
-          return postingOutcome(
-            await postReceivedPayment({
-              claim: {
-                eventId: claim.eventId,
-                siteId: claim.siteId,
-                accountId: claim.accountId,
-                environment: claim.environment,
-                leaseOwner: claim.leaseOwner,
-                leaseToken: claim.leaseToken,
-              },
-              checkout,
-              observation,
-            }),
-          );
-        } catch {
-          return defer(claim, "PAYMENT_POSTING_UNAVAILABLE");
-        }
-      },
-    };
-  } catch {
-    return unavailable();
+    const now = options.now();
+    if (order === null) {
+      // Never created: close once the creating call is safely in the past.
+      const created = Date.parse(binding.quoteExpiresAt);
+      if (now.getTime() < created + GIFT_PAYMENT_RECONCILE_AFTER_MS)
+        throw new Deferred("ORDER_NOT_FOUND_YET");
+      await options.checkouts.closeMissingOrder(binding, now.toISOString());
+      return null;
+    }
+    if (binding.providerOrderId === null) {
+      if (order.code !== binding.attemptId)
+        throw new Deferred("PAYMENT_CORRELATION_INVALID");
+      await options.checkouts.bindRecoveredOrder(
+        binding,
+        order,
+        now.toISOString(),
+      );
+    }
+    const transition = decideGiftOrderTransition(binding, order, now);
+    const result = await options.posting.applyOrderTransition({
+      binding,
+      providerOrderId: order.id,
+      transition,
+      eventId: claim.eventId,
+      observedAt: now,
+    });
+    return result;
   }
+
+  return {
+    async processNextReceivedPayment() {
+      let claim: GiftPaymentInboxClaim | null;
+      try {
+        claim = await options.inbox.claimNext();
+      } catch {
+        return { kind: "RETRY" };
+      }
+      if (claim === null) return { kind: "IDLE" };
+      try {
+        if (claim.eventType === "RECIPIENT_UPDATED") {
+          if (!options.refreshReceiving)
+            throw new Deferred("RECEIVING_REFRESH_UNAVAILABLE");
+          try {
+            await options.refreshReceiving(claim.siteId);
+          } catch {
+            throw new Deferred("PROVIDER_READ_UNAVAILABLE");
+          }
+          await options.inbox.complete(claim, null);
+          return { kind: "OBSERVED" };
+        }
+        const result = await processOrder(claim);
+        await options.inbox.complete(claim, result?.paymentId ?? null);
+        if (result?.outcome === "POSTED") return { kind: "POSTED" };
+        if (result?.outcome === "UNCHANGED") return { kind: "DUPLICATE" };
+        return { kind: "OBSERVED" };
+      } catch (error) {
+        const code =
+          error instanceof Deferred
+            ? error.code
+            : "PAYMENT_POSTING_UNAVAILABLE";
+        try {
+          return {
+            kind:
+              (await options.inbox.defer(claim, code)) === "DEAD_LETTER"
+                ? "DEAD_LETTER"
+                : "RETRY",
+          };
+        } catch {
+          return { kind: "UNRESOLVED" };
+        }
+      }
+    },
+  };
 }

@@ -26,7 +26,6 @@ import {
 } from "@entrelacos/database/schema";
 import { type SQL, sql } from "drizzle-orm";
 import type { PgTable } from "drizzle-orm/pg-core";
-import { hashAsaasEventIdentity } from "./asaasWebhook";
 import type { AuthDatabase } from "./auth";
 import { ADMIN_ABSOLUTE_TIMEOUT_MS, ADMIN_IDLE_TIMEOUT_MS } from "./authHttp";
 import {
@@ -47,6 +46,7 @@ import {
   isGiftReceiptEvent,
 } from "./giftPaymentReconciliation";
 import type { GiftQuoteSnapshot } from "./giftQuotes";
+import { hashFinancialEventIdentity } from "./pagarmeWebhook";
 import { readReceivingProvisioningRecord } from "./receivingNomination";
 import { resolveSiteAccess } from "./siteAccess";
 
@@ -71,7 +71,7 @@ export const giftPurchaseHasPayment = sql`EXISTS (
           AND l.amount_cents=p.recipient_net_cents AND l.compensates_entry_id IS NULL)
       OR EXISTS (SELECT 1 FROM ${financialEventInbox} e
         WHERE e.payment_id=p.id AND e.site_id=p.site_id AND e.account_id=p.account_id AND e.environment=p.environment
-          AND e.event_type IN ('PAYMENT_CONFIRMED','PAYMENT_RECEIVED','PAYMENT_SPLIT_DONE')
+          AND e.event_type IN ('PAYMENT_CONFIRMED','PAYMENT_RECEIVED','PAYMENT_SPLIT_DONE','ORDER_PAID','CHARGE_PAID','ORDER_RECONCILE')
           AND e.state='PROCESSED' AND e.authenticated_at IS NOT NULL AND e.processed_at IS NOT NULL
           AND e.payload->>'paymentId'=p.provider_payment_reference))
 )`;
@@ -232,7 +232,13 @@ function original(
     account = data.accounts.get(accountId);
   if (!quote || !account) return historyUnavailable();
   scoped(quote, scope, accountId);
-  if (account.id !== accountId || account.provider !== "PAGARME")
+  // Purchases recorded before the Pagar.me switch keep their stored provider
+  // and stay visible read-only; nothing here calls a provider API.
+  if (
+    account.id !== accountId ||
+    typeof account.provider !== "string" ||
+    !/^[A-Z][A-Z0-9_]{0,31}$/.test(account.provider)
+  )
     return historyUnavailable();
   const snapshot = readGiftQuoteSnapshot(
     object(quote.snapshot) as unknown as GiftQuoteSnapshot,
@@ -250,7 +256,7 @@ function original(
     q.siteId !== scope.siteId ||
     q.mode !== scope.mode ||
     q.giftId !== quote.gift_id ||
-    binding.provider !== "PAGARME" ||
+    binding.provider !== account.provider ||
     binding.siteId !== scope.siteId ||
     binding.environment !== scope.mode ||
     binding.accountReference !== account.account_reference ||
@@ -485,8 +491,14 @@ function eventPayload(
     "CHECKOUT_CANCELED",
     "CHECKOUT_EXPIRED",
   ].includes(row.event_type);
+  // Pagar.me order/charge events carry the order, the charge and/or our attempt.
+  const orderEvent = /^(ORDER|CHARGE)_/.test(row.event_type);
   if (
-    !Object.hasOwn(payload, checkoutEvent ? "checkoutId" : "paymentId") ||
+    (orderEvent
+      ? !["checkoutId", "paymentId", "externalReference"].some((key) =>
+          Object.hasOwn(payload, key),
+        )
+      : !Object.hasOwn(payload, checkoutEvent ? "checkoutId" : "paymentId")) ||
     Object.keys(payload).some(
       (key) =>
         !["paymentId", "checkoutId", "externalReference"].includes(key) &&
@@ -501,7 +513,7 @@ function eventPayload(
     id(payload.externalReference);
   if (
     row.payload_hash !==
-    hashAsaasEventIdentity(
+    hashFinancialEventIdentity(
       row.provider_event_reference,
       row.event_type,
       ref(plan.account.account_reference),
@@ -883,7 +895,7 @@ export function createGiftPaymentHistoryRepository(
         for (const event of events) {
           eventPayload(event, plan, data, scope);
           if (
-            /^(REFUND|TRANSFER)_|^PAYMENT_(REFUND|CHARGEBACK)|CANCEL|DISPUT/.test(
+            /^(REFUND|TRANSFER)_|^PAYMENT_(REFUND|CHARGEBACK)|^CHARGE_(REFUNDED|CHARGEDBACK)|CANCEL|DISPUT/.test(
               String(event.event_type),
             )
           )
@@ -899,11 +911,14 @@ export function createGiftPaymentHistoryRepository(
         // divergence top-up pays the part the provider split could not.
         const splitV2 =
           plan.snapshot.quote.settlementVersion === "PLATFORM_ACCOUNT_SPLIT_V2";
+        // A Pagar.me order is one charge (installment null) owed the whole
+        // nominal; numbered rows are per-installment payments from before.
         const v2Split = (installmentNumber: unknown): number | null => {
+          const splits = plan.snapshot.settlement?.recipientSplitCents;
           const split =
-            plan.snapshot.settlement?.recipientSplitCents[
-              typeof installmentNumber === "number" ? installmentNumber - 1 : 0
-            ];
+            typeof installmentNumber === "number"
+              ? splits?.[installmentNumber - 1]
+              : splits?.reduce((sum, cents) => sum + cents, 0);
           return splitV2 && typeof split === "number" ? split : null;
         };
         for (const payment of payments) {
@@ -1007,6 +1022,7 @@ export function createGiftPaymentHistoryRepository(
             ...(plan.snapshot.settlement
               ? {
                   expectedRecipientSplitCents:
+                    v2Split(installmentNumber) ??
                     plan.snapshot.settlement.recipientSplitCents[
                       Number(installmentNumber ?? 1) - 1
                     ],
@@ -1095,7 +1111,10 @@ export function createGiftPaymentHistoryRepository(
                   BigInt(actualProcessing) +
                     BigInt(payment.commission_cents) +
                     BigInt(recipientNet) ||
-                payment.split_fixed_cents !== recipientNet ||
+                // Couple rule amount: the net, or the net grossed up for anticipation.
+                typeof payment.split_fixed_cents !== "number" ||
+                payment.split_fixed_cents < recipientNet ||
+                payment.split_fixed_cents > terms.grossCents ||
                 !ref(payment.split_provider_reference)
               : BigInt(terms.grossCents) !==
                   BigInt(actualProcessing) +
@@ -1127,7 +1146,10 @@ export function createGiftPaymentHistoryRepository(
             !isGiftReceiptEvent(event.event_type) ||
             event.state !== "PROCESSED" ||
             event.payment_id !== payment.id ||
-            payload.paymentId !== payment.provider_payment_reference ||
+            (payload.paymentId === undefined
+              ? payload.checkoutId !== attempt.provider_reference &&
+                payload.externalReference !== attempt.id
+              : payload.paymentId !== payment.provider_payment_reference) ||
             (payload.checkoutId !== undefined &&
               payload.checkoutId !== attempt.provider_reference) ||
             (payload.externalReference !== undefined &&

@@ -1,0 +1,58 @@
+{
+  "id": "hook_fixtureHook0004",
+  "account": {
+    "id": "acc_fixtureAccount1",
+    "name": "Entrelacos"
+  },
+  "type": "recipient.updated",
+  "created_at": "2026-11-18T10:00:00Z",
+  "data": {
+    "id": "rp_fixtureRecipient01",
+    "name": "MARIA DA SILVA",
+    "email": "maria@example.test",
+    "document": "26224451990",
+    "description": null,
+    "type": "individual",
+    "status": "active",
+    "code": "receiving-account-1",
+    "created_at": "2026-11-18T12:00:00Z",
+    "updated_at": "2026-11-19T09:30:00Z",
+    "transfer_settings": {
+      "transfer_enabled": false,
+      "transfer_interval": "Daily",
+      "transfer_day": 0
+    },
+    "automatic_anticipation_settings": {
+      "enabled": true,
+      "type": "full",
+      "volume_percentage": 100,
+      "delay": null
+    },
+    "default_bank_account": {
+      "id": "ba_fixtureBankAcct01",
+      "holder_name": "MARIA DA SILVA",
+      "holder_type": "individual",
+      "holder_document": "26224451990",
+      "bank": "341",
+      "branch_number": "1234",
+      "branch_check_digit": "6",
+      "account_number": "12345",
+      "account_check_digit": "6",
+      "type": "checking",
+      "status": "active",
+      "created_at": "2026-11-18T12:00:00Z",
+      "updated_at": "2026-11-18T12:00:00Z",
+      "metadata": {}
+    },
+    "gateway_recipients": [
+      {
+        "gateway": "pagarme",
+        "status": "active",
+        "pgid": "re_fixturegatewayrecipient01",
+        "createdAt": "2026-11-18T12:00:00Z",
+        "updatedAt": "2026-11-18T12:00:00Z"
+      }
+    ],
+    "metadata": {}
+  }
+}

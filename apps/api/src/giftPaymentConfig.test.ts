@@ -135,13 +135,13 @@ describe("Pagar.me gift payment configuration", () => {
     ).toEqual({ mode: "disabled" });
   });
 
-  it("reads no ASAAS_* setting", () => {
+  it("reads only PAGARME_* settings", () => {
+    const read = new Set<string>();
     const env = new Proxy(
       { ...configured },
       {
         get(target, key) {
-          if (typeof key === "string" && key.startsWith("ASAAS_"))
-            throw new Error(`Read ${key}`);
+          if (typeof key === "string") read.add(key);
           return Reflect.get(target, key);
         },
       },
@@ -149,9 +149,10 @@ describe("Pagar.me gift payment configuration", () => {
     expect(readGiftPaymentConfig(env, "development")).toMatchObject({
       mode: "sandbox",
     });
+    expect([...read].every((key) => key.startsWith("PAGARME_"))).toBe(true);
     expect(
       readGiftPaymentConfig(
-        { ASAAS_MODE: "sandbox", ASAAS_API_KEY: "$aact_x" },
+        { LEGACY_PROVIDER_MODE: "sandbox", LEGACY_PROVIDER_API_KEY: "x" },
         "development",
       ),
     ).toEqual({ mode: "disabled" });

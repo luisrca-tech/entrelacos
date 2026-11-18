@@ -31,7 +31,7 @@ function fixture() {
   };
   const providerBinding = {
     siteId: "site-one",
-    provider: "asaas",
+    provider: "pagarme",
     operatorReference: "operator-private",
     environment: "live" as const,
     accountReference: "account-private",
@@ -372,7 +372,7 @@ describe("immutable gift quote creation", () => {
     );
     expect(dependencies.loadPricingPolicy).toHaveBeenCalledWith({
       siteId: "site-one",
-      provider: "asaas",
+      provider: "pagarme",
       operatorReference: "operator-private",
       environment: "live",
       accountReference: "account-private",
@@ -388,7 +388,7 @@ describe("immutable gift quote creation", () => {
       gift: storedGift.gift,
       receiving: {
         siteId: "site-one",
-        provider: "asaas",
+        provider: "pagarme",
         operatorReference: "operator-private",
         environment: "live",
         accountReference: "account-private",

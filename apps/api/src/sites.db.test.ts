@@ -112,14 +112,14 @@ describe("site lifecycle PostgreSQL integration", () => {
         id: `${fixturePrefix}-account-current`,
         siteId: withAccount.id,
         environment: "sandbox",
-        provider: "ASAAS",
+        provider: "PAGARME",
         isCurrent: true,
       },
       {
         id: `${fixturePrefix}-account-replaced`,
         siteId: withoutAccount.id,
         environment: "sandbox",
-        provider: "ASAAS",
+        provider: "PAGARME",
         isCurrent: false,
       },
     ]);

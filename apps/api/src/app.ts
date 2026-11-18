@@ -5,10 +5,6 @@ import {
 } from "@entrelacos/contracts";
 import { Hono } from "hono";
 import { createAdminAccessHttpRouter } from "./adminAccessHttp";
-import {
-  type AsaasWebhookHttpReceiver,
-  createAsaasWebhookHttpRouter,
-} from "./asaasWebhookHttp";
 import { createAuthHttpRouter } from "./authHttp";
 import { createDemoResetHttpRouter } from "./demoResetHttp";
 import {
@@ -42,6 +38,10 @@ import {
   type ObservabilityVariables,
 } from "./observability";
 import { createOwnerFinanceHttpRouter } from "./ownerFinanceHttp";
+import {
+  createPagarmeWebhookHttpRouter,
+  type PagarmeWebhookHttpReceiver,
+} from "./pagarmeWebhookHttp";
 import { createReceivingHttpRouter } from "./receivingHttp";
 import type { ReceivingNominationService } from "./receivingNomination";
 import {
@@ -75,7 +75,7 @@ export type ApiOptions = GiftPaymentsHttpOptions &
   > & {
     applicationEnvironment?: "development" | "test" | "production";
     receiving?: ReceivingRepositoryOptions;
-    asaasWebhook?: AsaasWebhookHttpReceiver;
+    pagarmeWebhook?: PagarmeWebhookHttpReceiver;
     financialReauthentication?: FinancialReauthentication;
     receivingNomination?: ReceivingNominationService;
     receivingSetup?: ReceivingSetupService;
@@ -111,7 +111,7 @@ export function createApp(
   }
 
   if (options) {
-    app.route("/", createAsaasWebhookHttpRouter(options.asaasWebhook));
+    app.route("/", createPagarmeWebhookHttpRouter(options.pagarmeWebhook));
     const liveSitePolicy = {
       applicationEnvironment:
         options.applicationEnvironment ??

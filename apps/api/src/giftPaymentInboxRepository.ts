@@ -1,60 +1,70 @@
-import { giftQuoteSchema } from "@entrelacos/contracts";
+import { createHash } from "node:crypto";
 import type { DatabaseConnection } from "@entrelacos/database";
 import {
   financialEventInbox,
+  giftCheckoutAttempt,
   receivingAccount,
-  site,
 } from "@entrelacos/database/schema";
 import { sql } from "drizzle-orm";
-import {
-  databaseTimestampEpochMicroseconds,
-  readDatabaseTimestamp,
-} from "./databaseTimestamp";
+import { insertFinancialOperatorAlert } from "./financialOperatorAlertRepository";
 import {
   financialInboxDueAt,
   readFinancialWorkDueAt,
 } from "./financialWorkSchedule";
-import type { GiftPaymentPostingClaim } from "./giftPaymentPostingRepository";
+import type { GiftPaymentReconcileTarget } from "./giftPaymentReconciliation";
 import {
-  giftPaymentInboxEvents,
-  giftPaymentV2OnlyInboxEvents,
-} from "./giftPaymentReconciliation";
-import {
-  allowedLiveDemoSiteIds,
-  type LiveSitePolicy,
-  liveDemoSiteIdsSql,
-} from "./liveSitePolicy";
+  hashFinancialEventIdentity,
+  type PagarmeInboxEventType,
+  type PagarmeWebhookAppendResult,
+  type PagarmeWebhookEvent,
+} from "./pagarmeWebhook";
 
-export interface GiftPaymentInboxClaim extends GiftPaymentPostingClaim {
-  paymentReference: string;
-  providerAccountReference: string;
+/** Event types this worker claims; rows of other types are never touched. */
+export const giftPaymentInboxEventTypes: readonly PagarmeInboxEventType[] =
+  Object.freeze([
+    "ORDER_PAID",
+    "ORDER_PAYMENT_FAILED",
+    "ORDER_CANCELED",
+    "CHARGE_PAID",
+    "CHARGE_REFUNDED",
+    "CHARGE_CHARGEDBACK",
+    "RECIPIENT_UPDATED",
+    "ORDER_RECONCILE",
+  ]);
+
+/** Normalized, whitelisted correlation references (never money or status). */
+export interface GiftPaymentInboxPayload {
+  /** Pagar.me order `or_` id. */
+  checkoutId?: string;
+  /** Pagar.me charge `ch_` id. */
+  paymentId?: string;
+  /** Our checkout attempt id (the order code). */
+  externalReference?: string;
+  /** Pagar.me recipient `rp_` id. */
+  accountId?: string;
+}
+
+export interface GiftPaymentInboxClaim {
+  eventId: string;
+  siteId: string;
+  accountId: string;
+  environment: "sandbox" | "live";
+  eventType: PagarmeInboxEventType;
+  payload: GiftPaymentInboxPayload;
+  leaseToken: string;
   attempts: number;
 }
-export type GiftPaymentInboxClaimResult =
-  | { kind: "CLAIMED"; claim: GiftPaymentInboxClaim }
-  | {
-      kind: "DEAD_LETTER";
-      eventId: string;
-      errorCode: "FINANCIAL_ATTEMPT_LIMIT" | "PAYMENT_CORRELATION_INVALID";
-    }
-  | null;
-export type GiftPaymentInboxDeferReason =
-  | "PROVIDER_READ_UNAVAILABLE"
-  | "CHECKOUT_BINDING_UNAVAILABLE"
-  | "PAYMENT_POSTING_UNAVAILABLE";
-export interface GiftPaymentInboxDeferResult {
-  kind: "RETRY" | "DEAD_LETTER";
-}
-export interface GiftPaymentInboxOptions extends LiveSitePolicy {
-  applicationEnvironment?: "development" | "test" | "production";
+
+export interface GiftPaymentInboxOptions {
   environment: "sandbox" | "live";
   instanceId: string;
   leaseMs: number;
   maxAttempts: number;
   retryDelayMs: number;
   now(): Date;
-  generateLeaseToken(): string;
+  generateId(): string;
 }
+
 export class GiftPaymentInboxRepositoryError extends Error {
   readonly status = 503;
   readonly code = "FINANCIAL_INBOX_UNAVAILABLE";
@@ -63,336 +73,261 @@ export class GiftPaymentInboxRepositoryError extends Error {
     this.name = "GiftPaymentInboxRepositoryError";
   }
 }
-interface ClaimRow {
-  eventId: string;
-  siteId: string;
-  accountId: string;
-  environment: string;
-  bindingSiteId: string;
-  bindingAccountId: string;
-  bindingEnvironment: string;
-  bindingProvider: string;
-  providerAccountReference: string;
-  authenticatedAt: Date;
-  receivedAt: Date;
-  attempts: number;
-  payload: unknown;
-  state: string;
-  leaseOwner: string | null;
-  leaseToken: string | null;
-  leaseExpiresAt: Date | null;
-  nextAttemptAt: Date;
-}
-interface DeferRow extends ClaimRow {
-  eventType: string;
-  processedAt: Date | null;
-  lastErrorCode: string | null;
-}
+
 function unavailable(): never {
   throw new GiftPaymentInboxRepositoryError();
 }
-function identifier(value: unknown): value is string {
-  return giftQuoteSchema.shape.siteId.safeParse(value).success;
+
+type Database = Pick<DatabaseConnection["db"], "transaction" | "execute">;
+type Executor = Pick<Database, "execute">;
+
+const eventTypeList = sql.join(
+  giftPaymentInboxEventTypes.map((type) => sql`${type}`),
+  sql`, `,
+);
+
+function payloadFor(
+  event: Pick<PagarmeWebhookEvent, "orderId" | "chargeId" | "recipientId">,
+  attemptId: string | null,
+): GiftPaymentInboxPayload {
+  const payload: GiftPaymentInboxPayload = {};
+  if (event.orderId) payload.checkoutId = event.orderId;
+  if (event.chargeId) payload.paymentId = event.chargeId;
+  if (attemptId) payload.externalReference = attemptId;
+  if (event.recipientId) payload.accountId = event.recipientId;
+  return payload;
 }
-function time(value: Date): Date {
-  if (
-    !(value instanceof Date) ||
-    !Number.isFinite(value.getTime()) ||
-    !giftQuoteSchema.shape.expiresAt.safeParse(value.toISOString()).success
-  )
-    unavailable();
-  return readDatabaseTimestamp(value);
-}
-function microseconds(value: Date): bigint {
-  return databaseTimestampEpochMicroseconds(time(value));
-}
-function storedRow<T extends ClaimRow>(value: unknown): T {
+
+function readPayload(value: unknown): GiftPaymentInboxPayload {
   if (!value || typeof value !== "object" || Array.isArray(value))
     return unavailable();
-  const row = value as Record<string, unknown>;
-  return {
-    ...row,
-    authenticatedAt: readDatabaseTimestamp(row.authenticatedAt),
-    receivedAt: readDatabaseTimestamp(row.receivedAt),
-    nextAttemptAt: readDatabaseTimestamp(row.nextAttemptAt),
-    leaseExpiresAt:
-      row.leaseExpiresAt === null
-        ? null
-        : readDatabaseTimestamp(row.leaseExpiresAt),
-  } as unknown as T;
+  const payload: GiftPaymentInboxPayload = {};
+  for (const [key, raw] of Object.entries(value)) {
+    if (
+      !["checkoutId", "paymentId", "externalReference", "accountId"].includes(
+        key,
+      ) ||
+      typeof raw !== "string" ||
+      !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(raw)
+    )
+      return unavailable();
+    payload[key as keyof GiftPaymentInboxPayload] = raw;
+  }
+  return payload;
 }
+
 export function createGiftPaymentInboxRepository(
-  db: Pick<DatabaseConnection["db"], "transaction" | "execute">,
+  db: Database,
   options: GiftPaymentInboxOptions,
 ) {
   if (
-    !["sandbox", "live"].includes(options.environment) ||
-    !identifier(options.instanceId) ||
     !Number.isSafeInteger(options.leaseMs) ||
-    options.leaseMs <= 0 ||
+    options.leaseMs < 1_000 ||
     options.leaseMs > 300_000 ||
     !Number.isSafeInteger(options.maxAttempts) ||
     options.maxAttempts < 1 ||
-    options.maxAttempts > 100 ||
     !Number.isSafeInteger(options.retryDelayMs) ||
-    options.retryDelayMs <= 0 ||
-    options.retryDelayMs > 300_000 ||
-    typeof options.now !== "function" ||
-    typeof options.generateLeaseToken !== "function"
+    options.retryDelayMs < 1
   )
-    unavailable();
-  options = Object.freeze({ ...options });
-  const liveDemoSiteIds = allowedLiveDemoSiteIds({
-    mode: options.environment,
-    applicationEnvironment: options.applicationEnvironment ?? "test",
-    liveDemoSiteIds: options.liveDemoSiteIds,
-  });
-  const eligibleEvents = sql`FROM ${financialEventInbox} e INNER JOIN ${receivingAccount} a ON a.site_id=e.site_id AND a.id=e.account_id AND a.environment=e.environment
-          INNER JOIN ${site} st ON st.id=e.site_id
-          WHERE e.environment=${options.environment} AND a.provider='ASAAS' AND a.account_reference IS NOT NULL AND length(trim(a.account_reference))>0
-            AND (${options.environment}<>'live' OR st.is_demo=false OR st.id = ANY(${liveDemoSiteIdsSql(liveDemoSiteIds)})) AND e.authenticated_at IS NOT NULL AND e.event_type IN ('PAYMENT_RECEIVED','PAYMENT_CONFIRMED','PAYMENT_SPLIT_DONE','PAYMENT_ANTICIPATED','PAYMENT_SPLIT_CANCELLED','PAYMENT_SPLIT_DIVERGENCE_BLOCK','PAYMENT_SPLIT_DIVERGENCE_BLOCK_FINISHED','RECEIVABLE_ANTICIPATION_CREDITED','RECEIVABLE_ANTICIPATION_DENIED','RECEIVABLE_ANTICIPATION_CANCELLED')
-    AND e.state IN ('RECEIVED','RETRY','CLAIMED')`;
-  return {
-    nextDueAt: () =>
-      readFinancialWorkDueAt(db, financialInboxDueAt, eligibleEvents),
-    async deferClaim(
-      claim: GiftPaymentInboxClaim,
-      reason: GiftPaymentInboxDeferReason,
-    ): Promise<GiftPaymentInboxDeferResult> {
-      try {
-        claim = structuredClone(claim);
-        if (
-          !claim ||
-          Object.keys(claim).some(
-            (key) =>
-              ![
-                "eventId",
-                "siteId",
-                "accountId",
-                "environment",
-                "leaseOwner",
-                "leaseToken",
-                "paymentReference",
-                "providerAccountReference",
-                "attempts",
-              ].includes(key),
-          ) ||
-          ![
-            claim.eventId,
-            claim.siteId,
-            claim.accountId,
-            claim.leaseOwner,
-            claim.leaseToken,
-            claim.providerAccountReference,
-          ].every(identifier) ||
-          typeof claim.paymentReference !== "string" ||
-          !/^[A-Za-z0-9_-]{1,128}$/.test(claim.paymentReference) ||
-          claim.environment !== options.environment ||
-          claim.leaseOwner !== options.instanceId ||
-          !Number.isSafeInteger(claim.attempts) ||
-          claim.attempts < 1 ||
-          claim.attempts > 100 ||
-          ![
-            "PROVIDER_READ_UNAVAILABLE",
-            "CHECKOUT_BINDING_UNAVAILABLE",
-            "PAYMENT_POSTING_UNAVAILABLE",
-          ].includes(reason)
-        )
-          unavailable();
-        return await db.transaction(
-          async (tx) => {
-            const selected =
-              await tx.execute(sql`SELECT e.id AS "eventId", e.site_id AS "siteId", e.account_id AS "accountId", e.environment,
-            a.site_id AS "bindingSiteId", a.id AS "bindingAccountId", a.environment AS "bindingEnvironment", a.provider AS "bindingProvider",
-            a.account_reference AS "providerAccountReference", e.authenticated_at AS "authenticatedAt", e.received_at AS "receivedAt",
-            e.attempts, e.payload, e.event_type AS "eventType", e.state, e.lease_owner AS "leaseOwner", e.lease_token AS "leaseToken",
-            e.lease_expires_at AS "leaseExpiresAt", e.next_attempt_at AS "nextAttemptAt", e.processed_at AS "processedAt", e.last_error_code AS "lastErrorCode"
-            FROM ${financialEventInbox} e INNER JOIN ${receivingAccount} a ON a.site_id=e.site_id AND a.id=e.account_id AND a.environment=e.environment
-            WHERE e.id=${claim.eventId} AND e.site_id=${claim.siteId} AND e.account_id=${claim.accountId} AND e.environment=${claim.environment} FOR UPDATE OF e`);
-            const row = storedRow<DeferRow>(selected.rows[0]);
-            const clock = time(options.now());
-            if (
-              selected.rows.length !== 1 ||
-              !row ||
-              row.eventId !== claim.eventId ||
-              row.siteId !== claim.siteId ||
-              row.accountId !== claim.accountId ||
-              row.environment !== claim.environment ||
-              row.bindingSiteId !== claim.siteId ||
-              row.bindingAccountId !== claim.accountId ||
-              row.bindingEnvironment !== claim.environment ||
-              row.bindingProvider !== "ASAAS" ||
-              row.providerAccountReference !== claim.providerAccountReference ||
-              !(
-                [
-                  ...giftPaymentInboxEvents,
-                  ...giftPaymentV2OnlyInboxEvents,
-                ] as readonly string[]
-              ).includes(row.eventType as string) ||
-              row.leaseOwner !== claim.leaseOwner ||
-              row.leaseToken !== claim.leaseToken ||
-              row.attempts !== claim.attempts ||
-              row.processedAt !== null ||
-              !row.leaseExpiresAt ||
-              !row.payload ||
-              typeof row.payload !== "object" ||
-              Array.isArray(row.payload) ||
-              (row.payload as Record<string, unknown>).paymentId !==
-                claim.paymentReference ||
-              microseconds(row.authenticatedAt) > microseconds(clock) ||
-              microseconds(row.receivedAt) >
-                microseconds(row.authenticatedAt) ||
-              microseconds(row.leaseExpiresAt) <
-                microseconds(row.authenticatedAt)
-            )
-              unavailable();
-            const kind =
-              claim.attempts >= options.maxAttempts ? "DEAD_LETTER" : "RETRY";
-            if (row.state === kind) {
-              const due = microseconds(row.nextAttemptAt);
-              if (
-                row.lastErrorCode !== reason ||
-                due <
-                  microseconds(row.authenticatedAt) +
-                    BigInt(options.retryDelayMs) * 1000n ||
-                due >
-                  microseconds(row.leaseExpiresAt) +
-                    BigInt(options.retryDelayMs) * 1000n
-              )
-                unavailable();
-              return { kind };
-            }
-            if (
-              row.state !== "CLAIMED" ||
-              microseconds(row.leaseExpiresAt) < microseconds(clock)
-            )
-              unavailable();
-            const due = time(new Date(clock.getTime() + options.retryDelayMs));
-            const saved =
-              await tx.execute(sql`UPDATE ${financialEventInbox} e SET state=${kind}, last_error_code=${reason}, next_attempt_at=${due.toISOString()}::timestamptz
-            WHERE e.id=${claim.eventId} AND e.site_id=${claim.siteId} AND e.account_id=${claim.accountId} AND e.environment=${claim.environment}
-              AND e.state='CLAIMED' AND e.event_type IN ('PAYMENT_RECEIVED','PAYMENT_CONFIRMED','PAYMENT_SPLIT_DONE','PAYMENT_ANTICIPATED','PAYMENT_SPLIT_CANCELLED','PAYMENT_SPLIT_DIVERGENCE_BLOCK','PAYMENT_SPLIT_DIVERGENCE_BLOCK_FINISHED','RECEIVABLE_ANTICIPATION_CREDITED','RECEIVABLE_ANTICIPATION_DENIED','RECEIVABLE_ANTICIPATION_CANCELLED') AND e.attempts=${claim.attempts}
-              AND e.lease_owner=${claim.leaseOwner} AND e.lease_token=${claim.leaseToken}
-              AND e.lease_expires_at>=${clock.toISOString()}::timestamptz AND e.lease_expires_at>=clock_timestamp()
-              AND e.authenticated_at<=${clock.toISOString()}::timestamptz AND e.authenticated_at<=clock_timestamp()
-              AND e.processed_at IS NULL AND e.payload->>'paymentId'=${claim.paymentReference} RETURNING e.id`);
-            if (saved.rows.length !== 1 || saved.rows[0]?.id !== claim.eventId)
-              unavailable();
-            return { kind };
-          },
-          { isolationLevel: "read committed" },
-        );
-      } catch {
-        unavailable();
-      }
+    return unavailable();
+  const environment = options.environment;
+
+  async function insert(
+    executor: Executor,
+    input: {
+      siteId: string;
+      accountId: string;
+      accountReference: string;
+      deliveryId: string;
+      eventType: PagarmeInboxEventType;
+      payload: GiftPaymentInboxPayload;
+      authenticatedAt: Date;
     },
-    async claimNextReceivedPayment(): Promise<GiftPaymentInboxClaimResult> {
-      try {
-        const clock = time(options.now());
-        return await db.transaction(
-          async (tx) => {
-            const rows =
-              await tx.execute(sql`SELECT e.id AS "eventId",e.site_id AS "siteId",e.account_id AS "accountId",e.environment,
-          a.site_id AS "bindingSiteId",a.id AS "bindingAccountId",a.environment AS "bindingEnvironment",a.provider AS "bindingProvider",
-          a.account_reference AS "providerAccountReference",e.authenticated_at AS "authenticatedAt",e.received_at AS "receivedAt",
-          e.attempts,e.payload,e.state,e.lease_owner AS "leaseOwner",e.lease_token AS "leaseToken",e.lease_expires_at AS "leaseExpiresAt",e.next_attempt_at AS "nextAttemptAt"
-          ${eligibleEvents}
-            AND ((e.state IN ('RECEIVED','RETRY') AND e.next_attempt_at<=${clock.toISOString()}::timestamptz AND e.next_attempt_at<=clock_timestamp())
-              OR (e.state='CLAIMED' AND e.lease_expires_at<=${clock.toISOString()}::timestamptz AND e.lease_expires_at<=clock_timestamp()))
-          ORDER BY e.next_attempt_at,e.id LIMIT 1 FOR UPDATE OF e SKIP LOCKED`);
-            if (rows.rows.length === 0) return null;
-            if (rows.rows.length !== 1) unavailable();
-            const row = storedRow<ClaimRow>(rows.rows[0]);
-            const observed = time(options.now());
-            if (
-              !identifier(row.eventId) ||
-              !identifier(row.siteId) ||
-              !identifier(row.accountId) ||
-              !identifier(row.providerAccountReference) ||
-              row.environment !== options.environment ||
-              row.siteId !== row.bindingSiteId ||
-              row.accountId !== row.bindingAccountId ||
-              row.environment !== row.bindingEnvironment ||
-              row.bindingProvider !== "ASAAS" ||
-              !Number.isSafeInteger(row.attempts) ||
-              row.attempts < 0 ||
-              !["RECEIVED", "RETRY", "CLAIMED"].includes(row.state) ||
-              microseconds(row.authenticatedAt) > microseconds(observed) ||
-              microseconds(row.receivedAt) > microseconds(observed) ||
-              microseconds(row.receivedAt) > microseconds(row.authenticatedAt)
-            )
-              unavailable();
-            if (row.state === "CLAIMED") {
-              if (
-                !identifier(row.leaseOwner) ||
-                !identifier(row.leaseToken) ||
-                !row.leaseExpiresAt ||
-                microseconds(row.leaseExpiresAt) > microseconds(observed)
-              )
-                unavailable();
-            } else if (microseconds(row.nextAttemptAt) > microseconds(observed))
-              unavailable();
-            const paymentReference =
-              row.payload &&
-              typeof row.payload === "object" &&
-              !Array.isArray(row.payload)
-                ? (row.payload as Record<string, unknown>).paymentId
-                : null;
-            const exhausted = row.attempts >= options.maxAttempts;
-            const correlated =
-              typeof paymentReference === "string" &&
-              /^[A-Za-z0-9_-]{1,128}$/.test(paymentReference);
-            const errorCode = exhausted
-              ? "FINANCIAL_ATTEMPT_LIMIT"
-              : "PAYMENT_CORRELATION_INVALID";
-            const token =
-              exhausted || !correlated ? null : options.generateLeaseToken();
-            if (
-              token !== null &&
-              (!identifier(token) || token === row.leaseToken)
-            )
-              unavailable();
-            const expires = time(
-              new Date(observed.getTime() + options.leaseMs),
-            );
-            const due = sql`((e.state IN ('RECEIVED','RETRY') AND e.next_attempt_at<=${observed.toISOString()}::timestamptz AND e.next_attempt_at<=clock_timestamp())
-          OR (e.state='CLAIMED' AND e.lease_expires_at<=${observed.toISOString()}::timestamptz AND e.lease_expires_at<=clock_timestamp()))`;
-            const scope = sql`e.id=${row.eventId} AND e.site_id=${row.siteId} AND e.account_id=${row.accountId} AND e.environment=${options.environment}
-          AND e.state=${row.state} AND e.attempts=${row.attempts} AND e.authenticated_at IS NOT NULL AND ${due}`;
-            if (exhausted || !correlated) {
-              const saved = await tx.execute(
-                sql`UPDATE ${financialEventInbox} e SET state='DEAD_LETTER',last_error_code=${errorCode} WHERE ${scope} RETURNING e.id`,
-              );
-              if (saved.rows.length !== 1 || saved.rows[0]?.id !== row.eventId)
-                unavailable();
-              return { kind: "DEAD_LETTER", eventId: row.eventId, errorCode };
-            }
-            const saved =
-              await tx.execute(sql`UPDATE ${financialEventInbox} e SET state='CLAIMED',lease_owner=${options.instanceId},lease_token=${token},
-          lease_expires_at=${expires.toISOString()}::timestamptz,attempts = e.attempts + 1,last_error_code=NULL
-          WHERE ${scope} AND ${expires.toISOString()}::timestamptz>clock_timestamp() RETURNING e.id`);
-            if (saved.rows.length !== 1 || saved.rows[0]?.id !== row.eventId)
-              unavailable();
-            return {
-              kind: "CLAIMED",
-              claim: {
-                eventId: row.eventId,
-                siteId: row.siteId,
-                accountId: row.accountId,
-                environment: options.environment,
-                leaseOwner: options.instanceId,
-                leaseToken: token as string,
-                paymentReference: paymentReference as string,
-                providerAccountReference: row.providerAccountReference,
-                attempts: row.attempts + 1,
-              },
-            };
+  ): Promise<"INSERTED" | "DUPLICATE"> {
+    const at = input.authenticatedAt.toISOString();
+    const payload = input.payload as Record<string, string>;
+    const result =
+      await executor.execute(sql`INSERT INTO ${financialEventInbox} (id, site_id, account_id, environment, delivery_id,
+      provider_event_reference, event_type, payload_hash, payload, received_at, authenticated_at, next_attempt_at)
+      VALUES (${options.generateId()}, ${input.siteId}, ${input.accountId}, ${environment}, ${input.deliveryId},
+        ${input.deliveryId}, ${input.eventType},
+        ${hashFinancialEventIdentity(input.deliveryId, input.eventType, input.accountReference, payload)},
+        ${JSON.stringify(payload)}::jsonb, ${at}::timestamptz, ${at}::timestamptz, ${at}::timestamptz)
+      ON CONFLICT DO NOTHING RETURNING id`);
+    return result.rows.length === 1 ? "INSERTED" : "DUPLICATE";
+  }
+
+  return {
+    /** Routes an authenticated webhook to its site/account; dedupes by event id. */
+    async append(
+      event: PagarmeWebhookEvent,
+      authenticatedAt: Date,
+    ): Promise<PagarmeWebhookAppendResult> {
+      return db.transaction(async (tx) => {
+        let scope: Record<string, unknown> | undefined;
+        if (event.recipientId) {
+          const result =
+            await tx.execute(sql`SELECT r.site_id AS "siteId", r.id AS "accountId", r.account_reference AS "accountReference",
+              NULL AS "attemptId" FROM ${receivingAccount} r
+            WHERE r.environment = ${environment} AND r.provider = 'PAGARME' AND r.is_current = true
+              AND r.recipient_reference = ${event.recipientId} LIMIT 2`);
+          if (result.rows.length === 1) scope = result.rows[0];
+        } else {
+          const result =
+            await tx.execute(sql`SELECT a.site_id AS "siteId", a.account_id AS "accountId", a.id AS "attemptId",
+              r.account_reference AS "accountReference"
+            FROM ${giftCheckoutAttempt} a
+            INNER JOIN ${receivingAccount} r ON r.id = a.account_id AND r.site_id = a.site_id AND r.environment = a.environment
+            WHERE a.environment = ${environment}
+              AND (a.provider_reference = ${event.orderId} OR (a.provider_reference IS NULL AND a.id = ${event.orderCode}))
+            LIMIT 2`);
+          if (result.rows.length === 1) scope = result.rows[0];
+        }
+        if (
+          !scope ||
+          typeof scope.siteId !== "string" ||
+          typeof scope.accountId !== "string" ||
+          typeof scope.accountReference !== "string"
+        ) {
+          await insertFinancialOperatorAlert(tx, {
+            kind: "UNROUTABLE_PLATFORM_EVENT",
+            severity: "warning",
+            environment,
+            paymentReference: event.eventId,
+            details: {
+              type: event.providerType,
+              orderId: event.orderId,
+              recipientId: event.recipientId,
+            },
+          });
+          return "UNROUTABLE";
+        }
+        return insert(tx, {
+          siteId: scope.siteId,
+          accountId: scope.accountId,
+          accountReference: scope.accountReference,
+          deliveryId: event.eventId,
+          eventType: event.eventType,
+          payload: payloadFor(
+            event,
+            typeof scope.attemptId === "string" ? scope.attemptId : null,
+          ),
+          authenticatedAt,
+        });
+      });
+    },
+
+    /** Internal reconciliation event: the worker re-reads the order. */
+    async enqueueReconcile(
+      executor: Executor,
+      target: GiftPaymentReconcileTarget,
+      sequence: string,
+    ): Promise<"INSERTED" | "DUPLICATE"> {
+      const account =
+        await executor.execute(sql`SELECT account_reference AS "accountReference" FROM ${receivingAccount}
+        WHERE id = ${target.accountId} AND site_id = ${target.siteId} AND environment = ${environment}`);
+      const accountReference = account.rows[0]?.accountReference;
+      if (account.rows.length !== 1 || typeof accountReference !== "string")
+        return unavailable();
+      return insert(executor, {
+        siteId: target.siteId,
+        accountId: target.accountId,
+        accountReference,
+        deliveryId: `reconcile:${target.attemptId}:${sequence}`,
+        eventType: "ORDER_RECONCILE",
+        payload: payloadFor(
+          {
+            orderId: target.providerOrderId,
+            chargeId: null,
+            recipientId: null,
           },
-          { isolationLevel: "read committed" },
-        );
-      } catch {
-        unavailable();
-      }
+          target.attemptId,
+        ),
+        authenticatedAt: options.now(),
+      });
+    },
+
+    async claimNext(): Promise<GiftPaymentInboxClaim | null> {
+      const now = options.now().toISOString();
+      const leaseToken = createHash("sha256")
+        .update(`${options.instanceId}:${options.generateId()}`)
+        .digest("hex")
+        .slice(0, 48);
+      const result = await db.execute(sql`UPDATE ${financialEventInbox} e
+        SET state = 'CLAIMED', lease_owner = ${options.instanceId}, lease_token = ${leaseToken},
+          lease_expires_at = ${now}::timestamptz + make_interval(secs => ${options.leaseMs / 1000}),
+          attempts = e.attempts + 1
+        WHERE e.id = (
+          SELECT c.id FROM ${financialEventInbox} c
+          WHERE c.environment = ${environment} AND c.event_type IN (${eventTypeList})
+            AND ((c.state IN ('RECEIVED', 'RETRY') AND c.next_attempt_at <= ${now}::timestamptz)
+              OR (c.state = 'CLAIMED' AND c.lease_expires_at <= ${now}::timestamptz))
+          ORDER BY c.next_attempt_at, c.id
+          LIMIT 1 FOR UPDATE SKIP LOCKED)
+        RETURNING e.id AS "eventId", e.site_id AS "siteId", e.account_id AS "accountId", e.environment,
+          e.event_type AS "eventType", e.payload, e.attempts`);
+      const row = result.rows[0];
+      if (!row) return null;
+      return {
+        eventId: String(row.eventId),
+        siteId: String(row.siteId),
+        accountId: String(row.accountId),
+        environment,
+        eventType: row.eventType as PagarmeInboxEventType,
+        payload: readPayload(row.payload),
+        leaseToken,
+        attempts: Number(row.attempts),
+      };
+    },
+
+    async complete(
+      claim: GiftPaymentInboxClaim,
+      paymentId: string | null,
+    ): Promise<void> {
+      const now = options.now().toISOString();
+      const result = await db.execute(sql`UPDATE ${financialEventInbox}
+        SET state = 'PROCESSED', processed_at = GREATEST(${now}::timestamptz, authenticated_at, received_at),
+          payment_id = COALESCE(${paymentId}, payment_id), last_error_code = NULL,
+          lease_owner = NULL, lease_token = NULL, lease_expires_at = NULL
+        WHERE id = ${claim.eventId} AND site_id = ${claim.siteId} AND account_id = ${claim.accountId}
+          AND environment = ${claim.environment} AND state = 'CLAIMED' AND lease_token = ${claim.leaseToken}
+        RETURNING id`);
+      if (result.rows.length !== 1) unavailable();
+    },
+
+    async defer(
+      claim: GiftPaymentInboxClaim,
+      errorCode: string,
+    ): Promise<"RETRY" | "DEAD_LETTER"> {
+      const state =
+        claim.attempts >= options.maxAttempts ? "DEAD_LETTER" : "RETRY";
+      const delayMs = Math.min(
+        options.retryDelayMs * 2 ** Math.max(0, claim.attempts - 1),
+        30 * 60_000,
+      );
+      const now = options.now().toISOString();
+      const result = await db.execute(sql`UPDATE ${financialEventInbox}
+        SET state = ${state}, last_error_code = ${errorCode},
+          next_attempt_at = ${now}::timestamptz + make_interval(secs => ${delayMs / 1000}),
+          lease_owner = NULL, lease_token = NULL, lease_expires_at = NULL
+        WHERE id = ${claim.eventId} AND site_id = ${claim.siteId} AND account_id = ${claim.accountId}
+          AND environment = ${claim.environment} AND state = 'CLAIMED' AND lease_token = ${claim.leaseToken}
+        RETURNING id`);
+      if (result.rows.length !== 1) unavailable();
+      return state;
+    },
+
+    nextDueAt(): Promise<number | null> {
+      return readFinancialWorkDueAt(
+        db,
+        financialInboxDueAt,
+        sql`FROM ${financialEventInbox} e WHERE e.environment = ${environment}
+          AND e.event_type IN (${eventTypeList}) AND e.state IN ('RECEIVED', 'RETRY', 'CLAIMED')`,
+      );
     },
   };
 }
+
+export type GiftPaymentInboxRepository = ReturnType<
+  typeof createGiftPaymentInboxRepository
+>;

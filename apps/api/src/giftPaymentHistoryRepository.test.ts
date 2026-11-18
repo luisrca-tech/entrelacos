@@ -1,12 +1,12 @@
 import { createHash } from "node:crypto";
 import { drizzle, type NodePgClient } from "drizzle-orm/node-postgres";
 import { describe, expect, it, vi } from "vitest";
-import { hashAsaasEventIdentity } from "./asaasWebhook";
 import { databaseTimestampEpochMicroseconds } from "./databaseTimestamp";
 import { platformTariffPolicy, quoteGiftPurchaseAmounts } from "./giftMoney";
 import type { GiftPaymentHistoryReadScope } from "./giftPaymentHistory";
 import { giftReceivedEffectKey } from "./giftPaymentReconciliation";
 import { buildGiftV2Settlement } from "./giftQuotes";
+import { hashFinancialEventIdentity } from "./pagarmeWebhook";
 import { readReceivingProvisioningRecord } from "./receivingNomination";
 
 async function fixture() {
@@ -301,7 +301,7 @@ async function fixture() {
         id: "event-one",
         provider_event_reference: "evt_one",
         event_type: "PAYMENT_RECEIVED",
-        payload_hash: hashAsaasEventIdentity(
+        payload_hash: hashFinancialEventIdentity(
           "evt_one",
           "PAYMENT_RECEIVED",
           "provider-account-old",
@@ -789,6 +789,104 @@ describe("bounded historical purchase stored reader", () => {
     await v.repository.close();
   });
 
+  it("keeps a purchase recorded with an earlier provider visible read-only", async () => {
+    const v = await fixture();
+    const snapshot = v.tables.gift_quote_record[0].snapshot as Record<
+      string,
+      Record<string, unknown>
+    >;
+    snapshot.receiving.provider = "LEGACYPSP";
+    snapshot.pricing.provider = "LEGACYPSP";
+    v.tables.receiving_account[0].provider = "LEGACYPSP";
+    const page = await v.repository.readPurchasePage(v.scope, null);
+    expect(page.history.items).toHaveLength(1);
+    const detail = await v.repository.readPurchaseDetailPage(
+      v.scope,
+      "order-one",
+      null,
+    );
+    expect(detail.history.validatedHistoricalReceipts).toHaveLength(1);
+    await v.repository.close();
+  });
+
+  it("validates a Pagar.me 6x card order as one charge crediting the whole nominal", async () => {
+    const v = await fixture();
+    const stored = v.tables.gift_quote_record[0];
+    const snapshot = stored.snapshot as Record<string, unknown> & {
+      quote: Record<string, unknown>;
+      pricing: Record<string, unknown>;
+    };
+    const amounts = quoteGiftPurchaseAmounts(
+      {
+        nominalCents: 10000,
+        method: "CREDIT_CARD",
+        policy: platformTariffPolicy("CREDIT_CARD"),
+      },
+      6,
+    );
+    Object.assign(snapshot.quote, amounts, {
+      method: "CREDIT_CARD",
+      settlementVersion: "PLATFORM_ACCOUNT_SPLIT_V2",
+    });
+    snapshot.settlement = buildGiftV2Settlement(snapshot.quote as never);
+    Object.assign(snapshot.pricing, {
+      provenance: "platform-tariff-table",
+      policy: platformTariffPolicy("CREDIT_CARD"),
+    });
+    Object.assign(stored, {
+      method: "CREDIT_CARD",
+      commission_cents: amounts.commissionCents,
+      processing_cents: amounts.processingCents,
+      total_cents: amounts.totalCents,
+      policy_version: amounts.policyVersion,
+    });
+    // One charge of G = 11890; couple rule C = 11031 nets V after anticipation.
+    Object.assign(v.tables.gift_payment_record[0], {
+      provider_payment_reference: "ch_one",
+      gross_cents: 11890,
+      processing_cents: 659 + 1031,
+      commission_cents: 200,
+      recipient_net_cents: 10000,
+      split_fixed_cents: 11031,
+      anticipation_cents: 1031,
+      platform_net_cents: 859,
+      installment_number: null,
+    });
+    const payload = {
+      checkoutId: "checkout-one",
+      externalReference: "attempt-one",
+    };
+    Object.assign(v.tables.financial_event_inbox[0], {
+      event_type: "ORDER_PAID",
+      provider_event_reference: "hook_one",
+      payload,
+      payload_hash: hashFinancialEventIdentity(
+        "hook_one",
+        "ORDER_PAID",
+        "provider-account-old",
+        payload,
+      ),
+    });
+    Object.assign(v.tables.financial_ledger_entry[0], {
+      amount_cents: 10000,
+      effect_key: giftReceivedEffectKey("ch_one"),
+    });
+    const detail = await v.repository.readPurchaseDetailPage(
+      v.scope,
+      "order-one",
+      null,
+    );
+    expect(detail.history.retainedPayments[0]).toMatchObject({
+      grossCents: 11890,
+      recipientNetCents: 10000,
+      expectedRecipientSplitCents: 10000,
+    });
+    expect(
+      detail.history.validatedHistoricalReceipts[0].recipientCreditCents,
+    ).toBe(10000);
+    await v.repository.close();
+  });
+
   it("reads index and detail for a native OWNER without membership, preserving public DTOs", async () => {
     const v = await fixture();
     v.state.role = "OWNER";
@@ -859,7 +957,7 @@ describe("bounded historical purchase stored reader", () => {
         provider_event_reference: "evt_checkout",
         payment_id: null,
         payload,
-        payload_hash: hashAsaasEventIdentity(
+        payload_hash: hashFinancialEventIdentity(
           "evt_checkout",
           eventType,
           "provider-account-old",
@@ -916,7 +1014,7 @@ describe("bounded historical purchase stored reader", () => {
       payload_hash:
         fault === "invalid-hash"
           ? "0".repeat(64)
-          : hashAsaasEventIdentity(
+          : hashFinancialEventIdentity(
               "evt_checkout",
               eventType,
               "provider-account-old",
@@ -1303,7 +1401,7 @@ describe("bounded historical purchase stored reader", () => {
       ...v.tables.financial_event_inbox[0],
       id: "event-later",
       provider_event_reference: "evt_later",
-      payload_hash: hashAsaasEventIdentity(
+      payload_hash: hashFinancialEventIdentity(
         "evt_later",
         "PAYMENT_RECEIVED",
         "provider-account-old",

@@ -1,891 +1,274 @@
-import { isDeepStrictEqual } from "node:util";
-import { giftQuoteSchema } from "@entrelacos/contracts";
 import type { DatabaseConnection } from "@entrelacos/database";
 import {
-  financialEventInbox,
   financialLedgerEntry,
   financialOperation,
-  giftCheckoutAttempt,
-  giftOrder,
   giftPaymentRecord,
-  giftQuoteRecord,
-  receivingAccount,
 } from "@entrelacos/database/schema";
 import { sql } from "drizzle-orm";
-import { hashAsaasEventIdentity } from "./asaasWebhook";
-import {
-  databaseTimestampEpochMicroseconds,
-  readDatabaseTimestamp,
-} from "./databaseTimestamp";
 import { insertFinancialOperatorAlert } from "./financialOperatorAlertRepository";
-import { readGiftQuoteSnapshot } from "./giftCheckouts";
-import {
-  type GiftOperatorAlertEffect,
-  type GiftPaymentReconciliationResult,
-  type GiftPaymentTerminalEvidence,
-  type GiftProviderPaymentObservation,
-  type GiftReceiptEffect,
-  giftPaymentInboxEvents,
-  giftPaymentTerms,
-  giftPaymentV2OnlyInboxEvents,
-  giftReceivedEffectKey,
-  isGiftReceiptEvent,
-  type ObservedGiftPaymentRecord,
-  type ObservedGiftPaymentRecordV2,
-  reconcileGiftPaymentObservation,
-  reconcileGiftPaymentObservationV2,
-  type StoredGiftPaymentCheckoutBinding,
-} from "./giftPaymentReconciliation";
-import { type GiftQuoteSnapshot, isPlatformAccountSplit } from "./giftQuotes";
+import type {
+  GiftCheckoutOrderBinding,
+  GiftOrderTransition,
+} from "./giftCheckoutLifecycle";
+import { giftReceivedEffectKey } from "./giftPaymentReconciliation";
+import { postGiftPaymentReversal } from "./giftPaymentRestrictions";
 
-export interface GiftPaymentPostingClaim {
+export interface GiftOrderPostingInput {
+  binding: GiftCheckoutOrderBinding;
+  /** The `or_` id of the re-read order. */
+  providerOrderId: string;
+  transition: GiftOrderTransition;
+  /** Inbox event that triggered the re-read; every receipt cites one. */
   eventId: string;
-  siteId: string;
-  accountId: string;
-  environment: "sandbox" | "live";
-  leaseOwner: string;
-  leaseToken: string;
+  observedAt: Date;
 }
 
-// Server-only observations come from an authenticated fetch using this stored account.
-export interface GiftPaymentPostingInput {
-  claim: GiftPaymentPostingClaim;
-  checkout: StoredGiftPaymentCheckoutBinding;
-  observation: GiftProviderPaymentObservation;
-}
-
-export interface GiftPaymentPostingOptions {
-  environment: "sandbox" | "live";
-  platformWalletId: string;
-  retryDelayMs: number;
-  now(): Date;
-  generateId(kind: "payment" | "ledger"): string;
-}
-
-export interface GiftPaymentPostingResult {
-  outcome: "POSTED" | "OBSERVED" | "DUPLICATE" | "NO_REGRESSION";
+export interface GiftOrderPostingResult {
+  outcome: "POSTED" | "CLOSED" | "REVERSED" | "UNCHANGED" | "MISMATCH";
   paymentId: string | null;
   ledgerEntryId: string | null;
 }
 
 export interface GiftPaymentPostingRepository {
-  postReceivedPayment(
-    input: GiftPaymentPostingInput,
-  ): Promise<GiftPaymentPostingResult>;
+  applyOrderTransition(
+    input: GiftOrderPostingInput,
+  ): Promise<GiftOrderPostingResult>;
 }
 
-export type GiftPaymentPostingDatabase = Pick<
-  DatabaseConnection["db"],
-  "transaction"
->;
-type Transaction = Parameters<
-  Parameters<GiftPaymentPostingDatabase["transaction"]>[0]
->[0];
-type Inbox = typeof financialEventInbox.$inferSelect;
-type Payment = typeof giftPaymentRecord.$inferSelect;
-type Ledger = typeof financialLedgerEntry.$inferSelect;
-type RetryReason =
-  | Exclude<GiftPaymentReconciliationResult["reason"], null>
-  | "PAYMENT_RECEIPT_MISMATCH"
-  | "PAYMENT_OBSERVATION_STALE";
-// One shape for both settlement versions; V2 adds its record fields and alert.
-type PostingDecision =
-  | {
-      outcome: "NO_REGRESSION";
-      reason: "TERMINAL_PAYMENT";
-      payment: null;
-      effect: null;
-    }
-  | {
-      outcome: Exclude<
-        GiftPaymentReconciliationResult["outcome"] | "OBSERVED" | "PENDING",
-        "NO_REGRESSION"
-      >;
-      reason: Exclude<RetryReason, "TERMINAL_PAYMENT"> | null;
-      payment: ObservedGiftPaymentRecord;
-      effect: GiftReceiptEffect | null;
-      platformAdjustmentCents?: number;
-      v2?: {
-        payment: ObservedGiftPaymentRecordV2;
-        alert: GiftOperatorAlertEffect | null;
-      };
-    };
-interface BindingRow extends StoredGiftPaymentCheckoutBinding {
-  quoteId: string;
-  operationId: string;
-  operationKind: string;
-  operationState: string;
-  providerOperationReference: string | null;
-  provider: string;
-  snapshot: Record<string, unknown>;
-  orderCreatedAt: Date;
-  quoteCreatedAt: Date;
-  quoteExpiresAt: Date;
-  giftId: string;
-  destinationVersion: number;
-  method: string;
-  currency: string;
-  nominalCents: number;
-  commissionBasisPoints: number;
-  commissionCents: number;
-  processingCents: number;
-  totalCents: number;
-  policyVersion: string;
+export interface GiftPaymentPostingOptions {
+  generateId(kind: "payment" | "ledger" | "alert"): string;
 }
 
 export class GiftPaymentPostingRepositoryError extends Error {
   readonly status = 503;
   readonly code = "PAYMENT_POSTING_UNAVAILABLE";
   constructor() {
-    super("Payment posting unavailable");
+    super("Gift payment posting unavailable");
     this.name = "GiftPaymentPostingRepositoryError";
   }
 }
+
 function unavailable(): never {
   throw new GiftPaymentPostingRepositoryError();
 }
-function validId(value: unknown): value is string {
-  return giftQuoteSchema.shape.siteId.safeParse(value).success;
-}
-function reference(value: unknown): value is string {
-  return typeof value === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(value);
-}
-function eventReference(value: unknown): value is string {
-  return typeof value === "string" && /^[\x21-\x7e]{1,256}$/.test(value);
-}
-function date(value: Date): Date {
-  if (
-    !(value instanceof Date) ||
-    !Number.isFinite(value.getTime()) ||
-    !giftQuoteSchema.shape.expiresAt.safeParse(value.toISOString()).success
-  )
-    return unavailable();
-  return readDatabaseTimestamp(value);
-}
-function microseconds(value: Date): bigint {
-  return databaseTimestampEpochMicroseconds(date(value));
-}
-function storedRow<T>(value: unknown, fields: string[]): T {
-  if (!value || typeof value !== "object" || Array.isArray(value))
-    return unavailable();
-  const row = value as Record<string, unknown>;
-  return {
-    ...row,
-    ...Object.fromEntries(
-      fields.map((field) => [
-        field,
-        row[field] === null ? null : readDatabaseTimestamp(row[field]),
-      ]),
-    ),
-  } as T;
-}
-function sameScope(
-  left: { siteId: string; accountId: string; environment: string },
-  right: GiftPaymentPostingClaim,
-) {
-  return (
-    left.siteId === right.siteId &&
-    left.accountId === right.accountId &&
-    left.environment === right.environment
-  );
-}
 
-async function readBinding(
-  tx: Transaction,
-  input: GiftPaymentPostingInput,
-): Promise<{
-  row: BindingRow;
-  snapshot: GiftQuoteSnapshot;
-  checkout: StoredGiftPaymentCheckoutBinding;
-}> {
-  const claim = input.claim;
-  const locked =
-    await tx.execute(sql`SELECT o.id AS "orderId", o.site_id AS "siteId", o.account_id AS "accountId", o.environment
-    FROM ${giftOrder} o WHERE o.id = ${input.checkout.orderId} AND o.site_id = ${claim.siteId}
-      AND o.account_id = ${claim.accountId} AND o.environment = ${claim.environment} FOR UPDATE OF o`);
-  const order = locked.rows[0];
-  if (
-    locked.rows.length !== 1 ||
-    !order ||
-    order.orderId !== input.checkout.orderId ||
-    !sameScope(order as unknown as BindingRow, claim)
-  )
-    return unavailable();
-  const result =
-    await tx.execute(sql`SELECT o.id AS "orderId", o.site_id AS "siteId", o.account_id AS "accountId", o.environment,
-    o.quote_id AS "quoteId", o.created_at AS "orderCreatedAt", a.id AS "attemptId", a.operation_id AS "operationId",
-    a.provider_reference AS "providerCheckoutReference", op.kind AS "operationKind", op.state AS "operationState",
-    op.provider_operation_reference AS "providerOperationReference", account.provider, account.account_reference AS "accountReference",
-    q.snapshot, q.created_at AS "quoteCreatedAt", q.expires_at AS "quoteExpiresAt", q.destination_version AS "destinationVersion",
-    q.gift_id AS "giftId", q.method, q.currency, q.nominal_cents AS "nominalCents", q.commission_basis_points AS "commissionBasisPoints",
-    q.commission_cents AS "commissionCents", q.processing_cents AS "processingCents", q.total_cents AS "totalCents", q.policy_version AS "policyVersion"
-    FROM ${giftOrder} o INNER JOIN ${giftQuoteRecord} q ON q.id = o.quote_id AND q.site_id = o.site_id AND q.account_id = o.account_id AND q.environment = o.environment
-    INNER JOIN ${giftCheckoutAttempt} a ON a.order_id = o.id AND a.site_id = o.site_id AND a.account_id = o.account_id AND a.environment = o.environment
-    INNER JOIN ${financialOperation} op ON op.id = a.operation_id AND op.site_id = a.site_id AND op.account_id = a.account_id AND op.environment = a.environment
-      AND op.order_id = o.id AND op.kind = a.operation_kind AND op.kind = 'CHECKOUT_CREATE'
-    INNER JOIN ${receivingAccount} account ON account.id = o.account_id AND account.site_id = o.site_id AND account.environment = o.environment
-    WHERE o.id = ${input.checkout.orderId} AND o.site_id = ${claim.siteId} AND o.account_id = ${claim.accountId}
-      AND o.environment = ${claim.environment} AND a.id = ${input.checkout.attemptId}`);
-  const row = storedRow<BindingRow>(result.rows[0], [
-    "orderCreatedAt",
-    "quoteCreatedAt",
-    "quoteExpiresAt",
-  ]);
-  if (
-    result.rows.length !== 1 ||
-    !row ||
-    !sameScope(row, claim) ||
-    row.operationKind !== "CHECKOUT_CREATE" ||
-    row.operationState !== "SUCCEEDED" ||
-    row.operationId !== row.attemptId ||
-    row.provider !== "ASAAS" ||
-    !reference(row.providerCheckoutReference) ||
-    row.providerCheckoutReference !== row.providerOperationReference
-  )
-    return unavailable();
-  const snapshot = readGiftQuoteSnapshot(
-    row.snapshot as unknown as GiftQuoteSnapshot,
-  );
-  const checkout: StoredGiftPaymentCheckoutBinding = {
-    siteId: row.siteId,
-    accountId: row.accountId,
-    environment: row.environment,
-    orderId: row.orderId,
-    attemptId: row.attemptId,
-    accountReference: row.accountReference,
-    providerCheckoutReference: row.providerCheckoutReference,
-  };
-  if (
-    !isDeepStrictEqual(input.checkout, checkout) ||
-    snapshot.quote.id !== row.quoteId ||
-    snapshot.quote.siteId !== row.siteId ||
-    snapshot.quote.mode !== row.environment ||
-    snapshot.receiving.accountReference !== row.accountReference ||
-    snapshot.receiving.destinationVersion !== row.destinationVersion ||
-    microseconds(new Date(snapshot.createdAt)) !==
-      microseconds(row.quoteCreatedAt) ||
-    microseconds(new Date(snapshot.expiresAt)) !==
-      microseconds(row.quoteExpiresAt) ||
-    [
-      "giftId",
-      "method",
-      "currency",
-      "nominalCents",
-      "commissionBasisPoints",
-      "commissionCents",
-      "processingCents",
-      "totalCents",
-      "policyVersion",
-    ].some(
-      (key) =>
-        snapshot.quote[key as keyof typeof snapshot.quote] !==
-        row[key as keyof BindingRow],
-    )
-  )
-    return unavailable();
-  return { row, snapshot, checkout };
-}
+type Database = Pick<DatabaseConnection["db"], "transaction">;
+type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
 
-async function readEvent(
-  tx: Transaction,
-  claim: GiftPaymentPostingClaim,
-  binding: BindingRow,
-  observation: GiftProviderPaymentObservation,
-  clock: Date,
-  acceptedEvents: readonly string[],
-) {
-  const result =
-    await tx.execute(sql`SELECT e.id, e.site_id AS "siteId", e.account_id AS "accountId", e.environment, e.provider_event_reference AS "providerEventReference",
-    e.event_type AS "eventType", e.payload_hash AS "payloadHash", e.payload, e.received_at AS "receivedAt", e.authenticated_at AS "authenticatedAt",
-    e.payment_id AS "paymentId", e.state, e.lease_owner AS "leaseOwner", e.lease_token AS "leaseToken", e.lease_expires_at AS "leaseExpiresAt", e.processed_at AS "processedAt",
-    e.next_attempt_at AS "nextAttemptAt", e.last_error_code AS "lastErrorCode"
-    FROM ${financialEventInbox} e WHERE e.id = ${claim.eventId} AND e.site_id = ${claim.siteId}
-      AND e.account_id = ${claim.accountId} AND e.environment = ${claim.environment} FOR UPDATE OF e`);
-  const event = storedRow<Inbox>(result.rows[0], [
-    "receivedAt",
-    "authenticatedAt",
-    "leaseExpiresAt",
-    "processedAt",
-    "nextAttemptAt",
-  ]);
-  const raw = observation.payment as Record<string, unknown>;
-  if (
-    result.rows.length !== 1 ||
-    !event ||
-    !sameScope(event, claim) ||
-    event.id !== claim.eventId ||
-    !acceptedEvents.includes(event.eventType) ||
-    event.leaseOwner !== claim.leaseOwner ||
-    event.leaseToken !== claim.leaseToken ||
-    !["CLAIMED", "RETRY", "PROCESSED"].includes(event.state) ||
-    (event.state === "CLAIMED" &&
-      microseconds(event.leaseExpiresAt as Date) < microseconds(clock)) ||
-    microseconds(event.authenticatedAt) > microseconds(clock) ||
-    microseconds(event.receivedAt) > microseconds(event.authenticatedAt) ||
-    !eventReference(event.providerEventReference) ||
-    !event.payload ||
-    !raw ||
-    !reference(event.payload.paymentId) ||
-    event.payload.paymentId !== raw.id ||
-    (event.payload.checkoutId !== undefined &&
-      event.payload.checkoutId !== binding.providerCheckoutReference) ||
-    (event.payload.externalReference !== undefined &&
-      event.payload.externalReference !== binding.attemptId) ||
-    Object.entries(event.payload).some(
-      ([key, value]) =>
-        !["paymentId", "checkoutId", "externalReference"].includes(key) ||
-        !(key === "externalReference" ? validId(value) : reference(value)),
-    ) ||
-    event.payloadHash !==
-      hashAsaasEventIdentity(
-        event.providerEventReference,
-        event.eventType,
-        binding.accountReference,
-        event.payload as Record<string, string>,
-      )
-  )
-    return unavailable();
-  return event;
-}
+const closedStates = {
+  FAILED: { state: "FAILED", code: "ORDER_FAILED" },
+  CANCELED: { state: "CANCELLED", code: "ORDER_CANCELED" },
+  EXPIRED: { state: "CANCELLED", code: "ORDER_EXPIRED" },
+} as const;
 
-async function completeEvent(
-  tx: Transaction,
-  claim: GiftPaymentPostingClaim,
-  event: Inbox,
-  paymentId: string,
-  options: GiftPaymentPostingOptions,
-  reason: RetryReason | null = null,
-) {
-  const clock = date(options.now());
-  const retryAt = date(new Date(clock.getTime() + options.retryDelayMs));
-  const completion =
-    reason === null
-      ? sql`state = 'PROCESSED', processed_at = ${clock.toISOString()}::timestamptz, last_error_code = NULL`
-      : sql`state = 'RETRY', processed_at = NULL, next_attempt_at = ${retryAt.toISOString()}::timestamptz, last_error_code = ${reason}`;
-  const result =
-    await tx.execute(sql`UPDATE ${financialEventInbox} e SET ${completion}, payment_id = ${paymentId}
-    WHERE e.id = ${claim.eventId} AND e.site_id = ${claim.siteId} AND e.account_id = ${claim.accountId} AND e.environment = ${claim.environment}
-      AND e.state = 'CLAIMED' AND e.event_type = ${event.eventType} AND e.payload_hash = ${event.payloadHash}
-      AND e.lease_owner = ${claim.leaseOwner} AND e.lease_token = ${claim.leaseToken}
-      AND e.lease_expires_at >= ${clock.toISOString()}::timestamptz AND e.lease_expires_at >= clock_timestamp()
-      AND e.authenticated_at <= ${clock.toISOString()}::timestamptz AND (e.payment_id IS NULL OR e.payment_id = ${paymentId}) RETURNING e.id`);
-  if (result.rows.length !== 1 || result.rows[0]?.id !== claim.eventId)
-    return unavailable();
-}
-
-async function currentPayment(
-  tx: Transaction,
-  claim: GiftPaymentPostingClaim,
-  checkout: StoredGiftPaymentCheckoutBinding,
-  providerReference: string,
-  clock: Date,
-) {
-  const result =
-    await tx.execute(sql`SELECT p.id, p.site_id AS "siteId", p.account_id AS "accountId", p.environment, p.order_id AS "orderId", p.attempt_id AS "attemptId",
-    p.provider_payment_reference AS "providerPaymentReference", p.provider_status AS "providerStatus", p.verification_status AS "verificationStatus", p.observed_at AS "observedAt",
-    p.currency, p.gross_cents AS "grossCents", p.processing_cents AS "processingCents", p.commission_cents AS "commissionCents", p.recipient_net_cents AS "recipientNetCents",
-    p.split_provider_reference AS "splitProviderReference", p.split_fixed_cents AS "splitFixedCents",
-    p.provider_installment_reference AS "providerInstallmentReference", p.installment_number AS "installmentNumber",
-    p.platform_adjustment_cents AS "platformAdjustmentCents"
-    FROM ${giftPaymentRecord} p WHERE p.site_id = ${claim.siteId} AND p.account_id = ${claim.accountId} AND p.environment = ${claim.environment}
-      AND p.provider_payment_reference = ${providerReference} FOR UPDATE OF p`);
-  if (result.rows.length === 0) return null;
-  const payment = storedRow<Payment>(result.rows[0], ["observedAt"]);
-  if (
-    result.rows.length !== 1 ||
-    !sameScope(payment, claim) ||
-    !validId(payment.id) ||
-    payment.orderId !== checkout.orderId ||
-    payment.attemptId !== checkout.attemptId ||
-    payment.providerPaymentReference !== providerReference ||
-    payment.currency !== "BRL" ||
-    !["VERIFIED", "UNVERIFIED"].includes(payment.verificationStatus) ||
-    (payment.observedAt !== null &&
-      microseconds(payment.observedAt) > microseconds(clock)) ||
-    (payment.verificationStatus === "VERIFIED" &&
-      (!reference(payment.providerStatus) ||
-        payment.observedAt === null ||
-        !Number.isSafeInteger(payment.grossCents) ||
-        (payment.grossCents as number) <= 0))
-  )
-    return unavailable();
-  return payment;
-}
-
-async function currentReceipt(
-  tx: Transaction,
-  claim: GiftPaymentPostingClaim,
-  binding: BindingRow,
-  payment: Payment,
-  snapshot: GiftQuoteSnapshot,
-  clock: Date,
-) {
-  const result =
-    await tx.execute(sql`SELECT l.id, l.site_id AS "siteId", l.account_id AS "accountId", l.environment, l.effect_key AS "effectKey", l.kind,
-    l.direction, l.currency, l.amount_cents AS "amountCents", l.payment_id AS "paymentId", l.operation_id AS "operationId", l.event_id AS "eventId", l.compensates_entry_id AS "compensatesEntryId"
-    FROM ${financialLedgerEntry} l WHERE l.site_id = ${claim.siteId} AND l.account_id = ${claim.accountId} AND l.environment = ${claim.environment}
-      AND (l.payment_id = ${payment.id} OR l.compensates_entry_id IN (SELECT original.id FROM ${financialLedgerEntry} original
-        WHERE original.site_id = ${claim.siteId} AND original.account_id = ${claim.accountId} AND original.environment = ${claim.environment} AND original.payment_id = ${payment.id}))`);
-  if (result.rows.length === 0) return null;
-  const ledger = result.rows[0] as unknown as Ledger;
-  if (
-    result.rows.length !== 1 ||
-    !sameScope(ledger, claim) ||
-    !validId(ledger.id) ||
-    ledger.paymentId !== payment.id ||
-    ledger.kind !== "GIFT_RECEIVED" ||
-    ledger.direction !== "CREDIT" ||
-    ledger.currency !== "BRL" ||
-    !Number.isSafeInteger(ledger.amountCents) ||
-    ledger.amountCents <= 0 ||
-    ledger.amountCents !== payment.recipientNetCents ||
-    ledger.effectKey !==
-      giftReceivedEffectKey(payment.providerPaymentReference) ||
-    ledger.compensatesEntryId !== null ||
-    (ledger.operationId !== null && ledger.operationId !== binding.operationId)
-  )
-    return unavailable();
-  const terms = giftPaymentTerms(snapshot.quote, payment.installmentNumber);
-  if (
-    !terms ||
-    (payment.installmentNumber == null
-      ? payment.providerInstallmentReference != null
-      : payment.providerInstallmentReference !==
-        binding.providerCheckoutReference)
-  )
-    return unavailable();
-  if (
-    payment.providerStatus === "RECEIVED" &&
-    (payment.verificationStatus !== "VERIFIED" ||
-      payment.observedAt === null ||
-      microseconds(payment.observedAt) < microseconds(binding.orderCreatedAt) ||
-      payment.grossCents !== terms.grossCents ||
-      payment.processingCents === null ||
-      !Number.isSafeInteger(payment.processingCents) ||
-      payment.processingCents < 0 ||
-      payment.commissionCents === null ||
-      (isPlatformAccountSplit(snapshot)
-        ? payment.splitFixedCents !== payment.recipientNetCents ||
-          !reference(payment.splitProviderReference)
-        : payment.commissionCents !== terms.commissionCents) ||
-      payment.recipientNetCents === null ||
-      (snapshot.quote.settlementVersion === "PLATFORM_FEE_GUARANTEE_V1" &&
-        (payment.platformAdjustmentCents ?? 0) !==
-          Math.max(0, terms.nominalCents - payment.recipientNetCents)) ||
-      BigInt(payment.grossCents) !==
-        BigInt(payment.processingCents) +
-          BigInt(payment.commissionCents) +
-          BigInt(payment.recipientNetCents) ||
-      (!isPlatformAccountSplit(snapshot) &&
-        (payment.splitFixedCents !== terms.commissionCents ||
-          (terms.commissionCents > 0 &&
-            !reference(payment.splitProviderReference)))))
-  )
-    return unavailable();
-  if (ledger.eventId !== null) {
-    const events =
-      await tx.execute(sql`SELECT e.id, e.site_id AS "siteId", e.account_id AS "accountId", e.environment, e.event_type AS "eventType",
-      e.payment_id AS "paymentId", e.state, e.authenticated_at AS "authenticatedAt", e.processed_at AS "processedAt", e.payload,
-      e.provider_event_reference AS "providerEventReference", e.payload_hash AS "payloadHash"
-      FROM ${financialEventInbox} e WHERE e.id = ${ledger.eventId} AND e.site_id = ${claim.siteId} AND e.account_id = ${claim.accountId} AND e.environment = ${claim.environment}`);
-    const event = storedRow<Inbox>(events.rows[0], [
-      "authenticatedAt",
-      "processedAt",
-    ]);
-    if (
-      events.rows.length !== 1 ||
-      !event ||
-      !sameScope(event, claim) ||
-      event.id !== ledger.eventId ||
-      !isGiftReceiptEvent(event.eventType) ||
-      event.paymentId !== payment.id ||
-      event.state !== "PROCESSED" ||
-      microseconds(event.authenticatedAt) > microseconds(clock) ||
-      microseconds(event.processedAt as Date) > microseconds(clock) ||
-      microseconds(event.processedAt as Date) <
-        microseconds(event.authenticatedAt) ||
-      event.payload.paymentId !== payment.providerPaymentReference ||
-      !eventReference(event.providerEventReference) ||
-      (event.payload.checkoutId !== undefined &&
-        event.payload.checkoutId !== binding.providerCheckoutReference) ||
-      (event.payload.externalReference !== undefined &&
-        event.payload.externalReference !== binding.attemptId) ||
-      event.payloadHash !==
-        hashAsaasEventIdentity(
-          event.providerEventReference,
-          event.eventType,
-          binding.accountReference,
-          event.payload as Record<string, string>,
-        )
-    )
-      return unavailable();
-  }
-  return ledger;
-}
-
-function paymentFields(payment: ObservedGiftPaymentRecord | Payment) {
-  return {
-    siteId: payment.siteId,
-    accountId: payment.accountId,
-    environment: payment.environment,
-    orderId: payment.orderId,
-    attemptId: payment.attemptId,
-    providerPaymentReference: payment.providerPaymentReference,
-    providerStatus: payment.providerStatus,
-    verificationStatus: payment.verificationStatus,
-    currency: payment.currency,
-    grossCents: payment.grossCents,
-    processingCents: payment.processingCents,
-    commissionCents: payment.commissionCents,
-    recipientNetCents: payment.recipientNetCents,
-    splitProviderReference: payment.splitProviderReference,
-    splitFixedCents: payment.splitFixedCents,
-    providerInstallmentReference: payment.providerInstallmentReference ?? null,
-    installmentNumber: payment.installmentNumber ?? null,
-  };
-}
-
-function terminalEvidence(
-  payment: Payment | null,
-): GiftPaymentTerminalEvidence | undefined {
-  if (payment?.verificationStatus !== "VERIFIED" || payment.observedAt === null)
-    return undefined;
-  const state = payment.providerStatus;
-  if (state !== "REFUNDED" && state !== "DISPUTED" && state !== "CANCELLED")
-    return undefined;
-  return {
-    providerPaymentReference: payment.providerPaymentReference,
-    state,
-    observedAt: date(payment.observedAt),
-  };
-}
-
-async function writePayment(
-  tx: Transaction,
-  payment: ObservedGiftPaymentRecord,
-  existing: Payment | null,
-  options: GiftPaymentPostingOptions,
-): Promise<string> {
-  if (existing) {
-    const result =
-      await tx.execute(sql`UPDATE ${giftPaymentRecord} p SET provider_status = ${payment.providerStatus}, verification_status = ${payment.verificationStatus},
-      observed_at = ${payment.observedAt.toISOString()}::timestamptz, currency = ${payment.currency}, gross_cents = ${payment.grossCents}, processing_cents = ${payment.processingCents},
-      commission_cents = ${payment.commissionCents}, recipient_net_cents = ${payment.recipientNetCents}, split_provider_reference = ${payment.splitProviderReference}, split_fixed_cents = ${payment.splitFixedCents}
-      WHERE p.id = ${existing.id} AND p.site_id = ${payment.siteId} AND p.account_id = ${payment.accountId} AND p.environment = ${payment.environment}
-        AND p.order_id = ${payment.orderId} AND p.attempt_id = ${payment.attemptId} AND p.provider_payment_reference = ${payment.providerPaymentReference}
-        AND p.provider_installment_reference IS NOT DISTINCT FROM ${payment.providerInstallmentReference ?? null}
-        AND p.installment_number IS NOT DISTINCT FROM ${payment.installmentNumber ?? null}
-        AND (p.observed_at IS NULL OR p.observed_at <= ${payment.observedAt.toISOString()}::timestamptz)
-        AND (p.provider_status IS NULL OR p.provider_status NOT IN ('REFUNDED', 'DISPUTED', 'CANCELLED')) RETURNING p.id`);
-    if (result.rows.length !== 1 || result.rows[0]?.id !== existing.id)
-      return unavailable();
-    return existing.id;
-  }
-  const id = options.generateId("payment");
-  if (!validId(id)) return unavailable();
-  const result =
-    await tx.execute(sql`INSERT INTO ${giftPaymentRecord} (id, site_id, account_id, environment, order_id, attempt_id, provider_payment_reference,
-    provider_status, verification_status, observed_at, currency, gross_cents, processing_cents, commission_cents, recipient_net_cents, split_provider_reference, split_fixed_cents, provider_installment_reference, installment_number, created_at)
-    VALUES (${id}, ${payment.siteId}, ${payment.accountId}, ${payment.environment}, ${payment.orderId}, ${payment.attemptId}, ${payment.providerPaymentReference},
-      ${payment.providerStatus}, ${payment.verificationStatus}, ${payment.observedAt.toISOString()}::timestamptz, ${payment.currency}, ${payment.grossCents}, ${payment.processingCents},
-      ${payment.commissionCents}, ${payment.recipientNetCents}, ${payment.splitProviderReference}, ${payment.splitFixedCents}, ${payment.providerInstallmentReference ?? null}, ${payment.installmentNumber ?? null}, ${date(options.now()).toISOString()}::timestamptz)
-    ON CONFLICT (site_id, account_id, environment, provider_payment_reference) DO NOTHING RETURNING id`);
-  if (result.rows.length !== 1 || result.rows[0]?.id !== id)
-    return unavailable();
-  return id;
-}
-
+/**
+ * Writes the effects of a re-read Pagar.me order. One gift_payment_record per
+ * charge: gross G, commission, couple net V (the couple split C minus the
+ * anticipation the couple recipient pays), platform share G − C. The couple
+ * ledger is credited V once per charge (effect key per charge id).
+ */
 export function createGiftPaymentPostingRepository(
-  db: GiftPaymentPostingDatabase,
+  db: Database,
   options: GiftPaymentPostingOptions,
 ): GiftPaymentPostingRepository {
-  if (
-    !["sandbox", "live"].includes(options.environment) ||
-    !reference(options.platformWalletId) ||
-    typeof options.now !== "function" ||
-    typeof options.generateId !== "function" ||
-    !Number.isSafeInteger(options.retryDelayMs) ||
-    options.retryDelayMs <= 0 ||
-    options.retryDelayMs > 300_000
-  )
-    return unavailable();
-  options = Object.freeze({ ...options });
+  async function lockOperation(tx: Transaction, input: GiftOrderPostingInput) {
+    const { binding } = input;
+    const result =
+      await tx.execute(sql`SELECT op.state, op.provider_operation_reference AS "providerReference"
+      FROM ${financialOperation} op
+      WHERE op.id = ${binding.attemptId} AND op.site_id = ${binding.siteId} AND op.account_id = ${binding.accountId}
+        AND op.environment = ${binding.environment} AND op.order_id = ${binding.orderId} AND op.kind = 'CHECKOUT_CREATE'
+      FOR UPDATE`);
+    const row = result.rows[0];
+    if (result.rows.length !== 1 || !row) return unavailable();
+    if (
+      row.providerReference !== null &&
+      row.providerReference !== input.providerOrderId
+    )
+      return unavailable();
+    return { state: String(row.state) };
+  }
+
+  async function findPayment(
+    tx: Transaction,
+    binding: GiftCheckoutOrderBinding,
+    chargeId: string,
+  ) {
+    const result =
+      await tx.execute(sql`SELECT p.id, p.order_id AS "orderId", p.attempt_id AS "attemptId"
+      FROM ${giftPaymentRecord} p
+      WHERE p.site_id = ${binding.siteId} AND p.account_id = ${binding.accountId}
+        AND p.environment = ${binding.environment} AND p.provider_payment_reference = ${chargeId}
+      FOR UPDATE`);
+    const row = result.rows[0];
+    if (!row) return null;
+    if (row.orderId !== binding.orderId || row.attemptId !== binding.attemptId)
+      return unavailable();
+    return String(row.id);
+  }
+
+  async function anyPayment(
+    tx: Transaction,
+    binding: GiftCheckoutOrderBinding,
+  ) {
+    const result = await tx.execute(sql`SELECT 1 FROM ${giftPaymentRecord} p
+      WHERE p.site_id = ${binding.siteId} AND p.account_id = ${binding.accountId}
+        AND p.environment = ${binding.environment} AND p.order_id = ${binding.orderId} LIMIT 1`);
+    return result.rows.length > 0;
+  }
+
+  async function bindOperation(
+    tx: Transaction,
+    input: GiftOrderPostingInput,
+    current: string,
+  ) {
+    if (current === "SUCCEEDED") return;
+    const at = input.observedAt.toISOString();
+    // Money arrived: a provider order always wins over a local close/unknown.
+    const updated = await tx.execute(sql`UPDATE ${financialOperation}
+      SET state = 'SUCCEEDED', provider_operation_reference = ${input.providerOrderId}, last_error_code = NULL,
+        updated_at = GREATEST(updated_at, ${at}::timestamptz),
+        lease_expires_at = GREATEST(lease_expires_at, updated_at, ${at}::timestamptz)
+      WHERE id = ${input.binding.attemptId} AND site_id = ${input.binding.siteId} RETURNING id`);
+    if (updated.rows.length !== 1) unavailable();
+  }
+
+  async function ensurePayment(
+    tx: Transaction,
+    input: GiftOrderPostingInput,
+    charge: { chargeId: string; paidCents: number; coupleSplitCents: number },
+  ) {
+    const { binding } = input;
+    const existing = await findPayment(tx, binding, charge.chargeId);
+    if (existing) return { paymentId: existing, ledgerEntryId: null };
+    const nominal = binding.nominalCents;
+    const commission = binding.commissionCents;
+    const gross = charge.paidCents;
+    const processing = gross - commission - nominal;
+    const anticipation = binding.coupleSplitCents - nominal;
+    if (
+      gross !== binding.totalCents ||
+      processing < 0 ||
+      anticipation < 0 ||
+      charge.coupleSplitCents < 1 ||
+      charge.coupleSplitCents > gross
+    )
+      return unavailable();
+    const paymentId = options.generateId("payment");
+    const at = input.observedAt.toISOString();
+    await tx.execute(sql`INSERT INTO ${giftPaymentRecord} (id, site_id, account_id, environment, order_id, attempt_id,
+      provider_payment_reference, provider_status, verification_status, observed_at, currency, gross_cents,
+      processing_cents, commission_cents, recipient_net_cents, split_provider_reference, split_fixed_cents,
+      anticipation_cents, platform_net_cents, created_at)
+      VALUES (${paymentId}, ${binding.siteId}, ${binding.accountId}, ${binding.environment}, ${binding.orderId},
+        ${binding.attemptId}, ${charge.chargeId}, 'RECEIVED', 'VERIFIED', ${at}::timestamptz, 'BRL', ${gross},
+        ${processing}, ${commission}, ${nominal}, ${binding.coupleRecipientId}, ${charge.coupleSplitCents},
+        ${anticipation}, ${gross - binding.coupleSplitCents}, ${at}::timestamptz)`);
+    const ledgerEntryId = options.generateId("ledger");
+    const ledger =
+      await tx.execute(sql`INSERT INTO ${financialLedgerEntry} (id, site_id, account_id, environment, effect_key, kind,
+      direction, currency, amount_cents, payment_id, operation_id, event_id, created_at)
+      VALUES (${ledgerEntryId}, ${binding.siteId}, ${binding.accountId}, ${binding.environment},
+        ${giftReceivedEffectKey(charge.chargeId)}, 'GIFT_RECEIVED', 'CREDIT', 'BRL', ${nominal}, ${paymentId},
+        ${binding.attemptId}, ${input.eventId}, ${at}::timestamptz)
+      ON CONFLICT (site_id, account_id, environment, effect_key) DO NOTHING RETURNING id`);
+    if (ledger.rows.length !== 1) return unavailable();
+    return { paymentId, ledgerEntryId };
+  }
+
   return {
-    async postReceivedPayment(
-      input: GiftPaymentPostingInput,
-    ): Promise<GiftPaymentPostingResult> {
+    async applyOrderTransition(input) {
       try {
-        const value = structuredClone(input);
-        const claim = value.claim;
-        if (
-          !claim ||
-          Object.keys(value).some(
-            (key) => !["claim", "checkout", "observation"].includes(key),
-          ) ||
-          ![
-            claim.eventId,
-            claim.siteId,
-            claim.accountId,
-            claim.leaseOwner,
-            claim.leaseToken,
-          ].every(validId) ||
-          claim.environment !== options.environment
-        )
-          return unavailable();
-        return await db.transaction<GiftPaymentPostingResult>(
-          async (tx) => {
-            const binding = await readBinding(tx, value);
-            const platformSplit = isPlatformAccountSplit(binding.snapshot);
-            const event = await readEvent(
-              tx,
-              claim,
-              binding.row,
-              value.observation,
-              date(options.now()),
-              platformSplit
-                ? [...giftPaymentInboxEvents, ...giftPaymentV2OnlyInboxEvents]
-                : giftPaymentInboxEvents,
-            );
-            const raw = value.observation.payment as Record<string, unknown>;
-            if (!raw || !reference(raw.id)) return unavailable();
-            const existing = await currentPayment(
-              tx,
-              claim,
-              binding.checkout,
-              raw.id,
-              date(options.now()),
-            );
-            const receipt = existing
-              ? await currentReceipt(
-                  tx,
-                  claim,
-                  binding.row,
-                  existing,
-                  binding.snapshot,
-                  date(options.now()),
-                )
-              : null;
-            const reconciliation = {
-              quoteSnapshot: binding.snapshot,
-              checkout: binding.checkout,
-              platformWalletId: options.platformWalletId,
-              observation: value.observation,
-              now: date(options.now()),
-              existingTerminal: terminalEvidence(existing),
-            };
-            let decision: PostingDecision;
-            if (platformSplit) {
-              const v2 = reconcileGiftPaymentObservationV2({
-                ...reconciliation,
-                eventType: event.eventType,
-                // V2 reuses platform_adjustment_cents for the divergence-fix
-                // top-up (scripts/fixSplitDivergence.ts): the couple split was
-                // lowered by this amount and the platform transfers the rest.
-                splitTopUpCents: existing?.platformAdjustmentCents ?? null,
-              });
-              decision =
-                v2.outcome === "NO_REGRESSION"
-                  ? v2
-                  : {
-                      outcome: v2.outcome,
-                      reason: v2.reason,
-                      payment: v2.payment,
-                      effect: v2.effect,
-                      v2: { payment: v2.payment, alert: v2.alert },
-                    };
-            } else decision = reconcileGiftPaymentObservation(reconciliation);
-            if (decision.outcome === "NO_REGRESSION") {
-              if (!existing) return unavailable();
-              if (event.state === "CLAIMED")
-                await completeEvent(tx, claim, event, existing.id, options);
-              else if (
-                event.state !== "PROCESSED" ||
-                event.paymentId !== existing.id ||
-                microseconds(event.processedAt as Date) >
-                  microseconds(options.now())
-              )
-                return unavailable();
-              return {
-                outcome: "NO_REGRESSION",
-                paymentId: existing.id,
-                ledgerEntryId: receipt?.id ?? null,
-              };
-            }
-            const payment = decision.payment;
-            if (
-              microseconds(payment.observedAt) <
-              microseconds(binding.row.orderCreatedAt)
-            )
-              return unavailable();
-            const matches =
-              existing !== null &&
-              isDeepStrictEqual(
-                paymentFields(existing),
-                paymentFields(payment),
-              );
-            const stale =
-              existing?.observedAt !== null &&
-              existing?.observedAt !== undefined &&
-              microseconds(existing.observedAt) >
-                microseconds(payment.observedAt);
-            const reversal =
-              typeof existing?.providerStatus === "string" &&
-              /^(REFUND|CHARGEBACK)|^(CANCELED|CANCELLED|DISPUTED)$/.test(
-                existing.providerStatus,
-              );
-            const confirmed =
-              event.eventType === "PAYMENT_CONFIRMED" &&
-              payment.providerStatus === "CONFIRMED" &&
-              payment.recipientNetCents !== null &&
-              payment.recipientNetCents > 0;
-            let reason: RetryReason | null = confirmed ? null : decision.reason;
-            if (
-              decision.effect &&
-              !isGiftReceiptEvent(event.eventType) &&
-              !receipt
-            )
-              reason = "PAYMENT_NOT_RECEIVED";
-            if (receipt && (!decision.effect || !matches))
-              reason ??= "PAYMENT_RECEIPT_MISMATCH";
-            if (!receipt && stale) reason = "PAYMENT_OBSERVATION_STALE";
-            if (reversal) reason = "PAYMENT_RESTRICTED";
-            if (event.state !== "CLAIMED") {
-              if (!existing || event.paymentId !== existing.id)
-                return unavailable();
-              if (event.state === "RETRY") {
-                const next = microseconds(event.nextAttemptAt);
-                if (
-                  reason === null ||
-                  event.lastErrorCode !== reason ||
-                  event.processedAt !== null ||
-                  (!receipt && !matches && !stale && !reversal) ||
-                  next < microseconds(event.authenticatedAt) ||
-                  next >
-                    microseconds(event.leaseExpiresAt as Date) +
-                      BigInt(options.retryDelayMs) * 1000n
-                )
-                  return unavailable();
+        return await db.transaction(
+          async (tx): Promise<GiftOrderPostingResult> => {
+            const { binding, transition } = input;
+            const operation = await lockOperation(tx, input);
+            switch (transition.kind) {
+              case "PENDING":
                 return {
-                  outcome: "OBSERVED",
-                  paymentId: existing.id,
-                  ledgerEntryId: receipt?.id ?? null,
+                  outcome: "UNCHANGED",
+                  paymentId: null,
+                  ledgerEntryId: null,
+                };
+              case "MISMATCH": {
+                await insertFinancialOperatorAlert(
+                  tx,
+                  {
+                    kind: "ORDER_MISMATCH",
+                    severity: "critical",
+                    environment: binding.environment,
+                    siteId: binding.siteId,
+                    accountId: binding.accountId,
+                    checkoutAttemptId: binding.attemptId,
+                    paymentReference: input.providerOrderId,
+                    details: { reason: transition.reason },
+                  },
+                  options.generateId("alert"),
+                );
+                return {
+                  outcome: "MISMATCH",
+                  paymentId: null,
+                  ledgerEntryId: null,
                 };
               }
-              if (
-                reason !== null ||
-                (!receipt && !confirmed) ||
-                !matches ||
-                microseconds(event.processedAt as Date) >
-                  microseconds(options.now())
-              )
-                return unavailable();
-              return {
-                outcome: "DUPLICATE",
-                paymentId: existing.id,
-                ledgerEntryId: receipt?.id ?? null,
-              };
-            }
-            if (receipt || stale || reversal) {
-              if (!existing) return unavailable();
-              await completeEvent(
-                tx,
-                claim,
-                event,
-                existing.id,
-                options,
-                reason,
-              );
-              return {
-                outcome: reason === null ? "DUPLICATE" : "OBSERVED",
-                paymentId: existing.id,
-                ledgerEntryId: receipt?.id ?? null,
-              };
-            }
-            if (
-              !existing &&
-              binding.snapshot.quote.settlementVersion ===
-                "PLATFORM_FEE_GUARANTEE_V1"
-            ) {
-              // The order row is already locked. Each promised allocation can post once.
-              const conflicts =
-                await tx.execute(sql`SELECT 1 FROM ${giftPaymentRecord} p
-              WHERE p.site_id = ${claim.siteId} AND p.account_id = ${claim.accountId} AND p.environment = ${claim.environment}
-                AND p.order_id = ${payment.orderId}
-                AND (p.attempt_id <> ${payment.attemptId}
-                  OR p.provider_installment_reference IS DISTINCT FROM ${payment.providerInstallmentReference ?? null}
-                  OR p.installment_number IS NOT DISTINCT FROM ${payment.installmentNumber ?? null})
-              LIMIT 1`);
-              if (conflicts.rows.length) return unavailable();
-            }
-            const paymentId = await writePayment(
-              tx,
-              payment,
-              existing,
-              options,
-            );
-            if (decision.v2) {
-              const extra = decision.v2.payment;
-              const updated =
-                await tx.execute(sql`UPDATE ${giftPaymentRecord} SET platform_net_cents = COALESCE(${extra.platformNetCents}::integer, platform_net_cents),
-              anticipation_cents = COALESCE(${extra.anticipationCents}::integer, anticipation_cents),
-              anticipation_reference = COALESCE(${extra.anticipationReference}::text, anticipation_reference),
-              split_divergence_blocked_at = CASE WHEN ${extra.splitDivergenceBlocked} THEN COALESCE(split_divergence_blocked_at, clock_timestamp()) ELSE split_divergence_blocked_at END
-              WHERE id = ${paymentId} AND site_id = ${claim.siteId} AND account_id = ${claim.accountId} AND environment = ${claim.environment} RETURNING id`);
-              if (
-                updated.rows.length !== 1 ||
-                updated.rows[0]?.id !== paymentId
-              )
-                return unavailable();
-              const alert = decision.v2.alert;
-              if (alert)
-                await insertFinancialOperatorAlert(tx, {
-                  kind: alert.kind,
-                  severity: alert.severity,
-                  environment: claim.environment,
-                  siteId: claim.siteId,
-                  accountId: claim.accountId,
-                  checkoutAttemptId: payment.attemptId,
-                  paymentReference: payment.providerPaymentReference,
-                  details: alert.details,
+              case "CLOSED": {
+                if (
+                  (await anyPayment(tx, binding)) ||
+                  !["SUCCEEDED", "PROCESSING", "UNKNOWN"].includes(
+                    operation.state,
+                  )
+                )
+                  return {
+                    outcome: "UNCHANGED",
+                    paymentId: null,
+                    ledgerEntryId: null,
+                  };
+                const target = closedStates[transition.reason];
+                const at = input.observedAt.toISOString();
+                const updated =
+                  await tx.execute(sql`UPDATE ${financialOperation}
+                  SET state = ${target.state}, last_error_code = ${target.code},
+                    provider_operation_reference = ${input.providerOrderId},
+                    updated_at = GREATEST(updated_at, ${at}::timestamptz)
+                  WHERE id = ${binding.attemptId} AND site_id = ${binding.siteId} RETURNING id`);
+                if (updated.rows.length !== 1) return unavailable();
+                return {
+                  outcome: "CLOSED",
+                  paymentId: null,
+                  ledgerEntryId: null,
+                };
+              }
+              case "PAID": {
+                await bindOperation(tx, input, operation.state);
+                const posted = await ensurePayment(tx, input, transition);
+                return {
+                  outcome: posted.ledgerEntryId ? "POSTED" : "UNCHANGED",
+                  ...posted,
+                };
+              }
+              case "REVERSED": {
+                await bindOperation(tx, input, operation.state);
+                const posted = await ensurePayment(tx, input, transition);
+                const reversed = await postGiftPaymentReversal(tx, {
+                  siteId: binding.siteId,
+                  accountId: binding.accountId,
+                  environment: binding.environment,
+                  attemptId: binding.attemptId,
+                  paymentId: posted.paymentId,
+                  providerOrderId: input.providerOrderId,
+                  chargeId: transition.chargeId,
+                  reversal: transition.reversal,
+                  eventId: input.eventId,
+                  observedAt: input.observedAt,
+                  generateId: () => options.generateId("ledger"),
                 });
+                return {
+                  outcome: reversed.changed ? "REVERSED" : "UNCHANGED",
+                  paymentId: posted.paymentId,
+                  ledgerEntryId: reversed.ledgerEntryId,
+                };
+              }
             }
-            let ledgerEntryId: string | null = null;
-            if (decision.effect && isGiftReceiptEvent(event.eventType)) {
-              ledgerEntryId = options.generateId("ledger");
-              if (!validId(ledgerEntryId)) return unavailable();
-              const effect = decision.effect;
-              const ledger =
-                await tx.execute(sql`INSERT INTO ${financialLedgerEntry} (id, site_id, account_id, environment, effect_key, kind, direction, currency, amount_cents,
-              payment_id, operation_id, event_id, created_at) VALUES (${ledgerEntryId}, ${claim.siteId}, ${claim.accountId}, ${claim.environment}, ${effect.effectKey},
-                ${effect.kind}, ${effect.direction}, ${effect.currency}, ${effect.amountCents}, ${paymentId}, ${binding.row.operationId}, ${claim.eventId}, ${date(options.now()).toISOString()}::timestamptz)
-              ON CONFLICT (site_id, account_id, environment, effect_key) DO NOTHING RETURNING id`);
-              if (
-                ledger.rows.length !== 1 ||
-                ledger.rows[0]?.id !== ledgerEntryId
-              )
-                return unavailable();
-            }
-            if (
-              ledgerEntryId &&
-              decision.outcome === "RECEIVED" &&
-              decision.platformAdjustmentCents
-            ) {
-              const updated =
-                await tx.execute(sql`UPDATE ${giftPaymentRecord} SET platform_adjustment_cents = ${decision.platformAdjustmentCents}
-              WHERE id = ${paymentId} AND site_id = ${claim.siteId} AND account_id = ${claim.accountId} AND environment = ${claim.environment}
-                AND platform_adjustment_cents IS NULL RETURNING id`);
-              if (
-                updated.rows.length !== 1 ||
-                updated.rows[0]?.id !== paymentId
-              )
-                return unavailable();
-            }
-            await completeEvent(tx, claim, event, paymentId, options, reason);
-            return {
-              outcome: ledgerEntryId ? "POSTED" : "OBSERVED",
-              paymentId,
-              ledgerEntryId,
-            };
           },
           { isolationLevel: "read committed" },
         );
