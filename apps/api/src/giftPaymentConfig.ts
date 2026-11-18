@@ -1,30 +1,25 @@
 import { createHash } from "node:crypto";
-import { isIP } from "node:net";
 import { siteIdSchema } from "@entrelacos/contracts";
 import type { DatabaseTarget } from "@entrelacos/database";
-import type { ProviderCredentialKeyring } from "./providerCredentials";
 
+/**
+ * Pagar.me settings. PAGARME_MODE=test is stored as the `sandbox` financial
+ * environment and PAGARME_MODE=live as `live`.
+ */
 export type GiftPaymentConfig =
   | { readonly mode: "disabled" }
   | {
       readonly mode: "sandbox" | "live";
+      readonly providerMode: "test" | "live";
       readonly applicationEnvironment: DatabaseTarget;
       readonly backgroundProcessing?: true;
       readonly liveDemoSiteIds?: readonly string[];
-      readonly sandboxBuyerGrossUpSiteId?: string;
-      readonly platformApiKey: string;
-      readonly platformAccountId: string;
-      readonly platformWalletId: string;
-      /** sha256 hex of ASAAS_PLATFORM_WEBHOOK_TOKEN; the raw token is not retained. */
-      readonly platformWebhookTokenHash: string;
-      readonly credentialKeyId: string;
-      readonly credentialKeyring: ProviderCredentialKeyring;
-      readonly webhookPublicOrigin: string;
-      readonly webhookUrl: string;
-      readonly withdrawalAuthorization?: {
-        readonly token: string;
-        readonly url: string;
-      };
+      /** Basic auth username for the Pagar.me API (empty password). */
+      readonly secretKey: string;
+      readonly platformRecipientId: string;
+      readonly webhookBasicUser: string;
+      /** sha256 hex of `user:password`; the raw password is not retained. */
+      readonly webhookCredentialsHash: string;
     };
 
 function invalid(): never {
@@ -44,52 +39,26 @@ function required(value: string | undefined): string {
   return value;
 }
 
-function reference(value: string | undefined): string {
-  const result = required(value);
-  if (!/^[A-Za-z0-9_-]{1,128}$/.test(result)) invalid();
-  return result;
-}
-
-function webhookOrigin(value: string | undefined): string {
-  const origin = required(value);
-  let url: URL;
-  try {
-    url = new URL(origin);
-  } catch {
-    return invalid();
-  }
+function secretKey(value: string | undefined, mode: "test" | "live") {
+  const key = required(value);
   if (
-    url.protocol !== "https:" ||
-    url.username ||
-    url.password ||
-    url.pathname !== "/" ||
-    url.search ||
-    url.hash ||
-    !url.hostname.includes(".") ||
-    url.hostname.endsWith(".") ||
-    isIP(url.hostname) ||
-    /(^|\.)(localhost|localdomain|local|internal)$/i.test(url.hostname)
+    key.length > 8192 ||
+    !/^sk_[A-Za-z0-9_-]+$/.test(key) ||
+    (mode === "test") !== key.startsWith("sk_test_") ||
+    key === "sk_test_"
   )
     invalid();
-  return url.origin;
+  return key;
 }
 
 export function readGiftPaymentConfig(
   env: Record<string, string | undefined>,
   applicationEnvironment: DatabaseTarget,
 ): GiftPaymentConfig {
-  const mode = env.ASAAS_MODE ?? "disabled";
-  const backgroundProcessing = env.ASAAS_BACKGROUND_PROCESSING;
-  const liveDemoSiteIdList = env.ASAAS_LIVE_DEMO_SITE_ID;
-  const liveDemoSiteIds = liveDemoSiteIdList?.split(",").map((id) => id.trim());
-  const sandboxBuyerGrossUpSiteId = env.ASAAS_SANDBOX_BUYER_GROSS_UP_SITE_ID;
-  if (
-    sandboxBuyerGrossUpSiteId !== undefined &&
-    (mode !== "sandbox" ||
-      applicationEnvironment !== "development" ||
-      !siteIdSchema.safeParse(sandboxBuyerGrossUpSiteId).success)
-  )
-    invalid();
+  const mode = env.PAGARME_MODE ?? "disabled";
+  const liveDemoSiteIds = env.PAGARME_LIVE_DEMO_SITE_ID?.split(",").map((id) =>
+    id.trim(),
+  );
   if (
     liveDemoSiteIds !== undefined &&
     (mode !== "live" ||
@@ -100,58 +69,36 @@ export function readGiftPaymentConfig(
     invalid();
   if (mode === "disabled") return { mode };
   if (
-    (mode !== "sandbox" && mode !== "live") ||
+    (mode !== "test" && mode !== "live") ||
     !["development", "test", "production"].includes(applicationEnvironment) ||
-    (mode === "live") !== (applicationEnvironment === "production") ||
-    (backgroundProcessing !== undefined &&
-      backgroundProcessing !== "true" &&
-      backgroundProcessing !== "false")
+    (mode === "live") !== (applicationEnvironment === "production")
   )
     invalid();
-  const platformApiKey = required(env.ASAAS_API_KEY);
-  if (Buffer.byteLength(platformApiKey) > 8192) invalid();
-  const platformAccountId = reference(env.ASAAS_PLATFORM_ACCOUNT_ID);
-  const platformWalletId = reference(env.ASAAS_PLATFORM_WALLET_ID);
-  const platformWebhookToken = required(env.ASAAS_PLATFORM_WEBHOOK_TOKEN);
-  if (!/^[!-~]{32,255}$/.test(platformWebhookToken)) invalid();
-  const platformWebhookTokenHash = createHash("sha256")
-    .update(platformWebhookToken)
-    .digest("hex");
-  const credentialKeyId = required(env.ASAAS_CREDENTIAL_KEY_ID);
-  if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(credentialKeyId)) invalid();
-  const encodedKey = required(env.ASAAS_CREDENTIAL_KEY);
-  const key = Buffer.from(encodedKey, "base64");
-  if (key.length !== 32 || key.toString("base64") !== encodedKey) invalid();
-  const webhookPublicOrigin = webhookOrigin(env.ASAAS_WEBHOOK_PUBLIC_ORIGIN);
-  const authorizationToken = env.ASAAS_WITHDRAWAL_AUTHORIZATION_TOKEN;
+  const backgroundProcessing = env.PAGARME_BACKGROUND_PROCESSING;
   if (
-    authorizationToken !== undefined &&
-    !/^[\x21-\x7e]{32,255}$/.test(authorizationToken)
+    backgroundProcessing !== undefined &&
+    backgroundProcessing !== "true" &&
+    backgroundProcessing !== "false"
   )
     invalid();
+  const key = secretKey(env.PAGARME_SECRET_KEY, mode);
+  const platformRecipientId = required(env.PAGARME_PLATFORM_RECIPIENT_ID);
+  if (!/^rp_[A-Za-z0-9]{1,128}$/.test(platformRecipientId)) invalid();
+  const webhookBasicUser = required(env.PAGARME_WEBHOOK_BASIC_USER);
+  if (!/^[!-9;-~]{1,128}$/.test(webhookBasicUser)) invalid();
+  const webhookPassword = required(env.PAGARME_WEBHOOK_BASIC_PASSWORD);
+  if (!/^[!-~]{32,255}$/.test(webhookPassword)) invalid();
   return {
-    mode,
+    mode: mode === "test" ? "sandbox" : "live",
+    providerMode: mode,
     applicationEnvironment,
     ...(backgroundProcessing === "true" ? { backgroundProcessing: true } : {}),
     ...(liveDemoSiteIds === undefined ? {} : { liveDemoSiteIds }),
-    ...(sandboxBuyerGrossUpSiteId === undefined
-      ? {}
-      : { sandboxBuyerGrossUpSiteId }),
-    platformApiKey,
-    platformAccountId,
-    platformWalletId,
-    platformWebhookTokenHash,
-    credentialKeyId,
-    credentialKeyring: new Map([[credentialKeyId, key]]),
-    webhookPublicOrigin,
-    webhookUrl: `${webhookPublicOrigin}/v1/webhooks/asaas`,
-    ...(authorizationToken !== undefined
-      ? {
-          withdrawalAuthorization: {
-            token: authorizationToken,
-            url: `${webhookPublicOrigin}/v1/webhooks/asaas/withdrawal-authorization`,
-          },
-        }
-      : {}),
+    secretKey: key,
+    platformRecipientId,
+    webhookBasicUser,
+    webhookCredentialsHash: createHash("sha256")
+      .update(`${webhookBasicUser}:${webhookPassword}`)
+      .digest("hex"),
   };
 }

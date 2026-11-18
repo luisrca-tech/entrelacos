@@ -3,6 +3,7 @@ import type { DatabaseConnection } from "@entrelacos/database";
 import type { SQL } from "drizzle-orm";
 import { PgDialect } from "drizzle-orm/pg-core";
 import { describe, expect, it, vi } from "vitest";
+import type { AsaasLegacyConfig } from "./asaasLegacyConfig";
 import * as webhookRepository from "./asaasWebhookRepository";
 import {
   type GiftProcessingPolicy,
@@ -10,7 +11,6 @@ import {
   quoteGiftPurchaseAmounts,
 } from "./giftMoney";
 import { createGiftPaymentComposition } from "./giftPaymentComposition";
-import type { GiftPaymentConfig } from "./giftPaymentConfig";
 import { createGiftPaymentWorkerLoop } from "./giftPaymentWorkerLoop";
 import { buildGiftV2Settlement, type GiftQuoteSnapshot } from "./giftQuotes";
 import { encryptProviderCredential } from "./providerCredentials";
@@ -163,7 +163,7 @@ function checkoutFixture() {
   };
 }
 
-function configuration(): GiftPaymentConfig {
+function configuration(): AsaasLegacyConfig {
   return {
     mode: "sandbox",
     applicationEnvironment: "development",
@@ -262,7 +262,7 @@ describe("gift payment composition", () => {
       const values = fixture();
       const execute = vi.fn(async (_query: SQL) => emptyWithdrawalHistory());
       values.db.execute = execute as never;
-      const config = { ...configuration(), mode } as GiftPaymentConfig;
+      const config = { ...configuration(), mode } as AsaasLegacyConfig;
       const composition = createGiftPaymentComposition(config, values);
       expect(composition.ports.finance?.listWithdrawals).toBeTypeOf("function");
       await expect(
@@ -353,7 +353,7 @@ describe("gift payment composition", () => {
         method: "PIX",
         policy: pix.policy,
       }),
-    ).toMatchObject({ totalCents: 10399, anticipationCents: 0 });
+    ).toMatchObject({ totalCents: 10369, anticipationCents: 0 });
     const card = (await composition.ports.giftPayments?.createQuote(
       "site-one",
       { ...values.snapshot.receiving, method: "CREDIT_CARD" },
@@ -362,9 +362,9 @@ describe("gift payment composition", () => {
     expect(
       quoteGiftPurchaseAmounts(
         { nominalCents: 10000, method: "CREDIT_CARD", policy: card.policy },
-        12,
+        6,
       ).totalCents,
-    ).toBe(11909);
+    ).toBe(11890);
     expect(values.fetch).not.toHaveBeenCalled();
     await composition.close();
   });
@@ -845,7 +845,7 @@ describe("gift payment composition", () => {
     const config = {
       ...configuration(),
       applicationEnvironment: "production",
-    } as GiftPaymentConfig;
+    } as AsaasLegacyConfig;
     expect(() => createGiftPaymentComposition(config, fixture())).toThrow(
       "Gift payment composition unavailable",
     );

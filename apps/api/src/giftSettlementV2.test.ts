@@ -38,9 +38,9 @@ function v2Quote(
 
 describe("V2 platform tariff pricing", () => {
   it.each([
-    [30000, "CREDIT_CARD", 1, 31961],
-    [10000, "PIX", undefined, 10399],
-    [10000, "CREDIT_CARD", 12, 11909],
+    [30000, "CREDIT_CARD", 1, 32353],
+    [10000, "PIX", undefined, 10369],
+    [10000, "CREDIT_CARD", 6, 11890],
   ] as const)(
     "prices %i %s x%s to %i cents",
     (nominal, method, count, total) => {
@@ -130,6 +130,8 @@ describe("V2 settlement snapshot", () => {
       version: "PLATFORM_ACCOUNT_SPLIT_V2",
       tariffVersion: GIFT_PLATFORM_TARIFFS.version,
       tier: "card2to6",
+      // C = ceil(30000 / (1 − 2.72% · 58/30)) = 31666
+      coupleSplitCents: 31666,
     });
     expect(settlement.recipientSplitCents).toHaveLength(3);
     expect(settlement.recipientSplitCents.reduce((a, b) => a + b, 0)).toBe(
@@ -142,8 +144,9 @@ describe("V2 settlement snapshot", () => {
   });
 
   it("round-trips a matching settlement and rejects tampered ones", () => {
-    const quote = v2Quote(10000, "CREDIT_CARD", 12);
+    const quote = v2Quote(10000, "CREDIT_CARD", 6);
     const settlement = buildGiftV2Settlement(quote);
+    expect(settlement.coupleSplitCents).toBe(11031);
     expect(readGiftV2Settlement(quote, settlement)).toEqual(settlement);
     expect(() => readGiftV2Settlement(quote, undefined)).toThrow();
     const split = [...settlement.recipientSplitCents];
@@ -161,6 +164,25 @@ describe("V2 settlement snapshot", () => {
         anticipationCents: settlement.anticipationCents + 1,
       }),
     ).toThrow();
+    expect(() =>
+      readGiftV2Settlement(quote, {
+        ...settlement,
+        coupleSplitCents: settlement.coupleSplitCents - 1,
+      }),
+    ).toThrow();
+  });
+
+  it("refuses more than six card installments", () => {
+    expect(() =>
+      quoteGiftPurchaseAmounts(
+        {
+          nominalCents: 100_000,
+          method: "CREDIT_CARD",
+          policy: platformTariffPolicy("CREDIT_CARD"),
+        },
+        7,
+      ),
+    ).toThrow(GiftMoneyServiceError);
   });
 
   it("rejects a V2 settlement attached to a V1 quote", () => {

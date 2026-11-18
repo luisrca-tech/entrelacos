@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { GiftPaymentConfig } from "./giftPaymentConfig";
+import type { AsaasLegacyConfig } from "./asaasLegacyConfig";
 import { encryptProviderCredential } from "./providerCredentials";
 import { createReceivingSetupComposition } from "./receivingSetupComposition";
 
@@ -31,7 +31,7 @@ function fixture() {
   vi.clearAllMocks();
   const now = () => new Date("2026-10-16T15:00:00Z");
   const keyring = new Map([["sandbox-v1", Buffer.alloc(32, 19)]]);
-  const config: GiftPaymentConfig = {
+  const config: AsaasLegacyConfig = {
     mode: "sandbox",
     applicationEnvironment: "test",
     platformApiKey: "private-platform-key",

@@ -1,4 +1,5 @@
 import { listGiftV2Options } from "../../../packages/contracts/src/giftPricingV2";
+import { GIFT_PLATFORM_TARIFFS } from "../../../packages/contracts/src/giftTariffs";
 
 export type FaqPricingExample = {
   label: string;
@@ -35,6 +36,8 @@ const card = (count: number) => {
 export const faqPricingExamples: FaqPricingExample[] = [
   example("Pix", options.pix),
   example("Cartão à vista", card(1)),
-  example("Cartão em 6x", card(6)),
-  example("Cartão em 12x", card(12)),
+  example(
+    `Cartão em ${GIFT_PLATFORM_TARIFFS.maxInstallments}x`,
+    card(GIFT_PLATFORM_TARIFFS.maxInstallments),
+  ),
 ];

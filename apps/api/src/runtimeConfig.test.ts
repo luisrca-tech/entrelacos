@@ -9,28 +9,50 @@ const settings = {
 };
 
 describe("API runtime configuration", () => {
-  it("composes Sandbox payment configuration and defaults its site origin locally", () => {
+  it("composes Pagar.me test configuration and defaults its site origin locally", () => {
     const config = readRuntimeConfig({
       ...settings,
-      ASAAS_MODE: "sandbox",
-      ASAAS_API_KEY: "$aact_hmlg_fixture",
-      ASAAS_PLATFORM_ACCOUNT_ID: "platform-account",
-      ASAAS_PLATFORM_WALLET_ID: "platform-wallet",
-      ASAAS_CREDENTIAL_KEY_ID: "local-v1",
-      ASAAS_CREDENTIAL_KEY: Buffer.alloc(32, 1).toString("base64"),
-      ASAAS_WEBHOOK_PUBLIC_ORIGIN: "https://fixture.trycloudflare.com",
-      ASAAS_PLATFORM_WEBHOOK_TOKEN: "fixture-platform-webhook-token-0123456789",
+      PAGARME_MODE: "test",
+      PAGARME_SECRET_KEY: "sk_test_fixture0123456789",
+      PAGARME_PLATFORM_RECIPIENT_ID: "rp_fixturePlatform01",
+      PAGARME_WEBHOOK_BASIC_USER: "entrelacos-webhook",
+      PAGARME_WEBHOOK_BASIC_PASSWORD: "fixture-webhook-password-0123456789",
     });
     expect(config).toMatchObject({
       giftPayment: {
         mode: "sandbox",
+        providerMode: "test",
         applicationEnvironment: "development",
-        webhookUrl: "https://fixture.trycloudflare.com/v1/webhooks/asaas",
+        platformRecipientId: "rp_fixturePlatform01",
       },
       giftPublicOrigin: "http://localhost:4321",
       giftPaymentHistory: { mode: "sandbox" },
     });
   });
+
+  it("ignores legacy Asaas settings", () => {
+    const config = readRuntimeConfig({
+      ...settings,
+      ASAAS_MODE: "sandbox",
+      ASAAS_API_KEY: "$aact_hmlg_fixture",
+    });
+    expect(config.giftPayment).toEqual({ mode: "disabled" });
+    expect(config.giftPublicOrigin).toBeUndefined();
+  });
+
+  it("refuses live Pagar.me mode outside production", () => {
+    expect(() =>
+      readRuntimeConfig({
+        ...settings,
+        PAGARME_MODE: "live",
+        PAGARME_SECRET_KEY: "sk_fixtureLive0123456789",
+        PAGARME_PLATFORM_RECIPIENT_ID: "rp_fixturePlatform01",
+        PAGARME_WEBHOOK_BASIC_USER: "entrelacos-webhook",
+        PAGARME_WEBHOOK_BASIC_PASSWORD: "fixture-webhook-password-0123456789",
+      }),
+    ).toThrow("Gift payment configuration is invalid");
+  });
+
   it("selects only the explicitly named database environment", () => {
     expect(readRuntimeConfig(settings)).toMatchObject({
       target: "development",

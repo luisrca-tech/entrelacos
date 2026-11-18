@@ -1,0 +1,7 @@
+{
+  "message": "The request is invalid.",
+  "errors": {
+    "order.customer.document": ["The document field is not a valid number."]
+  },
+  "request": {}
+}

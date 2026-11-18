@@ -12,6 +12,7 @@ import {
   type AsaasBalanceObservation,
   createAsaasHttpClient,
 } from "./asaasHttpClient";
+import type { AsaasLegacyConfig } from "./asaasLegacyConfig";
 import { createAsaasStoredAccountReader } from "./asaasStoredAccountReader";
 import { createAsaasWithdrawalTransferAdapter } from "./asaasTransferClient";
 import {
@@ -21,7 +22,6 @@ import {
 import { createAsaasWithdrawalCustody } from "./asaasWithdrawalCustody";
 import { readFinancialWorkDueAt } from "./financialWorkSchedule";
 import { parseBrlCents } from "./giftMoney";
-import type { GiftPaymentConfig } from "./giftPaymentConfig";
 import type { GiftPaymentWorkerResult } from "./giftPaymentWorker";
 import { liveDemoSiteIdsSql } from "./liveSitePolicy";
 import { decryptProviderCredential } from "./providerCredentials";
@@ -215,7 +215,7 @@ interface StoredWithdrawalHolder {
   consentAt: Date | string;
 }
 export function createWithdrawalComposition(
-  config: GiftPaymentConfig,
+  config: AsaasLegacyConfig,
   options: WithdrawalCompositionOptions,
 ): WithdrawalComposition {
   if (

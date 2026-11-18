@@ -2,9 +2,9 @@ import { randomUUID } from "node:crypto";
 import { receivingSetupConsentVersion } from "@entrelacos/contracts";
 import type { DatabaseConnection } from "@entrelacos/database";
 import { sql } from "drizzle-orm";
+import type { AsaasLegacyConfig } from "./asaasLegacyConfig";
 import { readDatabaseTimestamp } from "./databaseTimestamp";
 import { DEMO_REPOSITORY_SLUG, DEMO_SITE_ID } from "./environmentProvision";
-import type { GiftPaymentConfig } from "./giftPaymentConfig";
 import { decryptProviderCredential } from "./providerCredentials";
 import { evaluateReceivingReadiness } from "./receivingReadiness";
 
@@ -28,7 +28,7 @@ type Database = Pick<DatabaseConnection["db"], "transaction">;
 // Withdrawal service and SQL reservation boundaries reject SIMULATION evidence.
 export async function prepareDemoSandboxCheckout(
   db: Database,
-  config: GiftPaymentConfig,
+  config: AsaasLegacyConfig,
   input: { confirmation: string },
 ) {
   if (

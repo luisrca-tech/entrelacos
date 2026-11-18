@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
-import type { GiftPaymentConfig } from "./giftPaymentConfig";
+import type { AsaasLegacyConfig } from "./asaasLegacyConfig";
 import {
   PlatformWebhookRegistrationError,
   platformWebhookEvents,
@@ -19,7 +19,7 @@ function fixture(
   } = {},
 ) {
   const mode = options.mode ?? "sandbox";
-  const config: GiftPaymentConfig = {
+  const config: AsaasLegacyConfig = {
     mode,
     applicationEnvironment: mode === "live" ? "production" : "development",
     platformApiKey:
@@ -268,7 +268,7 @@ describe("registerPlatformWebhook", () => {
         {
           ...config,
           applicationEnvironment: "production",
-        } as GiftPaymentConfig,
+        } as AsaasLegacyConfig,
         { platformWebhookToken: token },
         { fetch },
       ),

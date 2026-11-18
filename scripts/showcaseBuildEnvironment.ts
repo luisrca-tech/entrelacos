@@ -23,7 +23,7 @@ export function showcaseBuildEnvironment(
     PUBLIC_ADMIN_ORIGIN: `https://admin${suffix}.entrelacosbr.site`,
     PUBLIC_SITE_ID: siteId,
     // Each production showcase opts in only its own tenant. The backend list in
-    // ASAAS_LIVE_DEMO_SITE_ID, receiving readiness and checkout guards stay authoritative.
+    // PAGARME_LIVE_DEMO_SITE_ID, receiving readiness and checkout guards stay authoritative.
     PUBLIC_LIVE_DEMO_SITE_ID:
       app !== "landing" && environment === "production" ? siteId : "",
     PUBLIC_LANDING_URL: landing,

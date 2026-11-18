@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { GiftPaymentConfig } from "./giftPaymentConfig";
+import type { AsaasLegacyConfig } from "./asaasLegacyConfig";
 
 // Events the platform (main) account notifies for PLATFORM_ACCOUNT_SPLIT_V2
 // charges. Keep this the single source of truth for the platform webhook.
@@ -96,7 +96,7 @@ function providerErrorCodes(body: unknown): string[] {
 // Lists the account's webhooks, updates the one owned by this URL or
 // creates it. There is no durable state: a later run reconciles by URL.
 export async function registerPlatformWebhook(
-  config: GiftPaymentConfig,
+  config: AsaasLegacyConfig,
   input: PlatformWebhookRegistrationInput,
   options: PlatformWebhookRegistrationOptions = {},
 ): Promise<PlatformWebhookRegistrationResult> {

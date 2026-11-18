@@ -1671,7 +1671,8 @@ describe("PLATFORM_ACCOUNT_SPLIT_V2 receipt posting", () => {
       billingType: "PIX",
       status: "RECEIVED",
       value: serializeBrlCents(quote.totalCents),
-      netValue: serializeBrlCents(quote.totalCents - 199),
+      // Provider fee equal to the quoted processing (Pix: 169 cents).
+      netValue: serializeBrlCents(quote.totalCents - quote.processingCents),
       split: [
         {
           id: "split-couple",
@@ -1700,7 +1701,7 @@ describe("PLATFORM_ACCOUNT_SPLIT_V2 receipt posting", () => {
       splitFixedCents: 10_000,
       platformNetCents: 200,
       commissionCents: 200,
-      processingCents: 199,
+      processingCents: 169,
     });
     expect(v.tables.gift_payment_record[0].platformAdjustmentCents).toBe(
       undefined,

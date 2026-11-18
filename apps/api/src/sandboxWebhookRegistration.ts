@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import type { DatabaseConnection } from "@entrelacos/database";
 import { sql } from "drizzle-orm";
-import type { GiftPaymentConfig } from "./giftPaymentConfig";
+import type { AsaasLegacyConfig } from "./asaasLegacyConfig";
 import { giftPaymentRestrictionEvents } from "./giftPaymentRestrictions";
 import { allowsLiveSite } from "./liveSitePolicy";
 import {
@@ -85,7 +85,7 @@ function validWebhookUrl(value: unknown): value is string {
 // An armed operation may only reconcile remote state; absence never permits another POST.
 export async function registerAsaasWebhook(
   db: Database,
-  config: GiftPaymentConfig,
+  config: AsaasLegacyConfig,
   input: AsaasWebhookRegistrationInput,
   options: { fetch?: typeof globalThis.fetch } = {},
 ): Promise<AsaasWebhookRegistrationResult> {
@@ -434,7 +434,7 @@ export async function registerAsaasWebhook(
 
 export async function registerSandboxWebhook(
   db: Database,
-  config: GiftPaymentConfig,
+  config: AsaasLegacyConfig,
   input: SandboxWebhookRegistrationInput,
   options: { fetch?: typeof globalThis.fetch } = {},
 ): Promise<SandboxWebhookRegistrationResult> {

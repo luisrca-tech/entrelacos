@@ -4,10 +4,10 @@ import type { DatabaseConnection } from "@entrelacos/database";
 import { site } from "@entrelacos/database/schema";
 import { eq } from "drizzle-orm";
 import { createAsaasAccountProvisioningClient } from "./asaasAccountProvisioningClient";
+import type { AsaasLegacyConfig } from "./asaasLegacyConfig";
 import type { AuthInstance } from "./authHttp";
 import { createFinancialPasswordVerifier } from "./financialPasswordVerifier";
 import { createFinancialReauthenticationRateLimit } from "./financialReauthenticationRateLimit";
-import type { GiftPaymentConfig } from "./giftPaymentConfig";
 import {
   decryptProviderCredential,
   type ProviderCredentialContext,
@@ -59,7 +59,7 @@ function unavailable(): never {
 }
 
 export function createReceivingSetupComposition(
-  config: GiftPaymentConfig,
+  config: AsaasLegacyConfig,
   options: ReceivingSetupCompositionOptions,
 ): ReceivingSetupComposition {
   if (config.mode === "disabled")

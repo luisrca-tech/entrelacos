@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import type { SQL } from "drizzle-orm";
 import { PgDialect } from "drizzle-orm/pg-core";
 import { describe, expect, it, vi } from "vitest";
-import type { GiftPaymentConfig } from "./giftPaymentConfig";
+import type { AsaasLegacyConfig } from "./asaasLegacyConfig";
 import { encryptProviderCredential } from "./providerCredentials";
 import {
   registerAsaasWebhook,
@@ -24,7 +24,7 @@ function fixture(mode: "sandbox" | "live" = "sandbox") {
     keyring,
     "sandbox-v1",
   );
-  const config: GiftPaymentConfig = {
+  const config: AsaasLegacyConfig = {
     mode,
     applicationEnvironment: mode === "live" ? "production" : "development",
     platformApiKey: "private-platform-key",
@@ -497,7 +497,7 @@ describe("Sandbox webhook registration operation", () => {
       await expect(
         registerSandboxWebhook(
           values.db,
-          { ...values.config, ...override } as GiftPaymentConfig,
+          { ...values.config, ...override } as AsaasLegacyConfig,
           values.input,
           { fetch: values.fetch },
         ),

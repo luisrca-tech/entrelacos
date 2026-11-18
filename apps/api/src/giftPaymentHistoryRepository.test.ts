@@ -771,8 +771,8 @@ describe("bounded historical purchase stored reader", () => {
     });
     // The platform account nets total − Pix fee; the couple split is 10000.
     Object.assign(v.tables.gift_payment_record[0], {
-      gross_cents: 10399,
-      processing_cents: 199,
+      gross_cents: 10369,
+      processing_cents: 169,
       commission_cents: 200,
       recipient_net_cents: 10000,
       split_fixed_cents: 10000,

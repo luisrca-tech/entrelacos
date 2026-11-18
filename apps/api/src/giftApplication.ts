@@ -1,4 +1,5 @@
 import type { DatabaseConnection } from "@entrelacos/database";
+import { ASAAS_UNREACHABLE } from "./asaasLegacyConfig";
 import { createAuth } from "./auth";
 import type { AuthInstance } from "./authHttp";
 import type { GiftMediaComposition } from "./giftMediaComposition";
@@ -24,7 +25,9 @@ export async function createGiftApplication(
     adminOrigin: config.adminOrigin,
   };
   let receiving: ReceivingSetupComposition | undefined;
-  const payments = createGiftPaymentComposition(config.giftPayment, {
+  // The Asaas compositions stay inert until the Pagar.me checkout and
+  // receiving flows replace them; config.giftPayment is never handed to them.
+  const payments = createGiftPaymentComposition(ASAAS_UNREACHABLE, {
     db: connection.db,
     publicOrigin: config.giftPublicOrigin ?? "http://localhost:4321",
     now,
@@ -36,7 +39,7 @@ export async function createGiftApplication(
     | Awaited<ReturnType<typeof createGiftPaymentHistoryApplication>>
     | undefined;
   try {
-    receiving = createReceivingSetupComposition(config.giftPayment, {
+    receiving = createReceivingSetupComposition(ASAAS_UNREACHABLE, {
       ...authentication,
       standardAuth: auth,
       now,

@@ -15,6 +15,7 @@ import type { ApiOptions } from "./app";
 import { createAsaasCheckoutClient } from "./asaasCheckoutClient";
 import { readAsaasCheckoutCallbacks } from "./asaasCheckoutPayload";
 import type { AsaasFeeQuotesOptions } from "./asaasFeeQuotes";
+import type { AsaasLegacyConfig } from "./asaasLegacyConfig";
 import { createAsaasStoredAccountReader } from "./asaasStoredAccountReader";
 import { createAsaasWebhookReceiver } from "./asaasWebhook";
 import { createAsaasWebhookRepository } from "./asaasWebhookRepository";
@@ -33,7 +34,6 @@ import {
 import { platformTariffPolicy, quoteGiftPurchaseAmounts } from "./giftMoney";
 import { createGiftPaymentAdjustmentWorker } from "./giftPaymentAdjustmentWorker";
 import { createGiftPaymentCheckoutLookup } from "./giftPaymentCheckoutLookup";
-import type { GiftPaymentConfig } from "./giftPaymentConfig";
 import { createGiftPaymentInboxRepository } from "./giftPaymentInboxRepository";
 import { createGiftPaymentPostingRepository } from "./giftPaymentPostingRepository";
 import { createGiftPaymentRestrictionWorker } from "./giftPaymentRestrictions";
@@ -99,7 +99,7 @@ function unavailable(): never {
 }
 
 export function createGiftPaymentComposition(
-  config: GiftPaymentConfig,
+  config: AsaasLegacyConfig,
   options: GiftPaymentCompositionOptions,
 ): GiftPaymentComposition {
   if (config.mode === "disabled") {

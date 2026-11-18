@@ -3,249 +3,162 @@ import { describe, expect, it } from "vitest";
 import { readGiftPaymentConfig } from "./giftPaymentConfig";
 
 const configured = {
-  ASAAS_MODE: "sandbox",
-  ASAAS_API_KEY: "$aact_fixture-private-key",
-  ASAAS_PLATFORM_ACCOUNT_ID: "platform-account",
-  ASAAS_PLATFORM_WALLET_ID: "platform-wallet",
-  ASAAS_CREDENTIAL_KEY_ID: "sandbox-v1",
-  ASAAS_CREDENTIAL_KEY: Buffer.alloc(32, 19).toString("base64"),
-  ASAAS_WEBHOOK_PUBLIC_ORIGIN: "https://webhook.example.test",
-  ASAAS_PLATFORM_WEBHOOK_TOKEN: "fixture-platform-webhook-token-0123456789",
+  PAGARME_MODE: "test",
+  PAGARME_SECRET_KEY: "sk_test_fixture0123456789abcdef",
+  PAGARME_PLATFORM_RECIPIENT_ID: "rp_fixturePlatform01",
+  PAGARME_WEBHOOK_BASIC_USER: "entrelacos-webhook",
+  PAGARME_WEBHOOK_BASIC_PASSWORD: "fixture-webhook-password-0123456789abcdef",
 };
-const platformWebhookTokenHash = createHash("sha256")
-  .update(configured.ASAAS_PLATFORM_WEBHOOK_TOKEN)
+const liveKey = "sk_fixtureLive0123456789abcdef";
+const webhookCredentialsHash = createHash("sha256")
+  .update(
+    `${configured.PAGARME_WEBHOOK_BASIC_USER}:${configured.PAGARME_WEBHOOK_BASIC_PASSWORD}`,
+  )
   .digest("hex");
 
-describe("gift payment runtime configuration", () => {
-  it("opts non-production environments into background processing explicitly", () => {
-    expect(readGiftPaymentConfig(configured, "development")).not.toHaveProperty(
-      "backgroundProcessing",
-    );
-    expect(
-      readGiftPaymentConfig(
-        { ...configured, ASAAS_BACKGROUND_PROCESSING: "true" },
-        "development",
-      ),
-    ).toMatchObject({ backgroundProcessing: true });
-    expect(() =>
-      readGiftPaymentConfig(
-        { ...configured, ASAAS_BACKGROUND_PROCESSING: "typo" },
-        "development",
-      ),
-    ).toThrow();
-  });
-
-  it("enables a separate Sandbox withdrawal authorization endpoint only with its own token", () => {
-    const authorizationToken = "fixture-withdrawal-authorization-secret";
-    const result = readGiftPaymentConfig(
-      {
-        ...configured,
-        ASAAS_WITHDRAWAL_AUTHORIZATION_TOKEN: authorizationToken,
-      },
-      "development",
-    );
-    expect(result).toMatchObject({
-      withdrawalAuthorization: {
-        token: authorizationToken,
-        url: "https://webhook.example.test/v1/webhooks/asaas/withdrawal-authorization",
-      },
-    });
-    expect(readGiftPaymentConfig(configured, "development")).not.toHaveProperty(
-      "withdrawalAuthorization",
-    );
-  });
-
-  it.each([
-    "",
-    "short",
-    "x".repeat(256),
-    `${"x".repeat(32)} y`,
-    `${"x".repeat(32)}\n`,
-  ])(
-    "rejects malformed withdrawal authorization secrets without echoing them (%#)",
-    (token) => {
-      expect(() =>
-        readGiftPaymentConfig(
-          { ...configured, ASAAS_WITHDRAWAL_AUTHORIZATION_TOKEN: token },
-          "development",
-        ),
-      ).toThrow("Gift payment configuration is invalid");
+describe("Pagar.me gift payment configuration", () => {
+  it.each(["development", "test"] as const)(
+    "loads test mode in %s as the sandbox environment",
+    (target) => {
+      expect(readGiftPaymentConfig(configured, target)).toEqual({
+        mode: "sandbox",
+        providerMode: "test",
+        applicationEnvironment: target,
+        secretKey: configured.PAGARME_SECRET_KEY,
+        platformRecipientId: "rp_fixturePlatform01",
+        webhookBasicUser: "entrelacos-webhook",
+        webhookCredentialsHash,
+      });
     },
   );
 
-  it("enables the distinct authenticated withdrawal callback in live production", () => {
-    expect(
-      readGiftPaymentConfig(
-        {
-          ...configured,
-          ASAAS_MODE: "live",
-          ASAAS_WITHDRAWAL_AUTHORIZATION_TOKEN:
-            "fixture-withdrawal-authorization-secret",
-        },
-        "production",
-      ),
-    ).toMatchObject({
-      mode: "live",
-      withdrawalAuthorization: {
-        token: "fixture-withdrawal-authorization-secret",
-        url: "https://webhook.example.test/v1/webhooks/asaas/withdrawal-authorization",
-      },
-    });
+  it("keeps only a hash of the webhook credentials, never the raw password", () => {
+    const result = readGiftPaymentConfig(configured, "development");
+    expect(JSON.stringify(result)).not.toContain(
+      configured.PAGARME_WEBHOOK_BASIC_PASSWORD,
+    );
   });
 
-  it("loads an exact production live showcase opt-in without changing default config shape", () => {
-    const config = readGiftPaymentConfig(
-      {
-        ...configured,
-        ASAAS_MODE: "live",
-        ASAAS_LIVE_DEMO_SITE_ID: "demo-wedding",
-      },
-      "production",
-    );
-    expect(config).toMatchObject({
-      mode: "live",
-      applicationEnvironment: "production",
-      liveDemoSiteIds: ["demo-wedding"],
-    });
-    expect(
-      readGiftPaymentConfig(
-        { ...configured, ASAAS_MODE: "live" },
-        "production",
-      ),
-    ).not.toHaveProperty("liveDemoSiteIds");
-  });
-  it("loads a comma-separated list of production live showcases", () => {
+  it("loads live mode only in production with a live key", () => {
     expect(
       readGiftPaymentConfig(
         {
           ...configured,
-          ASAAS_MODE: "live",
-          ASAAS_LIVE_DEMO_SITE_ID: "demo-wedding, demo-wedding-cartas",
+          PAGARME_MODE: "live",
+          PAGARME_SECRET_KEY: liveKey,
+          PAGARME_LIVE_DEMO_SITE_ID: "demo-wedding, demo-wedding-cartas",
+          PAGARME_BACKGROUND_PROCESSING: "true",
         },
         "production",
       ),
     ).toMatchObject({
+      mode: "live",
+      providerMode: "live",
+      applicationEnvironment: "production",
+      secretKey: liveKey,
+      backgroundProcessing: true,
       liveDemoSiteIds: ["demo-wedding", "demo-wedding-cartas"],
     });
-  });
-  it.each([
-    "",
-    " ",
-    "demo-wedding/other",
-    "demo-wedding,",
-    ",demo-wedding",
-    "demo-wedding,,demo-wedding-cartas",
-    "demo-wedding,demo-wedding",
-  ])("rejects invalid showcase IDs (%#)", (ASAAS_LIVE_DEMO_SITE_ID) => {
-    expect(() =>
-      readGiftPaymentConfig(
-        { ...configured, ASAAS_MODE: "live", ASAAS_LIVE_DEMO_SITE_ID },
-        "production",
-      ),
-    ).toThrow("Gift payment configuration is invalid");
-  });
-  it.each(["development", "test"] as const)(
-    "rejects showcase opt-in outside live production (%s)",
-    (target) => {
+    for (const target of ["development", "test"] as const)
       expect(() =>
         readGiftPaymentConfig(
-          { ...configured, ASAAS_LIVE_DEMO_SITE_ID: "demo-wedding" },
+          { ...configured, PAGARME_MODE: "live", PAGARME_SECRET_KEY: liveKey },
           target,
         ),
-      ).toThrow();
-      expect(() =>
-        readGiftPaymentConfig(
-          { ASAAS_MODE: "disabled", ASAAS_LIVE_DEMO_SITE_ID: "demo-wedding" },
-          target,
-        ),
-      ).toThrow();
-    },
-  );
-  it("defaults to disabled without reading unused secrets", () => {
-    const env: Record<string, string | undefined> = {};
-    for (const key of Object.keys(configured).filter(
-      (key) => key !== "ASAAS_MODE",
-    )) {
-      Object.defineProperty(env, key, {
-        get: () => {
-          throw new Error("Unused secret was read");
-        },
-      });
-    }
-    expect(readGiftPaymentConfig(env, "development")).toEqual({
-      mode: "disabled",
-    });
-    expect(
-      readGiftPaymentConfig(
-        { ...configured, ASAAS_MODE: "disabled" },
-        "production",
-      ),
-    ).toEqual({ mode: "disabled" });
-  });
-
-  it.each(["development", "test"] as const)(
-    "loads sandbox settings in %s with a separate public webhook origin",
-    (target) => {
-      const result = readGiftPaymentConfig(
-        {
-          ...configured,
-          BETTER_AUTH_URL: "http://localhost:8080",
-          SITE_ORIGIN: "http://localhost:4321",
-          ASAAS_WEBHOOK_PUBLIC_ORIGIN: "https://webhook.example.test/",
-        },
-        target,
-      );
-      expect(result).toEqual({
-        mode: "sandbox",
-        applicationEnvironment: target,
-        platformApiKey: configured.ASAAS_API_KEY,
-        platformAccountId: "platform-account",
-        platformWalletId: "platform-wallet",
-        platformWebhookTokenHash,
-        credentialKeyId: "sandbox-v1",
-        credentialKeyring: new Map([["sandbox-v1", Buffer.alloc(32, 19)]]),
-        webhookPublicOrigin: "https://webhook.example.test",
-        webhookUrl: "https://webhook.example.test/v1/webhooks/asaas",
-      });
-    },
-  );
-
-  it("keeps only the platform webhook token hash, never the raw token", () => {
-    const result = readGiftPaymentConfig(configured, "development");
-    expect(result).toMatchObject({ platformWebhookTokenHash });
-    expect(JSON.stringify(result)).not.toContain(
-      configured.ASAAS_PLATFORM_WEBHOOK_TOKEN,
-    );
-    expect(
-      readGiftPaymentConfig(
-        { ASAAS_PLATFORM_WEBHOOK_TOKEN: undefined },
-        "development",
-      ),
-    ).toEqual({ mode: "disabled" });
-  });
-
-  it("allows live only in production and sandbox only outside production", () => {
-    expect(
-      readGiftPaymentConfig(
-        { ...configured, ASAAS_MODE: "live" },
-        "production",
-      ),
-    ).toMatchObject({ mode: "live", applicationEnvironment: "production" });
+      ).toThrow("Gift payment configuration is invalid");
     expect(() => readGiftPaymentConfig(configured, "production")).toThrow(
       "Gift payment configuration is invalid",
     );
-    for (const target of ["development", "test"] as const) {
-      expect(() =>
-        readGiftPaymentConfig({ ...configured, ASAAS_MODE: "live" }, target),
-      ).toThrow("Gift payment configuration is invalid");
-    }
     expect(() =>
       readGiftPaymentConfig(configured, "unknown" as "test"),
     ).toThrow("Gift payment configuration is invalid");
   });
 
-  it.each(Object.keys(configured).filter((key) => key !== "ASAAS_MODE"))(
-    "requires %s when enabled without revealing private values",
+  it("rejects a secret key whose prefix does not match the mode", () => {
+    expect(() =>
+      readGiftPaymentConfig(
+        { ...configured, PAGARME_SECRET_KEY: liveKey },
+        "development",
+      ),
+    ).toThrow("Gift payment configuration is invalid");
+    expect(() =>
+      readGiftPaymentConfig(
+        {
+          ...configured,
+          PAGARME_MODE: "live",
+          PAGARME_SECRET_KEY: configured.PAGARME_SECRET_KEY,
+        },
+        "production",
+      ),
+    ).toThrow("Gift payment configuration is invalid");
+    for (const key of ["pk_test_public0123", "ak_test_x", "sk_test_"])
+      expect(() =>
+        readGiftPaymentConfig(
+          { ...configured, PAGARME_SECRET_KEY: key },
+          "development",
+        ),
+      ).toThrow("Gift payment configuration is invalid");
+  });
+
+  it("never echoes the secret key in configuration errors", () => {
+    const secret = "sk_privateLiveValue0123456789";
+    try {
+      readGiftPaymentConfig(
+        { ...configured, PAGARME_SECRET_KEY: secret },
+        "development",
+      );
+      expect.unreachable();
+    } catch (error) {
+      expect(String(error)).not.toContain(secret);
+    }
+  });
+
+  it("defaults to disabled without reading unused secrets", () => {
+    const env: Record<string, string | undefined> = {};
+    for (const key of [
+      ...Object.keys(configured).filter((key) => key !== "PAGARME_MODE"),
+      "PAGARME_BACKGROUND_PROCESSING",
+    ])
+      Object.defineProperty(env, key, {
+        get: () => {
+          throw new Error("Unused secret was read");
+        },
+      });
+    expect(readGiftPaymentConfig(env, "development")).toEqual({
+      mode: "disabled",
+    });
+    expect(
+      readGiftPaymentConfig(
+        { ...configured, PAGARME_MODE: "disabled" },
+        "production",
+      ),
+    ).toEqual({ mode: "disabled" });
+  });
+
+  it("reads no ASAAS_* setting", () => {
+    const env = new Proxy(
+      { ...configured },
+      {
+        get(target, key) {
+          if (typeof key === "string" && key.startsWith("ASAAS_"))
+            throw new Error(`Read ${key}`);
+          return Reflect.get(target, key);
+        },
+      },
+    );
+    expect(readGiftPaymentConfig(env, "development")).toMatchObject({
+      mode: "sandbox",
+    });
+    expect(
+      readGiftPaymentConfig(
+        { ASAAS_MODE: "sandbox", ASAAS_API_KEY: "$aact_x" },
+        "development",
+      ),
+    ).toEqual({ mode: "disabled" });
+  });
+
+  it.each(Object.keys(configured).filter((key) => key !== "PAGARME_MODE"))(
+    "requires %s when enabled",
     (key) => {
       expect(() =>
         readGiftPaymentConfig(
@@ -257,78 +170,64 @@ describe("gift payment runtime configuration", () => {
   );
 
   it.each([
-    { ASAAS_MODE: "fake" },
-    { ASAAS_MODE: " sandbox" },
-    { ASAAS_API_KEY: " key" },
-    { ASAAS_API_KEY: "key\nheader" },
-    { ASAAS_API_KEY: "secret\u007f" },
-    { ASAAS_API_KEY: "a".repeat(8193) },
-    { ASAAS_PLATFORM_ACCOUNT_ID: "account/other" },
-    { ASAAS_PLATFORM_WALLET_ID: "wallet.with:punctuation" },
-    { ASAAS_CREDENTIAL_KEY_ID: " key" },
-    { ASAAS_CREDENTIAL_KEY: Buffer.alloc(31).toString("base64") },
-    { ASAAS_CREDENTIAL_KEY: Buffer.alloc(33).toString("base64") },
-    { ASAAS_CREDENTIAL_KEY: "!".repeat(44) },
-    { ASAAS_CREDENTIAL_KEY: `${configured.ASAAS_CREDENTIAL_KEY}\n` },
-    { ASAAS_CREDENTIAL_KEY: configured.ASAAS_CREDENTIAL_KEY.replace(/=$/, "") },
-    { ASAAS_WEBHOOK_PUBLIC_ORIGIN: "http://webhook.example.test" },
-    { ASAAS_WEBHOOK_PUBLIC_ORIGIN: "https://localhost" },
-    { ASAAS_WEBHOOK_PUBLIC_ORIGIN: "https://localhost.localdomain" },
-    { ASAAS_WEBHOOK_PUBLIC_ORIGIN: "https://127.0.0.1" },
-    { ASAAS_WEBHOOK_PUBLIC_ORIGIN: "https://[::1]" },
-    { ASAAS_WEBHOOK_PUBLIC_ORIGIN: "https://10.0.0.1" },
-    { ASAAS_WEBHOOK_PUBLIC_ORIGIN: "https://172.16.0.1" },
-    { ASAAS_WEBHOOK_PUBLIC_ORIGIN: "https://192.168.1.1" },
-    { ASAAS_WEBHOOK_PUBLIC_ORIGIN: "https://webhook.example.test/path" },
-    { ASAAS_WEBHOOK_PUBLIC_ORIGIN: "https://webhook.example.test?key=private" },
-    { ASAAS_WEBHOOK_PUBLIC_ORIGIN: "https://webhook.example.test#hash" },
-    {
-      ASAAS_WEBHOOK_PUBLIC_ORIGIN: "https://user:private@webhook.example.test",
-    },
-    { ASAAS_WEBHOOK_PUBLIC_ORIGIN: "https://webhook.example.test." },
-    { ASAAS_WEBHOOK_PUBLIC_ORIGIN: " https://webhook.example.test" },
-    { ASAAS_PLATFORM_WEBHOOK_TOKEN: "short" },
-    { ASAAS_PLATFORM_WEBHOOK_TOKEN: "x".repeat(256) },
-    { ASAAS_PLATFORM_WEBHOOK_TOKEN: `${"x".repeat(32)} y` },
-  ])("rejects invalid settings with a sanitized error (%#)", (override) => {
-    try {
-      readGiftPaymentConfig({ ...configured, ...override }, "development");
-      expect.fail("Invalid settings were accepted");
-    } catch (error) {
-      expect(error).toBeInstanceOf(Error);
-      expect((error as Error).message).toBe(
-        "Gift payment configuration is invalid",
-      );
-    }
+    { PAGARME_MODE: "sandbox" },
+    { PAGARME_MODE: " test" },
+    { PAGARME_MODE: "TEST" },
+    { PAGARME_SECRET_KEY: " sk_test_fixture" },
+    { PAGARME_SECRET_KEY: "sk_test_fixture\nheader" },
+    { PAGARME_SECRET_KEY: `sk_test_${"a".repeat(8192)}` },
+    { PAGARME_PLATFORM_RECIPIENT_ID: "re_fixture" },
+    { PAGARME_PLATFORM_RECIPIENT_ID: "rp_fixture/other" },
+    { PAGARME_WEBHOOK_BASIC_USER: "user:with-colon" },
+    { PAGARME_WEBHOOK_BASIC_USER: "user name" },
+    { PAGARME_WEBHOOK_BASIC_PASSWORD: "short" },
+    { PAGARME_WEBHOOK_BASIC_PASSWORD: "x".repeat(256) },
+    { PAGARME_WEBHOOK_BASIC_PASSWORD: `${"x".repeat(32)} y` },
+    { PAGARME_BACKGROUND_PROCESSING: "typo" },
+    { PAGARME_LIVE_DEMO_SITE_ID: "demo-wedding" },
+  ])("rejects invalid setting %j", (override) => {
+    expect(() =>
+      readGiftPaymentConfig({ ...configured, ...override }, "development"),
+    ).toThrow("Gift payment configuration is invalid");
   });
-});
 
-describe("Sandbox buyer homologation configuration", () => {
-  it("selects exactly one site only in development Sandbox", () => {
+  it("accepts explicit background processing flags", () => {
     expect(
       readGiftPaymentConfig(
-        {
-          ...configured,
-          ASAAS_SANDBOX_BUYER_GROSS_UP_SITE_ID: "site-one",
-        },
+        { ...configured, PAGARME_BACKGROUND_PROCESSING: "true" },
         "development",
       ),
-    ).toMatchObject({ sandboxBuyerGrossUpSiteId: "site-one" });
+    ).toMatchObject({ backgroundProcessing: true });
+    expect(
+      readGiftPaymentConfig(
+        { ...configured, PAGARME_BACKGROUND_PROCESSING: "false" },
+        "development",
+      ),
+    ).not.toHaveProperty("backgroundProcessing");
   });
-  it.each([
-    ["production", "live", "site-one"],
-    ["test", "sandbox", "site-one"],
-    ["development", "sandbox", ""],
-    ["development", "sandbox", "site-one,site-two"],
-  ] as const)("rejects out-of-scope opt-in %s/%s/%s", (target, mode, site) => {
+
+  it.each(["demo-wedding,demo-wedding", "demo-wedding,", "Invalid Site"])(
+    "rejects invalid showcase IDs %j",
+    (PAGARME_LIVE_DEMO_SITE_ID) => {
+      expect(() =>
+        readGiftPaymentConfig(
+          {
+            ...configured,
+            PAGARME_MODE: "live",
+            PAGARME_SECRET_KEY: liveKey,
+            PAGARME_LIVE_DEMO_SITE_ID,
+          },
+          "production",
+        ),
+      ).toThrow("Gift payment configuration is invalid");
+    },
+  );
+
+  it("rejects showcase IDs while disabled", () => {
     expect(() =>
       readGiftPaymentConfig(
-        {
-          ...configured,
-          ASAAS_MODE: mode,
-          ASAAS_SANDBOX_BUYER_GROSS_UP_SITE_ID: site,
-        },
-        target,
+        { PAGARME_MODE: "disabled", PAGARME_LIVE_DEMO_SITE_ID: "demo-wedding" },
+        "production",
       ),
     ).toThrow("Gift payment configuration is invalid");
   });
