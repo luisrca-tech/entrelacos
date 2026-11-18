@@ -37,10 +37,10 @@ const account = {
 };
 
 describe("Pagar.me receiving setup contracts", () => {
-  it("records consent to Pagar.me, never to Asaas", () => {
+  it("records consent to Pagar.me only", () => {
     expect(receivingSetupConsentVersion).toBe("pagarme-receiving-v1");
     expect(receivingSetupDisclosure.text).toContain("Pagar.me");
-    expect(JSON.stringify(receivingSetupDisclosure)).not.toMatch(/asaas/i);
+    expect(receivingSetupDisclosure.text).not.toMatch(/subconta|BaaS/i);
   });
 
   it("accepts the individual recipient data with the couple's own bank account", () => {
@@ -55,8 +55,8 @@ describe("Pagar.me receiving setup contracts", () => {
   });
 
   it.each([
-    ["Asaas consent flag", { consentToAsaas: true }],
-    ["Pix consent", { pixConsentVersion: "asaas-incoming-pix-v1" }],
+    ["previous provider consent flag", { consentToPreviousProvider: true }],
+    ["Pix consent", { pixConsentVersion: "incoming-pix-v1" }],
   ])("rejects the retired %s", (_label, extra) => {
     expect(
       receivingSetupInputSchema.safeParse({
@@ -126,12 +126,14 @@ describe("Pagar.me receiving setup contracts", () => {
 });
 
 describe("owner finance alert contract", () => {
-  it("links to the provider payment without naming Asaas", () => {
+  it("links to the provider payment with a neutral field name", () => {
     expect(Object.keys(ownerFinanceAlertSchema.shape)).toContain(
       "providerPaymentUrl",
     );
-    expect(Object.keys(ownerFinanceAlertSchema.shape)).not.toContain(
-      "asaasPaymentUrl",
-    );
+    expect(
+      Object.keys(ownerFinanceAlertSchema.shape).filter((key) =>
+        key.endsWith("PaymentUrl"),
+      ),
+    ).toEqual(["providerPaymentUrl"]);
   });
 });

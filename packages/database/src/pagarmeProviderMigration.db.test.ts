@@ -15,7 +15,7 @@ afterAll(async () => {
 });
 
 describe("0031 Pagar.me provider migration", () => {
-  it("removes the Asaas-only tables", async () => {
+  it("removes the previous provider's tables", async () => {
     const result = await connection.pool.query(
       "SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_name = ANY($1)",
       [
@@ -42,6 +42,6 @@ describe("0031 Pagar.me provider migration", () => {
     );
     expect(result.rows).toHaveLength(1);
     expect(result.rows[0].definition).toContain("pagarme-withdrawal:");
-    expect(result.rows[0].definition).not.toContain("asaas");
+    expect(result.rows[0].definition).not.toContain("-transfer:");
   });
 });

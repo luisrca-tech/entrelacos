@@ -76,7 +76,6 @@ function context(
       accountState: current.accountState,
       provider: current.providerStatus,
       ready: false,
-      destinationSaved: false,
     }),
     incomingAvailable: true,
     onRetry: vi.fn(),
@@ -84,12 +83,12 @@ function context(
 }
 
 describe("receiving guided track", () => {
-  it("shows one next step, the five steps and the guide on the overview", () => {
+  it("shows one next step, the four steps and the guide on the overview", () => {
     const html = renderToStaticMarkup(
       createElement(ReceivingOverviewTrack, { context: context() }),
     );
-    expect(html).toContain("3 de 5 concluídas");
-    expect(html).toContain("Próximo passo · Etapa 3 de 5");
+    expect(html).toContain("3 de 4 concluídas");
+    expect(html).toContain("Próximo passo · Etapa 3 de 4");
     expect(html.match(/Próximo passo/g)).toHaveLength(1);
     expect(html).toContain('href="/sites/site-one/receiving/activation"');
     // The next-step card offers a single action; a second link to the same
@@ -98,15 +97,13 @@ describe("receiving guided track", () => {
     expect(html).not.toContain(
       'href="/sites/site-one/receiving/activation#duvidas"',
     );
-    for (const label of ["Concluída", "Agora", "Pode fazer já"])
-      expect(html).toContain(label);
-    expect(html).toContain("Fazer agora");
+    for (const label of ["Concluída", "Agora"]) expect(html).toContain(label);
     expect(html).toContain('href="/sites/site-one/receiving-guide"');
     expect(html).not.toContain("PENDING");
     expect(html).not.toContain("ONBOARDING");
   });
 
-  it("keeps account and fee information accessible while Pagar.me reviews", () => {
+  it("keeps the identity step in focus while Pagar.me reviews", () => {
     const html = renderToStaticMarkup(
       createElement(ReceivingOverviewTrack, {
         context: context({
@@ -119,32 +116,31 @@ describe("receiving guided track", () => {
         }),
       }),
     );
-    expect(html).toContain("Próximo passo · Etapa 4 de 5");
-    expect(html).toContain("Enquanto a Pagar.me analisa");
+    expect(html).toContain("Próximo passo · Etapa 3 de 4");
+    expect(html).toContain("A Pagar.me está analisando sua identidade.");
     expect(html).toContain("Em análise pela Pagar.me");
   });
 
-  it("offers the Asaas checklist, the missing e-mail help and support", () => {
+  it("offers the Pagar.me identity check, its status and support", () => {
     const html = renderToStaticMarkup(
       createElement(ActivationStep, { context: context() }),
     );
     expect(supportMailto).toBe(
-      "mailto:luisrcadev@gmail.com?subject=Ajuda%20com%20a%20ativa%C3%A7%C3%A3o%20no%20Asaas",
+      "mailto:luisrcadev@gmail.com?subject=Ajuda%20com%20os%20recebimentos",
     );
     expect(html).toContain(`href="${supportMailto}"`);
     for (const task of [
-      "Criar sua senha",
-      "Confirmar o celular",
-      "Enviar documentos e selfie",
+      "Dados do recebedor",
+      "Verificação de identidade",
+      "Pronto para receber",
     ])
       expect(html).toContain(task);
-    expect(html).toContain('aria-expanded="false"');
-    expect(html).toContain("Não recebi o e-mail do Asaas");
+    expect(html).toContain("Etapa 3 de 4");
+    expect(html).toContain("Verificar identidade");
+    expect(html).toContain("Cadastro recebido");
+    expect(html).toContain("Situação na Pagar.me");
     expect(html).toContain("Dúvidas desta etapa");
-    expect(html).toContain(
-      'href="https://sandbox.asaas.com/login/auth?customerSignUpOriginChannel=HOME"',
-    );
-    expect(html).toContain("Verificação pendente");
+    expect(html).not.toContain('type="checkbox"');
     expect(html).not.toContain('role="alert"');
   });
 
@@ -167,15 +163,16 @@ describe("receiving guided track", () => {
         }),
       );
     expect(status("UNDER_REVIEW")).toContain("Em análise");
+    expect(status("UNDER_REVIEW")).not.toContain(">Verificar identidade<");
     expect(status("APPROVED")).toContain("Feito");
     for (const state of ["BLOCKED", "SUSPENDED"] as const) {
       const html = status(state);
-      expect(html).toContain("Bloqueada");
+      expect(html).toContain("Precisa de ajuste");
       expect(html).toContain("A Pagar.me bloqueou ou suspendeu o recebedor.");
     }
   });
 
-  it("keeps the Asaas tasks read-only for someone who is not the holder", () => {
+  it("leaves the identity check to the holder", () => {
     const html = renderToStaticMarkup(
       createElement(ActivationStep, {
         context: context({
@@ -184,8 +181,22 @@ describe("receiving guided track", () => {
         }),
       }),
     );
-    expect(html).toContain("Somente Pedro conclui estas tarefas no Asaas.");
-    expect(html).not.toContain("Não recebi o e-mail do Asaas");
-    expect(html).toMatch(/type="checkbox"[^>]*disabled=""/);
+    expect(html).toContain("Somente Pedro verifica a identidade na Pagar.me.");
+    expect(html).not.toContain(">Verificar identidade<");
+  });
+
+  it("lets the platform owner open the identity check for the holder", () => {
+    const html = renderToStaticMarkup(
+      createElement(ActivationStep, {
+        context: {
+          ...context({
+            isHolder: false,
+            holder: { userId: "other", name: "Pedro" },
+          }),
+          owner: true,
+        },
+      }),
+    );
+    expect(html).toContain("Verificar identidade");
   });
 });

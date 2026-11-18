@@ -8,22 +8,6 @@ import { showSandboxNotice } from "@entrelacos/ui";
 import { Check } from "lucide-react";
 import type { ReactNode } from "react";
 import { AdminButton } from "../../components/AdminButton";
-import type { SavedPixDestinationSummary } from "../../components/savedPixDestination";
-
-const keyTypeLabels: Record<SavedPixDestinationSummary["keyType"], string> = {
-  CPF: "CPF",
-  CNPJ: "CNPJ",
-  EMAIL: "E-mail",
-  PHONE: "Celular",
-  EVP: "Chave aleatória",
-};
-
-export function destinationKeyLabel(destination: SavedPixDestinationSummary) {
-  return `${keyTypeLabels[destination.keyType]} ${destination.maskedKey}`;
-}
-export function destinationLabel(destination: SavedPixDestinationSummary) {
-  return `${destination.ownerName} · ${destinationKeyLabel(destination)}`;
-}
 
 const reasonMessages: Record<
   NonNullable<ReceivingReadiness["reason"]>,
@@ -60,7 +44,6 @@ export function ReceivingStatusCard({
   error = false,
   onRetry,
   action,
-  destination = null,
 }: {
   siteId: string;
   readiness: ReceivingReadiness | null;
@@ -68,7 +51,6 @@ export function ReceivingStatusCard({
   error?: boolean;
   onRetry: () => void;
   action?: ReactNode;
-  destination?: SavedPixDestinationSummary | null;
 }) {
   const parsedAccess = siteAccessSchema.safeParse(access);
   const canReadStatus =
@@ -152,12 +134,6 @@ export function ReceivingStatusCard({
               ? "Sandbox — status válido apenas para testes, sem movimentação de dinheiro real."
               : "Convidados já podem presentear por Pix e cartão."}
           </p>
-          {destination && (
-            <p className="m-0 min-w-0 [overflow-wrap:anywhere]">
-              Saques para <strong>{destinationLabel(destination)}</strong>
-              {action && <> · {action}</>}
-            </p>
-          )}
         </section>
       );
     } else {
@@ -176,7 +152,7 @@ export function ReceivingStatusCard({
               : "Os recebimentos precisam ser verificados."}
           </p>
           <p className="m-0 text-sm text-admin-text-secondary">
-            Acompanhe a etapa pendente em Ativação.
+            Acompanhe a etapa pendente em Verificar identidade.
           </p>
         </>
       );

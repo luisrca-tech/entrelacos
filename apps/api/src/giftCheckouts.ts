@@ -1,13 +1,13 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import {
-  checkoutStatusInputSchema,
   GIFT_PLATFORM_TARIFFS,
   type GiftCheckoutCreateResult,
   type GiftCheckoutPix,
   type GiftCheckoutState,
   type GiftCheckoutStatus,
   giftCheckoutCreateInputSchema,
+  giftCheckoutStatusInputSchema,
   giftCheckoutStatusSchema,
   giftQuoteSchema,
   publicGiftItemSchema,
@@ -745,7 +745,7 @@ export function createGiftCheckoutService(
     ): Promise<GiftCheckoutStatus> {
       try {
         const site = giftQuoteSchema.shape.siteId.safeParse(siteId);
-        const body = checkoutStatusInputSchema.safeParse(input);
+        const body = giftCheckoutStatusInputSchema.safeParse(input);
         if (!site.success || !body.success) return fail("QUOTE_INVALID");
         const tokenHash = createHash("sha256")
           .update(body.data.recoveryToken, "utf8")

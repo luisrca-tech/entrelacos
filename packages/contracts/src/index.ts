@@ -1151,5 +1151,4 @@ export const block7EndpointPaths = {
 export type Block7EndpointPath =
   (typeof block7EndpointPaths)[keyof typeof block7EndpointPaths];
 export * from "./giftPricingSettings";
-export * from "./receivingPixDestinationContracts";
 export * from "./receivingSetupContracts";

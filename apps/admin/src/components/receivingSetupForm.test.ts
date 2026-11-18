@@ -2,7 +2,6 @@ import { receivingSetupAccountSchema } from "@entrelacos/contracts";
 import { describe, expect, it } from "vitest";
 import {
   incomeToCents,
-  normalizePixKey,
   normalizeSetupAccount,
   parseIncome,
 } from "./receivingSetupForm";
@@ -100,19 +99,5 @@ describe("receiving setup form", () => {
         receivingSetupAccountSchema.safeParse(normalizeSetupAccount(values))
           .success,
       ).toBe(false);
-  });
-});
-
-describe("Pix key input", () => {
-  it("removes masks only from numeric key types", () => {
-    expect(normalizePixKey("CPF", " 123.456.789-00 ")).toBe("12345678900");
-    expect(normalizePixKey("CNPJ", "12.345.678/0001-90")).toBe(
-      "12345678000190",
-    );
-    expect(normalizePixKey("PHONE", "(11) 98765-4321")).toBe("11987654321");
-    expect(normalizePixKey("EMAIL", " Ana@Email.com ")).toBe("Ana@Email.com");
-    expect(
-      normalizePixKey("EVP", " 0f8fad5b-d9cb-469f-a165-70867728950e "),
-    ).toBe("0f8fad5b-d9cb-469f-a165-70867728950e");
   });
 });

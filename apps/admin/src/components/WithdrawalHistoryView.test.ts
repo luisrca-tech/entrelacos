@@ -142,7 +142,6 @@ describe("withdrawal history view", () => {
     expect(html).toContain("08:00");
     expect(html).not.toContain(withdrawal.id);
     expect(html).not.toContain("destinationVersion");
-    expect(html).not.toContain("Asaas");
     expect(html).not.toContain("conta bancária");
   });
 

@@ -1,6 +1,6 @@
 import {
-  type CheckoutStatus,
   checkoutRecoveryTokenSchema,
+  type GiftCheckoutStatus,
 } from "@entrelacos/contracts";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -26,19 +26,18 @@ const pending = {
   method: "PIX",
   mode: "sandbox",
 } as const;
-const terminalStatus: CheckoutStatus = {
+const terminalStatus: GiftCheckoutStatus = {
   siteId: "wedding-a",
   quoteId: pending.quoteId,
   requestId: pending.requestId,
-  orderId: "order-a",
-  attemptId: "attempt-a",
+  checkoutId: "checkout-a",
   method: "PIX",
   mode: "sandbox",
   state: "RECEIVED",
   observedAt: "2026-10-12T12:00:00.000Z",
   closedReason: null,
   mayStartNewAttempt: false,
-  checkout: null,
+  pix: null,
 };
 const withHistory = {
   ...pending,
@@ -201,8 +200,7 @@ describe("pending checkout recovery storage", () => {
       },
     },
     { terminalStatus: undefined },
-    { lastStatus: { ...withHistory.lastStatus, orderId: "order-b" } },
-    { lastStatus: { ...withHistory.lastStatus, attemptId: "attempt-b" } },
+    { lastStatus: { ...withHistory.lastStatus, checkoutId: "checkout-b" } },
     { lastStatus: { ...withHistory.lastStatus, siteId: "wedding-b" } },
   ])(
     "keeps corrupt or contradictory historical metadata locked: %j",
@@ -331,7 +329,7 @@ describe("pending checkout recovery storage", () => {
     expect(readPendingGiftCheckout(target, "wedding-a")).toEqual(pending);
     expect(readPendingGiftCheckout(target, "wedding-b")).toBeNull();
     expect(target.getItem(giftPendingStorageKey("wedding-a"))).not.toMatch(
-      /wallet|payer|amount|hostedUrl|paid/i,
+      /wallet|payer|buyer|card|cpf|amount|paid/i,
     );
   });
   it("refuses corrupt/private recovery records rather than silently opening another attempt", () => {
@@ -350,6 +348,25 @@ describe("pending checkout recovery storage", () => {
         mode: "disabled",
       }),
     ).toThrow();
+    for (const secret of [
+      { cardToken: "token_abc123" },
+      { cardNumber: "4111111111111111" },
+      {
+        buyer: {
+          name: "Ana Souza",
+          email: "ana@example.com",
+          cpf: "12345678909",
+          phone: "11987654321",
+        },
+      },
+    ])
+      expect(() =>
+        writePendingGiftCheckout(target, "wedding-a", {
+          ...pending,
+          ...secret,
+        } as never),
+      ).toThrow();
+    expect(target.getItem(giftPendingStorageKey("wedding-a"))).toBe("broken");
   });
   it("does not swallow a failed persistence step before a financial request", () => {
     const target = {

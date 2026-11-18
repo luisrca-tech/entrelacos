@@ -8,7 +8,7 @@ import { withdrawalProviderObservation } from "./withdrawalProviderObservationSc
 const dialect = new PgDialect();
 
 describe("Pagar.me provider schema", () => {
-  it("drops the Asaas withdrawal authorization and Pix preparation tables", () => {
+  it("drops the withdrawal authorization and Pix preparation tables", () => {
     expect(financialSchema).not.toHaveProperty(
       "withdrawalAuthorizationCandidate",
     );
@@ -24,10 +24,10 @@ describe("Pagar.me provider schema", () => {
     );
     const query = check ? dialect.sqlToQuery(check.value).sql : "";
     expect(query).toContain("'pagarme-withdrawal:'");
-    expect(query).not.toContain("asaas");
+    expect(query).not.toContain("-transfer:");
   });
 
-  it("drops the Asaas incoming Pix consent from the receiving holder", () => {
+  it("drops the incoming Pix consent from the receiving holder", () => {
     const config = getTableConfig(receivingSetupHolder);
     expect(config.columns.map((column) => column.name)).not.toContain(
       "pix_preparation_consent",

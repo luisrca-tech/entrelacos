@@ -33,6 +33,25 @@ Executable C1 uses `nominalCents`, selected `membershipRole` and an explicit boo
 
 PF/BaaS acceptance, provider account-specific fees, bank validation, ongoing credential operation and withdrawal approvals remain unresolved production gates. No one-cent transfer with an assumed automatic refund is adopted. Local code, injected deterministic tests and shared schema metadata are authorized; migrations against shared databases, live provider resources/money, Git publication and deployment retain explicit authorization boundaries.
 
+## Payment provider switch to Pagar.me — 2026-11-18
+
+Gift payments, couple receiving and withdrawals move from Asaas to Pagar.me v5 completely: no neutral provider interface, provider flag, coexistence or data migration. The one existing Asaas test charge is handled manually; old migrations keep their historical references.
+
+| Area | Decision |
+| --- | --- |
+| Checkout | Transparent checkout. Cards are tokenized in the browser with `PUBLIC_PAGARME_PUBLIC_KEY`; Pix shows its QR code in the site modal. The API never receives card numbers or CVV. |
+| Pricing | The guest pays everything; the couple receives 100% of the gift. `G = ceil((V + 2% commission + fixed fees) / (1 − rate))`, where the rate is the D+2 CET for the installment count (card) or the Pix MDR. Numbers live in `packages/contracts/src/giftTariffs.ts`. |
+| Installments | Card 1x–6x, minimum R$5.00 per installment. The 7–12x tier is removed. |
+| Split | Sent at authorization. Platform recipient: remainder, `liable`, pays processing fee and remainder. Couple recipient: flat amount grossed up for anticipation, all options off. |
+| Receiving | One individual (CPF) recipient per site with automatic anticipation on and automatic transfer off. Card amounts are available in about 2 days for any installment count; Pix immediately. |
+| Identity | KYC through a short-lived Pagar.me link and QR code generated from the panel, never stored. Receiving requires an approved recipient. |
+| Withdrawal | On demand to the recipient's bank account (same CPF). R$3.67 per withdrawal, free for Banco Stone accounts, shown before confirming. |
+| Webhook | Single `POST /v1/webhooks/pagarme` with Basic auth, idempotent through `financial_event_inbox`; the worker re-reads the order or recipient before posting. |
+| Refunds and chargebacks | Refunds are operator-only and total. Chargebacks are absorbed by the platform recipient and raise an operator alert. |
+| Disclosure | Text-only "Pagamentos processados por Pagar.me, uma empresa Stone." without a logo, pending confirmation of an official partner seal. |
+
+Operational details: [Pagar.me operation](pagarmeOperation.md), [gift pricing](giftPricingPanel.md), [settlement](giftPricingSettlement.md). Open points to confirm in the sandbox: gateway fee on Pix, whether a flat card split applies per charge or per installment, and the exact chargeback webhook event name.
+
 ## Confirmed technical boundaries
 
 - Public sites use Astro static builds on Cloudflare Workers Static Assets.

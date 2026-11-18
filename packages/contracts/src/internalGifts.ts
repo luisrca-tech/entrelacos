@@ -570,103 +570,19 @@ export const checkoutRecoveryTokenSchema = z
   .length(43)
   .regex(/^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$/);
 /**
- * @deprecated Hosted-checkout contract still read by the couple sites until
- * they move to the transparent Pagar.me checkout. The API speaks
- * `giftCheckoutCreateInputSchema` / `giftCheckoutStatusSchema`.
+ * Status lookup of a guest checkout. `recoveryToken` is the capability the
+ * browser generated before creating the checkout; only its hash is stored.
  */
-export const checkoutCreateInputSchema = z
+export const giftCheckoutStatusInputSchema = z
   .object({
     quoteId: id,
     requestId: id,
     recoveryToken: checkoutRecoveryTokenSchema,
   })
-  .strict()
-  .extend({
-    payer: z
-      .object({
-        name: z.string().trim().min(2).max(100),
-        cpfCnpj: z.string().regex(/^(?:[0-9]{11}|[0-9]{14})$/),
-        email: z.string().trim().max(254).email(),
-      })
-      .strict()
-      .optional(),
-  });
-export const checkoutStatusInputSchema = checkoutCreateInputSchema.omit({
-  payer: true,
-});
-export type CheckoutCreateInput = z.infer<typeof checkoutCreateInputSchema>;
-export type CheckoutStatusInput = z.infer<typeof checkoutStatusInputSchema>;
-export const checkoutResultSchema = z
-  .object({
-    orderId: id,
-    attemptId: id,
-    quoteId: id,
-    method: giftPaymentMethodSchema,
-    hostedUrl: z
-      .string()
-      .url()
-      .refine((value) => {
-        const url = new URL(value);
-        return url.protocol === "https:" && !url.username && !url.password;
-      }),
-    mode: receivingModeSchema,
-  })
   .strict();
-export type CheckoutResult = z.infer<typeof checkoutResultSchema>;
-export const checkoutResponseSchema = z
-  .object({ checkout: checkoutResultSchema })
-  .strict();
-
-export const checkoutStatusSchema = z
-  .object({
-    siteId: id,
-    quoteId: id,
-    requestId: id,
-    orderId: id,
-    attemptId: id,
-    method: giftPaymentMethodSchema,
-    mode: z.enum(["sandbox", "live"]),
-    state: z.enum([
-      "CREATING",
-      "OUTCOME_UNKNOWN",
-      "AWAITING_PAYMENT",
-      "CONFIRMED",
-      "RECEIVED",
-      "CLOSED_UNPAID",
-      "REFUNDED",
-    ]),
-    observedAt: instant.nullable(),
-    closedReason: z.enum(["FAILED", "EXPIRED", "CANCELED"]).nullable(),
-    mayStartNewAttempt: z.boolean(),
-    checkout: checkoutResultSchema.nullable(),
-  })
-  .strict()
-  .refine((value) => {
-    if (value.mayStartNewAttempt !== (value.state === "CLOSED_UNPAID"))
-      return false;
-    if ((value.closedReason !== null) !== (value.state === "CLOSED_UNPAID"))
-      return false;
-    if (
-      value.state !== "CREATING" &&
-      value.state !== "OUTCOME_UNKNOWN" &&
-      value.observedAt === null
-    )
-      return false;
-    if (value.state !== "AWAITING_PAYMENT") return value.checkout === null;
-    const checkout = value.checkout;
-    return (
-      checkout !== null &&
-      checkout.orderId === value.orderId &&
-      checkout.attemptId === value.attemptId &&
-      checkout.quoteId === value.quoteId &&
-      checkout.method === value.method &&
-      checkout.mode === value.mode
-    );
-  }, "Contradictory checkout status");
-export type CheckoutStatus = z.infer<typeof checkoutStatusSchema>;
-export const checkoutStatusResponseSchema = z
-  .object({ status: checkoutStatusSchema })
-  .strict();
+export type GiftCheckoutStatusInput = z.infer<
+  typeof giftCheckoutStatusInputSchema
+>;
 
 /**
  * Transparent Pagar.me checkout. The card is tokenized in the browser with the
@@ -689,9 +605,7 @@ export const giftCheckoutCardTokenSchema = z
   .regex(/^token_[A-Za-z0-9]{1,128}$/);
 export const giftCheckoutCreateInputSchema = z
   .object({
-    quoteId: id,
-    requestId: id,
-    recoveryToken: checkoutRecoveryTokenSchema,
+    ...giftCheckoutStatusInputSchema.shape,
     method: giftPaymentMethodSchema,
     installments: giftInstallmentCountSchema,
     cardToken: giftCheckoutCardTokenSchema.optional(),

@@ -72,7 +72,7 @@ describe("maximum withdrawal budget with actual settlement", () => {
       maskedDestination: "Pix EMAIL: c***@p***",
       payoutRecipientName: "Sandbox Recipient",
       operatorDisplayName: "Original Holder",
-      policyVersion: "asaas-pix-max-v1-200",
+      policyVersion: "pix-max-v1-200",
       issuedAt: "2026-10-19T10:00:00.000Z",
       expiresAt: "2026-10-19T10:01:00.000Z",
     };

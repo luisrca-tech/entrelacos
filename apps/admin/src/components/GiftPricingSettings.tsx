@@ -351,8 +351,7 @@ function PricingComparison({
       )}
       <p className="m-0 text-xs leading-[1.5] text-admin-text-secondary">
         No Pix, você recebe assim que o pagamento é confirmado. No cartão, mesmo
-        parcelado, o valor é antecipado e normalmente chega em até 2 dias úteis,
-        sujeito à análise do Asaas.
+        parcelado, o valor é antecipado e fica disponível em cerca de 2 dias.
       </p>
     </div>
   );

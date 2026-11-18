@@ -34,7 +34,7 @@ export async function recoverGiftCheckout(
     {
       method: pending.method,
       mode: pending.mode,
-      ...(known ? { orderId: known.orderId, attemptId: known.attemptId } : {}),
+      ...(known ? { checkoutId: known.checkoutId } : {}),
     },
   );
   if (!isCurrent()) return null;

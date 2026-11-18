@@ -123,7 +123,9 @@ describe("receiving status card", () => {
   it("keeps the disabled state pending and explains how to activate receiving", () => {
     const html = render({ readiness: readiness({}) });
     expect(html).toContain("Os recebimentos ainda não foram configurados");
-    expect(html).toContain("Acompanhe a etapa pendente em Ativação.");
+    expect(html).toContain(
+      "Acompanhe a etapa pendente em Verificar identidade.",
+    );
     expect(html).not.toContain("fluxo aprovado");
     expect(html).not.toContain("este cartão");
     expect(html).not.toContain("Configurar recebimentos");
@@ -190,28 +192,6 @@ describe("receiving status card", () => {
     expect(html).not.toContain("Ambiente de testes");
     expect(html).not.toContain("projeção de prontidão");
     expect(html).not.toContain("Saques para");
-  });
-
-  it("names the withdrawal destination and offers the change link it receives", () => {
-    const html = renderToStaticMarkup(
-      createElement(ReceivingStatusCard, {
-        siteId: "wedding-a",
-        readiness: ready,
-        access: allowedAccess,
-        onRetry: vi.fn(),
-        destination: {
-          ownerName: "Ana Souza",
-          keyType: "CPF",
-          maskedKey: "***.456.789-**",
-          bankName: "Banco Exemplo",
-        },
-        action: createElement("a", { href: "/account" }, "Alterar"),
-      }),
-    );
-    expect(html).toContain("Saques para");
-    expect(html).toContain("Ana Souza · CPF ***.456.789-**");
-    expect(html).toContain('href="/account"');
-    expect(html).not.toContain("<button");
   });
 
   it("labels sandbox status without implying movement of real money", () => {

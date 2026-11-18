@@ -26,7 +26,6 @@ import type {
   ReceivingSetupScope,
 } from "./ReceivingSetup";
 import {
-  AccountStep,
   ActivationStep,
   DetailsStep,
   FeesStep,
@@ -177,17 +176,13 @@ export function createReceivingAccountSetupController(
       if (revision === active) fail(cause);
     }
   }
-  function createGuard(
-    accountStates: readonly string[],
-    allowOwnerRead = false,
-  ) {
+  function createGuard(accountStates: readonly string[]) {
     const guard: FinancialReauthenticationGuard = {
       isCurrent: () =>
         current() &&
-        ((allowOwnerRead && ownerView) ||
-          (actor?.user.role === "SITE_ADMIN" &&
-            !!scopeKey &&
-            state.setup?.isHolder === true)) &&
+        actor?.user.role === "SITE_ADMIN" &&
+        !!scopeKey &&
+        state.setup?.isHolder === true &&
         state.status === "ready" &&
         state.setup !== null &&
         accountStates.includes(state.setup.accountState),
@@ -242,7 +237,6 @@ export function createReceivingAccountSetupController(
     return guard;
   }
   const guard = createGuard(["NOT_CREATED", "PENDING"]);
-  const pixGuard = createGuard(["CREATED"], true);
   const incomingGuard = createGuard(["CREATED"]);
   async function verifyIncoming(): Promise<ReceivingReadiness | undefined> {
     if (
@@ -293,25 +287,6 @@ export function createReceivingAccountSetupController(
         revision === active &&
         current() &&
         cause instanceof ApiError &&
-        cause.status === 409 &&
-        [
-          "RECEIVING_PIX_PREPARATION_PENDING",
-          "RECEIVING_PIX_PREPARATION_REVIEW_REQUIRED",
-        ].includes(cause.code)
-      ) {
-        await refresh(false);
-        if (!current() || state.status !== "ready") return;
-        update({
-          ...state,
-          status: "ready",
-          message: cause.code.endsWith("REVIEW_REQUIRED")
-            ? "A preparação dos recebimentos está em verificação. Não é necessário cadastrar outra chave. Se a situação persistir, entre em contato com o suporte."
-            : "A preparação dos recebimentos aguarda a liberação da Pagar.me. Conclua as pendências do cadastro e use Verificar situação para acompanhar.",
-        });
-      } else if (
-        revision === active &&
-        current() &&
-        cause instanceof ApiError &&
         cause.status === 503 &&
         state.setup
       ) {
@@ -331,7 +306,6 @@ export function createReceivingAccountSetupController(
   });
   return {
     guard,
-    pixGuard,
     incomingGuard,
     refresh,
     getState: () => structuredClone(state),
@@ -512,7 +486,6 @@ export function ReceivingAccountSetup(
       platformOwner={props.platformOwner}
       state={state}
       guard={controller.current?.guard}
-      pixGuard={controller.current?.pixGuard}
       incomingGuard={controller.current?.incomingGuard}
       ports={ports}
       form={form}
@@ -555,7 +528,6 @@ export function ReceivingAccountSetupView({
   platformOwner = false,
   state,
   guard,
-  pixGuard,
   incomingGuard,
   ports,
   onRetry,
@@ -571,7 +543,6 @@ export function ReceivingAccountSetupView({
   platformOwner?: boolean;
   state: ReceivingAccountSetupState;
   guard?: FinancialReauthenticationGuard;
-  pixGuard?: FinancialReauthenticationGuard;
   incomingGuard?: FinancialReauthenticationGuard;
   ports?: ReceivingSetupPorts;
   onRetry?: () => void;
@@ -608,8 +579,6 @@ export function ReceivingAccountSetupView({
     accountState: setup?.accountState ?? "NOT_CREATED",
     provider: setup?.providerStatus ?? null,
     ready: receivingReady,
-    destinationSaved:
-      !!currentReadiness && currentReadiness.destinationVersion !== null,
   });
   const context: ReceivingStepsContext = {
     scope,
@@ -622,7 +591,6 @@ export function ReceivingAccountSetupView({
     readiness: currentReadiness,
     ...track,
     guard,
-    pixGuard,
     incomingGuard,
     ports,
     form,
@@ -639,8 +607,6 @@ export function ReceivingAccountSetupView({
       return <HolderStep context={context} />;
     case "details":
       return <DetailsStep context={context} />;
-    case "account":
-      return <AccountStep context={context} />;
     case "fees":
       return <FeesStep context={context} pricingEnabled={pricingEnabled} />;
     default:

@@ -225,7 +225,7 @@ describe("gift pricing preview", () => {
         /Líquido do casal|Comissão|serviço Entrelaços|32 dias/i,
       );
       expect(dialog.textContent).toContain(
-        "normalmente chega em até 2 dias úteis, sujeito à análise do Asaas",
+        "o valor é antecipado e fica disponível em cerca de 2 dias.",
       );
     } finally {
       await view.close();
@@ -302,7 +302,7 @@ describe("gift pricing preview", () => {
           }),
         );
         expect(rowValue(dialog, "Taxas pagas pelo convidado")).toBe(label);
-        expect(dialog.textContent).not.toMatch(/Comissão|Processamento Asaas/);
+        expect(dialog.textContent).not.toMatch(/Comissão|Processamento/);
         expect(dialog.querySelector("input, form")).toBeNull();
       } finally {
         await view.close();

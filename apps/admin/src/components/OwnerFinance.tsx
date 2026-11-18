@@ -478,7 +478,7 @@ function GiftsPanel({
           <MetricCard
             label="Antecipação real"
             value={formatCents(summary.realAnticipationCents)}
-            hint="Taxa cobrada pelo Asaas até agora"
+            hint="Taxa cobrada pela Pagar.me até agora"
           />
         </dl>
       )}

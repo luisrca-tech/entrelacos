@@ -266,39 +266,7 @@ describe("receiving account setup", () => {
     expect(v.controller.getState().status).toBe("ready");
     v.controller.dispose();
   });
-  it.each(["PENDING", "REVIEW_REQUIRED"])(
-    "keeps activation usable and explains preparation %s without repeating its POST",
-    async (state) => {
-      vi.stubGlobal("__APP_ENV__", "production");
-      const v = fixture({
-        ...createdSetup,
-        mode: "live",
-        providerStatus: approved,
-      });
-      const original = v.request.getMockImplementation();
-      assert(original);
-      v.request.mockImplementation(async (path, options) => {
-        if (path.endsWith("/incoming-verification"))
-          throw new ApiError(409, `RECEIVING_PIX_PREPARATION_${state}`);
-        return original(path, options);
-      });
-      await v.controller.refresh();
-      expect(v.controller.getState()).toMatchObject({
-        status: "ready",
-        setup: { accountState: "CREATED" },
-      });
-      expect(v.controller.getState().message).toContain(
-        state === "PENDING" ? "liberação da Pagar.me" : "em verificação",
-      );
-      expect(
-        v.request.mock.calls.filter(([path]) =>
-          path.endsWith("/incoming-verification"),
-        ),
-      ).toHaveLength(1);
-      v.controller.dispose();
-    },
-  );
-  it("explains automatic Pix preparation while leaving only the withdrawal key for the holder to configure", () => {
+  it("explains the review after identity verification without any Pix setup", () => {
     vi.stubGlobal("__APP_ENV__", "production");
     const v = fixture();
     const html = renderToStaticMarkup(
@@ -311,11 +279,11 @@ describe("receiving account setup", () => {
         },
       }),
     );
-    expect(html).toContain("prepara automaticamente");
-    expect(html).not.toContain("cadastre uma chave Pix de entrada");
+    expect(html).toContain("Depois: análise da Pagar.me");
+    expect(html).not.toContain("chave Pix");
     expect(html).not.toContain("Confirmar minha conta de recebimento");
   });
-  it("shows the live holder a visible provider activation link and explains where to enter SMS codes", () => {
+  it("shows the live holder the identity check and the support contact", () => {
     vi.stubGlobal("__APP_ENV__", "production");
     const values = fixture();
     const html = renderToStaticMarkup(
@@ -329,28 +297,19 @@ describe("receiving account setup", () => {
       }),
     );
     const visible = html.slice(0, html.indexOf('id="duvidas"'));
-    expect(visible).toContain("Abrir o Asaas");
+    expect(visible).toContain(">Verificar identidade<");
     expect(visible).toContain(
-      'href="https://www.asaas.com/login/auth?customerSignUpOriginChannel=HOME"',
-    );
-    expect(visible).toContain('target="_blank"');
-    expect(visible).toContain('rel="noopener noreferrer"');
-    expect(visible).toContain("código recebido por SMS");
-    expect(visible).toContain("tela de ativação do Asaas");
-    expect(visible).toContain("Minha conta");
-    expect(visible).toContain("Não recebi o e-mail do Asaas");
-    expect(visible).toContain(
-      'href="mailto:luisrcadev@gmail.com?subject=Ajuda%20com%20a%20ativa%C3%A7%C3%A3o%20no%20Asaas"',
+      'href="mailto:luisrcadev@gmail.com?subject=Ajuda%20com%20os%20recebimentos"',
     );
     const guidance = visible.slice(
-      visible.indexOf('aria-label="Tarefas no Asaas"'),
+      visible.indexOf('aria-label="Etapas na Pagar.me"'),
     );
     const steps = [
-      "Criar sua senha",
-      "Confirmar o celular",
-      "Enviar documentos e selfie",
-      "Depois: análise do Asaas",
-      "prepara automaticamente",
+      "Dados do recebedor",
+      "Verificação de identidade",
+      "Pronto para receber",
+      "Verificar identidade",
+      "Depois: análise da Pagar.me",
     ];
     const positions = steps.map((step) => guidance.indexOf(step));
     expect(positions.every((position) => position >= 0)).toBe(true);
@@ -359,25 +318,22 @@ describe("receiving account setup", () => {
         (position, index) => index === 0 || position > positions[index - 1],
       ),
     ).toBe(true);
-    expect(guidance).toContain("documento e uma selfie");
+    expect(guidance).toContain("Foto do documento e selfie");
     expect(html).not.toContain('autocomplete="one-time-code"');
     expect(html).not.toContain("Sandbox");
+    expect(html).not.toContain("teste da Pagar.me");
     expect(values.request).not.toHaveBeenCalled();
     values.controller.dispose();
   });
 
-  it.each(["owner", "other-holder", "ready", "uncreated", "development"])(
-    "does not offer the live activation action for %s",
+  it.each(["other-holder", "ready", "uncreated", "review"])(
+    "does not offer the identity check for %s",
     (scenario) => {
-      vi.stubGlobal(
-        "__APP_ENV__",
-        scenario === "development" ? "development" : "production",
-      );
+      vi.stubGlobal("__APP_ENV__", "production");
       const values = fixture();
       const html = renderToStaticMarkup(
         createElement(ReceivingAccountSetupView, {
           scope: values.scope,
-          platformOwner: scenario === "owner",
           state: {
             status: "ready",
             setup: {
@@ -386,6 +342,17 @@ describe("receiving account setup", () => {
               isHolder: scenario !== "other-holder",
               accountState:
                 scenario === "uncreated" ? "NOT_CREATED" : "CREATED",
+              providerStatus:
+                scenario === "uncreated"
+                  ? null
+                  : scenario === "review"
+                    ? {
+                        ...(createdSetup.providerStatus as NonNullable<
+                          ReceivingSetupContext["providerStatus"]
+                        >),
+                        accountState: "UNDER_REVIEW",
+                      }
+                    : createdSetup.providerStatus,
             },
             message: null,
           },
@@ -393,7 +360,7 @@ describe("receiving account setup", () => {
             scenario === "ready" ? { ...readiness, mode: "live" } : null,
         }),
       );
-      expect(html).not.toContain("Abrir o Asaas");
+      expect(html).not.toContain(">Verificar identidade<");
       values.controller.dispose();
     },
   );
@@ -434,18 +401,8 @@ describe("receiving account setup", () => {
         expect(button).toBeDefined();
         expect(button).not.toMatch(/\sdisabled(?:\s|=|>)/);
       }
-      expect(html).toContain("Sua conta foi criada");
+      expect(html).toContain("Verifique sua identidade");
       expect(html).not.toContain("Destino Pix para saques");
-      const accountHtml = renderToStaticMarkup(
-        createElement(ReceivingAccountSetupView, {
-          scope: values.scope,
-          state: values.controller.getState(),
-          section: "account",
-          pixGuard: values.controller.pixGuard,
-        }),
-      );
-      expect(accountHtml).toContain("Destino Pix para saques");
-      expect(accountHtml).not.toContain("Etapas de ativação");
       await values.controller.verifyIncoming();
       expect(
         values.request.mock.calls.filter(
@@ -733,14 +690,14 @@ describe("receiving account setup", () => {
         }),
       );
       expect(html).toContain("A Pagar.me bloqueou ou suspendeu o recebedor.");
-      expect(html).toContain("Bloqueada</span>");
-      expect(html).not.toContain("Pronto para receber");
+      expect(html).toContain("Precisa de ajuste</span>");
+      expect(html).not.toContain("Recebimentos liberados");
       values.controller.dispose();
     },
   );
   it.each([
-    ["UNVERIFIED", "Verificação pendente"],
-    ["ONBOARDING", "Verificação pendente"],
+    ["UNVERIFIED", "A fazer"],
+    ["ONBOARDING", "A fazer"],
     ["UNDER_REVIEW", "Em análise"],
   ] as const)(
     "shows %s without implying an unsubmitted account is under review",
@@ -770,7 +727,7 @@ describe("receiving account setup", () => {
       values.controller.dispose();
     },
   );
-  it("keeps access activation unconfirmed even when the Pagar.me recipient is approved", async () => {
+  it("reports an approved Pagar.me recipient without offering another identity check", async () => {
     const values = fixture({
       ...createdSetup,
       providerStatus: {
@@ -787,14 +744,11 @@ describe("receiving account setup", () => {
         state: values.controller.getState(),
       }),
     );
-    expect(html).toContain("Como o painel acompanha a ativação?");
-    expect(html).toContain(
-      "A senha e o recebimento do e-mail não são consultados por este painel.",
-    );
-    expect(html).toContain("defina a senha de acesso");
-    expect(html).toContain("O EntreLaços não vê sua senha.");
-    expect(html).toContain("atualiza as verificações cadastrais do Asaas");
-    expect(html).not.toMatch(/Reenviar|Ativação concluída|E-mail enviado/);
+    expect(html).toContain("Como o painel acompanha a análise?");
+    expect(html).toContain("Verificar agora consulta a situação na hora.");
+    expect(html).toContain("Recebedor: <strong>Ativo</strong>");
+    expect(html).not.toContain(">Verificar identidade<");
+    expect(html).not.toMatch(/Reenviar|senha de acesso|E-mail enviado/);
     expect(values.request).toHaveBeenCalledTimes(1);
     expect(values.request.mock.calls[0]?.[1]?.method).not.toBe("POST");
     values.controller.dispose();
@@ -807,7 +761,7 @@ describe("receiving account setup", () => {
     ["test", "sandbox", false],
     [undefined, "sandbox", false],
   ] as const)(
-    "limits redirected test-email guidance to development Sandbox (%s, %s)",
+    "limits the test-environment guidance to development Sandbox (%s, %s)",
     (environment, mode, visible) => {
       vi.stubGlobal("__APP_ENV__", environment);
       const values = fixture();
@@ -821,21 +775,12 @@ describe("receiving account setup", () => {
           },
         }),
       );
-      expect(html).toContain("Como o painel acompanha a ativação?");
-      expect(html.includes("comunicações de teste são redirecionadas")).toBe(
+      expect(html).toContain("Como o painel acompanha a análise?");
+      expect(html.includes("a verificação não analisa documentos reais")).toBe(
         visible,
       );
-      expect(html.includes("link de definição de senha e as demais")).toBe(
-        visible,
-      );
-      expect(
-        html.includes(
-          "entre no Asaas Sandbox com o e-mail cadastrado para o recebedor",
-        ),
-      ).toBe(visible);
-      expect(html).toContain(
-        "Não foi possível consultar a verificação na Pagar.me",
-      );
+      expect(html.includes("Ambiente de teste da Pagar.me")).toBe(visible);
+      expect(html).toContain("Ainda sem resposta da Pagar.me");
       expect(html).not.toContain("E-mail não enviado");
       expect(values.request).not.toHaveBeenCalled();
       values.controller.dispose();
@@ -855,9 +800,9 @@ describe("receiving account setup", () => {
           },
         }),
       );
-      expect(html).not.toContain('aria-label="Tarefas no Asaas"');
-      expect(html).not.toContain("Abrir o Asaas");
-      expect(html).toContain("Primeiro, crie a conta na etapa 2");
+      expect(html).not.toContain('aria-label="Etapas na Pagar.me"');
+      expect(html).not.toContain(">Verificar identidade<");
+      expect(html).toContain("Primeiro, envie seus dados na etapa 2");
       values.controller.dispose();
     },
   );
@@ -1054,7 +999,7 @@ describe("receiving account setup", () => {
     expect(html).toMatch(/name="complement"(?![^>]*required)[^>]*>/);
     expect(html).toContain('name="consent"');
     expect(html.match(/type="checkbox"/g)).toHaveLength(1);
-    // The Asaas password is only mentioned as a later step, never requested.
+    // No provider password exists: the form never asks for one.
     expect(html).not.toMatch(
       /type="password"|reauthenticationToken|Sua senha do EntreLaços/,
     );

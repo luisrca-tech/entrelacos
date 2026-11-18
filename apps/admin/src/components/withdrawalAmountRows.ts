@@ -23,7 +23,7 @@ export function withdrawalAmountRows(
         ? "Taxa efetiva"
         : value.feeSemantics !== undefined
           ? "Taxa máxima"
-          : "Taxa",
+          : "Tarifa de saque",
       fee,
     ],
     [

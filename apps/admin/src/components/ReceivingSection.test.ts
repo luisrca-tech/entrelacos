@@ -327,8 +327,8 @@ describe("receiving session boundary", () => {
       expect(html).toContain(`href="/sites/wedding-1/receiving/${page}"`);
     expect(html).toContain(">Configurações</a>");
     expect(html).not.toContain("Configuração concluída");
-    expect(html).toContain('href="/sites/wedding-1/receiving/account"');
-    expect(html).toContain(">Alterar</a>");
+    expect(html).not.toContain("/receiving/account");
+    expect(html).not.toContain("Chave Pix");
     expect(html).toContain('aria-current="page"');
     expect(render(9, access, "overview", readiness)).not.toContain(
       'aria-label="Páginas de recebimentos"',
@@ -350,12 +350,12 @@ describe("receiving session boundary", () => {
       'data-finance-access="true"',
     );
   });
-  it("groups account, fees and holder under the settings tab", () => {
+  it("groups recipient data, fees and holder under the settings tab", () => {
     const html = render(9, access, "settings", ready);
     expect(html).toContain('aria-label="Páginas de recebimentos"');
-    for (const page of ["account", "fees", "holder"])
+    for (const page of ["details", "fees", "holder"])
       expect(html).toContain(`href="/sites/wedding-1/receiving/${page}"`);
-    expect(html).toContain("Conta para saque");
+    expect(html).toContain("Dados do recebedor");
     expect(html).toContain("Taxas");
     expect(html).toContain("Titular");
     expect(html).not.toContain("data-finance-access");

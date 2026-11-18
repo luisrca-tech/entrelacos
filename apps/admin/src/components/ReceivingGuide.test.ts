@@ -31,18 +31,18 @@ function render(mode: string | null = "live") {
     createElement(ReceivingGuide, { siteId: "wedding-1", mode }),
   );
 }
+function text(html: string) {
+  return html.replace(/<[^>]+>/g, "").replace(/\s+/g, " ");
+}
 
-describe("receiving guide environment boundaries", () => {
-  it("explains provider phone confirmation, document review and the final receiving verification in order", () => {
-    vi.stubGlobal("__APP_ENV__", "production");
-    const html = render("live");
+describe("receiving guide on Pagar.me", () => {
+  it("walks from the recipient data to the withdrawal in order", () => {
+    const html = render();
     const steps = [
-      "defina sua senha no próprio Asaas",
-      "código recebido por SMS",
-      "Envie os documentos",
-      "aguarde a análise",
-      "prepara automaticamente",
-      "Verificar situação",
+      "Envie os dados do recebedor",
+      "Verifique sua identidade",
+      "Aguarde a análise da Pagar.me",
+      "Solicite o saque",
     ];
     const positions = steps.map((step) => html.indexOf(step));
     expect(positions.every((position) => position >= 0)).toBe(true);
@@ -51,20 +51,35 @@ describe("receiving guide environment boundaries", () => {
         (position, index) => index === 0 || position > positions[index - 1],
       ),
     ).toBe(true);
-    expect(html).toContain("selfie, quando solicitado");
-    expect(html).not.toContain('autocomplete="one-time-code"');
+    expect(html).toContain('href="/sites/wedding-1/receiving/details"');
+    expect(html).toContain('href="/sites/wedding-1/receiving/activation"');
+    expect(html).toContain('href="/sites/wedding-1/receiving/withdrawals"');
   });
 
-  it("puts account access first and links the exact Entrelacos task", () => {
-    const html = render();
-    expect(html.indexOf("Acesse o Asaas com segurança")).toBeLessThan(
-      html.indexOf("Do cadastro ao saque"),
-    );
-    expect(html).toContain('href="/sites/wedding-1/receiving/activation"');
-    expect(html).toContain('href="/sites/wedding-1/receiving/account"');
-    expect(html).toContain('href="/sites/wedding-1/receiving/withdrawals"');
-    expect(html).toContain('href="https://central.ajuda.asaas.com/hc/pt-br"');
+  it("explains the short-lived identity link and the same-CPF bank account", () => {
+    const content = text(render());
+    expect(content).toContain("20 minutos");
+    expect(content).toContain("conta bancária no mesmo CPF");
+    expect(content).toContain("documento e uma selfie");
   });
+
+  it("states the withdrawal fee from the tariff table and when money is available", () => {
+    const content = text(render());
+    expect(content).toContain("R$ 3,67");
+    expect(content).toContain("Pix: assim que o pagamento é confirmado.");
+    expect(content).toContain("fica disponível em cerca de 2 dias");
+    expect(content).toContain("até 6x");
+    expect(content).not.toMatch(/serviço Entrelaços|comiss/i);
+  });
+
+  it("names Pagar.me as the payment institution and splits responsibilities", () => {
+    const html = render();
+    expect(html).toContain("No EntreLaços");
+    expect(html).toContain("Na Pagar.me");
+    expect(html).toContain("uma empresa Stone");
+    expect(html).toContain('id="receiving-guide-credit"');
+  });
+
   it.each([
     ["development", "sandbox", true],
     ["production", "sandbox", false],
@@ -72,99 +87,12 @@ describe("receiving guide environment boundaries", () => {
     ["development", "live", false],
     ["development", null, false],
   ])(
-    "shows redirected test email only for %s / %s",
+    "shows the test-environment note only for %s / %s",
     (environment, mode, expected) => {
       vi.stubGlobal("__APP_ENV__", environment);
-      expect(render(mode).includes("e-mail da conta principal")).toBe(expected);
-      expect(render(mode)).not.toContain("000000");
-      expect(render(mode).includes("Para testes no Sandbox")).toBe(expected);
+      expect(render(mode).includes("Ambiente de teste da Pagar.me")).toBe(
+        expected,
+      );
     },
   );
-  it("keeps production account guidance free of Sandbox instructions", () => {
-    vi.stubGlobal("__APP_ENV__", "production");
-    const html = render("live");
-    expect(html).not.toContain("Sandbox");
-    expect(html).toContain("https://www.asaas.com/login/auth");
-    expect(html).toContain("Asaas para Android");
-    expect(html).toContain("Asaas para iPhone");
-  });
-  it.each([
-    [
-      "live",
-      "https://www.asaas.com/login/auth?customerSignUpOriginChannel=HOME",
-    ],
-    [
-      "sandbox",
-      "https://sandbox.asaas.com/login/auth?customerSignUpOriginChannel=HOME",
-    ],
-  ])("links to the observed %s provider environment", (mode, loginUrl) => {
-    const html = render(mode);
-    expect(html).toContain(loginUrl);
-    expect(html).not.toContain(
-      mode === "live"
-        ? "https://sandbox.asaas.com/login"
-        : "https://www.asaas.com/login",
-    );
-  });
-  it.each([null, "disabled", "invalid"])(
-    "does not guess a login when provider mode is %s",
-    (mode) => {
-      const html = render(mode);
-      expect(html).not.toContain("/login/auth");
-      expect(html).toContain("Voltar para Recebimentos");
-    },
-  );
-  it("explains verified payment history and the unpaid installment deadline", () => {
-    const html = render();
-    expect(html).toContain(
-      "Ao abrir uma cobrança, o convidado ainda precisa concluir o pagamento",
-    );
-    expect(html).toContain("60 minutos");
-    expect(html).toContain("Asaas confirmar o encerramento");
-  });
-  it("explains card anticipation timing and the per-installment fallback", () => {
-    const text = render()
-      .replace(/<[^>]+>/g, "")
-      .replace(/\s+/g, " ");
-    expect(text).toContain("Pix: assim que o pagamento é confirmado.");
-    expect(text).toContain(
-      "o valor inteiro é antecipado e normalmente chega em até 2 dias úteis após o pagamento, sujeito à análise do Asaas.",
-    );
-    expect(text).toContain(
-      "Se o Asaas não antecipar, cada parcela chega quando o cartão a libera, cerca de 32 dias por parcela.",
-    );
-    expect(text).not.toMatch(/serviço Entrelaços|comiss/i);
-  });
-  it("explains activation, Pix destinations and optional official apps", () => {
-    const html = render();
-    expect(html).toContain("enviado automaticamente");
-    expect(html).toContain("aprovação cadastral não confirma");
-    expect(html).toContain("chave aleatória na sua conta Asaas");
-    expect(html).not.toContain("cadastre uma chave Pix de entrada");
-    expect(html).toContain("não precisa ser criada no Asaas");
-    expect(html).toContain("autorização manual");
-    expect(html).toContain("Android");
-    expect(html).toContain("iPhone");
-    expect(html).toContain("id=asaas.asaas");
-    expect(html).toContain("id1421133076");
-    expect(html).toContain("/sites/wedding-1/receiving");
-  });
-  it("explains conditional integrated authorization without promising transfer completion", () => {
-    const html = render();
-    expect(html).toContain("consentimento e confirme sua senha do Entrelacos");
-    expect(html).toContain(
-      "autorização integrada de segurança estiver habilitada",
-    );
-    expect(html).toContain("configuração do Asaas permitir");
-    expect(html).toContain(
-      "o pedido pode ser autorizado pelo próprio Entrelacos",
-    );
-    expect(html).not.toContain("webhook");
-    expect(html).toContain(
-      "não estiver habilitada ou houver autorização manual",
-    );
-    expect(html).toContain("SMS ou Token App");
-    expect(html).toContain("A autorização não confirma a conclusão do saque");
-    expect(html).not.toContain("não aprova automaticamente essa autorização");
-  });
 });

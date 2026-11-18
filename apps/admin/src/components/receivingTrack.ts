@@ -1,11 +1,6 @@
 import type { ReceivingSetupContext } from "@entrelacos/contracts";
 
-export type ReceivingStepId =
-  | "holder"
-  | "details"
-  | "activation"
-  | "account"
-  | "fees";
+export type ReceivingStepId = "holder" | "details" | "activation" | "fees";
 export type ReceivingStepStatus =
   | "done"
   | "current"
@@ -24,25 +19,19 @@ export const receivingSteps: readonly {
     id: "holder",
     title: "Quem vai receber",
     short: "Quem recebe",
-    summary: "Um dos noivos é o titular da conta e dos saques.",
+    summary: "Um dos noivos é o titular do recebedor e dos saques.",
   },
   {
     id: "details",
     title: "Seus dados",
     short: "Seus dados",
-    summary: "CPF, endereço e conta bancária para o cadastro na Pagar.me.",
+    summary: "CPF, endereço e conta bancária no seu CPF, para a Pagar.me.",
   },
   {
     id: "activation",
-    title: "Ative sua conta no Asaas",
-    short: "Ativar no Asaas",
-    summary: "Criar a senha, confirmar o celular e enviar documentos.",
-  },
-  {
-    id: "account",
-    title: "Conta para saque",
-    short: "Conta para saque",
-    summary: "A chave Pix do seu banco, para onde o dinheiro vai.",
+    title: "Verifique sua identidade",
+    short: "Verificar identidade",
+    summary: "Documento e selfie pelo link seguro da Pagar.me.",
   },
   {
     id: "fees",
@@ -69,7 +58,6 @@ export type ReceivingTrackInput = {
     "observedAt"
   > | null;
   ready: boolean;
-  destinationSaved: boolean;
 };
 
 export type ReceivingTrackStep = (typeof receivingSteps)[number] & {
@@ -88,7 +76,7 @@ function activationStatus(input: ReceivingTrackInput): BaseStatus {
   return "todo";
 }
 
-// Derives the five setup steps and the single next step from server state.
+// Derives the four setup steps and the single next step from server state.
 export function deriveReceivingTrack(input: ReceivingTrackInput) {
   const created = input.accountState === "CREATED";
   const base: Record<ReceivingStepId, BaseStatus> = {
@@ -101,11 +89,6 @@ export function deriveReceivingTrack(input: ReceivingTrackInput) {
           ? "attention"
           : "todo",
     activation: activationStatus(input),
-    account: !created
-      ? "locked"
-      : input.destinationSaved || input.ready
-        ? "done"
-        : "todo",
     fees: created ? "done" : "locked",
   };
   const actionable = receivingSteps.find(({ id }) =>

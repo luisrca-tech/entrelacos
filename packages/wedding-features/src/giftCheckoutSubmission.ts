@@ -1,4 +1,8 @@
-import type { CheckoutCreateInput, GiftQuote } from "@entrelacos/contracts";
+import type {
+  GiftCheckoutBuyer,
+  GiftCheckoutCreateInput,
+  GiftQuote,
+} from "@entrelacos/contracts";
 import {
   type GiftCheckoutEvent,
   pricesUpdatedMessage,
@@ -14,11 +18,16 @@ import {
   WeddingGiftsPaymentRejectedError,
 } from "./gifts";
 
+export const cardDeclinedMessage =
+  "O cartão não foi aprovado. Confira os dados ou use outro cartão.";
+
 const knownCheckoutRefusals = new Set([
   "QUOTE_INVALID",
   "QUOTE_EXPIRED",
+  "QUOTE_MISMATCH",
+  "INSTALLMENTS_UNAVAILABLE",
+  "PROVIDER_UNAVAILABLE",
   "RECEIVING_NOT_READY",
-  "DESTINATION_UNVERIFIED",
   "PROVIDER_MODE_UNAVAILABLE",
   "POLICY_UNAVAILABLE",
   "VALIDATION_ERROR",
@@ -26,26 +35,60 @@ const knownCheckoutRefusals = new Set([
   "SITE_EXPIRED",
 ]);
 
+/** What the guest typed besides the card; the card itself is only a token. */
+export type GiftCheckoutPayment = {
+  buyer: GiftCheckoutBuyer;
+  cardToken?: string;
+};
+
+export function giftCheckoutRequest(
+  quote: Pick<GiftQuote, "method" | "installmentCount">,
+  pending: Pick<PendingGiftCheckout, "quoteId" | "requestId" | "recoveryToken">,
+  payment: GiftCheckoutPayment,
+): GiftCheckoutCreateInput {
+  return {
+    quoteId: pending.quoteId,
+    requestId: pending.requestId,
+    recoveryToken: pending.recoveryToken,
+    method: quote.method,
+    installments: quote.installmentCount ?? 1,
+    ...(payment.cardToken ? { cardToken: payment.cardToken } : {}),
+    buyer: payment.buyer,
+  };
+}
+
 export async function submitGiftCheckout(
   api: Pick<WeddingGiftsApi, "createCheckout">,
   quote: GiftQuote,
   pending: PendingGiftCheckout,
   getStorage: () => Pick<Storage, "getItem" | "removeItem">,
-  isCurrent: () => boolean = () => true,
-  payer?: CheckoutCreateInput["payer"],
+  isCurrent: () => boolean,
+  payment: GiftCheckoutPayment,
 ): Promise<GiftCheckoutEvent | null> {
   if (!isCurrent()) return null;
   try {
     const checkout = await api.createCheckout(
-      {
-        quoteId: pending.quoteId,
-        requestId: pending.requestId,
-        recoveryToken: pending.recoveryToken,
-        ...(payer && { payer }),
-      },
+      giftCheckoutRequest(quote, pending, payment),
       quote,
     );
-    return isCurrent() ? { type: "CHECKOUT_RESOLVED", checkout } : null;
+    if (!isCurrent()) return null;
+    // A declined card closes the attempt and consumes the quote: start over
+    // with a fresh quote and a new request.
+    if (checkout.status === "CLOSED_UNPAID") {
+      try {
+        clearPendingGiftCheckout(getStorage, quote.siteId, pending);
+      } catch {
+        return { type: "CHECKOUT_RESOLVED", checkout };
+      }
+      return {
+        type: "CHECKOUT_FAILED",
+        unknown: false,
+        invalidateQuote: true,
+        requote: true,
+        message: cardDeclinedMessage,
+      };
+    }
+    return { type: "CHECKOUT_RESOLVED", checkout };
   } catch (error) {
     if (!isCurrent()) return null;
     const rejected = error instanceof WeddingGiftsPaymentRejectedError;

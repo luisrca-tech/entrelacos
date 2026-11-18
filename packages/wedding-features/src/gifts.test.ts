@@ -44,13 +44,21 @@ const quote = {
   expiresAt: "2026-10-12T22:00:00.000Z",
   mode: "sandbox",
 };
+const pix = {
+  qrCode: "00020126580014br.gov.bcb.pix0136checkout-a",
+  qrCodeUrl: "https://sandbox.example.test/pix/checkout-a.png",
+  expiresAt: "2026-10-12T22:30:00.000Z",
+};
 const checkout = {
-  orderId: "order-a",
-  attemptId: "attempt-a",
-  quoteId: "quote-a",
-  method: "PIX",
-  hostedUrl: "https://sandbox.example.test/checkout",
-  mode: "sandbox",
+  checkoutId: "checkout-a",
+  status: "AWAITING_PAYMENT",
+  pix,
+};
+const buyer = {
+  name: "Ana Souza",
+  email: "ana@example.com",
+  cpf: "12345678909",
+  phone: "11987654321",
 };
 const api = (fetcher: typeof fetch) =>
   new WeddingGiftsApi({
@@ -60,6 +68,14 @@ const api = (fetcher: typeof fetch) =>
   });
 
 const recoveryToken = "A".repeat(43);
+const createInput = {
+  quoteId: "quote-a",
+  requestId: "request-a",
+  recoveryToken,
+  method: "PIX",
+  installments: 1,
+  buyer,
+} as const;
 afterEach(() => vi.unstubAllGlobals());
 const catalogPage = (gifts: Array<typeof gift>, mode = "sandbox") => ({
   siteId: "wedding-a",
@@ -100,10 +116,7 @@ describe("public gifts API boundary", () => {
       mode: "sandbox",
     } as const;
     await expect(
-      client.createCheckout(
-        { quoteId: "quote-a", requestId: "request-a", recoveryToken },
-        expected,
-      ),
+      client.createCheckout(createInput, expected),
     ).rejects.toMatchObject(denied);
     await expect(
       client.getCheckoutStatus(
@@ -125,31 +138,24 @@ describe("public gifts API boundary", () => {
       totalCents: 10000,
       feeAllocation: "RECIPIENT_DEDUCTED",
     };
-    const liveCheckout = {
-      ...checkout,
-      mode: "live",
-      hostedUrl: "https://asaas.com/checkoutSession/show/checkout-a",
-    };
     const status = {
       siteId: "wedding-a",
       quoteId: "quote-a",
       requestId: "request-a",
-      orderId: "order-a",
-      attemptId: "attempt-a",
+      checkoutId: "checkout-a",
       method: "PIX",
       mode: "live",
       state: "OUTCOME_UNKNOWN",
       observedAt: null,
       closedReason: null,
       mayStartNewAttempt: false,
-      checkout: null,
+      pix: null,
     };
     const fetcher = vi.fn<typeof fetch>(async (url) => {
       const path = new URL(String(url)).pathname;
       if (path.endsWith("/gift-checkouts/status"))
         return Response.json({ status });
-      if (path.endsWith("/gift-checkouts"))
-        return Response.json({ checkout: liveCheckout });
+      if (path.endsWith("/gift-checkouts")) return Response.json(checkout);
       if (path.endsWith("/gift-quotes"))
         return Response.json({ quote: liveQuote });
       return Response.json(catalogPage([gift], "live"));
@@ -171,12 +177,9 @@ describe("public gifts API boundary", () => {
       method: "PIX",
       mode: "live",
     } as const;
-    await expect(
-      client.createCheckout(
-        { quoteId: "quote-a", requestId: "request-a", recoveryToken },
-        expected,
-      ),
-    ).resolves.toMatchObject({ mode: "live" });
+    await expect(client.createCheckout(createInput, expected)).resolves.toEqual(
+      checkout,
+    );
     await expect(
       client.getCheckoutStatus(
         { quoteId: "quote-a", requestId: "request-a", recoveryToken },
@@ -211,10 +214,12 @@ describe("public gifts API boundary", () => {
         fetcher,
       });
       await expect(
-        client.createCheckout(
-          { quoteId: "quote-a", requestId: "request-a", recoveryToken },
-          { id: "quote-a", siteId: "wedding-a", method: "PIX", mode: "live" },
-        ),
+        client.createCheckout(createInput, {
+          id: "quote-a",
+          siteId: "wedding-a",
+          method: "PIX",
+          mode: "live",
+        }),
       ).rejects.toMatchObject({ code: "LIVE_DEMO_FORBIDDEN" });
       expect(fetcher).not.toHaveBeenCalled();
       await expect(client.getCatalog()).rejects.toMatchObject({
@@ -241,15 +246,14 @@ describe("public gifts API boundary", () => {
       siteId: "wedding-a",
       quoteId: "quote-a",
       requestId: "request-a",
-      orderId: "order-a",
-      attemptId: "attempt-a",
+      checkoutId: "checkout-a",
       method: "PIX",
       mode: "sandbox",
       state: "OUTCOME_UNKNOWN",
       observedAt: null,
       closedReason: null,
       mayStartNewAttempt: false,
-      checkout: null,
+      pix: null,
     };
     const fetcher = vi.fn().mockResolvedValue(Response.json({ status }));
     const identity = {
@@ -285,6 +289,13 @@ describe("public gifts API boundary", () => {
         api(fetcher).getCheckoutStatus(identity, expected),
       ).rejects.toMatchObject({ code: "INVALID_API_RESPONSE" });
     }
+    fetcher.mockResolvedValue(Response.json({ status }));
+    await expect(
+      api(fetcher).getCheckoutStatus(identity, {
+        ...expected,
+        checkoutId: "checkout-b",
+      }),
+    ).rejects.toMatchObject({ code: "INVALID_API_RESPONSE" });
   });
   it("loads runtime gifts without invitation cookies and rejects cross-site/private data", async () => {
     const fetcher = vi
@@ -339,8 +350,8 @@ describe("public gifts API boundary", () => {
       api(fetcher).quoteGift({ giftId: "gift-a", method: "PIX" }),
     ).rejects.toMatchObject({ code: "INVALID_API_RESPONSE" });
   });
-  it("creates method/quote/mode-bound hosted checkout and rejects unexpected redirects", async () => {
-    const fetcher = vi.fn().mockResolvedValue(Response.json({ checkout }));
+  it("creates a quote/method-bound checkout and rejects unexpected results", async () => {
+    const fetcher = vi.fn().mockResolvedValue(Response.json(checkout));
     const expected = {
       id: "quote-a",
       siteId: "wedding-a",
@@ -348,37 +359,49 @@ describe("public gifts API boundary", () => {
       mode: "sandbox",
     } as const;
     await expect(
-      api(fetcher).createCheckout(
-        { quoteId: "quote-a", requestId: "request-a", recoveryToken },
-        expected,
-      ),
+      api(fetcher).createCheckout(createInput, expected),
     ).resolves.toEqual(checkout);
     expect(fetcher).toHaveBeenCalledWith(
       expect.stringContaining("/gift-checkouts"),
-      expect.objectContaining({
-        body: JSON.stringify({
-          quoteId: "quote-a",
-          requestId: "request-a",
-          recoveryToken,
-        }),
-      }),
+      expect.objectContaining({ body: JSON.stringify(createInput) }),
     );
     for (const invalid of [
-      { ...checkout, method: "CREDIT_CARD" },
-      { ...checkout, quoteId: "quote-b" },
-      { ...checkout, mode: "live" },
-      { ...checkout, hostedUrl: "javascript:alert(1)" },
+      { checkout },
+      { ...checkout, status: "CONFIRMED" },
+      { ...checkout, checkoutId: "../checkout" },
+      { ...checkout, pix: { ...pix, qrCodeUrl: "javascript:alert(1)" } },
+      { ...checkout, pix: { ...pix, qrCodeUrl: "http://pix.example.test" } },
+      { ...checkout, hostedUrl: "https://checkout.example.test" },
     ]) {
-      fetcher.mockResolvedValue(Response.json({ checkout: invalid }));
+      fetcher.mockResolvedValue(Response.json(invalid));
       await expect(
-        api(fetcher).createCheckout(
-          { quoteId: "quote-a", requestId: "request-a", recoveryToken },
-          expected,
-        ),
+        api(fetcher).createCheckout(createInput, expected),
       ).rejects.toMatchObject({ code: "INVALID_API_RESPONSE" });
     }
+    const card = {
+      ...createInput,
+      method: "CREDIT_CARD",
+      cardToken: "token_abc123",
+    } as const;
+    const cardQuote = { ...expected, method: "CREDIT_CARD" } as const;
+    fetcher.mockResolvedValue(Response.json(checkout));
+    await expect(
+      api(fetcher).createCheckout(card, cardQuote),
+    ).rejects.toMatchObject({ code: "INVALID_API_RESPONSE" });
+    const calls = fetcher.mock.calls.length;
+    for (const [input, quoteBinding] of [
+      [createInput, { ...expected, id: "quote-b" }],
+      [createInput, { ...expected, siteId: "wedding-b" }],
+      [card, expected],
+      [{ ...card, installments: 3 }, cardQuote],
+      [createInput, { ...expected, mode: "disabled" }],
+    ] as const)
+      await expect(
+        api(fetcher).createCheckout(input, quoteBinding),
+      ).rejects.toThrow();
+    expect(fetcher).toHaveBeenCalledTimes(calls);
   });
-  it("sanitizes network/provider errors without converting redirects into paid status", async () => {
+  it("sanitizes network/provider errors without converting them into paid status", async () => {
     const fetcher = vi.fn().mockRejectedValue(new Error("private diagnostic"));
     await expect(api(fetcher).getCatalog()).rejects.toEqual(
       new WeddingGiftsApiError(0, "NETWORK_ERROR"),
@@ -506,8 +529,10 @@ describe("failed checkout wire responses preserve the original operation", () =>
     ...[
       "QUOTE_INVALID",
       "QUOTE_EXPIRED",
+      "QUOTE_MISMATCH",
+      "INSTALLMENTS_UNAVAILABLE",
+      "PROVIDER_UNAVAILABLE",
       "RECEIVING_NOT_READY",
-      "DESTINATION_UNVERIFIED",
       "PROVIDER_MODE_UNAVAILABLE",
       "POLICY_UNAVAILABLE",
       "VALIDATION_ERROR",
@@ -543,6 +568,8 @@ describe("failed checkout wire responses preserve the original operation", () =>
           f.currentQuote,
           f.pending,
           () => f.storage,
+          () => true,
+          { buyer },
         );
         assertUnknown(f, event);
         const error = await create.mock.results[0].value.catch(
@@ -565,6 +592,9 @@ describe("failed checkout wire responses preserve the original operation", () =>
               quoteId: f.pending.quoteId,
               requestId: f.pending.requestId,
               recoveryToken: f.pending.recoveryToken,
+              method: "PIX",
+              installments: 1,
+              buyer,
             }),
           }),
         );
@@ -604,6 +634,8 @@ describe("failed checkout wire responses preserve the original operation", () =>
           f.currentQuote,
           f.pending,
           () => f.storage,
+          () => true,
+          { buyer },
         );
         const error = await create.mock.results[0].value.catch(
           (cause: unknown) => cause,
@@ -656,6 +688,8 @@ describe("failed checkout wire responses preserve the original operation", () =>
         f.currentQuote,
         f.pending,
         () => f.storage,
+        () => true,
+        { buyer },
       );
       assertUnknown(f, event);
     },
@@ -697,6 +731,8 @@ describe("failed checkout wire responses preserve the original operation", () =>
           f.currentQuote,
           f.pending,
           () => f.storage,
+          () => true,
+          { buyer },
         );
         assertUnknown(f, event);
         const error = await create.mock.results[0].value.catch(
@@ -723,14 +759,23 @@ describe("failed checkout wire responses preserve the original operation", () =>
     {
       label: "malformed success",
       fetcher: () =>
-        vi.fn<typeof fetch>(async () => new Response('{"checkout":')),
+        vi.fn<typeof fetch>(async () => new Response('{"checkoutId":')),
       code: "INVALID_API_RESPONSE",
     },
     {
-      label: "invalid success binding",
+      label: "legacy wrapped success",
+      fetcher: () =>
+        vi.fn<typeof fetch>(async () => Response.json({ checkout })),
+      code: "INVALID_API_RESPONSE",
+    },
+    {
+      label: "insecure Pix success",
       fetcher: () =>
         vi.fn<typeof fetch>(async () =>
-          Response.json({ checkout: { ...checkout, quoteId: "quote-b" } }),
+          Response.json({
+            ...checkout,
+            pix: { ...pix, qrCodeUrl: "http://pix.example.test/qr.png" },
+          }),
         ),
       code: "INVALID_API_RESPONSE",
     },
@@ -746,6 +791,8 @@ describe("failed checkout wire responses preserve the original operation", () =>
           f.currentQuote,
           f.pending,
           () => f.storage,
+          () => true,
+          { buyer },
         );
         assertUnknown(f, event);
         const error = await create.mock.results[0].value.catch(
@@ -759,23 +806,23 @@ describe("failed checkout wire responses preserve the original operation", () =>
       }
     },
   );
-  it("preserves valid creation as hosted continuation with its original marker", async () => {
-    const fetcher = vi.fn<typeof fetch>(async () =>
-      Response.json({ checkout }),
-    );
+  it("tracks valid creation as pending payment with its original marker", async () => {
+    const fetcher = vi.fn<typeof fetch>(async () => Response.json(checkout));
     const f = submissionFixture(fetcher);
     const event = await submitGiftCheckout(
       f.client,
       f.currentQuote,
       f.pending,
       () => f.storage,
+      () => true,
+      { buyer },
     );
     expect(event).toMatchObject({ type: "CHECKOUT_RESOLVED", checkout });
     if (!event)
       throw new Error("Current valid creation must return its checkout");
     const resolved = giftCheckoutReducer(f.state, event);
     expect(resolved).toMatchObject({
-      phase: "REDIRECTING",
+      phase: "UNKNOWN",
       checkout,
       checkoutStatus: null,
       pending: f.pending,
@@ -796,15 +843,14 @@ describe("failed checkout wire responses preserve the original operation", () =>
         siteId: "wedding-a",
         quoteId: "quote-a",
         requestId: "request-a",
-        orderId: "order-a",
-        attemptId: "attempt-a",
+        checkoutId: "checkout-a",
         method: "PIX",
         mode: "sandbox",
         state,
         observedAt,
         closedReason: state === "CLOSED_UNPAID" ? "EXPIRED" : null,
         mayStartNewAttempt: state === "CLOSED_UNPAID",
-        checkout: state === "AWAITING_PAYMENT" ? checkout : null,
+        pix: state === "AWAITING_PAYMENT" ? pix : null,
       };
       const fetcher = vi
         .fn<typeof fetch>()
@@ -818,6 +864,8 @@ describe("failed checkout wire responses preserve the original operation", () =>
         f.currentQuote,
         f.pending,
         () => f.storage,
+        () => true,
+        { buyer },
       );
       const unknown = assertUnknown(f, failed);
       const event = await recoverGiftCheckout(
@@ -891,6 +939,7 @@ describe("failed checkout wire responses preserve the original operation", () =>
       f.pending,
       () => f.storage,
       () => current,
+      { buyer },
     );
     current = false;
     resolve(Response.json({ code: "QUOTE_EXPIRED" }, { status: 409 }));

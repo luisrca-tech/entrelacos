@@ -15,7 +15,6 @@ const base: ReceivingTrackInput = {
   accountState: "CREATED",
   provider,
   ready: false,
-  destinationSaved: false,
 };
 
 const statuses = (input: ReceivingTrackInput) =>
@@ -34,7 +33,6 @@ describe("receiving guided track", () => {
       "locked",
       "locked",
       "locked",
-      "locked",
     ]);
     expect(track.next?.id).toBe("holder");
     expect(track.completed).toBe(0);
@@ -47,7 +45,6 @@ describe("receiving guided track", () => {
       ["holder", "done"],
       ["details", "current"],
       ["activation", "locked"],
-      ["account", "locked"],
       ["fees", "locked"],
     ]);
   });
@@ -68,22 +65,21 @@ describe("receiving guided track", () => {
       "done",
       "done",
       "current",
-      "available",
       "done",
     ]);
     expect(track.next?.id).toBe("activation");
     expect(track.completed).toBe(3);
   });
 
-  it("moves the next step forward while Pagar.me reviews the account", () => {
+  it("shows the identity step in review while Pagar.me analyses it", () => {
     const track = deriveReceivingTrack({
       ...base,
       provider: { ...provider, accountState: "UNDER_REVIEW" },
     });
     expect(track.steps[2].status).toBe("review");
-    expect(track.next?.id).toBe("account");
-    expect(track.steps[3].status).toBe("current");
-    expect(track.steps[4].status).toBe("done");
+    expect(track.next?.id).toBe("activation");
+    expect(track.next?.status).toBe("review");
+    expect(track.steps[3].status).toBe("done");
   });
 
   it("keeps activation current while identity verification is pending", () => {
@@ -107,7 +103,8 @@ describe("receiving guided track", () => {
       },
     });
     expect(track.steps[2].status).toBe("done");
-    expect(track.next?.id).toBe("account");
+    expect(track.next).toBeNull();
+    expect(track.completed).toBe(4);
   });
 
   it("asks for attention when Pagar.me blocks or suspends the recipient", () => {
@@ -119,15 +116,10 @@ describe("receiving guided track", () => {
     }
   });
 
-  it("counts saved destination and the fixed fees as done", () => {
-    const track = deriveReceivingTrack({
-      ...base,
-      provider: { ...provider, accountState: "UNDER_REVIEW" },
-      destinationSaved: true,
-    });
-    expect(track.completed).toBe(4);
-    expect(track.next?.id).toBe("activation");
-    expect(track.next?.status).toBe("review");
+  it("names the identity step after the Pagar.me verification", () => {
+    const step = deriveReceivingTrack(base).steps[2];
+    expect(step.title).toBe("Verifique sua identidade");
+    expect(step.short).toBe("Verificar identidade");
   });
 
   it("finishes when receiving is ready", () => {
@@ -139,9 +131,8 @@ describe("receiving guided track", () => {
         receivingEnabled: true,
       },
       ready: true,
-      destinationSaved: true,
     });
-    expect(track.completed).toBe(5);
+    expect(track.completed).toBe(4);
     expect(track.next).toBeNull();
   });
 

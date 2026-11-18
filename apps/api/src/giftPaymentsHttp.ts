@@ -1,10 +1,10 @@
 import {
-  checkoutStatusInputSchema,
   type GiftCheckoutCreateResult,
   type GiftCheckoutStatus,
   type GiftQuote,
   giftCheckoutCreateInputSchema,
   giftCheckoutCreateResultSchema,
+  giftCheckoutStatusInputSchema,
   giftCheckoutStatusResponseSchema,
   giftQuoteInputSchema,
   giftQuoteResponseSchema,
@@ -194,7 +194,7 @@ export function createGiftPaymentsHttpRouter(
   router.post(
     "/v1/public/sites/:siteId/gift-checkouts/status",
     async (context) => {
-      const input = checkoutStatusInputSchema.safeParse(
+      const input = giftCheckoutStatusInputSchema.safeParse(
         await readBody(context.req.raw),
       );
       if (!input.success) return problem(context, 400, "VALIDATION_ERROR");

@@ -19,11 +19,26 @@ bun scripts/buildShowcase.ts letters development
 bun scripts/buildShowcase.ts landing development
 ```
 
-Replace `development` with `production` only for a production build. The checked-in public environment map overrides inherited public values and rejects unknown targets. It binds each artifact to its API, site, Dashboard and public origins. Each production showcase build sets `PUBLIC_LIVE_DEMO_SITE_ID` to its own tenant only: `demo-wedding` for Botanical and `demo-wedding-cartas` for Letters. Development retains sandbox behavior and the landing never receives a live opt-in. The public value must match a backend entry in `ASAAS_LIVE_DEMO_SITE_ID`. This does not change receiving eligibility, financial consent, backend live-site policy, quote or checkout guards.
+Replace `development` with `production` only for a production build. The checked-in public environment map overrides inherited public values and rejects unknown targets. It binds each artifact to its API, site, Dashboard and public origins. Each production showcase build sets `PUBLIC_LIVE_DEMO_SITE_ID` to its own tenant only: `demo-wedding` for Botanical and `demo-wedding-cartas` for Letters. Development retains sandbox behavior and the landing never receives a live opt-in. The public value must match a backend entry in `PAGARME_LIVE_DEMO_SITE_ID`. This does not change receiving eligibility, financial consent, backend live-site policy, quote or checkout guards.
 
 Cloudflare Builds must use the repository root, not the removed `apps/wedding-demo` directory. For Botanical, use `bun scripts/buildShowcase.ts botanical production` (or `development`) as the build command and `bunx wrangler deploy --config apps/wedding-demo-botanico/wrangler.jsonc --keep-vars` (append `--env dev` for development) as the deploy command. Build-system credentials belong in the service configuration, never in source. Confirm branch and service identity before updating a build trigger.
 
 The requested rename to `demo-botanico` / `demo-botanico-dev` is not yet applied. Preserve the existing URLs until the new origins, tenant admission, build integration and compatibility links are verified together. An authenticated manual publish does not establish permission to edit Workers Builds; the latter currently returns HTTP 403 for the designated profile.
+
+## Payment configuration
+
+Guests pay through Pagar.me with a transparent checkout: the card is tokenized in the browser and Pix shows its QR code in the site's own modal. Each showcase build needs:
+
+| Variable | Local | Development | Production |
+| --- | --- | --- | --- |
+| `PUBLIC_PAGARME_PUBLIC_KEY` | `pk_test_…` | `pk_test_…` | live `pk_…` |
+| `PUBLIC_GIFT_PAYMENTS_ENABLED` | `true` only for QA | off | off until release |
+
+The public key belongs to the Entrelaços account, is the same for every couple site and can only tokenize cards. Each site origin (`*.entrelacosbr.site`, `localhost` for tests) may need to be allowed in the Pagar.me dashboard. Keys are build variables; never commit them.
+
+The API side uses `PAGARME_MODE` (`disabled`, `test` or `live`), `PAGARME_SECRET_KEY`, `PAGARME_PLATFORM_RECIPIENT_ID`, `PAGARME_WEBHOOK_BASIC_USER`, `PAGARME_WEBHOOK_BASIC_PASSWORD`, `PAGARME_BACKGROUND_PROCESSING` and `PAGARME_LIVE_DEMO_SITE_ID` (`demo-wedding` in production once the demo is reconfigured; empty elsewhere). Keep production on `disabled` until accreditation is done and release is approved. Setup, webhook and sandbox steps are in [Pagar.me operation](pagarmeOperation.md); the price formula, 1–6x installments, split and withdrawal fee are in [gift pricing](giftPricingPanel.md).
+
+The couple's identity is verified through a Pagar.me KYC link generated from the panel. A showcase site never inherits another site's recipient or verification.
 
 ## Controlled data population
 

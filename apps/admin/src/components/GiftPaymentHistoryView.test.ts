@@ -259,9 +259,7 @@ describe("mounted gift history", () => {
       (node) => node.textContent === "Taxas",
     );
     expect(row?.nextElementSibling?.textContent).toMatch(/− R\$\s*13,21/);
-    expect(document.body.textContent).not.toMatch(
-      /Comissão|Processamento Asaas/,
-    );
+    expect(document.body.textContent).not.toMatch(/Comissão|Processamento/);
     const net = [...document.querySelectorAll("dt")].find(
       (node) => node.textContent === "Para vocês",
     );
@@ -297,7 +295,7 @@ describe("mounted gift history", () => {
     );
     expect(document.body.textContent).not.toContain("Convidado pagou");
     expect(document.body.textContent).toContain(
-      "Pagamento com restrição no Asaas",
+      "Pagamento estornado ou cancelado",
     );
     expect(document.body.textContent).toContain(
       "Crédito registrado para vocês: R$",

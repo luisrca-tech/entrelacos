@@ -55,13 +55,3 @@ export function normalizeSetupAccount(values: SetupFormValues) {
     },
   };
 }
-
-// People type CPF, CNPJ and phone keys with masks; the API expects digits.
-export function normalizePixKey(
-  type: "CPF" | "CNPJ" | "PHONE" | "EMAIL" | "EVP",
-  key: string,
-) {
-  return ["CPF", "CNPJ", "PHONE"].includes(type)
-    ? key.replace(/\D/g, "")
-    : key.trim();
-}

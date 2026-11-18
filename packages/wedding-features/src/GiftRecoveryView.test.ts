@@ -1,6 +1,6 @@
 import {
-  type CheckoutStatus,
-  checkoutStatusSchema,
+  type GiftCheckoutStatus,
+  giftCheckoutStatusSchema,
 } from "@entrelacos/contracts";
 import { createElement, isValidElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -11,27 +11,24 @@ import {
   giftCheckoutReducer,
 } from "./giftCheckoutState";
 
-const identifiers = [
-  "site-1",
-  "quote-1",
-  "request-1",
-  "order-1",
-  "attempt-1",
-  "https://checkout.example.test/pay/private",
-];
+const identifiers = ["site-1", "quote-1", "request-1", "checkout-1"];
+const pix = {
+  qrCode: "00020126580014br.gov.bcb.pix0136checkout",
+  qrCodeUrl: "https://pix.example.test/qr.png",
+  expiresAt: "2026-10-12T12:30:00.000Z",
+};
 
 function makeStatus(
-  state: CheckoutStatus["state"],
-  overrides: Partial<CheckoutStatus> = {},
-): CheckoutStatus {
+  state: GiftCheckoutStatus["state"],
+  overrides: Partial<GiftCheckoutStatus> = {},
+): GiftCheckoutStatus {
   const closed = state === "CLOSED_UNPAID";
   const awaiting = state === "AWAITING_PAYMENT";
-  return checkoutStatusSchema.parse({
+  return giftCheckoutStatusSchema.parse({
     siteId: "site-1",
     quoteId: "quote-1",
     requestId: "request-1",
-    orderId: "order-1",
-    attemptId: "attempt-1",
+    checkoutId: "checkout-1",
     method: "PIX",
     mode: "sandbox",
     state,
@@ -41,16 +38,7 @@ function makeStatus(
         : "2026-10-12T12:00:00.000Z",
     closedReason: closed ? "EXPIRED" : null,
     mayStartNewAttempt: closed,
-    checkout: awaiting
-      ? {
-          orderId: "order-1",
-          attemptId: "attempt-1",
-          quoteId: "quote-1",
-          method: "PIX",
-          hostedUrl: "https://checkout.example.test/pay/private",
-          mode: "sandbox",
-        }
-      : null,
+    pix: awaiting ? pix : null,
     ...overrides,
   });
 }
@@ -141,11 +129,10 @@ describe("gift recovery view", () => {
           status: state.checkoutStatus,
           canRetry: true,
           onRetry: vi.fn(),
-          onContinue: vi.fn(),
         });
         expect(html).toContain("Pagamento em verificação");
         expect(html).not.toMatch(
-          /Recebimento confirmado|Reembolso confirmado|Continuar para pagamento|Nova tentativa/,
+          /Recebimento confirmado|Reembolso confirmado|QR Code do Pix|Nova tentativa/,
         );
         expect(html).toContain("Consultar pagamento");
       }
@@ -154,15 +141,19 @@ describe("gift recovery view", () => {
   it.each([
     ["CREATING", "Pagamento em verificação"],
     ["OUTCOME_UNKNOWN", "Pagamento em verificação"],
-    ["AWAITING_PAYMENT", "Pagamento aguardando conclusão"],
-    ["CONFIRMED", "Pagamento aprovado. Aguardando liberação do valor."],
+    ["AWAITING_PAYMENT", "Aguardando o Pix"],
+    [
+      "AWAITING_PAYMENT",
+      "Pagamento aguardando conclusão",
+      { method: "CREDIT_CARD", pix: null },
+    ],
     ["RECEIVED", "Recebimento confirmado"],
     ["CLOSED_UNPAID", "Pagamento encerrado sem recebimento"],
     ["REFUNDED", "Reembolso confirmado"],
-  ] as const)(
-    "projects %s without exposing checkout identifiers",
-    (state, label) => {
-      const html = renderRecovery({ status: makeStatus(state) });
+  ] as [GiftCheckoutStatus["state"], string, Partial<GiftCheckoutStatus>?][])(
+    "projects %s (%s) without exposing checkout identifiers",
+    (state, label, overrides) => {
+      const html = renderRecovery({ status: makeStatus(state, overrides) });
 
       expect(html).toContain(label);
       expect(html).toContain("Ambiente de testes — sem pagamentos reais.");
@@ -174,7 +165,7 @@ describe("gift recovery view", () => {
       expect(html).not.toMatch(/token|hash|payer|provider key/i);
 
       if (state === "CLOSED_UNPAID") {
-        expect(html).not.toContain("Continuar para pagamento");
+        expect(html).not.toContain("QR Code do Pix");
         expect(html).not.toContain("Nova tentativa");
       }
     },
@@ -185,11 +176,11 @@ describe("gift recovery view", () => {
     const contradictory = {
       ...makeStatus("RECEIVED"),
       closedReason: "EXPIRED",
-    } as unknown as CheckoutStatus;
+    } as unknown as GiftCheckoutStatus;
     const extraField = {
       ...makeStatus("RECEIVED"),
       recoveryToken: "private-token-value",
-    } as unknown as CheckoutStatus;
+    } as unknown as GiftCheckoutStatus;
     const cases = [
       [renderRecovery(), "Pagamento em verificação"],
       [renderRecovery({ loading: true }), "Consultando pagamento…"],
@@ -221,36 +212,30 @@ describe("gift recovery view", () => {
     expect(sandboxLoading).not.toContain("Recebimento confirmado");
   });
 
-  it("offers hosted continuation only when a valid checkout and handler exist", () => {
+  it("shows a Pix only from a valid status and never links away", () => {
     const status = makeStatus("AWAITING_PAYMENT");
-    const onContinue = vi.fn();
-    const html = renderRecovery({ status, onContinue });
-    const noHandler = renderRecovery({ status });
+    const onRetry = vi.fn();
+    const html = renderRecovery({ status, canRetry: true, onRetry });
 
-    expect(html).toContain("Continuar para pagamento");
-    expect(html).not.toContain("https://checkout.example.test/pay/private");
-    expect(
-      Array.from(
-        html.matchAll(/<a\b[^>]*href="([^"]*)"/g),
-        (match) => match[1],
-      ),
-    ).toEqual(["https://asaas.com", "mailto:contato@asaas.com.br"]);
-    expect(noHandler).not.toContain("Continuar para pagamento");
+    expect(html).toContain('alt="QR Code do Pix"');
+    expect(html).toContain(pix.qrCode);
+    expect(html).not.toMatch(/<a\b/);
 
-    const invalidCheckout = {
+    const invalidPix = {
       ...status,
-      checkout: { ...status.checkout, hostedUrl: "http://unsafe.example.test" },
-    } as unknown as CheckoutStatus;
-    const invalidUrl = renderRecovery({ status: invalidCheckout, onContinue });
+      pix: { ...pix, qrCodeUrl: "http://unsafe.example.test/qr.png" },
+    } as unknown as GiftCheckoutStatus;
+    const invalidUrl = renderRecovery({ status: invalidPix });
     expect(invalidUrl).toContain("Pagamento em verificação");
-    expect(invalidUrl).not.toContain("Continuar para pagamento");
+    expect(invalidUrl).not.toContain("unsafe.example.test");
+    expect(invalidUrl).not.toContain("QR Code do Pix");
 
     const button = findButton(
-      GiftRecoveryView({ ...baseProps, status, onContinue }),
-      "Continuar para pagamento",
+      GiftRecoveryView({ ...baseProps, status, canRetry: true, onRetry }),
+      "Já paguei",
     );
     button?.onClick?.();
-    expect(onContinue).toHaveBeenCalledWith(status.checkout);
+    expect(onRetry).toHaveBeenCalledTimes(1);
   });
 
   it("places the disclosure after the recovery action", () => {
@@ -260,7 +245,7 @@ describe("gift recovery view", () => {
       onRetry: vi.fn(),
     });
     const disclosure = html.indexOf(
-      'aria-label="Prestador dos serviços financeiros"',
+      "Pagamentos processados por Pagar.me, uma empresa Stone.",
     );
     expect(html).toContain("Consultar pagamento");
     expect(disclosure).toBeGreaterThan(html.indexOf("Consultar pagamento"));
