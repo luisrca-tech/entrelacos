@@ -97,6 +97,17 @@ describe("Pagar.me order payload", () => {
     });
   });
 
+  it("accepts the re_ and pp_ recipient id formats in split rules", () => {
+    const request = buildPagarmeOrderRequest({
+      ...pix,
+      platformRecipientId: "re_platform",
+      coupleRecipientId: "pp_couple",
+    });
+    expect(
+      request.body.payments[0].split.map((rule) => rule.recipient_id),
+    ).toEqual(["re_platform", "pp_couple"]);
+  });
+
   it("builds a tokenized card order with installments and descriptor", () => {
     const { body } = buildPagarmeOrderRequest(card);
     const [payment] = body.payments;

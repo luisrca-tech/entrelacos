@@ -1,4 +1,5 @@
 import { createHash, timingSafeEqual } from "node:crypto";
+import { pagarmeRecipientIdPattern } from "./pagarmeIds";
 
 /**
  * Pagar.me webhook types we act on, normalized to the inbox event types.
@@ -64,7 +65,7 @@ export class PagarmeWebhookError extends Error {
 const eventIdPattern = /^hook_[A-Za-z0-9]{1,128}$/;
 const orderIdPattern = /^or_[A-Za-z0-9]{1,128}$/;
 const chargeIdPattern = /^ch_[A-Za-z0-9]{1,128}$/;
-const recipientIdPattern = /^rp_[A-Za-z0-9]{1,128}$/;
+const recipientIdPattern = pagarmeRecipientIdPattern;
 const codePattern = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 
 function sha256(value: string): Buffer {

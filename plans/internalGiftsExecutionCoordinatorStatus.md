@@ -1,5 +1,7 @@
 # Supervised Internal Gifts Execution Coordinator
 
+> **2026-11 update:** Asaas was replaced by Pagar.me in 2026-11; see [Pagar.me operation](../docs/pagarmeOperation.md) and the [decision register](../docs/decisionRegister.md#payment-provider-switch-to-pagarme--2026-11-18). Asaas details below are historical.
+
 Updated: 2026-10-15 12:06 UTC.
 Owner: auxiliary chat 01a1380b-3489-79e3-a918-800c3bcae2c6 only.
 Principal: 01a0c6b0-0e91-7102-a240-885728de0a62.

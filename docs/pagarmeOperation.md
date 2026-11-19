@@ -60,15 +60,16 @@ A card decided in the creating call (paid or declined) is applied before the cre
 
 ## KYC
 
-The owner, or the recipient operator, calls `POST /v1/owner/sites/:siteId/receiving/kyc-link` (at most 3 links per site per minute; more answer `429`). The API calls `POST /recipients/{id}/kyc_link` and returns the URL and QR code once. They are valid for about 20 minutes and never stored. The panel opens the tab inside the click and fills in the URL when the API answers, so pop-up blockers allow it; the QR image type (PNG or SVG) is read from its bytes. Status changes arrive through `recipient.updated`, and the worker re-reads `GET /recipients/{id}`.
+The owner, or the recipient operator, calls `POST /v1/owner/sites/:siteId/receiving/kyc-link` (at most 3 links per site per minute; more answer `429`). The API calls `POST /recipients/{id}/kyc_link` and returns the URL and QR code once. They are valid for about 20 minutes and never stored. The panel opens the tab inside the click and fills in the URL when the API answers, so pop-up blockers allow it; the QR image type (PNG or SVG) is read from its bytes. Status changes arrive through `recipient.updated`, and the worker re-reads `GET /recipients/{id}`. Recipient ids may be `rp_`, `re_` or, for recipients created after the 2026-07-14 API change, a `pp_` `payment_profile_id`; all three are accepted.
 
 Recipient data is checked before Pagar.me is called: valid CPF check digits and an adult holder (18+).
 
 ## Withdrawals
 
 - Fee: R$ 3,67 per withdrawal, shown before confirming and recorded with the withdrawal.
-- `POST /recipients/{id}/withdrawals` is sent with `Idempotency-Key = withdrawal:<operationId>`, only from inside the dispatch guard (locks, budget, destination, consent, quote and lease). If the guard refuses before the POST leaves, the withdrawal fails with a local `rejected_<hash>` proof and the hold is released.
-- Recovery never replays the POST. A withdrawal whose response was lost is looked up in `GET /recipients/{id}/withdrawals?created_since=` (one match by net amount since it was requested). With no single match after 1 hour, the hold stays and a `WITHDRAWAL_UNRESOLVED` critical alert opens for an operator.
+- Withdrawals use [Transfers](https://docs.pagar.me/reference/criando-uma-transfer%C3%AAncia.md): Pagar.me deprecated `POST /recipients/{id}/withdrawals` in favour of `POST /transfers` with `{ amount, recipient_id }`. It is sent with `Idempotency-Key = withdrawal:<operationId>` (documented on this route), only from inside the dispatch guard (locks, budget, destination, consent, quote and lease). If the guard refuses before the POST leaves, the withdrawal fails with a local `rejected_<hash>` proof and the hold is released.
+- A transfer is read with `GET /transfers/{id}`; its integer id is stored as a decimal string. Statuses: `pending_transfer`, `processing`, `transferred` (completed), `failed` and `canceled` (released). A transfer whose `source_id` is another recipient is refused. Withdrawals recorded before the move (`with_` ids) are still read through the old route.
+- Recovery never replays the POST. A transfer whose response was lost is looked up in `GET /transfers?recipient_id=&count=1000`, keeping those created since the request (one match by net amount). With no single match after 1 hour, the hold stays and a `WITHDRAWAL_UNRESOLVED` critical alert opens for an operator. Pagar.me sends no transfer webhooks, so the status is polled.
 - A definitive refusal (`400`, `404`, `412`, `422`) fails the withdrawal and releases the reserved balance. Pagar.me created nothing in that case, so the failure proof carries a local `rejected_<hash>` reference. `401`, `403`, `409`, `429`, `5xx` and timeouts keep the hold until a lookup resolves it.
 
 ## Refunds and chargebacks
@@ -92,6 +93,15 @@ Rows from before the switch are kept: the previous provider's receiving accounts
 - `order` places a R$ 100,00 gift in 6x with the split and prints each recipient's payables for the charge. If the couple's total equals `C`, keep `charge_total`; if each installment equals `C`, switch to `per_installment`. Record the result here.
 
 The script never prints keys, tokens or card data.
+
+Confirm once in the sandbox before go-live (the 2026-11 docs review left these open):
+
+- Recipient `birthdate` is sent as `DD/MM/YYYY`, as in the [create recipient](https://docs.pagar.me/reference/criar-recebedor-1) examples; the format is not stated explicitly.
+- Whether `transfer_settings.transfer_interval` is case-sensitive (`Daily` in examples, `daily` in the update page).
+- Whether a transfer's `fee` is charged on top of `amount` (assumed) or deducted from it.
+- That a transfer's `source_id` is the recipient id sent as `recipient_id`; a mismatch is refused and leaves the hold to an operator, so a different format would block withdrawals safely but completely.
+- Whether a PSP account may pay orders with `card_token`: the [order reference](https://docs.pagar.me/reference/criar-pedido-2) reserves it for Gateway clients and recommends `card_id` for PSP, and says a token order must resend `billing_address`, which the checkout does not collect.
+- Whether `POST /orders` and `POST /recipients` honour `Idempotency-Key`; it is documented only for `POST /transfers`. Orders are recovered with `GET /orders?code=` regardless.
 
 Test cards (Pagar.me v5 simulator):
 

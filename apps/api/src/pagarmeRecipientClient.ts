@@ -4,6 +4,11 @@ import {
   type PagarmeHttpClient,
   type PagarmeHttpClientOptions,
 } from "./pagarmeHttpClient";
+import {
+  pagarmeLegacyWithdrawalIdPattern,
+  pagarmeRecipientIdPattern,
+  pagarmeTransferIdPattern,
+} from "./pagarmeIds";
 
 /** Flat fee Pagar.me debits from the recipient balance on each withdrawal. */
 export const PAGARME_WITHDRAWAL_FEE_CENTS =
@@ -20,7 +25,13 @@ export const pagarmeRecipientStatuses = [
 ] as const;
 export type PagarmeRecipientStatus = (typeof pagarmeRecipientStatuses)[number];
 
+/**
+ * Transfer statuses (https://docs.pagar.me/reference/objeto-transfer%C3%AAncia.md)
+ * plus the deprecated withdrawal ones, kept so recorded observations stay
+ * readable.
+ */
 export const pagarmeWithdrawalStatuses = [
+  "pending_transfer",
   "created",
   "pending",
   "processing",
@@ -124,7 +135,7 @@ export interface PagarmeRecipientClient {
     recipientId: string,
     withdrawalId: string,
   ): Promise<PagarmeWithdrawal>;
-  /** GET /recipients/{id}/withdrawals?created_since=: recovers a lost POST response. */
+  /** GET /transfers?recipient_id=, created since an instant: recovers a lost POST response. */
   listWithdrawals(
     recipientId: string,
     createdSince: string,
@@ -198,8 +209,21 @@ const providerId = (prefixes: readonly string[]) => (value: unknown) => {
     return invalid();
   return value;
 };
-export const readPagarmeRecipientId = providerId(["rp", "re"]);
-const withdrawalId = providerId(["with", "tran"]);
+export function readPagarmeRecipientId(value: unknown): string {
+  if (typeof value !== "string" || !pagarmeRecipientIdPattern.test(value))
+    return invalid();
+  return value;
+}
+/** Transfer ids are integers on the wire; they are kept as decimal strings. */
+function withdrawalId(value: unknown): string {
+  const id =
+    typeof value === "number" && Number.isSafeInteger(value) && value > 0
+      ? String(value)
+      : value;
+  if (typeof id !== "string" || !pagarmeTransferIdPattern.test(id))
+    return invalid();
+  return id;
+}
 const bankAccountId = providerId(["ba", "bank"]);
 
 function code(value: unknown): string {
@@ -268,7 +292,9 @@ function readRecipient(value: unknown): PagarmeRecipient {
       ? null
       : record(raw.default_bank_account);
   return Object.freeze({
-    id: readPagarmeRecipientId(raw.id),
+    // Recipients created after the 2026-07-14 API change may only carry a
+    // `pp_` payment profile id.
+    id: readPagarmeRecipientId(raw.id ?? raw.payment_profile_id),
     code: raw.code === null || raw.code === undefined ? null : code(raw.code),
     status,
     document:
@@ -288,14 +314,40 @@ function readRecipient(value: unknown): PagarmeRecipient {
   });
 }
 
-function readWithdrawal(value: unknown): PagarmeWithdrawal {
+/**
+ * Reads a transfer (or a legacy withdrawal). A transfer names its source
+ * recipient; one drawn from any other recipient is refused.
+ */
+function readWithdrawal(
+  value: unknown,
+  recipientId: string,
+): PagarmeWithdrawal {
   const raw = record(value);
+  if (
+    (raw.source_type !== undefined && raw.source_type !== "recipient") ||
+    (raw.source_id !== undefined && raw.source_id !== recipientId) ||
+    (raw.recipient_id !== undefined && raw.recipient_id !== recipientId)
+  )
+    return invalid();
   return Object.freeze({
     id: withdrawalId(raw.id),
     amountCents: cents(raw.amount),
     status: text(raw.status, 64),
-    updatedAt: instant(raw.updated_at ?? raw.created_at),
+    updatedAt: instant(
+      raw.date_updated ?? raw.updated_at ?? raw.date_created ?? raw.created_at,
+    ),
   });
+}
+
+function createdAt(value: unknown): number {
+  const raw = record(value);
+  return Date.parse(instant(raw.date_created ?? raw.created_at));
+}
+
+/** Pagar.me example dates are `DD/MM/YYYY` (criar-recebedor-1). */
+function pagarmeBirthdate(isoDate: string): string {
+  const [year, month, day] = birthDate(isoDate).split("-");
+  return `${day}/${month}/${year}`;
 }
 
 function recipientBody(recipientCode: string, input: PagarmeRecipientInput) {
@@ -317,7 +369,7 @@ function recipientBody(recipientCode: string, input: PagarmeRecipientInput) {
       name,
       email: text(input.email, 254),
       document: cpf,
-      birthdate: `${birthDate(input.birthDate)}T00:00:00`,
+      birthdate: pagarmeBirthdate(input.birthDate),
       monthly_income: input.monthlyIncomeCents,
       professional_occupation: text(input.professionalOccupation, 128),
       phone_numbers: [
@@ -431,11 +483,15 @@ export function createPagarmeRecipientClient(
       const id = readPagarmeRecipientId(recipientId);
       if (!Number.isSafeInteger(transferCents) || transferCents < 1)
         return invalid();
+      // POST /recipients/{id}/withdrawals is deprecated in favour of
+      // Transfers, the only route that documents Idempotency-Key
+      // (https://docs.pagar.me/reference/criando-uma-transfer%C3%AAncia.md).
       const withdrawal = readWithdrawal(
-        await http.request("POST", `/recipients/${id}/withdrawals`, {
-          body: { amount: transferCents },
+        await http.request("POST", "/transfers", {
+          body: { amount: transferCents, recipient_id: id },
           idempotencyKey,
         }),
+        id,
       );
       if (withdrawal.amountCents !== transferCents) return invalid();
       return withdrawal;
@@ -443,25 +499,28 @@ export function createPagarmeRecipientClient(
     async getWithdrawal(recipientId, providerWithdrawalId) {
       const id = readPagarmeRecipientId(recipientId);
       const wid = withdrawalId(providerWithdrawalId);
-      const withdrawal = readWithdrawal(
-        await http.request("GET", `/recipients/${id}/withdrawals/${wid}`),
-      );
+      // Only withdrawals recorded before the move to Transfers use the
+      // deprecated route.
+      const path = pagarmeLegacyWithdrawalIdPattern.test(wid)
+        ? `/recipients/${id}/withdrawals/${wid}`
+        : `/transfers/${wid}`;
+      const withdrawal = readWithdrawal(await http.request("GET", path), id);
       if (withdrawal.id !== wid) return invalid();
       return withdrawal;
     },
     async listWithdrawals(recipientId, createdSince) {
       const id = readPagarmeRecipientId(recipientId);
-      const query = new URLSearchParams({
-        created_since: instant(createdSince),
-      });
-      const raw = await http.request(
-        "GET",
-        `/recipients/${id}/withdrawals?${query}`,
-      );
-      // The reference shows a bare array; paginated lists wrap it in `data`.
+      const since = Date.parse(instant(createdSince));
+      // GET /transfers answers a bare array filtered by recipient; it has no
+      // "created since" filter, so the window is applied here
+      // (https://docs.pagar.me/reference/retornando-transfer%C3%AAncias.md).
+      const query = new URLSearchParams({ recipient_id: id, count: "1000" });
+      const raw = await http.request("GET", `/transfers?${query}`);
       const list = Array.isArray(raw) ? raw : record(raw).data;
       if (!Array.isArray(list) || list.length > 1_000) return invalid();
-      return list.map(readWithdrawal);
+      return list
+        .filter((item) => createdAt(item) >= since)
+        .map((item) => readWithdrawal(item, id));
     },
     async listPayables(recipientId, filter = {}) {
       const id = readPagarmeRecipientId(recipientId);

@@ -174,6 +174,18 @@ describe("Pagar.me webhook events", () => {
     });
   });
 
+  it("reads recipient updates for re_ and pp_ recipient ids", () => {
+    for (const id of ["re_fixtureRecipient01", "pp_fixtureProfile01"])
+      expect(
+        parsePagarmeWebhookEvent(
+          fixture("webhook-recipient-updated").replace(
+            '"rp_fixtureRecipient01"',
+            JSON.stringify(id),
+          ),
+        ),
+      ).toMatchObject({ eventType: "RECIPIENT_UPDATED", recipientId: id });
+  });
+
   it("ignores event types we do not handle", () => {
     expect(
       parsePagarmeWebhookEvent(

@@ -406,7 +406,7 @@ describe("completion-owned original account provisioning", () => {
         name: "MARIA DA SILVA",
         email: "maria@example.test",
         document: "12345678909",
-        birthdate: "1990-04-12T00:00:00",
+        birthdate: "12/04/1990",
         monthly_income: 500000,
         professional_occupation: "Professora",
         phone_numbers: [{ ddd: "21", number: "994647568", type: "mobile" }],

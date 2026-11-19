@@ -25,6 +25,7 @@ import {
   PagarmeRejectedError,
   PagarmeUnknownOutcomeError,
 } from "./pagarmeHttpClient";
+import { pagarmeRecipientIdPattern } from "./pagarmeIds";
 import type {
   PagarmeOrderClient,
   PagarmeOrderObservation,
@@ -454,7 +455,7 @@ function assertEligible(
   if (
     !sameBinding(snapshot.receiving, context.providerBinding) ||
     context.mode !== quote.data.mode ||
-    !/^rp_[A-Za-z0-9]{1,128}$/.test(recipient) ||
+    !pagarmeRecipientIdPattern.test(recipient) ||
     recipient === platformRecipientId
   )
     throw new ReceivingReadinessServiceError();

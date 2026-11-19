@@ -1,5 +1,7 @@
 # Internal Gifts Worker Status — Workstream C
 
+> **2026-11 update:** Asaas was replaced by Pagar.me in 2026-11; see [Pagar.me operation](../docs/pagarmeOperation.md) and the [decision register](../docs/decisionRegister.md#payment-provider-switch-to-pagarme--2026-11-18). Asaas details below are historical.
+
 Last update: 2026-10-14 (America/Sao_Paulo).
 
 ## State and authority

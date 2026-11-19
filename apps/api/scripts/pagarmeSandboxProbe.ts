@@ -22,6 +22,7 @@ import {
   PAGARME_API_BASE_URL,
   type PagarmeHttpClient,
 } from "../src/pagarmeHttpClient";
+import { isPagarmeRecipientId } from "../src/pagarmeIds";
 import { createPagarmeOrderClient } from "../src/pagarmeOrderClient";
 import { buildPagarmeOrderRequest } from "../src/pagarmeOrderPayload";
 import {
@@ -49,8 +50,10 @@ export function readProbeEnvironment(env: Record<string, string | undefined>) {
   if (!/^sk_test_[A-Za-z0-9_-]+$/.test(secretKey))
     fail("PAGARME_SECRET_KEY must be an sk_test_ key");
   const platformRecipientId = env.PAGARME_PLATFORM_RECIPIENT_ID ?? "";
-  if (!/^rp_[A-Za-z0-9]+$/.test(platformRecipientId))
-    fail("PAGARME_PLATFORM_RECIPIENT_ID must be an rp_ id");
+  if (!isPagarmeRecipientId(platformRecipientId))
+    fail(
+      "PAGARME_PLATFORM_RECIPIENT_ID must be a recipient id (rp_, re_ or pp_)",
+    );
   const publicKey = env.PAGARME_PUBLIC_KEY;
   if (publicKey !== undefined && !/^pk_test_[A-Za-z0-9_-]+$/.test(publicKey))
     fail("PAGARME_PUBLIC_KEY must be a pk_test_ key");
@@ -128,9 +131,9 @@ export async function runPagarmeSandboxProbe(
   let coupleRecipientId = flag >= 0 ? argv[flag + 1] : undefined;
   if (
     coupleRecipientId !== undefined &&
-    !/^rp_[A-Za-z0-9]+$/.test(coupleRecipientId)
+    !isPagarmeRecipientId(coupleRecipientId)
   )
-    fail("--recipient must be an rp_ id");
+    fail("--recipient must be a recipient id (rp_, re_ or pp_)");
   const http: PagarmeHttpClient = createPagarmeHttpClient({
     secretKey: settings.secretKey,
     fetch,

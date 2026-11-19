@@ -4,6 +4,7 @@ import {
   type PagarmeHttpClientOptions,
   PagarmeUnknownOutcomeError,
 } from "./pagarmeHttpClient";
+import { pagarmeRecipientIdPattern } from "./pagarmeIds";
 import type { PagarmeOrderRequest } from "./pagarmeOrderPayload";
 
 export interface PagarmePixData {
@@ -59,7 +60,7 @@ export interface PagarmeOrderClient {
 
 const orderId = /^or_[A-Za-z0-9]{1,128}$/;
 const chargeId = /^ch_[A-Za-z0-9]{1,128}$/;
-const recipientId = /^rp_[A-Za-z0-9]{1,128}$/;
+const recipientId = pagarmeRecipientIdPattern;
 const code = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 
 function malformed(): never {

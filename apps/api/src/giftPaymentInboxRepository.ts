@@ -49,7 +49,7 @@ export interface GiftPaymentInboxPayload {
   paymentId?: string;
   /** Our checkout attempt id (the order code). */
   externalReference?: string;
-  /** Pagar.me recipient `rp_` id. */
+  /** Pagar.me recipient id (`rp_`, `re_` or `pp_`). */
   accountId?: string;
 }
 

@@ -8,6 +8,7 @@ import {
 import { sql } from "drizzle-orm";
 import { databaseTimestampEpochMicroseconds } from "./databaseTimestamp";
 import { PagarmeRejectedError } from "./pagarmeHttpClient";
+import { pagarmeTransferIdPattern } from "./pagarmeIds";
 import {
   PAGARME_WITHDRAWAL_FEE_CENTS,
   type PagarmeRecipientBalance,
@@ -34,7 +35,7 @@ import {
 /** Fixed-fee policy recorded on every Pagar.me withdrawal intent. */
 export const PAGARME_WITHDRAWAL_POLICY_VERSION = `pagarme-withdrawal-fixed-v1-${PAGARME_WITHDRAWAL_FEE_CENTS}`;
 const observationReference = /^pagarme-withdrawal:[a-f0-9]{64}$/;
-// After this long an unknown withdrawal missing from the provider list is
+// After this long an unknown transfer missing from the provider list is
 // handed to an operator.
 const defaultReplayWindowMs = 60 * 60_000;
 
@@ -169,7 +170,7 @@ export function capturePagarmeWithdrawal(
     !w ||
     typeof w.id !== "string" ||
     !(
-      /^(?:with|tran)_[A-Za-z0-9]{1,128}$/.test(w.id) ||
+      pagarmeTransferIdPattern.test(w.id) ||
       (rejectedWithdrawalReference.test(w.id) && w.status === "failed")
     ) ||
     w.amountCents !== pagarmeWithdrawalTransferCents(c.amountCents) ||

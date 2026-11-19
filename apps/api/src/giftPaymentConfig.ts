@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { siteIdSchema } from "@entrelacos/contracts";
 import type { DatabaseTarget } from "@entrelacos/database";
+import { pagarmeRecipientIdPattern } from "./pagarmeIds";
 
 /**
  * Pagar.me settings. PAGARME_MODE=test is stored as the `sandbox` financial
@@ -83,7 +84,7 @@ export function readGiftPaymentConfig(
     invalid();
   const key = secretKey(env.PAGARME_SECRET_KEY, mode);
   const platformRecipientId = required(env.PAGARME_PLATFORM_RECIPIENT_ID);
-  if (!/^rp_[A-Za-z0-9]{1,128}$/.test(platformRecipientId)) invalid();
+  if (!pagarmeRecipientIdPattern.test(platformRecipientId)) invalid();
   const webhookBasicUser = required(env.PAGARME_WEBHOOK_BASIC_USER);
   if (!/^[!-9;-~]{1,128}$/.test(webhookBasicUser)) invalid();
   const webhookPassword = required(env.PAGARME_WEBHOOK_BASIC_PASSWORD);

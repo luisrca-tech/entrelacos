@@ -32,6 +32,16 @@ describe("Pagar.me gift payment configuration", () => {
     },
   );
 
+  it("accepts a platform recipient in the re_ or pp_ id format", () => {
+    for (const id of ["re_fixturePlatform01", "pp_fixturePlatform01"])
+      expect(
+        readGiftPaymentConfig(
+          { ...configured, PAGARME_PLATFORM_RECIPIENT_ID: id },
+          "test",
+        ),
+      ).toMatchObject({ platformRecipientId: id });
+  });
+
   it("keeps only a hash of the webhook credentials, never the raw password", () => {
     const result = readGiftPaymentConfig(configured, "development");
     expect(JSON.stringify(result)).not.toContain(
@@ -177,7 +187,7 @@ describe("Pagar.me gift payment configuration", () => {
     { PAGARME_SECRET_KEY: " sk_test_fixture" },
     { PAGARME_SECRET_KEY: "sk_test_fixture\nheader" },
     { PAGARME_SECRET_KEY: `sk_test_${"a".repeat(8192)}` },
-    { PAGARME_PLATFORM_RECIPIENT_ID: "re_fixture" },
+    { PAGARME_PLATFORM_RECIPIENT_ID: "ac_fixture" },
     { PAGARME_PLATFORM_RECIPIENT_ID: "rp_fixture/other" },
     { PAGARME_WEBHOOK_BASIC_USER: "user:with-colon" },
     { PAGARME_WEBHOOK_BASIC_USER: "user name" },

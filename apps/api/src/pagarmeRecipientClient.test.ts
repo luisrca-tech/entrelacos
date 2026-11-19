@@ -91,7 +91,7 @@ describe("Pagar.me recipient client", () => {
         name: "MARIA DA SILVA",
         email: "maria@example.test",
         document: "12345678909",
-        birthdate: "1990-04-12T00:00:00",
+        birthdate: "12/04/1990",
         monthly_income: 500000,
         professional_occupation: "Professora",
         phone_numbers: [{ ddd: "21", number: "994647568", type: "mobile" }],
@@ -210,6 +210,25 @@ describe("Pagar.me recipient client", () => {
     expect(recipient.status).toBe("active");
   });
 
+  it("reads recipients identified by the re_ and pp_ id formats", async () => {
+    const active = JSON.parse(fixture("recipient-active"));
+    for (const [body, id] of [
+      [{ ...active, id: "re_fixtureRecipient01" }, "re_fixtureRecipient01"],
+      [
+        { ...active, id: null, payment_profile_id: "pp_fixtureProfile01" },
+        "pp_fixtureProfile01",
+      ],
+    ] as const) {
+      const fetch = respond([200, JSON.stringify(body)]);
+      const recipient = await createPagarmeRecipientClient({
+        secretKey,
+        fetch,
+      }).getRecipient(id);
+      expect(call(fetch).url).toBe(`${PAGARME_API_BASE_URL}/recipients/${id}`);
+      expect(recipient.id).toBe(id);
+    }
+  });
+
   it("creates a short-lived KYC link and returns it without retaining it", async () => {
     const fetch = respond([200, fixture("recipient-kyc-link")]);
     const link = await createPagarmeRecipientClient({
@@ -274,28 +293,52 @@ describe("Pagar.me recipient client", () => {
     });
   });
 
-  it("creates a withdrawal of the transfer amount with an idempotency key", async () => {
-    const fetch = respond([200, fixture("recipient-withdrawal-pending")]);
+  it("creates a transfer (the documented replacement for withdrawals) with an idempotency key", async () => {
+    const fetch = respond([200, fixture("transfer-pending")]);
     const withdrawal = await createPagarmeRecipientClient({
       secretKey,
       fetch,
     }).createWithdrawal("rp_fixtureRecipient01", 9633, "withdrawal:op-1");
     const request = call(fetch);
-    expect(request.url).toBe(
-      `${PAGARME_API_BASE_URL}/recipients/rp_fixtureRecipient01/withdrawals`,
-    );
+    expect(request.url).toBe(`${PAGARME_API_BASE_URL}/transfers`);
     expect(request.method).toBe("POST");
-    expect(request.body).toEqual({ amount: 9633 });
+    expect(request.body).toEqual({
+      amount: 9633,
+      recipient_id: "rp_fixtureRecipient01",
+    });
     expect(request.headers.get("idempotency-key")).toBe("withdrawal:op-1");
     expect(withdrawal).toEqual({
-      id: "with_fixtureWithdraw01",
+      id: "65485",
       amountCents: 9633,
-      status: "pending",
+      status: "pending_transfer",
       updatedAt: "2026-11-20T10:00:00.000Z",
     });
   });
 
-  it("reads a withdrawal by id", async () => {
+  it("refuses a transfer drawn from another recipient", async () => {
+    const other = fixture("transfer-pending").replace(
+      '"source_id": "rp_fixtureRecipient01"',
+      '"source_id": "rp_someoneElse01"',
+    );
+    await expect(
+      createPagarmeRecipientClient({
+        secretKey,
+        fetch: respond([200, other]),
+      }).createWithdrawal("rp_fixtureRecipient01", 9633, "withdrawal:op-1"),
+    ).rejects.toThrow(TypeError);
+  });
+
+  it("reads a transfer by id", async () => {
+    const fetch = respond([200, fixture("transfer-transferred")]);
+    const withdrawal = await createPagarmeRecipientClient({
+      secretKey,
+      fetch,
+    }).getWithdrawal("rp_fixtureRecipient01", "65485");
+    expect(call(fetch).url).toBe(`${PAGARME_API_BASE_URL}/transfers/65485`);
+    expect(withdrawal.status).toBe("transferred");
+  });
+
+  it("still reads a withdrawal created through the deprecated withdrawals route", async () => {
     const fetch = respond([200, fixture("recipient-withdrawal-transferred")]);
     const withdrawal = await createPagarmeRecipientClient({
       secretKey,
@@ -307,26 +350,40 @@ describe("Pagar.me recipient client", () => {
     expect(withdrawal.status).toBe("transferred");
   });
 
-  it("lists withdrawals created since an instant (bare or paginated list)", async () => {
-    const pending = fixture("recipient-withdrawal-pending");
-    for (const body of [`[${pending}]`, `{"data":[${pending}]}`]) {
-      const fetch = respond([200, body]);
-      const listed = await createPagarmeRecipientClient({
+  it("lists the recipient's transfers created since an instant", async () => {
+    const recent = fixture("transfer-pending");
+    const older = recent
+      .replace('"id": 65485', '"id": 65400')
+      .replaceAll("2026-11-20T10:00:00.000Z", "2026-11-19T10:00:00.000Z");
+    const fetch = respond([200, `[${recent},${older}]`]);
+    const listed = await createPagarmeRecipientClient({
+      secretKey,
+      fetch,
+    }).listWithdrawals("rp_fixtureRecipient01", "2026-11-20T09:59:00.000Z");
+    expect(call(fetch).url).toBe(
+      `${PAGARME_API_BASE_URL}/transfers?recipient_id=rp_fixtureRecipient01&count=1000`,
+    );
+    expect(listed).toEqual([
+      {
+        id: "65485",
+        amountCents: 9633,
+        status: "pending_transfer",
+        updatedAt: "2026-11-20T10:00:00.000Z",
+      },
+    ]);
+  });
+
+  it("refuses a listed transfer of another recipient", async () => {
+    const other = fixture("transfer-pending").replace(
+      '"source_id": "rp_fixtureRecipient01"',
+      '"source_id": "rp_someoneElse01"',
+    );
+    await expect(
+      createPagarmeRecipientClient({
         secretKey,
-        fetch,
-      }).listWithdrawals("rp_fixtureRecipient01", "2026-11-20T09:59:00.000Z");
-      expect(call(fetch).url).toBe(
-        `${PAGARME_API_BASE_URL}/recipients/rp_fixtureRecipient01/withdrawals?created_since=2026-11-20T09%3A59%3A00.000Z`,
-      );
-      expect(listed).toEqual([
-        {
-          id: "with_fixtureWithdraw01",
-          amountCents: 9633,
-          status: "pending",
-          updatedAt: "2026-11-20T10:00:00.000Z",
-        },
-      ]);
-    }
+        fetch: respond([200, `[${other}]`]),
+      }).listWithdrawals("rp_fixtureRecipient01", "2026-11-20T09:59:00.000Z"),
+    ).rejects.toThrow(TypeError);
   });
 
   it("lists payables of one recipient, optionally for one charge", async () => {

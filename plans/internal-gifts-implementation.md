@@ -1,5 +1,7 @@
 # Plan: Internal Gifts and Couple Finance
 
+> **2026-11 update:** Asaas was replaced by Pagar.me in 2026-11; see [Pagar.me operation](../docs/pagarmeOperation.md) and the [decision register](../docs/decisionRegister.md#payment-provider-switch-to-pagarme--2026-11-18). Asaas details below are historical.
+
 > Source PRD: Internal Gifts and Couple Finance, prepared 2026-10-12. The Internal Gifts Asaas Release Plan remains the detailed financial/security reference.
 
 ## Current execution handoff — 2026-10-14 22:35 UTC

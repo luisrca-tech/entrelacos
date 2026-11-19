@@ -313,6 +313,39 @@ describe("Pagar.me withdrawal dispatch", () => {
     ]);
   });
 
+  it("accepts and proves a pending transfer identified by an integer id", async () => {
+    const transfer = {
+      id: "65485",
+      amountCents: 9_633,
+      status: "pending_transfer",
+      updatedAt: new Date().toISOString(),
+    };
+    const s = setup({ withdrawal: transfer });
+    const observation = await s.adapter.dispatch(s.original, s.fence);
+    expect(observation).toMatchObject({
+      outcome: "ACCEPTED",
+      providerReference: "65485",
+      proofReference: null,
+    });
+    const done = setup({
+      withdrawal: { ...transfer, status: "transferred" },
+    });
+    const completed = await done.adapter.dispatch(done.original, done.fence);
+    const reference =
+      completed.outcome === "ACCEPTED" ? completed.proofReference : null;
+    await expect(
+      done.custody.loadCompletionProofInTransaction(
+        done.tx as never,
+        done.original,
+        done.fence,
+        reference as string,
+      ),
+    ).resolves.toMatchObject({
+      outcome: "COMPLETED",
+      providerReference: "65485",
+    });
+  });
+
   it("returns a completion reference for a transferred withdrawal", async () => {
     const s = setup({ withdrawal: withdrawalFixture("transferred") });
     const observation = await s.adapter.dispatch(s.original, s.fence);

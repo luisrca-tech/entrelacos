@@ -105,6 +105,22 @@ describe("Pagar.me order client", () => {
     });
   });
 
+  it("reads split rules echoed for re_ and pp_ recipients", async () => {
+    const body = JSON.parse(
+      JSON.stringify(fixture("order-card-paid"))
+        .replaceAll('"rp_platformFixture01"', '"re_platformFixture01"')
+        .replaceAll('"rp_fixtureRecipient01"', '"pp_fixtureRecipient01"'),
+    );
+    const order = await createPagarmeOrderClient({
+      secretKey,
+      fetch: respond(200, body),
+    }).getOrder("or_fixtureOrder0002");
+    expect(order.charges[0].split).toEqual([
+      { recipientId: "re_platformFixture01", amountCents: 859 },
+      { recipientId: "pp_fixtureRecipient01", amountCents: 11031 },
+    ]);
+  });
+
   it("finds an order by its code and returns null when absent", async () => {
     const found = respond(200, fixture("orders-list-by-code"));
     expect(

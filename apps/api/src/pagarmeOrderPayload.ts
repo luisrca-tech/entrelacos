@@ -6,6 +6,7 @@ import {
   giftCheckoutBuyerSchema,
   giftCheckoutCardTokenSchema,
 } from "@entrelacos/contracts";
+import { pagarmeRecipientIdPattern } from "./pagarmeIds";
 
 /** Card statement text (Pagar.me limit: 13 characters, letters only here). */
 export const PAGARME_STATEMENT_DESCRIPTOR = "ENTRELACOS";
@@ -90,7 +91,7 @@ function invalid(reason: string): never {
 }
 
 const reference = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
-const recipient = /^rp_[A-Za-z0-9]{1,128}$/;
+const recipient = pagarmeRecipientIdPattern;
 
 function cents(value: number, label: string): number {
   if (!Number.isSafeInteger(value) || value < 1 || value > 2_147_483_647)
