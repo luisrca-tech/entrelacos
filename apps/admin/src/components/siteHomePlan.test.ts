@@ -202,7 +202,7 @@ it("counts calendar days in São Paulo across UTC midnight", async () => {
 describe("site home with money gifts switched off", () => {
   afterEach(() => vi.unstubAllEnvs());
   it("hides receiving cards, labels and next steps", () => {
-    vi.stubEnv("PUBLIC_GIFT_PAYMENTS_ENABLED", undefined);
+    vi.stubEnv("PUBLIC_GIFT_PAYMENTS_ENABLED", "false");
     for (const readiness of [
       null,
       pending,

@@ -54,7 +54,19 @@ describe("public FAQ payment content", () => {
   it("states the withdrawal fee from the tariff table", () => {
     expect(brl(GIFT_PLATFORM_TARIFFS.withdrawalFeeCents)).toBe("R$ 3,67");
     expect(text).toContain(brl(GIFT_PLATFORM_TARIFFS.withdrawalFeeCents));
-    expect(text).toContain("Banco Stone");
+  });
+
+  it("does not promise free withdrawals to any bank", () => {
+    expect(text).not.toMatch(/Banco Stone|gratuit|sem custo|grátis/i);
+  });
+
+  it("explains how card and identity data are protected", () => {
+    expect(text).toMatch(/número do cartão[^.]*direto[^.]*Pagar\.me/);
+    expect(text).toMatch(/nunca o número nem o CVV/);
+  });
+
+  it("never names the previous provider", () => {
+    expect(text).not.toMatch(/asaas/i);
   });
 
   it("does not repeat a question", () => {

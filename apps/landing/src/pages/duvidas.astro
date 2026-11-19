@@ -1,4 +1,5 @@
 ---
+import PaymentSeal from "../components/PaymentSeal.astro";
 import PricingExample from "../components/PricingExample.astro";
 import PublicHeader from "../components/PublicHeader.astro";
 import PublicFooter from "../components/PublicFooter.astro";
@@ -71,6 +72,7 @@ const description = "Tire suas dúvidas sobre personalização do site de casame
                   </details>
                 ))}
               </div>
+              {topic.id === "presentes" && <PaymentSeal />}
               {topic.id === "taxas" && <PricingExample />}
             </section>
           ))}

@@ -93,6 +93,11 @@ export const faqTopics: FaqTopic[] = [
         answer: `Pix e cartão de crédito, à vista ou em até ${maxInstallments}x. Cada parcela precisa ter pelo menos ${minimumInstallment}, então presentes de valor baixo oferecem menos opções de parcelamento. O convidado vê o total e o valor de cada parcela antes de confirmar.`,
       },
       {
+        question: "Os dados de pagamento ficam seguros?",
+        answer:
+          "O número do cartão vai direto do navegador do convidado para a Pagar.me, que devolve um código no lugar dele. O Entrelaços recebe só esse código, nunca o número nem o CVV. No Pix, o convidado paga pelo aplicativo do banco, com o QR Code ou o código copia e cola. A foto do documento e a selfie da verificação de identidade também seguem direto para a Pagar.me.",
+      },
+      {
         question: "Abrir o pagamento já conta como um presente recebido?",
         answer:
           "Não. Escolher um presente ou abrir o checkout não confirma a compra. Tentativas sem pagamento não aparecem como recebimentos do casal. O histórico passa a exibir o pagamento após a confirmação ou o registro de crédito; a disponibilidade para saque depende da liberação do valor.",
@@ -164,7 +169,7 @@ export const faqTopics: FaqTopic[] = [
     questions: [
       {
         question: "Quanto custa sacar?",
-        answer: `Cada saque custa ${withdrawalFee}, descontado do saldo; para contas no Banco Stone, é gratuito. A tarifa aparece antes da confirmação. Como ela é cobrada por saque, juntar presentes em menos saques reduz o custo.`,
+        answer: `Cada saque custa ${withdrawalFee}, descontado do saldo. A tarifa aparece antes da confirmação. Como ela é cobrada por saque, juntar presentes em menos saques reduz o custo.`,
       },
       {
         question: "Como solicitamos e acompanhamos um saque?",
