@@ -1,6 +1,6 @@
 declare global {
   interface ImportMetaEnv {
-    /** Build-time opt-in for money gifts. Anything but "true" keeps them off. */
+    /** Build-time kill switch for money gifts. Only "false" turns them off. */
     readonly PUBLIC_GIFT_PAYMENTS_ENABLED?: string;
   }
   interface ImportMeta {
@@ -10,11 +10,12 @@ declare global {
 
 /**
  * Frontend switch for receiving money gifts (public checkout and the admin
- * receiving area). Off unless the build sets
- * PUBLIC_GIFT_PAYMENTS_ENABLED=true; the API and its guards are unaffected.
+ * receiving area). On by default; a build can pause the feature with
+ * PUBLIC_GIFT_PAYMENTS_ENABLED=false. Whether money actually moves is decided
+ * by the API (PAGARME_MODE and its guards), never by this flag.
  */
 export function giftPaymentsEnabled(): boolean {
-  return import.meta.env.PUBLIC_GIFT_PAYMENTS_ENABLED === "true";
+  return import.meta.env.PUBLIC_GIFT_PAYMENTS_ENABLED !== "false";
 }
 
 /** Shown on the public site while money gifts are switched off. */

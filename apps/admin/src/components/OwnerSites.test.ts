@@ -509,7 +509,7 @@ it("shows lifecycle and stored receiving account state as badges with an outline
 });
 
 it("hides the receiving account column while money gifts are switched off", async () => {
-  vi.stubEnv("PUBLIC_GIFT_PAYMENTS_ENABLED", undefined);
+  vi.stubEnv("PUBLIC_GIFT_PAYMENTS_ENABLED", "false");
   try {
     await verify();
     request.mockResolvedValueOnce({

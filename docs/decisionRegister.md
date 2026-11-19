@@ -45,14 +45,16 @@ Gift payments, couple receiving and withdrawals move from Asaas to Pagar.me v5 c
 | Split | Sent at authorization. Platform recipient: remainder, `liable`, pays processing fee and remainder. Couple recipient: flat amount grossed up for anticipation, all options off. |
 | Receiving | One individual (CPF) recipient per site with automatic anticipation on and automatic transfer off. Card amounts are available in about 2 days for any installment count; Pix immediately. |
 | Identity | KYC through a short-lived Pagar.me link and QR code generated from the panel, never stored. Receiving requires an approved recipient. |
-| Withdrawal | On demand to the recipient's bank account (same CPF). R$3.67 per withdrawal, free for Banco Stone accounts, shown before confirming. |
+| Withdrawal | On demand to the recipient's bank account (same CPF). R$3.67 per withdrawal for every destination bank (no free tier is promised), shown before confirming. |
 | Webhook | Single `POST /v1/webhooks/pagarme` with Basic auth, idempotent through `financial_event_inbox`; the worker re-reads the order or recipient before posting. |
 | Refunds and chargebacks | Refunds are operator-only and total. Chargebacks are absorbed by the platform recipient and raise an operator alert. |
-| Disclosure | Text-only "Pagamentos processados por Pagar.me, uma empresa Stone." without a logo, pending confirmation of an official partner seal. |
+| Disclosure | Text seal "Pagamentos processados por Pagar.me, uma empresa Stone." with a generic lock icon, on checkout, admin receiving pages, landing and FAQ. No Pagar.me or Stone brand asset is reused: neither domain publishes a brand kit or usage terms for a partner badge (checked 2026-11-19), so no logo is imitated. |
 
 Operational details: [Pagar.me operation](pagarmeOperation.md), [gift pricing](giftPricingPanel.md), [settlement](giftPricingSettlement.md). Open points to confirm in the sandbox: gateway fee on Pix, whether a flat card split applies per charge or per installment, and the exact chargeback webhook event name.
 
 Review fixes (2026-11-18): rows written before the switch are kept rather than dropped (0031 only replaces constraints; 0033 restores the objects on local databases that ran an earlier draft). The unused `receiving_pix_destination` table and the `split_divergence_blocked_at` column stay for now because historical rows and history views still read them; dropping them is a later, explicit migration. Chargebacks are read from `chargeback.received` as well as the legacy names, and paid orders are re-read daily for 120 days. A compensated refund or chargeback clears the withdrawal block once the ledger is covered again, or when an operator resolves its alert.
+
+Money gifts back on in the frontend (2026-11-19): `PUBLIC_GIFT_PAYMENTS_ENABLED` (added in PR #79 to pause money gifts, off by default) is now a kill switch that is on by default; only the exact value `false` pauses the public checkout and the admin receiving area. Re-enabling is safe because the frontend flag never moved money: the API still refuses everything while `PAGARME_MODE=disabled` (the production default until accreditation), and a site whose catalog reports payments disabled shows no gift section. The variable was also missing from the `turbo.json` build env, so Turborepo never passed it to builds; it is listed now. Rejected: deleting the flag (loses the quick pause) and keeping it opt-in (a forgotten variable would silently hide the feature after release).
 
 ## Confirmed technical boundaries
 

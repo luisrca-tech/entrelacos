@@ -100,7 +100,7 @@ describe("admin shell navigation", () => {
 describe("navigation with money gifts switched off", () => {
   afterEach(() => vi.unstubAllEnvs());
   it("drops the receiving area from every menu and redirects its links home", () => {
-    vi.stubEnv("PUBLIC_GIFT_PAYMENTS_ENABLED", undefined);
+    vi.stubEnv("PUBLIC_GIFT_PAYMENTS_ENABLED", "false");
     for (const role of ["OWNER", "SITE_ADMIN", "SITE_ASSISTANT"] as const) {
       const areas = getSiteNavigation(role, "site-1").map((item) => item.area);
       expect(areas).not.toContain("receiving");
@@ -113,8 +113,8 @@ describe("navigation with money gifts switched off", () => {
       [...mobile.primary, ...mobile.more].map((item) => item.area),
     ).not.toContain("receiving");
   });
-  it("keeps the receiving area when the flag is on", () => {
-    vi.stubEnv("PUBLIC_GIFT_PAYMENTS_ENABLED", "true");
+  it("keeps the receiving area by default", () => {
+    vi.stubEnv("PUBLIC_GIFT_PAYMENTS_ENABLED", undefined);
     expect(
       getSiteNavigation("SITE_ADMIN", "site-1").map((item) => item.area),
     ).toContain("receiving");

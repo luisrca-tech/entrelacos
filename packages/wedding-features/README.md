@@ -13,9 +13,10 @@ integrate with a messaging provider.
 
 ## Money gifts switch
 
-`GiftRegistry` lists gifts but keeps checkout off unless the site is built with
-`PUBLIC_GIFT_PAYMENTS_ENABLED=true` (read through `giftPaymentsEnabled` in
-`@entrelacos/ui`). While off, the purchase button stays visible but disabled
+`GiftRegistry` offers checkout by default. A build can pause it with
+`PUBLIC_GIFT_PAYMENTS_ENABLED=false` (read through `giftPaymentsEnabled` in
+`@entrelacos/ui`). While paused, the purchase button stays visible but disabled
 with a short "coming soon" note, and a checkout attempt saved in the browser is
 neither resumed nor discarded. The admin panel reads the same variable to hide
-its receiving area. The API is unaffected.
+its receiving area. The switch is presentation only: the API (`PAGARME_MODE` and
+its guards) decides whether any payment is accepted.

@@ -32,7 +32,7 @@ Guests pay through Pagar.me with a transparent checkout: the card is tokenized i
 | Variable | Local | Development | Production |
 | --- | --- | --- | --- |
 | `PUBLIC_PAGARME_PUBLIC_KEY` | `pk_test_…` | `pk_test_…` | live `pk_…` |
-| `PUBLIC_GIFT_PAYMENTS_ENABLED` | `true` only for QA | off | off until release |
+| `PUBLIC_GIFT_PAYMENTS_ENABLED` | unset (on) | unset (on) | unset (on); `false` pauses the public checkout and the receiving area |
 
 The public key belongs to the Entrelaços account, is the same for every couple site and can only tokenize cards. Each site origin (`*.entrelacosbr.site`, `localhost` for tests) may need to be allowed in the Pagar.me dashboard. Keys are build variables; never commit them.
 

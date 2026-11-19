@@ -22,7 +22,7 @@ Symbolic gifts have no inventory or purchase limit. Each guest intent creates it
 
 ## Balance and withdrawal
 
-The couple's balance is read from `GET /recipients/{id}/balance` (`available_amount`, `waiting_funds_amount`). A withdrawal (`POST /recipients/{id}/withdrawals`) costs R$3.67 (free to Banco Stone accounts), is shown before confirming and must be larger than the fee. The money goes to the recipient's `default_bank_account`, registered under the same CPF as the couple's account holder.
+The couple's balance is read from `GET /recipients/{id}/balance` (`available_amount`, `waiting_funds_amount`). A withdrawal (`POST /recipients/{id}/withdrawals`) costs R$3.67 (no exemption is promised for any bank), is shown before confirming and must be larger than the fee. The money goes to the recipient's `default_bank_account`, registered under the same CPF as the couple's account holder.
 
 ## Historical snapshots
 

@@ -98,7 +98,7 @@ it("opens the editor only for the matching server demonstration grant while fina
 describe("locked gifts with money gifts switched off", () => {
   afterEach(() => vi.unstubAllEnvs());
   it("announces the pause instead of sending admins to the receiving setup", () => {
-    vi.stubEnv("PUBLIC_GIFT_PAYMENTS_ENABLED", undefined);
+    vi.stubEnv("PUBLIC_GIFT_PAYMENTS_ENABLED", "false");
     const html = renderToStaticMarkup(
       createElement(GiftsReadinessView, {
         siteId: "wedding-a",

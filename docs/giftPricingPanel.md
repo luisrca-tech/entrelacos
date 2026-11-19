@@ -35,7 +35,7 @@ Each order carries the split decided in D2:
 ### Couple receiving and withdrawal
 
 - Identity verification: the owner opens **Verificar identidade** in the panel; the API returns a Pagar.me KYC link and QR code valid for about 20 minutes and never stores them. Receiving starts only after the recipient is approved.
-- Withdrawal: R$3.67 per withdrawal (`withdrawalFeeCents: 367`), free for Banco Stone accounts. The fee is shown before confirming and deducted from the couple's balance; it is not part of the gift price.
+- Withdrawal: R$3.67 per withdrawal (`withdrawalFeeCents: 367`), with no exemption claimed for any bank. The fee is shown before confirming and deducted from the couple's balance; it is not part of the gift price.
 
 ### Panel and guest surfaces
 

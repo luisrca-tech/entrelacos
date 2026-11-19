@@ -498,7 +498,7 @@ describe("mounted server catalog runtime", () => {
   }
 
   describe("with money gifts switched off", () => {
-    beforeEach(() => vi.stubEnv("PUBLIC_GIFT_PAYMENTS_ENABLED", undefined));
+    beforeEach(() => vi.stubEnv("PUBLIC_GIFT_PAYMENTS_ENABLED", "false"));
 
     it("keeps the gifts listed with a disabled button that opens nothing", async () => {
       const fetcher = paymentFetcher(async () =>
