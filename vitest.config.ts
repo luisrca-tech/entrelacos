@@ -12,5 +12,11 @@ export default defineConfig({
     // The full suite saturates the CPU; the 5s default made heavy DOM and
     // full-stack tests time out at random while they pass in well under 1s alone.
     testTimeout: 15_000,
+    // Node 25+ ships a native global localStorage/sessionStorage that is
+    // unusable without --localstorage-file and shadows jsdom's Web Storage.
+    // Disabling it keeps jsdom tests deterministic across Node versions.
+    poolOptions: {
+      forks: { execArgv: ["--no-experimental-webstorage"] },
+    },
   },
 });
