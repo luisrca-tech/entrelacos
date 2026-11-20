@@ -1,3 +1,5 @@
+import { normalizeBankCode, otherBankValue } from "./brazilianBanks";
+
 // Parses a Brazilian money value such as "R$ 3.500,50"; returns NaN when unsure.
 export function parseIncome(value: string): number {
   const text = value.replace(/R\$/i, "").replace(/\s+/g, "");
@@ -15,8 +17,6 @@ export function incomeToCents(value: string): number {
   const [whole, fraction = ""] = reais.toFixed(2).split(".");
   return Number(whole) * 100 + Number(fraction);
 }
-
-import { normalizeBankCode, otherBankValue } from "./brazilianBanks";
 
 /** "1234-5" or "0001"; only a hyphen separates the optional check digit. */
 export function parseBranch(value: string) {
