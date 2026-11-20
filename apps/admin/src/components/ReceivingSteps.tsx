@@ -16,6 +16,7 @@ import {
 } from "react";
 import { apiRequest } from "../lib/apiClient";
 import { AdminButton } from "./AdminButton";
+import { brazilianBanks, otherBankValue } from "./brazilianBanks";
 import type { FinancialReauthenticationGuard } from "./financialReauthenticationClient";
 import {
   GiftPricingPreview,
@@ -31,6 +32,7 @@ import type {
   ReceivingSetupPorts,
   ReceivingSetupScope,
 } from "./ReceivingSetup";
+import { parseAccount } from "./receivingSetupForm";
 import {
   deriveReceivingTasks,
   type ReceivingTaskStatus,
@@ -561,7 +563,7 @@ export function HolderStep({ context }: { context: ReceivingStepsContext }) {
   );
 }
 
-const detailFields: {
+type DetailFieldSpec = {
   name: string;
   label: string;
   type: string;
@@ -572,8 +574,14 @@ const detailFields: {
   wide?: boolean;
   optional?: boolean;
   maxLength?: number;
+  // Native validation keeps the error on the visible field; the contract
+  // schema still validates the normalized account on submit.
+  pattern?: string;
+  title?: string;
   options?: readonly { value: string; label: string }[];
-}[] = [
+};
+
+const detailFields: DetailFieldSpec[] = [
   {
     name: "name",
     label: "Nome completo do titular",
@@ -664,52 +672,223 @@ const detailFields: {
     type: "text",
     wide: true,
   },
-  {
-    name: "bank",
-    label: "Código do banco",
-    type: "text",
-    placeholder: "000",
-    hint: "Os 3 dígitos do banco. A conta precisa estar no CPF informado acima; os saques vão para ela.",
-    inputMode: "numeric",
-    maxLength: 3,
-  },
-  {
-    name: "accountType",
-    label: "Tipo de conta",
-    type: "select",
-    options: [
-      { value: "checking", label: "Conta corrente" },
-      { value: "savings", label: "Conta poupança" },
-    ],
-  },
-  {
-    name: "branchNumber",
-    label: "Agência",
-    type: "text",
-    inputMode: "numeric",
-    maxLength: 4,
-  },
-  {
-    name: "branchCheckDigit",
-    label: "Dígito da agência (opcional)",
-    type: "text",
-    inputMode: "numeric",
-    maxLength: 1,
-    optional: true,
-  },
-  {
-    name: "accountNumber",
-    label: "Número da conta",
-    type: "text",
-    inputMode: "numeric",
-  },
-  {
-    name: "accountCheckDigit",
-    label: "Dígito da conta",
-    type: "text",
-    maxLength: 2,
-  },
 ];
+
+const accountTypeField: DetailFieldSpec = {
+  name: "accountType",
+  label: "Tipo de conta",
+  type: "select",
+  options: [
+    { value: "checking", label: "Conta corrente" },
+    { value: "savings", label: "Conta poupança" },
+  ],
+};
+
+const bankCodeField: DetailFieldSpec = {
+  name: "bankCode",
+  label: "Código do banco",
+  type: "text",
+  placeholder: "000",
+  hint: "3 dígitos. Se o app mostrar 4, como 0260, pode digitar assim.",
+  inputMode: "numeric",
+  maxLength: 4,
+  pattern: "\\s*0?\\d{3}\\s*",
+  title: "Use 3 dígitos, ou 4 começando com 0.",
+};
+
+const branchField: DetailFieldSpec = {
+  name: "branch",
+  label: "Agência",
+  type: "text",
+  placeholder: "0001",
+  hint: "Se tiver dígito, use hífen: 1234-5.",
+  inputMode: "numeric",
+  maxLength: 8,
+  pattern: "\\s*\\d{1,4}(-\\d)?\\s*",
+  title: "Até 4 números; dígito opcional depois do hífen, como 1234-5.",
+};
+
+const accountField: DetailFieldSpec = {
+  name: "account",
+  label: "Conta com dígito",
+  type: "text",
+  placeholder: "12345-6",
+  maxLength: 20,
+  pattern: "[\\s.]*\\d[\\d\\s.]*-?[\\s.]*[0-9Xx][\\s.]*",
+  title: "Número da conta seguido do dígito, como 12345-6.",
+};
+
+function DetailFieldInput({
+  id,
+  field,
+  busy,
+  onChange,
+  describedBy,
+}: {
+  id: string;
+  field: DetailFieldSpec;
+  busy: boolean;
+  onChange?: (value: string) => void;
+  describedBy?: string;
+}) {
+  const fieldId = `${id}-${field.name}`;
+  return field.options ? (
+    <select
+      id={fieldId}
+      name={field.name}
+      required
+      disabled={busy}
+      className={receivingField}
+    >
+      {field.options.map((option) => (
+        <option key={option.value} value={option.value}>
+          {option.label}
+        </option>
+      ))}
+    </select>
+  ) : (
+    <input
+      id={fieldId}
+      name={field.name}
+      type={field.type}
+      required={!field.optional}
+      disabled={busy}
+      placeholder={field.placeholder}
+      inputMode={field.inputMode}
+      maxLength={field.maxLength}
+      pattern={field.pattern}
+      title={field.title}
+      autoComplete={field.autoComplete ?? "off"}
+      aria-describedby={
+        describedBy ?? (field.hint ? `${fieldId}-hint` : undefined)
+      }
+      onChange={onChange && ((event) => onChange(event.currentTarget.value))}
+      className={receivingField}
+    />
+  );
+}
+
+function FieldLabel({ id, field }: { id: string; field: DetailFieldSpec }) {
+  return (
+    <label
+      htmlFor={`${id}-${field.name}`}
+      className="text-sm font-bold text-admin-text"
+    >
+      {field.label}
+    </label>
+  );
+}
+
+function FieldHint({
+  id,
+  name,
+  hint,
+}: {
+  id: string;
+  name: string;
+  hint?: string;
+}) {
+  return hint ? (
+    <p
+      id={`${id}-${name}-hint`}
+      className="m-0 text-[0.8rem] leading-[1.4] text-admin-text-secondary"
+    >
+      {hint}
+    </p>
+  ) : null;
+}
+
+function DetailField({
+  id,
+  field,
+  busy,
+}: {
+  id: string;
+  field: DetailFieldSpec;
+  busy: boolean;
+}) {
+  return (
+    <div
+      className={`grid min-w-0 content-start gap-1.5 ${field.wide ? "sm:col-span-2" : ""}`}
+    >
+      <FieldLabel id={id} field={field} />
+      <DetailFieldInput id={id} field={field} busy={busy} />
+      <FieldHint id={id} name={field.name} hint={field.hint} />
+    </div>
+  );
+}
+
+// Banco, tipo, agência e conta. The admin normalizer splits branch and
+// account check digits into the unchanged contract fields.
+function BankAccountFields({ id, busy }: { id: string; busy: boolean }) {
+  const [otherBank, setOtherBank] = useState(false);
+  const [account, setAccount] = useState("");
+  const parsedAccount = parseAccount(account);
+  const bankHintId = `${id}-bank-hint`;
+  return (
+    <>
+      <div className="grid min-w-0 content-start gap-1.5">
+        <label
+          htmlFor={`${id}-bank`}
+          className="text-sm font-bold text-admin-text"
+        >
+          Banco
+        </label>
+        <select
+          id={`${id}-bank`}
+          name="bank"
+          required
+          disabled={busy}
+          aria-describedby={bankHintId}
+          onChange={(event) =>
+            setOtherBank(event.currentTarget.value === otherBankValue)
+          }
+          className={receivingField}
+        >
+          <option value="">Selecione o banco</option>
+          {brazilianBanks.map((bank) => (
+            <option key={bank.code} value={bank.code}>
+              {bank.label}
+            </option>
+          ))}
+          <option value={otherBankValue}>Outro banco</option>
+        </select>
+        <FieldHint
+          id={id}
+          name="bank"
+          hint="A conta precisa estar no CPF informado acima; os saques vão para ela."
+        />
+        {otherBank && (
+          <div className="mt-2 grid gap-1.5">
+            <FieldLabel id={id} field={bankCodeField} />
+            <DetailFieldInput id={id} field={bankCodeField} busy={busy} />
+            <FieldHint id={id} name="bankCode" hint={bankCodeField.hint} />
+          </div>
+        )}
+      </div>
+      <DetailField id={id} field={accountTypeField} busy={busy} />
+      <DetailField id={id} field={branchField} busy={busy} />
+      <div className="grid min-w-0 content-start gap-1.5">
+        <FieldLabel id={id} field={accountField} />
+        <DetailFieldInput
+          id={id}
+          field={accountField}
+          busy={busy}
+          onChange={setAccount}
+          describedBy={`${id}-account-hint`}
+        />
+        <p
+          id={`${id}-account-hint`}
+          aria-live="polite"
+          className="m-0 min-h-[1.12rem] text-[0.8rem] leading-[1.4] text-admin-text-secondary"
+        >
+          {parsedAccount &&
+            `Conta ${parsedAccount.accountNumber}, dígito ${parsedAccount.accountCheckDigit}`}
+        </p>
+      </div>
+    </>
+  );
+}
 
 const nextSteps = [
   {
@@ -726,6 +905,7 @@ const nextSteps = [
 
 export function DetailsStep({ context }: { context: ReceivingStepsContext }) {
   const id = useId();
+  const [resetCount, setResetCount] = useState(0);
   const { setup, busy, canSubmit, owner } = context;
   const siteId = context.scope.siteId;
   return (
@@ -859,62 +1039,21 @@ export function DetailsStep({ context }: { context: ReceivingStepsContext }) {
           <form
             ref={context.form}
             onSubmit={context.onSubmit}
+            // Remount the bank fields so their local state follows reset().
+            onReset={() => setResetCount((count) => count + 1)}
             className="grid gap-6"
             autoComplete="off"
           >
             <div className="grid min-w-0 gap-x-5 gap-y-4 sm:grid-cols-2">
               {detailFields.map((field) => (
-                <div
+                <DetailField
                   key={field.name}
-                  className={`grid min-w-0 content-start gap-1.5 ${field.wide ? "sm:col-span-2" : ""}`}
-                >
-                  <label
-                    htmlFor={`${id}-${field.name}`}
-                    className="text-sm font-bold text-admin-text"
-                  >
-                    {field.label}
-                  </label>
-                  {field.options ? (
-                    <select
-                      id={`${id}-${field.name}`}
-                      name={field.name}
-                      required
-                      disabled={busy}
-                      className={receivingField}
-                    >
-                      {field.options.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                  ) : (
-                    <input
-                      id={`${id}-${field.name}`}
-                      name={field.name}
-                      type={field.type}
-                      required={!field.optional}
-                      disabled={busy}
-                      placeholder={field.placeholder}
-                      inputMode={field.inputMode}
-                      maxLength={field.maxLength}
-                      autoComplete={field.autoComplete ?? "off"}
-                      aria-describedby={
-                        field.hint ? `${id}-${field.name}-hint` : undefined
-                      }
-                      className={receivingField}
-                    />
-                  )}
-                  {field.hint && (
-                    <p
-                      id={`${id}-${field.name}-hint`}
-                      className="m-0 text-[0.8rem] leading-[1.4] text-admin-text-secondary"
-                    >
-                      {field.hint}
-                    </p>
-                  )}
-                </div>
+                  id={id}
+                  field={field}
+                  busy={busy}
+                />
               ))}
+              <BankAccountFields key={resetCount} id={id} busy={busy} />
             </div>
             <fieldset className="m-0 grid min-w-0 gap-3 rounded-[14px] border border-admin-border bg-admin-canvas p-5">
               <legend className="sr-only">Autorizações</legend>

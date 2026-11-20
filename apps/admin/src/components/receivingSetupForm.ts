@@ -1,3 +1,5 @@
+import { normalizeBankCode, otherBankValue } from "./brazilianBanks";
+
 // Parses a Brazilian money value such as "R$ 3.500,50"; returns NaN when unsure.
 export function parseIncome(value: string): number {
   const text = value.replace(/R\$/i, "").replace(/\s+/g, "");
@@ -16,6 +18,26 @@ export function incomeToCents(value: string): number {
   return Number(whole) * 100 + Number(fraction);
 }
 
+/** "1234-5" or "0001"; only a hyphen separates the optional check digit. */
+export function parseBranch(value: string) {
+  const match = /^(\d{1,4})(?:-(\d))?$/.exec(value.replace(/\s/g, ""));
+  if (!match) return null;
+  const [, branchNumber, branchCheckDigit] = match;
+  return branchCheckDigit
+    ? { branchNumber, branchCheckDigit }
+    : { branchNumber };
+}
+
+/** The last character (digit or X) is the check digit, hyphen optional. */
+export function parseAccount(value: string) {
+  const match = /^(\d+)-?([0-9X])$/i.exec(value.replace(/[\s.]/g, ""));
+  if (!match) return null;
+  return {
+    accountNumber: match[1],
+    accountCheckDigit: match[2].toUpperCase(),
+  };
+}
+
 type SetupFormValues = Partial<Record<string, unknown>>;
 
 // Accepts the masks people type; the contract schema still validates the result.
@@ -26,7 +48,15 @@ export function normalizeSetupAccount(values: SetupFormValues) {
   };
   const digits = (name: string) => text(name).replace(/\D/g, "");
   const complement = text("complement");
-  const branchCheckDigit = digits("branchCheckDigit");
+  const bank = text("bank");
+  // Unparseable input is kept raw so the contract schema rejects it.
+  const branch = parseBranch(text("branch")) ?? {
+    branchNumber: text("branch"),
+  };
+  const account = parseAccount(text("account")) ?? {
+    accountNumber: text("account"),
+    accountCheckDigit: "",
+  };
   return {
     name: text("name"),
     email: text("email"),
@@ -46,11 +76,11 @@ export function normalizeSetupAccount(values: SetupFormValues) {
       referencePoint: text("referencePoint"),
     },
     bankAccount: {
-      bank: digits("bank"),
-      branchNumber: digits("branchNumber"),
-      ...(branchCheckDigit ? { branchCheckDigit } : {}),
-      accountNumber: digits("accountNumber"),
-      accountCheckDigit: text("accountCheckDigit").toUpperCase(),
+      bank: normalizeBankCode(
+        bank === otherBankValue ? text("bankCode") : bank,
+      ),
+      ...branch,
+      ...account,
       type: text("accountType"),
     },
   };

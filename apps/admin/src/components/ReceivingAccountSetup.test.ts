@@ -988,14 +988,22 @@ describe("receiving account setup", () => {
       "zipCode",
       "referencePoint",
       "bank",
-      "branchNumber",
-      "branchCheckDigit",
-      "accountNumber",
-      "accountCheckDigit",
+      "branch",
+      "account",
       "accountType",
     ])
       expect(html).toContain(`name="${field}"`);
+    expect(html).not.toMatch(
+      /name="(branchNumber|branchCheckDigit|accountNumber|accountCheckDigit)"/,
+    );
     expect(html).toMatch(/<select[^>]*name="accountType"/);
+    expect(html).toMatch(/<select[^>]*name="bank"/);
+    expect(html).toContain('<option value="260">Nubank (260)</option>');
+    expect(html).toContain('<option value="other">Outro banco</option>');
+    // The free-text code only appears after choosing "Outro banco".
+    expect(html).not.toContain('name="bankCode"');
+    expect(html).toContain("Conta com dígito");
+    expect(html).toMatch(/aria-live="polite"/);
     expect(html).toMatch(/name="complement"(?![^>]*required)[^>]*>/);
     expect(html).toContain('name="consent"');
     expect(html.match(/type="checkbox"/g)).toHaveLength(1);
