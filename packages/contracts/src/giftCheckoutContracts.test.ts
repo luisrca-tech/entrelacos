@@ -137,6 +137,30 @@ describe("transparent gift checkout contract", () => {
       });
     });
 
+    it("stores the address text in NFC, like the recipient address", () => {
+      const parsed = giftCheckoutCreateInputSchema.parse({
+        ...card,
+        billingAddress: {
+          ...billingAddress,
+          city: "Sa\u0303o Paulo",
+          street: " Rua Joa\u0303o ",
+        },
+      });
+      expect(parsed.billingAddress?.city).toBe("S\u00e3o Paulo");
+      expect(parsed.billingAddress?.street).toBe("Rua Jo\u00e3o");
+    });
+
+    it("counts the 128-character street limit after NFC normalization", () => {
+      // 127 "a" + "a" + combining tilde: 129 code units decomposed, 128 in NFC.
+      const street = `${"a".repeat(127)}a\u0303`;
+      expect(
+        giftCheckoutCreateInputSchema.safeParse({
+          ...card,
+          billingAddress: { ...billingAddress, street },
+        }).success,
+      ).toBe(true);
+    });
+
     it("forbids a billing address on Pix", () => {
       expect(
         giftCheckoutCreateInputSchema.safeParse({
@@ -158,6 +182,11 @@ describe("transparent gift checkout contract", () => {
       ["an empty neighborhood", { neighborhood: "" }],
       ["an empty city", { city: "" }],
       ["an unknown field", { country: "BR" }],
+      ["a line break in the street", { street: "Avenida\nPaulista" }],
+      ["a tab in the neighborhood", { neighborhood: "Bela\tVista" }],
+      ["a DEL in the city", { city: "São\u007fPaulo" }],
+      ["a control character in the complement", { complement: "Apto\u000012" }],
+      ["a street over 128 characters", { street: "a".repeat(129) }],
     ])("rejects %s", (_label, change) => {
       expect(
         giftCheckoutCreateInputSchema.safeParse({
