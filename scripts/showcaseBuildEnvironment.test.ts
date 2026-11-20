@@ -54,6 +54,36 @@ describe("reviewed showcase build environments", () => {
       });
     },
   );
+  it.each([
+    ["botanical", "development", "pk_test_2z6JBOXt1izpDX7l"],
+    ["botanical", "production", "pk_V3br2mHMMhDBlE5Z"],
+    ["letters", "development", "pk_test_2z6JBOXt1izpDX7l"],
+    ["letters", "production", "pk_V3br2mHMMhDBlE5Z"],
+  ])(
+    "gives the %s %s build the publishable Pagar.me key",
+    (app, environment, key) => {
+      expect(
+        showcaseBuildEnvironment(app, environment).PUBLIC_PAGARME_PUBLIC_KEY,
+      ).toBe(key);
+    },
+  );
+  it.each(["development", "production"])(
+    "keeps the Pagar.me key out of the %s landing, which renders no card checkout",
+    (environment) => {
+      expect(
+        showcaseBuildEnvironment("landing", environment)
+          .PUBLIC_PAGARME_PUBLIC_KEY,
+      ).toBe("");
+    },
+  );
+  it("never carries a Pagar.me secret key", () => {
+    for (const app of ["botanical", "letters", "landing"])
+      for (const environment of ["development", "production"])
+        for (const value of Object.values(
+          showcaseBuildEnvironment(app, environment),
+        ))
+          expect(value.startsWith("sk_")).toBe(false);
+  });
   it("rejects unknown targets rather than defaulting to production", () => {
     expect(() => showcaseBuildEnvironment("botanical", "prod")).toThrow();
     expect(() => showcaseBuildEnvironment("unknown", "production")).toThrow();

@@ -94,6 +94,8 @@ Rows from before the switch are kept: the previous provider's receiving accounts
 
 The script never prints keys, tokens or card data.
 
+The browser key `PUBLIC_PAGARME_PUBLIC_KEY` is publishable (`pk_test_…` in development, `pk_…` in production), can only tokenize cards, and is committed in `scripts/showcaseBuildEnvironment.ts` so Cloudflare Builds do not depend on a dashboard variable. Secret keys (`sk_…`), the webhook credentials and recipient ids stay out of source; `PAGARME_SECRET_KEY` is a Worker secret.
+
 Confirm once in the sandbox before go-live (the 2026-11 docs review left these open):
 
 - Recipient `birthdate` is sent as `DD/MM/YYYY`, as in the [create recipient](https://docs.pagar.me/reference/criar-recebedor-1) examples; the format is not stated explicitly.
