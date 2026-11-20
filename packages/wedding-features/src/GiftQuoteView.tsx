@@ -2,6 +2,7 @@ import { GIFT_PLATFORM_TARIFFS, type GiftQuote } from "@entrelacos/contracts";
 import { PaymentProviderDisclosure, showSandboxNotice } from "@entrelacos/ui";
 import { useEffect, useId, useRef, useState } from "react";
 import {
+  type GiftCheckoutBillingField,
   type GiftCheckoutBillingFields,
   type GiftCheckoutFormInput,
   readGiftCheckoutForm,
@@ -32,7 +33,7 @@ const secondaryButtonClass =
 const methodButtonClass =
   "min-h-11 cursor-pointer rounded-full border border-template-line bg-transparent px-5 py-3 text-template-ink font-[inherit] text-sm font-medium transition-[background-color,color,border-color,transform] duration-200 ease-out hover:-translate-y-0.5 hover:border-template-ink hover:bg-template-ink hover:text-template-ivory focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-template-ink disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transform-none motion-reduce:transition-none aria-pressed:border-template-ink aria-pressed:bg-template-ink aria-pressed:text-template-ivory";
 const fieldClass =
-  "min-h-11 min-w-0 w-full rounded-xl border border-[var(--template-input-line,rgba(37,53,43,0.25))] bg-[var(--template-paper,#fffdf8)] px-4 py-3 text-base text-template-ink font-[inherit] transition-[border-color,box-shadow] duration-200 focus:border-template-olive focus:outline-2 focus:outline-offset-2 focus:outline-template-olive motion-reduce:transition-none";
+  "min-h-11 min-w-0 w-full rounded-xl border border-[var(--template-input-line,rgba(37,53,43,0.25))] bg-[var(--template-paper,#fffdf8)] px-4 py-3 text-base text-template-ink font-[inherit] transition-[border-color,box-shadow] duration-200 focus:border-template-olive focus:outline-2 focus:outline-offset-2 focus:outline-template-olive aria-invalid:border-template-ink aria-invalid:shadow-[inset_0_0_0_1px_var(--color-template-ink)] motion-reduce:transition-none";
 const quoteCardClass =
   "grid min-w-0 gap-5 rounded-2xl border border-template-line bg-[var(--template-paper,#fffdf8)] p-5 sm:p-6";
 const currencyFormatter = new Intl.NumberFormat("pt-BR", {
@@ -84,12 +85,25 @@ const emptyBilling: GiftCheckoutBillingFields = {
   state: "",
 };
 
-type CepLookup = "idle" | "loading" | "found" | "missing";
+type CepLookup = "idle" | "loading" | "found" | "not_found" | "unavailable";
 
 const cepLookupMessage: Record<Exclude<CepLookup, "idle">, string> = {
   loading: "Buscando o endereço…",
   found: "Endereço preenchido pelo CEP. Confira e informe o número.",
-  missing: "Não encontramos este CEP. Preencha o endereço.",
+  not_found: "Não encontramos este CEP. Preencha o endereço.",
+  unavailable:
+    "Não foi possível buscar o endereço agora. Preencha manualmente.",
+};
+
+/** Input names, used to focus the first invalid billing field on submit. */
+const billingInputName: Record<GiftCheckoutBillingField, string> = {
+  zipCode: "billing-zip",
+  street: "billing-street",
+  streetNumber: "billing-number",
+  complement: "billing-complement",
+  neighborhood: "billing-neighborhood",
+  city: "billing-city",
+  state: "billing-state",
 };
 
 /** "01310100" → "01310-100" while typing; keeps at most 8 digits. */
@@ -144,6 +158,12 @@ export function GiftQuoteView({
   const [billing, setBilling] =
     useState<GiftCheckoutBillingFields>(emptyBilling);
   const [cepLookup, setCepLookup] = useState<CepLookup>("idle");
+  const [invalidBilling, setInvalidBilling] = useState<
+    GiftCheckoutBillingField[]
+  >([]);
+  // Fields the guest edited since the current CEP lookup started: its answer
+  // must not overwrite them.
+  const editedDuringLookup = useRef(new Set<GiftCheckoutBillingField>());
   const cepDigits = billing.zipCode.replace(/[^0-9]/g, "");
   const cepStatusId = useId();
   const stateId = useId();
@@ -161,23 +181,34 @@ export function GiftQuoteView({
       setCepLookup("idle");
       return;
     }
-    let current = true;
+    const controller = new AbortController();
+    const edited = editedDuringLookup.current;
+    edited.clear();
     setCepLookup("loading");
-    void lookupCep(cepDigits).then((found) => {
-      if (!current) return;
-      setCepLookup(found ? "found" : "missing");
-      if (found)
-        setBilling((previous) => ({
-          ...previous,
-          street: found.street || previous.street,
-          neighborhood: found.neighborhood || previous.neighborhood,
-          city: found.city,
-          state: found.state,
-        }));
+    void lookupCep(cepDigits, fetch, controller.signal).then((found) => {
+      if (controller.signal.aborted) return;
+      if (typeof found === "string") {
+        setCepLookup(found);
+        return;
+      }
+      setCepLookup("found");
+      const filled: GiftCheckoutBillingField[] = (
+        ["street", "neighborhood", "city", "state"] as const
+      ).filter((key) => !edited.has(key) && found[key]);
+      setInvalidBilling((previous) =>
+        previous.filter((key) => !filled.includes(key)),
+      );
+      const fill = (key: keyof typeof found, previous: string) =>
+        filled.includes(key) ? found[key] : previous;
+      setBilling((previous) => ({
+        ...previous,
+        street: fill("street", previous.street),
+        neighborhood: fill("neighborhood", previous.neighborhood),
+        city: fill("city", previous.city),
+        state: fill("state", previous.state),
+      }));
     });
-    return () => {
-      current = false;
-    };
+    return () => controller.abort();
   }, [cepDigits]);
   const billingField =
     (key: keyof GiftCheckoutBillingFields) =>
@@ -186,8 +217,16 @@ export function GiftQuoteView({
         key === "zipCode"
           ? formatCep(event.currentTarget.value)
           : event.currentTarget.value;
+      if (key !== "zipCode") editedDuringLookup.current.add(key);
+      setInvalidBilling((previous) =>
+        previous.includes(key)
+          ? previous.filter((field) => field !== key)
+          : previous,
+      );
       setBilling((previous) => ({ ...previous, [key]: value }));
     };
+  const invalid = (key: GiftCheckoutBillingField) =>
+    invalidBilling.includes(key) || undefined;
   const quoteMatchesSelection =
     quote !== null &&
     quote.method === method &&
@@ -411,9 +450,17 @@ export function GiftQuoteView({
               );
               if ("error" in result) {
                 setFormError(result.error);
+                const fields = result.invalidBilling ?? [];
+                setInvalidBilling(fields);
+                const first = fields[0] && billingInputName[fields[0]];
+                const target = first
+                  ? event.currentTarget.elements.namedItem(first)
+                  : null;
+                if (target instanceof HTMLElement) target.focus();
                 return;
               }
               setFormError(null);
+              setInvalidBilling([]);
               onConfirm(result.input);
             }}
           >
@@ -539,8 +586,9 @@ export function GiftQuoteView({
               >
                 <legend className="px-1 font-bold">Endereço de cobrança</legend>
                 <p className="m-0 text-sm text-template-muted">
-                  O endereço da fatura do cartão. Vai só para a Pagar.me junto
-                  com o pagamento.
+                  O endereço da fatura do cartão, enviado à Pagar.me com o
+                  pagamento. O CEP é consultado no ViaCEP para preencher o
+                  restante.
                 </p>
                 <div className="grid min-w-0 gap-1">
                   <label className="grid min-w-0 gap-1">
@@ -551,10 +599,10 @@ export function GiftQuoteView({
                       autoComplete="billing postal-code"
                       placeholder="00000-000"
                       className={fieldClass}
-                      maxLength={9}
                       value={billing.zipCode}
                       onChange={billingField("zipCode")}
                       aria-describedby={cepStatusId}
+                      aria-invalid={invalid("zipCode")}
                       required
                     />
                   </label>
@@ -575,32 +623,36 @@ export function GiftQuoteView({
                     maxLength={128}
                     value={billing.street}
                     onChange={billingField("street")}
+                    aria-invalid={invalid("street")}
                     required
                   />
                 </label>
-                <div className="grid min-w-0 grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-3">
+                <div className="grid min-w-0 grid-cols-[minmax(0,2fr)_minmax(0,3fr)] items-end gap-3">
                   <label className="grid min-w-0 gap-1">
                     Número
                     <input
                       name="billing-number"
-                      inputMode="numeric"
                       className={fieldClass}
                       maxLength={16}
                       value={billing.streetNumber}
                       onChange={billingField("streetNumber")}
+                      aria-invalid={invalid("streetNumber")}
                       required
                     />
                   </label>
                   <label className="grid min-w-0 gap-1">
-                    Complemento
+                    <span>
+                      Complemento{" "}
+                      <span className="text-template-muted">(opcional)</span>
+                    </span>
                     <input
                       name="billing-complement"
                       autoComplete="billing address-line2"
-                      placeholder="Opcional"
                       className={fieldClass}
                       maxLength={64}
                       value={billing.complement}
                       onChange={billingField("complement")}
+                      aria-invalid={invalid("complement")}
                     />
                   </label>
                 </div>
@@ -613,6 +665,7 @@ export function GiftQuoteView({
                     maxLength={64}
                     value={billing.neighborhood}
                     onChange={billingField("neighborhood")}
+                    aria-invalid={invalid("neighborhood")}
                     required
                   />
                 </label>
@@ -626,6 +679,7 @@ export function GiftQuoteView({
                       maxLength={64}
                       value={billing.city}
                       onChange={billingField("city")}
+                      aria-invalid={invalid("city")}
                       required
                     />
                   </label>
@@ -638,6 +692,7 @@ export function GiftQuoteView({
                       className={fieldClass}
                       value={billing.state}
                       onChange={billingField("state")}
+                      aria-invalid={invalid("state")}
                       required
                     >
                       <option value="">—</option>

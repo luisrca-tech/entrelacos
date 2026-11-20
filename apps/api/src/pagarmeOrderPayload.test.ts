@@ -156,6 +156,24 @@ describe("Pagar.me order payload", () => {
     });
   });
 
+  it("keeps the longest accepted line_1 and line_2 within Pagar.me limits", () => {
+    // Pagar.me: line_1 up to 256, line_2 up to 128 characters.
+    const { body } = buildPagarmeOrderRequest({
+      ...card,
+      billingAddress: {
+        ...billingAddress,
+        streetNumber: "9".repeat(16),
+        street: "r".repeat(128),
+        neighborhood: "b".repeat(64),
+        complement: "c".repeat(64),
+      },
+    });
+    const address = body.payments[0].credit_card?.card.billing_address;
+    expect(address?.line_1).toHaveLength(16 + 2 + 128 + 2 + 64);
+    expect(address?.line_1.length).toBeLessThanOrEqual(256);
+    expect(address?.line_2?.length).toBeLessThanOrEqual(128);
+  });
+
   it.each([
     ["a missing billing address", { billingAddress: undefined }],
     [

@@ -293,6 +293,52 @@ describe("gift checkout service (Pagar.me orders)", () => {
       expect(stored).not.toContain(value);
   });
 
+  it("keeps the billing address out of events, records and the result when Pagar.me rejects the order", async () => {
+    const observe = vi.fn();
+    const createOrder = vi.fn(async () => {
+      // Pagar.me may echo submitted values in its message.
+      throw new PagarmeRejectedError(
+        422,
+        "validation_error",
+        "zip_code 01310100 invalid for Avenida Paulista, Bela Vista, Apto 12",
+      );
+    });
+    const { service, repository } = harness(
+      snapshotFor("CREDIT_CARD", 6),
+      { createOrder },
+      { observe },
+    );
+    const result = await failure(
+      service.createCheckout(
+        "site-1",
+        input({
+          method: "CREDIT_CARD",
+          installments: 6,
+          cardToken: "token_abc123",
+          billingAddress,
+        }),
+      ),
+    );
+    expect(result).toMatchObject({
+      status: 422,
+      code: "PAYMENT_METHOD_UNAVAILABLE",
+    });
+    expect(createOrder).toHaveBeenCalledOnce();
+    expect(repository.markProviderRejected).toHaveBeenCalledOnce();
+    expect(observe).toHaveBeenCalledWith(
+      expect.objectContaining({ event: "gift_checkout.provider_rejected" }),
+    );
+    const exposed = JSON.stringify([
+      vi.mocked(repository.reserve).mock.calls,
+      vi.mocked(repository.markProviderRejected).mock.calls,
+      observe.mock.calls,
+      result,
+      String(result),
+    ]);
+    for (const value of ["01310100", "Paulista", "Bela Vista", "Apto 12"])
+      expect(exposed).not.toContain(value);
+  });
+
   it("returns the same checkout for a retried request without a new order", async () => {
     const { service, orders } = harness(snapshotFor("PIX"));
     const first = await service.createCheckout("site-1", input());

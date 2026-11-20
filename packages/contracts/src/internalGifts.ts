@@ -615,7 +615,28 @@ export type GiftCheckoutBuyer = z.infer<typeof giftCheckoutBuyerSchema>;
 export const giftCheckoutCardTokenSchema = z
   .string()
   .regex(/^token_[A-Za-z0-9]{1,128}$/);
-const billingText = (max: number) => z.string().trim().min(1).max(max);
+/**
+ * Same rule as the recipient address text: NFC, trimmed, no control
+ * characters (below U+0020 or DEL), so a line break never reaches `line_1`.
+ */
+const billingText = (max: number) =>
+  z
+    .string()
+    .transform((value) => value.normalize("NFC").trim())
+    .pipe(
+      z
+        .string()
+        .min(1)
+        .max(max)
+        .refine(
+          (value) =>
+            ![...value].some(
+              (character) =>
+                character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127,
+            ),
+          "Control characters are not allowed",
+        ),
+    );
 /**
  * The cardholder's billing address. Pagar.me card tokens do not carry it, and
  * a tokenized card order without `card.billing_address` is refused by the
