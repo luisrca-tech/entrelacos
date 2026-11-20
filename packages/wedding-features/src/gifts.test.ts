@@ -382,6 +382,14 @@ describe("public gifts API boundary", () => {
       ...createInput,
       method: "CREDIT_CARD",
       cardToken: "token_abc123",
+      billingAddress: {
+        zipCode: "01310100",
+        street: "Avenida Paulista",
+        streetNumber: "1000",
+        neighborhood: "Bela Vista",
+        city: "São Paulo",
+        state: "SP",
+      },
     } as const;
     const cardQuote = { ...expected, method: "CREDIT_CARD" } as const;
     fetcher.mockResolvedValue(Response.json(checkout));

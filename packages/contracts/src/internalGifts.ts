@@ -615,21 +615,45 @@ export type GiftCheckoutBuyer = z.infer<typeof giftCheckoutBuyerSchema>;
 export const giftCheckoutCardTokenSchema = z
   .string()
   .regex(/^token_[A-Za-z0-9]{1,128}$/);
+const billingText = (max: number) => z.string().trim().min(1).max(max);
+/**
+ * The cardholder's billing address. Pagar.me card tokens do not carry it, and
+ * a tokenized card order without `card.billing_address` is refused by the
+ * gateway, so card checkouts send it next to the token. It only travels to
+ * Pagar.me: the API never stores it.
+ */
+export const giftCheckoutBillingAddressSchema = z
+  .object({
+    zipCode: z.string().regex(/^[0-9]{8}$/),
+    street: billingText(128),
+    streetNumber: billingText(16),
+    complement: billingText(64).optional(),
+    neighborhood: billingText(64),
+    city: billingText(64),
+    state: z.string().regex(/^[A-Z]{2}$/),
+  })
+  .strict();
+export type GiftCheckoutBillingAddress = z.infer<
+  typeof giftCheckoutBillingAddressSchema
+>;
 export const giftCheckoutCreateInputSchema = z
   .object({
     ...giftCheckoutStatusInputSchema.shape,
     method: giftPaymentMethodSchema,
     installments: giftInstallmentRequestSchema,
     cardToken: giftCheckoutCardTokenSchema.optional(),
+    billingAddress: giftCheckoutBillingAddressSchema.optional(),
     buyer: giftCheckoutBuyerSchema,
   })
   .strict()
   .refine(
     (value) =>
       value.method === "CREDIT_CARD"
-        ? value.cardToken !== undefined
-        : value.cardToken === undefined && value.installments === 1,
-    "Card checkouts need a card token; Pix is a single payment",
+        ? value.cardToken !== undefined && value.billingAddress !== undefined
+        : value.cardToken === undefined &&
+          value.billingAddress === undefined &&
+          value.installments === 1,
+    "Card checkouts need a card token and a billing address; Pix is a single payment without either",
   );
 export type GiftCheckoutCreateInput = z.infer<
   typeof giftCheckoutCreateInputSchema

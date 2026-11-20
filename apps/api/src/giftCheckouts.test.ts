@@ -75,6 +75,7 @@ function harness(
       ),
     ),
   },
+  extra: { observe?: (event: unknown) => void } = {},
 ) {
   const records = new Map<string, GiftCheckoutRecord>();
   let ids = 0;
@@ -153,9 +154,20 @@ function harness(
     applyOrder,
     now: () => now,
     generateId: (kind) => `${kind}-${++ids}`,
+    ...extra,
   });
   return { service, repository, orders, applyOrder, context, records };
 }
+
+const billingAddress = {
+  zipCode: "01310100",
+  street: "Avenida Paulista",
+  streetNumber: "1000",
+  complement: "Apto 12",
+  neighborhood: "Bela Vista",
+  city: "São Paulo",
+  state: "SP",
+};
 
 function input(change: Record<string, unknown> = {}) {
   return {
@@ -211,6 +223,7 @@ describe("gift checkout service (Pagar.me orders)", () => {
         method: "CREDIT_CARD",
         installments: 6,
         cardToken: "token_abc123",
+        billingAddress,
       }),
     );
     expect(result).toEqual({
@@ -220,9 +233,64 @@ describe("gift checkout service (Pagar.me orders)", () => {
     const request = vi.mocked(orders.createOrder).mock.calls[0][0];
     expect(request.body.payments[0].credit_card).toMatchObject({
       card_token: "token_abc123",
+      card: {
+        billing_address: {
+          line_1: "1000, Avenida Paulista, Bela Vista",
+          line_2: "Apto 12",
+          zip_code: "01310100",
+          city: "São Paulo",
+          state: "SP",
+          country: "BR",
+        },
+      },
       installments: 6,
     });
     expect(applyOrder).toHaveBeenCalledOnce();
+  });
+
+  it("rejects a card checkout without a billing address before reserving or calling Pagar.me", async () => {
+    const { service, orders, repository } = harness(
+      snapshotFor("CREDIT_CARD", 6),
+    );
+    expect(
+      await failure(
+        service.createCheckout(
+          "site-1",
+          input({
+            method: "CREDIT_CARD",
+            installments: 6,
+            cardToken: "token_abc123",
+          }),
+        ),
+      ),
+    ).toMatchObject({ status: 400, code: "QUOTE_INVALID" });
+    expect(repository.reserve).not.toHaveBeenCalled();
+    expect(orders.createOrder).not.toHaveBeenCalled();
+  });
+
+  it("keeps the billing address out of the reservation and of observed events", async () => {
+    const observe = vi.fn();
+    const { service, repository } = harness(
+      snapshotFor("CREDIT_CARD", 6),
+      undefined,
+      { observe },
+    );
+    await service.createCheckout(
+      "site-1",
+      input({
+        method: "CREDIT_CARD",
+        installments: 6,
+        cardToken: "token_abc123",
+        billingAddress,
+      }),
+    );
+    const stored = JSON.stringify([
+      vi.mocked(repository.reserve).mock.calls,
+      vi.mocked(repository.saveOrder).mock.calls,
+      observe.mock.calls,
+    ]);
+    for (const value of ["01310100", "Paulista", "Bela Vista", "Apto 12"])
+      expect(stored).not.toContain(value);
   });
 
   it("returns the same checkout for a retried request without a new order", async () => {
@@ -262,6 +330,7 @@ describe("gift checkout service (Pagar.me orders)", () => {
             method: "CREDIT_CARD",
             installments: 7,
             cardToken: "token_a1",
+            billingAddress,
           }),
         ),
       ),
@@ -288,6 +357,7 @@ describe("gift checkout service (Pagar.me orders)", () => {
             method: "CREDIT_CARD",
             installments: 2,
             cardToken: "token_a1",
+            billingAddress,
           }),
         ),
       ),

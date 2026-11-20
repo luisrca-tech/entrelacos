@@ -142,17 +142,28 @@ describe("Pagar.me recipient client", () => {
     });
   });
 
-  it("omits an absent address complement instead of sending an empty value", async () => {
-    const fetch = respond([200, fixture("recipient-created")]);
-    const { complement: _complement, ...address } = input.address;
-    await createPagarmeRecipientClient({ secretKey, fetch }).createRecipient(
-      "receiving-account-1",
-      { ...input, address },
-    );
-    expect(call(fetch).body.register_information.address).not.toHaveProperty(
-      "complementary",
-    );
-  });
+  it.each([
+    ["absent", undefined],
+    ["empty", ""],
+    ["blank", "   "],
+  ])(
+    "sends a fallback complementary when the complement is %s, because Pagar.me rejects its absence",
+    async (_label, complement) => {
+      const fetch = respond([200, fixture("recipient-created")]);
+      const { complement: _complement, ...address } = input.address;
+      await createPagarmeRecipientClient({ secretKey, fetch }).createRecipient(
+        "receiving-account-1",
+        {
+          ...input,
+          address:
+            complement === undefined ? address : { ...address, complement },
+        },
+      );
+      expect(call(fetch).body.register_information.address.complementary).toBe(
+        "Sem complemento",
+      );
+    },
+  );
 
   it("repeats the same code and idempotency key so a retry cannot create a second recipient", async () => {
     const fetch = respond(

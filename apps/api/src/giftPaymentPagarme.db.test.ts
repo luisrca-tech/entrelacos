@@ -318,7 +318,19 @@ async function checkout(
     ...recovery,
     method,
     installments,
-    ...(method === "CREDIT_CARD" ? { cardToken } : {}),
+    ...(method === "CREDIT_CARD"
+      ? {
+          cardToken,
+          billingAddress: {
+            zipCode: "01310100",
+            street: "Avenida Paulista",
+            streetNumber: "1000",
+            neighborhood: "Bela Vista",
+            city: "São Paulo",
+            state: "SP",
+          },
+        }
+      : {}),
     buyer,
   });
   const providerOrderId = [...app.pagarme.orders.values()].find(

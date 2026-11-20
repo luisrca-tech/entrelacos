@@ -1,4 +1,5 @@
 import type {
+  GiftCheckoutBillingAddress,
   GiftCheckoutBuyer,
   GiftCheckoutCreateInput,
   GiftQuote,
@@ -39,6 +40,7 @@ const knownCheckoutRefusals = new Set([
 export type GiftCheckoutPayment = {
   buyer: GiftCheckoutBuyer;
   cardToken?: string;
+  billingAddress?: GiftCheckoutBillingAddress;
 };
 
 export function giftCheckoutRequest(
@@ -53,6 +55,9 @@ export function giftCheckoutRequest(
     method: quote.method,
     installments: quote.installmentCount ?? 1,
     ...(payment.cardToken ? { cardToken: payment.cardToken } : {}),
+    ...(payment.billingAddress
+      ? { billingAddress: payment.billingAddress }
+      : {}),
     buyer: payment.buyer,
   };
 }

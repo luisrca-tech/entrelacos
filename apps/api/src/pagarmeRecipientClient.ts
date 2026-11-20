@@ -390,6 +390,12 @@ function pagarmeBirthdate(isoDate: string): string {
   return `${day}/${month}/${year}`;
 }
 
+/**
+ * POST /recipients answers 422 without `register_information.address.complementary`
+ * (sandbox, 2026-11-19), so an address without a complement sends this instead.
+ */
+const RECIPIENT_COMPLEMENT_FALLBACK = "Sem complemento";
+
 function recipientBody(recipientCode: string, input: PagarmeRecipientInput) {
   const name = text(input.name, 128);
   const cpf = digits(input.cpf, /^\d{11}$/);
@@ -418,9 +424,9 @@ function recipientBody(recipientCode: string, input: PagarmeRecipientInput) {
       address: {
         street: text(address.street, 256),
         street_number: text(address.streetNumber, 32),
-        ...(address.complement?.trim()
-          ? { complementary: text(address.complement, 128) }
-          : {}),
+        complementary: address.complement?.trim()
+          ? text(address.complement, 128)
+          : RECIPIENT_COMPLEMENT_FALLBACK,
         neighborhood: text(address.neighborhood, 128),
         city: text(address.city, 128),
         state: digits(address.state, /^[A-Z]{2}$/),

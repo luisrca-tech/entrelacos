@@ -2,10 +2,12 @@ import { GIFT_PLATFORM_TARIFFS, type GiftQuote } from "@entrelacos/contracts";
 import { PaymentProviderDisclosure, showSandboxNotice } from "@entrelacos/ui";
 import { useEffect, useId, useRef, useState } from "react";
 import {
+  type GiftCheckoutBillingFields,
   type GiftCheckoutFormInput,
   readGiftCheckoutForm,
 } from "./giftCheckoutForm";
 import { scheduleGiftQuoteExpiry } from "./giftQuoteExpiry";
+import { lookupCep } from "./viaCep";
 
 type PaymentMethod = "PIX" | "CREDIT_CARD";
 
@@ -40,6 +42,62 @@ const currencyFormatter = new Intl.NumberFormat("pt-BR", {
 
 function formatCents(cents: number): string {
   return currencyFormatter.format(cents / 100);
+}
+
+const brazilianStates = [
+  "AC",
+  "AL",
+  "AM",
+  "AP",
+  "BA",
+  "CE",
+  "DF",
+  "ES",
+  "GO",
+  "MA",
+  "MG",
+  "MS",
+  "MT",
+  "PA",
+  "PB",
+  "PE",
+  "PI",
+  "PR",
+  "RJ",
+  "RN",
+  "RO",
+  "RR",
+  "RS",
+  "SC",
+  "SE",
+  "SP",
+  "TO",
+] as const;
+
+const emptyBilling: GiftCheckoutBillingFields = {
+  zipCode: "",
+  street: "",
+  streetNumber: "",
+  complement: "",
+  neighborhood: "",
+  city: "",
+  state: "",
+};
+
+type CepLookup = "idle" | "loading" | "found" | "missing";
+
+const cepLookupMessage: Record<Exclude<CepLookup, "idle">, string> = {
+  loading: "Buscando o endereço…",
+  found: "Endereço preenchido pelo CEP. Confira e informe o número.",
+  missing: "Não encontramos este CEP. Preencha o endereço.",
+};
+
+/** "01310100" → "01310-100" while typing; keeps at most 8 digits. */
+function formatCep(value: string): string {
+  const digits = value.replace(/[^0-9]/g, "").slice(0, 8);
+  return digits.length > 5
+    ? `${digits.slice(0, 5)}-${digits.slice(5)}`
+    : digits;
 }
 
 const feesTooltip =
@@ -83,6 +141,12 @@ export function GiftQuoteView({
   const holderName = useRef<HTMLInputElement>(null);
   const expiry = useRef<HTMLInputElement>(null);
   const cvv = useRef<HTMLInputElement>(null);
+  const [billing, setBilling] =
+    useState<GiftCheckoutBillingFields>(emptyBilling);
+  const [cepLookup, setCepLookup] = useState<CepLookup>("idle");
+  const cepDigits = billing.zipCode.replace(/[^0-9]/g, "");
+  const cepStatusId = useId();
+  const stateId = useId();
   const quoteId = quote?.id;
   const expiresAt = quote?.expiresAt;
   useEffect(() => {
@@ -91,6 +155,39 @@ export function GiftQuoteView({
       setExpiredQuote({ id: quoteId, expiresAt }),
     );
   }, [now, quoteId, expiresAt]);
+  // ViaCEP only saves typing: a failure leaves every field editable.
+  useEffect(() => {
+    if (cepDigits.length !== 8) {
+      setCepLookup("idle");
+      return;
+    }
+    let current = true;
+    setCepLookup("loading");
+    void lookupCep(cepDigits).then((found) => {
+      if (!current) return;
+      setCepLookup(found ? "found" : "missing");
+      if (found)
+        setBilling((previous) => ({
+          ...previous,
+          street: found.street || previous.street,
+          neighborhood: found.neighborhood || previous.neighborhood,
+          city: found.city,
+          state: found.state,
+        }));
+    });
+    return () => {
+      current = false;
+    };
+  }, [cepDigits]);
+  const billingField =
+    (key: keyof GiftCheckoutBillingFields) =>
+    (event: { currentTarget: { value: string } }) => {
+      const value =
+        key === "zipCode"
+          ? formatCep(event.currentTarget.value)
+          : event.currentTarget.value;
+      setBilling((previous) => ({ ...previous, [key]: value }));
+    };
   const quoteMatchesSelection =
     quote !== null &&
     quote.method === method &&
@@ -307,6 +404,7 @@ export function GiftQuoteView({
                   holderName: holderName.current?.value,
                   expiry: expiry.current?.value,
                   cvv: cvv.current?.value,
+                  billing,
                 },
                 withCard,
                 now ?? new Date(),
@@ -431,6 +529,125 @@ export function GiftQuoteView({
                       required
                     />
                   </label>
+                </div>
+              </fieldset>
+            )}
+            {withCard && (
+              <fieldset
+                disabled={pending}
+                className="grid min-w-0 gap-3 border border-template-line p-4 sm:p-5"
+              >
+                <legend className="px-1 font-bold">Endereço de cobrança</legend>
+                <p className="m-0 text-sm text-template-muted">
+                  O endereço da fatura do cartão. Vai só para a Pagar.me junto
+                  com o pagamento.
+                </p>
+                <div className="grid min-w-0 gap-1">
+                  <label className="grid min-w-0 gap-1">
+                    CEP
+                    <input
+                      name="billing-zip"
+                      inputMode="numeric"
+                      autoComplete="billing postal-code"
+                      placeholder="00000-000"
+                      className={fieldClass}
+                      maxLength={9}
+                      value={billing.zipCode}
+                      onChange={billingField("zipCode")}
+                      aria-describedby={cepStatusId}
+                      required
+                    />
+                  </label>
+                  <p
+                    id={cepStatusId}
+                    role="status"
+                    className="m-0 min-h-5 text-sm text-template-muted"
+                  >
+                    {cepLookup === "idle" ? "" : cepLookupMessage[cepLookup]}
+                  </p>
+                </div>
+                <label className="grid min-w-0 gap-1">
+                  Rua
+                  <input
+                    name="billing-street"
+                    autoComplete="billing address-line1"
+                    className={fieldClass}
+                    maxLength={128}
+                    value={billing.street}
+                    onChange={billingField("street")}
+                    required
+                  />
+                </label>
+                <div className="grid min-w-0 grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-3">
+                  <label className="grid min-w-0 gap-1">
+                    Número
+                    <input
+                      name="billing-number"
+                      inputMode="numeric"
+                      className={fieldClass}
+                      maxLength={16}
+                      value={billing.streetNumber}
+                      onChange={billingField("streetNumber")}
+                      required
+                    />
+                  </label>
+                  <label className="grid min-w-0 gap-1">
+                    Complemento
+                    <input
+                      name="billing-complement"
+                      autoComplete="billing address-line2"
+                      placeholder="Opcional"
+                      className={fieldClass}
+                      maxLength={64}
+                      value={billing.complement}
+                      onChange={billingField("complement")}
+                    />
+                  </label>
+                </div>
+                <label className="grid min-w-0 gap-1">
+                  Bairro
+                  <input
+                    name="billing-neighborhood"
+                    autoComplete="billing address-level3"
+                    className={fieldClass}
+                    maxLength={64}
+                    value={billing.neighborhood}
+                    onChange={billingField("neighborhood")}
+                    required
+                  />
+                </label>
+                <div className="grid min-w-0 grid-cols-[minmax(0,3fr)_minmax(0,1fr)] gap-3">
+                  <label className="grid min-w-0 gap-1">
+                    Cidade
+                    <input
+                      name="billing-city"
+                      autoComplete="billing address-level2"
+                      className={fieldClass}
+                      maxLength={64}
+                      value={billing.city}
+                      onChange={billingField("city")}
+                      required
+                    />
+                  </label>
+                  <div className="grid min-w-0 gap-1">
+                    <label htmlFor={stateId}>UF</label>
+                    <select
+                      id={stateId}
+                      name="billing-state"
+                      autoComplete="billing address-level1"
+                      className={fieldClass}
+                      value={billing.state}
+                      onChange={billingField("state")}
+                      required
+                    >
+                      <option value="">—</option>
+                      {brazilianStates.map((state) => (
+                        <option key={state} value={state}>
+                          {state}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
               </fieldset>
             )}

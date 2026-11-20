@@ -663,6 +663,10 @@ export function createGiftCheckoutService(
             totalCents: quote.totalCents,
             coupleSplitCents: quoteSnapshot.settlement.coupleSplitCents,
             ...(body.data.cardToken ? { cardToken: body.data.cardToken } : {}),
+            // Sent to Pagar.me only: never reserved, stored or observed.
+            ...(body.data.billingAddress
+              ? { billingAddress: body.data.billingAddress }
+              : {}),
             quoteExpiresAt: new Date(quoteSnapshot.expiresAt),
             now: clock(dependencies),
             buyer: body.data.buyer,
