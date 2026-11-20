@@ -24,6 +24,7 @@ export interface ObservabilityEvent {
   errorCode?: string;
   attemptId?: string;
   paymentMethod?: string;
+  providerCode?: string;
 }
 
 export type ObservabilitySink = (event: ObservabilityEvent) => void;
@@ -59,6 +60,7 @@ const ALLOWED_FIELDS = [
   "errorCode",
   "attemptId",
   "paymentMethod",
+  "providerCode",
 ] as const satisfies readonly (keyof ObservabilityEvent)[];
 
 const TOKEN_PATTERN = /^[A-Za-z][A-Za-z0-9_.:-]{0,63}$/;
@@ -71,6 +73,16 @@ function boundedToken(value: unknown): string | undefined {
   return typeof value === "string" && TOKEN_PATTERN.test(value)
     ? value
     : undefined;
+}
+
+/**
+ * Provider error codes are external text: keep only short code-shaped values
+ * without digit runs, so an echoed document or phone never reaches the log.
+ */
+function providerCode(value: unknown): string | undefined {
+  const token = boundedToken(value);
+  if (token === undefined) return undefined;
+  return /\d{4,}/.test(token) ? "redacted" : token;
 }
 
 function boundedRoute(value: unknown): string | undefined {
@@ -116,6 +128,7 @@ function safeFieldValue(
       : undefined;
   }
   if (field === "requestId" || field === "attemptId") return boundedUuid(value);
+  if (field === "providerCode") return providerCode(value);
   if (field === "routeTemplate") return boundedRoute(value);
   if (field === "method") {
     return typeof value === "string" && /^[A-Z]{3,7}$/.test(value)

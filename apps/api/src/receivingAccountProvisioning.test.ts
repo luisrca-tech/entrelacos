@@ -1,12 +1,14 @@
 import { createHash, createHmac, hkdfSync } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { sanitizeObservabilityEvent } from "./observability";
 import { createPagarmeRecipientClient } from "./pagarmeRecipientClient";
 import {
   createReceivingAccountProvisioning,
   deriveReceivingFingerprintKey,
   deriveReceivingProvisioningContext,
   RECEIVING_FINGERPRINT_KEY_ID,
+  ReceivingAccountProvisioningError,
 } from "./receivingAccountProvisioning";
 import {
   type ReceivingProvisioningRecord,
@@ -724,5 +726,113 @@ describe("completion-owned original account provisioning", () => {
       await service.close();
       vi.useRealTimers();
     }
+  });
+});
+
+describe("provisioning failure observability", () => {
+  const PII = [
+    "MARIA",
+    "maria@example.test",
+    "12345678909",
+    "21994647568",
+    "General Justo",
+    "20021130",
+    "12345",
+    "sk_test",
+    "token-one",
+    "session-one",
+  ];
+  function expectNoPii(observe: ReturnType<typeof vi.fn>) {
+    const logged = JSON.stringify(observe.mock.calls);
+    for (const value of PII) expect(logged).not.toContain(value);
+    for (const [event] of observe.mock.calls)
+      expect(sanitizeObservabilityEvent(event)).toEqual(event);
+  }
+
+  it("records the refused claim stage without personal data", async () => {
+    const values = fixture();
+    const observe = vi.fn();
+    values.repository.claimOriginal.mockRejectedValueOnce(
+      new ReceivingAccountProvisioningError(),
+    );
+    const service = createReceivingAccountProvisioning({
+      ...values.options,
+      observe,
+    });
+    const owner = service.begin(values.command);
+    expect((await owner.feedback).state).toBe("UNAVAILABLE");
+    await owner.completion;
+    await service.close();
+    expect(values.fetchOriginal).not.toHaveBeenCalled();
+    expect(observe).toHaveBeenCalledExactlyOnceWith({
+      level: "warn",
+      event: "receiving.provisioning.failed",
+      operation: "claim",
+      result: "unavailable",
+      errorCode: "ReceivingAccountProvisioningError",
+      siteId: "site-one",
+    });
+    expectNoPii(observe);
+  });
+
+  it("records a Pagar.me rejection with its status and provider code only", async () => {
+    const values = fixture();
+    const observe = vi.fn();
+    values.fetchOriginal.mockImplementation(
+      async () =>
+        new Response(
+          JSON.stringify({
+            errors: [
+              {
+                type: "invalid_document",
+                message: "CPF 12345678909 of MARIA DA SILVA is invalid",
+              },
+            ],
+          }),
+          { status: 422, headers: { "content-type": "application/json" } },
+        ),
+    );
+    const service = createReceivingAccountProvisioning({
+      ...values.options,
+      observe,
+    });
+    const owner = service.begin(values.command);
+    expect((await owner.feedback).state).toBe("UNKNOWN");
+    await owner.completion;
+    await service.close();
+    expect(observe).toHaveBeenCalledExactlyOnceWith({
+      level: "warn",
+      event: "receiving.provisioning.failed",
+      operation: "create_recipient",
+      result: "unknown",
+      errorCode: "PagarmeRejectedError",
+      siteId: "site-one",
+      status: 422,
+      providerCode: "invalid_document",
+    });
+    expectNoPii(observe);
+  });
+
+  it("records a recovered attachment failure before consulting the stored result", async () => {
+    const values = fixture();
+    const observe = vi.fn();
+    values.controls.attachLostAck = true;
+    const service = createReceivingAccountProvisioning({
+      ...values.options,
+      observe,
+    });
+    const owner = service.begin(values.command);
+    expect((await owner.feedback).state).toBe("STORED");
+    await owner.completion;
+    await service.close();
+    expect(observe).toHaveBeenCalledExactlyOnceWith({
+      level: "warn",
+      event: "receiving.provisioning.failed",
+      operation: "attach",
+      result: "recovering",
+      errorCode: "Error",
+      siteId: "site-one",
+    });
+    expectNoPii(observe);
   });
 });
