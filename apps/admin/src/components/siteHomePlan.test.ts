@@ -1,6 +1,11 @@
 import type { ReceivingReadiness, SiteAccess } from "@entrelacos/contracts";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { paymentsAvailabilityStore } from "../lib/paymentsAvailability";
 import { buildSiteHomePlan } from "./siteHomePlan";
+
+// The API reports payments as available unless a test says otherwise.
+beforeEach(() => paymentsAvailabilityStore.reportMode("sandbox"));
+afterEach(() => paymentsAvailabilityStore.reset());
 
 const access: SiteAccess = {
   siteId: "wedding-a",
@@ -217,5 +222,63 @@ describe("site home with money gifts switched off", () => {
       expect(plan.receivingLabel).toBeNull();
       expect(plan.next?.href ?? "").not.toContain("receiving");
     }
+  });
+});
+
+describe("site home when the API reports payments disabled", () => {
+  const site = {
+    id: "site-1",
+    lifecycle: "ACTIVE",
+    publicationState: "PUBLISHED",
+  } as const;
+  const readiness: ReceivingReadiness = {
+    siteId: "site-1",
+    state: "BLOCKED",
+    reason: "PROVIDER_DISABLED",
+    observedAt: null,
+    destinationVersion: null,
+    catalogEligible: false,
+    mode: "disabled",
+  };
+  it("offers no receiving card, label or setup step", () => {
+    const plan = buildSiteHomePlan({
+      site,
+      access: null,
+      owner: true,
+      readiness,
+      paymentsOpen: false,
+    });
+    expect(plan.sections.map((section) => section.id)).toEqual([
+      "invitations",
+      "messages",
+      "gifts",
+      "team",
+      "settings",
+    ]);
+    expect(plan.receivingLabel).toBeNull();
+    expect(plan.next?.href).toBe("/sites/site-1/invitations");
+  });
+  it("keeps the receiving card when payments are open", () => {
+    const plan = buildSiteHomePlan({
+      site,
+      access: null,
+      owner: true,
+      readiness: null,
+      paymentsOpen: true,
+    });
+    expect(plan.sections.map((section) => section.id)).toContain("receiving");
+    expect(plan.receivingLabel).toBe("Status não consultado");
+  });
+  it("follows the API availability when the caller does not pass one", () => {
+    paymentsAvailabilityStore.reportMode("disabled");
+    const plan = buildSiteHomePlan({
+      site,
+      access: null,
+      owner: true,
+      readiness,
+    });
+    expect(plan.sections.map((section) => section.id)).not.toContain(
+      "receiving",
+    );
   });
 });

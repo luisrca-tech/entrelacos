@@ -34,6 +34,8 @@ Guests pay through Pagar.me with a transparent checkout: the card is tokenized i
 | `PUBLIC_PAGARME_PUBLIC_KEY` | `pk_test_…` | `pk_test_…` | live `pk_…` |
 | `PUBLIC_GIFT_PAYMENTS_ENABLED` | unset (on) | unset (on) | unset (on); `false` pauses the public checkout and the receiving area |
 
+The admin also reads the API `mode` (receiving readiness) and keeps "Recebimentos" and the setup steps closed while it is `disabled`, so production can keep the flag on before accreditation.
+
 The public key belongs to the Entrelaços account, is the same for every couple site and can only tokenize cards. Each site origin (`*.entrelacosbr.site`, `localhost` for tests) may need to be allowed in the Pagar.me dashboard. Keys are build variables; never commit them.
 
 The API side uses `PAGARME_MODE` (`disabled`, `test` or `live`), `PAGARME_SECRET_KEY`, `PAGARME_PLATFORM_RECIPIENT_ID`, `PAGARME_WEBHOOK_BASIC_USER`, `PAGARME_WEBHOOK_BASIC_PASSWORD`, `PAGARME_BACKGROUND_PROCESSING` and `PAGARME_LIVE_DEMO_SITE_ID` (`demo-wedding` in production once the demo is reconfigured; empty elsewhere). Keep production on `disabled` until accreditation is done and release is approved. Setup, webhook and sandbox steps are in [Pagar.me operation](pagarmeOperation.md); the price formula, 1–6x installments, split and withdrawal fee are in [gift pricing](giftPricingPanel.md).

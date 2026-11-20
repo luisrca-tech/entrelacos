@@ -1,10 +1,15 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { paymentsAvailabilityStore } from "../lib/paymentsAvailability";
 import {
   getInitials,
   getMobileNavigation,
   getSiteNavigation,
   resolveSiteArea,
 } from "./adminNavigation";
+
+// The API reports payments as available unless a test says otherwise.
+beforeEach(() => paymentsAvailabilityStore.reportMode("sandbox"));
+afterEach(() => paymentsAvailabilityStore.reset());
 
 describe("admin shell navigation", () => {
   it("derives circular account initials from the actor name", () => {
@@ -113,11 +118,90 @@ describe("navigation with money gifts switched off", () => {
       [...mobile.primary, ...mobile.more].map((item) => item.area),
     ).not.toContain("receiving");
   });
-  it("keeps the receiving area by default", () => {
+  it("keeps the receiving area by default once the API accepts payments", () => {
     vi.stubEnv("PUBLIC_GIFT_PAYMENTS_ENABLED", undefined);
     expect(
       getSiteNavigation("SITE_ADMIN", "site-1").map((item) => item.area),
     ).toContain("receiving");
     expect(resolveSiteArea("OWNER", "receiving-guide")).toBe("receiving-guide");
+  });
+});
+
+describe("navigation follows what the API reports about payments", () => {
+  afterEach(() => vi.unstubAllEnvs());
+  const receiving = (role: "OWNER" | "SITE_ADMIN") =>
+    getSiteNavigation(role, "site-1").map((item) => item.area);
+
+  it.each([
+    ["disabled", "unavailable"],
+    ["not asked yet", "unknown"],
+    ["unreachable", "unreachable"],
+  ] as const)("hides receiving when the API is %s", (_label, state) => {
+    paymentsAvailabilityStore.reset();
+    if (state === "unavailable")
+      paymentsAvailabilityStore.reportMode("disabled");
+    if (state === "unreachable") paymentsAvailabilityStore.reportFailure();
+    for (const role of ["OWNER", "SITE_ADMIN"] as const) {
+      expect(receiving(role)).not.toContain("receiving");
+      expect(receiving(role)).toContain("gifts");
+    }
+    const mobile = getMobileNavigation(getSiteNavigation("OWNER", "site-1"));
+    expect(
+      [...mobile.primary, ...mobile.more].map((item) => item.area),
+    ).not.toContain("receiving");
+  });
+
+  it("shows receiving for sandbox and live", () => {
+    for (const mode of ["sandbox", "live"] as const) {
+      paymentsAvailabilityStore.reportMode(mode);
+      expect(receiving("OWNER")).toContain("receiving");
+      expect(receiving("SITE_ADMIN")).toContain("receiving");
+    }
+  });
+
+  it("lets the caller pass the availability it subscribed to", () => {
+    paymentsAvailabilityStore.reportMode("disabled");
+    expect(
+      getSiteNavigation("OWNER", "site-1", true).map((item) => item.area),
+    ).toContain("receiving");
+    paymentsAvailabilityStore.reportMode("live");
+    expect(
+      getSiteNavigation("OWNER", "site-1", false).map((item) => item.area),
+    ).not.toContain("receiving");
+  });
+
+  it("keeps the manual pause stronger than the API", () => {
+    vi.stubEnv("PUBLIC_GIFT_PAYMENTS_ENABLED", "false");
+    paymentsAvailabilityStore.reportMode("live");
+    expect(receiving("OWNER")).not.toContain("receiving");
+    expect(resolveSiteArea("OWNER", "receiving")).toBe("home");
+  });
+
+  it("sends receiving links home when the API says disabled or unreachable", () => {
+    for (const state of ["unavailable", "unreachable"] as const) {
+      paymentsAvailabilityStore.reset();
+      if (state === "unavailable")
+        paymentsAvailabilityStore.reportMode("disabled");
+      else paymentsAvailabilityStore.reportFailure();
+      expect(resolveSiteArea("OWNER", "receiving")).toBe("home");
+      expect(resolveSiteArea("SITE_ADMIN", "receiving-guide")).toBe("home");
+    }
+    expect(resolveSiteArea("OWNER", "gifts")).toBe("gifts");
+  });
+
+  it("waits for the API instead of redirecting a deep link while unknown", () => {
+    paymentsAvailabilityStore.reset();
+    expect(resolveSiteArea("OWNER", "receiving")).toBe("receiving");
+    expect(resolveSiteArea("SITE_ADMIN", "receiving-guide")).toBe(
+      "receiving-guide",
+    );
+    expect(resolveSiteArea("SITE_ASSISTANT", "receiving")).toBe("home");
+  });
+
+  it("accepts an explicit availability for pure callers", () => {
+    expect(resolveSiteArea("OWNER", "receiving", "unavailable")).toBe("home");
+    expect(resolveSiteArea("OWNER", "receiving", "available")).toBe(
+      "receiving",
+    );
   });
 });

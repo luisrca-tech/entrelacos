@@ -3,7 +3,7 @@ import type {
   SiteAccess,
   SiteRecord,
 } from "@entrelacos/contracts";
-import { giftPaymentsEnabled } from "@entrelacos/ui";
+import { paymentsAreaOpen } from "../lib/paymentsAvailability";
 import { getSiteNavigation, type SiteArea } from "./adminNavigation";
 
 type HomeSite = Pick<SiteRecord, "id" | "lifecycle" | "publicationState">;
@@ -34,11 +34,14 @@ export function buildSiteHomePlan({
   access,
   owner,
   readiness,
+  paymentsOpen = paymentsAreaOpen(),
 }: {
   site: HomeSite;
   access: SiteAccess | null;
   owner: boolean;
   readiness: ReceivingReadiness | null;
+  /** Whether the API offers payments; see `paymentsAvailability`. */
+  paymentsOpen?: boolean;
 }): {
   sections: HomeSection[];
   next: NextStep | null;
@@ -48,7 +51,7 @@ export function buildSiteHomePlan({
     return { sections: [], next: null, receivingLabel: null };
   const role = owner ? "OWNER" : access?.membershipRole;
   if (!role) return { sections: [], next: null, receivingLabel: null };
-  const sections = getSiteNavigation(role, site.id)
+  const sections = getSiteNavigation(role, site.id, paymentsOpen)
     .filter((item) => item.area !== "home")
     .map((item) => ({
       id: item.area,
@@ -58,7 +61,7 @@ export function buildSiteHomePlan({
     }));
   const base = `/sites/${encodeURIComponent(site.id)}`;
   const receivingAllowed =
-    giftPaymentsEnabled() &&
+    paymentsOpen &&
     (owner ||
       (access?.membershipRole === "SITE_ADMIN" &&
         access.capabilities.configureReceiving));

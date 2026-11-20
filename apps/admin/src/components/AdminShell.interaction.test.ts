@@ -3,8 +3,13 @@ import type { MeResponse, SiteAccess } from "@entrelacos/contracts";
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { paymentsAvailabilityStore } from "../lib/paymentsAvailability";
 import { AdminShell } from "./AdminShell";
+
+// The API reports payments as available unless a test says otherwise.
+beforeEach(() => paymentsAvailabilityStore.reportMode("sandbox"));
+afterEach(() => paymentsAvailabilityStore.reset());
 
 vi.mock("@tanstack/react-router", () => ({
   Link: ({

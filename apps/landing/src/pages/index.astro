@@ -7,6 +7,7 @@ import "../styles/landing.css";
 import "../styles/cinematic.css";
 import "lenis/dist/lenis.css";
 import { landingConfig } from "../landingConfig";
+import { GIFT_PLATFORM_TARIFFS } from "../../../../packages/contracts/src/giftTariffs";
 const config = landingConfig(import.meta.env, import.meta.env.PROD);
 const contactLabel = new URL(config.contactUrl).hostname === "wa.me"
   ? "Falar no WhatsApp"
@@ -14,7 +15,7 @@ const contactLabel = new URL(config.contactUrl).hostname === "wa.me"
 const questions = [
   ["Podemos personalizar o site?", "Sim. Alinhamos cores, tipografia, fotos e textos à identidade visual de vocês. Também podemos adaptar a estrutura de algumas seções, conforme o que for combinado. O Entrelaços cuida da montagem e da publicação."],
   ["O que podemos gerenciar pelo painel?", "Vocês podem cadastrar famílias e convidados, acompanhar confirmações, moderar o mural e gerenciar a lista de presentes. Os recebimentos ficam disponíveis conforme a configuração da conta do casamento."],
-  ["Como funcionam os presentes em dinheiro?", "Os itens da lista representam contribuições para o casal, sem entrega de produtos físicos. O convidado escolhe o presente e paga por Pix ou cartão de crédito, em até 6x, com o total e as parcelas à vista antes de confirmar. A Pagar.me processa o pagamento. Para receber, uma pessoa do casal faz o cadastro e a verificação de identidade pelo painel."],
+  ["Como funcionam os presentes em dinheiro?", `Os itens da lista representam contribuições para o casal, sem entrega de produtos físicos. O convidado escolhe o presente e paga por Pix ou cartão de crédito, em até ${GIFT_PLATFORM_TARIFFS.maxInstallments}x conforme o valor do presente, com o total e o valor de cada parcela antes de confirmar. A Pagar.me processa o pagamento. Para receber, uma pessoa do casal faz o cadastro e a verificação de identidade pelo painel.`],
   ["Os convidados precisam criar uma conta?", "Não. Para confirmar presença, a família usa o telefone de contato cadastrado e o PIN recebido com o convite. As informações do evento ficam disponíveis no site."],
   ["Podemos usar no celular?", "Sim. Os sites e o painel têm versões que se adaptam ao celular. O convidado pode consultar as informações, confirmar presença e deixar sua mensagem pelo próprio aparelho."],
   ["Como combinamos valores e prazo de entrega?", "Depois de escolher o estilo, conversamos sobre a data, o conteúdo e o que vocês precisam. Valores, prazo de preparação, período de publicação e eventuais custos adicionais são combinados antes da contratação."],

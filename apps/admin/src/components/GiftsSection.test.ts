@@ -2,7 +2,9 @@ import type { ReceivingReadiness } from "@entrelacos/contracts";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { paymentsAvailabilityStore } from "../lib/paymentsAvailability";
 import { GiftsReadinessView } from "./GiftsSection";
+import { loadGiftsReadiness } from "./giftsReadiness";
 
 const locked: ReceivingReadiness = {
   siteId: "wedding-a",
@@ -11,6 +13,12 @@ const locked: ReceivingReadiness = {
   observedAt: null,
   destinationVersion: null,
   catalogEligible: false,
+  mode: "sandbox",
+};
+const apiDisabled: ReceivingReadiness = {
+  ...locked,
+  state: "BLOCKED",
+  reason: "PROVIDER_DISABLED",
   mode: "disabled",
 };
 
@@ -118,5 +126,78 @@ describe("locked gifts with money gifts switched off", () => {
     expect(html).not.toContain("conta de destino");
     expect(html).not.toContain("Ver recebimentos");
     expect(html).not.toContain("/receiving");
+  });
+});
+
+describe("gifts while the API has payments disabled", () => {
+  const receivingAction = createElement(
+    "a",
+    { href: "/sites/wedding-a/receiving" },
+    "Ver recebimentos",
+  );
+  const render = (readiness: ReceivingReadiness, extra = {}) =>
+    renderToStaticMarkup(
+      createElement(GiftsReadinessView, {
+        siteId: "wedding-a",
+        readiness,
+        onRetry: vi.fn(),
+        receivingAction,
+        ...extra,
+      }),
+    );
+
+  it("shows a calm coming-soon state instead of the receiving steps", () => {
+    const html = render(apiDisabled);
+    expect(html).toContain("Presentes em dinheiro em breve");
+    expect(html).toContain(
+      "Os presentes em dinheiro estarão disponíveis em breve.",
+    );
+    expect(html).not.toContain("Configure os recebimentos primeiro");
+    expect(html).not.toContain("não estão disponíveis para ativação");
+    expect(html).not.toContain("Ver recebimentos");
+    expect(html).not.toContain("/receiving");
+    expect(html).not.toContain('role="alert"');
+    expect(html).not.toContain("Adicionar presente");
+  });
+
+  it("keeps a demonstration catalog manageable", () => {
+    const demo = renderToStaticMarkup(
+      createElement(GiftsReadinessView, {
+        siteId: "wedding-a",
+        readiness: {
+          ...apiDisabled,
+          catalogAccess: { siteId: "wedding-a", mode: "demonstration" },
+        },
+        onRetry: vi.fn(),
+        catalog: createElement("p", null, "Adicionar presente"),
+      }),
+    );
+    expect(demo).toContain("Adicionar presente");
+    expect(demo).not.toContain("Presentes em dinheiro em breve");
+  });
+
+  it("still asks for the receiving setup once the API accepts payments", () => {
+    const html = render(locked);
+    expect(html).toContain("Configure os recebimentos primeiro");
+    expect(html).toContain("Ver recebimentos");
+    expect(html).not.toContain("Presentes em dinheiro em breve");
+  });
+});
+
+describe("gift readiness read", () => {
+  beforeEach(() => paymentsAvailabilityStore.reset());
+  afterEach(() => paymentsAvailabilityStore.reset());
+  const answer = (readiness: ReceivingReadiness) => async () => ({ readiness });
+  it("tells the availability store what mode the API reports", async () => {
+    await loadGiftsReadiness("wedding-a", answer(apiDisabled));
+    expect(paymentsAvailabilityStore.get()).toBe("unavailable");
+    await loadGiftsReadiness("wedding-a", answer(locked));
+    expect(paymentsAvailabilityStore.get()).toBe("available");
+  });
+  it("leaves the store alone for a response about another site", async () => {
+    await expect(
+      loadGiftsReadiness("wedding-b", answer(locked)),
+    ).rejects.toThrow();
+    expect(paymentsAvailabilityStore.get()).toBe("unknown");
   });
 });

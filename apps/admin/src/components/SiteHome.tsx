@@ -21,6 +21,10 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { apiRequest } from "../lib/apiClient";
+import {
+  paymentsAreaOpen,
+  usePaymentsAvailability,
+} from "../lib/paymentsAvailability";
 import { AdminButton } from "./AdminButton";
 import { formatBrazilianLongDate } from "./brazilianDate";
 import { loadGiftsReadiness } from "./giftsReadiness";
@@ -89,6 +93,7 @@ export async function readHomeReceiving(
 }
 
 export function SiteHome({ site, access, owner, sessionEpoch }: Props) {
+  const paymentsOpen = paymentsAreaOpen(usePaymentsAvailability());
   const [revision, setRevision] = useState(0);
   const [result, setResult] = useState<{
     siteId: string;
@@ -155,6 +160,7 @@ export function SiteHome({ site, access, owner, sessionEpoch }: Props) {
       readiness={current?.summary?.receiving ?? null}
       loading={!current}
       failed={current?.failed ?? false}
+      paymentsOpen={paymentsOpen}
       onRetry={() => setRevision((value) => value + 1)}
     />
   );
@@ -211,6 +217,7 @@ export function SiteHomeView({
   summary,
   loading,
   failed,
+  paymentsOpen = paymentsAreaOpen(),
   onRetry,
 }: {
   site: HomeSite;
@@ -220,9 +227,16 @@ export function SiteHomeView({
   summary?: SiteHomeSummary | null;
   loading: boolean;
   failed: boolean;
+  paymentsOpen?: boolean;
   onRetry: () => void;
 }) {
-  const plan = buildSiteHomePlan({ site, access, owner, readiness });
+  const plan = buildSiteHomePlan({
+    site,
+    access,
+    owner,
+    readiness,
+    paymentsOpen,
+  });
   const [days, setDays] = useState<number | null>(null);
   useEffect(() => {
     const update = () => setDays(daysUntilWedding(site.eventDate, new Date()));

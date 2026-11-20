@@ -28,6 +28,10 @@ import {
   useRef,
   useState,
 } from "react";
+import {
+  paymentsAreaOpen,
+  usePaymentsProbe,
+} from "../lib/paymentsAvailability";
 import { AdminButton } from "./AdminButton";
 import {
   type AdminRole,
@@ -36,6 +40,7 @@ import {
   getSiteNavigation,
   type SiteArea,
 } from "./adminNavigation";
+import { loadGiftsReadiness } from "./giftsReadiness";
 import {
   setNavigationExpanded,
   useNavigationExpanded,
@@ -62,7 +67,13 @@ export function AdminShell({
   children,
 }: AdminShellProps) {
   const role = (siteAccess?.membershipRole ?? actor.user.role) as AdminRole;
-  const navigation = siteId ? getSiteNavigation(role, siteId) : [];
+  const payments = usePaymentsProbe(
+    role === "SITE_ASSISTANT" ? undefined : siteId,
+    loadGiftsReadiness,
+  );
+  const navigation = siteId
+    ? getSiteNavigation(role, siteId, paymentsAreaOpen(payments))
+    : [];
   const navigationArea = area === "receiving-guide" ? "receiving" : area;
   const initials = getInitials(actor.user.name);
   const expanded = useNavigationExpanded();

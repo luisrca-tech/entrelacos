@@ -4,7 +4,6 @@ import type {
   SiteRecord,
 } from "@entrelacos/contracts";
 import {
-  giftPaymentsEnabled,
   Input,
   Table,
   TableBody,
@@ -24,9 +23,14 @@ import {
 } from "react";
 import { adminStyles, displayHeading } from "../lib/adminStyles";
 import { apiRequest } from "../lib/apiClient";
+import {
+  paymentsAreaOpen,
+  usePaymentsProbe,
+} from "../lib/paymentsAvailability";
 import { AdminButton, adminButtonClassName } from "./AdminButton";
 import { formatBrazilianDate } from "./brazilianDate";
 import { CreateWeddingDialog } from "./CreateWeddingDialog";
+import { loadGiftsReadiness } from "./giftsReadiness";
 import { LoadMoreButton } from "./LoadMoreButton";
 import { type PanelSessionSnapshot, panelActorOwner } from "./panelActor";
 import { ToneBadge } from "./receivingUi";
@@ -83,6 +87,10 @@ function OwnerSitesRuntime({
   const [loadingMore, setLoadingMore] = useState(false);
   const [search, setSearch] = useState("");
   const [lifecycle, setLifecycle] = useState("ALL");
+  // The API reports the payments mode for any site; ask it with the first one.
+  const paymentsOpen = paymentsAreaOpen(
+    usePaymentsProbe(sites[0]?.id, loadGiftsReadiness),
+  );
   const alive = useRef(true);
   const busy = useRef(false);
   const refreshQueued = useRef(false);
@@ -324,7 +332,7 @@ function OwnerSitesRuntime({
                 <TableHead className="px-[22px]">Casamento</TableHead>
                 <TableHead>Data</TableHead>
                 <TableHead>Situação</TableHead>
-                {giftPaymentsEnabled() && <TableHead>Recebimentos</TableHead>}
+                {paymentsOpen && <TableHead>Recebimentos</TableHead>}
                 <TableHead>Site e casal</TableHead>
                 <TableHead aria-label="Ação" />
               </TableRow>
@@ -348,7 +356,7 @@ function OwnerSitesRuntime({
                   <TableCell>
                     <LifecycleBadge lifecycle={site.lifecycle} />
                   </TableCell>
-                  {giftPaymentsEnabled() && (
+                  {paymentsOpen && (
                     <TableCell>
                       <ReceivingAccountBadge state={site.receivingAccount} />
                     </TableCell>
@@ -390,7 +398,7 @@ function OwnerSitesRuntime({
                 {site.coupleNames.join(" & ")} ·{" "}
                 {formatBrazilianDate(site.eventDate)}
               </span>
-              {giftPaymentsEnabled() && (
+              {paymentsOpen && (
                 <div className="flex flex-wrap items-center gap-2 text-[13px] text-admin-text-secondary">
                   Recebimentos
                   <ReceivingAccountBadge state={site.receivingAccount} />
