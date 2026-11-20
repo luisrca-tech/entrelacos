@@ -115,7 +115,7 @@ export function BalanceFigure({
       <p role="status" className="m-0 text-sm text-admin-text-secondary">
         {overview.availability === "STALE"
           ? "Saldo desatualizado. Aguarde uma nova confirmação para solicitar uma transferência."
-          : "Ainda não confirmado pelo Asaas."}
+          : "Ainda não confirmado pela Pagar.me."}
       </p>
     </div>
   );
@@ -166,7 +166,7 @@ export function FinancialOverviewCard({
       >
         <p className="m-0">
           Não há um saldo confirmado para exibir. Os recebimentos e as
-          movimentações dependem da confirmação do Asaas.
+          movimentações dependem da confirmação da Pagar.me.
         </p>
         {error && (
           <div>
@@ -199,8 +199,8 @@ export function FinancialOverviewCard({
           {current.awaitingReleaseCents > 0 && (
             <p className="m-0 text-sm leading-[1.55] text-admin-text">
               Mais <strong>{formatCents(current.awaitingReleaseCents)}</strong>{" "}
-              aguardando liberação do Asaas. No cartão, o valor é antecipado e
-              normalmente chega em até 2 dias úteis, sujeito à análise do Asaas.
+              aguardando liberação pela Pagar.me. No cartão, o valor é
+              antecipado e fica disponível em cerca de 2 dias.
             </p>
           )}
           {(current.platformAdjustmentOwedCents ?? 0) > 0 && (

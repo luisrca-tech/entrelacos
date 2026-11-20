@@ -13,7 +13,7 @@ describe("gift presentation seam", () => {
     expect(source).toContain("[data-gift-section][hidden] { display: none; }");
     expect(source).toContain("<slot />");
     expect(source).not.toMatch(
-      /fetch\(|wallet|readiness|DATABASE|Asaas|R2_ACCESS/i,
+      /fetch\(|wallet|readiness|DATABASE|pagar\.me|R2_ACCESS/i,
     );
   });
   it("uses host content validation and existing section tokens", () => {

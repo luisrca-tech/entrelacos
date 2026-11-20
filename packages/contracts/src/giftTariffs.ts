@@ -1,72 +1,90 @@
 import { GIFT_COMMISSION_BASIS_POINTS } from "./giftCommission";
 
+/** To confirm with Pagar.me: gateway fee on Pix. */
+export const PIX_FIXED_CENTS = 55;
+
 /**
- * Single source of truth for every tariff number used to price a gift under
- * `PLATFORM_ACCOUNT_SPLIT_V2` (API quotes, couple preview and landing).
+ * How the couple split amount is sent on an installment card order:
+ * `charge_total` sends the whole couple amount once; `per_installment` sends
+ * ceil(amount / installments). The sandbox payables test decides.
+ */
+export type CouplesSplitMode = "charge_total" | "per_installment";
+
+/**
+ * Single source of truth for every tariff number used to price a gift on
+ * Pagar.me (API quotes, couple preview and landing).
  *
- * Card percentages and fixed fees are the platform (main) account contract.
- *
- * Anticipation (decision of 2026-11-14): the platform account has AUTOMATIC
- * credit-card anticipation enabled with a special rate of 1.15% a month for
- * one-off charges and 1.6% a month for installments; Pix is never
- * anticipated. The guest pays the payment-method fee, the anticipation fee
- * and the 2% Entrelaços service, so the couple receives 100% of the gift,
- * usually about 2 business days after the card payment. Asaas charges the
- * anticipation on each installment net value for the days until its credit
- * date. If Asaas does not anticipate a charge, each installment still settles
- * normally and the couple split is unchanged.
+ * The guest pays the gift, the 2% Entrelaços service and every Pagar.me cost.
+ * Card prices are grossed up by the D+2 CET for the installment count (MDR,
+ * automatic anticipation and chargeback guarantee) plus the per-transaction
+ * gateway and antifraud fees. The couple recipient has automatic anticipation,
+ * so its split is grossed up by the monthly anticipation rate to net the gift.
+ * Pix is never anticipated.
  */
 export const GIFT_PLATFORM_TARIFFS = {
-  version: "platform-tariffs-2026-11-14",
+  version: "pagarme-proposal-2026-11",
   commissionBasisPoints: GIFT_COMMISSION_BASIS_POINTS,
-  pix: { basisPoints: 0, fixedCents: 199, anticipationMonthlyBasisPoints: 0 },
-  card1: {
-    basisPoints: 299,
-    fixedCents: 49,
-    anticipationMonthlyBasisPoints: 115,
+  pix: { mdrBasisPoints: 109, fixedCents: PIX_FIXED_CENTS },
+  card: {
+    /** Gateway 55 + antifraud 44, charged per transaction. */
+    fixedCents: 99,
+    cetBasisPointsByInstallments: {
+      1: 511,
+      2: 817,
+      3: 947,
+      4: 1077,
+      5: 1207,
+      6: 1338,
+    },
+    mdrBasisPoints: { 1: 264, "2to6": 429 },
   },
-  card2to6: {
-    basisPoints: 349,
-    fixedCents: 49,
-    anticipationMonthlyBasisPoints: 160,
-  },
-  card7to12: {
-    basisPoints: 399,
-    fixedCents: 49,
-    anticipationMonthlyBasisPoints: 160,
-  },
+  anticipationMonthlyBasisPoints: 272,
+  withdrawalFeeCents: 367,
   minimumInstallmentCents: 500,
-  maxInstallments: 12,
-  /**
-   * Conservative anticipation days used only to distribute the couple split
-   * across installments: installment i is assumed to be anticipated for
-   * `splitScheduleDaysPerInstallment * i + splitScheduleExtraDays` days from
-   * the payment date. Sandbox credit dates (2026-11-13 probe) reached
-   * 32, 66, 96, …, 290, …, 384 days for a 12x charge; 33·i + 5 keeps 5 to 17
-   * days of margin for weekends and holidays, so net_i never drops below the
-   * couple split of that installment.
-   */
-  splitScheduleDaysPerInstallment: 33,
-  splitScheduleExtraDays: 5,
+  maxInstallments: 6,
+  couplesSplitMode: "charge_total" as CouplesSplitMode,
 } as const;
 
-export type GiftTariffTier = "pix" | "card1" | "card2to6" | "card7to12";
+export type GiftTariffTier = "pix" | "card1" | "card2to6";
+export type CardInstallmentCount = 1 | 2 | 3 | 4 | 5 | 6;
 export type GiftTariff = {
-  readonly basisPoints: number;
+  readonly mdrBasisPoints: number;
   readonly fixedCents: number;
-  readonly anticipationMonthlyBasisPoints: number;
 };
+
+export function assertCardInstallmentCount(
+  installmentCount: number,
+): asserts installmentCount is CardInstallmentCount {
+  if (
+    !Number.isSafeInteger(installmentCount) ||
+    installmentCount < 1 ||
+    installmentCount > GIFT_PLATFORM_TARIFFS.maxInstallments
+  )
+    throw new RangeError("Unsupported installment count");
+}
 
 export function getGiftTariffTier(
   method: "PIX" | "CREDIT_CARD",
   installmentCount: number,
 ): GiftTariffTier {
   if (method === "PIX") return "pix";
-  if (installmentCount <= 1) return "card1";
-  if (installmentCount <= 6) return "card2to6";
-  return "card7to12";
+  assertCardInstallmentCount(installmentCount);
+  return installmentCount === 1 ? "card1" : "card2to6";
 }
 
 export function getGiftTariff(tier: GiftTariffTier): GiftTariff {
-  return GIFT_PLATFORM_TARIFFS[tier];
+  const { pix, card } = GIFT_PLATFORM_TARIFFS;
+  if (tier === "pix") return pix;
+  return {
+    mdrBasisPoints:
+      tier === "card1" ? card.mdrBasisPoints[1] : card.mdrBasisPoints["2to6"],
+    fixedCents: card.fixedCents,
+  };
+}
+
+export function getGiftCardCetBasisPoints(installmentCount: number): number {
+  assertCardInstallmentCount(installmentCount);
+  return GIFT_PLATFORM_TARIFFS.card.cetBasisPointsByInstallments[
+    installmentCount
+  ];
 }

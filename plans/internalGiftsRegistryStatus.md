@@ -1,5 +1,7 @@
 # Workstream B — Access, Catalog and Public Gifting
 
+> **2026-11 update:** Asaas was replaced by Pagar.me in 2026-11; see [Pagar.me operation](../docs/pagarmeOperation.md) and the [decision register](../docs/decisionRegister.md#payment-provider-switch-to-pagarme--2026-11-18). Asaas details below are historical.
+
 Owner: registry chat lead only. Parent: 01a0c6b0-0e91-7102-a240-885728de0a62.
 Status: LOCAL_READY / BOUNDARY_ROOT0223_CLOSED_FROZEN_RELEASED (one obsolete asset assertion removed; exact suite RED1/GREEN4, Biome1 and full byte preservation passed; root whole-base acceptance pending; coordinated catalog remains ROOT_SOURCE_ACCEPTED and frozen).
 Branch: feat/internal-gifts-asaas

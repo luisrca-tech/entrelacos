@@ -4,8 +4,13 @@ import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { ApiError, apiRequest } from "../lib/apiClient";
+import { paymentsAvailabilityStore } from "../lib/paymentsAvailability";
 import { OwnerSites } from "./OwnerSites";
 import { panelActorOwner } from "./panelActor";
+
+// The API reports payments as available unless a test says otherwise.
+beforeEach(() => paymentsAvailabilityStore.reportMode("sandbox"));
+afterEach(() => paymentsAvailabilityStore.reset());
 
 const { toastError } = vi.hoisted(() => ({ toastError: vi.fn() }));
 vi.mock("../lib/apiClient", async (original) => ({
@@ -509,7 +514,7 @@ it("shows lifecycle and stored receiving account state as badges with an outline
 });
 
 it("hides the receiving account column while money gifts are switched off", async () => {
-  vi.stubEnv("PUBLIC_GIFT_PAYMENTS_ENABLED", undefined);
+  vi.stubEnv("PUBLIC_GIFT_PAYMENTS_ENABLED", "false");
   try {
     await verify();
     request.mockResolvedValueOnce({
@@ -526,4 +531,70 @@ it("hides the receiving account column while money gifts are switched off", asyn
   } finally {
     vi.unstubAllEnvs();
   }
+});
+
+const readiness = (mode: "disabled" | "sandbox") => ({
+  readiness: {
+    siteId: "site-1",
+    state: mode === "disabled" ? "BLOCKED" : "NOT_CONFIGURED",
+    reason: mode === "disabled" ? "PROVIDER_DISABLED" : "NOT_CONFIGURED",
+    observedAt: null,
+    destinationVersion: null,
+    catalogEligible: false,
+    mode,
+  },
+});
+const ownerSiteList = {
+  sites: [{ ...sites[0], receivingAccount: "MISSING" }],
+  nextCursor: null,
+};
+function answerWith(mode: "disabled" | "sandbox") {
+  request.mockImplementation(async (path: string) =>
+    path.endsWith("/receiving/readiness") ? readiness(mode) : ownerSiteList,
+  );
+}
+
+it("hides the receiving column once the API reports payments disabled", async () => {
+  paymentsAvailabilityStore.reset();
+  await verify();
+  answerWith("disabled");
+  await mount();
+  await act(async () => {});
+  expect(request).toHaveBeenCalledWith("/v1/sites/site-1/receiving/readiness");
+  expect(paymentsAvailabilityStore.get()).toBe("unavailable");
+  const headers = [...container.querySelectorAll("th")].map(
+    (cell) => cell.textContent,
+  );
+  expect(headers).not.toContain("Recebimentos");
+  expect(container.textContent).not.toContain("Sem conta");
+  expect(container.textContent).toContain("Ana e João");
+});
+
+it("shows the receiving column once the API reports payments available", async () => {
+  paymentsAvailabilityStore.reset();
+  await verify();
+  answerWith("sandbox");
+  await mount();
+  await act(async () => {});
+  expect(paymentsAvailabilityStore.get()).toBe("available");
+  const headers = [...container.querySelectorAll("th")].map(
+    (cell) => cell.textContent,
+  );
+  expect(headers).toContain("Recebimentos");
+});
+
+it("keeps the receiving column hidden while the availability is unknown", async () => {
+  paymentsAvailabilityStore.reset();
+  await verify();
+  request.mockImplementation(async (path: string) => {
+    if (path.endsWith("/receiving/readiness")) throw new Error("offline");
+    return ownerSiteList;
+  });
+  await mount();
+  await act(async () => {});
+  expect(paymentsAvailabilityStore.get()).toBe("unreachable");
+  const headers = [...container.querySelectorAll("th")].map(
+    (cell) => cell.textContent,
+  );
+  expect(headers).not.toContain("Recebimentos");
 });

@@ -55,7 +55,7 @@ const pinnedRequestId = `nr1_${createHash("sha256")
       "receiving.self-nomination.request.v1",
       "site-one",
       "user-one",
-      "ASAAS",
+      "PAGARME",
       "sandbox",
     ]),
   )

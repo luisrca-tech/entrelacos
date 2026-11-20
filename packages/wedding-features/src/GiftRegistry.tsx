@@ -1,12 +1,11 @@
 import type {
-  CheckoutCreateInput,
-  CheckoutStatus,
+  GiftCheckoutStatus,
   GiftQuote,
   PublicGiftCatalogPageResponse,
   PublicGiftItem,
 } from "@entrelacos/contracts";
 import {
-  checkoutCreateInputSchema,
+  giftCheckoutCreateInputSchema,
   publicGiftCatalogQuerySchema,
 } from "@entrelacos/contracts";
 import { giftPaymentsEnabled } from "@entrelacos/ui";
@@ -15,6 +14,7 @@ import { useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { GiftCatalogView } from "./GiftCatalogView";
 import { GiftQuoteView } from "./GiftQuoteView";
 import { GiftRecoveryView } from "./GiftRecoveryView";
+import type { GiftCheckoutFormInput } from "./giftCheckoutForm";
 import { recoverGiftCheckout } from "./giftCheckoutRecovery";
 import {
   createGiftCheckoutState,
@@ -26,12 +26,20 @@ import {
   loadPendingGiftCheckout,
   writePendingGiftCheckout,
 } from "./giftCheckoutStorage";
-import { submitGiftCheckout } from "./giftCheckoutSubmission";
+import {
+  giftCheckoutRequest,
+  submitGiftCheckout,
+} from "./giftCheckoutSubmission";
 import {
   getGiftErrorMessage,
   WeddingGiftsApi,
   type WeddingGiftsApiOptions,
 } from "./gifts";
+import {
+  createPagarmeCardToken,
+  PagarmeCardTokenError,
+  pagarmePublicKey,
+} from "./pagarmeCardToken";
 import { SiteDialog } from "./SiteDialog";
 
 type Catalog = PublicGiftCatalogPageResponse;
@@ -40,14 +48,12 @@ type CatalogOwner = {
   controller: AbortController | null;
   pending: (() => void) | null;
 };
-export type GiftRegistryProps = WeddingGiftsApiOptions;
+export type GiftRegistryProps = WeddingGiftsApiOptions & {
+  /** Overrides the build-time PUBLIC_PAGARME_PUBLIC_KEY (local preview). */
+  pagarmePublicKey?: string;
+};
 
-const finalPaymentStates = new Set([
-  "CONFIRMED",
-  "RECEIVED",
-  "REFUNDED",
-  "CLOSED_UNPAID",
-]);
+const finalPaymentStates = new Set(["RECEIVED", "REFUNDED", "CLOSED_UNPAID"]);
 /** Status checks per opening of the payment dialog. */
 const maxPaymentChecks = 10;
 /** 3s, 6s, 12s… between checks while the payment dialog stays open. */
@@ -111,8 +117,10 @@ function GiftRegistryRuntime({
   fetcher,
   demo = false,
   liveDemoSiteId,
+  pagarmePublicKey: publicKeyOverride,
   catalogOwner,
 }: GiftRegistryProps & { catalogOwner: { current: CatalogOwner } }) {
+  const publicKey = publicKeyOverride ?? pagarmePublicKey();
   const api = useMemo(() => {
     try {
       return new WeddingGiftsApi({
@@ -129,7 +137,6 @@ function GiftRegistryRuntime({
   const root = useRef<HTMLDivElement>(null);
   const inFlight = useRef(false);
   const recoveryInFlight = useRef(false);
-  const currentRecoveredStatus = useRef<CheckoutStatus | null>(null);
   const recoveryEpoch = useRef(0);
   const recoveryAction = useRef<() => Promise<string | undefined>>(
     async () => undefined,
@@ -178,8 +185,8 @@ function GiftRegistryRuntime({
       currentCatalog?.mode !== "demonstration" &&
       currentCatalog?.gifts.find((gift) => gift.id === pendingGiftId)) ||
     null;
-  const outcomePending =
-    recovering || state.phase === "CREATING" || state.phase === "REDIRECTING";
+  const [preparing, setPreparing] = useState(false);
+  const outcomePending = recovering || state.phase === "CREATING";
   const visible =
     (catalogShown && currentCatalog?.mode !== "disabled") ||
     recovering ||
@@ -343,19 +350,6 @@ function GiftRegistryRuntime({
     state.revision,
   ]);
 
-  useEffect(() => {
-    if (state.phase === "REDIRECTING" && state.checkout)
-      window.location.assign(state.checkout.hostedUrl);
-  }, [state.phase, state.checkout]);
-
-  useEffect(() => {
-    const resumeCheckout = (event: PageTransitionEvent) => {
-      if (event.persisted) dispatch({ type: "CHECKOUT_RETURNED" });
-    };
-    window.addEventListener("pageshow", resumeCheckout);
-    return () => window.removeEventListener("pageshow", resumeCheckout);
-  }, []);
-
   function chooseGift(gift: PublicGiftItem) {
     if (
       !paymentsEnabled ||
@@ -380,7 +374,6 @@ function GiftRegistryRuntime({
     if (!api || !recovering || !state.pending || recoveryInFlight.current)
       return;
     recoveryInFlight.current = true;
-    currentRecoveredStatus.current = null;
     setRecoveryLoading(true);
     if (manual) setRecoveryError(false);
     const requestApi = api;
@@ -400,7 +393,6 @@ function GiftRegistryRuntime({
       if (!current()) return;
       if (event?.type === "STATUS_RESOLVED") {
         dispatch(event);
-        currentRecoveredStatus.current = event.status;
         setRecoveryError(false);
         settle(event.status, pending);
         return event.status.state;
@@ -416,7 +408,7 @@ function GiftRegistryRuntime({
 
   // A final outcome leaves the list: forget the attempt and say so once.
   function settle(
-    status: CheckoutStatus,
+    status: GiftCheckoutStatus,
     pending: NonNullable<typeof state.pending>,
   ) {
     if (!finalPaymentStates.has(status.state)) return;
@@ -436,23 +428,6 @@ function GiftRegistryRuntime({
     else toast.success(paymentConfirmedMessage);
   }
 
-  function continuePayment(checkout: NonNullable<CheckoutStatus["checkout"]>) {
-    const latest = currentRecoveredStatus.current;
-    if (
-      !mounted.current ||
-      recoveryInFlight.current ||
-      latest?.state !== "AWAITING_PAYMENT" ||
-      latest.checkout?.hostedUrl !== checkout.hostedUrl ||
-      latest.quoteId !== checkout.quoteId ||
-      latest.orderId !== checkout.orderId ||
-      latest.attemptId !== checkout.attemptId ||
-      latest.method !== checkout.method ||
-      latest.mode !== checkout.mode
-    )
-      return;
-    window.location.assign(checkout.hostedUrl);
-  }
-
   recoveryAction.current = recover;
   const pendingRequestId = state.pending?.requestId;
   useEffect(() => {
@@ -460,7 +435,7 @@ function GiftRegistryRuntime({
     else setPaymentOpen(false);
   }, [state.phase]);
   // One check when an attempt becomes pending: page load with a saved
-  // attempt, return from the hosted checkout, or an unknown creation outcome.
+  // attempt, a created checkout, or an unknown creation outcome.
   useEffect(() => {
     if (!api || state.phase !== "UNKNOWN" || !pendingRequestId) return;
     void recoveryAction.current();
@@ -489,7 +464,7 @@ function GiftRegistryRuntime({
     };
   }, [api, paymentOpen, state.phase, pendingRequestId]);
 
-  async function checkout(payer?: CheckoutCreateInput["payer"]) {
+  async function checkout(input: GiftCheckoutFormInput) {
     if (!api || state.phase !== "READY" || !state.quote || inFlight.current)
       return;
     inFlight.current = true;
@@ -497,6 +472,14 @@ function GiftRegistryRuntime({
     const quote = state.quote;
     const requestApi = api;
     const current = () => mounted.current && activeApi.current === requestApi;
+    // Until the create request is sent, a failure returns to the form.
+    let started = false;
+    let sent = false;
+    const backToForm = (message: string) => {
+      if (!current()) return;
+      dispatch({ type: "CHECKOUT_FAILED", message, unknown: false });
+      setDialogOpen(true);
+    };
     try {
       const requestId = state.requestId ?? crypto.randomUUID();
       const recoveryToken =
@@ -511,6 +494,34 @@ function GiftRegistryRuntime({
         dispatch(event);
         return;
       }
+      if ((quote.method === "CREDIT_CARD") !== (input.card !== undefined))
+        return;
+      // Lock the attempt before tokenizing: closing the dialog can no longer
+      // reset it, so an order created afterwards is always shown.
+      dispatch(event);
+      started = true;
+      // Tokenize first: nothing is reserved or charged if the card is refused
+      // here, and only the token travels on to the Entrelaços API.
+      let cardToken: string | undefined;
+      if (input.card) {
+        setPreparing(true);
+        try {
+          cardToken = await createPagarmeCardToken(input.card, {
+            publicKey,
+          });
+        } catch (error) {
+          backToForm(
+            error instanceof PagarmeCardTokenError &&
+              error.code === "CARD_INVALID"
+              ? "Confira os dados do cartão."
+              : "Não foi possível validar o cartão agora. Tente novamente ou use Pix.",
+          );
+          return;
+        } finally {
+          if (current()) setPreparing(false);
+        }
+        if (!current()) return;
+      }
       const pending = {
         quoteId: quote.id,
         requestId,
@@ -519,42 +530,45 @@ function GiftRegistryRuntime({
         method: quote.method,
         mode: quote.mode,
       };
+      // The billing address goes only into this request, never to storage.
+      const payment = {
+        buyer: input.buyer,
+        cardToken,
+        billingAddress: input.billingAddress,
+      };
       if (
-        ((quote.installmentCount ?? 1) > 1 && !payer) ||
-        !checkoutCreateInputSchema.safeParse({
-          quoteId: pending.quoteId,
-          requestId,
-          recoveryToken,
-          payer,
-        }).success
+        !giftCheckoutCreateInputSchema.safeParse(
+          giftCheckoutRequest(quote, pending, payment),
+        ).success
       ) {
-        setOperationError(
-          "Confira o nome, o CPF ou CNPJ e o e-mail do pagador.",
-        );
+        backToForm("Confira os seus dados e tente novamente.");
         return;
       }
       writePendingGiftCheckout(window.sessionStorage, siteId, pending);
-      dispatch(event);
+      sent = true;
       const result = await submitGiftCheckout(
         api,
         quote,
         pending,
         () => window.sessionStorage,
         current,
-        payer,
+        payment,
       );
       if (result && current()) {
         dispatch(result);
-        if (result.type === "CHECKOUT_FAILED" && result.rejected) {
+        if (result.type === "CHECKOUT_RESOLVED") setPaymentOpen(true);
+        else if (result.type === "CHECKOUT_FAILED" && result.rejected) {
           setDialogOpen(false);
           toast.error(result.message);
         } else if (result.type === "CHECKOUT_FAILED" && result.unknown)
           toast.warning(paymentUnknownMessage);
+        else if (result.type === "CHECKOUT_FAILED") setDialogOpen(true);
       }
     } catch {
-      setOperationError(
-        "Não foi possível preparar o pagamento com segurança. Tente novamente neste navegador.",
-      );
+      const message =
+        "Não foi possível preparar o pagamento com segurança. Tente novamente neste navegador.";
+      if (started && !sent) backToForm(message);
+      else setOperationError(message);
     } finally {
       inFlight.current = false;
     }
@@ -605,6 +619,7 @@ function GiftRegistryRuntime({
       <SiteDialog
         open={dialogOpen && !!state.gift && state.phase !== "UNKNOWN"}
         labelledBy="gift-quote-heading"
+        locked={state.phase === "CREATING" || preparing}
         className="overflow-hidden p-0 [@media(max-width:760px)]:fixed [@media(max-width:760px)]:inset-0 [@media(max-width:760px)]:m-0 [@media(max-width:760px)]:h-dvh [@media(max-width:760px)]:max-h-dvh [@media(max-width:760px)]:w-full [@media(max-width:760px)]:max-w-none [@media(max-width:760px)]:rounded-none"
         onClose={() => {
           setDialogOpen(false);
@@ -618,13 +633,11 @@ function GiftRegistryRuntime({
               method={state.method}
               installmentCount={state.installmentCount}
               loading={state.phase === "QUOTING"}
-              pending={
-                state.phase === "CREATING" || state.phase === "REDIRECTING"
-              }
+              pending={state.phase === "CREATING" || preparing}
               error={operationError || state.error || undefined}
               notice={state.notice ?? undefined}
               onSelectMethod={chooseMethod}
-              onConfirm={(payer) => void checkout(payer)}
+              onConfirm={(input) => void checkout(input)}
               onCancel={requestClose}
             />
           )
@@ -641,11 +654,11 @@ function GiftRegistryRuntime({
             <GiftRecoveryView
               siteId={siteId}
               status={state.checkoutStatus}
+              pix={state.checkout?.pix ?? null}
               loading={recoveryLoading}
               error={!api || !state.pending || recoveryError}
               canRetry={!!api && !!state.pending}
               onRetry={() => void recover(true)}
-              onContinue={continuePayment}
               headingId="gift-payment-heading"
               giftTitle={pendingGift?.title}
               onClose={requestClose}

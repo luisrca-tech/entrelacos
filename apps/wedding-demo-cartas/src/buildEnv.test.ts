@@ -21,6 +21,22 @@ describe("wedding demo build inputs", () => {
     );
   });
 
+  it("declares the Pagar.me public key for card tokenization", () => {
+    expect(turbo.tasks.build.env).toContain("PUBLIC_PAGARME_PUBLIC_KEY");
+    const example = readFileSync(
+      resolve(import.meta.dirname, "../.env.example"),
+      "utf8",
+    );
+    expect(example).toMatch(/^PUBLIC_PAGARME_PUBLIC_KEY=$/m);
+    expect(
+      readFileSync(resolve(import.meta.dirname, "env.d.ts"), "utf8"),
+    ).toContain("readonly PUBLIC_PAGARME_PUBLIC_KEY?: string;");
+  });
+
+  it("forwards the money gifts kill switch to builds", () => {
+    expect(turbo.tasks.build.env).toContain("PUBLIC_GIFT_PAYMENTS_ENABLED");
+  });
+
   it("applies local PUBLIC defaults only through the astro dev config", () => {
     expect(astroConfig).toContain("localPublicEnvPatch");
     expect(astroConfig).toContain("astroCliCommand");

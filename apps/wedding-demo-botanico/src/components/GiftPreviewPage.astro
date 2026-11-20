@@ -1,4 +1,5 @@
 ---
+import { Toaster } from "@entrelacos/ui/toaster";
 import { GiftRegistryPreview } from "./GiftRegistryPreview";
 ---
 
@@ -17,5 +18,6 @@ import { GiftRegistryPreview } from "./GiftRegistryPreview";
         <GiftRegistryPreview client:only="react" />
       </section>
     </main>
+    <Toaster client:load />
   </body>
 </html>

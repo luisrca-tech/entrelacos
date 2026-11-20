@@ -36,7 +36,7 @@ function fixture() {
     isDemo: false,
     accountId: "account-1",
     environment: "live",
-    provider: "ASAAS",
+    provider: "PAGARME",
     operatorUserId: "user-1",
     operatorReference: "operator_1",
     accountReference: "acct_1",

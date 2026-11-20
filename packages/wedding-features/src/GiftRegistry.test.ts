@@ -440,18 +440,17 @@ describe("mounted server catalog runtime", () => {
     mode: "sandbox",
     giftId: "gift-1",
   } as const;
-  const paymentStatus = (state = "CONFIRMED") => ({
+  const paymentStatus = (state = "RECEIVED") => ({
     siteId: "wedding-a",
     ...pendingCard,
     recoveryToken: undefined,
     giftId: undefined,
-    orderId: "order-a",
-    attemptId: "attempt-a",
+    checkoutId: "checkout-a",
     state,
     observedAt: "2026-10-19T12:00:00.000Z",
     closedReason: state === "CLOSED_UNPAID" ? "FAILED" : null,
     mayStartNewAttempt: state === "CLOSED_UNPAID",
-    checkout: null,
+    pix: null,
   });
   function paymentFetcher(status: () => Promise<Response>) {
     return vi.fn<typeof fetch>(async (url) => {
@@ -499,7 +498,7 @@ describe("mounted server catalog runtime", () => {
   }
 
   describe("with money gifts switched off", () => {
-    beforeEach(() => vi.stubEnv("PUBLIC_GIFT_PAYMENTS_ENABLED", undefined));
+    beforeEach(() => vi.stubEnv("PUBLIC_GIFT_PAYMENTS_ENABLED", "false"));
 
     it("keeps the gifts listed with a disabled button that opens nothing", async () => {
       const fetcher = paymentFetcher(async () =>
@@ -592,10 +591,10 @@ describe("mounted server catalog runtime", () => {
       "Pagamento em verificação",
     );
     expect(dialog?.textContent).toContain("Consultar pagamento");
-    expect(dialog?.querySelector("summary")?.textContent).toBe(
-      "Sobre o pagamento",
+    expect(dialog?.textContent).toContain(
+      "Pagamentos processados por Pagar.me, uma empresa Stone.",
     );
-    expect(dialog?.textContent).not.toContain("Continuar para pagamento");
+    expect(dialog?.querySelector("a, summary, img")).toBeNull();
     expect(statusCalls(fetcher)).toHaveLength(2);
 
     for (const [wait, total] of [
@@ -638,7 +637,7 @@ describe("mounted server catalog runtime", () => {
     let approved = false;
     const fetcher = paymentFetcher(async () =>
       reply({
-        status: paymentStatus(approved ? "CONFIRMED" : "OUTCOME_UNKNOWN"),
+        status: paymentStatus(approved ? "RECEIVED" : "OUTCOME_UNKNOWN"),
       }),
     );
     const { surface } = await mount(fetcher);
@@ -662,7 +661,7 @@ describe("mounted server catalog runtime", () => {
     expect(toastLog).toHaveLength(1);
   });
 
-  it.each(["CONFIRMED", "RECEIVED"])(
+  it.each(["RECEIVED"])(
     "settles a %s attempt found on return without showing a payment block",
     async (state) => {
       writePendingGiftCheckout(window.sessionStorage, "wedding-a", pendingCard);
@@ -822,55 +821,47 @@ describe("mounted server catalog runtime", () => {
     expect(window.sessionStorage.getItem(pendingKey)).toBe("broken");
   });
 
-  it("offers hosted continuation only while the payment is awaiting completion", async () => {
-    writePendingGiftCheckout(window.sessionStorage, "wedding-a", pendingCard);
-    const navigate = vi.fn();
-    vi.stubGlobal(
-      "window",
-      new Proxy(window, {
-        get(target, property) {
-          if (property === "location") return { assign: navigate };
-          const value = Reflect.get(target, property, target);
-          return typeof value === "function" ? value.bind(target) : value;
-        },
-      }),
-    );
+  it("shows the open Pix only while the payment is awaiting completion", async () => {
+    const pendingPix = { ...pendingCard, method: "PIX" } as const;
+    writePendingGiftCheckout(window.sessionStorage, "wedding-a", pendingPix);
+    const pix = {
+      qrCode: "00020126580014br.gov.bcb.pix0136checkout-a",
+      qrCodeUrl: "https://pix.example.test/checkout-a.png",
+      expiresAt: "2099-10-19T12:30:00.000Z",
+    };
     let nextState = "AWAITING_PAYMENT";
     const fetcher = paymentFetcher(async () =>
       reply({
         status: {
           ...paymentStatus(nextState),
-          checkout:
-            nextState === "AWAITING_PAYMENT"
-              ? {
-                  quoteId: "quote-a",
-                  orderId: "order-a",
-                  attemptId: "attempt-a",
-                  method: "CREDIT_CARD",
-                  mode: "sandbox",
-                  hostedUrl: "https://checkout.example.test/pay/existing",
-                }
-              : null,
+          method: "PIX",
+          pix: nextState === "AWAITING_PAYMENT" ? pix : null,
         },
       }),
     );
     const { surface } = await mount(fetcher);
-    expect(surface.textContent).not.toContain("Continuar para pagamento");
+    expect(surface.textContent).not.toContain("Pix copia e cola");
     await openPayment(surface);
-    expect(
-      paymentDialog(surface)?.querySelector('[role="status"]')?.textContent,
-    ).toBe("Pagamento aguardando conclusão");
-    await click(surface, "Continuar para pagamento");
-    expect(navigate).toHaveBeenCalledExactlyOnceWith(
-      "https://checkout.example.test/pay/existing",
+    const dialog = paymentDialog(surface);
+    expect(document.getElementById("gift-payment-heading")?.textContent).toBe(
+      "Pagar com Pix",
     );
-    nextState = "CONFIRMED";
-    await click(surface, "Consultar pagamento");
+    expect(dialog?.querySelector('[role="status"]')?.textContent).toBe(
+      "Aguardando o Pix",
+    );
+    expect(dialog?.textContent).toContain("Pix copia e cola");
+    expect(dialog?.querySelector("img")?.getAttribute("src")).toBe(
+      pix.qrCodeUrl,
+    );
+    expect(dialog?.querySelector("a")).toBeNull();
+    nextState = "RECEIVED";
+    await click(surface, "Já paguei");
     expect(paymentDialog(surface)?.open).toBe(false);
-    expect(surface.textContent).not.toContain("Continuar para pagamento");
+    expect(surface.textContent).not.toContain("Pix copia e cola");
     expect(toastLog.map((t) => t.message)).toEqual([
       "Pagamento confirmado. Obrigado pelo presente!",
     ]);
+    expect(window.sessionStorage.getItem(pendingKey)).toBeNull();
   });
 
   const checkoutQuote = (giftId: string, method: string) => ({
@@ -903,10 +894,27 @@ describe("mounted server catalog runtime", () => {
       return reply(page(q.siteId, q.page, q.q));
     });
   }
+  async function type(surface: HTMLElement, label: string, value: string) {
+    const input = Array.from(surface.querySelectorAll("label"))
+      .find((element) => element.textContent?.trim().startsWith(label))
+      ?.querySelector("input");
+    if (!input) throw new Error(`Missing field ${label}`);
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(
+        HTMLInputElement.prototype,
+        "value",
+      )?.set?.call(input, value);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+  }
   async function payWithPix(surface: HTMLElement) {
     await click(surface, "Escolher presente");
     await click(surface, "Pix");
-    await click(surface, "Continuar para pagamento");
+    await type(surface, "Nome completo", "Ana Souza");
+    await type(surface, "CPF", "529.982.247-25");
+    await type(surface, "E-mail", "ana@example.com");
+    await type(surface, "Celular", "11 98765-4321");
+    await click(surface, "Gerar Pix");
   }
 
   it.each([

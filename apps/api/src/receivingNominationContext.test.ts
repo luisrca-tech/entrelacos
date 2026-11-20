@@ -89,7 +89,7 @@ describe("read-only canonical receiving nomination context", () => {
           "receiving.self-nomination.request.v1",
           "site-one",
           "user-one",
-          "ASAAS",
+          "PAGARME",
           "sandbox",
         ]),
       )

@@ -1,4 +1,5 @@
 import {
+  GIFT_PLATFORM_TARIFFS,
   meResponseSchema,
   type SiteAccess,
   type WithdrawalIntent,
@@ -1832,6 +1833,30 @@ function AmountRows({ rows }: { rows: [string, string][] }) {
   );
 }
 
+const withdrawalFeeCents = GIFT_PLATFORM_TARIFFS.withdrawalFeeCents;
+// Estimates the net while the amount is typed; the preview holds the terms.
+function WithdrawalFeeNote({ amount }: { amount: string }) {
+  const cents = parseGiftPriceToCents(amount);
+  const net =
+    cents !== null && cents > withdrawalFeeCents
+      ? cents - withdrawalFeeCents
+      : null;
+  return (
+    <p className="m-0 text-[13px] leading-[1.5] text-admin-text-secondary">
+      Tarifa de saque: {money.format(withdrawalFeeCents / 100)}, descontada do
+      valor.
+      {net !== null && (
+        <>
+          {" "}
+          Você recebe{" "}
+          <strong className="text-admin-text">{money.format(net / 100)}</strong>
+          .
+        </>
+      )}
+    </p>
+  );
+}
+
 function WithdrawalSetupView({
   state,
   scope,
@@ -1865,7 +1890,7 @@ function WithdrawalSetupView({
     blockedReason === "RECIPIENT_REQUIRED"
       ? "Somente o titular dos recebimentos pode solicitar saques."
       : blockedReason === "DESTINATION_UNAVAILABLE"
-        ? "Configure e verifique a conta para saque antes de continuar."
+        ? "A conta bancária do recebedor ainda não foi confirmada pela Pagar.me."
         : blockedReason === "NOT_CONFIGURED"
           ? "Conclua a ativação dos recebimentos antes de solicitar um saque."
           : blockedReason === "CONTEXT_UNAVAILABLE"
@@ -1915,9 +1940,9 @@ function WithdrawalSetupView({
           />
           <dl className="m-0 grid w-full max-w-[420px] gap-1.5 text-[13px]">
             {[
-              ["Destino verificado", preview.maskedDestination],
+              ["Conta de destino", preview.maskedDestination],
               ...(preview.payoutRecipientName
-                ? [["Recebedor Pix", preview.payoutRecipientName]]
+                ? [["Titular da conta", preview.payoutRecipientName]]
                 : []),
               ["Nome no perfil", preview.operatorDisplayName],
               ["Validade da prévia", previewTime(preview.expiresAt)],
@@ -2036,6 +2061,7 @@ function WithdrawalSetupView({
                     </button>
                   )}
               </div>
+              <WithdrawalFeeNote amount={amount} />
             </div>
             <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
               <button
@@ -2284,8 +2310,8 @@ function WithdrawalActions({
       )}
       {request.state === "EXISTING" && (
         <p className="m-0 text-sm leading-[1.5] text-admin-text-secondary">
-          Continuamos esta mesma solicitação. Se o Pix já foi enviado, apenas
-          estamos verificando o andamento.
+          Continuamos esta mesma solicitação. Se a transferência já foi enviada,
+          apenas estamos verificando o andamento.
         </p>
       )}
       {!expired && (

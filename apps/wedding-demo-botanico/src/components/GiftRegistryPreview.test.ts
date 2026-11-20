@@ -7,10 +7,12 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import {
-  type CheckoutStatus,
-  checkoutCreateInputSchema,
+  allocateGiftInstallmentCents,
+  type GiftCheckoutStatus,
+  giftCheckoutCreateInputSchema,
   giftQuoteResponseSchema,
   publicGiftCatalogPageResponseSchema,
+  quoteGiftV2,
 } from "../../../../packages/contracts/src/index";
 import { recoverGiftCheckout } from "../../../../packages/wedding-features/src/giftCheckoutRecovery";
 import {
@@ -24,6 +26,7 @@ import {
 import {
   createGiftPreviewFetcher,
   GiftRegistryPreview,
+  PREVIEW_PAGARME_PUBLIC_KEY,
 } from "./GiftRegistryPreview";
 
 const apiOrigin = "https://gift-preview.invalid";
@@ -32,6 +35,12 @@ const catalogUrl = `${apiOrigin}/v1/public/sites/${siteId}/gifts`;
 const quoteUrl = `${apiOrigin}/v1/public/sites/${siteId}/gift-quotes`;
 const checkoutUrl = `${apiOrigin}/v1/public/sites/${siteId}/gift-checkouts`;
 const fixedNow = new Date("2026-10-12T12:00:00.000Z");
+const buyer = {
+  name: "Convidada Teste",
+  email: "convidada@example.com",
+  cpf: "52998224725",
+  phone: "11987654321",
+};
 
 async function readJson(response: Response) {
   return (await response.json()) as unknown;
@@ -59,7 +68,7 @@ describe("local gift registry preview", () => {
     "projects fictional %s to uncertainty across close/remount and never pays again",
     async (paymentState) => {
       let clock = fixedNow.getTime();
-      let nextStatus: CheckoutStatus["state"] = paymentState;
+      let nextStatus: GiftCheckoutStatus["state"] = paymentState;
       const scenario =
         paymentState === "RECEIVED" ? "received-history" : "refunded-history";
       const requests = vi.fn();
@@ -107,6 +116,9 @@ describe("local gift registry preview", () => {
               quoteId: pending.quoteId,
               requestId: pending.requestId,
               recoveryToken: pending.recoveryToken,
+              method: "PIX",
+              installments: 1,
+              buyer,
             },
             quote,
           ),
@@ -123,7 +135,6 @@ describe("local gift registry preview", () => {
             createElement(GiftRecoveryView, {
               siteId,
               status: state.checkoutStatus,
-              onContinue: vi.fn(),
             }),
           );
         }
@@ -137,7 +148,7 @@ describe("local gift registry preview", () => {
         const unknown = await consult();
         expect(unknown).toContain("Pagamento em verificação");
         expect(unknown).not.toMatch(
-          /Recebimento confirmado|Reembolso confirmado|Continuar para pagamento/,
+          /Recebimento confirmado|Reembolso confirmado|Pix copia e cola/,
         );
         expect(state.pending?.terminalStatus?.state).toBe(paymentState);
         expect(giftCheckoutReducer(state, { type: "CLOSE" })).toBe(state);
@@ -224,7 +235,7 @@ describe("local gift registry preview", () => {
       method: "CREDIT_CARD",
       mode: "sandbox",
       state: "REFUNDED",
-      checkout: null,
+      pix: null,
     });
     expect(JSON.stringify(status)).not.toMatch(
       /recoveryToken|AAAAAAAA|wallet|payer/,
@@ -267,7 +278,7 @@ describe("local gift registry preview", () => {
     expect(gift.pricing).toEqual({
       feeAllocation: "BUYER_GROSS_UP",
       available: true,
-      startingAtCents: 13860,
+      startingAtCents: quoteGiftV2(gift.nominalCents, "PIX", 1).totalCents,
     });
     const input = { giftId: gift.id, method: "PIX" };
     const response = await fetcher(quoteUrl, {
@@ -287,11 +298,11 @@ describe("local gift registry preview", () => {
       nominalCents: gift.nominalCents,
       commissionBasisPoints: 200,
       commissionCents: Math.round((gift.nominalCents * 200) / 10000),
-      processingCents: 90,
-      totalCents: 13860,
+      totalCents: quoteGiftV2(gift.nominalCents, "PIX", 1).totalCents,
       feeAllocation: "BUYER_GROSS_UP",
-      policyVersion: "local-gift-policy-v1",
-      expiresAt: "2026-10-12T12:05:00.000Z",
+      settlementVersion: "PLATFORM_ACCOUNT_SPLIT_V2",
+      policyVersion: "local-gift-policy-v2",
+      expiresAt: "2026-10-12T12:15:00.000Z",
       mode: "sandbox",
     });
 
@@ -306,7 +317,7 @@ describe("local gift registry preview", () => {
     expect(cardQuote).toMatchObject({
       giftId: gift.id,
       method: "CREDIT_CARD",
-      processingCents: 290,
+      totalCents: quoteGiftV2(gift.nominalCents, "CREDIT_CARD", 1).totalCents,
       mode: "sandbox",
     });
   });
@@ -323,15 +334,17 @@ describe("local gift registry preview", () => {
       method: "CREDIT_CARD",
       installmentCount: 3,
     });
+    const totalCents = quoteGiftV2(13_500, "CREDIT_CARD", 3).totalCents;
     expect(quote).toMatchObject({
       installmentCount: 3,
-      installmentSurchargeCents: 86,
-      installmentCents: [4715, 4715, 4716],
-      totalCents: 14146,
+      installmentSurchargeCents:
+        totalCents - quoteGiftV2(13_500, "CREDIT_CARD", 1).totalCents,
+      installmentCents: allocateGiftInstallmentCents(totalCents, 3),
+      totalCents,
     });
     expect(
       quote.installmentOptions?.map((option) => option.installmentCount),
-    ).toEqual([1, 3, 6]);
+    ).toEqual([1, 2, 3, 4, 5, 6]);
   });
 
   it("rejects malformed quote input and unknown fixture gifts", async () => {
@@ -469,17 +482,20 @@ describe("local gift registry preview", () => {
     );
   });
 
-  it("validates checkout recovery input then reports an unknown external outcome without redirect data", async () => {
+  it("validates the checkout input then reports an unknown external outcome", async () => {
     const onCheckoutRequest = vi.fn();
     const fetcher = createGiftPreviewFetcher(
       () => fixedNow,
-      "normal",
+      "unknown-outcome",
       onCheckoutRequest,
     );
-    const validInput = checkoutCreateInputSchema.parse({
+    const validInput = giftCheckoutCreateInputSchema.parse({
       quoteId: "gift-preview-gift-preview-dinner-pix",
       requestId: "gift-preview-request-1",
       recoveryToken: "A".repeat(43),
+      method: "PIX",
+      installments: 1,
+      buyer,
     });
     const response = await fetcher(checkoutUrl, {
       method: "POST",
@@ -493,14 +509,75 @@ describe("local gift registry preview", () => {
     });
     expect(onCheckoutRequest).toHaveBeenCalledTimes(1);
 
-    const invalid = await fetcher(checkoutUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...validInput, recoveryToken: "invalid" }),
-    });
-    expect(invalid.status).toBe(400);
-    expect(await readJson(invalid)).toEqual({ code: "VALIDATION_ERROR" });
+    for (const invalid of [
+      { ...validInput, recoveryToken: "invalid" },
+      { ...validInput, cvv: "123" },
+    ]) {
+      const refused = await fetcher(checkoutUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(invalid),
+      });
+      expect(refused.status).toBe(400);
+      expect(await readJson(refused)).toEqual({ code: "VALIDATION_ERROR" });
+    }
     expect(onCheckoutRequest).toHaveBeenCalledTimes(1);
+  });
+
+  it("answers a fictional Pix QR and a fictional card token in the normal flow", async () => {
+    const fetcher = createGiftPreviewFetcher(() => fixedNow);
+    const api = new WeddingGiftsApi({ siteId, apiOrigin, demo: true, fetcher });
+    const pixQuote = await api.quoteGift({
+      giftId: "gift-preview-dinner",
+      method: "PIX",
+    });
+    const pix = await api.createCheckout(
+      {
+        quoteId: pixQuote.id,
+        requestId: "preview-pix",
+        recoveryToken: "A".repeat(43),
+        method: "PIX",
+        installments: 1,
+        buyer,
+      },
+      pixQuote,
+    );
+    expect(pix).toMatchObject({ status: "AWAITING_PAYMENT" });
+    expect(pix.pix?.qrCode).toMatch(/^000201/);
+
+    const token = await fetcher(
+      `https://api.pagar.me/core/v5/tokens?appId=${PREVIEW_PAGARME_PUBLIC_KEY}`,
+      { method: "POST", body: "{}" },
+    );
+    expect(await readJson(token)).toMatchObject({ id: "token_localpreview" });
+    const cardQuote = await api.quoteGift({
+      giftId: "gift-preview-dinner",
+      method: "CREDIT_CARD",
+      installmentCount: 6,
+    });
+    expect(cardQuote.installmentOptions).toHaveLength(6);
+    await expect(
+      api.createCheckout(
+        {
+          quoteId: cardQuote.id,
+          requestId: "preview-card",
+          recoveryToken: "A".repeat(43),
+          method: "CREDIT_CARD",
+          installments: 6,
+          cardToken: "token_localpreview",
+          billingAddress: {
+            zipCode: "01310100",
+            street: "Avenida Paulista",
+            streetNumber: "1000",
+            neighborhood: "Bela Vista",
+            city: "São Paulo",
+            state: "SP",
+          },
+          buyer,
+        },
+        cardQuote,
+      ),
+    ).resolves.toMatchObject({ status: "RECEIVED" });
   });
 
   it("fails closed for other origins, methods, and resources without calling global fetch", async () => {

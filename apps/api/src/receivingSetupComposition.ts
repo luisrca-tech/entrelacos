@@ -1,40 +1,29 @@
 import { hkdfSync, randomUUID } from "node:crypto";
-import { receivingSetupConsentVersion } from "@entrelacos/contracts";
 import type { DatabaseConnection } from "@entrelacos/database";
 import { site } from "@entrelacos/database/schema";
 import { eq } from "drizzle-orm";
-import { createAsaasAccountProvisioningClient } from "./asaasAccountProvisioningClient";
 import type { AuthInstance } from "./authHttp";
 import { createFinancialPasswordVerifier } from "./financialPasswordVerifier";
 import { createFinancialReauthenticationRateLimit } from "./financialReauthenticationRateLimit";
 import type { GiftPaymentConfig } from "./giftPaymentConfig";
+import { createPagarmeRecipientClient } from "./pagarmeRecipientClient";
 import {
-  decryptProviderCredential,
-  type ProviderCredentialContext,
-} from "./providerCredentials";
-import { createReceivingAccountProvisioning } from "./receivingAccountProvisioning";
+  createReceivingAccountProvisioning,
+  deriveReceivingFingerprintKey,
+  RECEIVING_FINGERPRINT_KEY_ID,
+} from "./receivingAccountProvisioning";
 import { createReceivingAccountProvisioningRepository } from "./receivingAccountProvisioningRepository";
 import {
   createReceivingNominationComposition,
   type ReceivingNominationCompositionPorts,
 } from "./receivingNominationComposition";
 import { createReceivingNominationRepository } from "./receivingNominationRepository";
-import { createReceivingPixDestinationLookup } from "./receivingPixDestination";
-import { createReceivingPixDestinationSetup } from "./receivingPixDestinationSetup";
-import { createReceivingPixDestinationSetupRepository } from "./receivingPixDestinationSetupRepository";
 import {
   createReceivingSetupService,
   type ReceivingSetupService,
 } from "./receivingSetup";
-import {
-  createReceivingSetupAsaasObserver,
-  normalizeReceivingSetupAsaasAccount,
-} from "./receivingSetupAsaas";
 import type { ReceivingSetupHttpOptions } from "./receivingSetupHttp";
-import {
-  createReceivingSetupRepository,
-  ReceivingSetupError,
-} from "./receivingSetupRepository";
+import { createReceivingSetupRepository } from "./receivingSetupRepository";
 import { createReceivingVerificationComposition } from "./receivingVerificationComposition";
 
 export interface ReceivingSetupCompositionOptions {
@@ -50,6 +39,7 @@ export interface ReceivingSetupComposition {
   readonly ports: Partial<ReceivingNominationCompositionPorts> & {
     receivingSetup?: ReceivingSetupService;
     receivingVerification?: ReceivingSetupHttpOptions["receivingVerification"];
+    kycRateLimit?: ReceivingSetupHttpOptions["kycRateLimit"];
   };
   refreshReceiving?(siteId: string): Promise<void>;
   close(): Promise<void>;
@@ -78,20 +68,19 @@ export function createReceivingSetupComposition(
     config.liveDemoSiteIds === undefined
       ? {}
       : { liveDemoSiteIds: config.liveDemoSiteIds };
-  const {
-    applicationEnvironment,
-    credentialKeyId,
-    platformAccountId,
-    platformApiKey,
-  } = config;
+  const { applicationEnvironment, platformRecipientId, secretKey } = config;
   const policyVersion = "receiving-setup-v1";
   const maxAuthAgeMs = 300_000;
   const now = options.now ?? (() => new Date());
   const fetch = options.fetch ?? globalThis.fetch;
   const db = options.db;
-  const keys = new Map(
-    [...config.credentialKeyring].map(([id, key]) => [id, new Uint8Array(key)]),
-  );
+  const recipients = createPagarmeRecipientClient({ secretKey, fetch });
+  const keys = new Map([
+    [
+      RECEIVING_FINGERPRINT_KEY_ID,
+      deriveReceivingFingerprintKey(options.secret),
+    ],
+  ]);
   const setupRepository = createReceivingSetupRepository(db, {
     ...liveSitePolicy,
     mode,
@@ -105,10 +94,9 @@ export function createReceivingSetupComposition(
     db,
     mode,
     applicationEnvironment,
-    platformAccountReference: platformAccountId,
-    keyring: keys,
+    platformRecipientId,
+    recipients,
     repository: setupRepository,
-    fetch,
     now,
   });
   const repository = createReceivingNominationRepository(db, {
@@ -179,7 +167,7 @@ export function createReceivingSetupComposition(
       readCurrentPolicy: setupRepository.readCurrentProvisioningPolicy,
     }),
     fingerprintKeys: keys,
-    activeFingerprintKeyId: credentialKeyId,
+    activeFingerprintKeyId: RECEIVING_FINGERPRINT_KEY_ID,
     now,
     async readProvider(snapshot) {
       if (
@@ -190,124 +178,28 @@ export function createReceivingSetupComposition(
       return {
         approved: true,
         environment: mode,
-        parentAccountReference: platformAccountId,
+        parentAccountReference: platformRecipientId,
         policyVersion,
-        createClient(context) {
-          return createAsaasAccountProvisioningClient({
-            environment: mode,
-            parentAccountReference: platformAccountId,
-            parentCredential: platformApiKey,
-            credentialContext: context,
-            credentialKeys: keys,
-            activeCredentialKeyId: credentialKeyId,
-            fetch,
-            normalizeOriginalResult: normalizeReceivingSetupAsaasAccount,
-          });
-        },
+        recipients,
       };
-    },
-  });
-  const observers = new Set<
-    ReturnType<typeof createReceivingSetupAsaasObserver>
-  >();
-  const pixLookupLimit = createFinancialReauthenticationRateLimit(db, {
-    maxAttempts: 5,
-    windowMs: 60000,
-    namespace: "receiving-pix-destination-lookup-v1",
-  });
-  const pixDestinationSetup = createReceivingPixDestinationSetup({
-    repository: createReceivingPixDestinationSetupRepository(db, {
-      ...liveSitePolicy,
-      mode,
-      applicationEnvironment,
-      now,
-      maxAuthAgeMs,
-    }),
-    mode,
-    keyring: keys,
-    keyId: credentialKeyId,
-    now,
-  });
-  const pixDestination = createReceivingPixDestinationLookup({
-    mode,
-    fetch,
-    now,
-    issueReview: (actor, account, input, review) =>
-      pixDestinationSetup.issueReview(actor, account, input, review),
-    consume: (accountId) => pixLookupLimit.consume(accountId),
-    async authorize(actor) {
-      await setupRepository.readSessionAuthentication(actor);
-      const holder = await setupRepository.requireHolder(actor);
-      if (
-        !holder.consentId ||
-        holder.consentVersion !== receivingSetupConsentVersion
-      )
-        throw new ReceivingSetupError(403, "RECEIVING_CONSENT_REQUIRED");
-      const account = await setupRepository.readAccount(actor.siteId);
-      if (
-        !account ||
-        !account.result ||
-        account.state !== "SUCCEEDED" ||
-        account.operatorUserId !== actor.userId
-      )
-        throw new ReceivingSetupError(409, "RECEIVING_ACCOUNT_REQUIRED");
-      return account;
-    },
-    credential(account) {
-      if (!account.result) return unavailable();
-      return decryptProviderCredential(
-        account.result.credential,
-        {
-          provider: "ASAAS",
-          siteId: account.nomination.siteId,
-          accountBindingId: account.accountId,
-          environment: mode,
-        },
-        keys,
-      );
     },
   });
   const setup = createReceivingSetupService({
-    pixDestination,
-    pixDestinationSetup,
     repository: setupRepository,
     nomination: nomination.receivingNomination,
     provisioning,
-    async observe(siteId, account) {
-      if (
-        stopped ||
-        !account.result ||
-        account.state !== "SUCCEEDED" ||
-        !account.accountId
-      )
+    recipients,
+    async observe(_siteId, account) {
+      if (stopped || !account.result || account.state !== "SUCCEEDED")
         return unavailable();
-      const context: ProviderCredentialContext = {
-        provider: "ASAAS",
-        siteId,
-        accountBindingId: account.accountId,
-        environment: mode,
+      const recipient = await recipients.getRecipient(
+        account.result.recipientReference,
+      );
+      return {
+        recipientId: recipient.id,
+        status: recipient.status,
+        observedAt: now().toISOString(),
       };
-      const observer = createReceivingSetupAsaasObserver({
-        binding: {
-          ...context,
-          accountReference: account.result.accountReference,
-          recipientReference: account.result.recipientReference,
-        },
-        accessToken: decryptProviderCredential(
-          account.result.credential,
-          context,
-          keys,
-        ),
-        fetch,
-        now,
-      });
-      observers.add(observer);
-      try {
-        return await observer.readStatus();
-      } finally {
-        await observer.close();
-        observers.delete(observer);
-      }
     },
   });
   let stopped = false;
@@ -358,18 +250,16 @@ export function createReceivingSetupComposition(
         own(() => nomination.receivingNominationContext.readContext(...args)),
     },
     receivingSetup: {
-      readPixDestinationSnapshot: (...args) =>
-        own(() => setup.readPixDestinationSnapshot(...args)),
-      readPixDestination: (...args) =>
-        own(() => setup.readPixDestination(...args)),
-      confirmPixDestination: (...args) =>
-        own(() => setup.confirmPixDestination(...args)),
-      lookupPixDestination: (...args) =>
-        own(() => setup.lookupPixDestination(...args)),
+      createKycLink: (...args) => own(() => setup.createKycLink(...args)),
       read: (...args) => own(() => setup.read(...args)),
       designate: (...args) => own(() => setup.designate(...args)),
       submit: (...args) => own(() => setup.submit(...args)),
     },
+    kycRateLimit: createFinancialReauthenticationRateLimit(db, {
+      namespace: "receiving-kyc-link-v1",
+      maxAttempts: 3,
+      windowMs: 60_000,
+    }),
   };
   return Object.freeze({
     ports: Object.freeze(ports),
@@ -381,12 +271,8 @@ export function createReceivingSetupComposition(
       closing = (async () => {
         const draining = provisioning.close();
         await verification.close();
-        await Promise.allSettled(
-          [...observers].map((observer) => observer.close()),
-        );
         await Promise.allSettled([...pending]);
         await draining;
-        pixDestinationSetup.close();
         for (const key of keys.values()) key.fill(0);
         keys.clear();
       })();

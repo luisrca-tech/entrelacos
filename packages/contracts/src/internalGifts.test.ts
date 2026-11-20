@@ -1,11 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
-  checkoutCreateInputSchema,
-  checkoutStatusInputSchema,
-  checkoutStatusResponseSchema,
   financialOverviewSchema,
   financialReauthenticationInputSchema,
   financialReauthenticationResponseSchema,
+  giftCheckoutStatusInputSchema,
+  giftCheckoutStatusResponseSchema,
   giftCreateInputSchema,
   giftMediaFinalizeInputSchema,
   giftMediaFinalizeResponseSchema,
@@ -940,7 +939,7 @@ describe("internal gifts C1 contracts", () => {
         }).success,
       ).toBe(false);
       expect(
-        checkoutCreateInputSchema.safeParse({
+        giftCheckoutStatusInputSchema.safeParse({
           quoteId: "quote-a",
           requestId: "request-a",
           recoveryToken: "A".repeat(43),
@@ -1005,8 +1004,7 @@ describe("internal gifts C1 contracts", () => {
       requestId: "request-a",
       recoveryToken: "A".repeat(43),
     };
-    expect(checkoutCreateInputSchema.parse(input)).toEqual(input);
-    expect(checkoutStatusInputSchema.parse(input)).toEqual(input);
+    expect(giftCheckoutStatusInputSchema.parse(input)).toEqual(input);
     for (const invalid of [
       { quoteId: input.quoteId, requestId: input.requestId },
       { ...input, recoveryToken: "A".repeat(42) },
@@ -1018,103 +1016,59 @@ describe("internal gifts C1 contracts", () => {
       { ...input, walletId: "private" },
       { ...input, amountCents: 100 },
     ]) {
-      expect(checkoutCreateInputSchema.safeParse(invalid).success).toBe(false);
-      expect(checkoutStatusInputSchema.safeParse(invalid).success).toBe(false);
+      expect(giftCheckoutStatusInputSchema.safeParse(invalid).success).toBe(
+        false,
+      );
     }
   });
 
-  it("keeps uncertain checkout status locked and rejects contradictory hosted or paid claims", () => {
+  it("keeps uncertain checkout status locked and rejects contradictory Pix or paid claims", () => {
     const status = {
       siteId: "wedding-a",
       quoteId: "quote-a",
       requestId: "request-a",
-      orderId: "order-a",
-      attemptId: "attempt-a",
+      checkoutId: "checkout-a",
       method: "PIX",
       mode: "sandbox",
       state: "OUTCOME_UNKNOWN",
       observedAt: null,
       closedReason: null,
       mayStartNewAttempt: false,
-      checkout: null,
+      pix: null,
     };
-    expect(checkoutStatusResponseSchema.parse({ status })).toEqual({ status });
-    const confirmed = { ...status, state: "CONFIRMED", observedAt };
+    const pix = {
+      qrCode: "000201",
+      qrCodeUrl: "https://api.pagar.me/qr.png",
+      expiresAt: observedAt,
+    };
+    expect(giftCheckoutStatusResponseSchema.parse({ status })).toEqual({
+      status,
+    });
+    const received = { ...status, state: "RECEIVED", observedAt };
     expect(
-      checkoutStatusResponseSchema.safeParse({ status: confirmed }).success,
+      giftCheckoutStatusResponseSchema.safeParse({ status: received }).success,
     ).toBe(true);
-    for (const override of [
-      { observedAt: null },
-      { mayStartNewAttempt: true },
-      { closedReason: "EXPIRED" },
-      {
-        checkout: {
-          orderId: "order-a",
-          attemptId: "attempt-a",
-          quoteId: "quote-a",
-          method: "PIX",
-          mode: "sandbox",
-          hostedUrl: "https://checkout.example.test/hosted",
-        },
-      },
-    ]) {
-      expect(
-        checkoutStatusResponseSchema.safeParse({
-          status: { ...confirmed, ...override },
-        }).success,
-      ).toBe(false);
-    }
     for (const invalid of [
       { ...status, mayStartNewAttempt: true },
-      { ...status, state: "RECEIVED" },
-      { ...status, state: "CLOSED_UNPAID", observedAt },
+      { ...status, closedReason: "EXPIRED" },
+      { ...received, pix },
+      { ...status, state: "AWAITING_PAYMENT", method: "CREDIT_CARD", pix },
+      { ...status, state: "CONFIRMED" },
       { ...status, recoveryToken: "A".repeat(43) },
       { ...status, accountId: "private" },
       { ...status, mode: "disabled" },
     ]) {
       expect(
-        checkoutStatusResponseSchema.safeParse({ status: invalid }).success,
+        giftCheckoutStatusResponseSchema.safeParse({ status: invalid }).success,
       ).toBe(false);
     }
-    const checkout = {
-      orderId: status.orderId,
-      attemptId: status.attemptId,
-      quoteId: status.quoteId,
-      method: status.method,
-      mode: status.mode,
-      hostedUrl: "https://checkout.example.test/hosted",
-    };
     expect(
-      checkoutStatusResponseSchema.safeParse({
-        status: {
-          ...status,
-          state: "AWAITING_PAYMENT",
-          observedAt,
-          checkout,
-        },
+      giftCheckoutStatusResponseSchema.safeParse({
+        status: { ...status, state: "AWAITING_PAYMENT", observedAt, pix },
       }).success,
     ).toBe(true);
     expect(
-      checkoutStatusResponseSchema.safeParse({
-        status: {
-          ...status,
-          state: "AWAITING_PAYMENT",
-          observedAt,
-          checkout: { ...checkout, quoteId: "other" },
-        },
-      }).success,
-    ).toBe(false);
-    expect(
-      checkoutStatusResponseSchema.safeParse({
-        status: {
-          ...status,
-          state: "RECEIVED",
-          observedAt,
-        },
-      }).success,
-    ).toBe(true);
-    expect(
-      checkoutStatusResponseSchema.safeParse({
+      giftCheckoutStatusResponseSchema.safeParse({
         status: {
           ...status,
           state: "CLOSED_UNPAID",

@@ -3,11 +3,12 @@ import { createHash, createHmac, webcrypto } from "node:crypto";
 import { createRequire } from "node:module";
 import { URL as NodeURL } from "node:url";
 import { transferableAbortController } from "node:util";
-import type {
-  MeResponse,
-  SiteAccess,
-  WithdrawalRequestContext,
-  WithdrawalRequestStatus,
+import {
+  GIFT_PLATFORM_TARIFFS,
+  type MeResponse,
+  type SiteAccess,
+  type WithdrawalRequestContext,
+  type WithdrawalRequestStatus,
 } from "@entrelacos/contracts";
 import { toast } from "@entrelacos/ui";
 import { act, createElement, StrictMode, useLayoutEffect } from "react";
@@ -364,7 +365,7 @@ async function withdrawalHttpBridge(
     id: "account-bridge-a",
     siteId: access.siteId,
     environment: "sandbox",
-    provider: "ASAAS",
+    provider: "PAGARME",
     operatorUserId: storedUser.id,
     operatorReference: "fictional-operator",
     accountReference: "fictional-account",
@@ -1084,7 +1085,7 @@ async function withdrawalHttpBridge(
     balance: {
       getBalance: async (scope) => ({
         source: "provider",
-        provider: "ASAAS",
+        provider: "PAGARME",
         siteId: scope.siteId,
         accountBindingId: scope.accountId,
         accountReference: scope.accountReference,
@@ -1961,6 +1962,56 @@ describe("collapsible withdrawal request", () => {
       await act(async () => required(button("Cancelar")).click());
       expect(node.querySelector("#withdrawal-amount")).toBeNull();
       expect(button("Solicitar saque")).toBeTruthy();
+    } finally {
+      f.cleanup();
+    }
+  });
+});
+
+describe("withdrawal fee before confirmation", () => {
+  const fee = GIFT_PLATFORM_TARIFFS.withdrawalFeeCents;
+  const text = (node: HTMLElement) =>
+    (node.textContent ?? "").replace(/\s+/g, " ");
+  it("shows the per-withdrawal fee and the net while the amount is typed", async () => {
+    const f = await fixture(context());
+    try {
+      const { node } = await mount(f, false);
+      expect(text(node)).toContain("Tarifa de saque: R$ 3,67");
+      const input = required(
+        node.querySelector<HTMLInputElement>("#withdrawal-amount"),
+      );
+      await act(async () => {
+        Object.getOwnPropertyDescriptor(
+          HTMLInputElement.prototype,
+          "value",
+        )?.set?.call(input, "100,00");
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+      expect(text(node)).toContain("Você recebe R$ 96,33");
+      expect(fee).toBe(367);
+    } finally {
+      f.cleanup();
+    }
+  });
+  it("lists the fee and the net in the preview before the confirm button", async () => {
+    const value = open();
+    value.preview = {
+      ...value.preview,
+      feeCents: fee,
+      netCents: value.preview.amountCents - fee,
+    };
+    const f = await fixture(openContext(value));
+    f.setRequest(value);
+    try {
+      const { node } = await mount(f, false);
+      const content = text(node);
+      expect(content).toContain("Tarifa de saque");
+      expect(content).toContain("R$ 3,67");
+      expect(content).toContain("Valor líquido");
+      expect(content).toContain("R$ 96,33");
+      const confirm = content.indexOf("Confirmar solicitação de saque");
+      expect(confirm).toBeGreaterThan(content.indexOf("R$ 96,33"));
+      expect(content).toContain("Conta de destino");
     } finally {
       f.cleanup();
     }
@@ -3953,7 +4004,7 @@ describe("actual React withdrawal DOM", () => {
           expect(node.querySelector('input[type="checkbox"]')).not.toBeNull();
           expect(node.textContent).toContain("Retomar saque");
           expect(node.textContent).toContain(
-            "Continuamos esta mesma solicitação. Se o Pix já foi enviado, apenas estamos verificando o andamento.",
+            "Continuamos esta mesma solicitação. Se a transferência já foi enviada, apenas estamos verificando o andamento.",
           );
           expect(node.textContent).not.toContain(
             "Recuperar solicitação original",

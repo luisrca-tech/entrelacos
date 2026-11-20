@@ -16,19 +16,10 @@ const holder = {
   designatedByUserId: "owner-one",
   designatedAt: at,
   consentId: "consent-one",
-  consentVersion: "asaas-receiving-v1",
+  consentVersion: "pagarme-receiving-v1",
   consentAt: at,
   consentSessionId: "session-one",
   consentAuthenticatedAt: at,
-  pixConsent: {
-    id: "pix-consent-one",
-    version: "asaas-incoming-pix-v1",
-    accountId: "account-one",
-    userId: "bride-one",
-    sessionId: "session-one",
-    authenticatedAt: at.toISOString(),
-    acceptedAt: at.toISOString(),
-  },
 };
 function fixture(
   rows: Record<string, unknown>[][],
@@ -69,102 +60,6 @@ const recentAuth = {
   expiresAt: new Date(at.getTime() + 300000),
 };
 describe("receiving holder and consent custody", () => {
-  const pixBinding = {
-    provider: "ASAAS" as const,
-    siteId: "site-one",
-    accountBindingId: "account-one",
-    environment: "sandbox" as const,
-    accountReference: "native-account",
-    recipientReference: "native-wallet",
-  };
-  const pixAuthority = () => [
-    [{ id: "site-one", isDemo: true }],
-    [{ role: "SITE_ADMIN" }],
-    [
-      {
-        id: actor.sessionId,
-        createdAt: at,
-        expiresAt: new Date(at.getTime() + 3600000),
-      },
-    ],
-    [{ id: "membership-one" }],
-    [holder],
-    [{ id: "account-one" }],
-  ];
-  it("commits the incoming Pix dispatch claim only after current session, membership, holder, consent and native account locks", async () => {
-    const v = fixture([...pixAuthority(), [{ attemptId: "attempt-one" }]]);
-    await expect(v.repository.armIncomingPix(actor, pixBinding)).resolves.toBe(
-      "attempt-one",
-    );
-    const queries = v.execute.mock.calls.map(([q]) =>
-      new PgDialect().sqlToQuery(q),
-    );
-    expect(queries.at(-1)?.sql).toContain("ON CONFLICT");
-    expect(queries.at(-1)?.sql).toContain("state='REJECTED'");
-    expect(queries.at(-1)?.sql).toContain("attempted_at");
-    expect(queries.at(-2)?.params).toContain("native-account");
-    expect(queries.at(-2)?.params).toContain("native-wallet");
-    expect(v.transaction).toHaveBeenCalledOnce();
-  });
-  it("does not claim again when an attempt is armed, uncertain, submitted or in the rejection cooldown", async () => {
-    const v = fixture([...pixAuthority(), []]);
-    await expect(
-      v.repository.armIncomingPix(actor, pixBinding),
-    ).resolves.toBeNull();
-  });
-  it.each([
-    "revoked-session",
-    "missing-consent",
-    "missing-pix-consent",
-    "foreign-wallet",
-    "foreign-site",
-  ])("refuses incoming Pix dispatch for %s", async (reason) => {
-    const rows = pixAuthority();
-    if (reason === "revoked-session") rows[2] = [];
-    if (reason === "missing-consent")
-      rows[4] = [{ ...holder, consentId: null }] as never;
-    if (reason === "foreign-wallet") rows[5] = [];
-    if (reason === "missing-pix-consent")
-      rows[4] = [{ ...holder, pixConsent: null }] as never;
-    const v = fixture(rows);
-    await expect(
-      v.repository.armIncomingPix(
-        actor,
-        reason === "foreign-site"
-          ? { ...pixBinding, siteId: "other" }
-          : pixBinding,
-      ),
-    ).rejects.toThrow();
-    expect(
-      v.execute.mock.calls.some(([q]) =>
-        new PgDialect()
-          .sqlToQuery(q)
-          .sql.includes("INSERT INTO receiving_pix_preparation"),
-      ),
-    ).toBe(false);
-  });
-  it("records specific Pix consent without replacing the original account-opening consent", async () => {
-    const rows = pixAuthority();
-    rows[4] = [{ ...holder, pixConsent: null }] as never;
-    const v = fixture([...rows, [{ id: holder.id }]]);
-    await v.repository.consentIncomingPix(
-      actor,
-      "account-one",
-      "asaas-incoming-pix-v1",
-    );
-    const call = v.execute.mock.calls.at(-1);
-    if (!call) throw new Error("Missing consent write");
-    const query = new PgDialect().sqlToQuery(call[0]);
-    expect(query.sql).toContain("pix_preparation_consent");
-    expect(query.sql).not.toContain("SET consent_id");
-    expect(
-      query.params.some(
-        (value) =>
-          typeof value === "string" &&
-          value.includes('"version":"asaas-incoming-pix-v1"'),
-      ),
-    ).toBe(true);
-  });
   it.each(["site-one", "other-site"])(
     "retains actual holder authentication for exact production showcase (%s)",
     async (liveDemoSiteIds) => {
@@ -256,7 +151,7 @@ describe("receiving holder and consent custody", () => {
       const consent = values.repository.consent(
         actor,
         evidence,
-        "asaas-receiving-v1",
+        "pagarme-receiving-v1",
       );
       if (scenario === "valid") await expect(consent).resolves.toBeUndefined();
       else await expect(consent).rejects.toMatchObject({ status: 403 });
@@ -307,7 +202,7 @@ describe("receiving holder and consent custody", () => {
       values.repository.consent(
         actor,
         { ...recentAuth, userId: "planner-one" },
-        "asaas-receiving-v1",
+        "pagarme-receiving-v1",
       ),
     ).rejects.toMatchObject({ code: "RECENT_AUTH_REQUIRED" });
     expect(values.transaction).not.toHaveBeenCalled();
@@ -343,7 +238,7 @@ describe("receiving holder and consent custody", () => {
         values.repository.consent(
           actor,
           { ...recentAuth, authenticatedAt },
-          "asaas-receiving-v1",
+          "pagarme-receiving-v1",
         ),
       ).rejects.toMatchObject({ code: "RECENT_AUTH_REQUIRED" });
       expect(values.transaction).not.toHaveBeenCalled();
@@ -456,4 +351,19 @@ describe("receiving holder and consent custody", () => {
       expect(String(error)).not.toContain("private-invalid-timestamp");
     },
   );
+  it("reads the current account binding without any stored provider secret", async () => {
+    const values = fixture([[]]);
+    expect(await values.repository.readAccount("site-one")).toBeNull();
+    const query = new PgDialect().sqlToQuery(
+      values.execute.mock.calls[0][0],
+    ).sql;
+    expect(query).toContain("a.recipient_reference");
+    expect(query).not.toMatch(/credential|webhook|pix/i);
+  });
+  it("no longer offers incoming Pix consent or preparation", () => {
+    const values = fixture([]);
+    expect(values.repository).not.toHaveProperty("consentIncomingPix");
+    expect(values.repository).not.toHaveProperty("armIncomingPix");
+    expect(values.repository).not.toHaveProperty("settleIncomingPix");
+  });
 });

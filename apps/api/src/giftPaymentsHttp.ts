@@ -1,11 +1,11 @@
 import {
-  type CheckoutResult,
-  type CheckoutStatus,
-  checkoutCreateInputSchema,
-  checkoutResponseSchema,
-  checkoutStatusInputSchema,
-  checkoutStatusResponseSchema,
+  type GiftCheckoutCreateResult,
+  type GiftCheckoutStatus,
   type GiftQuote,
+  giftCheckoutCreateInputSchema,
+  giftCheckoutCreateResultSchema,
+  giftCheckoutStatusInputSchema,
+  giftCheckoutStatusResponseSchema,
   giftQuoteInputSchema,
   giftQuoteResponseSchema,
   siteIdSchema,
@@ -15,10 +15,7 @@ import { and, eq } from "drizzle-orm";
 import { type Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import type { AuthHttpOptions } from "./authHttp";
-import {
-  GiftCheckoutServiceError,
-  isSafeCheckoutContinuation,
-} from "./giftCheckouts";
+import { GiftCheckoutServiceError } from "./giftCheckouts";
 import { GiftMoneyServiceError } from "./giftMoney";
 import { GiftQuoteServiceError } from "./giftQuotes";
 import { allowsLocalPublicOrigin } from "./localPublicOrigin";
@@ -26,8 +23,11 @@ import { ReceivingReadinessServiceError } from "./receivingReadiness";
 
 export interface PublicGiftPaymentsServices {
   createQuote(siteId: unknown, input: unknown): Promise<GiftQuote>;
-  createCheckout(siteId: unknown, input: unknown): Promise<CheckoutResult>;
-  getStatus(siteId: unknown, input: unknown): Promise<CheckoutStatus>;
+  createCheckout(
+    siteId: unknown,
+    input: unknown,
+  ): Promise<GiftCheckoutCreateResult>;
+  getStatus(siteId: unknown, input: unknown): Promise<GiftCheckoutStatus>;
 }
 export type GiftPaymentsHttpOptions = AuthHttpOptions & {
   giftPayments?: PublicGiftPaymentsServices;
@@ -172,7 +172,8 @@ export function createGiftPaymentsHttpRouter(
     return context.json(result.data);
   });
   router.post("/v1/public/sites/:siteId/gift-checkouts", async (context) => {
-    const input = checkoutCreateInputSchema.safeParse(
+    // Strict schema: raw card fields (number, cvv, ...) are a validation error.
+    const input = giftCheckoutCreateInputSchema.safeParse(
       await readBody(context.req.raw),
     );
     if (!input.success) return problem(context, 400, "VALIDATION_ERROR");
@@ -182,15 +183,10 @@ export function createGiftPaymentsHttpRouter(
       context.req.param("siteId"),
       input.data,
     );
-    const result = checkoutResponseSchema.safeParse({ checkout });
+    const result = giftCheckoutCreateResultSchema.safeParse(checkout);
     if (
       !result.success ||
-      result.data.checkout.quoteId !== input.data.quoteId ||
-      result.data.checkout.mode === "disabled" ||
-      !isSafeCheckoutContinuation(
-        result.data.checkout.hostedUrl,
-        input.data.recoveryToken,
-      )
+      (result.data.pix !== undefined && input.data.method !== "PIX")
     )
       return problem(context, 503, "SERVICE_UNAVAILABLE");
     return context.json(result.data);
@@ -198,7 +194,7 @@ export function createGiftPaymentsHttpRouter(
   router.post(
     "/v1/public/sites/:siteId/gift-checkouts/status",
     async (context) => {
-      const input = checkoutStatusInputSchema.safeParse(
+      const input = giftCheckoutStatusInputSchema.safeParse(
         await readBody(context.req.raw),
       );
       if (!input.success) return problem(context, 400, "VALIDATION_ERROR");
@@ -206,17 +202,12 @@ export function createGiftPaymentsHttpRouter(
         return problem(context, 409, "PROVIDER_MODE_UNAVAILABLE");
       const siteId = context.req.param("siteId");
       const status = await options.giftPayments.getStatus(siteId, input.data);
-      const result = checkoutStatusResponseSchema.safeParse({ status });
+      const result = giftCheckoutStatusResponseSchema.safeParse({ status });
       if (
         !result.success ||
         result.data.status.siteId !== siteId ||
         result.data.status.quoteId !== input.data.quoteId ||
-        result.data.status.requestId !== input.data.requestId ||
-        (result.data.status.checkout !== null &&
-          !isSafeCheckoutContinuation(
-            result.data.status.checkout.hostedUrl,
-            input.data.recoveryToken,
-          ))
+        result.data.status.requestId !== input.data.requestId
       )
         return problem(context, 503, "SERVICE_UNAVAILABLE");
       return context.json(result.data);

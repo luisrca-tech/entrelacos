@@ -8,13 +8,17 @@ import type { ReactNode } from "react";
 export function GiftsLocked({
   receivingAction,
   reason,
+  comingSoon = false,
 }: {
   receivingAction?: ReactNode;
   reason?: string;
+  /** The API reports that payments are not available yet. */
+  comingSoon?: boolean;
 }) {
-  // While money gifts are off, the receiving setup is hidden: do not send
-  // admins there, just say the list opens later.
-  if (!giftPaymentsEnabled())
+  // While money gifts are off (paused build or API not accepting payments),
+  // the receiving setup is hidden: do not send admins there, just say the
+  // list opens later.
+  if (comingSoon || !giftPaymentsEnabled())
     return (
       <section
         className="rounded-2xl border border-admin-border bg-admin-surface p-6 sm:p-8"
@@ -28,7 +32,7 @@ export function GiftsLocked({
           id="gifts-locked-title"
           className="font-admin-display text-2xl text-admin-text"
         >
-          Lista de presentes em breve
+          Presentes em dinheiro em breve
         </h2>
         <p className="mt-3 max-w-xl text-sm leading-relaxed text-admin-text-secondary">
           {giftPaymentsComingSoonMessage}

@@ -1,11 +1,14 @@
+import { GIFT_PLATFORM_TARIFFS, type GiftQuote } from "@entrelacos/contracts";
+import { PaymentProviderDisclosure, showSandboxNotice } from "@entrelacos/ui";
+import { useEffect, useId, useRef, useState } from "react";
 import {
-  type CheckoutCreateInput,
-  type GiftQuote,
-  giftInstallmentExpiryMinutes,
-} from "@entrelacos/contracts";
-import { AsaasDisclosure, showSandboxNotice } from "@entrelacos/ui";
-import { useEffect, useId, useState } from "react";
+  type GiftCheckoutBillingField,
+  type GiftCheckoutBillingFields,
+  type GiftCheckoutFormInput,
+  readGiftCheckoutForm,
+} from "./giftCheckoutForm";
 import { scheduleGiftQuoteExpiry } from "./giftQuoteExpiry";
+import { lookupCep } from "./viaCep";
 
 type PaymentMethod = "PIX" | "CREDIT_CARD";
 
@@ -18,7 +21,7 @@ type Props = {
   error?: string;
   notice?: string;
   onSelectMethod: (method: PaymentMethod, installmentCount?: number) => void;
-  onConfirm: (payer?: CheckoutCreateInput["payer"]) => void;
+  onConfirm: (input: GiftCheckoutFormInput) => void;
   onCancel: () => void;
   now?: Date;
 };
@@ -30,7 +33,7 @@ const secondaryButtonClass =
 const methodButtonClass =
   "min-h-11 cursor-pointer rounded-full border border-template-line bg-transparent px-5 py-3 text-template-ink font-[inherit] text-sm font-medium transition-[background-color,color,border-color,transform] duration-200 ease-out hover:-translate-y-0.5 hover:border-template-ink hover:bg-template-ink hover:text-template-ivory focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-template-ink disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transform-none motion-reduce:transition-none aria-pressed:border-template-ink aria-pressed:bg-template-ink aria-pressed:text-template-ivory";
 const fieldClass =
-  "min-h-11 min-w-0 w-full rounded-xl border border-[var(--template-input-line,rgba(37,53,43,0.25))] bg-[var(--template-paper,#fffdf8)] px-4 py-3 text-base text-template-ink font-[inherit] transition-[border-color,box-shadow] duration-200 focus:border-template-olive focus:outline-2 focus:outline-offset-2 focus:outline-template-olive motion-reduce:transition-none";
+  "min-h-11 min-w-0 w-full rounded-xl border border-[var(--template-input-line,rgba(37,53,43,0.25))] bg-[var(--template-paper,#fffdf8)] px-4 py-3 text-base text-template-ink font-[inherit] transition-[border-color,box-shadow] duration-200 focus:border-template-olive focus:outline-2 focus:outline-offset-2 focus:outline-template-olive aria-invalid:border-template-ink aria-invalid:shadow-[inset_0_0_0_1px_var(--color-template-ink)] motion-reduce:transition-none";
 const quoteCardClass =
   "grid min-w-0 gap-5 rounded-2xl border border-template-line bg-[var(--template-paper,#fffdf8)] p-5 sm:p-6";
 const currencyFormatter = new Intl.NumberFormat("pt-BR", {
@@ -42,8 +45,84 @@ function formatCents(cents: number): string {
   return currencyFormatter.format(cents / 100);
 }
 
+const brazilianStates = [
+  "AC",
+  "AL",
+  "AM",
+  "AP",
+  "BA",
+  "CE",
+  "DF",
+  "ES",
+  "GO",
+  "MA",
+  "MG",
+  "MS",
+  "MT",
+  "PA",
+  "PB",
+  "PE",
+  "PI",
+  "PR",
+  "RJ",
+  "RN",
+  "RO",
+  "RR",
+  "RS",
+  "SC",
+  "SE",
+  "SP",
+  "TO",
+] as const;
+
+const emptyBilling: GiftCheckoutBillingFields = {
+  zipCode: "",
+  street: "",
+  streetNumber: "",
+  complement: "",
+  neighborhood: "",
+  city: "",
+  state: "",
+};
+
+type CepLookup = "idle" | "loading" | "found" | "not_found" | "unavailable";
+
+const cepLookupMessage: Record<Exclude<CepLookup, "idle">, string> = {
+  loading: "Buscando o endereço…",
+  found: "Endereço preenchido pelo CEP. Confira e informe o número.",
+  not_found: "Não encontramos este CEP. Preencha o endereço.",
+  unavailable:
+    "Não foi possível buscar o endereço agora. Preencha manualmente.",
+};
+
+/** Input names, used to focus the first invalid billing field on submit. */
+const billingInputName: Record<GiftCheckoutBillingField, string> = {
+  zipCode: "billing-zip",
+  street: "billing-street",
+  streetNumber: "billing-number",
+  complement: "billing-complement",
+  neighborhood: "billing-neighborhood",
+  city: "billing-city",
+  state: "billing-state",
+};
+
+/** "01310100" → "01310-100" while typing; keeps at most 8 digits. */
+function formatCep(value: string): string {
+  const digits = value.replace(/[^0-9]/g, "").slice(0, 8);
+  return digits.length > 5
+    ? `${digits.slice(0, 5)}-${digits.slice(5)}`
+    : digits;
+}
+
 const feesTooltip =
   "inclui a taxa do meio de pagamento, a antecipação ao casal (no cartão) e o serviço Entrelaços";
+
+/** "1x à vista · R$ 105,21" or "3x de R$ 36,70 · total R$ 110,10". */
+function formatInstallmentOption(amounts: number[], totalCents: number) {
+  return amounts.length === 1
+    ? `1x à vista · ${formatCents(totalCents)}`
+    : `${amounts.length}x de ${formatCents(amounts[0] ?? 0)} · total ${formatCents(totalCents)}`;
+}
 
 /** "3x de R$35,33 (última R$35,35)"; the last installment only when it differs. */
 function formatInstallmentLabel(amounts: number[]): string {
@@ -70,7 +149,24 @@ export function GiftQuoteView({
     GiftQuote,
     "id" | "expiresAt"
   > | null>(null);
-  const payerFormId = useId();
+  const formId = useId();
+  const [formError, setFormError] = useState<string | null>(null);
+  const cardNumber = useRef<HTMLInputElement>(null);
+  const holderName = useRef<HTMLInputElement>(null);
+  const expiry = useRef<HTMLInputElement>(null);
+  const cvv = useRef<HTMLInputElement>(null);
+  const [billing, setBilling] =
+    useState<GiftCheckoutBillingFields>(emptyBilling);
+  const [cepLookup, setCepLookup] = useState<CepLookup>("idle");
+  const [invalidBilling, setInvalidBilling] = useState<
+    GiftCheckoutBillingField[]
+  >([]);
+  // Fields the guest edited since the current CEP lookup started: its answer
+  // must not overwrite them.
+  const editedDuringLookup = useRef(new Set<GiftCheckoutBillingField>());
+  const cepDigits = billing.zipCode.replace(/[^0-9]/g, "");
+  const cepStatusId = useId();
+  const stateId = useId();
   const quoteId = quote?.id;
   const expiresAt = quote?.expiresAt;
   useEffect(() => {
@@ -79,6 +175,58 @@ export function GiftQuoteView({
       setExpiredQuote({ id: quoteId, expiresAt }),
     );
   }, [now, quoteId, expiresAt]);
+  // ViaCEP only saves typing: a failure leaves every field editable.
+  useEffect(() => {
+    if (cepDigits.length !== 8) {
+      setCepLookup("idle");
+      return;
+    }
+    const controller = new AbortController();
+    const edited = editedDuringLookup.current;
+    edited.clear();
+    setCepLookup("loading");
+    void lookupCep(cepDigits, fetch, controller.signal).then((found) => {
+      if (controller.signal.aborted) return;
+      if (typeof found === "string") {
+        setCepLookup(found);
+        return;
+      }
+      setCepLookup("found");
+      const filled: GiftCheckoutBillingField[] = (
+        ["street", "neighborhood", "city", "state"] as const
+      ).filter((key) => !edited.has(key) && found[key]);
+      setInvalidBilling((previous) =>
+        previous.filter((key) => !filled.includes(key)),
+      );
+      const fill = (key: keyof typeof found, previous: string) =>
+        filled.includes(key) ? found[key] : previous;
+      setBilling((previous) => ({
+        ...previous,
+        street: fill("street", previous.street),
+        neighborhood: fill("neighborhood", previous.neighborhood),
+        city: fill("city", previous.city),
+        state: fill("state", previous.state),
+      }));
+    });
+    return () => controller.abort();
+  }, [cepDigits]);
+  const billingField =
+    (key: keyof GiftCheckoutBillingFields) =>
+    (event: { currentTarget: { value: string } }) => {
+      const value =
+        key === "zipCode"
+          ? formatCep(event.currentTarget.value)
+          : event.currentTarget.value;
+      if (key !== "zipCode") editedDuringLookup.current.add(key);
+      setInvalidBilling((previous) =>
+        previous.includes(key)
+          ? previous.filter((field) => field !== key)
+          : previous,
+      );
+      setBilling((previous) => ({ ...previous, [key]: value }));
+    };
+  const invalid = (key: GiftCheckoutBillingField) =>
+    invalidBilling.includes(key) || undefined;
   const quoteMatchesSelection =
     quote !== null &&
     quote.method === method &&
@@ -93,8 +241,14 @@ export function GiftQuoteView({
   const canConfirm =
     quoteMatchesSelection && quoteIsCurrent && !loading && !pending;
   const methodsDisabled = loading || pending;
-  const options = method === "CREDIT_CARD" ? quote?.installmentOptions : null;
-  const hasPayerForm = quoteMatchesSelection && installmentCount > 1;
+  const options =
+    method === "CREDIT_CARD"
+      ? quote?.installmentOptions?.filter(
+          (option) =>
+            option.installmentCount <= GIFT_PLATFORM_TARIFFS.maxInstallments,
+        )
+      : null;
+  const withCard = method === "CREDIT_CARD";
   const installmentAmounts = quoteMatchesSelection
     ? quote.installmentCents
     : null;
@@ -117,9 +271,6 @@ export function GiftQuoteView({
           </h2>
           <p className="m-0 text-template-muted">
             Presente simbólico: não há produto físico ou entrega.
-          </p>
-          <p className="m-0 text-template-muted">
-            Ao confirmar, você continuará em uma página segura de pagamento.
           </p>
         </header>
         {showSandboxNotice(quote?.mode) && (
@@ -155,7 +306,7 @@ export function GiftQuoteView({
           </div>
         </fieldset>
 
-        {options && options.length > 1 && (
+        {options && options.length > 0 && (
           <label className="grid min-w-0 gap-2">
             <span className="font-bold">Parcelas</span>
             <select
@@ -171,21 +322,22 @@ export function GiftQuoteView({
                   key={option.installmentCount}
                   value={option.installmentCount}
                 >
-                  {option.installmentCount === 1
-                    ? `À vista · ${formatCents(option.totalCents)}`
-                    : formatInstallmentLabel(option.installmentCents)}
+                  {formatInstallmentOption(
+                    option.installmentCents,
+                    option.totalCents,
+                  )}
                 </option>
               ))}
             </select>
           </label>
         )}
 
-        {error && (
+        {(formError || error) && (
           <p role="alert" className="m-0 border border-template-line p-4">
-            {error}
+            {formError || error}
           </p>
         )}
-        {notice && !error && (
+        {notice && !error && !formError && (
           <p role="status" className="m-0 border border-template-line p-4">
             {notice}
           </p>
@@ -272,35 +424,55 @@ export function GiftQuoteView({
           </section>
         )}
 
-        {hasPayerForm && (
+        {method && (
           <form
-            id={payerFormId}
-            className="min-w-0"
+            id={formId}
+            className="grid min-w-0 gap-5"
+            noValidate
             onSubmit={(event) => {
               event.preventDefault();
               if (!canConfirm) return;
               const data = new FormData(event.currentTarget);
-              onConfirm({
-                name: String(data.get("name")).trim(),
-                cpfCnpj: String(data.get("cpfCnpj")).replace(/[^0-9]/g, ""),
-                email: String(data.get("email")).trim(),
-              });
+              const result = readGiftCheckoutForm(
+                {
+                  name: String(data.get("name") ?? ""),
+                  cpf: String(data.get("cpf") ?? ""),
+                  email: String(data.get("email") ?? ""),
+                  phone: String(data.get("phone") ?? ""),
+                  cardNumber: cardNumber.current?.value,
+                  holderName: holderName.current?.value,
+                  expiry: expiry.current?.value,
+                  cvv: cvv.current?.value,
+                  billing,
+                },
+                withCard,
+                now ?? new Date(),
+              );
+              if ("error" in result) {
+                setFormError(result.error);
+                const fields = result.invalidBilling ?? [];
+                setInvalidBilling(fields);
+                const first = fields[0] && billingInputName[fields[0]];
+                const target = first
+                  ? event.currentTarget.elements.namedItem(first)
+                  : null;
+                if (target instanceof HTMLElement) target.focus();
+                return;
+              }
+              setFormError(null);
+              setInvalidBilling([]);
+              onConfirm(result.input);
             }}
           >
             <fieldset
               disabled={pending}
               className="grid min-w-0 gap-3 border border-template-line p-4 sm:p-5"
             >
-              <legend className="px-1 font-bold">Dados do pagador</legend>
+              <legend className="px-1 font-bold">Seus dados</legend>
               <p className="m-0 text-sm text-template-muted">
-                Estes dados são usados para emitir a cobrança parcelada. Volte a
-                esta página para continuar a mesma cobrança ou acompanhar a
-                confirmação.
-              </p>
-              <p className="m-0 text-sm text-template-muted">
-                Pague em até {giftInstallmentExpiryMinutes} minutos após a
-                emissão. Se o prazo passar, aguarde a confirmação do
-                encerramento antes de tentar novamente.
+                {withCard
+                  ? "Usados pela Pagar.me para identificar a compra."
+                  : "Usados pela Pagar.me para emitir o Pix."}
               </p>
               <label className="grid min-w-0 gap-1">
                 Nome completo
@@ -308,21 +480,34 @@ export function GiftQuoteView({
                   name="name"
                   autoComplete="name"
                   className={fieldClass}
-                  minLength={2}
-                  maxLength={100}
+                  maxLength={64}
                   required
                 />
               </label>
-              <label className="grid min-w-0 gap-1">
-                CPF ou CNPJ
-                <input
-                  name="cpfCnpj"
-                  inputMode="numeric"
-                  className={fieldClass}
-                  maxLength={18}
-                  required
-                />
-              </label>
+              <div className="grid min-w-0 gap-3 sm:grid-cols-2">
+                <label className="grid min-w-0 gap-1">
+                  CPF
+                  <input
+                    name="cpf"
+                    inputMode="numeric"
+                    className={fieldClass}
+                    maxLength={14}
+                    required
+                  />
+                </label>
+                <label className="grid min-w-0 gap-1">
+                  Celular
+                  <input
+                    name="phone"
+                    type="tel"
+                    autoComplete="tel-national"
+                    placeholder="(11) 98765-4321"
+                    className={fieldClass}
+                    maxLength={20}
+                    required
+                  />
+                </label>
+              </div>
               <label className="grid min-w-0 gap-1">
                 E-mail
                 <input
@@ -330,26 +515,217 @@ export function GiftQuoteView({
                   type="email"
                   autoComplete="email"
                   className={fieldClass}
-                  maxLength={254}
+                  maxLength={64}
                   required
                 />
               </label>
             </fieldset>
+            {withCard && (
+              <fieldset
+                disabled={pending}
+                className="grid min-w-0 gap-3 border border-template-line p-4 sm:p-5"
+              >
+                <legend className="px-1 font-bold">Cartão de crédito</legend>
+                <p className="m-0 text-sm text-template-muted">
+                  O cartão vai direto para a Pagar.me. O Entrelaços não recebe
+                  nem guarda esses dados.
+                </p>
+                {/* No name attributes: card data never enters form serialization. */}
+                <label className="grid min-w-0 gap-1">
+                  Número do cartão
+                  <input
+                    ref={cardNumber}
+                    inputMode="numeric"
+                    autoComplete="cc-number"
+                    className={fieldClass}
+                    maxLength={23}
+                    required
+                  />
+                </label>
+                <label className="grid min-w-0 gap-1">
+                  Nome impresso no cartão
+                  <input
+                    ref={holderName}
+                    autoComplete="cc-name"
+                    className={fieldClass}
+                    maxLength={64}
+                    required
+                  />
+                </label>
+                <div className="grid min-w-0 grid-cols-2 gap-3">
+                  <label className="grid min-w-0 gap-1">
+                    Validade
+                    <input
+                      ref={expiry}
+                      inputMode="numeric"
+                      autoComplete="cc-exp"
+                      placeholder="MM/AA"
+                      className={fieldClass}
+                      maxLength={7}
+                      required
+                    />
+                  </label>
+                  <label className="grid min-w-0 gap-1">
+                    CVV
+                    <input
+                      ref={cvv}
+                      inputMode="numeric"
+                      autoComplete="cc-csc"
+                      className={fieldClass}
+                      maxLength={4}
+                      required
+                    />
+                  </label>
+                </div>
+              </fieldset>
+            )}
+            {withCard && (
+              <fieldset
+                disabled={pending}
+                className="grid min-w-0 gap-3 border border-template-line p-4 sm:p-5"
+              >
+                <legend className="px-1 font-bold">Endereço de cobrança</legend>
+                <p className="m-0 text-sm text-template-muted">
+                  O endereço da fatura do cartão, enviado à Pagar.me com o
+                  pagamento. O CEP é consultado no ViaCEP para preencher o
+                  restante.
+                </p>
+                <div className="grid min-w-0 gap-1">
+                  <label className="grid min-w-0 gap-1">
+                    CEP
+                    <input
+                      name="billing-zip"
+                      inputMode="numeric"
+                      autoComplete="billing postal-code"
+                      placeholder="00000-000"
+                      className={fieldClass}
+                      value={billing.zipCode}
+                      onChange={billingField("zipCode")}
+                      aria-describedby={cepStatusId}
+                      aria-invalid={invalid("zipCode")}
+                      required
+                    />
+                  </label>
+                  <p
+                    id={cepStatusId}
+                    role="status"
+                    className="m-0 min-h-5 text-sm text-template-muted"
+                  >
+                    {cepLookup === "idle" ? "" : cepLookupMessage[cepLookup]}
+                  </p>
+                </div>
+                <label className="grid min-w-0 gap-1">
+                  Rua
+                  <input
+                    name="billing-street"
+                    autoComplete="billing address-line1"
+                    className={fieldClass}
+                    maxLength={128}
+                    value={billing.street}
+                    onChange={billingField("street")}
+                    aria-invalid={invalid("street")}
+                    required
+                  />
+                </label>
+                <div className="grid min-w-0 grid-cols-[minmax(0,2fr)_minmax(0,3fr)] items-end gap-3">
+                  <label className="grid min-w-0 gap-1">
+                    Número
+                    <input
+                      name="billing-number"
+                      className={fieldClass}
+                      maxLength={16}
+                      value={billing.streetNumber}
+                      onChange={billingField("streetNumber")}
+                      aria-invalid={invalid("streetNumber")}
+                      required
+                    />
+                  </label>
+                  <label className="grid min-w-0 gap-1">
+                    <span>
+                      Complemento{" "}
+                      <span className="text-template-muted">(opcional)</span>
+                    </span>
+                    <input
+                      name="billing-complement"
+                      autoComplete="billing address-line2"
+                      className={fieldClass}
+                      maxLength={64}
+                      value={billing.complement}
+                      onChange={billingField("complement")}
+                      aria-invalid={invalid("complement")}
+                    />
+                  </label>
+                </div>
+                <label className="grid min-w-0 gap-1">
+                  Bairro
+                  <input
+                    name="billing-neighborhood"
+                    autoComplete="billing address-level3"
+                    className={fieldClass}
+                    maxLength={64}
+                    value={billing.neighborhood}
+                    onChange={billingField("neighborhood")}
+                    aria-invalid={invalid("neighborhood")}
+                    required
+                  />
+                </label>
+                <div className="grid min-w-0 grid-cols-[minmax(0,3fr)_minmax(0,1fr)] gap-3">
+                  <label className="grid min-w-0 gap-1">
+                    Cidade
+                    <input
+                      name="billing-city"
+                      autoComplete="billing address-level2"
+                      className={fieldClass}
+                      maxLength={64}
+                      value={billing.city}
+                      onChange={billingField("city")}
+                      aria-invalid={invalid("city")}
+                      required
+                    />
+                  </label>
+                  <div className="grid min-w-0 gap-1">
+                    <label htmlFor={stateId}>UF</label>
+                    <select
+                      id={stateId}
+                      name="billing-state"
+                      autoComplete="billing address-level1"
+                      className={fieldClass}
+                      value={billing.state}
+                      onChange={billingField("state")}
+                      aria-invalid={invalid("state")}
+                      required
+                    >
+                      <option value="">—</option>
+                      {brazilianStates.map((state) => (
+                        <option key={state} value={state}>
+                          {state}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </fieldset>
+            )}
           </form>
         )}
 
-        <AsaasDisclosure />
+        <PaymentProviderDisclosure />
       </div>
 
       <footer className="flex min-w-0 flex-wrap gap-3 border-t border-template-line px-[clamp(1.25rem,4vw,2.5rem)] pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
         <button
-          type={hasPayerForm ? "submit" : "button"}
-          form={hasPayerForm ? payerFormId : undefined}
+          type="submit"
+          form={method ? formId : undefined}
           className={primaryButtonClass}
-          disabled={!canConfirm}
-          onClick={hasPayerForm ? undefined : () => onConfirm()}
+          disabled={!canConfirm || !method}
         >
-          {pending ? "Aguarde…" : "Continuar para pagamento"}
+          {pending
+            ? "Aguarde…"
+            : withCard
+              ? quoteMatchesSelection
+                ? `Pagar ${formatCents(quote.totalCents)}`
+                : "Pagar com cartão"
+              : "Gerar Pix"}
         </button>
         <button
           type="button"

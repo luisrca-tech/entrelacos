@@ -9,7 +9,7 @@ import {
   serializeBrlCents,
 } from "./giftMoney";
 
-// Arithmetic fixtures are explicit local policies, not approved Asaas fees.
+// Arithmetic fixtures are explicit local policies, not approved provider fees.
 function policy(
   overrides: Partial<GiftProcessingPolicy> = {},
 ): GiftProcessingPolicy {

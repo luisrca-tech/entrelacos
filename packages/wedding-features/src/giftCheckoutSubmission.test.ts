@@ -1,6 +1,9 @@
 import type { GiftQuote } from "@entrelacos/contracts";
 import { describe, expect, it, vi } from "vitest";
-import { submitGiftCheckout } from "./giftCheckoutSubmission";
+import {
+  type GiftCheckoutPayment,
+  submitGiftCheckout,
+} from "./giftCheckoutSubmission";
 import { WeddingGiftsApiError } from "./gifts";
 
 const pending = {
@@ -15,7 +18,16 @@ const quote = {
   siteId: "wedding-a",
   method: pending.method,
   mode: pending.mode,
+  installmentCount: 1,
 } as GiftQuote;
+const payment: GiftCheckoutPayment = {
+  buyer: {
+    name: "Ana Souza",
+    email: "ana@example.com",
+    cpf: "12345678909",
+    phone: "11987654321",
+  },
+};
 function storage(value: unknown = pending) {
   return {
     getItem: vi.fn().mockReturnValue(JSON.stringify(value)),
@@ -41,9 +53,10 @@ describe("checkout submission ownership", () => {
       pending,
       () => target,
       () => current,
+      payment,
     );
     current = false;
-    finish({ hostedUrl: "https://checkout.example.test" } as never);
+    finish({ checkoutId: "checkout-a", status: "AWAITING_PAYMENT" } as never);
     expect(await result).toBeNull();
     expect(target.removeItem).not.toHaveBeenCalled();
   });
@@ -65,6 +78,7 @@ describe("checkout submission ownership", () => {
       pending,
       () => target,
       () => current,
+      payment,
     );
     current = false;
     fail(new WeddingGiftsApiError(409, "QUOTE_EXPIRED"));
@@ -83,6 +97,8 @@ describe("checkout submission ownership", () => {
       quote,
       pending,
       () => target,
+      () => true,
+      payment,
     );
     expect(target.removeItem).toHaveBeenCalledTimes(1);
     expect(result).toMatchObject({
@@ -101,6 +117,8 @@ describe("checkout submission ownership", () => {
       quote,
       pending,
       () => storage(),
+      () => true,
+      payment,
     );
     expect(result).toMatchObject({
       type: "CHECKOUT_FAILED",
@@ -120,6 +138,8 @@ describe("checkout submission ownership", () => {
       { ...quote, settlementVersion: "PLATFORM_ACCOUNT_SPLIT_V2" } as GiftQuote,
       pending,
       () => storage(),
+      () => true,
+      payment,
     );
     expect(result).not.toHaveProperty("requote");
   });
@@ -146,6 +166,8 @@ describe("checkout submission ownership", () => {
         quote,
         pending,
         () => target,
+        () => true,
+        payment,
       );
       expect(event).toMatchObject({
         type: "CHECKOUT_FAILED",
@@ -168,9 +190,25 @@ describe("checkout submission ownership", () => {
       quote,
       pending,
       () => target,
+      () => true,
+      payment,
     );
     expect(event).toMatchObject({ type: "CHECKOUT_FAILED", unknown: true });
     expect(target.removeItem).not.toHaveBeenCalled();
     expect(JSON.stringify(event)).not.toContain("private provider error");
+  });
+  it("keeps a declined card locked when its marker cannot be cleared", async () => {
+    const target = storage({ ...pending, requestId: "new-request" });
+    const checkout = { checkoutId: "checkout-a", status: "CLOSED_UNPAID" };
+    const event = await submitGiftCheckout(
+      { createCheckout: vi.fn().mockResolvedValue(checkout) },
+      quote,
+      pending,
+      () => target,
+      () => true,
+      payment,
+    );
+    expect(event).toEqual({ type: "CHECKOUT_RESOLVED", checkout });
+    expect(target.removeItem).not.toHaveBeenCalled();
   });
 });

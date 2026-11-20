@@ -1,7 +1,7 @@
 import type { MeResponse, SiteAccess } from "@entrelacos/contracts";
 import {
-  AsaasDisclosure,
   cn,
+  PaymentProviderDisclosure,
   Popover,
   PopoverContent,
   PopoverTrigger,
@@ -28,6 +28,10 @@ import {
   useRef,
   useState,
 } from "react";
+import {
+  paymentsAreaOpen,
+  usePaymentsProbe,
+} from "../lib/paymentsAvailability";
 import { AdminButton } from "./AdminButton";
 import {
   type AdminRole,
@@ -36,6 +40,7 @@ import {
   getSiteNavigation,
   type SiteArea,
 } from "./adminNavigation";
+import { loadGiftsReadiness } from "./giftsReadiness";
 import {
   setNavigationExpanded,
   useNavigationExpanded,
@@ -62,7 +67,13 @@ export function AdminShell({
   children,
 }: AdminShellProps) {
   const role = (siteAccess?.membershipRole ?? actor.user.role) as AdminRole;
-  const navigation = siteId ? getSiteNavigation(role, siteId) : [];
+  const payments = usePaymentsProbe(
+    role === "SITE_ASSISTANT" ? undefined : siteId,
+    loadGiftsReadiness,
+  );
+  const navigation = siteId
+    ? getSiteNavigation(role, siteId, paymentsAreaOpen(payments))
+    : [];
   const navigationArea = area === "receiving-guide" ? "receiving" : area;
   const initials = getInitials(actor.user.name);
   const expanded = useNavigationExpanded();
@@ -281,9 +292,12 @@ export function AdminShell({
         </main>
         <div className="mt-auto">
           {navigationArea === "receiving" && (
-            <div className="mx-auto w-full max-w-[1700px] px-[42px] pb-6 [@media(max-width:760px)]:px-5 [@media(min-width:761px)_and_(max-width:1060px)]:px-7">
-              <AsaasDisclosure />
-            </div>
+            <aside
+              aria-label="Prestador dos serviços financeiros"
+              className="mx-auto w-full max-w-[1700px] px-[42px] pb-6 text-admin-text-secondary [@media(max-width:760px)]:px-5 [@media(min-width:761px)_and_(max-width:1060px)]:px-7"
+            >
+              <PaymentProviderDisclosure />
+            </aside>
           )}
           <footer className="mx-auto flex w-full max-w-[1700px] justify-between gap-6 border-t border-admin-border px-[42px] pt-6 pb-7 text-[0.78rem] text-admin-text-secondary [@media(max-width:760px)]:hidden [@media(min-width:761px)_and_(max-width:1060px)]:px-7">
             <span className="flex items-center gap-2">

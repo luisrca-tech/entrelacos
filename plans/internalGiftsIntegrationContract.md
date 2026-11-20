@@ -1,5 +1,7 @@
 # Internal Gifts Integration Contract — Local Checkpoint C1
 
+> **2026-11 update:** Asaas was replaced by Pagar.me in 2026-11; see [Pagar.me operation](../docs/pagarmeOperation.md) and the [decision register](../docs/decisionRegister.md#payment-provider-switch-to-pagarme--2026-11-18). Asaas details below are historical.
+
 ## Current execution coordination authority — 2026-10-14 04:00 UTC
 
 Human approval promotes existing auxiliary01a1380b-3489-79e3-a918-800c3bcae2c6 to supervised execution coordination of current A/B/C/D, not a second principal. Current topology and the finite delegated dependency lease are specified at the top of principal `plans/internalGiftsCoordination.md`. Auxiliary may read/message those four leads and principal, maintain only its own `plans/internalGiftsExecutionCoordinatorStatus.md`, execute exact D-then-B frozen installs under the principal's nominal serial grant, and relay unchanged03:56 A/D grants after genuine dependency-ready closure. It cannot grant new scopes/leases, accept source for principal, write central/shared/lead files, publish Git or create schedules. B browser/C startup/shared checks remain ungranted. The SINGLE existing principal heartbeat supervises auxiliary deltas; independent Asaas/harness chats remain excluded. Financial/readiness/provider/DB/secret safety gates are unchanged.

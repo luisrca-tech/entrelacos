@@ -255,7 +255,7 @@ export function GiftPricingPreview({
 const feesTooltip =
   "Inclui a taxa do meio de pagamento e, no cartão, a antecipação";
 // Installment plans shown in the simulation; the guest still picks any plan.
-const simulatedInstallments = [1, 6, 12];
+const simulatedInstallments = [1, 3, 6];
 
 function PricingComparison({
   nominalCents,
@@ -350,9 +350,9 @@ function PricingComparison({
         </>
       )}
       <p className="m-0 text-xs leading-[1.5] text-admin-text-secondary">
-        No Pix, você recebe assim que o pagamento é confirmado. No cartão, mesmo
-        parcelado, o valor é antecipado e normalmente chega em até 2 dias úteis,
-        sujeito à análise do Asaas.
+        No Pix, o valor entra no saldo quando a Pagar.me libera o pagamento
+        confirmado. No cartão, mesmo parcelado, o valor é antecipado e fica
+        disponível em cerca de 2 dias.
       </p>
     </div>
   );

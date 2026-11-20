@@ -18,7 +18,7 @@ function fixture(
     id: "account.old",
     site_id: site.id,
     environment: "sandbox",
-    provider: "ASAAS",
+    provider: "PAGARME",
     is_current: false,
     provider_account_state: "BLOCKED",
     receiving_capability: false,
@@ -97,8 +97,7 @@ function fixture(
                 (a) =>
                   a.id === w.account_id &&
                   a.site_id === w.site_id &&
-                  a.environment === w.environment &&
-                  a.provider === "ASAAS",
+                  a.environment === w.environment,
               )
             : [];
           for (const a of accounts.length ? accounts : [null])
@@ -260,7 +259,8 @@ describe("stored withdrawal history", () => {
     expect(values.queries[0].sql).not.toMatch(
       /FOR UPDATE|BEGIN|credential|account_reference|provider_reference|authorization_reference|request_hash|receipt_reference|is_current|receiving_capability|lifecycle/,
     );
-    expect(values.queries[0].sql).toContain("a.provider='ASAAS'");
+    // Withdrawals of the previous provider's account stay in the history.
+    expect(values.queries[0].sql).not.toContain("a.provider");
   });
   it("returns an empty list only for an existing site's authoritative empty history", async () => {
     const values = fixture();
@@ -324,14 +324,22 @@ describe("stored withdrawal history", () => {
     });
     expect(values.queries).toHaveLength(0);
   });
-  it.each(["site", "environment", "missing", "provider"])(
+  it("keeps withdrawals made through the previous provider's account", async () => {
+    const values = fixture();
+    values.oldAccount.provider = "PREVIOUS_PROVIDER";
+    await expect(
+      values.repository.listWithdrawals("site:one"),
+    ).resolves.toHaveLength(
+      (await fixture().repository.listWithdrawals("site:one")).length,
+    );
+  });
+  it.each(["site", "environment", "missing"])(
     "fails closed on mismatched stored account %s instead of dropping withdrawals",
     async (change) => {
       const values = fixture();
       if (change === "site") values.oldAccount.site_id = "foreign-site";
       if (change === "environment") values.oldAccount.environment = "live";
       if (change === "missing") values.tables.accounts.splice(0, 1);
-      if (change === "provider") values.oldAccount.provider = "OTHER_PROVIDER";
       await expect(
         values.repository.listWithdrawals("site:one"),
       ).rejects.toMatchObject({

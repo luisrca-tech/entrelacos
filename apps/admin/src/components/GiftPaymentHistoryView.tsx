@@ -62,7 +62,7 @@ const sampleLabels: Record<
   PENDING: "Aguardando o pagamento",
   CONFIRMED: "Pagamento confirmado, aguardando liberação",
   RECEIVED: "Pagamento recebido",
-  RESTRICTED: "Pagamento com restrição no Asaas",
+  RESTRICTED: "Pagamento estornado ou cancelado",
 };
 // Status shown for a payment sample. V2 payments distinguish money still
 // waiting for the split (card payments until the anticipation is credited,

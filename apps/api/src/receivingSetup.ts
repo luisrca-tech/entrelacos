@@ -1,43 +1,37 @@
 import {
+  pagarmeRecipientStatuses,
+  type ReceivingKycLink,
   type ReceivingSetupContext,
+  receivingKycLinkSchema,
   receivingSetupContextSchema,
   receivingSetupDisclosure,
   receivingSetupInputSchema,
   type SiteAccess,
 } from "@entrelacos/contracts";
-import type {
-  FinancialActor,
-  RecentFinancialAuthenticationEvidence,
-} from "./financialAuthorization";
+import type { FinancialActor } from "./financialAuthorization";
+import { PagarmeRejectedError } from "./pagarmeHttpClient";
+import {
+  mapPagarmeRecipientStatus,
+  type PagarmeRecipientClient,
+} from "./pagarmeRecipientClient";
 import type { createReceivingAccountProvisioning } from "./receivingAccountProvisioning";
 import {
   deriveReceivingNominationRequestId,
   type ReceivingNominationService,
 } from "./receivingNomination";
 import {
-  ReceivingPixDestinationError,
-  type ReceivingPixDestinationLookup,
-} from "./receivingPixDestination";
-import type { createReceivingPixDestinationSetup } from "./receivingPixDestinationSetup";
-import type { ReceivingSetupAsaasObservation } from "./receivingSetupAsaas";
-import {
   type ReceivingSetupAccountRecord,
   ReceivingSetupError,
   type ReceivingSetupRepository,
 } from "./receivingSetupRepository";
 
+export interface ReceivingRecipientObservation {
+  readonly recipientId: string;
+  /** Raw Pagar.me status; unknown values stay unverified. */
+  readonly status: string;
+  readonly observedAt: string;
+}
 export interface ReceivingSetupServiceOptions {
-  pixDestination?: ReceivingPixDestinationLookup;
-  pixDestinationSetup?: Pick<
-    ReturnType<typeof createReceivingPixDestinationSetup>,
-    "read" | "confirm"
-  > &
-    Partial<
-      Pick<
-        ReturnType<typeof createReceivingPixDestinationSetup>,
-        "readWithRecent"
-      >
-    >;
   repository: Pick<
     ReceivingSetupRepository,
     | "mode"
@@ -47,7 +41,6 @@ export interface ReceivingSetupServiceOptions {
     | "readSessionAuthentication"
     | "readAccount"
     | "consent"
-    | "consentIncomingPix"
     | "designate"
     | "listHolderCandidates"
   >;
@@ -59,44 +52,48 @@ export interface ReceivingSetupServiceOptions {
   observe?: (
     siteId: string,
     account: ReceivingSetupAccountRecord,
-  ) => Promise<ReceivingSetupAsaasObservation>;
+  ) => Promise<ReceivingRecipientObservation>;
+  recipients?: Pick<PagarmeRecipientClient, "createKycLink">;
+}
+function recipientStatus(
+  status: string,
+): (typeof pagarmeRecipientStatuses)[number] | null {
+  return (pagarmeRecipientStatuses as readonly string[]).includes(status)
+    ? (status as (typeof pagarmeRecipientStatuses)[number])
+    : null;
 }
 export function createReceivingSetupService(
   options: ReceivingSetupServiceOptions,
 ) {
   const repository = options.repository;
   return Object.freeze({
-    async readPixDestination(actor: FinancialActor) {
-      if (!options.pixDestinationSetup)
-        throw new ReceivingPixDestinationError();
-      return options.pixDestinationSetup.read(actor);
-    },
-    async readPixDestinationSnapshot(actor: FinancialActor) {
-      if (!options.pixDestinationSetup)
-        throw new ReceivingPixDestinationError();
-      return options.pixDestinationSetup.readWithRecent
-        ? options.pixDestinationSetup.readWithRecent(actor)
-        : {
-            destination: await options.pixDestinationSetup.read(actor),
-            recentDestinations: [],
-          };
-    },
-    async confirmPixDestination(
+    /**
+     * Issues a short-lived Pagar.me identity verification link. The link is
+     * returned to the caller only: it is never stored or logged.
+     */
+    async createKycLink(
       actor: FinancialActor,
-      input: {
-        reviewToken: string;
-        confirmRecipient: true;
-        acceptThirdParty?: true;
-      },
-      recentAuth: RecentFinancialAuthenticationEvidence,
-    ) {
-      if (!options.pixDestinationSetup)
-        throw new ReceivingPixDestinationError();
-      return options.pixDestinationSetup.confirm(actor, input, recentAuth);
-    },
-    async lookupPixDestination(actor: FinancialActor, input: unknown) {
-      if (!options.pixDestination) throw new ReceivingPixDestinationError();
-      return options.pixDestination.lookup(actor, input);
+      platformRole: "OWNER" | "SITE_ADMIN" | "SITE_ASSISTANT",
+    ): Promise<ReceivingKycLink> {
+      const account = await repository.readAccount(actor.siteId);
+      if (platformRole !== "OWNER" && account?.operatorUserId !== actor.userId)
+        throw new ReceivingSetupError(403, "MEMBERSHIP_DENIED");
+      if (account?.state !== "SUCCEEDED" || !account.result)
+        throw new ReceivingSetupError(409, "RECEIVING_ACCOUNT_REQUIRED");
+      if (!options.recipients)
+        throw new ReceivingSetupError(503, "RECEIVING_SETUP_UNAVAILABLE");
+      let link: unknown;
+      try {
+        link = await options.recipients.createKycLink(
+          account.result.recipientReference,
+        );
+      } catch (error) {
+        // Pagar.me refuses a link when no identity check is pending.
+        if (error instanceof PagarmeRejectedError)
+          throw new ReceivingSetupError(409, "RECEIVING_KYC_LINK_UNAVAILABLE");
+        throw error;
+      }
+      return receivingKycLinkSchema.parse(link);
     },
     async read(
       actor: FinancialActor,
@@ -108,22 +105,17 @@ export function createReceivingSetupService(
       if (account?.state === "SUCCEEDED" && options.observe) {
         try {
           const observed = await options.observe(actor.siteId, account);
-          if (
-            observed.siteId !== actor.siteId ||
-            observed.accountBindingId !== account.accountId ||
-            observed.environment !== repository.mode ||
-            observed.accountReference !== account.result?.accountReference ||
-            observed.recipientReference !== account.result?.recipientReference
-          )
+          if (observed.recipientId !== account.result?.recipientReference)
             throw new Error("Provider binding mismatch");
-          const { id: _statusId, ...status } = observed.status;
+          const mapped = mapPagarmeRecipientStatus(observed.status);
           providerStatus = {
-            ...status,
-            commercialInfoExpired: observed.commercialInfoExpired,
+            recipientStatus: recipientStatus(observed.status),
+            accountState: mapped.providerAccountState,
+            receivingEnabled: mapped.receivingCapability,
             observedAt: observed.observedAt,
           };
         } catch {
-          /* A failed observation cannot turn stored credentials into provider approval. */
+          /* A failed observation cannot turn a stored recipient into provider approval. */
         }
       }
       return receivingSetupContextSchema.parse({
@@ -137,10 +129,6 @@ export function createReceivingSetupService(
         consentRecorded:
           !!holder?.consentId &&
           holder.consentVersion === receivingSetupDisclosure.version,
-        pixConsentRecorded:
-          !!holder?.pixConsent &&
-          holder.pixConsent.accountId === account?.accountId &&
-          holder.pixConsent.userId === holder.holderUserId,
         ...(platformRole === "OWNER"
           ? {
               holderCandidates: await repository.listHolderCandidates(
@@ -180,15 +168,8 @@ export function createReceivingSetupService(
       const previous = await repository.readAccount(actor.siteId);
       if (previous && previous.operatorUserId !== actor.userId)
         throw new ReceivingSetupError(403, "RECEIVING_HOLDER_REQUIRED");
-      if (previous?.state === "SUCCEEDED") {
-        if (input.pixConsentVersion)
-          await repository.consentIncomingPix(
-            actor,
-            previous.accountId,
-            input.pixConsentVersion,
-          );
-        return { state: "STORED" };
-      }
+      // The recipient already exists; never ask Pagar.me for another one.
+      if (previous?.state === "SUCCEEDED") return { state: "STORED" };
       if (previous && previous.state !== "REQUESTED")
         return { state: "UNKNOWN" };
       const nomination =
@@ -207,12 +188,6 @@ export function createReceivingSetupService(
             confirmSelfAsRecipient: true,
           },
         }));
-      if (input.pixConsentVersion)
-        await repository.consentIncomingPix(
-          actor,
-          nomination.accountId,
-          input.pixConsentVersion,
-        );
       const owner = options.provisioning.begin({
         action: "CREATE",
         nomination,

@@ -1,6 +1,7 @@
 import type {
-  CheckoutResult,
-  CheckoutStatus,
+  GiftCheckoutCreateResult,
+  GiftCheckoutPix,
+  GiftCheckoutStatus,
   GiftQuote,
   PublicGiftItem,
 } from "@entrelacos/contracts";
@@ -38,13 +39,15 @@ const quote: GiftQuote = {
   expiresAt: "2026-10-12T18:05:00.000Z",
   mode: "sandbox",
 };
-const checkout: CheckoutResult = {
-  orderId: "order-a",
-  attemptId: "attempt-a",
-  quoteId: quote.id,
-  method: quote.method,
-  hostedUrl: "https://sandbox.example.test/checkout/attempt-a",
-  mode: quote.mode,
+const pix: GiftCheckoutPix = {
+  qrCode: "00020126580014br.gov.bcb.pix0136checkout-a",
+  qrCodeUrl: "https://sandbox.example.test/pix/checkout-a.png",
+  expiresAt: "2026-10-12T18:30:00.000Z",
+};
+const checkout: GiftCheckoutCreateResult = {
+  checkoutId: "checkout-a",
+  status: "AWAITING_PAYMENT",
+  pix,
 };
 const now = "2026-10-12T18:00:00.000Z";
 const recoveryToken = "A".repeat(43);
@@ -56,19 +59,18 @@ const pending = {
   method: quote.method,
   mode: quote.mode,
 };
-const awaitingStatus: CheckoutStatus = {
+const awaitingStatus: GiftCheckoutStatus = {
   siteId: gift.siteId,
   quoteId: quote.id,
   requestId: pending.requestId,
-  orderId: checkout.orderId,
-  attemptId: checkout.attemptId,
+  checkoutId: checkout.checkoutId,
   method: quote.method,
   mode: "sandbox",
   state: "AWAITING_PAYMENT",
   observedAt: now,
   closedReason: null,
   mayStartNewAttempt: false,
-  checkout,
+  pix,
 };
 
 function selected(): GiftCheckoutState {
@@ -439,36 +441,53 @@ describe("gift checkout attempt", () => {
     });
   });
 
-  it("keeps accepted hosted checkout as a redirect without marking a payment successful", () => {
+  it("tracks an accepted checkout as pending payment without marking it successful", () => {
     const next = giftCheckoutReducer(creating(), {
       type: "CHECKOUT_RESOLVED",
       checkout,
     });
-    expect(next).toMatchObject({ phase: "REDIRECTING", checkout, quote });
+    expect(next).toMatchObject({
+      phase: "UNKNOWN",
+      checkout,
+      quote,
+      pending: { ...pending, giftId: gift.id },
+      checkoutStatus: null,
+    });
     expect(next).not.toHaveProperty("paid");
     expect(next).not.toHaveProperty("receipt");
+    for (const event of [
+      { type: "CLOSE" },
+      { type: "SELECT_GIFT", gift },
+      { type: "SELECT_METHOD", method: "CREDIT_CARD" },
+    ] as GiftCheckoutEvent[])
+      expect(giftCheckoutReducer(next, event)).toBe(next);
   });
 
   it.each([
-    ["another quote", { quoteId: "quote-b" }],
-    ["another method", { method: "CREDIT_CARD" }],
-    ["another provider mode", { mode: "live" }],
-    ["disabled mode", { mode: "disabled" }],
-    ["script URL", { hostedUrl: "javascript:alert(1)" }],
-    ["insecure URL", { hostedUrl: "http://checkout.example.test" }],
-    ["credential URL", { hostedUrl: "https://secret@checkout.example.test" }],
+    ["a Pix on a card quote", {}, "CREDIT_CARD"],
+    ["a script QR URL", { pix: { ...pix, qrCodeUrl: "javascript:alert(1)" } }],
+    [
+      "an insecure QR URL",
+      { pix: { ...pix, qrCodeUrl: "http://pix.example.test/qr.png" } },
+    ],
+    ["an unknown state", { status: "CONFIRMED_BY_GUEST" }],
+    ["an invalid checkout id", { checkoutId: "../checkout" }],
     ["private fields", { walletId: "private-wallet" }],
-  ])(
-    "locks an uncertain attempt for %s without redirecting",
-    (_label, extra) => {
-      const next = giftCheckoutReducer(creating(), {
+  ] as [string, object, GiftQuote["method"]?][])(
+    "locks an uncertain attempt for %s without trusting the result",
+    (_label, extra, method = "PIX") => {
+      const start = creating();
+      const state =
+        method === "PIX"
+          ? start
+          : { ...start, quote: { ...quote, method }, method };
+      const next = giftCheckoutReducer(state, {
         type: "CHECKOUT_RESOLVED",
         checkout: { ...checkout, ...extra },
       } as never);
       expect(next).toMatchObject({
         phase: "UNKNOWN",
         requestId: "request-a",
-        quote,
         checkout: null,
         error:
           "O pagamento ainda está sendo verificado. Aguarde antes de tentar novamente.",
@@ -527,7 +546,7 @@ describe("checkout recovery identity and authoritative status", () => {
     ).toBe(state);
   });
 
-  it("restores the exact operation without fabricating a gift, price or hosted checkout", () => {
+  it("restores the exact operation without fabricating a gift, price or checkout", () => {
     expect(restored()).toMatchObject({
       phase: "UNKNOWN",
       gift: null,
@@ -586,7 +605,7 @@ describe("checkout recovery identity and authoritative status", () => {
     ).toBe(state);
   });
 
-  it.each(["IDLE", "READY", "CREATING", "REDIRECTING"] as const)(
+  it.each(["IDLE", "READY", "CREATING"] as const)(
     "ignores status outside UNKNOWN to avoid racing creation (%s)",
     (phase) => {
       const state =
@@ -594,12 +613,7 @@ describe("checkout recovery identity and authoritative status", () => {
           ? createGiftCheckoutState()
           : phase === "READY"
             ? ready()
-            : phase === "REDIRECTING"
-              ? giftCheckoutReducer(creating(), {
-                  type: "CHECKOUT_RESOLVED",
-                  checkout,
-                })
-              : creating();
+            : creating();
       expect(
         giftCheckoutReducer(state, {
           type: "STATUS_RESOLVED",
@@ -613,11 +627,13 @@ describe("checkout recovery identity and authoritative status", () => {
     { siteId: "wedding-b" },
     { quoteId: "quote-b" },
     { requestId: "request-b" },
-    { method: "CREDIT_CARD", checkout: { ...checkout, method: "CREDIT_CARD" } },
-    { mode: "live", checkout: { ...checkout, mode: "live" } },
+    { method: "CREDIT_CARD", pix: null },
+    { mode: "live" },
     { walletId: "private" },
     { mayStartNewAttempt: true },
-    { checkout: null },
+    { state: "RECEIVED" },
+    { pix: { ...pix, qrCodeUrl: "http://pix.example.test/qr.png" } },
+    { pix: undefined },
   ])(
     "ignores statuses outside the exact operation and strict C1 contract",
     (extra) => {
@@ -640,10 +656,10 @@ describe("checkout recovery identity and authoritative status", () => {
   ] as const)(
     "stores truthful %s status while keeping another checkout locked",
     (paymentState) => {
-      const status: CheckoutStatus = {
+      const status: GiftCheckoutStatus = {
         ...awaitingStatus,
         state: paymentState,
-        checkout: paymentState === "AWAITING_PAYMENT" ? checkout : null,
+        pix: paymentState === "AWAITING_PAYMENT" ? pix : null,
         observedAt:
           paymentState === "CREATING" || paymentState === "OUTCOME_UNKNOWN"
             ? null
@@ -676,45 +692,47 @@ describe("checkout recovery identity and authoritative status", () => {
     },
   );
 
-  it.each([{ orderId: "order-b" }, { attemptId: "attempt-b" }])(
-    "binds later statuses to the already observed order and attempt",
-    (identity) => {
-      const state = giftCheckoutReducer(restored(), {
-        type: "STATUS_RESOLVED",
-        status: awaitingStatus,
-      });
-      expect(
-        giftCheckoutReducer(state, {
-          type: "STATUS_RESOLVED",
-          status: {
-            ...awaitingStatus,
-            ...identity,
-            checkout: { ...checkout, ...identity },
-          },
-        }),
-      ).toBe(state);
-    },
-  );
-
-  it("checks a previously known hosted checkout's order and attempt as well", () => {
-    const state = { ...restored(), checkout };
+  it("binds later statuses to the already observed checkout", () => {
+    const state = giftCheckoutReducer(restored(), {
+      type: "STATUS_RESOLVED",
+      status: awaitingStatus,
+    });
     expect(
       giftCheckoutReducer(state, {
         type: "STATUS_RESOLVED",
-        status: {
-          ...awaitingStatus,
-          orderId: "order-b",
-          checkout: { ...checkout, orderId: "order-b" },
-        },
+        status: { ...awaitingStatus, checkoutId: "checkout-b" },
       }),
     ).toBe(state);
   });
 
+  it("checks the checkout it just created as well", () => {
+    const state = giftCheckoutReducer(creating(), {
+      type: "CHECKOUT_RESOLVED",
+      checkout,
+    });
+    expect(
+      giftCheckoutReducer(state, {
+        type: "STATUS_RESOLVED",
+        status: { ...awaitingStatus, checkoutId: "checkout-b" },
+      }),
+    ).toBe(state);
+    expect(
+      giftCheckoutReducer(state, {
+        type: "STATUS_RESOLVED",
+        status: awaitingStatus,
+      }),
+    ).toMatchObject({
+      phase: "UNKNOWN",
+      checkout,
+      checkoutStatus: awaitingStatus,
+    });
+  });
+
   it("releases only an authoritative CLOSED_UNPAID status for a fresh quote and identity", () => {
-    const status: CheckoutStatus = {
+    const status: GiftCheckoutStatus = {
       ...awaitingStatus,
       state: "CLOSED_UNPAID",
-      checkout: null,
+      pix: null,
       closedReason: "EXPIRED",
       mayStartNewAttempt: true,
     };
@@ -769,10 +787,10 @@ describe("checkout recovery identity and authoritative status", () => {
   it.each(["RECEIVED", "REFUNDED"] as const)(
     "never unlocks a recorded %s payment through a later unpaid status",
     (paymentState) => {
-      const status: CheckoutStatus = {
+      const status: GiftCheckoutStatus = {
         ...awaitingStatus,
         state: paymentState,
-        checkout: null,
+        pix: null,
       };
       const state = giftCheckoutReducer(restored(), {
         type: "STATUS_RESOLVED",
@@ -784,7 +802,7 @@ describe("checkout recovery identity and authoritative status", () => {
           status: {
             ...awaitingStatus,
             state: "CLOSED_UNPAID",
-            checkout: null,
+            pix: null,
             observedAt: "2026-10-12T18:01:00.000Z",
             closedReason: "CANCELED",
             mayStartNewAttempt: true,
@@ -795,10 +813,10 @@ describe("checkout recovery identity and authoritative status", () => {
   );
 
   it("accepts a refund after receipt while ignoring older or less-final observations", () => {
-    const received: CheckoutStatus = {
+    const received: GiftCheckoutStatus = {
       ...awaitingStatus,
       state: "RECEIVED",
-      checkout: null,
+      pix: null,
     };
     const state = giftCheckoutReducer(restored(), {
       type: "STATUS_RESOLVED",
@@ -810,7 +828,7 @@ describe("checkout recovery identity and authoritative status", () => {
         status: awaitingStatus,
       }),
     ).toBe(state);
-    const refunded: CheckoutStatus = {
+    const refunded: GiftCheckoutStatus = {
       ...received,
       state: "REFUNDED",
       observedAt: "2026-10-12T18:01:00.000Z",
@@ -830,10 +848,10 @@ describe("checkout recovery identity and authoritative status", () => {
       type: "STATUS_RESOLVED",
       status: awaitingStatus,
     });
-    const older: CheckoutStatus = {
+    const older: GiftCheckoutStatus = {
       ...awaitingStatus,
       state: "CLOSED_UNPAID",
-      checkout: null,
+      pix: null,
       observedAt: "2026-10-12T17:59:00.000Z",
       closedReason: "FAILED",
       mayStartNewAttempt: true,
@@ -847,7 +865,7 @@ describe("checkout recovery identity and authoritative status", () => {
         status: {
           ...awaitingStatus,
           state: "CREATING",
-          checkout: null,
+          pix: null,
           observedAt: null,
         },
       }),
@@ -866,7 +884,7 @@ describe("current uncertainty after historical receipt", () => {
     });
     return giftCheckoutReducer(restored, {
       type: "STATUS_RESOLVED",
-      status: { ...awaitingStatus, state: paymentState, checkout: null },
+      status: { ...awaitingStatus, state: paymentState, pix: null },
     });
   }
   function uncertain(
@@ -878,7 +896,7 @@ describe("current uncertainty after historical receipt", () => {
       status: {
         ...awaitingStatus,
         state: "OUTCOME_UNKNOWN",
-        checkout: null,
+        pix: null,
         observedAt,
       },
     });
@@ -941,8 +959,7 @@ describe("current uncertainty after historical receipt", () => {
     { siteId: "wedding-b" },
     { quoteId: "quote-b" },
     { requestId: "request-b" },
-    { orderId: "order-b" },
-    { attemptId: "attempt-b" },
+    { checkoutId: "checkout-b" },
     { method: "CREDIT_CARD" },
     { mode: "live" },
   ])("ignores foreign uncertainty after a receipt: %j", (identity) => {
@@ -954,7 +971,7 @@ describe("current uncertainty after historical receipt", () => {
           ...awaitingStatus,
           ...identity,
           state: "OUTCOME_UNKNOWN",
-          checkout: null,
+          pix: null,
           observedAt: newer,
         },
       } as never),
@@ -979,18 +996,18 @@ describe("current uncertainty after historical receipt", () => {
           {
             ...awaitingStatus,
             state: "CREATING",
-            checkout: null,
+            pix: null,
             observedAt: newest,
           },
           {
             ...awaitingStatus,
             state: "CLOSED_UNPAID",
-            checkout: null,
+            pix: null,
             closedReason: "EXPIRED",
             mayStartNewAttempt: true,
             observedAt: newest,
           },
-        ] as CheckoutStatus[])
+        ] as GiftCheckoutStatus[])
           expect(
             giftCheckoutReducer(state, { type: "STATUS_RESOLVED", status }),
           ).toBe(state);
@@ -1002,7 +1019,7 @@ describe("current uncertainty after historical receipt", () => {
             status: {
               ...awaitingStatus,
               state: paymentState,
-              checkout: null,
+              pix: null,
               observedAt: newer,
             },
           }),
@@ -1017,7 +1034,7 @@ describe("current uncertainty after historical receipt", () => {
       status: {
         ...awaitingStatus,
         state: "RECEIVED",
-        checkout: null,
+        pix: null,
         observedAt: newest,
       },
     });
@@ -1030,7 +1047,7 @@ describe("current uncertainty after historical receipt", () => {
         status: {
           ...awaitingStatus,
           state: "RECEIVED",
-          checkout: null,
+          pix: null,
           observedAt: newest,
         },
       }),
@@ -1041,7 +1058,7 @@ describe("current uncertainty after historical receipt", () => {
         status: {
           ...awaitingStatus,
           state: "REFUNDED",
-          checkout: null,
+          pix: null,
           observedAt: newest,
         },
       }).checkoutStatus?.state,
@@ -1077,7 +1094,7 @@ describe("current uncertainty after historical receipt", () => {
           status: {
             ...awaitingStatus,
             state: paymentState,
-            checkout: null,
+            pix: null,
             observedAt: "2026-10-12T18:01:00Z",
           },
         }),
@@ -1094,11 +1111,11 @@ describe("uncertain gift checkout and closure", () => {
     { type: "CLOSE" },
   ];
 
-  it.each(["CREATING", "REDIRECTING", "UNKNOWN"] as const)(
+  it.each(["CREATING", "AWAITING_PAYMENT", "UNKNOWN"] as const)(
     "blocks replacement choices and closure while %s",
     (phase) => {
       const state =
-        phase === "REDIRECTING"
+        phase === "AWAITING_PAYMENT"
           ? giftCheckoutReducer(creating(), {
               type: "CHECKOUT_RESOLVED",
               checkout,
@@ -1233,25 +1250,8 @@ it("invalidates payment when switching to a different installment count", () => 
   ).toMatchObject({ phase: "READY", quote: { id: "quote-two" } });
 });
 
-it("recovers the same operation after a back-forward cache restore", () => {
-  const redirecting = giftCheckoutReducer(creating(), {
-    type: "CHECKOUT_RESOLVED",
-    checkout,
-  });
-  const returning = giftCheckoutReducer(redirecting, {
-    type: "CHECKOUT_RETURNED",
-  });
-  expect(returning).toMatchObject({
-    phase: "UNKNOWN",
-    pending,
-    checkout,
-  });
-  const idle = createGiftCheckoutState();
-  expect(giftCheckoutReducer(idle, { type: "CHECKOUT_RETURNED" })).toBe(idle);
-});
-
 describe("guest-facing payment follow-up", () => {
-  const restoredWith = (status: CheckoutStatus) =>
+  const restoredWith = (status: GiftCheckoutStatus) =>
     giftCheckoutReducer(
       giftCheckoutReducer(createGiftCheckoutState(), {
         type: "RESTORE_UNKNOWN",
@@ -1260,10 +1260,10 @@ describe("guest-facing payment follow-up", () => {
       }),
       { type: "STATUS_RESOLVED", status },
     );
-  const settledStatus = (state: "CONFIRMED" | "RECEIVED" | "REFUNDED") => ({
+  const settledStatus = (state: "RECEIVED" | "REFUNDED") => ({
     ...awaitingStatus,
     state,
-    checkout: null,
+    pix: null,
   });
 
   it("binds the saved attempt to the chosen gift", () => {
@@ -1292,7 +1292,7 @@ describe("guest-facing payment follow-up", () => {
     ).toBe("SELECTED");
   });
 
-  it.each(["CONFIRMED", "RECEIVED", "REFUNDED"] as const)(
+  it.each(["RECEIVED", "REFUNDED"] as const)(
     "settles a verified %s attempt back to the normal list",
     (paymentState) => {
       const resolved = restoredWith(settledStatus(paymentState));

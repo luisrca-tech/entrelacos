@@ -1,1533 +1,502 @@
 import { createHash } from "node:crypto";
-import {
-  checkoutResultSchema,
-  checkoutStatusSchema,
-} from "@entrelacos/contracts";
+import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import {
   createGiftCheckoutService,
-  type GiftCheckoutEvidence,
-  GiftCheckoutProviderRejectedError,
   type GiftCheckoutRecord,
-  type GiftCheckoutServiceDependencies,
-  GiftCheckoutServiceError,
-  type GiftHostedCheckout,
-  readGiftQuoteSnapshot,
+  type GiftCheckoutRepository,
+  type GiftCheckoutReservation,
+  giftCheckoutOrderBinding,
 } from "./giftCheckouts";
-import type {
-  GiftQuoteReceivingContext,
-  GiftQuoteSnapshot,
-  StoredGiftForQuote,
-} from "./giftQuotes";
+import {
+  approvedReceivingContext,
+  pagarmeQuoteSnapshot,
+} from "./giftPaymentTestFixtures";
+import type { GiftQuoteSnapshot } from "./giftQuotes";
+import {
+  PagarmeRejectedError,
+  PagarmeUnknownOutcomeError,
+} from "./pagarmeHttpClient";
+import { readPagarmeOrder } from "./pagarmeOrderClient";
+import type { PagarmeOrderRequest } from "./pagarmeOrderPayload";
 
-const instant = "2026-10-12T16:00:00.000Z";
-const observation = "2026-10-12T15:59:30.000Z";
-const token = Buffer.alloc(32, 7).toString("base64url");
-const body = {
-  quoteId: "quote-one",
-  requestId: "request-one",
-  recoveryToken: token,
+const now = new Date("2026-11-18T12:00:00.000Z");
+const recoveryToken = `${"a".repeat(42)}A`;
+const buyer = {
+  name: "Maria Convidada",
+  email: "maria@example.com",
+  cpf: "12345678909",
+  phone: "11987654321",
 };
 
-function required<T>(value: T | null | undefined): T {
-  if (value === null || value === undefined)
-    throw new Error("Missing fixture value");
-  return value;
+function order(name: string, code: string) {
+  const raw = JSON.parse(
+    readFileSync(
+      new URL(`./__fixtures__/pagarme/${name}.json`, import.meta.url),
+      "utf8",
+    ),
+  );
+  raw.code = code;
+  for (const charge of raw.charges) charge.code = code;
+  return readPagarmeOrder(raw);
 }
 
-function fixture() {
-  const receiving = {
-    siteId: "site-one",
-    provider: "ASAAS",
-    operatorReference: "operator-private",
-    environment: "sandbox" as const,
-    accountReference: "account-private",
-    recipientReference: "recipient-private",
-    destinationVersion: 1,
-    bankReference: "bank-private",
-  };
-  const snapshot: GiftQuoteSnapshot = {
-    quote: {
-      id: "quote-one",
-      siteId: "site-one",
-      giftId: "gift-one",
-      title: "Symbolic trip",
-      method: "PIX",
-      currency: "BRL",
-      nominalCents: 10_000,
-      commissionBasisPoints: 200,
-      commissionCents: 200,
-      processingCents: 0,
-      totalCents: 10_200,
-      policyVersion: "verified-policy-v1",
-      expiresAt: "2026-10-12T16:05:00.000Z",
-      mode: "sandbox",
-    },
-    gift: {
-      id: "gift-one",
-      siteId: "site-one",
-      title: "Symbolic trip",
-      description: "A contribution to our trip",
-      nominalCents: 10_000,
-      currency: "BRL",
-      image: null,
-      sortOrder: 0,
-    },
-    receiving,
-    pricing: {
-      ...receiving,
-      verification: "verified",
-      provenance: "provider",
-      observedAt: observation,
-      expiresAt: "2026-10-12T16:10:00.000Z",
-      policy: {
-        version: "verified-policy-v1",
-        method: "PIX",
-        commissionBasisPoints: 200,
-        processingBasisPoints: 0,
-        processingFixedCents: 0,
-        rounding: "CEILING",
-      },
-    },
-    createdAt: instant,
-    expiresAt: "2026-10-12T16:05:00.000Z",
-  };
-  const context: GiftQuoteReceivingContext = {
-    isDemo: false,
-    environment: "test",
-    mode: "sandbox",
-    providerBinding: { ...receiving },
-    evidence: {
-      ...receiving,
-      verification: "verified",
-      provenance: "provider",
-      accountState: "approved",
-      bankState: "verified",
-      observedAt: new Date(observation),
-      bankObservedAt: new Date(observation),
-      capabilities: { receiving: true, withdrawal: true },
-      commercialEnabled: true,
-    },
-    freshnessMs: 60_000,
-  };
-  const gift: StoredGiftForQuote = {
-    gift: structuredClone(snapshot.gift),
-    publicationState: "PUBLISHED",
-    siteActive: true,
-  };
-  const records = new Map<string, GiftCheckoutRecord>();
-  const key = (siteId: string, requestId: string) =>
-    JSON.stringify([siteId, requestId]);
-  const dependencies: GiftCheckoutServiceDependencies = {
-    repository: {
-      findByRequest: vi.fn(
-        async (siteId, requestId) =>
-          records.get(key(siteId, requestId)) ?? null,
-      ),
-      findQuote: vi.fn(async () => snapshot),
-      sealUncreatedRequest: vi.fn(async (reservation) => {
-        const existing = records.get(
-          key(reservation.siteId, reservation.requestId),
-        );
-        if (existing) return existing;
-        if (
-          [...records.values()].some(
-            (record) =>
-              record.siteId === reservation.siteId &&
-              record.quoteId === reservation.quoteId,
-          )
-        )
-          throw new GiftCheckoutServiceError("REQUEST_CONFLICT");
-        const closedReason =
-          Date.parse(reservation.quoteSnapshot.expiresAt) <=
-          Date.parse(reservation.createdAt)
-            ? "EXPIRED"
-            : "CANCELED";
-        const record: GiftCheckoutRecord = {
-          ...reservation,
-          state: "CLOSED_UNPAID",
-          observedAt: reservation.createdAt,
-          closedReason,
-          checkout: null,
-          evidence: {
-            source: "backend",
-            kind: "PRE_DISPATCH_REJECTION",
-            siteId: reservation.siteId,
-            quoteId: reservation.quoteId,
-            requestId: reservation.requestId,
-            orderId: reservation.orderId,
-            attemptId: reservation.attemptId,
-            recoveryTokenHash: reservation.recoveryTokenHash,
-            observedAt: reservation.createdAt,
-            noProviderCall: true,
-            closedReason,
-          },
-        };
-        records.set(key(record.siteId, record.requestId), record);
-        return record;
-      }),
-      reserve: vi.fn(async (reservation, assertEligible) => {
-        const existing = records.get(
-          key(reservation.siteId, reservation.requestId),
-        );
-        if (existing) return { created: false, record: existing };
-        if (
-          [...records.values()].some(
-            (record) =>
-              record.siteId === reservation.siteId &&
-              record.quoteId === reservation.quoteId,
-          )
-        ) {
-          throw new GiftCheckoutServiceError("REQUEST_CONFLICT");
-        }
-        assertEligible({
-          quoteSnapshot: snapshot,
-          receivingContext: context,
-          gift,
-        });
-        const record: GiftCheckoutRecord = {
-          ...reservation,
-          state: "CREATING",
-          observedAt: null,
-          closedReason: null,
-          checkout: null,
-          evidence: null,
-        };
-        records.set(key(record.siteId, record.requestId), record);
-        return { created: true, record };
-      }),
-      saveHostedCheckout: vi.fn(async (outcome) => {
-        const record = records.get(key(outcome.siteId, outcome.requestId));
-        if (!record) throw new Error("Missing reservation");
-        const saved: GiftCheckoutRecord = {
-          ...record,
-          state: "AWAITING_PAYMENT",
-          observedAt: outcome.observedAt,
-          checkout: outcome.checkout,
-          evidence: {
-            kind: "HOSTED_CHECKOUT",
-            source: "provider",
-            siteId: record.siteId,
-            orderId: record.orderId,
-            attemptId: record.attemptId,
-            provider: receiving.provider,
-            accountReference: receiving.accountReference,
-            environment: receiving.environment,
-            providerCheckoutReference: outcome.providerReference,
-            observedAt: outcome.observedAt,
-          },
-        };
-        records.set(key(saved.siteId, saved.requestId), saved);
-        return saved;
-      }),
-      markProviderRejected: vi.fn(async (identity, observedAt) => {
-        const record = records.get(key(identity.siteId, identity.requestId));
-        if (record?.state !== "CREATING") throw new Error("Not creating");
-        records.set(key(identity.siteId, identity.requestId), {
-          ...record,
-          state: "CLOSED_UNPAID",
-          observedAt,
-          closedReason: "FAILED",
-          evidence: {
-            source: "backend",
-            kind: "PROVIDER_REJECTION",
-            siteId: record.siteId,
-            quoteId: record.quoteId,
-            requestId: record.requestId,
-            orderId: record.orderId,
-            attemptId: record.attemptId,
-            recoveryTokenHash: record.recoveryTokenHash,
-            observedAt,
-            noProviderCharge: true,
-            closedReason: "FAILED",
-          },
-        });
-      }),
-      markOutcomeUnknown: vi.fn(async (identity, observedAt) => {
-        const record = records.get(key(identity.siteId, identity.requestId));
-        if (record?.state === "CREATING") {
-          records.set(key(identity.siteId, identity.requestId), {
-            ...record,
-            state: "OUTCOME_UNKNOWN",
-            observedAt,
-          });
-        }
-      }),
-    },
-    loadReceivingContext: vi.fn(async () => context),
-    findPublishedGift: vi.fn(async () => gift),
-    createHostedCheckout: vi.fn(async (command) => {
-      const record = records.get(key(command.siteId, command.requestId));
-      expect(record?.state).toBe("CREATING");
-      expect(record?.attemptId).toBe(command.attemptId);
-      return {
-        providerReference: "provider-checkout-private",
-        checkout: {
-          orderId: command.orderId,
-          attemptId: command.attemptId,
-          quoteId: command.quoteSnapshot.quote.id,
-          method: command.quoteSnapshot.quote.method,
-          mode: command.quoteSnapshot.quote.mode,
-          hostedUrl: "https://sandbox.example.test/checkout/one",
-        },
-      };
-    }),
-    now: vi.fn(() => new Date(instant)),
-    generateId: vi.fn((kind) => `${kind}-one`),
-  };
-  return { dependencies, snapshot, context, gift, records, key };
+function snapshotFor(
+  method: "PIX" | "CREDIT_CARD",
+  installments = 1,
+  change: Partial<Parameters<typeof pagarmeQuoteSnapshot>[0]> = {},
+): GiftQuoteSnapshot {
+  return pagarmeQuoteSnapshot({
+    siteId: "site-1",
+    quoteId: "quote-1",
+    giftId: "gift-1",
+    method,
+    installments,
+    createdAt: new Date(now.getTime() - 60_000),
+    expiresAt: new Date(now.getTime() + 240_000),
+    recipientId: "rp_fixtureRecipient01",
+    operatorReference: "operator-1",
+    bankReference: "ba_fixtureBankAcct01",
+    ...change,
+  });
 }
 
-describe("quote fee allocation compatibility", () => {
-  it("reads a live provider-observed recipient-deducted snapshot without changing its gift total", () => {
-    const { snapshot } = fixture();
-    snapshot.quote.mode = "live";
-    snapshot.receiving.environment = "live";
-    snapshot.pricing.environment = "live";
-    Object.assign(snapshot.quote, {
-      feeAllocation: "RECIPIENT_DEDUCTED",
-      totalCents: 10000,
-    });
-    Object.assign(snapshot.pricing.policy, {
-      feeAllocation: "RECIPIENT_DEDUCTED",
-      feeBasis: "OBSERVED_ESTIMATE",
-    });
-    expect(readGiftQuoteSnapshot(snapshot)).toEqual(snapshot);
-    const fabricated = structuredClone(snapshot);
-    fabricated.pricing.provenance = "local-test";
-    expect(() => readGiftQuoteSnapshot(fabricated)).toThrow();
-    const surcharge = structuredClone(snapshot);
-    delete surcharge.quote.feeAllocation;
-    delete surcharge.pricing.policy.feeAllocation;
-    surcharge.quote.totalCents = 10200;
-    expect(() => readGiftQuoteSnapshot(surcharge)).toThrow();
-  });
-  it("preserves historical unmarked snapshots without adding a new policy", () => {
-    const { snapshot } = fixture();
-    expect(readGiftQuoteSnapshot(snapshot)).toEqual(snapshot);
-    expect(snapshot.quote.totalCents).toBe(10200);
-  });
-
-  it("retains recipient deductions and rejects mixed or missing allocation markers", () => {
-    const { snapshot } = fixture();
-    Object.assign(snapshot.quote, {
-      totalCents: 10000,
-      feeAllocation: "RECIPIENT_DEDUCTED",
-    });
-    snapshot.pricing.policy.feeAllocation = "RECIPIENT_DEDUCTED";
-    expect(readGiftQuoteSnapshot(snapshot)).toEqual(snapshot);
-    const mixed = structuredClone(snapshot);
-    delete mixed.pricing.policy.feeAllocation;
-    expect(() => readGiftQuoteSnapshot(mixed)).toThrow();
-    const missing = structuredClone(snapshot);
-    delete missing.quote.feeAllocation;
-    expect(() => readGiftQuoteSnapshot(missing)).toThrow();
-    const inconsistent = structuredClone(snapshot);
-    inconsistent.quote.processingCents = 99;
-    expect(() => readGiftQuoteSnapshot(inconsistent)).toThrow();
-  });
-});
-
-describe("durable gift checkout orchestration", () => {
-  it("rejects invalid provider configuration before reserving a new operation", async () => {
-    const v = fixture();
-    const assertProviderConfiguration = vi.fn(() => {
-      throw new GiftCheckoutServiceError("CHECKOUT_CONFIGURATION_INVALID");
-    });
-    Object.assign(v.dependencies, { assertProviderConfiguration });
-    await expect(
-      createGiftCheckoutService(v.dependencies).createCheckout(
-        "site-one",
-        body,
+function harness(
+  snapshot: GiftQuoteSnapshot,
+  orders: {
+    createOrder: (request: PagarmeOrderRequest) => Promise<unknown>;
+  } = {
+    createOrder: vi.fn(async (request: PagarmeOrderRequest) =>
+      order(
+        snapshot.quote.method === "PIX"
+          ? "order-pix-pending"
+          : "order-card-paid",
+        request.body.code,
       ),
-    ).rejects.toMatchObject({
-      code: "CHECKOUT_CONFIGURATION_INVALID",
-      status: 503,
-    });
-    expect(assertProviderConfiguration).toHaveBeenCalledOnce();
-    expect(v.dependencies.repository.findQuote).not.toHaveBeenCalled();
-    expect(v.dependencies.repository.reserve).not.toHaveBeenCalled();
-    expect(v.dependencies.repository.markOutcomeUnknown).not.toHaveBeenCalled();
-    expect(v.dependencies.createHostedCheckout).not.toHaveBeenCalled();
-  });
-
-  it("recovers an issued checkout when current provider configuration becomes invalid", async () => {
-    const v = fixture();
-    const assertProviderConfiguration = vi.fn(() => {});
-    Object.assign(v.dependencies, { assertProviderConfiguration });
-    const service = createGiftCheckoutService(v.dependencies);
-    const issued = await service.createCheckout("site-one", body);
-    assertProviderConfiguration.mockImplementation(() => {
-      throw new GiftCheckoutServiceError("CHECKOUT_CONFIGURATION_INVALID");
-    });
-    await expect(service.createCheckout("site-one", body)).resolves.toEqual(
-      issued,
-    );
-    expect(assertProviderConfiguration).toHaveBeenCalledOnce();
-    expect(v.dependencies.repository.reserve).toHaveBeenCalledOnce();
-    expect(v.dependencies.createHostedCheckout).toHaveBeenCalledOnce();
-  });
-
-  it("preserves uncertain delivery instead of using invalid configuration to authorize a retry", async () => {
-    const v = fixture();
-    const assertProviderConfiguration = vi.fn(() => {});
-    Object.assign(v.dependencies, { assertProviderConfiguration });
-    vi.mocked(v.dependencies.createHostedCheckout).mockRejectedValue(
-      new Error("Lost provider ACK"),
-    );
-    const service = createGiftCheckoutService(v.dependencies);
-    await expect(
-      service.createCheckout("site-one", body),
-    ).rejects.toMatchObject({ code: "EXTERNAL_OUTCOME_UNKNOWN" });
-    assertProviderConfiguration.mockImplementation(() => {
-      throw new GiftCheckoutServiceError("CHECKOUT_CONFIGURATION_INVALID");
-    });
-    await expect(
-      service.createCheckout("site-one", body),
-    ).rejects.toMatchObject({ code: "EXTERNAL_OUTCOME_UNKNOWN" });
-    expect(assertProviderConfiguration).toHaveBeenCalledOnce();
-    expect(v.dependencies.repository.reserve).toHaveBeenCalledOnce();
-    expect(v.dependencies.createHostedCheckout).toHaveBeenCalledOnce();
-  });
-
-  it("closes a definitive provider rejection so the guest can start a new attempt", async () => {
-    const v = fixture();
-    const observe = vi.fn();
-    Object.assign(v.dependencies, { observe });
-    vi.mocked(v.dependencies.createHostedCheckout).mockRejectedValue(
-      new GiftCheckoutProviderRejectedError(["invalid_billingType"]),
-    );
-    const service = createGiftCheckoutService(v.dependencies);
-    await expect(
-      service.createCheckout("site-one", body),
-    ).rejects.toMatchObject({ code: "PIX_UNAVAILABLE", status: 422 });
-    expect(
-      v.dependencies.repository.markProviderRejected,
-    ).toHaveBeenCalledOnce();
-    expect(v.dependencies.repository.markOutcomeUnknown).not.toHaveBeenCalled();
-    expect(observe).toHaveBeenCalledWith({
-      level: "warn",
-      event: "gift_checkout.provider_rejected",
-      siteId: "site-one",
-      attemptId: "attempt-one",
-      paymentMethod: "PIX",
-      errorCode: "invalid_billingType",
-    });
-    expect(JSON.stringify(observe.mock.calls)).not.toMatch(/payer|cpf|email/i);
-    const status = await service.getStatus("site-one", body);
-    expect(status).toMatchObject({
-      state: "CLOSED_UNPAID",
-      closedReason: "FAILED",
-      mayStartNewAttempt: true,
-      checkout: null,
-    });
-    expect(checkoutStatusSchema.safeParse(status).success).toBe(true);
-  });
-
-  it("keeps the outcome unknown when a provider rejection cannot be closed durably", async () => {
-    const v = fixture();
-    vi.mocked(v.dependencies.createHostedCheckout).mockRejectedValue(
-      new GiftCheckoutProviderRejectedError(["invalid_billingType"]),
-    );
-    vi.mocked(v.dependencies.repository.markProviderRejected).mockRejectedValue(
-      new Error("database unavailable"),
-    );
-    const service = createGiftCheckoutService(v.dependencies);
-    await expect(
-      service.createCheckout("site-one", body),
-    ).rejects.toMatchObject({ code: "EXTERNAL_OUTCOME_UNKNOWN" });
-    expect(v.dependencies.repository.markOutcomeUnknown).toHaveBeenCalledOnce();
-  });
-
-  it("passes verified installment child payments through to the durable outcome", async () => {
-    const v = fixture();
-    const create = vi.mocked(v.dependencies.createHostedCheckout);
-    const original = create.getMockImplementation();
-    if (!original) throw new Error("Missing provider fake");
-    create.mockImplementation(async (command) => ({
-      ...(await original(command)),
-      installmentPaymentReferences: ["pay_1", "pay_2"],
-    }));
-    await createGiftCheckoutService(v.dependencies).createCheckout(
-      "site-one",
-      body,
-    );
-    expect(v.dependencies.repository.saveHostedCheckout).toHaveBeenCalledWith(
-      expect.objectContaining({
-        installmentPaymentReferences: ["pay_1", "pay_2"],
-      }),
-    );
-  });
-
-  it("requires another confirmation when authoritative pricing no longer matches", async () => {
-    const v = fixture();
-    Object.assign(v.dependencies, {
-      revalidateQuote: vi.fn(async () => false),
-    });
-    await expect(
-      createGiftCheckoutService(v.dependencies).createCheckout(
-        "site-one",
-        body,
-      ),
-    ).rejects.toMatchObject({ code: "QUOTE_EXPIRED" });
-    expect(v.dependencies.repository.reserve).not.toHaveBeenCalled();
-    expect(v.dependencies.createHostedCheckout).not.toHaveBeenCalled();
-  });
-  it.each(["amount", "settings"])(
-    "requires a fresh confirmation after stored %s changes",
-    async (change) => {
-      const v = fixture();
-      if (change === "amount") v.gift.gift.nominalCents++;
-      else
-        v.gift.pricingSettings = {
-          feeAllocation: "RECIPIENT_DEDUCTED",
-          revision: 1,
-        };
-      await expect(
-        createGiftCheckoutService(v.dependencies).createCheckout(
-          "site-one",
-          body,
-        ),
-      ).rejects.toMatchObject({ code: "QUOTE_EXPIRED" });
-      expect(v.dependencies.createHostedCheckout).not.toHaveBeenCalled();
-    },
-  );
-  it("reserves immutable identities and only a capability hash before hosting", async () => {
-    const values = fixture();
-    const checkout = await createGiftCheckoutService(
-      values.dependencies,
-    ).createCheckout("site-one", body);
-    expect(checkoutResultSchema.safeParse(checkout).success).toBe(true);
-    expect(checkout).toEqual({
-      orderId: "order-one",
-      attemptId: "attempt-one",
-      quoteId: "quote-one",
-      method: "PIX",
-      mode: "sandbox",
-      hostedUrl: "https://sandbox.example.test/checkout/one",
-    });
-    expect(values.dependencies.repository.reserve).toHaveBeenCalledTimes(1);
-    expect(values.dependencies.createHostedCheckout).toHaveBeenCalledTimes(1);
-    const record = values.records.get(values.key("site-one", body.requestId));
-    expect(record?.recoveryTokenHash).toBe(
-      createHash("sha256").update(token).digest("hex"),
-    );
-    expect(record?.state).toBe("AWAITING_PAYMENT");
-    expect(record?.quoteSnapshot).toEqual(values.snapshot);
-    for (const value of [
-      checkout,
-      record,
-      vi.mocked(values.dependencies.createHostedCheckout).mock.calls,
-    ]) {
-      expect(JSON.stringify(value)).not.toContain(token);
-    }
-  });
-
-  it("allows only one creator when concurrent reservations race", async () => {
-    const values = fixture();
-    const service = createGiftCheckoutService(values.dependencies);
-    let release = () => {};
-    let announce = () => {};
-    const gate = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    const started = new Promise<void>((resolve) => {
-      announce = resolve;
-    });
-    const original = vi
-      .mocked(values.dependencies.createHostedCheckout)
-      .getMockImplementation();
-    vi.mocked(values.dependencies.createHostedCheckout).mockImplementation(
-      async (command) => {
-        announce();
-        await gate;
-        if (!original) throw new Error("Missing fixture provider");
-        return original(command);
-      },
-    );
-    const completed = Promise.allSettled([
-      service.createCheckout("site-one", body),
-      service.createCheckout("site-one", body),
-    ]);
-    await started;
-    const status = await service.getStatus("site-one", body);
-    expect(status).toMatchObject({
-      state: "CREATING",
-      mayStartNewAttempt: false,
-      checkout: null,
-    });
-    release();
-    const results = await completed;
-    expect(
-      results.filter((result) => result.status === "fulfilled"),
-    ).toHaveLength(1);
-    expect(values.records.size).toBe(1);
-    expect(values.dependencies.createHostedCheckout).toHaveBeenCalledTimes(1);
-  });
-
-  it("recovers an awaiting operation before expiry, publication or readiness checks", async () => {
-    const values = fixture();
-    const service = createGiftCheckoutService(values.dependencies);
-    const first = await service.createCheckout("site-one", body);
-    values.gift.publicationState = "ARCHIVED";
-    values.gift.siteActive = false;
-    values.context.mode = "disabled";
-    vi.mocked(values.dependencies.now).mockReturnValue(
-      new Date("2026-10-13T16:00:00.000Z"),
-    );
-    vi.mocked(values.dependencies.repository.findQuote).mockClear();
-    vi.mocked(values.dependencies.loadReceivingContext).mockClear();
-    vi.mocked(required(values.dependencies.findPublishedGift)).mockClear();
-    expect(await service.createCheckout("site-one", body)).toEqual(first);
-    expect(await service.getStatus("site-one", body)).toMatchObject({
-      state: "AWAITING_PAYMENT",
-      checkout: first,
-      mayStartNewAttempt: false,
-    });
-    expect(values.dependencies.repository.findQuote).not.toHaveBeenCalled();
-    expect(values.dependencies.loadReceivingContext).not.toHaveBeenCalled();
-    expect(values.dependencies.findPublishedGift).not.toHaveBeenCalled();
-    expect(values.dependencies.createHostedCheckout).toHaveBeenCalledTimes(1);
-  });
-
-  it.each([
-    { quoteId: "quote-other" },
-    { requestId: "request-other" },
-    { recoveryToken: Buffer.alloc(32, 9).toString("base64url") },
-  ])(
-    "denies mismatching recovery identity %o without loading a new quote",
-    async (override) => {
-      const values = fixture();
-      const service = createGiftCheckoutService(values.dependencies);
-      await service.createCheckout("site-one", body);
-      const record = required(
-        values.records.get(values.key("site-one", body.requestId)),
-      );
-      vi.mocked(values.dependencies.repository.findByRequest).mockResolvedValue(
-        record,
-      );
-      vi.mocked(values.dependencies.repository.findQuote).mockClear();
-      for (const operation of [service.createCheckout, service.getStatus]) {
-        await expect(
-          operation("site-one", { ...body, ...override }),
-        ).rejects.toMatchObject({ code: "REQUEST_CONFLICT" });
-      }
-      await expect(service.getStatus("site-two", body)).rejects.toMatchObject({
-        code: "REQUEST_CONFLICT",
-      });
-      expect(values.dependencies.repository.findQuote).not.toHaveBeenCalled();
-      expect(values.dependencies.createHostedCheckout).toHaveBeenCalledTimes(1);
-    },
-  );
-
-  it.each([
-    { recoveryToken: undefined },
-    { recoveryToken: `${token}=` },
-    { recoveryToken: `${"A".repeat(42)}B` },
-    { walletId: "browser-wallet" },
-    { price: 1 },
-    { mode: "live" },
-    { method: "PIX" },
-  ])(
-    "rejects noncanonical or additional caller fields %o",
-    async (override) => {
-      const values = fixture();
-      const service = createGiftCheckoutService(values.dependencies);
-      for (const operation of [service.createCheckout, service.getStatus]) {
-        await expect(
-          operation("site-one", { ...body, ...override }),
-        ).rejects.toMatchObject({ code: "QUOTE_INVALID" });
-      }
-      expect(
-        values.dependencies.repository.findByRequest,
-      ).not.toHaveBeenCalled();
-      expect(values.dependencies.createHostedCheckout).not.toHaveBeenCalled();
-    },
-  );
-
-  it("does not invent a status for an unknown request", async () => {
-    const values = fixture();
-    vi.mocked(values.dependencies.repository.findQuote).mockResolvedValue(null);
-    await expect(
-      createGiftCheckoutService(values.dependencies).getStatus(
-        "site-one",
-        body,
-      ),
-    ).rejects.toMatchObject({ code: "REQUEST_CONFLICT" });
-    expect(
-      values.dependencies.repository.sealUncreatedRequest,
-    ).not.toHaveBeenCalled();
-    expect(values.dependencies.createHostedCheckout).not.toHaveBeenCalled();
-  });
-
-  it("durably closes a lost pre-reservation rejection and blocks a delayed original POST", async () => {
-    const values = fixture();
-    vi.mocked(values.dependencies.now).mockReturnValue(
-      new Date(values.snapshot.expiresAt),
-    );
-    const service = createGiftCheckoutService(values.dependencies);
-    await expect(
-      service.createCheckout("site-one", body),
-    ).rejects.toMatchObject({ code: "QUOTE_EXPIRED" });
-    const status = await service.getStatus("site-one", body);
-    expect(status).toMatchObject({
-      state: "CLOSED_UNPAID",
-      closedReason: "EXPIRED",
-      mayStartNewAttempt: true,
-      checkout: null,
-    });
-    expect(
-      values.dependencies.repository.sealUncreatedRequest,
-    ).toHaveBeenCalledTimes(1);
-    await expect(
-      service.createCheckout("site-one", body),
-    ).rejects.toMatchObject({ code: "REQUEST_CONFLICT" });
-    expect(values.dependencies.repository.reserve).not.toHaveBeenCalled();
-    expect(values.dependencies.createHostedCheckout).not.toHaveBeenCalled();
-  });
-
-  it("returns an existing commitment if reserve wins the status-sealing race", async () => {
-    const values = fixture();
-    const service = createGiftCheckoutService(values.dependencies);
-    await service.createCheckout("site-one", body);
-    vi.mocked(
-      values.dependencies.repository.findByRequest,
-    ).mockResolvedValueOnce(null);
-    const status = await service.getStatus("site-one", body);
-    expect(status.state).toBe("AWAITING_PAYMENT");
-    expect(status.mayStartNewAttempt).toBe(false);
-    expect(values.dependencies.createHostedCheckout).toHaveBeenCalledTimes(1);
-  });
-
-  it("seals an uncreated valid quote before any provider call", async () => {
-    const values = fixture();
-    const service = createGiftCheckoutService(values.dependencies);
-    expect(await service.getStatus("site-one", body)).toMatchObject({
-      state: "CLOSED_UNPAID",
-      closedReason: "CANCELED",
-      mayStartNewAttempt: true,
-    });
-    await expect(
-      service.createCheckout("site-one", body),
-    ).rejects.toMatchObject({ code: "REQUEST_CONFLICT" });
-    await expect(
-      service.getStatus("site-one", {
-        ...body,
-        recoveryToken: Buffer.alloc(32, 8).toString("base64url"),
-      }),
-    ).rejects.toMatchObject({ code: "REQUEST_CONFLICT" });
-    expect(values.dependencies.createHostedCheckout).not.toHaveBeenCalled();
-  });
-
-  it.each([
-    "requestId",
-    "quoteId",
-    "orderId",
-    "attemptId",
-    "recoveryTokenHash",
-    "observedAt",
-    "noProviderCall",
-    "closedReason",
-  ])("does not unlock from malformed pre-dispatch proof: %s", async (field) => {
-    const values = fixture();
-    const original = vi
-      .mocked(values.dependencies.repository.sealUncreatedRequest)
-      .getMockImplementation();
-    vi.mocked(
-      values.dependencies.repository.sealUncreatedRequest,
-    ).mockImplementation(async (reservation) => {
-      const record = await required(original)(reservation);
-      return {
-        ...record,
-        evidence: { ...record.evidence, [field]: null },
-      } as GiftCheckoutRecord;
-    });
-    await expect(
-      createGiftCheckoutService(values.dependencies).getStatus(
-        "site-one",
-        body,
-      ),
-    ).rejects.toMatchObject({ code: "EXTERNAL_OUTCOME_UNKNOWN" });
-  });
-
-  it("rejects a new checkout from an expired quote", async () => {
-    const values = fixture();
-    values.snapshot.quote.expiresAt = instant;
-    Object.assign(values.snapshot, {
-      expiresAt: instant,
-      createdAt: "2026-10-12T15:59:40.000Z",
-    });
-    await expect(
-      createGiftCheckoutService(values.dependencies).createCheckout(
-        "site-one",
-        body,
-      ),
-    ).rejects.toMatchObject({ code: "QUOTE_EXPIRED" });
-    expect(values.dependencies.repository.reserve).not.toHaveBeenCalled();
-    expect(values.dependencies.createHostedCheckout).not.toHaveBeenCalled();
-  });
-
-  it.each([
-    { accountReference: "account-new" },
-    { recipientReference: "recipient-new" },
-    { provider: "another-provider" },
-    { operatorReference: "operator-new" },
-    { bankReference: "bank-new" },
-    { destinationVersion: 2 },
-  ])(
-    "requires current READY evidence to match the quote binding %o",
-    async (override) => {
-      const values = fixture();
-      Object.assign(required(values.context.providerBinding), override);
-      Object.assign(required(values.context.evidence), override);
-      await expect(
-        createGiftCheckoutService(values.dependencies).createCheckout(
-          "site-one",
-          body,
-        ),
-      ).rejects.toMatchObject({ code: "RECEIVING_NOT_READY" });
-      expect(values.dependencies.repository.reserve).not.toHaveBeenCalled();
-      expect(values.dependencies.createHostedCheckout).not.toHaveBeenCalled();
-    },
-  );
-
-  it("denies an archived gift in the locked eligibility recheck", async () => {
-    const values = fixture();
-    const original = required(
-      vi.mocked(values.dependencies.repository.reserve).getMockImplementation(),
-    );
-    vi.mocked(values.dependencies.repository.reserve).mockImplementation(
-      async (reservation, validate) => {
-        values.gift.publicationState = "ARCHIVED";
-        return original(reservation, validate);
-      },
-    );
-    await expect(
-      createGiftCheckoutService(values.dependencies).createCheckout(
-        "site-one",
-        body,
-      ),
-    ).rejects.toMatchObject({ code: "QUOTE_INVALID" });
-    expect(values.records.size).toBe(0);
-    expect(values.dependencies.createHostedCheckout).not.toHaveBeenCalled();
-  });
-
-  it("rejects a different immutable quote returned under the reservation lock", async () => {
-    const values = fixture();
-    const original = required(
-      vi.mocked(values.dependencies.repository.reserve).getMockImplementation(),
-    );
-    vi.mocked(values.dependencies.repository.reserve).mockImplementation(
-      async (reservation, validate) =>
-        original(reservation, (locked) => {
-          const altered = structuredClone(locked.quoteSnapshot);
-          altered.quote.title = "Another frozen title";
-          altered.gift.title = "Another frozen title";
-          validate({ ...locked, quoteSnapshot: altered });
-        }),
-    );
-    await expect(
-      createGiftCheckoutService(values.dependencies).createCheckout(
-        "site-one",
-        body,
-      ),
-    ).rejects.toMatchObject({ code: "QUOTE_INVALID" });
-    expect(values.dependencies.createHostedCheckout).not.toHaveBeenCalled();
-  });
-
-  it("requires the reservation's locked callback before a winner can call the provider", async () => {
-    const values = fixture();
-    vi.mocked(values.dependencies.repository.reserve).mockImplementation(
-      async (reservation) => ({
-        created: true,
-        record: {
-          ...reservation,
-          state: "CREATING",
-          observedAt: null,
-          checkout: null,
-          evidence: null,
-          closedReason: null,
-        },
-      }),
-    );
-    await expect(
-      createGiftCheckoutService(values.dependencies).createCheckout(
-        "site-one",
-        body,
-      ),
-    ).rejects.toMatchObject({ code: "EXTERNAL_OUTCOME_UNKNOWN" });
-    expect(values.dependencies.createHostedCheckout).not.toHaveBeenCalled();
-  });
-
-  it("rejects different winner identities before hosting", async () => {
-    const values = fixture();
-    const original = required(
-      vi.mocked(values.dependencies.repository.reserve).getMockImplementation(),
-    );
-    vi.mocked(values.dependencies.repository.reserve).mockImplementation(
-      async (reservation, validate) => {
-        const result = await original(reservation, validate);
-        return {
-          ...result,
-          record: { ...result.record, orderId: "other-order" },
-        };
-      },
-    );
-    await expect(
-      createGiftCheckoutService(values.dependencies).createCheckout(
-        "site-one",
-        body,
-      ),
-    ).rejects.toMatchObject({ code: "EXTERNAL_OUTCOME_UNKNOWN" });
-    expect(values.dependencies.createHostedCheckout).not.toHaveBeenCalled();
-  });
-
-  it.each(["provider error", "saving error", "saving and marking error"])(
-    "retains commitments and refuses automatic retry after %s",
-    async (failure) => {
-      const values = fixture();
-      if (failure === "provider error")
-        vi.mocked(values.dependencies.createHostedCheckout).mockRejectedValue(
-          new Error("Lost response"),
-        );
-      else
-        vi.mocked(
-          values.dependencies.repository.saveHostedCheckout,
-        ).mockRejectedValue(new Error("Lost durable outcome"));
-      if (failure === "saving and marking error")
-        vi.mocked(
-          values.dependencies.repository.markOutcomeUnknown,
-        ).mockRejectedValue(new Error("Storage unavailable"));
-      const service = createGiftCheckoutService(values.dependencies);
-      for (let retry = 0; retry < 2; retry += 1) {
-        await expect(
-          service.createCheckout("site-one", body),
-        ).rejects.toMatchObject({ code: "EXTERNAL_OUTCOME_UNKNOWN" });
-      }
-      const status = await service.getStatus("site-one", body);
-      expect(["CREATING", "OUTCOME_UNKNOWN"]).toContain(status.state);
-      expect(status.mayStartNewAttempt).toBe(false);
-      expect(values.records.size).toBe(1);
-      expect(values.dependencies.createHostedCheckout).toHaveBeenCalledTimes(1);
-    },
-  );
-
-  it.each([
-    { method: "CREDIT_CARD" },
-    { quoteId: "another-quote" },
-    { orderId: "another-order" },
-    { attemptId: "another-attempt" },
-    { mode: "live" },
-    { hostedUrl: "http://unsafe.example.test" },
-    { apiKey: "private-key" },
-    { hostedUrl: `https://sandbox.example.test/${token}` },
-  ])(
-    "does not persist mismatching or unsafe hosted projection %o",
-    async (override) => {
-      const values = fixture();
-      const original = required(
-        vi
-          .mocked(values.dependencies.createHostedCheckout)
-          .getMockImplementation(),
-      );
-      vi.mocked(values.dependencies.createHostedCheckout).mockImplementation(
-        async (command) => {
-          const hosted = await original(command);
-          return {
-            ...hosted,
-            checkout: { ...hosted.checkout, ...override },
-          } as GiftHostedCheckout;
-        },
-      );
-      await expect(
-        createGiftCheckoutService(values.dependencies).createCheckout(
-          "site-one",
-          body,
-        ),
-      ).rejects.toMatchObject({ code: "EXTERNAL_OUTCOME_UNKNOWN" });
-      expect(
-        values.dependencies.repository.saveHostedCheckout,
-      ).not.toHaveBeenCalled();
-      expect(
-        values.records.get(values.key("site-one", body.requestId))?.state,
-      ).toBe("OUTCOME_UNKNOWN");
-    },
-  );
-
-  it("denies a blank provider reference before persisting the hosted outcome", async () => {
-    const values = fixture();
-    const original = required(
-      vi
-        .mocked(values.dependencies.createHostedCheckout)
-        .getMockImplementation(),
-    );
-    vi.mocked(values.dependencies.createHostedCheckout).mockImplementation(
-      async (command) => ({
-        ...(await original(command)),
-        providerReference: "",
-      }),
-    );
-    await expect(
-      createGiftCheckoutService(values.dependencies).createCheckout(
-        "site-one",
-        body,
-      ),
-    ).rejects.toMatchObject({ code: "EXTERNAL_OUTCOME_UNKNOWN" });
-    expect(
-      values.dependencies.repository.saveHostedCheckout,
-    ).not.toHaveBeenCalled();
-  });
-
-  it("keeps an uncertain operation locked if the clock fails after a provider call", async () => {
-    const values = fixture();
-    const original = required(
-      vi
-        .mocked(values.dependencies.createHostedCheckout)
-        .getMockImplementation(),
-    );
-    vi.mocked(values.dependencies.createHostedCheckout).mockImplementation(
-      async (command) => {
-        const result = await original(command);
-        vi.mocked(values.dependencies.now).mockReturnValue(
-          new Date(Number.NaN),
-        );
-        return result;
-      },
-    );
-    await expect(
-      createGiftCheckoutService(values.dependencies).createCheckout(
-        "site-one",
-        body,
-      ),
-    ).rejects.toMatchObject({ code: "EXTERNAL_OUTCOME_UNKNOWN" });
-    expect(values.dependencies.createHostedCheckout).toHaveBeenCalledTimes(1);
-    expect(values.records.size).toBe(1);
-  });
-
-  it("returns only detached public status and checkout fields", async () => {
-    const values = fixture();
-    const service = createGiftCheckoutService(values.dependencies);
-    const result = await service.createCheckout("site-one", body);
-    result.hostedUrl = "https://changed.example.test";
-    const status = await service.getStatus("site-one", body);
-    expect(checkoutStatusSchema.safeParse(status).success).toBe(true);
-    expect(status.checkout?.hostedUrl).toBe(
-      "https://sandbox.example.test/checkout/one",
-    );
-    const text = JSON.stringify(status);
-    for (const privateValue of [
-      token,
-      "recoveryTokenHash",
-      "account-private",
-      "recipient-private",
-      "operator-private",
-      "bank-private",
-      "provider-checkout-private",
-    ]) {
-      expect(text).not.toContain(privateValue);
-    }
-  });
-
-  it.each([
-    token,
-    Array.from(token)
-      .map((character) => `%${character.charCodeAt(0).toString(16)}`)
-      .join(""),
-  ])(
-    "denies a persisted capability-bearing hosted URL during every recovery",
-    async (embeddedToken) => {
-      const values = fixture();
-      const service = createGiftCheckoutService(values.dependencies);
-      await service.createCheckout("site-one", body);
-      const record = required(
-        values.records.get(values.key("site-one", body.requestId)),
-      );
-      required(record.checkout).hostedUrl =
-        `https://sandbox.example.test/checkout?private=${embeddedToken}`;
-      for (const operation of [service.getStatus, service.createCheckout]) {
-        await expect(operation("site-one", body)).rejects.toMatchObject({
-          code: "EXTERNAL_OUTCOME_UNKNOWN",
-        });
-      }
-      expect(values.dependencies.createHostedCheckout).toHaveBeenCalledTimes(1);
-    },
-  );
-
-  it.each(["CONFIRMED", "RECEIVED", "CLOSED_UNPAID", "REFUNDED"] as const)(
-    "does not trust %s without durable terminal evidence",
-    async (state) => {
-      const values = fixture();
-      const service = createGiftCheckoutService(values.dependencies);
-      await service.createCheckout("site-one", body);
-      const record = required(
-        values.records.get(values.key("site-one", body.requestId)),
-      );
-      values.records.set(values.key("site-one", body.requestId), {
-        ...record,
-        state,
-        checkout: null,
-        evidence: null,
-        closedReason: state === "CLOSED_UNPAID" ? "EXPIRED" : null,
-      });
-      await expect(service.getStatus("site-one", body)).rejects.toMatchObject({
-        code: "EXTERNAL_OUTCOME_UNKNOWN",
-      });
-      await expect(
-        service.createCheckout("site-one", body),
-      ).rejects.toMatchObject({ code: "EXTERNAL_OUTCOME_UNKNOWN" });
-      expect(values.dependencies.createHostedCheckout).toHaveBeenCalledTimes(1);
-    },
-  );
-
-  it.each([
-    "PAYMENT_CONFIRMATION",
-    "SETTLEMENT",
-    "CLOSED_UNPAID",
-    "REFUND",
-  ] as const)(
-    "projects recorded %s evidence and never rehosts the same request",
-    async (kind) => {
-      const values = fixture();
-      const service = createGiftCheckoutService(values.dependencies);
-      await service.createCheckout("site-one", body);
-      const record = required(
-        values.records.get(values.key("site-one", body.requestId)),
-      );
-      const evidence = {
-        ...required(record.evidence),
-        kind,
-        providerPaymentReference: "payment-private",
-        providerEventReference: "event-private",
-        eventId: "event-one",
-        providerRefundReference: "refund-private",
-        ledgerEntryId: "ledger-one",
-        noOutstandingPayment: true,
-        closedReason: "EXPIRED",
-      } as GiftCheckoutEvidence;
-      const state =
-        kind === "PAYMENT_CONFIRMATION"
-          ? "CONFIRMED"
-          : kind === "SETTLEMENT"
-            ? "RECEIVED"
-            : kind === "REFUND"
-              ? "REFUNDED"
-              : "CLOSED_UNPAID";
-      values.records.set(values.key("site-one", body.requestId), {
-        ...record,
-        state,
-        evidence,
-        checkout: null,
-        closedReason: state === "CLOSED_UNPAID" ? "EXPIRED" : null,
-      });
-      expect(await service.getStatus("site-one", body)).toMatchObject({
-        state,
-        mayStartNewAttempt: state === "CLOSED_UNPAID",
-        checkout: null,
-      });
-      await expect(
-        service.createCheckout("site-one", body),
-      ).rejects.toMatchObject({ code: "REQUEST_CONFLICT" });
-      expect(values.dependencies.createHostedCheckout).toHaveBeenCalledTimes(1);
-    },
-  );
-
-  it("rejects provider checkout completion as settlement proof", async () => {
-    const values = fixture();
-    const service = createGiftCheckoutService(values.dependencies);
-    await service.createCheckout("site-one", body);
-    const record = required(
-      values.records.get(values.key("site-one", body.requestId)),
-    );
-    values.records.set(values.key("site-one", body.requestId), {
-      ...record,
-      state: "RECEIVED",
-      checkout: null,
-    });
-    await expect(service.getStatus("site-one", body)).rejects.toMatchObject({
-      code: "EXTERNAL_OUTCOME_UNKNOWN",
-    });
-  });
-
-  it.each([
-    { kind: "HOSTED_CHECKOUT" },
-    { providerPaymentReference: "" },
-    { providerEventReference: "" },
-    { eventId: "" },
-    { accountReference: "foreign-account" },
-    { attemptId: "foreign-attempt" },
-    { observedAt: "2026-10-12T12:00:00.000Z" },
-  ])(
-    "rejects incomplete or unbound card confirmation proof %o",
-    async (override) => {
-      const values = fixture();
-      const service = createGiftCheckoutService(values.dependencies);
-      await service.createCheckout("site-one", body);
-      const record = required(
-        values.records.get(values.key("site-one", body.requestId)),
-      );
-      values.records.set(values.key("site-one", body.requestId), {
-        ...record,
-        state: "CONFIRMED",
-        checkout: null,
-        evidence: {
-          ...required(record.evidence),
-          kind: "PAYMENT_CONFIRMATION",
-          providerPaymentReference: "payment-private",
-          providerEventReference: "event-private",
-          eventId: "event-one",
-          ...override,
-        } as GiftCheckoutEvidence,
-      });
-      await expect(service.getStatus("site-one", body)).rejects.toMatchObject({
-        code: "EXTERNAL_OUTCOME_UNKNOWN",
-      });
-      expect(values.dependencies.createHostedCheckout).toHaveBeenCalledTimes(1);
-    },
-  );
-
-  it("sanitizes repository failures without exposing raw error causes", async () => {
-    const values = fixture();
-    vi.mocked(values.dependencies.repository.findByRequest).mockRejectedValue(
-      new Error(`Raw storage failure ${token} account-private`),
-    );
-    try {
-      await createGiftCheckoutService(values.dependencies).createCheckout(
-        "site-one",
-        body,
-      );
-      throw new Error("Expected rejection");
-    } catch (error) {
-      expect(error).toBeInstanceOf(GiftCheckoutServiceError);
-      expect((error as Error).cause).toBeUndefined();
-      expect((error as Error).message).not.toContain(token);
-      expect((error as Error).message).not.toContain("account-private");
-    }
-    expect(values.dependencies.createHostedCheckout).not.toHaveBeenCalled();
-  });
-
-  it("keeps the repository's quote claim when a different request targets the same quote", async () => {
-    const values = fixture();
-    const service = createGiftCheckoutService(values.dependencies);
-    await service.createCheckout("site-one", body);
-    await expect(
-      service.createCheckout("site-one", {
-        ...body,
-        requestId: "another-request",
-      }),
-    ).rejects.toMatchObject({ code: "REQUEST_CONFLICT" });
-    expect(values.records.size).toBe(1);
-    expect(values.dependencies.createHostedCheckout).toHaveBeenCalledTimes(1);
-  });
-
-  it("denies absent authoritative receiving context", async () => {
-    const values = fixture();
-    vi.mocked(values.dependencies.loadReceivingContext).mockResolvedValue(null);
-    await expect(
-      createGiftCheckoutService(values.dependencies).createCheckout(
-        "site-one",
-        body,
-      ),
-    ).rejects.toMatchObject({ code: "RECEIVING_NOT_READY" });
-    expect(values.dependencies.repository.reserve).not.toHaveBeenCalled();
-    expect(values.dependencies.createHostedCheckout).not.toHaveBeenCalled();
-  });
-
-  it("denies demo/live even with provider-backed approval", async () => {
-    const values = fixture();
-    values.context.isDemo = true;
-    values.context.mode = "live";
-    required(values.context.providerBinding).environment = "live";
-    required(values.context.evidence).environment = "live";
-    values.snapshot.quote.mode = "live";
-    values.snapshot.receiving.environment = "live";
-    values.snapshot.pricing.environment = "live";
-    await expect(
-      createGiftCheckoutService(values.dependencies).createCheckout(
-        "site-one",
-        body,
-      ),
-    ).rejects.toMatchObject({ code: "RECEIVING_NOT_READY" });
-    expect(values.dependencies.createHostedCheckout).not.toHaveBeenCalled();
-  });
-
-  it("does not reuse local-test pricing for a real sandbox wedding", async () => {
-    const values = fixture();
-    values.snapshot.pricing.provenance = "local-test";
-    await expect(
-      createGiftCheckoutService(values.dependencies).createCheckout(
-        "site-one",
-        body,
-      ),
-    ).rejects.toMatchObject({ code: "QUOTE_INVALID" });
-    expect(values.dependencies.repository.reserve).not.toHaveBeenCalled();
-    expect(values.dependencies.createHostedCheckout).not.toHaveBeenCalled();
-  });
-
-  it("uses the current clock after asynchronous authoritative loading", async () => {
-    const values = fixture();
-    const freshInstant = "2026-10-12T16:00:20.000Z";
-    vi.mocked(values.dependencies.loadReceivingContext).mockImplementation(
-      async () => {
-        vi.mocked(values.dependencies.now).mockReturnValue(
-          new Date(freshInstant),
-        );
-        required(values.context.evidence).observedAt = new Date(freshInstant);
-        required(values.context.evidence).bankObservedAt = new Date(
-          freshInstant,
-        );
-        return values.context;
-      },
-    );
-    await expect(
-      createGiftCheckoutService(values.dependencies).createCheckout(
-        "site-one",
-        body,
-      ),
-    ).resolves.toMatchObject({ attemptId: "attempt-one" });
-    expect(values.dependencies.createHostedCheckout).toHaveBeenCalledTimes(1);
-  });
-
-  it("retains a reservation if readiness expires before the provider call", async () => {
-    const values = fixture();
-    const original = required(
-      vi.mocked(values.dependencies.repository.reserve).getMockImplementation(),
-    );
-    vi.mocked(values.dependencies.repository.reserve).mockImplementation(
-      async (reservation, validate) => {
-        const result = await original(reservation, validate);
-        vi.mocked(values.dependencies.now).mockReturnValue(
-          new Date("2026-10-12T16:00:30.001Z"),
-        );
-        return result;
-      },
-    );
-    await expect(
-      createGiftCheckoutService(values.dependencies).createCheckout(
-        "site-one",
-        body,
-      ),
-    ).rejects.toMatchObject({ code: "EXTERNAL_OUTCOME_UNKNOWN" });
-    expect(values.dependencies.repository.reserve).toHaveBeenCalledTimes(1);
-    expect(values.dependencies.createHostedCheckout).not.toHaveBeenCalled();
-    expect(
-      values.records.get(values.key("site-one", body.requestId))?.state,
-    ).toBe("OUTCOME_UNKNOWN");
-  });
-
-  it.each([
-    { accountReference: "different-account" },
-    { environment: "live" },
-    { siteId: "another-site" },
-    { attemptId: "another-attempt" },
-    { ledgerEntryId: "" },
-    { providerPaymentReference: "" },
-    { source: "browser" },
-  ])("refuses inconsistent settlement proof %o", async (override) => {
-    const values = fixture();
-    const service = createGiftCheckoutService(values.dependencies);
-    await service.createCheckout("site-one", body);
-    const record = required(
-      values.records.get(values.key("site-one", body.requestId)),
-    );
-    values.records.set(values.key("site-one", body.requestId), {
-      ...record,
-      state: "RECEIVED",
-      checkout: null,
-      evidence: {
-        ...required(record.evidence),
-        kind: "SETTLEMENT",
-        providerPaymentReference: "payment-one",
-        ledgerEntryId: "ledger-one",
-        ...override,
-      } as GiftCheckoutEvidence,
-    });
-    await expect(service.getStatus("site-one", body)).rejects.toMatchObject({
-      code: "EXTERNAL_OUTCOME_UNKNOWN",
-    });
-    expect(values.dependencies.createHostedCheckout).toHaveBeenCalledTimes(1);
-  });
-
-  it("does not unlock a closed checkout without absence-of-payment proof", async () => {
-    const values = fixture();
-    const service = createGiftCheckoutService(values.dependencies);
-    await service.createCheckout("site-one", body);
-    const record = required(
-      values.records.get(values.key("site-one", body.requestId)),
-    );
-    values.records.set(values.key("site-one", body.requestId), {
-      ...record,
-      state: "CLOSED_UNPAID",
-      closedReason: "EXPIRED",
-      checkout: null,
-      evidence: {
-        ...required(record.evidence),
-        kind: "CLOSED_UNPAID",
-        closedReason: "EXPIRED",
-        noOutstandingPayment: false,
-      } as unknown as GiftCheckoutEvidence,
-    });
-    await expect(service.getStatus("site-one", body)).rejects.toMatchObject({
-      code: "EXTERNAL_OUTCOME_UNKNOWN",
-    });
-  });
-
-  it("refuses future persisted observations", async () => {
-    const values = fixture();
-    const service = createGiftCheckoutService(values.dependencies);
-    await service.createCheckout("site-one", body);
-    const record = required(
-      values.records.get(values.key("site-one", body.requestId)),
-    );
-    const future = "2026-10-12T16:00:00.001Z";
-    values.records.set(values.key("site-one", body.requestId), {
-      ...record,
-      observedAt: future,
-      evidence: { ...required(record.evidence), observedAt: future },
-    });
-    await expect(service.getStatus("site-one", body)).rejects.toMatchObject({
-      code: "EXTERNAL_OUTCOME_UNKNOWN",
-    });
-  });
-
-  it("freezes provider inputs and preserves an immutable snapshot after source edits", async () => {
-    const values = fixture();
-    const original = required(
-      vi
-        .mocked(values.dependencies.createHostedCheckout)
-        .getMockImplementation(),
-    );
-    vi.mocked(values.dependencies.createHostedCheckout).mockImplementation(
-      async (command) => {
-        expect(Object.isFrozen(command)).toBe(true);
-        expect(Object.isFrozen(command.quoteSnapshot.quote)).toBe(true);
-        expect(Object.isFrozen(command.quoteSnapshot.pricing.policy)).toBe(
-          true,
-        );
-        values.snapshot.quote.title = "Edited after reservation";
-        values.snapshot.gift.title = "Edited after reservation";
-        values.snapshot.pricing.policy.processingFixedCents = 1;
-        expect(command.quoteSnapshot.quote.title).toBe("Symbolic trip");
-        return original(command);
-      },
-    );
-    await expect(
-      createGiftCheckoutService(values.dependencies).createCheckout(
-        "site-one",
-        body,
-      ),
-    ).resolves.toMatchObject({ quoteId: "quote-one" });
-    expect(
-      values.records.get(values.key("site-one", body.requestId))?.quoteSnapshot
-        .quote.title,
-    ).toBe("Symbolic trip");
-  });
-
-  it("rejects a future-created immutable quote before reservation", async () => {
-    const values = fixture();
-    Object.assign(values.snapshot, { createdAt: "2026-10-12T16:00:00.001Z" });
-    await expect(
-      createGiftCheckoutService(values.dependencies).createCheckout(
-        "site-one",
-        body,
-      ),
-    ).rejects.toMatchObject({ code: "QUOTE_INVALID" });
-    expect(values.dependencies.repository.reserve).not.toHaveBeenCalled();
-    expect(values.dependencies.createHostedCheckout).not.toHaveBeenCalled();
-  });
-
-  it("rejects invalid generated references before writing a durable reservation", async () => {
-    const values = fixture();
-    vi.mocked(values.dependencies.generateId).mockReturnValue("invalid id");
-    await expect(
-      createGiftCheckoutService(values.dependencies).createCheckout(
-        "site-one",
-        body,
-      ),
-    ).rejects.toMatchObject({ code: "QUOTE_INVALID" });
-    expect(values.dependencies.repository.reserve).not.toHaveBeenCalled();
-    expect(values.dependencies.createHostedCheckout).not.toHaveBeenCalled();
-  });
-});
-
-describe("Sandbox buyer commitment boundary", () => {
-  function buyer() {
-    const v = fixture();
-    v.context.isDemo = true;
-    v.context.environment = "development";
-    v.snapshot.pricing.policy.feeBasis = "SANDBOX_BUYER_ESTIMATE";
-    v.snapshot.pricing.policy.feeAllocation = "BUYER_GROSS_UP";
-    v.snapshot.quote.feeAllocation = "BUYER_GROSS_UP";
-    Object.assign(v.snapshot, {
-      pricingSettings: { feeAllocation: "BUYER_GROSS_UP", revision: 4 },
-    });
-    v.gift.pricingSettings = { feeAllocation: "BUYER_GROSS_UP", revision: 4 };
-    v.dependencies.sandboxBuyerGrossUpSiteId = "site-one";
-    return v;
-  }
-  it("creates one commitment and recovers it even after the opt-in is removed", async () => {
-    const v = buyer();
-    const service = createGiftCheckoutService(v.dependencies);
-    const first = await service.createCheckout("site-one", body);
-    v.dependencies.sandboxBuyerGrossUpSiteId = undefined;
-    expect(await service.createCheckout("site-one", body)).toEqual(first);
-    expect(v.dependencies.createHostedCheckout).toHaveBeenCalledTimes(1);
-    expect(v.records.size).toBe(1);
-  });
-  it.each([
-    "opt-in",
-    "demo",
-    "environment",
-    "revision",
-    "revalidation",
-  ] as const)(
-    "refuses a new commitment with invalid %s before provider dispatch",
-    async (change) => {
-      const v = buyer();
-      if (change === "opt-in")
-        v.dependencies.sandboxBuyerGrossUpSiteId = undefined;
-      if (change === "demo") v.context.isDemo = false;
-      if (change === "environment") v.context.environment = "test";
-      if (change === "revision") required(v.gift.pricingSettings).revision++;
-      if (change === "revalidation")
-        v.dependencies.revalidateQuote = async () => false;
-      await expect(
-        createGiftCheckoutService(v.dependencies).createCheckout(
-          "site-one",
-          body,
-        ),
-      ).rejects.toMatchObject({
-        code:
-          change === "revision" || change === "revalidation"
-            ? "QUOTE_EXPIRED"
-            : "QUOTE_INVALID",
-      });
-      expect(v.dependencies.createHostedCheckout).not.toHaveBeenCalled();
-      expect(v.records.size).toBe(0);
-    },
-  );
-});
-
-it.each(["demo-wedding", "demo-wedding-cartas"])(
-  "never starts checkout for the unready %s showcase, even with a previously issued quote",
-  async (siteId) => {
-    const f = fixture();
-    for (const value of [
-      f.snapshot.quote,
-      f.snapshot.gift,
-      f.snapshot.receiving,
-      f.snapshot.pricing,
-      f.context.providerBinding,
-      f.context.evidence,
-      f.gift.gift,
-    ])
-      if (value) Object.assign(value, { siteId });
-    f.context.isDemo = true;
-    f.context.providerBinding = null;
-    f.context.evidence = null;
-    await expect(
-      createGiftCheckoutService(f.dependencies).createCheckout(siteId, body),
-    ).rejects.toMatchObject({ code: "RECEIVING_NOT_READY" });
-    expect(f.dependencies.repository.reserve).not.toHaveBeenCalled();
-    expect(f.dependencies.createHostedCheckout).not.toHaveBeenCalled();
+    ),
   },
-);
+  extra: { observe?: (event: unknown) => void } = {},
+) {
+  const records = new Map<string, GiftCheckoutRecord>();
+  let ids = 0;
+  const repository = {
+    findByRequest: vi.fn(async (_siteId: string, requestId: string) =>
+      structuredClone(records.get(requestId) ?? null),
+    ),
+    findQuote: vi.fn(async () => structuredClone(snapshot)),
+    reserve: vi.fn(
+      async (
+        reservation: GiftCheckoutReservation,
+        assert: Parameters<GiftCheckoutRepository["reserve"]>[1],
+      ) => {
+        assert({
+          quoteSnapshot: structuredClone(snapshot),
+          receivingContext: approvedReceivingContext(snapshot, now),
+          gift: {
+            gift: snapshot.gift,
+            publicationState: "PUBLISHED",
+            siteActive: true,
+          },
+        });
+        const record: GiftCheckoutRecord = {
+          ...structuredClone(reservation),
+          state: "CREATING",
+          observedAt: null,
+          closedReason: null,
+          providerOrderId: null,
+          pix: null,
+        };
+        records.set(reservation.requestId, record);
+        return { created: true, record: structuredClone(record) };
+      },
+    ),
+    saveOrder: vi.fn(async (identity, saved) => {
+      const record = records.get(identity.requestId) as GiftCheckoutRecord;
+      record.state = "AWAITING_PAYMENT";
+      record.observedAt = now.toISOString();
+      record.providerOrderId = saved.id;
+      record.pix = saved.charges[0].pix;
+      return structuredClone(record);
+    }),
+    markOutcomeUnknown: vi.fn(async (identity) => {
+      (records.get(identity.requestId) as GiftCheckoutRecord).state =
+        "OUTCOME_UNKNOWN";
+    }),
+    markProviderRejected: vi.fn(async (identity) => {
+      const record = records.get(identity.requestId) as GiftCheckoutRecord;
+      record.state = "CLOSED_UNPAID";
+      record.closedReason = "FAILED";
+      record.observedAt = now.toISOString();
+    }),
+    loadBinding: vi.fn(async ({ attemptId }) => {
+      const record = [...records.values()].find(
+        (value) => value.attemptId === attemptId,
+      ) as GiftCheckoutRecord;
+      return giftCheckoutOrderBinding({
+        ...record,
+        accountId: "account-1",
+        pixExpiresAt: record.pix?.expiresAt ?? null,
+      });
+    }),
+  } satisfies GiftCheckoutRepository;
+  const applyOrder = vi.fn(async () => {});
+  const context = vi.fn(async () => approvedReceivingContext(snapshot, now));
+  const service = createGiftCheckoutService({
+    repository,
+    loadReceivingContext: context,
+    findPublishedGift: async () => ({
+      gift: snapshot.gift,
+      publicationState: "PUBLISHED",
+      siteActive: true,
+    }),
+    orders: orders as never,
+    platformRecipientId: "rp_platformFixture01",
+    applyOrder,
+    now: () => now,
+    generateId: (kind) => `${kind}-${++ids}`,
+    ...extra,
+  });
+  return { service, repository, orders, applyOrder, context, records };
+}
+
+const billingAddress = {
+  zipCode: "01310100",
+  street: "Avenida Paulista",
+  streetNumber: "1000",
+  complement: "Apto 12",
+  neighborhood: "Bela Vista",
+  city: "São Paulo",
+  state: "SP",
+};
+
+function input(change: Record<string, unknown> = {}) {
+  return {
+    quoteId: "quote-1",
+    requestId: "request-1",
+    recoveryToken,
+    method: "PIX",
+    installments: 1,
+    buyer,
+    ...change,
+  };
+}
+
+async function failure(promise: Promise<unknown>) {
+  return (await promise.catch((error: unknown) => error)) as {
+    status: number;
+    code: string;
+  };
+}
+
+describe("gift checkout service (Pagar.me orders)", () => {
+  it("creates a Pix order and returns the checkout id with the QR data", async () => {
+    const { service, orders, repository } = harness(snapshotFor("PIX"));
+    const result = await service.createCheckout("site-1", input());
+    expect(result).toEqual({
+      checkoutId: "attempt-2",
+      status: "AWAITING_PAYMENT",
+      pix: {
+        qrCode: "00020101021226820014br.gov.bcb.pix2560fixture",
+        qrCodeUrl:
+          "https://api.pagar.me/core/v5/transactions/tran_fixtureTx0001/qrcode?payment_method=pix",
+        expiresAt: "2026-11-18T12:30:00.000Z",
+      },
+    });
+    const request = vi.mocked(orders.createOrder).mock.calls[0][0];
+    expect(request.idempotencyKey).toBe("attempt-2");
+    expect(request.body.code).toBe("attempt-2");
+    expect(request.body.payments[0].pix?.expires_in).toBe(240);
+    expect(request.body.payments[0].split[1]).toMatchObject({
+      recipient_id: "rp_fixtureRecipient01",
+      amount: 10000,
+    });
+    expect(repository.saveOrder).toHaveBeenCalledOnce();
+  });
+
+  it("sends a 6x card order with the token and hands a decided order to the worker", async () => {
+    const { service, orders, applyOrder } = harness(
+      snapshotFor("CREDIT_CARD", 6),
+    );
+    const result = await service.createCheckout(
+      "site-1",
+      input({
+        method: "CREDIT_CARD",
+        installments: 6,
+        cardToken: "token_abc123",
+        billingAddress,
+      }),
+    );
+    expect(result).toEqual({
+      checkoutId: "attempt-2",
+      status: "AWAITING_PAYMENT",
+    });
+    const request = vi.mocked(orders.createOrder).mock.calls[0][0];
+    expect(request.body.payments[0].credit_card).toMatchObject({
+      card_token: "token_abc123",
+      card: {
+        billing_address: {
+          line_1: "1000, Avenida Paulista, Bela Vista",
+          line_2: "Apto 12",
+          zip_code: "01310100",
+          city: "São Paulo",
+          state: "SP",
+          country: "BR",
+        },
+      },
+      installments: 6,
+    });
+    expect(applyOrder).toHaveBeenCalledOnce();
+  });
+
+  it("rejects a card checkout without a billing address before reserving or calling Pagar.me", async () => {
+    const { service, orders, repository } = harness(
+      snapshotFor("CREDIT_CARD", 6),
+    );
+    expect(
+      await failure(
+        service.createCheckout(
+          "site-1",
+          input({
+            method: "CREDIT_CARD",
+            installments: 6,
+            cardToken: "token_abc123",
+          }),
+        ),
+      ),
+    ).toMatchObject({ status: 400, code: "QUOTE_INVALID" });
+    expect(repository.reserve).not.toHaveBeenCalled();
+    expect(orders.createOrder).not.toHaveBeenCalled();
+  });
+
+  it("keeps the billing address out of the reservation and of observed events", async () => {
+    const observe = vi.fn();
+    const { service, repository } = harness(
+      snapshotFor("CREDIT_CARD", 6),
+      undefined,
+      { observe },
+    );
+    await service.createCheckout(
+      "site-1",
+      input({
+        method: "CREDIT_CARD",
+        installments: 6,
+        cardToken: "token_abc123",
+        billingAddress,
+      }),
+    );
+    const stored = JSON.stringify([
+      vi.mocked(repository.reserve).mock.calls,
+      vi.mocked(repository.saveOrder).mock.calls,
+      observe.mock.calls,
+    ]);
+    for (const value of ["01310100", "Paulista", "Bela Vista", "Apto 12"])
+      expect(stored).not.toContain(value);
+  });
+
+  it("keeps the billing address out of events, records and the result when Pagar.me rejects the order", async () => {
+    const observe = vi.fn();
+    const createOrder = vi.fn(async () => {
+      // Pagar.me may echo submitted values in its message.
+      throw new PagarmeRejectedError(
+        422,
+        "validation_error",
+        "zip_code 01310100 invalid for Avenida Paulista, Bela Vista, Apto 12",
+      );
+    });
+    const { service, repository } = harness(
+      snapshotFor("CREDIT_CARD", 6),
+      { createOrder },
+      { observe },
+    );
+    const result = await failure(
+      service.createCheckout(
+        "site-1",
+        input({
+          method: "CREDIT_CARD",
+          installments: 6,
+          cardToken: "token_abc123",
+          billingAddress,
+        }),
+      ),
+    );
+    expect(result).toMatchObject({
+      status: 422,
+      code: "PAYMENT_METHOD_UNAVAILABLE",
+    });
+    expect(createOrder).toHaveBeenCalledOnce();
+    expect(repository.markProviderRejected).toHaveBeenCalledOnce();
+    expect(observe).toHaveBeenCalledWith(
+      expect.objectContaining({ event: "gift_checkout.provider_rejected" }),
+    );
+    const exposed = JSON.stringify([
+      vi.mocked(repository.reserve).mock.calls,
+      vi.mocked(repository.markProviderRejected).mock.calls,
+      observe.mock.calls,
+      result,
+      String(result),
+    ]);
+    for (const value of ["01310100", "Paulista", "Bela Vista", "Apto 12"])
+      expect(exposed).not.toContain(value);
+  });
+
+  it("returns the same checkout for a retried request without a new order", async () => {
+    const { service, orders } = harness(snapshotFor("PIX"));
+    const first = await service.createCheckout("site-1", input());
+    const second = await service.createCheckout("site-1", input());
+    expect(second).toEqual(first);
+    expect(orders.createOrder).toHaveBeenCalledOnce();
+    const other = await failure(
+      service.createCheckout(
+        "site-1",
+        input({ recoveryToken: `${"b".repeat(42)}A` }),
+      ),
+    );
+    expect(other).toMatchObject({ status: 409, code: "REQUEST_CONFLICT" });
+  });
+
+  it("rejects an expired quote with 409 before calling Pagar.me", async () => {
+    const snapshot = snapshotFor("PIX", 1, {
+      createdAt: new Date(now.getTime() - 400_000),
+      expiresAt: new Date(now.getTime() - 1),
+    });
+    const { service, orders } = harness(snapshot);
+    expect(
+      await failure(service.createCheckout("site-1", input())),
+    ).toMatchObject({ status: 409, code: "QUOTE_EXPIRED" });
+    expect(orders.createOrder).not.toHaveBeenCalled();
+  });
+
+  it("rejects more than 6 installments with 422", async () => {
+    const { service, orders } = harness(snapshotFor("CREDIT_CARD", 6));
+    expect(
+      await failure(
+        service.createCheckout(
+          "site-1",
+          input({
+            method: "CREDIT_CARD",
+            installments: 7,
+            cardToken: "token_a1",
+            billingAddress,
+          }),
+        ),
+      ),
+    ).toMatchObject({ status: 422, code: "INSTALLMENTS_UNAVAILABLE" });
+    expect(orders.createOrder).not.toHaveBeenCalled();
+  });
+
+  it("rejects a quote from another provider with 409", async () => {
+    const { service } = harness(
+      snapshotFor("PIX", 1, { provider: "LEGACY_PROVIDER" }),
+    );
+    expect(
+      await failure(service.createCheckout("site-1", input())),
+    ).toMatchObject({ status: 409, code: "PROVIDER_UNAVAILABLE" });
+  });
+
+  it("rejects a method or installment count different from the quote with 422", async () => {
+    const { service } = harness(snapshotFor("CREDIT_CARD", 3));
+    expect(
+      await failure(
+        service.createCheckout(
+          "site-1",
+          input({
+            method: "CREDIT_CARD",
+            installments: 2,
+            cardToken: "token_a1",
+            billingAddress,
+          }),
+        ),
+      ),
+    ).toMatchObject({ status: 422, code: "QUOTE_MISMATCH" });
+  });
+
+  it("rejects a missing or inactive couple recipient with 409", async () => {
+    const snapshot = snapshotFor("PIX");
+    const missing = harness(snapshot);
+    missing.context.mockResolvedValue(null as never);
+    expect(
+      await failure(missing.service.createCheckout("site-1", input())),
+    ).toMatchObject({ status: 409, code: "RECEIVING_NOT_READY" });
+    const inactive = harness(snapshot);
+    const context = approvedReceivingContext(snapshot, now);
+    if (context.evidence) context.evidence.accountState = "under_review";
+    inactive.context.mockResolvedValue(context);
+    expect(
+      await failure(inactive.service.createCheckout("site-1", input())),
+    ).toMatchObject({ status: 409, code: "RECEIVING_NOT_READY" });
+    expect(inactive.orders.createOrder).not.toHaveBeenCalled();
+  });
+
+  it("refuses the platform recipient as the couple recipient", async () => {
+    const { service, orders } = harness(
+      snapshotFor("PIX", 1, { recipientId: "rp_platformFixture01" }),
+    );
+    expect(
+      await failure(service.createCheckout("site-1", input())),
+    ).toMatchObject({ status: 409, code: "RECEIVING_NOT_READY" });
+    expect(orders.createOrder).not.toHaveBeenCalled();
+  });
+
+  it("closes the attempt on a Pagar.me 4xx and reports 422", async () => {
+    const createOrder = vi.fn(async () => {
+      throw new PagarmeRejectedError(422, "validation_error", "invalid");
+    });
+    const { service, repository } = harness(snapshotFor("PIX"), {
+      createOrder,
+    });
+    expect(
+      await failure(service.createCheckout("site-1", input())),
+    ).toMatchObject({ status: 422, code: "PIX_UNAVAILABLE" });
+    expect(repository.markProviderRejected).toHaveBeenCalledOnce();
+    expect(repository.markOutcomeUnknown).not.toHaveBeenCalled();
+  });
+
+  it("keeps an unknown outcome (5xx/timeout) for reconciliation", async () => {
+    const createOrder = vi.fn(async () => {
+      throw new PagarmeUnknownOutcomeError("timeout");
+    });
+    const { service, repository } = harness(snapshotFor("PIX"), {
+      createOrder,
+    });
+    expect(
+      await failure(service.createCheckout("site-1", input())),
+    ).toMatchObject({ status: 409, code: "EXTERNAL_OUTCOME_UNKNOWN" });
+    expect(repository.markOutcomeUnknown).toHaveBeenCalledOnce();
+  });
+
+  it("projects status only for the holder of the recovery token", async () => {
+    const { service } = harness(snapshotFor("PIX"));
+    await service.createCheckout("site-1", input());
+    const status = await service.getStatus("site-1", {
+      quoteId: "quote-1",
+      requestId: "request-1",
+      recoveryToken,
+    });
+    expect(status).toMatchObject({
+      checkoutId: "attempt-2",
+      state: "AWAITING_PAYMENT",
+      method: "PIX",
+    });
+    expect(status.pix?.qrCode).toContain("br.gov.bcb.pix");
+    expect(
+      await failure(
+        service.getStatus("site-1", {
+          quoteId: "quote-1",
+          requestId: "request-1",
+          recoveryToken: `${"c".repeat(42)}A`,
+        }),
+      ),
+    ).toMatchObject({ code: "REQUEST_CONFLICT" });
+  });
+
+  it("stores only the hash of the recovery token", async () => {
+    const { service, records } = harness(snapshotFor("PIX"));
+    await service.createCheckout("site-1", input());
+    const stored = records.get("request-1") as GiftCheckoutRecord;
+    expect(stored.recoveryTokenHash).toBe(
+      createHash("sha256").update(recoveryToken).digest("hex"),
+    );
+    expect(JSON.stringify(stored)).not.toContain(recoveryToken);
+    expect(JSON.stringify(stored)).not.toContain(buyer.cpf);
+  });
+});

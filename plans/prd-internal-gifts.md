@@ -1,3 +1,5 @@
+> **2026-11 update:** the payment provider was switched to Pagar.me; see [Pagar.me operation](../docs/pagarmeOperation.md) and the [decision register](../docs/decisionRegister.md#payment-provider-switch-to-pagarme--2026-11-18). Provider details below are historical.
+
 # PRD: Internal Gifts and Couple Finance
 
 Prepared on 2026-10-12; execution and recipient direction amended on 2026-10-14. Product scope comes from the approved Internal Gifts Asaas Release Plan and subsequent user decisions. Local implementation uses reviewed worktrees converging only into `release-gift-payment`; real-money/provider mutations still need concrete approval.

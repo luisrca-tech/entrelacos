@@ -1,99 +1,53 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import {
-  type CheckoutCreateInput,
-  type CheckoutResult,
-  type CheckoutStatus,
-  checkoutCreateInputSchema,
-  checkoutResultSchema,
-  checkoutStatusInputSchema,
-  checkoutStatusSchema,
+  GIFT_PLATFORM_TARIFFS,
+  type GiftCheckoutCreateResult,
+  type GiftCheckoutPix,
+  type GiftCheckoutState,
+  type GiftCheckoutStatus,
+  giftCheckoutCreateInputSchema,
+  giftCheckoutStatusInputSchema,
+  giftCheckoutStatusSchema,
   giftQuoteSchema,
   publicGiftItemSchema,
 } from "@entrelacos/contracts";
+import type { GiftCheckoutOrderBinding } from "./giftCheckoutLifecycle";
 import { quoteGiftAmounts, quoteGiftPurchaseAmounts } from "./giftMoney";
 import {
   type GiftQuoteReceivingContext,
   type GiftQuoteSnapshot,
+  isPlatformAccountSplit,
   readGiftV2Settlement,
   type StoredGiftForQuote,
 } from "./giftQuotes";
+import {
+  PagarmeRejectedError,
+  PagarmeUnknownOutcomeError,
+} from "./pagarmeHttpClient";
+import { pagarmeRecipientIdPattern } from "./pagarmeIds";
+import type {
+  PagarmeOrderClient,
+  PagarmeOrderObservation,
+} from "./pagarmeOrderClient";
+import { buildPagarmeOrderRequest } from "./pagarmeOrderPayload";
 import {
   assertReceivingReady,
   evaluateReceivingReadiness,
   ReceivingReadinessServiceError,
 } from "./receivingReadiness";
-import { allowsSandboxBuyerGrossUp } from "./sandboxBuyerGrossUp";
+
+/** Provider of every new checkout; older stored rows keep their own value. */
+export const GIFT_CHECKOUT_PROVIDER = "PAGARME";
 
 export interface GiftCheckoutIdentity {
   siteId: string;
   quoteId: string;
   requestId: string;
   orderId: string;
+  /** Also the checkout id returned to the guest and the Pagar.me order code. */
   attemptId: string;
 }
-
-// Provider approval requires verified observations; received funds also require posted ledger rows.
-// A durable backend seal can prove that a request never dispatched. Request bodies
-// never supply either proof; the repository must enforce their references atomically.
-interface GiftCheckoutEvidenceBinding {
-  source: "provider";
-  siteId: string;
-  orderId: string;
-  attemptId: string;
-  provider: string;
-  accountReference: string;
-  environment: "sandbox" | "live";
-  providerCheckoutReference: string;
-  observedAt: string;
-}
-
-export type GiftCheckoutEvidence =
-  | (GiftCheckoutEvidenceBinding &
-      (
-        | { kind: "HOSTED_CHECKOUT" }
-        | {
-            kind: "PAYMENT_CONFIRMATION";
-            providerPaymentReference: string;
-            providerEventReference: string;
-            eventId: string;
-          }
-        | {
-            kind: "SETTLEMENT";
-            providerPaymentReference: string;
-            ledgerEntryId: string;
-          }
-        | {
-            kind: "CLOSED_UNPAID";
-            noOutstandingPayment: true;
-            closedReason: NonNullable<CheckoutStatus["closedReason"]>;
-          }
-        | {
-            kind: "REFUND";
-            providerPaymentReference: string;
-            providerRefundReference: string;
-            ledgerEntryId: string;
-          }
-      ))
-  | (GiftCheckoutIdentity & {
-      source: "backend";
-      kind: "PRE_DISPATCH_REJECTION";
-      recoveryTokenHash: string;
-      observedAt: string;
-      noProviderCall: true;
-      closedReason: "EXPIRED" | "CANCELED";
-      providerCheckoutReference?: never;
-    })
-  | (GiftCheckoutIdentity & {
-      source: "backend";
-      kind: "PROVIDER_REJECTION";
-      recoveryTokenHash: string;
-      observedAt: string;
-      // The provider refused the creating call, so no charge exists.
-      noProviderCharge: true;
-      closedReason: "FAILED";
-      providerCheckoutReference?: never;
-    });
 
 export interface GiftCheckoutReservation extends GiftCheckoutIdentity {
   recoveryTokenHash: string;
@@ -102,11 +56,11 @@ export interface GiftCheckoutReservation extends GiftCheckoutIdentity {
 }
 
 export interface GiftCheckoutRecord extends GiftCheckoutReservation {
-  state: CheckoutStatus["state"];
+  state: GiftCheckoutState;
   observedAt: string | null;
-  closedReason: CheckoutStatus["closedReason"];
-  checkout: CheckoutResult | null;
-  evidence: GiftCheckoutEvidence | null;
+  closedReason: GiftCheckoutStatus["closedReason"];
+  providerOrderId: string | null;
+  pix: GiftCheckoutPix | null;
 }
 
 export interface GiftCheckoutEligibility {
@@ -115,65 +69,42 @@ export interface GiftCheckoutEligibility {
   gift: StoredGiftForQuote | null;
 }
 
-export interface GiftHostedCheckout {
-  providerReference: string;
-  // PLATFORM_ACCOUNT_SPLIT_V2 installment plans: verified child payment IDs.
-  installmentPaymentReferences?: string[];
-  checkout: CheckoutResult;
-}
-
-export interface GiftCheckoutHostedOutcome
-  extends GiftCheckoutIdentity,
-    GiftHostedCheckout {
-  observedAt: string;
-}
-
-export interface GiftCheckoutProviderCommand
-  extends Omit<GiftCheckoutIdentity, "quoteId"> {
-  quoteSnapshot: GiftQuoteSnapshot;
-  payer?: CheckoutCreateInput["payer"];
-}
-
 export interface GiftCheckoutRepository {
   findByRequest(
     siteId: string,
     requestId: string,
   ): Promise<GiftCheckoutRecord | null>;
   findQuote(siteId: string, quoteId: string): Promise<GiftQuoteSnapshot | null>;
-  // Under the same locks as reserve, return an existing commitment or persist a
-  // never-dispatched cancellation. Every later reserve must return that sealed row.
-  // A missing row alone is not evidence that an in-flight request cannot dispatch.
-  sealUncreatedRequest(
-    reservation: GiftCheckoutReservation,
-  ): Promise<GiftCheckoutRecord>;
-  // Atomically enforce unique(site, request), one order per quote, immutable hash/snapshot,
-  // and a single creator. Run this callback with locked, freshly read stored eligibility
-  // before insertion; losers return the existing row. Never call the PSP in this transaction.
+  // Atomically enforce unique(site, request), one order per quote and a single
+  // creator; run the callback with locked, freshly read eligibility. Losers
+  // return the existing row. Never call Pagar.me inside this transaction.
   reserve(
     reservation: GiftCheckoutReservation,
     assertLockedEligibility: (eligibility: GiftCheckoutEligibility) => void,
   ): Promise<{ created: boolean; record: GiftCheckoutRecord }>;
-  // Persist creation evidence with a compare-and-set; never overwrite terminal evidence.
-  saveHostedCheckout(
-    outcome: GiftCheckoutHostedOutcome,
+  // Bind the Pagar.me order to the attempt (CREATING/UNKNOWN only).
+  saveOrder(
+    identity: GiftCheckoutIdentity,
+    order: PagarmeOrderObservation,
+    observedAt: string,
   ): Promise<GiftCheckoutRecord>;
-  // Keep the commitment; only CREATING may become UNKNOWN, with no terminal regression.
+  // Only CREATING may become UNKNOWN.
   markOutcomeUnknown(
     identity: GiftCheckoutIdentity,
     observedAt: string,
   ): Promise<void>;
-  // Only CREATING may close here, after the provider refused the creating call
-  // (no charge exists); the order then allows a new attempt.
+  // Pagar.me refused the creating call (4xx): no order exists.
   markProviderRejected(
     identity: GiftCheckoutIdentity,
     observedAt: string,
   ): Promise<void>;
+  loadBinding(identity: {
+    siteId: string;
+    attemptId: string;
+  }): Promise<GiftCheckoutOrderBinding | null>;
 }
 
 export interface GiftCheckoutServiceDependencies {
-  sandboxBuyerGrossUpSiteId?: string;
-  // Pure preflight for new commitments only; existing recovery must remain available.
-  assertProviderConfiguration?(): void;
   revalidateQuote?(snapshot: GiftQuoteSnapshot): Promise<boolean>;
   repository: GiftCheckoutRepository;
   loadReceivingContext(
@@ -183,34 +114,28 @@ export interface GiftCheckoutServiceDependencies {
     siteId: string,
     giftId: string,
   ): Promise<StoredGiftForQuote | null>;
-  createHostedCheckout(
-    command: GiftCheckoutProviderCommand,
-  ): Promise<GiftHostedCheckout>;
+  orders: Pick<PagarmeOrderClient, "createOrder">;
+  platformRecipientId: string;
+  /**
+   * Applies the order returned by the creating POST (a card is usually paid
+   * or failed synchronously). Webhooks and reconciliation cover any failure.
+   */
+  applyOrder?(
+    binding: GiftCheckoutOrderBinding,
+    order: PagarmeOrderObservation,
+  ): Promise<void>;
   now(): Date;
   generateId(kind: "order" | "attempt"): string;
-  /** Structured, sanitized operational events (never payer data). */
+  /** Structured, sanitized operational events (never buyer or card data). */
   observe?(event: Record<string, string>): void;
-}
-
-/**
- * The provider definitively refused a creating call (validation error with
- * `errors[]`), so no charge exists. Only sanitized provider codes are kept.
- */
-export class GiftCheckoutProviderRejectedError extends Error {
-  readonly providerCodes: readonly string[];
-
-  constructor(providerCodes: readonly string[]) {
-    super("Provider rejected the checkout");
-    this.name = "GiftCheckoutProviderRejectedError";
-    this.providerCodes = providerCodes
-      .filter((code) => /^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(code))
-      .slice(0, 5);
-  }
 }
 
 type CheckoutErrorCode =
   | "QUOTE_INVALID"
   | "QUOTE_EXPIRED"
+  | "QUOTE_MISMATCH"
+  | "INSTALLMENTS_UNAVAILABLE"
+  | "PROVIDER_UNAVAILABLE"
   | "REQUEST_CONFLICT"
   | "CHECKOUT_CONFIGURATION_INVALID"
   | "EXTERNAL_OUTCOME_UNKNOWN"
@@ -225,6 +150,9 @@ export class GiftCheckoutServiceError extends Error {
     const title = {
       QUOTE_INVALID: "Gift checkout input is invalid",
       QUOTE_EXPIRED: "Gift quote has expired",
+      QUOTE_MISMATCH: "Payment method or installments differ from the quote",
+      INSTALLMENTS_UNAVAILABLE: "These installments are unavailable",
+      PROVIDER_UNAVAILABLE: "The quote belongs to another payment provider",
       REQUEST_CONFLICT: "Gift checkout request is unavailable",
       CHECKOUT_CONFIGURATION_INVALID:
         "Gift checkout configuration is unavailable",
@@ -240,7 +168,12 @@ export class GiftCheckoutServiceError extends Error {
         ? 400
         : code === "CHECKOUT_CONFIGURATION_INVALID"
           ? 503
-          : code === "PIX_UNAVAILABLE" || code === "PAYMENT_METHOD_UNAVAILABLE"
+          : [
+                "PIX_UNAVAILABLE",
+                "PAYMENT_METHOD_UNAVAILABLE",
+                "QUOTE_MISMATCH",
+                "INSTALLMENTS_UNAVAILABLE",
+              ].includes(code)
             ? 422
             : 409;
   }
@@ -451,13 +384,6 @@ export function readGiftQuoteSnapshot(
                         pricing.policy.cardInstallmentBasisPoints.upToSix,
                     }
                   : {}),
-                ...(pricing.policy.cardInstallmentBasisPoints.upToTwelve !==
-                undefined
-                  ? {
-                      upToTwelve:
-                        pricing.policy.cardInstallmentBasisPoints.upToTwelve,
-                    }
-                  : {}),
               },
             }
           : {}),
@@ -469,197 +395,37 @@ export function readGiftQuoteSnapshot(
   });
 }
 
-function readRecord(loaded: GiftCheckoutRecord): GiftCheckoutRecord {
-  try {
-    const value = structuredClone(loaded);
-    value.quoteSnapshot = readGiftQuoteSnapshot(value.quoteSnapshot);
-    if (value.checkout !== null)
-      value.checkout = checkoutResultSchema.parse(value.checkout);
-    if (
-      value.quoteSnapshot.quote.id !== value.quoteId ||
-      value.quoteSnapshot.quote.siteId !== value.siteId ||
-      !checkoutResultSchema.shape.orderId.safeParse(value.orderId).success ||
-      !checkoutResultSchema.shape.attemptId.safeParse(value.attemptId)
-        .success ||
-      !giftQuoteSchema.shape.expiresAt.safeParse(value.createdAt).success
-    )
-      return fail("EXTERNAL_OUTCOME_UNKNOWN");
-    return value;
-  } catch {
-    return fail("EXTERNAL_OUTCOME_UNKNOWN");
-  }
-}
-
-function projectStatus(record: GiftCheckoutRecord, now: Date): CheckoutStatus {
-  const result = checkoutStatusSchema.safeParse({
+export function projectGiftCheckoutStatus(
+  record: GiftCheckoutRecord,
+): GiftCheckoutStatus {
+  const result = giftCheckoutStatusSchema.safeParse({
     siteId: record.siteId,
     quoteId: record.quoteId,
     requestId: record.requestId,
-    orderId: record.orderId,
-    attemptId: record.attemptId,
+    checkoutId: record.attemptId,
     method: record.quoteSnapshot.quote.method,
     mode: record.quoteSnapshot.quote.mode,
     state: record.state,
     observedAt: record.observedAt,
     closedReason: record.closedReason,
     mayStartNewAttempt: record.state === "CLOSED_UNPAID",
-    checkout: record.checkout,
+    pix:
+      record.state === "AWAITING_PAYMENT" &&
+      record.quoteSnapshot.quote.method === "PIX"
+        ? record.pix
+        : null,
   });
   if (!result.success) return fail("EXTERNAL_OUTCOME_UNKNOWN");
-  if (
-    record.observedAt !== null &&
-    Date.parse(record.observedAt) > now.getTime()
-  )
-    return fail("EXTERNAL_OUTCOME_UNKNOWN");
-  const evidence = record.evidence;
-  if (record.state === "CREATING" || record.state === "OUTCOME_UNKNOWN") {
-    if (evidence !== null) return fail("EXTERNAL_OUTCOME_UNKNOWN");
-    return result.data;
-  }
-  if (
-    evidence?.source === "backend" &&
-    evidence.kind === "PROVIDER_REJECTION"
-  ) {
-    if (
-      record.state !== "CLOSED_UNPAID" ||
-      record.checkout !== null ||
-      evidence.noProviderCharge !== true ||
-      evidence.siteId !== record.siteId ||
-      evidence.quoteId !== record.quoteId ||
-      evidence.requestId !== record.requestId ||
-      evidence.orderId !== record.orderId ||
-      evidence.attemptId !== record.attemptId ||
-      evidence.recoveryTokenHash !== record.recoveryTokenHash ||
-      evidence.observedAt !== record.observedAt ||
-      evidence.closedReason !== "FAILED" ||
-      record.closedReason !== "FAILED" ||
-      evidence.providerCheckoutReference !== undefined ||
-      record.observedAt === null ||
-      Date.parse(record.observedAt) < Date.parse(record.createdAt)
-    )
-      return fail("EXTERNAL_OUTCOME_UNKNOWN");
-    return result.data;
-  }
-  if (evidence?.source === "backend") {
-    const expectedReason =
-      Date.parse(record.quoteSnapshot.expiresAt) <= Date.parse(record.createdAt)
-        ? "EXPIRED"
-        : "CANCELED";
-    if (
-      record.state !== "CLOSED_UNPAID" ||
-      record.checkout !== null ||
-      evidence.kind !== "PRE_DISPATCH_REJECTION" ||
-      evidence.noProviderCall !== true ||
-      evidence.siteId !== record.siteId ||
-      evidence.quoteId !== record.quoteId ||
-      evidence.requestId !== record.requestId ||
-      evidence.orderId !== record.orderId ||
-      evidence.attemptId !== record.attemptId ||
-      evidence.recoveryTokenHash !== record.recoveryTokenHash ||
-      evidence.observedAt !== record.observedAt ||
-      record.observedAt !== record.createdAt ||
-      evidence.closedReason !== record.closedReason ||
-      record.closedReason !== expectedReason ||
-      evidence.providerCheckoutReference !== undefined ||
-      Date.parse(record.createdAt) < Date.parse(record.quoteSnapshot.createdAt)
-    )
-      return fail("EXTERNAL_OUTCOME_UNKNOWN");
-    return result.data;
-  }
-  const binding = record.quoteSnapshot.receiving;
-  if (
-    evidence?.source !== "provider" ||
-    evidence.siteId !== record.siteId ||
-    evidence.orderId !== record.orderId ||
-    evidence.attemptId !== record.attemptId ||
-    evidence.provider !== binding.provider ||
-    evidence.accountReference !== binding.accountReference ||
-    evidence.environment !== binding.environment ||
-    evidence.observedAt !== record.observedAt ||
-    !nonempty(evidence.providerCheckoutReference)
-  )
-    return fail("EXTERNAL_OUTCOME_UNKNOWN");
-  if (
-    record.state === "AWAITING_PAYMENT" &&
-    evidence.kind !== "HOSTED_CHECKOUT"
-  )
-    return fail("EXTERNAL_OUTCOME_UNKNOWN");
-  if (
-    record.state === "CONFIRMED" &&
-    (evidence.kind !== "PAYMENT_CONFIRMATION" ||
-      !nonempty(evidence.providerPaymentReference) ||
-      !nonempty(evidence.providerEventReference) ||
-      !checkoutResultSchema.shape.orderId.safeParse(evidence.eventId).success)
-  )
-    return fail("EXTERNAL_OUTCOME_UNKNOWN");
-  if (
-    record.state === "RECEIVED" &&
-    (evidence.kind !== "SETTLEMENT" ||
-      !nonempty(evidence.providerPaymentReference) ||
-      !checkoutResultSchema.shape.orderId.safeParse(evidence.ledgerEntryId)
-        .success)
-  )
-    return fail("EXTERNAL_OUTCOME_UNKNOWN");
-  if (
-    record.state === "CLOSED_UNPAID" &&
-    (evidence.kind !== "CLOSED_UNPAID" ||
-      evidence.noOutstandingPayment !== true ||
-      evidence.closedReason !== record.closedReason)
-  )
-    return fail("EXTERNAL_OUTCOME_UNKNOWN");
-  if (
-    record.state === "REFUNDED" &&
-    (evidence.kind !== "REFUND" ||
-      !nonempty(evidence.providerPaymentReference) ||
-      !nonempty(evidence.providerRefundReference) ||
-      !checkoutResultSchema.shape.orderId.safeParse(evidence.ledgerEntryId)
-        .success)
-  )
-    return fail("EXTERNAL_OUTCOME_UNKNOWN");
   return result.data;
 }
 
-export function isSafeCheckoutContinuation(
-  hostedUrl: string,
-  recoveryToken: string,
-): boolean {
-  try {
-    if (hostedUrl.length > 2048) return false;
-    const protectedValues = [
-      recoveryToken,
-      createHash("sha256").update(recoveryToken, "utf8").digest("hex"),
-    ];
-    let value = hostedUrl;
-    for (let depth = 0; depth < 4; depth++) {
-      if (protectedValues.some((secret) => value.includes(secret)))
-        return false;
-      const decoded = decodeURIComponent(value);
-      if (decoded === value) return true;
-      value = decoded;
-    }
-    return false;
-  } catch {
-    return false;
-  }
-}
-
-function continuation(
-  record: GiftCheckoutRecord,
-  now: Date,
-  recoveryToken: string,
-): CheckoutResult {
-  const status = projectStatus(record, now);
-  if (
-    status.checkout &&
-    !isSafeCheckoutContinuation(status.checkout.hostedUrl, recoveryToken)
-  )
-    return fail("EXTERNAL_OUTCOME_UNKNOWN");
-  if (status.state === "AWAITING_PAYMENT" && status.checkout)
-    return status.checkout;
-  if (status.state === "CREATING" || status.state === "OUTCOME_UNKNOWN") {
-    return fail("EXTERNAL_OUTCOME_UNKNOWN");
-  }
-  return fail("REQUEST_CONFLICT");
+function createResult(record: GiftCheckoutRecord): GiftCheckoutCreateResult {
+  const status = projectGiftCheckoutStatus(record);
+  return {
+    checkoutId: status.checkoutId,
+    status: status.state,
+    ...(status.pix ? { pix: status.pix } : {}),
+  };
 }
 
 function assertEligible(
@@ -668,8 +434,8 @@ function assertEligible(
   siteId: string,
   quoteId: string,
   now: Date,
+  platformRecipientId: string,
   gift?: StoredGiftForQuote | null,
-  sandboxBuyerGrossUpSiteId?: string,
 ) {
   const quote = giftQuoteSchema.safeParse(snapshot.quote);
   if (
@@ -684,31 +450,15 @@ function assertEligible(
   if (Date.parse(quote.data.expiresAt) <= now.getTime())
     return fail("QUOTE_EXPIRED");
   if (!context) throw new ReceivingReadinessServiceError();
-  if (
-    snapshot.pricing.policy.feeBasis === "SANDBOX_BUYER_ESTIMATE" &&
-    (snapshot.pricing.provenance !== "provider" ||
-      !allowsSandboxBuyerGrossUp({
-        siteId,
-        sandboxBuyerGrossUpSiteId,
-        isDemo: context.isDemo,
-        applicationEnvironment: context.environment,
-        environment: context.mode,
-      }))
-  )
-    return fail("QUOTE_INVALID");
   assertReceivingReady(evaluateReceivingReadiness({ ...context, siteId, now }));
+  const recipient = snapshot.receiving.recipientReference;
   if (
     !sameBinding(snapshot.receiving, context.providerBinding) ||
-    context.mode !== quote.data.mode
+    context.mode !== quote.data.mode ||
+    !pagarmeRecipientIdPattern.test(recipient) ||
+    recipient === platformRecipientId
   )
     throw new ReceivingReadinessServiceError();
-  if (
-    snapshot.pricing.provenance === "local-test" &&
-    (!context.isDemo ||
-      context.environment === "production" ||
-      quote.data.mode !== "sandbox")
-  )
-    return fail("QUOTE_INVALID");
   if (
     gift !== undefined &&
     (gift?.publicationState !== "PUBLISHED" ||
@@ -722,14 +472,44 @@ function assertEligible(
     (gift.gift.nominalCents !== quote.data.nominalCents ||
       gift.gift.title !== quote.data.title ||
       (gift.pricingSettings &&
-        ((!quote.data.settlementVersion &&
-          gift.pricingSettings.feeAllocation !==
-            (snapshot.pricingSettings?.feeAllocation ??
-              "RECIPIENT_DEDUCTED")) ||
-          gift.pricingSettings.revision !==
-            (snapshot.pricingSettings?.revision ?? 0))))
+        gift.pricingSettings.revision !==
+          (snapshot.pricingSettings?.revision ?? 0)))
   )
     return fail("QUOTE_EXPIRED");
+}
+
+/** The frozen order terms of a V2 Pagar.me quote. */
+export function giftCheckoutOrderBinding(
+  record: Pick<
+    GiftCheckoutRecord,
+    "siteId" | "quoteId" | "orderId" | "attemptId" | "quoteSnapshot"
+  > & {
+    accountId: string;
+    providerOrderId: string | null;
+    pixExpiresAt: string | null;
+  },
+): GiftCheckoutOrderBinding {
+  const { quote, settlement, receiving } = record.quoteSnapshot;
+  if (!settlement || !receiving.recipientReference)
+    return fail("EXTERNAL_OUTCOME_UNKNOWN");
+  return freeze({
+    siteId: record.siteId,
+    accountId: record.accountId,
+    environment: receiving.environment,
+    orderId: record.orderId,
+    attemptId: record.attemptId,
+    quoteId: record.quoteId,
+    providerOrderId: record.providerOrderId,
+    method: quote.method,
+    installments: quote.installmentCount ?? 1,
+    totalCents: quote.totalCents,
+    nominalCents: quote.nominalCents,
+    commissionCents: quote.commissionCents,
+    coupleSplitCents: settlement.coupleSplitCents,
+    coupleRecipientId: receiving.recipientReference,
+    quoteExpiresAt: record.quoteSnapshot.expiresAt,
+    pixExpiresAt: record.pixExpiresAt,
+  });
 }
 
 export function createGiftCheckoutService(
@@ -739,10 +519,20 @@ export function createGiftCheckoutService(
     async createCheckout(
       siteId: unknown,
       input: unknown,
-    ): Promise<CheckoutResult> {
+    ): Promise<GiftCheckoutCreateResult> {
       try {
         const site = giftQuoteSchema.shape.siteId.safeParse(siteId);
-        const body = checkoutCreateInputSchema.safeParse(input);
+        // More than 6x is a clear 422, not a malformed request (D7).
+        const requested =
+          input && typeof input === "object" && "installments" in input
+            ? input.installments
+            : undefined;
+        if (
+          Number.isSafeInteger(requested) &&
+          (requested as number) > GIFT_PLATFORM_TARIFFS.maxInstallments
+        )
+          return fail("INSTALLMENTS_UNAVAILABLE");
+        const body = giftCheckoutCreateInputSchema.safeParse(input);
         if (!site.success || !body.success) return fail("QUOTE_INVALID");
         const tokenHash = createHash("sha256")
           .update(body.data.recoveryToken, "utf8")
@@ -752,58 +542,56 @@ export function createGiftCheckoutService(
           body.data.requestId,
         );
         if (existing !== null) {
-          const record = readRecord(existing);
           authorizedRecord(
-            record,
+            existing,
             site.data,
             body.data.quoteId,
             body.data.requestId,
             tokenHash,
           );
-          return continuation(
-            record,
-            clock(dependencies),
-            body.data.recoveryToken,
-          );
+          return createResult(existing);
         }
-        dependencies.assertProviderConfiguration?.();
         const loaded = await dependencies.repository.findQuote(
           site.data,
           body.data.quoteId,
         );
         if (!loaded) return fail("QUOTE_INVALID");
         const quoteSnapshot = readGiftQuoteSnapshot(loaded);
+        const quote = quoteSnapshot.quote;
         if (
-          (quoteSnapshot.quote.installmentCount ?? 1) > 1 !==
-          Boolean(body.data.payer)
+          quoteSnapshot.receiving.provider !== GIFT_CHECKOUT_PROVIDER ||
+          !isPlatformAccountSplit(quoteSnapshot) ||
+          !quoteSnapshot.settlement
         )
-          return fail("QUOTE_INVALID");
+          return fail("PROVIDER_UNAVAILABLE");
+        if (
+          quote.method !== body.data.method ||
+          (quote.installmentCount ?? 1) !== body.data.installments
+        )
+          return fail("QUOTE_MISMATCH");
         const context = structuredClone(
           await dependencies.loadReceivingContext(site.data),
         );
         const gift = dependencies.findPublishedGift
           ? structuredClone(
-              await dependencies.findPublishedGift(
-                site.data,
-                quoteSnapshot.quote.giftId,
-              ),
+              await dependencies.findPublishedGift(site.data, quote.giftId),
             )
           : undefined;
-        const now = clock(dependencies);
-        if (
-          dependencies.revalidateQuote &&
-          !(await dependencies.revalidateQuote(quoteSnapshot))
-        )
-          return fail("QUOTE_EXPIRED");
         assertEligible(
           quoteSnapshot,
           context,
           site.data,
           body.data.quoteId,
           clock(dependencies),
+          dependencies.platformRecipientId,
           gift,
-          dependencies.sandboxBuyerGrossUpSiteId,
         );
+        if (
+          dependencies.revalidateQuote &&
+          !(await dependencies.revalidateQuote(quoteSnapshot))
+        )
+          return fail("QUOTE_EXPIRED");
+        const now = clock(dependencies);
         const reservation = freeze({
           siteId: site.data,
           quoteId: body.data.quoteId,
@@ -815,18 +603,14 @@ export function createGiftCheckoutService(
           createdAt: now.toISOString(),
         });
         if (
-          !checkoutResultSchema.shape.orderId.safeParse(reservation.orderId)
-            .success ||
-          !checkoutResultSchema.shape.attemptId.safeParse(reservation.attemptId)
-            .success
+          !giftQuoteSchema.shape.id.safeParse(reservation.orderId).success ||
+          !giftQuoteSchema.shape.id.safeParse(reservation.attemptId).success
         )
           return fail("QUOTE_INVALID");
-        let lockedContext: GiftQuoteReceivingContext | null = null;
         let eligibilityChecked = false;
         const reserved = await dependencies.repository.reserve(
           reservation,
           (locked) => {
-            lockedContext = structuredClone(locked.receivingContext);
             const lockedSnapshot = readGiftQuoteSnapshot(locked.quoteSnapshot);
             if (
               !locked.gift ||
@@ -835,17 +619,17 @@ export function createGiftCheckoutService(
               return fail("QUOTE_INVALID");
             assertEligible(
               lockedSnapshot,
-              lockedContext,
+              structuredClone(locked.receivingContext),
               site.data,
               body.data.quoteId,
               clock(dependencies),
+              dependencies.platformRecipientId,
               structuredClone(locked.gift),
-              dependencies.sandboxBuyerGrossUpSiteId,
             );
             eligibilityChecked = true;
           },
         );
-        const record = readRecord(reserved.record);
+        const record = reserved.record;
         authorizedRecord(
           record,
           site.data,
@@ -853,202 +637,130 @@ export function createGiftCheckoutService(
           body.data.requestId,
           tokenHash,
         );
-        if (typeof reserved.created !== "boolean")
-          return fail("EXTERNAL_OUTCOME_UNKNOWN");
-        if (!reserved.created)
-          return continuation(
-            record,
-            clock(dependencies),
-            body.data.recoveryToken,
-          );
+        if (!reserved.created) return createResult(record);
         if (
           !eligibilityChecked ||
           record.state !== "CREATING" ||
           record.orderId !== reservation.orderId ||
-          record.attemptId !== reservation.attemptId ||
-          record.createdAt !== reservation.createdAt ||
-          JSON.stringify(record.quoteSnapshot) !== JSON.stringify(quoteSnapshot)
+          record.attemptId !== reservation.attemptId
         )
           return fail("EXTERNAL_OUTCOME_UNKNOWN");
-        projectStatus(record, clock(dependencies));
+        const identity = {
+          siteId: record.siteId,
+          requestId: record.requestId,
+          quoteId: record.quoteId,
+          orderId: record.orderId,
+          attemptId: record.attemptId,
+        };
+        let order: PagarmeOrderObservation;
         try {
-          assertEligible(
-            record.quoteSnapshot,
-            lockedContext,
-            site.data,
-            body.data.quoteId,
-            clock(dependencies),
-            undefined,
-            dependencies.sandboxBuyerGrossUpSiteId,
-          );
-          const command = freeze({
-            siteId: record.siteId,
-            requestId: record.requestId,
-            orderId: record.orderId,
-            attemptId: record.attemptId,
-            quoteSnapshot: record.quoteSnapshot,
-            ...(body.data.payer ? { payer: body.data.payer } : {}),
-          });
-          const hosted = structuredClone(
-            await dependencies.createHostedCheckout(command),
-          );
-          const parsedCheckout = checkoutResultSchema.safeParse(
-            hosted.checkout,
-          );
-          if (!parsedCheckout.success || !nonempty(hosted.providerReference))
-            return fail("EXTERNAL_OUTCOME_UNKNOWN");
-          const checkout = parsedCheckout.data;
-          if (
-            checkout.orderId !== record.orderId ||
-            checkout.attemptId !== record.attemptId ||
-            checkout.quoteId !== record.quoteId ||
-            checkout.method !== record.quoteSnapshot.quote.method ||
-            checkout.mode !== record.quoteSnapshot.quote.mode ||
-            !isSafeCheckoutContinuation(
-              checkout.hostedUrl,
-              body.data.recoveryToken,
-            )
-          )
-            return fail("EXTERNAL_OUTCOME_UNKNOWN");
-          const saved = await dependencies.repository.saveHostedCheckout({
-            siteId: record.siteId,
-            quoteId: record.quoteId,
-            requestId: record.requestId,
-            orderId: record.orderId,
-            attemptId: record.attemptId,
-            providerReference: hosted.providerReference,
-            ...(hosted.installmentPaymentReferences
-              ? {
-                  installmentPaymentReferences:
-                    hosted.installmentPaymentReferences,
-                }
+          const request = buildPagarmeOrderRequest({
+            checkoutId: record.attemptId,
+            giftId: quote.giftId,
+            giftTitle: quote.title,
+            method: quote.method,
+            installments: quote.installmentCount ?? 1,
+            totalCents: quote.totalCents,
+            coupleSplitCents: quoteSnapshot.settlement.coupleSplitCents,
+            ...(body.data.cardToken ? { cardToken: body.data.cardToken } : {}),
+            // Sent to Pagar.me only: never reserved, stored or observed.
+            ...(body.data.billingAddress
+              ? { billingAddress: body.data.billingAddress }
               : {}),
-            checkout,
-            observedAt: clock(dependencies).toISOString(),
+            quoteExpiresAt: new Date(quoteSnapshot.expiresAt),
+            now: clock(dependencies),
+            buyer: body.data.buyer,
+            platformRecipientId: dependencies.platformRecipientId,
+            coupleRecipientId: quoteSnapshot.receiving.recipientReference,
+            splitMode: GIFT_PLATFORM_TARIFFS.couplesSplitMode,
           });
-          const confirmed = readRecord(saved);
-          authorizedRecord(
-            confirmed,
-            site.data,
-            body.data.quoteId,
-            body.data.requestId,
-            tokenHash,
-          );
-          if (
-            confirmed.orderId !== record.orderId ||
-            confirmed.attemptId !== record.attemptId ||
-            JSON.stringify(confirmed.quoteSnapshot) !==
-              JSON.stringify(record.quoteSnapshot) ||
-            confirmed.evidence?.providerCheckoutReference !==
-              hosted.providerReference ||
-            (confirmed.state === "AWAITING_PAYMENT" &&
-              JSON.stringify(confirmed.checkout) !== JSON.stringify(checkout))
-          )
-            return fail("EXTERNAL_OUTCOME_UNKNOWN");
-          return continuation(
-            confirmed,
-            clock(dependencies),
-            body.data.recoveryToken,
-          );
+          order = await dependencies.orders.createOrder(request);
         } catch (error) {
-          let observedAt = record.createdAt;
-          try {
-            observedAt = clock(dependencies).toISOString();
-          } catch {}
-          const identity = {
-            siteId: record.siteId,
-            requestId: record.requestId,
-            quoteId: record.quoteId,
-            orderId: record.orderId,
-            attemptId: record.attemptId,
-          };
-          const method = record.quoteSnapshot.quote.method;
-          let rejected = false;
-          if (error instanceof GiftCheckoutProviderRejectedError) {
-            try {
-              await dependencies.repository.markProviderRejected(
-                identity,
-                observedAt,
-              );
-              rejected = true;
-            } catch {}
+          const observedAt = clock(dependencies).toISOString();
+          if (
+            error instanceof PagarmeRejectedError ||
+            error instanceof RangeError
+          ) {
+            // 4xx (or a payload we refused to send): no order exists.
+            await dependencies.repository
+              .markProviderRejected(identity, observedAt)
+              .catch(() => {});
             try {
               dependencies.observe?.({
                 level: "warn",
-                event: rejected
-                  ? "gift_checkout.provider_rejected"
-                  : "gift_checkout.provider_rejection_unrecorded",
+                event: "gift_checkout.provider_rejected",
                 siteId: record.siteId,
-                attemptId: record.attemptId,
-                paymentMethod: method,
-                errorCode: error.providerCodes[0] ?? "UNKNOWN",
+                checkoutId: record.attemptId,
+                paymentMethod: quote.method,
+                errorCode:
+                  error instanceof PagarmeRejectedError
+                    ? String(error.status)
+                    : "PAYLOAD",
               });
             } catch {}
-          }
-          if (rejected)
             return fail(
-              method === "PIX"
+              quote.method === "PIX"
                 ? "PIX_UNAVAILABLE"
                 : "PAYMENT_METHOD_UNAVAILABLE",
             );
+          }
+          if (!(error instanceof PagarmeUnknownOutcomeError))
+            throw new PagarmeUnknownOutcomeError("network");
           await dependencies.repository
             .markOutcomeUnknown(identity, observedAt)
             .catch(() => {});
           return fail("EXTERNAL_OUTCOME_UNKNOWN");
         }
+        let saved = await dependencies.repository.saveOrder(
+          identity,
+          order,
+          clock(dependencies).toISOString(),
+        );
+        authorizedRecord(
+          saved,
+          site.data,
+          body.data.quoteId,
+          body.data.requestId,
+          tokenHash,
+        );
+        if (dependencies.applyOrder && order.status !== "pending") {
+          try {
+            const binding = await dependencies.repository.loadBinding({
+              siteId: record.siteId,
+              attemptId: record.attemptId,
+            });
+            if (binding) await dependencies.applyOrder(binding, order);
+            saved =
+              (await dependencies.repository.findByRequest(
+                record.siteId,
+                record.requestId,
+              )) ?? saved;
+          } catch {
+            // The order.paid webhook and the reconciliation sweep post it.
+          }
+        }
+        return createResult(saved);
       } catch (error) {
         return sanitized(error);
       }
     },
 
-    async getStatus(siteId: unknown, input: unknown): Promise<CheckoutStatus> {
+    async getStatus(
+      siteId: unknown,
+      input: unknown,
+    ): Promise<GiftCheckoutStatus> {
       try {
         const site = giftQuoteSchema.shape.siteId.safeParse(siteId);
-        const body = checkoutStatusInputSchema.safeParse(input);
+        const body = giftCheckoutStatusInputSchema.safeParse(input);
         if (!site.success || !body.success) return fail("QUOTE_INVALID");
         const tokenHash = createHash("sha256")
           .update(body.data.recoveryToken, "utf8")
           .digest();
-        let loaded = await dependencies.repository.findByRequest(
+        const record = await dependencies.repository.findByRequest(
           site.data,
           body.data.requestId,
         );
-        if (!loaded) {
-          const quote = await dependencies.repository.findQuote(
-            site.data,
-            body.data.quoteId,
-          );
-          if (!quote) return fail("REQUEST_CONFLICT");
-          const quoteSnapshot = readGiftQuoteSnapshot(quote);
-          const now = clock(dependencies);
-          if (
-            quoteSnapshot.quote.siteId !== site.data ||
-            quoteSnapshot.quote.id !== body.data.quoteId ||
-            Date.parse(quoteSnapshot.createdAt) > now.getTime()
-          )
-            return fail("REQUEST_CONFLICT");
-          const reservation = freeze({
-            siteId: site.data,
-            quoteId: body.data.quoteId,
-            requestId: body.data.requestId,
-            orderId: dependencies.generateId("order"),
-            attemptId: dependencies.generateId("attempt"),
-            recoveryTokenHash: tokenHash.toString("hex"),
-            quoteSnapshot,
-            createdAt: now.toISOString(),
-          });
-          if (
-            !checkoutResultSchema.shape.orderId.safeParse(reservation.orderId)
-              .success ||
-            !checkoutResultSchema.shape.attemptId.safeParse(
-              reservation.attemptId,
-            ).success
-          )
-            return fail("QUOTE_INVALID");
-          loaded =
-            await dependencies.repository.sealUncreatedRequest(reservation);
-        }
-        const record = readRecord(loaded);
+        if (!record) return fail("REQUEST_CONFLICT");
         authorizedRecord(
           record,
           site.data,
@@ -1056,16 +768,7 @@ export function createGiftCheckoutService(
           body.data.requestId,
           tokenHash,
         );
-        const status = projectStatus(record, clock(dependencies));
-        if (
-          status.checkout &&
-          !isSafeCheckoutContinuation(
-            status.checkout.hostedUrl,
-            body.data.recoveryToken,
-          )
-        )
-          return fail("EXTERNAL_OUTCOME_UNKNOWN");
-        return status;
+        return projectGiftCheckoutStatus(record);
       } catch (error) {
         return sanitized(error);
       }

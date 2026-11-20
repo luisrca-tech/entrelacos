@@ -61,7 +61,6 @@ describe("panel API boundary", () => {
     "holder",
     "details",
     "activation",
-    "account",
     "fees",
     "payments",
     "withdrawals",
@@ -71,6 +70,7 @@ describe("panel API boundary", () => {
   });
   it.each([
     "/sites/demo/receiving/unknown",
+    "/sites/demo/receiving/account",
     "/sites/demo/receiving/activation/extra",
     "/sites/demo/receiving/../payments",
     "/sites/demo/receiving/payments#secret",

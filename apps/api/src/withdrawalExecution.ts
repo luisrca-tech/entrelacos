@@ -8,7 +8,6 @@ import type {
   FinancialActor,
   RecentFinancialAuthenticationEvidence,
 } from "./financialAuthorization";
-import { logWithdrawalFailure } from "./withdrawalDiagnostics";
 import {
   readWithdrawalConsentRecord,
   readWithdrawalReservationSnapshot,
@@ -391,7 +390,6 @@ function hasAcceptedMaximumWithdrawalConsent(
     snapshot.feeQuote.provenance === "provider" &&
     consent.snapshot.feeQuote.provenance === "provider" &&
     consent.snapshot.feeQuote.feeSemantics === snapshot.feeQuote.feeSemantics &&
-    consent.snapshot.presentation.payout !== undefined &&
     acceptedAt >=
       databaseTimestampEpochMicroseconds(consent.snapshot.preview.issuedAt) &&
     acceptedAt <
@@ -769,8 +767,7 @@ export function createWithdrawalExecutionService(
         lookup: captureWithdrawalCallable(fields.lookup?.value, "lookup", true),
       };
     }
-  } catch (error) {
-    logWithdrawalFailure(error);
+  } catch {
     configured = null;
   }
   const c = configured;
@@ -793,8 +790,7 @@ export function createWithdrawalExecutionService(
           fence,
         }),
       );
-    } catch (error) {
-      logWithdrawalFailure(error);
+    } catch {
       /* An unacknowledged observation never permits another dispatch. */
     }
     return { outcome: "UNRESOLVED" };
@@ -807,8 +803,7 @@ export function createWithdrawalExecutionService(
     let observation: WithdrawalDispatchObservation;
     try {
       observation = captureWithdrawalObservation(raw, original, fence, clock());
-    } catch (error) {
-      logWithdrawalFailure(error);
+    } catch {
       return uncertain(original, fence);
     }
     try {
@@ -824,8 +819,7 @@ export function createWithdrawalExecutionService(
           c!.post(original, fence, observation.proofReference),
         );
       return { outcome: "PROCESSING", stored };
-    } catch (error) {
-      logWithdrawalFailure(error);
+    } catch {
       return { outcome: "UNRESOLVED" };
     }
   }
@@ -842,8 +836,7 @@ export function createWithdrawalExecutionService(
         armed = await genuineWithdrawalPromise(
           c.arm(captureWithdrawalValue(attempt)),
         );
-      } catch (error) {
-        logWithdrawalFailure(error);
+      } catch {
         return { outcome: "DENIED" };
       }
       if (armed.outcome !== "ARMED")
@@ -855,8 +848,7 @@ export function createWithdrawalExecutionService(
       try {
         original = captureOriginalWithdrawal(armed.original);
         fence = captureDispatchFence(armed.fence, original);
-      } catch (error) {
-        logWithdrawalFailure(error);
+      } catch {
         return { outcome: "UNRESOLVED" };
       }
       try {
@@ -890,8 +882,7 @@ export function createWithdrawalExecutionService(
           fence,
           await genuineWithdrawalPromise(c.dispatch(original, fence)),
         );
-      } catch (error) {
-        logWithdrawalFailure(error);
+      } catch {
         return uncertain(original, fence);
       }
     },
@@ -936,8 +927,7 @@ export function createWithdrawalExecutionService(
         if (["FAILED", "CANCELLED"].includes(stored.state) || !stored.fence)
           return { outcome: "EXISTING", stored };
         fence = captureDispatchFence(stored.fence, original);
-      } catch (error) {
-        logWithdrawalFailure(error);
+      } catch {
         return { outcome: "UNRESOLVED" };
       }
       try {
@@ -954,8 +944,7 @@ export function createWithdrawalExecutionService(
         }
         withdrawalObject(found, ["outcome"]);
         return uncertain(original, fence);
-      } catch (error) {
-        logWithdrawalFailure(error);
+      } catch {
         return uncertain(original, fence);
       }
     },

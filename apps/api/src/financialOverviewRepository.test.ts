@@ -1,6 +1,6 @@
+import { createHash } from "node:crypto";
 import { drizzle, type NodePgClient } from "drizzle-orm/node-postgres";
 import { describe, expect, it, vi } from "vitest";
-import { hashAsaasEventIdentity } from "./asaasWebhook";
 import {
   type FinancialAccountBinding,
   loadFinancialOverview,
@@ -8,8 +8,15 @@ import {
 import { createFinancialOverviewRepository } from "./financialOverviewRepository";
 import { platformTariffPolicy, quoteGiftPurchaseAmounts } from "./giftMoney";
 import { giftReceivedEffectKey } from "./giftPaymentReconciliation";
+import { giftReversalEffectKey } from "./giftPaymentRestrictions";
 import { buildGiftV2Settlement } from "./giftQuotes";
+import { hashFinancialEventIdentity } from "./pagarmeWebhook";
 import { withdrawalCompletedEffectKey } from "./withdrawalExecution";
+
+// Stored inbox hashes are verified by the provider-specific inbox writer.
+function eventHash(...parts: unknown[]): string {
+  return createHash("sha256").update(JSON.stringify(parts)).digest("hex");
+}
 
 type Row = Record<string, unknown>;
 const instant = new Date("2026-10-12T19:00:00.000Z");
@@ -25,7 +32,7 @@ const zeros = {
 };
 function fixture(live = false) {
   const binding: FinancialAccountBinding = {
-    provider: "ASAAS",
+    provider: "PAGARME",
     siteId: "site-one",
     accountBindingId: "account-one",
     accountReference: "remote_one",
@@ -45,7 +52,7 @@ function fixture(live = false) {
     id: binding.accountBindingId,
     site_id: binding.siteId,
     environment: binding.environment,
-    provider: "ASAAS",
+    provider: "PAGARME",
     account_reference: binding.accountReference,
     is_current: false,
     provider_account_state: "BLOCKED",
@@ -62,6 +69,8 @@ function fixture(live = false) {
     ledgers: [],
     events: [],
     withdrawals: [],
+    // Only operator-resolved reversal alerts (the query filters the rest).
+    resolvedAlerts: [],
   };
   const clock = { value: new Date(instant), database: instant as unknown };
   const faults = {
@@ -152,7 +161,7 @@ function fixture(live = false) {
         }
       } else {
         const matched = sql.match(
-          /FROM "(financial_ledger_entry|financial_event_inbox|financial_operation|withdrawal_intent)" (l|e|op|w)/,
+          /FROM "(financial_ledger_entry|financial_event_inbox|financial_operation|withdrawal_intent|financial_operator_alert)" (al|l|e|op|w)\b/,
         );
         if (!matched) throw new Error("Unexpected totals table");
         const table = (
@@ -161,6 +170,7 @@ function fixture(live = false) {
             financial_event_inbox: "events",
             financial_operation: "operations",
             withdrawal_intent: "withdrawals",
+            financial_operator_alert: "resolvedAlerts",
           } as Record<string, string>
         )[matched[1]];
         const alias = matched[2];
@@ -265,7 +275,7 @@ function received(
       receiving: {
         siteId: values.binding.siteId,
         environment: values.binding.environment,
-        provider: "ASAAS",
+        provider: "PAGARME",
         accountReference: values.binding.accountReference,
       },
     },
@@ -301,7 +311,7 @@ function received(
     provider_event_reference: `evt_${suffix}`,
     event_type: "PAYMENT_RECEIVED",
     payload,
-    payload_hash: hashAsaasEventIdentity(
+    payload_hash: eventHash(
       `evt_${suffix}`,
       "PAYMENT_RECEIVED",
       values.binding.accountReference,
@@ -476,7 +486,7 @@ describe("authoritative stored financial overview totals", () => {
     );
     expect(values.queries.at(-1)?.sql).toBe("commit");
     expect(values.queries.filter((q) => /^SELECT/i.test(q.sql))).toHaveLength(
-      6,
+      7,
     );
     expect(
       values.queries.every(
@@ -509,7 +519,7 @@ describe("authoritative stored financial overview totals", () => {
     });
     expect(result?.unresolvedFinancialEventCount).toBe(0);
     expect(values.queries.filter((q) => /^SELECT/i.test(q.sql))).toHaveLength(
-      6,
+      7,
     );
   });
   it.each(
@@ -557,7 +567,7 @@ describe("authoritative stored financial overview totals", () => {
     if (kind === "account") values.binding.accountBindingId = newId;
     const payload = r.e.payload as Record<string, string>;
     if (kind === "attempt") payload.externalReference = newId;
-    r.e.payload_hash = hashAsaasEventIdentity(
+    r.e.payload_hash = eventHash(
       r.e.provider_event_reference as string,
       r.e.event_type as string,
       values.binding.accountReference,
@@ -669,6 +679,106 @@ describe("authoritative stored financial overview totals", () => {
     });
     await denied(values);
   });
+  it.each([
+    ["REFUND", "REFUNDED", "GIFT_REFUNDED"],
+    ["CHARGEBACK", "CHARGEBACK", "GIFT_CHARGEBACK"],
+  ] as const)(
+    "accepts a compensated Pagar.me %s and clears the block once the balance covers it",
+    async (reversal, status, kind) => {
+      const values = fixture();
+      const rows = received(values);
+      rows.p.provider_status = status;
+      const eventType =
+        reversal === "REFUND" ? "CHARGE_REFUNDED" : "CHARGE_CHARGEDBACK";
+      values.tables.events.push({
+        ...rows.e,
+        id: "processed-reversal",
+        provider_event_reference: "hook_reversal",
+        event_type: eventType,
+        payload_hash: hashFinancialEventIdentity(
+          "hook_reversal",
+          eventType,
+          values.binding.accountReference,
+          rows.e.payload as Record<string, string>,
+        ),
+      });
+      const reversalDebit: Row = {
+        ...rows.l,
+        id: "reversal-one",
+        effect_key: giftReversalEffectKey(reversal, "pay_one"),
+        kind,
+        direction: "DEBIT",
+        compensates_entry_id: rows.l.id,
+        event_id: "processed-reversal",
+      };
+      values.tables.ledgers.push(reversalDebit);
+      const stored = await values.repository.loadStoredTotals(values.binding);
+      expect(stored?.totals).toMatchObject({
+        netReceivedCents: 10000,
+        refundedCents: 10000,
+      });
+      expect(stored?.unresolvedFinancialEventCount).toBe(0);
+      // Money already withdrawn: the ledger is negative and it blocks again.
+      values.tables.ledgers.push({
+        ...reversalDebit,
+        id: "shortfall",
+        effect_key: "SHORTFALL:one",
+        kind: "SHORTFALL",
+        compensates_entry_id: null,
+        amount_cents: 1,
+      });
+      expect((await consistency(values))?.unresolvedFinancialEventCount).toBe(
+        1,
+      );
+      // An operator write-off (resolved alert) clears it explicitly.
+      values.tables.resolvedAlerts.push({
+        ...values.scope,
+        id: "alert-one",
+        kind,
+        payment_reference: "pay_one",
+      });
+      expect((await consistency(values))?.unresolvedFinancialEventCount).toBe(
+        0,
+      );
+    },
+  );
+  it("re-hashes Pagar.me inbox rows instead of trusting the stored hash format", async () => {
+    const values = fixture();
+    const rows = received(values);
+    const forged = {
+      ...rows.e,
+      id: "forged-event",
+      provider_event_reference: "hook_forged",
+      event_type: "CHARGE_REFUNDED",
+      payload_hash: "a".repeat(64),
+    };
+    values.tables.events.push(forged);
+    await denied(values);
+    forged.payload_hash = hashFinancialEventIdentity(
+      "hook_forged",
+      "CHARGE_REFUNDED",
+      values.binding.accountReference,
+      rows.e.payload as Record<string, string>,
+    );
+    await expect(
+      values.repository.loadStoredTotals(values.binding),
+    ).resolves.toMatchObject({ totals: { netReceivedCents: 10000 } });
+  });
+  it("rejects a reversal debit that does not match the payment status", async () => {
+    const values = fixture();
+    const rows = received(values);
+    rows.p.provider_status = "CHARGEBACK";
+    values.tables.ledgers.push({
+      ...rows.l,
+      id: "reversal-one",
+      effect_key: giftReversalEffectKey("REFUND", "pay_one"),
+      kind: "GIFT_REFUNDED",
+      direction: "DEBIT",
+      compensates_entry_id: rows.l.id,
+    });
+    await denied(values);
+    expect((await consistency(values))?.unresolvedFinancialEventCount).toBe(1);
+  });
   it("does not turn a raw REFUNDED provider status into a known refund amount", async () => {
     const values = fixture();
     const rows = received(values);
@@ -682,7 +792,7 @@ describe("authoritative stored financial overview totals", () => {
       ...rows.e,
       id: "restrictive-event",
       provider_event_reference: "evt_restrictive",
-      payload_hash: hashAsaasEventIdentity(
+      payload_hash: eventHash(
         "evt_restrictive",
         "PAYMENT_RECEIVED",
         values.binding.accountReference,
@@ -734,7 +844,7 @@ describe("authoritative stored financial overview totals", () => {
         state: "DEAD_LETTER",
         processed_at: null,
         payment_id: null,
-        payload_hash: hashAsaasEventIdentity(
+        payload_hash: eventHash(
           rows.e.provider_event_reference as string,
           eventType,
           values.binding.accountReference,
@@ -775,7 +885,7 @@ describe("authoritative stored financial overview totals", () => {
       id: "processed-refund",
       provider_event_reference: "evt_refund",
       event_type: "PAYMENT_REFUNDED",
-      payload_hash: hashAsaasEventIdentity(
+      payload_hash: eventHash(
         "evt_refund",
         "PAYMENT_REFUNDED",
         values.binding.accountReference,
@@ -831,7 +941,7 @@ describe("authoritative stored financial overview totals", () => {
     if (change === "ledger-amount") rows.l.amount_cents = 9999;
     if (change === "effect") rows.l.effect_key = "arbitrary-credit";
     if (change === "receipt-event") rows.l.event_id = null;
-    if (change === "event-hash") rows.e.payload_hash = "a".repeat(64);
+    if (change === "event-hash") rows.e.payload_hash = "A".repeat(64);
     if (change === "event-payment") rows.e.payment_id = "other-payment";
     if (change === "event-auth") rows.e.authenticated_at = null;
     if (change === "scope") rows.o.account_id = "other-account";
@@ -1040,7 +1150,7 @@ describe("stored balance consistency after the provider GET", () => {
       /begin isolation level repeatable read read only/i,
     );
     expect(values.queries.filter((q) => /^SELECT/i.test(q.sql))).toHaveLength(
-      6,
+      7,
     );
   });
   it("reads after GET rather than reusing the earlier totals snapshot", async () => {
@@ -1113,7 +1223,7 @@ describe("stored balance consistency after the provider GET", () => {
       provider_event_reference: "evt_later",
       state: "RETRY",
       processed_at: null,
-      payload_hash: hashAsaasEventIdentity(
+      payload_hash: eventHash(
         "evt_later",
         "PAYMENT_RECEIVED",
         values.binding.accountReference,
@@ -1144,7 +1254,7 @@ describe("stored balance consistency after the provider GET", () => {
       id: "processed-refund",
       provider_event_reference: "evt_refund",
       event_type: "PAYMENT_REFUNDED",
-      payload_hash: hashAsaasEventIdentity(
+      payload_hash: eventHash(
         "evt_refund",
         "PAYMENT_REFUNDED",
         values.binding.accountReference,
@@ -1315,7 +1425,7 @@ function completedWithdrawal(receiptReference: string, live = false) {
   return { f, w, proof, repository };
 }
 
-it.each(["proof-1", `asaas-transfer:${"a".repeat(64)}`])(
+it.each(["proof-1", `pagarme-withdrawal:${"a".repeat(64)}`])(
   "counts an immutable provider-proven withdrawal actual debit and releases its unused maximum with receipt %s",
   async (receiptReference) => {
     const { f, repository } = completedWithdrawal(receiptReference);
@@ -1330,12 +1440,12 @@ it.each(["proof-1", `asaas-transfer:${"a".repeat(64)}`])(
 
 it.each([
   `foreign-transfer:${"a".repeat(64)}`,
-  `asaas-transfer:${"a".repeat(63)}`,
-  `asaas-transfer:${"a".repeat(65)}`,
-  `asaas-transfer:${"A".repeat(64)}`,
-  `asaas-transfer:${"g".repeat(64)}`,
-  `asaas-transfer:${"a".repeat(64)}\n`,
-  `asaas-transfer:${"a".repeat(64)}\u0000`,
+  `pagarme-withdrawal:${"a".repeat(63)}`,
+  `pagarme-withdrawal:${"a".repeat(65)}`,
+  `pagarme-withdrawal:${"A".repeat(64)}`,
+  `pagarme-withdrawal:${"g".repeat(64)}`,
+  `pagarme-withdrawal:${"a".repeat(64)}\n`,
+  `pagarme-withdrawal:${"a".repeat(64)}\u0000`,
 ])("rejects a malformed custody receipt %j", async (receiptReference) => {
   const { f, repository } = completedWithdrawal(receiptReference);
   await expect(repository.loadStoredTotals(f.binding)).rejects.toMatchObject({
@@ -1347,7 +1457,7 @@ it.each(["proofReference", "receiptReference", "providerReference"] as const)(
   "rejects a native custody proof with a foreign %s",
   async (field) => {
     const { f, proof, repository } = completedWithdrawal(
-      `asaas-transfer:${"a".repeat(64)}`,
+      `pagarme-withdrawal:${"a".repeat(64)}`,
     );
     proof[field] = "foreign-reference";
     await expect(repository.loadStoredTotals(f.binding)).rejects.toMatchObject({
@@ -1356,26 +1466,22 @@ it.each(["proofReference", "receiptReference", "providerReference"] as const)(
   },
 );
 
-it("counts a live gross-budget debit with the native net above the frozen minimum", async () => {
+it("rejects a completed debit whose net differs from the fixed-fee net", async () => {
   const { f, proof, repository } = completedWithdrawal(
-    `asaas-transfer:${"a".repeat(64)}`,
+    `pagarme-withdrawal:${"a".repeat(64)}`,
     true,
   );
   Object.assign(proof, { totalDebitCents: 5000, netCents: 5000 });
-  Object.assign(proof.correlation, {
-    policyVersion: "asaas-pix-gross-max-v1-100",
-  });
   f.tables.ledgers[0].amount_cents = 5000;
-  expect((await repository.loadStoredTotals(f.binding))?.totals).toMatchObject({
-    withdrawnCents: 5000,
-    pendingCommitmentsCents: 0,
+  await expect(repository.loadStoredTotals(f.binding)).rejects.toMatchObject({
+    code: "FINANCIAL_OVERVIEW_REPOSITORY_UNAVAILABLE",
   });
 });
 it.each(["FAILED", "CANCELLED"])(
   "excludes only a custody-proven zero-fee %s released reserve",
   async (state) => {
     const { f, w, proof } = completedWithdrawal(
-      `asaas-transfer:${"a".repeat(64)}`,
+      `pagarme-withdrawal:${"a".repeat(64)}`,
     );
     w.state = state;
     w.reservation_state = "RELEASED";
@@ -1519,7 +1625,7 @@ it("attributes only received installment shares and keeps confirmed funds awaiti
     };
     entry.e.payload = payload;
     entry.e.event_type = pending ? "PAYMENT_CONFIRMED" : "PAYMENT_RECEIVED";
-    entry.e.payload_hash = hashAsaasEventIdentity(
+    entry.e.payload_hash = eventHash(
       String(entry.e.provider_event_reference),
       String(entry.e.event_type),
       f.binding.accountReference,
@@ -1541,9 +1647,8 @@ it("attributes only received installment shares and keeps confirmed funds awaiti
 });
 
 describe("PLATFORM_ACCOUNT_SPLIT_V2 installment totals", () => {
-  // The first installment of a R$150 gift in 3x: its frozen couple split is
-  // 5091 cents, above the even nominal share (5000), because later
-  // installments cost more to anticipate.
+  // The first installment of a R$150 gift in 3x: its frozen couple net is the
+  // even nominal share (5000 cents).
   function v2Installment(
     values: ReturnType<typeof fixture>,
     recipientNetCents: number,
@@ -1571,7 +1676,7 @@ describe("PLATFORM_ACCOUNT_SPLIT_V2 installment totals", () => {
       ),
     };
     const settlement = buildGiftV2Settlement(quote as never);
-    expect(settlement.recipientSplitCents).toEqual([5091, 5000, 4909]);
+    expect(settlement.recipientSplitCents).toEqual([5000, 5000, 5000]);
     Object.assign(rows.q, {
       nominal_cents: quote.nominalCents,
       commission_cents: quote.commissionCents,
@@ -1583,8 +1688,8 @@ describe("PLATFORM_ACCOUNT_SPLIT_V2 installment totals", () => {
       settlement,
       pricing: { policy: platformTariffPolicy("CREDIT_CARD") },
     });
-    const gross = 5476;
-    const net = 5269;
+    const gross = 5670;
+    const net = 5420;
     Object.assign(rows.p, {
       gross_cents: gross,
       processing_cents: gross - net,
@@ -1610,41 +1715,41 @@ describe("PLATFORM_ACCOUNT_SPLIT_V2 installment totals", () => {
     return rows;
   }
 
-  it("counts an installment whose frozen split is above the even share", async () => {
+  it("counts an installment credited with its frozen split", async () => {
     const values = fixture();
-    v2Installment(values, 5091);
+    v2Installment(values, 5000);
     const result = await values.repository.loadStoredTotals(values.binding);
     expect(result?.totals).toMatchObject({
-      nominalReceivedCents: 5091,
-      netReceivedCents: 5091,
+      nominalReceivedCents: 5000,
+      netReceivedCents: 5000,
     });
   });
 
   it("counts a credited anticipated installment that is still CONFIRMED as received", async () => {
     const values = fixture();
-    const rows = v2Installment(values, 5091);
+    const rows = v2Installment(values, 5000);
     Object.assign(rows.p, { provider_status: "CONFIRMED" });
     const result = await values.repository.loadStoredTotals(values.binding);
     expect(result?.totals).toMatchObject({
-      nominalReceivedCents: 5091,
-      netReceivedCents: 5091,
+      nominalReceivedCents: 5000,
+      netReceivedCents: 5000,
       awaitingReleaseCents: 0,
     });
   });
 
   it("adds a funded divergence top-up to what the couple received", async () => {
     const values = fixture();
-    v2Installment(values, 4990, { cents: 101, funded: true });
+    v2Installment(values, 4899, { cents: 101, funded: true });
     const result = await values.repository.loadStoredTotals(values.binding);
     expect(result?.totals).toMatchObject({
-      nominalReceivedCents: 5091,
-      netReceivedCents: 5091,
+      nominalReceivedCents: 5000,
+      netReceivedCents: 5000,
     });
   });
 
   it("rejects a top-up that does not close the frozen split", async () => {
     const values = fixture();
-    v2Installment(values, 4990, { cents: 100, funded: true });
+    v2Installment(values, 4899, { cents: 100, funded: true });
     await denied(values);
   });
 });

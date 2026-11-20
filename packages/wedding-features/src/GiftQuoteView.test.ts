@@ -79,12 +79,15 @@ describe("gift quote view", () => {
     expect(html).toContain("Ambiente de testes — sem pagamentos reais.");
     expect(html).toContain("Presente simbólico");
     expect(html).toContain("não há produto físico ou entrega");
-    expect(html).toContain("página segura de pagamento");
+    expect(html).toContain(
+      "Pagamentos processados por Pagar.me, uma empresa Stone.",
+    );
+    expect(html).not.toMatch(/<a\b|<img\b/);
+    expect(html).toContain("Seus dados");
+    expect(html).not.toContain("Número do cartão");
     expect(html).not.toContain("Pagamento confirmado");
     expect(html).not.toContain('name="card"');
     expect(html).not.toMatch(/token|hash|payer|provider key/i);
-    expect(html).toContain('alt="Serviços financeiros Asaas"');
-    expect(html).toContain('href="https://asaas.com"');
     expect(html).not.toContain(quote.id);
     expect(html).not.toContain(quote.siteId);
   });
@@ -134,11 +137,17 @@ describe("gift quote view", () => {
       "Selecione novamente a forma de pagamento para atualizar os valores e continuar.",
     );
 
-    for (const html of [noQuote, wrongMethod, loading, expired]) {
-      expect(html).toMatch(
-        /<button[^>]*disabled=""[^>]*>Continuar para pagamento<\/button>/,
-      );
+    for (const html of [noQuote, loading, expired]) {
+      expect(html).toMatch(/<button[^>]*disabled=""[^>]*>Gerar Pix<\/button>/);
     }
+    expect(wrongMethod).toMatch(
+      /<button[^>]*disabled=""[^>]*>Pagar com cartão<\/button>/,
+    );
+    const noMethod = renderQuote({ quote: null, method: null });
+    expect(noMethod).not.toContain("Seus dados");
+    expect(noMethod).toMatch(
+      /<button type="submit"[^>]*disabled=""[^>]*>Gerar Pix<\/button>/,
+    );
   });
 
   it("enables confirmation immediately before expiry and disables it at the boundary", () => {
@@ -149,14 +158,10 @@ describe("gift quote view", () => {
       now: new Date("2026-10-12T15:30:00.000Z"),
     });
 
-    expect(justBefore).toMatch(
-      /<button[^>]*>Continuar para pagamento<\/button>/,
-    );
-    expect(justBefore).not.toMatch(
-      /<button[^>]*disabled=""[^>]*>Continuar para pagamento/,
-    );
+    expect(justBefore).toMatch(/<button[^>]*>Gerar Pix<\/button>/);
+    expect(justBefore).not.toMatch(/<button[^>]*disabled=""[^>]*>Gerar Pix/);
     expect(atExpiry).toMatch(
-      /<button[^>]*disabled=""[^>]*>Continuar para pagamento<\/button>/,
+      /<button[^>]*disabled=""[^>]*>Gerar Pix<\/button>/,
     );
   });
 
@@ -219,19 +224,21 @@ it("shows the exact installment schedule, surcharge and total of the selected qu
     },
   });
   expect(html).toContain("Parcelas");
-  expect(html).toMatch(/À vista · R\$\s*105,21/);
+  expect(html).toMatch(/1x à vista · R\$\s*105,21/);
+  expect(html).toMatch(/3x de R\$\s*35,33 · total R\$\s*106,01/);
   expect(html).toMatch(/3x de R\$\s*35,33 \(última R\$\s*35,35\)/);
   expect(html).not.toContain("A última parcela tem ajuste de centavos");
   expect(html).not.toContain("Acréscimo do parcelamento");
   expect(html).toContain("Taxas e serviço");
   expect(html).toMatch(/R\$\s*106,01/);
-  expect(html).toContain("Dados do pagador");
-  expect(html).toContain("continuar a mesma cobrança");
-  expect(html).toContain("60 minutos");
-  expect(html).toContain("aguarde a confirmação do encerramento");
+  expect(html).toContain("Seus dados");
+  expect(html).toContain("Número do cartão");
+  expect(html).toMatch(
+    /<button type="submit"[^>]*>Pagar R\$\s*106,01<\/button>/,
+  );
   expect(html).not.toContain("Taxa de processamento");
   const disclosure = html.indexOf(
-    'aria-label="Prestador dos serviços financeiros"',
+    "Pagamentos processados por Pagar.me, uma empresa Stone.",
   );
   expect(disclosure).toBeGreaterThan(html.indexOf("</form>"));
   expect(disclosure).toBeLessThan(html.indexOf("<footer"));
@@ -243,8 +250,11 @@ it("does not offer installments when the server returns only an upfront quote", 
     quote: { ...quote, method: "CREDIT_CARD" },
   });
   expect(html).not.toContain("Parcelas");
-  expect(html).not.toContain("Dados do pagador");
-  expect(html).not.toContain("60 minutos");
+  expect(html).not.toContain("Valor das parcelas");
+  expect(html).toContain("Número do cartão");
+  expect(html).toMatch(
+    /<button type="submit"[^>]*>Pagar R\$\s*105,21<\/button>/,
+  );
 });
 
 it("shows equal installments without a rounding marker", () => {
@@ -273,7 +283,7 @@ it("shows equal installments without a rounding marker", () => {
     },
   });
   expect(html).toMatch(
-    /<option[^>]*value="3"[^>]*>3x de R\$\s*35,34<\/option>/,
+    /<option[^>]*value="3"[^>]*>3x de R\$\s*35,34 · total R\$\s*106,02<\/option>/,
   );
   expect(html).not.toContain("A última parcela tem ajuste de centavos");
   expect(html).toMatch(/R\$\s*106,02/);

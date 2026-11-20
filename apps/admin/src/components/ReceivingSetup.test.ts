@@ -63,7 +63,7 @@ const bridgeRequestId = `nr1_${createHash("sha256")
       "receiving.self-nomination.request.v1",
       "wedding-a",
       "admin-a",
-      "ASAAS",
+      "PAGARME",
       "sandbox",
     ]),
   )
@@ -406,6 +406,9 @@ async function receivingHttpBridge(
       return { rows: [] };
     }
     if (/pg_advisory_xact_lock/.test(sql)) return { rows: [] };
+    // Retiring a previous provider's account: none exists in these fixtures.
+    if (/^UPDATE "receiving_account" SET is_current=false/i.test(sql))
+      return { rows: [] };
     if (/SELECT clock_timestamp/.test(sql))
       return { rows: [{ currentTime: new Date(Date.now()) }] };
     if (/^select .*from "session" inner join "user"/i.test(sql)) {
@@ -571,14 +574,8 @@ async function receivingHttpBridge(
                     ? null
                     : [
                         "operatorReference",
-                        "webhookTokenHash",
                         "accountReference",
                         "recipientReference",
-                        "credentialVersion",
-                        "credentialKeyId",
-                        "credentialNonce",
-                        "credentialCiphertext",
-                        "credentialTag",
                         "observedAt",
                       ].some((key) => source.a?.[key] !== null) ||
                       source.a.providerAccountState !== "UNVERIFIED" ||

@@ -56,7 +56,7 @@ const alert: OwnerFinanceAlert = {
   amountCents: 10239,
   createdAt: "2026-10-14T12:00:00.000Z",
   dueAt: "2026-10-16T12:00:00.000Z",
-  asaasPaymentUrl: "https://www.asaas.com/payment/show/123",
+  providerPaymentUrl: "https://dashboard.pagar.me/orders/or_123",
   resolvedAt: null,
   resolvedNote: null,
 };
@@ -235,14 +235,14 @@ describe("OwnerFinance screen", () => {
     Object.getOwnPropertyDescriptor(
       HTMLInputElement.prototype,
       "value",
-    )?.set?.call(note, "Conferido no Asaas");
+    )?.set?.call(note, "Conferido na Pagar.me");
     await act(async () =>
       note.dispatchEvent(new Event("input", { bubbles: true })),
     );
     await act(async () => button("Confirmar").click());
     expect(request).toHaveBeenCalledWith(
       "/v1/owner/finance/alerts/alert-1/resolve",
-      { method: "POST", body: { note: "Conferido no Asaas" } },
+      { method: "POST", body: { note: "Conferido na Pagar.me" } },
     );
   });
 });

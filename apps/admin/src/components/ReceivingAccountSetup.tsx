@@ -2,7 +2,6 @@ import {
   meResponseSchema,
   type ReceivingReadiness,
   type ReceivingSetupContext,
-  receivingIncomingPixDisclosure,
   receivingReadinessResponseSchema,
   receivingSetupAccountSchema,
   receivingSetupResponseSchema,
@@ -27,7 +26,6 @@ import type {
   ReceivingSetupScope,
 } from "./ReceivingSetup";
 import {
-  AccountStep,
   ActivationStep,
   DetailsStep,
   FeesStep,
@@ -47,6 +45,14 @@ function supportsIncomingVerification(
     (typeof __APP_ENV__ !== "undefined" &&
       __APP_ENV__ === "production" &&
       mode === "live")
+  );
+}
+
+// Pagar.me approval is what lets the API confirm the incoming account.
+function providerApproved(setup: ReceivingSetupContext): boolean {
+  return (
+    setup.accountState === "CREATED" &&
+    setup.providerStatus?.accountState === "APPROVED"
   );
 }
 
@@ -162,12 +168,7 @@ export function createReceivingAccountSetupController(
           setup.isHolder &&
           !ownerView &&
           setup.consentRecorded &&
-          setup.pixConsentRecorded === true &&
-          setup.accountState === "CREATED" &&
-          setup.providerStatus?.commercialInfoExpired !== true &&
-          (["commercialInfo", "documentation", "general"] as const).every(
-            (key) => setup.providerStatus?.[key] === "APPROVED",
-          )
+          providerApproved(setup)
         )
           return await verifyIncoming();
       }
@@ -175,17 +176,13 @@ export function createReceivingAccountSetupController(
       if (revision === active) fail(cause);
     }
   }
-  function createGuard(
-    accountStates: readonly string[],
-    allowOwnerRead = false,
-  ) {
+  function createGuard(accountStates: readonly string[]) {
     const guard: FinancialReauthenticationGuard = {
       isCurrent: () =>
         current() &&
-        ((allowOwnerRead && ownerView) ||
-          (actor?.user.role === "SITE_ADMIN" &&
-            !!scopeKey &&
-            state.setup?.isHolder === true)) &&
+        actor?.user.role === "SITE_ADMIN" &&
+        !!scopeKey &&
+        state.setup?.isHolder === true &&
         state.status === "ready" &&
         state.setup !== null &&
         accountStates.includes(state.setup.accountState),
@@ -240,11 +237,8 @@ export function createReceivingAccountSetupController(
     return guard;
   }
   const guard = createGuard(["NOT_CREATED", "PENDING"]);
-  const pixGuard = createGuard(["CREATED"], true);
   const incomingGuard = createGuard(["CREATED"]);
-  async function verifyIncoming(
-    authorizePix = false,
-  ): Promise<ReceivingReadiness | undefined> {
+  async function verifyIncoming(): Promise<ReceivingReadiness | undefined> {
     if (
       incomingInFlight ||
       !supportsIncomingVerification(state.setup?.mode) ||
@@ -273,12 +267,7 @@ export function createReceivingAccountSetupController(
           `/v1/sites/${encodeURIComponent(scope.siteId)}/receiving/incoming-verification`,
           {
             method: "POST",
-            body: {
-              confirmIncomingAccount: true,
-              ...(authorizePix
-                ? { pixConsentVersion: receivingIncomingPixDisclosure.version }
-                : {}),
-            },
+            body: { confirmIncomingAccount: true },
           },
         ),
       );
@@ -290,30 +279,11 @@ export function createReceivingAccountSetupController(
       update({
         ...state,
         message:
-          "Conta consultada no Asaas. Confira a situação atual dos recebimentos.",
+          "Cadastro consultado na Pagar.me. Confira a situação atual dos recebimentos.",
       });
       return readiness;
     } catch (cause) {
       if (
-        revision === active &&
-        current() &&
-        cause instanceof ApiError &&
-        cause.status === 409 &&
-        [
-          "RECEIVING_PIX_PREPARATION_PENDING",
-          "RECEIVING_PIX_PREPARATION_REVIEW_REQUIRED",
-        ].includes(cause.code)
-      ) {
-        await refresh(false);
-        if (!current() || state.status !== "ready") return;
-        update({
-          ...state,
-          status: "ready",
-          message: cause.code.endsWith("REVIEW_REQUIRED")
-            ? "A preparação dos recebimentos está em verificação. Não é necessário cadastrar outra chave. Se a situação persistir, entre em contato com o suporte."
-            : "A preparação dos recebimentos aguarda a liberação do Asaas. Conclua as pendências da conta e use Verificar situação para acompanhar.",
-        });
-      } else if (
         revision === active &&
         current() &&
         cause instanceof ApiError &&
@@ -324,7 +294,7 @@ export function createReceivingAccountSetupController(
           ...state,
           status: "ready",
           message:
-            "Não foi possível atualizar a verificação no Asaas agora. Sua configuração está salva. Use Verificar situação para acompanhar.",
+            "Não foi possível atualizar a verificação na Pagar.me agora. Sua configuração está salva. Use Verificar situação para acompanhar.",
         });
       } else if (revision === active) fail(cause);
     } finally {
@@ -336,7 +306,6 @@ export function createReceivingAccountSetupController(
   });
   return {
     guard,
-    pixGuard,
     incomingGuard,
     refresh,
     getState: () => structuredClone(state),
@@ -374,8 +343,7 @@ export function createReceivingAccountSetupController(
                 policyVersion: setup.policyVersion,
                 consentVersion: setup.disclosure.version,
                 confirmHolder: true,
-                consentToAsaas: true,
-                pixConsentVersion: receivingIncomingPixDisclosure.version,
+                consentToProvider: true,
               },
             },
           ),
@@ -387,7 +355,7 @@ export function createReceivingAccountSetupController(
             ...state,
             message:
               result.state === "STORED"
-                ? "Cadastro enviado ao Asaas. Acompanhe as verificações abaixo."
+                ? "Cadastro enviado à Pagar.me. Acompanhe as verificações abaixo."
                 : "O resultado permanece incerto. Verifique a situação antes de tentar novamente.",
           });
       } catch (cause) {
@@ -479,12 +447,7 @@ export function ReceivingAccountSetup(
       readiness.data.readiness.mode !== setup.mode ||
       !setup.isHolder ||
       !setup.consentRecorded ||
-      !setup.pixConsentRecorded ||
-      setup.accountState !== "CREATED" ||
-      setup.providerStatus?.commercialInfoExpired === true ||
-      !(["commercialInfo", "documentation", "general"] as const).every(
-        (key) => setup.providerStatus?.[key] === "APPROVED",
-      )
+      !providerApproved(setup)
     )
       return;
     const key = JSON.stringify([
@@ -509,7 +472,7 @@ export function ReceivingAccountSetup(
     if (state.status === "unavailable") toast.error(state.message);
     else if (
       state.message.startsWith("Cadastro enviado") ||
-      state.message.startsWith("Conta consultada")
+      state.message.startsWith("Cadastro consultado")
     )
       toast.success(state.message);
     else toast.warning(state.message);
@@ -523,7 +486,6 @@ export function ReceivingAccountSetup(
       platformOwner={props.platformOwner}
       state={state}
       guard={controller.current?.guard}
-      pixGuard={controller.current?.pixGuard}
       incomingGuard={controller.current?.incomingGuard}
       ports={ports}
       form={form}
@@ -540,16 +502,6 @@ export function ReceivingAccountSetup(
       onVerifyIncoming={() => {
         const current = controller.current;
         void current?.verifyIncoming().then(() => {
-          if (
-            controller.current === current &&
-            current.getState().status === "ready"
-          )
-            props.onReadinessChange?.();
-        });
-      }}
-      onAuthorizePix={() => {
-        const current = controller.current;
-        void current?.verifyIncoming(true).then(() => {
           if (
             controller.current === current &&
             current.getState().status === "ready"
@@ -576,14 +528,12 @@ export function ReceivingAccountSetupView({
   platformOwner = false,
   state,
   guard,
-  pixGuard,
   incomingGuard,
   ports,
   onRetry,
   onSubmit,
   onDesignate,
   onVerifyIncoming,
-  onAuthorizePix,
   form,
   section = "activation",
   readiness,
@@ -593,14 +543,12 @@ export function ReceivingAccountSetupView({
   platformOwner?: boolean;
   state: ReceivingAccountSetupState;
   guard?: FinancialReauthenticationGuard;
-  pixGuard?: FinancialReauthenticationGuard;
   incomingGuard?: FinancialReauthenticationGuard;
   ports?: ReceivingSetupPorts;
   onRetry?: () => void;
   onSubmit?: (event: FormEvent<HTMLFormElement>) => void;
   onDesignate?: (holderUserId: string) => void;
   onVerifyIncoming?: () => void;
-  onAuthorizePix?: () => void;
   form?: React.RefObject<HTMLFormElement | null>;
   section?: ReceivingStepSection;
   readiness?: ReceivingReadiness | null;
@@ -631,8 +579,6 @@ export function ReceivingAccountSetupView({
     accountState: setup?.accountState ?? "NOT_CREATED",
     provider: setup?.providerStatus ?? null,
     ready: receivingReady,
-    destinationSaved:
-      !!currentReadiness && currentReadiness.destinationVersion !== null,
   });
   const context: ReceivingStepsContext = {
     scope,
@@ -645,7 +591,6 @@ export function ReceivingAccountSetupView({
     readiness: currentReadiness,
     ...track,
     guard,
-    pixGuard,
     incomingGuard,
     ports,
     form,
@@ -654,7 +599,6 @@ export function ReceivingAccountSetupView({
     onSubmit,
     onDesignate,
     onVerifyIncoming,
-    onAuthorizePix,
   };
   switch (section) {
     case "overview":
@@ -663,8 +607,6 @@ export function ReceivingAccountSetupView({
       return <HolderStep context={context} />;
     case "details":
       return <DetailsStep context={context} />;
-    case "account":
-      return <AccountStep context={context} />;
     case "fees":
       return <FeesStep context={context} pricingEnabled={pricingEnabled} />;
     default:

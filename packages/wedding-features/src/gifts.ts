@@ -1,12 +1,13 @@
 import {
-  type CheckoutResult,
-  type CheckoutStatus,
-  type CheckoutStatusInput,
-  checkoutCreateInputSchema,
-  checkoutResponseSchema,
-  checkoutStatusInputSchema,
-  checkoutStatusResponseSchema,
+  type GiftCheckoutCreateInput,
+  type GiftCheckoutCreateResult,
+  type GiftCheckoutStatus,
+  type GiftCheckoutStatusInput,
   type GiftQuote,
+  giftCheckoutCreateInputSchema,
+  giftCheckoutCreateResultSchema,
+  giftCheckoutStatusInputSchema,
+  giftCheckoutStatusResponseSchema,
   giftQuoteInputSchema,
   giftQuoteResponseSchema,
   originSchema,
@@ -141,40 +142,40 @@ export class WeddingGiftsApi {
     });
   }
   async createCheckout(
-    input: typeof checkoutCreateInputSchema._input,
-    expected: Pick<GiftQuote, "id" | "siteId" | "method" | "mode">,
-  ): Promise<CheckoutResult> {
-    const body = checkoutCreateInputSchema.parse(input);
+    input: GiftCheckoutCreateInput,
+    expected: Pick<
+      GiftQuote,
+      "id" | "siteId" | "method" | "mode" | "installmentCount"
+    >,
+  ): Promise<GiftCheckoutCreateResult> {
+    // Strict: raw card fields never leave the browser towards this API.
+    const body = giftCheckoutCreateInputSchema.parse(input);
     this.enforceDemoMode(expected.mode);
     if (
       expected.siteId !== this.siteId ||
       body.quoteId !== expected.id ||
+      body.method !== expected.method ||
+      body.installments !== (expected.installmentCount ?? 1) ||
       expected.mode === "disabled"
     )
       throw new Error("Unexpected checkout quote");
     return this.request("gift-checkouts", body, (value) => {
-      const { checkout } = checkoutResponseSchema.parse(value);
-      this.enforceDemoMode(checkout.mode);
-      if (
-        checkout.quoteId !== expected.id ||
-        checkout.method !== expected.method ||
-        checkout.mode !== expected.mode
-      )
+      const checkout = giftCheckoutCreateResultSchema.parse(value);
+      if (checkout.pix && expected.method !== "PIX")
         throw new Error("Unexpected checkout binding");
       return checkout;
     });
   }
   async getCheckoutStatus(
-    input: CheckoutStatusInput,
-    expected: Pick<GiftQuote, "method" | "mode"> &
-      Partial<Pick<CheckoutResult, "orderId" | "attemptId">>,
-  ): Promise<CheckoutStatus> {
-    const body = checkoutStatusInputSchema.parse(input);
+    input: GiftCheckoutStatusInput,
+    expected: Pick<GiftQuote, "method" | "mode"> & { checkoutId?: string },
+  ): Promise<GiftCheckoutStatus> {
+    const body = giftCheckoutStatusInputSchema.parse(input);
     this.enforceDemoMode(expected.mode);
     if (expected.mode === "disabled")
       throw new Error("Disabled checkout recovery");
     return this.request("gift-checkouts/status", body, (value) => {
-      const { status } = checkoutStatusResponseSchema.parse(value);
+      const { status } = giftCheckoutStatusResponseSchema.parse(value);
       this.enforceDemoMode(status.mode);
       if (
         status.siteId !== this.siteId ||
@@ -182,10 +183,8 @@ export class WeddingGiftsApi {
         status.requestId !== body.requestId ||
         status.method !== expected.method ||
         status.mode !== expected.mode ||
-        (expected.orderId !== undefined &&
-          status.orderId !== expected.orderId) ||
-        (expected.attemptId !== undefined &&
-          status.attemptId !== expected.attemptId)
+        (expected.checkoutId !== undefined &&
+          status.checkoutId !== expected.checkoutId)
       )
         throw new Error("Unexpected recovery binding");
       return status;

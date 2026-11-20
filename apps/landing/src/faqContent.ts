@@ -1,3 +1,14 @@
+import { GIFT_PLATFORM_TARIFFS } from "../../../packages/contracts/src/giftTariffs";
+import { faqPricingExampleNominalCents, formatBrl } from "./faqPricingExample";
+
+const { maxInstallments } = GIFT_PLATFORM_TARIFFS;
+const minimumInstallment = formatBrl(
+  GIFT_PLATFORM_TARIFFS.minimumInstallmentCents,
+);
+const withdrawalFee = formatBrl(GIFT_PLATFORM_TARIFFS.withdrawalFeeCents);
+const exampleGift = formatBrl(faqPricingExampleNominalCents);
+const commission = `${GIFT_PLATFORM_TARIFFS.commissionBasisPoints / 100}%`;
+
 export type FaqQuestion = {
   question: string;
   answer: string;
@@ -79,8 +90,12 @@ export const faqTopics: FaqTopic[] = [
       },
       {
         question: "Quais formas de pagamento estão disponíveis?",
+        answer: `Pix e cartão de crédito, à vista ou em até ${maxInstallments}x. Cada parcela precisa ter pelo menos ${minimumInstallment}, então presentes de valor baixo oferecem menos opções de parcelamento. O convidado vê o total e o valor de cada parcela antes de confirmar.`,
+      },
+      {
+        question: "Os dados de pagamento ficam seguros?",
         answer:
-          "Pix e cartão de crédito, à vista ou parcelado, conforme as opções liberadas para a conta recebedora e o valor do presente. O convidado confere as condições e o total antes de confirmar o pagamento.",
+          "O número do cartão vai direto do navegador do convidado para a Pagar.me, que devolve um código no lugar dele. O Entrelaços recebe só esse código, nunca o número nem o CVV. No Pix, o convidado paga pelo aplicativo do banco, com o QR Code ou o código copia e cola. A foto do documento e a selfie da verificação de identidade também seguem direto para a Pagar.me.",
       },
       {
         question: "Abrir o pagamento já conta como um presente recebido?",
@@ -95,28 +110,25 @@ export const faqTopics: FaqTopic[] = [
     questions: [
       {
         question: "Como as taxas entram no preço do presente?",
-        answer:
-          "Vocês cadastram quanto desejam receber. O sistema calcula automaticamente as taxas e apresenta ao convidado o preço final com elas incluídas. As condições podem combinar um percentual e um valor fixo por compra. O valor fixo é somado à parte percentual uma vez na compra, não repetido em cada parcela.",
+        answer: `Vocês cadastram quanto desejam receber. O preço mostrado ao convidado soma a esse valor a taxa do meio de pagamento, as tarifas fixas da compra (cobradas uma vez, não por parcela) e o serviço Entrelaços de ${commission}.`,
       },
       {
         question: "Quanto o casal recebe?",
-        answer:
-          "Em um novo presente cadastrado por R$ 100,00, o casal recebe R$ 100,00 inteiros: a taxa do meio de pagamento, a antecipação (no cartão) e o serviço Entrelaços são pagos pelo convidado e já aparecem no total. Estornos, contestações e eventuais tarifas de saque são movimentações separadas.",
+        answer: `100% do valor cadastrado. Em um presente de ${exampleGift}, entram ${exampleGift} no saldo de vocês, no Pix ou no cartão, em qualquer número de parcelas: o convidado paga as taxas e o serviço Entrelaços. A única tarifa descontada do saldo é a de saque.`,
       },
       {
-        question: "Como funciona o parcelamento no cartão?",
-        answer:
-          "O convidado pode escolher entre as opções disponíveis, em até 12 parcelas, respeitando o valor mínimo por parcela. O sistema calcula o acréscimo e divide o total entre as parcelas. Antes de pagar, ele vê o total e os valores das parcelas, incluindo eventual ajuste de centavos na última. O acréscimo já faz parte do total apresentado.",
+        question: "Por que o total muda com o número de parcelas?",
+        answer: `Vocês recebem o presente de uma vez, mesmo quando o convidado parcela em até ${maxInstallments}x. O acréscimo cobre o custo de adiantar essas parcelas, por isso cresce a cada parcela a mais. O total é dividido em parcelas iguais, com eventual ajuste de centavos na última.`,
       },
       {
         question: "Podemos simular quanto o convidado vai pagar?",
         answer:
-          "Sim. No cadastro ou na edição do presente e na tela de taxas, abram “Simular taxas e parcelamento”. A simulação mostra quanto vocês recebem (100% do presente), o total que o convidado paga no Pix e no cartão à vista, em 6x e em 12x, e as taxas pagas pelo convidado. Escolher uma quantidade de parcelas nessa janela não altera o presente nem define como ele será pago: o convidado escolhe no checkout, onde confere as condições finais.",
+          "Sim. No cadastro ou na edição do presente e na tela de taxas, abram “Simular taxas e parcelamento”. A simulação mostra o total do convidado no Pix e em cada parcelamento. Escolher parcelas nessa janela não altera o presente: quem decide como pagar é o convidado.",
       },
       {
-        question: "As taxas e promoções são sempre as mesmas?",
+        question: "O preço de um presente pode mudar?",
         answer:
-          "As condições variam conforme a conta recebedora, a forma de pagamento, o número de parcelas e eventuais promoções vigentes. Por isso, o sistema consulta as tarifas aplicáveis para calcular os valores. Usem a prévia do painel para comparar as opções; o convidado confere o preço final antes de pagar.",
+          "Pode, se as tarifas da Pagar.me mudarem. O preço de cada compra é calculado quando o convidado abre o pagamento e fica valendo para aquela compra; mudanças posteriores não alteram pagamentos já iniciados.",
       },
     ],
   },
@@ -125,20 +137,19 @@ export const faqTopics: FaqTopic[] = [
     title: "Conta e recebimentos",
     questions: [
       {
-        question: "O que é o Asaas e por que precisamos dessa conta?",
+        question: "Quem processa os pagamentos?",
         answer:
-          "O Asaas é a plataforma de pagamentos integrada ao Entrelaços. Ele mantém a conta do recebedor, processa os pagamentos e realiza as transferências. O Entrelaços organiza a lista de presentes e os pedidos de saque. A conta é aberta no fluxo de Recebimentos do painel, com os dados e o consentimento do titular.",
+          "A Pagar.me, empresa do grupo Stone. Ela recebe o pagamento do convidado, separa a parte do casal e a do Entrelaços e guarda o saldo de vocês até o saque. Não é preciso abrir conta por fora: o cadastro é feito na área de Recebimentos do painel.",
       },
       {
-        question:
-          "Quem deve ser o titular e quais verificações são necessárias?",
+        question: "Quem deve ser o titular dos recebimentos?",
         answer:
-          "O casal define a pessoa responsável pelos recebimentos no painel. O titular confirma seus dados e segue as etapas de ativação e análise do Asaas, que podem incluir confirmação de celular, documentos e selfie. O guia de Recebimentos acompanha esse processo. A liberação depende da aprovação da conta e da configuração dos pagamentos.",
+          "Uma pessoa do casal, com CPF. Ela informa seus dados pessoais e a conta bancária que vai receber os saques, que precisa estar no mesmo CPF.",
       },
       {
-        question: "Precisamos criar uma conta Asaas por fora?",
+        question: "Como funciona a verificação de identidade?",
         answer:
-          "Usem a conta criada pelo fluxo de Recebimentos do Entrelaços. Não abram outra conta para tentar vinculá-la ao casamento. As instruções de ativação e acesso aparecem no guia do painel; a senha e os códigos de segurança são tratados diretamente no Asaas.",
+          "Depois do cadastro, o botão “Verificar identidade” do painel gera um link da Pagar.me, também em QR Code, para o titular enviar documento e foto pelo celular. O link vale por cerca de 20 minutos; se expirar, gerem outro. Os presentes só podem ser recebidos depois que a verificação for aprovada.",
       },
       {
         question: "Pagamento confirmado significa saldo disponível?",
@@ -148,21 +159,7 @@ export const faqTopics: FaqTopic[] = [
       {
         question: "Em quanto tempo um presente pago fica disponível?",
         answer:
-          "No Pix, vocês recebem assim que o pagamento é confirmado. No cartão, à vista ou parcelado, o valor é antecipado e normalmente chega em até 2 dias úteis após o pagamento, sujeito à análise do Asaas. Acompanhem a situação no painel.",
-      },
-      {
-        question: "Se o convidado parcelar, recebemos tudo de uma vez?",
-        answer:
-          "Normalmente, sim. Os pagamentos no cartão são antecipados automaticamente, todas as parcelas, mesmo que o convidado parcele. O custo da antecipação já está no total pago pelo convidado, e o casal recebe 100% do presente.",
-      },
-      {
-        question: "E se o Asaas não antecipar um pagamento?",
-        answer:
-          "A antecipação passa por análise do Asaas e pode ser recusada. Nesse caso, o presente não se perde: cada parcela chega quando o cartão a libera, cerca de 32 dias por parcela. O painel mostra o que já foi recebido e o que ainda aguarda liberação.",
-        reference: {
-          label: "Entender as condições de antecipação",
-          href: "https://www.asaas.com/antecipacao-de-recebiveis",
-        },
+          "No Pix, o valor fica disponível quando a Pagar.me libera o pagamento confirmado. No cartão, fica disponível em cerca de 2 dias, inteiro, seja qual for o número de parcelas escolhido pelo convidado.",
       },
     ],
   },
@@ -171,37 +168,17 @@ export const faqTopics: FaqTopic[] = [
     title: "Saques e suporte",
     questions: [
       {
-        question: "Saques via Pix são gratuitos?",
-        answer:
-          "Sim, para contas recebedoras cadastradas como pessoa física (PF) ou MEI, as transferências Pix são gratuitas e ilimitadas. O Entrelaços não cobra uma taxa adicional pelo saque. Para os demais tipos de empresa, há uma franquia mensal de transferências gratuitas e pode haver cobrança após esse limite. Confiram as condições da conta e a prévia antes de confirmar.",
-        reference: {
-          label: "Consultar as regras de gratuidade do Asaas",
-          href: "https://central.ajuda.asaas.com/hc/pt-br/articles/32059618254875",
-        },
-      },
-      {
-        question: "Como indicamos a conta bancária que vai receber o saque?",
-        answer:
-          "Na área de Recebimentos, o titular cadastra e confirma a chave Pix da sua própria conta bancária. Essa é a chave de destino do saque. O Entrelaços prepara separadamente o recebimento dos presentes no Asaas, sem transferir ou alterar as chaves Pix do banco de vocês.",
+        question: "Quanto custa sacar?",
+        answer: `Cada saque custa ${withdrawalFee}, descontado do saldo. A tarifa aparece antes da confirmação. Como ela é cobrada por saque, juntar presentes em menos saques reduz o custo.`,
       },
       {
         question: "Como solicitamos e acompanhamos um saque?",
-        answer:
-          "Com saldo disponível, o titular escolhe o valor, confere o destinatário e a prévia e confirma o pedido com sua senha do Entrelaços. O andamento aparece no histórico. Se houver uma confirmação adicional exigida pelo Asaas, sigam as instruções apresentadas. Solicitar o saque não significa que a transferência já foi concluída.",
-      },
-      {
-        question: "Quanto tempo demora um saque via Pix?",
-        answer:
-          "Depois que a transferência é efetivada pelo Asaas, o dinheiro costuma chegar à conta de destino em alguns instantes. O pedido pode aguardar autorização ou análise de segurança antes do envio. Acompanhem o status no histórico: saque solicitado ainda não significa transferência concluída. É necessário ter saldo disponível e a conta liberada para movimentação.",
-        reference: {
-          label: "Consultar os prazos de transferência",
-          href: "https://central.ajuda.asaas.com/hc/pt-br/articles/52772307878811-Quanto-tempo-demora-para-cair-a-transfer%C3%AAncia-de-saque-da-minha-conta",
-        },
+        answer: `Com saldo disponível, o titular escolhe um valor maior que ${withdrawalFee}, confere a tarifa e confirma com a senha do Entrelaços. O dinheiro vai para a conta bancária cadastrada nos Recebimentos. O andamento aparece no histórico: saque solicitado ainda não significa transferência concluída.`,
       },
       {
         question: "Como pedir ajuda com um pagamento, saque ou estorno?",
         answer:
-          "Consultem primeiro a situação na área de Recebimentos e no guia do painel. Para dúvidas sobre o site ou ajuda para entender uma movimentação, falem com a equipe do Entrelaços. Verificações da conta, autorizações e estornos podem exigir atendimento ou confirmação no Asaas. Não enviem senhas nem códigos de segurança pelo WhatsApp.",
+          "Consultem primeiro a situação na área de Recebimentos. Para dúvidas sobre uma movimentação, falem com a equipe do Entrelaços; estornos são feitos pela nossa equipe. Não enviem senhas nem códigos de segurança pelo WhatsApp.",
       },
     ],
   },

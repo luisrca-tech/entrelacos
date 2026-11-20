@@ -9,6 +9,17 @@ const recovery = {
   requestId: "request-one",
   recoveryToken: "A".repeat(43),
 };
+const pixCheckout = {
+  ...recovery,
+  method: "PIX",
+  installments: 1,
+  buyer: {
+    name: "Maria Convidada",
+    email: "maria@example.com",
+    cpf: "12345678909",
+    phone: "11987654321",
+  },
+};
 const quote = {
   id: "quote-one",
   giftId: "gift-one",
@@ -25,27 +36,28 @@ const quote = {
   expiresAt: "2026-10-12T12:05:00.000Z",
   mode: "sandbox",
 };
+const pix = {
+  qrCode: "00020101021226820014br.gov.bcb.pix",
+  qrCodeUrl: "https://api.pagar.me/core/v5/transactions/tran_1/qrcode",
+  expiresAt: "2026-10-12T12:05:00.000Z",
+};
 const checkout = {
-  orderId: "order-one",
-  attemptId: "attempt-one",
-  quoteId: "quote-one",
-  method: "PIX",
-  hostedUrl: "https://checkout.example.test/one",
-  mode: "sandbox",
+  checkoutId: "attempt-one",
+  status: "AWAITING_PAYMENT",
+  pix,
 };
 const status = {
   siteId: "site-one",
   quoteId: "quote-one",
   requestId: "request-one",
-  orderId: "order-one",
-  attemptId: "attempt-one",
+  checkoutId: "attempt-one",
   method: "PIX",
   mode: "sandbox",
   state: "OUTCOME_UNKNOWN",
   observedAt: null,
   closedReason: null,
   mayStartNewAttempt: false,
-  checkout: null,
+  pix: null,
 };
 
 function fixture() {
@@ -91,7 +103,7 @@ describe("public gift payment transport", () => {
     values.giftPayments.createCheckout.mockRejectedValue(
       new GiftCheckoutServiceError("CHECKOUT_CONFIGURATION_INVALID"),
     );
-    const response = await values.post("gift-checkouts", recovery);
+    const response = await values.post("gift-checkouts", pixCheckout);
     expect(response.status).toBe(503);
     expect(await response.json()).toMatchObject({
       code: "CHECKOUT_CONFIGURATION_INVALID",
@@ -106,7 +118,7 @@ describe("public gift payment transport", () => {
       values.giftPayments.createCheckout.mockRejectedValue(
         new GiftCheckoutServiceError(code),
       );
-      const response = await values.post("gift-checkouts", recovery);
+      const response = await values.post("gift-checkouts", pixCheckout);
       expect(response.status).toBe(422);
       expect(await response.json()).toEqual({
         type: "about:blank",
@@ -137,8 +149,12 @@ describe("public gift payment transport", () => {
   it("posts the recovery capability only in the body and returns sanitized same-identity checkout/status", async () => {
     const values = fixture();
     expect(
-      await (await values.post("gift-checkouts", recovery)).json(),
-    ).toEqual({ checkout });
+      await (await values.post("gift-checkouts", pixCheckout)).json(),
+    ).toEqual(checkout);
+    expect(values.giftPayments.createCheckout).toHaveBeenCalledWith(
+      "site-one",
+      pixCheckout,
+    );
     expect(
       await (await values.post("gift-checkouts/status", recovery)).json(),
     ).toEqual({ status });
@@ -164,7 +180,9 @@ describe("public gift payment transport", () => {
           body: JSON.stringify(
             path === "gift-quotes"
               ? { giftId: "gift-one", method: "PIX" }
-              : recovery,
+              : path === "gift-checkouts"
+                ? pixCheckout
+                : recovery,
           ),
         },
       );
@@ -267,9 +285,9 @@ describe("public gift payment transport", () => {
     ).toBe(503);
     values.giftPayments.createCheckout.mockResolvedValue({
       ...checkout,
-      quoteId: "other",
+      orderId: "other",
     });
-    expect((await values.post("gift-checkouts", recovery)).status).toBe(503);
+    expect((await values.post("gift-checkouts", pixCheckout)).status).toBe(503);
   });
 
   it("sanitizes storage/service errors without logging or exposing token/cause", async () => {
@@ -284,23 +302,69 @@ describe("public gift payment transport", () => {
     );
   });
 
-  it("rejects a capability-bearing hosted URL from creation and status services", async () => {
+  it.each([
+    ["number", { number: "4000000000000010" }],
+    ["cvv", { cvv: "123" }],
+    ["card", { card: { number: "4000000000000010", cvv: "123" } }],
+  ])(
+    "rejects raw card data (%s) with 400 before the service",
+    async (_label, extra) => {
+      const values = fixture();
+      const response = await values.post("gift-checkouts", {
+        ...pixCheckout,
+        method: "CREDIT_CARD",
+        cardToken: "token_abc123",
+        ...extra,
+      });
+      expect(response.status).toBe(400);
+      expect(values.giftPayments.createCheckout).not.toHaveBeenCalled();
+    },
+  );
+
+  it("does not return Pix data for a card checkout or for a settled status", async () => {
     const values = fixture();
-    const unsafe = {
-      ...checkout,
-      hostedUrl: `https://checkout.example.test/?private=${recovery.recoveryToken}`,
-    };
-    values.giftPayments.createCheckout.mockResolvedValue(unsafe);
-    expect((await values.post("gift-checkouts", recovery)).status).toBe(503);
+    values.giftPayments.createCheckout.mockResolvedValue(checkout);
+    expect(
+      (
+        await values.post("gift-checkouts", {
+          ...pixCheckout,
+          method: "CREDIT_CARD",
+          cardToken: "token_abc123",
+          billingAddress: {
+            zipCode: "01310100",
+            street: "Avenida Paulista",
+            streetNumber: "1000",
+            neighborhood: "Bela Vista",
+            city: "São Paulo",
+            state: "SP",
+          },
+        })
+      ).status,
+    ).toBe(503);
     values.giftPayments.getStatus.mockResolvedValue({
       ...status,
-      state: "AWAITING_PAYMENT",
+      state: "RECEIVED",
       observedAt: "2026-10-12T12:00:00.000Z",
-      checkout: unsafe,
+      pix,
     });
     expect((await values.post("gift-checkouts/status", recovery)).status).toBe(
       503,
     );
+  });
+
+  it.each([
+    ["QUOTE_EXPIRED", 409],
+    ["PROVIDER_UNAVAILABLE", 409],
+    ["INSTALLMENTS_UNAVAILABLE", 422],
+    ["QUOTE_MISMATCH", 422],
+  ] as const)("maps %s to %i", async (code, httpStatus) => {
+    const values = fixture();
+    values.giftPayments.createCheckout.mockRejectedValue(
+      new GiftCheckoutServiceError(code),
+    );
+    const response = await values.post("gift-checkouts", pixCheckout);
+    expect(response.status).toBe(httpStatus);
+    expect((await response.json()).code).toBe(code);
   });
 
   it("accepts exact JSON with charset while rejecting prefix lookalikes", async () => {

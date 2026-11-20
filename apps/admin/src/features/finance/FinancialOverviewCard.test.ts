@@ -115,7 +115,7 @@ describe("financial overview card", () => {
     expect(html).toContain("103,00");
     expect(html).toContain("100,00");
     expect(html).toContain("Saldo indisponível");
-    expect(html).toContain("Ainda não confirmado pelo Asaas");
+    expect(html).toContain("Ainda não confirmado pela Pagar.me");
     expect(html).not.toMatch(/text-admin-success-text[^"]*">R\$\s0,00/);
     expect(html).not.toContain("Atualizado às");
     expect(html).toContain("Sandbox");

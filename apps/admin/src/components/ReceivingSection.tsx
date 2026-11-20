@@ -24,10 +24,6 @@ import {
   receivingPrimaryAction,
   receivingStepTitle,
 } from "./receivingUi";
-import {
-  loadSavedPixDestination,
-  type SavedPixDestinationSummary,
-} from "./savedPixDestination";
 
 type ReceivingSectionResult = {
   siteId: string;
@@ -120,25 +116,6 @@ export function ReceivingSection({
   }, [siteId, eligible, revision, sessionEpoch]);
   const current =
     result?.siteId === siteId && result.epoch === sessionEpoch ? result : null;
-  const ready =
-    current?.readiness?.siteId === siteId &&
-    current.readiness.state === "READY";
-  const [destination, setDestination] = useState<{
-    siteId: string;
-    value: SavedPixDestinationSummary | null;
-  } | null>(null);
-  useEffect(() => {
-    let active = true;
-    setDestination(null);
-    if (ready && !guide && sessionEpoch !== null)
-      void loadSavedPixDestination(siteId).then((value) => {
-        if (active && isCurrentPanelSessionEpoch(sessionEpoch))
-          setDestination({ siteId, value });
-      });
-    return () => {
-      active = false;
-    };
-  }, [siteId, ready, guide, sessionEpoch]);
   if (guide) {
     return (
       <ReceivingGuide siteId={siteId} mode={current?.readiness?.mode ?? null} />
@@ -154,7 +131,6 @@ export function ReceivingSection({
       readiness={current?.readiness ?? null}
       failed={ownerAccessFailed || (current?.failed ?? false)}
       onRetry={() => setRevision((value) => value + 1)}
-      destination={destination?.siteId === siteId ? destination.value : null}
     />
   );
 }
@@ -168,7 +144,6 @@ export function ReceivingSectionView({
   failed,
   onRetry,
   page = "overview",
-  destination = null,
 }: {
   siteId: string;
   access: SiteAccess | null;
@@ -178,7 +153,6 @@ export function ReceivingSectionView({
   failed: boolean;
   onRetry: () => void;
   page?: ReceivingPage;
-  destination?: SavedPixDestinationSummary | null;
 }) {
   const currentAccess =
     sessionEpoch !== null && access?.siteId === siteId ? access : null;
@@ -204,19 +178,8 @@ export function ReceivingSectionView({
       readiness={currentReadiness}
       error={!!currentAccess && failed}
       onRetry={onRetry}
-      destination={destination}
       action={
-        ready ? (
-          canChangeDestination(currentAccess) ? (
-            <Link
-              to="/sites/$siteId/receiving/$page"
-              params={{ siteId, page: "account" }}
-              className="font-semibold text-admin-success-text underline underline-offset-4"
-            >
-              Alterar
-            </Link>
-          ) : undefined
-        ) : setupEligible ? (
+        !ready && setupEligible ? (
           <AdminButton
             tone="primary"
             className="w-fit"
@@ -228,7 +191,7 @@ export function ReceivingSectionView({
               />
             }
           >
-            Acompanhar ativação
+            Acompanhar verificação
           </AdminButton>
         ) : undefined
       }
@@ -279,8 +242,7 @@ export function ReceivingSectionView({
           platformOwner={platformOwner}
           sessionEpoch={sessionEpoch}
           statusCard={statusCard}
-          destination={destination}
-          canChangeDestination={canChangeDestination(currentAccess)}
+          canReview={canReviewSettings(currentAccess)}
         />
       ) : page === "overview" ? (
         setupEligible && !ready && !failed ? (
@@ -368,8 +330,8 @@ function canPreviewFees(platformOwner: boolean, access: SiteAccess | null) {
   );
 }
 
-// Changing the Pix destination stays with the receiving holder's team.
-function canChangeDestination(access: SiteAccess | null) {
+// Reviewing the recipient settings stays with the receiving holder's team.
+function canReviewSettings(access: SiteAccess | null) {
   return (
     access?.membershipRole === "SITE_ADMIN" &&
     access.capabilities.configureReceiving
@@ -383,8 +345,7 @@ function ReadyReceiving({
   platformOwner,
   sessionEpoch,
   statusCard,
-  destination,
-  canChangeDestination,
+  canReview,
 }: {
   siteId: string;
   page: ReadyReceivingPage;
@@ -392,8 +353,7 @@ function ReadyReceiving({
   platformOwner: boolean;
   sessionEpoch: number | null;
   statusCard: ReactNode;
-  destination: SavedPixDestinationSummary | null;
-  canChangeDestination: boolean;
+  canReview: boolean;
 }) {
   const links: FinanceLinks = (target, label, variant = "link") => (
     <Link
@@ -414,11 +374,7 @@ function ReadyReceiving({
       <ReadyReceivingHeader siteId={siteId} page={page} />
       {page === "overview" && statusCard}
       {page === "settings" ? (
-        <ReceivingSettings
-          siteId={siteId}
-          destination={destination}
-          editable={canChangeDestination}
-        />
+        <ReceivingSettings siteId={siteId} editable={canReview} />
       ) : (
         (!platformOwner || !!access) && (
           <FinanceSection
@@ -426,12 +382,7 @@ function ReadyReceiving({
             siteId={siteId}
             access={access}
             sessionEpoch={sessionEpoch}
-            destination={destination}
-            links={(target, label, variant) =>
-              target === "account" && !canChangeDestination
-                ? null
-                : links(target, label, variant)
-            }
+            links={links}
           />
         )
       )}
@@ -441,25 +392,21 @@ function ReadyReceiving({
 
 function ReceivingSettings({
   siteId,
-  destination,
   editable,
 }: {
   siteId: string;
-  destination: SavedPixDestinationSummary | null;
   editable: boolean;
 }) {
   const items: {
-    page: "account" | "fees" | "holder";
+    page: "details" | "fees" | "holder";
     title: string;
     text: string;
     icon: ReactNode;
   }[] = [
     {
-      page: "account",
-      title: "Conta para saque",
-      text: destination
-        ? `${destination.ownerName} · Chave Pix ${destination.maskedKey} · ${destination.bankName}`
-        : "A chave Pix do seu banco, para onde o dinheiro vai.",
+      page: "details",
+      title: "Dados do recebedor",
+      text: "CPF, endereço e conta bancária cadastrados na Pagar.me. Os saques vão para essa conta.",
       icon: <Landmark className="size-[18px]" />,
     },
     {

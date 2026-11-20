@@ -1,5 +1,7 @@
 # EntreLaços Internal Gifts Asaas Release Plan
 
+> **2026-11 update:** Asaas was replaced by Pagar.me in 2026-11; see [Pagar.me operation](../docs/pagarmeOperation.md) and the [decision register](../docs/decisionRegister.md#payment-provider-switch-to-pagarme--2026-11-18). Asaas details below are historical.
+
 Status: Local development proceeds without an Asaas support response. Provider enablement and commercial decisions remain pending; live collection and withdrawals require the production gates. Prepared on 2026-10-12; execution and recipient direction amended on 2026-10-14.
 
 Execution amendment, 2026-10-12: the user authorized local implementation from main in the single branch `feat/internal-gifts-asaas`, with two collaborating Sol-high chat leads and complexity-based Sol 6.1/Luna 6 xhigh subagents. See [Product requirements](prd-internal-gifts.md), [vertical implementation phases](internal-gifts-implementation.md), [coordination and file ownership](internalGiftsCoordination.md), and [integration contract seed](internalGiftsIntegrationContract.md). Provider writes, live money, non-disposable migrations, deployment and Git publication retain their explicit approval gates.

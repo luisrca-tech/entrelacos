@@ -52,20 +52,33 @@ function fixture(mode: "sandbox" | "live" = "sandbox") {
     },
   });
   const input = {
-    name: "Fictional Operator",
-    email: "fictional@example.test",
-    cpfCnpj: "12345678909",
-    mobilePhone: "11999999999",
-    incomeValue: 1000,
-    address: "Fictional Street",
-    addressNumber: "1",
-    province: "Fictional District",
-    postalCode: "12345678",
-    birthDate: "1990-01-01",
+    name: "MARIA DA SILVA",
+    email: "maria@example.test",
+    cpf: "12345678909",
+    mobilePhone: "21994647568",
+    birthDate: "1990-04-12",
+    monthlyIncomeCents: 500000,
+    professionalOccupation: "Professora",
+    address: {
+      street: "Av. General Justo",
+      streetNumber: "375",
+      neighborhood: "Centro",
+      city: "Rio de Janeiro",
+      state: "RJ",
+      zipCode: "20021130",
+      referencePoint: "Ao lado da banca",
+    },
+    bankAccount: {
+      bank: "341",
+      branchNumber: "1234",
+      accountNumber: "12345",
+      accountCheckDigit: "6",
+      type: "checking" as const,
+    },
   };
   const provision = deriveReceivingProvisioningContext(
     nomination,
-    "fictional-parent",
+    "rp_platformRecipient",
     "fingerprint-one",
     input,
     new Map([["fingerprint-one", new Uint8Array(32).fill(12)]]),
@@ -93,22 +106,16 @@ function fixture(mode: "sandbox" | "live" = "sandbox") {
         id: "account-one",
         site_id: "site-one",
         environment: mode,
-        provider: "ASAAS",
+        provider: "PAGARME",
         operator_user_id: "operator-one",
         operator_reference: null,
-        account_reference: "native-account",
-        recipient_reference: "native-wallet",
+        account_reference: "rp_fixtureRecipient01",
+        recipient_reference: "rp_fixtureRecipient01",
         is_current: true,
         provider_account_state: "UNVERIFIED",
         receiving_capability: false,
         withdrawal_capability: false,
         commercial_enabled: false,
-        credential_version: 1,
-        credential_key_id: "fictional-key",
-        credential_nonce: Buffer.alloc(12, 1).toString("base64url"),
-        credential_ciphertext: Buffer.alloc(32, 2).toString("base64url"),
-        credential_tag: Buffer.alloc(16, 3).toString("base64url"),
-        webhook_token_hash: null,
         observed_at: null,
         created_at: createdAt,
         updated_at: "2026-10-13T00:00:00.000123Z",
@@ -129,7 +136,7 @@ function fixture(mode: "sandbox" | "live" = "sandbox") {
         lease_owner: "owner-one",
         lease_token: "token-one",
         lease_expires_at: "2026-10-13T00:01:00.000123Z",
-        provider_operation_reference: "native-account",
+        provider_operation_reference: "rp_fixtureRecipient01",
         order_id: null,
         payment_id: null,
         withdrawal_intent_id: null,
@@ -338,14 +345,14 @@ function fixture(mode: "sandbox" | "live" = "sandbox") {
     },
   };
   const scope = (): ReceivingVerificationScope => ({
-    provider: "ASAAS",
+    provider: "PAGARME",
     siteId: "site-one",
     accountId: "account-one",
     operatorUserId: "operator-one",
     environment: mode,
     operatorReference: tables.accounts[0].operator_reference as string | null,
-    accountReference: "native-account",
-    recipientReference: "native-wallet",
+    accountReference: "rp_fixtureRecipient01",
+    recipientReference: "rp_fixtureRecipient01",
   });
   const candidate = () => ({
     kind: "DESTINATION" as const,
@@ -627,8 +634,8 @@ describe("locked immutable receiving verification repository", () => {
       if (changed === "foreign")
         v.tables.evidence[0].account_id = "other-account";
       if (changed === "native") {
-        v.tables.destinations[0].bank_reference = "asaas-bank-native";
-        v.tables.evidence[0].bank_reference = "asaas-bank-native";
+        v.tables.destinations[0].bank_reference = "ba_nativeBank";
+        v.tables.evidence[0].bank_reference = "ba_nativeBank";
       }
       const repository = createReceivingVerificationRepository(v.db, {
         ...v.options,
@@ -1089,15 +1096,7 @@ describe("locked immutable receiving verification repository", () => {
     });
     expect(v.tables.evidence).toHaveLength(0);
     expect(v.tables.operations).toEqual(original.operations);
-    for (const field of [
-      "account_reference",
-      "recipient_reference",
-      "credential_version",
-      "credential_key_id",
-      "credential_nonce",
-      "credential_ciphertext",
-      "credential_tag",
-    ])
+    for (const field of ["account_reference", "recipient_reference"])
       expect(v.tables.accounts[0][field]).toEqual(original.accounts[0][field]);
     expect(
       await v.repository.consultSelection(
@@ -1263,11 +1262,11 @@ describe("locked immutable receiving verification repository", () => {
     });
     const binding = {
       siteId: "site-one",
-      provider: "ASAAS",
+      provider: "PAGARME",
       operatorReference: "native-operator",
       environment: "sandbox" as const,
-      accountReference: "native-account",
-      recipientReference: "native-wallet",
+      accountReference: "rp_fixtureRecipient01",
+      recipientReference: "rp_fixtureRecipient01",
       destinationVersion: 1,
       bankReference: "native-bank",
     };

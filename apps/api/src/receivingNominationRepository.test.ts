@@ -18,7 +18,7 @@ const canonicalRequestId = `nr1_${createHash("sha256")
       "receiving.self-nomination.request.v1",
       "site-one",
       "user-one",
-      "ASAAS",
+      "PAGARME",
       "sandbox",
     ]),
     "utf8",
@@ -242,14 +242,8 @@ function fixture(rawTimestamps = false) {
                       ? null
                       : [
                           "operatorReference",
-                          "webhookTokenHash",
                           "accountReference",
                           "recipientReference",
-                          "credentialVersion",
-                          "credentialKeyId",
-                          "credentialNonce",
-                          "credentialCiphertext",
-                          "credentialTag",
                           "observedAt",
                         ].some((key) => source.a?.[key] !== null) ||
                         source.a.providerAccountState !== "UNVERIFIED" ||
@@ -332,15 +326,19 @@ function fixture(rawTimestamps = false) {
         };
       if (/FROM "receiving_account" a/.test(text))
         return {
-          rows: tables.accounts.map((a) => ({
-            ...a,
-            hasProviderBinding:
-              a.accountReference !== null ||
-              a.operatorReference !== null ||
-              a.webhookTokenHash !== null ||
-              a.credentialVersion !== null ||
-              a.providerAccountState !== "UNVERIFIED",
-          })),
+          rows: tables.accounts
+            .filter(
+              (a) =>
+                !/a\.provider='PAGARME'/.test(text) || a.provider === "PAGARME",
+            )
+            .map((a) => ({
+              ...a,
+              hasProviderBinding:
+                a.accountReference !== null ||
+                a.operatorReference !== null ||
+                a.recipientReference !== null ||
+                a.providerAccountState !== "UNVERIFIED",
+            })),
         };
       if (/FROM "financial_operation" op/.test(text))
         return {
@@ -358,10 +356,20 @@ function fixture(rawTimestamps = false) {
               )?.operatorUserId,
               accountSiteId: "site-one",
               accountEnvironment: "sandbox",
-              accountProvider: "ASAAS",
+              accountProvider: "PAGARME",
             })),
         };
       if (/pg_advisory_xact_lock/.test(text)) return { rows: [] };
+      if (/^update "receiving_account" set is_current=false/i.test(text)) {
+        for (const a of tables.accounts)
+          if (
+            a.siteId === params[0] &&
+            a.environment === params[1] &&
+            a.provider !== "PAGARME"
+          )
+            a.isCurrent = false;
+        return { rows: [] };
+      }
       const insert = text.match(
         /^insert into "([a-z_]+)" \((.*?)\) values \((.*?)\)/i,
       );
@@ -512,7 +520,7 @@ describe("durable initial receiving nomination", () => {
         version: "receiving.account-provisioning.v1",
         nomination: original,
         provision: {
-          provider: "ASAAS",
+          provider: "PAGARME",
           siteId: original.siteId,
           accountId: original.accountId,
           operationId: original.operationId,
@@ -641,7 +649,7 @@ describe("durable initial receiving nomination", () => {
     ).rejects.toMatchObject({ code: "RECEIVING_NOMINATION_UNAVAILABLE" });
     expect(v.tables.accounts).toHaveLength(0);
   });
-  it.each(["operatorReference", "webhookTokenHash"])(
+  it.each(["operatorReference", "recipientReference"])(
     "rejects a candidate with a stored provider marker %s",
     async (field) => {
       const v = fixture();
@@ -651,7 +659,7 @@ describe("durable initial receiving nomination", () => {
         v.authorization,
       );
       v.tables.accounts[0][field] =
-        field === "webhookTokenHash" ? "a".repeat(64) : "provider-operator";
+        field === "recipientReference" ? "rp_foreign" : "provider-operator";
       await expect(
         v.repository.reserveNomination(
           v.snapshot,
@@ -666,7 +674,7 @@ describe("durable initial receiving nomination", () => {
         v.queries.some(
           (q) =>
             /a\.operator_reference IS NOT NULL/.test(q.sql) &&
-            /a\.webhook_token_hash IS NOT NULL/.test(q.sql),
+            /a\.recipient_reference IS NOT NULL/.test(q.sql),
         ),
       ).toBe(true);
     },
@@ -817,7 +825,7 @@ describe("durable initial receiving nomination", () => {
     expect(v.tables.accounts[0]).toMatchObject({
       id: "account-one",
       operatorUserId: "user-one",
-      provider: "ASAAS",
+      provider: "PAGARME",
       environment: "sandbox",
       providerAccountState: "UNVERIFIED",
       isCurrent: true,
@@ -826,7 +834,7 @@ describe("durable initial receiving nomination", () => {
       commercialEnabled: false,
     });
     expect(v.tables.accounts[0].accountReference).toBeNull();
-    expect(v.tables.accounts[0].credentialVersion).toBeNull();
+    expect(v.tables.accounts[0].recipientReference).toBeNull();
     expect(v.tables.operations[0]).toMatchObject({
       kind: "ACCOUNT_CREATE",
       state: "REQUESTED",
@@ -836,6 +844,40 @@ describe("durable initial receiving nomination", () => {
     });
     expect(v.authorize).toHaveBeenCalledOnce();
     expect(v.queries.at(-1)?.sql).toBe("commit");
+  });
+  it("nominates a Pagar.me recipient next to a legacy-provider account, keeping its data", async () => {
+    const v = fixture();
+    v.tables.accounts.push({
+      id: "legacy-account",
+      siteId: "site-one",
+      environment: "sandbox",
+      provider: "PREVIOUS_PROVIDER",
+      operatorUserId: "user-one",
+      operatorReference: null,
+      accountReference: "acc_legacy",
+      recipientReference: null,
+      providerAccountState: "APPROVED",
+      isCurrent: true,
+      credentialCiphertext: "kept-ciphertext",
+    });
+    const result = await v.repository.reserveNomination(
+      v.snapshot,
+      v.authorize,
+      v.authorization,
+    );
+    expect(result).toEqual(v.snapshot);
+    expect(v.tables.accounts).toHaveLength(2);
+    expect(v.tables.accounts[0]).toMatchObject({
+      id: "legacy-account",
+      isCurrent: false,
+      accountReference: "acc_legacy",
+      credentialCiphertext: "kept-ciphertext",
+    });
+    expect(v.tables.accounts[1]).toMatchObject({
+      id: "account-one",
+      provider: "PAGARME",
+      isCurrent: true,
+    });
   });
   it("revalidates a new current session while preserving the original replay audit", async () => {
     const v = fixture();
@@ -1023,14 +1065,8 @@ describe("authoritative nomination scope recovery", () => {
   });
   it.each([
     "operatorReference",
-    "webhookTokenHash",
     "accountReference",
     "recipientReference",
-    "credentialVersion",
-    "credentialKeyId",
-    "credentialNonce",
-    "credentialCiphertext",
-    "credentialTag",
     "observedAt",
     "providerAccountState",
     "receivingCapability",

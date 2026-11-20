@@ -147,6 +147,42 @@ describe("API composition", () => {
     });
   });
 
+  it("mounts the owner identity verification link route", async () => {
+    vi.spyOn(authHttp, "requireAdminSession").mockResolvedValue({
+      user: { id: "owner-one", role: "OWNER" },
+      session: { id: "owner-session" },
+    } as never);
+    const link = {
+      url: "https://exemplo.com/kyc?token=eyWfwqrnqwrnfoqwntoqwntqw",
+      base64QrCode: "PD94bWwgdmVyc2lvbj0iMS4wIj8+PHN2Zy8+",
+      expiresAt: "2026-11-18T12:20:00.000Z",
+    };
+    const createKycLink = vi.fn(async () => link);
+    const api = createApp(
+      {
+        auth: {} as never,
+        db: {} as never,
+        adminOrigin: "http://localhost:3001",
+        receivingSetup: { createKycLink } as never,
+      },
+      { sink: () => {} },
+    );
+    const response = await api.request(
+      "/v1/owner/sites/site-one/receiving/kyc-link",
+      { method: "POST", headers: { origin: "http://localhost:3001" } },
+    );
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(await response.json()).toEqual(link);
+    expect(
+      (
+        await api.request("/v1/sites/site-one/receiving/pix-destination", {
+          headers: { origin: "http://localhost:3001" },
+        })
+      ).status,
+    ).toBe(404);
+  });
+
   it("mounts receiving holder designation without leaking its private middleware to the webhook", async () => {
     vi.spyOn(authHttp, "requireAdminSession").mockResolvedValue({
       user: { id: "owner-one", role: "OWNER" },
@@ -160,7 +196,7 @@ describe("API composition", () => {
         db: {} as never,
         adminOrigin: "http://localhost:3001",
         receivingSetup: { designate } as never,
-        asaasWebhook: { receive },
+        pagarmeWebhook: { receive },
       },
       { sink: () => {} },
     );
@@ -177,16 +213,19 @@ describe("API composition", () => {
       { userId: "owner-one", sessionId: "owner-session", siteId: "site-one" },
       "bride-one",
     );
-    const webhook = await api.request("/v1/webhooks/asaas", {
+    const webhook = await api.request("/v1/webhooks/pagarme", {
       method: "POST",
       headers: {
         "content-type": "application/json",
-        "asaas-access-token": "a".repeat(32),
+        authorization: "Basic dXNlcjpwYXNzd29yZA==",
       },
-      body: JSON.stringify({ id: "event-one" }),
+      body: JSON.stringify({ id: "hook_one" }),
     });
     expect(webhook.status).toBe(200);
-    expect(receive).toHaveBeenCalledOnce();
+    expect(receive).toHaveBeenCalledWith(
+      "Basic dXNlcjpwYXNzd29yZA==",
+      JSON.stringify({ id: "hook_one" }),
+    );
   });
   it("forwards singleton media ports and separate read auth only to media routes", async () => {
     const standardAuth = { standard: true } as never;
@@ -1001,11 +1040,11 @@ describe("API composition", () => {
       adminOrigin: "https://panel.example.test",
     } as unknown as AuthHttpOptions;
     const api = createApp(options, { sink: () => {} });
-    const response = await api.request("/v1/webhooks/asaas", {
+    const response = await api.request("/v1/webhooks/pagarme", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "asaas-access-token": "local-test-webhook-token-for-disabled-runtime",
+        authorization: "Basic dXNlcjpwYXNzd29yZA==",
       },
       body: "{}",
     });
@@ -1210,6 +1249,18 @@ describe("API composition", () => {
                 quoteId: "quote-one",
                 requestId: "request-one",
                 recoveryToken: "A".repeat(43),
+                ...(endpoint === "gift-checkouts"
+                  ? {
+                      method: "PIX",
+                      installments: 1,
+                      buyer: {
+                        name: "Maria Convidada",
+                        email: "maria@example.com",
+                        cpf: "12345678909",
+                        phone: "11987654321",
+                      },
+                    }
+                  : {}),
               },
         ),
       });

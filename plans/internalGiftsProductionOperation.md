@@ -1,5 +1,7 @@
 # Internal gifts: production operation
 
+> **2026-11 update:** Asaas was replaced by Pagar.me in 2026-11; see [Pagar.me operation](../docs/pagarmeOperation.md) and the [decision register](../docs/decisionRegister.md#payment-provider-switch-to-pagarme--2026-11-18). Asaas details below are historical.
+
 Updated: 2026-10-24 (America/Sao_Paulo).
 Release branch: `release-gift-payment`. Protected UI baseline: `bbf24a0`.
 

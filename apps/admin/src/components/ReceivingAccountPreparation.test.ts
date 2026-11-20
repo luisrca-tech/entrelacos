@@ -89,15 +89,12 @@ function fixture() {
     holder: { userId: "holder-one", name: "Fixture Holder" },
     isHolder: true,
     consentRecorded: true,
-    pixConsentRecorded: true,
     disclosure: receivingSetupDisclosure,
     accountState: "CREATED",
     providerStatus: {
-      commercialInfo: "APPROVED",
-      bankAccountInfo: "PENDING",
-      documentation: "APPROVED",
-      general: "APPROVED",
-      commercialInfoExpired: false,
+      recipientStatus: "active",
+      accountState: "APPROVED",
+      receivingEnabled: true,
       observedAt: "2026-10-24T20:00:00.000Z",
     },
   };
