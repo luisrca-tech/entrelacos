@@ -31,7 +31,7 @@ What the endpoint does:
 
 ## Guest checkout
 
-`POST /v1/public/sites/:siteId/gift-checkouts` takes `{ quoteId, requestId, recoveryToken, method, installments, cardToken?, buyer }` and returns `{ checkoutId, status, pix? }`. The card is tokenized in the browser with the public key. Any raw card field (`number`, `cvv`, …) is rejected with `400`. `requestId` + `recoveryToken` make retries return the same checkout and authorize `POST …/gift-checkouts/status`.
+`POST /v1/public/sites/:siteId/gift-checkouts` takes `{ quoteId, requestId, recoveryToken, method, installments, cardToken?, billingAddress?, buyer }` and returns `{ checkoutId, status, pix? }`. The card is tokenized in the browser with the public key. Any raw card field (`number`, `cvv`, …) is rejected with `400`. Card checkouts must also send the cardholder `billingAddress` (`zipCode`, `street`, `streetNumber`, optional `complement`, `neighborhood`, `city`, `state`); Pix must not. Tokens do not carry an address and the gateway refuses a token order without one (`billing | "value" is required`, sandbox 2026-11-19), so the API forwards it as `credit_card.card.billing_address` (`line_1` = "number, street, neighborhood", `line_2` = complement, `country` `BR`). The address is never stored or logged; the guest form can prefill it from ViaCEP and falls back to manual entry. `requestId` + `recoveryToken` make retries return the same checkout and authorize `POST …/gift-checkouts/status`.
 
 The API sends `POST /orders` with `code = checkoutId` and `Idempotency-Key = checkoutId`:
 
@@ -62,7 +62,7 @@ A card decided in the creating call (paid or declined) is applied before the cre
 
 The owner, or the recipient operator, calls `POST /v1/owner/sites/:siteId/receiving/kyc-link` (at most 3 links per site per minute; more answer `429`). The API calls `POST /recipients/{id}/kyc_link` and returns the URL and QR code once. They are valid for about 20 minutes and never stored. The panel opens the tab inside the click and fills in the URL when the API answers, so pop-up blockers allow it; the QR image type (PNG or SVG) is read from its bytes. Status changes arrive through `recipient.updated`, and the worker re-reads `GET /recipients/{id}`. Recipient ids may be `rp_`, `re_` or, for recipients created after the 2026-07-14 API change, a `pp_` `payment_profile_id`; all three are accepted.
 
-Recipient data is checked before Pagar.me is called: valid CPF check digits and an adult holder (18+).
+Recipient data is checked before Pagar.me is called: valid CPF check digits and an adult holder (18+). `register_information.address.complementary` is always sent (`POST /recipients` answers `422` without it); an empty complement becomes `Sem complemento`.
 
 ## Withdrawals
 
@@ -101,7 +101,6 @@ Confirm once in the sandbox before go-live (the 2026-11 docs review left these o
 - Whether a transfer's `fee` is charged on top of `amount` (assumed) or deducted from it.
 - Which recipient id format a transfer's `source_id` echoes. Any of the recipient's own ids (`id`, `payment_profile_id`, `gateway_recipients[].pgid`) is accepted; an id the recipient read does not list is refused and leaves the hold to an operator.
 - The sort order of `GET /transfers` and how `x-cursor-nextpage` is followed; only the first page is read today.
-- Whether a PSP account may pay orders with `card_token`: the [order reference](https://docs.pagar.me/reference/criar-pedido-2) reserves it for Gateway clients and recommends `card_id` for PSP, and says a token order must resend `billing_address`, which the checkout does not collect.
 - Whether `POST /orders` and `POST /recipients` honour `Idempotency-Key`; it is documented only for `POST /transfers`. Orders are recovered with `GET /orders?code=` regardless.
 
 Test cards (Pagar.me v5 simulator):
