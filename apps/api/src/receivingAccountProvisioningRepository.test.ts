@@ -1,14 +1,19 @@
 import { createHash } from "node:crypto";
+import { receivingSetupConsentVersion } from "@entrelacos/contracts";
 import { drizzle, type NodePgClient } from "drizzle-orm/node-postgres";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { readDatabaseTimestamp } from "./databaseTimestamp";
-import { deriveReceivingProvisioningContext } from "./receivingAccountProvisioning";
+import {
+  createReceivingAccountProvisioning,
+  deriveReceivingProvisioningContext,
+} from "./receivingAccountProvisioning";
 import { createReceivingAccountProvisioningRepository } from "./receivingAccountProvisioningRepository";
 import {
   type ReceivingNominationCurrentAuthorization,
   type ReceivingProvisioningRecord,
   readReceivingNominationSnapshot,
 } from "./receivingNomination";
+import { createReceivingSetupService } from "./receivingSetup";
 
 const nonceState = vi.hoisted(() => ({ value: 0 }));
 vi.mock("node:crypto", async (original) => ({
@@ -18,6 +23,94 @@ vi.mock("node:crypto", async (original) => ({
 beforeEach(() => {
   nonceState.value = 0;
 });
+
+// Emulates the provider/kind filters of the locked scope reads so rows of the
+// previous provider reach the repository exactly as the database returns them.
+function scopedAccount(text: string) {
+  const pagarmeOnly = /provider='PAGARME'/.test(text);
+  return (row: Record<string, unknown>) =>
+    !pagarmeOnly || row.provider === "PAGARME";
+}
+function scopedOperation(
+  text: string,
+  accounts: ReadonlyArray<Record<string, unknown>>,
+) {
+  const accountCreateOnly = /kind='ACCOUNT_CREATE'/.test(text);
+  const withoutPreviousProvider = /NOT EXISTS/.test(text);
+  return (row: Record<string, unknown>) =>
+    (!accountCreateOnly || row.kind === "ACCOUNT_CREATE") &&
+    (!withoutPreviousProvider ||
+      !accounts.some(
+        (account) =>
+          account.id === row.account_id && account.provider !== "PAGARME",
+      ));
+}
+function previousProviderRows(mode: "sandbox" | "live") {
+  const at = "2026-03-01T12:00:00.000Z";
+  const operation = (id: string, kind: string, target: object) => ({
+    id,
+    site_id: "site-one",
+    account_id: "a-previous-account",
+    environment: mode,
+    kind,
+    state: "SUCCEEDED",
+    request_id: `request-${id}`,
+    request_hash: "a".repeat(64),
+    request_snapshot: { legacy: true },
+    attempts: 1,
+    lease_owner: null,
+    lease_token: null,
+    lease_expires_at: null,
+    provider_operation_reference: `ref-${id}`,
+    order_id: null,
+    payment_id: null,
+    withdrawal_intent_id: null,
+    next_attempt_at: at,
+    last_error_code: null,
+    created_at: at,
+    updated_at: at,
+    ...target,
+  });
+  return {
+    account: {
+      // Sorts before the Pagar.me rows, as a random older id may in production.
+      id: "a-previous-account",
+      site_id: "site-one",
+      environment: mode,
+      provider: "ASAAS",
+      operator_user_id: "operator-one",
+      is_current: false,
+      provider_account_state: "APPROVED",
+      receiving_capability: true,
+      withdrawal_capability: true,
+      commercial_enabled: true,
+      operator_reference: null,
+      observed_at: at,
+      account_reference: "acc_previous",
+      recipient_reference: null,
+      created_at: at,
+      updated_at: at,
+    },
+    operations: [
+      operation("a-previous-create", "ACCOUNT_CREATE", {}),
+      operation("a-previous-checkout", "CHECKOUT_CREATE", {
+        order_id: "order-previous",
+      }),
+      operation("a-previous-withdrawal", "WITHDRAWAL", {
+        withdrawal_intent_id: "withdrawal-previous",
+      }),
+    ],
+  };
+}
+function withPreviousProvider(tables: {
+  accounts: Array<Record<string, unknown>>;
+  operations: Array<Record<string, unknown>>;
+}) {
+  const mode = tables.accounts[0].environment as "sandbox" | "live";
+  const previous = previousProviderRows(mode);
+  tables.accounts.unshift(previous.account);
+  tables.operations.unshift(...previous.operations);
+}
 
 function fixture(mode: "sandbox" | "live" = "sandbox") {
   const now = "2026-10-13T00:00:00.000123Z";
@@ -248,21 +341,28 @@ function fixture(mode: "sandbox" | "live" = "sandbox") {
         };
       if (/SELECT to_jsonb\(a\)/.test(text))
         return {
-          rows: tables.accounts.map((row) => ({
+          rows: tables.accounts.filter(scopedAccount(text)).map((row) => ({
             account: structuredClone(row),
           })),
         };
       if (/SELECT to_jsonb\(op\)/.test(text))
         return {
-          rows: tables.operations.map((row) => ({
-            operation: structuredClone(row),
-          })),
+          rows: tables.operations
+            .filter(scopedOperation(text, tables.accounts))
+            .map((row) => ({
+              operation: structuredClone(row),
+            })),
         };
       if (/^UPDATE /i.test(text)) {
         const operation = /UPDATE "financial_operation"/.test(text);
         if (operation && state.failOperationUpdate)
           throw new Error("fictional operation update");
-        const row = (operation ? tables.operations : tables.accounts)[0];
+        const where = text.slice(text.indexOf("WHERE"));
+        const id = /\bid\s*=\s*\$(\d+)/.exec(where);
+        const target = id ? params[Number(id[1]) - 1] : undefined;
+        const row = (operation ? tables.operations : tables.accounts).find(
+          (value) => value.id === target,
+        );
         if (!row) return { rows: [] };
         const set = text.slice(text.indexOf("SET") + 3, text.indexOf("WHERE"));
         for (const match of set.matchAll(/"?([a-z_]+)"?\s*=\s*\$(\d+)/g)) {
@@ -314,6 +414,7 @@ function fixture(mode: "sandbox" | "live" = "sandbox") {
   return {
     nomination,
     authorization,
+    input,
     claimInput,
     tables,
     state,
@@ -692,5 +793,174 @@ describe("locked original account provisioning repository", () => {
         recipientReference: "rp_foreign",
       }),
     ).rejects.toThrow();
+  });
+});
+
+describe("provisioning next to a previous provider's history", () => {
+  const PII = [
+    "MARIA",
+    "maria@example.test",
+    "12345678909",
+    "21994647568",
+    "General Justo",
+    "20021130",
+    "12345",
+    "token-one",
+  ];
+
+  it("claims, arms, quarantines, attaches and consults only the Pagar.me intent", async () => {
+    const values = fixture("live");
+    values.state.demo = true;
+    const repository = createReceivingAccountProvisioningRepository(values.db, {
+      ...values.options,
+      liveDemoSiteIds: ["site-one"],
+    });
+    withPreviousProvider(values.tables);
+    const history = structuredClone({
+      account: values.tables.accounts[0],
+      operations: values.tables.operations.slice(0, 3),
+    });
+    const claim = values.armed(
+      await repository.claimOriginal(values.claimInput, values.authorization),
+    );
+    await repository.armOriginal(claim, values.authorization);
+    await repository.quarantineOriginal(claim, values.result);
+    await repository.attachOriginal(claim, values.result, values.authorization);
+    const observed = await repository.consultOriginal(claim, values.result);
+    expect(observed?.state).toBe("SUCCEEDED");
+    expect(observed?.result).toEqual(values.result);
+    expect(values.tables.accounts[1]).toMatchObject({
+      id: "account-one",
+      recipient_reference: values.result.recipientReference,
+    });
+    expect(values.tables.operations[3]).toMatchObject({
+      id: "operation-one",
+      state: "SUCCEEDED",
+    });
+    expect(values.tables.accounts[0]).toEqual(history.account);
+    expect(values.tables.operations.slice(0, 3)).toEqual(history.operations);
+  });
+
+  it.each(["second-account", "second-create"])(
+    "a %s of Pagar.me still refuses the claim and reports why",
+    async (caseName) => {
+      const observe = vi.fn();
+      const values = fixture();
+      const repository = createReceivingAccountProvisioningRepository(
+        values.db,
+        { ...values.options, observe },
+      );
+      withPreviousProvider(values.tables);
+      if (caseName === "second-account")
+        values.tables.accounts.push({
+          ...values.tables.accounts[1],
+          id: "account-two",
+          is_current: false,
+        });
+      else
+        values.tables.operations.push({
+          ...values.tables.operations[3],
+          id: "operation-two",
+          request_id: "request-two",
+        });
+      await expect(
+        repository.claimOriginal(values.claimInput, values.authorization),
+      ).rejects.toThrow();
+      expect(values.tables.operations[3].state).toBe("REQUESTED");
+      expect(observe).toHaveBeenCalledWith({
+        level: "warn",
+        event: "receiving.provisioning.refused",
+        operation: "scope",
+        result:
+          caseName === "second-account" ? "account_count" : "operation_count",
+        siteId: "site-one",
+        count: 2,
+      });
+      const logged = JSON.stringify(observe.mock.calls);
+      for (const value of PII) expect(logged).not.toContain(value);
+    },
+  );
+});
+
+describe("resubmitting a stuck setup next to a previous provider's history", () => {
+  it("reuses the REQUESTED nomination, claims it and creates exactly one recipient", async () => {
+    const values = fixture();
+    withPreviousProvider(values.tables);
+    const history = structuredClone({
+      account: values.tables.accounts[0],
+      operations: values.tables.operations.slice(0, 3),
+    });
+    const createRecipient = vi.fn(async (code: string) => ({
+      id: values.result.recipientReference,
+      code,
+    }));
+    const provisioning = createReceivingAccountProvisioning({
+      repository: values.repository,
+      readProvider: async () => ({
+        approved: true as const,
+        environment: "sandbox" as const,
+        parentAccountReference: "rp_platformRecipient",
+        policyVersion: values.nomination.policyVersion,
+        recipients: { createRecipient } as never,
+      }),
+      fingerprintKeys: new Map([["fp-v1", new Uint8Array(32).fill(8)]]),
+      activeFingerprintKeyId: "fp-v1",
+      now: () => new Date(values.state.clock),
+      generateId: (kind) => `${kind}-one`,
+      observe: vi.fn(),
+    });
+    const nominate = vi.fn();
+    const setup = createReceivingSetupService({
+      repository: {
+        mode: "sandbox",
+        policyVersion: values.nomination.policyVersion,
+        requireHolder: vi.fn(async () => {}),
+        designate: vi.fn(async () => {}),
+        readSessionAuthentication: vi.fn(
+          async () => values.authorization.recentAuth,
+        ),
+        consent: vi.fn(async () => {}),
+        // The stuck production row: REQUESTED, never claimed or dispatched.
+        readAccount: vi.fn(async () => ({
+          accountId: values.nomination.accountId,
+          operatorUserId: values.nomination.operatorUserId,
+          state: "REQUESTED" as const,
+          nomination: values.nomination,
+          record: null,
+          result: null,
+        })),
+      } as never,
+      nomination: { nominate },
+      provisioning,
+    });
+    const outcome = await setup.submit(
+      {
+        policyVersion: values.nomination.policyVersion,
+        consentVersion: receivingSetupConsentVersion,
+        confirmHolder: true,
+        consentToProvider: true,
+        account: values.input,
+      },
+      { actor: values.authorization.actor } as never,
+    );
+    await provisioning.close();
+    expect(outcome).toEqual({ state: "STORED" });
+    expect(nominate).not.toHaveBeenCalled();
+    expect(createRecipient).toHaveBeenCalledExactlyOnceWith(
+      "account-one",
+      values.input,
+    );
+    expect(values.tables.accounts[1]).toMatchObject({
+      id: "account-one",
+      account_reference: values.result.accountReference,
+      recipient_reference: values.result.recipientReference,
+    });
+    expect(values.tables.operations[3]).toMatchObject({
+      id: "operation-one",
+      state: "SUCCEEDED",
+      attempts: 1,
+    });
+    expect(values.tables.accounts[0]).toEqual(history.account);
+    expect(values.tables.operations.slice(0, 3)).toEqual(history.operations);
   });
 });

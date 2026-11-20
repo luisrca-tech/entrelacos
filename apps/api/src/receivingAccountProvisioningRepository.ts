@@ -16,6 +16,7 @@ import {
   readDatabaseTimestamp,
 } from "./databaseTimestamp";
 import { allowsLiveSite, type LiveSitePolicy } from "./liveSitePolicy";
+import { logObservabilityEvent } from "./observability";
 import {
   ReceivingAccountProvisioningError,
   type ReceivingAccountProvisioningRepository,
@@ -46,7 +47,23 @@ interface Options extends LiveSitePolicy {
     tx: Transaction,
     authorization: ReceivingNominationCurrentAuthorization,
   ) => Promise<boolean>;
+  /** Receives PII-free refusal events; defaults to the structured log. */
+  observe?(event: {
+    level: "warn";
+    event: string;
+    operation: string;
+    result: ScopeRefusal;
+    siteId: string;
+    count?: number;
+  }): void;
 }
+type ScopeRefusal =
+  | "account_count"
+  | "operation_count"
+  | "binding_mismatch"
+  | "snapshot_mismatch"
+  | "lease_mismatch"
+  | "state_mismatch";
 interface Scope {
   account: Row;
   operation: Row;
@@ -113,6 +130,26 @@ export function createReceivingAccountProvisioningRepository(
   const { mode, applicationEnvironment, maxAuthAgeMs, now, readCurrentPolicy } =
     options;
   const liveDemoSiteIds = options.liveDemoSiteIds;
+  const observe = options.observe ?? logObservabilityEvent;
+  function refuse(
+    nomination: ReceivingNominationSnapshot,
+    reason: ScopeRefusal,
+    count?: number,
+  ): never {
+    try {
+      observe({
+        level: "warn",
+        event: "receiving.provisioning.refused",
+        operation: "scope",
+        result: reason,
+        siteId: nomination.siteId,
+        ...(count === undefined ? {} : { count }),
+      });
+    } catch {
+      /* Logging never changes the refusal. */
+    }
+    return unavailable();
+  }
   async function clock(tx: Transaction): Promise<bigint> {
     const value = await tx.execute(
       sql`SELECT clock_timestamp() AS "currentTime"`,
@@ -150,11 +187,16 @@ export function createReceivingAccountProvisioningRepository(
     nomination: ReceivingNominationSnapshot,
     allowAbsent = false,
   ): Promise<Scope | null> {
+    // Rows of the previous provider (and their operations) are history only,
+    // as in the nomination scope. Any other Pagar.me account or account
+    // creation, including one whose account row is missing, still refuses.
     const accounts = await tx.execute(
-      sql`SELECT to_jsonb(a) AS account FROM ${receivingAccount} a WHERE a.site_id=${nomination.siteId} AND a.environment=${mode} ORDER BY a.id LIMIT 2 FOR UPDATE OF a`,
+      sql`SELECT to_jsonb(a) AS account FROM ${receivingAccount} a WHERE a.site_id=${nomination.siteId} AND a.environment=${mode} AND a.provider='PAGARME' ORDER BY a.id LIMIT 2 FOR UPDATE OF a`,
     );
     const operations = await tx.execute(
-      sql`SELECT to_jsonb(op) AS operation FROM ${financialOperation} op WHERE op.site_id=${nomination.siteId} AND op.environment=${mode} ORDER BY op.id LIMIT 2 FOR UPDATE OF op`,
+      sql`SELECT to_jsonb(op) AS operation FROM ${financialOperation} op WHERE op.site_id=${nomination.siteId} AND op.environment=${mode} AND op.kind='ACCOUNT_CREATE'
+        AND NOT EXISTS (SELECT 1 FROM ${receivingAccount} l WHERE l.id=op.account_id AND l.site_id=op.site_id AND l.environment=op.environment AND l.provider<>'PAGARME')
+        ORDER BY op.id LIMIT 2 FOR UPDATE OF op`,
     );
     if (
       allowAbsent &&
@@ -162,8 +204,10 @@ export function createReceivingAccountProvisioningRepository(
       operations.rows.length === 0
     )
       return null;
-    if (accounts.rows.length !== 1 || operations.rows.length !== 1)
-      return unavailable();
+    if (accounts.rows.length !== 1)
+      return refuse(nomination, "account_count", accounts.rows.length);
+    if (operations.rows.length !== 1)
+      return refuse(nomination, "operation_count", operations.rows.length);
     const account = accounts.rows[0].account as Row;
     const operation = operations.rows[0].operation as Row;
     if (
@@ -196,14 +240,14 @@ export function createReceivingAccountProvisioningRepository(
       time(operation.created_at) !== time(nomination.createdAt) ||
       time(operation.next_attempt_at) !== time(nomination.createdAt)
     )
-      return unavailable();
+      return refuse(nomination, "binding_mismatch");
     if (
       !isDeepStrictEqual(
         readReceivingNominationSnapshot(operation.request_snapshot),
         nomination,
       )
     )
-      return unavailable();
+      return refuse(nomination, "snapshot_mismatch");
     if (operation.state === "REQUESTED") {
       if (
         !isDeepStrictEqual(operation.request_snapshot, nomination) ||
@@ -216,7 +260,7 @@ export function createReceivingAccountProvisioningRepository(
         time(account.updated_at) !== time(nomination.createdAt) ||
         time(operation.updated_at) !== time(nomination.createdAt)
       )
-        return unavailable();
+        return refuse(nomination, "state_mismatch");
       return { account, operation, record: null, result: null };
     }
     const record = readReceivingProvisioningRecord(operation.request_snapshot);
@@ -227,7 +271,7 @@ export function createReceivingAccountProvisioningRepository(
       time(operation.lease_expires_at) !==
         BigInt(dispatch.leaseExpiresAtMicroseconds)
     )
-      return unavailable();
+      return refuse(nomination, "lease_mismatch");
     if (operation.state === "CLAIMED") {
       if (
         operation.attempts !== 0 ||
@@ -236,7 +280,7 @@ export function createReceivingAccountProvisioningRepository(
         operation.provider_operation_reference !== null ||
         !unbound(account)
       )
-        return unavailable();
+        return refuse(nomination, "state_mismatch");
     } else if (operation.state === "UNKNOWN") {
       if (
         operation.attempts !== 1 ||
@@ -244,19 +288,19 @@ export function createReceivingAccountProvisioningRepository(
         operation.provider_operation_reference !== null ||
         !unbound(account)
       )
-        return unavailable();
+        return refuse(nomination, "state_mismatch");
     } else if (operation.state === "SUCCEEDED") {
       if (
         operation.attempts !== 1 ||
         !dispatch.possibleDispatch ||
         record.sealedResult !== null
       )
-        return unavailable();
+        return refuse(nomination, "state_mismatch");
       const result = canonicalResult(account);
       if (operation.provider_operation_reference !== result.accountReference)
-        return unavailable();
+        return refuse(nomination, "state_mismatch");
       return { account, operation, record, result };
-    } else return unavailable();
+    } else return refuse(nomination, "state_mismatch");
     return { account, operation, record, result: record.sealedResult };
   }
   async function authority(

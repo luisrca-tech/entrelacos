@@ -325,11 +325,16 @@ export function createReceivingVerificationRepository(
     input: ReceivingVerificationScope,
   ): Promise<ReceivingVerificationFence> {
     const scope = readReceivingVerificationScope(input);
+    // Rows of the previous provider (and their operations) are history only,
+    // as in the nomination scope. Any other Pagar.me account or account
+    // creation, including one whose account row is missing, still refuses.
     const accounts = await tx.execute(
-      sql`SELECT to_jsonb(a) AS account FROM ${receivingAccount} a WHERE a.site_id=${scope.siteId} AND a.environment=${mode} ORDER BY a.id LIMIT 2 FOR UPDATE OF a`,
+      sql`SELECT to_jsonb(a) AS account FROM ${receivingAccount} a WHERE a.site_id=${scope.siteId} AND a.environment=${mode} AND a.provider='PAGARME' ORDER BY a.id LIMIT 2 FOR UPDATE OF a`,
     );
     const operations = await tx.execute(
-      sql`SELECT to_jsonb(op) AS operation FROM ${financialOperation} op WHERE op.site_id=${scope.siteId} AND op.environment=${mode} AND op.kind='ACCOUNT_CREATE' ORDER BY op.id LIMIT 2 FOR UPDATE OF op`,
+      sql`SELECT to_jsonb(op) AS operation FROM ${financialOperation} op WHERE op.site_id=${scope.siteId} AND op.environment=${mode} AND op.kind='ACCOUNT_CREATE'
+        AND NOT EXISTS (SELECT 1 FROM ${receivingAccount} l WHERE l.id=op.account_id AND l.site_id=op.site_id AND l.environment=op.environment AND l.provider<>'PAGARME')
+        ORDER BY op.id LIMIT 2 FOR UPDATE OF op`,
     );
     if (accounts.rows.length !== 1 || operations.rows.length !== 1)
       return unavailable();

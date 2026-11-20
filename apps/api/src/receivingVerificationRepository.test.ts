@@ -240,15 +240,33 @@ function fixture(mode: "sandbox" | "live" = "sandbox") {
         };
       if (/SELECT to_jsonb\(a\)/.test(sql))
         return {
-          rows: tables.accounts.map((account) => ({
-            account: structuredClone(account),
-          })),
+          rows: tables.accounts
+            .filter(
+              (account) =>
+                !/provider='PAGARME'/.test(sql) ||
+                account.provider === "PAGARME",
+            )
+            .map((account) => ({
+              account: structuredClone(account),
+            })),
         };
       if (/SELECT to_jsonb\(op\)/.test(sql))
         return {
-          rows: tables.operations.map((operation) => ({
-            operation: structuredClone(operation),
-          })),
+          rows: tables.operations
+            .filter(
+              (operation) =>
+                (!/kind='ACCOUNT_CREATE'/.test(sql) ||
+                  operation.kind === "ACCOUNT_CREATE") &&
+                (!/NOT EXISTS/.test(sql) ||
+                  !tables.accounts.some(
+                    (account) =>
+                      account.id === operation.account_id &&
+                      account.provider !== "PAGARME",
+                  )),
+            )
+            .map((operation) => ({
+              operation: structuredClone(operation),
+            })),
         };
       if (/SELECT to_jsonb\(d\)/.test(sql))
         return {
@@ -1494,4 +1512,91 @@ describe("locked immutable receiving verification repository", () => {
     expect(v.tables.accounts[0].provider_account_state).toBe("BLOCKED");
     expect(v.tables.evidence[1].created_at).toBe(v.state.clock);
   });
+});
+
+describe("verification next to a previous provider's history", () => {
+  function withPreviousProvider(
+    tables: ReturnType<typeof fixture>["tables"],
+    mode: "sandbox" | "live",
+  ) {
+    const at = "2026-03-01T12:00:00.000Z";
+    const operation = (id: string, kind: string, target: object) => ({
+      ...structuredClone(tables.operations[0]),
+      id,
+      account_id: "a-previous-account",
+      kind,
+      state: "SUCCEEDED",
+      request_id: `request-${id}`,
+      request_hash: "a".repeat(64),
+      request_snapshot: { legacy: true },
+      lease_owner: null,
+      lease_token: null,
+      lease_expires_at: null,
+      provider_operation_reference: `ref-${id}`,
+      next_attempt_at: at,
+      created_at: at,
+      updated_at: at,
+      ...target,
+    });
+    tables.accounts.unshift({
+      ...structuredClone(tables.accounts[0]),
+      // Sorts before the Pagar.me rows, as a random older id may in production.
+      id: "a-previous-account",
+      environment: mode,
+      provider: "ASAAS",
+      is_current: false,
+      provider_account_state: "APPROVED",
+      receiving_capability: true,
+      withdrawal_capability: true,
+      commercial_enabled: true,
+      account_reference: "acc_previous",
+      recipient_reference: null,
+      observed_at: at,
+      created_at: at,
+      updated_at: at,
+    });
+    tables.operations.unshift(
+      operation("a-previous-create", "ACCOUNT_CREATE", {}),
+      operation("a-previous-checkout", "CHECKOUT_CREATE", {
+        order_id: "order-previous",
+      }),
+      operation("a-previous-withdrawal", "WITHDRAWAL", {
+        withdrawal_intent_id: "withdrawal-previous",
+      }),
+    );
+  }
+
+  it("loads the Pagar.me account and selects a destination", async () => {
+    const v = fixture();
+    withPreviousProvider(v.tables, "sandbox");
+    const history = structuredClone(v.tables);
+    const fence = await v.select();
+    expect(fence.account.id).toBe("account-one");
+    expect(fence.operation.id).toBe("operation-one");
+    expect(v.tables.accounts[1].operator_reference).toBe("native-operator");
+    expect(v.tables.accounts[0]).toEqual(history.accounts[0]);
+    expect(v.tables.operations).toEqual(history.operations);
+  });
+
+  it.each(["second-account", "second-create"])(
+    "a %s of Pagar.me still refuses the scope",
+    async (caseName) => {
+      const v = fixture();
+      withPreviousProvider(v.tables, "sandbox");
+      if (caseName === "second-account")
+        v.tables.accounts.push({
+          ...structuredClone(v.tables.accounts[1]),
+          id: "account-two",
+          is_current: false,
+        });
+      else
+        v.tables.operations.push({
+          ...structuredClone(v.tables.operations[3]),
+          id: "operation-two",
+          request_id: "request-two",
+        });
+      await expect(v.select()).rejects.toThrow();
+      expect(v.tables.destinations).toHaveLength(0);
+    },
+  );
 });

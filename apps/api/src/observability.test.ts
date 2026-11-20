@@ -89,6 +89,21 @@ describe("safe observability", () => {
     expect(JSON.stringify(event)).not.toContain("Private message");
   });
 
+  it("keeps code-shaped provider codes and redacts echoed values", () => {
+    expect(
+      sanitizeObservabilityEvent({ providerCode: "invalid_document" }),
+    ).toEqual({ providerCode: "invalid_document" });
+    expect(
+      sanitizeObservabilityEvent({ providerCode: "document.12345678909" }),
+    ).toEqual({ providerCode: "redacted" });
+    expect(
+      sanitizeObservabilityEvent({ providerCode: "maria@example.test" }),
+    ).toEqual({});
+    expect(
+      sanitizeObservabilityEvent({ providerCode: "CPF 123.456.789-09" }),
+    ).toEqual({});
+  });
+
   it("adds a server-generated request id and logs the matched route without reading request surfaces", async () => {
     const forbiddenPhone = ["+55", "11", "9", "99999999"].join("");
     const clientRequestId = forbiddenValue("client-request-id");
