@@ -15,7 +15,7 @@ import type {
   RecentFinancialAuthenticationEvidence,
 } from "./financialAuthorization";
 import { allowsLiveSite, type LiveSitePolicy } from "./liveSitePolicy";
-import type { ProviderCredentialEnvelope } from "./providerCredentials";
+import { readPagarmeRecipientId } from "./pagarmeRecipientClient";
 
 const NominationPromise = Promise;
 const nominationPromiseThen = Promise.prototype.then;
@@ -75,7 +75,7 @@ export function deriveReceivingNominationRequestId(
         "receiving.self-nomination.request.v1",
         siteId,
         operatorUserId,
-        "ASAAS",
+        "PAGARME",
         value.environment,
       ]),
       "utf8",
@@ -143,13 +143,13 @@ export interface ReceivingNominationSnapshot {
   readonly authentication: ReceivingNominationAuthenticationAudit;
 }
 
+// Both references are the Pagar.me recipient id; no provider secret is kept.
 export interface ReceivingProvisioningResult {
   readonly accountReference: string;
   readonly recipientReference: string;
-  readonly credential: ProviderCredentialEnvelope;
 }
 export interface ReceivingProvisioningContext extends ReceivingNominationScope {
-  readonly provider: "ASAAS";
+  readonly provider: "PAGARME";
   readonly accountId: string;
   readonly operationId: string;
   readonly requestId: string;
@@ -584,49 +584,16 @@ function privateIdentifier(value: unknown): string {
     return unavailable();
   return value;
 }
-function encoded(value: unknown, minimum: number, maximum: number): string {
-  if (
-    typeof value !== "string" ||
-    value.length > Math.ceil((maximum * 4) / 3) ||
-    !/^[A-Za-z0-9_-]+$/.test(value)
-  )
-    return unavailable();
-  const decoded = Buffer.from(value, "base64url");
-  if (
-    decoded.length < minimum ||
-    decoded.length > maximum ||
-    decoded.toString("base64url") !== value
-  )
-    return unavailable();
-  return value;
-}
 export function readReceivingProvisioningResult(
   value: unknown,
 ): ReceivingProvisioningResult {
   try {
-    const raw = exactRecord(value, [
-      "accountReference",
-      "recipientReference",
-      "credential",
-    ]);
-    const credential = exactRecord(raw.credential, [
-      "version",
-      "keyId",
-      "nonce",
-      "ciphertext",
-      "tag",
-    ]);
-    if (credential.version !== 1) return unavailable();
+    const raw = exactRecord(value, ["accountReference", "recipientReference"]);
+    const recipient = readPagarmeRecipientId(raw.recipientReference);
+    if (raw.accountReference !== recipient) return unavailable();
     return Object.freeze({
-      accountReference: privateIdentifier(raw.accountReference),
-      recipientReference: privateIdentifier(raw.recipientReference),
-      credential: Object.freeze({
-        version: 1,
-        keyId: privateIdentifier(credential.keyId),
-        nonce: encoded(credential.nonce, 12, 12),
-        ciphertext: encoded(credential.ciphertext, 1, 8192),
-        tag: encoded(credential.tag, 16, 16),
-      }),
+      accountReference: recipient,
+      recipientReference: recipient,
     });
   } catch {
     return unavailable();
@@ -671,7 +638,7 @@ export function readReceivingProvisioningRecord(
     ] as const)
       if (provision[field] !== nomination[field]) return unavailable();
     if (
-      provision.provider !== "ASAAS" ||
+      provision.provider !== "PAGARME" ||
       provision.fingerprintVersion !== "hkdf-hmac-sha256-v1" ||
       typeof provision.inputFingerprint !== "string" ||
       !/^[a-f0-9]{64}$/.test(provision.inputFingerprint)
@@ -697,7 +664,7 @@ export function readReceivingProvisioningRecord(
       version: "receiving.account-provisioning.v1",
       nomination,
       provision: Object.freeze({
-        provider: "ASAAS",
+        provider: "PAGARME",
         siteId: nomination.siteId,
         accountId: nomination.accountId,
         operationId: nomination.operationId,

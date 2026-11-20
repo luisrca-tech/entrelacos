@@ -29,7 +29,7 @@ export interface GiftProcessingPolicy {
     | "SANDBOX_BUYER_ESTIMATE"
     | "ACCOUNT_BUYER_ESTIMATE"
     | "PLATFORM_TARIFF_TABLE";
-  cardInstallmentBasisPoints?: { upToSix?: number; upToTwelve?: number };
+  cardInstallmentBasisPoints?: { upToSix?: number };
 }
 
 export interface QuoteGiftAmountsInput {
@@ -170,11 +170,10 @@ function quoteGiftCardInstallments(
     },
   ];
   for (const { start, end, rate } of [
-    { start: 2, end: 6, rate: policy.cardInstallmentBasisPoints?.upToSix },
     {
-      start: 7,
+      start: 2,
       end: giftMaximumInstallments,
-      rate: policy.cardInstallmentBasisPoints?.upToTwelve,
+      rate: policy.cardInstallmentBasisPoints?.upToSix,
     },
   ]) {
     if (rate === undefined) continue;
@@ -329,7 +328,7 @@ export function platformTariffPolicy(
     version: GIFT_PLATFORM_TARIFFS.version,
     method,
     commissionBasisPoints: 200,
-    processingBasisPoints: tariff.basisPoints,
+    processingBasisPoints: tariff.mdrBasisPoints,
     processingFixedCents: tariff.fixedCents,
     rounding: "CEILING",
     feeAllocation: "BUYER_GROSS_UP",
@@ -337,7 +336,20 @@ export function platformTariffPolicy(
   };
 }
 
-/** Frozen per-installment couple split for a V2 quote (sums to the nominal). */
+/** Frozen couple amount C on the order split for a V2 quote. */
+export function giftV2CoupleSplitCents(
+  quote: Pick<GiftQuote, "nominalCents" | "method" | "installmentCount">,
+): number {
+  const v2 = quoteGiftV2(
+    quote.nominalCents,
+    quote.method,
+    quote.installmentCount ?? 1,
+  );
+  if (!v2.offered) return policyUnavailable();
+  return v2.coupleSplitCents;
+}
+
+/** Frozen per-installment couple net for a V2 quote (sums to the nominal). */
 export function giftV2RecipientSplitCents(
   quote: Pick<GiftQuote, "nominalCents" | "method" | "installmentCount">,
 ): number[] {

@@ -31,7 +31,7 @@ function fixture() {
   };
   const providerBinding = {
     siteId: "site-one",
-    provider: "asaas",
+    provider: "pagarme",
     operatorReference: "operator-private",
     environment: "live" as const,
     accountReference: "account-private",
@@ -131,7 +131,7 @@ describe("immutable gift quote creation", () => {
     Object.assign(v.pricing.policy, {
       feeAllocation: "BUYER_GROSS_UP",
       feeBasis: "ACCOUNT_BUYER_ESTIMATE",
-      cardInstallmentBasisPoints: { upToSix: 350, upToTwelve: 450 },
+      cardInstallmentBasisPoints: { upToSix: 350 },
     });
     const quote = await createGiftQuoteService(v.dependencies).createQuote(
       "site-one",
@@ -151,7 +151,7 @@ describe("immutable gift quote creation", () => {
       installmentSurchargeCents: 109,
       installmentCents: [3537, 3537, 3537],
     });
-    expect(quote.installmentOptions).toHaveLength(12);
+    expect(quote.installmentOptions).toHaveLength(6);
     expect(v.appended[0].quote).toEqual(quote);
     expect(Object.isFrozen(v.appended[0].quote.installmentCents)).toBe(true);
   });
@@ -372,7 +372,7 @@ describe("immutable gift quote creation", () => {
     );
     expect(dependencies.loadPricingPolicy).toHaveBeenCalledWith({
       siteId: "site-one",
-      provider: "asaas",
+      provider: "pagarme",
       operatorReference: "operator-private",
       environment: "live",
       accountReference: "account-private",
@@ -388,7 +388,7 @@ describe("immutable gift quote creation", () => {
       gift: storedGift.gift,
       receiving: {
         siteId: "site-one",
-        provider: "asaas",
+        provider: "pagarme",
         operatorReference: "operator-private",
         environment: "live",
         accountReference: "account-private",

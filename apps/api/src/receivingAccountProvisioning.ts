@@ -1,18 +1,14 @@
 import { createHmac, hkdfSync, randomUUID, timingSafeEqual } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
-import {
-  type AccountProvisioningInput,
-  type AsaasAccountProvisioningClient,
-  readAccountProvisioningInput,
-} from "./asaasAccountProvisioningClient";
+import { receivingSetupAccountSchema } from "@entrelacos/contracts";
 import {
   databaseTimestampEpochMicroseconds,
   readDatabaseTimestamp,
 } from "./databaseTimestamp";
 import type {
-  ProviderCredentialContext,
-  ProviderCredentialKeyring,
-} from "./providerCredentials";
+  PagarmeRecipientClient,
+  PagarmeRecipientInput,
+} from "./pagarmeRecipientClient";
 import {
   type ReceivingNominationCurrentAuthorization,
   type ReceivingNominationSnapshot,
@@ -21,7 +17,30 @@ import {
   type ReceivingProvisioningResult,
   readReceivingNominationSnapshot,
   readReceivingProvisioningRecord,
+  readReceivingProvisioningResult,
 } from "./receivingNomination";
+
+export type ReceivingFingerprintKeyring = ReadonlyMap<string, Uint8Array>;
+export const RECEIVING_FINGERPRINT_KEY_ID = "receiving-fingerprint-v1";
+/** Keys only the input fingerprint; it never encrypts or authenticates a provider. */
+export function deriveReceivingFingerprintKey(secret: string): Uint8Array {
+  return new Uint8Array(
+    hkdfSync(
+      "sha256",
+      secret,
+      "entrelacos-receiving-fingerprint-v1",
+      "input-fingerprint",
+      32,
+    ),
+  );
+}
+export function readReceivingRecipientInput(
+  value: unknown,
+): Readonly<PagarmeRecipientInput> {
+  const parsed = receivingSetupAccountSchema.safeParse(value);
+  if (!parsed.success) return unavailable();
+  return Object.freeze(parsed.data);
+}
 
 export class ReceivingAccountProvisioningError extends Error {
   readonly status = 503;
@@ -86,25 +105,24 @@ export interface ReceivingAccountProvisioningRepository {
 export interface ReceivingProvisioningProvider {
   readonly approved: true;
   readonly environment: "sandbox" | "live";
+  /** The platform Pagar.me recipient that receives the platform split. */
   readonly parentAccountReference: string;
   readonly policyVersion: string;
-  createClient(
-    context: ProviderCredentialContext,
-  ): AsaasAccountProvisioningClient;
+  readonly recipients: Pick<PagarmeRecipientClient, "createRecipient">;
 }
 interface Options {
   repository: ReceivingAccountProvisioningRepository;
   readProvider(
     nomination: ReceivingNominationSnapshot,
   ): Promise<ReceivingProvisioningProvider | null>;
-  fingerprintKeys: ProviderCredentialKeyring;
+  fingerprintKeys: ReceivingFingerprintKeyring;
   activeFingerprintKeyId: string;
   now(): Date;
   generateId?(kind: "owner" | "token"): string;
 }
 export type ReceivingProvisioningCommand = {
   readonly nomination: ReceivingNominationSnapshot;
-  readonly input: AccountProvisioningInput;
+  readonly input: PagarmeRecipientInput;
   readonly authorization: ReceivingNominationCurrentAuthorization;
   readonly confirmNativeCreation: true;
 } & (
@@ -128,8 +146,8 @@ export function deriveReceivingProvisioningContext(
   inputNomination: ReceivingNominationSnapshot,
   parentAccountReference: string,
   fingerprintKeyId: string,
-  input: AccountProvisioningInput,
-  keyring: ProviderCredentialKeyring,
+  input: PagarmeRecipientInput,
+  keyring: ReceivingFingerprintKeyring,
 ): Readonly<ProvisioningIdentity> {
   let root: Buffer | undefined;
   let derived: Buffer | undefined;
@@ -141,7 +159,9 @@ export function deriveReceivingProvisioningContext(
     const key = keyring.get(id);
     if (!(key instanceof Uint8Array) || key.byteLength !== 32)
       return unavailable();
-    const fields = readAccountProvisioningInput(input);
+    const fields = readReceivingRecipientInput(input);
+    const address = fields.address;
+    const bank = fields.bankAccount;
     root = Buffer.from(key);
     derived = Buffer.from(
       hkdfSync(
@@ -154,10 +174,10 @@ export function deriveReceivingProvisioningContext(
     );
     canonical = Buffer.from(
       JSON.stringify([
-        "entrelacos.receiving-provisioning.input.v1",
+        "entrelacos.receiving-provisioning.input.v2",
         "hkdf-hmac-sha256-v1",
         id,
-        "ASAAS",
+        "PAGARME",
         nomination.siteId,
         nomination.accountId,
         nomination.operationId,
@@ -169,18 +189,29 @@ export function deriveReceivingProvisioningContext(
         parent,
         fields.name,
         fields.email,
-        fields.cpfCnpj,
+        fields.cpf,
         fields.mobilePhone,
-        fields.incomeValue,
-        fields.address,
-        fields.addressNumber,
-        fields.province,
-        fields.postalCode,
         fields.birthDate,
+        fields.monthlyIncomeCents,
+        fields.professionalOccupation,
+        address.street,
+        address.streetNumber,
+        address.complement ?? null,
+        address.neighborhood,
+        address.city,
+        address.state,
+        address.zipCode,
+        address.referencePoint,
+        bank.bank,
+        bank.branchNumber,
+        bank.branchCheckDigit ?? null,
+        bank.accountNumber,
+        bank.accountCheckDigit,
+        bank.type,
       ]),
     );
     return Object.freeze({
-      provider: "ASAAS",
+      provider: "PAGARME",
       siteId: nomination.siteId,
       accountId: nomination.accountId,
       operationId: nomination.operationId,
@@ -367,7 +398,6 @@ export function createReceivingAccountProvisioning(options?: Options): {
         report(armAttempted || settling ? "UNKNOWN" : "UNAVAILABLE");
       };
       const timer = setTimeout(cancel, 45000);
-      let client: AsaasAccountProvisioningClient | undefined;
       const current = () => {
         if (closing || abort.signal.aborted) return unavailable();
       };
@@ -389,36 +419,18 @@ export function createReceivingAccountProvisioning(options?: Options): {
             command.authorization,
             nomination,
           );
-          const input = readAccountProvisioningInput(command.input);
+          const input = readReceivingRecipientInput(command.input);
           const provider = await readProvider(nomination);
           current();
           if (
             provider?.approved !== true ||
             provider.environment !== nomination.environment ||
             provider.policyVersion !== nomination.policyVersion ||
-            typeof provider.createClient !== "function"
+            typeof provider.recipients?.createRecipient !== "function"
           )
             return unavailable();
           const parent = identifier(provider.parentAccountReference);
-          client = provider.createClient({
-            provider: "ASAAS",
-            siteId: nomination.siteId,
-            accountBindingId: nomination.accountId,
-            environment: nomination.environment,
-          });
-          current();
-          if (
-            !client.available ||
-            client.configuration?.parentAccountReference !== parent ||
-            client.configuration.environment !== nomination.environment ||
-            !isDeepStrictEqual(client.configuration.credentialContext, {
-              provider: "ASAAS",
-              siteId: nomination.siteId,
-              accountBindingId: nomination.accountId,
-              environment: nomination.environment,
-            })
-          )
-            return unavailable();
+          const recipients = provider.recipients;
           let claim: ReceivingProvisioningRecord;
           let prepared: ReceivingProvisioningResult;
           if (settlement) {
@@ -456,8 +468,6 @@ export function createReceivingAccountProvisioning(options?: Options): {
             )
               return unavailable();
             prepared = observation.result;
-            if (!client.credentialKeyIds.includes(prepared.credential.keyId))
-              return unavailable();
             if (confirmed(observation, claim, prepared) === "SUCCEEDED") {
               report("STORED");
               return;
@@ -515,7 +525,17 @@ export function createReceivingAccountProvisioning(options?: Options): {
             )
               return unavailable();
             spent = true;
-            prepared = await client.createOriginal(input, abort.signal);
+            // The account id is the recipient code and idempotency key, so a
+            // repeated request can only return the same Pagar.me recipient.
+            const recipient = await recipients.createRecipient(
+              nomination.accountId,
+              input,
+            );
+            if (recipient.code !== nomination.accountId) return unavailable();
+            prepared = readReceivingProvisioningResult({
+              accountReference: recipient.id,
+              recipientReference: recipient.id,
+            });
             try {
               await repository.quarantineOriginal(claim, prepared);
             } catch {
@@ -550,13 +570,9 @@ export function createReceivingAccountProvisioning(options?: Options): {
         } catch {
           report(armAttempted || settling ? "UNKNOWN" : "UNAVAILABLE");
         } finally {
-          try {
-            await client?.close();
-          } finally {
-            clearTimeout(timer);
-            owned.delete(entry);
-            settle();
-          }
+          clearTimeout(timer);
+          owned.delete(entry);
+          settle();
         }
       })().catch(() => {
         report(armAttempted ? "UNKNOWN" : "UNAVAILABLE");

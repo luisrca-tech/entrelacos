@@ -9,7 +9,7 @@ import {
 const now = new Date("2026-10-16T12:00:00.000Z");
 const binding = {
   siteId: "demo-wedding",
-  provider: "ASAAS",
+  provider: "PAGARME",
   operatorReference: "demo-holder",
   environment: "sandbox" as const,
   accountReference: "sandbox-account",

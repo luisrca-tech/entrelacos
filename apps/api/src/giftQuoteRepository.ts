@@ -6,7 +6,7 @@ import {
   site,
 } from "@entrelacos/database/schema";
 import { and, eq } from "drizzle-orm";
-import { readGiftQuoteSnapshot } from "./giftCheckouts";
+import { GIFT_CHECKOUT_PROVIDER, readGiftQuoteSnapshot } from "./giftCheckouts";
 import type { GiftQuoteSnapshot } from "./giftQuotes";
 
 type QuoteDatabase = Pick<DatabaseConnection["db"], "transaction">;
@@ -40,7 +40,7 @@ export function createGiftQuoteRepository(
           )
             unavailable();
         };
-        if (binding.provider !== "ASAAS") unavailable();
+        if (binding.provider !== GIFT_CHECKOUT_PROVIDER) unavailable();
         assertFresh();
         await db.transaction(async (tx) => {
           // Take the site foreign-key lock before receiving locks, as checkout reservation does.
@@ -66,7 +66,7 @@ export function createGiftQuoteRepository(
               and(
                 eq(receivingAccount.siteId, binding.siteId),
                 eq(receivingAccount.environment, binding.environment),
-                eq(receivingAccount.provider, "ASAAS"),
+                eq(receivingAccount.provider, GIFT_CHECKOUT_PROVIDER),
                 eq(receivingAccount.accountReference, binding.accountReference),
                 eq(receivingAccount.isCurrent, true),
               ),

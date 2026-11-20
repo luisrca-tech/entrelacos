@@ -1,4 +1,5 @@
 ---
+import PaymentSeal from "../components/PaymentSeal.astro";
 import PricingExample from "../components/PricingExample.astro";
 import PublicHeader from "../components/PublicHeader.astro";
 import PublicFooter from "../components/PublicFooter.astro";
@@ -9,7 +10,7 @@ import "../styles/landing.css";
 import "../styles/faq.css";
 const config = landingConfig(import.meta.env, import.meta.env.PROD);
 const canonical = new URL("/duvidas", config.siteUrl).href;
-const description = "Tire suas dúvidas sobre personalização do site de casamento, presentes, taxas, parcelamento, conta Asaas, recebimentos e saques no Entrelaços.";
+const description = "Tire suas dúvidas sobre personalização do site de casamento, presentes, taxas, parcelamento no cartão, recebimentos pela Pagar.me e saques no Entrelaços.";
 ---
 <!doctype html>
 <html lang="pt-BR">
@@ -71,6 +72,7 @@ const description = "Tire suas dúvidas sobre personalização do site de casame
                   </details>
                 ))}
               </div>
+              {topic.id === "presentes" && <PaymentSeal />}
               {topic.id === "taxas" && <PricingExample />}
             </section>
           ))}

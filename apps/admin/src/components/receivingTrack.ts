@@ -1,11 +1,6 @@
 import type { ReceivingSetupContext } from "@entrelacos/contracts";
 
-export type ReceivingStepId =
-  | "holder"
-  | "details"
-  | "activation"
-  | "account"
-  | "fees";
+export type ReceivingStepId = "holder" | "details" | "activation" | "fees";
 export type ReceivingStepStatus =
   | "done"
   | "current"
@@ -24,25 +19,19 @@ export const receivingSteps: readonly {
     id: "holder",
     title: "Quem vai receber",
     short: "Quem recebe",
-    summary: "Um dos noivos é o titular da conta e dos saques.",
+    summary: "Um dos noivos é o titular do recebedor e dos saques.",
   },
   {
     id: "details",
     title: "Seus dados",
     short: "Seus dados",
-    summary: "CPF, celular e endereço para abrir a conta no Asaas.",
+    summary: "CPF, endereço e conta bancária no seu CPF, para a Pagar.me.",
   },
   {
     id: "activation",
-    title: "Ative sua conta no Asaas",
-    short: "Ativar no Asaas",
-    summary: "Criar a senha, confirmar o celular e enviar documentos.",
-  },
-  {
-    id: "account",
-    title: "Conta para saque",
-    short: "Conta para saque",
-    summary: "A chave Pix do seu banco, para onde o dinheiro vai.",
+    title: "Verifique sua identidade",
+    short: "Verificar identidade",
+    summary: "Documento e selfie pelo link seguro da Pagar.me.",
   },
   {
     id: "fees",
@@ -55,7 +44,7 @@ export const receivingSteps: readonly {
 export const receivingStepStatusLabel: Record<ReceivingStepStatus, string> = {
   done: "Concluída",
   current: "Agora",
-  review: "Em análise pelo Asaas",
+  review: "Em análise pela Pagar.me",
   attention: "Precisa de ajuste",
   available: "Pode fazer já",
   locked: "Depois",
@@ -69,7 +58,6 @@ export type ReceivingTrackInput = {
     "observedAt"
   > | null;
   ready: boolean;
-  destinationSaved: boolean;
 };
 
 export type ReceivingTrackStep = (typeof receivingSteps)[number] & {
@@ -81,23 +69,14 @@ type BaseStatus = "done" | "todo" | "review" | "attention" | "locked";
 
 function activationStatus(input: ReceivingTrackInput): BaseStatus {
   if (input.accountState !== "CREATED") return "locked";
-  if (input.ready || input.provider?.general === "APPROVED") return "done";
-  const provider = input.provider;
-  if (
-    provider &&
-    (provider.commercialInfoExpired === true ||
-      [
-        provider.commercialInfo,
-        provider.documentation,
-        provider.general,
-      ].includes("REJECTED"))
-  )
-    return "attention";
-  if (provider?.general === "AWAITING_APPROVAL") return "review";
+  const state = input.provider?.accountState;
+  if (input.ready || state === "APPROVED") return "done";
+  if (state === "BLOCKED" || state === "SUSPENDED") return "attention";
+  if (state === "UNDER_REVIEW") return "review";
   return "todo";
 }
 
-// Derives the five setup steps and the single next step from server state.
+// Derives the four setup steps and the single next step from server state.
 export function deriveReceivingTrack(input: ReceivingTrackInput) {
   const created = input.accountState === "CREATED";
   const base: Record<ReceivingStepId, BaseStatus> = {
@@ -110,11 +89,6 @@ export function deriveReceivingTrack(input: ReceivingTrackInput) {
           ? "attention"
           : "todo",
     activation: activationStatus(input),
-    account: !created
-      ? "locked"
-      : input.destinationSaved || input.ready
-        ? "done"
-        : "todo",
     fees: created ? "done" : "locked",
   };
   const actionable = receivingSteps.find(({ id }) =>

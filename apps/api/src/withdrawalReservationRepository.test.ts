@@ -114,7 +114,7 @@ function fixture(live = false) {
     id: "account-1",
     siteId: "site-1",
     environment: mode,
-    provider: "ASAAS",
+    provider: "PAGARME",
     operatorUserId: actor.userId,
     operatorReference: "operator-remote-1",
     accountReference: "acct_1",
@@ -1991,37 +1991,11 @@ async function addRetainedWithdrawal(
   return { intent, operation };
 }
 describe("durable withdrawal request lifecycle", () => {
-  it("rereads an issued payout consent after PostgreSQL JSONB reorders nested keys without changing its hash", async () => {
+  it("rereads an issued consent after PostgreSQL JSONB reorders nested keys without changing its hash", async () => {
     const v = fixture();
     v.tables.withdrawal_request.length = 0;
     v.faults.jsonbRoundTrip = true;
-    const payout = {
-      destinationId: "payout-1",
-      destinationVersion: 2,
-      configurationHash: "a".repeat(64),
-      reviewId: "review-1",
-      holderId: "holder-record-1",
-      holderConsentId: "holder-consent-1",
-      acceptThirdParty: true,
-      keyType: "EMAIL" as const,
-      maskedKey: "c***@p***",
-      ownerName: "Sandbox Recipient",
-    };
-    const maskedDestination = `Pix ${payout.keyType}: ${payout.maskedKey}`;
-    Object.assign(v.presentation, { payout, maskedDestination });
-    const consent = readWithdrawalConsentSnapshot({
-      ...v.consentSnapshot,
-      preview: {
-        ...v.consentSnapshot.preview,
-        maskedDestination,
-        payoutRecipientName: payout.ownerName,
-      },
-      presentation: {
-        ...v.consentSnapshot.presentation,
-        payout,
-        maskedDestination,
-      },
-    });
+    const consent = readWithdrawalConsentSnapshot(v.consentSnapshot);
     const originalHash = hashWithdrawalConsentSnapshot(consent);
     const repo = createWithdrawalReservationRepository(v.db, v.options);
     expect(
@@ -2032,17 +2006,13 @@ describe("durable withdrawal request lifecycle", () => {
     expect(reread?.snapshot).toEqual(consent);
     const stored = v.tables.withdrawal_request[0];
     expect(
-      Object.keys(
-        (stored.previewSnapshot as typeof consent).presentation.payout ?? {},
-      ),
-    ).not.toEqual(Object.keys(payout));
+      Object.keys((stored.previewSnapshot as typeof consent).presentation),
+    ).not.toEqual(Object.keys(consent.presentation));
     expect(stored.previewHash).toBe(originalHash);
     expect(v.tables.withdrawal_intent).toHaveLength(0);
     expect(v.tables.financial_operation).toHaveLength(0);
-    const storedPayout = (stored.previewSnapshot as typeof consent).presentation
-      .payout;
-    if (!storedPayout) throw new Error("Missing stored payout");
-    storedPayout.configurationHash = "b".repeat(64);
+    (stored.previewSnapshot as typeof consent).presentation.destinationId =
+      "destination-other";
     await expect(repo.findConsent?.(requestAttempt(v))).rejects.toMatchObject({
       code: "WITHDRAWAL_UNAVAILABLE",
       status: 503,
@@ -3212,7 +3182,7 @@ it.each(["FAILED", "CANCELLED"])(
       reservationState: "RELEASED",
       reservedCents: 0,
       providerReference: "transfer-1",
-      receiptReference: `asaas-transfer:${"a".repeat(64)}`,
+      receiptReference: `pagarme-withdrawal:${"a".repeat(64)}`,
       resolutionObservedAt: now.toISOString(),
     });
     Object.assign(f.tables.financial_operation[0], {

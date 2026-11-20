@@ -11,6 +11,7 @@ import {
 } from "@entrelacos/contracts";
 import {
   type GiftProcessingPolicy,
+  giftV2CoupleSplitCents,
   giftV2RecipientSplitCents,
   quoteGiftPurchaseAmounts,
 } from "./giftMoney";
@@ -75,8 +76,10 @@ export interface GiftV2SettlementSnapshot {
   readonly tariffVersion: string;
   readonly tier: GiftTariffTier;
   readonly anticipationCents: number;
-  /** Fixed split to the couple wallet per installment; sums to the nominal. */
+  /** Couple net per installment after anticipation; sums to the nominal. */
   readonly recipientSplitCents: readonly number[];
+  /** C: couple amount on the Pagar.me order split (Pix: the nominal). */
+  readonly coupleSplitCents: number;
 }
 
 /** Single dispatch point between V1 and V2 settlement (spec e.5). */
@@ -105,6 +108,7 @@ export function buildGiftV2Settlement(
     tier: getGiftTariffTier(quote.method, count),
     anticipationCents: quote.anticipationCents ?? 0,
     recipientSplitCents: giftV2RecipientSplitCents(quote),
+    coupleSplitCents: giftV2CoupleSplitCents(quote),
   };
 }
 
@@ -123,6 +127,7 @@ export function readGiftV2Settlement(
     settlement.tariffVersion !== expected.tariffVersion ||
     settlement.tier !== expected.tier ||
     settlement.anticipationCents !== expected.anticipationCents ||
+    settlement.coupleSplitCents !== expected.coupleSplitCents ||
     settlement.recipientSplitCents.length !==
       expected.recipientSplitCents.length ||
     settlement.recipientSplitCents.some(

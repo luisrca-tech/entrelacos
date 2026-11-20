@@ -1009,7 +1009,7 @@ describe("finance HTTP disabled boundary", () => {
         siteId: actor.siteId,
         operatorUserId: actor.userId,
         environment: "sandbox" as const,
-        accountReference: "private-asaas-account",
+        accountReference: "private-provider-account",
         recipientReference: "private-recipient",
         destinationVersion: 1,
       },
@@ -1148,7 +1148,7 @@ describe("finance HTTP disabled boundary", () => {
     }));
     const balance = vi.fn(async (scope) => ({
       source: "provider" as const,
-      provider: "ASAAS" as const,
+      provider: "PAGARME" as const,
       siteId: scope.siteId,
       accountBindingId: scope.accountId,
       accountReference: scope.accountReference,
@@ -1300,7 +1300,7 @@ describe("finance HTTP disabled boundary", () => {
     expect(v.fee).toHaveBeenCalledExactlyOnceWith({
       siteId: "site-one",
       accountId: "private-account",
-      accountReference: "private-asaas-account",
+      accountReference: "private-provider-account",
       environment: "sandbox",
       bankReference: "private-bank",
       destinationVersion: 1,

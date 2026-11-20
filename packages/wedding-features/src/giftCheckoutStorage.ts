@@ -1,21 +1,25 @@
 import {
-  checkoutCreateInputSchema,
   checkoutRecoveryTokenSchema,
-  checkoutStatusSchema,
+  giftCheckoutStatusInputSchema,
+  giftCheckoutStatusSchema,
   giftPaymentMethodSchema,
   receivingModeSchema,
   siteIdSchema,
 } from "@entrelacos/contracts";
 
-export const pendingGiftCheckoutSchema = checkoutCreateInputSchema
-  .omit({ payer: true })
+/**
+ * What the browser keeps to resume a checkout: the request id and recovery
+ * token only. Strict, so card data, the card token or buyer data can never be
+ * stored here.
+ */
+export const pendingGiftCheckoutSchema = giftCheckoutStatusInputSchema
   .extend({
     // Binds the attempt to its gift card; absent on markers saved before it existed.
-    giftId: checkoutCreateInputSchema.shape.quoteId.optional(),
+    giftId: giftCheckoutStatusInputSchema.shape.quoteId.optional(),
     method: giftPaymentMethodSchema,
     mode: receivingModeSchema,
-    terminalStatus: checkoutStatusSchema.optional(),
-    lastStatus: checkoutStatusSchema.optional(),
+    terminalStatus: giftCheckoutStatusSchema.optional(),
+    lastStatus: giftCheckoutStatusSchema.optional(),
   })
   .strict()
   .refine((value) => {
@@ -34,8 +38,7 @@ export const pendingGiftCheckoutSchema = checkoutCreateInputSchema
         (latest.state === terminal.state &&
           Date.parse(latest.observedAt) === Date.parse(terminal.observedAt))) &&
       latest.siteId === terminal.siteId &&
-      latest.orderId === terminal.orderId &&
-      latest.attemptId === terminal.attemptId &&
+      latest.checkoutId === terminal.checkoutId &&
       [terminal, latest].every(
         (status) =>
           status.quoteId === value.quoteId &&
@@ -186,8 +189,8 @@ export function retainPendingGiftCheckout(
       )
         throw new Error("Checkout recovery history has no observation.");
       if (
-        parsed.terminalStatus.orderId !== current.terminalStatus.orderId ||
-        parsed.terminalStatus.attemptId !== current.terminalStatus.attemptId ||
+        parsed.terminalStatus.checkoutId !==
+          current.terminalStatus.checkoutId ||
         (current.terminalStatus.state === "REFUNDED" &&
           parsed.terminalStatus.state !== "REFUNDED") ||
         Date.parse(parsed.terminalStatus.observedAt) <

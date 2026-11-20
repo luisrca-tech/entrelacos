@@ -3,9 +3,14 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { apiRequest } from "../lib/apiClient";
+import { paymentsAvailabilityStore } from "../lib/paymentsAvailability";
 import { loadGiftsReadiness } from "./giftsReadiness";
 import { panelActorOwner } from "./panelActor";
 import { readHomeReceiving, SiteHomeView } from "./SiteHome";
+
+// The API reports payments as available unless a test says otherwise.
+beforeEach(() => paymentsAvailabilityStore.reportMode("sandbox"));
+afterEach(() => paymentsAvailabilityStore.reset());
 
 vi.mock("@tanstack/react-router", () => ({
   Link: ({

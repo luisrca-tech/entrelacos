@@ -18,7 +18,6 @@ import {
   withdrawalRequestStatusSchema,
   withdrawalReservationInputSchema,
 } from "@entrelacos/contracts";
-import type { AsaasBalanceObservation } from "./asaasHttpClient";
 import {
   databaseTimestampEpochMicroseconds,
   readDatabaseTimestamp,
@@ -32,14 +31,8 @@ import {
   type RecentFinancialAuthenticationEvidence,
 } from "./financialAuthorization";
 import { allowsLiveSite } from "./liveSitePolicy";
+import type { ProviderBalanceObservation } from "./pagarmeWithdrawalClient";
 import { ReceivingReadinessServiceError } from "./receivingReadiness";
-import { logWithdrawalFailure } from "./withdrawalDiagnostics";
-
-import {
-  readWithdrawalPayoutBinding,
-  sameWithdrawalPayout,
-  type WithdrawalPayoutBinding,
-} from "./withdrawalPayout";
 
 type Environment = "sandbox" | "live";
 
@@ -201,7 +194,6 @@ export interface WithdrawalConfirmationReference {
 // These are internal stored-evidence ports. Matching caller flags never establish
 // bank masking or ownership; an adapter must read the exact stored association.
 export interface WithdrawalVerifiedPresentation extends WithdrawalFeeScope {
-  payout?: WithdrawalPayoutBinding;
   source: "stored";
   verification: "verified";
   provenance: "provider" | "simulation";
@@ -294,7 +286,6 @@ export function readWithdrawalConsentSnapshot(
     const operatorUserId = id(raw.operatorUserId);
     const recipientReference = reference(raw.recipientReference);
     const p = exact(raw.presentation, [
-      ...(Object.hasOwn(record(raw.presentation), "payout") ? ["payout"] : []),
       ...Object.keys(scope),
       "source",
       "verification",
@@ -337,9 +328,6 @@ export function readWithdrawalConsentSnapshot(
       operatorProfileUpdatedAt: canonicalStoredInstant(
         p.operatorProfileUpdatedAt,
       ),
-      ...(p.payout === undefined
-        ? {}
-        : { payout: readWithdrawalPayoutBinding(p.payout) }),
       maskedDestination: preview.maskedDestination,
       operatorDisplayName: preview.operatorDisplayName,
     };
@@ -375,10 +363,7 @@ export function readWithdrawalConsentSnapshot(
       (f.feeSemantics !== undefined &&
         f.feeSemantics !== "MAXIMUM" &&
         f.feeSemantics !== "MAXIMUM_WITH_MINIMUM_NET") ||
-      (presentation.payout !== undefined &&
-        (preview.payoutRecipientName !== presentation.payout.ownerName ||
-          preview.maskedDestination !==
-            `Pix ${presentation.payout.keyType}: ${presentation.payout.maskedKey}`)) ||
+      preview.payoutRecipientName !== undefined ||
       feeQuote.policyVersion !== preview.policyVersion ||
       !["provider", "simulation"].includes(feeQuote.provenance) ||
       (feeQuote.provenance === "simulation" && preview.mode !== "sandbox") ||
@@ -458,7 +443,9 @@ export type WithdrawalReservationOptions =
         quoteWithdrawal(scope: WithdrawalFeeScope): Promise<WithdrawalFeeQuote>;
       };
       balance: {
-        getBalance(scope: WithdrawalFeeScope): Promise<AsaasBalanceObservation>;
+        getBalance(
+          scope: WithdrawalFeeScope,
+        ): Promise<ProviderBalanceObservation>;
       };
       repository: WithdrawalReservationRepository;
     };
@@ -516,7 +503,6 @@ export class WithdrawalReservationServiceError extends Error {
   ) {
     super("Withdrawal reservation is unavailable");
     this.name = "WithdrawalReservationServiceError";
-    logWithdrawalFailure(this);
   }
 }
 
@@ -1015,9 +1001,6 @@ export function captureWithdrawalPresentation(
   }
   return {
     ...scope,
-    ...(raw.payout === undefined
-      ? {}
-      : { payout: readWithdrawalPayoutBinding(raw.payout) }),
     source: "stored",
     verification: "verified",
     provenance: raw.provenance as "provider" | "simulation",
@@ -1062,7 +1045,6 @@ export function sameWithdrawalConsentTerms(
     candidate.feeQuote.policyVersion === consent.preview.policyVersion &&
     candidate.feeQuote.provenance === consent.feeQuote.provenance &&
     candidate.feeQuote.feeSemantics === consent.feeQuote.feeSemantics &&
-    sameWithdrawalPayout(presentation.payout, consent.presentation.payout) &&
     presentation.destinationId === consent.presentation.destinationId &&
     presentation.maskedDestination === consent.preview.maskedDestination &&
     presentation.operatorDisplayName === consent.preview.operatorDisplayName &&
@@ -1081,7 +1063,7 @@ function balanceObservation(
     const raw = record(value);
     if (
       raw.source !== "provider" ||
-      raw.provider !== "ASAAS" ||
+      raw.provider !== "PAGARME" ||
       raw.siteId !== scope.siteId ||
       raw.accountBindingId !== scope.accountId ||
       raw.accountReference !== scope.accountReference ||
@@ -1207,7 +1189,6 @@ export function createWithdrawalReservationService(
       };
     };
     const safe = (error: unknown): never => {
-      logWithdrawalFailure(error);
       if (error instanceof WithdrawalReservationServiceError)
         return deny(error.code, error.status);
       if (error instanceof FinancialAuthorizationError)
@@ -1373,9 +1354,6 @@ export function createWithdrawalReservationService(
               ),
               destinationVersion: scope.destinationVersion,
               maskedDestination: presentation.maskedDestination,
-              ...(presentation.payout
-                ? { payoutRecipientName: presentation.payout.ownerName }
-                : {}),
               operatorDisplayName: presentation.operatorDisplayName,
               policyVersion: fee.policyVersion,
               issuedAt: new Date(issued).toISOString(),

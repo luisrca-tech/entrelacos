@@ -1,10 +1,10 @@
 import {
-  type CheckoutResult,
-  type CheckoutStatus,
-  checkoutCreateInputSchema,
-  checkoutResultSchema,
-  checkoutStatusSchema,
+  type GiftCheckoutCreateResult,
+  type GiftCheckoutStatus,
   type GiftQuote,
+  giftCheckoutCreateResultSchema,
+  giftCheckoutStatusInputSchema,
+  giftCheckoutStatusSchema,
   giftPaymentMethodSchema,
   giftQuoteSchema,
   type PublicGiftItem,
@@ -29,21 +29,16 @@ export type GiftCheckoutState = {
   method: GiftQuote["method"] | null;
   installmentCount: number;
   quote: GiftQuote | null;
-  checkout: CheckoutResult | null;
-  phase:
-    | "IDLE"
-    | "SELECTED"
-    | "QUOTING"
-    | "READY"
-    | "CREATING"
-    | "REDIRECTING"
-    | "UNKNOWN";
+  /** Creation result; carries the Pix QR until the first status check. */
+  checkout: GiftCheckoutCreateResult | null;
+  /** UNKNOWN tracks a created (or possibly created) attempt until it settles. */
+  phase: "IDLE" | "SELECTED" | "QUOTING" | "READY" | "CREATING" | "UNKNOWN";
   revision: number;
   requestId: string | null;
   recoveryToken: string | null;
   pending: PendingGiftCheckout | null;
   pendingSiteId: string | null;
-  checkoutStatus: CheckoutStatus | null;
+  checkoutStatus: GiftCheckoutStatus | null;
   error: string | null;
   notice: string | null;
 };
@@ -63,21 +58,20 @@ export type GiftCheckoutEvent =
       recoveryToken: string;
       now: string;
     }
-  | { type: "CHECKOUT_RESOLVED"; checkout: CheckoutResult }
-  | { type: "CHECKOUT_RETURNED" }
+  | { type: "CHECKOUT_RESOLVED"; checkout: GiftCheckoutCreateResult }
   | {
       type: "CHECKOUT_FAILED";
       message: string;
       unknown: boolean;
       invalidateQuote?: boolean;
-      /** Old (V1) reservation refused: silently fetch a fresh quote. */
+      /** Fetch a fresh quote (old V1 reservation or declined card). */
       requote?: boolean;
       /** The provider definitively refused it; nothing was charged. */
       rejected?: boolean;
     }
   | { type: "CLOSE" }
   | { type: "RESTORE_UNKNOWN"; siteId?: string; pending?: PendingGiftCheckout }
-  | { type: "STATUS_RESOLVED"; status: CheckoutStatus }
+  | { type: "STATUS_RESOLVED"; status: GiftCheckoutStatus }
   /** Leaves a verified payment or refund so the list returns to normal. */
   | { type: "SETTLED" };
 
@@ -104,10 +98,7 @@ export function giftCheckoutReducer(
   state: GiftCheckoutState,
   event: GiftCheckoutEvent,
 ): GiftCheckoutState {
-  const locked =
-    state.phase === "CREATING" ||
-    state.phase === "REDIRECTING" ||
-    state.phase === "UNKNOWN";
+  const locked = state.phase === "CREATING" || state.phase === "UNKNOWN";
 
   switch (event.type) {
     case "SELECT_GIFT": {
@@ -203,7 +194,7 @@ export function giftCheckoutReducer(
       }
       if ((state.requestId === null) !== (state.recoveryToken === null))
         return state;
-      const request = checkoutCreateInputSchema.safeParse({
+      const request = giftCheckoutStatusInputSchema.safeParse({
         quoteId: parsed.data.id,
         requestId: state.requestId ?? event.requestId,
         recoveryToken: state.recoveryToken ?? event.recoveryToken,
@@ -229,31 +220,17 @@ export function giftCheckoutReducer(
     }
     case "CHECKOUT_RESOLVED": {
       if (state.phase !== "CREATING") return state;
-      const parsed = checkoutResultSchema.safeParse(event.checkout);
-      if (
-        !parsed.success ||
-        parsed.data.quoteId !== state.quote?.id ||
-        parsed.data.method !== state.quote.method ||
-        parsed.data.mode !== state.quote.mode
-      ) {
-        return {
-          ...state,
-          phase: "UNKNOWN",
-          checkout: null,
-          error: unknownCheckoutMessage,
-        };
-      }
+      const parsed = giftCheckoutCreateResultSchema.safeParse(event.checkout);
+      const valid =
+        parsed.success &&
+        (parsed.data.pix === undefined || state.quote?.method === "PIX");
       return {
         ...state,
-        phase: "REDIRECTING",
-        checkout: parsed.data,
-        error: null,
+        phase: "UNKNOWN",
+        checkout: valid ? parsed.data : null,
+        error: unknownCheckoutMessage,
       };
     }
-    case "CHECKOUT_RETURNED":
-      return state.phase === "REDIRECTING" && state.pending
-        ? { ...state, phase: "UNKNOWN", error: unknownCheckoutMessage }
-        : state;
     case "CHECKOUT_FAILED": {
       if (state.phase !== "CREATING") return state;
       if (event.unknown) {
@@ -298,9 +275,7 @@ export function giftCheckoutReducer(
     case "SETTLED":
       return state.phase === "UNKNOWN" &&
         state.checkoutStatus &&
-        ["CONFIRMED", "RECEIVED", "REFUNDED"].includes(
-          state.checkoutStatus.state,
-        )
+        ["RECEIVED", "REFUNDED"].includes(state.checkoutStatus.state)
         ? {
             ...createGiftCheckoutState(),
             revision: state.revision + 1,
@@ -345,7 +320,7 @@ export function giftCheckoutReducer(
     case "STATUS_RESOLVED": {
       if (state.phase !== "UNKNOWN" || !state.pending) return state;
       const pending = state.pending;
-      const parsed = checkoutStatusSchema.safeParse(event.status);
+      const parsed = giftCheckoutStatusSchema.safeParse(event.status);
       if (!parsed.success || !statusMatchesOperation(state, parsed.data))
         return state;
       const status = parsed.data;
@@ -385,7 +360,6 @@ export function giftCheckoutReducer(
             : terminal
               ? { ...pending, lastStatus: status }
               : state.pending,
-        checkout: status.checkout,
         checkoutStatus: status,
         error:
           status.state === "RECEIVED" || status.state === "REFUNDED"
@@ -399,7 +373,7 @@ export function giftCheckoutReducer(
 
 function statusMatchesOperation(
   state: GiftCheckoutState,
-  status: CheckoutStatus,
+  status: GiftCheckoutStatus,
 ): boolean {
   const pending = pendingGiftCheckoutSchema.safeParse(state.pending);
   const site = siteIdSchema.safeParse(state.pendingSiteId);
@@ -425,12 +399,7 @@ function statusMatchesOperation(
     state.checkoutStatus,
     pending.data.terminalStatus ?? null,
     pending.data.lastStatus ?? null,
-  ].every(
-    (known) =>
-      known === null ||
-      (known.orderId === status.orderId &&
-        known.attemptId === status.attemptId),
-  );
+  ].every((known) => known === null || known.checkoutId === status.checkoutId);
 }
 
 function quoteMatchesSelection(

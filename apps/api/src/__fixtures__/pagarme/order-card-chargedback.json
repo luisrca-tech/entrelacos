@@ -1,0 +1,85 @@
+{
+  "id": "or_fixtureOrder0002",
+  "code": "checkout-fixture-2",
+  "amount": 11890,
+  "currency": "BRL",
+  "closed": true,
+  "status": "paid",
+  "items": [
+    {
+      "id": "oi_fixtureItem0002",
+      "description": "Jantar no Porto",
+      "amount": 11890,
+      "quantity": 1,
+      "status": "active",
+      "code": "gift-fixture-2"
+    }
+  ],
+  "customer": {
+    "id": "cus_fixtureCustomer1",
+    "name": "Maria Convidada",
+    "email": "maria@example.com",
+    "document": "12345678909",
+    "type": "individual"
+  },
+  "charges": [
+    {
+      "id": "ch_fixtureCharge002",
+      "code": "checkout-fixture-2",
+      "amount": 11890,
+      "paid_amount": 11890,
+      "status": "chargedback",
+      "currency": "BRL",
+      "payment_method": "credit_card",
+      "paid_at": "2026-11-18T12:00:02Z",
+      "last_transaction": {
+        "id": "tran_fixtureTx0002",
+        "transaction_type": "credit_card",
+        "amount": 11890,
+        "status": "chargedback",
+        "success": true,
+        "installments": 6,
+        "statement_descriptor": "ENTRELACOS",
+        "operation_type": "auth_and_capture",
+        "card": {
+          "id": "card_fixtureCard0001",
+          "last_four_digits": "0010",
+          "brand": "Visa",
+          "holder_name": "MARIA C",
+          "exp_month": 12,
+          "exp_year": 2030
+        },
+        "split": [
+          {
+            "id": "sr_fixturePlatform01",
+            "type": "flat",
+            "amount": 859,
+            "recipient": {
+              "id": "rp_platformFixture01"
+            },
+            "options": {
+              "liable": true,
+              "charge_processing_fee": true,
+              "charge_remainder_fee": true
+            }
+          },
+          {
+            "id": "sr_fixtureCouple0001",
+            "type": "flat",
+            "amount": 11031,
+            "recipient": {
+              "id": "rp_fixtureRecipient01"
+            },
+            "options": {
+              "liable": false,
+              "charge_processing_fee": false,
+              "charge_remainder_fee": false
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "created_at": "2026-11-18T12:00:01Z",
+  "updated_at": "2026-12-01T09:00:00Z"
+}

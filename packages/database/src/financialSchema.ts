@@ -177,6 +177,9 @@ export const receivingAccount = pgTable(
     commercialEnabled: boolean("commercial_enabled").notNull().default(false),
     // Current selection never establishes receiving or bank approval.
     isCurrent: boolean("is_current").notNull().default(false),
+    // Legacy sub-account credentials and webhook state from the previous
+    // provider. Kept (never read) so existing balances stay recoverable by an
+    // operator; Pagar.me accounts leave them null.
     credentialVersion: integer("credential_version"),
     credentialKeyId: text("credential_key_id"),
     credentialNonce: text("credential_nonce"),
@@ -267,7 +270,7 @@ export const receivingDestination = pgTable(
   ],
 );
 
-// External payout configuration does not establish an Asaas receiving bank or readiness.
+// Legacy external Pix payout configuration; it never establishes a receiving bank or readiness.
 export const receivingPixDestination = pgTable(
   "receiving_pix_destination",
   {
@@ -808,6 +811,9 @@ export const giftCheckoutAttempt = pgTable(
     installmentExpiryPaymentReferences: text(
       "installment_expiry_payment_references",
     ).array(),
+    // Pix copy-and-paste code and QR image URL shown to the guest; not secret.
+    pixQrCode: text("pix_qr_code"),
+    pixQrCodeUrl: text("pix_qr_code_url"),
   },
   (table): PgTableExtraConfigValue[] => [
     unique("gift_checkout_attempt_scope_key").on(
@@ -884,6 +890,10 @@ export const giftCheckoutAttempt = pgTable(
     check(
       "gift_checkout_attempt_expiry_payment_references_check",
       sql`${table.installmentExpiryPaymentReferences} IS NULL OR (cardinality(${table.installmentExpiryPaymentReferences}) BETWEEN 2 AND 12 AND array_position(${table.installmentExpiryPaymentReferences}, NULL) IS NULL)`,
+    ),
+    check(
+      "gift_checkout_attempt_pix_check",
+      sql`(${table.pixQrCode} IS NULL AND ${table.pixQrCodeUrl} IS NULL) OR (length(${table.pixQrCode}) BETWEEN 1 AND 4096 AND ${table.pixQrCodeUrl} ~ '^https://' AND length(${table.pixQrCodeUrl}) <= 2048 AND ${table.expiresAt} IS NOT NULL AND ${table.providerReference} IS NOT NULL)`,
     ),
     check(
       "gift_checkout_attempt_number_check",
@@ -1040,6 +1050,10 @@ export const financialOperatorAlertKinds = [
   "PAYMENT_RESTRICTION",
   "UNROUTABLE_PLATFORM_EVENT",
   "SPLIT_SETUP_FAILED",
+  "GIFT_REFUNDED",
+  "GIFT_CHARGEBACK",
+  "ORDER_MISMATCH",
+  "WITHDRAWAL_UNRESOLVED",
 ] as const;
 
 // Operator-facing alerts for the platform account split (V2). Site and account
@@ -1076,7 +1090,7 @@ export const financialOperatorAlert = pgTable(
       .where(sql`${table.resolvedAt} IS NULL`),
     check(
       "financial_operator_alert_kind_check",
-      sql`${table.kind} IN ('SPLIT_DIVERGENCE_BLOCK','SPLIT_CANCELLED','ANTICIPATION_DENIED','PAYMENT_RESTRICTION','UNROUTABLE_PLATFORM_EVENT','SPLIT_SETUP_FAILED')`,
+      sql`${table.kind} IN ('SPLIT_DIVERGENCE_BLOCK','SPLIT_CANCELLED','ANTICIPATION_DENIED','PAYMENT_RESTRICTION','UNROUTABLE_PLATFORM_EVENT','SPLIT_SETUP_FAILED','GIFT_REFUNDED','GIFT_CHARGEBACK','ORDER_MISMATCH','WITHDRAWAL_UNRESOLVED')`,
     ),
     check(
       "financial_operator_alert_severity_check",
@@ -1364,9 +1378,12 @@ export const withdrawalProviderObservation = pgTable(
     })
       .onDelete("restrict")
       .onUpdate("restrict"),
+    // Created NOT VALID by migration 0031 (rows from before the switch keep
+    // their identifiers). Drizzle cannot express NOT VALID: apply schema
+    // changes with `db:migrate` only, never `drizzle-kit push`.
     check(
       "withdrawal_observation_hash_check",
-      sql`${table.payloadHash} ~ '^[a-f0-9]{64}$' AND ${table.id} = 'asaas-transfer:' || ${table.payloadHash}`,
+      sql`${table.payloadHash} ~ '^[a-f0-9]{64}$' AND ${table.id} = 'pagarme-withdrawal:' || ${table.payloadHash}`,
     ),
     check(
       "withdrawal_observation_payload_check",
@@ -1383,7 +1400,8 @@ export const withdrawalProviderObservation = pgTable(
   ],
 );
 
-// The callback authorizes an existing native transfer; neither table is monetary state.
+// Legacy withdrawal-authorization custody from the previous provider; never
+// written since the Pagar.me switch and kept so no existing row is lost.
 export const withdrawalAuthorizationCandidate = pgTable(
   "withdrawal_authorization_candidate",
   {
@@ -1473,7 +1491,7 @@ export const withdrawalAuthorizationDecision = pgTable(
   ],
 );
 
-// A committed dispatch fence survives process crashes and uncertain provider responses.
+// Legacy incoming-Pix preparation fences; kept read-only since the Pagar.me switch.
 export const receivingPixPreparation = pgTable(
   "receiving_pix_preparation",
   {

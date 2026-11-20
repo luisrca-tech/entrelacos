@@ -1,18 +1,3 @@
-export const setupAccountFields = [
-  "name",
-  "email",
-  "cpfCnpj",
-  "birthDate",
-  "mobilePhone",
-  "incomeValue",
-  "postalCode",
-  "address",
-  "addressNumber",
-  "province",
-] as const;
-
-const digitsOnly = new Set(["cpfCnpj", "mobilePhone", "postalCode"]);
-
 // Parses a Brazilian money value such as "R$ 3.500,50"; returns NaN when unsure.
 export function parseIncome(value: string): number {
   const text = value.replace(/R\$/i, "").replace(/\s+/g, "");
@@ -23,26 +8,50 @@ export function parseIncome(value: string): number {
   return Number.NaN;
 }
 
-// Accepts the masks people type; the contract schema still validates the result.
-export function normalizeSetupAccount(
-  values: Partial<Record<(typeof setupAccountFields)[number], unknown>>,
-) {
-  return Object.fromEntries(
-    setupAccountFields.map((name) => {
-      const raw = values[name];
-      const text = typeof raw === "string" ? raw.trim() : "";
-      if (name === "incomeValue") return [name, parseIncome(text)];
-      return [name, digitsOnly.has(name) ? text.replace(/\D/g, "") : text];
-    }),
-  );
+// Converts reais to integer cents through the decimal text to avoid float drift.
+export function incomeToCents(value: string): number {
+  const reais = parseIncome(value);
+  if (!Number.isFinite(reais)) return Number.NaN;
+  const [whole, fraction = ""] = reais.toFixed(2).split(".");
+  return Number(whole) * 100 + Number(fraction);
 }
 
-// People type CPF, CNPJ and phone keys with masks; the API expects digits.
-export function normalizePixKey(
-  type: "CPF" | "CNPJ" | "PHONE" | "EMAIL" | "EVP",
-  key: string,
-) {
-  return ["CPF", "CNPJ", "PHONE"].includes(type)
-    ? key.replace(/\D/g, "")
-    : key.trim();
+type SetupFormValues = Partial<Record<string, unknown>>;
+
+// Accepts the masks people type; the contract schema still validates the result.
+export function normalizeSetupAccount(values: SetupFormValues) {
+  const text = (name: string) => {
+    const raw = values[name];
+    return typeof raw === "string" ? raw.trim() : "";
+  };
+  const digits = (name: string) => text(name).replace(/\D/g, "");
+  const complement = text("complement");
+  const branchCheckDigit = digits("branchCheckDigit");
+  return {
+    name: text("name"),
+    email: text("email"),
+    cpf: digits("cpf"),
+    mobilePhone: digits("mobilePhone"),
+    birthDate: text("birthDate"),
+    monthlyIncomeCents: incomeToCents(text("monthlyIncome")),
+    professionalOccupation: text("professionalOccupation"),
+    address: {
+      street: text("street"),
+      streetNumber: text("streetNumber"),
+      ...(complement ? { complement } : {}),
+      neighborhood: text("neighborhood"),
+      city: text("city"),
+      state: text("state").toUpperCase(),
+      zipCode: digits("zipCode"),
+      referencePoint: text("referencePoint"),
+    },
+    bankAccount: {
+      bank: digits("bank"),
+      branchNumber: digits("branchNumber"),
+      ...(branchCheckDigit ? { branchCheckDigit } : {}),
+      accountNumber: digits("accountNumber"),
+      accountCheckDigit: text("accountCheckDigit").toUpperCase(),
+      type: text("accountType"),
+    },
+  };
 }

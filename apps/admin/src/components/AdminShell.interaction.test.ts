@@ -3,8 +3,13 @@ import type { MeResponse, SiteAccess } from "@entrelacos/contracts";
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { paymentsAvailabilityStore } from "../lib/paymentsAvailability";
 import { AdminShell } from "./AdminShell";
+
+// The API reports payments as available unless a test says otherwise.
+beforeEach(() => paymentsAvailabilityStore.reportMode("sandbox"));
+afterEach(() => paymentsAvailabilityStore.reset());
 
 vi.mock("@tanstack/react-router", () => ({
   Link: ({
@@ -29,7 +34,7 @@ const actor: MeResponse = {
   siteId: "wedding-a",
 };
 
-describe("Asaas financial disclosure", () => {
+describe("payment provider disclosure", () => {
   it.each(["receiving", "receiving-guide"] as const)(
     "places a single disclosure between the %s content and the footer",
     (area) => {
@@ -47,6 +52,10 @@ describe("Asaas financial disclosure", () => {
       const footer = node.querySelector("footer");
       const lastBlock = footer?.previousElementSibling;
       expect(disclosures).toHaveLength(1);
+      expect(disclosures[0].textContent).toBe(
+        "Pagamentos processados por Pagar.me, uma empresa Stone.",
+      );
+      expect(disclosures[0].querySelector("img")).toBeNull();
       expect(lastBlock?.contains(disclosures[0])).toBe(true);
       expect(node.querySelector("main")?.textContent).toBe("Page content");
     },
@@ -61,7 +70,8 @@ describe("Asaas financial disclosure", () => {
         onLogout: vi.fn(),
       }),
     );
-    expect(html).not.toContain('alt="Serviços financeiros Asaas"');
+    expect(html).not.toContain("Prestador dos serviços financeiros");
+    expect(html).not.toContain("Pagamentos processados por");
   });
 });
 

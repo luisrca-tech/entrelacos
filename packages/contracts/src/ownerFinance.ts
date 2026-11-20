@@ -130,7 +130,8 @@ export const ownerFinanceAlertSchema = z
     createdAt: instant,
     // Resolution deadline: two business days for split divergences.
     dueAt: instant.nullable(),
-    asaasPaymentUrl: z.string().nullable(),
+    // Provider dashboard link for the payment, when one exists.
+    providerPaymentUrl: z.string().nullable(),
     resolvedAt: instant.nullable(),
     resolvedNote: z.string().nullable(),
   })

@@ -5,14 +5,6 @@ import {
 } from "@entrelacos/contracts";
 import { Hono } from "hono";
 import { createAdminAccessHttpRouter } from "./adminAccessHttp";
-import {
-  type AsaasWebhookHttpReceiver,
-  createAsaasWebhookHttpRouter,
-} from "./asaasWebhookHttp";
-import {
-  type AsaasWithdrawalAuthorizationHttpReceiver,
-  createAsaasWithdrawalAuthorizationHttpRouter,
-} from "./asaasWithdrawalAuthorizationHttp";
 import { createAuthHttpRouter } from "./authHttp";
 import { createDemoResetHttpRouter } from "./demoResetHttp";
 import {
@@ -46,6 +38,10 @@ import {
   type ObservabilityVariables,
 } from "./observability";
 import { createOwnerFinanceHttpRouter } from "./ownerFinanceHttp";
+import {
+  createPagarmeWebhookHttpRouter,
+  type PagarmeWebhookHttpReceiver,
+} from "./pagarmeWebhookHttp";
 import { createReceivingHttpRouter } from "./receivingHttp";
 import type { ReceivingNominationService } from "./receivingNomination";
 import {
@@ -79,12 +75,12 @@ export type ApiOptions = GiftPaymentsHttpOptions &
   > & {
     applicationEnvironment?: "development" | "test" | "production";
     receiving?: ReceivingRepositoryOptions;
-    asaasWebhook?: AsaasWebhookHttpReceiver;
-    asaasWithdrawalAuthorization?: AsaasWithdrawalAuthorizationHttpReceiver;
+    pagarmeWebhook?: PagarmeWebhookHttpReceiver;
     financialReauthentication?: FinancialReauthentication;
     receivingNomination?: ReceivingNominationService;
     receivingSetup?: ReceivingSetupService;
     receivingVerification?: ReceivingSetupHttpOptions["receivingVerification"];
+    kycRateLimit?: ReceivingSetupHttpOptions["kycRateLimit"];
     giftMediaAuth?: GiftMediaHttpOptions["auth"];
     giftPaymentHistory?: GiftPaymentHistoryHttpOptions["giftPaymentHistory"];
     previewPricing?: (siteId: string, input: unknown) => Promise<unknown>;
@@ -116,13 +112,7 @@ export function createApp(
   }
 
   if (options) {
-    app.route(
-      "/",
-      createAsaasWithdrawalAuthorizationHttpRouter(
-        options.asaasWithdrawalAuthorization,
-      ),
-    );
-    app.route("/", createAsaasWebhookHttpRouter(options.asaasWebhook));
+    app.route("/", createPagarmeWebhookHttpRouter(options.pagarmeWebhook));
     const liveSitePolicy = {
       applicationEnvironment:
         options.applicationEnvironment ??
@@ -176,9 +166,7 @@ export function createApp(
       ["POST", "/v1/sites/:siteId/receiving/setup"],
       ["POST", "/v1/sites/:siteId/receiving/holder"],
       ["POST", "/v1/sites/:siteId/receiving/incoming-verification"],
-      ["POST", "/v1/sites/:siteId/receiving/pix-destination/preview"],
-      ["POST", "/v1/sites/:siteId/receiving/pix-destination/confirm"],
-      ["GET", "/v1/sites/:siteId/receiving/pix-destination"],
+      ["POST", "/v1/owner/sites/:siteId/receiving/kyc-link"],
     ]) {
       app.on(method, path, (context) =>
         receivingSetupRouter.fetch(context.req.raw),

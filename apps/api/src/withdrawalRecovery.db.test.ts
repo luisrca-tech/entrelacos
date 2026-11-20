@@ -22,12 +22,21 @@ it("persists a recovery deadline before provider I/O and resumes it across worke
           id text PRIMARY KEY, site_id text, account_id text, environment text, state text, kind text,
           attempts integer, withdrawal_intent_id text, next_attempt_at timestamptz, lease_expires_at timestamptz
         );
+        CREATE TEMP TABLE receiving_account (
+          id text PRIMARY KEY, site_id text, environment text, provider text
+        );
         INSERT INTO site VALUES ('site-one', false);
+        INSERT INTO receiving_account VALUES
+          ('account-one', 'site-one', 'sandbox', 'PAGARME'),
+          ('account-old', 'site-one', 'sandbox', 'PREVIOUS_PROVIDER');
         INSERT INTO withdrawal_intent VALUES
+          ('legacy', 'site-one', 'account-old', 'sandbox', 'UNKNOWN', 'request-legacy'),
           ('unknown', 'site-one', 'account-one', 'sandbox', 'UNKNOWN', 'request-one'),
           ('requested', 'site-one', 'account-one', 'sandbox', 'REQUESTED', 'request-two'),
           ('dispatching', 'site-one', 'account-one', 'sandbox', 'PROCESSING', 'request-three');
         INSERT INTO financial_operation VALUES
+          -- An in-flight withdrawal of the previous provider is never recovered here.
+          ('legacy-op', 'site-one', 'account-old', 'sandbox', 'UNKNOWN', 'WITHDRAWAL', 1, 'legacy', '1990-01-01Z', '1990-01-02Z'),
           ('one', 'site-one', 'account-one', 'sandbox', 'UNKNOWN', 'WITHDRAWAL', 1, 'unknown', '2000-01-01Z', '2000-01-02Z'),
           ('two', 'site-one', 'account-one', 'sandbox', 'REQUESTED', 'WITHDRAWAL', 0, 'requested', '1999-01-01Z', NULL),
           ('three', 'site-one', 'account-one', 'sandbox', 'PROCESSING', 'WITHDRAWAL', 1, 'dispatching', '2000-01-01Z', clock_timestamp()+interval '1 hour');
@@ -54,15 +63,12 @@ it("persists a recovery deadline before provider I/O and resumes it across worke
         createWithdrawalComposition(
           {
             mode: "sandbox",
+            providerMode: "test",
             applicationEnvironment: "test",
-            platformApiKey: "$aact_hmlg_fixture",
-            platformAccountId: "platform-one",
-            platformWalletId: "wallet-one",
-            platformWebhookTokenHash: "a".repeat(64),
-            credentialKeyId: "test-key",
-            credentialKeyring: new Map([["test-key", new Uint8Array(32)]]),
-            webhookPublicOrigin: "https://webhook.example.test",
-            webhookUrl: "https://webhook.example.test/v1/webhooks/asaas",
+            secretKey: "sk_test_fixture",
+            platformRecipientId: "rp_platform01",
+            webhookBasicUser: "webhook-user",
+            webhookCredentialsHash: "a".repeat(64),
           },
           { db: drizzle(client), fetch },
         );

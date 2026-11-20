@@ -5,13 +5,17 @@ import {
   withdrawalRequestStatusSchema,
 } from "@entrelacos/contracts";
 import { describe, expect, it, vi } from "vitest";
-import type { AsaasBalanceObservation } from "./asaasHttpClient";
 import { databaseTimestampEpochMicroseconds } from "./databaseTimestamp";
 import type {
   FinancialActor,
   RecentFinancialAuthenticationEvidence,
 } from "./financialAuthorization";
 import { FinancialAuthorizationError } from "./financialAuthorization";
+import {
+  type ProviderBalanceObservation,
+  readPagarmeBalanceObservation,
+} from "./pagarmeWithdrawalClient";
+import { quotePagarmeWithdrawalFee } from "./withdrawalComposition";
 import {
   createWithdrawalReservationService,
   hashWithdrawalConsentSnapshot,
@@ -103,9 +107,9 @@ function fixture() {
     observedAt: new Date(now),
     expiresAt: new Date(now.getTime() + 60_000),
   };
-  const balance: AsaasBalanceObservation = {
+  const balance: ProviderBalanceObservation = {
     source: "provider",
-    provider: "ASAAS",
+    provider: "PAGARME",
     siteId: actor.siteId,
     accountBindingId: "account-1",
     accountReference: "acct_1",
@@ -707,7 +711,7 @@ describe("durable withdrawal consent service", () => {
     expect(v.quoteWithdrawal).not.toHaveBeenCalled();
     expect(v.getBalance).not.toHaveBeenCalled();
   });
-  it.each(["fee", "policy", "mask", "profile", "profile timestamp", "payout"])(
+  it.each(["fee", "policy", "mask", "profile", "profile timestamp"])(
     "rejects changed accepted %s terms before any hold",
     async (field) => {
       const v = durableFixture();
@@ -725,21 +729,6 @@ describe("durable withdrawal consent service", () => {
         v.presentation.maskedDestination = "Bank **** 9999";
       else if (field === "profile timestamp")
         v.presentation.operatorProfileUpdatedAt = new Date(now.getTime() - 1);
-      else if (field === "payout")
-        Object.assign(v.presentation, {
-          payout: {
-            destinationId: "pix-1",
-            destinationVersion: 1,
-            configurationHash: "b".repeat(64),
-            reviewId: "review-1",
-            holderId: "holder-1",
-            holderConsentId: "holder-consent-1",
-            acceptThirdParty: true,
-            keyType: "EMAIL",
-            maskedKey: "j***@example.test",
-            ownerName: "Reviewed Recipient",
-          },
-        });
       else v.presentation.operatorDisplayName = "New Operator";
       await rejected(
         v.service.confirmNew({ ...v.attempt, recentAuth: v.recentAuth }),
@@ -1948,5 +1937,100 @@ describe("explicit live showcase withdrawal authority", () => {
     f.fee.provenance = "simulation";
     await rejected(create(f), "FEE_QUOTE_UNAVAILABLE", 409);
     expect(f.reserveWithdrawal).not.toHaveBeenCalled();
+  });
+});
+
+describe("Pagar.me fixed withdrawal fee", () => {
+  function pagarme(availableCents = 25_000) {
+    const v = durableFixture();
+    v.options.freshnessMs = 300_000;
+    v.quoteWithdrawal.mockImplementation(async (scope) =>
+      quotePagarmeWithdrawalFee(scope, new Date(now)),
+    );
+    v.getBalance.mockImplementation(async (scope) =>
+      readPagarmeBalanceObservation(
+        { ...scope, accountBindingId: scope.accountId },
+        { availableCents, waitingFundsCents: 50_000 },
+        new Date(now),
+      ),
+    );
+    v.loadPresentation.mockImplementation(async (scope) => ({
+      ...v.presentation,
+      ...scope,
+    }));
+    const service = createWithdrawalReservationService(v.options);
+    const preview = (amountCents: number) =>
+      service.createPreview({
+        ...v.attempt,
+        input: {
+          requestId: v.input.requestId,
+          amountCents,
+          scopeRevision: "0",
+        },
+      });
+    const confirm = () =>
+      service.confirmNew({ ...v.attempt, recentAuth: v.recentAuth });
+    return { ...v, service, preview, confirm };
+  }
+
+  it("shows the fixed fee and the net transfer in the preview", async () => {
+    const v = pagarme();
+    const opened = await v.preview(10_000);
+    expect(opened).toMatchObject({
+      state: "OPEN",
+      preview: {
+        amountCents: 10_000,
+        feeCents: 367,
+        netCents: 9_633,
+        feeSemantics: "MAXIMUM",
+        maskedDestination: "Bank **** 1234",
+      },
+    });
+    expect(v.getBalance).not.toHaveBeenCalled();
+  });
+
+  it.each([1, 366, 367])(
+    "rejects a %i cent withdrawal that does not exceed the fee",
+    async (amountCents) => {
+      const v = pagarme();
+      await rejected(v.preview(amountCents), "WITHDRAWAL_INVALID", 400);
+      expect(v.issuePreview).not.toHaveBeenCalled();
+    },
+  );
+
+  it("records the fee on the intent and reuses the reservation for the same request", async () => {
+    const v = pagarme();
+    await v.preview(10_000);
+    const first = await v.confirm();
+    expect(first).toMatchObject({
+      amountCents: 10_000,
+      feeCents: 367,
+      netCents: 9_633,
+      feeSemantics: "MAXIMUM",
+      state: "REQUESTED",
+    });
+    expect(v.reserveWithdrawal.mock.calls[0]?.[0]).toMatchObject({
+      feeQuote: { feeCents: 367 },
+      balance: { balanceCents: 25_000 },
+    });
+    const second = await v.confirm();
+    expect(second).toEqual(first);
+    expect(v.reserveWithdrawal).toHaveBeenCalledOnce();
+    expect(v.getBalance).toHaveBeenCalledOnce();
+  });
+
+  it("rejects an amount above the available balance, ignoring waiting funds", async () => {
+    const v = pagarme(9_999);
+    await v.preview(10_000);
+    await rejected(v.confirm(), "INSUFFICIENT_FUNDS", 409);
+    expect(v.reserveWithdrawal).not.toHaveBeenCalled();
+  });
+
+  it("subtracts other held reservations from the available balance", async () => {
+    const v = pagarme(14_999);
+    v.locked.heldCents = 5_000n;
+    await v.preview(10_000);
+    await rejected(v.confirm(), "INSUFFICIENT_FUNDS", 409);
+    expect(v.getConsent()?.state).toBe("OPEN");
   });
 });

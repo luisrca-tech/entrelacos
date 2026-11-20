@@ -272,14 +272,14 @@ describe("owner finance HTTP boundary", () => {
   it("resolves an alert with a note", async () => {
     const response = await call("/v1/owner/finance/alerts/alert-1/resolve", {
       method: "POST",
-      body: { note: "  Conferido no Asaas  " },
+      body: { note: "  Conferido no Pagar.me  " },
     });
     expect(response.status).toBe(204);
     expect(repository.resolveOwnerFinanceAlert).toHaveBeenCalledWith(
       {},
       {
         id: "alert-1",
-        note: "Conferido no Asaas",
+        note: "Conferido no Pagar.me",
         now: new Date("2026-11-01T00:00:00.000Z"),
       },
     );

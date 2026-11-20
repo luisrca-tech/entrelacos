@@ -63,31 +63,15 @@ function instant(value: bigint): string {
   const milliseconds = value / 1000n;
   return `${new Date(Number(milliseconds)).toISOString().slice(0, 19)}.${(value % 1000000n).toString().padStart(6, "0")}Z`;
 }
-const credentialFields = [
-  "credential_version",
-  "credential_key_id",
-  "credential_nonce",
-  "credential_ciphertext",
-  "credential_tag",
-] as const;
 function unbound(account: Row): boolean {
   return (
-    account.account_reference === null &&
-    account.recipient_reference === null &&
-    credentialFields.every((field) => account[field] === null)
+    account.account_reference === null && account.recipient_reference === null
   );
 }
 function canonicalResult(account: Row): ReceivingProvisioningResult {
   return readReceivingProvisioningResult({
     accountReference: account.account_reference,
     recipientReference: account.recipient_reference,
-    credential: {
-      version: account.credential_version,
-      keyId: account.credential_key_id,
-      nonce: account.credential_nonce,
-      ciphertext: account.credential_ciphertext,
-      tag: account.credential_tag,
-    },
   });
 }
 function originalContext(
@@ -188,7 +172,7 @@ export function createReceivingAccountProvisioningRepository(
       account.id !== nomination.accountId ||
       account.site_id !== nomination.siteId ||
       account.environment !== mode ||
-      account.provider !== "ASAAS" ||
+      account.provider !== "PAGARME" ||
       account.operator_user_id !== nomination.operatorUserId ||
       account.is_current !== true ||
       account.provider_account_state !== "UNVERIFIED" ||
@@ -196,7 +180,6 @@ export function createReceivingAccountProvisioningRepository(
       account.withdrawal_capability !== false ||
       account.commercial_enabled !== false ||
       account.operator_reference !== null ||
-      account.webhook_token_hash !== null ||
       account.observed_at !== null ||
       operation.id !== nomination.operationId ||
       operation.site_id !== nomination.siteId ||
@@ -485,12 +468,11 @@ export function createReceivingAccountProvisioningRepository(
         )
           return unavailable();
         const at = await check(selected.record, false);
-        const credentials = prepared.credential;
         const nomination = claim.nomination;
         const updated =
-          await tx.execute(sql`UPDATE ${receivingAccount} SET account_reference=${prepared.accountReference}, recipient_reference=${prepared.recipientReference}, credential_version=${credentials.version}, credential_key_id=${credentials.keyId}, credential_nonce=${credentials.nonce}, credential_ciphertext=${credentials.ciphertext}, credential_tag=${credentials.tag}, updated_at=${instant(at)}::timestamptz
-          WHERE id=${nomination.accountId} AND site_id=${nomination.siteId} AND environment=${mode} AND provider='ASAAS' AND operator_user_id=${nomination.operatorUserId} AND is_current=true AND provider_account_state='UNVERIFIED' AND receiving_capability=false AND withdrawal_capability=false AND commercial_enabled=false AND operator_reference IS NULL AND webhook_token_hash IS NULL AND observed_at IS NULL
-          AND account_reference IS NULL AND recipient_reference IS NULL AND credential_version IS NULL AND credential_key_id IS NULL AND credential_nonce IS NULL AND credential_ciphertext IS NULL AND credential_tag IS NULL RETURNING id`);
+          await tx.execute(sql`UPDATE ${receivingAccount} SET account_reference=${prepared.accountReference}, recipient_reference=${prepared.recipientReference}, updated_at=${instant(at)}::timestamptz
+          WHERE id=${nomination.accountId} AND site_id=${nomination.siteId} AND environment=${mode} AND provider='PAGARME' AND operator_user_id=${nomination.operatorUserId} AND is_current=true AND provider_account_state='UNVERIFIED' AND receiving_capability=false AND withdrawal_capability=false AND commercial_enabled=false AND operator_reference IS NULL AND observed_at IS NULL
+          AND account_reference IS NULL AND recipient_reference IS NULL RETURNING id`);
         if (
           updated.rows.length !== 1 ||
           updated.rows[0].id !== nomination.accountId

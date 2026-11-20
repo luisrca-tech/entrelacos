@@ -1,0 +1,33 @@
+{
+  "object": "transfer",
+  "id": 65485,
+  "amount": 9633,
+  "type": "ted",
+  "status": "transferred",
+  "source_type": "recipient",
+  "source_id": "rp_fixtureRecipient01",
+  "target_type": "bank_account",
+  "target_id": "ba_fixtureBankAcct01",
+  "fee": 367,
+  "funding_date": null,
+  "funding_estimated_date": "2026-11-21T03:00:00.000Z",
+  "transaction_id": null,
+  "date_created": "2026-11-20T10:00:00.000Z",
+  "date_updated": "2026-11-20T10:00:00.000Z",
+  "bank_account": {
+    "object": "bank_account",
+    "id": "ba_fixtureBankAcct01",
+    "bank_code": "341",
+    "agencia": "1234",
+    "agencia_dv": "6",
+    "conta": "12345",
+    "conta_dv": "6",
+    "type": "conta_corrente",
+    "document_type": "cpf",
+    "document_number": "12345678909",
+    "legal_name": "MARIA DA SILVA",
+    "charge_transfer_fees": true
+  },
+  "bank_response": null,
+  "metadata": {}
+}

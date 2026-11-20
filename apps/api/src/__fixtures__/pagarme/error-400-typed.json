@@ -1,0 +1,5 @@
+{
+  "errors": [
+    { "type": "not_found_error", "message": "Recipient não encontrado." }
+  ]
+}

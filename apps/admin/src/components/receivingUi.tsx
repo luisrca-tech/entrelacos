@@ -8,6 +8,7 @@ import {
   type ReceivingStepStatus,
   type ReceivingTrackStep,
   receivingStepStatusLabel,
+  receivingSteps,
 } from "./receivingTrack";
 
 export const receivingCard =
@@ -85,13 +86,13 @@ export function ProgressBar({ completed }: { completed: number }) {
       role="progressbar"
       aria-label="Etapas concluídas"
       aria-valuemin={0}
-      aria-valuemax={5}
+      aria-valuemax={receivingSteps.length}
       aria-valuenow={completed}
       className="h-2 w-full overflow-hidden rounded-full bg-admin-subtle"
     >
       <div
         className="h-full rounded-full bg-admin-accent"
-        style={{ width: `${(completed / 5) * 100}%` }}
+        style={{ width: `${(completed / receivingSteps.length) * 100}%` }}
       />
     </div>
   );
@@ -214,7 +215,9 @@ export function StepHeading({
 }) {
   return (
     <header className="grid gap-3">
-      <p className={receivingEyebrow}>Etapa {number} de 5</p>
+      <p className={receivingEyebrow}>
+        Etapa {number} de {receivingSteps.length}
+      </p>
       <h1 className={receivingStepTitle}>{title}</h1>
       {children}
     </header>
@@ -328,7 +331,7 @@ const readySubtitles: Record<ReadyReceivingPage, string> = {
     "Acompanhe os presentes recebidos e o dinheiro disponível para saque.",
   payments: "Cada presente pago pelos convidados, com o que fica para vocês.",
   withdrawals: "Saque o saldo disponível para a sua conta bancária.",
-  settings: "Conta para saque, taxas e quem recebe os presentes.",
+  settings: "Dados do recebedor, taxas e quem recebe os presentes.",
 };
 
 export function ReadyReceivingHeader({

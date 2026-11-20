@@ -7,7 +7,7 @@ import {
 } from "./databaseTimestamp";
 
 export interface ReceivingVerificationScope {
-  readonly provider: "ASAAS";
+  readonly provider: "PAGARME";
   readonly siteId: string;
   readonly accountId: string;
   readonly operatorUserId: string;
@@ -187,12 +187,12 @@ export function readReceivingVerificationScope(
     "recipientReference",
   ]);
   if (
-    data.provider !== "ASAAS" ||
+    data.provider !== "PAGARME" ||
     (data.environment !== "sandbox" && data.environment !== "live")
   )
     return unavailable();
   return Object.freeze({
-    provider: "ASAAS",
+    provider: "PAGARME",
     siteId: verificationIdentifier(data.siteId),
     accountId: verificationIdentifier(data.accountId),
     operatorUserId: verificationIdentifier(data.operatorUserId),
@@ -354,7 +354,7 @@ export function prepareReceivingVerificationObservation(
           JSON.stringify([
             "entrelacos.receiving-verification.observation.v1",
             "rv1",
-            "ASAAS",
+            "PAGARME",
             scope.siteId,
             scope.accountId,
             scope.operatorUserId,

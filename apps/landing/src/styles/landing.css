@@ -2011,3 +2011,21 @@ body:has(.consent-notice:not([hidden])) {
     padding-bottom: 9.5rem;
   }
 }
+
+.payment-seal {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  max-width: 100%;
+  margin: 1.25rem 0 0;
+  padding: 0.45rem 0.9rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--ink);
+  font-size: 0.85rem;
+  line-height: 1.35;
+}
+.payment-seal svg {
+  flex: none;
+  color: var(--wine);
+}

@@ -5,11 +5,11 @@ import {
   giftQuoteSchema,
   siteIdSchema,
 } from "@entrelacos/contracts";
-import type { AsaasBalanceObservation } from "./asaasHttpClient";
 import { compareDatabaseTimestamps } from "./databaseTimestamp";
+import type { ProviderBalanceObservation } from "./pagarmeWithdrawalClient";
 
 export interface FinancialAccountBinding {
-  provider: "ASAAS";
+  provider: "PAGARME";
   siteId: string;
   accountBindingId: string;
   accountReference: string;
@@ -37,7 +37,7 @@ export interface StoredFinancialTotalsSnapshot {
   currency: "BRL";
   totals: StoredFinancialTotals;
   observedAt: Date;
-  lastBalanceObservation: AsaasBalanceObservation | null;
+  lastBalanceObservation: ProviderBalanceObservation | null;
   // Correlated unresolved provider observations or reversals block availability.
   // The durable repository must count them explicitly; absence never means zero.
   unresolvedFinancialEventCount: number;
@@ -69,7 +69,7 @@ export interface FinancialBalanceConsistencySnapshot {
 export interface FinancialOverviewBalancePort {
   getBalance(
     binding: FinancialAccountBinding,
-  ): Promise<AsaasBalanceObservation | null>;
+  ): Promise<ProviderBalanceObservation | null>;
 }
 
 export interface FinancialOverviewInput {
@@ -138,14 +138,14 @@ function readBinding(value: unknown): FinancialAccountBinding {
   if (
     !site.success ||
     !account.success ||
-    raw.provider !== "ASAAS" ||
+    raw.provider !== "PAGARME" ||
     (raw.environment !== "sandbox" && raw.environment !== "live") ||
     typeof raw.accountReference !== "string" ||
     !/^[A-Za-z0-9_-]{1,128}$/.test(raw.accountReference)
   )
     return unavailable();
   return {
-    provider: "ASAAS",
+    provider: "PAGARME",
     siteId: site.data,
     accountBindingId: account.data,
     accountReference: raw.accountReference,

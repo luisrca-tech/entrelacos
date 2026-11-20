@@ -2,14 +2,26 @@ import { describe, expect, it } from "vitest";
 import { faqPricingExamples } from "../apps/landing/src/faqPricingExample";
 import { quoteGiftV2 } from "../packages/contracts/src/giftPricingV2";
 
-describe("public R$100 illustration with card anticipation (V2)", () => {
+describe("public R$100 illustration (Pagar.me V2 pricing)", () => {
+  it("lists Pix, card in full and the largest installment plan only", () => {
+    expect(
+      faqPricingExamples.map((row) => [
+        row.method,
+        row.installmentCents.length,
+      ]),
+    ).toEqual([
+      ["PIX", 1],
+      ["CREDIT_CARD", 1],
+      ["CREDIT_CARD", 6],
+    ]);
+  });
+
   it.each([
-    ["PIX", 1, 10399],
-    ["CREDIT_CARD", 1, 10688],
-    ["CREDIT_CARD", 6, 11247],
-    ["CREDIT_CARD", 12, 11909],
+    ["PIX", 1, 10369],
+    ["CREDIT_CARD", 1, 10854],
+    ["CREDIT_CARD", 6, 11890],
   ] as const)(
-    "matches V2 checkout pricing and preserves cents for %s in %i payments",
+    "matches checkout pricing and preserves cents for %s in %i payments",
     (method, count, total) => {
       const row = faqPricingExamples.find(
         (example) =>
@@ -28,12 +40,8 @@ describe("public R$100 illustration with card anticipation (V2)", () => {
         quote.commissionCents + quote.processingCents + quote.anticipationCents,
       );
       expect(row?.recipientNetCents).toBe(10000);
-      // Pix is never anticipated; every card plan carries anticipation.
       if (method === "PIX") expect(quote.anticipationCents).toBe(0);
       else expect(quote.anticipationCents).toBeGreaterThan(0);
-      expect(quote.recipientSplitCents.reduce((sum, v) => sum + v, 0)).toBe(
-        10000,
-      );
     },
   );
 });

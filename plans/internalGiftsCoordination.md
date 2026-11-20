@@ -1,5 +1,7 @@
 # Internal Gifts Release Coordination
 
+> **2026-11 update:** Asaas was replaced by Pagar.me in 2026-11; see [Pagar.me operation](../docs/pagarmeOperation.md) and the [decision register](../docs/decisionRegister.md#payment-provider-switch-to-pagarme--2026-11-18). Asaas details below are historical.
+
 Prepared 2026-10-12. This document is owned by the central coordinator in parent thread `01a0c6b0-0e91-7102-a240-885728de0a62`. Child leads must read it before editing. No implementation acceptance is implied by task creation.
 
 ## Current supervised execution topology — approved 2026-10-14 04:00 UTC

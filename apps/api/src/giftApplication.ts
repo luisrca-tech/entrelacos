@@ -9,6 +9,7 @@ import {
   type ReceivingSetupComposition,
 } from "./receivingSetupComposition";
 import type { readRuntimeConfig } from "./runtimeConfig";
+import { createWithdrawalComposition } from "./withdrawalComposition";
 
 export async function createGiftApplication(
   config: ReturnType<typeof readRuntimeConfig>,
@@ -26,7 +27,13 @@ export async function createGiftApplication(
   let receiving: ReceivingSetupComposition | undefined;
   const payments = createGiftPaymentComposition(config.giftPayment, {
     db: connection.db,
-    publicOrigin: config.giftPublicOrigin ?? "http://localhost:4321",
+    now,
+    refreshReceiving: async (siteId) => {
+      await receiving?.refreshReceiving?.(siteId);
+    },
+  });
+  const withdrawals = createWithdrawalComposition(config.giftPayment, {
+    db: connection.db,
     now,
     refreshReceiving: async (siteId) => {
       await receiving?.refreshReceiving?.(siteId);
@@ -59,6 +66,7 @@ export async function createGiftApplication(
         authForDatabase: (db) => createAuth({ db, ...config }),
         ...media,
         ...payments.ports,
+        ...withdrawals.ports,
         ...receiving.ports,
       },
     );
@@ -68,6 +76,7 @@ export async function createGiftApplication(
     const close = () => {
       closing ??= Promise.all([
         payments.close(),
+        withdrawals.close(),
         closeReceiving(),
         closeHistory(),
       ]).then(() => {});
@@ -79,11 +88,13 @@ export async function createGiftApplication(
         config.giftPayment.backgroundProcessing)
     ) {
       payments.start();
+      withdrawals.start();
     }
     return Object.assign(application, { close });
   } catch {
     await Promise.allSettled([
       payments.close(),
+      withdrawals.close(),
       receiving?.close(),
       application?.close(),
     ]);

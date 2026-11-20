@@ -1,9 +1,9 @@
-import type {
-  FinancialOverview,
-  SiteAccess,
-  WithdrawalPage,
+import {
+  type FinancialOverview,
+  GIFT_PLATFORM_TARIFFS,
+  type SiteAccess,
+  type WithdrawalPage,
 } from "@entrelacos/contracts";
-import { Landmark } from "lucide-react";
 import {
   type ReactNode,
   useCallback,
@@ -17,7 +17,6 @@ import {
   FinancialOverviewCard,
   OverviewNotice,
 } from "../features/finance/FinancialOverviewCard";
-import { destinationKeyLabel } from "../features/receiving/ReceivingStatusCard";
 import { adminStyles } from "../lib/adminStyles";
 import { AdminButton } from "./AdminButton";
 import { formatCents } from "./financialFlow";
@@ -38,7 +37,6 @@ import {
 import type { HistoryPorts } from "./giftPaymentHistory";
 import { isCurrentPanelSessionEpoch, panelActorOwner } from "./panelActor";
 import { ReadOnlyNote, readyCard, readyLabel } from "./receivingUi";
-import type { SavedPixDestinationSummary } from "./savedPixDestination";
 import {
   RecentWithdrawals,
   WithdrawalHistoryView,
@@ -49,10 +47,12 @@ import {
   type WithdrawalHistoryResult,
 } from "./withdrawalHistory";
 
+const withdrawalFee = formatCents(GIFT_PLATFORM_TARIFFS.withdrawalFeeCents);
+
 type SessionFinancialRead<T> = ScopedFinancialRead<T> & {
   sessionEpoch: number | null;
 };
-export type FinanceLinkTarget = "payments" | "withdrawals" | "account";
+export type FinanceLinkTarget = "payments" | "withdrawals";
 // Router links come from the caller so this section stays router-agnostic.
 export type FinanceLinks = (
   target: FinanceLinkTarget,
@@ -66,7 +66,6 @@ export function FinanceSection({
   sessionEpoch = null,
   historyPorts,
   page = "overview",
-  destination = null,
   links,
 }: {
   siteId: string;
@@ -74,7 +73,6 @@ export function FinanceSection({
   sessionEpoch?: number | null;
   historyPorts?: HistoryPorts;
   page?: "overview" | "payments" | "withdrawals";
-  destination?: SavedPixDestinationSummary | null;
   links?: FinanceLinks;
 }) {
   const [overviewRead, setOverviewRead] =
@@ -252,9 +250,8 @@ export function FinanceSection({
           paymentsLink={links?.("payments", "Ver pagamentos")}
         />
         <p className={`m-0 text-sm ${adminStyles.notice}`}>
-          <strong>Saques via Pix gratuitos para PF e MEI.</strong> Sem limite de
-          quantidade para contas recebedoras cadastradas nessas categorias. Para
-          outros tipos de empresa, consulte as taxas na prévia do saque.
+          <strong>Tarifa de {withdrawalFee} por saque.</strong> A prévia mostra
+          a tarifa e o valor líquido antes de você confirmar.
         </p>
         {eligible && (
           <div className="grid min-w-0 items-start gap-5 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
@@ -292,26 +289,6 @@ export function FinanceSection({
               overview={overviewValue}
               onRetry={retryOverview}
             />
-            {destination && (
-              <div className="flex min-w-0 items-center gap-3 rounded-xl bg-admin-canvas px-4 py-3.5">
-                <span
-                  aria-hidden="true"
-                  className="flex size-9 shrink-0 items-center justify-center rounded-[10px] bg-admin-accent-subtle text-admin-accent-hover"
-                >
-                  <Landmark className="size-[18px]" />
-                </span>
-                <div className="grid min-w-0 flex-1 gap-0.5">
-                  <strong className="text-sm text-admin-text [overflow-wrap:anywhere]">
-                    Destino: {destination.ownerName}
-                  </strong>
-                  <span className="text-[13px] text-admin-text-secondary [overflow-wrap:anywhere]">
-                    Chave Pix {destinationKeyLabel(destination)} ·{" "}
-                    {destination.bankName}
-                  </span>
-                </div>
-                {!owner && links?.("account", "Alterar")}
-              </div>
-            )}
             {access?.membershipRole === "SITE_ADMIN" &&
             sessionEpoch !== null ? (
               <WithdrawalSetup
@@ -345,15 +322,16 @@ export function FinanceSection({
             >
               Como funciona o saque
             </h2>
-            <p className="m-0 text-sm leading-[1.5] text-admin-text">
-              <strong>Saques via Pix gratuitos e ilimitados</strong> para contas
-              recebedoras de pessoa física (PF) e MEI. Para outros tipos de
-              empresa, consulte as taxas na prévia.
-            </p>
             <ol className="m-0 grid list-decimal gap-2 pl-[18px] text-sm leading-[1.5] text-admin-text marker:text-admin-text-secondary">
-              <li>Escolha o valor e confira a prévia.</li>
+              <li>
+                Escolha o valor e confira na prévia a tarifa de {withdrawalFee}{" "}
+                e o valor líquido.
+              </li>
               <li>Confirme com sua senha do EntreLaços.</li>
-              <li>O Asaas transfere por Pix para a sua chave.</li>
+              <li>
+                A Pagar.me transfere para a conta bancária cadastrada no seu
+                CPF.
+              </li>
             </ol>
             <p className="m-0 text-[13px] text-admin-text-secondary">
               Só a pessoa titular dos recebimentos pode sacar.
@@ -421,7 +399,7 @@ function WithdrawalBalance({
         <p className="m-0 text-[13px] text-admin-text-secondary">
           Dos pagamentos confirmados,{" "}
           {formatCents(overview.awaitingReleaseCents)} ainda aguardam liberação
-          pelo Asaas. Você recebe 100% do valor de cada presente.
+          pela Pagar.me. Você recebe 100% do valor de cada presente.
         </p>
       )}
     </div>

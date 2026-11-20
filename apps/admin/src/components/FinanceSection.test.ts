@@ -107,8 +107,10 @@ describe("finance section composition", () => {
     expect(html).toContain("Consultando o saldo");
     expect(html).toContain("Consultando o histórico de saques");
     expect(html).not.toMatch(
-      /R\$|Nenhum saque|Solicitar saque|Refazer saque|Recebido no banco/,
+      /R\$\s*0,00|Nenhum saque|Solicitar saque|Refazer saque|Recebido no banco/,
     );
+    // The per-withdrawal fee is a fixed tariff, not a guessed balance.
+    expect(html).toMatch(/tarifa de R\$\s*3,67/);
   });
   it.each([
     null,

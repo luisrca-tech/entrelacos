@@ -1,490 +1,254 @@
-import { drizzle, type NodePgClient } from "drizzle-orm/node-postgres";
-import { describe, expect, it, vi } from "vitest";
-import { hashAsaasEventIdentity } from "./asaasWebhook";
-import { createGiftCheckoutLifecycleWorker } from "./giftCheckoutLifecycle";
+import { readFileSync } from "node:fs";
+import { describe, expect, it } from "vitest";
+import {
+  decideGiftOrderTransition,
+  type GiftCheckoutOrderBinding,
+} from "./giftCheckoutLifecycle";
+import { readPagarmeOrder } from "./pagarmeOrderClient";
 
-function fixture(
-  eventType = "CHECKOUT_CANCELED",
-  overrides: Partial<
-    Parameters<typeof createGiftCheckoutLifecycleWorker>[0]
-  > = {},
+function order(
+  name: string,
+  change: (raw: Record<string, unknown>) => void = () => {},
 ) {
-  const now = new Date("2026-10-16T16:00:00.000Z");
-  const payload = {
-    checkoutId: "checkout-one",
-    externalReference: "attempt-one",
-  };
-  const row = {
-    eventId: "event-one",
-    siteId: "site-one",
-    accountId: "account-one",
-    environment: overrides.environment ?? "sandbox",
-    provider: "ASAAS",
-    accountReference: "remote-one",
-    isDemo: true,
-    orderId: "order-one",
-    attemptId: "attempt-one",
-    checkoutReference: "checkout-one",
-    operationState: "SUCCEEDED",
-    operationReference: "checkout-one",
-    quoteAccountReference: "remote-one",
-    eventType,
-    payload,
-    providerEventReference: "evt_one",
-    payloadHash: hashAsaasEventIdentity(
-      "evt_one",
-      eventType,
-      "remote-one",
-      payload,
+  const raw = JSON.parse(
+    readFileSync(
+      new URL(`./__fixtures__/pagarme/${name}.json`, import.meta.url),
+      "utf8",
     ),
-    receivedAt: now,
-    authenticatedAt: now,
-    attempts: 0,
-    state: "RECEIVED",
-    nextAttemptAt: now,
-    leaseOwner: null,
-    leaseToken: null,
-    leaseExpiresAt: null,
-    processedAt: null,
-  };
-  const statements: Array<{ sql: string; params: unknown[] }> = [];
-  let present = true;
-  let lostFence = false;
-  let outstanding = false;
-  const query = vi.fn(
-    async (statement: string | { text: string }, params: unknown[] = []) => {
-      const sql = typeof statement === "string" ? statement : statement.text;
-      statements.push({ sql, params });
-      if (/^(begin|commit|rollback)/i.test(sql)) return { rows: [] };
-      if (/^SELECT o.id/i.test(sql)) return { rows: [{ id: row.orderId }] };
-      if (/^SELECT 1 FROM "gift_payment_record"/i.test(sql))
-        return { rows: outstanding ? [{ found: 1 }] : [] };
-      if (/^SELECT/i.test(sql)) return { rows: present ? [row] : [] };
-      if (/^UPDATE "gift_checkout_attempt"/i.test(sql))
-        return { rows: [{ id: row.attemptId }] };
-      if (/^UPDATE "financial_operation"/i.test(sql))
-        return {
-          rows: [{ id: row.attemptId, retryAt: "2026-10-16T16:05:00.000Z" }],
-        };
-      if (/^UPDATE/i.test(sql))
-        return { rows: lostFence ? [] : [{ id: row.eventId }] };
-      throw new Error("Unexpected lifecycle SQL");
-    },
   );
-  const read = vi.fn().mockResolvedValue({
-    source: "provider",
-    provider: "ASAAS",
-    siteId: row.siteId,
-    accountBindingId: row.accountId,
-    accountReference: row.accountReference,
-    environment: row.environment,
-    checkoutReference: row.checkoutReference,
-    observedAt: now,
-    payments: [],
-  });
-  const worker = createGiftCheckoutLifecycleWorker({
-    db: drizzle({ query } as unknown as NodePgClient),
-    environment: overrides.environment ?? "sandbox",
-    instanceId: "worker-one",
-    reader: {
-      listCheckoutPayments: read,
-      getInstallmentRemoval: vi.fn(),
-      listInstallmentPayments: vi.fn(),
-      removeInstallment: vi.fn(),
-    },
-    now: () => now,
-    ...overrides,
-  });
-  return {
-    worker,
-    row,
-    read,
-    statements,
-    empty: () => {
-      present = false;
-    },
-    setOutstanding: () => {
-      outstanding = true;
-    },
-    loseFence: () => {
-      lostFence = true;
-    },
-  };
+  change(raw);
+  return readPagarmeOrder(raw);
 }
 
-describe("durable checkout lifecycle", () => {
-  it.each(["CHECKOUT_CREATED", "CHECKOUT_CANCELED", "CHECKOUT_EXPIRED"])(
-    "consumes %s after a scoped complete provider read without financial writes",
-    async (eventType) => {
-      const values = fixture(eventType);
-      expect(await values.worker.processNextReceivedPayment()).toEqual({
-        kind: "OBSERVED",
-      });
-      expect(values.read).toHaveBeenCalledWith(
-        {
-          provider: "ASAAS",
-          siteId: "site-one",
-          accountBindingId: "account-one",
-          accountReference: "remote-one",
-          environment: "sandbox",
-        },
-        "checkout-one",
-      );
-      expect(
-        values.statements.some(({ sql }) =>
-          /financial_ledger_entry|INSERT/i.test(sql),
-        ),
-      ).toBe(false);
-      expect(
-        values.statements.find(({ sql }) => /state='PROCESSED'/.test(sql))
-          ?.params,
-      ).toContain(
-        eventType === "CHECKOUT_CREATED"
-          ? "CHECKOUT_CREATED_OBSERVED"
-          : `${eventType}_EMPTY`,
-      );
-    },
-  );
-  it("never closes canceled checkout with an outstanding provider payment", async () => {
-    const values = fixture();
-    values.read.mockResolvedValueOnce({
-      ...(await values.read()),
-      payments: [
-        { id: "pay_one", checkoutSession: "checkout-one", status: "PENDING" },
-      ],
-    });
-    values.read.mockClear();
-    expect(await values.worker.processNextReceivedPayment()).toEqual({
-      kind: "RETRY",
-    });
+const card: GiftCheckoutOrderBinding = {
+  siteId: "site-1",
+  accountId: "account-1",
+  environment: "sandbox",
+  orderId: "order-1",
+  attemptId: "checkout-fixture-2",
+  quoteId: "quote-1",
+  providerOrderId: "or_fixtureOrder0002",
+  method: "CREDIT_CARD",
+  installments: 6,
+  totalCents: 11890,
+  nominalCents: 10000,
+  commissionCents: 200,
+  coupleSplitCents: 11031,
+  coupleRecipientId: "rp_fixtureRecipient01",
+  quoteExpiresAt: "2026-11-18T12:05:00.000Z",
+  pixExpiresAt: null,
+};
+const pix: GiftCheckoutOrderBinding = {
+  ...card,
+  attemptId: "checkout-fixture-1",
+  providerOrderId: "or_fixtureOrder0001",
+  method: "PIX",
+  installments: 1,
+  totalCents: 10369,
+  coupleSplitCents: 10000,
+  pixExpiresAt: "2026-11-18T12:30:00.000Z",
+};
+const now = new Date("2026-11-18T12:10:00.000Z");
+type ChargeJson = Record<string, unknown> & {
+  last_transaction: Record<string, unknown>;
+};
+
+describe("gift order lifecycle", () => {
+  it("keeps a waiting Pix order pending", () => {
     expect(
-      values.statements.some(({ sql }) => /state='PROCESSED'/.test(sql)),
-    ).toBe(false);
+      decideGiftOrderTransition(pix, order("order-pix-pending"), now),
+    ).toEqual({
+      kind: "PENDING",
+    });
   });
-  it("consumes paid checkout only when the provider lists its original payment, without granting settlement", async () => {
-    const values = fixture("CHECKOUT_PAID");
-    values.read.mockResolvedValueOnce({
-      ...(await values.read()),
-      payments: [
-        {
-          id: "pay_one",
-          checkoutSession: "checkout-one",
-          externalReference: "attempt-one",
-          status: "CONFIRMED",
-        },
-      ],
-    });
-    values.read.mockClear();
-    expect(await values.worker.processNextReceivedPayment()).toEqual({
-      kind: "OBSERVED",
+
+  it("marks a paid order with the expected amount and split as paid", () => {
+    expect(
+      decideGiftOrderTransition(card, order("order-card-paid"), now),
+    ).toEqual({
+      kind: "PAID",
+      chargeId: "ch_fixtureCharge002",
+      paidCents: 11890,
+      coupleSplitCents: 11031,
     });
     expect(
-      values.statements.some(({ sql }) =>
-        /gift_payment_record|financial_ledger_entry|INSERT/i.test(sql),
+      decideGiftOrderTransition(pix, order("order-pix-paid"), now),
+    ).toMatchObject({
+      kind: "PAID",
+      paidCents: 10369,
+      coupleSplitCents: 10000,
+    });
+  });
+
+  it("closes failed and canceled orders, telling an expired Pix apart", () => {
+    expect(
+      decideGiftOrderTransition(
+        {
+          ...card,
+          attemptId: "checkout-fixture-3",
+          providerOrderId: "or_fixtureOrder0003",
+        },
+        order("order-card-failed"),
+        now,
       ),
-    ).toBe(false);
-  });
-  it("retries a paid event whose payment has not become visible", async () => {
-    const values = fixture("CHECKOUT_PAID");
-    expect(await values.worker.processNextReceivedPayment()).toEqual({
-      kind: "RETRY",
-    });
-  });
-  it("does not read the provider when the immutable event hash is inconsistent", async () => {
-    const values = fixture();
-    values.row.payloadHash = "0".repeat(64);
-    await expect(values.worker.processNextReceivedPayment()).rejects.toThrow();
-    expect(values.read).not.toHaveBeenCalled();
-  });
-  it("does not acknowledge a lifecycle observation after its lease fence is lost", async () => {
-    const values = fixture();
-    values.read.mockImplementationOnce(async () => {
-      values.loseFence();
-      return {
-        source: "provider",
-        provider: "ASAAS",
-        siteId: "site-one",
-        accountBindingId: "account-one",
-        accountReference: "remote-one",
-        environment: "sandbox",
-        checkoutReference: "checkout-one",
-        observedAt: new Date("2026-10-16T16:00:00.000Z"),
-        payments: [],
-      };
-    });
-    await expect(values.worker.processNextReceivedPayment()).rejects.toThrow();
-  });
-  it("is idle when no due original checkout event exists", async () => {
-    const values = fixture();
-    values.empty();
-    expect(await values.worker.processNextReceivedPayment()).toEqual({
-      kind: "IDLE",
-    });
-    expect(values.read).not.toHaveBeenCalled();
-  });
-});
-
-it.each([undefined, "foreign-site", "site-one"])(
-  "processes only the designated live showcase event (%s)",
-  async (liveDemoSiteIds) => {
-    const v = fixture("CHECKOUT_CANCELED", {
-      environment: "live",
-      applicationEnvironment: "production",
-      liveDemoSiteIds:
-        liveDemoSiteIds === undefined ? undefined : [liveDemoSiteIds],
-    });
-    if (liveDemoSiteIds === "site-one") {
-      expect(await v.worker.processNextReceivedPayment()).toMatchObject({
-        kind: "OBSERVED",
-      });
-      expect(v.read).toHaveBeenCalled();
-    } else {
-      await expect(v.worker.processNextReceivedPayment()).rejects.toThrow();
-      expect(v.read).not.toHaveBeenCalled();
-    }
-  },
-);
-
-it.each([
-  {
-    removed: true,
-    outstanding: false,
-    kind: "OBSERVED",
-    code: "PAYMENT_DELETED_INSTALLMENT_EMPTY",
-  },
-  {
-    removed: false,
-    outstanding: false,
-    kind: "RETRY",
-    code: "CHECKOUT_PAYMENT_OUTSTANDING",
-  },
-  {
-    removed: true,
-    outstanding: true,
-    kind: "RETRY",
-    code: "CHECKOUT_PAYMENT_OUTSTANDING",
-  },
-])(
-  "uses both provider and durable payment evidence before closing direct installments ($removed, $outstanding)",
-  async ({ removed, outstanding, kind, code }) => {
-    const getInstallmentRemoval = vi.fn().mockResolvedValue({
-      source: "provider",
-      provider: "ASAAS",
-      siteId: "site-one",
-      accountBindingId: "account-one",
-      accountReference: "remote-one",
-      environment: "sandbox",
-      installmentReference: "checkout-one",
-      observedAt: new Date("2026-10-16T16:00:00.000Z"),
-      removed,
-    });
-    const f = fixture("PAYMENT_DELETED", {
-      reader: {
-        listCheckoutPayments: vi.fn(),
-        getInstallmentRemoval,
-        listInstallmentPayments: vi.fn(),
-        removeInstallment: vi.fn(),
-      },
-    });
-    const payload = {
-      paymentId: "pay_one",
-      externalReference: "attempt-one",
-      installmentId: "checkout-one",
-    };
-    Object.assign(f.row, {
-      installmentCount: 2,
-      payload,
-      payloadHash: hashAsaasEventIdentity(
-        "evt_one",
-        "PAYMENT_DELETED",
-        "remote-one",
-        payload,
-      ),
-    });
-    if (outstanding) f.setOutstanding();
-    await expect(f.worker.processNextReceivedPayment()).resolves.toEqual({
-      kind,
-    });
-    expect(getInstallmentRemoval).toHaveBeenCalledOnce();
+    ).toEqual({ kind: "CLOSED", reason: "FAILED" });
     expect(
-      f.statements.find(({ sql }) => /SET state='(PROCESSED|RETRY)'/.test(sql))
-        ?.params,
-    ).toContain(code);
-  },
-);
+      decideGiftOrderTransition(pix, order("order-pix-canceled"), now),
+    ).toEqual({ kind: "CLOSED", reason: "CANCELED" });
+    expect(
+      decideGiftOrderTransition(
+        pix,
+        order("order-pix-canceled"),
+        new Date("2026-11-18T12:31:00.000Z"),
+      ),
+    ).toEqual({ kind: "CLOSED", reason: "EXPIRED" });
+  });
 
-it.each([
-  "unpaid",
-  "recovered",
-  "already-paid",
-  "late-receipt",
-  "confirmed-parcel",
-  "incomplete-plan",
-  "wrong-amount",
-])(
-  "requires complete provider and local evidence to expire a sixty-minute installment (%s)",
-  async (scenario) => {
-    const removeInstallment = vi.fn().mockResolvedValue(undefined);
-    const getInstallmentRemoval = vi.fn().mockResolvedValue({
-      source: "provider",
-      provider: "ASAAS",
-      siteId: "site-one",
-      accountBindingId: "account-one",
-      accountReference: "remote-one",
-      environment: "sandbox",
-      installmentReference: "checkout-one",
-      observedAt: new Date("2026-10-16T16:00:00.000Z"),
-      removed: true,
+  it("reports refunds and chargebacks as reversals", () => {
+    expect(
+      decideGiftOrderTransition(card, order("order-card-refunded"), now),
+    ).toMatchObject({
+      kind: "REVERSED",
+      reversal: "REFUND",
+      chargeId: "ch_fixtureCharge002",
+      paidCents: 11890,
     });
-    const listInstallmentPayments = vi.fn();
-    const values = fixture("CHECKOUT_CREATED", {
-      reader: {
-        listCheckoutPayments: vi.fn(),
-        getInstallmentRemoval,
-        listInstallmentPayments,
-        removeInstallment,
+    expect(
+      decideGiftOrderTransition(card, order("order-card-chargedback"), now),
+    ).toMatchObject({ kind: "REVERSED", reversal: "CHARGEBACK" });
+  });
+
+  it("reads a paid card charge canceled by DELETE /charges as a refund", () => {
+    // Pagar.me v5 charge statuses have no `refunded`: a captured card charge
+    // that is cancelled comes back as `canceled` with a refunded transaction.
+    const canceled = order("order-card-refunded", (raw) => {
+      const charge = (raw.charges as ChargeJson[])[0];
+      charge.status = "canceled";
+    });
+    expect(decideGiftOrderTransition(card, canceled, now)).toMatchObject({
+      kind: "REVERSED",
+      reversal: "REFUND",
+      chargeId: "ch_fixtureCharge002",
+    });
+    const onlyCanceledAmount = order("order-card-refunded", (raw) => {
+      const charge = (raw.charges as ChargeJson[])[0];
+      charge.status = "canceled";
+      charge.last_transaction.status = "voided";
+    });
+    expect(decideGiftOrderTransition(card, onlyCanceledAmount, now).kind).toBe(
+      "REVERSED",
+    );
+  });
+
+  it("never auto-debits a partial refund or cancellation", () => {
+    for (const change of [
+      (charge: ChargeJson) => {
+        charge.status = "partial_refunded";
       },
-    });
-    const one = {
-      installmentCount: 1,
-      totalCents: 10239,
-      installmentSurchargeCents: 0,
-      installmentCents: [10239],
-    };
-    const two = {
-      installmentCount: 2,
-      totalCents: 10239,
-      installmentSurchargeCents: 0,
-      installmentCents: [5119, 5120],
-    };
-    Object.assign(values.row, {
-      createdAt: new Date("2026-10-16T15:00:00.000Z"),
-      expiryPaymentReferences:
-        scenario === "recovered" ? ["pay_1", "pay_2"] : null,
-      lastErrorCode:
-        scenario === "recovered" ? "INSTALLMENT_EXPIRY_DISPATCHED" : null,
-      quote: {
-        ...two,
-        installmentOptions: [one, two],
-        id: "quote-one",
-        giftId: "gift-one",
-        siteId: "site-one",
-        title: "A contribution",
-        mode: "sandbox",
-        method: "CREDIT_CARD",
-        currency: "BRL",
-        nominalCents: 10000,
-        commissionBasisPoints: 200,
-        commissionCents: 200,
-        processingCents: 39,
-        policyVersion: "policy-one",
-        feeAllocation: "BUYER_GROSS_UP",
-        settlementVersion: "PLATFORM_FEE_GUARANTEE_V1",
-        expiresAt: "2026-10-16T15:05:00.000Z",
+      (charge: ChargeJson) => {
+        charge.status = "canceled";
+        charge.canceled_amount = 5000;
       },
-    });
-    if (scenario === "already-paid") values.setOutstanding();
-    listInstallmentPayments.mockImplementation(async () => {
-      if (scenario === "late-receipt") values.setOutstanding();
-      return {
-        source: "provider",
-        provider: "ASAAS",
-        siteId: "site-one",
-        accountBindingId: "account-one",
-        accountReference: "remote-one",
-        environment: "sandbox",
-        installmentReference: "checkout-one",
-        observedAt: new Date("2026-10-16T16:00:00.000Z"),
-        payments: [1, 2]
-          .slice(0, scenario === "incomplete-plan" ? 1 : 2)
-          .map((installmentNumber) => ({
-            id: `pay_${installmentNumber}`,
-            installment: "checkout-one",
-            externalReference: "attempt-one",
-            installmentNumber,
-            billingType: "CREDIT_CARD",
-            status:
-              scenario === "confirmed-parcel" && installmentNumber === 2
-                ? "CONFIRMED"
-                : "PENDING",
-            value:
-              installmentNumber === 1
-                ? "51.19"
-                : scenario === "wrong-amount"
-                  ? "51.21"
-                  : "51.20",
-          })),
-      };
-    });
-    const expected =
-      scenario === "unpaid" || scenario === "recovered"
-        ? "OBSERVED"
-        : scenario === "already-paid"
-          ? "IDLE"
-          : "RETRY";
-    await expect(values.worker.expireNextUnpaidInstallment()).resolves.toEqual({
-      kind: expected,
-    });
-    if (scenario === "unpaid") {
-      expect(getInstallmentRemoval).toHaveBeenCalledOnce();
-      expect(
-        values.statements.some(({ params }) =>
-          params.includes("INSTALLMENT_EXPIRY_DISPATCHED"),
-        ),
-      ).toBe(true);
-      expect(
-        values.statements.some(({ params }) =>
-          params.includes("INSTALLMENT_EXPIRY_CONFIRMED"),
-        ),
-      ).toBe(true);
-      expect(removeInstallment).toHaveBeenCalledExactlyOnceWith(
-        {
-          provider: "ASAAS",
-          siteId: "site-one",
-          accountBindingId: "account-one",
-          accountReference: "remote-one",
-          environment: "sandbox",
-        },
-        "checkout-one",
-      );
-      expect(
-        values.statements.filter(({ sql }) => /FOR UPDATE OF o/.test(sql)),
-      ).toHaveLength(3);
-      expect(
-        values.statements.some(({ sql }) =>
-          /UPDATE "financial_event_inbox"/.test(sql),
-        ),
-      ).toBe(false);
-    } else {
-      expect(removeInstallment).not.toHaveBeenCalled();
-      if (scenario === "recovered") {
-        expect(getInstallmentRemoval).toHaveBeenCalledOnce();
-        expect(listInstallmentPayments).not.toHaveBeenCalled();
-        expect(
-          values.statements.some(({ params }) =>
-            params.includes("INSTALLMENT_EXPIRY_CONFIRMED"),
-          ),
-        ).toBe(true);
-      }
+      (charge: ChargeJson) => {
+        charge.status = "paid";
+        charge.last_transaction.status = "partial_refunded";
+        charge.canceled_amount = 100;
+      },
+    ]) {
+      const partial = order("order-card-refunded", (raw) => {
+        change((raw.charges as ChargeJson[])[0]);
+      });
+      expect(decideGiftOrderTransition(card, partial, now)).toEqual({
+        kind: "MISMATCH",
+        reason: "PARTIAL_REVERSAL",
+      });
     }
-  },
-);
+  });
 
-it("does not query the provider when no installment attempt is due", async () => {
-  const listInstallmentPayments = vi.fn();
-  const removeInstallment = vi.fn();
-  const values = fixture("CHECKOUT_CREATED", {
-    reader: {
-      listCheckoutPayments: vi.fn(),
-      getInstallmentRemoval: vi.fn(),
-      listInstallmentPayments,
-      removeInstallment,
-    },
+  it("keeps an unpaid canceled card charge closed, not reversed", () => {
+    const unpaid = order("order-card-refunded", (raw) => {
+      const charge = (raw.charges as ChargeJson[])[0];
+      charge.status = "canceled";
+      delete charge.paid_amount;
+      delete charge.paid_at;
+      delete charge.canceled_amount;
+      charge.last_transaction.status = "voided";
+    });
+    expect(decideGiftOrderTransition(card, unpaid, now)).toEqual({
+      kind: "CLOSED",
+      reason: "CANCELED",
+    });
   });
-  values.empty();
-  await expect(values.worker.expireNextUnpaidInstallment()).resolves.toEqual({
-    kind: "IDLE",
+
+  it.each<[string, (raw: Record<string, unknown>) => void]>([
+    [
+      "another checkout code",
+      (raw) => {
+        raw.code = "checkout-other";
+      },
+    ],
+    [
+      "a different total",
+      (raw) => {
+        raw.amount = 11000;
+      },
+    ],
+    [
+      "an underpaid charge",
+      (raw) => {
+        (raw.charges as Record<string, unknown>[])[0].paid_amount = 100;
+      },
+    ],
+    [
+      "a couple split other than the frozen amount",
+      (raw) => {
+        const charge = (
+          raw.charges as Record<string, Record<string, unknown>>[]
+        )[0];
+        const split = charge.last_transaction.split as Record<
+          string,
+          unknown
+        >[];
+        split[1].amount = 10000;
+      },
+    ],
+    [
+      "a split without the couple recipient",
+      (raw) => {
+        const charge = (
+          raw.charges as Record<string, Record<string, unknown>>[]
+        )[0];
+        const split = charge.last_transaction.split as Record<
+          string,
+          unknown
+        >[];
+        split[1].recipient = { id: "rp_someoneElse01" };
+      },
+    ],
+  ])("flags %s as a mismatch and never as paid", (_label, change) => {
+    expect(
+      decideGiftOrderTransition(card, order("order-card-paid", change), now)
+        .kind,
+    ).toBe("MISMATCH");
   });
-  expect(listInstallmentPayments).not.toHaveBeenCalled();
-  expect(removeInstallment).not.toHaveBeenCalled();
+
+  it("flags an order that is not the stored provider order", () => {
+    expect(
+      decideGiftOrderTransition(
+        { ...card, providerOrderId: "or_fixtureOrder9999" },
+        order("order-card-paid"),
+        now,
+      ).kind,
+    ).toBe("MISMATCH");
+  });
+
+  it("accepts the order found by code when the creation outcome was unknown", () => {
+    expect(
+      decideGiftOrderTransition(
+        { ...card, providerOrderId: null },
+        order("order-card-paid"),
+        now,
+      ).kind,
+    ).toBe("PAID");
+  });
 });

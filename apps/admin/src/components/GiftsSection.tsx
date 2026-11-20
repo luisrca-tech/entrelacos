@@ -137,6 +137,16 @@ export function GiftsReadinessView({
     current.catalogAccess?.siteId === siteId &&
     current.catalogAccess.mode === "demonstration" &&
     !current.catalogEligible;
+  // The API runs with payments disabled: no setup can succeed yet, so show a
+  // calm waiting state instead of the receiving steps. Demonstration catalogs
+  // stay manageable below.
+  if (current.mode === "disabled" && !demonstration)
+    return (
+      <div className="grid gap-4">
+        <GiftsPageHeader />
+        <GiftsLocked comingSoon />
+      </div>
+    );
   return (
     <div className="grid gap-4">
       {demonstration && (

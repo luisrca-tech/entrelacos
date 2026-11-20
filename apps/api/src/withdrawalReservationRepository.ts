@@ -40,6 +40,7 @@ import {
   FinancialAuthorizationError,
   type RecentFinancialAuthenticationEvidence,
 } from "./financialAuthorization";
+import { unresolvedGiftPaymentSql } from "./giftPaymentRestrictions";
 import { allowsLiveSite } from "./liveSitePolicy";
 import {
   evaluateReceivingReadiness,
@@ -50,7 +51,6 @@ import {
   type ReceivingTransaction,
 } from "./receivingRepository";
 import { resolveSiteAccess, SiteAccessDeniedError } from "./siteAccess";
-import { logWithdrawalFailure } from "./withdrawalDiagnostics";
 import {
   captureWithdrawalPresentation,
   hashWithdrawalConsentSnapshot,
@@ -340,7 +340,6 @@ function safeCount(value: unknown): number {
   return Number(integer);
 }
 function safeError(error: unknown): never {
-  logWithdrawalFailure(error);
   if (
     error instanceof WithdrawalReservationServiceError &&
     [400, 403, 409, 503].includes(error.status) &&
@@ -449,7 +448,7 @@ function validateNative(
     row.accountId !== snapshot.accountId ||
     row.environment !== snapshot.environment ||
     row.operatorUserId !== snapshot.operatorUserId ||
-    row.accountProvider !== "ASAAS" ||
+    row.accountProvider !== "PAGARME" ||
     row.accountOperatorUserId !== snapshot.operatorUserId ||
     row.destinationVersion !== snapshot.intent.destinationVersion ||
     row.requestHash !== snapshot.requestHash ||
@@ -798,7 +797,7 @@ async function requestPair(
       account.id !== accountId ||
       account.siteId !== authority.actor.siteId ||
       account.environment !== mode ||
-      account.provider !== "ASAAS" ||
+      account.provider !== "PAGARME" ||
       account.operatorUserId !== authority.actor.userId
     )
       return fail("RECIPIENT_REQUIRED", 403);
@@ -842,7 +841,7 @@ async function currentPresentation(
     a.id !== scope.accountId ||
     a.siteId !== scope.siteId ||
     a.environment !== scope.environment ||
-    a.provider !== "ASAAS" ||
+    a.provider !== "PAGARME" ||
     a.operatorUserId !== authority.actor.userId ||
     a.isCurrent !== true ||
     a.accountReference !== scope.accountReference ||
@@ -891,7 +890,7 @@ async function currentPresentation(
     !loaded ||
     loaded.isDemo !== authority.isDemo ||
     loaded.evidence?.provenance !== "provider" ||
-    loaded.providerBinding?.provider !== "ASAAS" ||
+    loaded.providerBinding?.provider !== "PAGARME" ||
     loaded.providerBinding.accountReference !== scope.accountReference ||
     loaded.providerBinding.recipientReference !== consent.recipientReference ||
     loaded.providerBinding.bankReference !== scope.bankReference ||
@@ -1049,10 +1048,10 @@ async function unresolvedScope(
   environment: string,
 ): Promise<number> {
   const result = await reader.execute(sql`SELECT (
-    (SELECT COUNT(*) FROM ${financialEventInbox} ev INNER JOIN ${receivingAccount} a ON a.id=ev.account_id AND a.site_id=ev.site_id AND a.environment=ev.environment WHERE ev.site_id=${actor.siteId} AND ev.environment=${environment} AND a.operator_user_id=${actor.userId} AND ev.authenticated_at IS NOT NULL AND ev.state<>'PROCESSED' AND ev.event_type ~ '^(PAYMENT|CHECKOUT|TRANSFER|REFUND)_') +
+    (SELECT COUNT(*) FROM ${financialEventInbox} ev INNER JOIN ${receivingAccount} a ON a.id=ev.account_id AND a.site_id=ev.site_id AND a.environment=ev.environment WHERE ev.site_id=${actor.siteId} AND ev.environment=${environment} AND a.operator_user_id=${actor.userId} AND ev.authenticated_at IS NOT NULL AND ev.state<>'PROCESSED' AND ev.event_type ~ '^(PAYMENT|CHECKOUT|TRANSFER|REFUND|ORDER|CHARGE)_') +
     (SELECT COUNT(*) FROM ${financialOperation} op INNER JOIN ${receivingAccount} a ON a.id=op.account_id AND a.site_id=op.site_id AND a.environment=op.environment WHERE op.site_id=${actor.siteId} AND op.environment=${environment} AND a.operator_user_id=${actor.userId} AND op.state='UNKNOWN') +
     (SELECT COUNT(*) FROM ${withdrawalIntent} w INNER JOIN ${receivingAccount} a ON a.id=w.account_id AND a.site_id=w.site_id AND a.environment=w.environment WHERE w.site_id=${actor.siteId} AND w.environment=${environment} AND w.operator_user_id=${actor.userId} AND a.operator_user_id=${actor.userId} AND w.state='UNKNOWN') +
-    (SELECT COUNT(*) FROM ${giftPaymentRecord} p INNER JOIN ${receivingAccount} a ON a.id=p.account_id AND a.site_id=p.site_id AND a.environment=p.environment WHERE p.site_id=${actor.siteId} AND p.environment=${environment} AND a.operator_user_id=${actor.userId} AND (p.provider_status IS NULL OR p.verification_status<>'VERIFIED' OR p.provider_status NOT IN ('PENDING','AUTHORIZED','CONFIRMED','RECEIVED','OVERDUE')))
+    (SELECT COUNT(*) FROM ${giftPaymentRecord} p INNER JOIN ${receivingAccount} a ON a.id=p.account_id AND a.site_id=p.site_id AND a.environment=p.environment WHERE p.site_id=${actor.siteId} AND p.environment=${environment} AND a.operator_user_id=${actor.userId} AND ${unresolvedGiftPaymentSql})
   )::text AS "scopeUnresolvedCount"`);
   if (result.rows.length !== 1) return fail();
   return safeCount(result.rows[0].scopeUnresolvedCount);
@@ -1080,7 +1079,7 @@ async function readCurrentPresentation(
   if (
     a.siteId !== authority.actor.siteId ||
     a.environment !== options.mode ||
-    a.provider !== "ASAAS" ||
+    a.provider !== "PAGARME" ||
     a.isCurrent !== true
   )
     return fail();
@@ -1139,7 +1138,7 @@ async function readCurrentPresentation(
     !loaded ||
     loaded.isDemo !== authority.isDemo ||
     loaded.evidence?.provenance !== "provider" ||
-    loaded.providerBinding?.provider !== "ASAAS" ||
+    loaded.providerBinding?.provider !== "PAGARME" ||
     loaded.providerBinding.accountReference !== scope.accountReference ||
     loaded.providerBinding.recipientReference !== a.recipientReference ||
     loaded.providerBinding.bankReference !== scope.bankReference ||
@@ -1908,7 +1907,7 @@ export function createWithdrawalReservationRepository(
               return fail("REQUEST_CONFLICT", 409);
             const snapshot = preliminary?.snapshot ?? candidate;
             const accounts = await execute(
-              sql`SELECT a.id,a.site_id AS "siteId",a.environment,a.provider,a.operator_user_id AS "operatorUserId",a.operator_reference AS "operatorReference",a.account_reference AS "accountReference",a.recipient_reference AS "recipientReference",a.is_current AS "isCurrent",a.observed_at AS "observedAt" FROM ${receivingAccount} a WHERE a.id=${snapshot.accountId} AND a.site_id=${actor.siteId} AND a.environment=${snapshot.environment} AND a.provider='ASAAS' FOR UPDATE OF a`,
+              sql`SELECT a.id,a.site_id AS "siteId",a.environment,a.provider,a.operator_user_id AS "operatorUserId",a.operator_reference AS "operatorReference",a.account_reference AS "accountReference",a.recipient_reference AS "recipientReference",a.is_current AS "isCurrent",a.observed_at AS "observedAt" FROM ${receivingAccount} a WHERE a.id=${snapshot.accountId} AND a.site_id=${actor.siteId} AND a.environment=${snapshot.environment} AND a.provider='PAGARME' FOR UPDATE OF a`,
             );
             if (accounts.rows.length !== 1) return fail();
             const account = record(accounts.rows[0]);
@@ -1916,7 +1915,7 @@ export function createWithdrawalReservationRepository(
               account.id !== snapshot.accountId ||
               account.siteId !== actor.siteId ||
               account.environment !== snapshot.environment ||
-              account.provider !== "ASAAS" ||
+              account.provider !== "PAGARME" ||
               account.operatorUserId !== snapshot.operatorUserId ||
               account.operatorUserId !== actor.userId
             )
@@ -2128,7 +2127,7 @@ export function createWithdrawalReservationRepository(
                 !loaded ||
                 loaded.isDemo !== isDemo ||
                 loaded.evidence?.provenance !== "provider" ||
-                loaded.providerBinding?.provider !== "ASAAS" ||
+                loaded.providerBinding?.provider !== "PAGARME" ||
                 loaded.providerBinding.accountReference !==
                   snapshot.accountReference ||
                 loaded.providerBinding.recipientReference !==
@@ -2256,9 +2255,9 @@ export function createWithdrawalReservationRepository(
               await requireResolvedOwnScope();
               const totals = await execute(sql`SELECT
                 COALESCE((SELECT SUM(w.reserved_cents)::text FROM ${withdrawalIntent} w WHERE w.site_id=${actor.siteId} AND w.account_id=${snapshot.accountId} AND w.environment=${mode} AND w.reservation_state='HELD' AND w.state IN ('REQUESTED','AWAITING_AUTHORIZATION','PROCESSING','UNKNOWN')),'0') AS "heldCents",
-                ((SELECT COUNT(*) FROM ${financialEventInbox} ev WHERE ev.site_id=${actor.siteId} AND ev.account_id=${snapshot.accountId} AND ev.environment=${mode} AND ev.authenticated_at IS NOT NULL AND ev.state<>'PROCESSED' AND ev.event_type ~ '^(PAYMENT|CHECKOUT|TRANSFER|REFUND)_') +
+                ((SELECT COUNT(*) FROM ${financialEventInbox} ev WHERE ev.site_id=${actor.siteId} AND ev.account_id=${snapshot.accountId} AND ev.environment=${mode} AND ev.authenticated_at IS NOT NULL AND ev.state<>'PROCESSED' AND ev.event_type ~ '^(PAYMENT|CHECKOUT|TRANSFER|REFUND|ORDER|CHARGE)_') +
                 (SELECT COUNT(*) FROM ${financialOperation} op WHERE op.site_id=${actor.siteId} AND op.account_id=${snapshot.accountId} AND op.environment=${mode} AND op.state='UNKNOWN') +
-                (SELECT COUNT(*) FROM ${giftPaymentRecord} p WHERE p.site_id=${actor.siteId} AND p.account_id=${snapshot.accountId} AND p.environment=${mode} AND (p.provider_status IS NULL OR p.verification_status<>'VERIFIED' OR p.provider_status NOT IN ('PENDING','AUTHORIZED','CONFIRMED','RECEIVED','OVERDUE'))))::text AS "unresolvedFinancialEventCount",
+                (SELECT COUNT(*) FROM ${giftPaymentRecord} p WHERE p.site_id=${actor.siteId} AND p.account_id=${snapshot.accountId} AND p.environment=${mode} AND ${unresolvedGiftPaymentSql}))::text AS "unresolvedFinancialEventCount",
                 ((SELECT COUNT(*) FROM ${withdrawalIntent} w WHERE w.site_id=${actor.siteId} AND w.account_id=${snapshot.accountId} AND w.environment=${mode} AND w.state='COMPLETED' AND w.updated_at>=${snapshot.balance.observedAt}::timestamptz) +
                 (SELECT COUNT(*) FROM ${financialLedgerEntry} le WHERE le.site_id=${actor.siteId} AND le.account_id=${snapshot.accountId} AND le.environment=${mode} AND le.direction='DEBIT' AND le.created_at>=${snapshot.balance.observedAt}::timestamptz))::text AS "balanceEffectsAfterObservationCount"`);
               if (totals.rows.length !== 1) return fail();

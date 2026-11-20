@@ -1,5 +1,7 @@
 # Internal Gifts: Gap Review and Sandbox Operation
 
+> **2026-11 update:** Asaas was replaced by Pagar.me in 2026-11; see [Pagar.me operation](../docs/pagarmeOperation.md) and the [decision register](../docs/decisionRegister.md#payment-provider-switch-to-pagarme--2026-11-18). Asaas details below are historical.
+
 Reviewed: 2026-10-24 (America/Sao_Paulo).
 Branch: `release-gift-payment`.
 Original local HEAD: `ab9a120ff65982bef8aa3655bb259f85eecfa652`. Implementation checkpoint `2c99375` is committed and pushed to `origin/release-gift-payment`.

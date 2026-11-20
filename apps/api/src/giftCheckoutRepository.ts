@@ -1,15 +1,13 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import {
-  checkoutResultSchema,
-  giftCentsSchema,
-  giftInstallmentExpiryMinutes,
+  type GiftCheckoutPix,
+  giftCheckoutPixSchema,
   giftQuoteSchema,
   publicGiftItemSchema,
 } from "@entrelacos/contracts";
 import type { DatabaseConnection } from "@entrelacos/database";
 import {
-  financialEventInbox,
   financialLedgerEntry,
   financialOperation,
   giftCheckoutAttempt,
@@ -22,37 +20,26 @@ import {
   receivingVerificationEvidence,
 } from "@entrelacos/database/schema";
 import { sql } from "drizzle-orm";
-import { hashAsaasEventIdentity } from "./asaasWebhook";
 import {
   compareDatabaseTimestamps,
   readDatabaseTimestamp,
 } from "./databaseTimestamp";
+import type { GiftCheckoutOrderBinding } from "./giftCheckoutLifecycle";
 import {
-  checkoutPaymentFacts,
-  giftInstallmentExpiryConfirmedCode,
-  readInstallmentExpiryPaymentReferences,
-} from "./giftCheckoutLifecycle";
-import {
-  type GiftCheckoutEvidence,
-  type GiftCheckoutHostedOutcome,
   type GiftCheckoutIdentity,
   type GiftCheckoutRecord,
   type GiftCheckoutRepository,
   type GiftCheckoutReservation,
   GiftCheckoutServiceError,
-  isSafeCheckoutContinuation,
+  giftCheckoutOrderBinding,
   readGiftQuoteSnapshot,
 } from "./giftCheckouts";
-import {
-  giftPaymentTerms,
-  isGiftReceiptEvent,
-} from "./giftPaymentReconciliation";
 import { findPublishedGiftForQuote } from "./giftQuoteLookup";
-import {
-  type GiftQuoteReceivingContext,
-  type GiftQuoteSnapshot,
-  isPlatformAccountSplit,
+import type {
+  GiftQuoteReceivingContext,
+  GiftQuoteSnapshot,
 } from "./giftQuotes";
+import type { PagarmeOrderObservation } from "./pagarmeOrderClient";
 import {
   assertReceivingReady,
   evaluateReceivingReadiness,
@@ -101,39 +88,23 @@ interface QuoteRow extends GiftCheckoutAccountScope {
   expiresAt: Date;
 }
 
-interface OrderRow extends QuoteRow {
+interface CheckoutRow extends QuoteRow {
   orderId: string;
   requestId: string;
-  requestHash: string;
   recoveryTokenHash: string;
   orderCreatedAt: Date;
-}
-
-interface AttemptRow extends GiftCheckoutAccountScope {
   attemptId: string;
-  orderId: string;
-  operationId: string;
-  operationKind: string;
-  attemptNumber: number;
   providerReference: string | null;
-  hostedUrl: string | null;
-  expiresAt: Date | null;
-  installmentExpiryPaymentReferences: string[] | null;
+  pixExpiresAt: Date | null;
+  pixQrCode: string | null;
+  pixQrCodeUrl: string | null;
   operationState: string;
-  operationLastErrorCode: string | null;
-  operationAttempts: number;
-  operationRequestId: string;
-  operationRequestHash: string;
-  requestSnapshot: Record<string, unknown>;
-  providerOperationReference: string | null;
-  leaseOwner: string | null;
-  leaseToken: string | null;
-  leaseExpiresAt: Date | null;
-  updatedAt: Date;
+  operationErrorCode: string | null;
+  operationUpdatedAt: Date;
+  paymentStatus: string | null;
+  paymentObservedAt: Date | null;
+  credited: boolean;
 }
-
-type PaymentRow = typeof giftPaymentRecord.$inferSelect;
-type LedgerRow = typeof financialLedgerEntry.$inferSelect;
 
 const quoteColumns = sql`
   q.id AS "quoteId", q.site_id AS "siteId", q.account_id AS "accountId", q.environment,
@@ -183,45 +154,18 @@ function now(options: GiftCheckoutRepositoryOptions): Date {
   return new Date(instant(options.now()));
 }
 
-function scoped(
-  row: GiftCheckoutAccountScope,
-  scope: GiftCheckoutAccountScope,
-) {
-  return (
-    row.siteId === scope.siteId &&
-    row.accountId === scope.accountId &&
-    row.environment === scope.environment
-  );
-}
-
-function nonempty(value: unknown): value is string {
-  return (
-    typeof value === "string" && value.trim().length > 0 && value.length <= 512
-  );
-}
-
 function validIdentity(identity: GiftCheckoutIdentity) {
   if (
     !identity ||
-    !Object.values({
-      siteId: identity.siteId,
-      quoteId: identity.quoteId,
-      requestId: identity.requestId,
-      orderId: identity.orderId,
-      attemptId: identity.attemptId,
-    }).every((value) => giftQuoteSchema.shape.siteId.safeParse(value).success)
+    ![
+      identity.siteId,
+      identity.quoteId,
+      identity.requestId,
+      identity.orderId,
+      identity.attemptId,
+    ].every((value) => giftQuoteSchema.shape.siteId.safeParse(value).success)
   )
     return fail("EXTERNAL_OUTCOME_UNKNOWN");
-}
-
-function sameIdentity(left: GiftCheckoutIdentity, right: GiftCheckoutIdentity) {
-  return (
-    left.siteId === right.siteId &&
-    left.quoteId === right.quoteId &&
-    left.requestId === right.requestId &&
-    left.orderId === right.orderId &&
-    left.attemptId === right.attemptId
-  );
 }
 
 function sameBinding(
@@ -257,31 +201,6 @@ function operationSnapshot(
   };
 }
 
-function preDispatchRejection(
-  identity: GiftCheckoutIdentity & {
-    recoveryTokenHash: string;
-    createdAt: string;
-  },
-  expiresAt: Date,
-): Extract<GiftCheckoutEvidence, { source: "backend" }> {
-  return {
-    source: "backend",
-    kind: "PRE_DISPATCH_REJECTION",
-    siteId: identity.siteId,
-    quoteId: identity.quoteId,
-    requestId: identity.requestId,
-    orderId: identity.orderId,
-    attemptId: identity.attemptId,
-    recoveryTokenHash: identity.recoveryTokenHash,
-    observedAt: identity.createdAt,
-    noProviderCall: true,
-    closedReason:
-      expiresAt.getTime() <= Date.parse(identity.createdAt)
-        ? "EXPIRED"
-        : "CANCELED",
-  };
-}
-
 function requestHash(
   identity: Pick<
     GiftCheckoutReservation,
@@ -299,12 +218,6 @@ function requestHash(
       ]),
     )
     .digest("hex");
-}
-
-export function giftReceivedEffectKey(
-  providerPaymentReference: string,
-): string {
-  return `GIFT_RECEIVED:${createHash("sha256").update(providerPaymentReference, "utf8").digest("hex")}`;
 }
 
 function snapshot(row: QuoteRow): GiftQuoteSnapshot {
@@ -373,841 +286,123 @@ async function lockRequest(
   );
 }
 
+function checkoutQuery(where: ReturnType<typeof sql>) {
+  return sql`SELECT ${quoteColumns}, o.id AS "orderId", o.request_id AS "requestId",
+    o.recovery_token_hash AS "recoveryTokenHash", o.created_at AS "orderCreatedAt",
+    a.id AS "attemptId", a.provider_reference AS "providerReference", a.expires_at AS "pixExpiresAt",
+    a.pix_qr_code AS "pixQrCode", a.pix_qr_code_url AS "pixQrCodeUrl",
+    op.state AS "operationState", op.last_error_code AS "operationErrorCode", op.updated_at AS "operationUpdatedAt",
+    p.provider_status AS "paymentStatus", p.observed_at AS "paymentObservedAt",
+    COALESCE(p.credited, false) AS credited
+    FROM ${giftOrder} o
+    INNER JOIN ${giftQuoteRecord} q ON q.id = o.quote_id AND q.site_id = o.site_id AND q.account_id = o.account_id AND q.environment = o.environment
+    INNER JOIN ${giftCheckoutAttempt} a ON a.order_id = o.id AND a.site_id = o.site_id AND a.account_id = o.account_id AND a.environment = o.environment AND a.attempt_number = 1
+    INNER JOIN ${financialOperation} op ON op.id = a.operation_id AND op.order_id = o.id AND op.kind = 'CHECKOUT_CREATE'
+      AND op.site_id = o.site_id AND op.account_id = o.account_id AND op.environment = o.environment
+    LEFT JOIN LATERAL (
+      SELECT pr.provider_status, pr.observed_at, EXISTS (SELECT 1 FROM ${financialLedgerEntry} l
+        WHERE l.payment_id = pr.id AND l.site_id = pr.site_id AND l.account_id = pr.account_id AND l.environment = pr.environment
+          AND l.kind = 'GIFT_RECEIVED' AND l.direction = 'CREDIT') AS credited
+      FROM ${giftPaymentRecord} pr
+      WHERE pr.order_id = o.id AND pr.attempt_id = a.id AND pr.site_id = o.site_id AND pr.account_id = o.account_id
+        AND pr.environment = o.environment AND pr.verification_status = 'VERIFIED'
+      ORDER BY pr.created_at DESC, pr.id LIMIT 1
+    ) p ON true
+    WHERE ${where}`;
+}
+
+function time(value: unknown): Date {
+  return readDatabaseTimestamp(value);
+}
+
+function project(raw: Record<string, unknown>): GiftCheckoutRecord {
+  const row = {
+    ...raw,
+    createdAt: time(raw.createdAt),
+    expiresAt: time(raw.expiresAt),
+    orderCreatedAt: time(raw.orderCreatedAt),
+    operationUpdatedAt: time(raw.operationUpdatedAt),
+    pixExpiresAt: raw.pixExpiresAt === null ? null : time(raw.pixExpiresAt),
+    paymentObservedAt:
+      raw.paymentObservedAt === null ? null : time(raw.paymentObservedAt),
+  } as unknown as CheckoutRow;
+  const quoteSnapshot = snapshot(row);
+  let state: GiftCheckoutRecord["state"];
+  let observedAt: Date | null = row.operationUpdatedAt;
+  let closedReason: GiftCheckoutRecord["closedReason"] = null;
+  switch (row.operationState) {
+    case "REQUESTED":
+    case "CLAIMED":
+    case "PROCESSING":
+      state = "CREATING";
+      observedAt = null;
+      break;
+    case "UNKNOWN":
+      state = "OUTCOME_UNKNOWN";
+      observedAt = null;
+      break;
+    case "FAILED":
+      state = "CLOSED_UNPAID";
+      closedReason = "FAILED";
+      break;
+    case "CANCELLED":
+      state = "CLOSED_UNPAID";
+      closedReason =
+        row.operationErrorCode === "ORDER_EXPIRED" ? "EXPIRED" : "CANCELED";
+      break;
+    case "SUCCEEDED":
+      if (
+        row.paymentStatus === "REFUNDED" ||
+        row.paymentStatus === "CHARGEBACK"
+      ) {
+        state = "REFUNDED";
+        observedAt = row.paymentObservedAt ?? observedAt;
+      } else if (row.paymentStatus === "RECEIVED" && row.credited === true) {
+        state = "RECEIVED";
+        observedAt = row.paymentObservedAt ?? observedAt;
+      } else state = "AWAITING_PAYMENT";
+      break;
+    default:
+      return fail("EXTERNAL_OUTCOME_UNKNOWN");
+  }
+  let pix: GiftCheckoutPix | null = null;
+  if (row.pixQrCode !== null && row.pixExpiresAt !== null) {
+    const parsed = giftCheckoutPixSchema.safeParse({
+      qrCode: row.pixQrCode,
+      qrCodeUrl: row.pixQrCodeUrl,
+      expiresAt: row.pixExpiresAt.toISOString(),
+    });
+    if (!parsed.success) return fail("EXTERNAL_OUTCOME_UNKNOWN");
+    pix = parsed.data;
+  }
+  return {
+    siteId: row.siteId,
+    quoteId: row.quoteId,
+    requestId: row.requestId,
+    orderId: row.orderId,
+    attemptId: row.attemptId,
+    recoveryTokenHash: row.recoveryTokenHash,
+    quoteSnapshot,
+    createdAt: row.orderCreatedAt.toISOString(),
+    state,
+    observedAt: observedAt === null ? null : observedAt.toISOString(),
+    closedReason,
+    providerOrderId: row.providerReference,
+    pix,
+  };
+}
+
 async function readRecord(
   tx: GiftCheckoutReader,
   siteId: string,
   requestId: string,
-  options: GiftCheckoutRepositoryOptions,
 ): Promise<GiftCheckoutRecord | null> {
-  const result =
-    await tx.execute(sql`SELECT ${quoteColumns}, o.id AS "orderId", o.request_id AS "requestId",
-    o.request_hash AS "requestHash", o.recovery_token_hash AS "recoveryTokenHash", o.created_at AS "orderCreatedAt"
-    FROM ${giftOrder} o INNER JOIN ${giftQuoteRecord} q ON q.id = o.quote_id
-      AND q.site_id = o.site_id AND q.account_id = o.account_id AND q.environment = o.environment
-    WHERE o.site_id = ${siteId} AND o.request_id = ${requestId}`);
+  const result = await tx.execute(
+    checkoutQuery(sql`o.site_id = ${siteId} AND o.request_id = ${requestId}`),
+  );
   if (result.rows.length === 0) return null;
-  const row = {
-    ...result.rows[0],
-    createdAt: readDatabaseTimestamp(result.rows[0].createdAt),
-    expiresAt: readDatabaseTimestamp(result.rows[0].expiresAt),
-    orderCreatedAt: readDatabaseTimestamp(result.rows[0].orderCreatedAt),
-  } as unknown as OrderRow;
-  if (
-    result.rows.length !== 1 ||
-    row.siteId !== siteId ||
-    row.requestId !== requestId ||
-    !/^[a-f0-9]{64}$/.test(row.recoveryTokenHash) ||
-    row.requestHash !== requestHash(row)
-  )
-    return fail("EXTERNAL_OUTCOME_UNKNOWN");
-  const quoteSnapshot = snapshot(row);
-  const attempts =
-    await tx.execute(sql`SELECT a.id AS "attemptId", a.site_id AS "siteId", a.account_id AS "accountId",
-    a.environment, a.order_id AS "orderId", a.operation_id AS "operationId", a.attempt_number AS "attemptNumber",
-    a.provider_reference AS "providerReference", a.hosted_url AS "hostedUrl", a.expires_at AS "expiresAt",
-    a.installment_expiry_payment_references AS "installmentExpiryPaymentReferences", op.kind AS "operationKind",
-    op.state AS "operationState", op.last_error_code AS "operationLastErrorCode", op.attempts AS "operationAttempts", op.request_id AS "operationRequestId", op.request_hash AS "operationRequestHash",
-    op.request_snapshot AS "requestSnapshot", op.provider_operation_reference AS "providerOperationReference",
-    op.lease_owner AS "leaseOwner", op.lease_token AS "leaseToken", op.lease_expires_at AS "leaseExpiresAt", op.updated_at AS "updatedAt"
-    FROM ${giftCheckoutAttempt} a INNER JOIN ${financialOperation} op ON op.id = a.operation_id
-      AND op.site_id = a.site_id AND op.account_id = a.account_id AND op.environment = a.environment
-      AND op.order_id = a.order_id AND op.kind = a.operation_kind AND op.kind = 'CHECKOUT_CREATE'
-    WHERE a.site_id = ${siteId} AND a.account_id = ${row.accountId} AND a.environment = ${row.environment} AND a.order_id = ${row.orderId}
-    ORDER BY a.attempt_number, a.id`);
-  const attemptRows = attempts.rows.map((raw) => ({
-    ...raw,
-    updatedAt: readDatabaseTimestamp(raw.updatedAt),
-    expiresAt:
-      raw.expiresAt === null ? null : readDatabaseTimestamp(raw.expiresAt),
-    leaseExpiresAt:
-      raw.leaseExpiresAt === null
-        ? null
-        : readDatabaseTimestamp(raw.leaseExpiresAt),
-  })) as unknown as AttemptRow[];
-  const attempt = attemptRows[0];
-  if (
-    !attempt ||
-    attemptRows.some((value) => {
-      const identity = {
-        siteId,
-        requestId,
-        quoteId: row.quoteId,
-        orderId: row.orderId,
-        attemptId: value.attemptId,
-        recoveryTokenHash: row.recoveryTokenHash,
-        createdAt: instant(row.orderCreatedAt),
-      };
-      const expected = operationSnapshot(row, identity);
-      const sealed = value.requestSnapshot?.preDispatchRejection !== undefined;
-      return (
-        !scoped(value, row) ||
-        value.orderId !== row.orderId ||
-        value.operationId !== value.attemptId ||
-        value.operationKind !== "CHECKOUT_CREATE" ||
-        value.operationRequestId !== requestId ||
-        value.operationRequestHash !== row.requestHash ||
-        !isDeepStrictEqual(
-          value.requestSnapshot,
-          sealed
-            ? {
-                ...expected,
-                preDispatchRejection: preDispatchRejection(
-                  identity,
-                  row.expiresAt,
-                ),
-              }
-            : expected,
-        )
-      );
-    })
-  )
-    return fail("EXTERNAL_OUTCOME_UNKNOWN");
-  const record: GiftCheckoutRecord = {
-    siteId,
-    requestId,
-    quoteId: row.quoteId,
-    orderId: row.orderId,
-    attemptId: attempt.attemptId,
-    recoveryTokenHash: row.recoveryTokenHash,
-    quoteSnapshot,
-    createdAt: instant(row.orderCreatedAt),
-    state: "OUTCOME_UNKNOWN",
-    observedAt: instant(attempt.updatedAt),
-    closedReason: null,
-    checkout: null,
-    evidence: null,
-  };
-  validIdentity(record);
-  const payments =
-    await tx.execute(sql`SELECT p.id, p.site_id AS "siteId", p.account_id AS "accountId", p.environment,
-    p.order_id AS "orderId", p.attempt_id AS "attemptId", p.provider_payment_reference AS "providerPaymentReference",
-    p.provider_status AS "providerStatus", p.verification_status AS "verificationStatus", p.observed_at AS "observedAt",
-    p.currency, p.gross_cents AS "grossCents", p.processing_cents AS "processingCents", p.commission_cents AS "commissionCents",
-    p.recipient_net_cents AS "recipientNetCents", p.split_provider_reference AS "splitProviderReference", p.split_fixed_cents AS "splitFixedCents",
-    p.provider_installment_reference AS "providerInstallmentReference", p.installment_number AS "installmentNumber"
-    FROM ${giftPaymentRecord} p WHERE p.site_id = ${siteId} AND p.account_id = ${row.accountId}
-      AND p.environment = ${row.environment} AND p.order_id = ${row.orderId} ORDER BY p.id`);
-  const paymentRows = payments.rows.map((raw) => ({
-    ...raw,
-    observedAt: readDatabaseTimestamp(raw.observedAt),
-  })) as unknown as PaymentRow[];
-  const ledgers =
-    await tx.execute(sql`SELECT l.id, l.site_id AS "siteId", l.account_id AS "accountId", l.environment,
-    l.payment_id AS "paymentId", l.operation_id AS "operationId", l.event_id AS "eventId", l.compensates_entry_id AS "compensatesEntryId",
-    l.kind, l.direction, l.currency, l.amount_cents AS "amountCents", l.effect_key AS "effectKey"
-    FROM ${financialLedgerEntry} l WHERE l.site_id = ${siteId} AND l.account_id = ${row.accountId} AND l.environment = ${row.environment}
-      AND (l.payment_id IN (SELECT p.id FROM ${giftPaymentRecord} p WHERE p.site_id = ${siteId} AND p.account_id = ${row.accountId}
-        AND p.environment = ${row.environment} AND p.order_id = ${row.orderId})
-        OR l.operation_id IN (SELECT op.id FROM ${financialOperation} op WHERE op.site_id = ${siteId} AND op.account_id = ${row.accountId}
-          AND op.environment = ${row.environment} AND op.order_id = ${row.orderId})
-        OR l.compensates_entry_id IN (SELECT original.id FROM ${financialLedgerEntry} original INNER JOIN ${giftPaymentRecord} p
-          ON p.id = original.payment_id AND p.site_id = original.site_id AND p.account_id = original.account_id AND p.environment = original.environment
-          WHERE p.site_id = ${siteId} AND p.account_id = ${row.accountId} AND p.environment = ${row.environment} AND p.order_id = ${row.orderId})) ORDER BY l.id`);
-  const ledgerRows = ledgers.rows as unknown as LedgerRow[];
-  if (
-    paymentRows.some(
-      (payment) =>
-        !scoped(payment, row) ||
-        payment.orderId !== row.orderId ||
-        !attempts.rows.some((raw) => raw.attemptId === payment.attemptId),
-    ) ||
-    ledgerRows.some((ledger) => !scoped(ledger, row))
-  )
-    return fail("EXTERNAL_OUTCOME_UNKNOWN");
-  const clock = now(options);
-  const validTime = (date: Date | null): date is Date =>
-    date instanceof Date &&
-    Number.isFinite(date.getTime()) &&
-    compareDatabaseTimestamps(date, row.orderCreatedAt) >= 0 &&
-    compareDatabaseTimestamps(date, clock) <= 0;
-  if (attempts.rows.length !== 1 || !validTime(attempt.updatedAt))
-    return record;
-  // A prior receipt cannot erase authenticated uncertainty or a reversal. Keep
-  // public recovery locked until the correlated durable events are resolved.
-  const unresolved =
-    await tx.execute(sql`SELECT e.id FROM ${financialEventInbox} e
-    WHERE e.site_id = ${siteId} AND e.account_id = ${row.accountId} AND e.environment = ${row.environment}
-      AND e.authenticated_at IS NOT NULL AND e.state <> 'PROCESSED'
-      AND (starts_with(e.event_type, 'PAYMENT_') OR starts_with(e.event_type, 'CHECKOUT_'))
-      AND (e.payload->>'externalReference' = ${attempt.attemptId}
-        OR (${attempt.providerReference}::text IS NOT NULL AND e.payload->>'checkoutId' = ${attempt.providerReference})
-        OR EXISTS (SELECT 1 FROM ${giftPaymentRecord} related WHERE related.site_id = ${siteId}
-          AND related.account_id = ${row.accountId} AND related.environment = ${row.environment} AND related.order_id = ${row.orderId}
-          AND (e.payment_id = related.id OR e.payload->>'paymentId' = related.provider_payment_reference))) LIMIT 1`);
-  if (unresolved.rows.length > 0) {
-    const projectedAt = now(options);
-    if (projectedAt.getTime() < clock.getTime())
-      return fail("EXTERNAL_OUTCOME_UNKNOWN");
-    return { ...record, observedAt: instant(projectedAt) };
-  }
-  if (attempt.requestSnapshot.preDispatchRejection !== undefined) {
-    if (
-      paymentRows.length === 0 &&
-      ledgerRows.length === 0 &&
-      attempt.attemptNumber === 1 &&
-      attempt.operationAttempts === 0 &&
-      ["CANCELLED", "FAILED"].includes(attempt.operationState) &&
-      attempt.providerReference === null &&
-      attempt.hostedUrl === null &&
-      attempt.expiresAt === null &&
-      attempt.providerOperationReference === null &&
-      attempt.leaseOwner === null &&
-      attempt.leaseToken === null &&
-      attempt.leaseExpiresAt === null &&
-      compareDatabaseTimestamps(attempt.updatedAt, row.orderCreatedAt) === 0 &&
-      compareDatabaseTimestamps(row.orderCreatedAt, row.createdAt) >= 0
-    ) {
-      const evidence = preDispatchRejection(record, row.expiresAt);
-      return {
-        ...record,
-        state: "CLOSED_UNPAID",
-        closedReason: evidence.closedReason,
-        observedAt: record.createdAt,
-        evidence,
-      };
-    }
-    return record;
-  }
-  const checkout = checkoutResultSchema.safeParse({
-    orderId: row.orderId,
-    attemptId: attempt.attemptId,
-    quoteId: row.quoteId,
-    method: row.method,
-    mode: row.environment,
-    hostedUrl: attempt.hostedUrl,
-  });
-  const hosted =
-    attempt.operationState === "SUCCEEDED" &&
-    nonempty(attempt.providerReference) &&
-    attempt.providerReference === attempt.providerOperationReference &&
-    checkout.success &&
-    isSafeCheckoutContinuation(checkout.data.hostedUrl, row.recoveryTokenHash);
-  if (!hosted || !checkout.success || !nonempty(attempt.providerReference)) {
-    if (
-      paymentRows.length === 0 &&
-      ledgerRows.length === 0 &&
-      attempt.operationState === "FAILED" &&
-      attempt.operationLastErrorCode === "PROVIDER_REJECTED" &&
-      attempt.operationAttempts === 1 &&
-      attempt.attemptNumber === 1 &&
-      attempt.providerReference === null &&
-      attempt.hostedUrl === null &&
-      attempt.providerOperationReference === null
-    ) {
-      // The provider refused the creating call, so no charge exists.
-      const observedAt = instant(attempt.updatedAt);
-      return {
-        ...record,
-        state: "CLOSED_UNPAID",
-        observedAt,
-        closedReason: "FAILED",
-        checkout: null,
-        evidence: {
-          source: "backend",
-          kind: "PROVIDER_REJECTION",
-          siteId: record.siteId,
-          quoteId: record.quoteId,
-          requestId: record.requestId,
-          orderId: record.orderId,
-          attemptId: record.attemptId,
-          recoveryTokenHash: record.recoveryTokenHash,
-          observedAt,
-          noProviderCharge: true,
-          closedReason: "FAILED",
-        },
-      };
-    }
-    if (
-      paymentRows.length === 0 &&
-      ledgerRows.length === 0 &&
-      attempt.operationState === "PROCESSING" &&
-      attempt.operationAttempts === 1 &&
-      attempt.attemptNumber === 1 &&
-      attempt.providerReference === null &&
-      attempt.hostedUrl === null &&
-      attempt.providerOperationReference === null &&
-      attempt.leaseToken === attempt.attemptId &&
-      nonempty(attempt.leaseOwner) &&
-      attempt.leaseExpiresAt instanceof Date &&
-      compareDatabaseTimestamps(attempt.leaseExpiresAt, clock) >= 0
-    ) {
-      record.state = "CREATING";
-      record.observedAt = null;
-    }
-    return record;
-  }
-  const evidence: GiftCheckoutEvidence = {
-    kind: "HOSTED_CHECKOUT",
-    source: "provider",
-    siteId,
-    orderId: row.orderId,
-    attemptId: attempt.attemptId,
-    provider: quoteSnapshot.receiving.provider,
-    accountReference: quoteSnapshot.receiving.accountReference,
-    environment: row.environment,
-    providerCheckoutReference: attempt.providerReference,
-    observedAt: instant(attempt.updatedAt),
-  };
-  async function receiptEventIsVerified(
-    paymentId: string,
-    eventId: string | null,
-  ) {
-    if (eventId === null) return true;
-    const events =
-      await tx.execute(sql`SELECT e.id, e.site_id AS "siteId", e.account_id AS "accountId", e.environment,
-      e.payment_id AS "paymentId", e.event_type AS "eventType", e.state, e.authenticated_at AS "authenticatedAt", e.processed_at AS "processedAt"
-      FROM ${financialEventInbox} e WHERE e.site_id = ${siteId} AND e.account_id = ${row.accountId} AND e.environment = ${row.environment} AND e.id = ${eventId}`);
-    const event = events.rows[0];
-    if (
-      events.rows.length !== 1 ||
-      !event ||
-      event.id !== eventId ||
-      !scoped(event as unknown as GiftCheckoutAccountScope, row) ||
-      event.paymentId !== paymentId ||
-      !isGiftReceiptEvent(event.eventType) ||
-      event.state !== "PROCESSED" ||
-      event.authenticatedAt === null ||
-      event.processedAt === null
-    )
-      return false;
-    const authenticated = readDatabaseTimestamp(event.authenticatedAt);
-    const processed = readDatabaseTimestamp(event.processedAt);
-    return (
-      validTime(authenticated) &&
-      validTime(processed) &&
-      compareDatabaseTimestamps(processed, authenticated) >= 0
-    );
-  }
-
-  const count = quoteSnapshot.quote.installmentCount ?? 1;
-  if (count > 1) {
-    const unpaid = paymentRows.every(
-      (payment) =>
-        payment.verificationStatus === "VERIFIED" &&
-        payment.providerStatus !== null &&
-        ["PENDING", "OVERDUE"].includes(payment.providerStatus) &&
-        payment.attemptId === attempt.attemptId &&
-        payment.providerInstallmentReference === attempt.providerReference &&
-        validTime(payment.observedAt),
-    );
-    if (unpaid && ledgerRows.length === 0) {
-      if (
-        attempt.operationLastErrorCode === giftInstallmentExpiryConfirmedCode
-      ) {
-        if (
-          !readInstallmentExpiryPaymentReferences(
-            attempt.installmentExpiryPaymentReferences,
-            count,
-          ) ||
-          !validTime(attempt.updatedAt) ||
-          (
-            await tx.execute(
-              checkoutPaymentFacts({
-                siteId,
-                accountId: row.accountId,
-                environment: row.environment,
-                orderId: row.orderId,
-                attemptId: attempt.attemptId,
-                checkoutReference: attempt.providerReference,
-              }),
-            )
-          ).rows.length
-        )
-          return record;
-        const observedAt = instant(attempt.updatedAt);
-        return {
-          ...record,
-          state: "CLOSED_UNPAID",
-          observedAt,
-          closedReason: "EXPIRED",
-          evidence: {
-            ...evidence,
-            kind: "CLOSED_UNPAID",
-            observedAt,
-            noOutstandingPayment: true,
-            closedReason: "EXPIRED",
-          },
-        };
-      }
-      const deletionEvents =
-        await tx.execute(sql`SELECT e.id, e.site_id AS "siteId", e.account_id AS "accountId", e.environment,
-        e.event_type AS "eventType", e.state, e.payload, e.payload_hash AS "payloadHash", e.provider_event_reference AS "providerEventReference",
-        e.authenticated_at AS "authenticatedAt", e.received_at AS "receivedAt", e.processed_at AS "processedAt", e.last_error_code AS "lastErrorCode"
-        FROM ${financialEventInbox} e WHERE e.site_id = ${siteId} AND e.account_id = ${row.accountId} AND e.environment = ${row.environment}
-        AND e.event_type = 'PAYMENT_DELETED' AND e.state = 'PROCESSED' AND e.last_error_code = 'PAYMENT_DELETED_INSTALLMENT_EMPTY'
-        AND e.payload->>'externalReference' = ${attempt.attemptId} AND e.payload->>'installmentId' = ${attempt.providerReference}
-        ORDER BY e.processed_at DESC, e.id`);
-      for (const event of deletionEvents.rows) {
-        const payload = event.payload as Record<string, string> | null;
-        if (
-          !scoped(event as unknown as GiftCheckoutAccountScope, row) ||
-          event.eventType !== "PAYMENT_DELETED" ||
-          event.state !== "PROCESSED" ||
-          event.lastErrorCode !== "PAYMENT_DELETED_INSTALLMENT_EMPTY" ||
-          !nonempty(event.providerEventReference) ||
-          payload?.externalReference !== attempt.attemptId ||
-          payload.installmentId !== attempt.providerReference ||
-          !nonempty(payload.paymentId) ||
-          Object.keys(payload).length !== 3 ||
-          event.payloadHash !==
-            hashAsaasEventIdentity(
-              event.providerEventReference,
-              "PAYMENT_DELETED",
-              quoteSnapshot.receiving.accountReference,
-              payload,
-            ) ||
-          event.receivedAt === null ||
-          event.authenticatedAt === null ||
-          event.processedAt === null
-        )
-          continue;
-        const received = readDatabaseTimestamp(event.receivedAt);
-        const authenticated = readDatabaseTimestamp(event.authenticatedAt);
-        const processed = readDatabaseTimestamp(event.processedAt);
-        if (
-          !validTime(received) ||
-          !validTime(authenticated) ||
-          !validTime(processed) ||
-          compareDatabaseTimestamps(authenticated, received) < 0 ||
-          compareDatabaseTimestamps(processed, authenticated) < 0
-        )
-          continue;
-        const observedAt = instant(processed);
-        return {
-          ...record,
-          state: "CLOSED_UNPAID",
-          observedAt,
-          closedReason: "CANCELED",
-          evidence: {
-            ...evidence,
-            kind: "CLOSED_UNPAID",
-            observedAt,
-            noOutstandingPayment: true,
-            closedReason: "CANCELED",
-          },
-        };
-      }
-      if (
-        clock.getTime() - attempt.updatedAt.getTime() >=
-        giftInstallmentExpiryMinutes * 60_000
-      )
-        return record;
-      return {
-        ...record,
-        state: "AWAITING_PAYMENT",
-        checkout: checkout.data,
-        evidence,
-      };
-    }
-    if (paymentRows.length !== count) return record;
-    const positions = new Set<number>();
-    const paymentReferences = new Set<string>();
-    let confirmed: GiftCheckoutEvidence | undefined;
-    let settled: GiftCheckoutEvidence | undefined;
-    let settledCount = 0;
-    for (const payment of paymentRows) {
-      const terms = giftPaymentTerms(
-        quoteSnapshot.quote,
-        payment.installmentNumber,
-      );
-      const processing = giftCentsSchema.safeParse(payment.processingCents);
-      const net = giftCentsSchema.safeParse(payment.recipientNetCents);
-      if (
-        !terms ||
-        payment.installmentNumber === null ||
-        positions.has(payment.installmentNumber) ||
-        payment.attemptId !== attempt.attemptId ||
-        payment.providerInstallmentReference !== attempt.providerReference ||
-        !nonempty(payment.providerPaymentReference) ||
-        paymentReferences.has(payment.providerPaymentReference) ||
-        payment.verificationStatus !== "VERIFIED" ||
-        !validTime(payment.observedAt) ||
-        payment.currency !== row.currency ||
-        payment.grossCents !== terms.grossCents ||
-        !processing.success ||
-        !net.success ||
-        net.data === 0 ||
-        terms.grossCents !==
-          processing.data + terms.commissionCents + net.data ||
-        payment.splitFixedCents !== terms.commissionCents ||
-        (terms.commissionCents > 0 && !nonempty(payment.splitProviderReference))
-      )
-        return record;
-      positions.add(payment.installmentNumber);
-      paymentReferences.add(payment.providerPaymentReference);
-      const related = ledgerRows.filter(
-        (ledger) => ledger.paymentId === payment.id,
-      );
-      const paymentObservedAt = payment.observedAt;
-      const observedAt = instant(paymentObservedAt);
-      if (
-        payment.providerStatus === "RECEIVED" &&
-        payment.commissionCents === terms.commissionCents &&
-        related.length === 1
-      ) {
-        const ledger = related[0];
-        if (
-          ledger.kind !== "GIFT_RECEIVED" ||
-          ledger.direction !== "CREDIT" ||
-          ledger.currency !== row.currency ||
-          ledger.amountCents !== net.data ||
-          ledger.effectKey !==
-            giftReceivedEffectKey(payment.providerPaymentReference) ||
-          ledger.compensatesEntryId !== null ||
-          (ledger.operationId !== null &&
-            ledger.operationId !== attempt.operationId) ||
-          !giftQuoteSchema.shape.siteId.safeParse(ledger.id).success
-        )
-          return record;
-        if (!(await receiptEventIsVerified(payment.id, ledger.eventId)))
-          return record;
-        settledCount++;
-        if (!settled || observedAt > settled.observedAt)
-          settled = {
-            ...evidence,
-            kind: "SETTLEMENT",
-            observedAt,
-            providerPaymentReference: payment.providerPaymentReference,
-            ledgerEntryId: ledger.id,
-          };
-      } else if (
-        payment.providerStatus === "CONFIRMED" &&
-        payment.commissionCents === null &&
-        related.length === 0
-      ) {
-        const events =
-          await tx.execute(sql`SELECT e.id, e.site_id AS "siteId", e.account_id AS "accountId", e.environment,
-          e.payment_id AS "paymentId", e.event_type AS "eventType", e.state, e.payload, e.payload_hash AS "payloadHash",
-          e.provider_event_reference AS "providerEventReference", e.authenticated_at AS "authenticatedAt", e.processed_at AS "processedAt"
-          FROM ${financialEventInbox} e WHERE e.site_id = ${siteId} AND e.account_id = ${row.accountId} AND e.environment = ${row.environment}
-          AND e.payment_id = ${payment.id} AND e.event_type = 'PAYMENT_CONFIRMED' AND e.state = 'PROCESSED'`);
-        const event = events.rows.find((event) => {
-          const payload = event.payload as Record<string, string> | null;
-          return (
-            event.paymentId === payment.id &&
-            scoped(event as unknown as GiftCheckoutAccountScope, row) &&
-            event.eventType === "PAYMENT_CONFIRMED" &&
-            event.state === "PROCESSED" &&
-            nonempty(event.providerEventReference) &&
-            giftQuoteSchema.shape.siteId.safeParse(event.id).success &&
-            payload?.paymentId === payment.providerPaymentReference &&
-            payload.externalReference === attempt.attemptId &&
-            event.payloadHash ===
-              hashAsaasEventIdentity(
-                event.providerEventReference,
-                "PAYMENT_CONFIRMED",
-                quoteSnapshot.receiving.accountReference,
-                payload,
-              ) &&
-            event.authenticatedAt !== null &&
-            event.processedAt !== null &&
-            compareDatabaseTimestamps(
-              paymentObservedAt,
-              readDatabaseTimestamp(event.authenticatedAt),
-            ) >= 0 &&
-            compareDatabaseTimestamps(
-              paymentObservedAt,
-              readDatabaseTimestamp(event.processedAt),
-            ) <= 0
-          );
-        });
-        if (
-          !event ||
-          !nonempty(event.providerEventReference) ||
-          typeof event.id !== "string"
-        )
-          return record;
-        if (!confirmed || observedAt > confirmed.observedAt)
-          confirmed = {
-            ...evidence,
-            kind: "PAYMENT_CONFIRMATION",
-            observedAt,
-            providerPaymentReference: payment.providerPaymentReference,
-            providerEventReference: event.providerEventReference,
-            eventId: event.id,
-          };
-      } else return record;
-    }
-    if (ledgerRows.length !== settledCount) return record;
-    if (settledCount === count && settled)
-      return {
-        ...record,
-        state: "RECEIVED",
-        observedAt: settled.observedAt,
-        evidence: settled,
-      };
-    if (confirmed)
-      return {
-        ...record,
-        state: "CONFIRMED",
-        observedAt: confirmed.observedAt,
-        evidence: confirmed,
-      };
-    return record;
-  }
-  const payment = paymentRows[0];
-  const ledger = ledgerRows[0];
-  const actualProcessing = giftCentsSchema.safeParse(payment?.processingCents);
-  const recipientNet = giftCentsSchema.safeParse(payment?.recipientNetCents);
-  if (
-    paymentRows.length === 1 &&
-    ledgerRows.length === 0 &&
-    row.method === "CREDIT_CARD" &&
-    payment &&
-    payment.attemptId === attempt.attemptId &&
-    nonempty(payment.providerPaymentReference) &&
-    payment.providerStatus === "CONFIRMED" &&
-    payment.verificationStatus === "VERIFIED" &&
-    validTime(payment.observedAt) &&
-    payment.currency === row.currency &&
-    payment.grossCents === row.totalCents &&
-    actualProcessing.success &&
-    recipientNet.success &&
-    recipientNet.data > 0 &&
-    BigInt(row.totalCents) ===
-      BigInt(actualProcessing.data) +
-        BigInt(row.commissionCents) +
-        BigInt(recipientNet.data) &&
-    payment.commissionCents === null &&
-    payment.splitFixedCents === row.commissionCents &&
-    (row.commissionCents === 0 || nonempty(payment.splitProviderReference))
-  ) {
-    const events =
-      await tx.execute(sql`SELECT e.id, e.site_id AS "siteId", e.account_id AS "accountId", e.environment,
-      e.payment_id AS "paymentId", e.event_type AS "eventType", e.state, e.payload, e.payload_hash AS "payloadHash",
-      e.provider_event_reference AS "providerEventReference", e.authenticated_at AS "authenticatedAt",
-      e.received_at AS "receivedAt", e.processed_at AS "processedAt"
-      FROM ${financialEventInbox} e WHERE e.site_id = ${siteId} AND e.account_id = ${row.accountId} AND e.environment = ${row.environment}
-        AND (starts_with(e.event_type, 'PAYMENT_') OR starts_with(e.event_type, 'CHECKOUT_'))
-        AND (e.payment_id = ${payment.id} OR e.payload->>'paymentId' = ${payment.providerPaymentReference}
-          OR e.payload->>'externalReference' = ${attempt.attemptId} OR e.payload->>'checkoutId' = ${attempt.providerReference})`);
-    let confirmation: {
-      eventId: string;
-      providerEventReference: string;
-    } | null = null;
-    for (const event of events.rows) {
-      const payload = event.payload as Record<string, string> | null;
-      const authenticated =
-        event.authenticatedAt === null
-          ? null
-          : readDatabaseTimestamp(event.authenticatedAt);
-      const received =
-        event.receivedAt === null
-          ? null
-          : readDatabaseTimestamp(event.receivedAt);
-      const processed =
-        event.processedAt === null
-          ? null
-          : readDatabaseTimestamp(event.processedAt);
-      if (
-        !scoped(event as unknown as GiftCheckoutAccountScope, row) ||
-        !["PAYMENT_CONFIRMED", "CHECKOUT_CREATED", "CHECKOUT_PAID"].includes(
-          String(event.eventType),
-        ) ||
-        event.state !== "PROCESSED" ||
-        !giftQuoteSchema.shape.siteId.safeParse(event.id).success ||
-        !nonempty(event.providerEventReference) ||
-        !payload ||
-        typeof payload !== "object" ||
-        Array.isArray(payload) ||
-        (payload.externalReference !== undefined &&
-          payload.externalReference !== attempt.attemptId) ||
-        (payload.checkoutId !== undefined &&
-          payload.checkoutId !== attempt.providerReference) ||
-        (payload.paymentId !== undefined &&
-          payload.paymentId !== payment.providerPaymentReference) ||
-        Object.entries(payload).some(
-          ([key, value]) =>
-            !["paymentId", "checkoutId", "externalReference"].includes(key) ||
-            !nonempty(value),
-        ) ||
-        event.payloadHash !==
-          hashAsaasEventIdentity(
-            event.providerEventReference,
-            String(event.eventType),
-            quoteSnapshot.receiving.accountReference,
-            payload,
-          ) ||
-        !validTime(authenticated) ||
-        !validTime(received) ||
-        !validTime(processed) ||
-        compareDatabaseTimestamps(authenticated, received) < 0 ||
-        compareDatabaseTimestamps(processed, authenticated) < 0
-      )
-        return record;
-      if (event.eventType === "PAYMENT_CONFIRMED") {
-        if (
-          confirmation ||
-          event.paymentId !== payment.id ||
-          payload.paymentId !== payment.providerPaymentReference ||
-          compareDatabaseTimestamps(payment.observedAt, authenticated) < 0 ||
-          compareDatabaseTimestamps(payment.observedAt, processed) > 0
-        )
-          return record;
-        confirmation = {
-          eventId: event.id as string,
-          providerEventReference: event.providerEventReference,
-        };
-      } else if (payload.checkoutId !== attempt.providerReference)
-        return record;
-    }
-    if (confirmation)
-      return {
-        ...record,
-        state: "CONFIRMED",
-        observedAt: instant(payment.observedAt),
-        evidence: {
-          ...evidence,
-          kind: "PAYMENT_CONFIRMATION",
-          observedAt: instant(payment.observedAt),
-          providerPaymentReference: payment.providerPaymentReference,
-          ...confirmation,
-        },
-      };
-  }
-  if (
-    paymentRows.length === 1 &&
-    ledgerRows.length === 1 &&
-    payment &&
-    ledger &&
-    payment.attemptId === attempt.attemptId &&
-    nonempty(payment.providerPaymentReference) &&
-    payment.providerStatus === "RECEIVED" &&
-    payment.verificationStatus === "VERIFIED" &&
-    validTime(payment.observedAt) &&
-    payment.currency === row.currency &&
-    payment.grossCents === row.totalCents &&
-    actualProcessing.success &&
-    recipientNet.success &&
-    recipientNet.data > 0 &&
-    BigInt(row.totalCents) ===
-      BigInt(actualProcessing.data) +
-        BigInt(row.commissionCents) +
-        BigInt(recipientNet.data) &&
-    payment.commissionCents === row.commissionCents &&
-    payment.splitFixedCents === row.commissionCents &&
-    (row.commissionCents === 0 || nonempty(payment.splitProviderReference)) &&
-    ledger.paymentId === payment.id &&
-    ledger.kind === "GIFT_RECEIVED" &&
-    ledger.direction === "CREDIT" &&
-    ledger.currency === row.currency &&
-    ledger.amountCents === recipientNet.data &&
-    ledger.effectKey ===
-      giftReceivedEffectKey(payment.providerPaymentReference) &&
-    ledger.compensatesEntryId === null &&
-    (ledger.operationId === null || ledger.operationId === attempt.operationId)
-  ) {
-    if (
-      (await receiptEventIsVerified(payment.id, ledger.eventId)) &&
-      giftQuoteSchema.shape.siteId.safeParse(ledger.id).success
-    )
-      return {
-        ...record,
-        state: "RECEIVED",
-        observedAt: instant(payment.observedAt),
-        evidence: {
-          ...evidence,
-          kind: "SETTLEMENT",
-          observedAt: instant(payment.observedAt),
-          providerPaymentReference: payment.providerPaymentReference,
-          ledgerEntryId: ledger.id,
-        },
-      };
-  }
-  const lifecycle =
-    await tx.execute(sql`SELECT e.id, e.site_id AS "siteId", e.account_id AS "accountId", e.environment,
-    e.event_type AS "eventType", e.state, e.payload, e.payload_hash AS "payloadHash", e.provider_event_reference AS "providerEventReference",
-    e.authenticated_at AS "authenticatedAt", e.received_at AS "receivedAt", e.processed_at AS "processedAt", e.last_error_code AS "lastErrorCode"
-    FROM ${financialEventInbox} e WHERE e.site_id = ${siteId} AND e.account_id = ${row.accountId} AND e.environment = ${row.environment}
-      AND e.state = 'PROCESSED' AND e.event_type IN ('CHECKOUT_PAID','CHECKOUT_CANCELED','CHECKOUT_EXPIRED')
-      AND e.payload->>'checkoutId' = ${attempt.providerReference} ORDER BY e.processed_at DESC, e.id`);
-  let closed:
-    | { reason: "CANCELED" | "EXPIRED"; observedAt: string }
-    | undefined;
-  for (const event of lifecycle.rows) {
-    if (
-      !["CHECKOUT_PAID", "CHECKOUT_CANCELED", "CHECKOUT_EXPIRED"].includes(
-        String(event.eventType),
-      )
-    )
-      continue;
-    const payload = event.payload as Record<string, string> | null;
-    const date = (value: unknown) => {
-      try {
-        return readDatabaseTimestamp(value);
-      } catch {
-        return null;
-      }
-    };
-    const authenticated = date(event.authenticatedAt);
-    const received = date(event.receivedAt);
-    const processed = date(event.processedAt);
-    if (
-      !scoped(event as unknown as GiftCheckoutAccountScope, row) ||
-      event.state !== "PROCESSED" ||
-      !payload ||
-      payload.checkoutId !== attempt.providerReference ||
-      (payload.externalReference !== undefined &&
-        payload.externalReference !== attempt.attemptId) ||
-      Object.entries(payload).some(
-        ([key, value]) =>
-          !["checkoutId", "externalReference"].includes(key) ||
-          !nonempty(value),
-      ) ||
-      typeof event.providerEventReference !== "string" ||
-      event.payloadHash !==
-        hashAsaasEventIdentity(
-          event.providerEventReference,
-          String(event.eventType),
-          quoteSnapshot.receiving.accountReference,
-          payload,
-        ) ||
-      !validTime(authenticated) ||
-      !validTime(received) ||
-      !validTime(processed) ||
-      compareDatabaseTimestamps(authenticated, received) < 0 ||
-      compareDatabaseTimestamps(processed, authenticated) < 0
-    )
-      return record;
-    if (event.eventType === "CHECKOUT_PAID") return record;
-    const reason =
-      event.eventType === "CHECKOUT_CANCELED" ? "CANCELED" : "EXPIRED";
-    if (event.lastErrorCode === `${event.eventType}_EMPTY` && !closed)
-      closed = { reason, observedAt: instant(processed) };
-  }
-  if (closed && paymentRows.length === 0 && ledgerRows.length === 0)
-    return {
-      ...record,
-      state: "CLOSED_UNPAID",
-      closedReason: closed.reason,
-      observedAt: closed.observedAt,
-      evidence: {
-        ...evidence,
-        kind: "CLOSED_UNPAID",
-        observedAt: closed.observedAt,
-        noOutstandingPayment: true,
-        closedReason: closed.reason,
-      },
-    };
-  if (
-    ledgerRows.length === 0 &&
-    (paymentRows.length === 0 ||
-      (paymentRows.length === 1 &&
-        payment?.providerStatus === "PENDING" &&
-        payment.verificationStatus === "VERIFIED" &&
-        validTime(payment.observedAt))) &&
-    (attempt.expiresAt === null ||
-      (attempt.expiresAt instanceof Date &&
-        compareDatabaseTimestamps(attempt.expiresAt, clock) > 0))
-  ) {
-    return {
-      ...record,
-      state: "AWAITING_PAYMENT",
-      checkout: checkout.data,
-      evidence,
-    };
-  }
-  return record;
+  if (result.rows.length !== 1) return fail("EXTERNAL_OUTCOME_UNKNOWN");
+  return project(result.rows[0]);
 }
 
 async function lockEligibility(
@@ -1215,6 +410,7 @@ async function lockEligibility(
   row: QuoteRow,
   options: GiftCheckoutRepositoryOptions,
 ) {
+  const stored = snapshot(row);
   const accounts =
     await tx.execute(sql`SELECT id, site_id AS "siteId", environment, is_current AS "isCurrent",
     account_reference AS "accountReference", recipient_reference AS "recipientReference", operator_reference AS "operatorReference", provider FROM ${receivingAccount}
@@ -1223,13 +419,11 @@ async function lockEligibility(
     !accounts.rows.some(
       (value) =>
         value.id === row.accountId &&
-        value.siteId === row.siteId &&
-        value.environment === row.environment &&
         value.isCurrent === true &&
-        value.accountReference === snapshot(row).receiving.accountReference &&
-        value.provider === snapshot(row).receiving.provider &&
-        value.operatorReference === snapshot(row).receiving.operatorReference &&
-        value.recipientReference === snapshot(row).receiving.recipientReference,
+        value.accountReference === stored.receiving.accountReference &&
+        value.provider === stored.receiving.provider &&
+        value.operatorReference === stored.receiving.operatorReference &&
+        value.recipientReference === stored.receiving.recipientReference,
     )
   )
     throw new ReceivingReadinessServiceError();
@@ -1240,102 +434,42 @@ async function lockEligibility(
   await tx.execute(
     sql`SELECT id FROM ${giftItem} WHERE site_id = ${row.siteId} AND id = ${row.giftId} FOR UPDATE`,
   );
-  const scope: GiftCheckoutAccountScope = {
-    siteId: row.siteId,
-    accountId: row.accountId,
-    environment: row.environment,
-  };
   const receivingContext = structuredClone(
-    await options.loadStoredReceivingContext(tx, scope),
+    await options.loadStoredReceivingContext(tx, {
+      siteId: row.siteId,
+      accountId: row.accountId,
+      environment: row.environment,
+    }),
   );
   if (!receivingContext) throw new ReceivingReadinessServiceError();
-  assertReceivingReady(
+  const readiness = () =>
     evaluateReceivingReadiness({
       ...receivingContext,
       siteId: row.siteId,
       now: now(options),
-    }),
-  );
+    });
+  assertReceivingReady(readiness());
+  if (!sameBinding(stored.receiving, receivingContext.providerBinding))
+    throw new ReceivingReadinessServiceError();
   const gift = await findPublishedGiftForQuote(tx, row.siteId, row.giftId, {
     applicationEnvironment: receivingContext.environment,
     liveDemoSiteIds: receivingContext.liveDemoSiteIds,
     now: options.now,
-    readReadiness: async () =>
-      evaluateReceivingReadiness({
-        ...receivingContext,
-        siteId: row.siteId,
-        now: now(options),
-      }),
+    readReadiness: async () => readiness(),
   });
-  if (!sameBinding(snapshot(row).receiving, receivingContext.providerBinding))
-    throw new ReceivingReadinessServiceError();
-  assertReceivingReady(
-    evaluateReceivingReadiness({
-      ...receivingContext,
-      siteId: row.siteId,
-      now: now(options),
-    }),
-  );
   if (
     gift?.publicationState !== "PUBLISHED" ||
     gift.siteActive !== true ||
     gift.gift.id !== row.giftId ||
     gift.gift.siteId !== row.siteId ||
-    !publicGiftItemSchema.safeParse(gift.gift).success ||
-    (snapshot(row).pricing.provenance === "local-test" &&
-      (!receivingContext.isDemo ||
-        receivingContext.environment === "production" ||
-        row.environment !== "sandbox"))
+    !publicGiftItemSchema.safeParse(gift.gift).success
   )
     return fail("QUOTE_INVALID");
   return {
-    quoteSnapshot: snapshot(row),
+    quoteSnapshot: stored,
     receivingContext,
     gift: structuredClone(gift),
   };
-}
-
-async function lockedRecord(
-  tx: GiftCheckoutReader,
-  identity: GiftCheckoutIdentity,
-  options: GiftCheckoutRepositoryOptions,
-) {
-  await lockRequest(tx, identity.siteId, identity.requestId);
-  // Financial event writers must take this same order lock before posting payment effects.
-  await tx.execute(
-    sql`SELECT id FROM ${giftOrder} WHERE site_id = ${identity.siteId} AND id = ${identity.orderId} FOR UPDATE`,
-  );
-  const record = await readRecord(
-    tx,
-    identity.siteId,
-    identity.requestId,
-    options,
-  );
-  if (!record || !sameIdentity(record, identity))
-    return fail("EXTERNAL_OUTCOME_UNKNOWN");
-  const row = await quoteRow(tx, record.siteId, record.quoteId);
-  if (!row) return fail("EXTERNAL_OUTCOME_UNKNOWN");
-  return { record, row };
-}
-
-function noPaymentEffects(row: QuoteRow, identity: GiftCheckoutIdentity) {
-  return sql`NOT EXISTS (SELECT 1 FROM ${giftPaymentRecord} p WHERE p.site_id = ${identity.siteId}
-    AND p.account_id = ${row.accountId} AND p.environment = ${row.environment} AND p.order_id = ${identity.orderId})
-    AND NOT EXISTS (SELECT 1 FROM ${financialLedgerEntry} l WHERE l.site_id = ${identity.siteId}
-      AND l.account_id = ${row.accountId} AND l.environment = ${row.environment} AND l.operation_id = ${identity.attemptId})`;
-}
-
-function originalFence(
-  row: QuoteRow,
-  identity: GiftCheckoutRecord,
-  options: GiftCheckoutRepositoryOptions,
-) {
-  return sql`op.id = ${identity.attemptId} AND op.site_id = ${identity.siteId} AND op.account_id = ${row.accountId}
-    AND op.environment = ${row.environment} AND op.order_id = ${identity.orderId} AND op.request_id = ${identity.requestId}
-    AND op.kind = 'CHECKOUT_CREATE' AND op.state = 'PROCESSING' AND op.request_hash = ${requestHash(identity)}
-    AND op.lease_owner = ${options.instanceId} AND op.lease_token = ${identity.attemptId}
-    AND EXISTS (SELECT 1 FROM ${giftOrder} o WHERE o.id = op.order_id AND o.site_id = op.site_id
-      AND o.account_id = op.account_id AND o.environment = op.environment AND o.request_id = ${identity.requestId} AND o.quote_id = ${identity.quoteId})`;
 }
 
 function reservationInput(reservation: GiftCheckoutReservation) {
@@ -1364,28 +498,12 @@ function sameRequest(
     return fail("REQUEST_CONFLICT");
 }
 
-async function lockNewQuote(
-  tx: GiftCheckoutTransaction,
-  input: GiftCheckoutReservation,
-) {
-  const site = await tx.execute(
-    sql`SELECT id FROM site WHERE id = ${input.siteId} FOR UPDATE`,
-  );
-  if (site.rows.length !== 1 || site.rows[0]?.id !== input.siteId)
-    return fail("QUOTE_INVALID");
-  const row = await quoteRow(tx, input.siteId, input.quoteId, true);
-  if (!row || !isDeepStrictEqual(input.quoteSnapshot, snapshot(row)))
-    return fail("QUOTE_INVALID");
-  return row;
-}
-
 async function insertReservation(
   tx: GiftCheckoutTransaction,
   row: QuoteRow,
   input: GiftCheckoutReservation,
   options: GiftCheckoutRepositoryOptions,
   clock: Date,
-  dispatch: boolean,
 ) {
   const createdAt = new Date(input.createdAt);
   if (
@@ -1399,11 +517,8 @@ async function insertReservation(
     environment: row.environment,
   };
   const hash = requestHash(input);
-  const requestSnapshot = operationSnapshot(scope, input);
-  const leaseExpiresAt = dispatch
-    ? new Date(clock.getTime() + options.leaseMs)
-    : null;
-  if (leaseExpiresAt) instant(leaseExpiresAt);
+  const leaseExpiresAt = new Date(clock.getTime() + options.leaseMs);
+  instant(leaseExpiresAt);
   await tx.insert(giftOrder).values({
     ...scope,
     id: input.orderId,
@@ -1413,26 +528,22 @@ async function insertReservation(
     recoveryTokenHash: input.recoveryTokenHash,
     createdAt,
   });
+  // The lease token is the attempt id: it proves this instance dispatched it.
   await tx.insert(financialOperation).values({
     ...scope,
     id: input.attemptId,
     orderId: input.orderId,
     kind: "CHECKOUT_CREATE",
-    state: dispatch ? "PROCESSING" : "CANCELLED",
+    state: "PROCESSING",
     requestId: input.requestId,
     requestHash: hash,
-    requestSnapshot: dispatch
-      ? requestSnapshot
-      : {
-          ...requestSnapshot,
-          preDispatchRejection: preDispatchRejection(input, row.expiresAt),
-        },
-    leaseOwner: dispatch ? options.instanceId : null,
-    leaseToken: dispatch ? input.attemptId : null,
+    requestSnapshot: operationSnapshot(scope, input),
+    leaseOwner: options.instanceId,
+    leaseToken: input.attemptId,
     leaseExpiresAt,
-    attempts: dispatch ? 1 : 0,
+    attempts: 1,
     createdAt,
-    updatedAt: dispatch ? clock : createdAt,
+    updatedAt: clock,
   });
   await tx.insert(giftCheckoutAttempt).values({
     ...scope,
@@ -1443,278 +554,188 @@ async function insertReservation(
     attemptNumber: 1,
     createdAt,
   });
-  const record = await readRecord(tx, input.siteId, input.requestId, options);
-  if (
-    !record ||
-    (dispatch ? record.state !== "CREATING" : record.state !== "CLOSED_UNPAID")
-  )
-    return fail("EXTERNAL_OUTCOME_UNKNOWN");
+  const record = await readRecord(tx, input.siteId, input.requestId);
+  if (record?.state !== "CREATING") return fail("EXTERNAL_OUTCOME_UNKNOWN");
   return record;
 }
+
+function pixData(order: PagarmeOrderObservation) {
+  const pix = order.charges[0]?.pix ?? null;
+  if (pix === null) return null;
+  return giftCheckoutPixSchema.parse(pix);
+}
+
+async function bindOrder(
+  tx: GiftCheckoutReader,
+  identity: Pick<GiftCheckoutIdentity, "siteId" | "orderId" | "attemptId">,
+  order: PagarmeOrderObservation,
+  observedAt: string,
+) {
+  const at = instant(new Date(observedAt));
+  if (order.code !== identity.attemptId)
+    return fail("EXTERNAL_OUTCOME_UNKNOWN");
+  const pix = pixData(order);
+  const operation = await tx.execute(sql`UPDATE ${financialOperation}
+    SET state = 'SUCCEEDED', provider_operation_reference = ${order.id}, last_error_code = NULL,
+      updated_at = GREATEST(updated_at, ${at}::timestamptz),
+      lease_expires_at = GREATEST(lease_expires_at, updated_at, ${at}::timestamptz)
+    WHERE id = ${identity.attemptId} AND site_id = ${identity.siteId} AND order_id = ${identity.orderId}
+      AND kind = 'CHECKOUT_CREATE'
+      AND (state IN ('PROCESSING', 'UNKNOWN') OR (state = 'SUCCEEDED' AND provider_operation_reference = ${order.id}))
+    RETURNING id`);
+  if (operation.rows.length !== 1) return fail("EXTERNAL_OUTCOME_UNKNOWN");
+  const attempt = await tx.execute(sql`UPDATE ${giftCheckoutAttempt}
+    SET provider_reference = ${order.id},
+      expires_at = ${pix ? pix.expiresAt : null}::timestamptz,
+      pix_qr_code = ${pix?.qrCode ?? null}, pix_qr_code_url = ${pix?.qrCodeUrl ?? null}
+    WHERE id = ${identity.attemptId} AND site_id = ${identity.siteId} AND order_id = ${identity.orderId}
+      AND (provider_reference IS NULL OR provider_reference = ${order.id}) RETURNING id`);
+  if (attempt.rows.length !== 1) return fail("EXTERNAL_OUTCOME_UNKNOWN");
+}
+
+export type GiftCheckoutStore = GiftCheckoutRepository & {
+  bindRecoveredOrder(
+    binding: GiftCheckoutOrderBinding,
+    order: PagarmeOrderObservation,
+    observedAt: string,
+  ): Promise<void>;
+  closeMissingOrder(
+    binding: GiftCheckoutOrderBinding,
+    observedAt: string,
+  ): Promise<void>;
+};
 
 export function createGiftCheckoutRepository(
   db: GiftCheckoutDatabase,
   options: GiftCheckoutRepositoryOptions,
-): GiftCheckoutRepository {
+): GiftCheckoutStore {
   if (
     !giftQuoteSchema.shape.siteId.safeParse(options.instanceId).success ||
     !Number.isSafeInteger(options.leaseMs) ||
-    options.leaseMs <= 0 ||
-    options.leaseMs > 300_000 ||
-    typeof options.now !== "function" ||
-    typeof options.loadStoredReceivingContext !== "function"
+    options.leaseMs < 1_000
   )
     return fail("EXTERNAL_OUTCOME_UNKNOWN");
-  options = Object.freeze({ ...options });
+  async function transition(
+    identity: GiftCheckoutIdentity,
+    observedAt: string,
+    target: "UNKNOWN" | "FAILED",
+  ) {
+    validIdentity(identity);
+    const at = new Date(observedAt);
+    instant(at);
+    await guarded(() =>
+      db.transaction(async (tx) => {
+        const updated =
+          await tx.execute(sql`UPDATE ${financialOperation} SET state = ${target},
+          last_error_code = ${target === "FAILED" ? "PROVIDER_REJECTED" : null},
+          updated_at = GREATEST(updated_at, ${instant(at)}::timestamptz)
+          WHERE id = ${identity.attemptId} AND site_id = ${identity.siteId} AND order_id = ${identity.orderId}
+            AND kind = 'CHECKOUT_CREATE' AND state = 'PROCESSING' RETURNING id`);
+        if (updated.rows.length !== 1) return fail("EXTERNAL_OUTCOME_UNKNOWN");
+      }),
+    );
+  }
   return {
-    findQuote: (siteId, quoteId) =>
-      guarded(async () => {
+    findByRequest(siteId, requestId) {
+      return guarded(() => readRecord(db, siteId, requestId));
+    },
+    findQuote(siteId, quoteId) {
+      return guarded(async () => {
         const row = await quoteRow(db, siteId, quoteId);
         return row ? snapshot(row) : null;
-      }),
-    findByRequest: (siteId, requestId) =>
-      guarded(() =>
-        db.transaction((tx) => readRecord(tx, siteId, requestId, options), {
-          isolationLevel: "repeatable read",
-          accessMode: "read only",
-        }),
-      ),
-    sealUncreatedRequest: (reservation) =>
-      guarded(async () => {
-        const input = reservationInput(reservation);
-        return db.transaction(
-          async (tx) => {
-            await lockRequest(tx, input.siteId, input.requestId);
-            const existing = await readRecord(
-              tx,
-              input.siteId,
-              input.requestId,
-              options,
-            );
-            if (existing) {
-              sameRequest(existing, input);
-              return existing;
-            }
-            const row = await lockNewQuote(tx, input);
-            return insertReservation(
+      });
+    },
+    reserve(reservation, assertLockedEligibility) {
+      const input = reservationInput(reservation);
+      return guarded(() =>
+        db.transaction(async (tx) => {
+          await lockRequest(tx, input.siteId, input.requestId);
+          const existing = await readRecord(tx, input.siteId, input.requestId);
+          if (existing) {
+            sameRequest(existing, input);
+            return { created: false, record: existing };
+          }
+          const site = await tx.execute(
+            sql`SELECT id FROM site WHERE id = ${input.siteId} FOR UPDATE`,
+          );
+          if (site.rows.length !== 1) return fail("QUOTE_INVALID");
+          const row = await quoteRow(tx, input.siteId, input.quoteId, true);
+          if (!row || !isDeepStrictEqual(input.quoteSnapshot, snapshot(row)))
+            return fail("QUOTE_INVALID");
+          const ordered = await tx.execute(
+            checkoutQuery(
+              sql`o.site_id = ${input.siteId} AND o.account_id = ${row.accountId} AND o.environment = ${row.environment} AND o.quote_id = ${input.quoteId}`,
+            ),
+          );
+          if (ordered.rows.length) return fail("REQUEST_CONFLICT");
+          assertLockedEligibility(await lockEligibility(tx, row, options));
+          return {
+            created: true,
+            record: await insertReservation(
               tx,
               row,
               input,
               options,
               now(options),
-              false,
-            );
-          },
-          { isolationLevel: "read committed" },
+            ),
+          };
+        }),
+      );
+    },
+    saveOrder(identity, order, observedAt) {
+      validIdentity(identity);
+      return guarded(() =>
+        db.transaction(async (tx) => {
+          await bindOrder(tx, identity, order, observedAt);
+          const record = await readRecord(
+            tx,
+            identity.siteId,
+            identity.requestId,
+          );
+          if (!record || record.attemptId !== identity.attemptId)
+            return fail("EXTERNAL_OUTCOME_UNKNOWN");
+          return record;
+        }),
+      );
+    },
+    bindRecoveredOrder(binding, order, observedAt) {
+      return guarded(() =>
+        db.transaction((tx) => bindOrder(tx, binding, order, observedAt)),
+      );
+    },
+    closeMissingOrder(binding, observedAt) {
+      const at = instant(new Date(observedAt));
+      return guarded(async () => {
+        const updated = await db.execute(sql`UPDATE ${financialOperation}
+          SET state = 'FAILED', last_error_code = 'ORDER_NOT_FOUND', updated_at = GREATEST(updated_at, ${at}::timestamptz)
+          WHERE id = ${binding.attemptId} AND site_id = ${binding.siteId} AND order_id = ${binding.orderId}
+            AND kind = 'CHECKOUT_CREATE' AND state IN ('PROCESSING', 'UNKNOWN') RETURNING id`);
+        if (updated.rows.length !== 1) return fail("EXTERNAL_OUTCOME_UNKNOWN");
+      });
+    },
+    markOutcomeUnknown(identity, observedAt) {
+      return transition(identity, observedAt, "UNKNOWN");
+    },
+    markProviderRejected(identity, observedAt) {
+      return transition(identity, observedAt, "FAILED");
+    },
+    loadBinding(identity) {
+      return guarded(async () => {
+        const result = await db.execute(
+          checkoutQuery(
+            sql`o.site_id = ${identity.siteId} AND a.id = ${identity.attemptId}`,
+          ),
         );
-      }),
-    reserve: (reservation, validate) =>
-      guarded(async () => {
-        const input = reservationInput(reservation);
-        if (typeof validate !== "function")
-          return fail("EXTERNAL_OUTCOME_UNKNOWN");
-        return db.transaction(
-          async (tx) => {
-            await lockRequest(tx, input.siteId, input.requestId);
-            const existing = await readRecord(
-              tx,
-              input.siteId,
-              input.requestId,
-              options,
-            );
-            if (existing) {
-              sameRequest(existing, input);
-              return { created: false, record: existing };
-            }
-            const row = await lockNewQuote(tx, input);
-            const eligibility = await lockEligibility(tx, row, options);
-            const validation: unknown = validate(structuredClone(eligibility));
-            // Validation is synchronous; contain a mistaken async callback's rejection.
-            if (validation instanceof Promise) void validation.catch(() => {});
-            if (validation !== undefined)
-              return fail("EXTERNAL_OUTCOME_UNKNOWN");
-            const clock = now(options);
-            assertReceivingReady(
-              evaluateReceivingReadiness({
-                ...eligibility.receivingContext,
-                siteId: row.siteId,
-                now: clock,
-              }),
-            );
-            if (compareDatabaseTimestamps(row.expiresAt, clock) <= 0)
-              return fail("QUOTE_INVALID");
-            const record = await insertReservation(
-              tx,
-              row,
-              input,
-              options,
-              clock,
-              true,
-            );
-            return { created: true, record };
-          },
-          { isolationLevel: "read committed" },
-        );
-      }),
-    saveHostedCheckout: (outcome: GiftCheckoutHostedOutcome) =>
-      guarded(async () => {
-        const input = structuredClone(outcome);
-        validIdentity(input);
-        const parsed = checkoutResultSchema.safeParse(input.checkout);
-        if (
-          !parsed.success ||
-          !nonempty(input.providerReference) ||
-          !giftQuoteSchema.shape.expiresAt.safeParse(input.observedAt)
-            .success ||
-          parsed.data.orderId !== input.orderId ||
-          parsed.data.attemptId !== input.attemptId ||
-          parsed.data.quoteId !== input.quoteId
-        )
-          return fail("EXTERNAL_OUTCOME_UNKNOWN");
-        return db.transaction(
-          async (tx) => {
-            const { record, row } = await lockedRecord(tx, input, options);
-            const clock = now(options);
-            // PLATFORM_ACCOUNT_SPLIT_V2 plans arrive with their verified
-            // children, stored where installment expiry keeps them.
-            let childReferences: string[] | null = null;
-            if (input.installmentPaymentReferences !== undefined) {
-              let snapshot: GiftQuoteSnapshot;
-              try {
-                snapshot = readGiftQuoteSnapshot(
-                  row.snapshot as unknown as GiftQuoteSnapshot,
-                );
-              } catch {
-                return fail("EXTERNAL_OUTCOME_UNKNOWN");
-              }
-              const count = snapshot.quote.installmentCount ?? 1;
-              childReferences =
-                isPlatformAccountSplit(snapshot) && count > 1
-                  ? readInstallmentExpiryPaymentReferences(
-                      input.installmentPaymentReferences,
-                      count,
-                    )
-                  : null;
-              if (!childReferences) return fail("EXTERNAL_OUTCOME_UNKNOWN");
-            }
-            if (
-              parsed.data.method !== row.method ||
-              parsed.data.mode !== row.environment ||
-              !isSafeCheckoutContinuation(
-                parsed.data.hostedUrl,
-                record.recoveryTokenHash,
-              ) ||
-              Date.parse(input.observedAt) < Date.parse(record.createdAt) ||
-              Date.parse(input.observedAt) > clock.getTime()
-            )
-              return fail("EXTERNAL_OUTCOME_UNKNOWN");
-            if (
-              record.state === "AWAITING_PAYMENT" &&
-              isDeepStrictEqual(record.checkout, parsed.data) &&
-              record.evidence?.providerCheckoutReference ===
-                input.providerReference
-            )
-              return record;
-            const saved =
-              await tx.execute(sql`UPDATE ${financialOperation} op SET state = 'SUCCEEDED',
-          provider_operation_reference = ${input.providerReference}, updated_at = ${input.observedAt}::timestamptz
-          WHERE ${originalFence(row, record, options)} AND op.lease_expires_at >= ${clock.toISOString()}::timestamptz
-            AND op.lease_expires_at >= clock_timestamp() AND ${noPaymentEffects(row, input)} RETURNING op.id`);
-            if (
-              saved.rows.length !== 1 ||
-              saved.rows[0]?.id !== input.attemptId
-            )
-              return fail("EXTERNAL_OUTCOME_UNKNOWN");
-            const attempt =
-              await tx.execute(sql`UPDATE ${giftCheckoutAttempt} a SET provider_reference = ${input.providerReference}, hosted_url = ${parsed.data.hostedUrl}${
-                childReferences
-                  ? sql`, installment_expiry_payment_references = ARRAY[${sql.join(
-                      childReferences.map((ref) => sql`${ref}`),
-                      sql`, `,
-                    )}]::text[]`
-                  : sql``
-              }
-          WHERE a.id = ${input.attemptId} AND a.site_id = ${input.siteId} AND a.account_id = ${row.accountId}
-            AND a.environment = ${row.environment} AND a.order_id = ${input.orderId} AND a.operation_id = ${input.attemptId}
-            AND a.operation_kind = 'CHECKOUT_CREATE' AND a.provider_reference IS NULL AND a.hosted_url IS NULL RETURNING a.id`);
-            if (
-              attempt.rows.length !== 1 ||
-              attempt.rows[0]?.id !== input.attemptId
-            )
-              return fail("EXTERNAL_OUTCOME_UNKNOWN");
-            const stored = await readRecord(
-              tx,
-              input.siteId,
-              input.requestId,
-              options,
-            );
-            if (
-              stored?.state !== "AWAITING_PAYMENT" ||
-              !sameIdentity(stored, input) ||
-              !isDeepStrictEqual(stored.checkout, parsed.data)
-            )
-              return fail("EXTERNAL_OUTCOME_UNKNOWN");
-            return stored;
-          },
-          { isolationLevel: "read committed" },
-        );
-      }),
-    markOutcomeUnknown: (identity: GiftCheckoutIdentity, observedAt: string) =>
-      guarded(async () => {
-        const input = structuredClone(identity);
-        validIdentity(input);
-        if (!giftQuoteSchema.shape.expiresAt.safeParse(observedAt).success)
-          return fail("EXTERNAL_OUTCOME_UNKNOWN");
-        await db.transaction(
-          async (tx) => {
-            const { record, row } = await lockedRecord(tx, input, options);
-            const clock = now(options);
-            if (
-              Date.parse(observedAt) < Date.parse(record.createdAt) ||
-              Date.parse(observedAt) > clock.getTime()
-            )
-              return fail("EXTERNAL_OUTCOME_UNKNOWN");
-            await tx.execute(sql`UPDATE ${financialOperation} op SET state = 'UNKNOWN', last_error_code = 'EXTERNAL_OUTCOME_UNKNOWN',
-          updated_at = ${clock.toISOString()}::timestamptz WHERE ${originalFence(row, record, options)} AND ${noPaymentEffects(row, input)} RETURNING op.id`);
-          },
-          { isolationLevel: "read committed" },
-        );
-      }),
-    markProviderRejected: (
-      identity: GiftCheckoutIdentity,
-      observedAt: string,
-    ) =>
-      guarded(async () => {
-        const input = structuredClone(identity);
-        validIdentity(input);
-        if (!giftQuoteSchema.shape.expiresAt.safeParse(observedAt).success)
-          return fail("EXTERNAL_OUTCOME_UNKNOWN");
-        await db.transaction(
-          async (tx) => {
-            const { record, row } = await lockedRecord(tx, input, options);
-            const clock = now(options);
-            if (
-              record.state !== "CREATING" ||
-              Date.parse(observedAt) < Date.parse(record.createdAt) ||
-              Date.parse(observedAt) > clock.getTime()
-            )
-              return fail("EXTERNAL_OUTCOME_UNKNOWN");
-            // Only the still-dispatching original creator may close it, and
-            // only while nothing from the provider was ever stored for it.
-            const closed =
-              await tx.execute(sql`UPDATE ${financialOperation} op SET state = 'FAILED', last_error_code = 'PROVIDER_REJECTED',
-          updated_at = ${clock.toISOString()}::timestamptz WHERE ${originalFence(row, record, options)} AND ${noPaymentEffects(row, input)}
-            AND op.provider_operation_reference IS NULL
-            AND NOT EXISTS (SELECT 1 FROM ${giftCheckoutAttempt} a WHERE a.operation_id = op.id AND a.site_id = op.site_id
-              AND (a.provider_reference IS NOT NULL OR a.hosted_url IS NOT NULL)) RETURNING op.id`);
-            if (
-              closed.rows.length !== 1 ||
-              closed.rows[0]?.id !== input.attemptId
-            )
-              return fail("EXTERNAL_OUTCOME_UNKNOWN");
-          },
-          { isolationLevel: "read committed" },
-        );
-      }),
+        if (result.rows.length === 0) return null;
+        if (result.rows.length !== 1) return fail("EXTERNAL_OUTCOME_UNKNOWN");
+        const raw = result.rows[0];
+        const record = project(raw);
+        return giftCheckoutOrderBinding({
+          ...record,
+          accountId: String(raw.accountId),
+          pixExpiresAt: record.pix?.expiresAt ?? null,
+        });
+      });
+    },
   };
 }

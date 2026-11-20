@@ -237,18 +237,6 @@ export async function listOwnerFinanceSites(
   };
 }
 
-function paymentUrl(
-  environment: "sandbox" | "live",
-  reference: string | null,
-): string | null {
-  if (!reference) return null;
-  const id = reference.replace(/^pay_/, "");
-  if (!/^[A-Za-z0-9]{1,64}$/.test(id)) return null;
-  const host =
-    environment === "sandbox" ? "sandbox.asaas.com" : "www.asaas.com";
-  return `https://${host}/payment/show/${id}`;
-}
-
 function detailAmount(details: unknown): number | null {
   if (!details || typeof details !== "object") return null;
   const value = (details as Row).amountCents;
@@ -309,7 +297,8 @@ export async function listOwnerFinanceAlerts(
         row.kind === "SPLIT_DIVERGENCE_BLOCK"
           ? addBusinessDays(createdAt, DIVERGENCE_BUSINESS_DAYS).toISOString()
           : null,
-      asaasPaymentUrl: paymentUrl(environment, reference),
+      // Pagar.me has no stable public dashboard URL per charge.
+      providerPaymentUrl: null,
       resolvedAt: row.resolved_at ? iso(row.resolved_at) : null,
       resolvedNote:
         typeof row.resolved_note === "string" ? row.resolved_note : null,

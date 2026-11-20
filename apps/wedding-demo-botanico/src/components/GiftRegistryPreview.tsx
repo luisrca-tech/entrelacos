@@ -2,21 +2,26 @@ import { GiftRegistry } from "@entrelacos/wedding-features";
 import { useMemo, useRef, useState } from "react";
 import {
   allocateGiftInstallmentCents,
-  type CheckoutStatus,
-  checkoutCreateInputSchema,
-  checkoutStatusInputSchema,
-  checkoutStatusResponseSchema,
+  GIFT_PLATFORM_TARIFFS,
+  type GiftCheckoutStatus,
   getGiftCommissionCents,
   giftCatalogLimits,
+  giftCheckoutCardTokenSchema,
+  giftCheckoutCreateInputSchema,
+  giftCheckoutStatusInputSchema,
+  giftCheckoutStatusResponseSchema,
   giftQuoteInputSchema,
   giftQuoteResponseSchema,
   publicGiftCatalogPageResponseSchema,
   publicGiftCatalogQuerySchema,
   publicGiftCatalogResponseSchema,
+  quoteGiftV2,
 } from "../../../../packages/contracts/src/index";
 
 export type GiftPreviewScenario =
   | "normal"
+  | "unknown-outcome"
+  | "card-declined"
   | "catalog-error"
   | "quote-error"
   | "slow-quote"
@@ -28,6 +33,8 @@ export type GiftPreviewScenario =
 
 const scenarios: Array<{ value: GiftPreviewScenario; label: string }> = [
   { value: "normal", label: "Fluxo normal" },
+  { value: "unknown-outcome", label: "Resultado do pagamento incerto" },
+  { value: "card-declined", label: "Cartão recusado" },
   { value: "catalog-error", label: "Erro de catálogo" },
   { value: "quote-error", label: "Erro de cotação" },
   { value: "slow-quote", label: "Cotação lenta" },
@@ -38,32 +45,41 @@ const scenarios: Array<{ value: GiftPreviewScenario; label: string }> = [
   { value: "refunded-history", label: "Reembolso seguido de verificação" },
 ];
 
-const recoveryStates: Array<{ value: CheckoutStatus["state"]; label: string }> =
-  [
-    { value: "RECEIVED", label: "Recebimento fictício" },
-    { value: "REFUNDED", label: "Reembolso fictício" },
-    { value: "OUTCOME_UNKNOWN", label: "Resultado em verificação" },
-    { value: "CLOSED_UNPAID", label: "Encerrado sem recebimento" },
-    { value: "AWAITING_PAYMENT", label: "Aguardando pagamento" },
-  ];
+const recoveryStates: Array<{
+  value: GiftCheckoutStatus["state"];
+  label: string;
+}> = [
+  { value: "RECEIVED", label: "Recebimento fictício" },
+  { value: "REFUNDED", label: "Reembolso fictício" },
+  { value: "OUTCOME_UNKNOWN", label: "Resultado em verificação" },
+  { value: "CLOSED_UNPAID", label: "Encerrado sem recebimento" },
+  { value: "AWAITING_PAYMENT", label: "Aguardando pagamento" },
+];
 
 const PREVIEW_SITE_ID = "local-gift-preview";
 const PREVIEW_API_ORIGIN = "https://gift-preview.invalid";
 const PREVIEW_PREFIX = `/v1/public/sites/${PREVIEW_SITE_ID}/`;
+/** Fictional public key: the preview fetcher answers tokenization locally. */
+export const PREVIEW_PAGARME_PUBLIC_KEY = "pk_test_localpreview";
+const PREVIEW_TOKENS_URL = "https://api.pagar.me/core/v5/tokens";
+/** Never resolves to a real image; screenshots route it to a placeholder. */
+const PREVIEW_PIX_QR_URL = "https://gift-preview.invalid/pix-qr.png";
 
-const previewInstallmentCounts = [1, 3, 6];
-const previewPixProcessingCents = 90;
-const previewCardProcessingCents = 290;
+const previewInstallmentCounts = Array.from(
+  { length: GIFT_PLATFORM_TARIFFS.maxInstallments },
+  (_, index) => index + 1,
+);
 
 function previewPricing(nominalCents: number) {
   return {
     feeAllocation: "BUYER_GROSS_UP",
     available: true,
-    startingAtCents:
-      nominalCents +
-      getGiftCommissionCents(nominalCents) +
-      previewPixProcessingCents,
+    startingAtCents: quoteGiftV2(nominalCents, "PIX", 1).totalCents,
   };
+}
+
+function previewMethod(quoteId: string) {
+  return quoteId.includes("-credit_card") ? "CREDIT_CARD" : "PIX";
 }
 
 function previewQuoteId(giftId: string, method: string, count = 1) {
@@ -113,6 +129,18 @@ const catalog = publicGiftCatalogResponseSchema.parse({
   ],
 });
 
+function previewPix(now: () => Date) {
+  return {
+    qrCode:
+      "00020101021226840014br.gov.bcb.pix2562gift-preview.invalid/pix/local-preview5204000053039865802BR5913PREVIA LOCAL6009SAO PAULO62070503***6304ABCD",
+    qrCodeUrl: PREVIEW_PIX_QR_URL,
+    // Whole minutes keep the fictional deadline stable while polling.
+    expiresAt: new Date(
+      Math.ceil(now().getTime() / 60_000) * 60_000 + 15 * 60_000,
+    ).toISOString(),
+  };
+}
+
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -156,7 +184,7 @@ export function createGiftPreviewFetcher(
   now: () => Date = () => new Date(),
   scenario: GiftPreviewScenario = "normal",
   onCheckoutRequest: () => void = () => {},
-  readRecoveryState?: () => CheckoutStatus["state"],
+  readRecoveryState?: () => GiftCheckoutStatus["state"],
 ): typeof fetch {
   return async (input, init) => {
     let request: Request;
@@ -166,6 +194,19 @@ export function createGiftPreviewFetcher(
       url = new URL(request.url);
     } catch {
       return notFound();
+    }
+
+    if (`${url.origin}${url.pathname}` === PREVIEW_TOKENS_URL) {
+      // Fictional tokenization: the card is never kept or forwarded.
+      if (
+        request.method !== "POST" ||
+        url.searchParams.get("appId") !== PREVIEW_PAGARME_PUBLIC_KEY
+      )
+        return jsonResponse({ message: "invalid" }, 401);
+      return jsonResponse({
+        id: giftCheckoutCardTokenSchema.parse("token_localpreview"),
+        type: "card",
+      });
     }
 
     if (
@@ -242,19 +283,19 @@ export function createGiftPreviewFetcher(
       if (!gift) return jsonResponse({ code: "QUOTE_INVALID" }, 409);
 
       const commissionCents = getGiftCommissionCents(gift.nominalCents);
-      const baseCents = gift.nominalCents + commissionCents;
       const installmentCount = inputValue.installmentCount ?? 1;
+      const upfront = quoteGiftV2(gift.nominalCents, inputValue.method, 1);
       const installmentOptions =
         inputValue.method === "CREDIT_CARD"
           ? previewInstallmentCounts.map((count) => {
-              const installmentSurchargeCents = 43 * (count - 1);
-              const totalCents =
-                baseCents +
-                previewCardProcessingCents +
-                installmentSurchargeCents;
+              const { totalCents } = quoteGiftV2(
+                gift.nominalCents,
+                "CREDIT_CARD",
+                count,
+              );
               return {
                 installmentCount: count,
-                installmentSurchargeCents,
+                installmentSurchargeCents: totalCents - upfront.totalCents,
                 totalCents,
                 installmentCents: allocateGiftInstallmentCents(
                   totalCents,
@@ -267,8 +308,11 @@ export function createGiftPreviewFetcher(
         (option) => option.installmentCount === installmentCount,
       );
       if (installmentOptions && !selected) return validationError();
-      const totalCents =
-        selected?.totalCents ?? baseCents + previewPixProcessingCents;
+      const priced = quoteGiftV2(
+        gift.nominalCents,
+        inputValue.method,
+        installmentCount,
+      );
       const quote = giftQuoteResponseSchema.parse({
         quote: {
           id: previewQuoteId(gift.id, inputValue.method, installmentCount),
@@ -283,15 +327,17 @@ export function createGiftPreviewFetcher(
           nominalCents: gift.nominalCents,
           commissionBasisPoints: 200,
           commissionCents,
-          processingCents: totalCents - baseCents,
-          totalCents,
+          processingCents:
+            priced.totalCents - gift.nominalCents - commissionCents,
+          anticipationCents: priced.anticipationCents,
+          totalCents: priced.totalCents,
           feeAllocation: "BUYER_GROSS_UP",
-          settlementVersion: "PLATFORM_FEE_GUARANTEE_V1",
+          settlementVersion: "PLATFORM_ACCOUNT_SPLIT_V2",
           ...(selected && { ...selected, installmentOptions }),
-          policyVersion: "local-gift-policy-v1",
+          policyVersion: "local-gift-policy-v2",
           expiresAt: new Date(
             now().getTime() +
-              (scenario === "expiring-quote" ? 3_000 : 5 * 60_000),
+              (scenario === "expiring-quote" ? 3_000 : 15 * 60_000),
           ).toISOString(),
           mode: "sandbox",
         },
@@ -300,19 +346,32 @@ export function createGiftPreviewFetcher(
     }
 
     if (resource === "gift-checkouts" && request.method === "POST") {
+      let inputValue: ReturnType<typeof giftCheckoutCreateInputSchema.parse>;
       try {
-        checkoutCreateInputSchema.parse(await request.json());
+        inputValue = giftCheckoutCreateInputSchema.parse(await request.json());
       } catch {
         return validationError();
       }
       onCheckoutRequest();
-      return jsonResponse({ code: "EXTERNAL_OUTCOME_UNKNOWN" }, 409);
+      // History scenarios start from an unresolved creation, like a lost reply.
+      if (scenario === "unknown-outcome" || scenario.endsWith("-history"))
+        return jsonResponse({ code: "EXTERNAL_OUTCOME_UNKNOWN" }, 409);
+      if (inputValue.method === "CREDIT_CARD")
+        return jsonResponse({
+          checkoutId: "gift-preview-checkout",
+          status: scenario === "card-declined" ? "CLOSED_UNPAID" : "RECEIVED",
+        });
+      return jsonResponse({
+        checkoutId: "gift-preview-checkout",
+        status: "AWAITING_PAYMENT",
+        pix: previewPix(now),
+      });
     }
 
     if (resource === "gift-checkouts/status" && request.method === "POST") {
-      let inputValue: ReturnType<typeof checkoutStatusInputSchema.parse>;
+      let inputValue: ReturnType<typeof giftCheckoutStatusInputSchema.parse>;
       try {
-        inputValue = checkoutStatusInputSchema.parse(await request.json());
+        inputValue = giftCheckoutStatusInputSchema.parse(await request.json());
       } catch {
         return validationError();
       }
@@ -332,37 +391,51 @@ export function createGiftPreviewFetcher(
           (scenario === "received-history" ? "RECEIVED" : "REFUNDED");
         // Fictional observations exercise the consumer's historical floor; no
         // provider, payment record or financial ledger is queried or changed.
-        const status = checkoutStatusResponseSchema.safeParse({
+        const status = giftCheckoutStatusResponseSchema.safeParse({
           status: {
             siteId: PREVIEW_SITE_ID,
             quoteId: inputValue.quoteId,
             requestId: inputValue.requestId,
-            orderId: "gift-preview-order",
-            attemptId: "gift-preview-attempt",
+            checkoutId: "gift-preview-checkout",
             method,
             mode: "sandbox",
             state,
             observedAt: now().toISOString(),
             closedReason: state === "CLOSED_UNPAID" ? "EXPIRED" : null,
             mayStartNewAttempt: state === "CLOSED_UNPAID",
-            checkout:
-              state === "AWAITING_PAYMENT"
-                ? {
-                    orderId: "gift-preview-order",
-                    attemptId: "gift-preview-attempt",
-                    quoteId: inputValue.quoteId,
-                    method,
-                    mode: "sandbox",
-                    hostedUrl: "https://gift-preview.invalid/no-payment",
-                  }
+            pix:
+              state === "AWAITING_PAYMENT" && method === "PIX"
+                ? previewPix(now)
                 : null,
           },
         });
         return status.success ? jsonResponse(status.data) : validationError();
       }
-      if (scenario === "slow-recovery")
+      if (scenario === "slow-recovery") {
         await new Promise((resolve) => setTimeout(resolve, 1500));
-      return jsonResponse({ code: "PROVIDER_MODE_UNAVAILABLE" }, 409);
+        return jsonResponse({ code: "PROVIDER_MODE_UNAVAILABLE" }, 409);
+      }
+      if (scenario !== "normal")
+        return jsonResponse({ code: "PROVIDER_MODE_UNAVAILABLE" }, 409);
+      // Normal flow: a fictional Pix stays open, a fictional card is received.
+      const method = previewMethod(inputValue.quoteId);
+      const state = method === "PIX" ? "AWAITING_PAYMENT" : "RECEIVED";
+      const status = giftCheckoutStatusResponseSchema.safeParse({
+        status: {
+          siteId: PREVIEW_SITE_ID,
+          quoteId: inputValue.quoteId,
+          requestId: inputValue.requestId,
+          checkoutId: "gift-preview-checkout",
+          method,
+          mode: "sandbox",
+          state,
+          observedAt: now().toISOString(),
+          closedReason: null,
+          mayStartNewAttempt: false,
+          pix: method === "PIX" ? previewPix(now) : null,
+        },
+      });
+      return status.success ? jsonResponse(status.data) : validationError();
     }
 
     return notFound();
@@ -373,7 +446,7 @@ export function GiftRegistryPreview() {
   const [scenario, setScenario] = useState<GiftPreviewScenario>("normal");
   const [checkoutRequests, setCheckoutRequests] = useState(0);
   const [recoveryState, setRecoveryState] =
-    useState<CheckoutStatus["state"]>("RECEIVED");
+    useState<GiftCheckoutStatus["state"]>("RECEIVED");
   const recoveryStateRef = useRef(recoveryState);
   recoveryStateRef.current = recoveryState;
   const fetcher = useMemo(
@@ -437,7 +510,9 @@ export function GiftRegistryPreview() {
             className="min-h-11 min-w-0 rounded-lg border border-template-line bg-template-surface px-3 py-2 text-template-ink"
             value={recoveryState}
             onChange={(event) =>
-              setRecoveryState(event.target.value as CheckoutStatus["state"])
+              setRecoveryState(
+                event.target.value as GiftCheckoutStatus["state"],
+              )
             }
           >
             {recoveryStates.map((option) => (
@@ -463,6 +538,7 @@ export function GiftRegistryPreview() {
         apiOrigin={PREVIEW_API_ORIGIN}
         demo
         fetcher={fetcher}
+        pagarmePublicKey={PREVIEW_PAGARME_PUBLIC_KEY}
       />
     </section>
   );

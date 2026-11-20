@@ -100,23 +100,23 @@ describe("receiving guide authorized runtime context", () => {
     vi.mocked(loadGiftsReadiness).mockResolvedValueOnce(readiness);
     await mount();
     expect(loadGiftsReadiness).toHaveBeenCalledExactlyOnceWith("wedding-1");
-    expect(container.innerHTML).toContain(
-      "https://sandbox.asaas.com/login/auth",
-    );
-    expect(container.textContent).toContain("e-mail da conta principal");
+    expect(container.textContent).toContain("Ambiente de teste da Pagar.me");
     expect(FinanceSection).not.toHaveBeenCalled();
     expect(ReceivingAccountSetup).not.toHaveBeenCalled();
   });
   it("does not expose an environment after readiness fails", async () => {
     vi.mocked(loadGiftsReadiness).mockRejectedValueOnce(new Error("offline"));
     await mount();
-    expect(container.innerHTML).not.toContain("/login/auth");
-    expect(container.textContent).not.toContain("e-mail da conta principal");
+    expect(container.textContent).not.toContain(
+      "Ambiente de teste da Pagar.me",
+    );
   });
   it("does not request provider context for a different-site membership", async () => {
     await mount({ ...access, siteId: "other" });
     expect(loadGiftsReadiness).not.toHaveBeenCalled();
-    expect(container.innerHTML).not.toContain("/login/auth");
+    expect(container.textContent).not.toContain(
+      "Ambiente de teste da Pagar.me",
+    );
   });
   it("discards provider context when the session expires during the read", async () => {
     let resolve!: (value: ReceivingReadiness) => void;
@@ -130,7 +130,8 @@ describe("receiving guide authorized runtime context", () => {
     await act(async () => {
       resolve(readiness);
     });
-    expect(container.innerHTML).not.toContain("/login/auth");
-    expect(container.textContent).not.toContain("e-mail da conta principal");
+    expect(container.textContent).not.toContain(
+      "Ambiente de teste da Pagar.me",
+    );
   });
 });

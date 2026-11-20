@@ -33,6 +33,32 @@ Executable C1 uses `nominalCents`, selected `membershipRole` and an explicit boo
 
 PF/BaaS acceptance, provider account-specific fees, bank validation, ongoing credential operation and withdrawal approvals remain unresolved production gates. No one-cent transfer with an assumed automatic refund is adopted. Local code, injected deterministic tests and shared schema metadata are authorized; migrations against shared databases, live provider resources/money, Git publication and deployment retain explicit authorization boundaries.
 
+## Payment provider switch to Pagar.me — 2026-11-18
+
+Gift payments, couple receiving and withdrawals move from Asaas to Pagar.me v5 completely: no neutral provider interface, provider flag, coexistence or data migration. The one existing Asaas test charge is handled manually; old migrations keep their historical references.
+
+| Area | Decision |
+| --- | --- |
+| Checkout | Transparent checkout. Cards are tokenized in the browser with `PUBLIC_PAGARME_PUBLIC_KEY`; Pix shows its QR code in the site modal. The API never receives card numbers or CVV. |
+| Pricing | The guest pays everything; the couple receives 100% of the gift. `G = ceil((V + 2% commission + fixed fees) / (1 − rate))`, where the rate is the D+2 CET for the installment count (card) or the Pix MDR. Numbers live in `packages/contracts/src/giftTariffs.ts`. |
+| Installments | Card 1x–6x, minimum R$5.00 per installment. The 7–12x tier is removed. |
+| Split | Sent at authorization. Platform recipient: remainder, `liable`, pays processing fee and remainder. Couple recipient: flat amount grossed up for anticipation, all options off. |
+| Receiving | One individual (CPF) recipient per site with automatic anticipation on and automatic transfer off. Card amounts are available in about 2 days for any installment count; Pix immediately. |
+| Identity | KYC through a short-lived Pagar.me link and QR code generated from the panel, never stored. Receiving requires an approved recipient. |
+| Withdrawal | On demand to the recipient's bank account (same CPF). R$3.67 per withdrawal for every destination bank (no free tier is promised), shown before confirming. |
+| Public key | `PUBLIC_PAGARME_PUBLIC_KEY` is a publishable key that ends up in the browser bundle and can only tokenize cards, so it is committed per environment in `scripts/showcaseBuildEnvironment.ts` with the other `PUBLIC_` values (2026-11-19). Cloudflare Builds need no dashboard variable, and a missing key can no longer silently disable card gifts. Secret keys (`sk_`) never go in source; a test enforces it. Rejected: a dashboard-only variable (not reachable for automation, fails silently when absent). |
+| Webhook | Single `POST /v1/webhooks/pagarme` with Basic auth, idempotent through `financial_event_inbox`; the worker re-reads the order or recipient before posting. |
+| Refunds and chargebacks | Refunds are operator-only and total. Chargebacks are absorbed by the platform recipient and raise an operator alert. |
+| Disclosure | Text seal "Pagamentos processados por Pagar.me, uma empresa Stone." with a generic lock icon, on checkout, admin receiving pages, landing and FAQ. No Pagar.me or Stone brand asset is reused: neither domain publishes a brand kit or usage terms for a partner badge (checked 2026-11-19), so no logo is imitated. |
+
+Operational details: [Pagar.me operation](pagarmeOperation.md), [gift pricing](giftPricingPanel.md), [settlement](giftPricingSettlement.md). Open points to confirm in the sandbox: gateway fee on Pix, whether a flat card split applies per charge or per installment, and the exact chargeback webhook event name.
+
+Review fixes (2026-11-18): rows written before the switch are kept rather than dropped (0031 only replaces constraints; 0033 restores the objects on local databases that ran an earlier draft). The unused `receiving_pix_destination` table and the `split_divergence_blocked_at` column stay for now because historical rows and history views still read them; dropping them is a later, explicit migration. Chargebacks are read from `chargeback.received` as well as the legacy names, and paid orders are re-read daily for 120 days. A compensated refund or chargeback clears the withdrawal block once the ledger is covered again, or when an operator resolves its alert.
+
+Money gifts back on in the frontend (2026-11-19): `PUBLIC_GIFT_PAYMENTS_ENABLED` (added in PR #79 to pause money gifts, off by default) is now a kill switch that is on by default; only the exact value `false` pauses the public checkout and the admin receiving area. Re-enabling is safe because the frontend flag never moved money: the API still refuses everything while `PAGARME_MODE=disabled` (the production default until accreditation), and a site whose catalog reports payments disabled shows no gift section. The variable was also missing from the `turbo.json` build env, so Turborepo never passed it to builds; it is listed now. Rejected: deleting the flag (loses the quick pause) and keeping it opt-in (a forgotten variable would silently hide the feature after release).
+
+Admin follows the API (2026-11-19, second review): with the flag on by default, the production admin would have shown "Recebimentos", the setup flows and the gifts steps while `PAGARME_MODE=disabled` answers 503. The admin now reads the `mode` field of the existing `GET /v1/sites/:siteId/receiving/readiness` response (no API change) and opens those areas only when it is `sandbox` or `live`; `disabled`, a failed check or a check not made yet keep them closed (a deep link waits for the answer instead of redirecting). The gifts page shows "Presentes em dinheiro em breve" instead of the receiving steps, except on demonstration catalogs. `PUBLIC_GIFT_PAYMENTS_ENABLED=false` stays the manual pause and wins over the API. Rejected: default-off in production builds (a forgotten variable would hide the feature at release) and a new capability field (the readiness mode already carries the signal). The landing keeps its Pix and card copy, now with the installment limit read from the tariff constants (Pix and card in up to 6x are the launch offer, with each installment at least R$ 5,00) and without the wrong "parcelas à vista".
+
 ## Confirmed technical boundaries
 
 - Public sites use Astro static builds on Cloudflare Workers Static Assets.

@@ -157,7 +157,7 @@ describe("site team view", () => {
     expect(html).toContain("Revogar convite para Clara Pendente");
     expect(html).not.toContain("Revogar convite para Duda Utilizada");
     expect(html).not.toContain("Revogar convite para Eva Revogada");
-    expect(html).not.toMatch(/token|hash|Asaas|banco|conta bancária|R\$/i);
+    expect(html).not.toMatch(/token|hash|Pagar\.me|banco|conta bancária|R\$/i);
   });
 
   it("expires an unconsumed invitation at its exact expiry time", () => {

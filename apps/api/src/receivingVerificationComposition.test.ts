@@ -12,22 +12,20 @@ vi.mock("./receivingVerification", async (original) => ({
   }),
 }));
 
-import { encryptProviderCredential } from "./providerCredentials";
 import { createReceivingVerificationComposition } from "./receivingVerificationComposition";
 
 function fixture(
   native = false,
   mode: "sandbox" | "live" = "sandbox",
   liveDemoSiteIds?: string,
-  actualPreparation = false,
 ) {
   const row = {
     siteId: "site-one",
     accountId: "account-one",
     operatorUserId: "holder-one",
     operatorReference: "local-operator",
-    accountReference: "native-account",
-    recipientReference: "native-wallet",
+    accountReference: "rp_fixtureRecipient01",
+    recipientReference: "rp_fixtureRecipient01",
     nativeDestination: native,
     isDemo: mode === "sandbox",
   };
@@ -36,29 +34,6 @@ function fixture(
     requireHolder: vi.fn(async () => ({ holderUserId: "holder-one" })),
     readSessionAuthentication: vi.fn(async () => proof),
     readCurrentProvisioningPolicy: vi.fn(async () => true),
-    readAccount: vi.fn(async () => ({
-      accountId: row.accountId,
-      operatorUserId: row.operatorUserId,
-      state: "SUCCEEDED",
-      record: { provision: { parentAccountReference: "parent-one" } },
-      result: {
-        accountReference: row.accountReference,
-        recipientReference: row.recipientReference,
-        credential: encryptProviderCredential(
-          "child-private-key",
-          {
-            provider: "ASAAS",
-            siteId: row.siteId,
-            accountBindingId: row.accountId,
-            environment: mode,
-          },
-          new Map([["key-one", new Uint8Array(32)]]),
-          "key-one",
-        ),
-      },
-    })),
-    armIncomingPix: vi.fn(async () => "attempt-one"),
-    settleIncomingPix: vi.fn(async () => {}),
   };
   const actor = {
     siteId: "site-one",
@@ -74,42 +49,7 @@ function fixture(
     expiresAt: new Date("2026-10-19T12:04:00Z"),
   };
   const now = () => new Date("2026-10-19T12:00:00Z");
-  let activeKey = false;
-  const fetch = vi.fn(
-    async (url: string | URL | Request, init?: RequestInit) => {
-      const path = new URL(String(url)).pathname;
-      if (path.endsWith("/wallets/"))
-        return Response.json({
-          data: [{ id: row.recipientReference }],
-          hasMore: false,
-        });
-      if (path.endsWith("/myAccount/status/"))
-        return Response.json({
-          id: "status-one",
-          commercialInfo: "APPROVED",
-          bankAccountInfo: "PENDING",
-          documentation: "APPROVED",
-          general: "APPROVED",
-        });
-      if (path.endsWith("/myAccount/commercialInfo/"))
-        return Response.json({
-          commercialInfoExpiration: { isExpired: false },
-        });
-      if (path.endsWith("/pix/addressKeys")) {
-        if (init?.method === "POST") activeKey = true;
-        const key = { id: "key-one", type: "EVP", status: "ACTIVE" };
-        return Response.json(
-          init?.method === "POST"
-            ? key
-            : { hasMore: false, data: activeKey ? [key] : [] },
-        );
-      }
-      throw new Error("Unexpected native route");
-    },
-  );
-  const prepareIncoming = vi.fn(
-    async (): Promise<"READY" | "PENDING" | "REVIEW_REQUIRED"> => "READY",
-  );
+  const getRecipient = vi.fn();
   mocks.begin.mockImplementation((command) => {
     if (command.action === "SELECT") row.nativeDestination = true;
     return {
@@ -123,12 +63,10 @@ function fixture(
       liveDemoSiteIds === undefined ? undefined : [liveDemoSiteIds],
     mode,
     applicationEnvironment: mode === "live" ? "production" : "development",
-    platformAccountReference: "parent-one",
-    keyring: new Map([["key-one", new Uint8Array(32)]]),
+    platformRecipientId: "rp_platformRecipient",
+    recipients: { getRecipient },
     repository: repository as never,
-    fetch,
     now,
-    ...(actualPreparation ? {} : { prepareIncoming }),
     readReadiness: async () => ({
       siteId: "site-one",
       mode,
@@ -146,11 +84,10 @@ function fixture(
     row,
     execute,
     repository,
-    prepareIncoming,
-    fetch,
+    getRecipient,
   };
 }
-describe("native receiving verification composition", () => {
+describe("Pagar.me receiving verification composition", () => {
   it("shares one in-flight observation between public refresh and holder verification", async () => {
     const v = fixture(true, "live");
     let release = (_value: { state: string }) => {};
@@ -165,46 +102,29 @@ describe("native receiving verification composition", () => {
     const publicRead = v.composition.refresh("site-one");
     await vi.waitFor(() => expect(mocks.begin).toHaveBeenCalledOnce());
     const holderRead = v.composition.verify(v.actor);
-    await vi.waitFor(() => expect(v.prepareIncoming).toHaveBeenCalledOnce());
+    await vi.waitFor(() =>
+      expect(v.repository.requireHolder).toHaveBeenCalledOnce(),
+    );
     await new Promise((resolve) => setTimeout(resolve, 0));
     release({ state: "STORED" });
     await Promise.all([publicRead, holderRead]);
     expect(mocks.begin).toHaveBeenCalledOnce();
     await v.composition.close();
   });
-  it("decrypts the saved credential using only its exact security context before native preparation", async () => {
-    const v = fixture(false, "live", undefined, true);
-    expect(await v.composition.verify(v.actor)).toMatchObject({
+  it("selects only the current Pagar.me recipient binding", async () => {
+    const v = fixture(false, "live");
+    mocks.begin.mockClear();
+    await expect(v.composition.verify(v.actor)).resolves.toMatchObject({
       state: "READY",
-      mode: "live",
     });
-    expect(v.repository.armIncomingPix).toHaveBeenCalledOnce();
-    expect(
-      v.fetch.mock.calls.filter(([, init]) => init?.method === "POST"),
-    ).toHaveLength(1);
-    expect(
-      new Headers(v.fetch.mock.calls[0][1]?.headers).get("access_token"),
-    ).toBe("child-private-key");
+    expect(JSON.stringify(v.execute.mock.calls)).toContain("PAGARME");
+    expect(mocks.begin.mock.calls[0][0].scope).toMatchObject({
+      provider: "PAGARME",
+      accountReference: "rp_fixtureRecipient01",
+      recipientReference: "rp_fixtureRecipient01",
+    });
     await v.composition.close();
   });
-  it.each(["PENDING", "REVIEW_REQUIRED"] as const)(
-    "keeps incoming readiness blocked while preparation is %s",
-    async (state) => {
-      const v = fixture(false, "live");
-      v.prepareIncoming.mockResolvedValue(state);
-      mocks.begin.mockClear();
-      await expect(v.composition.verify(v.actor)).rejects.toMatchObject({
-        status: 409,
-        code: `RECEIVING_PIX_PREPARATION_${state}`,
-      });
-      expect(v.prepareIncoming).toHaveBeenCalledWith(
-        v.actor,
-        expect.objectContaining({ accountId: "account-one" }),
-      );
-      expect(mocks.begin).not.toHaveBeenCalled();
-      await v.composition.close();
-    },
-  );
   it.each(["sandbox", "live"] as const)(
     "never selects %s incoming bank while refreshing a simulated or missing destination",
     async (mode) => {
@@ -212,7 +132,7 @@ describe("native receiving verification composition", () => {
       mocks.begin.mockClear();
       await v.composition.refresh("site-one");
       expect(mocks.begin).not.toHaveBeenCalled();
-      expect(v.prepareIncoming).not.toHaveBeenCalled();
+      expect(v.getRecipient).not.toHaveBeenCalled();
       await v.composition.close();
     },
   );

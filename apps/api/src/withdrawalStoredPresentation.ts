@@ -330,7 +330,7 @@ export function createWithdrawalStoredPresentationLoader(
           row.accountReference !== scope.accountReference ||
           row.bankReference !== scope.bankReference ||
           row.destinationVersion !== scope.destinationVersion ||
-          row.provider !== "ASAAS" ||
+          row.provider !== "PAGARME" ||
           typeof row.isDemo !== "boolean" ||
           (mode === "live" &&
             !allowsLiveSite({
@@ -404,7 +404,7 @@ export function createWithdrawalStoredPresentationLoader(
           return null;
         const binding = {
           ...scope,
-          provider: "ASAAS",
+          provider: "PAGARME",
           operatorReference,
           recipientReference,
         };

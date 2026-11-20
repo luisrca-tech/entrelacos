@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   receivingPageHref,
@@ -13,7 +14,6 @@ describe("receiving navigation", () => {
       "holder",
       "details",
       "activation",
-      "account",
       "fees",
       "payments",
       "withdrawals",
@@ -25,7 +25,6 @@ describe("receiving navigation", () => {
       "holder",
       "details",
       "activation",
-      "account",
       "fees",
       "payments",
       "withdrawals",
@@ -54,8 +53,21 @@ describe("receiving navigation", () => {
     expect(receivingPageHref("wedding/a", "overview")).toBe(
       "/sites/wedding%2Fa/receiving",
     );
-    expect(receivingPageHref("wedding/a", "account")).toBe(
-      "/sites/wedding%2Fa/receiving/account",
+    expect(receivingPageHref("wedding/a", "activation")).toBe(
+      "/sites/wedding%2Fa/receiving/activation",
     );
+  });
+  it("drops the retired Pix destination page and its screens", () => {
+    expect(resolveReceivingPage("account")).toBe("overview");
+    expect(receivingPages.find(({ id }) => id === "activation")?.label).toBe(
+      "Verificar identidade",
+    );
+    for (const file of [
+      "ReceivingPixDestination.tsx",
+      "ReceivingPixDestination.test.ts",
+      "savedPixDestination.ts",
+      "savedPixDestination.test.ts",
+    ])
+      expect(existsSync(new URL(`./${file}`, import.meta.url))).toBe(false);
   });
 });

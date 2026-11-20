@@ -1442,7 +1442,7 @@ async function storedIndexFixture() {
   const v = await fixture();
   const receiving = {
     siteId: "site-one",
-    provider: "ASAAS",
+    provider: "PAGARME",
     environment: "sandbox",
     operatorReference: "operator-original",
     accountReference: "provider-account-old",
@@ -1464,7 +1464,7 @@ async function storedIndexFixture() {
         id: "account-old",
         site_id: "site-one",
         environment: "sandbox",
-        provider: "ASAAS",
+        provider: "PAGARME",
         operator_user_id: "operator-old",
         operator_reference: "operator-original",
         account_reference: "provider-account-old",

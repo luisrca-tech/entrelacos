@@ -27,15 +27,14 @@ const status = {
   siteId: "wedding-a",
   quoteId: "quote-a",
   requestId: "request-a",
-  orderId: "order-a",
-  attemptId: "attempt-a",
+  checkoutId: "checkout-a",
   method: "PIX",
   mode: "sandbox",
   state: "OUTCOME_UNKNOWN",
   observedAt: null,
   closedReason: null,
   mayStartNewAttempt: false,
-  checkout: null,
+  pix: null,
 } as const;
 const closed = {
   ...status,
@@ -113,8 +112,7 @@ describe("checkout recovery coordinator", () => {
         {
           method: pending.method,
           mode: pending.mode,
-          orderId: terminal.orderId,
-          attemptId: terminal.attemptId,
+          checkoutId: terminal.checkoutId,
         },
       );
       expect(target.removeItem).not.toHaveBeenCalled();

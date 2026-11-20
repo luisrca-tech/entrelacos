@@ -86,13 +86,6 @@ function checkSql(table: PgTable, name: string): string {
 }
 
 describe("financial receiving account schema", () => {
-  it("retains optional durable webhook registration metadata beside the authentication hash", () => {
-    expect(receivingAccount.webhookRegistration.name).toBe(
-      "webhook_registration",
-    );
-    expect(receivingAccount.webhookRegistration.dataType).toBe("json");
-    expect(receivingAccount.webhookRegistration.notNull).toBe(false);
-  });
   it("starts unapproved without an implicit recipient or remote references", () => {
     expect(receivingAccount.providerAccountState.default).toBe("UNVERIFIED");
     for (const column of [
@@ -147,48 +140,30 @@ describe("financial receiving account schema", () => {
     expect(keys.every((key) => key.onDelete === "restrict")).toBe(true);
   });
 
-  it("stores only a complete encrypted envelope or no credentials", () => {
+  it("never stores plaintext credentials and keeps legacy encrypted ones intact", () => {
     const config = getTableConfig(receivingAccount);
-    expect(config.columns.map((column) => column.name)).not.toContain(
-      "api_key",
-    );
-    expect(config.columns.map((column) => column.name)).not.toContain(
-      "credential_plaintext",
-    );
-    const envelope = config.checks.find(
-      (entry) => entry.name === "receiving_account_credentials_check",
-    );
-    expect(envelope).toBeDefined();
-    const query = envelope && dialect.sqlToQuery(envelope.value).sql;
-    expect(query).toContain("num_nonnulls");
-    expect(query).toContain("credential_ciphertext");
-    expect(query).toContain("credential_tag");
-    for (const column of [
-      receivingAccount.credentialVersion,
-      receivingAccount.credentialKeyId,
-      receivingAccount.credentialNonce,
-      receivingAccount.credentialCiphertext,
-      receivingAccount.credentialTag,
+    const names = config.columns.map((column) => column.name);
+    for (const absent of ["api_key", "credential_plaintext"])
+      expect(names).not.toContain(absent);
+    // Rows from the previous provider keep their encrypted sub-account
+    // credentials and webhook state; Pagar.me rows leave them null.
+    for (const legacy of [
+      "credential_version",
+      "credential_key_id",
+      "credential_nonce",
+      "credential_ciphertext",
+      "credential_tag",
+      "webhook_token_hash",
+      "webhook_registration",
     ]) {
-      expect(column.notNull).toBe(false);
-      expect(column.default).toBeUndefined();
+      expect(names).toContain(legacy);
+      expect(
+        config.columns.find((column) => column.name === legacy)?.notNull,
+      ).toBe(false);
     }
-  });
-
-  it("binds a webhook capability hash to one stored account without plaintext", () => {
-    expect(receivingAccount.webhookTokenHash?.notNull).toBe(false);
-    expect(receivingAccount.webhookTokenHash?.default).toBeUndefined();
-    expect(
-      checkSql(receivingAccount, "receiving_account_webhook_hash_check"),
-    ).toContain("64");
-    expect(
-      getTableConfig(receivingAccount)
-        .uniqueConstraints.find(
-          (entry) => entry.name === "receiving_account_webhook_hash_key",
-        )
-        ?.columns.map((column) => column.name),
-    ).toEqual(["webhook_token_hash"]);
-    expect(Object.hasOwn(receivingAccount, "webhookToken")).toBe(false);
+    expect(config.checks.map((entry) => entry.name)).toContain(
+      "receiving_account_credentials_check",
+    );
   });
 });
 
