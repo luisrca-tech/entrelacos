@@ -668,9 +668,10 @@ const detailFields: DetailFieldSpec[] = [
   },
   {
     name: "referencePoint",
-    label: "Ponto de referência",
+    label: "Ponto de referência (opcional)",
     type: "text",
     wide: true,
+    optional: true,
   },
 ];
 

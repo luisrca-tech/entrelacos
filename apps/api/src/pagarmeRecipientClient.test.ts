@@ -165,6 +165,31 @@ describe("Pagar.me recipient client", () => {
     },
   );
 
+  it.each([
+    ["absent", undefined],
+    ["empty", ""],
+    ["blank", "   "],
+  ])(
+    "sends a fallback reference_point when the reference point is %s, because Pagar.me requires it",
+    async (_label, referencePoint) => {
+      const fetch = respond([200, fixture("recipient-created")]);
+      const { referencePoint: _referencePoint, ...address } = input.address;
+      await createPagarmeRecipientClient({ secretKey, fetch }).createRecipient(
+        "receiving-account-1",
+        {
+          ...input,
+          address:
+            referencePoint === undefined
+              ? address
+              : { ...address, referencePoint },
+        },
+      );
+      expect(
+        call(fetch).body.register_information.address.reference_point,
+      ).toBe("Sem referência");
+    },
+  );
+
   it("repeats the same code and idempotency key so a retry cannot create a second recipient", async () => {
     const fetch = respond(
       [200, fixture("recipient-created")],

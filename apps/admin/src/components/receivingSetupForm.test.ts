@@ -74,6 +74,15 @@ describe("receiving setup form", () => {
     expect(receivingSetupAccountSchema.safeParse(account).success).toBe(true);
   });
 
+  it.each([
+    ["empty", ""],
+    ["blank", "   "],
+  ])("omits a %s reference point so the contract accepts it", (_l, value) => {
+    const account = normalizeSetupAccount({ ...masked, referencePoint: value });
+    expect(account.address).not.toHaveProperty("referencePoint");
+    expect(receivingSetupAccountSchema.safeParse(account).success).toBe(true);
+  });
+
   it("reads the bank from the list or from the other-bank code", () => {
     const bank = (values: Record<string, string>) =>
       normalizeSetupAccount({ ...masked, ...values }).bankAccount.bank;

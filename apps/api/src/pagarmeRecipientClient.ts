@@ -62,7 +62,7 @@ export interface PagarmeRecipientInput {
     readonly city: string;
     readonly state: string;
     readonly zipCode: string;
-    readonly referencePoint: string;
+    readonly referencePoint?: string;
   };
   readonly bankAccount: {
     readonly bank: string;
@@ -396,6 +396,13 @@ function pagarmeBirthdate(isoDate: string): string {
  */
 const RECIPIENT_COMPLEMENT_FALLBACK = "Sem complemento";
 
+/**
+ * `register_information.address.reference_point` is required by POST /recipients
+ * (https://docs.pagar.me/reference/criar-recebedor-1), so an address without a
+ * reference point sends this instead of an empty string.
+ */
+const RECIPIENT_REFERENCE_POINT_FALLBACK = "Sem referência";
+
 function recipientBody(recipientCode: string, input: PagarmeRecipientInput) {
   const name = text(input.name, 128);
   const cpf = digits(input.cpf, /^\d{11}$/);
@@ -431,7 +438,9 @@ function recipientBody(recipientCode: string, input: PagarmeRecipientInput) {
         city: text(address.city, 128),
         state: digits(address.state, /^[A-Z]{2}$/),
         zip_code: digits(address.zipCode, /^\d{8}$/),
-        reference_point: text(address.referencePoint, 256),
+        reference_point: address.referencePoint?.trim()
+          ? text(address.referencePoint, 256)
+          : RECIPIENT_REFERENCE_POINT_FALLBACK,
       },
     },
     default_bank_account: {
