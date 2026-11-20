@@ -530,7 +530,12 @@ function GiftRegistryRuntime({
         method: quote.method,
         mode: quote.mode,
       };
-      const payment = { buyer: input.buyer, cardToken };
+      // The billing address goes only into this request, never to storage.
+      const payment = {
+        buyer: input.buyer,
+        cardToken,
+        billingAddress: input.billingAddress,
+      };
       if (
         !giftCheckoutCreateInputSchema.safeParse(
           giftCheckoutRequest(quote, pending, payment),

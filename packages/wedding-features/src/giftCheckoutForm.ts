@@ -1,5 +1,7 @@
 import {
+  type GiftCheckoutBillingAddress,
   type GiftCheckoutBuyer,
+  giftCheckoutBillingAddressSchema,
   giftCheckoutBuyerSchema,
 } from "@entrelacos/contracts";
 import { type PagarmeCardInput, parseCardExpiry } from "./pagarmeCardToken";
@@ -8,6 +10,19 @@ import { type PagarmeCardInput, parseCardExpiry } from "./pagarmeCardToken";
 export type GiftCheckoutFormInput = {
   buyer: GiftCheckoutBuyer;
   card?: PagarmeCardInput;
+  /** Card only: Pagar.me needs it next to the token. Never stored. */
+  billingAddress?: GiftCheckoutBillingAddress;
+};
+
+/** Card billing address as typed; every part is free text until submit. */
+export type GiftCheckoutBillingFields = {
+  zipCode: string;
+  street: string;
+  streetNumber: string;
+  complement: string;
+  neighborhood: string;
+  city: string;
+  state: string;
 };
 
 export type GiftCheckoutFormFields = {
@@ -19,6 +34,7 @@ export type GiftCheckoutFormFields = {
   holderName?: string;
   expiry?: string;
   cvv?: string;
+  billing?: GiftCheckoutBillingFields;
 };
 
 const digits = (value: string) => value.replace(/[^0-9]/g, "");
@@ -55,6 +71,36 @@ function isValidCardNumber(number: string): boolean {
 function normalizePhone(value: string): string {
   const phone = digits(value);
   return phone.length > 11 && phone.startsWith("55") ? phone.slice(2) : phone;
+}
+
+const line = (value: string) => value.trim().replace(/\s+/g, " ");
+
+const billingErrors: Record<string, string> = {
+  zipCode: "Confira o CEP do endereço de cobrança.",
+  street: "Informe a rua do endereço de cobrança.",
+  streetNumber: "Informe o número do endereço de cobrança.",
+  complement: "Confira o complemento do endereço de cobrança.",
+  neighborhood: "Informe o bairro do endereço de cobrança.",
+  city: "Informe a cidade do endereço de cobrança.",
+  state: "Selecione a UF do endereço de cobrança.",
+};
+
+function readBillingAddress(
+  fields: GiftCheckoutBillingFields | undefined,
+): { address: GiftCheckoutBillingAddress } | { error: string } {
+  const complement = line(fields?.complement ?? "");
+  const address = giftCheckoutBillingAddressSchema.safeParse({
+    zipCode: digits(fields?.zipCode ?? ""),
+    street: line(fields?.street ?? ""),
+    streetNumber: line(fields?.streetNumber ?? ""),
+    ...(complement ? { complement } : {}),
+    neighborhood: line(fields?.neighborhood ?? ""),
+    city: line(fields?.city ?? ""),
+    state: line(fields?.state ?? "").toUpperCase(),
+  });
+  if (address.success) return { address: address.data };
+  const field = String(address.error.issues[0]?.path[0] ?? "zipCode");
+  return { error: billingErrors[field] ?? billingErrors.zipCode };
 }
 
 /**
@@ -97,10 +143,13 @@ export function readGiftCheckoutForm(
     return { error: "Confira a validade do cartão (MM/AA)." };
   const cvv = digits(fields.cvv ?? "");
   if (!/^[0-9]{3,4}$/.test(cvv)) return { error: "Confira o CVV." };
+  const billing = readBillingAddress(fields.billing);
+  if ("error" in billing) return billing;
   return {
     input: {
       buyer: buyer.data,
       card: { number, holderName, ...expiry, cvv },
+      billingAddress: billing.address,
     },
   };
 }

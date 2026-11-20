@@ -25,6 +25,14 @@ const quote = {
   installmentCount: 3,
   settlementVersion: "PLATFORM_ACCOUNT_SPLIT_V2",
 } as GiftQuote;
+const billingAddress = {
+  zipCode: "01310100",
+  street: "Avenida Paulista",
+  streetNumber: "1000",
+  neighborhood: "Bela Vista",
+  city: "São Paulo",
+  state: "SP",
+};
 const buyer = {
   name: "Ana Souza",
   email: "ana@example.com",
@@ -40,7 +48,7 @@ function storage(value: unknown = pending) {
 }
 
 describe("transparent checkout submission", () => {
-  it("sends only the card token, the buyer and the recovery identity", async () => {
+  it("sends only the card token, the billing address, the buyer and the recovery identity", async () => {
     const createCheckout = vi
       .fn()
       .mockResolvedValue({ checkoutId: "checkout-a", status: "RECEIVED" });
@@ -50,7 +58,7 @@ describe("transparent checkout submission", () => {
       pending,
       () => storage(),
       () => true,
-      { buyer, cardToken: "token_abc123" },
+      { buyer, cardToken: "token_abc123", billingAddress },
     );
     expect(createCheckout).toHaveBeenCalledWith(
       {
@@ -60,6 +68,7 @@ describe("transparent checkout submission", () => {
         method: "CREDIT_CARD",
         installments: 3,
         cardToken: "token_abc123",
+        billingAddress,
         buyer,
       },
       quote,
@@ -146,6 +155,7 @@ describe("couple-site API client", () => {
           method: "CREDIT_CARD",
           installments: 3,
           cardToken: "token_x1",
+          billingAddress,
         },
         quote,
       ),
@@ -168,6 +178,7 @@ describe("couple-site API client", () => {
           method: "CREDIT_CARD",
           installments: 3,
           cardToken: "token_x1",
+          billingAddress,
           buyer,
           card: { number: "4000000000000010", cvv: "123" },
         } as never,

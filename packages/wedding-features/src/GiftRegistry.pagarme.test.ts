@@ -190,7 +190,7 @@ async function clickButton(label: string) {
 }
 async function type(label: string, value: string) {
   const input = [...surface.querySelectorAll("label")]
-    .find((element) => element.textContent?.trim().startsWith(label))
+    .find((element) => element.textContent?.trim() === label)
     ?.querySelector("input");
   if (!input) throw new Error(`Missing field ${label}`);
   await act(async () => {
@@ -206,6 +206,21 @@ async function fillBuyer() {
   await type("CPF", "529.982.247-25");
   await type("E-mail", "ana@example.com");
   await type("Celular", "11 98765-4321");
+}
+async function fillBilling() {
+  await type("CEP", "01310-100");
+  await type("Rua", "Avenida Paulista");
+  await type("Número", "1000");
+  await type("Bairro", "Bela Vista");
+  await type("Cidade", "São Paulo");
+  const uf = [...surface.querySelectorAll("label")].find(
+    (element) => element.textContent?.trim() === "UF",
+  )?.control;
+  if (!(uf instanceof HTMLSelectElement)) throw new Error("Missing UF");
+  await act(async () => {
+    uf.value = "SP";
+    uf.dispatchEvent(new Event("change", { bubbles: true }));
+  });
 }
 async function submit() {
   const button = [...surface.querySelectorAll("button")].find(
@@ -228,6 +243,7 @@ describe("transparent checkout on the couple site", () => {
     await type("Nome impresso no cartão", "ANA SOUZA");
     await type("Validade", "12/30");
     await type("CVV", "123");
+    await fillBilling();
     await submit();
 
     const token = calls.find((call) => call.url.includes("api.pagar.me"));
@@ -241,7 +257,19 @@ describe("transparent checkout on the couple site", () => {
       installments: 1,
       cardToken: "token_card123",
       buyer: { cpf: "52998224725", phone: "11987654321" },
+      billingAddress: {
+        zipCode: "01310100",
+        street: "Avenida Paulista",
+        streetNumber: "1000",
+        neighborhood: "Bela Vista",
+        city: "São Paulo",
+        state: "SP",
+      },
     });
+    // The address only travels with the order: it is not kept for recovery.
+    expect(JSON.stringify({ ...window.sessionStorage })).not.toMatch(
+      /01310100|Paulista|Bela Vista/,
+    );
     const ownApi = calls
       .filter((call) => call.url.startsWith(apiOrigin))
       .map((call) => String(call.init?.body ?? ""))
@@ -293,6 +321,7 @@ describe("transparent checkout on the couple site", () => {
     await type("Nome impresso no cartão", "ANA SOUZA");
     await type("Validade", "12/30");
     await type("CVV", "123");
+    await fillBilling();
   }
   function quoteDialog() {
     return surface.querySelector<HTMLDialogElement>(
@@ -443,9 +472,16 @@ describe("transparent checkout on the couple site", () => {
     await fillBuyer();
     await fillCard();
     await submit();
-    expect(String(browser.mock.calls[0]?.[0])).toContain("api.pagar.me");
     expect(
-      site.mock.calls.some(([input]) => String(input).includes("api.pagar.me")),
+      browser.mock.calls.some(([input]) =>
+        String(input).startsWith("https://api.pagar.me/"),
+      ),
+    ).toBe(true);
+    // Neither Pagar.me nor ViaCEP ever goes through the site's API fetcher.
+    expect(
+      site.mock.calls.some(([input]) =>
+        /api\.pagar\.me|viacep\.com\.br/.test(String(input)),
+      ),
     ).toBe(false);
   });
 });
