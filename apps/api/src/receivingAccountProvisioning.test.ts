@@ -128,6 +128,8 @@ function fixture() {
   };
   let record: ReceivingProvisioningRecord | undefined;
   let state = "REQUESTED";
+  let attempts = 0;
+  let lastErrorCode: string | null = null;
   let attached: ReceivingProvisioningResult | null = null;
   const controls = {
     armLostAck: false,
@@ -160,6 +162,7 @@ function fixture() {
                 60000000n
               ).toString(),
               possibleDispatch: false,
+              ...(attempts > 0 ? { attempt: attempts + 1 } : {}),
             },
           },
           sealedResult: null,
@@ -210,6 +213,21 @@ function fixture() {
         attached = result;
         state = "SUCCEEDED";
         if (controls.attachLostAck) throw new Error("private attachment ACK");
+      },
+    ),
+    releaseOriginal: vi.fn(
+      async (claim: ReceivingProvisioningRecord, reason: string) => {
+        if (
+          state !== "UNKNOWN" ||
+          !record ||
+          record.sealedResult !== null ||
+          !claim.provision.dispatch.possibleDispatch
+        )
+          throw new Error("release refused");
+        attempts = claim.provision.dispatch.attempt ?? 1;
+        lastErrorCode = reason;
+        record = undefined;
+        state = "REQUESTED";
       },
     ),
     consultOriginal: vi.fn(
@@ -264,8 +282,267 @@ function fixture() {
     command,
     getRecord: () => record,
     getState: () => state,
+    getAttempts: () => attempts,
+    getLastErrorCode: () => lastErrorCode,
   };
 }
+function json(status: number, body: unknown) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "content-type": "application/json" },
+  });
+}
+const rejectionBody = {
+  message: "Recebedor inválido para 'MARIA DA SILVA'",
+  errors: {
+    "register_information.birthdate": [
+      "The field birthdate must be dd/mm/yyyy, got 1990-04-12.",
+    ],
+    "register_information.phone_numbers": [
+      "Phone 21994647568 of MARIA DA SILVA is invalid",
+    ],
+  },
+};
+async function settleUnknown(values: ReturnType<typeof fixture>) {
+  values.fetchOriginal.mockImplementationOnce(async () => json(500, {}));
+  const service = createReceivingAccountProvisioning(values.options);
+  const owner = service.begin(values.command);
+  expect((await owner.feedback).state).toBe("UNKNOWN");
+  await owner.completion;
+  await service.close();
+  expect(values.getState()).toBe("UNKNOWN");
+  const record = values.getRecord();
+  if (!record) throw new Error("missing armed record");
+  values.fetchOriginal.mockReset();
+  return record;
+}
+describe("definitive Pagar.me rejection", () => {
+  it.each([400, 412, 422])(
+    "releases the dispatch and reports a %s as a retryable refusal",
+    async (status) => {
+      const values = fixture();
+      values.fetchOriginal.mockImplementationOnce(async () =>
+        json(status, rejectionBody),
+      );
+      const service = createReceivingAccountProvisioning({
+        ...values.options,
+        observe: () => {},
+      });
+      const owner = service.begin(values.command);
+      const feedback = await owner.feedback;
+      await owner.completion;
+      expect(feedback.state).toBe("REJECTED");
+      expect(feedback.rejection?.status).toBe(status);
+      expect(feedback.rejection?.fields.map((field) => field.field)).toEqual([
+        "register_information.birthdate",
+        "register_information.phone_numbers",
+      ]);
+      const exposed = JSON.stringify(feedback.rejection);
+      for (const value of ["MARIA", "SILVA", "21994647568", "1990-04-12"])
+        expect(exposed).not.toContain(value);
+      expect(values.repository.releaseOriginal).toHaveBeenCalledOnce();
+      const [released, reason] =
+        values.repository.releaseOriginal.mock.calls[0];
+      expect(reason).toBe("PROVIDER_REJECTED");
+      expect(released.provision.dispatch.possibleDispatch).toBe(true);
+      expect(values.repository.quarantineOriginal).not.toHaveBeenCalled();
+      expect(values.repository.attachOriginal).not.toHaveBeenCalled();
+      expect(values.getState()).toBe("REQUESTED");
+
+      // The corrected resubmission dispatches again with a new key.
+      values.fetchOriginal.mockImplementationOnce(async () => created());
+      const retry = service.begin(values.command);
+      expect((await retry.feedback).state).toBe("STORED");
+      await retry.completion;
+      await service.close();
+      expect(values.fetchOriginal).toHaveBeenCalledTimes(2);
+      const [, init] = values.fetchOriginal.mock.calls[1];
+      expect(new Headers(init?.headers).get("idempotency-key")).toBe(
+        "recipient:account-one:2",
+      );
+      expect(JSON.parse(String(init?.body)).code).toBe("account-one");
+    },
+  );
+
+  it.each([401, 403, 404, 409, 429, 500, 503])(
+    "keeps a %s uncertain without releasing the dispatch",
+    async (status) => {
+      const values = fixture();
+      values.fetchOriginal.mockImplementationOnce(async () =>
+        json(status, rejectionBody),
+      );
+      const service = createReceivingAccountProvisioning({
+        ...values.options,
+        observe: () => {},
+      });
+      const owner = service.begin(values.command);
+      expect((await owner.feedback).state).toBe("UNKNOWN");
+      await owner.completion;
+      await service.close();
+      expect(values.repository.releaseOriginal).not.toHaveBeenCalled();
+      expect(values.getState()).toBe("UNKNOWN");
+    },
+  );
+
+  it("stays uncertain when the rejected dispatch cannot be released", async () => {
+    const values = fixture();
+    values.fetchOriginal.mockImplementationOnce(async () =>
+      json(412, rejectionBody),
+    );
+    values.repository.releaseOriginal.mockRejectedValueOnce(
+      new Error("private release failure"),
+    );
+    const service = createReceivingAccountProvisioning({
+      ...values.options,
+      observe: () => {},
+    });
+    const owner = service.begin(values.command);
+    expect((await owner.feedback).state).toBe("UNKNOWN");
+    await owner.completion;
+    await service.close();
+  });
+});
+describe("reconciling an armed dispatch without a stored result", () => {
+  function reconcile(
+    values: ReturnType<typeof fixture>,
+    record: ReceivingProvisioningRecord,
+  ) {
+    return { ...values.command, action: "RECONCILE" as const, record };
+  }
+  const listed = (items: unknown[]) =>
+    json(200, { data: items, paging: { total: items.length } });
+  const platform = {
+    id: "rp_platformRecipient",
+    code: "platform",
+    status: "active",
+  };
+
+  it("attaches the recipient Pagar.me already holds under the account code", async () => {
+    const values = fixture();
+    const record = await settleUnknown(values);
+    values.fetchOriginal
+      .mockImplementationOnce(async () =>
+        listed([
+          platform,
+          {
+            id: "rp_fixtureRecipient01",
+            code: "account-one",
+            status: "registration",
+          },
+        ]),
+      )
+      .mockImplementationOnce(async () => created());
+    const service = createReceivingAccountProvisioning(values.options);
+    const owner = service.begin(reconcile(values, record));
+    expect((await owner.feedback).state).toBe("STORED");
+    await owner.completion;
+    await service.close();
+    expect(
+      values.fetchOriginal.mock.calls.every(
+        ([, init]) => init?.method === "GET",
+      ),
+    ).toBe(true);
+    expect(values.repository.releaseOriginal).not.toHaveBeenCalled();
+    expect(values.repository.attachOriginal.mock.calls.at(-1)?.[1]).toEqual({
+      accountReference: "rp_fixtureRecipient01",
+      recipientReference: "rp_fixtureRecipient01",
+    });
+  });
+
+  it("releases a dispatch Pagar.me confirms absent and creates again with the next key", async () => {
+    const values = fixture();
+    const record = await settleUnknown(values);
+    values.fetchOriginal
+      .mockImplementationOnce(async () => listed([platform]))
+      .mockImplementationOnce(async () => created());
+    const service = createReceivingAccountProvisioning(values.options);
+    const owner = service.begin(reconcile(values, record));
+    expect((await owner.feedback).state).toBe("STORED");
+    await owner.completion;
+    await service.close();
+    expect(values.repository.releaseOriginal).toHaveBeenCalledOnce();
+    expect(values.repository.releaseOriginal.mock.calls[0][1]).toBe(
+      "PROVIDER_ABSENT",
+    );
+    const posts = values.fetchOriginal.mock.calls.filter(
+      ([, init]) => init?.method === "POST",
+    );
+    expect(posts).toHaveLength(1);
+    expect(new Headers(posts[0][1]?.headers).get("idempotency-key")).toBe(
+      "recipient:account-one:2",
+    );
+  });
+
+  it.each([
+    ["a failed consultation", async () => json(500, {})],
+    ["a rejected consultation", async () => json(429, {})],
+  ])(
+    "stays uncertain after %s without releasing or creating",
+    async (_label, answer) => {
+      const values = fixture();
+      const record = await settleUnknown(values);
+      values.fetchOriginal.mockImplementation(answer);
+      const service = createReceivingAccountProvisioning({
+        ...values.options,
+        observe: () => {},
+      });
+      const owner = service.begin(reconcile(values, record));
+      expect((await owner.feedback).state).toBe("UNKNOWN");
+      await owner.completion;
+      await service.close();
+      expect(values.repository.releaseOriginal).not.toHaveBeenCalled();
+      expect(
+        values.fetchOriginal.mock.calls.some(
+          ([, init]) => init?.method === "POST",
+        ),
+      ).toBe(false);
+    },
+  );
+
+  it("stays uncertain when the release is refused, so it never creates", async () => {
+    const values = fixture();
+    const record = await settleUnknown(values);
+    values.fetchOriginal.mockImplementation(async () => listed([platform]));
+    values.repository.releaseOriginal.mockRejectedValueOnce(
+      new Error("lease still live"),
+    );
+    const service = createReceivingAccountProvisioning({
+      ...values.options,
+      observe: () => {},
+    });
+    const owner = service.begin(reconcile(values, record));
+    expect((await owner.feedback).state).toBe("UNKNOWN");
+    await owner.completion;
+    await service.close();
+    expect(
+      values.fetchOriginal.mock.calls.some(
+        ([, init]) => init?.method === "POST",
+      ),
+    ).toBe(false);
+  });
+
+  it("never reconciles a record that already holds a sealed result", async () => {
+    const values = fixture();
+    const record = await settleUnknown(values);
+    const sealed = readReceivingProvisioningRecord({
+      ...record,
+      sealedResult: {
+        accountReference: "rp_fixtureRecipient01",
+        recipientReference: "rp_fixtureRecipient01",
+      },
+    });
+    const service = createReceivingAccountProvisioning({
+      ...values.options,
+      observe: () => {},
+    });
+    const owner = service.begin(reconcile(values, sealed));
+    expect((await owner.feedback).state).toBe("UNKNOWN");
+    await owner.completion;
+    await service.close();
+    expect(values.fetchOriginal).not.toHaveBeenCalled();
+    expect(values.repository.releaseOriginal).not.toHaveBeenCalled();
+  });
+});
 describe("completion-owned original account provisioning", () => {
   it("configuration getter failure cannot expose a private error or read a provider", async () => {
     const values = fixture();
@@ -775,7 +1052,7 @@ describe("provisioning failure observability", () => {
     expectNoPii(observe);
   });
 
-  it("records a Pagar.me rejection with its status and provider code only", async () => {
+  it("records a Pagar.me rejection with its status, code and redacted reason", async () => {
     const values = fixture();
     const observe = vi.fn();
     values.fetchOriginal.mockImplementation(
@@ -797,19 +1074,60 @@ describe("provisioning failure observability", () => {
       observe,
     });
     const owner = service.begin(values.command);
-    expect((await owner.feedback).state).toBe("UNKNOWN");
+    expect((await owner.feedback).state).toBe("REJECTED");
     await owner.completion;
     await service.close();
     expect(observe).toHaveBeenCalledExactlyOnceWith({
       level: "warn",
       event: "receiving.provisioning.failed",
       operation: "create_recipient",
-      result: "unknown",
+      result: "rejected",
       errorCode: "PagarmeRejectedError",
       siteId: "site-one",
       status: 422,
       providerCode: "invalid_document",
+      providerMessage: "CPF [número] of [valor] is invalid",
     });
+    expectNoPii(observe);
+  });
+
+  it("logs the field paths of a 412 without echoed personal data", async () => {
+    const values = fixture();
+    const observe = vi.fn();
+    values.fetchOriginal.mockImplementation(async () =>
+      json(412, {
+        message: "Dados de Rio de Janeiro, Av. General Justo inválidos",
+        errors: {
+          "register_information.address.street": [
+            "Street Av. General Justo is invalid",
+          ],
+          "register_information.name": ["Name Maria da Silva is invalid"],
+          "default_bank_account.account_number": ["12345 is invalid"],
+        },
+      }),
+    );
+    const service = createReceivingAccountProvisioning({
+      ...values.options,
+      observe,
+    });
+    const owner = service.begin(values.command);
+    expect((await owner.feedback).state).toBe("REJECTED");
+    await owner.completion;
+    await service.close();
+    const [event] = observe.mock.calls[0];
+    expect(event).toMatchObject({
+      operation: "create_recipient",
+      result: "rejected",
+      status: 412,
+    });
+    expect(event.providerFields).toEqual([
+      expect.stringMatching(/^register_information\.address\.street: /),
+      expect.stringMatching(/^register_information\.name: /),
+      expect.stringMatching(/^default_bank_account\.account_number: /),
+    ]);
+    const logged = JSON.stringify(observe.mock.calls);
+    for (const value of ["Maria", "Silva", "General Justo", "Rio de Janeiro"])
+      expect(logged).not.toContain(value);
     expectNoPii(observe);
   });
 

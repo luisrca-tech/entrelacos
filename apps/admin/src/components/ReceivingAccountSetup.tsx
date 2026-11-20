@@ -34,6 +34,10 @@ import {
   type ReceivingStepSection,
   type ReceivingStepsContext,
 } from "./ReceivingSteps";
+import {
+  type LabeledProviderRejection,
+  readProviderRejection,
+} from "./receivingProviderRejection";
 import { normalizeSetupAccount } from "./receivingSetupForm";
 import { deriveReceivingTrack } from "./receivingTrack";
 
@@ -60,7 +64,16 @@ export type ReceivingAccountSetupState = {
   status: "loading" | "ready" | "submitting" | "denied" | "unavailable";
   setup: ReceivingSetupContext | null;
   message: string | null;
+  /** Pagar.me's refusal of the last submit, kept until the next one. */
+  rejection?: LabeledProviderRejection | null;
 };
+/** What became of a submit; the form keeps its data only when "rejected". */
+export type ReceivingSetupSubmitOutcome =
+  | "stored"
+  | "unknown"
+  | "rejected"
+  | "failed"
+  | "skipped";
 export function createReceivingAccountSetupController(
   scope: ReceivingSetupScope,
   publish: (state: ReceivingAccountSetupState) => void,
@@ -310,16 +323,19 @@ export function createReceivingAccountSetupController(
     refresh,
     getState: () => structuredClone(state),
     verifyIncoming,
-    async submit(account: unknown, confirmed: boolean) {
+    async submit(
+      account: unknown,
+      confirmed: boolean,
+    ): Promise<ReceivingSetupSubmitOutcome> {
       if (!confirmed || owner.isSuspended?.() || !(await guard.validate()))
-        return;
+        return "skipped";
       const parsed = receivingSetupAccountSchema.safeParse(account);
       if (!parsed.success) {
         update({
           ...state,
           message: "Confira os dados cadastrais antes de enviar.",
         });
-        return;
+        return "skipped";
       }
       const setup = state.setup;
       if (!setup || !guard.isCurrent() || owner.isSuspended?.()) {
@@ -327,10 +343,15 @@ export function createReceivingAccountSetupController(
           ...state,
           message: "Verifique o titular e a sessão antes de enviar o cadastro.",
         });
-        return;
+        return "skipped";
       }
       const active = ++revision;
-      update({ ...state, status: "submitting", message: null });
+      update({
+        ...state,
+        status: "submitting",
+        message: null,
+        rejection: null,
+      });
       notify();
       try {
         const result = receivingSetupResultSchema.parse(
@@ -348,7 +369,7 @@ export function createReceivingAccountSetupController(
             },
           ),
         );
-        if (!current() || active !== revision) return;
+        if (!current() || active !== revision) return "skipped";
         await refresh();
         if (current())
           update({
@@ -356,10 +377,39 @@ export function createReceivingAccountSetupController(
             message:
               result.state === "STORED"
                 ? "Cadastro enviado à Pagar.me. Acompanhe as verificações abaixo."
-                : "O resultado permanece incerto. Verifique a situação antes de tentar novamente.",
+                : "O resultado ainda está incerto. Envie o cadastro de novo em alguns minutos: antes de criar outro, consultamos a Pagar.me.",
           });
+        return result.state === "STORED" ? "stored" : "unknown";
       } catch (cause) {
+        const rejection =
+          cause instanceof ApiError &&
+          cause.status === 422 &&
+          cause.code === "RECEIVING_PROVIDER_REJECTED"
+            ? (readProviderRejection(cause.problem) ?? {
+                message: null,
+                fields: [],
+              })
+            : null;
+        if (rejection && current() && revision === active) {
+          // Reload without unmounting the form, which keeps what was typed.
+          let next = state.setup;
+          try {
+            next = await load();
+          } catch {
+            /* The refusal is known; the previous context still allows a resend. */
+          }
+          if (!current() || revision !== active) return "skipped";
+          update({
+            status: "ready",
+            setup: next,
+            message:
+              "A Pagar.me recusou o cadastro. Corrija os dados indicados e envie novamente.",
+            rejection,
+          });
+          return "rejected";
+        }
         if (revision === active) fail(cause);
+        return "failed";
       }
     },
     async designate(holderUserId: string) {
@@ -514,11 +564,14 @@ export function ReceivingAccountSetup(
       }}
       onSubmit={(event) => {
         event.preventDefault();
-        const data = new FormData(event.currentTarget);
+        const target = event.currentTarget;
+        const data = new FormData(target);
         const account = normalizeSetupAccount(Object.fromEntries(data));
         const confirmed = data.get("consent") === "on";
-        event.currentTarget.reset();
-        void controller.current?.submit(account, confirmed);
+        // The typed data stays only when Pagar.me refused it, to be fixed.
+        void controller.current?.submit(account, confirmed).then((outcome) => {
+          if (outcome !== "rejected" && outcome !== "skipped") target.reset();
+        });
       }}
     />
   );
@@ -560,7 +613,8 @@ export function ReceivingAccountSetupView({
   const canSubmit =
     !owner &&
     !!setup?.isHolder &&
-    ["NOT_CREATED", "PENDING"].includes(setup.accountState) &&
+    // UNKNOWN resends are consulted on Pagar.me before anything is created.
+    ["NOT_CREATED", "PENDING", "UNKNOWN"].includes(setup.accountState) &&
     !!guard?.isCurrent();
   const parsedReadiness = receivingReadinessResponseSchema.safeParse({
     readiness,
@@ -589,6 +643,7 @@ export function ReceivingAccountSetupView({
     canSubmit,
     receivingReady,
     readiness: currentReadiness,
+    rejection: state.rejection ?? null,
     ...track,
     guard,
     incomingGuard,

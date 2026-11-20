@@ -11,6 +11,7 @@ vi.mock("./authHttp", () => ({
 }));
 vi.mock("./siteAccess", () => ({ resolveSiteAccess: mocks.resolveSiteAccess }));
 
+import { ReceivingProviderRejectedError } from "./receivingSetup";
 import { createReceivingSetupHttpRouter } from "./receivingSetupHttp";
 import { ReceivingSetupError } from "./receivingSetupRepository";
 
@@ -232,6 +233,69 @@ describe("receiving setup HTTP boundary", () => {
       (await v.router.request(request("setup", { apiKey: "private" }))).status,
     ).toBe(400);
     expect(v.submit).not.toHaveBeenCalled();
+  });
+  it("answers a definitive Pagar.me refusal with an owner-safe 422 problem", async () => {
+    const v = fixture();
+    v.submit.mockRejectedValueOnce(
+      new ReceivingProviderRejectedError({
+        message: "Recebedor inválido",
+        fields: [
+          {
+            field: "register_information.birthdate",
+            messages: ["must be dd/mm/yyyy"],
+          },
+        ],
+      }),
+    );
+    const response = await v.router.request(
+      request("setup", {
+        policyVersion: "policy-v1",
+        consentVersion: "pagarme-receiving-v1",
+        confirmHolder: true,
+        consentToProvider: true,
+        account: {
+          name: "Maria da Silva",
+          email: "maria@example.test",
+          cpf: "12345678909",
+          mobilePhone: "21994647568",
+          birthDate: "1990-04-12",
+          monthlyIncomeCents: 500000,
+          professionalOccupation: "Professora",
+          address: {
+            street: "Av. General Justo",
+            streetNumber: "375",
+            neighborhood: "Centro",
+            city: "Rio de Janeiro",
+            state: "RJ",
+            zipCode: "20021130",
+          },
+          bankAccount: {
+            bank: "341",
+            branchNumber: "1234",
+            accountNumber: "12345",
+            accountCheckDigit: "6",
+            type: "checking",
+          },
+        },
+      }),
+    );
+    expect(response.status).toBe(422);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(await response.json()).toEqual({
+      type: "about:blank",
+      title: "Receiving setup unavailable",
+      status: 422,
+      code: "RECEIVING_PROVIDER_REJECTED",
+      provider: {
+        message: "Recebedor inválido",
+        fields: [
+          {
+            field: "register_information.birthdate",
+            messages: ["must be dd/mm/yyyy"],
+          },
+        ],
+      },
+    });
   });
   it("sanitizes unexpected provider failures", async () => {
     const v = fixture();

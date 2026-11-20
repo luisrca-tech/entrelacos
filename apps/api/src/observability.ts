@@ -25,6 +25,9 @@ export interface ObservabilityEvent {
   attemptId?: string;
   paymentMethod?: string;
   providerCode?: string;
+  providerMessage?: string;
+  /** `field.path: message` entries of a provider validation error. */
+  providerFields?: string[];
 }
 
 export type ObservabilitySink = (event: ObservabilityEvent) => void;
@@ -61,6 +64,8 @@ const ALLOWED_FIELDS = [
   "attemptId",
   "paymentMethod",
   "providerCode",
+  "providerMessage",
+  "providerFields",
 ] as const satisfies readonly (keyof ObservabilityEvent)[];
 
 const TOKEN_PATTERN = /^[A-Za-z][A-Za-z0-9_.:-]{0,63}$/;
@@ -83,6 +88,46 @@ function providerCode(value: unknown): string | undefined {
   const token = boundedToken(value);
   if (token === undefined) return undefined;
   return /\d{4,}/.test(token) ? "redacted" : token;
+}
+
+export const PROVIDER_MESSAGE_LIMIT = 300;
+export const PROVIDER_FIELD_LIMIT = 10;
+const PROVIDER_FIELD_ENTRY_LIMIT = 240;
+
+/**
+ * Provider text may echo what was sent. Removes the shapes personal data
+ * takes: quoted values, e-mails, runs of capitalized words (names are sent in
+ * capitals) and any number of four or more digits, separators included
+ * (CPF, phone, CEP, bank account, dates). Control characters are dropped and
+ * the result is bounded.
+ */
+export function redactProviderText(value: unknown, limit: number): string {
+  if (typeof value !== "string") return "";
+  return value
+    .normalize("NFC")
+    .replace(/\p{Cc}+/gu, " ")
+    .replace(
+      /["'`\u2018\u2019\u201c\u201d][^"'`\u2018\u2019\u201c\u201d]*["'`\u2018\u2019\u201c\u201d]/g,
+      "[valor]",
+    )
+    .replace(/[^\s@()[\]<>,;:]+@[^\s@()[\]<>,;:]+/g, "[e-mail]")
+    .replace(/\b\p{Lu}{2,}(?:\s+\p{Lu}{2,})+\b/gu, "[valor]")
+    .replace(/\d(?:[\d.\-/\s()]*\d)?/g, (number) =>
+      (number.match(/\d/g)?.length ?? 0) >= 4 ? "[número]" : number,
+    )
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, limit);
+}
+
+function providerFields(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const fields = value
+    .filter((entry): entry is string => typeof entry === "string")
+    .slice(0, PROVIDER_FIELD_LIMIT)
+    .map((entry) => redactProviderText(entry, PROVIDER_FIELD_ENTRY_LIMIT))
+    .filter(Boolean);
+  return fields.length ? fields : undefined;
 }
 
 function boundedRoute(value: unknown): string | undefined {
@@ -114,7 +159,10 @@ function nonNegativeInteger(value: unknown): number | undefined {
 function safeFieldValue(
   field: keyof ObservabilityEvent,
   value: unknown,
-): string | number | undefined {
+): string | number | string[] | undefined {
+  if (field === "providerFields") return providerFields(value);
+  if (field === "providerMessage")
+    return redactProviderText(value, PROVIDER_MESSAGE_LIMIT) || undefined;
   if (field === "timestamp") {
     return typeof value === "string" &&
       value.length <= 64 &&
@@ -163,7 +211,7 @@ export function sanitizeObservabilityEvent(input: unknown): ObservabilityEvent {
   const source = input as Record<string, unknown>;
   const output: ObservabilityEvent = {};
   for (const field of ALLOWED_FIELDS) {
-    let value: string | number | undefined;
+    let value: string | number | string[] | undefined;
     try {
       value = safeFieldValue(field, source[field]);
     } catch {

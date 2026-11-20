@@ -21,6 +21,7 @@ import {
   captureReceivingNominationAdmissionAuthority,
   captureReceivingNominationAdmissionContext,
   captureReceivingNominationAdmissionPolicy,
+  consistentDispatchHistory,
   deriveReceivingNominationRequestId,
   observeNominationSettlement,
   type ReceivingNominationAdmissionAuthority,
@@ -167,14 +168,15 @@ async function readScope(
     row.leaseOwner !== null ||
     row.leaseToken !== null ||
     row.leaseExpiresAt !== null ||
-    row.attempts !== 0 ||
-    row.lastErrorCode !== null
+    !consistentDispatchHistory(row.attempts, row.lastErrorCode)
   )
     fail();
   const originalTime = timestamp(new Date(snapshot.createdAt));
   if (originalTime > databaseTime) fail();
   // An untouched local REQUESTED intent has one immutable creation timestamp.
   // Compare driver dates at full precision rather than their public ISO millis.
+  // Releasing a dispatch (see receivingAccountProvisioningRepository) only
+  // moves the operation update forward.
   for (const field of [
     "accountCreatedAt",
     "accountUpdatedAt",
@@ -182,7 +184,13 @@ async function readScope(
     "operationUpdatedAt",
     "nextAttemptAt",
   ]) {
-    if (timestamp(readDatabaseTimestamp(row[field])) !== originalTime) fail();
+    const value = timestamp(readDatabaseTimestamp(row[field]));
+    if (
+      field === "operationUpdatedAt" && row.attempts !== 0
+        ? value < originalTime
+        : value !== originalTime
+    )
+      fail();
   }
   return snapshot;
 }

@@ -1168,6 +1168,26 @@ describe("authoritative nomination scope recovery", () => {
       ).rejects.toMatchObject({ status: 503 });
     },
   );
+  it("replays an intent whose earlier dispatch was released after a Pagar.me refusal", async () => {
+    const v = fixture(true);
+    await v.repository.reserveNomination(
+      v.snapshot,
+      v.authorize,
+      v.authorization,
+    );
+    const op = v.tables.operations[0];
+    op.attempts = 1;
+    op.lastErrorCode = "PROVIDER_REJECTED";
+    op.updatedAt = "2026-10-12 18:20:00.000001+00";
+    v.state.clock = new Date("2026-10-12T18:20:01.000Z");
+    await expect(v.repository.readNominationScope(scope(v))).resolves.toEqual(
+      v.snapshot,
+    );
+    op.lastErrorCode = "SOMETHING_ELSE";
+    await expect(
+      v.repository.readNominationScope(scope(v)),
+    ).rejects.toHaveProperty("status");
+  });
   it("ignores facts from another site/environment while proving the exact scope", async () => {
     const v = fixture();
     await v.repository.reserveNomination(

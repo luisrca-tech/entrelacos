@@ -809,6 +809,37 @@ describe("bounded historical purchase stored reader", () => {
     await v.repository.close();
   });
 
+  it.each([
+    [2, "PROVIDER_ABSENT", true],
+    [1, "PROVIDER_ABSENT", false],
+  ] as const)(
+    "reads a recipient created by dispatch 2 (attempts %s, last error %s) as bound: %s",
+    async (attempts, lastErrorCode, readable) => {
+      const v = await fixture();
+      const operation = v.tables.financial_operation[0];
+      const record = readReceivingProvisioningRecord(
+        operation.request_snapshot,
+      );
+      operation.request_snapshot = readReceivingProvisioningRecord({
+        ...record,
+        provision: {
+          ...record.provision,
+          dispatch: { ...record.provision.dispatch, attempt: 2 },
+        },
+      });
+      operation.attempts = attempts;
+      operation.last_error_code = lastErrorCode;
+      try {
+        const page = await v.repository.readPurchasePage(v.scope, null);
+        expect(page.history.items[0]?.binding).toBe(
+          readable ? "AVAILABLE" : "UNBOUND",
+        );
+      } finally {
+        await v.repository.close();
+      }
+    },
+  );
+
   it("validates a Pagar.me 6x card order as one charge crediting the whole nominal", async () => {
     const v = await fixture();
     const stored = v.tables.gift_quote_record[0];

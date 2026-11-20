@@ -806,7 +806,7 @@ describe("receiving account setup", () => {
       values.controller.dispose();
     },
   );
-  it("hides registration after an uncertain original dispatch", () => {
+  it("lets the holder resend after an uncertain dispatch, which Pagar.me is consulted for first", () => {
     const values = fixture();
     const html = renderToStaticMarkup(
       createElement(ReceivingAccountSetupView, {
@@ -815,12 +815,100 @@ describe("receiving account setup", () => {
           status: "ready",
           setup: { ...setup, accountState: "UNKNOWN" },
           message: null,
+          rejection: null,
         },
+        guard: { isCurrent: () => true } as never,
+        onSubmit: vi.fn(),
         section: "details",
       }),
     );
     expect(html).toContain("incerto");
-    expect(html).not.toContain('name="cpf"');
+    expect(html).toContain("consultamos a Pagar.me");
+    expect(html).toContain('name="cpf"');
+    values.controller.dispose();
+  });
+  it("shows a Pagar.me refusal with the fields to fix and keeps the form", async () => {
+    const values = fixture();
+    const original = values.request.getMockImplementation();
+    values.request.mockImplementation(async (path, options) => {
+      if (options?.method === "POST")
+        throw new ApiError(422, "RECEIVING_PROVIDER_REJECTED", {
+          code: "RECEIVING_PROVIDER_REJECTED",
+          provider: {
+            message: "Recebedor inválido",
+            fields: [
+              {
+                field: "register_information.birthdate",
+                messages: ["must be dd/mm/yyyy"],
+              },
+              { field: "default_bank_account.account_number", messages: [] },
+            ],
+          },
+        });
+      return original?.(path, options);
+    });
+    await values.controller.refresh();
+    const outcome = await values.controller.submit(
+      {
+        name: "Fictional Person",
+        email: "person@example.test",
+        cpf: "12345678909",
+        mobilePhone: "11999999999",
+        birthDate: "1990-01-01",
+        monthlyIncomeCents: 100000,
+        professionalOccupation: "Engineer",
+        address: {
+          street: "Fictional Road",
+          streetNumber: "1",
+          neighborhood: "District",
+          city: "Fictional City",
+          state: "SP",
+          zipCode: "12345678",
+        },
+        bankAccount: {
+          bank: "341",
+          branchNumber: "1234",
+          accountNumber: "12345",
+          accountCheckDigit: "6",
+          type: "checking",
+        },
+      },
+      true,
+    );
+    expect(outcome).toBe("rejected");
+    const state = values.controller.getState();
+    expect(state.status).toBe("ready");
+    expect(state.message).toContain("A Pagar.me recusou o cadastro");
+    expect(state.rejection).toEqual({
+      message: "Recebedor inválido",
+      fields: [
+        {
+          field: "register_information.birthdate",
+          label: "Data de nascimento",
+          messages: ["must be dd/mm/yyyy"],
+        },
+        {
+          field: "default_bank_account.account_number",
+          label: "Conta com dígito",
+          messages: [],
+        },
+      ],
+    });
+    expect(values.owner.reportFailure).not.toHaveBeenCalled();
+    const html = renderToStaticMarkup(
+      createElement(ReceivingAccountSetupView, {
+        scope: values.scope,
+        state: { ...state, setup: { ...setup, accountState: "PENDING" } },
+        guard: { isCurrent: () => true } as never,
+        onSubmit: vi.fn(),
+        section: "details",
+      }),
+    );
+    expect(html).toContain("A Pagar.me recusou o cadastro");
+    expect(html).toContain("Data de nascimento");
+    expect(html).toContain("must be dd/mm/yyyy");
+    expect(html).toContain("Recebedor inválido");
+    expect(html).toContain('name="cpf"');
     values.controller.dispose();
   });
   it("shows a named holder selection to an owner without a membership", () => {

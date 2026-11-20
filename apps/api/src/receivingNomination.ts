@@ -15,7 +15,10 @@ import type {
   RecentFinancialAuthenticationEvidence,
 } from "./financialAuthorization";
 import { allowsLiveSite, type LiveSitePolicy } from "./liveSitePolicy";
-import { readPagarmeRecipientId } from "./pagarmeRecipientClient";
+import {
+  MAX_RECIPIENT_DISPATCH_ATTEMPTS,
+  readPagarmeRecipientId,
+} from "./pagarmeRecipientClient";
 
 const NominationPromise = Promise;
 const nominationPromiseThen = Promise.prototype.then;
@@ -163,6 +166,11 @@ export interface ReceivingProvisioningContext extends ReceivingNominationScope {
     readonly leaseToken: string;
     readonly leaseExpiresAtMicroseconds: string;
     readonly possibleDispatch: boolean;
+    /**
+     * Which dispatch of this account creation the lease is for. Absent for
+     * the first one, so records written before retries stay identical.
+     */
+    readonly attempt?: number;
   };
 }
 export interface ReceivingProvisioningRecord {
@@ -584,6 +592,37 @@ function privateIdentifier(value: unknown): string {
     return unavailable();
   return value;
 }
+/**
+ * Why an armed account creation went back to REQUESTED: Pagar.me refused it
+ * definitively (400/412/422), or a consultation after the lease proved no
+ * recipient carries its code.
+ */
+export const receivingDispatchReleaseCodes = [
+  "PROVIDER_REJECTED",
+  "PROVIDER_ABSENT",
+] as const;
+export type ReceivingDispatchReleaseCode =
+  (typeof receivingDispatchReleaseCodes)[number];
+/**
+ * `released` dispatches ended without a recipient. None leaves no error code;
+ * any other count keeps the code of the last release.
+ */
+export function consistentDispatchHistory(
+  released: unknown,
+  lastErrorCode: unknown,
+): boolean {
+  if (
+    !Number.isSafeInteger(released) ||
+    (released as number) < 0 ||
+    (released as number) >= MAX_RECIPIENT_DISPATCH_ATTEMPTS
+  )
+    return false;
+  return released === 0
+    ? lastErrorCode === null
+    : (receivingDispatchReleaseCodes as readonly unknown[]).includes(
+        lastErrorCode,
+      );
+}
 export function readReceivingProvisioningResult(
   value: unknown,
 ): ReceivingProvisioningResult {
@@ -644,13 +683,22 @@ export function readReceivingProvisioningRecord(
       !/^[a-f0-9]{64}$/.test(provision.inputFingerprint)
     )
       return unavailable();
+    const retried =
+      !!provision.dispatch &&
+      typeof provision.dispatch === "object" &&
+      Object.hasOwn(provision.dispatch, "attempt");
     const dispatch = exactRecord(provision.dispatch, [
       "leaseOwner",
       "leaseToken",
       "leaseExpiresAtMicroseconds",
       "possibleDispatch",
+      ...(retried ? ["attempt"] : []),
     ]);
     if (
+      (retried &&
+        (!Number.isSafeInteger(dispatch.attempt) ||
+          (dispatch.attempt as number) < 2 ||
+          (dispatch.attempt as number) > MAX_RECIPIENT_DISPATCH_ATTEMPTS)) ||
       typeof dispatch.possibleDispatch !== "boolean" ||
       typeof dispatch.leaseExpiresAtMicroseconds !== "string" ||
       !/^[1-9]\d{0,18}$/.test(dispatch.leaseExpiresAtMicroseconds) ||
@@ -683,6 +731,7 @@ export function readReceivingProvisioningRecord(
           leaseToken: privateIdentifier(dispatch.leaseToken),
           leaseExpiresAtMicroseconds: dispatch.leaseExpiresAtMicroseconds,
           possibleDispatch: dispatch.possibleDispatch,
+          ...(retried ? { attempt: dispatch.attempt as number } : {}),
         }),
       }),
       sealedResult:

@@ -25,6 +25,7 @@ import {
   ReceivingNominationServiceError,
   type ReceivingNominationSnapshot,
   readReceivingNominationSnapshot,
+  readReceivingProvisioningRecord,
 } from "./receivingNomination";
 
 const now = new Date("2026-10-12T12:00:00.000Z");
@@ -108,6 +109,30 @@ describe("private provisioning snapshot projection", () => {
     };
     expect(readReceivingNominationSnapshot(record)).toEqual(record.nomination);
   });
+  it("keeps the dispatch attempt of a later account creation", async () => {
+    const record = await wrapper();
+    Object.assign(record.provision.dispatch, { attempt: 2 });
+    expect(
+      readReceivingProvisioningRecord(record).provision.dispatch.attempt,
+    ).toBe(2);
+    const first = await wrapper();
+    expect(
+      Object.hasOwn(
+        readReceivingProvisioningRecord(first).provision.dispatch,
+        "attempt",
+      ),
+    ).toBe(false);
+  });
+  it.each([1, 0, -1, 2.5, "2", 1001])(
+    "rejects a non-canonical dispatch attempt %s",
+    async (attempt) => {
+      const record = await wrapper();
+      Object.assign(record.provision.dispatch, { attempt });
+      expect(() => readReceivingProvisioningRecord(record)).toThrow(
+        ReceivingNominationServiceError,
+      );
+    },
+  );
   it.each([
     "siteId",
     "accountId",

@@ -946,9 +946,11 @@ describe("resubmitting a stuck setup next to a previous provider's history", () 
     await provisioning.close();
     expect(outcome).toEqual({ state: "STORED" });
     expect(nominate).not.toHaveBeenCalled();
+    // The first dispatch keeps the original idempotency key (attempt 1).
     expect(createRecipient).toHaveBeenCalledExactlyOnceWith(
       "account-one",
       values.input,
+      1,
     );
     expect(values.tables.accounts[1]).toMatchObject({
       id: "account-one",

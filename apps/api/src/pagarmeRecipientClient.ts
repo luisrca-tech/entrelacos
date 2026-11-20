@@ -119,11 +119,23 @@ export interface PagarmePayable {
 }
 
 export interface PagarmeRecipientClient {
+  /**
+   * `attempt` counts the dispatches of one account creation. The first keeps
+   * the `recipient:<code>` idempotency key; a later one, made only after a
+   * recorded definitive refusal or a confirmed absence, uses
+   * `recipient:<code>:<attempt>` so a cached refusal is not replayed.
+   */
   createRecipient(
     code: string,
     input: PagarmeRecipientInput,
+    attempt?: number,
   ): Promise<PagarmeRecipient>;
   getRecipient(recipientId: string): Promise<PagarmeRecipient>;
+  /**
+   * Reads every recipient (GET only) and returns the one created with this
+   * code, or null once every page proved it absent. Any doubt throws.
+   */
+  findRecipientByCode(code: string): Promise<PagarmeRecipient | null>;
   /** Short-lived (about 20 minutes); callers must never persist it. */
   createKycLink(recipientId: string): Promise<PagarmeKycLink>;
   getBalance(recipientId: string): Promise<PagarmeRecipientBalance>;
@@ -384,6 +396,26 @@ function createdAt(value: unknown): number {
 /** GET /transfers answers at most this many items per page. */
 const TRANSFER_PAGE_SIZE = 1_000;
 
+/**
+ * GET /recipients only documents `page` and `size`, no `code` filter, and its
+ * list items may omit `code` (https://docs.pagar.me/reference/listar-recebedores-1),
+ * so the search pages the list and reads by id an item without one.
+ */
+const RECIPIENT_PAGE_SIZE = 100;
+const RECIPIENT_MAX_PAGES = 20;
+const RECIPIENT_MAX_CODE_READS = 25;
+export const MAX_RECIPIENT_DISPATCH_ATTEMPTS = 1_000;
+
+function attemptNumber(value: unknown): number {
+  if (
+    !Number.isSafeInteger(value) ||
+    (value as number) < 1 ||
+    (value as number) > MAX_RECIPIENT_DISPATCH_ATTEMPTS
+  )
+    return invalid();
+  return value as number;
+}
+
 /** Pagar.me example dates are `DD/MM/YYYY` (criar-recebedor-1). */
 function pagarmeBirthdate(isoDate: string): string {
   const [year, month, day] = birthDate(isoDate).split("-");
@@ -513,12 +545,16 @@ export function createPagarmeRecipientClient(
       return invalid();
   }
   const client: PagarmeRecipientClient = {
-    async createRecipient(recipientCode, input) {
+    async createRecipient(recipientCode, input, attempt = 1) {
       const body = recipientBody(code(recipientCode), input);
+      const dispatch = attemptNumber(attempt);
       const recipient = readRecipient(
         await http.request("POST", "/recipients", {
           body,
-          idempotencyKey: `recipient:${recipientCode}`,
+          idempotencyKey:
+            dispatch === 1
+              ? `recipient:${recipientCode}`
+              : `recipient:${recipientCode}:${dispatch}`,
         }),
       );
       if (
@@ -537,6 +573,47 @@ export function createPagarmeRecipientClient(
       // The stored id may be any of the recipient's formats; it is kept.
       if (!recipientIdentities(raw).has(id)) return invalid();
       return Object.freeze({ ...recipient, id });
+    },
+    async findRecipientByCode(recipientCode) {
+      const wanted = code(recipientCode);
+      let reads = 0;
+      let seen = 0;
+      for (let page = 1; page <= RECIPIENT_MAX_PAGES; page++) {
+        const query = new URLSearchParams({
+          page: String(page),
+          size: String(RECIPIENT_PAGE_SIZE),
+        });
+        const raw = record(await http.request("GET", `/recipients?${query}`));
+        const total = record(raw.paging).total;
+        if (!Array.isArray(raw.data) || !Number.isSafeInteger(total))
+          return invalid();
+        for (const item of raw.data) {
+          const listed = record(item);
+          const id = readPagarmeRecipientId(
+            listed.id ?? listed.payment_profile_id,
+          );
+          let listedCode = listed.code;
+          if (listedCode === undefined) {
+            if (++reads > RECIPIENT_MAX_CODE_READS) return invalid();
+            listedCode = readRecipient(
+              await http.request("GET", `/recipients/${id}`),
+            ).code;
+          }
+          if (listedCode !== wanted) continue;
+          const found = readRecipient(
+            await http.request("GET", `/recipients/${id}`),
+          );
+          if (found.code !== wanted) return invalid();
+          return found;
+        }
+        seen += raw.data.length;
+        if (raw.data.length < RECIPIENT_PAGE_SIZE) {
+          // Absence is proven only when every counted recipient was read.
+          if (seen !== total) return invalid();
+          return null;
+        }
+      }
+      return invalid();
     },
     async createKycLink(recipientId) {
       const id = readPagarmeRecipientId(recipientId);
