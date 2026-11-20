@@ -290,14 +290,14 @@ describe("panel session resume with a mounted receiving form", () => {
       state: "SP",
       referencePoint: "Near the park",
       bank: "341",
-      branchNumber: "1234",
-      accountNumber: "12345",
-      accountCheckDigit: "6",
+      branch: "1234",
+      account: "12345-6",
     };
     for (const [key, value] of Object.entries(values)) {
-      const input = container.querySelector<HTMLInputElement>(
-        `input[name="${key}"]`,
-      );
+      // "bank" is a select; the other fields are inputs.
+      const input = container.querySelector<
+        HTMLInputElement | HTMLSelectElement
+      >(`[name="${key}"]`);
       if (!input) throw new Error(`Missing receiving field ${key}`);
       input.value = value;
     }
@@ -387,13 +387,12 @@ describe("panel session resume with a mounted receiving form", () => {
         state: "SP",
         referencePoint: "Near the park",
         bank: "341",
-        branchNumber: "1234",
-        accountNumber: "12345",
-        accountCheckDigit: "6",
+        branch: "1234",
+        account: "12345-6",
       };
       for (const [key, value] of Object.entries(values))
-        container.querySelector<HTMLInputElement>(
-          `input[name="${key}"]`,
+        container.querySelector<HTMLInputElement | HTMLSelectElement>(
+          `[name="${key}"]`,
         )!.value = value;
       container.querySelector<HTMLInputElement>(
         'input[name="consent"]',
