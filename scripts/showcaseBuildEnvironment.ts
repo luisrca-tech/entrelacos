@@ -1,3 +1,10 @@
+// Publishable Pagar.me keys. They only tokenize cards and ship in the browser
+// bundle anyway, so they are checked in; secret keys (sk_) never belong here.
+const PAGARME_PUBLIC_KEYS = {
+  development: "pk_test_2z6JBOXt1izpDX7l",
+  production: "pk_V3br2mHMMhDBlE5Z",
+} as const;
+
 export function showcaseBuildEnvironment(
   app: string,
   environment: string,
@@ -26,6 +33,11 @@ export function showcaseBuildEnvironment(
     // PAGARME_LIVE_DEMO_SITE_ID, receiving readiness and checkout guards stay authoritative.
     PUBLIC_LIVE_DEMO_SITE_ID:
       app !== "landing" && environment === "production" ? siteId : "",
+    // Only the couple sites bundle the card checkout; the landing never does.
+    PUBLIC_PAGARME_PUBLIC_KEY:
+      app === "landing"
+        ? ""
+        : PAGARME_PUBLIC_KEYS[environment as keyof typeof PAGARME_PUBLIC_KEYS],
     PUBLIC_LANDING_URL: landing,
     PUBLIC_SITE_URL:
       app === "landing" ? landing : app === "letters" ? letters : botanical,

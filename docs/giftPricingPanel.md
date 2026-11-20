@@ -58,7 +58,7 @@ Catalog mutations pass their transaction through the readiness binding, so the p
 
 ## Environment
 
-API: `PAGARME_MODE`, `PAGARME_SECRET_KEY`, `PAGARME_PLATFORM_RECIPIENT_ID`, `PAGARME_WEBHOOK_BASIC_USER`, `PAGARME_WEBHOOK_BASIC_PASSWORD`, `PAGARME_BACKGROUND_PROCESSING`, `PAGARME_LIVE_DEMO_SITE_ID`. Couple sites: `PUBLIC_PAGARME_PUBLIC_KEY` (tokenizes cards in the browser) and the existing `PUBLIC_GIFT_PAYMENTS_ENABLED`. Values per environment are in [Pagar.me operation](pagarmeOperation.md) and [showcase operations](showcaseOperations.md).
+API: `PAGARME_MODE`, `PAGARME_SECRET_KEY`, `PAGARME_PLATFORM_RECIPIENT_ID`, `PAGARME_WEBHOOK_BASIC_USER`, `PAGARME_WEBHOOK_BASIC_PASSWORD`, `PAGARME_BACKGROUND_PROCESSING`, `PAGARME_LIVE_DEMO_SITE_ID`. Couple sites: `PUBLIC_PAGARME_PUBLIC_KEY` (publishable key that tokenizes cards in the browser; checked in per environment in `scripts/showcaseBuildEnvironment.ts`, never an `sk_` key) and the existing `PUBLIC_GIFT_PAYMENTS_ENABLED`. Values per environment are in [Pagar.me operation](pagarmeOperation.md) and [showcase operations](showcaseOperations.md).
 
 ## Listening
 
