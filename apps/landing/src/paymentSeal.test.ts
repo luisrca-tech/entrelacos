@@ -29,3 +29,18 @@ describe("landing payment seal", () => {
       expect(read(file)).not.toMatch(/asaas/i);
   });
 });
+
+describe("landing gift payment copy", () => {
+  const page = read("./pages/index.astro");
+
+  it("promises only what the product offers: Pix and card up to the configured installments", () => {
+    expect(page).toContain("GIFT_PLATFORM_TARIFFS.maxInstallments");
+    expect(page).not.toMatch(/em até \d+x/);
+    expect(page).toContain("conforme o valor do presente");
+  });
+
+  it("describes installments without calling them à vista", () => {
+    expect(page).not.toContain("parcelas à vista");
+    expect(page).toContain("o valor de cada parcela antes de confirmar");
+  });
+});

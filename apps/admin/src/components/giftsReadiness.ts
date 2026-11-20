@@ -3,6 +3,7 @@ import {
   siteIdSchema,
 } from "@entrelacos/contracts";
 import { apiRequest } from "../lib/apiClient";
+import { paymentsAvailabilityStore } from "../lib/paymentsAvailability";
 
 export type GiftCatalogReadiness =
   (typeof receivingReadinessResponseSchema._output)["readiness"] &
@@ -20,5 +21,7 @@ export async function loadGiftsReadiness(
   );
   if (readiness.siteId !== validSiteId)
     throw new Error("Unexpected readiness site");
+  // The mode is the API's own word on whether payments exist at all.
+  paymentsAvailabilityStore.reportMode(readiness.mode);
   return catalogAccess ? { ...readiness, catalogAccess } : readiness;
 }

@@ -4,6 +4,11 @@ import { Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { adminStyles, displayHeading } from "../lib/adminStyles";
 import { apiRequest } from "../lib/apiClient";
+import {
+  type PaymentsAvailability,
+  paymentsAvailabilityStore,
+  usePaymentsAvailability,
+} from "../lib/paymentsAvailability";
 import { AdminButton } from "./AdminButton";
 import { AdminShell, ShellLoading } from "./AdminShell";
 import { resolveSiteArea, type SiteArea } from "./adminNavigation";
@@ -29,6 +34,7 @@ export function Panel({ siteId, area }: { siteId?: string; area?: SiteArea }) {
     panelActorOwner.getSnapshot,
     panelActorOwner.getServerSnapshot,
   );
+  const payments = usePaymentsAvailability();
   const [siteName, setSiteName] = useState<string>();
   const authActions = useRef<ReturnType<
     typeof createPanelAuthenticationActions
@@ -86,6 +92,7 @@ export function Panel({ siteId, area }: { siteId?: string; area?: SiteArea }) {
         siteId={siteId}
         area={area}
         siteName={siteName}
+        payments={payments}
         onSiteName={setSiteName}
         onVerify={() => {
           void panelActorOwner.load(true).catch(() => {});
@@ -114,6 +121,7 @@ export function PanelSessionView({
   siteId,
   area,
   siteName,
+  payments = paymentsAvailabilityStore.get(),
   onSiteName,
   onVerify,
   onLogout,
@@ -122,6 +130,7 @@ export function PanelSessionView({
   siteId?: string;
   area?: SiteArea;
   siteName?: string;
+  payments?: PaymentsAvailability;
   onSiteName?: (name: string) => void;
   onVerify: () => void;
   onLogout: () => void;
@@ -175,7 +184,7 @@ export function PanelSessionView({
       </ShellLoading>
     );
   const selectedRole = selectedAccess?.membershipRole ?? actor.user.role;
-  const resolvedArea = resolveSiteArea(selectedRole, area);
+  const resolvedArea = resolveSiteArea(selectedRole, area, payments);
   if (siteId && area && resolvedArea !== area) {
     return <SiteAreaRedirect siteId={siteId} area={resolvedArea} />;
   }

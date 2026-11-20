@@ -1,4 +1,9 @@
-import { giftPaymentsEnabled } from "@entrelacos/ui";
+import {
+  type PaymentsAvailability,
+  paymentsAreaOpen,
+  paymentsAreaPending,
+  paymentsAvailabilityStore,
+} from "../lib/paymentsAvailability";
 
 export type AdminRole = "OWNER" | "SITE_ADMIN" | "SITE_ASSISTANT";
 
@@ -44,10 +49,11 @@ export function getInitials(name: string): string {
 export function getSiteNavigation(
   role: AdminRole,
   siteId: string,
+  paymentsOpen: boolean = paymentsAreaOpen(),
 ): SiteNavigationItem[] {
   const encodedSiteId = encodeURIComponent(siteId);
   const areas: SiteArea[] = ["home", "invitations", "messages", "gifts"];
-  if ((role === "SITE_ADMIN" || role === "OWNER") && giftPaymentsEnabled())
+  if ((role === "SITE_ADMIN" || role === "OWNER") && paymentsOpen)
     areas.push("receiving");
   if (role !== "SITE_ASSISTANT") areas.push("team");
   if (role === "OWNER") areas.push("settings");
@@ -62,6 +68,7 @@ export function getSiteNavigation(
 export function resolveSiteArea(
   role: AdminRole,
   requestedArea: string | undefined,
+  payments: PaymentsAvailability = paymentsAvailabilityStore.get(),
 ): SiteArea {
   if (!requestedArea || !siteAreas.includes(requestedArea as SiteArea)) {
     return "home";
@@ -69,7 +76,8 @@ export function resolveSiteArea(
   if (requestedArea === "settings" && role !== "OWNER") return "home";
   if (
     (requestedArea === "receiving" || requestedArea === "receiving-guide") &&
-    (role === "SITE_ASSISTANT" || !giftPaymentsEnabled())
+    (role === "SITE_ASSISTANT" ||
+      !(paymentsAreaOpen(payments) || paymentsAreaPending(payments)))
   )
     return "home";
   if (requestedArea === "team" && role === "SITE_ASSISTANT") return "home";

@@ -22,7 +22,6 @@ import {
   DialogClose,
   DialogDescription,
   DialogTitle,
-  giftPaymentsEnabled,
   Input,
   Select,
   SelectContent,
@@ -42,6 +41,11 @@ import {
 } from "react";
 import { adminStyles, displayHeading } from "../lib/adminStyles";
 import { ApiError, apiRequest } from "../lib/apiClient";
+import {
+  paymentsAreaOpen,
+  paymentsAreaPending,
+  usePaymentsAvailability,
+} from "../lib/paymentsAvailability";
 import { AdminButton } from "./AdminButton";
 import { AdminAlertDialogContent, AdminDialogContent } from "./AdminDialog";
 import type { SiteArea } from "./adminNavigation";
@@ -179,6 +183,8 @@ export function SiteWorkspace({
   access?: SiteAccess | null;
   sessionEpoch?: number | null;
 }) {
+  const payments = usePaymentsAvailability();
+  const paymentsOpen = paymentsAreaOpen(payments);
   const [site, setSite] = useState<SiteView | null>(null);
   const [admins, setAdmins] = useState<Admin[]>([]);
   const [domains, setDomains] = useState<Domain[]>([]);
@@ -549,7 +555,7 @@ export function SiteWorkspace({
             (access?.siteId === site.id && access.capabilities.manageCatalog)
           }
           receivingAction={
-            giftPaymentsEnabled() &&
+            paymentsOpen &&
             access?.siteId === site.id &&
             access.capabilities.configureReceiving ? (
               <Link
@@ -564,7 +570,7 @@ export function SiteWorkspace({
         />
       )}
       {(area === "receiving" || area === "receiving-guide") &&
-        giftPaymentsEnabled() && (
+        (paymentsOpen ? (
           <ReceivingSection
             key={`${site.id}:${sessionEpoch}`}
             siteId={site.id}
@@ -573,7 +579,13 @@ export function SiteWorkspace({
             guide={area === "receiving-guide"}
             sessionEpoch={sessionEpoch}
           />
-        )}
+        ) : (
+          paymentsAreaPending(payments) && (
+            <p role="status" className="m-0 text-admin-text-secondary">
+              Verificando os recebimentos…
+            </p>
+          )
+        ))}
       {area === "team" && (
         <SiteTeamSection
           key={site.id}
