@@ -396,6 +396,24 @@ function pagarmeBirthdate(isoDate: string): string {
  */
 const RECIPIENT_COMPLEMENT_FALLBACK = "Sem complemento";
 
+/**
+ * Mirrors the platform recipient settings applied by Pagar.me; a null delay is
+ * stored by the provider as 365 days, which never anticipates.
+ */
+const COUPLE_AUTOMATIC_ANTICIPATION_SETTINGS: {
+  readonly enabled: boolean;
+  readonly type: string;
+  readonly volume_percentage: number;
+  readonly delay: number;
+  readonly days: readonly number[];
+} = {
+  enabled: true,
+  type: "1025",
+  volume_percentage: 100,
+  delay: 1,
+  days: Array.from({ length: 31 }, (_, index) => index + 1),
+};
+
 function recipientBody(recipientCode: string, input: PagarmeRecipientInput) {
   const name = text(input.name, 128);
   const cpf = digits(input.cpf, /^\d{11}$/);
@@ -452,12 +470,7 @@ function recipientBody(recipientCode: string, input: PagarmeRecipientInput) {
       transfer_interval: "Daily",
       transfer_day: 0,
     },
-    automatic_anticipation_settings: {
-      enabled: true,
-      type: "full",
-      volume_percentage: 100,
-      delay: null,
-    },
+    automatic_anticipation_settings: COUPLE_AUTOMATIC_ANTICIPATION_SETTINGS,
   };
 }
 
