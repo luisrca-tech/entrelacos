@@ -2,7 +2,9 @@ ALTER TABLE "financial_operator_alert" DROP CONSTRAINT "financial_operator_alert
 ALTER TABLE "financial_operator_alert" ADD CONSTRAINT "financial_operator_alert_kind_check" CHECK ("financial_operator_alert"."kind" IN ('SPLIT_DIVERGENCE_BLOCK','SPLIT_CANCELLED','ANTICIPATION_DENIED','PAYMENT_RESTRICTION','UNROUTABLE_PLATFORM_EVENT','SPLIT_SETUP_FAILED','GIFT_REFUNDED','GIFT_CHARGEBACK','ORDER_MISMATCH','WITHDRAWAL_UNRESOLVED'));--> statement-breakpoint
 -- Restores the Asaas-era objects on databases that applied an earlier draft
 -- of 0031 which dropped them (local development only). Every statement is a
--- no-op where 0031 kept them, as in production.
+-- no-op where 0031 kept them, as in production. The checks are restored
+-- NOT VALID so rows a draft left unchecked do not block the migration; new
+-- writes are still checked.
 ALTER TABLE "receiving_account" ADD COLUMN IF NOT EXISTS "credential_version" integer;--> statement-breakpoint
 ALTER TABLE "receiving_account" ADD COLUMN IF NOT EXISTS "credential_key_id" text;--> statement-breakpoint
 ALTER TABLE "receiving_account" ADD COLUMN IF NOT EXISTS "credential_nonce" text;--> statement-breakpoint
@@ -16,10 +18,10 @@ DO $$ BEGIN
     ALTER TABLE "receiving_account" ADD CONSTRAINT "receiving_account_webhook_hash_key" UNIQUE("webhook_token_hash");
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'receiving_account_credentials_check') THEN
-    ALTER TABLE "receiving_account" ADD CONSTRAINT "receiving_account_credentials_check" CHECK (num_nonnulls("receiving_account"."credential_version", "receiving_account"."credential_key_id", "receiving_account"."credential_nonce", "receiving_account"."credential_ciphertext", "receiving_account"."credential_tag") = 0 OR (num_nonnulls("receiving_account"."credential_version", "receiving_account"."credential_key_id", "receiving_account"."credential_nonce", "receiving_account"."credential_ciphertext", "receiving_account"."credential_tag") = 5 AND "receiving_account"."credential_version" = 1 AND length(trim("receiving_account"."credential_key_id")) > 0 AND length("receiving_account"."credential_nonce") > 0 AND length("receiving_account"."credential_ciphertext") > 0 AND length("receiving_account"."credential_tag") > 0));
+    ALTER TABLE "receiving_account" ADD CONSTRAINT "receiving_account_credentials_check" CHECK (num_nonnulls("receiving_account"."credential_version", "receiving_account"."credential_key_id", "receiving_account"."credential_nonce", "receiving_account"."credential_ciphertext", "receiving_account"."credential_tag") = 0 OR (num_nonnulls("receiving_account"."credential_version", "receiving_account"."credential_key_id", "receiving_account"."credential_nonce", "receiving_account"."credential_ciphertext", "receiving_account"."credential_tag") = 5 AND "receiving_account"."credential_version" = 1 AND length(trim("receiving_account"."credential_key_id")) > 0 AND length("receiving_account"."credential_nonce") > 0 AND length("receiving_account"."credential_ciphertext") > 0 AND length("receiving_account"."credential_tag") > 0)) NOT VALID;
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'receiving_account_webhook_hash_check') THEN
-    ALTER TABLE "receiving_account" ADD CONSTRAINT "receiving_account_webhook_hash_check" CHECK ("receiving_account"."webhook_token_hash" IS NULL OR "receiving_account"."webhook_token_hash" ~ '^[a-f0-9]{64}$');
+    ALTER TABLE "receiving_account" ADD CONSTRAINT "receiving_account_webhook_hash_check" CHECK ("receiving_account"."webhook_token_hash" IS NULL OR "receiving_account"."webhook_token_hash" ~ '^[a-f0-9]{64}$') NOT VALID;
   END IF;
 END $$;--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS "withdrawal_authorization_candidate" (

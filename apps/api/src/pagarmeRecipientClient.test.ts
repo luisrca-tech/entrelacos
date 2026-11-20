@@ -328,6 +328,141 @@ describe("Pagar.me recipient client", () => {
     ).rejects.toThrow(TypeError);
   });
 
+  describe("recipient identity across id formats", () => {
+    const active = JSON.parse(fixture("recipient-active"));
+    // One recipient: core id rp_, gateway id re_ (pgid) and payment profile pp_.
+    const recipient = JSON.stringify({
+      ...active,
+      payment_profile_id: "pp_fixtureProfile01",
+    });
+    const echoing = (sourceId: string) =>
+      fixture("transfer-pending").replace(
+        '"source_id": "rp_fixtureRecipient01"',
+        `"source_id": "${sourceId}", "recipient_id": "${sourceId}"`,
+      );
+
+    it("does not read the recipient when the transfer echoes the stored id", async () => {
+      const fetch = respond([200, fixture("transfer-pending")]);
+      await createPagarmeRecipientClient({ secretKey, fetch }).createWithdrawal(
+        "rp_fixtureRecipient01",
+        9633,
+        "withdrawal:op-1",
+      );
+      expect(fetch).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([
+      ["rp_fixtureRecipient01", "pp_fixtureProfile01"],
+      ["rp_fixtureRecipient01", "re_fixturegatewayrecipient01"],
+      ["pp_fixtureProfile01", "rp_fixtureRecipient01"],
+      ["pp_fixtureProfile01", "re_fixturegatewayrecipient01"],
+      ["re_fixturegatewayrecipient01", "rp_fixtureRecipient01"],
+      ["re_fixturegatewayrecipient01", "pp_fixtureProfile01"],
+    ])(
+      "accepts a transfer of stored %s echoed as %s after reading the recipient",
+      async (stored, echoed) => {
+        const fetch = respond([200, echoing(echoed)], [200, recipient]);
+        const withdrawal = await createPagarmeRecipientClient({
+          secretKey,
+          fetch,
+        }).createWithdrawal(stored, 9633, "withdrawal:op-1");
+        expect(withdrawal.id).toBe("65485");
+        expect(call(fetch, 1).url).toBe(
+          `${PAGARME_API_BASE_URL}/recipients/${stored}`,
+        );
+        expect(call(fetch, 1).method).toBe("GET");
+      },
+    );
+
+    it.each(["pp_someoneElse01", "re_someoneElse01", "rp_someoneElse01"])(
+      "still refuses a transfer echoed as another recipient (%s)",
+      async (echoed) => {
+        await expect(
+          createPagarmeRecipientClient({
+            secretKey,
+            fetch: respond([200, echoing(echoed)], [200, recipient]),
+          }).createWithdrawal("rp_fixtureRecipient01", 9633, "withdrawal:op-1"),
+        ).rejects.toThrow(TypeError);
+      },
+    );
+
+    it("refuses when the recipient read does not belong to the stored id", async () => {
+      const other = JSON.stringify({
+        ...active,
+        id: "rp_someoneElse01",
+        payment_profile_id: "pp_fixtureProfile01",
+        gateway_recipients: [],
+      });
+      await expect(
+        createPagarmeRecipientClient({
+          secretKey,
+          fetch: respond([200, echoing("pp_fixtureProfile01")], [200, other]),
+        }).createWithdrawal(
+          "re_fixturegatewayrecipient01",
+          9633,
+          "withdrawal:op-1",
+        ),
+      ).rejects.toThrow(TypeError);
+    });
+
+    it("never reports a created transfer as rejected when the identity read is refused", async () => {
+      const fetch = respond(
+        [200, echoing("pp_fixtureProfile01")],
+        [404, fixture("error-422-validation")],
+      );
+      const created = createPagarmeRecipientClient({
+        secretKey,
+        fetch,
+      }).createWithdrawal("rp_fixtureRecipient01", 9633, "withdrawal:op-1");
+      await expect(created).rejects.toThrow(TypeError);
+      await expect(created).rejects.not.toBeInstanceOf(PagarmeRejectedError);
+    });
+
+    it("reads a transfer and a recipient stored as pp_ when the provider answers with its core id", async () => {
+      const fetch = respond(
+        [200, fixture("transfer-transferred")],
+        [200, recipient],
+        [200, recipient],
+      );
+      const client = createPagarmeRecipientClient({ secretKey, fetch });
+      const withdrawal = await client.getWithdrawal(
+        "pp_fixtureProfile01",
+        "65485",
+      );
+      expect(withdrawal.status).toBe("transferred");
+      const read = await client.getRecipient("pp_fixtureProfile01");
+      expect(read.id).toBe("pp_fixtureProfile01");
+    });
+
+    it("reads the recipient once for a whole transfer list", async () => {
+      const second = echoing("pp_fixtureProfile01").replace(
+        '"id": 65485',
+        '"id": 65486',
+      );
+      const fetch = respond(
+        [200, `[${echoing("pp_fixtureProfile01")},${second}]`],
+        [200, recipient],
+      );
+      const listed = await createPagarmeRecipientClient({
+        secretKey,
+        fetch,
+      }).listWithdrawals("rp_fixtureRecipient01", "2026-11-20T09:59:00.000Z");
+      expect(listed.map((item) => item.id)).toEqual(["65485", "65486"]);
+      expect(fetch).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  it("refuses tran_ ids, which are charge transactions, not transfers", async () => {
+    const fetch = respond([200, "{}"]);
+    await expect(
+      createPagarmeRecipientClient({ secretKey, fetch }).getWithdrawal(
+        "rp_fixtureRecipient01",
+        "tran_fixtureTx0001",
+      ),
+    ).rejects.toThrow(TypeError);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
   it("reads a transfer by id", async () => {
     const fetch = respond([200, fixture("transfer-transferred")]);
     const withdrawal = await createPagarmeRecipientClient({
@@ -382,6 +517,59 @@ describe("Pagar.me recipient client", () => {
       createPagarmeRecipientClient({
         secretKey,
         fetch: respond([200, `[${other}]`]),
+      }).listWithdrawals("rp_fixtureRecipient01", "2026-11-20T09:59:00.000Z"),
+    ).rejects.toThrow(TypeError);
+  });
+
+  it("skips a malformed or undated transfer, logs only a count and keeps the others", async () => {
+    const good = fixture("transfer-pending");
+    const malformed = JSON.stringify({
+      ...JSON.parse(good),
+      id: 65486,
+      amount: "lots",
+    });
+    const undated = JSON.parse(good);
+    undated.id = 65487;
+    delete undated.date_created;
+    delete undated.date_updated;
+    const observe = vi.fn();
+    const listed = await createPagarmeRecipientClient({
+      secretKey,
+      fetch: respond([
+        200,
+        `[${malformed},${good},${JSON.stringify(undated)},"x"]`,
+      ]),
+      observe,
+    }).listWithdrawals("rp_fixtureRecipient01", "2026-11-20T09:59:00.000Z");
+    expect(listed.map((item) => item.id)).toEqual(["65485"]);
+    expect(observe).toHaveBeenCalledExactlyOnceWith({
+      level: "warn",
+      event: "pagarme_transfer_list_item_skipped",
+      operation: "listWithdrawals",
+      count: 3,
+    });
+  });
+
+  it("does not log when every listed transfer is readable", async () => {
+    const observe = vi.fn();
+    await createPagarmeRecipientClient({
+      secretKey,
+      fetch: respond([200, `[${fixture("transfer-pending")}]`]),
+      observe,
+    }).listWithdrawals("rp_fixtureRecipient01", "2026-11-20T09:59:00.000Z");
+    expect(observe).not.toHaveBeenCalled();
+  });
+
+  it("refuses a full first page of transfers, which may hide the match on a later page", async () => {
+    // GET /transfers answers at most `count` (1000) items and signals more
+    // pages only in a header. A full page cannot prove the window is
+    // complete, so lookup stays unresolved instead of matching a subset.
+    const item = fixture("transfer-pending");
+    const page = `[${Array.from({ length: 1000 }, () => item).join(",")}]`;
+    await expect(
+      createPagarmeRecipientClient({
+        secretKey,
+        fetch: respond([200, page]),
       }).listWithdrawals("rp_fixtureRecipient01", "2026-11-20T09:59:00.000Z"),
     ).rejects.toThrow(TypeError);
   });

@@ -14,9 +14,11 @@ export function isPagarmeRecipientId(value: unknown): value is string {
 /**
  * Transfer ids are integers in the Transfers reference
  * (https://docs.pagar.me/reference/objeto-transfer%C3%AAncia.md) and are kept
- * as decimal strings. `with_`/`tran_` ids come from the deprecated
- * withdrawals route and stay readable for rows recorded before the move.
+ * as decimal strings. `with_` ids come from the deprecated withdrawals
+ * route and stay readable for rows recorded before the move. `tran_` ids are
+ * charge transactions (`last_transaction.id` of an order), never transfers,
+ * so they are refused.
  */
 export const pagarmeTransferIdPattern =
-  /^(?:[1-9][0-9]{0,18}|(?:with|tran)_[A-Za-z0-9]{1,128})$/;
+  /^(?:[1-9][0-9]{0,18}|with_[A-Za-z0-9]{1,128})$/;
 export const pagarmeLegacyWithdrawalIdPattern = /^with_[A-Za-z0-9]{1,128}$/;

@@ -28,8 +28,18 @@ const migrations = fileURLToPath(new URL("../migrations", import.meta.url));
 const legacyProvider = "ASAAS";
 let admin: DatabaseConnection;
 let scratch: Pool | undefined;
-let scratchName = "";
 let folder = "";
+const scratches: Array<{ name: string; pool: Pool }> = [];
+
+async function scratchDatabase(): Promise<Pool> {
+  const name = `entrelacos_legacy_${randomUUID().replaceAll("-", "").slice(0, 12)}`;
+  await admin.pool.query(`CREATE DATABASE "${name}"`);
+  const url = new URL(admin.config.url);
+  url.pathname = `/${name}`;
+  const pool = new Pool({ connectionString: url.toString() });
+  scratches.push({ name, pool });
+  return pool;
+}
 
 function migrationsUpTo(lastTag: string): string {
   const journal = JSON.parse(
@@ -56,18 +66,15 @@ beforeAll(async () => {
   await verifyDatabaseConnection(admin);
   if (!isLocalDatabaseUrl(admin.config.url))
     throw new Error("Scratch migration databases are created only locally");
-  scratchName = `entrelacos_legacy_${randomUUID().replaceAll("-", "").slice(0, 12)}`;
-  await admin.pool.query(`CREATE DATABASE "${scratchName}"`);
-  const url = new URL(admin.config.url);
-  url.pathname = `/${scratchName}`;
-  scratch = new Pool({ connectionString: url.toString() });
+  scratch = await scratchDatabase();
   folder = migrationsUpTo("0030_platform_account_split");
 });
 
 afterAll(async () => {
-  await scratch?.end();
-  if (scratchName)
-    await admin?.pool.query(`DROP DATABASE IF EXISTS "${scratchName}"`);
+  for (const { name, pool } of scratches) {
+    await pool.end();
+    await admin?.pool.query(`DROP DATABASE IF EXISTS "${name}"`);
+  }
   await admin?.close();
   if (folder) rmSync(folder, { recursive: true, force: true });
 });
@@ -119,6 +126,20 @@ describe("Pagar.me migrations over Asaas-era rows", () => {
     );
 
     await migrate(db, { migrationsFolder: migrations });
+
+    // 0033 is a no-op where 0031 kept the checks: they stay validated.
+    expect(
+      (
+        await q(
+          `SELECT conname, convalidated FROM pg_constraint
+           WHERE conname IN ('receiving_account_credentials_check', 'receiving_account_webhook_hash_check')
+           ORDER BY conname`,
+        )
+      ).rows,
+    ).toEqual([
+      { conname: "receiving_account_credentials_check", convalidated: true },
+      { conname: "receiving_account_webhook_hash_check", convalidated: true },
+    ]);
 
     const account = await q(
       `SELECT provider, is_current, credential_version, credential_key_id, credential_nonce,
@@ -180,5 +201,64 @@ describe("Pagar.me migrations over Asaas-era rows", () => {
        VALUES ($1, $2, 'live', 'PAGARME', $3, 'rp_new0001', 'rp_new0001', true)`,
       [randomUUID(), siteId, userId],
     );
+  });
+
+  it("restores the legacy checks without failing on rows a draft left unchecked", async () => {
+    // A local database that applied an early 0031 draft can hold rows written
+    // while these checks were missing. 0033 adds them NOT VALID so it still
+    // applies; new writes are checked.
+    const pool = await scratchDatabase();
+    const db = drizzle(pool);
+    const draft = migrationsUpTo("0032_pagarme_orders");
+    try {
+      await migrate(db, { migrationsFolder: draft });
+    } finally {
+      rmSync(draft, { recursive: true, force: true });
+    }
+    const q = (text: string, values: unknown[] = []) =>
+      pool.query(text, values);
+    await q(`ALTER TABLE receiving_account
+      DROP CONSTRAINT receiving_account_credentials_check,
+      DROP CONSTRAINT receiving_account_webhook_hash_check`);
+    const userId = randomUUID();
+    const siteId = randomUUID();
+    await q(`INSERT INTO "user" (id, name, email) VALUES ($1, 'Draft', $2)`, [
+      userId,
+      `${userId}@example.test`,
+    ]);
+    await q(
+      `INSERT INTO site (id, repository_slug, provisioning_key, display_name, partner_one_name, partner_two_name, event_date)
+       VALUES ($1, $2, $3, 'Demo', 'A', 'B', '2027-05-22')`,
+      [siteId, `draft-${siteId}`, `draft:${siteId}`],
+    );
+    await q(
+      `INSERT INTO receiving_account (id, site_id, environment, provider, operator_user_id, account_reference,
+         is_current, credential_version, webhook_token_hash)
+       VALUES ($1, $2, 'sandbox', 'PAGARME', $3, 'rp_draft0001', true, 1, 'not-hex')`,
+      [randomUUID(), siteId, userId],
+    );
+
+    await migrate(db, { migrationsFolder: migrations });
+
+    expect(
+      (
+        await q(
+          `SELECT conname, convalidated FROM pg_constraint
+           WHERE conname IN ('receiving_account_credentials_check', 'receiving_account_webhook_hash_check')
+           ORDER BY conname`,
+        )
+      ).rows,
+    ).toEqual([
+      { conname: "receiving_account_credentials_check", convalidated: false },
+      { conname: "receiving_account_webhook_hash_check", convalidated: false },
+    ]);
+    await expect(
+      q(
+        `INSERT INTO receiving_account (id, site_id, environment, provider, operator_user_id, account_reference,
+           is_current, webhook_token_hash)
+         VALUES ($1, $2, 'sandbox', 'PAGARME', $3, 'rp_draft0002', false, 'not-hex')`,
+        [randomUUID(), siteId, userId],
+      ),
+    ).rejects.toThrow(/receiving_account_webhook_hash_check/);
   });
 });

@@ -1,4 +1,5 @@
 import { GIFT_PLATFORM_TARIFFS } from "@entrelacos/contracts";
+import { logObservabilityEvent } from "./observability";
 import {
   createPagarmeHttpClient,
   type PagarmeHttpClient,
@@ -315,34 +316,73 @@ function readRecipient(value: unknown): PagarmeRecipient {
 }
 
 /**
- * Reads a transfer (or a legacy withdrawal). A transfer names its source
- * recipient; one drawn from any other recipient is refused.
+ * Every id one recipient answers to: the core `rp_`/`re_` id, the `pp_`
+ * payment profile id and the gateway `re_` id (`gateway_recipients[].pgid`).
+ * Pagar.me may echo any of them as a transfer's `source_id`.
  */
-function readWithdrawal(
-  value: unknown,
-  recipientId: string,
-): PagarmeWithdrawal {
+function recipientIdentities(value: unknown): ReadonlySet<string> {
   const raw = record(value);
-  if (
-    (raw.source_type !== undefined && raw.source_type !== "recipient") ||
-    (raw.source_id !== undefined && raw.source_id !== recipientId) ||
-    (raw.recipient_id !== undefined && raw.recipient_id !== recipientId)
-  )
-    return invalid();
-  return Object.freeze({
-    id: withdrawalId(raw.id),
-    amountCents: cents(raw.amount),
-    status: text(raw.status, 64),
-    updatedAt: instant(
-      raw.date_updated ?? raw.updated_at ?? raw.date_created ?? raw.created_at,
+  const gateways = Array.isArray(raw.gateway_recipients)
+    ? raw.gateway_recipients
+    : [];
+  const candidates = [
+    raw.id,
+    raw.payment_profile_id,
+    ...gateways.map((gateway) =>
+      gateway && typeof gateway === "object" && !Array.isArray(gateway)
+        ? (gateway as Record<string, unknown>).pgid
+        : undefined,
     ),
-  });
+  ];
+  return new Set(
+    candidates.filter(
+      (id): id is string =>
+        typeof id === "string" && pagarmeRecipientIdPattern.test(id),
+    ),
+  );
+}
+
+interface ReadTransfer {
+  readonly withdrawal: PagarmeWithdrawal;
+  /** Recipient ids the provider names as the transfer's source. */
+  readonly sources: readonly string[];
+}
+
+/**
+ * Reads a transfer (or a legacy withdrawal) and the recipient ids it names.
+ * A source that is not a recipient is refused here; whether the named ids
+ * belong to our recipient is settled by `ownedBy`.
+ */
+function readTransfer(value: unknown): ReadTransfer {
+  const raw = record(value);
+  if (raw.source_type !== undefined && raw.source_type !== "recipient")
+    return invalid();
+  const sources = [raw.source_id, raw.recipient_id]
+    .filter((id) => id !== undefined)
+    .map(readPagarmeRecipientId);
+  return {
+    withdrawal: Object.freeze({
+      id: withdrawalId(raw.id),
+      amountCents: cents(raw.amount),
+      status: text(raw.status, 64),
+      updatedAt: instant(
+        raw.date_updated ??
+          raw.updated_at ??
+          raw.date_created ??
+          raw.created_at,
+      ),
+    }),
+    sources,
+  };
 }
 
 function createdAt(value: unknown): number {
   const raw = record(value);
   return Date.parse(instant(raw.date_created ?? raw.created_at));
 }
+
+/** GET /transfers answers at most this many items per page. */
+const TRANSFER_PAGE_SIZE = 1_000;
 
 /** Pagar.me example dates are `DD/MM/YYYY` (criar-recebedor-1). */
 function pagarmeBirthdate(isoDate: string): string {
@@ -415,11 +455,48 @@ function recipientBody(recipientCode: string, input: PagarmeRecipientInput) {
   };
 }
 
+export type PagarmeRecipientClientOptions = (
+  | PagarmeHttpClientOptions
+  | { http: PagarmeHttpClient }
+) & {
+  /** Receives PII-free operational events; defaults to the structured log. */
+  observe?(event: {
+    level: "warn";
+    event: string;
+    operation: string;
+    count: number;
+  }): void;
+};
+
 export function createPagarmeRecipientClient(
-  options: PagarmeHttpClientOptions | { http: PagarmeHttpClient },
+  options: PagarmeRecipientClientOptions,
 ): PagarmeRecipientClient {
   const http =
     "http" in options ? options.http : createPagarmeHttpClient(options);
+  const observe = options.observe ?? logObservabilityEvent;
+  /**
+   * Refuses any source that is not the recipient `id`. When the provider
+   * names it in another format, the recipient is read once: it must answer
+   * to `id` and list every named source among its own ids. Any failure of
+   * that read is a TypeError, never a PagarmeRejectedError, so a created
+   * transfer is never mistaken for a definitive rejection.
+   */
+  async function ownedBy(id: string, sources: readonly string[]) {
+    if (sources.every((source) => source === id)) return;
+    let identities: ReadonlySet<string>;
+    try {
+      identities = recipientIdentities(
+        await http.request("GET", `/recipients/${id}`),
+      );
+    } catch {
+      return invalid();
+    }
+    if (
+      !identities.has(id) ||
+      !sources.every((source) => identities.has(source))
+    )
+      return invalid();
+  }
   const client: PagarmeRecipientClient = {
     async createRecipient(recipientCode, input) {
       const body = recipientBody(code(recipientCode), input);
@@ -440,11 +517,11 @@ export function createPagarmeRecipientClient(
     },
     async getRecipient(recipientId) {
       const id = readPagarmeRecipientId(recipientId);
-      const recipient = readRecipient(
-        await http.request("GET", `/recipients/${id}`),
-      );
-      if (recipient.id !== id) return invalid();
-      return recipient;
+      const raw = await http.request("GET", `/recipients/${id}`);
+      const recipient = readRecipient(raw);
+      // The stored id may be any of the recipient's formats; it is kept.
+      if (!recipientIdentities(raw).has(id)) return invalid();
+      return Object.freeze({ ...recipient, id });
     },
     async createKycLink(recipientId) {
       const id = readPagarmeRecipientId(recipientId);
@@ -486,13 +563,13 @@ export function createPagarmeRecipientClient(
       // POST /recipients/{id}/withdrawals is deprecated in favour of
       // Transfers, the only route that documents Idempotency-Key
       // (https://docs.pagar.me/reference/criando-uma-transfer%C3%AAncia.md).
-      const withdrawal = readWithdrawal(
+      const { withdrawal, sources } = readTransfer(
         await http.request("POST", "/transfers", {
           body: { amount: transferCents, recipient_id: id },
           idempotencyKey,
         }),
-        id,
       );
+      await ownedBy(id, sources);
       if (withdrawal.amountCents !== transferCents) return invalid();
       return withdrawal;
     },
@@ -504,7 +581,10 @@ export function createPagarmeRecipientClient(
       const path = pagarmeLegacyWithdrawalIdPattern.test(wid)
         ? `/recipients/${id}/withdrawals/${wid}`
         : `/transfers/${wid}`;
-      const withdrawal = readWithdrawal(await http.request("GET", path), id);
+      const { withdrawal, sources } = readTransfer(
+        await http.request("GET", path),
+      );
+      await ownedBy(id, sources);
       if (withdrawal.id !== wid) return invalid();
       return withdrawal;
     },
@@ -514,13 +594,50 @@ export function createPagarmeRecipientClient(
       // GET /transfers answers a bare array filtered by recipient; it has no
       // "created since" filter, so the window is applied here
       // (https://docs.pagar.me/reference/retornando-transfer%C3%AAncias.md).
-      const query = new URLSearchParams({ recipient_id: id, count: "1000" });
+      // Only the first page is read: later pages are signalled by the
+      // `x-cursor-nextpage` header and the sort order is undocumented, so a
+      // full page cannot prove the window is complete and is refused. Lookup
+      // then stays unresolved and the hold is kept.
+      const query = new URLSearchParams({
+        recipient_id: id,
+        count: String(TRANSFER_PAGE_SIZE),
+      });
       const raw = await http.request("GET", `/transfers?${query}`);
       const list = Array.isArray(raw) ? raw : record(raw).data;
-      if (!Array.isArray(list) || list.length > 1_000) return invalid();
-      return list
-        .filter((item) => createdAt(item) >= since)
-        .map((item) => readWithdrawal(item, id));
+      if (!Array.isArray(list) || list.length >= TRANSFER_PAGE_SIZE)
+        return invalid();
+      // An unreadable item (bad shape or no creation date) is skipped so the
+      // others still reconcile; it can never be matched, and only a count is
+      // logged. A readable item naming another recipient still refuses the
+      // whole list: the provider filter cannot be trusted then.
+      const readable: ReadTransfer[] = [];
+      const inWindow: PagarmeWithdrawal[] = [];
+      let skipped = 0;
+      for (const item of list) {
+        let transfer: ReadTransfer;
+        let created: number;
+        try {
+          transfer = readTransfer(item);
+          created = createdAt(item);
+        } catch {
+          skipped += 1;
+          continue;
+        }
+        readable.push(transfer);
+        if (created >= since) inWindow.push(transfer.withdrawal);
+      }
+      if (skipped > 0)
+        observe({
+          level: "warn",
+          event: "pagarme_transfer_list_item_skipped",
+          operation: "listWithdrawals",
+          count: skipped,
+        });
+      await ownedBy(
+        id,
+        readable.flatMap((transfer) => transfer.sources),
+      );
+      return inWindow;
     },
     async listPayables(recipientId, filter = {}) {
       const id = readPagarmeRecipientId(recipientId);
