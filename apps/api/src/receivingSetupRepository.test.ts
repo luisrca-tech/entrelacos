@@ -168,6 +168,76 @@ describe("receiving holder and consent custody", () => {
         );
     },
   );
+  function consentFixture(stored: Partial<typeof holder>) {
+    return fixture([
+      [{ id: "site-one", isDemo: true }],
+      [{ role: "SITE_ADMIN" }],
+      [{ id: actor.sessionId, createdAt: at, expiresAt: at }],
+      [{ id: "membership-one" }],
+      [{ ...holder, ...stored }],
+      [],
+    ]);
+  }
+  function updates(values: ReturnType<typeof fixture>) {
+    const dialect = new PgDialect();
+    return values.execute.mock.calls
+      .map((call) => dialect.sqlToQuery(call[0]))
+      .filter((query) => query.sql.startsWith("UPDATE"));
+  }
+  it("renews a stored consent from a previous version", async () => {
+    const values = consentFixture({ consentVersion: "asaas-receiving-v1" });
+    await expect(
+      values.repository.consent(actor, recentAuth, "pagarme-receiving-v1"),
+    ).resolves.toBeUndefined();
+    const [update, ...rest] = updates(values);
+    expect(rest).toHaveLength(0);
+    expect(update.sql).toContain(
+      "consent_id=$1,consent_version=$2,consent_at=$3,consent_session_id=$4,consent_authenticated_at=$5",
+    );
+    expect(update.sql).toContain("consent_id IS NOT DISTINCT FROM");
+    expect(update.params[0]).not.toBe("consent-one");
+    expect(update.params.slice(1, 5)).toEqual([
+      "pagarme-receiving-v1",
+      at,
+      actor.sessionId,
+      at,
+    ]);
+    expect(update.params.slice(-2)).toEqual(["holder-one", "consent-one"]);
+  });
+  it("keeps a valid current-version consent unchanged", async () => {
+    const values = consentFixture({});
+    await expect(
+      values.repository.consent(actor, recentAuth, "pagarme-receiving-v1"),
+    ).resolves.toBeUndefined();
+    expect(updates(values)).toHaveLength(0);
+  });
+  it("still rejects an invalid current-version consent", async () => {
+    const values = consentFixture({
+      consentAt: new Date(at.getTime() + 1000),
+    });
+    await expect(
+      values.repository.consent(actor, recentAuth, "pagarme-receiving-v1"),
+    ).rejects.toMatchObject({ code: "RECEIVING_CONSENT_REQUIRED" });
+    expect(updates(values)).toHaveLength(0);
+  });
+  it("does not renew a previous-version consent without recent authentication", async () => {
+    const values = consentFixture({ consentVersion: "asaas-receiving-v1" });
+    await expect(
+      values.repository.consent(
+        actor,
+        { ...recentAuth, authenticatedAt: new Date(at.getTime() - 300001) },
+        "pagarme-receiving-v1",
+      ),
+    ).rejects.toMatchObject({ status: 403 });
+    expect(updates(values)).toHaveLength(0);
+  });
+  it("rejects a submitted previous consent version", async () => {
+    const values = consentFixture({ consentVersion: "asaas-receiving-v1" });
+    await expect(
+      values.repository.consent(actor, recentAuth, "asaas-receiving-v1"),
+    ).rejects.toMatchObject({ code: "RECEIVING_CONSENT_REQUIRED" });
+    expect(values.transaction).not.toHaveBeenCalled();
+  });
   it("does not treat an administrator as holder without stored designation", async () => {
     const values = fixture([[]]);
     await expect(values.repository.requireHolder(actor)).rejects.toMatchObject({

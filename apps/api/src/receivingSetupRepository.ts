@@ -422,12 +422,17 @@ export function createReceivingSetupRepository(
         )
           return deny("RECENT_AUTH_REQUIRED", 403);
         proof(actor, recentAuth);
-        if (holder.consentId !== null) {
+        // A consent stored for a previous version is renewed; a current-version
+        // consent must still be valid as stored.
+        if (
+          holder.consentId !== null &&
+          holder.consentVersion === receivingSetupConsentVersion
+        ) {
           requireConsent(holder);
           return;
         }
         await tx.execute(
-          sql`UPDATE ${receivingSetupHolder} SET consent_id=${randomUUID()},consent_version=${version},consent_at=${clock()},consent_session_id=${actor.sessionId},consent_authenticated_at=${recentAuth.proofKind === "SESSION_AUTHENTICATION" ? sql`(SELECT created_at FROM "session" WHERE id=${actor.sessionId} AND user_id=${actor.userId})` : sql`${recentAuth.authenticatedAt}`} WHERE id=${holder.id} AND consent_id IS NULL`,
+          sql`UPDATE ${receivingSetupHolder} SET consent_id=${randomUUID()},consent_version=${version},consent_at=${clock()},consent_session_id=${actor.sessionId},consent_authenticated_at=${recentAuth.proofKind === "SESSION_AUTHENTICATION" ? sql`(SELECT created_at FROM "session" WHERE id=${actor.sessionId} AND user_id=${actor.userId})` : sql`${recentAuth.authenticatedAt}`} WHERE id=${holder.id} AND consent_id IS NOT DISTINCT FROM ${holder.consentId}`,
         );
       });
     },
