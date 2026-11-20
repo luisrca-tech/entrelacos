@@ -32,6 +32,7 @@ import type {
   ReceivingSetupPorts,
   ReceivingSetupScope,
 } from "./ReceivingSetup";
+import type { LabeledProviderRejection } from "./receivingProviderRejection";
 import { parseAccount } from "./receivingSetupForm";
 import {
   deriveReceivingTasks,
@@ -81,6 +82,8 @@ export type ReceivingStepsContext = {
   onSubmit?: (event: FormEvent<HTMLFormElement>) => void;
   onDesignate?: (holderUserId: string) => void;
   onVerifyIncoming?: () => void;
+  /** Pagar.me's refusal of the last submit; the form keeps its data. */
+  rejection?: LabeledProviderRejection | null;
 };
 
 const lastCheckFormatter = new Intl.DateTimeFormat("pt-BR", {
@@ -1007,9 +1010,34 @@ export function DetailsStep({ context }: { context: ReceivingStepsContext }) {
         {setup?.accountState === "UNKNOWN" && (
           <div className="grid gap-3 rounded-[14px] bg-admin-danger-subtle p-4 text-admin-danger-text">
             <p role="alert" className="m-0 text-sm leading-[1.55]">
-              O resultado da criação está incerto. Verifique a conta existente
-              antes de repetir qualquer criação.
+              {canSubmit
+                ? "O resultado do envio anterior está incerto. Envie o cadastro de novo: antes de criar outro, consultamos a Pagar.me para não duplicar."
+                : "O resultado da criação está incerto. Verifique a conta existente antes de repetir qualquer criação."}
             </p>
+          </div>
+        )}
+        {canSubmit && context.rejection && (
+          <div className="grid gap-2 rounded-[14px] bg-admin-danger-subtle p-4 text-admin-danger-text">
+            <p role="alert" className="m-0 text-sm font-bold leading-[1.55]">
+              A Pagar.me recusou o cadastro. Corrija os dados indicados e envie
+              novamente.
+            </p>
+            {context.rejection.fields.length > 0 && (
+              <ul className="m-0 grid list-disc gap-1 pl-5 text-sm leading-[1.55]">
+                {context.rejection.fields.map((field) => (
+                  <li key={field.field}>
+                    <strong>{field.label}</strong>
+                    {field.messages.length > 0 &&
+                      `: ${field.messages.join(" ")}`}
+                  </li>
+                ))}
+              </ul>
+            )}
+            {context.rejection.message && (
+              <p className="m-0 text-sm leading-[1.55]">
+                Mensagem da Pagar.me: {context.rejection.message}
+              </p>
+            )}
           </div>
         )}
         {setup?.accountState === "PENDING" && !canSubmit && (

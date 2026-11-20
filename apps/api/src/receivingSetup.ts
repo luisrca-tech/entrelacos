@@ -1,8 +1,10 @@
 import {
   pagarmeRecipientStatuses,
   type ReceivingKycLink,
+  type ReceivingProviderRejection,
   type ReceivingSetupContext,
   receivingKycLinkSchema,
+  receivingProviderRejectionSchema,
   receivingSetupContextSchema,
   receivingSetupDisclosure,
   receivingSetupInputSchema,
@@ -25,6 +27,18 @@ import {
   type ReceivingSetupRepository,
 } from "./receivingSetupRepository";
 
+/**
+ * Pagar.me definitively refused the recipient and the dispatch was released:
+ * the holder may correct the data and submit again.
+ */
+export class ReceivingProviderRejectedError extends Error {
+  readonly status = 422;
+  readonly code = "RECEIVING_PROVIDER_REJECTED";
+  constructor(readonly rejection: ReceivingProviderRejection) {
+    super("Pagar.me rejected the recipient");
+    this.name = "ReceivingProviderRejectedError";
+  }
+}
 export interface ReceivingRecipientObservation {
   readonly recipientId: string;
   /** Raw Pagar.me status; unknown values stay unverified. */
@@ -170,7 +184,13 @@ export function createReceivingSetupService(
         throw new ReceivingSetupError(403, "RECEIVING_HOLDER_REQUIRED");
       // The recipient already exists; never ask Pagar.me for another one.
       if (previous?.state === "SUCCEEDED") return { state: "STORED" };
-      if (previous && previous.state !== "REQUESTED")
+      // An armed dispatch without a stored result is consulted on Pagar.me
+      // by its code before anything is created again.
+      const reconcile =
+        previous?.state === "UNKNOWN" &&
+        !!previous.record &&
+        previous.record.sealedResult === null;
+      if (previous && previous.state !== "REQUESTED" && !reconcile)
         return { state: "UNKNOWN" };
       const nomination =
         previous?.nomination ??
@@ -189,7 +209,9 @@ export function createReceivingSetupService(
           },
         }));
       const owner = options.provisioning.begin({
-        action: "CREATE",
+        ...(reconcile && previous.record
+          ? { action: "RECONCILE" as const, record: previous.record }
+          : { action: "CREATE" as const }),
         nomination,
         input: {
           ...input.account,
@@ -201,6 +223,13 @@ export function createReceivingSetupService(
       // The original owner continues durable settlement if its feedback is uncertain.
       void owner.completion.catch(() => {});
       const feedback = await owner.feedback;
+      if (feedback.state === "REJECTED")
+        throw new ReceivingProviderRejectedError(
+          receivingProviderRejectionSchema.parse({
+            message: feedback.rejection?.message ?? null,
+            fields: feedback.rejection?.fields ?? [],
+          }),
+        );
       return { state: feedback.state };
     },
   });

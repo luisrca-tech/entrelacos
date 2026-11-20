@@ -5,13 +5,18 @@ import {
   databaseTimestampEpochMicroseconds,
   readDatabaseTimestamp,
 } from "./databaseTimestamp";
-import { logObservabilityEvent } from "./observability";
+import {
+  logObservabilityEvent,
+  PROVIDER_FIELD_LIMIT,
+  PROVIDER_MESSAGE_LIMIT,
+} from "./observability";
 import { PagarmeRejectedError } from "./pagarmeHttpClient";
 import type {
   PagarmeRecipientClient,
   PagarmeRecipientInput,
 } from "./pagarmeRecipientClient";
 import {
+  type ReceivingDispatchReleaseCode,
   type ReceivingNominationCurrentAuthorization,
   type ReceivingNominationSnapshot,
   type ReceivingProvisioningContext,
@@ -103,6 +108,15 @@ export interface ReceivingAccountProvisioningRepository {
     claim: ReceivingProvisioningRecord,
     expectedResult: ReceivingProvisioningResult | null,
   ): Promise<ReceivingProvisioningObservation | null>;
+  /**
+   * Returns an armed dispatch without a stored result to REQUESTED, counting
+   * it, so the next submit dispatches again. `PROVIDER_ABSENT` is accepted
+   * only well after the dispatch lease expired.
+   */
+  releaseOriginal(
+    claim: ReceivingProvisioningRecord,
+    reason: ReceivingDispatchReleaseCode,
+  ): Promise<void>;
 }
 export interface ReceivingProvisioningProvider {
   readonly approved: true;
@@ -110,7 +124,10 @@ export interface ReceivingProvisioningProvider {
   /** The platform Pagar.me recipient that receives the platform split. */
   readonly parentAccountReference: string;
   readonly policyVersion: string;
-  readonly recipients: Pick<PagarmeRecipientClient, "createRecipient">;
+  readonly recipients: Pick<
+    PagarmeRecipientClient,
+    "createRecipient" | "findRecipientByCode"
+  >;
 }
 interface Options {
   repository: ReceivingAccountProvisioningRepository;
@@ -131,6 +148,8 @@ export type ReceivingProvisioningStage =
   | "arm"
   | "confirm_arm"
   | "create_recipient"
+  | "consult_provider"
+  | "release"
   | "quarantine"
   | "attach"
   | "consult";
@@ -139,19 +158,93 @@ export interface ReceivingProvisioningFailureEvent {
   readonly event: "receiving.provisioning.failed";
   /** The stage that failed. */
   readonly operation: ReceivingProvisioningStage;
-  /** "recovering" when the owner continues by consulting the stored result. */
-  readonly result: "recovering" | "unknown" | "unavailable";
+  /**
+   * "recovering" when the owner continues by consulting the stored result;
+   * "rejected" when Pagar.me definitively refused the recipient.
+   */
+  readonly result: "recovering" | "unknown" | "unavailable" | "rejected";
   readonly errorCode: string;
   readonly siteId?: string;
   readonly status?: number;
   readonly providerCode?: string;
+  readonly providerMessage?: string;
+  /** `field.path: message | message`, without the submitted values. */
+  readonly providerFields?: string[];
+}
+/**
+ * A definitive refusal of POST /recipients: nothing was created. 401, 403,
+ * 404, 409 and 429 say nothing about the payload, so they stay uncertain.
+ */
+const DEFINITIVE_REJECTIONS = new Set([400, 412, 422]);
+/** The provider reason the holder can act on, free of submitted values. */
+export interface ReceivingProviderRejection {
+  readonly status: number;
+  readonly message: string | null;
+  readonly fields: readonly {
+    readonly field: string;
+    readonly messages: readonly string[];
+  }[];
+}
+function inputValues(input: PagarmeRecipientInput): string[] {
+  const values = [
+    input.name,
+    ...input.name.split(/\s+/),
+    input.email,
+    input.cpf,
+    input.mobilePhone,
+    input.birthDate,
+    input.professionalOccupation,
+    ...Object.values(input.address),
+    ...Object.values(input.bankAccount),
+  ];
+  return [
+    ...new Set(
+      values
+        .filter((value): value is string => typeof value === "string")
+        .map((value) => value.normalize("NFC").trim())
+        .filter((value) => value.length >= 3),
+    ),
+  ].sort((left, right) => right.length - left.length);
+}
+/** Removes any submitted value the provider echoed, ignoring case. */
+function withoutInput(text: string, values: readonly string[]): string {
+  let redacted = text.normalize("NFC");
+  for (const value of values)
+    redacted = redacted.replace(
+      new RegExp(value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "giu"),
+      "[valor]",
+    );
+  return redacted;
+}
+function describeRejection(
+  error: PagarmeRejectedError,
+  input: PagarmeRecipientInput | undefined,
+): ReceivingProviderRejection {
+  const values = input ? inputValues(input) : [];
+  const message =
+    error.providerMessage === null
+      ? null
+      : withoutInput(error.providerMessage, values).slice(
+          0,
+          PROVIDER_MESSAGE_LIMIT,
+        );
+  return Object.freeze({
+    status: error.status,
+    message,
+    fields: error.providerFields.slice(0, PROVIDER_FIELD_LIMIT).map((field) =>
+      Object.freeze({
+        field: field.field,
+        messages: field.messages.map((text) => withoutInput(text, values)),
+      }),
+    ),
+  });
 }
 /**
  * Describes a failure without its message: only the error class and, for a
- * Pagar.me rejection, the HTTP status and provider code. The provider code is
- * further bounded by the observability sanitizer.
+ * Pagar.me rejection, the HTTP status, provider code, redacted reason and
+ * field paths. The observability sanitizer bounds and redacts them again.
  */
-function failureDetails(error: unknown) {
+function failureDetails(error: unknown, input?: PagarmeRecipientInput) {
   const errorCode =
     error instanceof Error
       ? error.name !== "Error"
@@ -159,12 +252,23 @@ function failureDetails(error: unknown) {
         : error.constructor.name
       : "unknown";
   if (!(error instanceof PagarmeRejectedError)) return { errorCode };
+  const rejection = describeRejection(error, input);
   return {
     errorCode,
     status: error.status,
     ...(error.providerCode === null
       ? {}
       : { providerCode: error.providerCode }),
+    ...(rejection.message ? { providerMessage: rejection.message } : {}),
+    ...(rejection.fields.length
+      ? {
+          providerFields: rejection.fields.map((field) =>
+            field.messages.length
+              ? `${field.field}: ${field.messages.join(" | ")}`
+              : field.field,
+          ),
+        }
+      : {}),
   };
 }
 export type ReceivingProvisioningCommand = {
@@ -175,13 +279,24 @@ export type ReceivingProvisioningCommand = {
 } & (
   | { readonly action: "CREATE" }
   | { readonly action: "SETTLE"; readonly record: ReceivingProvisioningRecord }
+  /**
+   * An armed dispatch without a stored result: consult Pagar.me by the
+   * account code, attach what it holds, or release and create again once
+   * it is proven absent.
+   */
+  | {
+      readonly action: "RECONCILE";
+      readonly record: ReceivingProvisioningRecord;
+    }
 );
 interface Feedback {
-  readonly state: "UNAVAILABLE" | "UNKNOWN" | "STORED";
+  readonly state: "UNAVAILABLE" | "UNKNOWN" | "STORED" | "REJECTED";
   readonly siteId?: string;
   readonly requestId?: string;
   readonly accountId?: string;
   readonly operationId?: string;
+  /** Only with REJECTED: the dispatch was released for a corrected submit. */
+  readonly rejection?: ReceivingProviderRejection;
 }
 export interface ReceivingProvisioningOwner {
   readonly feedback: Promise<Feedback>;
@@ -432,6 +547,7 @@ export function createReceivingAccountProvisioning(options?: Options): {
       let spent = false;
       let settling = false;
       let stage: ReceivingProvisioningStage = "validate";
+      let recipientInput: PagarmeRecipientInput | undefined;
       const recordFailure = (
         error: unknown,
         result: ReceivingProvisioningFailureEvent["result"],
@@ -442,16 +558,20 @@ export function createReceivingAccountProvisioning(options?: Options): {
             event: "receiving.provisioning.failed",
             operation: stage,
             result,
-            ...failureDetails(error),
+            ...failureDetails(error, recipientInput),
             ...(nomination ? { siteId: nomination.siteId } : {}),
           });
         } catch {
           /* Logging never changes the provisioning outcome. */
         }
       };
-      const report = (state: Feedback["state"]) =>
+      const report = (
+        state: Feedback["state"],
+        rejection?: ReceivingProviderRejection,
+      ) =>
         resolveFeedback({
           state,
+          ...(rejection ? { rejection } : {}),
           ...(nomination
             ? {
                 siteId: nomination.siteId,
@@ -475,19 +595,31 @@ export function createReceivingAccountProvisioning(options?: Options): {
           nomination = readReceivingNominationSnapshot(command.nomination);
           if (
             command.confirmNativeCreation !== true ||
-            !["CREATE", "SETTLE"].includes(command.action)
+            !["CREATE", "SETTLE", "RECONCILE"].includes(command.action)
           )
             return unavailable();
           const settlement =
             command.action === "SETTLE"
               ? readReceivingProvisioningRecord(command.record)
               : null;
-          settling = settlement !== null;
+          const reconciliation =
+            command.action === "RECONCILE"
+              ? readReceivingProvisioningRecord(command.record)
+              : null;
+          settling = settlement !== null || reconciliation !== null;
           const authorization = authorizationFor(
             command.authorization,
             nomination,
           );
           const input = readReceivingRecipientInput(command.input);
+          recipientInput = input;
+          if (
+            reconciliation &&
+            (!isDeepStrictEqual(reconciliation.nomination, nomination) ||
+              !reconciliation.provision.dispatch.possibleDispatch ||
+              reconciliation.sealedResult !== null)
+          )
+            return unavailable();
           stage = "provider_check";
           const provider = await readProvider(nomination);
           current();
@@ -495,13 +627,36 @@ export function createReceivingAccountProvisioning(options?: Options): {
             provider?.approved !== true ||
             provider.environment !== nomination.environment ||
             provider.policyVersion !== nomination.policyVersion ||
-            typeof provider.recipients?.createRecipient !== "function"
+            typeof provider.recipients?.createRecipient !== "function" ||
+            (reconciliation &&
+              typeof provider.recipients.findRecipientByCode !== "function")
           )
             return unavailable();
           const parent = identifier(provider.parentAccountReference);
           const recipients = provider.recipients;
-          let claim: ReceivingProvisioningRecord;
-          let prepared: ReceivingProvisioningResult;
+          let claim: ReceivingProvisioningRecord | undefined;
+          let prepared: ReceivingProvisioningResult | undefined;
+          /** Seals the result; true once the account is already attached. */
+          const quarantine = async (
+            held: ReceivingProvisioningRecord,
+            result: ReceivingProvisioningResult,
+          ) => {
+            stage = "quarantine";
+            try {
+              await repository.quarantineOriginal(held, result);
+            } catch (error) {
+              /* Consult only the original prepared result after commit uncertainty. */
+              recordFailure(error, "recovering");
+            }
+            stage = "consult";
+            return (
+              confirmed(
+                await repository.consultOriginal(held, result),
+                held,
+                result,
+              ) === "SUCCEEDED"
+            );
+          };
           if (settlement) {
             claim = settlement;
             if (
@@ -543,6 +698,33 @@ export function createReceivingAccountProvisioning(options?: Options): {
               return;
             }
           } else {
+            if (reconciliation) {
+              claim = reconciliation;
+              stage = "consult_provider";
+              // GET only: a failed or partial read throws and stays UNKNOWN.
+              const found = await recipients.findRecipientByCode(
+                nomination.accountId,
+              );
+              current();
+              if (found) {
+                if (found.code !== nomination.accountId) return unavailable();
+                prepared = readReceivingProvisioningResult({
+                  accountReference: found.id,
+                  recipientReference: found.id,
+                });
+                if (await quarantine(claim, prepared)) {
+                  report("STORED");
+                  return;
+                }
+              } else {
+                stage = "release";
+                await repository.releaseOriginal(claim, "PROVIDER_ABSENT");
+                current();
+                settling = false;
+              }
+            }
+          }
+          if (!settlement && !prepared) {
             const provision = deriveReceivingProvisioningContext(
               nomination,
               parent,
@@ -600,40 +782,48 @@ export function createReceivingAccountProvisioning(options?: Options): {
               return unavailable();
             spent = true;
             stage = "create_recipient";
-            // The account id is the recipient code and idempotency key, so a
-            // repeated request can only return the same Pagar.me recipient.
-            const recipient = await recipients.createRecipient(
-              nomination.accountId,
-              input,
-            );
+            // The account id is the recipient code; with the dispatch attempt
+            // it keys idempotency, so a repeated request of one dispatch can
+            // only return the same Pagar.me recipient.
+            let recipient: Awaited<
+              ReturnType<typeof recipients.createRecipient>
+            >;
+            try {
+              recipient = await recipients.createRecipient(
+                nomination.accountId,
+                input,
+                claim.provision.dispatch.attempt ?? 1,
+              );
+            } catch (error) {
+              if (
+                !(error instanceof PagarmeRejectedError) ||
+                !DEFINITIVE_REJECTIONS.has(error.status)
+              )
+                throw error;
+              // Nothing was created: release the dispatch for a corrected
+              // submit. A failed release stays UNKNOWN until reconciled.
+              recordFailure(error, "rejected");
+              stage = "release";
+              await repository.releaseOriginal(claim, "PROVIDER_REJECTED");
+              report("REJECTED", describeRejection(error, input));
+              return;
+            }
             if (recipient.code !== nomination.accountId) return unavailable();
             prepared = readReceivingProvisioningResult({
               accountReference: recipient.id,
               recipientReference: recipient.id,
             });
-            stage = "quarantine";
-            try {
-              await repository.quarantineOriginal(claim, prepared);
-            } catch (error) {
-              /* Consult only the original prepared result after commit uncertainty. */
-              recordFailure(error, "recovering");
-            }
-            stage = "consult";
-            if (
-              confirmed(
-                await repository.consultOriginal(claim, prepared),
-                claim,
-                prepared,
-              ) === "SUCCEEDED"
-            ) {
+            if (await quarantine(claim, prepared)) {
               report("STORED");
               return;
             }
           }
+          if (!claim || !prepared) return unavailable();
+          const held = claim;
           current();
           stage = "attach";
           try {
-            await repository.attachOriginal(claim, prepared, authorization);
+            await repository.attachOriginal(held, prepared, authorization);
           } catch (error) {
             /* No regenerated envelope or provider repeat follows an ambiguous commit. */
             recordFailure(error, "recovering");
@@ -641,8 +831,8 @@ export function createReceivingAccountProvisioning(options?: Options): {
           stage = "consult";
           if (
             confirmed(
-              await repository.consultOriginal(claim, prepared),
-              claim,
+              await repository.consultOriginal(held, prepared),
+              held,
               prepared,
             ) !== "SUCCEEDED"
           )

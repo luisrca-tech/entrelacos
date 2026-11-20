@@ -2,6 +2,7 @@ import {
   type ReceivingReadiness,
   receivingIncomingVerificationInputSchema,
   receivingKycLinkSchema,
+  receivingProviderRejectionSchema,
   receivingReadinessSchema,
   receivingSetupHolderInputSchema,
   receivingSetupInputSchema,
@@ -18,7 +19,10 @@ import {
 } from "./authHttp";
 import { FinancialReauthenticationError } from "./financialReauthentication";
 import { ReceivingNominationServiceError } from "./receivingNomination";
-import type { ReceivingSetupService } from "./receivingSetup";
+import {
+  ReceivingProviderRejectedError,
+  type ReceivingSetupService,
+} from "./receivingSetup";
 import { ReceivingSetupError } from "./receivingSetupRepository";
 import { resolveSiteAccess } from "./siteAccess";
 
@@ -32,13 +36,14 @@ export type ReceivingSetupHttpOptions = AuthHttpOptions & {
     ): Promise<ReceivingReadiness>;
   };
 };
-function problem(status: number, code: string) {
+function problem(status: number, code: string, extra: object = {}) {
   return new Response(
     JSON.stringify({
       type: "about:blank",
       title: "Receiving setup unavailable",
       status,
       code,
+      ...extra,
     }),
     {
       status,
@@ -89,6 +94,11 @@ export function createReceivingSetupHttpRouter(
   router.onError((error) => {
     if (error instanceof AdminSessionRequiredError)
       return problem(401, "UNAUTHORIZED");
+    // The holder's own correctable reason, already free of submitted values.
+    if (error instanceof ReceivingProviderRejectedError)
+      return problem(error.status, error.code, {
+        provider: receivingProviderRejectionSchema.parse(error.rejection),
+      });
     if (
       error instanceof ReceivingSetupError ||
       error instanceof FinancialReauthenticationError ||

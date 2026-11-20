@@ -176,6 +176,29 @@ export const receivingSetupResponseSchema = z
 export const receivingSetupResultSchema = z
   .object({ state: z.enum(["STORED", "UNKNOWN", "UNAVAILABLE"]) })
   .strict();
+/**
+ * Why Pagar.me definitively refused the recipient (problem
+ * `RECEIVING_PROVIDER_REJECTED`): field paths and messages without the
+ * submitted values, so the holder can correct the form and resend.
+ */
+export const receivingProviderRejectionSchema = z
+  .object({
+    message: z.string().max(300).nullable(),
+    fields: z
+      .array(
+        z
+          .object({
+            field: z.string().min(1).max(96),
+            messages: z.array(z.string().max(240)).max(3),
+          })
+          .strict(),
+      )
+      .max(10),
+  })
+  .strict();
+export type ReceivingProviderRejection = z.infer<
+  typeof receivingProviderRejectionSchema
+>;
 export type ReceivingSetupContext = z.infer<typeof receivingSetupContextSchema>;
 export type ReceivingSetupInput = z.infer<typeof receivingSetupInputSchema>;
 

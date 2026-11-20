@@ -104,6 +104,41 @@ describe("safe observability", () => {
     ).toEqual({});
   });
 
+  it("keeps a redacted provider message and field errors, bounded", () => {
+    const event = sanitizeObservabilityEvent({
+      providerMessage:
+        "Recebedor 'MARIA DA SILVA' maria@example.test CPF 123.456.789-09 phone (21) 99464-7568 invalid",
+      providerFields: [
+        "register_information.birthdate: must be dd/mm/yyyy",
+        "default_bank_account.account_number: 12345-6 invalid",
+        { nested: "dropped" },
+        ...Array.from({ length: 30 }, (_, index) => `field_${index}: x`),
+      ],
+    });
+    const logged = JSON.stringify(event);
+    for (const value of [
+      "MARIA",
+      "maria@example.test",
+      "123.456.789-09",
+      "99464",
+      "12345-6",
+      "nested",
+    ])
+      expect(logged).not.toContain(value);
+    expect(event.providerMessage).toContain("invalid");
+    expect(event.providerFields?.[0]).toBe(
+      "register_information.birthdate: must be dd/mm/yyyy",
+    );
+    expect(event.providerFields?.length).toBeLessThanOrEqual(10);
+    expect(
+      sanitizeObservabilityEvent({ providerMessage: "z".repeat(5000) })
+        .providerMessage?.length,
+    ).toBeLessThanOrEqual(300);
+    expect(
+      sanitizeObservabilityEvent({ providerFields: "not a list" }),
+    ).toEqual({});
+  });
+
   it("adds a server-generated request id and logs the matched route without reading request surfaces", async () => {
     const forbiddenPhone = ["+55", "11", "9", "99999999"].join("");
     const clientRequestId = forbiddenValue("client-request-id");

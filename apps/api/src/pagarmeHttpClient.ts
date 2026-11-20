@@ -1,7 +1,22 @@
+import {
+  PROVIDER_FIELD_LIMIT,
+  PROVIDER_MESSAGE_LIMIT,
+  redactProviderText,
+} from "./observability";
+
 export const PAGARME_API_BASE_URL = "https://api.pagar.me/core/v5";
 
 const DEFAULT_TIMEOUT_MS = 15_000;
 const MAX_PROVIDER_MESSAGE_LENGTH = 500;
+const MAX_FIELD_MESSAGES = 3;
+const MAX_FIELD_MESSAGE_LENGTH = 200;
+const FIELD_PATH_PATTERN = /^[A-Za-z_][A-Za-z0-9_.[\]-]{0,95}$/;
+
+/** One field of a Pagar.me validation error, already free of echoed values. */
+export interface PagarmeProviderField {
+  readonly field: string;
+  readonly messages: readonly string[];
+}
 
 /** Pagar.me refused the request (4xx): nothing was created or changed. */
 export class PagarmeRejectedError extends Error {
@@ -10,7 +25,10 @@ export class PagarmeRejectedError extends Error {
   constructor(
     readonly status: number,
     readonly providerCode: string | null,
+    /** Redacted of personal data and bounded. */
     readonly providerMessage: string | null,
+    /** Field paths of a v5 `errors` map, with redacted, bounded messages. */
+    readonly providerFields: readonly PagarmeProviderField[] = [],
   ) {
     super(`Pagar.me rejected the request (${status})`);
     this.name = "PagarmeRejectedError";
@@ -67,6 +85,34 @@ function text(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value : null;
 }
 
+/** A field path is kept only when it is path-shaped and carries no number. */
+function fieldPath(key: string): string {
+  return FIELD_PATH_PATTERN.test(key) && !/\d{4,}/.test(key) ? key : "[campo]";
+}
+
+/**
+ * Reads the `{ "field.path": ["message", ...] }` map of a v5 validation
+ * error (https://docs.pagar.me/reference/criar-recebedor-1 answers it on 4xx).
+ */
+function readProviderFields(
+  errors: unknown,
+  redact: (value: string) => string,
+): PagarmeProviderField[] {
+  if (!errors || typeof errors !== "object" || Array.isArray(errors)) return [];
+  return Object.entries(errors as Record<string, unknown>)
+    .slice(0, PROVIDER_FIELD_LIMIT)
+    .map(([key, value]) => ({
+      field: fieldPath(key),
+      messages: (Array.isArray(value) ? value : [value])
+        .filter((message): message is string => typeof message === "string")
+        .slice(0, MAX_FIELD_MESSAGES)
+        .map((message) =>
+          redactProviderText(redact(message), MAX_FIELD_MESSAGE_LENGTH),
+        )
+        .filter(Boolean),
+    }));
+}
+
 /** Tolerates the error shapes used across Pagar.me v5 endpoints. */
 function readProviderError(body: unknown): {
   code: string | null;
@@ -85,7 +131,7 @@ function readProviderError(body: unknown): {
       : undefined;
   const fieldCode =
     errors && typeof errors === "object" && !Array.isArray(errors)
-      ? (Object.keys(errors)[0] ?? null)
+      ? (Object.keys(errors).map(fieldPath)[0] ?? null)
       : null;
   return {
     code:
@@ -168,10 +214,19 @@ export function createPagarmeHttpClient(
         const error = readable
           ? readProviderError(parsed)
           : { code: null, message: null };
+        const message = redact(error.message);
         throw new PagarmeRejectedError(
           response.status,
-          redact(error.code),
-          redact(error.message),
+          error.code === "[campo]" ? null : redact(error.code),
+          message === null
+            ? null
+            : redactProviderText(message, PROVIDER_MESSAGE_LIMIT) || null,
+          readable
+            ? readProviderFields(
+                (parsed as Record<string, unknown> | undefined)?.errors,
+                (value) => redact(value) ?? "",
+              )
+            : [],
         );
       }
       if (!response.ok)

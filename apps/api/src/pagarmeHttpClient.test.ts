@@ -217,6 +217,90 @@ describe("Pagar.me HTTP client", () => {
     });
   });
 
+  it("keeps the provider message and every field path of a v5 errors map, without personal data", async () => {
+    const body = JSON.stringify({
+      message: "Recebedor inválido para 'MARIA DA SILVA' (maria@example.test)",
+      errors: {
+        "register_information.birthdate": [
+          "The field birthdate must be dd/mm/yyyy, got 1990-04-12.",
+        ],
+        "register_information.phone_numbers[0].number": [
+          "Phone (21) 99464-7568 is invalid",
+        ],
+        "default_bank_account.account_number": [
+          "Account 12345-6 at branch 1234 is invalid",
+          "CPF 123.456.789-09 does not match",
+        ],
+      },
+    });
+    const error = await failure(
+      client(respond(412, body)).request("POST", "/recipients", { body: {} }),
+    );
+    expect(error).toBeInstanceOf(PagarmeRejectedError);
+    const rejected = error as PagarmeRejectedError;
+    expect(rejected.status).toBe(412);
+    expect(rejected.providerFields.map((field) => field.field)).toEqual([
+      "register_information.birthdate",
+      "register_information.phone_numbers[0].number",
+      "default_bank_account.account_number",
+    ]);
+    expect(rejected.providerFields[0].messages[0]).toContain("dd/mm/yyyy");
+    const exposed = JSON.stringify({
+      message: rejected.providerMessage,
+      fields: rejected.providerFields,
+    });
+    for (const value of [
+      "MARIA",
+      "SILVA",
+      "maria@example.test",
+      "1990-04-12",
+      "99464",
+      "7568",
+      "12345",
+      "1234",
+      "123.456.789-09",
+      "456",
+    ])
+      expect(exposed).not.toContain(value);
+  });
+
+  it("bounds the number and size of provider field errors", async () => {
+    const errors = Object.fromEntries(
+      Array.from({ length: 40 }, (_, index) => [
+        `field_${index}`,
+        Array.from({ length: 10 }, () => "x".repeat(2000)),
+      ]),
+    );
+    const error = (await failure(
+      client(
+        respond(422, JSON.stringify({ message: "y".repeat(5000), errors })),
+      ).request("POST", "/recipients", { body: {} }),
+    )) as PagarmeRejectedError;
+    expect(error.providerFields.length).toBeLessThanOrEqual(10);
+    for (const field of error.providerFields) {
+      expect(field.messages.length).toBeLessThanOrEqual(3);
+      for (const message of field.messages)
+        expect(message.length).toBeLessThanOrEqual(200);
+    }
+    expect(error.providerMessage?.length).toBeLessThanOrEqual(300);
+  });
+
+  it("replaces a field path that is not path-shaped", async () => {
+    const error = (await failure(
+      client(
+        respond(
+          412,
+          JSON.stringify({
+            errors: { "maria@example.test 12345678909": ["x"] },
+          }),
+        ),
+      ).request("POST", "/recipients", { body: {} }),
+    )) as PagarmeRejectedError;
+    expect(JSON.stringify(error.providerFields)).not.toContain("maria");
+    expect(JSON.stringify(error.providerFields)).not.toContain("12345678909");
+    expect(error.providerCode).toBeNull();
+  });
+
   it("refuses an invalid secret key at construction", () => {
     for (const key of ["", "pk_test_public", "sk_test_ with space"])
       expect(() => createPagarmeHttpClient({ secretKey: key })).toThrow(

@@ -440,6 +440,31 @@ function fixture(mode: "sandbox" | "live" = "sandbox") {
   };
 }
 describe("locked immutable receiving verification repository", () => {
+  it.each([
+    [2, "PROVIDER_REJECTED", true],
+    [1, "PROVIDER_REJECTED", false],
+    [2, null, false],
+  ] as const)(
+    "binds an account created by dispatch 2 (attempts %s, last error %s): %s",
+    async (attempts, lastErrorCode, accepted) => {
+      const v = fixture();
+      const operation = v.tables.operations[0];
+      const record = readReceivingProvisioningRecord(
+        operation.request_snapshot,
+      );
+      operation.request_snapshot = readReceivingProvisioningRecord({
+        ...record,
+        provision: {
+          ...record.provision,
+          dispatch: { ...record.provision.dispatch, attempt: 2 },
+        },
+      });
+      operation.attempts = attempts;
+      operation.last_error_code = lastErrorCode;
+      if (accepted) await expect(v.select()).resolves.toBeDefined();
+      else await expect(v.select()).rejects.toThrow();
+    },
+  );
   it("serialized competing original fences admit only one initial selection", async () => {
     const v = fixture();
     const original = await v.repository.captureSelection(

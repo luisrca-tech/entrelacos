@@ -253,6 +253,75 @@ describe("receiving setup orchestration", () => {
     expect(values.nominate).not.toHaveBeenCalled();
     expect(values.begin).not.toHaveBeenCalled();
   });
+  it("reconciles an armed dispatch without a stored result instead of staying uncertain", async () => {
+    const values = fixture();
+    const record = { sealedResult: null, provision: {} };
+    const nomination = { accountId: "binding-one" };
+    values.repository.readAccount.mockResolvedValueOnce({
+      state: "UNKNOWN",
+      operatorUserId: actor.userId,
+      nomination,
+      record,
+    });
+    expect(await values.service.submit(input, authorization)).toEqual({
+      state: "STORED",
+    });
+    expect(values.nominate).not.toHaveBeenCalled();
+    expect(values.begin).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        action: "RECONCILE",
+        record,
+        nomination,
+        input: { ...input.account, name: "MARIA DA SILVA" },
+      }),
+    );
+  });
+  it("keeps an uncertain dispatch with a stored result uncertain", async () => {
+    const values = fixture();
+    values.repository.readAccount.mockResolvedValueOnce({
+      state: "UNKNOWN",
+      operatorUserId: actor.userId,
+      nomination: {},
+      record: {
+        sealedResult: {
+          accountReference: "rp_fixtureRecipient01",
+          recipientReference: "rp_fixtureRecipient01",
+        },
+      },
+    });
+    expect(await values.service.submit(input, authorization)).toEqual({
+      state: "UNKNOWN",
+    });
+    expect(values.begin).not.toHaveBeenCalled();
+  });
+  it("turns a definitive Pagar.me refusal into a clear, retryable problem", async () => {
+    const values = fixture();
+    const rejection = {
+      status: 412,
+      message: "Recebedor inválido",
+      fields: [
+        {
+          field: "register_information.birthdate",
+          messages: ["must be dd/mm/yyyy"],
+        },
+      ],
+    };
+    values.begin.mockReturnValueOnce({
+      feedback: Promise.resolve({ state: "REJECTED", rejection }),
+      completion: Promise.resolve(),
+      cancel: vi.fn(),
+    } as never);
+    await expect(
+      values.service.submit(input, authorization),
+    ).rejects.toMatchObject({
+      status: 422,
+      code: "RECEIVING_PROVIDER_REJECTED",
+      rejection: {
+        message: "Recebedor inválido",
+        fields: rejection.fields,
+      },
+    });
+  });
   it("rejects a stale policy without recording consent or dispatching", async () => {
     const values = fixture();
     await expect(

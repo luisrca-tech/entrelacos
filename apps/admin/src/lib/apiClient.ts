@@ -2,6 +2,8 @@ export class ApiError extends Error {
   constructor(
     public readonly status: number,
     public readonly code: string,
+    /** The parsed problem body, for callers that read its extra fields. */
+    public readonly problem: unknown = undefined,
   ) {
     super(
       status === 401
@@ -39,7 +41,11 @@ export async function apiRequest<T>(
     const problem = (await response.json().catch(() => ({}))) as {
       code?: string;
     };
-    throw new ApiError(response.status, problem.code ?? "REQUEST_FAILED");
+    throw new ApiError(
+      response.status,
+      problem.code ?? "REQUEST_FAILED",
+      problem,
+    );
   }
   if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;

@@ -20,6 +20,7 @@ import {
 import { assertRecipientFinancialAction } from "./financialAuthorization";
 import { allowsLiveSite, type LiveSitePolicy } from "./liveSitePolicy";
 import {
+  consistentDispatchHistory,
   readReceivingProvisioningRecord,
   readReceivingProvisioningResult,
 } from "./receivingNomination";
@@ -385,7 +386,7 @@ export function createReceivingVerificationRepository(
       operation.environment !== mode ||
       operation.kind !== "ACCOUNT_CREATE" ||
       operation.state !== "SUCCEEDED" ||
-      operation.attempts !== 1 ||
+      operation.attempts !== (dispatch.attempt ?? 1) ||
       operation.request_id !== nomination.requestId ||
       operation.request_hash !== nomination.requestHash ||
       operation.provider_operation_reference !== scope.accountReference ||
@@ -398,7 +399,10 @@ export function createReceivingVerificationRepository(
       operation.order_id !== null ||
       operation.payment_id !== null ||
       operation.withdrawal_intent_id !== null ||
-      operation.last_error_code !== null ||
+      !consistentDispatchHistory(
+        (dispatch.attempt ?? 1) - 1,
+        operation.last_error_code,
+      ) ||
       micros(account.created_at) !== micros(nomination.createdAt) ||
       micros(operation.created_at) !== micros(nomination.createdAt) ||
       micros(operation.next_attempt_at) !== micros(nomination.createdAt)

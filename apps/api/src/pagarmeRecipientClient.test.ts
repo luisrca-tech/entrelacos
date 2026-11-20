@@ -205,6 +205,27 @@ describe("Pagar.me recipient client", () => {
     expect(call(fetch, 1).body.code).toBe(call(fetch, 0).body.code);
   });
 
+  it("uses a new idempotency key for a later dispatch attempt and keeps the first one", async () => {
+    const fetch = respond(
+      [200, fixture("recipient-created")],
+      [200, fixture("recipient-created")],
+    );
+    const client = createPagarmeRecipientClient({ secretKey, fetch });
+    await client.createRecipient("receiving-account-1", input);
+    await client.createRecipient("receiving-account-1", input, 2);
+    expect(call(fetch, 0).headers.get("idempotency-key")).toBe(
+      "recipient:receiving-account-1",
+    );
+    expect(call(fetch, 1).headers.get("idempotency-key")).toBe(
+      "recipient:receiving-account-1:2",
+    );
+    expect(call(fetch, 1).body.code).toBe("receiving-account-1");
+    await expect(
+      client.createRecipient("receiving-account-1", input, 0),
+    ).rejects.toThrow();
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
   it("refuses a recipient answer bound to another code or document", async () => {
     const other = JSON.parse(fixture("recipient-created"));
     other.code = "receiving-account-2";
@@ -231,6 +252,117 @@ describe("Pagar.me recipient client", () => {
       ),
     ).rejects.toThrow();
     expect(fetch).not.toHaveBeenCalled();
+  });
+
+  describe("finding a recipient by its code", () => {
+    function listed(
+      items: Array<Record<string, unknown>>,
+      total = items.length,
+    ): [number, string] {
+      return [200, JSON.stringify({ data: items, paging: { total } })];
+    }
+    const platform = {
+      id: "rp_platformRecipient",
+      code: "platform",
+      status: "active",
+    };
+
+    it("returns the recipient whose code matches, read again by id", async () => {
+      const created = JSON.parse(fixture("recipient-created"));
+      const fetch = respond(
+        listed([
+          platform,
+          { id: created.id, code: created.code, status: "registration" },
+        ]),
+        [200, JSON.stringify(created)],
+      );
+      const recipient = await createPagarmeRecipientClient({
+        secretKey,
+        fetch,
+      }).findRecipientByCode("receiving-account-1");
+      expect(recipient?.id).toBe("rp_fixtureRecipient01");
+      expect(recipient?.code).toBe("receiving-account-1");
+      expect(call(fetch, 0).method).toBe("GET");
+      expect(call(fetch, 0).url).toBe(
+        `${PAGARME_API_BASE_URL}/recipients?page=1&size=100`,
+      );
+      expect(call(fetch, 1).url).toBe(
+        `${PAGARME_API_BASE_URL}/recipients/rp_fixtureRecipient01`,
+      );
+      expect(fetch.mock.calls.every(([, init]) => init?.method === "GET")).toBe(
+        true,
+      );
+    });
+
+    it("confirms absence only after reading every page", async () => {
+      const full = Array.from({ length: 100 }, (_, index) => ({
+        id: `rp_other${index}`,
+        code: `other-${index}`,
+        status: "active",
+      }));
+      const fetch = respond(listed(full, 101), listed([platform], 101));
+      await expect(
+        createPagarmeRecipientClient({ secretKey, fetch }).findRecipientByCode(
+          "receiving-account-1",
+        ),
+      ).resolves.toBeNull();
+      expect(call(fetch, 1).url).toBe(
+        `${PAGARME_API_BASE_URL}/recipients?page=2&size=100`,
+      );
+    });
+
+    it("reads the code of a listed recipient that does not show one", async () => {
+      const fetch = respond(
+        listed([{ id: "rp_platformRecipient", status: "active" }]),
+        [200, JSON.stringify({ ...platform, code: null })],
+      );
+      await expect(
+        createPagarmeRecipientClient({ secretKey, fetch }).findRecipientByCode(
+          "receiving-account-1",
+        ),
+      ).resolves.toBeNull();
+      expect(call(fetch, 1).url).toBe(
+        `${PAGARME_API_BASE_URL}/recipients/rp_platformRecipient`,
+      );
+    });
+
+    it.each([
+      ["an unreadable item", [listed([{ code: "x" }])]],
+      ["a short count", [listed([platform], 5)]],
+      ["no list", [[200, JSON.stringify({ paging: { total: 0 } })]]],
+      ["a provider error", [[500, "{}"]]],
+      ["a rejected list", [[429, "{}"]]],
+    ] as Array<[string, Array<[number, string]>]>)(
+      "never confirms absence after %s",
+      async (_label, bodies) => {
+        const fetch = respond(...bodies);
+        await expect(
+          createPagarmeRecipientClient({
+            secretKey,
+            fetch,
+          }).findRecipientByCode("receiving-account-1"),
+        ).rejects.toThrow();
+      },
+    );
+
+    it("refuses a recipient read by id that answers to another code", async () => {
+      const created = JSON.parse(fixture("recipient-created"));
+      const fetch = respond(
+        listed([
+          {
+            id: created.id,
+            code: "receiving-account-1",
+            status: "registration",
+          },
+        ]),
+        [200, JSON.stringify({ ...created, code: "other" })],
+      );
+      await expect(
+        createPagarmeRecipientClient({ secretKey, fetch }).findRecipientByCode(
+          "receiving-account-1",
+        ),
+      ).rejects.toThrow();
+    });
   });
 
   it("reads a recipient", async () => {

@@ -23,6 +23,8 @@ import {
   type ReceivingProvisioningObservation,
 } from "./receivingAccountProvisioning";
 import {
+  consistentDispatchHistory,
+  type ReceivingDispatchReleaseCode,
   type ReceivingNominationCurrentAuthorization,
   type ReceivingNominationSnapshot,
   type ReceivingProvisioningRecord,
@@ -30,6 +32,7 @@ import {
   readReceivingNominationSnapshot,
   readReceivingProvisioningRecord,
   readReceivingProvisioningResult,
+  receivingDispatchReleaseCodes,
 } from "./receivingNomination";
 import { resolveSiteAccess } from "./siteAccess";
 
@@ -72,6 +75,15 @@ interface Scope {
 }
 function unavailable(): never {
   throw new ReceivingAccountProvisioningError();
+}
+/**
+ * A dispatch is proven absent only well after its lease: the owner refuses to
+ * send once the lease expires, and a request sent just before it has had time
+ * to be applied and listed.
+ */
+const ABSENCE_GRACE_MICROSECONDS = 300_000_000n;
+function dispatchAttempt(record: ReceivingProvisioningRecord): number {
+  return record.provision.dispatch.attempt ?? 1;
 }
 function time(value: unknown): bigint {
   return databaseTimestampEpochMicroseconds(readDatabaseTimestamp(value));
@@ -235,7 +247,6 @@ export function createReceivingAccountProvisioningRepository(
       operation.order_id !== null ||
       operation.payment_id !== null ||
       operation.withdrawal_intent_id !== null ||
-      operation.last_error_code !== null ||
       time(account.created_at) !== time(nomination.createdAt) ||
       time(operation.created_at) !== time(nomination.createdAt) ||
       time(operation.next_attempt_at) !== time(nomination.createdAt)
@@ -249,22 +260,30 @@ export function createReceivingAccountProvisioningRepository(
     )
       return refuse(nomination, "snapshot_mismatch");
     if (operation.state === "REQUESTED") {
+      // Released dispatches leave their count and last code; the row was
+      // then updated, so only an untouched intent keeps its creation time.
+      const released = operation.attempts;
       if (
         !isDeepStrictEqual(operation.request_snapshot, nomination) ||
-        operation.attempts !== 0 ||
+        !consistentDispatchHistory(released, operation.last_error_code) ||
         operation.lease_owner !== null ||
         operation.lease_token !== null ||
         operation.lease_expires_at !== null ||
         operation.provider_operation_reference !== null ||
         !unbound(account) ||
         time(account.updated_at) !== time(nomination.createdAt) ||
-        time(operation.updated_at) !== time(nomination.createdAt)
+        (released === 0
+          ? time(operation.updated_at) !== time(nomination.createdAt)
+          : time(operation.updated_at) < time(nomination.createdAt))
       )
         return refuse(nomination, "state_mismatch");
       return { account, operation, record: null, result: null };
     }
     const record = readReceivingProvisioningRecord(operation.request_snapshot);
     const dispatch = record.provision.dispatch;
+    const attempt = dispatchAttempt(record);
+    if (!consistentDispatchHistory(attempt - 1, operation.last_error_code))
+      return refuse(nomination, "state_mismatch");
     if (
       operation.lease_owner !== dispatch.leaseOwner ||
       operation.lease_token !== dispatch.leaseToken ||
@@ -274,7 +293,7 @@ export function createReceivingAccountProvisioningRepository(
       return refuse(nomination, "lease_mismatch");
     if (operation.state === "CLAIMED") {
       if (
-        operation.attempts !== 0 ||
+        operation.attempts !== attempt - 1 ||
         dispatch.possibleDispatch ||
         record.sealedResult !== null ||
         operation.provider_operation_reference !== null ||
@@ -283,7 +302,7 @@ export function createReceivingAccountProvisioningRepository(
         return refuse(nomination, "state_mismatch");
     } else if (operation.state === "UNKNOWN") {
       if (
-        operation.attempts !== 1 ||
+        operation.attempts !== attempt ||
         !dispatch.possibleDispatch ||
         operation.provider_operation_reference !== null ||
         !unbound(account)
@@ -291,7 +310,7 @@ export function createReceivingAccountProvisioningRepository(
         return refuse(nomination, "state_mismatch");
     } else if (operation.state === "SUCCEEDED") {
       if (
-        operation.attempts !== 1 ||
+        operation.attempts !== attempt ||
         !dispatch.possibleDispatch ||
         record.sealedResult !== null
       )
@@ -440,19 +459,24 @@ export function createReceivingAccountProvisioningRepository(
     timestamp: bigint,
     providerReference: string | null = null,
   ) {
-    const op = selected.operation;
     const nomination = next.nomination;
     const dispatch = next.provision.dispatch;
+    const attempt = dispatchAttempt(next);
     const updated =
-      await tx.execute(sql`UPDATE ${financialOperation} SET state=${state}, request_snapshot=${JSON.stringify(next)}::jsonb, attempts=${state === "CLAIMED" ? 0 : 1}, lease_owner=${dispatch.leaseOwner}, lease_token=${dispatch.leaseToken}, lease_expires_at=${instant(BigInt(dispatch.leaseExpiresAtMicroseconds))}::timestamptz, provider_operation_reference=${providerReference}, updated_at=${instant(timestamp)}::timestamptz
-      WHERE id=${nomination.operationId} AND site_id=${nomination.siteId} AND account_id=${nomination.accountId} AND environment=${mode} AND kind='ACCOUNT_CREATE' AND request_id=${nomination.requestId} AND request_hash=${nomination.requestHash} AND request_snapshot=${JSON.stringify(op.request_snapshot)}::jsonb AND state=${op.state} AND attempts=${op.attempts}
-      AND lease_owner IS NOT DISTINCT FROM ${op.lease_owner} AND lease_token IS NOT DISTINCT FROM ${op.lease_token} AND lease_expires_at IS NOT DISTINCT FROM ${op.lease_expires_at === null ? null : instant(time(op.lease_expires_at))}::timestamptz
-      AND provider_operation_reference IS NOT DISTINCT FROM ${op.provider_operation_reference} AND order_id IS NULL AND payment_id IS NULL AND withdrawal_intent_id IS NULL RETURNING id`);
+      await tx.execute(sql`UPDATE ${financialOperation} SET state=${state}, request_snapshot=${JSON.stringify(next)}::jsonb, attempts=${state === "CLAIMED" ? attempt - 1 : attempt}, lease_owner=${dispatch.leaseOwner}, lease_token=${dispatch.leaseToken}, lease_expires_at=${instant(BigInt(dispatch.leaseExpiresAtMicroseconds))}::timestamptz, provider_operation_reference=${providerReference}, updated_at=${instant(timestamp)}::timestamptz
+      WHERE ${unchanged(selected, nomination)} RETURNING id`);
     if (
       updated.rows.length !== 1 ||
       updated.rows[0].id !== nomination.operationId
     )
       return unavailable();
+  }
+  /** Matches only the exact operation row the locked scope read. */
+  function unchanged(selected: Scope, nomination: ReceivingNominationSnapshot) {
+    const op = selected.operation;
+    return sql`id=${nomination.operationId} AND site_id=${nomination.siteId} AND account_id=${nomination.accountId} AND environment=${mode} AND kind='ACCOUNT_CREATE' AND request_id=${nomination.requestId} AND request_hash=${nomination.requestHash} AND request_snapshot=${JSON.stringify(op.request_snapshot)}::jsonb AND state=${op.state} AND attempts=${op.attempts}
+      AND lease_owner IS NOT DISTINCT FROM ${op.lease_owner} AND lease_token IS NOT DISTINCT FROM ${op.lease_token} AND lease_expires_at IS NOT DISTINCT FROM ${op.lease_expires_at === null ? null : instant(time(op.lease_expires_at))}::timestamptz
+      AND provider_operation_reference IS NOT DISTINCT FROM ${op.provider_operation_reference} AND last_error_code IS NOT DISTINCT FROM ${op.last_error_code} AND order_id IS NULL AND payment_id IS NULL AND withdrawal_intent_id IS NULL`;
   }
   async function transaction<T>(
     operation: (tx: Transaction) => Promise<T>,
@@ -562,6 +586,8 @@ export function createReceivingAccountProvisioningRepository(
         if (selected?.operation.state !== "REQUESTED" || selected.record)
           return unavailable();
         const at = await check(draft, false);
+        // Each released dispatch moves the next one to a new attempt.
+        const attempt = (selected.operation.attempts as number) + 1;
         const claim = readReceivingProvisioningRecord({
           ...draft,
           provision: {
@@ -569,6 +595,7 @@ export function createReceivingAccountProvisioningRepository(
             dispatch: {
               ...draft.provision.dispatch,
               leaseExpiresAtMicroseconds: (at + 60000000n).toString(),
+              ...(attempt > 1 ? { attempt } : {}),
             },
           },
         });
@@ -609,6 +636,45 @@ export function createReceivingAccountProvisioningRepository(
           "UNKNOWN",
           await clock(tx),
         );
+      });
+    },
+    async releaseOriginal(input, reason: ReceivingDispatchReleaseCode) {
+      const claim = readReceivingProvisioningRecord(input);
+      if (
+        !receivingDispatchReleaseCodes.includes(reason) ||
+        !claim.provision.dispatch.possibleDispatch ||
+        claim.sealedResult !== null
+      )
+        return unavailable();
+      await transaction(async (tx) => {
+        await lockSite(tx, claim.nomination, false);
+        const selected = await scope(tx, claim.nomination);
+        if (
+          !selected?.record ||
+          selected.operation.state !== "UNKNOWN" ||
+          selected.record.sealedResult !== null ||
+          !unbound(selected.account) ||
+          !isDeepStrictEqual(selected.record, claim)
+        )
+          return unavailable();
+        const at = await clock(tx);
+        if (
+          reason === "PROVIDER_ABSENT" &&
+          at <
+            BigInt(claim.provision.dispatch.leaseExpiresAtMicroseconds) +
+              ABSENCE_GRACE_MICROSECONDS
+        )
+          return unavailable();
+        const nomination = claim.nomination;
+        // Back to the untouched intent, keeping how many dispatches ended.
+        const updated =
+          await tx.execute(sql`UPDATE ${financialOperation} SET state='REQUESTED', request_snapshot=${JSON.stringify(nomination)}::jsonb, attempts=${dispatchAttempt(claim)}, lease_owner=NULL, lease_token=NULL, lease_expires_at=NULL, last_error_code=${reason}, updated_at=${instant(at)}::timestamptz
+          WHERE ${unchanged(selected, nomination)} RETURNING id`);
+        if (
+          updated.rows.length !== 1 ||
+          updated.rows[0].id !== nomination.operationId
+        )
+          return unavailable();
       });
     },
     async consultOriginal(

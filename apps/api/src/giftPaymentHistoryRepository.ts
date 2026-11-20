@@ -47,7 +47,10 @@ import {
 } from "./giftPaymentReconciliation";
 import type { GiftQuoteSnapshot } from "./giftQuotes";
 import { hashFinancialEventIdentity } from "./pagarmeWebhook";
-import { readReceivingProvisioningRecord } from "./receivingNomination";
+import {
+  consistentDispatchHistory,
+  readReceivingProvisioningRecord,
+} from "./receivingNomination";
 import { resolveSiteAccess } from "./siteAccess";
 
 export interface GiftPaymentHistoryRepositoryOptions {
@@ -328,7 +331,10 @@ function original(
       operation.order_id !== null ||
       operation.payment_id !== null ||
       operation.withdrawal_intent_id !== null ||
-      operation.last_error_code !== null ||
+      !consistentDispatchHistory(
+        (dispatch.attempt ?? 1) - 1,
+        operation.last_error_code,
+      ) ||
       operation.sealed_present !== false ||
       time(operation.created_at) !== time(nomination.createdAt) ||
       time(account.created_at) !== time(nomination.createdAt) ||
@@ -341,7 +347,7 @@ function original(
       return historyUnavailable();
     bound =
       operation.state === "SUCCEEDED" &&
-      operation.attempts === 1 &&
+      operation.attempts === (dispatch.attempt ?? 1) &&
       dispatch.possibleDispatch &&
       operation.provider_operation_reference === account.account_reference;
   }
