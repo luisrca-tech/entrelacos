@@ -33,6 +33,19 @@ import {
 /** Approved test card of the Pagar.me v5 simulator. */
 export const PAGARME_SANDBOX_APPROVED_CARD = "4000000000000010";
 
+/**
+ * Fixed cardholder address: card tokens do not carry one and the gateway
+ * refuses a tokenized order without `card.billing_address`.
+ */
+export const PAGARME_SANDBOX_BILLING_ADDRESS = {
+  zipCode: "01310100",
+  street: "Avenida Paulista",
+  streetNumber: "1000",
+  neighborhood: "Bela Vista",
+  city: "Sao Paulo",
+  state: "SP",
+} as const;
+
 export interface ProbeDependencies {
   fetch?: typeof globalThis.fetch;
   log(line: string): void;
@@ -154,6 +167,7 @@ export async function runPagarmeSandboxProbe(
       birthDate: "1990-05-20",
       monthlyIncomeCents: 500_000,
       professionalOccupation: "Analista",
+      // No complement on purpose: the client must send its fallback (422 otherwise).
       address: {
         street: "Avenida Paulista",
         streetNumber: "1000",
@@ -201,6 +215,7 @@ export async function runPagarmeSandboxProbe(
         totalCents: quote.totalCents,
         coupleSplitCents: quote.coupleSplitCents,
         cardToken,
+        billingAddress: PAGARME_SANDBOX_BILLING_ADDRESS,
         quoteExpiresAt: new Date(now().getTime() + 300_000),
         now: now(),
         buyer: {

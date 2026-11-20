@@ -330,6 +330,14 @@ describe("public gift payment transport", () => {
           ...pixCheckout,
           method: "CREDIT_CARD",
           cardToken: "token_abc123",
+          billingAddress: {
+            zipCode: "01310100",
+            street: "Avenida Paulista",
+            streetNumber: "1000",
+            neighborhood: "Bela Vista",
+            city: "São Paulo",
+            state: "SP",
+          },
         })
       ).status,
     ).toBe(503);

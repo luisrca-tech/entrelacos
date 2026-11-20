@@ -2,7 +2,9 @@ import {
   type CouplesSplitMode,
   couplesSplitAmountCents,
   GIFT_PLATFORM_TARIFFS,
+  type GiftCheckoutBillingAddress,
   type GiftCheckoutBuyer,
+  giftCheckoutBillingAddressSchema,
   giftCheckoutBuyerSchema,
   giftCheckoutCardTokenSchema,
 } from "@entrelacos/contracts";
@@ -23,6 +25,8 @@ export interface PagarmeOrderCommand {
   /** C: the couple amount frozen with the quote settlement. */
   readonly coupleSplitCents: number;
   readonly cardToken?: string;
+  /** Cardholder billing address; required for cards, absent on Pix. */
+  readonly billingAddress?: GiftCheckoutBillingAddress;
   readonly quoteExpiresAt: Date;
   readonly now: Date;
   readonly buyer: GiftCheckoutBuyer;
@@ -42,12 +46,22 @@ export interface PagarmeSplitRule {
   };
 }
 
+export interface PagarmeBillingAddress {
+  line_1: string;
+  line_2?: string;
+  zip_code: string;
+  city: string;
+  state: string;
+  country: "BR";
+}
+
 export interface PagarmeOrderPayment {
   payment_method: "pix" | "credit_card";
   amount: number;
   pix?: { expires_in: number };
   credit_card?: {
     card_token: string;
+    card: { billing_address: PagarmeBillingAddress };
     installments: number;
     statement_descriptor: string;
     operation_type: "auth_and_capture";
@@ -92,6 +106,25 @@ function invalid(reason: string): never {
 
 const reference = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 const recipient = pagarmeRecipientIdPattern;
+
+/**
+ * Card tokens do not carry a billing address and the gateway refuses a
+ * tokenized order without one (`billing | "value" is required`), so it goes in
+ * `credit_card.card.billing_address`. `line_1` is "number, street, neighborhood".
+ */
+function billingAddress(value: unknown): PagarmeBillingAddress {
+  const address = giftCheckoutBillingAddressSchema.safeParse(value);
+  if (!address.success) invalid("billing address");
+  const { data } = address;
+  return {
+    line_1: `${data.streetNumber}, ${data.street}, ${data.neighborhood}`,
+    ...(data.complement ? { line_2: data.complement } : {}),
+    zip_code: data.zipCode,
+    city: data.city,
+    state: data.state,
+    country: "BR",
+  };
+}
 
 function cents(value: number, label: string): number {
   if (!Number.isSafeInteger(value) || value < 1 || value > 2_147_483_647)
@@ -197,7 +230,11 @@ export function buildPagarmeOrderRequest(
   ];
   let payment: PagarmeOrderPayment;
   if (command.method === "PIX") {
-    if (installments !== 1 || command.cardToken !== undefined)
+    if (
+      installments !== 1 ||
+      command.cardToken !== undefined ||
+      command.billingAddress !== undefined
+    )
       invalid("Pix is a single tokenless payment");
     const expiresIn = Math.floor(
       (command.quoteExpiresAt.getTime() - command.now.getTime()) / 1000,
@@ -213,6 +250,7 @@ export function buildPagarmeOrderRequest(
   } else if (command.method === "CREDIT_CARD") {
     const token = giftCheckoutCardTokenSchema.safeParse(command.cardToken);
     if (!token.success) invalid("card token");
+    const billing = billingAddress(command.billingAddress);
     if (command.quoteExpiresAt.getTime() <= command.now.getTime())
       invalid("quote expired");
     payment = {
@@ -220,6 +258,7 @@ export function buildPagarmeOrderRequest(
       amount: total,
       credit_card: {
         card_token: token.data,
+        card: { billing_address: billing },
         installments,
         statement_descriptor: PAGARME_STATEMENT_DESCRIPTOR,
         operation_type: "auth_and_capture",

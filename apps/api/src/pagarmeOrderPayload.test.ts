@@ -12,6 +12,14 @@ const buyer = {
   cpf: "12345678909",
   phone: "11987654321",
 };
+const billingAddress = {
+  zipCode: "01310100",
+  street: "Avenida Paulista",
+  streetNumber: "1000",
+  neighborhood: "Bela Vista",
+  city: "São Paulo",
+  state: "SP",
+};
 // R$ 100,00 gift; G and C from quoteGiftV2 (Phase 1 table).
 const pix: PagarmeOrderCommand = {
   checkoutId: "attempt-1",
@@ -34,6 +42,7 @@ const card: PagarmeOrderCommand = {
   totalCents: 11890,
   coupleSplitCents: 11031,
   cardToken: "token_abc123",
+  billingAddress,
 };
 
 describe("Pagar.me order payload", () => {
@@ -115,6 +124,15 @@ describe("Pagar.me order payload", () => {
     expect(payment.amount).toBe(11890);
     expect(payment.credit_card).toEqual({
       card_token: "token_abc123",
+      card: {
+        billing_address: {
+          line_1: "1000, Avenida Paulista, Bela Vista",
+          zip_code: "01310100",
+          city: "São Paulo",
+          state: "SP",
+          country: "BR",
+        },
+      },
       installments: 6,
       statement_descriptor: "ENTRELACOS",
       operation_type: "auth_and_capture",
@@ -123,7 +141,30 @@ describe("Pagar.me order payload", () => {
     expect(body.items[0].amount).toBe(11890);
     expect(payment.split.map((rule) => rule.amount)).toEqual([859, 11031]);
     expect(JSON.stringify(body)).not.toMatch(
-      /"(cvv|card)"|"number":"\d{13,19}"/,
+      /"(cvv|holder_name|exp_month|exp_year)"|"number":"\d{13,19}"/,
+    );
+  });
+
+  it("sends the billing address complement as line_2", () => {
+    const { body } = buildPagarmeOrderRequest({
+      ...card,
+      billingAddress: { ...billingAddress, complement: "Apto 12" },
+    });
+    expect(body.payments[0].credit_card?.card.billing_address).toMatchObject({
+      line_1: "1000, Avenida Paulista, Bela Vista",
+      line_2: "Apto 12",
+    });
+  });
+
+  it.each([
+    ["a missing billing address", { billingAddress: undefined }],
+    [
+      "a malformed billing CEP",
+      { billingAddress: { ...billingAddress, zipCode: "123" } },
+    ],
+  ])("refuses a card order with %s", (_label, change) => {
+    expect(() => buildPagarmeOrderRequest({ ...card, ...change })).toThrow(
+      RangeError,
     );
   });
 
@@ -208,6 +249,12 @@ describe("Pagar.me order payload", () => {
     ).toThrow();
     expect(() =>
       buildPagarmeOrderRequest({ ...pix, cardToken: "token_abc123" }),
+    ).toThrow();
+    expect(() =>
+      buildPagarmeOrderRequest({
+        ...pix,
+        billingAddress: card.billingAddress,
+      }),
     ).toThrow();
   });
 });

@@ -83,8 +83,25 @@ describe("Pagar.me sandbox probe", () => {
     const body = JSON.parse(String(order?.[1]?.body));
     expect(body.payments[0].credit_card).toMatchObject({
       card_token: "token_probe123",
+      card: {
+        billing_address: {
+          line_1: "1000, Avenida Paulista, Bela Vista",
+          zip_code: "01310100",
+          city: "Sao Paulo",
+          state: "SP",
+          country: "BR",
+        },
+      },
       installments: 6,
     });
+    const recipient = fetch.mock.calls.find(
+      ([url, init]) =>
+        String(url).endsWith("/recipients") && init?.method === "POST",
+    );
+    expect(
+      JSON.parse(String(recipient?.[1]?.body)).register_information.address
+        .complementary,
+    ).toBe("Sem complemento");
     expect(body.payments[0].split).toHaveLength(2);
     const output = lines.join("\n");
     expect(output).toMatch(/payables platform rp_platformFixture01/);

@@ -18,6 +18,15 @@ const base = {
   },
 };
 
+const billingAddress = {
+  zipCode: "01310100",
+  street: "Avenida Paulista",
+  streetNumber: "1000",
+  neighborhood: "Bela Vista",
+  city: "São Paulo",
+  state: "SP",
+};
+
 describe("transparent gift checkout contract", () => {
   it("accepts a Pix checkout and a tokenized card checkout", () => {
     expect(
@@ -33,6 +42,7 @@ describe("transparent gift checkout contract", () => {
         method: "CREDIT_CARD",
         installments: 6,
         cardToken: "token_abc123",
+        billingAddress,
       }).success,
     ).toBe(true);
   });
@@ -98,6 +108,64 @@ describe("transparent gift checkout contract", () => {
         cardToken: "4000000000000010",
       }).success,
     ).toBe(false);
+  });
+
+  describe("card billing address", () => {
+    const card = {
+      ...base,
+      method: "CREDIT_CARD",
+      installments: 1,
+      cardToken: "token_abc123",
+    } as const;
+
+    it("requires the billing address on card checkouts", () => {
+      expect(giftCheckoutCreateInputSchema.safeParse(card).success).toBe(false);
+    });
+
+    it("accepts an optional complement and trims the text fields", () => {
+      const parsed = giftCheckoutCreateInputSchema.parse({
+        ...card,
+        billingAddress: {
+          ...billingAddress,
+          street: "  Avenida Paulista ",
+          complement: "Apto 12",
+        },
+      });
+      expect(parsed.billingAddress).toEqual({
+        ...billingAddress,
+        complement: "Apto 12",
+      });
+    });
+
+    it("forbids a billing address on Pix", () => {
+      expect(
+        giftCheckoutCreateInputSchema.safeParse({
+          ...base,
+          method: "PIX",
+          installments: 1,
+          billingAddress,
+        }).success,
+      ).toBe(false);
+    });
+
+    it.each([
+      ["a 7-digit CEP", { zipCode: "0131010" }],
+      ["a formatted CEP", { zipCode: "01310-100" }],
+      ["a lowercase UF", { state: "sp" }],
+      ["a 3-letter UF", { state: "SPX" }],
+      ["an empty street", { street: " " }],
+      ["an empty number", { streetNumber: "" }],
+      ["an empty neighborhood", { neighborhood: "" }],
+      ["an empty city", { city: "" }],
+      ["an unknown field", { country: "BR" }],
+    ])("rejects %s", (_label, change) => {
+      expect(
+        giftCheckoutCreateInputSchema.safeParse({
+          ...card,
+          billingAddress: { ...billingAddress, ...change },
+        }).success,
+      ).toBe(false);
+    });
   });
 
   it("returns the checkout id, status and the Pix QR data", () => {
