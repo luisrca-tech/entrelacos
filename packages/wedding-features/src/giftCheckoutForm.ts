@@ -75,6 +75,25 @@ function normalizePhone(value: string): string {
 
 const line = (value: string) => value.trim().replace(/\s+/g, " ");
 
+export type GiftCheckoutBillingField = keyof GiftCheckoutBillingFields;
+
+/** Form order, so the first invalid field is the one the guest meets first. */
+const billingFieldOrder: GiftCheckoutBillingField[] = [
+  "zipCode",
+  "street",
+  "streetNumber",
+  "complement",
+  "neighborhood",
+  "city",
+  "state",
+];
+
+/** A guest-facing message; for the address, also the fields to mark. */
+export type GiftCheckoutFormError = {
+  error: string;
+  invalidBilling?: GiftCheckoutBillingField[];
+};
+
 const billingErrors: Record<string, string> = {
   zipCode: "Confira o CEP do endereço de cobrança.",
   street: "Informe a rua do endereço de cobrança.",
@@ -87,7 +106,7 @@ const billingErrors: Record<string, string> = {
 
 function readBillingAddress(
   fields: GiftCheckoutBillingFields | undefined,
-): { address: GiftCheckoutBillingAddress } | { error: string } {
+): { address: GiftCheckoutBillingAddress } | Required<GiftCheckoutFormError> {
   const complement = line(fields?.complement ?? "");
   const address = giftCheckoutBillingAddressSchema.safeParse({
     zipCode: digits(fields?.zipCode ?? ""),
@@ -99,8 +118,13 @@ function readBillingAddress(
     state: line(fields?.state ?? "").toUpperCase(),
   });
   if (address.success) return { address: address.data };
-  const field = String(address.error.issues[0]?.path[0] ?? "zipCode");
-  return { error: billingErrors[field] ?? billingErrors.zipCode };
+  const failed = new Set(address.error.issues.map((issue) => issue.path[0]));
+  const invalidBilling = billingFieldOrder.filter((field) => failed.has(field));
+  const field = invalidBilling[0] ?? "zipCode";
+  return {
+    error: billingErrors[field] ?? billingErrors.zipCode,
+    invalidBilling: invalidBilling.length > 0 ? invalidBilling : ["zipCode"],
+  };
 }
 
 /**
@@ -111,7 +135,7 @@ export function readGiftCheckoutForm(
   fields: GiftCheckoutFormFields,
   withCard: boolean,
   now: Date,
-): { input: GiftCheckoutFormInput } | { error: string } {
+): { input: GiftCheckoutFormInput } | GiftCheckoutFormError {
   if (!isValidCpf(fields.cpf)) return { error: "Confira o CPF." };
   const buyer = giftCheckoutBuyerSchema.safeParse({
     name: fields.name.trim().replace(/\s+/g, " "),
