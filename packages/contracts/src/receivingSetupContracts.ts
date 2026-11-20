@@ -74,7 +74,7 @@ export const receivingSetupAccountSchema = z
         city: text(128),
         state: digits(/^[A-Z]{2}$/),
         zipCode: digits(/^\d{8}$/),
-        referencePoint: text(256),
+        referencePoint: text(256).optional(),
       })
       .strict(),
     bankAccount: z

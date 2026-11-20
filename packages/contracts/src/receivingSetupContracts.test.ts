@@ -55,6 +55,18 @@ describe("Pagar.me receiving setup contracts", () => {
     expect(parsed.account.bankAccount.type).toBe("checking");
   });
 
+  it("accepts an address without the optional reference point", () => {
+    const { referencePoint: _referencePoint, ...address } = account.address;
+    const parsed = receivingSetupInputSchema.parse({
+      policyVersion: "receiving-setup-v1",
+      consentVersion: receivingSetupConsentVersion,
+      confirmHolder: true,
+      consentToProvider: true,
+      account: { ...account, address },
+    });
+    expect(parsed.account.address.referencePoint).toBeUndefined();
+  });
+
   it.each([
     ["previous provider consent flag", { consentToPreviousProvider: true }],
     ["Pix consent", { pixConsentVersion: "incoming-pix-v1" }],

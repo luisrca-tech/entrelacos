@@ -48,6 +48,7 @@ export function normalizeSetupAccount(values: SetupFormValues) {
   };
   const digits = (name: string) => text(name).replace(/\D/g, "");
   const complement = text("complement");
+  const referencePoint = text("referencePoint");
   const bank = text("bank");
   // Unparseable input is kept raw so the contract schema rejects it.
   const branch = parseBranch(text("branch")) ?? {
@@ -73,7 +74,7 @@ export function normalizeSetupAccount(values: SetupFormValues) {
       city: text("city"),
       state: text("state").toUpperCase(),
       zipCode: digits("zipCode"),
-      referencePoint: text("referencePoint"),
+      ...(referencePoint ? { referencePoint } : {}),
     },
     bankAccount: {
       bank: normalizeBankCode(

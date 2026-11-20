@@ -1005,6 +1005,8 @@ describe("receiving account setup", () => {
     expect(html).toContain("Conta com dígito");
     expect(html).toMatch(/aria-live="polite"/);
     expect(html).toMatch(/name="complement"(?![^>]*required)[^>]*>/);
+    expect(html).toMatch(/name="referencePoint"(?![^>]*required)[^>]*>/);
+    expect(html).toContain("Ponto de referência (opcional)");
     expect(html).toContain('name="consent"');
     expect(html.match(/type="checkbox"/g)).toHaveLength(1);
     // No provider password exists: the form never asks for one.

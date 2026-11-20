@@ -201,7 +201,7 @@ export function deriveReceivingProvisioningContext(
         address.city,
         address.state,
         address.zipCode,
-        address.referencePoint,
+        address.referencePoint ?? null,
         bank.bank,
         bank.branchNumber,
         bank.branchCheckDigit ?? null,
