@@ -60,6 +60,7 @@ const values: Record<string, string> = {
   bank: "341",
   branch: "1234",
   account: "12345-6",
+  holderName: "FIXTURE HOLDER",
 };
 let root: Root;
 let container: HTMLDivElement;
@@ -212,8 +213,11 @@ describe("verifying an uncertain registration", () => {
       "A Pagar.me não recebeu seu cadastro.",
     );
     expect(field("name").value).toBe("Fixture Holder");
+    // The bank holder name follows the saved name, so it is not marked.
+    expect(field("holderName").value).toBe("FIXTURE HOLDER");
+    expect(field("holderName").closest("[data-reentry]")).toBeNull();
     for (const name of Object.keys(values).filter(
-      (name) => !["name", "accountType"].includes(name),
+      (name) => !["name", "accountType", "holderName"].includes(name),
     )) {
       expect(field(name).value).toBe("");
       expect(field(name).closest("[data-reentry]")).not.toBeNull();

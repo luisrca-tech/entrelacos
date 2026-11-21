@@ -1,6 +1,7 @@
 import { receivingSetupAccountSchema } from "@entrelacos/contracts";
 import { describe, expect, it } from "vitest";
 import {
+  accountFieldErrors,
   incomeToCents,
   normalizeSetupAccount,
   parseAccount,
@@ -29,6 +30,7 @@ describe("receiving setup form", () => {
     branch: "1234",
     account: "12.345-x",
     accountType: "checking",
+    holderName: " Ana  Souza ",
   };
 
   it("builds the Pagar.me recipient from masked form values", () => {
@@ -55,10 +57,13 @@ describe("receiving setup form", () => {
         branchNumber: "1234",
         accountNumber: "12345",
         accountCheckDigit: "X",
+        holderName: "Ana  Souza",
         type: "checking",
       },
     });
-    expect(receivingSetupAccountSchema.safeParse(account).success).toBe(true);
+    expect(
+      receivingSetupAccountSchema.parse(account).bankAccount.holderName,
+    ).toBe("ANA SOUZA");
   });
 
   it("keeps optional complement and branch check digit when given", () => {
@@ -181,5 +186,24 @@ describe("receiving setup form", () => {
         receivingSetupAccountSchema.safeParse(normalizeSetupAccount(values))
           .success,
       ).toBe(false);
+  });
+
+  it("names each invalid field in pt-BR before sending", () => {
+    const parsed = receivingSetupAccountSchema.safeParse(
+      normalizeSetupAccount({
+        ...masked,
+        holderName: "MARIA APARECIDA DOS SANTOS LIMA",
+        zipCode: "0131",
+        branch: "12345",
+      }),
+    );
+    expect(parsed.success).toBe(false);
+    expect(accountFieldErrors(parsed.error?.issues ?? [])).toEqual({
+      holderName:
+        "Nome do titular da conta: use de 2 a 30 caracteres, só letras, espaços, apóstrofo ou hífen, como aparece no banco.",
+      zipCode: "CEP: informe os 8 números do CEP.",
+      branch:
+        "Agência: use até 4 números; o dígito, se houver, vai depois do hífen.",
+    });
   });
 });

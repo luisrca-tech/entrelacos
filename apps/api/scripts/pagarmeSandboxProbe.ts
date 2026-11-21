@@ -182,6 +182,7 @@ export async function runPagarmeSandboxProbe(
         branchNumber: "1234",
         accountNumber: "12345",
         accountCheckDigit: "6",
+        holderName: "RECEBEDOR SANDBOX ENTRELACOS",
         type: "checking",
       },
     });

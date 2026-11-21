@@ -66,6 +66,7 @@ const input: PagarmeRecipientInput = {
     branchCheckDigit: "6",
     accountNumber: "12345",
     accountCheckDigit: "6",
+    holderName: "MARIA SILVA",
     type: "checking",
   },
 };
@@ -107,7 +108,7 @@ describe("Pagar.me recipient client", () => {
         },
       },
       default_bank_account: {
-        holder_name: "MARIA DA SILVA",
+        holder_name: "MARIA SILVA",
         holder_type: "individual",
         holder_document: "12345678909",
         bank: "341",
@@ -253,6 +254,42 @@ describe("Pagar.me recipient client", () => {
     ).rejects.toThrow();
     expect(fetch).not.toHaveBeenCalled();
   });
+
+  it("sends the bank holder name typed for the bank, never the full registration name", async () => {
+    const fetch = respond([200, fixture("recipient-created")]);
+    const name = `MARIA ${"APARECIDA ".repeat(11)}SANTOS`;
+    await createPagarmeRecipientClient({ secretKey, fetch }).createRecipient(
+      "receiving-account-1",
+      {
+        ...input,
+        name,
+        bankAccount: { ...input.bankAccount, holderName: "MARIA A SANTOS" },
+      },
+    );
+    const body = call(fetch).body;
+    expect(body.register_information.name).toBe(name);
+    expect(body.default_bank_account.holder_name).toBe("MARIA A SANTOS");
+  });
+
+  it.each([
+    ["longer than 30 characters", "MARIA APARECIDA DOS SANTOS LIMA"],
+    ["missing", undefined],
+  ])(
+    "refuses a bank holder name %s before calling Pagar.me",
+    async (_label, holderName) => {
+      const fetch = respond([200, fixture("recipient-created")]);
+      await expect(
+        createPagarmeRecipientClient({ secretKey, fetch }).createRecipient(
+          "receiving-account-1",
+          {
+            ...input,
+            bankAccount: { ...input.bankAccount, holderName },
+          } as PagarmeRecipientInput,
+        ),
+      ).rejects.toThrow(TypeError);
+      expect(fetch).not.toHaveBeenCalled();
+    },
+  );
 
   describe("finding a recipient by its code", () => {
     function listed(

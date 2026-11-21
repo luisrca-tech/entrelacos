@@ -292,6 +292,7 @@ describe("panel session resume with a mounted receiving form", () => {
       bank: "341",
       branch: "1234",
       account: "12345-6",
+      holderName: "FICTIONAL PERSON",
     };
     for (const [key, value] of Object.entries(values)) {
       // "bank" is a select; the other fields are inputs.
@@ -389,6 +390,7 @@ describe("panel session resume with a mounted receiving form", () => {
         bank: "341",
         branch: "1234",
         account: "12345-6",
+        holderName: "FICTIONAL PERSON",
       };
       for (const [key, value] of Object.entries(values))
         container.querySelector<HTMLInputElement | HTMLSelectElement>(

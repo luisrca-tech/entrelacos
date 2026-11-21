@@ -185,6 +185,7 @@ function fixture(mode: "sandbox" | "live" = "sandbox") {
       branchNumber: "1234",
       accountNumber: "12345",
       accountCheckDigit: "6",
+      holderName: "MARIA DA SILVA",
       type: "checking" as const,
     },
   };

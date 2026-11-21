@@ -1,4 +1,7 @@
-import { GIFT_PLATFORM_TARIFFS } from "@entrelacos/contracts";
+import {
+  GIFT_PLATFORM_TARIFFS,
+  RECEIVING_HOLDER_NAME_MAX_LENGTH,
+} from "@entrelacos/contracts";
 import { logObservabilityEvent } from "./observability";
 import {
   createPagarmeHttpClient,
@@ -70,6 +73,8 @@ export interface PagarmeRecipientInput {
     readonly branchCheckDigit?: string;
     readonly accountNumber: string;
     readonly accountCheckDigit: string;
+    /** `default_bank_account.holder_name`, at most 30 characters. */
+    readonly holderName: string;
     readonly type: "checking" | "savings";
   };
 }
@@ -476,7 +481,9 @@ function recipientBody(recipientCode: string, input: PagarmeRecipientInput) {
       },
     },
     default_bank_account: {
-      holder_name: name,
+      // Pagar.me refuses a holder name of 30 or more characters (422), so it
+      // is the name typed for the bank, never the 128-character full name.
+      holder_name: text(bank.holderName, RECEIVING_HOLDER_NAME_MAX_LENGTH),
       holder_type: "individual",
       holder_document: cpf,
       bank: digits(bank.bank, /^\d{3}$/),

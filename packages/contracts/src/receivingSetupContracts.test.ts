@@ -33,6 +33,7 @@ const account = {
     branchCheckDigit: "6",
     accountNumber: "12345",
     accountCheckDigit: "6",
+    holderName: "MARIA DA SILVA",
     type: "checking",
   },
 };

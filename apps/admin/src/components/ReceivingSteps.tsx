@@ -3,6 +3,8 @@ import {
   type GiftItem,
   type ReceivingReadiness,
   type ReceivingSetupContext,
+  receivingSetupAccountSchema,
+  suggestReceivingHolderName,
 } from "@entrelacos/contracts";
 import { showSandboxNotice } from "@entrelacos/ui";
 import { Link } from "@tanstack/react-router";
@@ -32,8 +34,16 @@ import type {
   ReceivingSetupPorts,
   ReceivingSetupScope,
 } from "./ReceivingSetup";
-import type { LabeledProviderRejection } from "./receivingProviderRejection";
-import { parseAccount } from "./receivingSetupForm";
+import {
+  type LabeledProviderRejection,
+  rejectionFieldErrors,
+} from "./receivingProviderRejection";
+import {
+  accountFieldErrors,
+  normalizeSetupAccount,
+  parseAccount,
+  type ReceivingFormField,
+} from "./receivingSetupForm";
 import {
   deriveReceivingTasks,
   type ReceivingTaskStatus,
@@ -88,6 +98,8 @@ export type ReceivingStepsContext = {
   rejection?: LabeledProviderRejection | null;
   /** What the last verification found; "released" reopens the form. */
   verification?: { outcome: "released" | "unknown"; text: string } | null;
+  /** The holder's own submit is in flight: the form stays with its data. */
+  sending?: boolean;
 };
 
 const lastCheckFormatter = new Intl.DateTimeFormat("pt-BR", {
@@ -726,6 +738,14 @@ const accountField: DetailFieldSpec = {
   title: "Número da conta seguido do dígito, como 12345-6.",
 };
 
+const holderNameField: DetailFieldSpec = {
+  name: "holderName",
+  label: "Nome do titular da conta (como está no banco, até 30 caracteres)",
+  type: "text",
+  hint: "Sugerimos a partir do nome completo; ajuste se o banco abrevia diferente.",
+  wide: true,
+};
+
 function DetailFieldInput({
   id,
   field,
@@ -733,6 +753,8 @@ function DetailFieldInput({
   onChange,
   describedBy,
   defaultValue,
+  value,
+  error,
 }: {
   id: string;
   field: DetailFieldSpec;
@@ -740,15 +762,26 @@ function DetailFieldInput({
   onChange?: (value: string) => void;
   describedBy?: string;
   defaultValue?: string;
+  value?: string;
+  error?: string;
 }) {
   const fieldId = `${id}-${field.name}`;
+  const described =
+    [
+      describedBy ?? (field.hint ? `${fieldId}-hint` : undefined),
+      error ? `${fieldId}-error` : undefined,
+    ]
+      .filter(Boolean)
+      .join(" ") || undefined;
   return field.options ? (
     <select
       id={fieldId}
       name={field.name}
       required
       disabled={busy}
-      className={receivingField}
+      aria-invalid={error ? true : undefined}
+      aria-describedby={error ? `${fieldId}-error` : undefined}
+      className={`${receivingField} ${invalidField}`}
     >
       {field.options.map((option) => (
         <option key={option.value} value={option.value}>
@@ -764,19 +797,42 @@ function DetailFieldInput({
       required={!field.optional}
       disabled={busy}
       placeholder={field.placeholder}
-      defaultValue={defaultValue}
+      defaultValue={value === undefined ? defaultValue : undefined}
+      value={value}
       inputMode={field.inputMode}
       maxLength={field.maxLength}
       pattern={field.pattern}
       title={field.title}
       autoComplete={field.autoComplete ?? "off"}
-      aria-describedby={
-        describedBy ?? (field.hint ? `${fieldId}-hint` : undefined)
-      }
+      aria-invalid={error ? true : undefined}
+      aria-describedby={described}
       onChange={onChange && ((event) => onChange(event.currentTarget.value))}
-      className={receivingField}
+      className={`${receivingField} ${invalidField}`}
     />
   );
+}
+
+const invalidField =
+  "aria-[invalid=true]:border-admin-danger aria-[invalid=true]:bg-admin-danger-subtle";
+
+/** Why the input is refused, in pt-BR: before sending or from Pagar.me. */
+function FieldError({
+  id,
+  name,
+  error,
+}: {
+  id: string;
+  name: string;
+  error?: string;
+}) {
+  return error ? (
+    <p
+      id={`${id}-${name}-error`}
+      className="m-0 text-[0.8rem] font-bold leading-[1.4] text-admin-danger-text"
+    >
+      {error}
+    </p>
+  ) : null;
 }
 
 function FieldLabel({ id, field }: { id: string; field: DetailFieldSpec }) {
@@ -824,12 +880,18 @@ function DetailField({
   busy,
   reentry = false,
   defaultValue,
+  value,
+  onChange,
+  error,
 }: {
   id: string;
   field: DetailFieldSpec;
   busy: boolean;
   reentry?: boolean;
   defaultValue?: string;
+  value?: string;
+  onChange?: (value: string) => void;
+  error?: string;
 }) {
   return (
     <div
@@ -842,8 +904,12 @@ function DetailField({
         field={field}
         busy={busy}
         defaultValue={defaultValue}
+        value={value}
+        onChange={onChange}
+        error={error}
       />
       <FieldHint id={id} name={field.name} hint={field.hint} />
+      <FieldError id={id} name={field.name} error={error} />
       {reentry && <ReentryNote />}
     </div>
   );
@@ -855,10 +921,18 @@ function BankAccountFields({
   id,
   busy,
   reentry = false,
+  errors,
+  holderName,
 }: {
   id: string;
   busy: boolean;
   reentry?: boolean;
+  errors: Partial<Record<ReceivingFormField, string>>;
+  holderName: {
+    value: string;
+    onChange: (value: string) => void;
+    reentry: boolean;
+  };
 }) {
   const [otherBank, setOtherBank] = useState(false);
   const [account, setAccount] = useState("");
@@ -879,11 +953,14 @@ function BankAccountFields({
           name="bank"
           required
           disabled={busy}
-          aria-describedby={bankHintId}
+          aria-invalid={errors.bank ? true : undefined}
+          aria-describedby={
+            errors.bank ? `${bankHintId} ${id}-bank-error` : bankHintId
+          }
           onChange={(event) =>
             setOtherBank(event.currentTarget.value === otherBankValue)
           }
-          className={receivingField}
+          className={`${receivingField} ${invalidField}`}
         >
           <option value="">Selecione o banco</option>
           {brazilianBanks.map((bank) => (
@@ -898,6 +975,7 @@ function BankAccountFields({
           name="bank"
           hint="A conta precisa estar no CPF informado acima; os saques vão para ela."
         />
+        <FieldError id={id} name="bank" error={errors.bank} />
         {reentry && <ReentryNote />}
         {otherBank && (
           <div className="mt-2 grid gap-1.5">
@@ -912,8 +990,15 @@ function BankAccountFields({
         field={accountTypeField}
         busy={busy}
         reentry={reentry}
+        error={errors.accountType}
       />
-      <DetailField id={id} field={branchField} busy={busy} reentry={reentry} />
+      <DetailField
+        id={id}
+        field={branchField}
+        busy={busy}
+        reentry={reentry}
+        error={errors.branch}
+      />
       <div data-reentry={marked} className="grid min-w-0 content-start gap-1.5">
         <FieldLabel id={id} field={accountField} />
         <DetailFieldInput
@@ -922,6 +1007,7 @@ function BankAccountFields({
           busy={busy}
           onChange={setAccount}
           describedBy={`${id}-account-hint`}
+          error={errors.account}
         />
         <p
           id={`${id}-account-hint`}
@@ -931,8 +1017,18 @@ function BankAccountFields({
           {parsedAccount &&
             `Conta ${parsedAccount.accountNumber}, dígito ${parsedAccount.accountCheckDigit}`}
         </p>
+        <FieldError id={id} name="account" error={errors.account} />
         {reentry && <ReentryNote />}
       </div>
+      <DetailField
+        id={id}
+        field={holderNameField}
+        busy={busy}
+        reentry={holderName.reentry}
+        value={holderName.value}
+        onChange={holderName.onChange}
+        error={errors.holderName}
+      />
     </>
   );
 }
@@ -959,6 +1055,25 @@ export function DetailsStep({ context }: { context: ReceivingStepsContext }) {
   // only the holder's name is stored to fill in again.
   const reopened = canSubmit && context.verification?.outcome === "released";
   const verifySituation = context.onReconcile ?? context.onRetry;
+  // The saved name a release reopened the form with; kept after a resend
+  // clears the verification, so neither the name nor its suggestion vanish.
+  const [savedName, setSavedName] = useState<string | undefined>();
+  const reopenedName = reopened ? setup?.holder?.name : undefined;
+  if (reopenedName && reopenedName !== savedName) setSavedName(reopenedName);
+  // The bank holder name follows the full name until the holder edits it.
+  const [typedName, setTypedName] = useState<string | null>(null);
+  const [typedHolderName, setTypedHolderName] = useState<string | null>(null);
+  const holderName =
+    typedHolderName ?? suggestReceivingHolderName(typedName ?? savedName ?? "");
+  const [inputErrors, setInputErrors] = useState<
+    Partial<Record<ReceivingFormField, string>>
+  >({});
+  // Pagar.me's refusal points at inputs; what was checked here comes first.
+  const rejection = canSubmit ? context.rejection : null;
+  const errors = {
+    ...(rejection ? rejectionFieldErrors(rejection) : {}),
+    ...inputErrors,
+  };
   return (
     <StepFrame
       siteId={siteId}
@@ -1077,15 +1192,15 @@ export function DetailsStep({ context }: { context: ReceivingStepsContext }) {
             </p>
           </div>
         )}
-        {canSubmit && context.rejection && (
+        {rejection && (
           <div className="grid gap-2 rounded-[14px] bg-admin-danger-subtle p-4 text-admin-danger-text">
             <p role="alert" className="m-0 text-sm font-bold leading-[1.55]">
               A Pagar.me recusou o cadastro. Corrija os dados indicados e envie
               novamente.
             </p>
-            {context.rejection.fields.length > 0 && (
+            {rejection.fields.length > 0 && (
               <ul className="m-0 grid list-disc gap-1 pl-5 text-sm leading-[1.55]">
-                {context.rejection.fields.map((field) => (
+                {rejection.fields.map((field) => (
                   <li key={field.field}>
                     <strong>{field.label}</strong>
                     {field.messages.length > 0 &&
@@ -1094,10 +1209,8 @@ export function DetailsStep({ context }: { context: ReceivingStepsContext }) {
                 ))}
               </ul>
             )}
-            {context.rejection.message && (
-              <p className="m-0 text-sm leading-[1.55]">
-                Mensagem da Pagar.me: {context.rejection.message}
-              </p>
+            {rejection.message && (
+              <p className="m-0 text-sm leading-[1.55]">{rejection.message}</p>
             )}
           </div>
         )}
@@ -1125,12 +1238,44 @@ export function DetailsStep({ context }: { context: ReceivingStepsContext }) {
             </Link>
           </div>
         )}
-        {canSubmit && setup && (
+        {(canSubmit || context.sending) && setup && (
           <form
             ref={context.form}
-            onSubmit={context.onSubmit}
+            onSubmit={(event) => {
+              // The contract that the API applies, checked before sending.
+              const checked = receivingSetupAccountSchema.safeParse(
+                normalizeSetupAccount(
+                  Object.fromEntries(new FormData(event.currentTarget)),
+                ),
+              );
+              const found = checked.success
+                ? {}
+                : accountFieldErrors(checked.error.issues);
+              setInputErrors(found);
+              const first = Object.keys(found)[0];
+              if (first) {
+                event.preventDefault();
+                event.currentTarget
+                  .querySelector<HTMLElement>(`[name="${first}"]`)
+                  ?.focus();
+                return;
+              }
+              context.onSubmit?.(event);
+            }}
+            onInput={(event) => {
+              const name = (event.target as HTMLInputElement).name;
+              if (name in inputErrors)
+                setInputErrors(
+                  ({ [name as ReceivingFormField]: _, ...rest }) => rest,
+                );
+            }}
             // Remount the bank fields so their local state follows reset().
-            onReset={() => setResetCount((count) => count + 1)}
+            onReset={() => {
+              setResetCount((count) => count + 1);
+              setTypedName(null);
+              setTypedHolderName(null);
+              setInputErrors({});
+            }}
             className="grid gap-6"
             autoComplete="off"
           >
@@ -1142,11 +1287,9 @@ export function DetailsStep({ context }: { context: ReceivingStepsContext }) {
                   field={field}
                   busy={busy}
                   reentry={reopened && field.name !== "name"}
-                  defaultValue={
-                    reopened && field.name === "name"
-                      ? setup.holder?.name
-                      : undefined
-                  }
+                  defaultValue={field.name === "name" ? savedName : undefined}
+                  onChange={field.name === "name" ? setTypedName : undefined}
+                  error={errors[field.name as ReceivingFormField]}
                 />
               ))}
               <BankAccountFields
@@ -1154,6 +1297,12 @@ export function DetailsStep({ context }: { context: ReceivingStepsContext }) {
                 id={id}
                 busy={busy}
                 reentry={reopened}
+                errors={errors}
+                holderName={{
+                  value: holderName,
+                  onChange: setTypedHolderName,
+                  reentry: reopened && !holderName,
+                }}
               />
             </div>
             <fieldset className="m-0 grid min-w-0 gap-3 rounded-[14px] border border-admin-border bg-admin-canvas p-5">
