@@ -421,6 +421,7 @@ export function createReceivingAccountSetupController(
             ? (readProviderRejection(cause.problem) ?? {
                 message: null,
                 fields: [],
+                formFields: [],
               })
             : null;
         if (rejection && current() && revision === active) {
@@ -751,6 +752,13 @@ export function ReceivingAccountSetupView({
     // UNKNOWN resends are consulted on Pagar.me before anything is created.
     ["NOT_CREATED", "PENDING", "UNKNOWN"].includes(setup.accountState) &&
     !!guard?.isCurrent();
+  // While the holder's own submit is in flight the guard is not current,
+  // but the form stays mounted (disabled) so a refusal keeps what was typed.
+  const sending =
+    !owner &&
+    state.status === "submitting" &&
+    !!setup?.isHolder &&
+    ["NOT_CREATED", "PENDING"].includes(setup.accountState);
   // Only the holder consults Pagar.me about her own uncertain dispatch.
   const canReconcile =
     !owner &&
@@ -786,6 +794,7 @@ export function ReceivingAccountSetupView({
     readiness: currentReadiness,
     rejection: state.rejection ?? null,
     verification: state.verification ?? null,
+    sending,
     ...track,
     guard,
     incomingGuard,

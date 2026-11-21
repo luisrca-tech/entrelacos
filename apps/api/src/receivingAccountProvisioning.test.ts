@@ -108,6 +108,7 @@ function fixture() {
       branchCheckDigit: "6",
       accountNumber: "12345",
       accountCheckDigit: "6",
+      holderName: "MARIA DA SILVA",
       type: "checking" as const,
     },
   };
@@ -919,7 +920,7 @@ describe("completion-owned original account provisioning", () => {
     const expected = createHmac("sha256", Buffer.from(derived))
       .update(
         JSON.stringify([
-          "entrelacos.receiving-provisioning.input.v2",
+          "entrelacos.receiving-provisioning.input.v3",
           "hkdf-hmac-sha256-v1",
           "fp-v1",
           "PAGARME",
@@ -952,6 +953,7 @@ describe("completion-owned original account provisioning", () => {
           "6",
           "12345",
           "6",
+          "MARIA DA SILVA",
           "checking",
         ]),
       )

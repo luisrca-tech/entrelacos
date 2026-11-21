@@ -195,6 +195,7 @@ function inputValues(input: PagarmeRecipientInput): string[] {
   const values = [
     input.name,
     ...input.name.split(/\s+/),
+    ...input.bankAccount.holderName.split(/\s+/),
     input.email,
     input.cpf,
     input.mobilePhone,
@@ -366,7 +367,7 @@ export function deriveReceivingProvisioningContext(
     );
     canonical = Buffer.from(
       JSON.stringify([
-        "entrelacos.receiving-provisioning.input.v2",
+        "entrelacos.receiving-provisioning.input.v3",
         "hkdf-hmac-sha256-v1",
         id,
         "PAGARME",
@@ -399,6 +400,7 @@ export function deriveReceivingProvisioningContext(
         bank.branchCheckDigit ?? null,
         bank.accountNumber,
         bank.accountCheckDigit,
+        bank.holderName,
         bank.type,
       ]),
     );

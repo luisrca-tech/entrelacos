@@ -108,6 +108,7 @@ const input = {
       branchNumber: "1234",
       accountNumber: "12345",
       accountCheckDigit: "6",
+      holderName: "Maria  da Silva",
       type: "checking" as const,
     },
   },
@@ -215,7 +216,14 @@ describe("receiving setup orchestration", () => {
       expect.objectContaining({
         action: "CREATE",
         confirmNativeCreation: true,
-        input: { ...input.account, name: "MARIA DA SILVA" },
+        input: {
+          ...input.account,
+          name: "MARIA DA SILVA",
+          bankAccount: {
+            ...input.account.bankAccount,
+            holderName: "MARIA DA SILVA",
+          },
+        },
       }),
     );
     expect(
@@ -240,6 +248,39 @@ describe("receiving setup orchestration", () => {
       ),
     ).rejects.toMatchObject({ code: "RECEIVING_SETUP_INVALID_INPUT" });
     expect(values.begin).not.toHaveBeenCalled();
+  });
+  it("refuses a bank holder name over 30 characters without consent or a Pagar.me call", async () => {
+    const values = fixture();
+    await expect(
+      values.service.submit(
+        {
+          ...input,
+          account: {
+            ...input.account,
+            bankAccount: {
+              ...input.account.bankAccount,
+              holderName: "MARIA APARECIDA DOS SANTOS LIMA",
+            },
+          },
+        },
+        authorization,
+      ),
+    ).rejects.toMatchObject({
+      status: 409,
+      code: "RECEIVING_SETUP_INVALID_INPUT",
+    });
+    expect(values.repository.consent).not.toHaveBeenCalled();
+    expect(values.begin).not.toHaveBeenCalled();
+  });
+  it("dispatches the normalized bank holder name apart from the full name", async () => {
+    const values = fixture();
+    await values.service.submit(input, authorization);
+    expect(values.begin.mock.calls[0]?.[0]).toMatchObject({
+      input: {
+        name: "MARIA DA SILVA",
+        bankAccount: { holderName: "MARIA DA SILVA" },
+      },
+    });
   });
   it("does not create another provider account when a previous dispatch is uncertain", async () => {
     const values = fixture();
@@ -272,7 +313,14 @@ describe("receiving setup orchestration", () => {
         action: "RECONCILE",
         record,
         nomination,
-        input: { ...input.account, name: "MARIA DA SILVA" },
+        input: {
+          ...input.account,
+          name: "MARIA DA SILVA",
+          bankAccount: {
+            ...input.account.bankAccount,
+            holderName: "MARIA DA SILVA",
+          },
+        },
       }),
     );
   });

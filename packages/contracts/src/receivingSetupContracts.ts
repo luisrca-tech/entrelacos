@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { receivingHolderNameSchema } from "./receivingHolderName";
 
 const identifier = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/);
 const text = (maximum: number) =>
@@ -47,6 +48,19 @@ function ageInYears(birthDate: string, today = new Date()): number {
 }
 /** Pagar.me only registers adult individual recipients. */
 const minimumRecipientAge = 18;
+/**
+ * Pagar.me v5 POST /recipients limits for an individual recipient
+ * (https://docs.pagar.me/reference/criar-recebedor-1, checked 2026-11-21):
+ * - zip_code: "deve conter uma numeração de 8 dígitos";
+ * - account_number: "Máximo 13 caracteres numéricos";
+ * - monthly_income: integer, int32 (so at most 2_147_483_647);
+ * - type: checking | savings; holder_document equals the recipient CPF;
+ * - holder_name: 30, from Pagar.me's 422 (see receivingHolderName.ts).
+ * The docs give no number for name, email, phone ddd/number, street,
+ * street_number, complementary, neighborhood, city, state, reference_point,
+ * professional_occupation, birthdate/minimum age, bank, branch_number or
+ * the check digits: those keep the bounds below, chosen here ("sem fonte").
+ */
 export const receivingSetupAccountSchema = z
   .object({
     name: text(128),
@@ -84,6 +98,8 @@ export const receivingSetupAccountSchema = z
         branchCheckDigit: digits(/^\d$/).optional(),
         accountNumber: digits(/^\d{1,13}$/),
         accountCheckDigit: digits(/^[0-9Xx]{1,2}$/),
+        /** As printed by the bank; register_information.name keeps 128. */
+        holderName: receivingHolderNameSchema,
         type: z.enum(["checking", "savings"]),
       })
       .strict(),
