@@ -1,6 +1,9 @@
 import { createHmac, hkdfSync, randomUUID, timingSafeEqual } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
-import { receivingSetupAccountSchema } from "@entrelacos/contracts";
+import {
+  type ReceivingSetupReconcileReason,
+  receivingSetupAccountSchema,
+} from "@entrelacos/contracts";
 import {
   databaseTimestampEpochMicroseconds,
   readDatabaseTimestamp,
@@ -16,6 +19,7 @@ import type {
   PagarmeRecipientInput,
 } from "./pagarmeRecipientClient";
 import {
+  RECEIVING_ABSENCE_GRACE_MICROSECONDS,
   type ReceivingDispatchReleaseCode,
   type ReceivingNominationCurrentAuthorization,
   type ReceivingNominationSnapshot,
@@ -176,6 +180,8 @@ export interface ReceivingProvisioningFailureEvent {
  * 404, 409 and 429 say nothing about the payload, so they stay uncertain.
  */
 const DEFINITIVE_REJECTIONS = new Set([400, 412, 422]);
+/** The contract bound of one field message shown to the holder. */
+const PROVIDER_FIELD_MESSAGE_LIMIT = 240;
 /** The provider reason the holder can act on, free of submitted values. */
 export interface ReceivingProviderRejection {
   readonly status: number;
@@ -234,7 +240,10 @@ function describeRejection(
     fields: error.providerFields.slice(0, PROVIDER_FIELD_LIMIT).map((field) =>
       Object.freeze({
         field: field.field,
-        messages: field.messages.map((text) => withoutInput(text, values)),
+        // Redaction can lengthen a message ("[valor]"), so bound it after.
+        messages: field.messages.map((text) =>
+          withoutInput(text, values).slice(0, PROVIDER_FIELD_MESSAGE_LIMIT),
+        ),
       }),
     ),
   });
@@ -273,12 +282,15 @@ function failureDetails(error: unknown, input?: PagarmeRecipientInput) {
 }
 export type ReceivingProvisioningCommand = {
   readonly nomination: ReceivingNominationSnapshot;
-  readonly input: PagarmeRecipientInput;
   readonly authorization: ReceivingNominationCurrentAuthorization;
   readonly confirmNativeCreation: true;
 } & (
-  | { readonly action: "CREATE" }
-  | { readonly action: "SETTLE"; readonly record: ReceivingProvisioningRecord }
+  | { readonly action: "CREATE"; readonly input: PagarmeRecipientInput }
+  | {
+      readonly action: "SETTLE";
+      readonly input: PagarmeRecipientInput;
+      readonly record: ReceivingProvisioningRecord;
+    }
   /**
    * An armed dispatch without a stored result: consult Pagar.me by the
    * account code, attach what it holds, or release and create again once
@@ -286,17 +298,35 @@ export type ReceivingProvisioningCommand = {
    */
   | {
       readonly action: "RECONCILE";
+      readonly input: PagarmeRecipientInput;
+      readonly record: ReceivingProvisioningRecord;
+    }
+  /**
+   * The RECONCILE consultation alone, without recipient input: attach what
+   * Pagar.me holds or release a dispatch proven absent, then stop. It never
+   * creates a recipient; the holder submits again after a release.
+   */
+  | {
+      readonly action: "VERIFY";
       readonly record: ReceivingProvisioningRecord;
     }
 );
 interface Feedback {
-  readonly state: "UNAVAILABLE" | "UNKNOWN" | "STORED" | "REJECTED";
+  /** RELEASED only answers VERIFY: the dispatch is back to REQUESTED. */
+  readonly state:
+    | "UNAVAILABLE"
+    | "UNKNOWN"
+    | "STORED"
+    | "REJECTED"
+    | "RELEASED";
   readonly siteId?: string;
   readonly requestId?: string;
   readonly accountId?: string;
   readonly operationId?: string;
   /** Only with REJECTED: the dispatch was released for a corrected submit. */
   readonly rejection?: ReceivingProviderRejection;
+  /** Only with UNKNOWN after VERIFY: why the dispatch stays uncertain. */
+  readonly reason?: ReceivingSetupReconcileReason;
 }
 export interface ReceivingProvisioningOwner {
   readonly feedback: Promise<Feedback>;
@@ -548,6 +578,16 @@ export function createReceivingAccountProvisioning(options?: Options): {
       let settling = false;
       let stage: ReceivingProvisioningStage = "validate";
       let recipientInput: PagarmeRecipientInput | undefined;
+      let verifyOnly = false;
+      let verifyReason: ReceivingSetupReconcileReason | undefined;
+      /** Why a verification stays UNKNOWN, from the stage that stopped it. */
+      const reasonFor = (): ReceivingSetupReconcileReason =>
+        verifyReason ??
+        (stage === "consult_provider"
+          ? "PROVIDER_UNREACHABLE"
+          : stage === "release"
+            ? "STATE_CHANGED"
+            : "UNAVAILABLE");
       const recordFailure = (
         error: unknown,
         result: ReceivingProvisioningFailureEvent["result"],
@@ -572,6 +612,7 @@ export function createReceivingAccountProvisioning(options?: Options): {
         resolveFeedback({
           state,
           ...(rejection ? { rejection } : {}),
+          ...(verifyOnly && state === "UNKNOWN" ? { reason: reasonFor() } : {}),
           ...(nomination
             ? {
                 siteId: nomination.siteId,
@@ -595,15 +636,18 @@ export function createReceivingAccountProvisioning(options?: Options): {
           nomination = readReceivingNominationSnapshot(command.nomination);
           if (
             command.confirmNativeCreation !== true ||
-            !["CREATE", "SETTLE", "RECONCILE"].includes(command.action)
+            !["CREATE", "SETTLE", "RECONCILE", "VERIFY"].includes(
+              command.action,
+            )
           )
             return unavailable();
+          verifyOnly = command.action === "VERIFY";
           const settlement =
             command.action === "SETTLE"
               ? readReceivingProvisioningRecord(command.record)
               : null;
           const reconciliation =
-            command.action === "RECONCILE"
+            command.action === "RECONCILE" || command.action === "VERIFY"
               ? readReceivingProvisioningRecord(command.record)
               : null;
           settling = settlement !== null || reconciliation !== null;
@@ -611,8 +655,13 @@ export function createReceivingAccountProvisioning(options?: Options): {
             command.authorization,
             nomination,
           );
-          const input = readReceivingRecipientInput(command.input);
+          // VERIFY carries no recipient input, so it can never create one.
+          const input =
+            command.action === "VERIFY"
+              ? undefined
+              : readReceivingRecipientInput(command.input);
           recipientInput = input;
+          const requireInput = () => input ?? unavailable();
           if (
             reconciliation &&
             (!isDeepStrictEqual(reconciliation.nomination, nomination) ||
@@ -620,6 +669,21 @@ export function createReceivingAccountProvisioning(options?: Options): {
               reconciliation.sealedResult !== null)
           )
             return unavailable();
+          // Absence can only be proven after the window, so a verification
+          // before it does not even ask Pagar.me.
+          if (
+            verifyOnly &&
+            reconciliation &&
+            databaseTimestampEpochMicroseconds(now()) <
+              BigInt(
+                reconciliation.provision.dispatch.leaseExpiresAtMicroseconds,
+              ) +
+                RECEIVING_ABSENCE_GRACE_MICROSECONDS
+          ) {
+            verifyReason = "WINDOW_NOT_ELAPSED";
+            report("UNKNOWN");
+            return;
+          }
           stage = "provider_check";
           const provider = await readProvider(nomination);
           current();
@@ -627,7 +691,8 @@ export function createReceivingAccountProvisioning(options?: Options): {
             provider?.approved !== true ||
             provider.environment !== nomination.environment ||
             provider.policyVersion !== nomination.policyVersion ||
-            typeof provider.recipients?.createRecipient !== "function" ||
+            (!verifyOnly &&
+              typeof provider.recipients?.createRecipient !== "function") ||
             (reconciliation &&
               typeof provider.recipients.findRecipientByCode !== "function")
           )
@@ -668,7 +733,7 @@ export function createReceivingAccountProvisioning(options?: Options): {
               nomination,
               parent,
               claim.provision.fingerprintKeyId,
-              input,
+              requireInput(),
               keys,
             );
             const { dispatch: _dispatch, ...originalIdentity } =
@@ -721,15 +786,21 @@ export function createReceivingAccountProvisioning(options?: Options): {
                 await repository.releaseOriginal(claim, "PROVIDER_ABSENT");
                 current();
                 settling = false;
+                if (verifyOnly) {
+                  report("RELEASED");
+                  return;
+                }
               }
             }
           }
           if (!settlement && !prepared) {
+            if (verifyOnly) return unavailable();
+            const createInput = requireInput();
             const provision = deriveReceivingProvisioningContext(
               nomination,
               parent,
               activeKeyId,
-              input,
+              createInput,
               keys,
             );
             stage = "claim";
@@ -791,7 +862,7 @@ export function createReceivingAccountProvisioning(options?: Options): {
             try {
               recipient = await recipients.createRecipient(
                 nomination.accountId,
-                input,
+                createInput,
                 claim.provision.dispatch.attempt ?? 1,
               );
             } catch (error) {
@@ -805,7 +876,7 @@ export function createReceivingAccountProvisioning(options?: Options): {
               recordFailure(error, "rejected");
               stage = "release";
               await repository.releaseOriginal(claim, "PROVIDER_REJECTED");
-              report("REJECTED", describeRejection(error, input));
+              report("REJECTED", describeRejection(error, createInput));
               return;
             }
             if (recipient.code !== nomination.accountId) return unavailable();

@@ -3,6 +3,7 @@ import {
   type ReceivingKycLink,
   type ReceivingProviderRejection,
   type ReceivingSetupContext,
+  type ReceivingSetupReconcileResult,
   receivingKycLinkSchema,
   receivingProviderRejectionSchema,
   receivingSetupContextSchema,
@@ -230,7 +231,50 @@ export function createReceivingSetupService(
             fields: feedback.rejection?.fields ?? [],
           }),
         );
-      return { state: feedback.state };
+      return {
+        state:
+          feedback.state === "STORED"
+            ? "STORED"
+            : feedback.state === "UNAVAILABLE"
+              ? "UNAVAILABLE"
+              : "UNKNOWN",
+      };
+    },
+    /**
+     * "Verificar situação": consults Pagar.me for an uncertain dispatch
+     * without recipient input. It binds the recipient Pagar.me holds or
+     * releases a dispatch proven absent so the holder can submit again; it
+     * never creates a recipient.
+     */
+    async reconcile(
+      actor: FinancialActor,
+    ): Promise<ReceivingSetupReconcileResult> {
+      await repository.requireHolder(actor);
+      const recentAuth = await repository.readSessionAuthentication(actor);
+      const previous = await repository.readAccount(actor.siteId);
+      if (!previous)
+        throw new ReceivingSetupError(409, "RECEIVING_ACCOUNT_REQUIRED");
+      if (previous.operatorUserId !== actor.userId)
+        throw new ReceivingSetupError(403, "RECEIVING_HOLDER_REQUIRED");
+      if (previous.state === "SUCCEEDED") return { outcome: "STORED" };
+      if (previous.state === "REQUESTED") return { outcome: "RELEASED" };
+      if (previous.state === "CLAIMED")
+        return { outcome: "UNKNOWN", reason: "DISPATCH_IN_PROGRESS" };
+      // A sealed result is settled by a submit, not by a consultation.
+      if (!previous.record || previous.record.sealedResult !== null)
+        return { outcome: "UNKNOWN", reason: "UNAVAILABLE" };
+      const owner = options.provisioning.begin({
+        action: "VERIFY",
+        record: previous.record,
+        nomination: previous.nomination,
+        authorization: { actor, recentAuth },
+        confirmNativeCreation: true,
+      });
+      void owner.completion.catch(() => {});
+      const feedback = await owner.feedback;
+      if (feedback.state === "RELEASED") return { outcome: "RELEASED" };
+      if (feedback.state === "STORED") return { outcome: "STORED" };
+      return { outcome: "UNKNOWN", reason: feedback.reason ?? "UNAVAILABLE" };
     },
   });
 }

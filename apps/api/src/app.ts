@@ -164,6 +164,7 @@ export function createApp(
     for (const [method, path] of [
       ["GET", "/v1/sites/:siteId/receiving/setup"],
       ["POST", "/v1/sites/:siteId/receiving/setup"],
+      ["POST", "/v1/sites/:siteId/receiving/setup/reconcile"],
       ["POST", "/v1/sites/:siteId/receiving/holder"],
       ["POST", "/v1/sites/:siteId/receiving/incoming-verification"],
       ["POST", "/v1/owner/sites/:siteId/receiving/kyc-link"],

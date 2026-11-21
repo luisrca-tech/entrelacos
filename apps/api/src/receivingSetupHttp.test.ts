@@ -32,6 +32,11 @@ function fixture() {
   const designate = vi.fn(async () => {}),
     read = vi.fn(),
     submit = vi.fn(async () => ({ state: "STORED" })),
+    reconcile = vi.fn(
+      async (_actor: unknown): Promise<unknown> => ({
+        outcome: "RELEASED",
+      }),
+    ),
     createKycLink = vi.fn(async () => kycLink),
     kycRateLimit = { consume: vi.fn(async (_siteId: string) => true) };
   const verifyIncoming = vi.fn(async () => ({
@@ -47,7 +52,13 @@ function fixture() {
     auth: {} as never,
     db: {} as never,
     adminOrigin: origin,
-    receivingSetup: { read, designate, submit, createKycLink } as never,
+    receivingSetup: {
+      read,
+      designate,
+      submit,
+      reconcile,
+      createKycLink,
+    } as never,
     receivingVerification: { verify: verifyIncoming },
     kycRateLimit,
   });
@@ -57,6 +68,7 @@ function fixture() {
     designate,
     read,
     submit,
+    reconcile,
     createKycLink,
     kycRateLimit,
   };
@@ -315,6 +327,114 @@ describe("receiving setup HTTP boundary", () => {
   });
 });
 
+describe("verifying an uncertain receiving setup over HTTP", () => {
+  it.each([
+    [{ outcome: "RELEASED" }, 200],
+    [{ outcome: "STORED" }, 200],
+    [{ outcome: "UNKNOWN", reason: "PROVIDER_UNREACHABLE" }, 202],
+  ])(
+    "answers the holder's verification %o with %s and no store",
+    async (outcome, status) => {
+      const v = fixture();
+      v.reconcile.mockResolvedValueOnce(outcome);
+      const response = await v.router.request(
+        request("setup/reconcile", { confirmReconcile: true }),
+      );
+      expect(response.status).toBe(status);
+      expect(response.headers.get("cache-control")).toBe("no-store");
+      expect(await response.json()).toEqual(outcome);
+      expect(v.reconcile).toHaveBeenCalledExactlyOnceWith({
+        userId: "bride-one",
+        sessionId: "session-one",
+        siteId: "site-one",
+      });
+      expect(v.submit).not.toHaveBeenCalled();
+    },
+  );
+  it.each([
+    {},
+    { confirmReconcile: false },
+    { confirmReconcile: true, account: { cpf: "12345678909" } },
+  ])("rejects an unconfirmed or extended verification %#", async (input) => {
+    const v = fixture();
+    expect(
+      (await v.router.request(request("setup/reconcile", input))).status,
+    ).toBe(400);
+    expect(v.reconcile).not.toHaveBeenCalled();
+  });
+  it.each(["OWNER", "SITE_ASSISTANT"])(
+    "does not let %s verify on the holder's behalf",
+    async (role) => {
+      const v = fixture();
+      mocks.requireAdminSession.mockResolvedValue({
+        user: { id: "bride-one", role },
+        session: { id: "session-one" },
+      });
+      expect(
+        (
+          await v.router.request(
+            request("setup/reconcile", { confirmReconcile: true }),
+          )
+        ).status,
+      ).toBe(403);
+      expect(v.reconcile).not.toHaveBeenCalled();
+    },
+  );
+  it("denies an administrator without the receiving capability", async () => {
+    const v = fixture();
+    mocks.resolveSiteAccess.mockResolvedValue({
+      ...access,
+      capabilities: { ...access.capabilities, configureReceiving: false },
+    });
+    expect(
+      (
+        await v.router.request(
+          request("setup/reconcile", { confirmReconcile: true }),
+        )
+      ).status,
+    ).toBe(403);
+    expect(v.reconcile).not.toHaveBeenCalled();
+  });
+  it("requires a session and a trusted origin", async () => {
+    const v = fixture();
+    expect(
+      (
+        await v.router.request(
+          request(
+            "setup/reconcile",
+            { confirmReconcile: true },
+            "https://foreign.test",
+          ),
+        )
+      ).status,
+    ).toBe(403);
+    expect(mocks.requireAdminSession).not.toHaveBeenCalled();
+    mocks.requireAdminSession.mockRejectedValue(
+      new mocks.AdminSessionRequiredError(),
+    );
+    expect(
+      (
+        await v.router.request(
+          request("setup/reconcile", { confirmReconcile: true }),
+        )
+      ).status,
+    ).toBe(401);
+    expect(v.reconcile).not.toHaveBeenCalled();
+  });
+  it("reports a holder or account refusal as its problem code", async () => {
+    const v = fixture();
+    v.reconcile.mockRejectedValueOnce(
+      new ReceivingSetupError(409, "RECEIVING_ACCOUNT_REQUIRED"),
+    );
+    const response = await v.router.request(
+      request("setup/reconcile", { confirmReconcile: true }),
+    );
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({
+      code: "RECEIVING_ACCOUNT_REQUIRED",
+    });
+  });
+});
 describe("receiving identity verification link", () => {
   function kycRequest(suppliedOrigin = origin, query = "") {
     return new Request(

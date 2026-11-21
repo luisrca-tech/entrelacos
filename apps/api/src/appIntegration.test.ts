@@ -147,6 +147,48 @@ describe("API composition", () => {
     });
   });
 
+  it("mounts the holder's verification of an uncertain receiving setup", async () => {
+    vi.spyOn(authHttp, "requireAdminSession").mockResolvedValue({
+      user: { id: "holder-one", role: "SITE_ADMIN" },
+      session: { id: "session-one" },
+    } as never);
+    vi.spyOn(siteAccess, "resolveSiteAccess").mockResolvedValue({
+      siteId: "site-one",
+      userId: "holder-one",
+      membershipId: "membership-one",
+      membershipRole: "SITE_ADMIN",
+      capabilities: { configureReceiving: true, readFinance: true },
+    } as never);
+    const reconcile = vi.fn(async () => ({ outcome: "RELEASED" as const }));
+    const api = createApp(
+      {
+        auth: {} as never,
+        db: {} as never,
+        adminOrigin: "http://localhost:3001",
+        receivingSetup: { reconcile } as never,
+      },
+      { sink: () => {} },
+    );
+    const response = await api.request(
+      "/v1/sites/site-one/receiving/setup/reconcile",
+      {
+        method: "POST",
+        headers: {
+          origin: "http://localhost:3001",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ confirmReconcile: true }),
+      },
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ outcome: "RELEASED" });
+    expect(reconcile).toHaveBeenCalledWith({
+      siteId: "site-one",
+      userId: "holder-one",
+      sessionId: "session-one",
+    });
+  });
+
   it("mounts the owner identity verification link route", async () => {
     vi.spyOn(authHttp, "requireAdminSession").mockResolvedValue({
       user: { id: "owner-one", role: "OWNER" },

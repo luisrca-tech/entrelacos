@@ -344,6 +344,116 @@ describe("receiving setup orchestration", () => {
   });
 });
 
+describe("verifying an uncertain receiving setup", () => {
+  const record = { sealedResult: null, provision: {} };
+  const nomination = { accountId: "binding-one" };
+  const uncertain = {
+    state: "UNKNOWN" as const,
+    operatorUserId: actor.userId,
+    nomination,
+    record,
+  };
+  it.each([
+    [{ state: "RELEASED" }, { outcome: "RELEASED" }],
+    [{ state: "STORED" }, { outcome: "STORED" }],
+    [
+      { state: "UNKNOWN", reason: "PROVIDER_UNREACHABLE" },
+      { outcome: "UNKNOWN", reason: "PROVIDER_UNREACHABLE" },
+    ],
+    [
+      { state: "UNKNOWN", reason: "WINDOW_NOT_ELAPSED" },
+      { outcome: "UNKNOWN", reason: "WINDOW_NOT_ELAPSED" },
+    ],
+    [{ state: "UNKNOWN" }, { outcome: "UNKNOWN", reason: "UNAVAILABLE" }],
+    [{ state: "UNAVAILABLE" }, { outcome: "UNKNOWN", reason: "UNAVAILABLE" }],
+  ])(
+    "consults the stored dispatch without recipient input: %o answers %o",
+    async (feedback, outcome) => {
+      const values = fixture();
+      values.repository.readAccount.mockResolvedValueOnce(uncertain);
+      values.begin.mockReturnValueOnce({
+        feedback: Promise.resolve(feedback),
+        completion: Promise.resolve(),
+        cancel: vi.fn(),
+      } as never);
+      expect(await values.service.reconcile(actor)).toEqual(outcome);
+      expect(values.repository.requireHolder).toHaveBeenCalledWith(actor);
+      expect(values.repository.readSessionAuthentication).toHaveBeenCalledWith(
+        actor,
+      );
+      expect(values.begin).toHaveBeenCalledExactlyOnceWith({
+        action: "VERIFY",
+        record,
+        nomination,
+        authorization: { actor, recentAuth: expect.any(Object) },
+        confirmNativeCreation: true,
+      });
+      expect(values.begin.mock.calls[0][0]).not.toHaveProperty("input");
+      expect(values.nominate).not.toHaveBeenCalled();
+      expect(values.repository.consent).not.toHaveBeenCalled();
+    },
+  );
+  it.each([
+    [{ state: "SUCCEEDED" }, { outcome: "STORED" }],
+    [{ state: "REQUESTED" }, { outcome: "RELEASED" }],
+    [
+      { state: "CLAIMED" },
+      { outcome: "UNKNOWN", reason: "DISPATCH_IN_PROGRESS" },
+    ],
+    [
+      {
+        state: "UNKNOWN",
+        nomination,
+        record: {
+          sealedResult: {
+            accountReference: "rp_fixtureRecipient01",
+            recipientReference: "rp_fixtureRecipient01",
+          },
+        },
+      },
+      { outcome: "UNKNOWN", reason: "UNAVAILABLE" },
+    ],
+  ])(
+    "answers a %o dispatch from the stored state alone",
+    async (account, outcome) => {
+      const values = fixture();
+      values.repository.readAccount.mockResolvedValueOnce({
+        operatorUserId: actor.userId,
+        ...account,
+      });
+      expect(await values.service.reconcile(actor)).toEqual(outcome);
+      expect(values.begin).not.toHaveBeenCalled();
+    },
+  );
+  it("requires an existing account of the same holder", async () => {
+    const values = fixture();
+    await expect(values.service.reconcile(actor)).rejects.toMatchObject({
+      status: 409,
+      code: "RECEIVING_ACCOUNT_REQUIRED",
+    });
+    values.repository.readAccount.mockResolvedValueOnce({
+      ...uncertain,
+      operatorUserId: "groom-one",
+    });
+    await expect(values.service.reconcile(actor)).rejects.toMatchObject({
+      status: 403,
+      code: "RECEIVING_HOLDER_REQUIRED",
+    });
+    expect(values.begin).not.toHaveBeenCalled();
+  });
+  it("refuses anyone but the designated holder before reading the account", async () => {
+    const values = fixture();
+    values.repository.requireHolder.mockRejectedValueOnce(
+      Object.assign(new Error("not the holder"), { status: 403 }),
+    );
+    await expect(values.service.reconcile(actor)).rejects.toThrow(
+      "not the holder",
+    );
+    expect(values.repository.readAccount).not.toHaveBeenCalled();
+    expect(values.begin).not.toHaveBeenCalled();
+  });
+});
+
 describe("receiving identity verification link", () => {
   it.each([
     ["the platform owner", { ...actor, userId: "owner-one" }, "OWNER"],

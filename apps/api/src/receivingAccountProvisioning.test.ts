@@ -1,5 +1,6 @@
 import { createHash, createHmac, hkdfSync } from "node:crypto";
 import { readFileSync } from "node:fs";
+import { receivingProviderRejectionSchema } from "@entrelacos/contracts";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { sanitizeObservabilityEvent } from "./observability";
 import { createPagarmeRecipientClient } from "./pagarmeRecipientClient";
@@ -16,6 +17,7 @@ import {
   readReceivingNominationSnapshot,
   readReceivingProvisioningRecord,
 } from "./receivingNomination";
+import { ReceivingProviderRejectedError } from "./receivingSetup";
 
 const nonceState = vi.hoisted(() => ({ value: 0 }));
 vi.mock("node:crypto", async (original) => ({
@@ -541,6 +543,331 @@ describe("reconciling an armed dispatch without a stored result", () => {
     await service.close();
     expect(values.fetchOriginal).not.toHaveBeenCalled();
     expect(values.repository.releaseOriginal).not.toHaveBeenCalled();
+  });
+});
+describe("verifying an uncertain dispatch without recipient input", () => {
+  const listed = (items: unknown[]) =>
+    json(200, { data: items, paging: { total: items.length } });
+  const platform = {
+    id: "rp_platformRecipient",
+    code: "platform",
+    status: "active",
+  };
+  function verify(
+    values: ReturnType<typeof fixture>,
+    record: ReceivingProvisioningRecord,
+  ) {
+    return {
+      action: "VERIFY" as const,
+      nomination: values.nomination,
+      authorization: values.authorization,
+      confirmNativeCreation: true as const,
+      record,
+    };
+  }
+  /** A clock this many minutes after the dispatch lease ended. */
+  function afterLease(record: ReceivingProvisioningRecord, minutes: number) {
+    const leaseEnd =
+      Number(BigInt(record.provision.dispatch.leaseExpiresAtMicroseconds)) /
+      1000;
+    return () => new Date(leaseEnd + minutes * 60_000);
+  }
+  /** Verifies with a clock past the absence window, without logging. */
+  function verifier(
+    values: ReturnType<typeof fixture>,
+    record: ReceivingProvisioningRecord,
+  ) {
+    return createReceivingAccountProvisioning({
+      ...values.options,
+      now: afterLease(record, 7),
+      observe: () => {},
+    });
+  }
+  const posts = (values: ReturnType<typeof fixture>) =>
+    values.fetchOriginal.mock.calls.filter(
+      ([, init]) => init?.method === "POST",
+    );
+
+  it("demo-wedding: releases an UNKNOWN 412 dispatch Pagar.me never received, then the next submit creates exactly one recipient with key :2", async () => {
+    const values = fixture();
+    // Before #89 a 412 left the armed dispatch UNKNOWN: emulate the release
+    // that never happened.
+    values.fetchOriginal.mockImplementationOnce(async () =>
+      json(412, rejectionBody),
+    );
+    values.repository.releaseOriginal.mockRejectedValueOnce(
+      new Error("pre-#89 kept the dispatch uncertain"),
+    );
+    const original = createReceivingAccountProvisioning({
+      ...values.options,
+      observe: () => {},
+    });
+    const first = original.begin(values.command);
+    expect((await first.feedback).state).toBe("UNKNOWN");
+    await first.completion;
+    await original.close();
+    const record = values.getRecord();
+    if (!record) throw new Error("missing armed record");
+    expect(values.getState()).toBe("UNKNOWN");
+    expect(record.provision.dispatch.possibleDispatch).toBe(true);
+    expect(record.provision.dispatch.attempt).toBeUndefined();
+    expect(record.sealedResult).toBeNull();
+    values.fetchOriginal.mockReset();
+    values.repository.releaseOriginal.mockClear();
+
+    // "Verificar situação": the list holds only the platform recipient.
+    values.fetchOriginal.mockImplementation(async () => listed([platform]));
+    const verification = verifier(values, record);
+    const verified = verification.begin(verify(values, record));
+    expect(await verified.feedback).toMatchObject({ state: "RELEASED" });
+    await verified.completion;
+    await verification.close();
+    expect(posts(values)).toHaveLength(0);
+    expect(
+      values.fetchOriginal.mock.calls.every(
+        ([, init]) => init?.method === "GET",
+      ),
+    ).toBe(true);
+    expect(values.repository.releaseOriginal).toHaveBeenCalledOnce();
+    expect(values.repository.releaseOriginal.mock.calls[0][1]).toBe(
+      "PROVIDER_ABSENT",
+    );
+    expect(values.getState()).toBe("REQUESTED");
+    expect(values.getAttempts()).toBe(1);
+    expect(values.getLastErrorCode()).toBe("PROVIDER_ABSENT");
+
+    // The holder's next submit dispatches once, with the next attempt key.
+    values.fetchOriginal.mockReset();
+    values.fetchOriginal.mockImplementation(async () => created());
+    const submitting = createReceivingAccountProvisioning(values.options);
+    const submit = submitting.begin(values.command);
+    expect((await submit.feedback).state).toBe("STORED");
+    await submit.completion;
+    await submitting.close();
+    expect(posts(values)).toHaveLength(1);
+    expect(
+      new Headers(posts(values)[0][1]?.headers).get("idempotency-key"),
+    ).toBe("recipient:account-one:2");
+  });
+
+  it("binds the recipient Pagar.me holds under the account code without creating one", async () => {
+    const values = fixture();
+    const record = await settleUnknown(values);
+    values.fetchOriginal
+      .mockImplementationOnce(async () =>
+        listed([
+          platform,
+          {
+            id: "rp_fixtureRecipient01",
+            code: "account-one",
+            status: "registration",
+          },
+        ]),
+      )
+      .mockImplementationOnce(async () => created());
+    const service = verifier(values, record);
+    const owner = service.begin(verify(values, record));
+    expect((await owner.feedback).state).toBe("STORED");
+    await owner.completion;
+    await service.close();
+    expect(posts(values)).toHaveLength(0);
+    expect(values.repository.releaseOriginal).not.toHaveBeenCalled();
+    expect(values.repository.attachOriginal.mock.calls.at(-1)?.[1]).toEqual({
+      accountReference: "rp_fixtureRecipient01",
+      recipientReference: "rp_fixtureRecipient01",
+    });
+    expect(values.getState()).toBe("SUCCEEDED");
+  });
+
+  it("needs no recipient creation capability at all", async () => {
+    const values = fixture();
+    const record = await settleUnknown(values);
+    values.fetchOriginal.mockImplementation(async () => listed([platform]));
+    const createRecipient = vi.fn();
+    const service = createReceivingAccountProvisioning({
+      ...values.options,
+      now: afterLease(record, 7),
+      observe: () => {},
+      readProvider: async () => ({
+        ...values.provider,
+        recipients: {
+          findRecipientByCode: values.provider.recipients.findRecipientByCode,
+          createRecipient,
+        },
+      }),
+    });
+    const owner = service.begin(verify(values, record));
+    expect((await owner.feedback).state).toBe("RELEASED");
+    await owner.completion;
+    await service.close();
+    expect(createRecipient).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["a failed consultation", async () => json(500, {})],
+    ["a refused consultation", async () => json(429, {})],
+    ["an unexpected list shape", async () => json(200, { data: "none" })],
+    [
+      "an incomplete pagination",
+      async () => json(200, { data: [platform], paging: { total: 9999 } }),
+    ],
+  ])(
+    "stays UNKNOWN as PROVIDER_UNREACHABLE after %s, releasing and creating nothing",
+    async (_label, answer) => {
+      const values = fixture();
+      const record = await settleUnknown(values);
+      values.fetchOriginal.mockImplementation(answer);
+      const service = verifier(values, record);
+      const owner = service.begin(verify(values, record));
+      expect(await owner.feedback).toMatchObject({
+        state: "UNKNOWN",
+        reason: "PROVIDER_UNREACHABLE",
+      });
+      await owner.completion;
+      await service.close();
+      expect(values.repository.releaseOriginal).not.toHaveBeenCalled();
+      expect(posts(values)).toHaveLength(0);
+      expect(values.getState()).toBe("UNKNOWN");
+    },
+  );
+
+  it("stays UNKNOWN as WINDOW_NOT_ELAPSED before the absence window, without asking Pagar.me", async () => {
+    const values = fixture();
+    const record = await settleUnknown(values);
+    const service = createReceivingAccountProvisioning({
+      ...values.options,
+      now: afterLease(record, 4),
+      observe: () => {},
+    });
+    const owner = service.begin(verify(values, record));
+    expect(await owner.feedback).toMatchObject({
+      state: "UNKNOWN",
+      reason: "WINDOW_NOT_ELAPSED",
+    });
+    await owner.completion;
+    await service.close();
+    expect(values.fetchOriginal).not.toHaveBeenCalled();
+    expect(values.repository.releaseOriginal).not.toHaveBeenCalled();
+    expect(values.getState()).toBe("UNKNOWN");
+  });
+
+  it("lets only one of two concurrent verifications release; the other stays UNKNOWN as STATE_CHANGED", async () => {
+    const values = fixture();
+    const record = await settleUnknown(values);
+    values.fetchOriginal.mockImplementation(async () => listed([platform]));
+    const service = verifier(values, record);
+    const left = service.begin(verify(values, record));
+    const right = service.begin(verify(values, record));
+    const outcomes = await Promise.all([left.feedback, right.feedback]);
+    await Promise.all([left.completion, right.completion]);
+    await service.close();
+    expect(outcomes.map((outcome) => outcome.state).sort()).toEqual([
+      "RELEASED",
+      "UNKNOWN",
+    ]);
+    expect(
+      outcomes.find((outcome) => outcome.state === "UNKNOWN"),
+    ).toMatchObject({ reason: "STATE_CHANGED" });
+    expect(values.repository.releaseOriginal).toHaveBeenCalledTimes(2);
+    expect(values.getState()).toBe("REQUESTED");
+    expect(values.getAttempts()).toBe(1);
+    expect(posts(values)).toHaveLength(0);
+  });
+
+  it("creates at most one recipient when a verification races a submit of the same dispatch", async () => {
+    const values = fixture();
+    const record = await settleUnknown(values);
+    values.fetchOriginal.mockImplementation(async (_url, init) =>
+      init?.method === "POST" ? created() : listed([platform]),
+    );
+    const verification = verifier(values, record);
+    const submitting = createReceivingAccountProvisioning({
+      ...values.options,
+      observe: () => {},
+    });
+    const verified = verification.begin(verify(values, record));
+    const submitted = submitting.begin({
+      ...values.command,
+      action: "RECONCILE" as const,
+      record,
+    });
+    const [verifyOutcome, submitOutcome] = await Promise.all([
+      verified.feedback,
+      submitted.feedback,
+    ]);
+    await Promise.all([verified.completion, submitted.completion]);
+    await Promise.all([verification.close(), submitting.close()]);
+    expect(values.repository.releaseOriginal).toHaveBeenCalledTimes(2);
+    expect(posts(values).length).toBeLessThanOrEqual(1);
+    if (verifyOutcome.state === "RELEASED") {
+      expect(submitOutcome.state).toBe("UNKNOWN");
+      expect(posts(values)).toHaveLength(0);
+      expect(values.getState()).toBe("REQUESTED");
+    } else {
+      expect(verifyOutcome).toMatchObject({
+        state: "UNKNOWN",
+        reason: "STATE_CHANGED",
+      });
+      expect(submitOutcome.state).toBe("STORED");
+      expect(posts(values)).toHaveLength(1);
+      expect(
+        new Headers(posts(values)[0][1]?.headers).get("idempotency-key"),
+      ).toBe("recipient:account-one:2");
+    }
+  });
+
+  it("never verifies a record that already holds a sealed result", async () => {
+    const values = fixture();
+    const record = await settleUnknown(values);
+    const sealed = readReceivingProvisioningRecord({
+      ...record,
+      sealedResult: {
+        accountReference: "rp_fixtureRecipient01",
+        recipientReference: "rp_fixtureRecipient01",
+      },
+    });
+    const service = verifier(values, sealed);
+    const owner = service.begin(verify(values, sealed));
+    expect((await owner.feedback).state).toBe("UNKNOWN");
+    await owner.completion;
+    await service.close();
+    expect(values.fetchOriginal).not.toHaveBeenCalled();
+    expect(values.repository.releaseOriginal).not.toHaveBeenCalled();
+  });
+});
+describe("rejection details within the contract", () => {
+  it("bounds each sanitized field message so the refusal stays RECEIVING_PROVIDER_REJECTED", async () => {
+    const values = fixture();
+    // Each echoed "ana" grows to "[valor]" after the input redaction.
+    const input = { ...values.input, name: "ANA LUZ" };
+    values.fetchOriginal.mockImplementationOnce(async () =>
+      json(412, {
+        message: `${"ana ".repeat(80)}`,
+        errors: { "register_information.name": ["ana ".repeat(50)] },
+      }),
+    );
+    const service = createReceivingAccountProvisioning({
+      ...values.options,
+      observe: () => {},
+    });
+    const owner = service.begin({ ...values.command, input });
+    const feedback = await owner.feedback;
+    await owner.completion;
+    await service.close();
+    expect(feedback.state).toBe("REJECTED");
+    const rejection = feedback.rejection;
+    if (!rejection) throw new Error("missing rejection");
+    expect(rejection.fields[0].messages[0].length).toBeLessThanOrEqual(240);
+    expect(rejection.fields[0].messages[0]).not.toMatch(/ana/i);
+    expect((rejection.message ?? "").length).toBeLessThanOrEqual(300);
+    const error = new ReceivingProviderRejectedError(
+      receivingProviderRejectionSchema.parse({
+        message: rejection.message,
+        fields: rejection.fields,
+      }),
+    );
+    expect(error.code).toBe("RECEIVING_PROVIDER_REJECTED");
+    expect(error.status).toBe(422);
   });
 });
 describe("completion-owned original account provisioning", () => {
