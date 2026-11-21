@@ -176,6 +176,50 @@ export const receivingSetupResponseSchema = z
 export const receivingSetupResultSchema = z
   .object({ state: z.enum(["STORED", "UNKNOWN", "UNAVAILABLE"]) })
   .strict();
+/** The holder confirms "Verificar situação"; it carries no recipient data. */
+export const receivingSetupReconcileInputSchema = z
+  .object({ confirmReconcile: z.literal(true) })
+  .strict();
+/**
+ * Why an uncertain dispatch stays UNKNOWN after a verification:
+ * - `WINDOW_NOT_ELAPSED`: too soon after the dispatch to prove absence;
+ * - `PROVIDER_UNREACHABLE`: Pagar.me could not be read completely;
+ * - `STATE_CHANGED`: another verification or submit changed the dispatch;
+ * - `DISPATCH_IN_PROGRESS`: a submit is still dispatching;
+ * - `UNAVAILABLE`: anything else; nothing was created or released.
+ */
+export const receivingSetupReconcileReasons = [
+  "WINDOW_NOT_ELAPSED",
+  "PROVIDER_UNREACHABLE",
+  "STATE_CHANGED",
+  "DISPATCH_IN_PROGRESS",
+  "UNAVAILABLE",
+] as const;
+export type ReceivingSetupReconcileReason =
+  (typeof receivingSetupReconcileReasons)[number];
+/**
+ * What a verification of an uncertain dispatch found. It only reads
+ * Pagar.me and never creates a recipient:
+ * - `RELEASED`: Pagar.me never received it; the holder may submit again;
+ * - `STORED`: the recipient Pagar.me holds is bound to the account;
+ * - `UNKNOWN`: still uncertain, for the given reason.
+ */
+export const receivingSetupReconcileResultSchema = z.discriminatedUnion(
+  "outcome",
+  [
+    z.object({ outcome: z.literal("RELEASED") }).strict(),
+    z.object({ outcome: z.literal("STORED") }).strict(),
+    z
+      .object({
+        outcome: z.literal("UNKNOWN"),
+        reason: z.enum(receivingSetupReconcileReasons),
+      })
+      .strict(),
+  ],
+);
+export type ReceivingSetupReconcileResult = z.infer<
+  typeof receivingSetupReconcileResultSchema
+>;
 /**
  * Why Pagar.me definitively refused the recipient (problem
  * `RECEIVING_PROVIDER_REJECTED`): field paths and messages without the

@@ -6,6 +6,8 @@ import {
   receivingReadinessSchema,
   receivingSetupHolderInputSchema,
   receivingSetupInputSchema,
+  receivingSetupReconcileInputSchema,
+  receivingSetupReconcileResultSchema,
   receivingSetupResponseSchema,
   receivingSetupResultSchema,
   siteIdSchema,
@@ -239,6 +241,43 @@ export function createReceivingSetupHttpRouter(
       "Cache-Control": "no-store",
     });
   });
+  // "Verificar situação": the holder consults Pagar.me for an uncertain
+  // dispatch, under the same checks as the submit. It never creates one.
+  router.post(
+    "/v1/sites/:siteId/receiving/setup/reconcile",
+    async (context) => {
+      const current = await requireAdminSession(context.req.raw, options);
+      const siteId = context.req.param("siteId");
+      const access = await resolveSiteAccess(options.db, {
+        userId: current.user.id,
+        platformRole: current.user.role,
+        siteId,
+      });
+      if (
+        current.user.role !== "SITE_ADMIN" ||
+        !access ||
+        access.membershipRole !== "SITE_ADMIN" ||
+        !access.capabilities.configureReceiving
+      )
+        return problem(403, "MEMBERSHIP_DENIED");
+      const input = receivingSetupReconcileInputSchema.safeParse(
+        await body(context.req.raw),
+      );
+      if (!input.success) return problem(400, "VALIDATION_ERROR");
+      if (!options.receivingSetup)
+        return problem(503, "RECEIVING_SETUP_UNAVAILABLE");
+      const result = receivingSetupReconcileResultSchema.parse(
+        await options.receivingSetup.reconcile({
+          userId: current.user.id,
+          sessionId: current.session.id,
+          siteId,
+        }),
+      );
+      return context.json(result, result.outcome === "UNKNOWN" ? 202 : 200, {
+        "Cache-Control": "no-store",
+      });
+    },
+  );
   // The owner or the recipient operator may open the provider's identity
   // check; the short-lived link goes to the response only.
   router.post("/v1/owner/sites/:siteId/receiving/kyc-link", async (context) => {

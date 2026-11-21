@@ -2,8 +2,10 @@ import {
   meResponseSchema,
   type ReceivingReadiness,
   type ReceivingSetupContext,
+  type ReceivingSetupReconcileResult,
   receivingReadinessResponseSchema,
   receivingSetupAccountSchema,
+  receivingSetupReconcileResultSchema,
   receivingSetupResponseSchema,
   receivingSetupResultSchema,
 } from "@entrelacos/contracts";
@@ -66,7 +68,35 @@ export type ReceivingAccountSetupState = {
   message: string | null;
   /** Pagar.me's refusal of the last submit, kept until the next one. */
   rejection?: LabeledProviderRejection | null;
+  /** What "Verificar situação" found, shown until the next action. */
+  verification?: ReceivingSetupVerification | null;
 };
+/**
+ * "released": Pagar.me never received the registration, so the form is
+ * open again; "unknown": still uncertain, to verify again later.
+ */
+export type ReceivingSetupVerification = {
+  outcome: "released" | "unknown";
+  text: string;
+};
+export type ReceivingSetupReconcileOutcome =
+  | "released"
+  | "stored"
+  | "unknown"
+  | "failed"
+  | "skipped";
+const releasedCopy =
+  "A Pagar.me não recebeu seu cadastro. Mantivemos o que estava salvo: confira o nome e preencha de novo os campos marcados antes de enviar.";
+const retryLaterCopy =
+  "Ainda não conseguimos confirmar com a Pagar.me se o cadastro chegou. Tente de novo em alguns minutos.";
+function uncertainCopy(
+  result: Extract<ReceivingSetupReconcileResult, { outcome: "UNKNOWN" }>,
+) {
+  return result.reason === "WINDOW_NOT_ELAPSED" ||
+    result.reason === "DISPATCH_IN_PROGRESS"
+    ? "O envio anterior ainda é recente para a Pagar.me confirmar. Tente de novo em alguns minutos."
+    : retryLaterCopy;
+}
 /** What became of a submit; the form keeps its data only when "rejected". */
 export type ReceivingSetupSubmitOutcome =
   | "stored"
@@ -251,6 +281,7 @@ export function createReceivingAccountSetupController(
   }
   const guard = createGuard(["NOT_CREATED", "PENDING"]);
   const incomingGuard = createGuard(["CREATED"]);
+  const reconcileGuard = createGuard(["UNKNOWN"]);
   async function verifyIncoming(): Promise<ReceivingReadiness | undefined> {
     if (
       incomingInFlight ||
@@ -320,6 +351,7 @@ export function createReceivingAccountSetupController(
   return {
     guard,
     incomingGuard,
+    reconcileGuard,
     refresh,
     getState: () => structuredClone(state),
     verifyIncoming,
@@ -351,6 +383,7 @@ export function createReceivingAccountSetupController(
         status: "submitting",
         message: null,
         rejection: null,
+        verification: null,
       });
       notify();
       try {
@@ -407,6 +440,100 @@ export function createReceivingAccountSetupController(
             rejection,
           });
           return "rejected";
+        }
+        // A failed send keeps the form open with what was typed; the next
+        // send is consulted on Pagar.me before anything is created again.
+        if (
+          cause instanceof ApiError &&
+          cause.status !== 401 &&
+          cause.status !== 403 &&
+          current() &&
+          revision === active &&
+          state.setup
+        ) {
+          update({
+            ...state,
+            status: "ready",
+            message:
+              "Não foi possível enviar o cadastro agora. Seus dados continuam no formulário; tente de novo em alguns minutos.",
+          });
+          return "failed";
+        }
+        if (revision === active) fail(cause);
+        return "failed";
+      }
+    },
+    /**
+     * "Verificar situação" for an uncertain dispatch: the API only reads
+     * Pagar.me. A release reopens the form; nothing is ever resubmitted here.
+     */
+    async reconcile(): Promise<ReceivingSetupReconcileOutcome> {
+      if (owner.isSuspended?.() || !(await reconcileGuard.validate()))
+        return "skipped";
+      const before = state;
+      const active = ++revision;
+      update({
+        ...state,
+        status: "submitting",
+        message: null,
+        rejection: null,
+        verification: null,
+      });
+      notify();
+      try {
+        const result = receivingSetupReconcileResultSchema.parse(
+          await request(
+            `/v1/sites/${encodeURIComponent(scope.siteId)}/receiving/setup/reconcile`,
+            { method: "POST", body: { confirmReconcile: true } },
+          ),
+        );
+        if (!current() || active !== revision) return "skipped";
+        await refresh();
+        if (!current() || state.status !== "ready") return "failed";
+        if (result.outcome === "STORED") {
+          update({
+            ...state,
+            message:
+              "Cadastro consultado na Pagar.me. Agora confirme sua identidade.",
+          });
+          return "stored";
+        }
+        if (result.outcome === "RELEASED") {
+          const reopened = ["NOT_CREATED", "PENDING"].includes(
+            state.setup?.accountState ?? "",
+          );
+          update({
+            ...state,
+            message: releasedCopy,
+            verification: reopened
+              ? { outcome: "released", text: releasedCopy }
+              : null,
+          });
+          return "released";
+        }
+        const text = uncertainCopy(result);
+        update({
+          ...state,
+          message: text,
+          verification: { outcome: "unknown", text },
+        });
+        return "unknown";
+      } catch (cause) {
+        // Only a lost session or permission leaves the panel; anything else
+        // keeps the uncertain state to verify again later.
+        if (
+          !(cause instanceof ApiError && [401, 403].includes(cause.status)) &&
+          current() &&
+          revision === active &&
+          before.setup
+        ) {
+          update({
+            ...before,
+            status: "ready",
+            message: retryLaterCopy,
+            verification: { outcome: "unknown", text: retryLaterCopy },
+          });
+          return "unknown";
         }
         if (revision === active) fail(cause);
         return "failed";
@@ -537,6 +664,7 @@ export function ReceivingAccountSetup(
       state={state}
       guard={controller.current?.guard}
       incomingGuard={controller.current?.incomingGuard}
+      reconcileGuard={controller.current?.reconcileGuard}
       ports={ports}
       form={form}
       onRetry={() => {
@@ -562,15 +690,18 @@ export function ReceivingAccountSetup(
       onDesignate={(id) => {
         void controller.current?.designate(id);
       }}
+      onReconcile={() => {
+        void controller.current?.reconcile();
+      }}
       onSubmit={(event) => {
         event.preventDefault();
         const target = event.currentTarget;
         const data = new FormData(target);
         const account = normalizeSetupAccount(Object.fromEntries(data));
         const confirmed = data.get("consent") === "on";
-        // The typed data stays only when Pagar.me refused it, to be fixed.
+        // The typed data is cleared only once the registration is stored.
         void controller.current?.submit(account, confirmed).then((outcome) => {
-          if (outcome !== "rejected" && outcome !== "skipped") target.reset();
+          if (outcome === "stored") target.reset();
         });
       }}
     />
@@ -582,11 +713,13 @@ export function ReceivingAccountSetupView({
   state,
   guard,
   incomingGuard,
+  reconcileGuard,
   ports,
   onRetry,
   onSubmit,
   onDesignate,
   onVerifyIncoming,
+  onReconcile,
   form,
   section = "activation",
   readiness,
@@ -597,11 +730,13 @@ export function ReceivingAccountSetupView({
   state: ReceivingAccountSetupState;
   guard?: FinancialReauthenticationGuard;
   incomingGuard?: FinancialReauthenticationGuard;
+  reconcileGuard?: FinancialReauthenticationGuard;
   ports?: ReceivingSetupPorts;
   onRetry?: () => void;
   onSubmit?: (event: FormEvent<HTMLFormElement>) => void;
   onDesignate?: (holderUserId: string) => void;
   onVerifyIncoming?: () => void;
+  onReconcile?: () => void;
   form?: React.RefObject<HTMLFormElement | null>;
   section?: ReceivingStepSection;
   readiness?: ReceivingReadiness | null;
@@ -616,6 +751,12 @@ export function ReceivingAccountSetupView({
     // UNKNOWN resends are consulted on Pagar.me before anything is created.
     ["NOT_CREATED", "PENDING", "UNKNOWN"].includes(setup.accountState) &&
     !!guard?.isCurrent();
+  // Only the holder consults Pagar.me about her own uncertain dispatch.
+  const canReconcile =
+    !owner &&
+    !!setup?.isHolder &&
+    setup.accountState === "UNKNOWN" &&
+    !!reconcileGuard?.isCurrent();
   const parsedReadiness = receivingReadinessResponseSchema.safeParse({
     readiness,
   });
@@ -644,6 +785,7 @@ export function ReceivingAccountSetupView({
     receivingReady,
     readiness: currentReadiness,
     rejection: state.rejection ?? null,
+    verification: state.verification ?? null,
     ...track,
     guard,
     incomingGuard,
@@ -654,6 +796,7 @@ export function ReceivingAccountSetupView({
     onSubmit,
     onDesignate,
     onVerifyIncoming,
+    onReconcile: canReconcile ? onReconcile : undefined,
   };
   switch (section) {
     case "overview":

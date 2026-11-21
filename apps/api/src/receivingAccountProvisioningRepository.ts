@@ -24,6 +24,7 @@ import {
 } from "./receivingAccountProvisioning";
 import {
   consistentDispatchHistory,
+  RECEIVING_ABSENCE_GRACE_MICROSECONDS,
   type ReceivingDispatchReleaseCode,
   type ReceivingNominationCurrentAuthorization,
   type ReceivingNominationSnapshot,
@@ -76,12 +77,6 @@ interface Scope {
 function unavailable(): never {
   throw new ReceivingAccountProvisioningError();
 }
-/**
- * A dispatch is proven absent only well after its lease: the owner refuses to
- * send once the lease expires, and a request sent just before it has had time
- * to be applied and listed.
- */
-const ABSENCE_GRACE_MICROSECONDS = 300_000_000n;
 function dispatchAttempt(record: ReceivingProvisioningRecord): number {
   return record.provision.dispatch.attempt ?? 1;
 }
@@ -662,7 +657,7 @@ export function createReceivingAccountProvisioningRepository(
           reason === "PROVIDER_ABSENT" &&
           at <
             BigInt(claim.provision.dispatch.leaseExpiresAtMicroseconds) +
-              ABSENCE_GRACE_MICROSECONDS
+              RECEIVING_ABSENCE_GRACE_MICROSECONDS
         )
           return unavailable();
         const nomination = claim.nomination;

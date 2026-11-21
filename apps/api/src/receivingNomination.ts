@@ -604,6 +604,12 @@ export const receivingDispatchReleaseCodes = [
 export type ReceivingDispatchReleaseCode =
   (typeof receivingDispatchReleaseCodes)[number];
 /**
+ * A dispatch is proven absent only well after its lease: the owner refuses to
+ * send once the lease expires, and a request sent just before it has had time
+ * to be applied and listed.
+ */
+export const RECEIVING_ABSENCE_GRACE_MICROSECONDS = 300_000_000n;
+/**
  * `released` dispatches ended without a recipient. None leaves no error code;
  * any other count keeps the code of the last release.
  */

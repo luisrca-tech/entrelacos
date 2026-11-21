@@ -254,6 +254,7 @@ export function createReceivingSetupComposition(
       read: (...args) => own(() => setup.read(...args)),
       designate: (...args) => own(() => setup.designate(...args)),
       submit: (...args) => own(() => setup.submit(...args)),
+      reconcile: (...args) => own(() => setup.reconcile(...args)),
     },
     kycRateLimit: createFinancialReauthenticationRateLimit(db, {
       namespace: "receiving-kyc-link-v1",

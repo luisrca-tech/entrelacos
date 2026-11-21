@@ -82,8 +82,12 @@ export type ReceivingStepsContext = {
   onSubmit?: (event: FormEvent<HTMLFormElement>) => void;
   onDesignate?: (holderUserId: string) => void;
   onVerifyIncoming?: () => void;
+  /** "Verificar situação" consults Pagar.me; set only for the holder. */
+  onReconcile?: () => void;
   /** Pagar.me's refusal of the last submit; the form keeps its data. */
   rejection?: LabeledProviderRejection | null;
+  /** What the last verification found; "released" reopens the form. */
+  verification?: { outcome: "released" | "unknown"; text: string } | null;
 };
 
 const lastCheckFormatter = new Intl.DateTimeFormat("pt-BR", {
@@ -728,12 +732,14 @@ function DetailFieldInput({
   busy,
   onChange,
   describedBy,
+  defaultValue,
 }: {
   id: string;
   field: DetailFieldSpec;
   busy: boolean;
   onChange?: (value: string) => void;
   describedBy?: string;
+  defaultValue?: string;
 }) {
   const fieldId = `${id}-${field.name}`;
   return field.options ? (
@@ -758,6 +764,7 @@ function DetailFieldInput({
       required={!field.optional}
       disabled={busy}
       placeholder={field.placeholder}
+      defaultValue={defaultValue}
       inputMode={field.inputMode}
       maxLength={field.maxLength}
       pattern={field.pattern}
@@ -802,36 +809,65 @@ function FieldHint({
   ) : null;
 }
 
+/** Marks a field the holder must type again: it is never stored. */
+function ReentryNote() {
+  return (
+    <p className="m-0 text-[0.8rem] font-bold leading-[1.4] text-admin-danger-text">
+      Não guardamos este dado. Preencha de novo.
+    </p>
+  );
+}
+
 function DetailField({
   id,
   field,
   busy,
+  reentry = false,
+  defaultValue,
 }: {
   id: string;
   field: DetailFieldSpec;
   busy: boolean;
+  reentry?: boolean;
+  defaultValue?: string;
 }) {
   return (
     <div
+      data-reentry={reentry ? "" : undefined}
       className={`grid min-w-0 content-start gap-1.5 ${field.wide ? "sm:col-span-2" : ""}`}
     >
       <FieldLabel id={id} field={field} />
-      <DetailFieldInput id={id} field={field} busy={busy} />
+      <DetailFieldInput
+        id={id}
+        field={field}
+        busy={busy}
+        defaultValue={defaultValue}
+      />
       <FieldHint id={id} name={field.name} hint={field.hint} />
+      {reentry && <ReentryNote />}
     </div>
   );
 }
 
 // Banco, tipo, agência e conta. The admin normalizer splits branch and
 // account check digits into the unchanged contract fields.
-function BankAccountFields({ id, busy }: { id: string; busy: boolean }) {
+function BankAccountFields({
+  id,
+  busy,
+  reentry = false,
+}: {
+  id: string;
+  busy: boolean;
+  reentry?: boolean;
+}) {
   const [otherBank, setOtherBank] = useState(false);
   const [account, setAccount] = useState("");
   const parsedAccount = parseAccount(account);
   const bankHintId = `${id}-bank-hint`;
+  const marked = reentry ? "" : undefined;
   return (
     <>
-      <div className="grid min-w-0 content-start gap-1.5">
+      <div data-reentry={marked} className="grid min-w-0 content-start gap-1.5">
         <label
           htmlFor={`${id}-bank`}
           className="text-sm font-bold text-admin-text"
@@ -862,6 +898,7 @@ function BankAccountFields({ id, busy }: { id: string; busy: boolean }) {
           name="bank"
           hint="A conta precisa estar no CPF informado acima; os saques vão para ela."
         />
+        {reentry && <ReentryNote />}
         {otherBank && (
           <div className="mt-2 grid gap-1.5">
             <FieldLabel id={id} field={bankCodeField} />
@@ -870,9 +907,14 @@ function BankAccountFields({ id, busy }: { id: string; busy: boolean }) {
           </div>
         )}
       </div>
-      <DetailField id={id} field={accountTypeField} busy={busy} />
-      <DetailField id={id} field={branchField} busy={busy} />
-      <div className="grid min-w-0 content-start gap-1.5">
+      <DetailField
+        id={id}
+        field={accountTypeField}
+        busy={busy}
+        reentry={reentry}
+      />
+      <DetailField id={id} field={branchField} busy={busy} reentry={reentry} />
+      <div data-reentry={marked} className="grid min-w-0 content-start gap-1.5">
         <FieldLabel id={id} field={accountField} />
         <DetailFieldInput
           id={id}
@@ -889,6 +931,7 @@ function BankAccountFields({ id, busy }: { id: string; busy: boolean }) {
           {parsedAccount &&
             `Conta ${parsedAccount.accountNumber}, dígito ${parsedAccount.accountCheckDigit}`}
         </p>
+        {reentry && <ReentryNote />}
       </div>
     </>
   );
@@ -912,6 +955,10 @@ export function DetailsStep({ context }: { context: ReceivingStepsContext }) {
   const [resetCount, setResetCount] = useState(0);
   const { setup, busy, canSubmit, owner } = context;
   const siteId = context.scope.siteId;
+  // After a verification proved Pagar.me never received the registration,
+  // only the holder's name is stored to fill in again.
+  const reopened = canSubmit && context.verification?.outcome === "released";
+  const verifySituation = context.onReconcile ?? context.onRetry;
   return (
     <StepFrame
       siteId={siteId}
@@ -1012,7 +1059,21 @@ export function DetailsStep({ context }: { context: ReceivingStepsContext }) {
             <p role="alert" className="m-0 text-sm leading-[1.55]">
               {canSubmit
                 ? "O resultado do envio anterior está incerto. Envie o cadastro de novo: antes de criar outro, consultamos a Pagar.me para não duplicar."
-                : "O resultado da criação está incerto. Verifique a conta existente antes de repetir qualquer criação."}
+                : context.onReconcile
+                  ? "Não sabemos se a Pagar.me recebeu seu cadastro. Use Verificar situação: só consultamos a Pagar.me, sem criar outro cadastro."
+                  : "O resultado da criação está incerto. Verifique a conta existente antes de repetir qualquer criação."}
+            </p>
+            {context.verification?.outcome === "unknown" && (
+              <p role="status" className="m-0 text-sm font-bold leading-[1.55]">
+                {context.verification.text}
+              </p>
+            )}
+          </div>
+        )}
+        {reopened && context.verification && (
+          <div className="grid gap-2 rounded-[14px] bg-admin-pending-subtle p-4 text-admin-pending-text">
+            <p role="alert" className="m-0 text-sm font-bold leading-[1.55]">
+              {context.verification.text}
             </p>
           </div>
         )}
@@ -1080,9 +1141,20 @@ export function DetailsStep({ context }: { context: ReceivingStepsContext }) {
                   id={id}
                   field={field}
                   busy={busy}
+                  reentry={reopened && field.name !== "name"}
+                  defaultValue={
+                    reopened && field.name === "name"
+                      ? setup.holder?.name
+                      : undefined
+                  }
                 />
               ))}
-              <BankAccountFields key={resetCount} id={id} busy={busy} />
+              <BankAccountFields
+                key={resetCount}
+                id={id}
+                busy={busy}
+                reentry={reopened}
+              />
             </div>
             <fieldset className="m-0 grid min-w-0 gap-3 rounded-[14px] border border-admin-border bg-admin-canvas p-5">
               <legend className="sr-only">Autorizações</legend>
@@ -1146,8 +1218,8 @@ export function DetailsStep({ context }: { context: ReceivingStepsContext }) {
             <AdminButton
               tone="secondary"
               className="w-fit"
-              disabled={busy || !context.onRetry}
-              onClick={context.onRetry}
+              disabled={busy || !verifySituation}
+              onClick={verifySituation}
             >
               Verificar situação
             </AdminButton>
