@@ -291,7 +291,18 @@ describe("receiving account setup", () => {
         scope: values.scope,
         state: {
           status: "ready",
-          setup: { ...createdSetup, mode: "live" },
+          setup: {
+            ...createdSetup,
+            mode: "live",
+            providerStatus: {
+              recipientStatus: "affiliation",
+              accountState: "UNDER_REVIEW",
+              receivingEnabled: false,
+              kycStatus: "partially_denied",
+              kycStatusReason: "additional_documents_required",
+              observedAt: "2026-10-16T12:00:00.000Z",
+            },
+          },
           message: null,
         },
       }),
@@ -318,7 +329,7 @@ describe("receiving account setup", () => {
         (position, index) => index === 0 || position > positions[index - 1],
       ),
     ).toBe(true);
-    expect(guidance).toContain("Foto do documento e selfie");
+    expect(guidance).toContain("pediu a foto do documento e uma selfie");
     expect(html).not.toContain('autocomplete="one-time-code"');
     expect(html).not.toContain("Sandbox");
     expect(html).not.toContain("teste da Pagar.me");
@@ -696,11 +707,11 @@ describe("receiving account setup", () => {
     },
   );
   it.each([
-    ["UNVERIFIED", "A fazer"],
-    ["ONBOARDING", "A fazer"],
+    ["UNVERIFIED", "Em análise"],
+    ["ONBOARDING", "Em análise"],
     ["UNDER_REVIEW", "Em análise"],
   ] as const)(
-    "shows %s without implying an unsubmitted account is under review",
+    "shows %s as the Pagar.me initial analysis of a submitted account",
     (accountState, label) => {
       const values = fixture();
       const html = renderToStaticMarkup(
@@ -722,8 +733,8 @@ describe("receiving account setup", () => {
         }),
       );
       expect(html).toContain(`${label}</span>`);
-      if (accountState !== "UNDER_REVIEW")
-        expect(html).not.toContain("Em análise");
+      expect(html).toContain("até 24 horas");
+      expect(html).not.toContain(">Verificar identidade<");
       values.controller.dispose();
     },
   );

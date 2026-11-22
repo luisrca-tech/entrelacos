@@ -12,12 +12,17 @@ import {
   type SiteAccess,
 } from "@entrelacos/contracts";
 import type { FinancialActor } from "./financialAuthorization";
+import { logObservabilityEvent } from "./observability";
 import { PagarmeRejectedError } from "./pagarmeHttpClient";
 import {
   mapPagarmeRecipientStatus,
   type PagarmeRecipientClient,
+  type PagarmeRecipientKyc,
 } from "./pagarmeRecipientClient";
-import type { createReceivingAccountProvisioning } from "./receivingAccountProvisioning";
+import {
+  type createReceivingAccountProvisioning,
+  failureDetails,
+} from "./receivingAccountProvisioning";
 import {
   deriveReceivingNominationRequestId,
   type ReceivingNominationService,
@@ -44,6 +49,8 @@ export interface ReceivingRecipientObservation {
   readonly recipientId: string;
   /** Raw Pagar.me status; unknown values stay unverified. */
   readonly status: string;
+  /** Pagar.me `kyc_details`; absent when the observation did not read it. */
+  readonly kyc?: PagarmeRecipientKyc;
   readonly observedAt: string;
 }
 export interface ReceivingSetupServiceOptions {
@@ -69,6 +76,8 @@ export interface ReceivingSetupServiceOptions {
     account: ReceivingSetupAccountRecord,
   ) => Promise<ReceivingRecipientObservation>;
   recipients?: Pick<PagarmeRecipientClient, "createKycLink">;
+  /** Receives PII-free events; defaults to the structured log. */
+  log?: (event: unknown) => void;
 }
 function recipientStatus(
   status: string,
@@ -77,10 +86,31 @@ function recipientStatus(
     ? (status as (typeof pagarmeRecipientStatuses)[number])
     : null;
 }
+/**
+ * Pagar.me creates the selfie and document link only for a recipient in
+ * `affiliation` whose KYC is `partially_denied`; earlier it answers 404
+ * (https://docs.pagar.me/reference/criar-link-recebedor). Only a documented
+ * state that rules the link out refuses it here; anything uncertain is left
+ * to Pagar.me.
+ */
+function kycLinkRuledOut(observed: ReceivingRecipientObservation): boolean {
+  if (observed.status !== "affiliation")
+    return recipientStatus(observed.status) !== null;
+  const kyc = observed.kyc?.status ?? null;
+  return kyc !== null && kyc !== "unknown" && kyc !== "partially_denied";
+}
 export function createReceivingSetupService(
   options: ReceivingSetupServiceOptions,
 ) {
   const repository = options.repository;
+  const log = options.log ?? logObservabilityEvent;
+  function record(event: object) {
+    try {
+      log(event);
+    } catch {
+      /* Logging never changes the response. */
+    }
+  }
   return Object.freeze({
     /**
      * Issues a short-lived Pagar.me identity verification link. The link is
@@ -97,15 +127,45 @@ export function createReceivingSetupService(
         throw new ReceivingSetupError(409, "RECEIVING_ACCOUNT_REQUIRED");
       if (!options.recipients)
         throw new ReceivingSetupError(503, "RECEIVING_SETUP_UNAVAILABLE");
+      let observed: ReceivingRecipientObservation | null = null;
+      try {
+        observed = (await options.observe?.(actor.siteId, account)) ?? null;
+      } catch {
+        /* Without a fresh observation, Pagar.me decides. */
+      }
+      if (
+        observed &&
+        observed.recipientId === account.result.recipientReference &&
+        kycLinkRuledOut(observed)
+      ) {
+        record({
+          level: "info",
+          event: "receiving.kyc_link.unavailable",
+          operation: "observe",
+          result: `${recipientStatus(observed.status) ?? "unknown"}.${observed.kyc?.status ?? "none"}`,
+          siteId: actor.siteId,
+        });
+        throw new ReceivingSetupError(409, "RECEIVING_KYC_LINK_UNAVAILABLE");
+      }
       let link: unknown;
       try {
         link = await options.recipients.createKycLink(
           account.result.recipientReference,
         );
       } catch (error) {
-        // Pagar.me refuses a link when no identity check is pending.
-        if (error instanceof PagarmeRejectedError)
+        // Pagar.me refuses a link when no identity check is pending. The
+        // response stays generic; the log keeps the redacted provider reason.
+        if (error instanceof PagarmeRejectedError) {
+          record({
+            level: "warn",
+            event: "receiving.kyc_link.rejected",
+            operation: "createKycLink",
+            result: "unavailable",
+            siteId: actor.siteId,
+            ...failureDetails(error),
+          });
           throw new ReceivingSetupError(409, "RECEIVING_KYC_LINK_UNAVAILABLE");
+        }
         throw error;
       }
       return receivingKycLinkSchema.parse(link);
@@ -125,6 +185,8 @@ export function createReceivingSetupService(
           const mapped = mapPagarmeRecipientStatus(observed.status);
           providerStatus = {
             recipientStatus: recipientStatus(observed.status),
+            kycStatus: observed.kyc?.status ?? null,
+            kycStatusReason: observed.kyc?.statusReason ?? null,
             accountState: mapped.providerAccountState,
             receivingEnabled: mapped.receivingCapability,
             observedAt: observed.observedAt,

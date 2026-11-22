@@ -4,7 +4,7 @@ import {
 } from "@entrelacos/contracts";
 import { ArrowUpRight, ScanFace } from "lucide-react";
 import { useRef, useState } from "react";
-import { apiRequest } from "../lib/apiClient";
+import { ApiError, apiRequest } from "../lib/apiClient";
 import {
   receivingBody,
   receivingLink,
@@ -69,19 +69,31 @@ export function kycQrImageSource(base64: string): string {
   return `data:${type};base64,${base64}`;
 }
 
+/** Pagar.me has not asked for the selfie and document yet. */
+function kycLinkUnavailable(error: unknown): boolean {
+  return (
+    error instanceof ApiError &&
+    error.status === 409 &&
+    error.code === "RECEIVING_KYC_LINK_UNAVAILABLE"
+  );
+}
+
 export function ReceivingIdentityVerification({
   siteId,
   request,
   openTab = browserOpenTab,
   disabled = false,
+  onUnavailable,
 }: {
   siteId: string;
   request?: IdentityVerificationRequest;
   openTab?: OpenTab;
   disabled?: boolean;
+  /** Reloads the setup status when Pagar.me refuses the link. */
+  onUnavailable?: () => void;
 }) {
   const [state, setState] = useState<{
-    status: "idle" | "loading" | "ready" | "error";
+    status: "idle" | "loading" | "ready" | "error" | "unavailable";
     link: ReceivingKycLink | null;
   }>({ status: "idle", link: null });
   const attempt = useRef(0);
@@ -97,10 +109,13 @@ export function ReceivingIdentityVerification({
       }
       tab?.navigate(link.url);
       setState({ status: "ready", link });
-    } catch {
+    } catch (error) {
       tab?.close();
-      if (attempt.current === current)
-        setState({ status: "error", link: null });
+      if (attempt.current !== current) return;
+      if (kycLinkUnavailable(error)) {
+        setState({ status: "unavailable", link: null });
+        onUnavailable?.();
+      } else setState({ status: "error", link: null });
     }
   }
   const { link, status } = state;
@@ -132,6 +147,16 @@ export function ReceivingIdentityVerification({
         >
           Não foi possível gerar o link de verificação. Tente novamente em
           instantes.
+        </p>
+      )}
+      {status === "unavailable" && (
+        <p
+          role="status"
+          className="m-0 rounded-[14px] bg-admin-pending-subtle p-4 text-sm leading-[1.55] text-admin-pending-text"
+        >
+          A Pagar.me ainda não liberou a verificação de identidade deste
+          cadastro. A situação foi atualizada nesta página. Volte mais tarde: o
+          botão funciona assim que a Pagar.me pedir o documento e a selfie.
         </p>
       )}
       {link && (

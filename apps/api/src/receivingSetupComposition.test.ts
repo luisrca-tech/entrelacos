@@ -266,6 +266,8 @@ describe("receiving setup composition", () => {
     });
     expect(result?.providerStatus).toEqual({
       recipientStatus: "active",
+      kycStatus: null,
+      kycStatusReason: null,
       accountState: "APPROVED",
       receivingEnabled: true,
       observedAt: "2026-10-16T15:00:00.000Z",
@@ -278,6 +280,59 @@ describe("receiving setup composition", () => {
     expect(new Headers(init?.headers).get("authorization")).toBe(
       `Basic ${Buffer.from("sk_test_fixtureSecret0123456789:").toString("base64")}`,
     );
+    values.drain.resolve();
+    await composition.close();
+  });
+  it("reports the Pagar.me identity check status of the recipient", async () => {
+    const values = fixture();
+    values.fetch.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          ...JSON.parse(pagarmeFixture("recipient-active")),
+          status: "affiliation",
+          kyc_details: {
+            status: "partially_denied",
+            status_reason: "additional_documents_required",
+          },
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+    );
+    const composition = createReceivingSetupComposition(
+      values.config,
+      values.options,
+    );
+    const result = await composition.ports.receivingSetup?.read({
+      siteId: "site-one",
+      userId: "holder-one",
+      sessionId: "session-one",
+    });
+    expect(result?.providerStatus).toMatchObject({
+      recipientStatus: "affiliation",
+      kycStatus: "partially_denied",
+      kycStatusReason: "additional_documents_required",
+    });
+    values.drain.resolve();
+    await composition.close();
+  });
+  it("refuses the identity link without asking Pagar.me for it while the recipient is active", async () => {
+    const values = fixture();
+    vi.spyOn(console, "info").mockImplementation(() => {});
+    const composition = createReceivingSetupComposition(
+      values.config,
+      values.options,
+    );
+    await expect(
+      composition.ports.receivingSetup?.createKycLink(
+        { siteId: "site-one", userId: "owner-one", sessionId: "session-one" },
+        "OWNER",
+      ),
+    ).rejects.toMatchObject({
+      status: 409,
+      code: "RECEIVING_KYC_LINK_UNAVAILABLE",
+    });
+    expect(values.fetch).toHaveBeenCalledOnce();
+    expect(values.fetch.mock.calls[0]?.[1]?.method ?? "GET").toBe("GET");
     values.drain.resolve();
     await composition.close();
   });
@@ -300,6 +355,22 @@ describe("receiving setup composition", () => {
   });
   it("creates a fresh identity verification link without touching the database", async () => {
     const values = fixture();
+    const respond = values.fetch.getMockImplementation();
+    values.fetch.mockImplementation(async (url, init) => {
+      if (new URL(String(url)).pathname.endsWith("/rp_fixtureRecipient01"))
+        return new Response(
+          JSON.stringify({
+            ...JSON.parse(pagarmeFixture("recipient-active")),
+            status: "affiliation",
+            kyc_details: {
+              status: "partially_denied",
+              status_reason: "additional_documents_required",
+            },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      return respond?.(url, init) as Promise<Response>;
+    });
     const composition = createReceivingSetupComposition(
       values.config,
       values.options,
@@ -313,7 +384,8 @@ describe("receiving setup composition", () => {
       base64QrCode: "PD94bWwgdmVyc2lvbj0iMS4wIj8+PHN2Zy8+",
       expiresAt: "2026-11-18T12:20:00.000Z",
     });
-    const [url, init] = values.fetch.mock.calls[0];
+    expect(values.fetch).toHaveBeenCalledTimes(2);
+    const [url, init] = values.fetch.mock.calls[1];
     expect(new URL(String(url)).pathname).toMatch(
       /\/recipients\/rp_fixtureRecipient01\/kyc_link$/,
     );

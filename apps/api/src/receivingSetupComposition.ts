@@ -198,6 +198,7 @@ export function createReceivingSetupComposition(
       return {
         recipientId: recipient.id,
         status: recipient.status,
+        kyc: recipient.kyc,
         observedAt: now().toISOString(),
       };
     },

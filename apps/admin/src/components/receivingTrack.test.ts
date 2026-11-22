@@ -64,7 +64,7 @@ describe("receiving guided track", () => {
     expect(track.steps.map(({ status }) => status)).toEqual([
       "done",
       "done",
-      "current",
+      "review",
       "done",
     ]);
     expect(track.next?.id).toBe("activation");
@@ -82,15 +82,41 @@ describe("receiving guided track", () => {
     expect(track.steps[3].status).toBe("done");
   });
 
-  it("keeps activation current while identity verification is pending", () => {
+  it("keeps activation in review until Pagar.me asks for the selfie and document", () => {
     for (const accountState of ["UNVERIFIED", "ONBOARDING"] as const) {
       const track = deriveReceivingTrack({
         ...base,
         provider: { ...provider, accountState },
       });
-      expect(track.steps[2].status).toBe("current");
+      expect(track.steps[2].status).toBe("review");
       expect(track.next?.id).toBe("activation");
     }
+    const pending = deriveReceivingTrack({
+      ...base,
+      provider: {
+        recipientStatus: "affiliation",
+        accountState: "UNDER_REVIEW",
+        receivingEnabled: false,
+        kycStatus: "pending",
+        kycStatusReason: "in_analysis",
+      },
+    });
+    expect(pending.steps[2].status).toBe("review");
+  });
+
+  it("makes activation current when Pagar.me asks for the selfie and document", () => {
+    const track = deriveReceivingTrack({
+      ...base,
+      provider: {
+        recipientStatus: "affiliation",
+        accountState: "UNDER_REVIEW",
+        receivingEnabled: false,
+        kycStatus: "partially_denied",
+        kycStatusReason: "additional_documents_required",
+      },
+    });
+    expect(track.steps[2].status).toBe("current");
+    expect(track.next?.id).toBe("activation");
   });
 
   it("marks activation done once Pagar.me approves the recipient", () => {
@@ -105,6 +131,20 @@ describe("receiving guided track", () => {
     expect(track.steps[2].status).toBe("done");
     expect(track.next).toBeNull();
     expect(track.completed).toBe(4);
+  });
+
+  it("asks for attention when Pagar.me refuses the identity check", () => {
+    const track = deriveReceivingTrack({
+      ...base,
+      provider: {
+        recipientStatus: "affiliation",
+        accountState: "UNDER_REVIEW",
+        receivingEnabled: false,
+        kycStatus: "denied",
+        kycStatusReason: "fully_denied",
+      },
+    });
+    expect(track.steps[2].status).toBe("attention");
   });
 
   it("asks for attention when Pagar.me blocks or suspends the recipient", () => {

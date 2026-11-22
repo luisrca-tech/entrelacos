@@ -1,4 +1,5 @@
 import type { ReceivingSetupContext } from "@entrelacos/contracts";
+import { identityTaskStatus } from "./receivingTasks";
 
 export type ReceivingStepId = "holder" | "details" | "activation" | "fees";
 export type ReceivingStepStatus =
@@ -69,11 +70,8 @@ type BaseStatus = "done" | "todo" | "review" | "attention" | "locked";
 
 function activationStatus(input: ReceivingTrackInput): BaseStatus {
   if (input.accountState !== "CREATED") return "locked";
-  const state = input.provider?.accountState;
-  if (input.ready || state === "APPROVED") return "done";
-  if (state === "BLOCKED" || state === "SUSPENDED") return "attention";
-  if (state === "UNDER_REVIEW") return "review";
-  return "todo";
+  if (input.ready) return "done";
+  return identityTaskStatus(input.provider);
 }
 
 // Derives the four setup steps and the single next step from server state.

@@ -254,7 +254,7 @@ function describeRejection(
  * Pagar.me rejection, the HTTP status, provider code, redacted reason and
  * field paths. The observability sanitizer bounds and redacts them again.
  */
-function failureDetails(error: unknown, input?: PagarmeRecipientInput) {
+export function failureDetails(error: unknown, input?: PagarmeRecipientInput) {
   const errorCode =
     error instanceof Error
       ? error.name !== "Error"

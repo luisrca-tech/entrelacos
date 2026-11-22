@@ -2,6 +2,7 @@
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { ApiError } from "../lib/apiClient";
 import {
   kycQrImageSource,
   ReceivingIdentityVerification,
@@ -159,6 +160,59 @@ describe("identity verification link", () => {
     expect(opened[0].navigate).not.toHaveBeenCalled();
     expect(opened[0].close).toHaveBeenCalledOnce();
     expect(container.querySelector("img")).toBeNull();
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+      "Não foi possível gerar o link",
+    );
+  });
+
+  it("explains that Pagar.me has not released the check yet and reloads the status", async () => {
+    const request = vi.fn(async () => {
+      throw new ApiError(409, "RECEIVING_KYC_LINK_UNAVAILABLE", {
+        code: "RECEIVING_KYC_LINK_UNAVAILABLE",
+      });
+    });
+    const onUnavailable = vi.fn();
+    const { openTab, opened } = tabs();
+    await act(async () =>
+      root.render(
+        createElement(ReceivingIdentityVerification, {
+          siteId: "site-one",
+          request,
+          openTab,
+          onUnavailable,
+        }),
+      ),
+    );
+    await act(async () => button("Verificar identidade").click());
+    expect(opened[0].navigate).not.toHaveBeenCalled();
+    expect(opened[0].close).toHaveBeenCalledOnce();
+    expect(onUnavailable).toHaveBeenCalledOnce();
+    const message = container.querySelector('[role="status"]')?.textContent;
+    expect(message).toContain(
+      "A Pagar.me ainda não liberou a verificação de identidade",
+    );
+    expect(message).toContain("Volte mais tarde");
+    expect(container.textContent).not.toContain("Tente novamente em instantes");
+    expect(container.querySelector('[role="alert"]')).toBeNull();
+  });
+
+  it("keeps the generic message for any other API failure", async () => {
+    const request = vi.fn(async () => {
+      throw new ApiError(409, "RECEIVING_ACCOUNT_REQUIRED");
+    });
+    const onUnavailable = vi.fn();
+    await act(async () =>
+      root.render(
+        createElement(ReceivingIdentityVerification, {
+          siteId: "site-one",
+          request,
+          openTab: tabs().openTab,
+          onUnavailable,
+        }),
+      ),
+    );
+    await act(async () => button("Verificar identidade").click());
+    expect(onUnavailable).not.toHaveBeenCalled();
     expect(container.querySelector('[role="alert"]')?.textContent).toContain(
       "Não foi possível gerar o link",
     );

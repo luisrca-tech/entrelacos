@@ -104,6 +104,14 @@ describe("safe observability", () => {
     ).toEqual({});
   });
 
+  it("redacts links a provider message may echo", () => {
+    const event = sanitizeObservabilityEvent({
+      providerMessage:
+        "Link https://pagar.me/kyc/session-abc?token=xyz and www.pagar.me/kyc/abc expired",
+    });
+    expect(event.providerMessage).toBe("Link [link] and [link] expired");
+  });
+
   it("keeps a redacted provider message and field errors, bounded", () => {
     const event = sanitizeObservabilityEvent({
       providerMessage:
