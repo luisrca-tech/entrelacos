@@ -38,6 +38,8 @@ type Props = FinancialReauthenticationScope & {
     options: { method: string; body: unknown },
   ) => Promise<unknown>;
   now?: () => number;
+  /** Replaces the default explanation of what the confirmation is for. */
+  hint?: string;
 };
 
 export function mountFinancialReauthenticationController(
@@ -74,6 +76,7 @@ export function FinancialReauthenticationForm(props: Props) {
       state={{ status: "denied" }}
       ready={false}
       feedback={props.feedback}
+      hint={props.hint}
     />
   );
 }
@@ -136,6 +139,7 @@ function FinancialReauthenticationRuntime(props: Props) {
       ready={ready}
       feedback={props.feedback}
       dialog={props.dialog}
+      hint={props.hint}
       now={props.now?.()}
       passwordRef={passwordRef}
       onSubmit={(event) => {
@@ -223,6 +227,7 @@ export function FinancialReauthenticationView({
   passwordRef,
   feedback,
   dialog,
+  hint,
 }: {
   scope: FinancialReauthenticationScope;
   state: FinancialReauthenticationState;
@@ -232,6 +237,7 @@ export function FinancialReauthenticationView({
   passwordRef?: Ref<HTMLInputElement>;
   feedback?: "toast";
   dialog?: boolean;
+  hint?: string;
 }) {
   const id = useId();
   const allowed = financialReauthenticationScopeKey(scope) !== null;
@@ -290,9 +296,10 @@ export function FinancialReauthenticationView({
               id={`${id}-hint`}
               className="m-0 text-sm text-admin-text-secondary"
             >
-              {feedback === "toast"
-                ? "Confirme sua senha para continuar."
-                : "Esta confirmação não altera o responsável financeiro nem movimenta valores."}
+              {hint ??
+                (feedback === "toast"
+                  ? "Confirme sua senha para continuar."
+                  : "Esta confirmação não altera o responsável financeiro nem movimenta valores.")}
             </p>
           )}
         </>

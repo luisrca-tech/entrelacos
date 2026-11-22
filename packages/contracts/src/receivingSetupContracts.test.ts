@@ -6,6 +6,7 @@ import {
   receivingSetupConsentVersion,
   receivingSetupContextSchema,
   receivingSetupDisclosure,
+  receivingSetupHolderInputSchema,
   receivingSetupInputSchema,
 } from "./index";
 
@@ -173,6 +174,31 @@ describe("Pagar.me receiving setup contracts", () => {
   });
 });
 
+describe("receiving holder designation contract", () => {
+  const token = `fr1.${"a".repeat(80)}.${"b".repeat(43)}`;
+  it("accepts the owner's bare choice and an administrator's password proof", () => {
+    expect(
+      receivingSetupHolderInputSchema.parse({ holderUserId: "bride-one" }),
+    ).toEqual({ holderUserId: "bride-one" });
+    expect(
+      receivingSetupHolderInputSchema.parse({
+        holderUserId: "bride-one",
+        reauthenticationToken: token,
+      }),
+    ).toEqual({ holderUserId: "bride-one", reauthenticationToken: token });
+  });
+  it.each(["", "proof", `fr1.a.${"b".repeat(42)}`])(
+    "rejects a malformed reauthentication token %#",
+    (reauthenticationToken) => {
+      expect(
+        receivingSetupHolderInputSchema.safeParse({
+          holderUserId: "bride-one",
+          reauthenticationToken,
+        }).success,
+      ).toBe(false);
+    },
+  );
+});
 describe("owner finance alert contract", () => {
   it("links to the provider payment with a neutral field name", () => {
     expect(Object.keys(ownerFinanceAlertSchema.shape)).toContain(

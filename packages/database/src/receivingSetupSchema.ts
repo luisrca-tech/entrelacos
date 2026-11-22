@@ -9,7 +9,9 @@ import {
 } from "drizzle-orm/pg-core";
 import { site, user } from "./schema";
 
-// Designation is set once by the platform owner. Consent is an independent holder action.
+// Designation is set once, by the platform owner or by a site administrator with
+// configureReceiving and a fresh password proof; it is never replaced. Consent is
+// an independent holder action.
 export const receivingSetupHolder = pgTable(
   "receiving_setup_holder",
   {

@@ -576,3 +576,48 @@ describe("receiving identity verification link", () => {
     expect(values.recipients.createKycLink).not.toHaveBeenCalled();
   });
 });
+describe("receiving holder candidates", () => {
+  const candidates = [
+    { userId: "bride-one", name: "Marina", email: "marina@example.test" },
+    { userId: "groom-one", name: "Rafael", email: "rafael@example.test" },
+  ];
+  it("lists candidates to a site administrator while no holder exists", async () => {
+    const values = fixture();
+    values.repository.readHolder.mockResolvedValue(null as never);
+    values.repository.listHolderCandidates.mockResolvedValue(
+      candidates as never,
+    );
+    const context = await values.service.read(actor, "SITE_ADMIN");
+    expect(context.holderCandidates).toEqual(candidates);
+    expect(values.repository.listHolderCandidates).toHaveBeenCalledWith(
+      "site-one",
+    );
+  });
+  it("stops listing candidates to a site administrator once a holder exists", async () => {
+    const values = fixture();
+    values.repository.listHolderCandidates.mockResolvedValue(
+      candidates as never,
+    );
+    const context = await values.service.read(actor, "SITE_ADMIN");
+    expect(context).not.toHaveProperty("holderCandidates");
+    expect(values.repository.listHolderCandidates).not.toHaveBeenCalled();
+  });
+  it("never lists candidates to an assistant", async () => {
+    const values = fixture();
+    values.repository.readHolder.mockResolvedValue(null as never);
+    const context = await values.service.read(actor, "SITE_ASSISTANT");
+    expect(context).not.toHaveProperty("holderCandidates");
+    expect(values.repository.listHolderCandidates).not.toHaveBeenCalled();
+  });
+  it("keeps listing candidates to the owner", async () => {
+    const values = fixture();
+    values.repository.listHolderCandidates.mockResolvedValue(
+      candidates as never,
+    );
+    const context = await values.service.read(
+      { ...actor, userId: "owner-one" },
+      "OWNER",
+    );
+    expect(context.holderCandidates).toEqual(candidates);
+  });
+});
