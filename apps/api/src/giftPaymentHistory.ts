@@ -14,6 +14,7 @@ import type { AuthDatabase } from "./auth";
 import { type AuthInstance, readAdministrativeSession } from "./authHttp";
 import { databaseTimestampEpochMicroseconds } from "./databaseTimestamp";
 import { assertFinancialReadAccess } from "./financialAuthorization";
+import { carryUnavailable, markUnavailable } from "./observability";
 import { resolveSiteAccess } from "./siteAccess";
 
 export interface GiftPaymentHistoryReadScope {
@@ -52,6 +53,8 @@ export interface GiftPaymentHistoryReadOwner<T> {
 }
 export interface GiftPaymentHistoryService {
   readonly available: boolean;
+  /** Payment mode, for diagnostics only. */
+  readonly mode?: "sandbox" | "live";
   readPurchasePage(
     input: GiftPaymentHistoryReadInput,
   ): GiftPaymentHistoryReadOwner<GiftPurchaseHistoryPageResponse>;
@@ -77,8 +80,14 @@ export class GiftPaymentHistoryError extends Error {
     this.name = "GiftPaymentHistoryError";
   }
 }
-export function historyUnavailable(): never {
-  throw new GiftPaymentHistoryError();
+/** Throws the generic unavailability, labeled with a non-personal reason. */
+export function historyUnavailable(reason?: string, count?: number): never {
+  const error = new GiftPaymentHistoryError();
+  throw reason === undefined ? error : markUnavailable(error, reason, count);
+}
+/** Rethrows any failure as the generic unavailability, keeping its diagnosis. */
+export function historyUnavailableFrom(cause: unknown): never {
+  throw carryUnavailable(cause, new GiftPaymentHistoryError());
 }
 export function readGiftPaymentHistoryScope(
   value: GiftPaymentHistoryReadScope,
@@ -88,7 +97,7 @@ export function readGiftPaymentHistoryScope(
     Object.keys(value).sort().join(",") !==
       "membershipId,mode,policy,sessionId,siteId,userId"
   )
-    return historyUnavailable();
+    return historyUnavailable("scope_invalid:keys");
   const publicScope = giftPurchaseHistoryScopeSchema.parse({
     siteId: value.siteId,
     mode: value.mode,
@@ -100,7 +109,7 @@ export function readGiftPaymentHistoryScope(
     ...(value.membershipId === null ? [] : [value.membershipId]),
   ])
     if (!siteAccessSchema.shape.userId.safeParse(id).success)
-      return historyUnavailable();
+      return historyUnavailable("scope_invalid:identifier");
   return Object.freeze({
     ...publicScope,
     userId: value.userId,
@@ -108,15 +117,19 @@ export function readGiftPaymentHistoryScope(
     membershipId: value.membershipId,
   });
 }
-function failed<T>(): GiftPaymentHistoryReadOwner<T> {
-  const result = Promise.reject<T>(new GiftPaymentHistoryError());
+function failed<T>(reason: string): GiftPaymentHistoryReadOwner<T> {
+  const result = Promise.reject<T>(
+    markUnavailable(new GiftPaymentHistoryError(), reason),
+  );
   void result.catch(() => {});
   return Object.freeze({ result, completion: Promise.resolve(), cancel() {} });
 }
 const inactive: GiftPaymentHistoryService = Object.freeze({
   available: false,
-  readPurchasePage: () => failed<GiftPurchaseHistoryPageResponse>(),
-  readPurchaseDetailPage: () => failed<GiftPurchaseHistoryDetailResponse>(),
+  readPurchasePage: () =>
+    failed<GiftPurchaseHistoryPageResponse>("history_inactive"),
+  readPurchaseDetailPage: () =>
+    failed<GiftPurchaseHistoryDetailResponse>("history_inactive"),
   close: async () => {},
 });
 function freeze<T>(value: T): T {
@@ -176,7 +189,7 @@ export function createGiftPaymentHistory(
       detail: boolean,
       schema: { parse(value: unknown): T },
     ): GiftPaymentHistoryReadOwner<T> {
-      if (closing) return failed<T>();
+      if (closing) return failed<T>("closing");
       let aborted = false,
         clockFloor = -1n;
       const cancel = () => {
@@ -194,11 +207,12 @@ export function createGiftPaymentHistory(
         orderId: string | undefined,
         originalSignal: AbortSignal | undefined;
       const sample = () => {
-        if (closing || aborted) return historyUnavailable();
+        if (closing) return historyUnavailable("closing");
+        if (aborted) return historyUnavailable("request_aborted");
         const value = now(),
           time = databaseTimestampEpochMicroseconds(value);
         if (!(value instanceof Date) || time < 0n || time < clockFloor)
-          return historyUnavailable();
+          return historyUnavailable("clock_invalid");
         clockFloor = time;
         return new Date(value.getTime());
       };
@@ -214,7 +228,7 @@ export function createGiftPaymentHistory(
             !["GET", "HEAD"].includes(input.request.method) ||
             !trustedAdminOrigin(input.request.headers.get("origin"), origin)
           )
-            return historyUnavailable();
+            return historyUnavailable("request_invalid");
           request = new Request(input.request.url, {
             method: "GET",
             headers: new Headers(input.request.headers),
@@ -242,7 +256,9 @@ export function createGiftPaymentHistory(
               !actor ||
               (actor.user.role !== "SITE_ADMIN" && actor.user.role !== "OWNER")
             )
-              return historyUnavailable();
+              return historyUnavailable(
+                actor ? "session_role_denied" : "session_missing",
+              );
             const matches =
               actor.user.role === "OWNER"
                 ? [
@@ -253,14 +269,18 @@ export function createGiftPaymentHistory(
                     }),
                   ]
                 : actor.memberships.filter((item) => item.siteId === siteId);
-            if (matches.length !== 1) return historyUnavailable();
+            if (matches.length !== 1)
+              return historyUnavailable(
+                "row_count_mismatch:site_access",
+                matches.length,
+              );
             const access = siteAccessSchema.parse(matches[0]);
             assertFinancialReadAccess(access, siteId);
             if (
               access.userId !== actor.user.id ||
               access.membershipRole !== actor.user.role
             )
-              return historyUnavailable();
+              return historyUnavailable("access_mismatch");
             const scope = readGiftPaymentHistoryScope({
               siteId,
               mode,
@@ -288,7 +308,7 @@ export function createGiftPaymentHistory(
           const current = await authority();
           sample();
           if (!isDeepStrictEqual(current, original))
-            return historyUnavailable();
+            return historyUnavailable("authority_changed");
           const envelope = reply as
             | GiftPurchaseHistoryPageResponse
             | GiftPurchaseHistoryDetailResponse;
@@ -302,10 +322,10 @@ export function createGiftPaymentHistory(
               (envelope as GiftPurchaseHistoryDetailResponse).history
                 .originalPurchase.orderId !== orderId)
           )
-            return historyUnavailable();
+            return historyUnavailable("scope_mismatch:response");
           return reply;
-        } catch {
-          return historyUnavailable();
+        } catch (error) {
+          return historyUnavailableFrom(error);
         } finally {
           originalSignal?.removeEventListener("abort", cancel);
           pending.delete(entry);
@@ -317,6 +337,7 @@ export function createGiftPaymentHistory(
     }
     return Object.freeze({
       available: true,
+      mode,
       readPurchasePage: (input: GiftPaymentHistoryReadInput) =>
         start(input, false, giftPurchaseHistoryPageResponseSchema),
       readPurchaseDetailPage: (

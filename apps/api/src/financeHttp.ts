@@ -13,7 +13,7 @@ import {
   withdrawalResponseSchema,
   withdrawalSealInputSchema,
 } from "@entrelacos/contracts";
-import { Hono } from "hono";
+import { type Context, Hono } from "hono";
 import { trustedAdminOrigin } from "./adminOrigin";
 import {
   type AdministrativeActor,
@@ -26,12 +26,15 @@ import {
   type FinancialActor,
   FinancialAuthorizationError,
 } from "./financialAuthorization";
+import { FinancialOverviewServiceError } from "./financialOverview";
 import {
   type FinancialReauthentication,
   FinancialReauthenticationError,
 } from "./financialReauthentication";
+import { describeUnavailable, logObservabilityEvent } from "./observability";
 import { ReceivingReadinessServiceError } from "./receivingReadiness";
 import { resolveSiteAccess } from "./siteAccess";
+import { WithdrawalHistoryRepositoryError } from "./withdrawalHistoryRepository";
 import {
   type WithdrawalReservationService,
   WithdrawalReservationServiceError,
@@ -43,6 +46,8 @@ const WITHDRAWALS_PATH = "/v1/sites/:siteId/withdrawals";
 // Server-selected readers resolve stored account scope; browser claims cannot
 // select a provider account, credential, balance source or recipient.
 export interface FinanceHttpReadPorts {
+  /** Payment mode, for diagnostics only. */
+  readonly mode?: "sandbox" | "live";
   readOverview?(siteId: string): Promise<unknown>;
   listWithdrawals?(siteId: string): Promise<unknown>;
   listWithdrawalPage?(
@@ -58,6 +63,8 @@ export type FinanceHttpOptions = AuthHttpOptions & {
     request: Request,
     options: Pick<AuthHttpOptions, "auth" | "db" | "now">,
   ) => Promise<AdministrativeActor | null>;
+  /** Receives one sanitized event per 503 response. */
+  log?: (event: unknown) => void;
 };
 
 function problem(status: number, code: string, title: string): Response {
@@ -117,6 +124,17 @@ async function readWithdrawalBody(request: Request): Promise<unknown> {
   }
 }
 
+// Errors whose own code names the failure when no reason was labeled.
+const domainErrors = [
+  AdminSessionRequiredError,
+  FinancialAuthorizationError,
+  FinancialOverviewServiceError,
+  FinancialReauthenticationError,
+  ReceivingReadinessServiceError,
+  WithdrawalHistoryRepositoryError,
+  WithdrawalReservationServiceError,
+];
+
 const actionFailureStatuses = {
   WITHDRAWAL_INVALID: 400,
   MEMBERSHIP_DENIED: 403,
@@ -174,7 +192,47 @@ export function createFinanceHttpRouter(options: FinanceHttpOptions) {
     typeof proof?.readProof === "function"
       ? proof.readProof.bind(proof)
       : undefined;
-  router.onError((error, context) => {
+  const log = options.log ?? logObservabilityEvent;
+  // One sanitized event per 503: reason, row count and error class, never the
+  // message, request data or stored values. Logging never changes the response.
+  function unavailable(
+    context: Context,
+    diagnosis: { reason: string } | { error: unknown },
+    response = problem(
+      503,
+      "SERVICE_UNAVAILABLE",
+      "Financial service unavailable",
+    ),
+  ): Response {
+    try {
+      let routeTemplate: string | undefined;
+      try {
+        routeTemplate = context.req.routePath;
+      } catch {
+        routeTemplate = undefined;
+      }
+      const read = ["GET", "HEAD"].includes(context.req.method);
+      const site = siteIdSchema.safeParse(context.req.param("siteId"));
+      log({
+        level: "warn",
+        event: read ? "finance.read.unavailable" : "finance.action.unavailable",
+        operation: read ? "read" : "action",
+        routeTemplate,
+        method: context.req.method,
+        status: 503,
+        siteId: site.success ? site.data : undefined,
+        mode: options.finance?.mode,
+        result: "unavailable",
+        ...("error" in diagnosis
+          ? describeUnavailable(diagnosis.error, domainErrors)
+          : { reason: diagnosis.reason }),
+      });
+    } catch {
+      /* Logging never changes the response. */
+    }
+    return response;
+  }
+  function failure(error: unknown, context: Context): Response {
     if (error instanceof AdminSessionRequiredError) {
       return problem(401, "UNAUTHORIZED", "Authentication required");
     }
@@ -200,6 +258,12 @@ export function createFinanceHttpRouter(options: FinanceHttpOptions) {
       }
     }
     return problem(503, "SERVICE_UNAVAILABLE", "Financial service unavailable");
+  }
+  router.onError((error, context) => {
+    const response = failure(error, context);
+    return response.status === 503
+      ? unavailable(context, { error }, response)
+      : response;
   });
 
   for (const path of [
@@ -306,11 +370,11 @@ export function createFinanceHttpRouter(options: FinanceHttpOptions) {
       overview: await options.finance.readOverview(siteId),
     });
     if (!result.success || result.data.overview.siteId !== siteId) {
-      return problem(
-        503,
-        "SERVICE_UNAVAILABLE",
-        "Financial service unavailable",
-      );
+      return unavailable(context, {
+        reason: result.success
+          ? "response_mismatch"
+          : "response_schema_invalid",
+      });
     }
     context.header("Cache-Control", "no-store");
     return context.json(result.data);
@@ -339,11 +403,11 @@ export function createFinanceHttpRouter(options: FinanceHttpOptions) {
       !result.success ||
       result.data.withdrawals.some((value) => value.siteId !== siteId)
     ) {
-      return problem(
-        503,
-        "SERVICE_UNAVAILABLE",
-        "Financial service unavailable",
-      );
+      return unavailable(context, {
+        reason: result.success
+          ? "response_mismatch"
+          : "response_schema_invalid",
+      });
     }
     context.header("Cache-Control", "no-store");
     return context.json(result.data);
@@ -378,11 +442,11 @@ export function createFinanceHttpRouter(options: FinanceHttpOptions) {
       (result.data.withdrawal.mode !== "sandbox" &&
         result.data.withdrawal.mode !== "live")
     )
-      return problem(
-        503,
-        "SERVICE_UNAVAILABLE",
-        "Financial service unavailable",
-      );
+      return unavailable(context, {
+        reason: result.success
+          ? "response_mismatch"
+          : "response_schema_invalid",
+      });
     return context.json(result.data, 200, { "Cache-Control": "no-store" });
   });
   router.get(`${WITHDRAWALS_PATH}/context`, async (context) => {
@@ -398,11 +462,11 @@ export function createFinanceHttpRouter(options: FinanceHttpOptions) {
       }),
     });
     if (!result.success || result.data.context.siteId !== actor.siteId)
-      return problem(
-        503,
-        "SERVICE_UNAVAILABLE",
-        "Financial service unavailable",
-      );
+      return unavailable(context, {
+        reason: result.success
+          ? "response_mismatch"
+          : "response_schema_invalid",
+      });
     return context.json(result.data, 200, { "Cache-Control": "no-store" });
   });
   router.post(`${WITHDRAWALS_PATH}/preview`, async (context) => {
@@ -427,11 +491,11 @@ export function createFinanceHttpRouter(options: FinanceHttpOptions) {
         result.data.request.command !== null &&
         result.data.request.command.amountCents !== input.data.amountCents)
     )
-      return problem(
-        503,
-        "SERVICE_UNAVAILABLE",
-        "Financial service unavailable",
-      );
+      return unavailable(context, {
+        reason: result.success
+          ? "response_mismatch"
+          : "response_schema_invalid",
+      });
     return context.json(result.data, 200, { "Cache-Control": "no-store" });
   });
   router.get(`${WITHDRAWALS_PATH}/requests/:requestId`, async (context) => {
@@ -451,11 +515,11 @@ export function createFinanceHttpRouter(options: FinanceHttpOptions) {
       result.data.request.siteId !== actor.siteId ||
       result.data.request.requestId !== requestId.data
     )
-      return problem(
-        503,
-        "SERVICE_UNAVAILABLE",
-        "Financial service unavailable",
-      );
+      return unavailable(context, {
+        reason: result.success
+          ? "response_mismatch"
+          : "response_schema_invalid",
+      });
     return context.json(result.data, 200, { "Cache-Control": "no-store" });
   });
   router.post(`${WITHDRAWALS_PATH}/:requestId/seal`, async (context) => {
@@ -483,11 +547,11 @@ export function createFinanceHttpRouter(options: FinanceHttpOptions) {
       result.data.request.requestId !== requestId.data ||
       result.data.request.state === "OPEN"
     )
-      return problem(
-        503,
-        "SERVICE_UNAVAILABLE",
-        "Financial service unavailable",
-      );
+      return unavailable(context, {
+        reason: result.success
+          ? "response_mismatch"
+          : "response_schema_invalid",
+      });
     return context.json(result.data, 200, { "Cache-Control": "no-store" });
   });
   return router;

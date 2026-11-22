@@ -38,6 +38,7 @@ import {
   type GiftPaymentHistoryReadScope,
   type GiftPaymentHistoryRepository,
   historyUnavailable,
+  historyUnavailableFrom,
   readGiftPaymentHistoryScope,
 } from "./giftPaymentHistory";
 import {
@@ -46,6 +47,7 @@ import {
   isGiftReceiptEvent,
 } from "./giftPaymentReconciliation";
 import type { GiftQuoteSnapshot } from "./giftQuotes";
+import { markUnavailable } from "./observability";
 import { hashFinancialEventIdentity } from "./pagarmeWebhook";
 import {
   consistentDispatchHistory,
@@ -80,7 +82,7 @@ export const giftPurchaseHasPayment = sql`EXISTS (
 )`;
 function object(value: unknown): Row {
   if (!value || typeof value !== "object" || Array.isArray(value))
-    return historyUnavailable();
+    return historyUnavailable("row_shape_invalid");
   return value as Row;
 }
 function id(value: unknown): string {
@@ -88,19 +90,21 @@ function id(value: unknown): string {
 }
 function ref(value: unknown): string {
   if (typeof value !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(value))
-    return historyUnavailable();
+    return historyUnavailable("reference_invalid");
   return value;
 }
 function time(value: unknown): bigint {
   const result = databaseTimestampEpochMicroseconds(
     readDatabaseTimestamp(value),
   );
-  if (result < 0n || result > 253402300799999999n) return historyUnavailable();
+  if (result < 0n || result > 253402300799999999n)
+    return historyUnavailable("timestamp_out_of_range");
   return result;
 }
 function within(value: unknown, minimum: bigint, maximum: bigint): bigint {
   const result = time(value);
-  if (result < minimum || result > maximum) return historyUnavailable();
+  if (result < minimum || result > maximum)
+    return historyUnavailable("timestamp_outside_window");
   return result;
 }
 function scoped(
@@ -113,13 +117,13 @@ function scoped(
     row.environment !== scope.mode ||
     (account !== undefined && row.account_id !== account)
   )
-    return historyUnavailable();
+    return historyUnavailable("scope_mismatch:row");
 }
 function unique(rows: Row[]) {
   const result = new Map<string, Row>();
   for (const row of rows) {
     const key = id(row.id);
-    if (result.has(key)) return historyUnavailable();
+    if (result.has(key)) return historyUnavailable("duplicate_row");
     result.set(key, row);
   }
   return result;
@@ -141,7 +145,11 @@ async function rows(
   const result = await tx.execute(
     sql`SELECT ${columns} AS record FROM ${table} t WHERE ${where} LIMIT ${scanLimit + 1}`,
   );
-  if (result.rows.length > scanLimit) return historyUnavailable();
+  if (result.rows.length > scanLimit)
+    return historyUnavailable(
+      "row_count_mismatch:scan_limit",
+      result.rows.length,
+    );
   const loaded = result.rows.map((row) => structuredClone(object(row.record)));
   unique(loaded);
   return loaded;
@@ -170,7 +178,8 @@ async function context(
   orders: Row[],
 ): Promise<Context> {
   const clock = await tx.execute(sql`SELECT clock_timestamp()::text AS clock`);
-  if (clock.rows.length !== 1) return historyUnavailable();
+  if (clock.rows.length !== 1)
+    return historyUnavailable("row_count_mismatch:clock", clock.rows.length);
   const at = time(clock.rows[0].clock);
   const siteResult = await tx.execute(
     sql`SELECT s.id,s.is_demo FROM "site" s WHERE s.id=${scope.siteId}`,
@@ -180,7 +189,7 @@ async function context(
     siteResult.rows[0].id !== scope.siteId ||
     typeof siteResult.rows[0].is_demo !== "boolean"
   )
-    return historyUnavailable();
+    return historyUnavailable("site_row_invalid", siteResult.rows.length);
   for (const order of orders) {
     scoped(order, scope);
     id(order.account_id);
@@ -233,7 +242,10 @@ function original(
   const accountId = id(order.account_id),
     quote = data.quotes.get(id(order.quote_id)),
     account = data.accounts.get(accountId);
-  if (!quote || !account) return historyUnavailable();
+  if (!quote || !account)
+    return historyUnavailable(
+      "order_validation_failed:quote_or_account_missing",
+    );
   scoped(quote, scope, accountId);
   // Purchases recorded before the Pagar.me switch keep their stored provider
   // and stay visible read-only; nothing here calls a provider API.
@@ -242,16 +254,17 @@ function original(
     typeof account.provider !== "string" ||
     !/^[A-Z][A-Z0-9_]{0,31}$/.test(account.provider)
   )
-    return historyUnavailable();
+    return historyUnavailable("order_validation_failed:account_provider");
   const snapshot = readGiftQuoteSnapshot(
     object(quote.snapshot) as unknown as GiftQuoteSnapshot,
   );
-  if (!isDeepStrictEqual(snapshot, quote.snapshot)) return historyUnavailable();
+  if (!isDeepStrictEqual(snapshot, quote.snapshot))
+    return historyUnavailable("order_validation_failed:quote_snapshot");
   if (
     snapshot.pricing.provenance === "local-test" &&
     (scope.mode !== "sandbox" || environment === "production" || !data.isDemo)
   )
-    return historyUnavailable();
+    return historyUnavailable("order_validation_failed:local_test_pricing");
   const q = snapshot.quote,
     binding = snapshot.receiving;
   if (
@@ -285,7 +298,7 @@ function original(
         ],
     )
   )
-    return historyUnavailable();
+    return historyUnavailable("order_validation_failed:quote_binding");
   const purchased = within(order.created_at, time(quote.created_at), data.at);
   const destination = data.destinations.filter(
     (row) =>
@@ -296,7 +309,10 @@ function original(
     destination.length !== 1 ||
     destination[0].bank_reference !== binding.bankReference
   )
-    return historyUnavailable();
+    return historyUnavailable(
+      "order_validation_failed:destination",
+      destination.length,
+    );
   within(
     destination[0].created_at,
     time(account.created_at),
@@ -306,7 +322,11 @@ function original(
     (row) => row.kind === "ACCOUNT_CREATE" && row.account_id === accountId,
   );
   let bound = false;
-  if (producers.length > 1) return historyUnavailable();
+  if (producers.length > 1)
+    return historyUnavailable(
+      "row_count_mismatch:account_producer",
+      producers.length,
+    );
   if (
     producers.length === 1 &&
     producers[0].provisioning_version === "receiving.account-provisioning.v1"
@@ -344,7 +364,7 @@ function original(
       time(operation.lease_expires_at) !==
         BigInt(dispatch.leaseExpiresAtMicroseconds)
     )
-      return historyUnavailable();
+      return historyUnavailable("order_validation_failed:account_provisioning");
     bound =
       operation.state === "SUCCEEDED" &&
       operation.attempts === (dispatch.attempt ?? 1) &&
@@ -394,11 +414,15 @@ function operationFor(
     attempt.operation_id !== attempt.id ||
     attempt.attempt_number !== 1
   )
-    return historyUnavailable();
+    return historyUnavailable("attempt_validation_failed:identity");
   const matches = data.operations.filter(
     (row) => row.id === attempt.operation_id,
   );
-  if (matches.length !== 1) return historyUnavailable();
+  if (matches.length !== 1)
+    return historyUnavailable(
+      "row_count_mismatch:checkout_operation",
+      matches.length,
+    );
   const operation = matches[0];
   if (
     operation.kind !== "CHECKOUT_CREATE" ||
@@ -417,7 +441,7 @@ function operationFor(
       "CANCELLED",
     ].includes(String(operation.state))
   )
-    return historyUnavailable();
+    return historyUnavailable("attempt_validation_failed:operation");
   const expectedHash = createHash("sha256")
     .update(
       JSON.stringify([
@@ -429,7 +453,8 @@ function operationFor(
       ]),
     )
     .digest("hex");
-  if (expectedHash !== plan.order.request_hash) return historyUnavailable();
+  if (expectedHash !== plan.order.request_hash)
+    return historyUnavailable("order_validation_failed:request_hash");
   const snapshot = object(operation.request_snapshot);
   const expected = {
     version: 1,
@@ -442,7 +467,8 @@ function operationFor(
     requestId: plan.order.request_id,
   };
   const { preDispatchRejection: _rejection, ...identity } = snapshot;
-  if (!isDeepStrictEqual(identity, expected)) return historyUnavailable();
+  if (!isDeepStrictEqual(identity, expected))
+    return historyUnavailable("attempt_validation_failed:snapshot_identity");
   if (
     Object.hasOwn(snapshot, "preDispatchRejection") &&
     (!["CANCELLED", "FAILED"].includes(String(operation.state)) ||
@@ -450,13 +476,15 @@ function operationFor(
       operation.provider_operation_reference !== null ||
       attempt.provider_reference !== null)
   )
-    return historyUnavailable();
+    return historyUnavailable(
+      "attempt_validation_failed:pre_dispatch_rejection",
+    );
   within(attempt.created_at, time(plan.order.created_at), data.at);
   within(operation.created_at, time(plan.order.created_at), data.at);
   within(operation.updated_at, time(operation.created_at), data.at);
   if (operation.state === "SUCCEEDED") {
     if (operation.attempts !== 1 || operation.lease_token !== attempt.id)
-      return historyUnavailable();
+      return historyUnavailable("attempt_validation_failed:lease_token");
     id(operation.lease_owner);
     // Retained dispatch proof must cover success; its present expiry is irrelevant.
     const lease = time(operation.lease_expires_at);
@@ -464,7 +492,7 @@ function operationFor(
       lease <= time(operation.created_at) ||
       lease < time(operation.updated_at)
     )
-      return historyUnavailable();
+      return historyUnavailable("attempt_validation_failed:lease_expiry");
   }
   return operation;
 }
@@ -489,7 +517,7 @@ function eventPayload(
       String(row.state),
     )
   )
-    return historyUnavailable();
+    return historyUnavailable("event_validation_failed:identity");
   const payload = object(row.payload);
   const checkoutEvent = [
     "CHECKOUT_CREATED",
@@ -511,7 +539,7 @@ function eventPayload(
         !(key === "installmentId" && row.event_type === "PAYMENT_DELETED"),
     )
   )
-    return historyUnavailable();
+    return historyUnavailable("event_validation_failed:payload_keys");
   if (Object.hasOwn(payload, "paymentId")) ref(payload.paymentId);
   if (Object.hasOwn(payload, "checkoutId")) ref(payload.checkoutId);
   if (Object.hasOwn(payload, "installmentId")) ref(payload.installmentId);
@@ -526,7 +554,7 @@ function eventPayload(
       payload as Record<string, string>,
     )
   )
-    return historyUnavailable();
+    return historyUnavailable("event_validation_failed:payload_hash");
   const authenticated = within(
     row.authenticated_at,
     time(plan.account.created_at),
@@ -536,7 +564,7 @@ function eventPayload(
   if (row.processed_at !== null)
     within(row.processed_at, authenticated, data.at);
   if (row.state === "PROCESSED" && row.processed_at === null)
-    return historyUnavailable();
+    return historyUnavailable("event_validation_failed:processed_at");
   return payload;
 }
 function recordedState(row: Row): GiftPurchaseHistoryPayment["recordedState"] {
@@ -592,7 +620,7 @@ function decode(
 ): Position | null {
   if (cursor === null) return null;
   if (!/^gh1\.[A-Za-z0-9_-]+$/.test(cursor) || cursor.length > 256)
-    return historyUnavailable();
+    return historyUnavailable("cursor_invalid:format");
   const bytes = Buffer.from(cursor.slice(4), "base64url");
   if (
     bytes.length < 43 ||
@@ -606,7 +634,7 @@ function decode(
       bindingHash(scope, detail, orderId),
     )
   )
-    return historyUnavailable();
+    return historyUnavailable("cursor_invalid:binding");
   const position = {
     kind: bytes[1],
     at: bytes.readBigUInt64BE(2),
@@ -616,7 +644,7 @@ function decode(
     position.at > 253402300799999999n ||
     Buffer.from(position.id, "ascii").compare(bytes.subarray(42)) !== 0
   )
-    return historyUnavailable();
+    return historyUnavailable("cursor_invalid:position");
   return position;
 }
 function publicEnvelope(scope: GiftPaymentHistoryReadScope, at: bigint) {
@@ -642,7 +670,7 @@ export function createGiftPaymentHistoryRepository(
     options.policy !== "SITE_HISTORY" ||
     typeof options.now !== "function"
   )
-    return historyUnavailable();
+    return historyUnavailable("repository_options_invalid");
   const mode = options.mode,
     environment = options.applicationEnvironment,
     now = options.now.bind(options);
@@ -652,7 +680,7 @@ export function createGiftPaymentHistoryRepository(
   async function authority(scope: GiftPaymentHistoryReadScope) {
     const sample = now();
     if (!(sample instanceof Date) || time(sample) < 0n)
-      return historyUnavailable();
+      return historyUnavailable("clock_invalid");
     const native =
       await database.execute(sql`SELECT se.id AS "sessionId",se.user_id AS "userId",se.expires_at::text AS "expiresAt",
       se.created_at::text AS "createdAt",se.last_active_at::text AS "lastActiveAt",u.role,u.state,clock_timestamp()::text AS "checkedAt"
@@ -666,7 +694,7 @@ export function createGiftPaymentHistoryRepository(
       (row.role !== "SITE_ADMIN" && row.role !== "OWNER") ||
       row.state !== "ACTIVE"
     )
-      return historyUnavailable();
+      return historyUnavailable("session_invalid", native.rows.length);
     const checked = time(row.checkedAt),
       expires = time(row.expiresAt),
       created = time(row.createdAt),
@@ -678,7 +706,7 @@ export function createGiftPaymentHistoryRepository(
       checked - created >= BigInt(ADMIN_ABSOLUTE_TIMEOUT_MS) * 1000n ||
       checked - active >= BigInt(ADMIN_IDLE_TIMEOUT_MS) * 1000n
     )
-      return historyUnavailable();
+      return historyUnavailable("session_expired");
     const access = await resolveSiteAccess(database, {
       userId: scope.userId,
       platformRole: row.role,
@@ -691,7 +719,7 @@ export function createGiftPaymentHistoryRepository(
       access.membershipRole !== row.role ||
       access.membershipId !== scope.membershipId
     )
-      return historyUnavailable();
+      return historyUnavailable("access_mismatch");
     return {
       checked,
       active,
@@ -713,7 +741,9 @@ export function createGiftPaymentHistoryRepository(
     ) => Promise<T>,
   ): Promise<T> {
     if (closing)
-      return Promise.reject(new Error("Purchase history unavailable"));
+      return Promise.reject(
+        markUnavailable(new Error("Purchase history unavailable"), "closing"),
+      );
     let finish!: () => void;
     const completion = new Promise<void>((yes) => {
       finish = yes;
@@ -722,9 +752,10 @@ export function createGiftPaymentHistoryRepository(
     const result = (async () => {
       try {
         const scope = readGiftPaymentHistoryScope(input);
-        if (scope.mode !== mode) return historyUnavailable();
+        if (scope.mode !== mode)
+          return historyUnavailable("scope_mismatch:mode");
         const original = await authority(scope);
-        if (closing) return historyUnavailable();
+        if (closing) return historyUnavailable("closing");
         const result = await database.transaction(
           (tx) => reader(scope, original.checked, tx),
           { isolationLevel: "repeatable read", accessMode: "read only" },
@@ -737,10 +768,10 @@ export function createGiftPaymentHistoryRepository(
           current.active < original.active ||
           !isDeepStrictEqual(current.frame, original.frame)
         )
-          return historyUnavailable();
+          return historyUnavailable("authority_changed");
         return result;
-      } catch {
-        return historyUnavailable();
+      } catch (error) {
+        return historyUnavailableFrom(error);
       } finally {
         pending.delete(completion);
         finish();
@@ -765,10 +796,14 @@ export function createGiftPaymentHistoryRepository(
           const found =
             await tx.execute(sql`SELECT to_jsonb(o) AS record FROM ${giftOrder} o WHERE o.id=${position.id}
             AND o.site_id=${scope.siteId} AND o.environment=${mode} AND ${giftPurchaseHasPayment} LIMIT 2`);
-          if (found.rows.length !== 1) return historyUnavailable();
+          if (found.rows.length !== 1)
+            return historyUnavailable(
+              "row_count_mismatch:cursor_anchor",
+              found.rows.length,
+            );
           anchor = object(found.rows[0].record);
           if (time(anchor.created_at) !== position.at)
-            return historyUnavailable();
+            return historyUnavailable("cursor_invalid:anchor_time");
         }
         const filter = position
           ? sql`AND ((EXTRACT(EPOCH FROM o.created_at)*1000000)<${position.at.toString()}::numeric
@@ -778,7 +813,10 @@ export function createGiftPaymentHistoryRepository(
           await tx.execute(sql`SELECT to_jsonb(o) AS record FROM ${giftOrder} o WHERE o.site_id=${scope.siteId}
           AND o.environment=${mode} AND ${giftPurchaseHasPayment} ${filter} ORDER BY o.created_at DESC,o.id COLLATE "C" DESC LIMIT ${giftPurchaseHistoryLimits.indexRows + 1}`);
         if (result.rows.length > giftPurchaseHistoryLimits.indexRows + 1)
-          return historyUnavailable();
+          return historyUnavailable(
+            "row_count_mismatch:index_limit",
+            result.rows.length,
+          );
         const orders = result.rows.map((row) => object(row.record));
         unique(orders);
         const data = await context(
@@ -786,7 +824,8 @@ export function createGiftPaymentHistoryRepository(
           scope,
           anchor ? [...orders, anchor] : orders,
         );
-        if (data.at < originalClock) return historyUnavailable();
+        if (data.at < originalClock)
+          return historyUnavailable("clock_regressed");
         if (anchor) original(anchor, data, scope, environment);
         const purchases = orders.map(
           (row) => original(row, data, scope, environment).purchase,
@@ -817,10 +856,15 @@ export function createGiftPaymentHistoryRepository(
         const result =
           await tx.execute(sql`SELECT to_jsonb(o) AS record FROM ${giftOrder} o WHERE o.id=${orderId}
           AND o.site_id=${scope.siteId} AND o.environment=${mode} AND ${giftPurchaseHasPayment} LIMIT 2`);
-        if (result.rows.length !== 1) return historyUnavailable();
+        if (result.rows.length !== 1)
+          return historyUnavailable(
+            "row_count_mismatch:detail_order",
+            result.rows.length,
+          );
         const order = object(result.rows[0].record),
           data = await context(tx, scope, [order]);
-        if (data.at < originalClock) return historyUnavailable();
+        if (data.at < originalClock)
+          return historyUnavailable("clock_regressed");
         const plan = original(order, data, scope, environment),
           envelope = publicEnvelope(scope, data.at);
         const coverage = {
@@ -830,7 +874,8 @@ export function createGiftPaymentHistoryRepository(
           bankSettlement: "UNAVAILABLE",
         };
         if (!plan.bound) {
-          if (position) return historyUnavailable();
+          if (position)
+            return historyUnavailable("cursor_invalid:unbound_purchase");
           return giftPurchaseHistoryDetailResponseSchema.parse({
             history: {
               ...envelope,
@@ -935,26 +980,36 @@ export function createGiftPaymentHistoryRepository(
               String(payment.verification_status),
             )
           )
-            return historyUnavailable();
+            return historyUnavailable(
+              "payment_validation_failed:order_or_status",
+            );
           const reference = ref(payment.provider_payment_reference);
-          if (nativeRefs.has(reference)) return historyUnavailable();
+          if (nativeRefs.has(reference))
+            return historyUnavailable(
+              "payment_validation_failed:duplicate_reference",
+            );
           nativeRefs.add(reference);
           const attempt = attemptMap.get(id(payment.attempt_id));
-          if (!attempt) return historyUnavailable();
+          if (!attempt)
+            return historyUnavailable(
+              "payment_validation_failed:attempt_missing",
+            );
           const operation = operationFor(plan, attempt, data, scope);
           if (
             operation.state !== "SUCCEEDED" ||
             ref(attempt.provider_reference) !==
               operation.provider_operation_reference
           )
-            return historyUnavailable();
+            return historyUnavailable("payment_validation_failed:operation");
           if (
             payment.verification_status === "VERIFIED" &&
             (payment.observed_at === null ||
               payment.provider_status === null ||
               payment.gross_cents === null)
           )
-            return historyUnavailable();
+            return historyUnavailable(
+              "payment_validation_failed:verified_fields",
+            );
           const installmentNumber = payment.installment_number ?? null;
           const terms = giftPaymentTerms(
             plan.snapshot.quote,
@@ -988,7 +1043,7 @@ export function createGiftPaymentHistoryRepository(
                 payment.platform_adjustment_transfer_reference == null ||
                 payment.platform_adjustment_dispatch_at == null))
           )
-            return historyUnavailable();
+            return historyUnavailable("payment_validation_failed:terms");
           if (guaranteed) {
             guaranteedAttempt = id(attempt.id);
             installmentNumbers.add(installmentNumber);
@@ -1063,12 +1118,12 @@ export function createGiftPaymentHistoryRepository(
             ledger.currency !== "BRL" ||
             !["CREDIT", "DEBIT"].includes(String(ledger.direction))
           )
-            return historyUnavailable();
+            return historyUnavailable("ledger_validation_failed:amount");
           if (
             ledger.compensates_entry_id !== null &&
             !ledgerMap.has(id(ledger.compensates_entry_id))
           )
-            return historyUnavailable();
+            return historyUnavailable("ledger_validation_failed:compensation");
           if (
             ledger.kind !== "GIFT_RECEIVED" ||
             ledger.direction !== "CREDIT" ||
@@ -1079,16 +1134,20 @@ export function createGiftPaymentHistoryRepository(
           }
           const payment = paymentMap.get(id(ledger.payment_id));
           if (!payment || creditedPayments.has(id(payment.id)))
-            return historyUnavailable();
+            return historyUnavailable("ledger_validation_failed:payment");
           creditedPayments.add(id(payment.id));
           const attempt = attemptMap.get(id(payment.attempt_id));
-          if (!attempt) return historyUnavailable();
+          if (!attempt)
+            return historyUnavailable(
+              "ledger_validation_failed:attempt_missing",
+            );
           const operation = operationFor(plan, attempt, data, scope);
           const terms = giftPaymentTerms(
             plan.snapshot.quote,
             payment.installment_number,
           );
-          if (!terms) return historyUnavailable();
+          if (!terms)
+            return historyUnavailable("ledger_validation_failed:terms");
           const actualProcessing = giftCentsSchema.parse(
             payment.processing_cents,
           );
@@ -1131,7 +1190,7 @@ export function createGiftPaymentHistoryRepository(
                 (terms.commissionCents > 0 &&
                   !ref(payment.split_provider_reference)))
           )
-            return historyUnavailable();
+            return historyUnavailable("ledger_validation_failed:settlement");
           const observed = within(
             payment.observed_at,
             time(order.created_at),
@@ -1141,7 +1200,8 @@ export function createGiftPaymentHistoryRepository(
             receiptUnavailable = true;
             continue;
           }
-          if (ledger.operation_id !== operation.id) return historyUnavailable();
+          if (ledger.operation_id !== operation.id)
+            return historyUnavailable("ledger_validation_failed:operation");
           const event = eventMap.get(id(ledger.event_id));
           if (!event) {
             receiptUnavailable = true;
@@ -1163,7 +1223,7 @@ export function createGiftPaymentHistoryRepository(
             time(event.authenticated_at) > posted ||
             time(event.processed_at) < posted
           )
-            return historyUnavailable();
+            return historyUnavailable("receipt_validation_failed:event");
           const receipt = giftPurchaseHistoryReceiptSchema.parse({
             effectId: id(ledger.id),
             paymentId: id(payment.id),
@@ -1190,7 +1250,9 @@ export function createGiftPaymentHistoryRepository(
               payment.platformAdjustmentFundedCents !== undefined) &&
             !verifiedReceiptPayments.has(payment.paymentId)
           )
-            return historyUnavailable();
+            return historyUnavailable(
+              "payment_validation_failed:adjustment_receipt",
+            );
         }
         const facts = [
           ...[...projectedPayments.values()].map((value) => ({
@@ -1220,7 +1282,8 @@ export function createGiftPaymentHistoryRepository(
               item.id === position.id &&
               item.at === position.at,
           );
-          if (index < 0) return historyUnavailable();
+          if (index < 0)
+            return historyUnavailable("cursor_invalid:position_missing");
           offset = index + 1;
         }
         const page = facts.slice(

@@ -3,6 +3,7 @@ import { PgDialect } from "drizzle-orm/pg-core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createSessionReadAuth } from "./auth";
 import type { GiftPaymentHistoryRepository } from "./giftPaymentHistory";
+import { describeUnavailable, markUnavailable } from "./observability";
 
 const instant = new Date("2026-10-13T14:00:00.000Z");
 const origin = "https://admin.example.test";
@@ -436,6 +437,87 @@ describe("native owned private purchase history service", () => {
     });
     await expect(failed.result).rejects.not.toHaveProperty("cause");
     await failed.completion;
+    await v.service.close();
+  });
+});
+
+describe("purchase history service unavailable reasons", () => {
+  async function reasonOf(promise: Promise<unknown>) {
+    const error = await promise.then(
+      () => {
+        throw new Error("Expected an unavailable read");
+      },
+      (value: unknown) => value,
+    );
+    expect(error).toMatchObject({
+      status: 503,
+      code: "GIFT_PAYMENT_HISTORY_UNAVAILABLE",
+    });
+    const described = describeUnavailable(error);
+    const serialized = JSON.stringify(described);
+    for (const value of [
+      "Fictional Admin",
+      "fictional@example.test",
+      "123.456.789-09",
+      "fictional-history-session",
+    ])
+      expect(serialized).not.toContain(value);
+    return described;
+  }
+  it("labels a stored page scoped to another site", async () => {
+    const v = await fixture();
+    v.repository.readPurchasePage.mockResolvedValue({
+      history: {
+        ...v.page.history,
+        scope: { ...v.page.history.scope, siteId: "site-two" },
+      },
+    });
+    const owner = v.service.readPurchasePage({
+      request: v.request(),
+      siteId: "site-one",
+    });
+    expect(await reasonOf(owner.result)).toMatchObject({
+      reason: "scope_mismatch:response",
+    });
+    await owner.completion;
+    await v.service.close();
+  });
+  it("keeps the repository reason across the service boundary", async () => {
+    const v = await fixture();
+    v.repository.readPurchasePage.mockRejectedValue(
+      markUnavailable(
+        new v.module.GiftPaymentHistoryError(),
+        "order_validation_failed:quote_binding",
+      ),
+    );
+    const owner = v.service.readPurchasePage({
+      request: v.request(),
+      siteId: "site-one",
+    });
+    expect(await reasonOf(owner.result)).toMatchObject({
+      reason: "order_validation_failed:quote_binding",
+    });
+    await owner.completion;
+    await v.service.close();
+  });
+  it("names an unexpected repository exception by class only", async () => {
+    const v = await fixture();
+    v.repository.readPurchasePage.mockRejectedValue(
+      new TypeError("Fictional Admin fictional@example.test 123.456.789-09"),
+    );
+    const owner = v.service.readPurchasePage({
+      request: v.request(),
+      siteId: "site-one",
+    });
+    expect(await reasonOf(owner.result)).toMatchObject({
+      reason: "unexpected_error:TypeError",
+    });
+    await owner.completion;
+    await v.service.close();
+  });
+  it("exposes its mode for diagnostics", async () => {
+    const v = await fixture();
+    expect(v.service.mode).toBe("sandbox");
     await v.service.close();
   });
 });

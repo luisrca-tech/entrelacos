@@ -21,6 +21,7 @@ import type { GiftPaymentWorkerResult } from "./giftPaymentWorker";
 import { createGiftPaymentWorkerLoop } from "./giftPaymentWorkerLoop";
 import { liveDemoSiteIdsSql } from "./liveSitePolicy";
 import { mapWithConcurrency } from "./mapWithConcurrency";
+import { carryUnavailable, markUnavailable } from "./observability";
 import {
   createPagarmeRecipientClient,
   PAGARME_WITHDRAWAL_FEE_CENTS,
@@ -101,11 +102,21 @@ export interface WithdrawalComposition {
   start(): void;
   close(): Promise<void>;
 }
-function unavailable(): never {
-  throw new WithdrawalReservationServiceError(503, "WITHDRAWAL_UNAVAILABLE");
+/** Throws the generic unavailability, labeled with a non-personal reason. */
+function unavailable(reason: string, count?: number): never {
+  throw markUnavailable(
+    new WithdrawalReservationServiceError(503, "WITHDRAWAL_UNAVAILABLE"),
+    reason,
+    count,
+  );
 }
-function one<T = Record<string, unknown>>(result: { rows: unknown[] }): T {
-  if (result.rows.length !== 1) unavailable();
+/** Expects exactly one row; `label` names the query, never its values. */
+function one<T = Record<string, unknown>>(
+  result: { rows: unknown[] },
+  label: string,
+): T {
+  if (result.rows.length !== 1)
+    unavailable(`row_count_mismatch:${label}`, result.rows.length);
   return result.rows[0] as T;
 }
 
@@ -127,7 +138,7 @@ export function quotePagarmeWithdrawalFee(
     !(now instanceof Date) ||
     !Number.isFinite(now.getTime())
   )
-    unavailable();
+    unavailable("fee_quote_scope_invalid");
   return {
     ...scope,
     feeCents: PAGARME_WITHDRAWAL_FEE_CENTS,
@@ -169,7 +180,7 @@ export function verifyPagarmeWithdrawalDispatchBudget(
     balance.balanceCents < 0 ||
     BigInt(balance.balanceCents) < BigInt(c.amountCents) + otherHeldCents
   )
-    unavailable();
+    unavailable("dispatch_budget_invalid");
 }
 
 interface StoredWithdrawalAccount {
@@ -257,7 +268,8 @@ export function createWithdrawalComposition(
     accountReference: string;
   }): Promise<ProviderBalanceObservation> {
     // The platform recipient holds commissions; it is never a withdrawal source.
-    if (binding.accountReference === platformRecipientId) unavailable();
+    if (binding.accountReference === platformRecipientId)
+      unavailable("account_is_platform_recipient");
     const balance = await recipients.getBalance(binding.accountReference);
     return readPagarmeBalanceObservation(
       { ...binding, environment: mode },
@@ -274,19 +286,28 @@ export function createWithdrawalComposition(
     const result = await tx.execute(
       sql`SELECT a.id,a.site_id,a.environment,a.provider,a.account_reference,a.recipient_reference,a.operator_user_id,a.is_current,st.is_demo AS "isDemo" FROM receiving_account a JOIN site st ON st.id=a.site_id WHERE a.site_id=${scope.siteId} AND a.environment=${mode} AND a.provider='PAGARME' ${scope.accountId ? sql`AND a.id=${scope.accountId}` : sql``} ${scope.accountReference ? sql`AND a.account_reference=${scope.accountReference}` : sql``} ${current ? sql`AND a.is_current=true` : sql``} LIMIT 2 ${lock ? sql`FOR UPDATE OF a` : sql``}`,
     );
-    const row = one<StoredWithdrawalAccount>(result);
-    if (
+    const row = one<StoredWithdrawalAccount>(
+      result,
+      current ? "current_account" : "account",
+    );
+    const invalid =
       row.site_id !== scope.siteId ||
       row.environment !== mode ||
-      row.provider !== "PAGARME" ||
-      (mode === "sandbox" && row.isDemo !== true) ||
-      !row.account_reference ||
-      row.recipient_reference !== row.account_reference ||
-      !row.operator_user_id ||
-      (current && row.is_current !== true) ||
-      row.account_reference === platformRecipientId
-    )
-      unavailable();
+      row.provider !== "PAGARME"
+        ? "account_scope_mismatch"
+        : mode === "sandbox" && row.isDemo !== true
+          ? "account_not_demo"
+          : !row.account_reference ||
+              row.recipient_reference !== row.account_reference
+            ? "account_reference_mismatch"
+            : !row.operator_user_id
+              ? "account_operator_missing"
+              : current && row.is_current !== true
+                ? "account_not_current"
+                : row.account_reference === platformRecipientId
+                  ? "account_is_platform_recipient"
+                  : null;
+    if (invalid) unavailable(invalid);
     return row;
   }
   async function holder(tx: ReceivingTransaction, a: StoredWithdrawalAccount) {
@@ -294,15 +315,19 @@ export function createWithdrawalComposition(
       await tx.execute(
         sql`SELECT id,holder_user_id AS "holderUserId",consent_id AS "consentId",consent_version AS "consentVersion",consent_at AS "consentAt" FROM receiving_setup_holder WHERE site_id=${a.site_id} AND environment=${mode}`,
       ),
+      "holder",
     );
-    if (
-      h.holderUserId !== a.operator_user_id ||
-      h.consentVersion !== receivingSetupConsentVersion ||
-      !h.consentId ||
-      !h.consentAt ||
-      new Date(h.consentAt).getTime() > now().getTime()
-    )
-      unavailable();
+    const invalid =
+      h.holderUserId !== a.operator_user_id
+        ? "holder_operator_mismatch"
+        : h.consentVersion !== receivingSetupConsentVersion
+          ? "consent_version_mismatch"
+          : !h.consentId || !h.consentAt
+            ? "consent_missing"
+            : new Date(h.consentAt).getTime() > now().getTime()
+              ? "consent_in_future"
+              : null;
+    if (invalid) unavailable(invalid);
     return h;
   }
   const storedPresentation = createWithdrawalStoredPresentationLoader({
@@ -332,14 +357,14 @@ export function createWithdrawalComposition(
     );
     const a = await account(tx, { siteId }, true);
     const b = loaded?.providerBinding;
+    if (!loaded) unavailable("receiving_context_missing");
     if (
-      !loaded ||
       !b?.accountReference ||
       !b.recipientReference ||
       !b.bankReference ||
       !b.destinationVersion
     )
-      unavailable();
+      unavailable("destination_missing_reference");
     return {
       siteId,
       isDemo: loaded.isDemo,
@@ -425,7 +450,7 @@ export function createWithdrawalComposition(
       a.operator_user_id !== snapshot.operatorUserId ||
       h.holderUserId !== snapshot.operatorUserId
     )
-      unavailable();
+      unavailable("holder_operator_mismatch:original");
     return {
       correlation: withdrawalCorrelation(snapshot),
       consentHash: consent.previewHash,
@@ -463,6 +488,7 @@ export function createWithdrawalComposition(
       await tx.execute(
         sql`SELECT id,version,bank_reference AS "bankReference",masked_descriptor AS "maskedDescriptor" FROM receiving_destination WHERE site_id=${c.siteId} AND account_id=${c.accountId} AND environment=${mode} AND is_current=true LIMIT 2`,
       ),
+      "current_destination",
     );
     if (
       destination.id !== presented.destinationId ||
@@ -470,7 +496,7 @@ export function createWithdrawalComposition(
       destination.bankReference !== c.bankReference ||
       destination.maskedDescriptor !== presented.maskedDestination
     )
-      unavailable();
+      unavailable("destination_changed");
   }
   async function checkBudget(
     tx: ReceivingTransaction,
@@ -481,12 +507,13 @@ export function createWithdrawalComposition(
       await tx.execute(
         sql`SELECT COALESCE(SUM(w.reserved_cents),0)::text AS "otherHeldCents" FROM withdrawal_intent w WHERE w.site_id=${c.siteId} AND w.account_id=${c.accountId} AND w.environment=${c.environment} AND w.reservation_state='HELD' AND w.id<>${c.withdrawalId}`,
       ),
+      "held_total",
     );
     if (
       typeof held.otherHeldCents !== "string" ||
       !/^(0|[1-9]\d*)$/.test(held.otherHeldCents)
     )
-      unavailable();
+      unavailable("held_total_invalid");
     const balance = await readBalance({
       siteId: c.siteId,
       accountBindingId: c.accountId,
@@ -578,6 +605,7 @@ export function createWithdrawalComposition(
         await tx.execute(
           sql`SELECT request_hash AS "requestHash",request_snapshot AS "requestSnapshot",state,attempts,lease_token AS "leaseToken",lease_owner AS "leaseOwner",lease_expires_at AS "leaseExpiresAt" FROM financial_operation WHERE id=${c.operationId} AND site_id=${c.siteId} AND account_id=${c.accountId} AND environment=${mode} AND kind='WITHDRAWAL' AND withdrawal_intent_id=${c.withdrawalId} FOR UPDATE`,
         ),
+        "dispatch_operation",
       );
       if (
         op.requestHash !== c.requestHash ||
@@ -601,7 +629,7 @@ export function createWithdrawalComposition(
             now().getTime() >=
               Date.parse(original.consent.snapshot.preview.expiresAt)))
       )
-        unavailable();
+        unavailable("dispatch_fence_invalid");
       await originalHolder(tx, original.snapshot, original.consent);
       await checkDestination(tx, original);
       await checkBudget(tx, original);
@@ -610,12 +638,13 @@ export function createWithdrawalComposition(
         await tx.execute(
           sql`SELECT lease_expires_at>clock_timestamp() AS valid FROM financial_operation WHERE id=${c.operationId} AND site_id=${c.siteId} AND account_id=${c.accountId} AND environment=${c.environment} AND state='PROCESSING' AND attempts=1 AND lease_owner=${fence.leaseOwner} AND lease_token=${fence.leaseToken} AND lease_expires_at=${fence.leaseExpiresAt}::timestamptz`,
         ),
+        "dispatch_lease",
       );
       if (
         current.valid !== true ||
         now().getTime() >= Date.parse(fence.leaseExpiresAt)
       )
-        unavailable();
+        unavailable("dispatch_lease_expired");
       return send();
     });
   }
@@ -674,7 +703,7 @@ export function createWithdrawalComposition(
     if (selected.rows.length !== 1) return null;
     const body = one<{
       payload: { original: OriginalWithdrawal; fence: DispatchFence };
-    }>(selected).payload;
+    }>(selected, "provider_observation").payload;
     if (!body?.original || !body?.fence) return null;
     return (
       failure
@@ -693,6 +722,7 @@ export function createWithdrawalComposition(
         await tx.execute(
           sql`SELECT w.receipt_reference AS reference,op.request_snapshot AS snapshot FROM withdrawal_intent w JOIN financial_operation op ON op.withdrawal_intent_id=w.id AND op.site_id=w.site_id AND op.account_id=w.account_id AND op.environment=w.environment AND op.kind='WITHDRAWAL' WHERE w.id=${intent.id} AND w.site_id=${intent.siteId} AND w.environment=${mode}`,
         ),
+        "withdrawal_operation",
       );
       if (
         !["MAXIMUM", "MAXIMUM_WITH_MINIMUM_NET"].includes(
@@ -707,7 +737,7 @@ export function createWithdrawalComposition(
         proof?.outcome !== "COMPLETED" ||
         proof.correlation.siteId !== intent.siteId
       )
-        unavailable();
+        unavailable("completion_proof_missing");
       return {
         ...intent,
         feeSemantics: row.snapshot.feeQuote.feeSemantics,
@@ -761,7 +791,7 @@ export function createWithdrawalComposition(
           try {
             await options.refreshReceiving(context.siteId);
           } catch {
-            unavailable();
+            unavailable("receiving_refresh_failed");
           }
           context = await reservation.readContext(attempt);
         }
@@ -835,8 +865,8 @@ export function createWithdrawalComposition(
         accountReference: a.account_reference,
         environment: mode,
       };
-    } catch {
-      throw new FinancialOverviewServiceError();
+    } catch (error) {
+      throw carryUnavailable(error, new FinancialOverviewServiceError());
     }
     return loadFinancialOverview({
       mode,
@@ -912,6 +942,7 @@ export function createWithdrawalComposition(
     ports: Object.freeze({
       withdrawalReservation: service,
       finance: {
+        mode,
         listWithdrawals: (siteId: string) =>
           own(async () =>
             mapWithConcurrency(

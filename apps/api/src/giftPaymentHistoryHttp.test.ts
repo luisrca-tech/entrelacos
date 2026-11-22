@@ -21,6 +21,7 @@ import type {
   GiftPaymentHistoryService,
 } from "./giftPaymentHistory";
 import { createGiftPaymentHistoryRepository } from "./giftPaymentHistoryRepository";
+import { markUnavailable } from "./observability";
 
 const instant = new Date("2026-10-13T14:00:00.000Z");
 const origin = "https://admin.example.test";
@@ -1769,5 +1770,123 @@ describe("CSV over the unchanged stored purchase repository", () => {
     expect(response.headers.get("content-disposition")).toBeNull();
     expect(s.pages).toHaveLength(0);
     expect(s.readPage).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("purchase history 503 diagnostics", () => {
+  const unavailableBody = {
+    type: "about:blank",
+    status: 503,
+    code: "GIFT_PAYMENT_HISTORY_UNAVAILABLE",
+    title: "Purchase history unavailable",
+  };
+  const personal = [
+    "Maria Ficticia Souza",
+    "maria.ficticia@example.test",
+    "123.456.789-09",
+    "ba_fixtureBankAcct01",
+  ];
+  async function diagnosed(failure: unknown) {
+    const module = await import("./giftPaymentHistoryHttp");
+    const history = await import("./giftPaymentHistory");
+    const result = Promise.reject(failure);
+    void result.catch(() => {});
+    const owner = {
+      result,
+      completion: Promise.resolve(),
+      cancel() {},
+    } as GiftPaymentHistoryReadOwner<GiftPurchaseHistoryPageResponse>;
+    const service: GiftPaymentHistoryService = {
+      available: true,
+      mode: "live",
+      readPurchasePage: vi.fn(() => owner),
+      readPurchaseDetailPage: vi.fn(() => owner as never),
+      close: vi.fn(async () => {}),
+    };
+    const log = vi.fn();
+    const router = module.createGiftPaymentHistoryHttpRouter({
+      adminOrigin: origin,
+      giftPaymentHistory: service,
+      log,
+    });
+    closers.push(() => router.close());
+    return { router, log, history };
+  }
+  it("logs the labeled reason of an unavailable purchase index", async () => {
+    const history = await import("./giftPaymentHistory");
+    const v = await diagnosed(
+      markUnavailable(
+        new history.GiftPaymentHistoryError(),
+        "order_validation_failed:quote_binding",
+      ),
+    );
+    const response = await v.router.request(
+      new Request(`https://api.example.test${indexPath}`, {
+        headers: { origin },
+      }),
+    );
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual(unavailableBody);
+    expect(v.log).toHaveBeenCalledOnce();
+    expect(v.log.mock.calls[0][0]).toMatchObject({
+      level: "warn",
+      event: "gift_payment_history.unavailable",
+      operation: "purchases.page",
+      routeTemplate: "/v1/sites/:siteId/finance/purchases",
+      method: "GET",
+      status: 503,
+      siteId: "site-one",
+      mode: "live",
+      result: "unavailable",
+      reason: "order_validation_failed:quote_binding",
+      errorCode: "GiftPaymentHistoryError",
+    });
+  });
+  it("names an unexpected exception by class without personal data", async () => {
+    const v = await diagnosed(
+      Object.assign(new RangeError(personal.join(" ")), { code: personal[2] }),
+    );
+    const response = await v.router.request(
+      new Request(`https://api.example.test${indexPath}`, {
+        headers: { origin },
+      }),
+    );
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual(unavailableBody);
+    expect(v.log.mock.calls[0][0]).toMatchObject({
+      reason: "unexpected_error:RangeError",
+    });
+    const serialized = JSON.stringify(v.log.mock.calls);
+    for (const value of personal) expect(serialized).not.toContain(value);
+  });
+  it("logs an inactive history configuration", async () => {
+    const module = await import("./giftPaymentHistoryHttp");
+    const log = vi.fn();
+    const router = module.createGiftPaymentHistoryHttpRouter({
+      adminOrigin: origin,
+      log,
+    });
+    closers.push(() => router.close());
+    const response = await router.request(
+      new Request(`https://api.example.test${indexPath}`, {
+        headers: { origin },
+      }),
+    );
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual(unavailableBody);
+    expect(log.mock.calls[0][0]).toMatchObject({
+      reason: "history_inactive",
+      siteId: "site-one",
+    });
+  });
+  it("does not log a rejected Origin", async () => {
+    const v = await diagnosed(new Error("unused"));
+    const response = await v.router.request(
+      new Request(`https://api.example.test${indexPath}`, {
+        headers: { origin: "https://foreign.example.test" },
+      }),
+    );
+    expect(response.status).toBe(403);
+    expect(v.log).not.toHaveBeenCalled();
   });
 });
