@@ -1,6 +1,7 @@
 import {
   GIFT_PLATFORM_TARIFFS,
   type GiftItem,
+  RECEIVING_HOLDER_NAME_MAX_LENGTH,
   type ReceivingReadiness,
   type ReceivingSetupContext,
   receivingSetupAccountSchema,
@@ -779,7 +780,7 @@ const accountField: DetailFieldSpec = {
 
 const holderNameField: DetailFieldSpec = {
   name: "holderName",
-  label: "Nome do titular da conta (como está no banco, até 30 caracteres)",
+  label: `Nome do titular da conta (como está no banco, até ${RECEIVING_HOLDER_NAME_MAX_LENGTH} caracteres)`,
   type: "text",
   hint: "Sugerimos a partir do nome completo; ajuste se o banco abrevia diferente.",
   wide: true,

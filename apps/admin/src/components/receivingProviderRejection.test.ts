@@ -14,7 +14,7 @@ describe("Pagar.me refusal in pt-BR", () => {
     [
       "Bank account holder name must be lower than 30 characters",
       "holderName",
-      "Nome do titular da conta: use até 30 caracteres, como aparece no banco.",
+      "Nome do titular da conta: use até 29 caracteres, como aparece no banco.",
     ],
     [
       "The document field is not a valid number.",
@@ -113,7 +113,7 @@ describe("Pagar.me refusal in pt-BR", () => {
           field: "default_bank_account.holder_name",
           formField: "holderName",
           label: "Nome do titular da conta",
-          messages: ["use até 30 caracteres, como aparece no banco."],
+          messages: ["use até 29 caracteres, como aparece no banco."],
         },
       ],
       formFields: ["holderName"],
@@ -126,7 +126,7 @@ describe("Pagar.me refusal in pt-BR", () => {
     );
     expect(byMessage).toEqual({
       message:
-        "Nome do titular da conta: use até 30 caracteres, como aparece no banco.",
+        "Nome do titular da conta: use até 29 caracteres, como aparece no banco.",
       fields: [],
       formFields: ["holderName"],
     });

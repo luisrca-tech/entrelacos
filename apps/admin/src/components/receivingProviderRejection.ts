@@ -1,4 +1,7 @@
-import { receivingProviderRejectionSchema } from "@entrelacos/contracts";
+import {
+  RECEIVING_HOLDER_NAME_MAX_LENGTH,
+  receivingProviderRejectionSchema,
+} from "@entrelacos/contracts";
 import {
   type ReceivingFormField,
   receivingFormLabels,
@@ -53,7 +56,7 @@ const knownMessages: [RegExp, ReceivingFormField | null, string][] = [
   [
     /holder.?name/i,
     "holderName",
-    "use até 30 caracteres, como aparece no banco.",
+    `use até ${RECEIVING_HOLDER_NAME_MAX_LENGTH} caracteres, como aparece no banco.`,
   ],
   [
     /holder.?document/i,

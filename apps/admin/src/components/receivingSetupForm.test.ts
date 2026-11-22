@@ -188,11 +188,22 @@ describe("receiving setup form", () => {
       ).toBe(false);
   });
 
+  it("accepts a 29-character holder name", () => {
+    expect(
+      receivingSetupAccountSchema.safeParse(
+        normalizeSetupAccount({
+          ...masked,
+          holderName: "MARIA APARECIDA DOS SANTOS LI",
+        }),
+      ).success,
+    ).toBe(true);
+  });
+
   it("names each invalid field in pt-BR before sending", () => {
     const parsed = receivingSetupAccountSchema.safeParse(
       normalizeSetupAccount({
         ...masked,
-        holderName: "MARIA APARECIDA DOS SANTOS LIMA",
+        holderName: "MARIA APARECIDA DOS SANTOS LIM",
         zipCode: "0131",
         branch: "12345",
       }),
@@ -200,7 +211,7 @@ describe("receiving setup form", () => {
     expect(parsed.success).toBe(false);
     expect(accountFieldErrors(parsed.error?.issues ?? [])).toEqual({
       holderName:
-        "Nome do titular da conta: use de 2 a 30 caracteres, só letras, espaços, apóstrofo ou hífen, como aparece no banco.",
+        "Nome do titular da conta: use de 2 a 29 caracteres, só letras, espaços, apóstrofo ou hífen, como aparece no banco.",
       zipCode: "CEP: informe os 8 números do CEP.",
       branch:
         "Agência: use até 4 números; o dígito, se houver, vai depois do hífen.",

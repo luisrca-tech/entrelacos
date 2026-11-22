@@ -73,7 +73,7 @@ export interface PagarmeRecipientInput {
     readonly branchCheckDigit?: string;
     readonly accountNumber: string;
     readonly accountCheckDigit: string;
-    /** `default_bank_account.holder_name`, at most 30 characters. */
+    /** `default_bank_account.holder_name`, at most 29 characters. */
     readonly holderName: string;
     readonly type: "checking" | "savings";
   };

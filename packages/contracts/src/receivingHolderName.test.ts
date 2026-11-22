@@ -40,8 +40,8 @@ const withHolder = (holderName: unknown) => ({
 });
 
 describe("bank account holder name", () => {
-  it("is limited to the 30 characters Pagar.me accepts", () => {
-    expect(RECEIVING_HOLDER_NAME_MAX_LENGTH).toBe(30);
+  it("is limited to the 29 characters Pagar.me accepts", () => {
+    expect(RECEIVING_HOLDER_NAME_MAX_LENGTH).toBe(29);
   });
 
   it("normalizes spaces and case the way the bank prints it", () => {
@@ -53,17 +53,15 @@ describe("bank account holder name", () => {
     );
   });
 
-  it("accepts a 30-character holder name and rejects a 31-character one", () => {
+  it("accepts a 29-character holder name and rejects a 30-character one", () => {
+    const twentyNine = "MARIA APARECIDA DOS SANTOS LI";
     const thirty = "MARIA APARECIDA DOS SANTOS LIM";
-    const thirtyOne = "MARIA APARECIDA DOS SANTOS LIMA";
+    expect(twentyNine).toHaveLength(29);
     expect(thirty).toHaveLength(30);
-    expect(thirtyOne).toHaveLength(31);
     expect(
-      receivingSetupAccountSchema.safeParse(withHolder(thirty)).success,
+      receivingSetupAccountSchema.safeParse(withHolder(twentyNine)).success,
     ).toBe(true);
-    const refused = receivingSetupAccountSchema.safeParse(
-      withHolder(thirtyOne),
-    );
+    const refused = receivingSetupAccountSchema.safeParse(withHolder(thirty));
     expect(refused.success).toBe(false);
     expect(refused.error?.issues[0]?.path).toEqual([
       "bankAccount",
@@ -75,7 +73,7 @@ describe("bank account holder name", () => {
         consentVersion: receivingSetupConsentVersion,
         confirmHolder: true,
         consentToProvider: true,
-        account: withHolder(thirtyOne),
+        account: withHolder(thirty),
       }).success,
     ).toBe(false);
   });
@@ -143,7 +141,16 @@ describe("holder name suggestion", () => {
         "Wolfeschlegelsteinhausen Bergerdorffvoralternwaren",
       ),
     ).toBe("WOLFESCHLEGELSTEINHAUSEN");
-    expect(suggestReceivingHolderName("A".repeat(40))).toBe("A".repeat(30));
+    expect(suggestReceivingHolderName("A".repeat(40))).toBe("A".repeat(29));
+  });
+
+  it("abbreviates a 30-character full name to fit 29", () => {
+    const fullName = "MARIA EDUARDA DOS SANTOS SILVA";
+    expect(fullName).toHaveLength(30);
+    const suggestion = suggestReceivingHolderName(fullName);
+    expect(suggestion).toBe("MARIA E DOS S SILVA");
+    expect(suggestion.length).toBeLessThanOrEqual(29);
+    expect(receivingHolderNameSchema.safeParse(suggestion).success).toBe(true);
   });
 
   it("drops characters a bank name does not carry", () => {
@@ -160,7 +167,7 @@ describe("holder name suggestion", () => {
     "D'Ávila-Souza Mendonça de Albuquerque Cavalcanti Wanderley",
   ])("always suggests a valid holder name for %s", (name) => {
     const suggestion = suggestReceivingHolderName(name);
-    expect(suggestion.length).toBeLessThanOrEqual(30);
+    expect(suggestion.length).toBeLessThanOrEqual(29);
     expect(receivingHolderNameSchema.safeParse(suggestion).success).toBe(true);
   });
 

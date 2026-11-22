@@ -197,6 +197,50 @@ describe("receiving setup HTTP boundary", () => {
       ).status,
     ).toBe(400);
   });
+  it.each([
+    ["MARIA APARECIDA DOS SANTOS LI", 200],
+    ["MARIA APARECIDA DOS SANTOS LIM", 400],
+  ] as const)(
+    "limits the bank holder name to 29 characters (%s)",
+    async (holderName, status) => {
+      const v = fixture();
+      const response = await v.router.request(
+        request("setup", {
+          policyVersion: "policy-v1",
+          consentVersion: "pagarme-receiving-v1",
+          confirmHolder: true,
+          consentToProvider: true,
+          account: {
+            name: "Maria Aparecida dos Santos Lima",
+            email: "maria@example.test",
+            cpf: "12345678909",
+            mobilePhone: "21994647568",
+            birthDate: "1990-04-12",
+            monthlyIncomeCents: 500000,
+            professionalOccupation: "Professora",
+            address: {
+              street: "Av. General Justo",
+              streetNumber: "375",
+              neighborhood: "Centro",
+              city: "Rio de Janeiro",
+              state: "RJ",
+              zipCode: "20021130",
+            },
+            bankAccount: {
+              bank: "341",
+              branchNumber: "1234",
+              accountNumber: "12345",
+              accountCheckDigit: "6",
+              holderName,
+              type: "checking",
+            },
+          },
+        }),
+      );
+      expect(response.status).toBe(status);
+      expect(v.submit).toHaveBeenCalledTimes(status === 200 ? 1 : 0);
+    },
+  );
   it.each(["OWNER", "SITE_ASSISTANT"])(
     "does not let %s submit initial holder consent",
     async (role) => {
