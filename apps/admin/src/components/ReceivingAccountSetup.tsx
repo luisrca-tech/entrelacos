@@ -219,16 +219,15 @@ export function createReceivingAccountSetupController(
       if (revision === active) fail(cause);
     }
   }
-  function createGuard(accountStates: readonly string[]) {
+  function createGuard(accepts: (setup: ReceivingSetupContext) => boolean) {
     const guard: FinancialReauthenticationGuard = {
       isCurrent: () =>
         current() &&
         actor?.user.role === "SITE_ADMIN" &&
         !!scopeKey &&
-        state.setup?.isHolder === true &&
         state.status === "ready" &&
         state.setup !== null &&
-        accountStates.includes(state.setup.accountState),
+        accepts(state.setup),
       async validate() {
         if (!guard.isCurrent() || owner.isSuspended?.()) return false;
         const active = revision,
@@ -279,9 +278,16 @@ export function createReceivingAccountSetupController(
     };
     return guard;
   }
-  const guard = createGuard(["NOT_CREATED", "PENDING"]);
-  const incomingGuard = createGuard(["CREATED"]);
-  const reconcileGuard = createGuard(["UNKNOWN"]);
+  const holderIn =
+    (accountStates: readonly string[]) => (setup: ReceivingSetupContext) =>
+      setup.isHolder && accountStates.includes(setup.accountState);
+  const guard = createGuard(holderIn(["NOT_CREATED", "PENDING"]));
+  const incomingGuard = createGuard(holderIn(["CREATED"]));
+  const reconcileGuard = createGuard(holderIn(["UNKNOWN"]));
+  // A site administrator designates only while the holder slot is empty.
+  const designateGuard = createGuard(
+    (setup) => !setup.holder && setup.accountState === "NOT_CREATED",
+  );
   async function verifyIncoming(): Promise<ReceivingReadiness | undefined> {
     if (
       incomingInFlight ||
@@ -352,6 +358,7 @@ export function createReceivingAccountSetupController(
     guard,
     incomingGuard,
     reconcileGuard,
+    designateGuard,
     refresh,
     getState: () => structuredClone(state),
     verifyIncoming,
@@ -540,25 +547,81 @@ export function createReceivingAccountSetupController(
         return "failed";
       }
     },
-    async designate(holderUserId: string) {
-      if (
-        !ownerView ||
-        !current() ||
-        owner.isSuspended?.() ||
-        state.setup?.holder ||
-        !holderUserId.trim()
-      )
+    async designate(
+      holderUserId: string,
+      reauthenticationToken?: string | null,
+    ) {
+      const chosen = holderUserId.trim();
+      if (ownerView) {
+        if (
+          !current() ||
+          owner.isSuspended?.() ||
+          state.setup?.holder ||
+          !chosen
+        )
+          return;
+        const active = ++revision;
+        update({ ...state, status: "submitting", message: null });
+        try {
+          await request(
+            `/v1/sites/${encodeURIComponent(scope.siteId)}/receiving/holder`,
+            { method: "POST", body: { holderUserId: chosen } },
+          );
+          if (current() && active === revision) await refresh();
+        } catch (cause) {
+          if (revision === active) fail(cause);
+        }
         return;
+      }
+      if (!chosen || owner.isSuspended?.() || !designateGuard.isCurrent())
+        return;
+      if (!reauthenticationToken) {
+        update({
+          ...state,
+          message: "Confirme sua senha antes de designar o titular.",
+        });
+        return;
+      }
+      if (!(await designateGuard.validate())) return;
       const active = ++revision;
       update({ ...state, status: "submitting", message: null });
+      notify();
       try {
         await request(
           `/v1/sites/${encodeURIComponent(scope.siteId)}/receiving/holder`,
-          { method: "POST", body: { holderUserId: holderUserId.trim() } },
+          {
+            method: "POST",
+            body: { holderUserId: chosen, reauthenticationToken },
+          },
         );
-        if (current() && active === revision) await refresh();
+        if (!current() || active !== revision) return;
+        await refresh(false);
+        if (current() && state.status === "ready")
+          update({ ...state, message: "Titular designado." });
       } catch (cause) {
-        if (revision === active) fail(cause);
+        if (revision !== active || !current()) return;
+        const message =
+          cause instanceof ApiError
+            ? cause.status === 409 &&
+              [
+                "RECEIVING_HOLDER_ALREADY_DESIGNATED",
+                "RECEIVING_BINDING_EXISTS",
+              ].includes(cause.code)
+              ? "O titular já foi designado. Confira quem ficou como titular."
+              : cause.status === 403 && cause.code === "RECENT_AUTH_REQUIRED"
+                ? "Sua confirmação de senha expirou. Confirme a senha de novo para designar o titular."
+                : cause.status === 403 &&
+                    cause.code === "RECEIVING_HOLDER_REQUIRED"
+                  ? "Essa conta não pode ser titular: ela precisa estar ativa e administrar este casamento."
+                  : null
+            : null;
+        if (!message) {
+          fail(cause);
+          return;
+        }
+        await refresh(false);
+        if (current() && state.status === "ready")
+          update({ ...state, message });
       }
     },
     dispose() {
@@ -650,7 +713,8 @@ export function ReceivingAccountSetup(
     if (state.status === "unavailable") toast.error(state.message);
     else if (
       state.message.startsWith("Cadastro enviado") ||
-      state.message.startsWith("Cadastro consultado")
+      state.message.startsWith("Cadastro consultado") ||
+      state.message === "Titular designado."
     )
       toast.success(state.message);
     else toast.warning(state.message);
@@ -666,6 +730,7 @@ export function ReceivingAccountSetup(
       guard={controller.current?.guard}
       incomingGuard={controller.current?.incomingGuard}
       reconcileGuard={controller.current?.reconcileGuard}
+      designateGuard={controller.current?.designateGuard}
       ports={ports}
       form={form}
       onRetry={() => {
@@ -688,8 +753,8 @@ export function ReceivingAccountSetup(
             props.onReadinessChange?.();
         });
       }}
-      onDesignate={(id) => {
-        void controller.current?.designate(id);
+      onDesignate={(id, token) => {
+        void controller.current?.designate(id, token);
       }}
       onReconcile={() => {
         void controller.current?.reconcile();
@@ -715,6 +780,7 @@ export function ReceivingAccountSetupView({
   guard,
   incomingGuard,
   reconcileGuard,
+  designateGuard,
   ports,
   onRetry,
   onSubmit,
@@ -732,10 +798,14 @@ export function ReceivingAccountSetupView({
   guard?: FinancialReauthenticationGuard;
   incomingGuard?: FinancialReauthenticationGuard;
   reconcileGuard?: FinancialReauthenticationGuard;
+  designateGuard?: FinancialReauthenticationGuard;
   ports?: ReceivingSetupPorts;
   onRetry?: () => void;
   onSubmit?: (event: FormEvent<HTMLFormElement>) => void;
-  onDesignate?: (holderUserId: string) => void;
+  onDesignate?: (
+    holderUserId: string,
+    reauthenticationToken?: string | null,
+  ) => void;
   onVerifyIncoming?: () => void;
   onReconcile?: () => void;
   form?: React.RefObject<HTMLFormElement | null>;
@@ -765,6 +835,13 @@ export function ReceivingAccountSetupView({
     !!setup?.isHolder &&
     setup.accountState === "UNKNOWN" &&
     !!reconcileGuard?.isCurrent();
+  // The owner designates directly; a site administrator with configureReceiving
+  // designates the empty slot after confirming the password.
+  const canDesignate =
+    owner ||
+    (scope.access?.membershipRole === "SITE_ADMIN" &&
+      scope.access.capabilities.configureReceiving &&
+      !!designateGuard?.isCurrent());
   const parsedReadiness = receivingReadinessResponseSchema.safeParse({
     readiness,
   });
@@ -789,6 +866,7 @@ export function ReceivingAccountSetupView({
     status: state.status,
     busy,
     owner,
+    canDesignate,
     canSubmit,
     receivingReady,
     readiness: currentReadiness,
@@ -798,6 +876,7 @@ export function ReceivingAccountSetupView({
     ...track,
     guard,
     incomingGuard,
+    designateGuard,
     ports,
     form,
     incomingAvailable: supportsIncomingVerification(setup?.mode),

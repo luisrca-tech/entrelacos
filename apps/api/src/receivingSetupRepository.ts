@@ -377,10 +377,24 @@ export function createReceivingSetupRepository(
         result,
       };
     },
-    async designate(actor: FinancialActor, holderUserId: string) {
+    /**
+     * The platform owner designates without a proof. A site administrator
+     * passes a fresh password proof and is reread as an active administrator
+     * of the site; both may only fill an empty slot, never replace a holder.
+     */
+    async designate(
+      actor: FinancialActor,
+      holderUserId: string,
+      siteAdmin?: { recentAuth: ReceivingAuthenticationEvidence },
+    ) {
+      if (siteAdmin) {
+        if (siteAdmin.recentAuth?.proofKind === "SESSION_AUTHENTICATION")
+          return deny("RECENT_AUTH_REQUIRED", 403);
+        proof(actor, siteAdmin.recentAuth);
+      }
       return db.transaction(async (tx) => {
         await currentSite(tx, actor.siteId);
-        await currentActor(tx, actor, true);
+        await currentActor(tx, actor, !siteAdmin);
         const eligible = await tx.execute(
           sql`SELECT u.id FROM "user" u INNER JOIN site_membership m ON m.user_id=u.id AND m.site_id=${actor.siteId} WHERE u.id=${holderUserId} AND u.role='SITE_ADMIN' AND u.state='ACTIVE' AND m.role='SITE_ADMIN' AND m.revoked_at IS NULL FOR UPDATE OF u,m`,
         );

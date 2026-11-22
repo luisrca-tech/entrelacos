@@ -437,3 +437,145 @@ describe("receiving holder and consent custody", () => {
     expect(values.repository).not.toHaveProperty("settleIncomingPix");
   });
 });
+describe("receiving holder designation by a site administrator", () => {
+  const session = {
+    id: actor.sessionId,
+    createdAt: new Date(at.getTime() - 3600000),
+    expiresAt: new Date(at.getTime() + 3600000),
+  };
+  function designation(rows: Record<string, unknown>[][]) {
+    return fixture([
+      [{ id: "site-one", isDemo: true }],
+      [{ role: "SITE_ADMIN" }],
+      [session],
+      [{ id: "membership-one" }],
+      ...rows,
+    ]);
+  }
+  function queries(values: ReturnType<typeof fixture>) {
+    const dialect = new PgDialect();
+    return values.execute.mock.calls.map((call) => dialect.sqlToQuery(call[0]));
+  }
+  it("stores the holder designated by the site administrator with a fresh password proof", async () => {
+    const values = designation([[{ id: "groom-one" }], [], [], []]);
+    await expect(
+      values.repository.designate(actor, "groom-one", { recentAuth }),
+    ).resolves.toBeUndefined();
+    const executed = queries(values);
+    expect(executed[1].params).toContain("SITE_ADMIN");
+    expect(executed[3].sql).toContain("FROM site_membership");
+    const insert = executed.at(-1);
+    expect(insert?.sql).toContain("INSERT INTO");
+    expect(insert?.params.slice(1, 5)).toEqual([
+      "site-one",
+      "sandbox",
+      "groom-one",
+      "bride-one",
+    ]);
+  });
+  it("lets the site administrator designate herself", async () => {
+    const values = designation([[{ id: "bride-one" }], [], [], []]);
+    await values.repository.designate(actor, "bride-one", { recentAuth });
+    expect(queries(values).at(-1)?.params.slice(3, 5)).toEqual([
+      "bride-one",
+      "bride-one",
+    ]);
+  });
+  it.each([
+    [
+      "a session-only proof",
+      { ...recentAuth, proofKind: "SESSION_AUTHENTICATION" as const },
+    ],
+    ["another user's proof", { ...recentAuth, userId: "planner-one" }],
+    ["an expired proof", { ...recentAuth, expiresAt: at }],
+  ])(
+    "requires recent password authentication, not %s",
+    async (_label, proof) => {
+      const values = designation([[{ id: "groom-one" }], [], [], []]);
+      await expect(
+        values.repository.designate(actor, "groom-one", { recentAuth: proof }),
+      ).rejects.toMatchObject({ status: 403, code: "RECENT_AUTH_REQUIRED" });
+      expect(values.transaction).not.toHaveBeenCalled();
+    },
+  );
+  it.each([
+    [
+      "not an active site administrator",
+      [[{ id: "site-one", isDemo: true }], []],
+    ],
+    [
+      "without a current membership",
+      [
+        [{ id: "site-one", isDemo: true }],
+        [{ role: "SITE_ADMIN" }],
+        [session],
+        [],
+      ],
+    ],
+  ])("denies an actor %s", async (_label, rows) => {
+    const values = fixture(rows as Record<string, unknown>[][]);
+    await expect(
+      values.repository.designate(actor, "groom-one", { recentAuth }),
+    ).rejects.toMatchObject({ status: 403, code: "MEMBERSHIP_DENIED" });
+    expect(
+      queries(values).some((query) => query.sql.startsWith("INSERT")),
+    ).toBe(false);
+  });
+  it("rejects a candidate who is not an active administrator of the site", async () => {
+    const values = designation([[]]);
+    await expect(
+      values.repository.designate(actor, "guest-one", { recentAuth }),
+    ).rejects.toMatchObject({ status: 403, code: "RECEIVING_HOLDER_REQUIRED" });
+  });
+  it("never replaces an existing holder with another user", async () => {
+    const values = designation([[{ id: "groom-one" }], [holder]]);
+    await expect(
+      values.repository.designate(actor, "groom-one", { recentAuth }),
+    ).rejects.toMatchObject({
+      status: 409,
+      code: "RECEIVING_HOLDER_ALREADY_DESIGNATED",
+    });
+  });
+  it("keeps designating the same holder again idempotent", async () => {
+    const values = designation([[{ id: "bride-one" }], [holder]]);
+    await expect(
+      values.repository.designate(actor, "bride-one", { recentAuth }),
+    ).resolves.toBeUndefined();
+    expect(
+      queries(values).some((query) => query.sql.startsWith("INSERT")),
+    ).toBe(false);
+  });
+  it("refuses a designation once a receiving account exists", async () => {
+    const values = designation([
+      [{ id: "groom-one" }],
+      [],
+      [{ id: "binding-one" }],
+    ]);
+    await expect(
+      values.repository.designate(actor, "groom-one", { recentAuth }),
+    ).rejects.toMatchObject({ status: 409, code: "RECEIVING_BINDING_EXISTS" });
+  });
+  it("keeps the owner designation free of a password proof", async () => {
+    const values = fixture([
+      [{ id: "site-one", isDemo: true }],
+      [{ role: "OWNER" }],
+      [{ id: "owner-session" }],
+      [{ id: "bride-one" }],
+      [],
+      [],
+      [],
+    ]);
+    await expect(
+      values.repository.designate(
+        { ...actor, userId: "owner-one", sessionId: "owner-session" },
+        "bride-one",
+      ),
+    ).resolves.toBeUndefined();
+    const executed = queries(values);
+    expect(executed[1].params).toContain("OWNER");
+    expect(executed.at(-1)?.params.slice(3, 5)).toEqual([
+      "bride-one",
+      "owner-one",
+    ]);
+  });
+});

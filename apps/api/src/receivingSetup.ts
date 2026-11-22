@@ -144,7 +144,11 @@ export function createReceivingSetupService(
         consentRecorded:
           !!holder?.consentId &&
           holder.consentVersion === receivingSetupDisclosure.version,
-        ...(platformRole === "OWNER"
+        // Whoever may designate sees the candidates: the owner always, a site
+        // administrator (the route requires configureReceiving) only while no
+        // holder exists.
+        ...(platformRole === "OWNER" ||
+        (platformRole === "SITE_ADMIN" && !holder)
           ? {
               holderCandidates: await repository.listHolderCandidates(
                 actor.siteId,

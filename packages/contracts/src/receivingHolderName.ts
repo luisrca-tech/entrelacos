@@ -4,10 +4,10 @@ import { z } from "zod";
  * `default_bank_account.holder_name` length. The POST /recipients docs
  * (https://docs.pagar.me/reference/criar-recebedor-1) state no number; the
  * limit comes from Pagar.me's own 422: "Bank account holder name must be
- * lower than 30 characters". Whether exactly 30 passes was not probed
- * (no POST to Pagar.me); 29 would be the strict reading of "lower than".
+ * lower than 30 characters". 29 is the strict reading of "lower than"
+ * (whether exactly 30 passes was never probed against Pagar.me).
  */
-export const RECEIVING_HOLDER_NAME_MAX_LENGTH = 30;
+export const RECEIVING_HOLDER_NAME_MAX_LENGTH = 29;
 const RECEIVING_HOLDER_NAME_MIN_LENGTH = 2;
 
 /** Trim, collapse spaces, curly apostrophe to ', pt-BR uppercase. */
@@ -39,7 +39,7 @@ const fits = (words: readonly string[]) =>
   words.join(" ").length <= RECEIVING_HOLDER_NAME_MAX_LENGTH;
 
 /**
- * A bank-style holder name (at most 30 characters) from the full name:
+ * A bank-style holder name (at most 29 characters) from the full name:
  * unchanged when it fits; otherwise first and last names are kept, middle
  * names become initials and the particles da/de/do/dos/das/e stay. Still
  * too long: particles go, then middle initials from the right, and last

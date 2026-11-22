@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { financialReauthenticationResponseSchema } from "./internalGifts";
 import { receivingHolderNameSchema } from "./receivingHolderName";
 
 const identifier = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/);
@@ -114,8 +115,16 @@ export const receivingSetupInputSchema = z
     account: receivingSetupAccountSchema,
   })
   .strict();
+/**
+ * The platform owner sends only the choice; a site administrator also sends a
+ * CONFIGURE_RECEIVING password proof, which the API requires for that role.
+ */
 export const receivingSetupHolderInputSchema = z
-  .object({ holderUserId: identifier })
+  .object({
+    holderUserId: identifier,
+    reauthenticationToken:
+      financialReauthenticationResponseSchema.shape.reauthenticationToken.optional(),
+  })
   .strict();
 export const pagarmeRecipientStatuses = [
   "registration",

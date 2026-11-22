@@ -241,7 +241,7 @@ describe("registration refused by Pagar.me", () => {
     await act(async () => refuse(holderRefusal()));
     await vi.waitFor(() =>
       expect(container.textContent).toContain(
-        "Nome do titular da conta: use até 30 caracteres, como aparece no banco.",
+        "Nome do titular da conta: use até 29 caracteres, como aparece no banco.",
       ),
     );
     expect(container.textContent).not.toContain("must be lower than");
@@ -254,16 +254,23 @@ describe("registration refused by Pagar.me", () => {
 });
 
 describe("bank account holder name in the form", () => {
-  it("shows the field error before sending a 31-character holder name", async () => {
+  it("shows the field error before sending a 30-character holder name", async () => {
     const { posts } = await renderPanel(async () => ({ state: "STORED" }));
-    await fill({ ...values, holderName: "MARIA APARECIDA DOS SANTOS LIMA" });
+    await fill({ ...values, holderName: "MARIA APARECIDA DOS SANTOS LIM" });
     await submit();
     expect(posts()).toHaveLength(0);
     expect(field("holderName").getAttribute("aria-invalid")).toBe("true");
     expect(container.textContent).toContain(
-      "Nome do titular da conta: use de 2 a 30 caracteres",
+      "Nome do titular da conta: use de 2 a 29 caracteres",
     );
-    expect(field("holderName").value).toBe("MARIA APARECIDA DOS SANTOS LIMA");
+    expect(field("holderName").value).toBe("MARIA APARECIDA DOS SANTOS LIM");
+  });
+
+  it("labels the holder name field with the 29-character limit", async () => {
+    await renderPanel(async () => ({ state: "STORED" }));
+    expect(container.textContent).toContain(
+      "Nome do titular da conta (como está no banco, até 29 caracteres)",
+    );
   });
 
   it("sends the holder name apart from the full name", async () => {
@@ -292,6 +299,10 @@ describe("bank account holder name in the form", () => {
     expect(field("holderName").value).toBe("MARIA A F S SANTOS");
     await fill({ name: "Luis Felipe Da Rocha" });
     expect(field("holderName").value).toBe("LUIS FELIPE DA ROCHA");
+    // 30 characters: one over the bank limit, so it is abbreviated.
+    await fill({ name: "Maria Eduarda dos Santos Silva" });
+    expect(field("holderName").value).toBe("MARIA E DOS S SILVA");
+    await fill({ name: "Luis Felipe Da Rocha" });
     await fill({ holderName: "LUIS F ROCHA" });
     await fill({ name: "Luis Felipe Da Rocha Neto" });
     expect(field("holderName").value).toBe("LUIS F ROCHA");

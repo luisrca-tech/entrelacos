@@ -1,6 +1,7 @@
 import {
   GIFT_PLATFORM_TARIFFS,
   type GiftItem,
+  RECEIVING_HOLDER_NAME_MAX_LENGTH,
   type ReceivingReadiness,
   type ReceivingSetupContext,
   receivingSetupAccountSchema,
@@ -14,11 +15,16 @@ import {
   type RefObject,
   useEffect,
   useId,
+  useRef,
   useState,
 } from "react";
 import { apiRequest } from "../lib/apiClient";
 import { AdminButton } from "./AdminButton";
 import { brazilianBanks, otherBankValue } from "./brazilianBanks";
+import {
+  FinancialReauthenticationForm,
+  type FinancialReauthenticationHandle,
+} from "./FinancialReauthenticationForm";
 import type { FinancialReauthenticationGuard } from "./financialReauthenticationClient";
 import {
   GiftPricingPreview,
@@ -77,6 +83,8 @@ export type ReceivingStepsContext = {
   status: "loading" | "ready" | "submitting" | "denied" | "unavailable";
   busy: boolean;
   owner: boolean;
+  /** The owner, or a site administrator allowed to fill the empty slot. */
+  canDesignate?: boolean;
   canSubmit: boolean;
   receivingReady: boolean;
   readiness: ReceivingReadiness | null;
@@ -85,12 +93,17 @@ export type ReceivingStepsContext = {
   completed: number;
   guard?: FinancialReauthenticationGuard;
   incomingGuard?: FinancialReauthenticationGuard;
+  /** Guards a site administrator's password proof for the designation. */
+  designateGuard?: FinancialReauthenticationGuard;
   ports?: ReceivingSetupPorts;
   form?: RefObject<HTMLFormElement | null>;
   incomingAvailable: boolean;
   onRetry?: () => void;
   onSubmit?: (event: FormEvent<HTMLFormElement>) => void;
-  onDesignate?: (holderUserId: string) => void;
+  onDesignate?: (
+    holderUserId: string,
+    reauthenticationToken?: string | null,
+  ) => void;
   onVerifyIncoming?: () => void;
   /** "Verificar situação" consults Pagar.me; set only for the holder. */
   onReconcile?: () => void;
@@ -179,13 +192,14 @@ function SandboxNotice({ mode }: { mode: string | null | undefined }) {
 function nextCopy(context: ReceivingStepsContext) {
   const { next, setup, owner } = context;
   const holderName = setup?.holder?.name ?? "O titular";
+  const canDesignate = owner || !!context.canDesignate;
   switch (next?.id) {
     case "holder":
       return {
-        text: owner
+        text: canDesignate
           ? "Escolha qual dos noivos será titular do recebedor e dos saques."
-          : "A equipe do EntreLaços define quem dos noivos será titular do recebedor. Depois disso, você segue para os seus dados.",
-        action: owner ? "Escolher titular" : "Ver etapa",
+          : "Os administradores do casamento escolhem quem dos noivos será titular do recebedor. Depois disso, o titular preenche os dados.",
+        action: canDesignate ? "Escolher titular" : "Ver etapa",
       };
     case "details":
       return next.status === "attention"
@@ -461,6 +475,9 @@ export function ReceivingOverviewTrack({
 export function HolderStep({ context }: { context: ReceivingStepsContext }) {
   const id = useId();
   const { setup, owner, busy } = context;
+  const canDesignate = owner || !!context.canDesignate;
+  const candidates = !!setup?.holderCandidates?.length;
+  const authentication = useRef<FinancialReauthenticationHandle | null>(null);
   return (
     <StepFrame
       siteId={context.scope.siteId}
@@ -510,63 +527,86 @@ export function HolderStep({ context }: { context: ReceivingStepsContext }) {
             <StatusBadge status="done" />
           </div>
         )}
-        {setup && !setup.holder && !owner && (
+        {setup && !setup.holder && !canDesignate && (
           <p className={receivingBody}>
-            O titular dos recebimentos ainda não foi designado. O responsável
-            pela plataforma deve selecionar a conta do titular.
+            O titular dos recebimentos ainda não foi designado. Os
+            administradores do casamento escolhem quem dos noivos será o
+            titular.
           </p>
         )}
-        {setup && !setup.holder && owner && (
-          <form
-            onSubmit={(event) => {
-              event.preventDefault();
-              const value = new FormData(event.currentTarget).get(
-                "holderUserId",
-              );
-              if (typeof value === "string") context.onDesignate?.(value);
-            }}
-            className="grid gap-3"
-          >
-            <label
-              htmlFor={`${id}-holder`}
-              className="text-sm font-bold text-admin-text"
+        {setup && !setup.holder && canDesignate && (
+          <>
+            <form
+              id={`${id}-designation`}
+              onSubmit={(event) => {
+                event.preventDefault();
+                const value = new FormData(event.currentTarget).get(
+                  "holderUserId",
+                );
+                if (typeof value !== "string") return;
+                context.onDesignate?.(
+                  value,
+                  owner
+                    ? undefined
+                    : (authentication.current?.consumeProof() ?? null),
+                );
+              }}
+              className="grid gap-3"
             >
-              Conta do titular neste casamento
-            </label>
-            <select
-              id={`${id}-holder`}
-              name="holderUserId"
-              required
-              disabled={busy || !setup.holderCandidates?.length}
-              className={receivingField}
-            >
-              <option value="">Selecione o titular</option>
-              {setup.holderCandidates?.map((candidate) => (
-                <option key={candidate.userId} value={candidate.userId}>
-                  {candidate.name} ({candidate.email})
-                </option>
-              ))}
-            </select>
-            {!setup.holderCandidates?.length && (
+              <label
+                htmlFor={`${id}-holder`}
+                className="text-sm font-bold text-admin-text"
+              >
+                Conta do titular neste casamento
+              </label>
+              <select
+                id={`${id}-holder`}
+                name="holderUserId"
+                required
+                disabled={busy || !candidates}
+                className={receivingField}
+              >
+                <option value="">Selecione o titular</option>
+                {setup.holderCandidates?.map((candidate) => (
+                  <option key={candidate.userId} value={candidate.userId}>
+                    {candidate.name} ({candidate.email})
+                  </option>
+                ))}
+              </select>
+              {!candidates && (
+                <p className="m-0 text-sm text-admin-text-secondary">
+                  Nenhuma conta ativa administra este casamento ainda. Convide o
+                  titular como administrador antes de designá-lo.
+                </p>
+              )}
               <p className="m-0 text-sm text-admin-text-secondary">
-                Adicione uma conta administradora para o titular antes de
-                designar o titular.
+                {owner
+                  ? "A conta deve estar ativa e administrar este casamento. A designação será fixa; confirme a identidade antes de salvar."
+                  : "Pode ser você ou a outra pessoa que administra o casamento. A designação fica fixa depois de salva."}
               </p>
+            </form>
+            {!owner && (
+              <FinancialReauthenticationForm
+                siteId={context.scope.siteId}
+                access={context.scope.access}
+                sessionEpoch={context.scope.sessionEpoch}
+                action="CONFIGURE_RECEIVING"
+                guard={context.designateGuard}
+                request={context.ports?.request}
+                now={context.ports?.now}
+                hint="Confirme sua senha para designar o titular. Esta etapa não envia dinheiro."
+                ref={authentication}
+              />
             )}
-            <p className="m-0 text-sm text-admin-text-secondary">
-              A conta deve estar ativa e administrar este casamento. A
-              designação será fixa; confirme a identidade antes de salvar.
-            </p>
             <button
               type="submit"
+              form={`${id}-designation`}
               className={receivingPrimaryAction}
-              disabled={
-                busy || !context.onDesignate || !setup.holderCandidates?.length
-              }
+              disabled={busy || !context.onDesignate || !candidates}
             >
               Designar titular
             </button>
-          </form>
+          </>
         )}
         {setup?.holder && (
           <Link
@@ -740,7 +780,7 @@ const accountField: DetailFieldSpec = {
 
 const holderNameField: DetailFieldSpec = {
   name: "holderName",
-  label: "Nome do titular da conta (como está no banco, até 30 caracteres)",
+  label: `Nome do titular da conta (como está no banco, até ${RECEIVING_HOLDER_NAME_MAX_LENGTH} caracteres)`,
   type: "text",
   hint: "Sugerimos a partir do nome completo; ajuste se o banco abrevia diferente.",
   wide: true,

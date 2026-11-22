@@ -11,6 +11,7 @@ vi.mock("./authHttp", () => ({
 }));
 vi.mock("./siteAccess", () => ({ resolveSiteAccess: mocks.resolveSiteAccess }));
 
+import { FinancialReauthenticationError } from "./financialReauthentication";
 import { ReceivingProviderRejectedError } from "./receivingSetup";
 import { createReceivingSetupHttpRouter } from "./receivingSetupHttp";
 import { ReceivingSetupError } from "./receivingSetupRepository";
@@ -28,6 +29,15 @@ const kycLink = {
   base64QrCode: "PD94bWwgdmVyc2lvbj0iMS4wIj8+PHN2Zy8+",
   expiresAt: "2026-11-18T12:20:00.000Z",
 };
+const FRESH = `fr1.${"a".repeat(80)}.${"b".repeat(43)}`;
+const STALE = `fr1.${"c".repeat(80)}.${"d".repeat(43)}`;
+const passwordProof = {
+  proofKind: "PASSWORD_REAUTHENTICATION",
+  verification: "verified",
+  provenance: "backend",
+  authenticatedAt: new Date("2026-10-16T12:00:00.000Z"),
+  expiresAt: new Date("2026-10-16T12:05:00.000Z"),
+};
 function fixture() {
   const designate = vi.fn(async () => {}),
     read = vi.fn(),
@@ -38,7 +48,12 @@ function fixture() {
       }),
     ),
     createKycLink = vi.fn(async () => kycLink),
-    kycRateLimit = { consume: vi.fn(async (_siteId: string) => true) };
+    kycRateLimit = { consume: vi.fn(async (_siteId: string) => true) },
+    readProof = vi.fn((actor: object, _action: string, token: string) => {
+      if (token !== FRESH)
+        throw new FinancialReauthenticationError(403, "RECENT_AUTH_REQUIRED");
+      return { ...actor, ...passwordProof };
+    });
   const verifyIncoming = vi.fn(async () => ({
     siteId: "site-one",
     mode: "sandbox" as const,
@@ -61,6 +76,7 @@ function fixture() {
     } as never,
     receivingVerification: { verify: verifyIncoming },
     kycRateLimit,
+    financialReauthentication: { readProof } as never,
   });
   return {
     router,
@@ -71,6 +87,7 @@ function fixture() {
     reconcile,
     createKycLink,
     kycRateLimit,
+    readProof,
   };
 }
 function request(path = "setup", body?: unknown, suppliedOrigin = origin) {
@@ -180,6 +197,50 @@ describe("receiving setup HTTP boundary", () => {
       ).status,
     ).toBe(400);
   });
+  it.each([
+    ["MARIA APARECIDA DOS SANTOS LI", 200],
+    ["MARIA APARECIDA DOS SANTOS LIM", 400],
+  ] as const)(
+    "limits the bank holder name to 29 characters (%s)",
+    async (holderName, status) => {
+      const v = fixture();
+      const response = await v.router.request(
+        request("setup", {
+          policyVersion: "policy-v1",
+          consentVersion: "pagarme-receiving-v1",
+          confirmHolder: true,
+          consentToProvider: true,
+          account: {
+            name: "Maria Aparecida dos Santos Lima",
+            email: "maria@example.test",
+            cpf: "12345678909",
+            mobilePhone: "21994647568",
+            birthDate: "1990-04-12",
+            monthlyIncomeCents: 500000,
+            professionalOccupation: "Professora",
+            address: {
+              street: "Av. General Justo",
+              streetNumber: "375",
+              neighborhood: "Centro",
+              city: "Rio de Janeiro",
+              state: "RJ",
+              zipCode: "20021130",
+            },
+            bankAccount: {
+              bank: "341",
+              branchNumber: "1234",
+              accountNumber: "12345",
+              accountCheckDigit: "6",
+              holderName,
+              type: "checking",
+            },
+          },
+        }),
+      );
+      expect(response.status).toBe(status);
+      expect(v.submit).toHaveBeenCalledTimes(status === 200 ? 1 : 0);
+    },
+  );
   it.each(["OWNER", "SITE_ASSISTANT"])(
     "does not let %s submit initial holder consent",
     async (role) => {
@@ -216,12 +277,139 @@ describe("receiving setup HTTP boundary", () => {
     expect(mocks.requireAdminSession).not.toHaveBeenCalled();
     expect(v.designate).not.toHaveBeenCalled();
   });
-  it("restricts receiving-holder designation to the platform owner", async () => {
+  it("requires a site administrator's fresh password proof before designating", async () => {
     const v = fixture();
+    const response = await v.router.request(
+      request("holder", { holderUserId: "bride-one" }),
+    );
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({
+      code: "RECENT_AUTH_REQUIRED",
+    });
+    expect(v.designate).not.toHaveBeenCalled();
+  });
+  it("rejects a forged or expired site administrator proof", async () => {
+    const v = fixture();
+    const response = await v.router.request(
+      request("holder", {
+        holderUserId: "bride-one",
+        reauthenticationToken: STALE,
+      }),
+    );
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({
+      code: "RECENT_AUTH_REQUIRED",
+    });
+    expect(v.designate).not.toHaveBeenCalled();
+  });
+  it("lets a site administrator with configureReceiving designate a holder", async () => {
+    const v = fixture();
+    const response = await v.router.request(
+      request("holder", {
+        holderUserId: "groom-one",
+        reauthenticationToken: FRESH,
+      }),
+    );
+    expect(response.status).toBe(204);
+    const actor = {
+      userId: "bride-one",
+      siteId: "site-one",
+      sessionId: "session-one",
+    };
+    expect(mocks.resolveSiteAccess).toHaveBeenCalledWith(
+      {},
+      { userId: "bride-one", platformRole: "SITE_ADMIN", siteId: "site-one" },
+    );
+    expect(v.readProof).toHaveBeenCalledWith(
+      actor,
+      "CONFIGURE_RECEIVING",
+      FRESH,
+    );
+    expect(v.designate).toHaveBeenCalledExactlyOnceWith(actor, "groom-one", {
+      recentAuth: { ...actor, ...passwordProof },
+    });
+  });
+  it.each([
+    ["an administrator of another site", "SITE_ADMIN", null],
+    ["a revoked membership", "SITE_ADMIN", null],
+    [
+      "an assistant",
+      "SITE_ASSISTANT",
+      { ...access, membershipRole: "SITE_ASSISTANT" },
+    ],
+    [
+      "an administrator without configureReceiving",
+      "SITE_ADMIN",
+      {
+        ...access,
+        capabilities: { ...access.capabilities, configureReceiving: false },
+      },
+    ],
+    [
+      "access resolved for another site",
+      "SITE_ADMIN",
+      { ...access, siteId: "site-two" },
+    ],
+    [
+      "access resolved for another user",
+      "SITE_ADMIN",
+      { ...access, userId: "groom-one" },
+    ],
+  ])("denies holder designation to %s", async (_label, role, resolved) => {
+    const v = fixture();
+    mocks.requireAdminSession.mockResolvedValue({
+      user: { id: "bride-one", role },
+      session: { id: "session-one" },
+    });
+    mocks.resolveSiteAccess.mockResolvedValue(resolved);
+    const response = await v.router.request(
+      request("holder", {
+        holderUserId: "bride-one",
+        reauthenticationToken: FRESH,
+      }),
+    );
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({ code: "MEMBERSHIP_DENIED" });
+    expect(v.readProof).not.toHaveBeenCalled();
+    expect(v.designate).not.toHaveBeenCalled();
+  });
+  it.each([
+    [409, "RECEIVING_HOLDER_ALREADY_DESIGNATED"],
+    [409, "RECEIVING_BINDING_EXISTS"],
+    [403, "RECEIVING_HOLDER_REQUIRED"],
+  ] as const)(
+    "answers a site administrator's refused designation with %s %s",
+    async (status, code) => {
+      const v = fixture();
+      v.designate.mockRejectedValueOnce(new ReceivingSetupError(status, code));
+      const response = await v.router.request(
+        request("holder", {
+          holderUserId: "groom-one",
+          reauthenticationToken: FRESH,
+        }),
+      );
+      expect(response.status).toBe(status);
+      expect(await response.json()).toMatchObject({ code });
+    },
+  );
+  it("keeps the owner designation without a password proof", async () => {
+    const v = fixture();
+    mocks.requireAdminSession.mockResolvedValue({
+      user: { id: "owner-one", role: "OWNER" },
+      session: { id: "owner-session" },
+    });
     expect(
-      (await v.router.request(request("holder", { holderUserId: "bride-one" })))
-        .status,
-    ).toBe(403);
+      (
+        await v.router.request(
+          request("holder", {
+            holderUserId: "bride-one",
+            reauthenticationToken: FRESH,
+          }),
+        )
+      ).status,
+    ).toBe(400);
+    expect(v.readProof).not.toHaveBeenCalled();
+    expect(mocks.resolveSiteAccess).not.toHaveBeenCalled();
     expect(v.designate).not.toHaveBeenCalled();
   });
   it("allows the owner to designate an explicit identity without consenting on her behalf", async () => {

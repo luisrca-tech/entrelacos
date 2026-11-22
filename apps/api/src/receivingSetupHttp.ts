@@ -19,7 +19,10 @@ import {
   type AuthHttpOptions,
   requireAdminSession,
 } from "./authHttp";
-import { FinancialReauthenticationError } from "./financialReauthentication";
+import {
+  type FinancialReauthentication,
+  FinancialReauthenticationError,
+} from "./financialReauthentication";
 import { ReceivingNominationServiceError } from "./receivingNomination";
 import {
   ReceivingProviderRejectedError,
@@ -30,6 +33,8 @@ import { resolveSiteAccess } from "./siteAccess";
 
 export type ReceivingSetupHttpOptions = AuthHttpOptions & {
   receivingSetup?: ReceivingSetupService;
+  /** Proves a site administrator's recent password before designating. */
+  financialReauthentication?: Pick<FinancialReauthentication, "readProof">;
   /** A few identity links per site and minute (each one calls Pagar.me). */
   kycRateLimit?: { consume(siteId: string): Promise<boolean> };
   receivingVerification?: {
@@ -119,23 +124,58 @@ export function createReceivingSetupHttpRouter(
       return problem(400, "VALIDATION_ERROR");
     await next();
   });
+  // The platform owner, or a site administrator with configureReceiving and a
+  // fresh password proof, fills the empty holder slot; no one replaces it.
   router.post("/v1/sites/:siteId/receiving/holder", async (context) => {
     const current = await requireAdminSession(context.req.raw, options);
-    if (current.user.role !== "OWNER") return problem(403, "MEMBERSHIP_DENIED");
+    const siteId = context.req.param("siteId");
+    const actor = {
+      userId: current.user.id,
+      sessionId: current.session.id,
+      siteId,
+    };
+    if (current.user.role === "OWNER") {
+      const input = receivingSetupHolderInputSchema.safeParse(
+        await body(context.req.raw),
+      );
+      if (!input.success || input.data.reauthenticationToken !== undefined)
+        return problem(400, "VALIDATION_ERROR");
+      if (!options.receivingSetup)
+        return problem(503, "RECEIVING_SETUP_UNAVAILABLE");
+      await options.receivingSetup.designate(actor, input.data.holderUserId);
+      return context.body(null, 204, { "Cache-Control": "no-store" });
+    }
+    const access = await resolveSiteAccess(options.db, {
+      userId: current.user.id,
+      platformRole: current.user.role,
+      siteId,
+    });
+    if (
+      current.user.role !== "SITE_ADMIN" ||
+      !access ||
+      access.siteId !== siteId ||
+      access.userId !== current.user.id ||
+      access.membershipRole !== "SITE_ADMIN" ||
+      access.membershipId === null ||
+      !access.capabilities.configureReceiving
+    )
+      return problem(403, "MEMBERSHIP_DENIED");
     const input = receivingSetupHolderInputSchema.safeParse(
       await body(context.req.raw),
     );
     if (!input.success) return problem(400, "VALIDATION_ERROR");
-    if (!options.receivingSetup)
+    if (!options.receivingSetup || !options.financialReauthentication)
       return problem(503, "RECEIVING_SETUP_UNAVAILABLE");
-    await options.receivingSetup.designate(
-      {
-        userId: current.user.id,
-        sessionId: current.session.id,
-        siteId: context.req.param("siteId"),
-      },
-      input.data.holderUserId,
+    if (input.data.reauthenticationToken === undefined)
+      throw new FinancialReauthenticationError(403, "RECENT_AUTH_REQUIRED");
+    const recentAuth = options.financialReauthentication.readProof(
+      actor,
+      "CONFIGURE_RECEIVING",
+      input.data.reauthenticationToken,
     );
+    await options.receivingSetup.designate(actor, input.data.holderUserId, {
+      recentAuth,
+    });
     return context.body(null, 204, { "Cache-Control": "no-store" });
   });
   router.get("/v1/sites/:siteId/receiving/setup", async (context) => {

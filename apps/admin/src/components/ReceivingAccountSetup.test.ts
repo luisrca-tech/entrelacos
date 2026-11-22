@@ -1129,3 +1129,124 @@ describe("receiving account setup", () => {
     values.controller.dispose();
   });
 });
+describe("receiving holder designation by a site administrator", () => {
+  const unassigned: ReceivingSetupContext = {
+    ...setup,
+    holder: null,
+    isHolder: false,
+    holderCandidates: [
+      { userId: "bride-one", name: "Marina", email: "marina@example.test" },
+      { userId: "groom-one", name: "Rafael", email: "rafael@example.test" },
+    ],
+  };
+  const proof = `fr1.${"a".repeat(80)}.${"b".repeat(43)}`;
+  const designateGuard = {
+    isCurrent: () => true,
+    validate: async () => true,
+    subscribeInvalidation: () => () => {},
+  };
+  function view(props: Record<string, unknown>) {
+    return renderToStaticMarkup(
+      createElement(ReceivingAccountSetupView, {
+        scope: { siteId: "site-one", access, sessionEpoch: 1 },
+        state: { status: "ready", setup: unassigned, message: null },
+        onDesignate: vi.fn(),
+        section: "holder",
+        ...props,
+      }),
+    );
+  }
+  it("shows the designation form with a password confirmation to an administrator who can designate", () => {
+    const html = view({ designateGuard });
+    expect(html).toContain("Designar titular");
+    expect(html).toContain("Rafael");
+    expect(html).toContain("rafael@example.test");
+    expect(html).toContain("Confirme sua senha");
+    expect(html).not.toContain("ainda não foi designado");
+  });
+  it("shows only the notice to someone who cannot designate", () => {
+    const html = view({});
+    expect(html).toContain(
+      "O titular dos recebimentos ainda não foi designado. Os administradores do casamento escolhem quem dos noivos será o titular.",
+    );
+    expect(html).not.toContain("Designar titular");
+    expect(html).not.toContain("Confirme sua senha");
+  });
+  it("keeps the owner's designation free of a password confirmation", () => {
+    const html = view({
+      scope: { siteId: "site-one", access: null, sessionEpoch: 1 },
+      platformOwner: true,
+    });
+    expect(html).toContain("Designar titular");
+    expect(html).not.toContain("Confirme sua senha");
+    expect(html).not.toContain("ainda não foi designado");
+  });
+  it("offers designation only while the slot is empty", async () => {
+    const values = fixture(unassigned);
+    await values.controller.refresh();
+    expect(values.controller.designateGuard.isCurrent()).toBe(true);
+    values.controller.dispose();
+    const assigned = fixture();
+    await assigned.controller.refresh();
+    expect(assigned.controller.designateGuard.isCurrent()).toBe(false);
+    assigned.controller.dispose();
+  });
+  it("sends the chosen holder with the password proof after rechecking the session", async () => {
+    const values = fixture(unassigned);
+    await values.controller.refresh();
+    const original = values.request.getMockImplementation();
+    values.request.mockImplementation(async (path, options) =>
+      options?.method === "POST" ? null : original?.(path, options),
+    );
+    await values.controller.designate("groom-one", proof);
+    expect(values.request).toHaveBeenCalledWith("/v1/me");
+    expect(values.request).toHaveBeenCalledWith(
+      "/v1/sites/site-one/receiving/holder",
+      {
+        method: "POST",
+        body: { holderUserId: "groom-one", reauthenticationToken: proof },
+      },
+    );
+    values.controller.dispose();
+  });
+  it("asks for the password instead of sending a designation without proof", async () => {
+    const values = fixture(unassigned);
+    await values.controller.refresh();
+    await values.controller.designate("groom-one", null);
+    expect(
+      values.request.mock.calls.some((call) => call[1]?.method === "POST"),
+    ).toBe(false);
+    expect(values.controller.getState().message).toContain(
+      "Confirme sua senha",
+    );
+    values.controller.dispose();
+  });
+  it("reloads when another administrator designated the holder first", async () => {
+    const values = fixture(unassigned);
+    await values.controller.refresh();
+    let designated = false;
+    values.request.mockImplementation(async (path, options) => {
+      if (options?.method === "POST") {
+        designated = true;
+        throw new ApiError(409, "RECEIVING_HOLDER_ALREADY_DESIGNATED");
+      }
+      if (path === "/v1/me") return values.owner.getSnapshot().actor;
+      return {
+        setup: designated
+          ? {
+              ...setup,
+              isHolder: false,
+              holder: { userId: "groom-one", name: "Rafael" },
+            }
+          : unassigned,
+      };
+    });
+    await values.controller.designate("bride-one", proof);
+    const state = values.controller.getState();
+    expect(state.status).toBe("ready");
+    expect(state.setup?.holder?.name).toBe("Rafael");
+    expect(state.message).toContain("já foi designado");
+    expect(values.owner.reportFailure).not.toHaveBeenCalled();
+    values.controller.dispose();
+  });
+});
