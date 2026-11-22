@@ -96,7 +96,8 @@ const PROVIDER_FIELD_ENTRY_LIMIT = 240;
 
 /**
  * Provider text may echo what was sent. Removes the shapes personal data
- * takes: quoted values, e-mails, runs of capitalized words (names are sent in
+ * takes: links (an identity verification link is a bearer secret), quoted
+ * values, e-mails, runs of capitalized words (names are sent in
  * capitals) and any number of four or more digits, separators included
  * (CPF, phone, CEP, bank account, dates). Control characters are dropped and
  * the result is bounded.
@@ -106,6 +107,7 @@ export function redactProviderText(value: unknown, limit: number): string {
   return value
     .normalize("NFC")
     .replace(/\p{Cc}+/gu, " ")
+    .replace(/\b(?:https?:\/\/|www\.)\S+/gi, "[link]")
     .replace(
       /["'`\u2018\u2019\u201c\u201d][^"'`\u2018\u2019\u201c\u201d]*["'`\u2018\u2019\u201c\u201d]/g,
       "[valor]",

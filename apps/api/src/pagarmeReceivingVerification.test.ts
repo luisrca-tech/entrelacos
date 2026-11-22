@@ -117,6 +117,7 @@ function fixture(environment: "sandbox" | "live" = "live") {
     id: "rp_fixtureRecipient01",
     code: "account-one",
     status: "active",
+    kyc: { status: "approved", statusReason: null },
     document: "12345678909",
     bankAccount: {
       id: "ba_fixtureBankAcct01",

@@ -1,5 +1,9 @@
 import {
   GIFT_PLATFORM_TARIFFS,
+  type PagarmeKycStatus,
+  type PagarmeKycStatusReason,
+  pagarmeKycStatuses,
+  pagarmeKycStatusReasons,
   RECEIVING_HOLDER_NAME_MAX_LENGTH,
 } from "@entrelacos/contracts";
 import { logObservabilityEvent } from "./observability";
@@ -86,12 +90,20 @@ export interface PagarmeRecipient {
   readonly status: string;
   /** Recipient CPF/CNPJ digits, compared with the bank account holder. */
   readonly document?: string | null;
+  /** Identity check (`kyc_details`): enum values only, no personal data. */
+  readonly kyc: PagarmeRecipientKyc;
   readonly bankAccount: {
     readonly id: string;
     readonly holderDocument: string;
     /** Matches the withdrawal preview mask: `Conta **** 1234`. */
     readonly maskedAccount: string;
   } | null;
+}
+
+export interface PagarmeRecipientKyc {
+  /** Null when Pagar.me sent no `kyc_details`. */
+  readonly status: PagarmeKycStatus | null;
+  readonly statusReason: PagarmeKycStatusReason | null;
 }
 
 export interface PagarmeKycLink {
@@ -302,6 +314,33 @@ function maskAccount(number: string, digit: string): string {
   return `Conta **** ${`${number}${digit}`.slice(-4).padStart(4, "0")}`;
 }
 
+function kycValue<T extends string>(
+  values: readonly T[],
+  value: unknown,
+): T | "unknown" | null {
+  if (value === null || value === undefined) return null;
+  return typeof value === "string" &&
+    (values as readonly string[]).includes(value)
+    ? (value as T)
+    : "unknown";
+}
+
+/**
+ * Reads `kyc_details` without ever failing the recipient read: only the
+ * documented enum values survive, anything else becomes `unknown`.
+ */
+function readKyc(value: unknown): PagarmeRecipientKyc {
+  if (value === null || value === undefined)
+    return Object.freeze({ status: null, statusReason: null });
+  if (typeof value !== "object" || Array.isArray(value))
+    return Object.freeze({ status: "unknown", statusReason: null });
+  const raw = value as Record<string, unknown>;
+  return Object.freeze({
+    status: kycValue(pagarmeKycStatuses, raw.status),
+    statusReason: kycValue(pagarmeKycStatusReasons, raw.status_reason),
+  });
+}
+
 function readRecipient(value: unknown): PagarmeRecipient {
   const raw = record(value);
   const status = text(raw.status, 64);
@@ -315,6 +354,7 @@ function readRecipient(value: unknown): PagarmeRecipient {
     id: readPagarmeRecipientId(raw.id ?? raw.payment_profile_id),
     code: raw.code === null || raw.code === undefined ? null : code(raw.code),
     status,
+    kyc: readKyc(raw.kyc_details),
     document:
       raw.document === null || raw.document === undefined
         ? null

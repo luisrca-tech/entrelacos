@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   isValidCpf,
   ownerFinanceAlertSchema,
+  pagarmeKycStatuses,
+  pagarmeKycStatusReasons,
   receivingKycLinkSchema,
   receivingSetupConsentVersion,
   receivingSetupContextSchema,
@@ -154,6 +156,60 @@ describe("Pagar.me receiving setup contracts", () => {
       },
     });
     expect(context.providerStatus?.accountState).toBe("ONBOARDING");
+  });
+
+  it("exposes the Pagar.me identity check status without personal data", () => {
+    const base = {
+      siteId: "site-1",
+      mode: "sandbox",
+      policyVersion: "receiving-setup-v1",
+      holder: { userId: "user-1", name: "Maria" },
+      isHolder: true,
+      consentRecorded: true,
+      disclosure: receivingSetupDisclosure,
+      accountState: "CREATED",
+    };
+    const provider = {
+      recipientStatus: "affiliation",
+      accountState: "UNDER_REVIEW",
+      receivingEnabled: false,
+      observedAt: "2026-11-18T12:00:00.000Z",
+    };
+    const parse = (extra: object) =>
+      receivingSetupContextSchema.safeParse({
+        ...base,
+        providerStatus: { ...provider, ...extra },
+      });
+    for (const kycStatus of pagarmeKycStatuses)
+      expect(parse({ kycStatus, kycStatusReason: null }).success).toBe(true);
+    for (const kycStatusReason of pagarmeKycStatusReasons)
+      expect(parse({ kycStatus: "pending", kycStatusReason }).success).toBe(
+        true,
+      );
+    expect(pagarmeKycStatuses).toEqual([
+      "pending",
+      "partially_denied",
+      "approved",
+      "denied",
+      "unknown",
+    ]);
+    expect(pagarmeKycStatusReasons).toEqual([
+      "in_analysis",
+      "answered_waiting_analysis",
+      "waiting_manual_risk_analysis",
+      "additional_documents_required",
+      "fully_denied",
+      "unknown",
+    ]);
+    // Absent before the API reports it, so older responses still parse.
+    expect(parse({}).success).toBe(true);
+    expect(parse({ kycStatus: null, kycStatusReason: null }).success).toBe(
+      true,
+    );
+    expect(parse({ kycStatus: "selfie" }).success).toBe(false);
+    expect(parse({ kycDetails: { document: "12345678909" } }).success).toBe(
+      false,
+    );
   });
 
   it("returns a KYC link with its QR code and expiry", () => {

@@ -134,6 +134,7 @@ describe("Pagar.me recipient client", () => {
       id: "rp_fixtureRecipient01",
       code: "receiving-account-1",
       status: "registration",
+      kyc: { status: null, statusReason: null },
       document: "12345678909",
       bankAccount: {
         id: "ba_fixtureBankAcct01",
@@ -413,6 +414,69 @@ describe("Pagar.me recipient client", () => {
     );
     expect(call(fetch).method).toBe("GET");
     expect(recipient.status).toBe("active");
+  });
+
+  describe("identity check (kyc_details)", () => {
+    async function readKyc(kycDetails: unknown) {
+      const active = JSON.parse(fixture("recipient-active"));
+      const body =
+        kycDetails === undefined
+          ? active
+          : { ...active, kyc_details: kycDetails };
+      const fetch = respond([200, JSON.stringify(body)]);
+      return (
+        await createPagarmeRecipientClient({ secretKey, fetch }).getRecipient(
+          "rp_fixtureRecipient01",
+        )
+      ).kyc;
+    }
+    it.each([
+      ["pending", "in_analysis"],
+      ["pending", "answered_waiting_analysis"],
+      ["pending", "waiting_manual_risk_analysis"],
+      ["partially_denied", "additional_documents_required"],
+      ["approved", null],
+      ["denied", "fully_denied"],
+    ] as const)(
+      "reads the status %s with reason %s",
+      async (status, reason) => {
+        expect(await readKyc({ status, status_reason: reason })).toEqual({
+          status,
+          statusReason: reason,
+        });
+      },
+    );
+    it("reports missing KYC details as null", async () => {
+      expect(await readKyc(undefined)).toEqual({
+        status: null,
+        statusReason: null,
+      });
+      expect(await readKyc(null)).toEqual({ status: null, statusReason: null });
+      expect(await readKyc({})).toEqual({ status: null, statusReason: null });
+    });
+    it("reports undocumented or malformed values as unknown without failing the read", async () => {
+      expect(
+        await readKyc({ status: "selfie_needed", status_reason: "x-y" }),
+      ).toEqual({ status: "unknown", statusReason: "unknown" });
+      expect(await readKyc({ status: 42, status_reason: ["a"] })).toEqual({
+        status: "unknown",
+        statusReason: "unknown",
+      });
+      expect(await readKyc("partially_denied")).toEqual({
+        status: "unknown",
+        statusReason: null,
+      });
+    });
+    it("keeps nothing else from the KYC details", async () => {
+      const kyc = await readKyc({
+        status: "partially_denied",
+        status_reason: "additional_documents_required",
+        document: "12345678909",
+        name: "MARIA DA SILVA",
+        url: "https://pagar.me/kyc/secret",
+      });
+      expect(JSON.stringify(kyc)).not.toMatch(/12345678909|MARIA|https:/);
+    });
   });
 
   it("reads recipients identified by the re_ and pp_ id formats", async () => {

@@ -52,6 +52,8 @@ import {
 } from "./receivingSetupForm";
 import {
   deriveReceivingTasks,
+  identityStage,
+  kycStatusLabel,
   type ReceivingTaskStatus,
   recipientStatusLabel,
 } from "./receivingTasks";
@@ -214,20 +216,33 @@ function nextCopy(context: ReceivingStepsContext) {
             action: setup?.isHolder ? "Preencher meus dados" : "Ver etapa",
           };
     case "activation":
-      if (next.status === "review")
-        return {
-          text: "A Pagar.me está analisando sua identidade. Não há nada a fazer aqui agora.",
-          action: "Acompanhar análise",
-        };
-      if (next.status === "attention")
-        return {
-          text: "A Pagar.me bloqueou ou suspendeu o recebedor. Fale com o suporte para entender o que ajustar.",
-          action: "Ver o que ajustar",
-        };
-      return {
-        text: "Cadastro criado. Agora a Pagar.me confirma que você é o titular, com a foto de um documento e uma selfie.",
-        action: "Verificar identidade",
-      };
+      switch (identityStage(setup?.providerStatus)) {
+        case "initial_analysis":
+          return {
+            text: "Cadastro criado. A Pagar.me faz uma análise inicial, que pode levar até 24 horas. Quando ela pedir a selfie e a foto do documento, a verificação de identidade é liberada nesta etapa.",
+            action: "Acompanhar análise",
+          };
+        case "documents_review":
+          return {
+            text: "A Pagar.me está analisando o documento e a selfie. Não há nada a fazer aqui agora.",
+            action: "Acompanhar análise",
+          };
+        case "refused":
+          return {
+            text: "A Pagar.me recusou a verificação de identidade. Fale com o suporte para entender os próximos passos.",
+            action: "Ver detalhes",
+          };
+        case "blocked":
+          return {
+            text: "A Pagar.me bloqueou ou suspendeu o recebedor. Fale com o suporte para entender o que ajustar.",
+            action: "Ver o que ajustar",
+          };
+        default:
+          return {
+            text: "A Pagar.me pediu a foto de um documento e uma selfie para confirmar que você é o titular.",
+            action: "Verificar identidade",
+          };
+      }
     case "fees":
       return {
         text: "Veja como o convidado paga as taxas e você recebe 100% do presente.",
@@ -1520,16 +1535,16 @@ export function ActivationStep({
     provider,
     ready: receivingReady,
   });
-  const identity = tasks.find(({ id }) => id === "identity")?.status;
+  const stage = identityStage(provider);
+  // Pagar.me issues the link only once it asks for the selfie and document.
   // The API accepts the platform owner or the holder; a new link per click.
   const canVerify =
     created &&
     !receivingReady &&
-    (identity === "todo" || identity === "attention") &&
+    stage === "verify" &&
     (owner || !!setup?.isHolder);
   const blocked =
-    provider?.accountState === "BLOCKED" ||
-    provider?.accountState === "SUSPENDED";
+    created && !receivingReady && (stage === "refused" || stage === "blocked");
   return (
     <StepFrame
       siteId={siteId}
@@ -1554,6 +1569,12 @@ export function ActivationStep({
                   : "Ainda não cadastrado"}
               </strong>
             </p>
+            {created && (
+              <p className="m-0 text-sm leading-[1.55] text-admin-text">
+                Identidade:{" "}
+                <strong>{kycStatusLabel(provider?.kycStatus)}</strong>
+              </p>
+            )}
             <p className="m-0 text-sm leading-[1.55] text-admin-text">
               {receivingReady
                 ? "Recebimentos liberados. Você pode acompanhar os pagamentos e consultar a disponibilidade de saque."
@@ -1650,6 +1671,7 @@ export function ActivationStep({
                 siteId={siteId}
                 request={context.ports?.request}
                 disabled={busy || context.status === "denied"}
+                onUnavailable={context.onRetry}
               />
               <a
                 href={supportMailto}
@@ -1671,8 +1693,13 @@ export function ActivationStep({
           role="alert"
           className="m-0 rounded-[14px] bg-admin-danger-subtle p-4 text-sm leading-[1.55] text-admin-danger-text"
         >
-          A Pagar.me bloqueou ou suspendeu o recebedor. Fale com o suporte do
-          EntreLaços para entender o que ajustar.
+          {stage === "refused"
+            ? "A Pagar.me recusou a verificação de identidade. "
+            : "A Pagar.me bloqueou ou suspendeu o recebedor. "}
+          <a href={supportMailto} className={receivingLink}>
+            Fale com o suporte do EntreLaços
+          </a>{" "}
+          para entender os próximos passos.
         </p>
       )}
       {created && (

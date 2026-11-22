@@ -135,6 +135,30 @@ export const pagarmeRecipientStatuses = [
   "blocked",
   "inactive",
 ] as const;
+/**
+ * Pagar.me `kyc_details.status` of a recipient. The selfie and document link
+ * exists only while the recipient is in `affiliation` and its KYC is
+ * `partially_denied` (https://docs.pagar.me/reference/criar-link-recebedor).
+ * Undocumented values are reported as `unknown`.
+ */
+export const pagarmeKycStatuses = [
+  "pending",
+  "partially_denied",
+  "approved",
+  "denied",
+  "unknown",
+] as const;
+export type PagarmeKycStatus = (typeof pagarmeKycStatuses)[number];
+/** Pagar.me `kyc_details.status_reason`; undocumented values are `unknown`. */
+export const pagarmeKycStatusReasons = [
+  "in_analysis",
+  "answered_waiting_analysis",
+  "waiting_manual_risk_analysis",
+  "additional_documents_required",
+  "fully_denied",
+  "unknown",
+] as const;
+export type PagarmeKycStatusReason = (typeof pagarmeKycStatusReasons)[number];
 export const receivingProviderAccountStates = [
   "UNVERIFIED",
   "ONBOARDING",
@@ -177,6 +201,10 @@ export const receivingSetupContextSchema = z
       .object({
         // Unknown provider statuses are reported as null and stay UNVERIFIED.
         recipientStatus: z.enum(pagarmeRecipientStatuses).nullable(),
+        // Null while Pagar.me reports no KYC details; optional so responses
+        // from an API without them still parse.
+        kycStatus: z.enum(pagarmeKycStatuses).nullable().optional(),
+        kycStatusReason: z.enum(pagarmeKycStatusReasons).nullable().optional(),
         accountState: z.enum(receivingProviderAccountStates),
         receivingEnabled: z.boolean(),
         observedAt: z.iso.datetime(),
