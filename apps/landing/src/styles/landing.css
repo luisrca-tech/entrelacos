@@ -1164,20 +1164,21 @@ summary:focus-visible {
   }
 }
 @media (prefers-reduced-motion: no-preference) {
+  /* Keep the hero call to action readable within 0.6 s of first paint. */
   .entrance {
-    animation: entrance 0.7s both;
+    animation: entrance 0.4s both;
   }
   .hero h1 {
-    animation-delay: 0.1s;
+    animation-delay: 0s;
   }
   .hero-description {
-    animation-delay: 0.2s;
+    animation-delay: 0.05s;
   }
   .hero .button {
-    animation-delay: 0.3s;
+    animation-delay: 0.1s;
   }
   .hero-note {
-    animation-delay: 0.4s;
+    animation-delay: 0.15s;
   }
   @supports (animation-timeline: view()) {
     .story-thread > span,
@@ -1993,7 +1994,46 @@ summary:focus-visible {
 body:has(.consent-notice:not([hidden])) {
   padding-bottom: 6rem;
 }
+/* Fixed mobile contact; mountStickyContact toggles data-visible. */
+.sticky-contact {
+  display: none;
+}
 @media (max-width: 760px) {
+  :root {
+    --sticky-contact-height: 4.5rem;
+  }
+  .sticky-contact {
+    display: block;
+    position: fixed;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 15;
+    padding: 0.5rem 0.75rem calc(0.5rem + env(safe-area-inset-bottom));
+    border-top: 1px solid var(--line);
+    background: var(--paper);
+    visibility: hidden;
+    translate: 0 100%;
+    transition:
+      translate 0.25s ease,
+      visibility 0.25s;
+  }
+  .sticky-contact[data-visible] {
+    visibility: visible;
+    translate: 0 0;
+  }
+  .sticky-contact .button {
+    width: 100%;
+  }
+  .sticky-contact .button:hover {
+    transform: none;
+  }
+  body:has(.sticky-contact) {
+    padding-bottom: calc(
+      var(--sticky-contact-height) +
+      env(safe-area-inset-bottom)
+    );
+  }
   .consent-notice {
     right: 0.75rem;
     bottom: 0.75rem;

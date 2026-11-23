@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { contactMessage, defaultContactUrl } from "./landingConfig";
 import {
   type ClickDestinations,
   classifyClick,
@@ -11,8 +12,7 @@ import {
   withContactRef,
 } from "./landingTracking";
 
-const contactUrl =
-  "https://wa.me/5562981848515?text=Ol%C3%A1!%20Vim%20pelo%20site.";
+const contactUrl = defaultContactUrl;
 const destinations: ClickDestinations = {
   botanicalUrl: "https://demo-botanico.example/",
   lettersUrl: "https://demo-cartas.example/",
@@ -148,7 +148,7 @@ describe("advertising reference for WhatsApp", () => {
   it("appends the reference to the prefilled WhatsApp text", () => {
     const url = new URL(withContactRef(contactUrl, "ig-verao"));
     expect(url.searchParams.get("text")).toBe(
-      "Olá! Vim pelo site. (ref: ig-verao)",
+      `${contactMessage} (ref: ig-verao)`,
     );
     expect(`${url.origin}${url.pathname}`).toBe("https://wa.me/5562981848515");
     expect(url.search).not.toContain("+");
@@ -264,6 +264,21 @@ describe("mounting", () => {
     ]);
   });
 
+  it("tracks the sticky mobile button as a contact from its fixed position", () => {
+    localStorage.setItem(consentStorageKey, "granted");
+    render("fixo");
+    cleanup = mountLandingTracking(document, window, settings());
+    document.addEventListener("click", (event) => event.preventDefault());
+    document.querySelector<HTMLAnchorElement>("#contact")?.click();
+    const browser = window as TrackingWindow;
+    expect(browser.fbq?.queue.slice(2).map((call) => [...call])).toEqual([
+      ["track", "Contact", { content_name: "fixo" }],
+    ]);
+    expect(browser.dataLayer?.slice(2).map((call) => [...call])).toEqual([
+      ["event", "contact_whatsapp", { content_name: "fixo" }],
+    ]);
+  });
+
   it("adds the campaign reference to contact links, even without trackers", () => {
     window.history.replaceState(
       null,
@@ -278,7 +293,7 @@ describe("mounting", () => {
     );
     const link = document.querySelector<HTMLAnchorElement>("#contact");
     expect(new URL(link?.href ?? "").searchParams.get("text")).toBe(
-      "Olá! Vim pelo site. (ref: ig-verao)",
+      `${contactMessage} (ref: ig-verao)`,
     );
     expect(document.querySelector<HTMLAnchorElement>("#botanical")?.href).toBe(
       destinations.botanicalUrl,

@@ -18,7 +18,7 @@ const questions = [
   ["Como funcionam os presentes em dinheiro?", `Os itens da lista representam contribuições para o casal, sem entrega de produtos físicos. O convidado escolhe o presente e paga por Pix ou cartão de crédito, em até ${GIFT_PLATFORM_TARIFFS.maxInstallments}x conforme o valor do presente, com o total e o valor de cada parcela antes de confirmar. A Pagar.me processa o pagamento. Para receber, uma pessoa do casal faz o cadastro e a verificação de identidade pelo painel.`],
   ["Os convidados precisam criar uma conta?", "Não. Para confirmar presença, a família usa o telefone de contato cadastrado e o PIN recebido com o convite. As informações do evento ficam disponíveis no site."],
   ["Podemos usar no celular?", "Sim. Os sites e o painel têm versões que se adaptam ao celular. O convidado pode consultar as informações, confirmar presença e deixar sua mensagem pelo próprio aparelho."],
-  ["Como combinamos valores e prazo de entrega?", "Depois de escolher o estilo, conversamos sobre a data, o conteúdo e o que vocês precisam. Valores, prazo de preparação, período de publicação e eventuais custos adicionais são combinados antes da contratação."],
+  ["Como combinamos valores e prazo de entrega?", "Os sites começam a partir de R$ 300. Depois de escolher o estilo, conversamos pelo WhatsApp sobre a data, o conteúdo e o que vocês precisam. O valor final, o prazo de preparação, o período de publicação e eventuais custos adicionais são combinados antes da contratação."],
 ];
 ---
 <!doctype html>
@@ -26,7 +26,8 @@ const questions = [
   <head>
     <meta charset="UTF-8" />
     <script is:inline>
-      // Release the opening lock if the deferred module cannot start.
+      // Arm the short rings introduction before first paint. It only animates
+      // the decorative hero art; the page is never locked or covered.
       try {
         const navigation = performance.getEntriesByType?.("navigation")[0];
         let seen = false;
@@ -35,22 +36,8 @@ const questions = [
         const returning = navigation?.type !== "reload" && (seen || internalVisit);
         if (!returning && !location.hash && navigation?.type !== "back_forward" &&
             !matchMedia("(prefers-reduced-motion: reduce)").matches) {
-          const root = document.documentElement;
-          const listeners = new AbortController();
-          root.dataset.opening = "armed";
-          root.setAttribute("inert", "");
-          const release = () => {
-            if (root.dataset.opening === "armed") {
-              delete root.dataset.opening;
-              root.removeAttribute("inert");
-            }
-            clearTimeout(deadline);
-            listeners.abort();
-          };
-          const deadline = setTimeout(release, 1200);
-          for (const type of ["pagehide", "opening:ready"]) {
-            window.addEventListener(type, release, { signal: listeners.signal });
-          }
+          document.documentElement.setAttribute("data-rings-intro", "");
+          try { sessionStorage.setItem("entrelacos-opening", "seen"); } catch {}
         }
       } catch {}
     </script>
@@ -81,7 +68,7 @@ const questions = [
         <div class="hero-copy">
 
           <h1 id="hero-title" tabindex="-1" class="entrance">O site do seu<br /><em>casamento.</em></h1>
-          <p class="hero-description entrance">Fotos, informações e confirmações em um só lugar. Nós preparamos o site; vocês acompanham os convidados pelo painel.</p>
+          <p class="hero-description entrance">Fotos, confirmações de presença e lista de presentes em dinheiro em um só lugar. Nós preparamos o site; vocês acompanham tudo pelo painel.</p>
           <div class="hero-actions entrance" data-track-position="inicio">
             <a class="button button-wine" href={config.contactUrl}>{contactLabel}<span aria-hidden="true">↗</span></a>
             <a class="button button-outline" href="#modelos">Explorar modelos <span aria-hidden="true">↗</span></a>
@@ -146,12 +133,15 @@ const questions = [
         <div class="gift-copy reveal"><h2 id="gifts-title">Presentes para<br /><em>os planos do casal.</em></h2><p>Montem uma lista para a lua de mel, a casa ou outros planos de vocês.</p><p>Os convidados escolhem um item e contribuem em dinheiro. Vocês gerenciam a lista e acompanham os recebimentos pelo painel.</p><p class="fine-print">Os presentes são contribuições, sem entrega física. Recebimento sujeito à verificação de identidade; taxas e parcelas aparecem antes do pagamento.</p><PaymentSeal /></div>
       </section>
 
-      <section class="process chapter" aria-labelledby="process-title"><div class="process-intro reveal"><h2 id="process-title">Como preparamos<br /><em>o site de vocês.</em></h2></div><ol class="process-list"><li><div><h3>Escolha do modelo</h3><p>Vocês escolhem um estilo. Combinamos o conteúdo, o prazo e os valores antes de começar.</p></div></li><li><div><h3>Montagem e revisão</h3><p>Enviem as fotos, os textos e os dados do casamento. Nós montamos o site e vocês conferem antes da publicação.</p></div></li><li><div><h3>Publicação</h3><p>Publicamos o site e preparamos o painel. Vocês recebem o link para compartilhar e organizam os convidados.</p></div></li></ol></section>
+      <section class="process chapter" aria-labelledby="process-title"><div class="process-intro reveal"><h2 id="process-title">Como preparamos<br /><em>o site de vocês.</em></h2></div><ol class="process-list"><li><div><h3>Escolha do modelo</h3><p>Vocês escolhem um estilo. Os sites começam a partir de R$ 300; o valor final, o conteúdo e o prazo combinamos pelo WhatsApp, conforme o que vocês precisam.</p></div></li><li><div><h3>Montagem e revisão</h3><p>Enviem as fotos, os textos e os dados do casamento. Nós montamos o site e vocês conferem antes da publicação.</p></div></li><li><div><h3>Publicação</h3><p>Publicamos o site e preparamos o painel. Vocês recebem o link para compartilhar e organizam os convidados.</p></div></li></ol></section>
 
       <section id="detalhes" class="faq chapter" aria-labelledby="faq-title"><div class="faq-intro"><h2 id="faq-title">Dúvidas frequentes</h2><a class="faq-more" href="/duvidas">Ver todas as dúvidas <span aria-hidden="true">↗</span></a></div><div class="faq-list">{questions.map(([question, answer]) => <details><summary>{question}<span aria-hidden="true">+</span></summary><p>{answer}</p></details>)}</div></section>
 
       <section id="comecar" class="closing" aria-labelledby="closing-title"><h2 id="closing-title" class="reveal">Vamos preparar<br /><em>o site de vocês?</em></h2><div class="closing-actions reveal" data-track-position="fechamento"><a class="button button-ivory" href={config.contactUrl}>{contactLabel}<span aria-hidden="true">↗</span></a><p>Contem a data do casamento e o modelo que vocês gostaram.</p></div></section>
     </main>
+    <div class="sticky-contact" data-track-position="fixo">
+      <a class="button button-wine" href={config.contactUrl}>{contactLabel}<span aria-hidden="true">↗</span></a>
+    </div>
     <PublicFooter config={config} home />
     <script>
       import Lenis from "lenis";
@@ -162,6 +152,10 @@ const questions = [
         window.matchMedia("(prefers-reduced-motion: reduce)"),
         (options) => new Lenis(options),
       );
+    </script>
+    <script>
+      import { mountStickyContact } from "../stickyContact";
+      mountStickyContact(document);
     </script>
   </body>
 </html>

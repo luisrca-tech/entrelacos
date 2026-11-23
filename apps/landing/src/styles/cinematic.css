@@ -30,31 +30,19 @@
     #63462a
   );
 }
-html[data-opening] {
-  overflow: hidden;
-  overscroll-behavior: none;
+/* First-visit rings introduction, armed by the inline head script. It only
+   moves the decorative art, never the hero copy or its call to action. */
+@media (prefers-reduced-motion: no-preference) {
+  html[data-rings-intro] .union-scene {
+    animation: rings-intro 900ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
 }
-[data-opening-overlay] {
-  position: fixed;
-  inset: 0;
-  z-index: 30;
-  pointer-events: none;
-  overflow: hidden;
-}
-.opening-backdrop {
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(ellipse at 34% 35%, #49392c, #201b19 75%);
-}
-.opening-brand {
-  position: absolute;
-  inset: auto 1rem 12%;
-  color: #f5ebd9;
-  font: 400 clamp(2.6rem, 7vw, 6rem) / 1.15 var(--serif);
-  letter-spacing: -0.04em;
-  text-align: center;
-  text-shadow: 0 2px 24px #201b19;
-  opacity: 0;
+@keyframes rings-intro {
+  from {
+    opacity: 0;
+    scale: 0.9;
+    translate: 0 1rem;
+  }
 }
 .model-meta {
   grid-template-columns: 1fr auto;

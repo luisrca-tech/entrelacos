@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { landingConfig } from "./landingConfig";
+import { INSTAGRAM_URL, instagramLink, landingConfig } from "./landingConfig";
 
 describe("landing public destinations", () => {
   it("uses independent local demos during development", () => {
@@ -62,8 +62,33 @@ describe("landing public destinations", () => {
         "https://wa.me/5562981848515",
       );
       expect(contact.searchParams.get("text")).toBe(
-        "Olá! Vim pelo site do Entrelaços e queria saber mais sobre o site para o nosso casamento.",
+        "Oi! Vi o site do Entrelaços. Gostei do modelo ___ e vamos casar em ___.",
       );
+      expect(contact.search).toContain("%20");
+      expect(contact.search).not.toContain("+");
     },
   );
+});
+
+describe("Instagram footer link", () => {
+  it("stays hidden until the profile URL is filled in", () => {
+    expect(instagramLink("")).toBeNull();
+    expect(instagramLink("   ")).toBeNull();
+    expect(instagramLink(INSTAGRAM_URL)).toBe(
+      INSTAGRAM_URL ? new URL(INSTAGRAM_URL).href : null,
+    );
+  });
+  it.each([
+    "http://instagram.com/entrelacos",
+    "javascript:alert(1)",
+    "instagram.com/entrelacos",
+    "https://user:secret@instagram.com/entrelacos",
+  ])("rejects %s", (url) => {
+    expect(instagramLink(url)).toBeNull();
+  });
+  it("accepts a public HTTPS profile", () => {
+    expect(instagramLink(" https://www.instagram.com/entrelacos/ ")).toBe(
+      "https://www.instagram.com/entrelacos/",
+    );
+  });
 });

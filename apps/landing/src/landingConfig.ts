@@ -1,8 +1,24 @@
 type Environment = Record<string, string | undefined>;
 
-const contactMessage =
-  "Olá! Vim pelo site do Entrelaços e queria saber mais sobre o site para o nosso casamento.";
-const defaultContactUrl = `https://wa.me/5562981848515?text=${encodeURIComponent(contactMessage)}`;
+export const contactMessage =
+  "Oi! Vi o site do Entrelaços. Gostei do modelo ___ e vamos casar em ___.";
+// encodeURIComponent keeps spaces as %20, which WhatsApp renders reliably.
+export const defaultContactUrl = `https://wa.me/5562981848515?text=${encodeURIComponent(contactMessage)}`;
+
+// Fill with the public Instagram profile URL (https://www.instagram.com/...).
+// While empty, the footer renders no Instagram link.
+export const INSTAGRAM_URL = "";
+
+/** The profile URL when it is a public HTTPS address, otherwise null. */
+export function instagramLink(value: string): string | null {
+  try {
+    const url = new URL(value.trim());
+    if (url.protocol !== "https:" || url.username || url.password) return null;
+    return url.href;
+  } catch {
+    return null;
+  }
+}
 
 function destination(
   value: string | undefined,
