@@ -34,7 +34,7 @@ export const faqTopics: FaqTopic[] = [
       {
         question: "Como contratamos e combinamos o prazo?",
         answer:
-          "Conversem com a nossa equipe pelo WhatsApp sobre a data do casamento, o estilo do site e o que precisam. Valores, conteúdo, prazo de preparação, período de publicação e eventuais serviços adicionais são alinhados antes da contratação.",
+          "Os sites começam a partir de R$ 300. Conversem com a nossa equipe pelo WhatsApp sobre a data do casamento, o estilo do site e o que precisam. O valor final, o conteúdo, o prazo de preparação, o período de publicação e eventuais serviços adicionais são alinhados antes da contratação.",
       },
       {
         question: "Os convidados precisam criar uma conta?",

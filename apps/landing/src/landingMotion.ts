@@ -168,7 +168,7 @@ export function mountLandingMotion(
     if (!frame) frame = browser.requestAnimationFrame(updateProgress);
   }
   function startSmooth() {
-    if (smooth || preference.matches || root.dataset.opening) return;
+    if (smooth || preference.matches) return;
     try {
       smooth = createSmooth({
         autoRaf: true,
@@ -191,7 +191,6 @@ export function mountLandingMotion(
     revealReadingArea();
     startSmooth();
   }
-  browser.addEventListener("opening:ready", startSmooth);
   syncPreference();
   preference.addEventListener("change", syncPreference);
   browser.addEventListener("scroll", scheduleProgress, { passive: true });
@@ -206,7 +205,6 @@ export function mountLandingMotion(
     if (disposed) return;
     disposed = true;
     browser.removeEventListener("pagehide", onPageHide);
-    browser.removeEventListener("opening:ready", startSmooth);
     preference.removeEventListener("change", syncPreference);
     opening.dispose();
     disposeDecorations();

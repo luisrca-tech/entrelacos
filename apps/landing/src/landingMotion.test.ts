@@ -282,19 +282,15 @@ describe("gift animation visibility", () => {
         ),
     };
   }
-  it("starts the rings only after docking and preserves each illustration visibility", () => {
+  it("plays the rings as soon as they are visible, independently of the gift", () => {
     const observer = observe();
     const { dispose } = setup();
     const union = document.querySelector(".union-art") as HTMLElement;
     const gift = document.querySelector(".gift-object") as HTMLElement;
-    document.documentElement.dataset.opening = "playing";
     observer.enter(true, ".union-art");
     observer.enter(true);
-    expect(union.hasAttribute("data-union-playing")).toBe(false);
-    expect(gift.hasAttribute("data-gift-playing")).toBe(true);
-    delete document.documentElement.dataset.opening;
-    window.dispatchEvent(new Event("opening:ready"));
     expect(union.hasAttribute("data-union-playing")).toBe(true);
+    expect(gift.hasAttribute("data-gift-playing")).toBe(true);
     observer.enter(false);
     expect(union.hasAttribute("data-union-playing")).toBe(true);
     observer.enter(false, ".union-art");
@@ -330,7 +326,6 @@ describe("gift animation visibility", () => {
     preference.matches = false;
     dispose();
     observer.enter(true, ".union-art");
-    window.dispatchEvent(new Event("opening:ready"));
     preference.dispatchEvent(new Event("change"));
     expect(union.hasAttribute("data-union-playing")).toBe(false);
     expect(observer.disconnect).toHaveBeenCalledOnce();

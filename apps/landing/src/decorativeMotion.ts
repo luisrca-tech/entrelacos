@@ -8,12 +8,10 @@ export function mountDecorativeMotion(
     {
       element: doc.querySelector<HTMLElement>(".gift-object"),
       attribute: "data-gift-playing",
-      waitForOpening: false,
     },
     {
       element: doc.querySelector<HTMLElement>(".union-art"),
       attribute: "data-union-playing",
-      waitForOpening: true,
     },
   ];
   if (typeof IntersectionObserver !== "function") return () => {};
@@ -22,14 +20,10 @@ export function mountDecorativeMotion(
   let disposed = false;
   function sync() {
     if (disposed) return;
-    for (const { element, attribute, waitForOpening } of decorations) {
+    for (const { element, attribute } of decorations) {
       element?.toggleAttribute(
         attribute,
-        visible.has(element) &&
-          !away &&
-          !doc.hidden &&
-          !preference.matches &&
-          (!waitForOpening || !doc.documentElement.dataset.opening),
+        visible.has(element) && !away && !doc.hidden && !preference.matches,
       );
     }
   }
@@ -54,7 +48,6 @@ export function mountDecorativeMotion(
   for (const { element } of decorations) {
     if (element) observer.observe(element);
   }
-  browser.addEventListener("opening:ready", sync);
   preference.addEventListener("change", sync);
   doc.addEventListener("visibilitychange", sync);
   browser.addEventListener("pagehide", hide);
@@ -63,7 +56,6 @@ export function mountDecorativeMotion(
     disposed = true;
     observer.disconnect();
     visible.clear();
-    browser.removeEventListener("opening:ready", sync);
     preference.removeEventListener("change", sync);
     doc.removeEventListener("visibilitychange", sync);
     browser.removeEventListener("pagehide", hide);
