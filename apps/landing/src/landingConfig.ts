@@ -5,9 +5,8 @@ export const contactMessage =
 // encodeURIComponent keeps spaces as %20, which WhatsApp renders reliably.
 export const defaultContactUrl = `https://wa.me/5562981848515?text=${encodeURIComponent(contactMessage)}`;
 
-// Fill with the public Instagram profile URL (https://www.instagram.com/...).
-// While empty, the footer renders no Instagram link.
-export const INSTAGRAM_URL = "";
+// Public Instagram profile shown in the footer. Leave empty to hide the link.
+export const INSTAGRAM_URL = "https://www.instagram.com/entrelacos.site/";
 
 /** The profile URL when it is a public HTTPS address, otherwise null. */
 export function instagramLink(value: string): string | null {
