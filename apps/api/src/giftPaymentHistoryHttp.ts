@@ -10,15 +10,19 @@ import {
 import { type Context, Hono } from "hono";
 import { trustedAdminOrigin } from "./adminOrigin";
 import {
+  GiftPaymentHistoryError,
   type GiftPaymentHistoryService,
   historyUnavailable,
 } from "./giftPaymentHistory";
 
 import { encodeGiftPurchaseHistoryCsv } from "./giftPaymentHistoryCsv";
+import { describeUnavailable, logObservabilityEvent } from "./observability";
 
 export interface GiftPaymentHistoryHttpOptions {
   adminOrigin?: string;
   giftPaymentHistory?: GiftPaymentHistoryService;
+  /** Receives one sanitized event per 503 response. */
+  log?: (event: unknown) => void;
 }
 export type GiftPaymentHistoryHttpRouter = Hono & { close(): Promise<void> };
 export const giftPaymentHistoryHttpPaths = Object.freeze([
@@ -56,8 +60,14 @@ function problem(
     },
   );
 }
-function unavailable() {
-  return problem(503, "GIFT_PAYMENT_HISTORY_UNAVAILABLE");
+const operations = ["purchases.page", "purchases.detail", "purchases.csv"];
+type Diagnosis = { reason: string } | { error: unknown };
+function diagnosticMode(service: GiftPaymentHistoryService) {
+  try {
+    return service.mode;
+  } catch {
+    return undefined;
+  }
 }
 function configuration(options?: GiftPaymentHistoryHttpOptions) {
   try {
@@ -74,6 +84,7 @@ function configuration(options?: GiftPaymentHistoryHttpOptions) {
       return undefined;
     return Object.freeze({
       origin,
+      mode: diagnosticMode(service),
       readPage: service.readPurchasePage.bind(service),
       readDetail: service.readPurchaseDetailPage.bind(service),
       close: service.close.bind(service),
@@ -136,13 +147,13 @@ function normalize(
       (!("originalPurchase" in reply.history) ||
         reply.history.originalPurchase.orderId !== orderId))
   )
-    return historyUnavailable();
+    return historyUnavailable("scope_mismatch:response");
   const json = JSON.stringify(reply);
   if (
     new TextEncoder().encode(json).byteLength >
     giftPurchaseHistoryLimits.jsonBytes
   )
-    return historyUnavailable();
+    return historyUnavailable("response_too_large");
   return json;
 }
 export function createGiftPaymentHistoryHttpRouter(
@@ -153,14 +164,44 @@ export function createGiftPaymentHistoryHttpRouter(
   const pending = new Set<{ settled: Promise<void>; cancel(): void }>();
   let closing = false,
     closed: Promise<void> | undefined;
-  router.onError(() => unavailable());
+  const log = options?.log ?? logObservabilityEvent;
+  // One sanitized event per 503: reason, row count and error class, never the
+  // message, request data or stored values. Logging never changes the response.
+  function unavailable(context: Context, diagnosis: Diagnosis) {
+    try {
+      const index = (giftPaymentHistoryHttpPaths as readonly string[]).indexOf(
+        context.req.routePath,
+      );
+      const site = siteIdSchema.safeParse(context.req.param("siteId"));
+      log({
+        level: "warn",
+        event: "gift_payment_history.unavailable",
+        operation: operations[index],
+        routeTemplate: giftPaymentHistoryHttpPaths[index],
+        method: context.req.method,
+        status: 503,
+        siteId: site.success ? site.data : undefined,
+        mode: configured?.mode,
+        result: "unavailable",
+        ...("error" in diagnosis
+          ? describeUnavailable(diagnosis.error, [GiftPaymentHistoryError])
+          : { reason: diagnosis.reason }),
+      });
+    } catch {
+      /* Logging never changes the response. */
+    }
+    return problem(503, "GIFT_PAYMENT_HISTORY_UNAVAILABLE");
+  }
+  router.onError((error, context) => unavailable(context, { error }));
 
   async function read(
     context: Context,
     detail: boolean,
     csv: boolean,
   ): Promise<Response> {
-    if (closing || !configured) return unavailable();
+    if (closing) return unavailable(context, { reason: "closing" });
+    if (!configured)
+      return unavailable(context, { reason: "history_inactive" });
     if (!trustedAdminOrigin(context.req.header("origin"), configured.origin))
       return problem(403, "FORBIDDEN");
     const parsed = input(context, detail);
@@ -173,7 +214,8 @@ export function createGiftPaymentHistoryHttpRouter(
       return problem(400, "VALIDATION_ERROR");
     const { request, siteId, orderId, cursor } = parsed,
       signal = request.signal;
-    if (signal.aborted) return unavailable();
+    if (signal.aborted)
+      return unavailable(context, { reason: "request_aborted" });
 
     let finish!: () => void;
     const settled = new Promise<void>((resolve) => {
@@ -200,7 +242,10 @@ export function createGiftPaymentHistoryHttpRouter(
     let drained: Promise<PromiseSettledResult<string | true>[]> | undefined;
     try {
       if (signal.aborted) cancel();
-      if (aborted || closing) return unavailable();
+      if (aborted || closing)
+        return unavailable(context, {
+          reason: closing ? "closing" : "request_aborted",
+        });
       const owner = detail
         ? configured.readDetail({
             request,
@@ -212,12 +257,14 @@ export function createGiftPaymentHistoryHttpRouter(
       // Observe both promises before cancellation or any await can interrupt ownership.
       const result = (async () => {
         const promise = owner.result;
-        if (!isPromise(promise)) return historyUnavailable();
+        if (!isPromise(promise))
+          return historyUnavailable("port_contract_invalid");
         return normalize(await promise, siteId, orderId, csv);
       })();
       const completion = (async () => {
         const promise = owner.completion;
-        if (!isPromise(promise)) return historyUnavailable();
+        if (!isPromise(promise))
+          return historyUnavailable("port_contract_invalid");
         await promise;
         return true as const;
       })();
@@ -229,15 +276,16 @@ export function createGiftPaymentHistoryHttpRouter(
       }
       if (aborted || closing) cancel();
       const outcomes = await drained;
-      if (
-        aborted ||
-        closing ||
-        portFailed ||
-        outcomes[0].status !== "fulfilled" ||
-        outcomes[1].status !== "fulfilled" ||
-        typeof outcomes[0].value !== "string"
-      )
-        return unavailable();
+      if (closing) return unavailable(context, { reason: "closing" });
+      if (aborted) return unavailable(context, { reason: "request_aborted" });
+      if (portFailed)
+        return unavailable(context, { reason: "port_cancel_failed" });
+      if (outcomes[0].status !== "fulfilled")
+        return unavailable(context, { error: outcomes[0].reason });
+      if (outcomes[1].status !== "fulfilled")
+        return unavailable(context, { error: outcomes[1].reason });
+      if (typeof outcomes[0].value !== "string")
+        return unavailable(context, { reason: "response_invalid" });
       return new Response(outcomes[0].value, {
         status: 200,
         headers: {
@@ -254,8 +302,8 @@ export function createGiftPaymentHistoryHttpRouter(
             : {}),
         },
       });
-    } catch {
-      return unavailable();
+    } catch (error) {
+      return unavailable(context, { error });
     } finally {
       if (drained) await drained;
       signal.removeEventListener("abort", cancel);

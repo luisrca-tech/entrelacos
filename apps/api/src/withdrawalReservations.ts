@@ -31,6 +31,7 @@ import {
   type RecentFinancialAuthenticationEvidence,
 } from "./financialAuthorization";
 import { allowsLiveSite } from "./liveSitePolicy";
+import { carryUnavailable, markUnavailable } from "./observability";
 import type { ProviderBalanceObservation } from "./pagarmeWithdrawalClient";
 import { ReceivingReadinessServiceError } from "./receivingReadiness";
 
@@ -1188,9 +1189,13 @@ export function createWithdrawalReservationService(
         ),
       };
     };
+    // Rethrown failures keep their diagnosis for the 503 log, never the cause.
     const safe = (error: unknown): never => {
       if (error instanceof WithdrawalReservationServiceError)
-        return deny(error.code, error.status);
+        throw carryUnavailable(
+          error,
+          new WithdrawalReservationServiceError(error.status, error.code),
+        );
       if (error instanceof FinancialAuthorizationError)
         throw new FinancialAuthorizationError(
           error.status,
@@ -1199,7 +1204,10 @@ export function createWithdrawalReservationService(
         );
       if (error instanceof ReceivingReadinessServiceError)
         throw new ReceivingReadinessServiceError();
-      return deny("WITHDRAWAL_UNAVAILABLE");
+      throw carryUnavailable(
+        error,
+        new WithdrawalReservationServiceError(503, "WITHDRAWAL_UNAVAILABLE"),
+      );
     };
     const service: WithdrawalReservationService = {
       async readContext(attempt) {
@@ -1220,7 +1228,13 @@ export function createWithdrawalReservationService(
             }),
           );
           if (result.siteId !== selected.actor.siteId || result.mode !== mode)
-            return deny("WITHDRAWAL_UNAVAILABLE");
+            throw markUnavailable(
+              new WithdrawalReservationServiceError(
+                503,
+                "WITHDRAWAL_UNAVAILABLE",
+              ),
+              "scope_mismatch:context",
+            );
           return result;
         } catch (error) {
           return safe(error);

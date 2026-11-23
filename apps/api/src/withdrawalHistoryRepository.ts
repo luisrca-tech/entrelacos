@@ -18,6 +18,7 @@ import {
   readDatabaseTimestamp,
 } from "./databaseTimestamp";
 import { allowedLiveDemoSiteIds, liveDemoSiteIdsSql } from "./liveSitePolicy";
+import { carryUnavailable, markUnavailable } from "./observability";
 
 export interface WithdrawalHistoryOptions {
   mode: "disabled" | "sandbox" | "live";
@@ -52,12 +53,13 @@ export class WithdrawalHistoryRepositoryError extends Error {
         : "WITHDRAWAL_HISTORY_UNAVAILABLE";
   }
 }
-function unavailable(): never {
-  throw new WithdrawalHistoryRepositoryError();
+/** Throws the generic unavailability, labeled with a non-personal reason. */
+function unavailable(reason: string, count?: number): never {
+  throw markUnavailable(new WithdrawalHistoryRepositoryError(), reason, count);
 }
 function instant(value: unknown): string {
   if (!(value instanceof Date) || !Number.isFinite(value.getTime()))
-    return unavailable();
+    return unavailable("timestamp_invalid");
   return value.toISOString();
 }
 const withdrawalFields = [
@@ -78,7 +80,8 @@ export function createWithdrawalHistoryRepository(
   options: WithdrawalHistoryOptions,
 ): WithdrawalHistoryRepository {
   const mode = options.mode;
-  if (!["disabled", "sandbox", "live"].includes(mode)) return unavailable();
+  if (!["disabled", "sandbox", "live"].includes(mode))
+    return unavailable("mode_invalid");
   const liveDemoSiteIds = options.liveDemoSiteIds;
   const approvedDemoSiteIds = allowedLiveDemoSiteIds({
     mode,
@@ -92,7 +95,7 @@ export function createWithdrawalHistoryRepository(
     if (mode === "disabled") throw new WithdrawalHistoryRepositoryError(409);
     try {
       if (!giftQuoteSchema.shape.siteId.safeParse(siteId).success)
-        return unavailable();
+        return unavailable("site_id_invalid");
       const [cursorTime, cursorId] = page?.cursor?.split("~") ?? [];
       const createdAt = page
         ? sql`date_trunc('milliseconds', w.created_at at time zone 'UTC')`
@@ -116,23 +119,26 @@ export function createWithdrawalHistoryRepository(
           WHERE st.id=${siteId} AND (${mode}<>'live' OR st.is_demo=false OR st.id = ANY(${liveDemoSiteIdsSql(approvedDemoSiteIds)}))
           ORDER BY ${createdAt} DESC, w.id COLLATE "C" ASC LIMIT ${limit}`);
       if (selected.rows.length === 0 || selected.rows.length > 1000)
-        return unavailable();
+        return unavailable(
+          `row_count_mismatch:${page ? "withdrawal_page" : "withdrawal_list"}`,
+          selected.rows.length,
+        );
       const withdrawals: WithdrawalIntent[] = [];
       const seen = new Set<string>();
       for (const value of selected.rows) {
         const row = value as Record<string, unknown>;
-        if (row.siteId !== siteId) return unavailable();
+        if (row.siteId !== siteId) return unavailable("scope_mismatch:row");
         if (row.id === null) {
           if (
             selected.rows.length !== 1 ||
             row.accountMatches !== false ||
             !withdrawalFields.every((field) => row[field] === null)
           )
-            return unavailable();
+            return unavailable("empty_history_row_invalid");
           return [];
         }
         if (row.accountMatches !== true || row.mode !== mode)
-          return unavailable();
+          return unavailable("withdrawal_account_or_mode_mismatch");
         const createdAt = readDatabaseTimestamp(row.createdAt);
         const updatedAt = readDatabaseTimestamp(row.updatedAt);
         const parsed = withdrawalIntentSchema.safeParse({
@@ -153,7 +159,7 @@ export function createWithdrawalHistoryRepository(
           compareDatabaseTimestamps(updatedAt, createdAt) < 0 ||
           seen.has(parsed.data.id)
         )
-          return unavailable();
+          return unavailable("withdrawal_row_invalid");
         const previous = withdrawals.at(-1);
         if (
           previous &&
@@ -161,13 +167,13 @@ export function createWithdrawalHistoryRepository(
             (previous.createdAt === parsed.data.createdAt &&
               previous.id >= parsed.data.id))
         )
-          return unavailable();
+          return unavailable("withdrawal_order_invalid");
         seen.add(parsed.data.id);
         withdrawals.push(parsed.data);
       }
       return withdrawals;
-    } catch {
-      return unavailable();
+    } catch (error) {
+      throw carryUnavailable(error, new WithdrawalHistoryRepositoryError());
     }
   }
 

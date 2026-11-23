@@ -42,6 +42,7 @@ import {
 } from "./financialAuthorization";
 import { unresolvedGiftPaymentSql } from "./giftPaymentRestrictions";
 import { allowsLiveSite } from "./liveSitePolicy";
+import { carryUnavailable } from "./observability";
 import {
   evaluateReceivingReadiness,
   ReceivingReadinessServiceError,
@@ -359,7 +360,10 @@ function safeError(error: unknown): never {
       "WITHDRAWAL_UNAVAILABLE",
     ].includes(error.code)
   )
-    throw new WithdrawalReservationServiceError(error.status, error.code);
+    throw carryUnavailable(
+      error,
+      new WithdrawalReservationServiceError(error.status, error.code),
+    );
   if (
     error instanceof FinancialAuthorizationError ||
     error instanceof SiteAccessDeniedError
@@ -380,7 +384,11 @@ function safeError(error: unknown): never {
   }
   if (error instanceof ReceivingReadinessServiceError)
     throw new ReceivingReadinessServiceError();
-  return fail();
+  // Unexpected causes are named by class in the 503 log, never by message.
+  throw carryUnavailable(
+    error,
+    new WithdrawalReservationServiceError(503, "WITHDRAWAL_UNAVAILABLE"),
+  );
 }
 
 async function find(

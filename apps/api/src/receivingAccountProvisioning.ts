@@ -9,6 +9,7 @@ import {
   readDatabaseTimestamp,
 } from "./databaseTimestamp";
 import {
+  errorClassName,
   logObservabilityEvent,
   PROVIDER_FIELD_LIMIT,
   PROVIDER_MESSAGE_LIMIT,
@@ -255,12 +256,7 @@ function describeRejection(
  * field paths. The observability sanitizer bounds and redacts them again.
  */
 export function failureDetails(error: unknown, input?: PagarmeRecipientInput) {
-  const errorCode =
-    error instanceof Error
-      ? error.name !== "Error"
-        ? error.name
-        : error.constructor.name
-      : "unknown";
+  const errorCode = errorClassName(error);
   if (!(error instanceof PagarmeRejectedError)) return { errorCode };
   const rejection = describeRejection(error, input);
   return {

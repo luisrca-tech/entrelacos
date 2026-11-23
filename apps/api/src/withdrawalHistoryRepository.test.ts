@@ -1,6 +1,7 @@
 import { withdrawalIntentSchema } from "@entrelacos/contracts";
 import { drizzle, type NodePgClient } from "drizzle-orm/node-postgres";
 import { describe, expect, it, vi } from "vitest";
+import { describeUnavailable } from "./observability";
 import { createWithdrawalHistoryRepository } from "./withdrawalHistoryRepository";
 
 type Row = Record<string, unknown>;
@@ -503,4 +504,37 @@ describe("live showcase withdrawal history", () => {
       expect(f.site.is_demo).toBe(true);
     },
   );
+});
+
+describe("stored withdrawal history unavailable reasons", () => {
+  async function reasonOf(promise: Promise<unknown>) {
+    const error = await promise.then(
+      () => {
+        throw new Error("Expected an unavailable read");
+      },
+      (value: unknown) => value,
+    );
+    expect(error).toMatchObject({
+      status: 503,
+      code: "WITHDRAWAL_HISTORY_UNAVAILABLE",
+    });
+    const described = describeUnavailable(error);
+    expect(JSON.stringify(described)).not.toContain("private");
+    return described;
+  }
+  it("labels a site the history query cannot see by its row count", async () => {
+    const values = fixture();
+    expect(
+      await reasonOf(values.repository.listWithdrawals("site:missing")),
+    ).toMatchObject({ reason: "row_count_mismatch:withdrawal_list", count: 0 });
+  });
+  it("labels a driver failure as unexpected without its message", async () => {
+    const values = fixture();
+    values.faults.failure = true;
+    expect(
+      await reasonOf(
+        values.repository.listWithdrawalPage("site:one", { limit: 20 }),
+      ),
+    ).toMatchObject({ reason: "unexpected_error:DrizzleQueryError" });
+  });
 });

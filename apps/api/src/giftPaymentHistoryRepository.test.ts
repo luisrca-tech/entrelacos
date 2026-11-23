@@ -6,6 +6,7 @@ import { platformTariffPolicy, quoteGiftPurchaseAmounts } from "./giftMoney";
 import type { GiftPaymentHistoryReadScope } from "./giftPaymentHistory";
 import { giftReceivedEffectKey } from "./giftPaymentReconciliation";
 import { buildGiftV2Settlement } from "./giftQuotes";
+import { describeUnavailable } from "./observability";
 import { hashFinancialEventIdentity } from "./pagarmeWebhook";
 import { readReceivingProvisioningRecord } from "./receivingNomination";
 
@@ -1535,6 +1536,54 @@ describe("bounded historical purchase stored reader", () => {
       "Purchase history unavailable",
     );
     expect(v.queries.filter((q) => /^begin/i.test(q.sql))).toHaveLength(1);
+    await v.repository.close();
+  });
+});
+
+describe("stored purchase history unavailable reasons", () => {
+  async function reasonOf(promise: Promise<unknown>) {
+    const error = await promise.then(
+      () => {
+        throw new Error("Expected an unavailable read");
+      },
+      (value: unknown) => value,
+    );
+    expect(error).toMatchObject({
+      status: 503,
+      code: "GIFT_PAYMENT_HISTORY_UNAVAILABLE",
+    });
+    return describeUnavailable(error);
+  }
+  it("labels an order whose quote binding no longer matches its account", async () => {
+    const v = await fixture();
+    const account = v.tables.receiving_account[0];
+    account.account_reference = "rp_fixtureOtherRecipient";
+    const described = await reasonOf(
+      v.repository.readPurchasePage(v.scope, null),
+    );
+    expect(described).toMatchObject({
+      reason: "order_validation_failed:quote_binding",
+    });
+    expect(JSON.stringify(described)).not.toContain("rp_fixture");
+    await v.repository.close();
+  });
+  it("labels a lost commit acknowledgment as unexpected without the driver cause", async () => {
+    const v = await fixture();
+    v.state.loseCommit = true;
+    expect(
+      await reasonOf(v.repository.readPurchasePage(v.scope, null)),
+    ).toMatchObject({ reason: expect.stringMatching(/^unexpected_error:/) });
+    await v.repository.close();
+  });
+  it("labels a session that no longer authorizes the read", async () => {
+    const v = await fixture();
+    const described = await reasonOf(
+      v.repository.readPurchasePage(
+        { ...v.scope, sessionId: "session-gone" },
+        null,
+      ),
+    );
+    expect(described.reason).toMatch(/^session_invalid$/);
     await v.repository.close();
   });
 });

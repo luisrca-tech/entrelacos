@@ -21,6 +21,7 @@ vi.mock("./siteAccess", () => ({ resolveSiteAccess: mocks.resolveSiteAccess }));
 import { createFinanceHttpRouter } from "./financeHttp";
 import { FinancialAuthorizationError } from "./financialAuthorization";
 import { createFinancialReauthentication } from "./financialReauthentication";
+import { markUnavailable } from "./observability";
 import {
   createWithdrawalReservationService,
   hashWithdrawalConsentSnapshot,
@@ -1866,4 +1867,195 @@ describe("finance HTTP disabled boundary", () => {
       expect(consoleSpy).not.toHaveBeenCalled();
     },
   );
+});
+
+describe("finance read 503 diagnostics", () => {
+  // Synthetic personal data seeded into failures; none may reach the log.
+  const personal = [
+    "Maria Ficticia Souza",
+    "maria.ficticia@example.test",
+    "123.456.789-09",
+    "ba_fixtureBankAcct01",
+    "rp_fixtureRecipient01",
+  ];
+  const unavailableBody = {
+    type: "about:blank",
+    status: 503,
+    code: "SERVICE_UNAVAILABLE",
+    title: "Financial service unavailable",
+  };
+  beforeEach(() => {
+    vi.resetAllMocks();
+    mocks.requireAdminSession.mockResolvedValue({
+      user: { id: "admin-one", role: "SITE_ADMIN" },
+      session: { id: "session-one" },
+      siteId: "site-one",
+      memberships: [access()],
+    });
+    mocks.resolveSiteAccess.mockResolvedValue(access());
+  });
+  afterEach(() => vi.restoreAllMocks());
+
+  function diagnosed(
+    finance: Record<string, unknown>,
+    extra: Record<string, unknown> = {},
+  ) {
+    const log = vi.fn();
+    const app = createFinanceHttpRouter({
+      auth: {} as never,
+      db: {} as never,
+      adminOrigin,
+      finance: { mode: "live", ...finance } as never,
+      log,
+      ...extra,
+    });
+    return { app, log };
+  }
+  function assertPrivate(log: ReturnType<typeof vi.fn>) {
+    const serialized = JSON.stringify(log.mock.calls);
+    for (const value of personal) expect(serialized).not.toContain(value);
+  }
+
+  it("logs the labeled reason and row count of a withdrawal page outage", async () => {
+    const failure = markUnavailable(
+      new WithdrawalReservationServiceError(503, "WITHDRAWAL_UNAVAILABLE"),
+      "row_count_mismatch:withdrawal_operation",
+      2,
+    );
+    const { app, log } = diagnosed({
+      listWithdrawalPage: vi.fn().mockRejectedValue(failure),
+    });
+    const response = await app.request(request(`${withdrawalsPath}?limit=20`));
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual(unavailableBody);
+    expect(log).toHaveBeenCalledOnce();
+    expect(log.mock.calls[0][0]).toMatchObject({
+      level: "warn",
+      event: "finance.read.unavailable",
+      method: "GET",
+      routeTemplate: "/v1/sites/:siteId/withdrawals",
+      status: 503,
+      siteId: "site-one",
+      mode: "live",
+      result: "unavailable",
+      reason: "row_count_mismatch:withdrawal_operation",
+      count: 2,
+      errorCode: "WithdrawalReservationServiceError",
+    });
+  });
+
+  it("names an unexpected exception by class without its private message", async () => {
+    const failure = Object.assign(new TypeError(personal.join(" ")), {
+      code: personal[2],
+    });
+    const { app, log } = diagnosed({
+      listWithdrawalPage: vi.fn().mockRejectedValue(failure),
+    });
+    const response = await app.request(request(`${withdrawalsPath}?limit=20`));
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual(unavailableBody);
+    expect(log.mock.calls[0][0]).toMatchObject({
+      reason: "unexpected_error:TypeError",
+      errorCode: "TypeError",
+    });
+    assertPrivate(log);
+  });
+
+  it("logs the reason of an unavailable withdrawal context", async () => {
+    const readContext = vi
+      .fn()
+      .mockRejectedValue(
+        markUnavailable(
+          new WithdrawalReservationServiceError(503, "WITHDRAWAL_UNAVAILABLE"),
+          "holder_operator_mismatch",
+        ),
+      );
+    const { app, log } = diagnosed(
+      {},
+      {
+        withdrawalReservation: { readContext, readRequest: vi.fn() },
+        readAdministrativeSession: vi.fn(async () => ({
+          user: { id: "admin-one", role: "SITE_ADMIN" },
+          session: { id: "session-one" },
+        })),
+      },
+    );
+    const response = await app.request(request(`${withdrawalsPath}/context`));
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual(unavailableBody);
+    expect(log).toHaveBeenCalledOnce();
+    expect(log.mock.calls[0][0]).toMatchObject({
+      event: "finance.read.unavailable",
+      routeTemplate: "/v1/sites/:siteId/withdrawals/context",
+      siteId: "site-one",
+      reason: "holder_operator_mismatch",
+    });
+  });
+
+  it("logs a generic fallback reason when the stored page fails its contract", async () => {
+    const { app, log } = diagnosed({
+      listWithdrawalPage: vi.fn().mockResolvedValue({
+        withdrawals: [{ siteId: "site-one", holder: personal[0] }],
+        nextCursor: null,
+      }),
+    });
+    const response = await app.request(request(`${withdrawalsPath}?limit=20`));
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual(unavailableBody);
+    expect(log.mock.calls[0][0]).toMatchObject({
+      reason: "response_schema_invalid",
+      routeTemplate: "/v1/sites/:siteId/withdrawals",
+    });
+    assertPrivate(log);
+  });
+
+  it("logs an unlabeled domain error by its code through the generic fallback", async () => {
+    const { app, log } = diagnosed({
+      readOverview: vi
+        .fn()
+        .mockRejectedValue(
+          new WithdrawalReservationServiceError(503, "WITHDRAWAL_UNAVAILABLE"),
+        ),
+    });
+    const response = await app.request(request(financePath));
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual(unavailableBody);
+    expect(log.mock.calls[0][0]).toMatchObject({
+      reason: "code:WITHDRAWAL_UNAVAILABLE",
+      errorCode: "WithdrawalReservationServiceError",
+      routeTemplate: "/v1/sites/:siteId/finance",
+    });
+  });
+
+  it("does not log responses that are not 503", async () => {
+    const { app, log } = diagnosed({
+      listWithdrawalPage: vi
+        .fn()
+        .mockResolvedValue({ withdrawals: [], nextCursor: null }),
+    });
+    expect(
+      (await app.request(request(`${withdrawalsPath}?limit=20`))).status,
+    ).toBe(200);
+    expect(
+      (await app.request(request(`${withdrawalsPath}?limit=101`))).status,
+    ).toBe(400);
+    expect(log).not.toHaveBeenCalled();
+  });
+
+  it("never lets a failing logger change the response", async () => {
+    const app = createFinanceHttpRouter({
+      auth: {} as never,
+      db: {} as never,
+      adminOrigin,
+      finance: {
+        listWithdrawalPage: vi.fn().mockRejectedValue(new Error("x")),
+      },
+      log: () => {
+        throw new Error("sink down");
+      },
+    });
+    const response = await app.request(request(`${withdrawalsPath}?limit=20`));
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual(unavailableBody);
+  });
 });

@@ -3,7 +3,10 @@ import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
 import { createApp } from "./app";
 import {
+  carryUnavailable,
   createObservabilityMiddleware,
+  describeUnavailable,
+  markUnavailable,
   sanitizeObservabilityEvent,
 } from "./observability";
 
@@ -273,5 +276,125 @@ describe("safe observability", () => {
     expect(JSON.stringify(events)).not.toContain(
       forbiddenValue("request-body"),
     );
+  });
+});
+
+// Synthetic personal data: none of it may reach an unavailability event.
+const PERSONAL = [
+  "Maria Ficticia Souza",
+  "maria.ficticia@example.test",
+  "123.456.789-09",
+  "12345678909",
+  "ba_fixtureBankAcct01",
+  "rp_fixtureRecipient01",
+];
+
+class DomainUnavailableError extends Error {
+  readonly code = "DOMAIN_UNAVAILABLE";
+  constructor() {
+    super("Domain unavailable");
+    this.name = "DomainUnavailableError";
+  }
+}
+
+describe("unavailability diagnosis", () => {
+  it("carries a labeled reason and row count without changing the error", () => {
+    const error = markUnavailable(
+      new DomainUnavailableError(),
+      "row_count_mismatch:current_account",
+      2,
+    );
+    expect(error.message).toBe("Domain unavailable");
+    expect(Object.keys(error)).toEqual(
+      Object.keys(new DomainUnavailableError()),
+    );
+    expect(JSON.stringify(error)).toBe(
+      JSON.stringify(new DomainUnavailableError()),
+    );
+    expect(describeUnavailable(error)).toMatchObject({
+      reason: "row_count_mismatch:current_account",
+      count: 2,
+      errorCode: "DomainUnavailableError",
+    });
+  });
+
+  it("keeps the reason and throw site across a boundary that rethrows", () => {
+    function readCurrentAccount() {
+      throw markUnavailable(
+        new DomainUnavailableError(),
+        "account_not_current",
+      );
+    }
+    let cause: unknown;
+    try {
+      readCurrentAccount();
+    } catch (error) {
+      cause = error;
+    }
+    const rethrown = carryUnavailable(cause, new DomainUnavailableError());
+    expect(describeUnavailable(rethrown)).toMatchObject({
+      reason: "account_not_current",
+      throwSite: expect.stringContaining("readCurrentAccount"),
+    });
+  });
+
+  it("names an unexpected cause by its class only", () => {
+    const cause = Object.assign(
+      new TypeError(
+        `${PERSONAL.join(" ")} https://pay.example.test/?token=abc`,
+      ),
+      { code: PERSONAL[2], detail: PERSONAL[1] },
+    );
+    const rethrown = carryUnavailable(cause, new DomainUnavailableError());
+    const described = describeUnavailable(rethrown);
+    expect(described).toMatchObject({
+      reason: "unexpected_error:TypeError",
+      errorCode: "DomainUnavailableError",
+    });
+    const serialized = JSON.stringify(sanitizeObservabilityEvent(described));
+    for (const value of [...PERSONAL, "token=abc"])
+      expect(serialized).not.toContain(value);
+  });
+
+  it("reports an unlabeled domain error by its code and an unknown one as unexpected", () => {
+    expect(
+      describeUnavailable(new DomainUnavailableError(), [
+        DomainUnavailableError,
+      ]),
+    ).toMatchObject({
+      reason: "code:DOMAIN_UNAVAILABLE",
+      errorCode: "DomainUnavailableError",
+    });
+    expect(describeUnavailable(new RangeError("x"))).toMatchObject({
+      reason: "unexpected_error:RangeError",
+      errorCode: "RangeError",
+    });
+  });
+
+  it("never reads a throw site from the error message", () => {
+    const error = new Error(
+      "boom\n    at mariaFicticiaSouza (/private/12345678909.ts:1:1)",
+    );
+    const described = describeUnavailable(error);
+    expect(JSON.stringify(described)).not.toContain("mariaFicticiaSouza");
+    expect(JSON.stringify(described)).not.toContain("12345678909");
+  });
+
+  it("allows the reason and throw site through the sanitizer as bounded tokens", () => {
+    expect(
+      sanitizeObservabilityEvent({
+        reason: "order_validation_failed:quote_binding",
+        throwSite: "original:readPurchasePage",
+      }),
+    ).toEqual({
+      reason: "order_validation_failed:quote_binding",
+      throwSite: "original:readPurchasePage",
+    });
+    expect(
+      sanitizeObservabilityEvent({
+        reason: PERSONAL[1],
+        throwSite: PERSONAL[0],
+      }),
+    ).toEqual({});
   });
 });

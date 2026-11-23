@@ -28,6 +28,10 @@ export interface ObservabilityEvent {
   providerMessage?: string;
   /** `field.path: message` entries of a provider validation error. */
   providerFields?: string[];
+  /** Stable, non-personal code naming the check that made a read unavailable. */
+  reason?: string;
+  /** Names of the functions that threw, innermost first. */
+  throwSite?: string;
 }
 
 export type ObservabilitySink = (event: ObservabilityEvent) => void;
@@ -66,6 +70,8 @@ const ALLOWED_FIELDS = [
   "providerCode",
   "providerMessage",
   "providerFields",
+  "reason",
+  "throwSite",
 ] as const satisfies readonly (keyof ObservabilityEvent)[];
 
 const TOKEN_PATTERN = /^[A-Za-z][A-Za-z0-9_.:-]{0,63}$/;
@@ -231,6 +237,159 @@ export function emitObservabilityEvent(
   input: unknown,
 ): void {
   sink(sanitizeObservabilityEvent(input));
+}
+
+export function errorClassName(error: unknown): string {
+  if (!(error instanceof Error)) return "unknown";
+  return error.name !== "Error" ? error.name : error.constructor.name;
+}
+
+interface UnavailableDiagnosis {
+  readonly reason?: string;
+  readonly count?: number;
+  readonly throwSite?: string;
+}
+const UNAVAILABLE_DIAGNOSIS = Symbol("unavailableDiagnosis");
+// Generic throw helpers say nothing about which check failed.
+const THROW_HELPERS = new Set([
+  "historyUnavailable",
+  "historyUnavailableFrom",
+  "unavailable",
+  "fail",
+  "deny",
+  "one",
+  "safe",
+  "safeError",
+  "markUnavailable",
+  "carryUnavailable",
+]);
+const STACK_FRAME =
+  /^\s+at (?:async )?(?:new )?([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*) \(/;
+
+function diagnosisOf(error: unknown): UnavailableDiagnosis | undefined {
+  if (!error || typeof error !== "object") return undefined;
+  return (error as { [UNAVAILABLE_DIAGNOSIS]?: UnavailableDiagnosis })[
+    UNAVAILABLE_DIAGNOSIS
+  ];
+}
+
+function attachDiagnosis<E extends Error>(
+  error: E,
+  diagnosis: UnavailableDiagnosis,
+): E {
+  try {
+    // Non-enumerable: never serialized into a response or compared as data.
+    Object.defineProperty(error, UNAVAILABLE_DIAGNOSIS, {
+      value: Object.freeze({ ...diagnosis }),
+      configurable: true,
+    });
+  } catch {
+    /* A diagnosis never changes the failure. */
+  }
+  return error;
+}
+
+/**
+ * Names the functions that threw, from the stack frames only: the message
+ * line (which may hold provider or database text) is never read, and only
+ * identifier-shaped names without long digit runs are kept.
+ */
+function throwSiteOf(error: unknown): string | undefined {
+  try {
+    if (!(error instanceof Error) || typeof error.stack !== "string")
+      return undefined;
+    let stack = error.stack;
+    const header = String(error);
+    if (stack.startsWith(header)) stack = stack.slice(header.length);
+    else return undefined;
+    const names: string[] = [];
+    for (const line of stack.split("\n")) {
+      if (line.includes("node_modules") || line.includes("node:internal"))
+        continue;
+      const match = STACK_FRAME.exec(line);
+      if (!match) continue;
+      const segments = match[1].split(".");
+      if (segments[0] === "Promise") continue;
+      const name = segments[segments.length - 1];
+      if (THROW_HELPERS.has(name) || /\d{4,}/.test(name)) continue;
+      if (names[names.length - 1] !== name) names.push(name);
+      if (names.length === 4) break;
+    }
+    while (names.length && names.join(":").length > 64) names.pop();
+    return names.length ? names.join(":") : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Labels why a read is unavailable. The label travels on the error, outside
+ * its message and enumerable fields, so the HTTP body never carries it.
+ */
+export function markUnavailable<E extends Error>(
+  error: E,
+  reason: string,
+  count?: number,
+): E {
+  return attachDiagnosis(error, {
+    reason,
+    ...(count === undefined ? {} : { count }),
+    throwSite: throwSiteOf(error),
+  });
+}
+
+/**
+ * Keeps the diagnosis of `cause` on the fresh `error` a boundary rethrows. An
+ * unlabeled cause of the same class keeps where it was thrown; any other
+ * cause is unexpected and is named by its class only.
+ */
+export function carryUnavailable<E extends Error>(cause: unknown, error: E): E {
+  const carried = diagnosisOf(cause);
+  if (carried)
+    return attachDiagnosis(error, {
+      ...carried,
+      throwSite: carried.throwSite ?? throwSiteOf(cause),
+    });
+  if (cause instanceof error.constructor)
+    return attachDiagnosis(error, { throwSite: throwSiteOf(cause) });
+  return attachDiagnosis(error, {
+    reason: `unexpected_error:${errorClassName(cause)}`,
+    throwSite: throwSiteOf(cause),
+  });
+}
+
+/**
+ * Describes an unavailable read for the log: its reason, row count, error
+ * class and throw site. Never the message, code values of foreign errors or
+ * any stored field.
+ */
+export function describeUnavailable(
+  error: unknown,
+  domain: readonly (abstract new (...args: never[]) => Error)[] = [],
+): {
+  reason: string;
+  count?: number;
+  errorCode: string;
+  throwSite?: string;
+} {
+  const diagnosis = diagnosisOf(error);
+  const errorCode = errorClassName(error);
+  const throwSite = diagnosis?.throwSite ?? throwSiteOf(error);
+  const code = (error as { code?: unknown } | null)?.code;
+  const reason =
+    diagnosis?.reason ??
+    (domain.some((type) => error instanceof type) ||
+    diagnosisOf(error) !== undefined
+      ? typeof code === "string" && TOKEN_PATTERN.test(code)
+        ? `code:${code}`
+        : "unlabeled"
+      : `unexpected_error:${errorCode}`);
+  return {
+    reason,
+    ...(diagnosis?.count === undefined ? {} : { count: diagnosis.count }),
+    errorCode,
+    ...(throwSite === undefined ? {} : { throwSite }),
+  };
 }
 
 function defaultSink(event: ObservabilityEvent): void {
