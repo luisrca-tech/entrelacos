@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
-import { receivingSetupConsentVersion } from "@entrelacos/contracts";
+import { receivingConsentCoversCreatedRecipient } from "@entrelacos/contracts";
 import { sql } from "drizzle-orm";
 import {
   mapPagarmeRecipientStatus,
@@ -214,7 +214,9 @@ export function createPagarmeReceivingVerification(options: {
       holder.rows.length !== 1 ||
       row.holderUserId !== fence.scope.operatorUserId ||
       !row.consentId ||
-      row.consentVersion !== receivingSetupConsentVersion ||
+      !receivingConsentCoversCreatedRecipient(
+        typeof row.consentVersion === "string" ? row.consentVersion : null,
+      ) ||
       !row.consentAt
     )
       return false;

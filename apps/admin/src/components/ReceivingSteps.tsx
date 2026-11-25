@@ -9,7 +9,7 @@ import {
 } from "@entrelacos/contracts";
 import { showSandboxNotice } from "@entrelacos/ui";
 import { Link } from "@tanstack/react-router";
-import { Check, Clock, Gift, Plus, RefreshCw, Smartphone } from "lucide-react";
+import { Check, Clock, Gift, Plus, RefreshCw, ShieldCheck } from "lucide-react";
 import {
   type FormEvent,
   type RefObject,
@@ -35,7 +35,6 @@ import {
 } from "./GiftPricingSettings";
 import { GiftCatalogClient } from "./giftCatalogClient";
 import { isCurrentPanelSessionEpoch } from "./panelActor";
-import { ReceivingIdentityVerification } from "./ReceivingIdentityVerification";
 import type {
   ReceivingSetupPorts,
   ReceivingSetupScope,
@@ -217,30 +216,25 @@ function nextCopy(context: ReceivingStepsContext) {
           };
     case "activation":
       switch (identityStage(setup?.providerStatus)) {
-        case "initial_analysis":
-          return {
-            text: "Cadastro criado. A Pagar.me faz uma análise inicial, que pode levar até 24 horas. Quando ela pedir a selfie e a foto do documento, a verificação de identidade é liberada nesta etapa.",
-            action: "Acompanhar análise",
-          };
-        case "documents_review":
-          return {
-            text: "A Pagar.me está analisando o documento e a selfie. Não há nada a fazer aqui agora.",
-            action: "Acompanhar análise",
-          };
         case "refused":
           return {
-            text: "A Pagar.me recusou a verificação de identidade. Fale com o suporte para entender os próximos passos.",
+            text: "A Pagar.me recusou o cadastro. Fale com o suporte do EntreLaços para entender os próximos passos.",
             action: "Ver detalhes",
           };
         case "blocked":
           return {
-            text: "A Pagar.me bloqueou ou suspendeu o recebedor. Fale com o suporte para entender o que ajustar.",
+            text: "A Pagar.me bloqueou ou suspendeu a conta. Fale com o suporte do EntreLaços para entender o que ajustar.",
             action: "Ver o que ajustar",
+          };
+        case "documents_requested":
+          return {
+            text: "A Pagar.me pediu documentos para este cadastro. Antes de enviar qualquer coisa, fale com o suporte do EntreLaços.",
+            action: "Ver o que fazer",
           };
         default:
           return {
-            text: "A Pagar.me pediu a foto de um documento e uma selfie para confirmar que você é o titular.",
-            action: "Verificar identidade",
+            text: "Cadastro enviado. A Pagar.me está ativando a conta, o que costuma ser rápido.",
+            action: "Acompanhar ativação",
           };
       }
     case "fees":
@@ -280,7 +274,7 @@ function AdvanceCard({
         tone="accent"
         title={
           activation.status === "review"
-            ? "Enquanto a Pagar.me analisa"
+            ? "Enquanto a Pagar.me ativa a conta"
             : "Já pode adiantar"
         }
       >
@@ -324,11 +318,12 @@ const commonQuestions = [
     ),
   },
   {
-    question: "O EntreLaços vê meus documentos?",
+    question: "Preciso enviar fotos ou documentos?",
     answer: (
       <p className="m-0">
-        Não. A foto do documento e a selfie vão direto para a Pagar.me, pelo
-        link de verificação. O EntreLaços só recebe a situação do cadastro.
+        Não. Antes do envio, o EntreLaços confere se o CPF é válido, se o
+        titular tem 18 anos ou mais e se a conta bancária está no mesmo CPF. A
+        Pagar.me recebe só o cadastro.
       </p>
     ),
   },
@@ -506,7 +501,7 @@ export function HolderStep({ context }: { context: ReceivingStepsContext }) {
               answer: (
                 <p className="m-0">
                   O recebedor na Pagar.me é cadastrado no CPF de uma pessoa, que
-                  verifica a identidade e faz os saques. Os dois continuam
+                  é a titular da conta e faz os saques. Os dois continuam
                   administrando o casamento normalmente.
                 </p>
               ),
@@ -1090,14 +1085,14 @@ function BankAccountFields({
 
 const nextSteps = [
   {
-    icon: Smartphone,
-    title: "Verificação de identidade",
-    text: "Na Pagar.me: foto do documento e selfie, por um link seguro.",
+    icon: ShieldCheck,
+    title: "Conferência dos dados",
+    text: "O EntreLaços confere o CPF, a idade e se a conta está no seu CPF antes de enviar.",
   },
   {
     icon: Clock,
-    title: "Análise da Pagar.me",
-    text: "A Pagar.me analisa o cadastro. Acompanhe a situação aqui em Recebimentos.",
+    title: "Ativação na Pagar.me",
+    text: "A Pagar.me ativa a conta, o que costuma ser rápido.",
   },
 ];
 
@@ -1165,8 +1160,8 @@ export function DetailsStep({ context }: { context: ReceivingStepsContext }) {
                 question: "Por que a Pagar.me pede renda e endereço?",
                 answer: (
                   <p className="m-0">
-                    São exigências da Pagar.me para cadastrar qualquer recebedor
-                    e verificar a identidade do titular.
+                    São exigências da Pagar.me para cadastrar qualquer
+                    recebedor.
                   </p>
                 ),
               },
@@ -1289,7 +1284,7 @@ export function DetailsStep({ context }: { context: ReceivingStepsContext }) {
               params={{ siteId, page: "activation" }}
               className={receivingPrimaryAction}
             >
-              Ir para a verificação de identidade
+              Acompanhar o status da conta
             </Link>
           </div>
         )}
@@ -1366,10 +1361,7 @@ export function DetailsStep({ context }: { context: ReceivingStepsContext }) {
                 Ao continuar, você autoriza
               </p>
               <ul className="m-0 grid list-disc gap-2 pl-5 text-sm leading-[1.55] text-admin-text">
-                <li>
-                  Cadastrar você como recebedor na Pagar.me, no seu nome, e
-                  verificar sua identidade.
-                </li>
+                <li>Cadastrar você como recebedor na Pagar.me, no seu nome.</li>
                 <li>
                   Usar a conta bancária informada como destino dos repasses.
                 </li>
@@ -1396,8 +1388,9 @@ export function DetailsStep({ context }: { context: ReceivingStepsContext }) {
                   disabled={busy}
                   className="mt-0.5 size-5 shrink-0 accent-admin-accent"
                 />
-                Confirmo que sou o titular designado dos recebimentos e concordo
-                com os itens acima.
+                Declaro que sou o titular designado, que o CPF e a conta
+                bancária informados são meus, que tenho 18 anos ou mais e que os
+                dados são verdadeiros. Concordo com os itens acima.
               </label>
             </fieldset>
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
@@ -1409,7 +1402,7 @@ export function DetailsStep({ context }: { context: ReceivingStepsContext }) {
                 Enviar cadastro à Pagar.me
               </button>
               <p className="m-0 text-[0.82rem] text-admin-text-secondary">
-                Depois disso, você verifica sua identidade.
+                Depois disso, é só acompanhar a ativação.
               </p>
             </div>
           </form>
@@ -1443,7 +1436,7 @@ const taskBadges: Record<
   },
   todo: { label: "A fazer", className: "bg-admin-subtle text-admin-text" },
   review: {
-    label: "Em análise",
+    label: "Em ativação",
     className: "bg-admin-pending-subtle text-admin-pending-text",
   },
   attention: {
@@ -1477,46 +1470,29 @@ function TaskMarker({ status }: { status: ReceivingTaskStatus }) {
 
 const activationQuestions = (mode: string | null | undefined) => [
   {
-    question: "O que preciso ter em mãos?",
-    answer: (
-      <p className="m-0">
-        Um documento com foto (RG ou CNH) e um celular com câmera para a selfie.
-        No computador, use o QR Code para continuar pelo celular.
-      </p>
-    ),
-  },
-  {
-    question: "Por que a Pagar.me pede selfie?",
-    answer: (
-      <p className="m-0">
-        A selfie confirma que quem cadastrou o recebedor é a mesma pessoa do
-        documento. Isso protege seus recebimentos contra fraudes.
-      </p>
-    ),
-  },
-  {
-    question: "O link expirou. E agora?",
-    answer: (
-      <p className="m-0">
-        Clique em Verificar identidade de novo. Cada clique gera um link novo,
-        válido por 20 minutos; o EntreLaços não guarda nenhum deles.
-      </p>
-    ),
-  },
-  {
-    question: "Como o painel acompanha a análise?",
+    question: "Quanto tempo leva a ativação?",
     answer: (
       <>
         <p className="m-0">
-          A Pagar.me avisa o EntreLaços quando a situação do recebedor muda. O
-          botão Verificar agora consulta a situação na hora.
+          Costuma ser rápida. A Pagar.me avisa o EntreLaços quando a situação da
+          conta muda, e esta página mostra a mudança.
         </p>
         {showSandboxNotice(mode) && (
           <p className="m-0">
-            No ambiente de teste, a verificação não analisa documentos reais.
+            No ambiente de teste, a ativação não analisa dados reais.
           </p>
         )}
       </>
+    ),
+  },
+  {
+    question: "A Pagar.me pediu documentos. E agora?",
+    answer: (
+      <p className="m-0">
+        Isso não faz parte deste cadastro. Não envie documentos por links ou
+        mensagens recebidos fora do painel; fale com o suporte do EntreLaços,
+        que acompanha o caso com a Pagar.me.
+      </p>
     ),
   },
 ];
@@ -1536,15 +1512,13 @@ export function ActivationStep({
     ready: receivingReady,
   });
   const stage = identityStage(provider);
-  // Pagar.me issues the link only once it asks for the selfie and document.
-  // The API accepts the platform owner or the holder; a new link per click.
-  const canVerify =
+  // Nothing to do at Pagar.me: any trouble goes to Entrelaços support.
+  const blocked =
     created &&
     !receivingReady &&
-    stage === "verify" &&
-    (owner || !!setup?.isHolder);
-  const blocked =
-    created && !receivingReady && (stage === "refused" || stage === "blocked");
+    (stage === "refused" ||
+      stage === "blocked" ||
+      stage === "documents_requested");
   return (
     <StepFrame
       siteId={siteId}
@@ -1571,14 +1545,14 @@ export function ActivationStep({
             </p>
             {created && (
               <p className="m-0 text-sm leading-[1.55] text-admin-text">
-                Identidade:{" "}
+                Análise cadastral:{" "}
                 <strong>{kycStatusLabel(provider?.kycStatus)}</strong>
               </p>
             )}
             <p className="m-0 text-sm leading-[1.55] text-admin-text">
               {receivingReady
                 ? "Recebimentos liberados. Você pode acompanhar os pagamentos e consultar a disponibilidade de saque."
-                : "Depois de enviar o documento e a selfie, verifique de novo para atualizar a situação aqui."}
+                : "Use Verificar agora para consultar a Pagar.me na hora."}
             </p>
             <LastCheck setup={setup} />
             {context.status !== "denied" && (
@@ -1613,11 +1587,11 @@ export function ActivationStep({
         </>
       }
     >
-      <StepHeading number={3} title="Verifique sua identidade">
+      <StepHeading number={3} title="Status da conta">
         <p className={receivingBody}>
           {created
-            ? "A Pagar.me confirma que você é o titular com a foto de um documento e uma selfie. Leva poucos minutos, pelo celular ou pelo computador."
-            : "Primeiro, envie seus dados na etapa 2. Depois, a verificação de identidade aparece aqui."}
+            ? "O cadastro já está na Pagar.me. Aqui você acompanha a ativação da conta que recebe os presentes."
+            : "Primeiro, envie seus dados na etapa 2. Depois, a ativação da conta aparece aqui."}
         </p>
       </StepHeading>
       <SandboxNotice mode={setup?.mode} />
@@ -1635,7 +1609,7 @@ export function ActivationStep({
       )}
       {created && setup && (
         <section
-          aria-label="Etapas na Pagar.me"
+          aria-label="Cadastro do recebedor"
           className={`${receivingCard} overflow-hidden`}
         >
           <ol className="m-0 list-none p-0">
@@ -1665,27 +1639,6 @@ export function ActivationStep({
               </li>
             ))}
           </ol>
-          {canVerify && (
-            <div className="grid gap-3 border-t border-admin-subtle px-6 py-5 [@media(max-width:760px)]:px-4">
-              <ReceivingIdentityVerification
-                siteId={siteId}
-                request={context.ports?.request}
-                disabled={busy || context.status === "denied"}
-                onUnavailable={context.onRetry}
-              />
-              <a
-                href={supportMailto}
-                className={`${receivingLink} inline-flex w-fit text-sm`}
-              >
-                Falar com o suporte do EntreLaços
-              </a>
-            </div>
-          )}
-          {!owner && !setup.isHolder && setup.holder && (
-            <p className="m-0 border-t border-admin-subtle px-6 py-4 text-sm text-admin-text-secondary">
-              Somente {setup.holder.name} verifica a identidade na Pagar.me.
-            </p>
-          )}
         </section>
       )}
       {blocked && (
@@ -1694,35 +1647,14 @@ export function ActivationStep({
           className="m-0 rounded-[14px] bg-admin-danger-subtle p-4 text-sm leading-[1.55] text-admin-danger-text"
         >
           {stage === "refused"
-            ? "A Pagar.me recusou a verificação de identidade. "
-            : "A Pagar.me bloqueou ou suspendeu o recebedor. "}
+            ? "A Pagar.me recusou o cadastro. "
+            : stage === "blocked"
+              ? "A Pagar.me bloqueou ou suspendeu a conta. "
+              : "A Pagar.me pediu documentos, o que não faz parte deste cadastro. Não envie nada por links ou mensagens de fora do painel. "}
           <a href={supportMailto} className={receivingLink}>
-            Fale com o suporte do EntreLaços
-          </a>{" "}
-          para entender os próximos passos.
+            Falar com o suporte do EntreLaços
+          </a>
         </p>
-      )}
-      {created && (
-        <section className={`${receivingCard} flex gap-4 p-6`}>
-          <span
-            aria-hidden="true"
-            className="flex size-9 shrink-0 items-center justify-center rounded-full bg-admin-subtle text-admin-text"
-          >
-            <Clock className="size-[18px]" />
-          </span>
-          <div className="grid gap-1">
-            <h2 className="m-0 text-base font-bold text-admin-text">
-              {receivingReady
-                ? "Recebimentos liberados"
-                : "Depois: análise da Pagar.me"}
-            </h2>
-            <p className="m-0 text-[0.95rem] leading-[1.55] text-admin-text">
-              {receivingReady
-                ? "Os convidados já podem presentear por Pix e cartão."
-                : "Com o documento e a selfie enviados, a Pagar.me analisa o cadastro. Não é preciso fazer nada aqui; a liberação aparece nesta página."}
-            </p>
-          </div>
-        </section>
       )}
     </StepFrame>
   );

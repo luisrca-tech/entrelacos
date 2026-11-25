@@ -60,7 +60,7 @@ describe("receiving navigation", () => {
   it("drops the retired Pix destination page and its screens", () => {
     expect(resolveReceivingPage("account")).toBe("overview");
     expect(receivingPages.find(({ id }) => id === "activation")?.label).toBe(
-      "Verificar identidade",
+      "Status da conta",
     );
     for (const file of [
       "ReceivingPixDestination.tsx",

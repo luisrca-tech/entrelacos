@@ -106,12 +106,6 @@ export interface PagarmeRecipientKyc {
   readonly statusReason: PagarmeKycStatusReason | null;
 }
 
-export interface PagarmeKycLink {
-  readonly url: string;
-  readonly base64QrCode: string;
-  readonly expiresAt: string;
-}
-
 export interface PagarmeRecipientBalance {
   readonly availableCents: number;
   readonly waitingFundsCents: number;
@@ -153,8 +147,6 @@ export interface PagarmeRecipientClient {
    * code, or null once every page proved it absent. Any doubt throws.
    */
   findRecipientByCode(code: string): Promise<PagarmeRecipient | null>;
-  /** Short-lived (about 20 minutes); callers must never persist it. */
-  createKycLink(recipientId: string): Promise<PagarmeKycLink>;
   getBalance(recipientId: string): Promise<PagarmeRecipientBalance>;
   createWithdrawal(
     recipientId: string,
@@ -661,27 +653,6 @@ export function createPagarmeRecipientClient(
         }
       }
       return invalid();
-    },
-    async createKycLink(recipientId) {
-      const id = readPagarmeRecipientId(recipientId);
-      const raw = record(
-        await http.request("POST", `/recipients/${id}/kyc_link`),
-      );
-      const url = text(raw.url, 2048);
-      let parsed: URL;
-      try {
-        parsed = new URL(url.startsWith("www.") ? `https://${url}` : url);
-      } catch {
-        return invalid();
-      }
-      if (parsed.protocol !== "https:") return invalid();
-      const qr = text(raw.base64_qrcode ?? raw.base64, 1_000_000);
-      if (!/^[A-Za-z0-9+/]+={0,2}$/.test(qr)) return invalid();
-      return Object.freeze({
-        url: parsed.href,
-        base64QrCode: qr,
-        expiresAt: instant(raw.expires_at ?? raw.expiration_date),
-      });
     },
     async getBalance(recipientId) {
       const id = readPagarmeRecipientId(recipientId);

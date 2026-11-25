@@ -40,8 +40,7 @@ describe("receiving guide on Pagar.me", () => {
     const html = render();
     const steps = [
       "Envie os dados do recebedor",
-      "Verifique sua identidade",
-      "Aguarde a análise da Pagar.me",
+      "Acompanhe a ativação da conta",
       "Solicite o saque",
     ];
     const positions = steps.map((step) => html.indexOf(step));
@@ -56,11 +55,14 @@ describe("receiving guide on Pagar.me", () => {
     expect(html).toContain('href="/sites/wedding-1/receiving/withdrawals"');
   });
 
-  it("explains the short-lived identity link and the same-CPF bank account", () => {
+  it("explains the Entrelaços identity check, the declaration and the same-CPF bank account", () => {
     const content = text(render());
-    expect(content).toContain("20 minutos");
     expect(content).toContain("conta bancária no mesmo CPF");
-    expect(content).toContain("documento e uma selfie");
+    expect(content).toContain("18 anos ou mais");
+    expect(content).toContain("declara");
+    expect(content).not.toMatch(
+      /selfie|prova de vida|QR Code|20 minutos|link seguro|verificação de identidade/i,
+    );
   });
 
   it("states the withdrawal fee from the tariff table and when money is available", () => {

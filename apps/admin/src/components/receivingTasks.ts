@@ -2,7 +2,7 @@ import type { ReceivingSetupContext } from "@entrelacos/contracts";
 
 type ProviderStatus = NonNullable<ReceivingSetupContext["providerStatus"]>;
 
-export type ReceivingTaskId = "recipient" | "identity" | "ready";
+export type ReceivingTaskId = "recipient" | "bank" | "account";
 export type ReceivingTaskStatus =
   | "done"
   | "todo"
@@ -26,23 +26,23 @@ type IdentityProvider = Pick<
   "recipientStatus" | "accountState" | "kycStatus" | "kycStatusReason"
 >;
 /**
- * Where the Pagar.me identity check stands:
- * - `initial_analysis`: Pagar.me is still analysing the registration (up to
- *   24 hours) and has not asked for the selfie and document;
- * - `verify`: Pagar.me asked for them (`affiliation` with KYC
- *   `partially_denied`), the only time it issues the verification link;
- * - `documents_review`: the selfie and document are being analysed;
+ * Where the recipient's activation at Pagar.me stands. On a pass-through
+ * account Pagar.me runs no identity check of its own (the marketplace checks
+ * CPF, age and bank ownership before sending), so the couple never acts here:
+ * - `activating`: Pagar.me has not activated the recipient yet;
  * - `done`: the recipient is active;
  * - `refused`: Pagar.me refused the recipient or its identity;
- * - `blocked`: the recipient was blocked or suspended.
+ * - `blocked`: the recipient was blocked, suspended or deactivated;
+ * - `documents_requested`: Pagar.me unexpectedly asked for documents
+ *   (KYC `partially_denied` or `additional_documents_required`); the couple
+ *   is sent to Entrelaços support, never to a Pagar.me link.
  */
 export type IdentityStage =
-  | "initial_analysis"
-  | "verify"
-  | "documents_review"
+  | "activating"
   | "done"
   | "refused"
-  | "blocked";
+  | "blocked"
+  | "documents_requested";
 export function identityStage(
   provider: IdentityProvider | null | undefined,
 ): IdentityStage {
@@ -57,86 +57,75 @@ export function identityStage(
     provider?.accountState === "SUSPENDED"
   )
     return "blocked";
-  if (provider?.recipientStatus === "affiliation") {
-    if (provider.kycStatus === "partially_denied") return "verify";
-    if (
-      provider.kycStatus === "approved" ||
-      provider.kycStatusReason === "answered_waiting_analysis"
-    )
-      return "documents_review";
-  }
-  return "initial_analysis";
+  if (
+    provider?.kycStatus === "partially_denied" ||
+    provider?.kycStatusReason === "additional_documents_required"
+  )
+    return "documents_requested";
+  return "activating";
 }
 
 const identityStageStatus: Record<
   IdentityStage,
-  Exclude<ReceivingTaskStatus, "waiting">
+  Exclude<ReceivingTaskStatus, "waiting" | "todo">
 > = {
-  initial_analysis: "review",
-  verify: "todo",
-  documents_review: "review",
+  activating: "review",
   done: "done",
   refused: "attention",
   blocked: "attention",
+  documents_requested: "attention",
 };
-// Identity verification happens at Pagar.me; its recipient and KYC status
-// drive the task.
+// The recipient and KYC status Pagar.me reports drive the account task.
 export function identityTaskStatus(
   provider: IdentityProvider | null | undefined,
-): Exclude<ReceivingTaskStatus, "waiting"> {
+): Exclude<ReceivingTaskStatus, "waiting" | "todo"> {
   return identityStageStatus[identityStage(provider)];
 }
 
+// Only the fact: the step page's alert carries the support guidance.
 const identityDescriptions: Record<IdentityStage, string> = {
-  initial_analysis:
-    "A Pagar.me faz primeiro uma análise do cadastro, que pode levar até 24 horas. Quando ela pedir a foto do documento e a selfie, o botão Verificar identidade aparece aqui.",
-  verify:
-    "A Pagar.me pediu a foto do documento e uma selfie. Envie pelo link seguro, no celular ou no computador.",
-  documents_review:
-    "Documento e selfie recebidos. A Pagar.me está concluindo a análise.",
-  done: "Identidade confirmada pela Pagar.me.",
+  activating:
+    "A Pagar.me está ativando a conta. A ativação costuma ser rápida e aparece aqui assim que terminar.",
+  done: "Conta ativa. Os convidados já podem presentear por Pix e cartão.",
   refused: "Recusada pela Pagar.me.",
-  blocked: "Recebedor bloqueado ou suspenso na Pagar.me.",
+  blocked: "Bloqueada ou suspensa pela Pagar.me.",
+  documents_requested:
+    "A Pagar.me pediu documentos, fora do fluxo deste cadastro.",
 };
 
-// The three Pagar.me steps, all derived from server state: nothing is
-// marked by hand or kept in the browser.
+// The registration and its activation, all derived from server state:
+// nothing is marked by hand or kept in the browser.
 export function deriveReceivingTasks(
   input: ReceivingTasksInput,
 ): ReceivingTask[] {
   const created = input.accountState === "CREATED";
-  const identity = created
-    ? input.ready
-      ? "done"
-      : identityTaskStatus(input.provider)
-    : "waiting";
+  const sent = created
+    ? "done"
+    : input.accountState === "UNKNOWN"
+      ? "attention"
+      : "todo";
+  const stage = input.ready ? "done" : identityStage(input.provider);
   return [
     {
       id: "recipient",
-      title: "Dados do recebedor",
+      title: "Dados do casal",
       description:
-        "Nome, CPF, endereço e a conta bancária no mesmo CPF, enviados à Pagar.me.",
-      status: created
-        ? "done"
-        : input.accountState === "UNKNOWN"
-          ? "attention"
-          : "todo",
+        "Nome, CPF, nascimento e endereço do titular, com a declaração de que os dados são verdadeiros.",
+      status: sent,
     },
     {
-      id: "identity",
-      title: "Verificação de identidade",
-      description:
-        created && !input.ready
-          ? identityDescriptions[identityStage(input.provider)]
-          : "Foto do documento e selfie, pelo link seguro da Pagar.me no celular ou no computador.",
-      status: identity,
+      id: "bank",
+      title: "Conta bancária",
+      description: "No mesmo CPF do titular, para onde vão os saques.",
+      status: sent,
     },
     {
-      id: "ready",
-      title: "Pronto para receber",
-      description:
-        "Com a identidade aprovada, os convidados podem presentear por Pix e cartão.",
-      status: input.ready ? "done" : "waiting",
+      id: "account",
+      title: "Status da conta",
+      description: created
+        ? identityDescriptions[stage]
+        : "A Pagar.me ativa a conta depois que o cadastro é enviado.",
+      status: created ? identityStageStatus[stage] : "waiting",
     },
   ];
 }
@@ -146,7 +135,7 @@ const recipientStatusLabels: Record<
   string
 > = {
   registration: "Cadastro recebido",
-  affiliation: "Em análise",
+  affiliation: "Em ativação",
   active: "Ativo",
   refused: "Recusado",
   suspended: "Suspenso",
@@ -167,12 +156,12 @@ const kycStatusLabels: Record<
   string
 > = {
   pending: "Em análise",
-  partially_denied: "Aguardando documento e selfie",
+  partially_denied: "Documentos pedidos, fale com o suporte",
   approved: "Aprovada",
   denied: "Recusada",
   unknown: "Situação não reconhecida",
 };
 
 export function kycStatusLabel(status: ProviderStatus["kycStatus"]): string {
-  return status ? kycStatusLabels[status] : "Ainda não solicitada";
+  return status ? kycStatusLabels[status] : "Sem pendências";
 }

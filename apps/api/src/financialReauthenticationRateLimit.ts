@@ -29,8 +29,7 @@ export function createFinancialReauthenticationRateLimit(
     windowMs: number;
     namespace?:
       | "financial-password-reauthentication-v1"
-      | "receiving-pix-destination-lookup-v1"
-      | "receiving-kyc-link-v1";
+      | "receiving-pix-destination-lookup-v1";
   },
 ) {
   const namespace =
@@ -45,7 +44,6 @@ export function createFinancialReauthenticationRateLimit(
     ![
       "financial-password-reauthentication-v1",
       "receiving-pix-destination-lookup-v1",
-      "receiving-kyc-link-v1",
     ].includes(namespace)
   )
     unavailable();

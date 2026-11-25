@@ -498,53 +498,24 @@ describe("Pagar.me recipient client", () => {
     }
   });
 
-  it("creates a short-lived KYC link and returns it without retaining it", async () => {
-    const fetch = respond([200, fixture("recipient-kyc-link")]);
-    const link = await createPagarmeRecipientClient({
-      secretKey,
-      fetch,
-    }).createKycLink("rp_fixtureRecipient01");
-    expect(call(fetch).url).toBe(
-      `${PAGARME_API_BASE_URL}/recipients/rp_fixtureRecipient01/kyc_link`,
-    );
-    expect(call(fetch).method).toBe("POST");
-    expect(link).toEqual({
-      url: "https://exemplo.com/kyc?token=eyWfwqrnqwrnfoqwntoqwntqw",
-      base64QrCode: "PD94bWwgdmVyc2lvbj0iMS4wIj8+PHN2Zy8+",
-      expiresAt: "2026-11-18T12:20:00.000Z",
-    });
-  });
-
-  it("accepts the older KYC link field names", async () => {
+  it("refuses a created recipient whose bank account holder document is not the recipient CPF", async () => {
+    const created = JSON.parse(fixture("recipient-created"));
     const fetch = respond([
       200,
       JSON.stringify({
-        base64: "BJ1B51JK2B51KJ2B5=",
-        url: "https://www.pagar.me/kyc/14214214215",
-        expiration_date: "2026-11-18T12:20:00.046Z",
-      }),
-    ]);
-    const link = await createPagarmeRecipientClient({
-      secretKey,
-      fetch,
-    }).createKycLink("rp_fixtureRecipient01");
-    expect(link.base64QrCode).toBe("BJ1B51JK2B51KJ2B5=");
-  });
-
-  it("refuses a KYC link that is not https", async () => {
-    const fetch = respond([
-      200,
-      JSON.stringify({
-        url: "javascript:alert(1)",
-        base64_qrcode: "AAAA",
-        expires_at: "2026-11-18T12:20:00Z",
+        ...created,
+        default_bank_account: {
+          ...created.default_bank_account,
+          holder_document: "52998224725",
+        },
       }),
     ]);
     await expect(
-      createPagarmeRecipientClient({ secretKey, fetch }).createKycLink(
-        "rp_fixtureRecipient01",
+      createPagarmeRecipientClient({ secretKey, fetch }).createRecipient(
+        "receiving-account-1",
+        input,
       ),
-    ).rejects.toThrow();
+    ).rejects.toThrow(TypeError);
   });
 
   it("reads available and waiting balances in cents", async () => {

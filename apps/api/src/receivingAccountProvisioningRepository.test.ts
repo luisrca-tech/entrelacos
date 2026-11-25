@@ -940,6 +940,7 @@ describe("resubmitting a stuck setup next to a previous provider's history", () 
         consentVersion: receivingSetupConsentVersion,
         confirmHolder: true,
         consentToProvider: true,
+        declareHolderIdentity: true,
         account: values.input,
       },
       { actor: values.authorization.actor } as never,

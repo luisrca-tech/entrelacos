@@ -24,11 +24,6 @@ const access = {
   membershipId: "membership-one",
   capabilities: { configureReceiving: true, readFinance: true },
 };
-const kycLink = {
-  url: "https://exemplo.com/kyc?token=eyWfwqrnqwrnfoqwntoqwntqw",
-  base64QrCode: "PD94bWwgdmVyc2lvbj0iMS4wIj8+PHN2Zy8+",
-  expiresAt: "2026-11-18T12:20:00.000Z",
-};
 const FRESH = `fr1.${"a".repeat(80)}.${"b".repeat(43)}`;
 const STALE = `fr1.${"c".repeat(80)}.${"d".repeat(43)}`;
 const passwordProof = {
@@ -38,7 +33,7 @@ const passwordProof = {
   authenticatedAt: new Date("2026-10-16T12:00:00.000Z"),
   expiresAt: new Date("2026-10-16T12:05:00.000Z"),
 };
-function fixture() {
+function fixture(clock?: () => Date) {
   const designate = vi.fn(async () => {}),
     read = vi.fn(),
     submit = vi.fn(async () => ({ state: "STORED" })),
@@ -47,8 +42,6 @@ function fixture() {
         outcome: "RELEASED",
       }),
     ),
-    createKycLink = vi.fn(async () => kycLink),
-    kycRateLimit = { consume: vi.fn(async (_siteId: string) => true) },
     readProof = vi.fn((actor: object, _action: string, token: string) => {
       if (token !== FRESH)
         throw new FinancialReauthenticationError(403, "RECENT_AUTH_REQUIRED");
@@ -72,10 +65,9 @@ function fixture() {
       designate,
       submit,
       reconcile,
-      createKycLink,
     } as never,
     receivingVerification: { verify: verifyIncoming },
-    kycRateLimit,
+    ...(clock ? { clock } : {}),
     financialReauthentication: { readProof } as never,
   });
   return {
@@ -85,8 +77,6 @@ function fixture() {
     read,
     submit,
     reconcile,
-    createKycLink,
-    kycRateLimit,
     readProof,
   };
 }
@@ -146,9 +136,10 @@ describe("receiving setup HTTP boundary", () => {
     const v = fixture();
     const input = {
       policyVersion: "policy-v1",
-      consentVersion: "pagarme-receiving-v1",
+      consentVersion: "pagarme-receiving-v2",
       confirmHolder: true,
       consentToProvider: true,
+      declareHolderIdentity: true,
       account: {
         name: "Maria da Silva",
         email: "maria@example.test",
@@ -207,9 +198,10 @@ describe("receiving setup HTTP boundary", () => {
       const response = await v.router.request(
         request("setup", {
           policyVersion: "policy-v1",
-          consentVersion: "pagarme-receiving-v1",
+          consentVersion: "pagarme-receiving-v2",
           confirmHolder: true,
           consentToProvider: true,
+          declareHolderIdentity: true,
           account: {
             name: "Maria Aparecida dos Santos Lima",
             email: "maria@example.test",
@@ -451,9 +443,10 @@ describe("receiving setup HTTP boundary", () => {
     const response = await v.router.request(
       request("setup", {
         policyVersion: "policy-v1",
-        consentVersion: "pagarme-receiving-v1",
+        consentVersion: "pagarme-receiving-v2",
         confirmHolder: true,
         consentToProvider: true,
+        declareHolderIdentity: true,
         account: {
           name: "Maria da Silva",
           email: "maria@example.test",
@@ -625,96 +618,97 @@ describe("verifying an uncertain receiving setup over HTTP", () => {
     });
   });
 });
-describe("receiving identity verification link", () => {
-  function kycRequest(suppliedOrigin = origin, query = "") {
-    return new Request(
-      `http://localhost:8080/v1/owner/sites/site-one/receiving/kyc-link${query}`,
-      { method: "POST", headers: { origin: suppliedOrigin } },
-    );
-  }
-  it("returns a no-store link to the platform owner", async () => {
+const setupInput = {
+  policyVersion: "policy-v1",
+  consentVersion: "pagarme-receiving-v2",
+  confirmHolder: true,
+  consentToProvider: true,
+  declareHolderIdentity: true,
+  account: {
+    name: "Maria da Silva",
+    email: "maria@example.test",
+    cpf: "12345678909",
+    mobilePhone: "21994647568",
+    birthDate: "2008-04-12",
+    monthlyIncomeCents: 500000,
+    professionalOccupation: "Professora",
+    address: {
+      street: "Av. General Justo",
+      streetNumber: "375",
+      neighborhood: "Centro",
+      city: "Rio de Janeiro",
+      state: "RJ",
+      zipCode: "20021130",
+    },
+    bankAccount: {
+      bank: "341",
+      branchNumber: "1234",
+      accountNumber: "12345",
+      accountCheckDigit: "6",
+      holderName: "MARIA DA SILVA",
+      type: "checking",
+    },
+  },
+};
+describe("receiving holder identity checks at the HTTP boundary", () => {
+  const onDay = (day: string) => () => new Date(`${day}T12:00:00.000Z`);
+  const withAccount = (patch: object) => ({
+    ...setupInput,
+    account: { ...setupInput.account, ...patch },
+  });
+  it.each([
+    ["an invalid CPF", withAccount({ cpf: "12345678900" })],
+    [
+      "a holder one day before the 18th birthday",
+      withAccount({ birthDate: "2008-04-13" }),
+    ],
+    [
+      "a bank account under another document",
+      withAccount({
+        bankAccount: {
+          ...setupInput.account.bankAccount,
+          holderDocument: "52998224725",
+        },
+      }),
+    ],
+    [
+      "no identity declaration",
+      { ...setupInput, declareHolderIdentity: undefined },
+    ],
+    ["no consent version", { ...setupInput, consentVersion: undefined }],
+    [
+      "the pre-declaration consent version",
+      { ...setupInput, consentVersion: "pagarme-receiving-v1" },
+    ],
+  ])("answers 400 to %s without submitting", async (_label, input) => {
+    const v = fixture(onDay("2026-04-12"));
+    const response = await v.router.request(request("setup", input));
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ code: "VALIDATION_ERROR" });
+    expect(v.submit).not.toHaveBeenCalled();
+  });
+  it("accepts a holder on the 18th birthday", async () => {
+    const v = fixture(onDay("2026-04-12"));
+    const response = await v.router.request(request("setup", setupInput));
+    expect(response.status).toBe(200);
+    expect(v.submit).toHaveBeenCalledOnce();
+  });
+});
+describe("retired Pagar.me identity verification link", () => {
+  it("no longer serves the kyc-link route", async () => {
     const v = fixture();
     mocks.requireAdminSession.mockResolvedValue({
       user: { id: "owner-one", role: "OWNER" },
       session: { id: "owner-session" },
     });
-    const response = await v.router.request(kycRequest());
-    expect(response.status).toBe(200);
-    expect(response.headers.get("cache-control")).toBe("no-store");
-    expect(await response.json()).toEqual(kycLink);
-    expect(v.createKycLink).toHaveBeenCalledExactlyOnceWith(
-      { userId: "owner-one", sessionId: "owner-session", siteId: "site-one" },
-      "OWNER",
+    const response = await v.router.request(
+      new Request(
+        "http://localhost:8080/v1/owner/sites/site-one/receiving/kyc-link",
+        { method: "POST", headers: { origin } },
+      ),
     );
-  });
-  it("lets the site administrator ask for her own recipient link", async () => {
-    const v = fixture();
-    const response = await v.router.request(kycRequest());
-    expect(response.status).toBe(200);
-    expect(await response.json()).toEqual(kycLink);
-    expect(v.createKycLink).toHaveBeenCalledExactlyOnceWith(
-      { userId: "bride-one", sessionId: "session-one", siteId: "site-one" },
-      "SITE_ADMIN",
-    );
-  });
-  it("limits identity links per site and answers 429 without calling Pagar.me", async () => {
-    const v = fixture();
-    v.kycRateLimit.consume.mockResolvedValueOnce(false);
-    const response = await v.router.request(kycRequest());
-    expect(response.status).toBe(429);
-    expect(v.createKycLink).not.toHaveBeenCalled();
-    expect(v.kycRateLimit.consume).toHaveBeenCalledWith("site-one");
-  });
-  it("refuses another administrator of the site", async () => {
-    const v = fixture();
-    v.createKycLink.mockRejectedValue(
-      new ReceivingSetupError(403, "MEMBERSHIP_DENIED"),
-    );
-    const response = await v.router.request(kycRequest());
-    expect(response.status).toBe(403);
-    expect(await response.text()).not.toContain("kyc?token");
-  });
-  it.each([
-    ["no site membership", null],
-    [
-      "an assistant membership",
-      { ...access, membershipRole: "SITE_ASSISTANT" },
-    ],
-  ])("refuses a site user with %s", async (_label, membership) => {
-    const v = fixture();
-    mocks.resolveSiteAccess.mockResolvedValue(membership);
-    expect((await v.router.request(kycRequest())).status).toBe(403);
-    expect(v.createKycLink).not.toHaveBeenCalled();
-  });
-  it("requires a session", async () => {
-    const v = fixture();
-    mocks.requireAdminSession.mockRejectedValue(
-      new mocks.AdminSessionRequiredError(),
-    );
-    expect((await v.router.request(kycRequest())).status).toBe(401);
-    expect(v.createKycLink).not.toHaveBeenCalled();
-  });
-  it("reports a missing recipient as a conflict", async () => {
-    const v = fixture();
-    v.createKycLink.mockRejectedValue(
-      new ReceivingSetupError(409, "RECEIVING_ACCOUNT_REQUIRED"),
-    );
-    const response = await v.router.request(kycRequest());
-    expect(response.status).toBe(409);
-    expect(await response.json()).toMatchObject({
-      code: "RECEIVING_ACCOUNT_REQUIRED",
-    });
-  });
-  it("denies a foreign origin or a query string before authentication", async () => {
-    const v = fixture();
-    expect(
-      (await v.router.request(kycRequest("https://foreign.test"))).status,
-    ).toBe(403);
-    expect((await v.router.request(kycRequest(origin, "?x=1"))).status).toBe(
-      400,
-    );
+    expect(response.status).toBe(404);
     expect(mocks.requireAdminSession).not.toHaveBeenCalled();
-    expect(v.createKycLink).not.toHaveBeenCalled();
   });
   it("no longer serves the Pix destination routes", async () => {
     const v = fixture();

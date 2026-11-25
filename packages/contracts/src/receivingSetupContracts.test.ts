@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  createReceivingSetupInputSchema,
   isValidCpf,
   ownerFinanceAlertSchema,
   pagarmeKycStatuses,
   pagarmeKycStatusReasons,
-  receivingKycLinkSchema,
+  receivingConsentCoversCreatedRecipient,
   receivingSetupConsentVersion,
   receivingSetupContextSchema,
   receivingSetupDisclosure,
@@ -43,10 +44,119 @@ const account = {
 
 describe("Pagar.me receiving setup contracts", () => {
   it("records consent to Pagar.me only", () => {
-    expect(receivingSetupConsentVersion).toBe("pagarme-receiving-v1");
+    expect(receivingSetupConsentVersion).toBe("pagarme-receiving-v2");
+    expect(receivingSetupDisclosure.version).toBe("pagarme-receiving-v2");
     expect(receivingSetupDisclosure.text).toContain("Pagar.me");
     expect(receivingSetupDisclosure.text).not.toMatch(/subconta|BaaS/i);
   });
+
+  it("keeps a recipient created under the previous Pagar.me consent operating", () => {
+    expect(receivingConsentCoversCreatedRecipient("pagarme-receiving-v2")).toBe(
+      true,
+    );
+    expect(receivingConsentCoversCreatedRecipient("pagarme-receiving-v1")).toBe(
+      true,
+    );
+    expect(receivingConsentCoversCreatedRecipient("asaas-receiving-v1")).toBe(
+      false,
+    );
+    expect(receivingConsentCoversCreatedRecipient(null)).toBe(false);
+  });
+
+  it("carries the holder's own identity declaration and no provider identity check", () => {
+    const text = receivingSetupDisclosure.text;
+    expect(text).toContain("Declaro que sou o titular do CPF informado");
+    expect(text).toContain("da conta bancária cadastrada");
+    expect(text).toContain("tenho 18 anos ou mais");
+    expect(text).toContain("os dados deste formulário são verdadeiros");
+    expect(text).not.toMatch(/selfie|prova de vida|verificação de identidade/i);
+    expect(text).not.toMatch(/documentos? (serão|será) solicitad/i);
+  });
+
+  it.each([
+    ["without the identity declaration", { declareHolderIdentity: undefined }],
+    ["with a false identity declaration", { declareHolderIdentity: false }],
+    ["without the holder confirmation", { confirmHolder: undefined }],
+    ["without the Pagar.me consent", { consentToProvider: undefined }],
+    ["without a consent version", { consentVersion: undefined }],
+    [
+      "with the pre-declaration consent version",
+      { consentVersion: "pagarme-receiving-v1" },
+    ],
+  ])("rejects an acceptance %s", (_label, patch) => {
+    expect(
+      receivingSetupInputSchema.safeParse({
+        policyVersion: "receiving-setup-v1",
+        consentVersion: receivingSetupConsentVersion,
+        confirmHolder: true,
+        consentToProvider: true,
+        declareHolderIdentity: true,
+        account,
+        ...patch,
+      }).success,
+    ).toBe(false);
+  });
+
+  it.each([
+    ["the day before the 18th birthday", "2026-04-11", false],
+    ["on the 18th birthday", "2026-04-12", true],
+    ["the day after the 18th birthday", "2026-04-13", true],
+  ])(
+    "checks the holder age against the reference date %s",
+    (_label, today, accepted) => {
+      const schema = createReceivingSetupInputSchema(
+        () => new Date(`${today}T12:00:00.000Z`),
+      );
+      expect(
+        schema.safeParse({
+          policyVersion: "receiving-setup-v1",
+          consentVersion: receivingSetupConsentVersion,
+          confirmHolder: true,
+          consentToProvider: true,
+          declareHolderIdentity: true,
+          account: { ...account, birthDate: "2008-04-12" },
+        }).success,
+      ).toBe(accepted);
+    },
+  );
+
+  it("counts a 29 February birthday as 18 only on 1 March of a common year", () => {
+    const parse = (today: string) =>
+      createReceivingSetupInputSchema(
+        () => new Date(`${today}T00:00:00.000Z`),
+      ).safeParse({
+        policyVersion: "receiving-setup-v1",
+        consentVersion: receivingSetupConsentVersion,
+        confirmHolder: true,
+        consentToProvider: true,
+        declareHolderIdentity: true,
+        account: { ...account, birthDate: "2008-02-29" },
+      }).success;
+    expect(parse("2026-02-28")).toBe(false);
+    expect(parse("2026-03-01")).toBe(true);
+  });
+
+  it.each([
+    ["a different holder document", "52998224725"],
+    ["the recipient CPF as holder document", "12345678909"],
+  ])(
+    "takes the bank holder document from the recipient CPF and refuses %s from the form",
+    (_label, holderDocument) => {
+      expect(
+        receivingSetupInputSchema.safeParse({
+          policyVersion: "receiving-setup-v1",
+          consentVersion: receivingSetupConsentVersion,
+          confirmHolder: true,
+          consentToProvider: true,
+          declareHolderIdentity: true,
+          account: {
+            ...account,
+            bankAccount: { ...account.bankAccount, holderDocument },
+          },
+        }).success,
+      ).toBe(false);
+    },
+  );
 
   it("accepts the individual recipient data with the couple's own bank account", () => {
     const parsed = receivingSetupInputSchema.parse({
@@ -54,6 +164,7 @@ describe("Pagar.me receiving setup contracts", () => {
       consentVersion: receivingSetupConsentVersion,
       confirmHolder: true,
       consentToProvider: true,
+      declareHolderIdentity: true,
       account,
     });
     expect(parsed.account.bankAccount.type).toBe("checking");
@@ -66,6 +177,7 @@ describe("Pagar.me receiving setup contracts", () => {
       consentVersion: receivingSetupConsentVersion,
       confirmHolder: true,
       consentToProvider: true,
+      declareHolderIdentity: true,
       account: { ...account, address },
     });
     expect(parsed.account.address.referencePoint).toBeUndefined();
@@ -81,6 +193,7 @@ describe("Pagar.me receiving setup contracts", () => {
         consentVersion: receivingSetupConsentVersion,
         confirmHolder: true,
         consentToProvider: true,
+        declareHolderIdentity: true,
         account,
         ...extra,
       }).success,
@@ -99,6 +212,7 @@ describe("Pagar.me receiving setup contracts", () => {
         consentVersion: receivingSetupConsentVersion,
         confirmHolder: true,
         consentToProvider: true,
+        declareHolderIdentity: true,
         account: { ...account, ...patch },
       }).success,
     ).toBe(false);
@@ -125,6 +239,7 @@ describe("Pagar.me receiving setup contracts", () => {
           consentVersion: receivingSetupConsentVersion,
           confirmHolder: true,
           consentToProvider: true,
+          declareHolderIdentity: true,
           account: { ...account, ...patch },
         }).success,
       ).toBe(false);
@@ -210,23 +325,6 @@ describe("Pagar.me receiving setup contracts", () => {
     expect(parse({ kycDetails: { document: "12345678909" } }).success).toBe(
       false,
     );
-  });
-
-  it("returns a KYC link with its QR code and expiry", () => {
-    expect(
-      receivingKycLinkSchema.parse({
-        url: "https://exemplo.com/kyc?token=abc",
-        base64QrCode: "PD94bWw=",
-        expiresAt: "2026-11-18T12:20:00.000Z",
-      }).url,
-    ).toBe("https://exemplo.com/kyc?token=abc");
-    expect(
-      receivingKycLinkSchema.safeParse({
-        url: "http://exemplo.com/kyc",
-        base64QrCode: "PD94bWw=",
-        expiresAt: "2026-11-18T12:20:00.000Z",
-      }).success,
-    ).toBe(false);
   });
 });
 

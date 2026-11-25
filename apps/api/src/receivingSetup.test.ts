@@ -1,6 +1,5 @@
 import { receivingSetupConsentVersion } from "@entrelacos/contracts";
 import { describe, expect, it, vi } from "vitest";
-import { PagarmeRejectedError } from "./pagarmeHttpClient";
 import {
   createReceivingSetupService,
   type ReceivingRecipientObservation,
@@ -29,12 +28,7 @@ const createdAccount = {
     recipientReference: "rp_fixtureRecipient01",
   },
 };
-const kycLink = {
-  url: "https://exemplo.com/kyc?token=eyWfwqrnqwrnfoqwntoqwntqw",
-  base64QrCode: "PD94bWwgdmVyc2lvbj0iMS4wIj8+PHN2Zy8+",
-  expiresAt: "2026-11-18T12:20:00.000Z",
-};
-function fixture() {
+function fixture(clock?: () => Date) {
   const sessionAuthentication = {
     ...actor,
     proofKind: "SESSION_AUTHENTICATION",
@@ -69,20 +63,18 @@ function fixture() {
       observedAt: "2026-11-18T12:00:00.000Z",
     }),
   );
-  const recipients = { createKycLink: vi.fn(async () => kycLink) };
   const options = {
     repository,
     nomination: { nominate },
     provisioning: { begin },
     observe,
-    recipients,
+    ...(clock ? { clock } : {}),
   } as unknown as Parameters<typeof createReceivingSetupService>[0];
   return {
     repository,
     nominate,
     begin,
     observe,
-    recipients,
     service: createReceivingSetupService(options),
   };
 }
@@ -91,6 +83,7 @@ const input = {
   consentVersion: receivingSetupConsentVersion,
   confirmHolder: true as const,
   consentToProvider: true as const,
+  declareHolderIdentity: true as const,
   account: {
     name: "Maria da Silva",
     email: "maria@example.test",
@@ -538,227 +531,118 @@ describe("verifying an uncertain receiving setup", () => {
   });
 });
 
-function eligible(values: ReturnType<typeof fixture>) {
-  values.observe.mockResolvedValue({
-    recipientId: "rp_fixtureRecipient01",
-    status: "affiliation",
-    kyc: {
-      status: "partially_denied",
-      statusReason: "additional_documents_required",
-    },
-    observedAt: "2026-11-18T12:00:00.000Z",
-  } as never);
-}
-describe("receiving identity verification link", () => {
-  it.each([
-    ["the platform owner", { ...actor, userId: "owner-one" }, "OWNER"],
-    ["the account operator", actor, "SITE_ADMIN"],
-  ] as const)(
-    "returns a fresh link for %s without writing it anywhere",
-    async (_label, requester, role) => {
-      const values = fixture();
-      values.repository.readAccount.mockResolvedValue(createdAccount);
-      eligible(values);
-      const log = vi.spyOn(console, "log");
-      const info = vi.spyOn(console, "info");
-      expect(await values.service.createKycLink(requester, role)).toEqual(
-        kycLink,
-      );
-      expect(values.recipients.createKycLink).toHaveBeenCalledExactlyOnceWith(
-        "rp_fixtureRecipient01",
-      );
-      expect(values.repository.consent).not.toHaveBeenCalled();
-      expect(values.repository.designate).not.toHaveBeenCalled();
-      expect(values.begin).not.toHaveBeenCalled();
-      expect(log).not.toHaveBeenCalled();
-      expect(info).not.toHaveBeenCalled();
-      log.mockRestore();
-      info.mockRestore();
-    },
-  );
-  it("refuses another site administrator", async () => {
-    const values = fixture();
-    values.repository.readAccount.mockResolvedValue(createdAccount);
+describe("checking the holder identity before Pagar.me", () => {
+  const at = (day: string) => () => new Date(`${day}T15:00:00.000Z`);
+  const withAccount = (patch: object) => ({
+    ...input,
+    account: { ...input.account, ...patch },
+  });
+  async function refused(
+    values: ReturnType<typeof fixture>,
+    submitted: unknown,
+  ) {
     await expect(
-      values.service.createKycLink(
-        { ...actor, userId: "planner-one" },
-        "SITE_ADMIN",
-      ),
-    ).rejects.toMatchObject({ status: 403 });
-    expect(values.recipients.createKycLink).not.toHaveBeenCalled();
-  });
-  it("reports a provider refusal as an unavailable link without provider details", async () => {
-    const values = fixture();
-    values.repository.readAccount.mockResolvedValue(createdAccount);
-    eligible(values);
-    vi.spyOn(console, "info").mockImplementation(() => {});
-    values.recipients.createKycLink.mockRejectedValue(
-      new PagarmeRejectedError(
-        404,
-        null,
-        "no kyc with partially_denied status",
-      ),
-    );
-    const error = await values.service
-      .createKycLink({ ...actor, userId: "owner-one" }, "OWNER")
-      .catch((reason: unknown) => reason);
-    expect(error).toMatchObject({
+      values.service.submit(submitted, authorization),
+    ).rejects.toMatchObject({
       status: 409,
-      code: "RECEIVING_KYC_LINK_UNAVAILABLE",
+      code: "RECEIVING_SETUP_INVALID_INPUT",
     });
-    expect(String((error as Error).message)).not.toContain("partially_denied");
+    expect(values.repository.consent).not.toHaveBeenCalled();
+    expect(values.nominate).not.toHaveBeenCalled();
+    expect(values.begin).not.toHaveBeenCalled();
+  }
+  it.each([
+    ["wrong check digits", "12345678900"],
+    ["repeated digits", "00000000000"],
+    ["punctuation", "123.456.789-09"],
+  ])("refuses a CPF with %s", async (_label, cpf) => {
+    await refused(fixture(), withAccount({ cpf }));
+  });
+  it("refuses a holder one day before the 18th birthday", async () => {
+    await refused(
+      fixture(at("2026-04-11")),
+      withAccount({ birthDate: "2008-04-12" }),
+    );
   });
   it.each([
-    ["registration", { status: null, statusReason: null }],
-    ["affiliation", { status: "pending", statusReason: "in_analysis" }],
-    [
-      "affiliation",
-      { status: "pending", statusReason: "answered_waiting_analysis" },
-    ],
-    ["affiliation", { status: "approved", statusReason: null }],
-    ["active", { status: "approved", statusReason: null }],
-    ["refused", { status: "denied", statusReason: "fully_denied" }],
-    ["affiliation", { status: "denied", statusReason: "fully_denied" }],
-  ] as const)(
-    "refuses before calling Pagar.me while the recipient is %s with KYC %o",
-    async (status, kyc) => {
-      const values = fixture();
-      values.repository.readAccount.mockResolvedValue(createdAccount);
-      values.observe.mockResolvedValue({
-        recipientId: "rp_fixtureRecipient01",
-        status,
-        kyc,
-        observedAt: "2026-11-18T12:00:00.000Z",
-      } as never);
-      const info = vi.spyOn(console, "info").mockImplementation(() => {});
-      await expect(
-        values.service.createKycLink(
-          { ...actor, userId: "owner-one" },
-          "OWNER",
-        ),
-      ).rejects.toMatchObject({
-        status: 409,
-        code: "RECEIVING_KYC_LINK_UNAVAILABLE",
-      });
-      expect(values.recipients.createKycLink).not.toHaveBeenCalled();
-      expect(JSON.parse(String(info.mock.calls[0]?.[0]))).toMatchObject({
-        event: "receiving.kyc_link.unavailable",
-        operation: "observe",
-        result: `${status}.${kyc.status ?? "none"}`,
-        siteId: "site-one",
-      });
-      info.mockRestore();
+    ["on the 18th birthday", "2026-04-12"],
+    ["after the 18th birthday", "2026-04-13"],
+  ])("accepts a holder %s", async (_label, day) => {
+    const values = fixture(at(day));
+    await expect(
+      values.service.submit(
+        withAccount({ birthDate: "2008-04-12" }),
+        authorization,
+      ),
+    ).resolves.toEqual({ state: "STORED" });
+    expect(values.begin).toHaveBeenCalledOnce();
+  });
+  it("refuses a bank account whose holder document differs from the CPF", async () => {
+    await refused(
+      fixture(),
+      withAccount({
+        bankAccount: {
+          ...input.account.bankAccount,
+          holderDocument: "52998224725",
+        },
+      }),
+    );
+  });
+  it("sends Pagar.me the recipient CPF as the only document, also for the bank account", async () => {
+    const values = fixture();
+    await values.service.submit(input, authorization);
+    const [call] = values.begin.mock.calls;
+    const account = (
+      call?.[0] as { input: { cpf: string; bankAccount: object } } | undefined
+    )?.input;
+    expect(account).toBeDefined();
+    expect(account?.cpf).toBe("12345678909");
+    expect(account?.bankAccount).not.toHaveProperty("holderDocument");
+  });
+  it.each([
+    ["absent", { declareHolderIdentity: undefined }],
+    ["false", { declareHolderIdentity: false }],
+  ])(
+    "refuses a submit whose identity declaration is %s",
+    async (_label, patch) => {
+      await refused(fixture(), { ...input, ...patch });
     },
   );
   it.each([
-    [
-      "the observation fails",
-      () => Promise.reject(new Error("Pagar.me unreachable")),
-    ],
-    [
-      "Pagar.me sends no KYC details in affiliation",
-      async () => ({
-        recipientId: "rp_fixtureRecipient01",
-        status: "affiliation",
-        kyc: { status: null, statusReason: null },
-        observedAt: "2026-11-18T12:00:00.000Z",
-      }),
-    ],
-    [
-      "the recipient status is undocumented",
-      async () => ({
-        recipientId: "rp_fixtureRecipient01",
-        status: "mystery",
-        kyc: { status: "unknown", statusReason: "unknown" },
-        observedAt: "2026-11-18T12:00:00.000Z",
-      }),
-    ],
-  ])("lets Pagar.me decide when %s", async (_label, observation) => {
-    const values = fixture();
-    values.repository.readAccount.mockResolvedValue(createdAccount);
-    values.observe.mockImplementation(observation as never);
-    expect(
-      await values.service.createKycLink(
-        { ...actor, userId: "owner-one" },
-        "OWNER",
-      ),
-    ).toEqual(kycLink);
-  });
-  it("logs a Pagar.me refusal with its status, code and redacted reason only", async () => {
-    const values = fixture();
-    values.repository.readAccount.mockResolvedValue(createdAccount);
-    eligible(values);
-    const info = vi.spyOn(console, "info").mockImplementation(() => {});
-    values.recipients.createKycLink.mockRejectedValue(
-      new PagarmeRejectedError(
-        404,
-        "not_found",
-        "rp_fixtureRecipient01 doesn´t have any kyc with partially_denied status. MARIA DA SILVA 123.456.789-09 https://pagar.me/kyc/session-abc",
-      ),
-    );
-    await expect(
-      values.service.createKycLink({ ...actor, userId: "owner-one" }, "OWNER"),
-    ).rejects.toMatchObject({
-      status: 409,
-      code: "RECEIVING_KYC_LINK_UNAVAILABLE",
-    });
-    expect(info).toHaveBeenCalledOnce();
-    const logged = String(info.mock.calls[0]?.[0]);
-    expect(JSON.parse(logged)).toMatchObject({
-      level: "warn",
-      event: "receiving.kyc_link.rejected",
-      operation: "createKycLink",
-      status: 404,
-      providerCode: "not_found",
-      errorCode: "PagarmeRejectedError",
-      siteId: "site-one",
-    });
-    expect(JSON.parse(logged).providerMessage).toContain(
-      "partially_denied status",
-    );
-    for (const value of [
-      "https://",
-      "pagar.me/kyc",
-      "MARIA",
-      "SILVA",
-      "123.456.789-09",
-      "12345678909",
-      kycLink.url,
-      kycLink.base64QrCode,
-    ])
-      expect(logged).not.toContain(value);
-    info.mockRestore();
-  });
-  it("never lets a failing log change the refusal", async () => {
-    const values = fixture();
-    values.repository.readAccount.mockResolvedValue(createdAccount);
-    eligible(values);
-    vi.spyOn(console, "info").mockImplementation(() => {
-      throw new Error("log sink down");
-    });
-    values.recipients.createKycLink.mockRejectedValue(
-      new PagarmeRejectedError(404, null, null),
-    );
-    await expect(
-      values.service.createKycLink({ ...actor, userId: "owner-one" }, "OWNER"),
-    ).rejects.toMatchObject({ code: "RECEIVING_KYC_LINK_UNAVAILABLE" });
-  });
+    ["absent", undefined],
+    ["the pre-declaration version", "pagarme-receiving-v1"],
+    ["the previous provider version", "asaas-receiving-v1"],
+  ])(
+    "refuses a submit whose consent version is %s",
+    async (_label, version) => {
+      await refused(fixture(), { ...input, consentVersion: version });
+    },
+  );
+});
+describe("consent of an already created recipient", () => {
   it.each([
-    ["no account", null],
-    [
-      "a pending account",
-      { ...createdAccount, state: "UNKNOWN", result: null },
-    ],
-  ])("requires a created recipient (%s)", async (_label, account) => {
+    ["the current version", receivingSetupConsentVersion, true],
+    ["the pre-declaration Pagar.me version", "pagarme-receiving-v1", true],
+    ["the previous provider version", "asaas-receiving-v1", false],
+  ])(
+    "reports a created recipient accepted under %s as recorded: %s",
+    async (_label, consentVersion, recorded) => {
+      const values = fixture();
+      values.repository.readHolder.mockResolvedValue({
+        ...holder,
+        consentVersion,
+      });
+      values.repository.readAccount.mockResolvedValue(createdAccount);
+      expect((await values.service.read(actor)).consentRecorded).toBe(recorded);
+    },
+  );
+  it("asks for the new declaration before a recipient is created", async () => {
     const values = fixture();
-    values.repository.readAccount.mockResolvedValue(account);
-    await expect(
-      values.service.createKycLink({ ...actor, userId: "owner-one" }, "OWNER"),
-    ).rejects.toMatchObject({
-      status: 409,
-      code: "RECEIVING_ACCOUNT_REQUIRED",
+    values.repository.readHolder.mockResolvedValue({
+      ...holder,
+      consentVersion: "pagarme-receiving-v1",
     });
-    expect(values.recipients.createKycLink).not.toHaveBeenCalled();
+    expect((await values.service.read(actor)).consentRecorded).toBe(false);
   });
 });
 describe("receiving holder candidates", () => {

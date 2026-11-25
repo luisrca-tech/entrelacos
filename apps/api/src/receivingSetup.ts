@@ -1,28 +1,21 @@
 import {
+  createReceivingSetupInputSchema,
   pagarmeRecipientStatuses,
-  type ReceivingKycLink,
   type ReceivingProviderRejection,
   type ReceivingSetupContext,
   type ReceivingSetupReconcileResult,
-  receivingKycLinkSchema,
+  receivingConsentCoversCreatedRecipient,
   receivingProviderRejectionSchema,
   receivingSetupContextSchema,
   receivingSetupDisclosure,
-  receivingSetupInputSchema,
   type SiteAccess,
 } from "@entrelacos/contracts";
 import type { FinancialActor } from "./financialAuthorization";
-import { logObservabilityEvent } from "./observability";
-import { PagarmeRejectedError } from "./pagarmeHttpClient";
 import {
   mapPagarmeRecipientStatus,
-  type PagarmeRecipientClient,
   type PagarmeRecipientKyc,
 } from "./pagarmeRecipientClient";
-import {
-  type createReceivingAccountProvisioning,
-  failureDetails,
-} from "./receivingAccountProvisioning";
+import type { createReceivingAccountProvisioning } from "./receivingAccountProvisioning";
 import {
   deriveReceivingNominationRequestId,
   type ReceivingNominationService,
@@ -75,9 +68,8 @@ export interface ReceivingSetupServiceOptions {
     siteId: string,
     account: ReceivingSetupAccountRecord,
   ) => Promise<ReceivingRecipientObservation>;
-  recipients?: Pick<PagarmeRecipientClient, "createKycLink">;
-  /** Receives PII-free events; defaults to the structured log. */
-  log?: (event: unknown) => void;
+  /** Reference date for the holder's minimum age; defaults to now. */
+  clock?: () => Date;
 }
 function recipientStatus(
   status: string,
@@ -86,90 +78,17 @@ function recipientStatus(
     ? (status as (typeof pagarmeRecipientStatuses)[number])
     : null;
 }
-/**
- * Pagar.me creates the selfie and document link only for a recipient in
- * `affiliation` whose KYC is `partially_denied`; earlier it answers 404
- * (https://docs.pagar.me/reference/criar-link-recebedor). Only a documented
- * state that rules the link out refuses it here; anything uncertain is left
- * to Pagar.me.
- */
-function kycLinkRuledOut(observed: ReceivingRecipientObservation): boolean {
-  if (observed.status !== "affiliation")
-    return recipientStatus(observed.status) !== null;
-  const kyc = observed.kyc?.status ?? null;
-  return kyc !== null && kyc !== "unknown" && kyc !== "partially_denied";
-}
 export function createReceivingSetupService(
   options: ReceivingSetupServiceOptions,
 ) {
   const repository = options.repository;
-  const log = options.log ?? logObservabilityEvent;
-  function record(event: object) {
-    try {
-      log(event);
-    } catch {
-      /* Logging never changes the response. */
-    }
-  }
+  // The marketplace's own identity check (Pagar.me runs none on a
+  // pass-through account): CPF check digits, 18 or older on the reference
+  // date, and the bank account under the same CPF (no other document field).
+  const inputSchema = createReceivingSetupInputSchema(
+    options.clock ?? (() => new Date()),
+  );
   return Object.freeze({
-    /**
-     * Issues a short-lived Pagar.me identity verification link. The link is
-     * returned to the caller only: it is never stored or logged.
-     */
-    async createKycLink(
-      actor: FinancialActor,
-      platformRole: "OWNER" | "SITE_ADMIN" | "SITE_ASSISTANT",
-    ): Promise<ReceivingKycLink> {
-      const account = await repository.readAccount(actor.siteId);
-      if (platformRole !== "OWNER" && account?.operatorUserId !== actor.userId)
-        throw new ReceivingSetupError(403, "MEMBERSHIP_DENIED");
-      if (account?.state !== "SUCCEEDED" || !account.result)
-        throw new ReceivingSetupError(409, "RECEIVING_ACCOUNT_REQUIRED");
-      if (!options.recipients)
-        throw new ReceivingSetupError(503, "RECEIVING_SETUP_UNAVAILABLE");
-      let observed: ReceivingRecipientObservation | null = null;
-      try {
-        observed = (await options.observe?.(actor.siteId, account)) ?? null;
-      } catch {
-        /* Without a fresh observation, Pagar.me decides. */
-      }
-      if (
-        observed &&
-        observed.recipientId === account.result.recipientReference &&
-        kycLinkRuledOut(observed)
-      ) {
-        record({
-          level: "info",
-          event: "receiving.kyc_link.unavailable",
-          operation: "observe",
-          result: `${recipientStatus(observed.status) ?? "unknown"}.${observed.kyc?.status ?? "none"}`,
-          siteId: actor.siteId,
-        });
-        throw new ReceivingSetupError(409, "RECEIVING_KYC_LINK_UNAVAILABLE");
-      }
-      let link: unknown;
-      try {
-        link = await options.recipients.createKycLink(
-          account.result.recipientReference,
-        );
-      } catch (error) {
-        // Pagar.me refuses a link when no identity check is pending. The
-        // response stays generic; the log keeps the redacted provider reason.
-        if (error instanceof PagarmeRejectedError) {
-          record({
-            level: "warn",
-            event: "receiving.kyc_link.rejected",
-            operation: "createKycLink",
-            result: "unavailable",
-            siteId: actor.siteId,
-            ...failureDetails(error),
-          });
-          throw new ReceivingSetupError(409, "RECEIVING_KYC_LINK_UNAVAILABLE");
-        }
-        throw error;
-      }
-      return receivingKycLinkSchema.parse(link);
-    },
     async read(
       actor: FinancialActor,
       platformRole?: "OWNER" | "SITE_ADMIN" | "SITE_ASSISTANT",
@@ -203,9 +122,13 @@ export function createReceivingSetupService(
           ? { userId: holder.holderUserId, name: holder.holderName }
           : null,
         isHolder: holder?.holderUserId === actor.userId,
+        // A recipient created under the previous Pagar.me consent keeps
+        // operating; before creation the current declaration is required.
         consentRecorded:
           !!holder?.consentId &&
-          holder.consentVersion === receivingSetupDisclosure.version,
+          (holder.consentVersion === receivingSetupDisclosure.version ||
+            (account?.state === "SUCCEEDED" &&
+              receivingConsentCoversCreatedRecipient(holder.consentVersion))),
         // Whoever may designate sees the candidates: the owner always, a site
         // administrator (the route requires configureReceiving) only while no
         // holder exists.
@@ -236,7 +159,7 @@ export function createReceivingSetupService(
         access: SiteAccess;
       },
     ): Promise<{ state: "STORED" | "UNKNOWN" | "UNAVAILABLE" }> {
-      const parsed = receivingSetupInputSchema.safeParse(rawInput);
+      const parsed = inputSchema.safeParse(rawInput);
       if (!parsed.success)
         throw new ReceivingSetupError(409, "RECEIVING_SETUP_INVALID_INPUT");
       const input = parsed.data;

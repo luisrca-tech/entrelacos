@@ -16,12 +16,33 @@ const text = (maximum: number) =>
             character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127,
         ),
     );
-export const receivingSetupConsentVersion = "pagarme-receiving-v1";
+/**
+ * v2 adds the holder's own identity declaration: on a Pagar.me pass-through
+ * account ("Conta de Passagem") recipients go through no provider identity
+ * check, so the marketplace checks CPF, age and bank ownership itself.
+ */
+export const receivingSetupConsentVersion = "pagarme-receiving-v2";
+/**
+ * The Pagar.me consent accepted before the identity declaration. A recipient
+ * already created under it keeps operating (status, readiness, withdrawals);
+ * any new registration requires the current version.
+ */
+export const receivingSetupPreviousPagarmeConsentVersion =
+  "pagarme-receiving-v1";
 export const receivingSetupDisclosure = {
   id: "entrelacos-pagarme-receiving",
   version: receivingSetupConsentVersion,
-  text: "O recebedor será cadastrado na Pagar.me em meu nome, com a minha conta bancária. Autorizo o envio dos dados deste formulário à Pagar.me para cadastro e verificação de identidade. A aprovação e eventuais documentos serão solicitados pela Pagar.me. Esta confirmação não libera pagamentos ou saques. Em teste, as operações não movimentam dinheiro real.",
+  text: "Declaro que sou o titular do CPF informado e da conta bancária cadastrada, que tenho 18 anos ou mais e que os dados deste formulário são verdadeiros. O recebedor será cadastrado na Pagar.me em meu nome, com a minha conta bancária, e autorizo o envio destes dados à Pagar.me para esse cadastro. Esta confirmação não libera pagamentos ou saques. Em teste, as operações não movimentam dinheiro real.",
 } as const;
+/** Whether a stored consent still covers a recipient that already exists. */
+export function receivingConsentCoversCreatedRecipient(
+  version: string | null | undefined,
+): boolean {
+  return (
+    version === receivingSetupConsentVersion ||
+    version === receivingSetupPreviousPagarmeConsentVersion
+  );
+}
 const digits = (pattern: RegExp) => z.string().regex(pattern);
 
 /** CPF check digits (punctuation ignored); repeated digits are invalid. */
@@ -37,8 +58,8 @@ export function isValidCpf(value: string): boolean {
   return true;
 }
 
-/** Whole years between a YYYY-MM-DD birth date and today (UTC). */
-function ageInYears(birthDate: string, today = new Date()): number {
+/** Whole years between a YYYY-MM-DD birth date and `today` (UTC). */
+function ageInYears(birthDate: string, today: Date): number {
   const [year, month, day] = birthDate.split("-").map(Number);
   let age = today.getUTCFullYear() - year;
   const beforeBirthday =
@@ -62,59 +83,76 @@ const minimumRecipientAge = 18;
  * professional_occupation, birthdate/minimum age, bank, branch_number or
  * the check digits: those keep the bounds below, chosen here ("sem fonte").
  */
-export const receivingSetupAccountSchema = z
-  .object({
-    name: text(128),
-    email: z.email().max(254),
-    cpf: digits(/^\d{11}$/).refine(isValidCpf),
-    mobilePhone: digits(/^\d{10,11}$/),
-    birthDate: z
-      .string()
-      .regex(/^\d{4}-\d{2}-\d{2}$/)
-      .refine(
-        (value) =>
-          Number.isFinite(Date.parse(value)) &&
-          new Date(value).toISOString().slice(0, 10) === value &&
-          ageInYears(value) >= minimumRecipientAge &&
-          ageInYears(value) <= 120,
-      ),
-    monthlyIncomeCents: z.number().int().nonnegative().max(2_147_483_647),
-    professionalOccupation: text(128),
-    address: z
-      .object({
-        street: text(256),
-        streetNumber: text(32),
-        complement: text(128).optional(),
-        neighborhood: text(128),
-        city: text(128),
-        state: digits(/^[A-Z]{2}$/),
-        zipCode: digits(/^\d{8}$/),
-        referencePoint: text(256).optional(),
-      })
-      .strict(),
-    bankAccount: z
-      .object({
-        bank: digits(/^\d{3}$/),
-        branchNumber: digits(/^\d{1,4}$/),
-        branchCheckDigit: digits(/^\d$/).optional(),
-        accountNumber: digits(/^\d{1,13}$/),
-        accountCheckDigit: digits(/^[0-9Xx]{1,2}$/),
-        /** As printed by the bank; register_information.name keeps 128. */
-        holderName: receivingHolderNameSchema,
-        type: z.enum(["checking", "savings"]),
-      })
-      .strict(),
-  })
-  .strict();
-export const receivingSetupInputSchema = z
-  .object({
-    policyVersion: identifier,
-    consentVersion: z.literal(receivingSetupConsentVersion),
-    confirmHolder: z.literal(true),
-    consentToProvider: z.literal(true),
-    account: receivingSetupAccountSchema,
-  })
-  .strict();
+export function createReceivingSetupAccountSchema(
+  today: () => Date = () => new Date(),
+) {
+  return z
+    .object({
+      name: text(128),
+      email: z.email().max(254),
+      cpf: digits(/^\d{11}$/).refine(isValidCpf),
+      mobilePhone: digits(/^\d{10,11}$/),
+      birthDate: z
+        .string()
+        .regex(/^\d{4}-\d{2}-\d{2}$/)
+        .refine(
+          (value) =>
+            Number.isFinite(Date.parse(value)) &&
+            new Date(value).toISOString().slice(0, 10) === value &&
+            ageInYears(value, today()) >= minimumRecipientAge &&
+            ageInYears(value, today()) <= 120,
+        ),
+      monthlyIncomeCents: z.number().int().nonnegative().max(2_147_483_647),
+      professionalOccupation: text(128),
+      address: z
+        .object({
+          street: text(256),
+          streetNumber: text(32),
+          complement: text(128).optional(),
+          neighborhood: text(128),
+          city: text(128),
+          state: digits(/^[A-Z]{2}$/),
+          zipCode: digits(/^\d{8}$/),
+          referencePoint: text(256).optional(),
+        })
+        .strict(),
+      bankAccount: z
+        .object({
+          bank: digits(/^\d{3}$/),
+          branchNumber: digits(/^\d{1,4}$/),
+          branchCheckDigit: digits(/^\d$/).optional(),
+          accountNumber: digits(/^\d{1,13}$/),
+          accountCheckDigit: digits(/^[0-9Xx]{1,2}$/),
+          /** As printed by the bank; register_information.name keeps 128. */
+          holderName: receivingHolderNameSchema,
+          type: z.enum(["checking", "savings"]),
+          // No holder document: it is always the recipient CPF (strict).
+        })
+        .strict(),
+    })
+    .strict();
+}
+export const receivingSetupAccountSchema = createReceivingSetupAccountSchema();
+/**
+ * `today` is the reference date for the minimum age, injectable so the 18th
+ * birthday is tested deterministically.
+ */
+export function createReceivingSetupInputSchema(
+  today: () => Date = () => new Date(),
+) {
+  return z
+    .object({
+      policyVersion: identifier,
+      consentVersion: z.literal(receivingSetupConsentVersion),
+      confirmHolder: z.literal(true),
+      consentToProvider: z.literal(true),
+      /** The holder declares owning the CPF and bank account, being 18+ and truthful data. */
+      declareHolderIdentity: z.literal(true),
+      account: createReceivingSetupAccountSchema(today),
+    })
+    .strict();
+}
+export const receivingSetupInputSchema = createReceivingSetupInputSchema();
 /**
  * The platform owner sends only the choice; a site administrator also sends a
  * CONFIGURE_RECEIVING password proof, which the API requires for that role.
@@ -136,9 +174,9 @@ export const pagarmeRecipientStatuses = [
   "inactive",
 ] as const;
 /**
- * Pagar.me `kyc_details.status` of a recipient. The selfie and document link
- * exists only while the recipient is in `affiliation` and its KYC is
- * `partially_denied` (https://docs.pagar.me/reference/criar-link-recebedor).
+ * Pagar.me `kyc_details.status` of a recipient. On a pass-through account
+ * the provider runs no identity check of its own, so any request for
+ * documents (`partially_denied`) is unexpected and handled with support.
  * Undocumented values are reported as `unknown`.
  */
 export const pagarmeKycStatuses = [
@@ -302,17 +340,3 @@ export type ReceivingSetupInput = z.infer<typeof receivingSetupInputSchema>;
 export const receivingIncomingVerificationInputSchema = z
   .object({ confirmIncomingAccount: z.literal(true) })
   .strict();
-
-/** Short-lived Pagar.me identity verification link; never stored. */
-export const receivingKycLinkSchema = z
-  .object({
-    url: z.url({ protocol: /^https$/ }).max(2048),
-    base64QrCode: z
-      .string()
-      .min(1)
-      .max(1_000_000)
-      .regex(/^[A-Za-z0-9+/]+={0,2}$/),
-    expiresAt: z.iso.datetime(),
-  })
-  .strict();
-export type ReceivingKycLink = z.infer<typeof receivingKycLinkSchema>;

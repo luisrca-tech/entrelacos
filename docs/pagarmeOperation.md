@@ -62,9 +62,11 @@ Every checkout still unresolved 10 minutes after creation (pending order, unknow
 
 A card decided in the creating call (paid or declined) is applied before the create response, so the guest sees the decision right away.
 
-## KYC
+## Identity
 
-The owner, or the recipient operator, calls `POST /v1/owner/sites/:siteId/receiving/kyc-link` (at most 3 links per site per minute; more answer `429`). The API calls `POST /recipients/{id}/kyc_link` and returns the URL and QR code once. They are valid for about 20 minutes and never stored. The panel opens the tab inside the click and fills in the URL when the API answers, so pop-up blockers allow it; the QR image type (PNG or SVG) is read from its bytes. Status changes arrive through `recipient.updated`, and the worker re-reads `GET /recipients/{id}`. Recipient ids may be `rp_`, `re_` or, for recipients created after the 2026-07-14 API change, a `pp_` `payment_profile_id`; all three are accepted.
+The Entrelaços account is a Pagar.me pass-through account ("Conta de Passagem"): individual recipients go through no Pagar.me liveness check (no selfie, document or `kyc_link`). Identity is the marketplace's responsibility. Before anything is sent, the API itself refuses (`400 VALIDATION_ERROR` at the route, `409 RECEIVING_SETUP_INVALID_INPUT` in the service) a CPF with wrong check digits, a holder younger than 18 on the reference date, and any bank holder document other than the recipient CPF (the form has no such field; `holder_document` is always the CPF, and a created recipient whose bank document differs is refused). The holder also accepts disclosure `pagarme-receiving-v2`, declaring they own the CPF and the bank account, are 18 or older and that the data is true; the version, time, session and holder are stored in `receiving_setup_holder`. A recipient created under `pagarme-receiving-v1` keeps operating; any new registration requires v2.
+
+The recipient may still take time to activate, or be refused, blocked or suspended. Status changes arrive through `recipient.updated`, and the worker re-reads `GET /recipients/{id}`; `kyc_details` is still read and shown. An unexpected request for documents (`partially_denied`) is shown as needing attention with a pointer to Entrelaços support. Recipient ids may be `rp_`, `re_` or, for recipients created after the 2026-07-14 API change, a `pp_` `payment_profile_id`; all three are accepted.
 
 Recipient data is checked before Pagar.me is called: valid CPF check digits and an adult holder (18+). `register_information.address.complementary` is always sent (`POST /recipients` answers `422` without it); an empty complement becomes `Sem complemento`.
 
@@ -93,7 +95,7 @@ Rows from before the switch are kept: the previous provider's receiving accounts
 
 `tsx apps/api/scripts/pagarmeSandboxProbe.ts [recipient|order|all] [--recipient rp_…]`, run with `PAGARME_MODE=test`, `sk_test_` and the platform `rp_`, plus either `PAGARME_PUBLIC_KEY` (`pk_test_`) or `PAGARME_TEST_CARD_TOKEN`:
 
-- `recipient` creates an individual recipient (automatic anticipation on, transfers off) and checks that the KYC link expires in about 20 minutes.
+- `recipient` creates an individual recipient (automatic anticipation on, transfers off) and prints its status and `kyc_details` status.
 - `order` places a R$ 100,00 gift in 6x with the split and prints each recipient's payables for the charge. If the couple's total equals `C`, keep `charge_total`; if each installment equals `C`, switch to `per_installment`. Record the result here.
 
 The script never prints keys, tokens or card data.

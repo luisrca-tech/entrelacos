@@ -152,7 +152,7 @@ export function ReceivingStatusCard({
               : "Os recebimentos precisam ser verificados."}
           </p>
           <p className="m-0 text-sm text-admin-text-secondary">
-            Acompanhe a etapa pendente em Verificar identidade.
+            Acompanhe a etapa pendente em Status da conta.
           </p>
         </>
       );

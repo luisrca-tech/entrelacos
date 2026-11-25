@@ -16,7 +16,7 @@ const holder = {
   designatedByUserId: "owner-one",
   designatedAt: at,
   consentId: "consent-one",
-  consentVersion: "pagarme-receiving-v1",
+  consentVersion: "pagarme-receiving-v2",
   consentAt: at,
   consentSessionId: "session-one",
   consentAuthenticatedAt: at,
@@ -151,7 +151,7 @@ describe("receiving holder and consent custody", () => {
       const consent = values.repository.consent(
         actor,
         evidence,
-        "pagarme-receiving-v1",
+        "pagarme-receiving-v2",
       );
       if (scenario === "valid") await expect(consent).resolves.toBeUndefined();
       else await expect(consent).rejects.toMatchObject({ status: 403 });
@@ -187,7 +187,7 @@ describe("receiving holder and consent custody", () => {
   it("renews a stored consent from a previous version", async () => {
     const values = consentFixture({ consentVersion: "asaas-receiving-v1" });
     await expect(
-      values.repository.consent(actor, recentAuth, "pagarme-receiving-v1"),
+      values.repository.consent(actor, recentAuth, "pagarme-receiving-v2"),
     ).resolves.toBeUndefined();
     const [update, ...rest] = updates(values);
     expect(rest).toHaveLength(0);
@@ -197,7 +197,7 @@ describe("receiving holder and consent custody", () => {
     expect(update.sql).toContain("consent_id IS NOT DISTINCT FROM");
     expect(update.params[0]).not.toBe("consent-one");
     expect(update.params.slice(1, 5)).toEqual([
-      "pagarme-receiving-v1",
+      "pagarme-receiving-v2",
       at,
       actor.sessionId,
       at,
@@ -207,7 +207,7 @@ describe("receiving holder and consent custody", () => {
   it("keeps a valid current-version consent unchanged", async () => {
     const values = consentFixture({});
     await expect(
-      values.repository.consent(actor, recentAuth, "pagarme-receiving-v1"),
+      values.repository.consent(actor, recentAuth, "pagarme-receiving-v2"),
     ).resolves.toBeUndefined();
     expect(updates(values)).toHaveLength(0);
   });
@@ -216,7 +216,7 @@ describe("receiving holder and consent custody", () => {
       consentAt: new Date(at.getTime() + 1000),
     });
     await expect(
-      values.repository.consent(actor, recentAuth, "pagarme-receiving-v1"),
+      values.repository.consent(actor, recentAuth, "pagarme-receiving-v2"),
     ).rejects.toMatchObject({ code: "RECEIVING_CONSENT_REQUIRED" });
     expect(updates(values)).toHaveLength(0);
   });
@@ -226,10 +226,33 @@ describe("receiving holder and consent custody", () => {
       values.repository.consent(
         actor,
         { ...recentAuth, authenticatedAt: new Date(at.getTime() - 300001) },
-        "pagarme-receiving-v1",
+        "pagarme-receiving-v2",
       ),
     ).rejects.toMatchObject({ status: 403 });
     expect(updates(values)).toHaveLength(0);
+  });
+  it("renews the pre-declaration Pagar.me consent with the version, time and session of who accepted", async () => {
+    const values = consentFixture({ consentVersion: "pagarme-receiving-v1" });
+    await expect(
+      values.repository.consent(actor, recentAuth, "pagarme-receiving-v2"),
+    ).resolves.toBeUndefined();
+    const [update, ...rest] = updates(values);
+    expect(rest).toHaveLength(0);
+    expect(update.params.slice(1, 5)).toEqual([
+      "pagarme-receiving-v2",
+      at,
+      actor.sessionId,
+      at,
+    ]);
+    // The row is the holder's own: only the designated holder may consent.
+    expect(update.params.slice(-2)).toEqual(["holder-one", "consent-one"]);
+  });
+  it("rejects the pre-declaration Pagar.me consent version on a new acceptance", async () => {
+    const values = consentFixture({ consentVersion: "pagarme-receiving-v1" });
+    await expect(
+      values.repository.consent(actor, recentAuth, "pagarme-receiving-v1"),
+    ).rejects.toMatchObject({ code: "RECEIVING_CONSENT_REQUIRED" });
+    expect(values.transaction).not.toHaveBeenCalled();
   });
   it("rejects a submitted previous consent version", async () => {
     const values = consentFixture({ consentVersion: "asaas-receiving-v1" });
@@ -272,7 +295,7 @@ describe("receiving holder and consent custody", () => {
       values.repository.consent(
         actor,
         { ...recentAuth, userId: "planner-one" },
-        "pagarme-receiving-v1",
+        "pagarme-receiving-v2",
       ),
     ).rejects.toMatchObject({ code: "RECENT_AUTH_REQUIRED" });
     expect(values.transaction).not.toHaveBeenCalled();
@@ -308,7 +331,7 @@ describe("receiving holder and consent custody", () => {
         values.repository.consent(
           actor,
           { ...recentAuth, authenticatedAt },
-          "pagarme-receiving-v1",
+          "pagarme-receiving-v2",
         ),
       ).rejects.toMatchObject({ code: "RECENT_AUTH_REQUIRED" });
       expect(values.transaction).not.toHaveBeenCalled();

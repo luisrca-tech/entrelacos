@@ -95,7 +95,7 @@ export const faqTopics: FaqTopic[] = [
       {
         question: "Os dados de pagamento ficam seguros?",
         answer:
-          "O número do cartão vai direto do navegador do convidado para a Pagar.me, que devolve um código no lugar dele. O Entrelaços recebe só esse código, nunca o número nem o CVV. No Pix, o convidado paga pelo aplicativo do banco, com o QR Code ou o código copia e cola. A foto do documento e a selfie da verificação de identidade também seguem direto para a Pagar.me.",
+          "O número do cartão vai direto do navegador do convidado para a Pagar.me, que devolve um código no lugar dele. O Entrelaços recebe só esse código, nunca o número nem o CVV. No Pix, o convidado paga pelo aplicativo do banco, com o QR Code ou o código copia e cola.",
       },
       {
         question: "Abrir o pagamento já conta como um presente recebido?",
@@ -147,9 +147,9 @@ export const faqTopics: FaqTopic[] = [
           "Uma pessoa do casal, com CPF. Ela informa seus dados pessoais e a conta bancária que vai receber os saques, que precisa estar no mesmo CPF.",
       },
       {
-        question: "Como funciona a verificação de identidade?",
+        question: "Como o titular confirma que é dono da conta?",
         answer:
-          "Depois do cadastro, o botão “Verificar identidade” do painel gera um link da Pagar.me, também em QR Code, para o titular enviar documento e foto pelo celular. O link vale por cerca de 20 minutos; se expirar, gerem outro. Os presentes só podem ser recebidos depois que a verificação for aprovada.",
+          "No cadastro, o titular declara que o CPF e a conta bancária são dele, que tem 18 anos ou mais e que os dados são verdadeiros. O Entrelaços confere o CPF, a idade e se a conta está no mesmo CPF antes de enviar à Pagar.me. Não é preciso enviar fotos nem documentos. Os presentes podem ser recebidos assim que a Pagar.me ativar a conta.",
       },
       {
         question: "Pagamento confirmado significa saldo disponível?",
