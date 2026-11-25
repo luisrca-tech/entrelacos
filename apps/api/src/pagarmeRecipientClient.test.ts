@@ -72,7 +72,7 @@ const input: PagarmeRecipientInput = {
 };
 
 describe("Pagar.me recipient client", () => {
-  it("creates an individual recipient with the couple's own bank account, manual transfers and full automatic anticipation", async () => {
+  it("creates an individual recipient with the couple's own bank account, manual transfers and D+1 automatic anticipation", async () => {
     const fetch = respond([200, fixture("recipient-created")]);
     const client = createPagarmeRecipientClient({ secretKey, fetch });
     const recipient = await client.createRecipient(
@@ -125,9 +125,8 @@ describe("Pagar.me recipient client", () => {
       },
       automatic_anticipation_settings: {
         enabled: true,
-        type: "full",
-        volume_percentage: 100,
-        delay: null,
+        type: "1025",
+        delay: 1,
       },
     });
     expect(recipient).toEqual({
