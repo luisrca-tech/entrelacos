@@ -150,7 +150,7 @@ describe("advertising reference for WhatsApp", () => {
     expect(url.searchParams.get("text")).toBe(
       `${contactMessage} (ref: ig-verao)`,
     );
-    expect(`${url.origin}${url.pathname}`).toBe("https://wa.me/5562981848515");
+    expect(`${url.origin}${url.pathname}`).toBe("https://wa.me/5562991339861");
     expect(url.search).not.toContain("+");
     expect(url.search).toContain("%20%28ref%3A%20ig-verao%29");
   });
