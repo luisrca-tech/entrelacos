@@ -266,7 +266,7 @@ describe("receiving account setup", () => {
     expect(v.controller.getState().status).toBe("ready");
     v.controller.dispose();
   });
-  it("explains the review after identity verification without any Pix setup", () => {
+  it("shows the account status without any Pix setup", () => {
     vi.stubGlobal("__APP_ENV__", "production");
     const v = fixture();
     const html = renderToStaticMarkup(
@@ -279,11 +279,11 @@ describe("receiving account setup", () => {
         },
       }),
     );
-    expect(html).toContain("Depois: análise da Pagar.me");
+    expect(html).toContain("Status da conta");
     expect(html).not.toContain("chave Pix");
     expect(html).not.toContain("Confirmar minha conta de recebimento");
   });
-  it("shows the live holder the identity check and the support contact", () => {
+  it("sends the live holder to support when Pagar.me unexpectedly asks for documents", () => {
     vi.stubGlobal("__APP_ENV__", "production");
     const values = fixture();
     const html = renderToStaticMarkup(
@@ -308,19 +308,18 @@ describe("receiving account setup", () => {
       }),
     );
     const visible = html.slice(0, html.indexOf('id="duvidas"'));
-    expect(visible).toContain(">Verificar identidade<");
+    expect(visible).not.toContain("Verificar identidade");
     expect(visible).toContain(
       'href="mailto:luisrcadev@gmail.com?subject=Ajuda%20com%20os%20recebimentos"',
     );
     const guidance = visible.slice(
-      visible.indexOf('aria-label="Etapas na Pagar.me"'),
+      visible.indexOf('aria-label="Cadastro do recebedor"'),
     );
     const steps = [
-      "Dados do recebedor",
-      "Verificação de identidade",
-      "Pronto para receber",
-      "Verificar identidade",
-      "Depois: análise da Pagar.me",
+      "Dados do casal",
+      "Conta bancária",
+      "Status da conta",
+      "Falar com o suporte do EntreLaços",
     ];
     const positions = steps.map((step) => guidance.indexOf(step));
     expect(positions.every((position) => position >= 0)).toBe(true);
@@ -329,7 +328,8 @@ describe("receiving account setup", () => {
         (position, index) => index === 0 || position > positions[index - 1],
       ),
     ).toBe(true);
-    expect(guidance).toContain("pediu a foto do documento e uma selfie");
+    expect(guidance).toContain("A Pagar.me pediu documentos");
+    expect(guidance).not.toMatch(/selfie|QR Code|link seguro/i);
     expect(html).not.toContain('autocomplete="one-time-code"');
     expect(html).not.toContain("Sandbox");
     expect(html).not.toContain("teste da Pagar.me");
@@ -412,7 +412,7 @@ describe("receiving account setup", () => {
         expect(button).toBeDefined();
         expect(button).not.toMatch(/\sdisabled(?:\s|=|>)/);
       }
-      expect(html).toContain("Verifique sua identidade");
+      expect(html).toContain("Status da conta");
       expect(html).not.toContain("Destino Pix para saques");
       await values.controller.verifyIncoming();
       expect(
@@ -563,6 +563,8 @@ describe("receiving account setup", () => {
     expect(html).toContain("Nome completo do titular");
     expect(html).toContain("E-mail do titular");
     expect(html).toContain("sou o titular designado");
+    expect(html).toContain("tenho 18 anos ou mais");
+    expect(html).toContain("o CPF e a conta bancária");
     expect(html).not.toContain("da noiva");
     values.controller.dispose();
   });
@@ -581,9 +583,9 @@ describe("receiving account setup", () => {
     );
     const afterForm = html.slice(html.indexOf("</form>"));
     expect(afterForm).toContain("O que vem depois");
-    expect(afterForm).toContain("Verificação de identidade");
-    expect(afterForm).toContain("documento e selfie");
-    expect(afterForm).toContain("Análise da Pagar.me");
+    expect(afterForm).toContain("Conferência dos dados");
+    expect(afterForm).toContain("Ativação na Pagar.me");
+    expect(afterForm).not.toMatch(/selfie|Verificação de identidade/i);
     expect(afterForm).toContain("Seus dados ficam seguros");
     expect(html).toContain("Enviar cadastro à Pagar.me");
     expect(html).toContain("Ler o termo completo");
@@ -700,18 +702,18 @@ describe("receiving account setup", () => {
           },
         }),
       );
-      expect(html).toContain("A Pagar.me bloqueou ou suspendeu o recebedor.");
+      expect(html).toContain("A Pagar.me bloqueou ou suspendeu a conta.");
       expect(html).toContain("Precisa de ajuste</span>");
       expect(html).not.toContain("Recebimentos liberados");
       values.controller.dispose();
     },
   );
   it.each([
-    ["UNVERIFIED", "Em análise"],
-    ["ONBOARDING", "Em análise"],
-    ["UNDER_REVIEW", "Em análise"],
+    ["UNVERIFIED", "Em ativação"],
+    ["ONBOARDING", "Em ativação"],
+    ["UNDER_REVIEW", "Em ativação"],
   ] as const)(
-    "shows %s as the Pagar.me initial analysis of a submitted account",
+    "shows %s as the activation of a submitted account",
     (accountState, label) => {
       const values = fixture();
       const html = renderToStaticMarkup(
@@ -733,12 +735,13 @@ describe("receiving account setup", () => {
         }),
       );
       expect(html).toContain(`${label}</span>`);
-      expect(html).toContain("até 24 horas");
-      expect(html).not.toContain(">Verificar identidade<");
+      expect(html).toContain("costuma ser rápida");
+      expect(html).not.toContain("até 24 horas");
+      expect(html).not.toContain("Verificar identidade");
       values.controller.dispose();
     },
   );
-  it("reports an approved Pagar.me recipient without offering another identity check", async () => {
+  it("reports an approved Pagar.me recipient without any identity action", async () => {
     const values = fixture({
       ...createdSetup,
       providerStatus: {
@@ -755,8 +758,8 @@ describe("receiving account setup", () => {
         state: values.controller.getState(),
       }),
     );
-    expect(html).toContain("Como o painel acompanha a análise?");
-    expect(html).toContain("Verificar agora consulta a situação na hora.");
+    expect(html).toContain("Quanto tempo leva a ativação?");
+    expect(html).toContain("Conta ativa.");
     expect(html).toContain("Recebedor: <strong>Ativo</strong>");
     expect(html).not.toContain(">Verificar identidade<");
     expect(html).not.toMatch(/Reenviar|senha de acesso|E-mail enviado/);
@@ -786,10 +789,8 @@ describe("receiving account setup", () => {
           },
         }),
       );
-      expect(html).toContain("Como o painel acompanha a análise?");
-      expect(html.includes("a verificação não analisa documentos reais")).toBe(
-        visible,
-      );
+      expect(html).toContain("Quanto tempo leva a ativação?");
+      expect(html.includes("a ativação não analisa dados reais")).toBe(visible);
       expect(html.includes("Ambiente de teste da Pagar.me")).toBe(visible);
       expect(html).toContain("Ainda sem resposta da Pagar.me");
       expect(html).not.toContain("E-mail não enviado");
@@ -1008,6 +1009,7 @@ describe("receiving account setup", () => {
           consentVersion: receivingSetupDisclosure.version,
           confirmHolder: true,
           consentToProvider: true,
+          declareHolderIdentity: true,
         },
       },
     );

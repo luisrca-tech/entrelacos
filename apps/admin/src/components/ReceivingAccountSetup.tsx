@@ -405,6 +405,7 @@ export function createReceivingAccountSetupController(
                 consentVersion: setup.disclosure.version,
                 confirmHolder: true,
                 consentToProvider: true,
+                declareHolderIdentity: true,
               },
             },
           ),
@@ -502,7 +503,7 @@ export function createReceivingAccountSetupController(
           update({
             ...state,
             message:
-              "Cadastro consultado na Pagar.me. Agora confirme sua identidade.",
+              "Cadastro consultado na Pagar.me. Agora acompanhe a ativação da conta.",
           });
           return "stored";
         }

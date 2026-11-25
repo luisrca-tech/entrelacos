@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import {
+  receivingConsentCoversCreatedRecipient,
   receivingSetupConsentVersion,
   receivingSetupDisclosure,
 } from "@entrelacos/contracts";
@@ -152,10 +153,20 @@ export function createReceivingSetupRepository(
       return deny("RECEIVING_HOLDER_REQUIRED", 403);
     return holder;
   }
-  function requireConsent(holder: ReceivingSetupHolderRecord) {
+  /**
+   * `covers` decides which consent versions authorize the action: creating a
+   * recipient requires the current one; selecting the destination of a
+   * recipient that already exists also accepts the consent it was created
+   * under. Every other field is checked the same way.
+   */
+  function requireConsent(
+    holder: ReceivingSetupHolderRecord,
+    covers: (version: string | null) => boolean = (version) =>
+      version === receivingSetupConsentVersion,
+  ) {
     if (
       !holder.consentId ||
-      holder.consentVersion !== receivingSetupConsentVersion ||
+      !covers(holder.consentVersion) ||
       !(holder.consentAt instanceof Date) ||
       !holder.consentSessionId ||
       !(holder.consentAuthenticatedAt instanceof Date) ||
@@ -278,6 +289,27 @@ export function createReceivingSetupRepository(
       issuedAt,
       expiresAt: new Date(Date.parse(issuedAt) + maxAuthAgeMs).toISOString(),
     };
+  }
+  async function provisioningPolicy(
+    record: ReceivingProvisioningRecord,
+    tx: Transaction,
+    authorization: {
+      actor: FinancialActor;
+      recentAuth: ReceivingAuthenticationEvidence;
+    },
+    covers?: (version: string | null) => boolean,
+  ) {
+    proof(authorization.actor, authorization.recentAuth);
+    const holder = requireConsent(
+      await requireHolder(authorization.actor, tx, true),
+      covers,
+    );
+    return (
+      holder.siteId === record.nomination.siteId &&
+      holder.holderUserId === record.nomination.operatorUserId &&
+      record.nomination.environment === mode &&
+      record.nomination.policyVersion === policyVersion
+    );
   }
   const admission = Object.freeze({
     ...admissionPolicy,
@@ -450,7 +482,7 @@ export function createReceivingSetupRepository(
         );
       });
     },
-    async readCurrentProvisioningPolicy(
+    readCurrentProvisioningPolicy(
       record: ReceivingProvisioningRecord,
       tx: Transaction,
       authorization: {
@@ -458,15 +490,27 @@ export function createReceivingSetupRepository(
         recentAuth: ReceivingAuthenticationEvidence;
       },
     ) {
-      proof(authorization.actor, authorization.recentAuth);
-      const holder = requireConsent(
-        await requireHolder(authorization.actor, tx, true),
-      );
-      return (
-        holder.siteId === record.nomination.siteId &&
-        holder.holderUserId === record.nomination.operatorUserId &&
-        record.nomination.environment === mode &&
-        record.nomination.policyVersion === policyVersion
+      return provisioningPolicy(record, tx, authorization);
+    },
+    /**
+     * Destination selection of a recipient that already exists: a holder
+     * whose recipient was created under the pre-declaration Pagar.me consent
+     * keeps operating without renewing it. Creation and reconciliation keep
+     * using readCurrentProvisioningPolicy, which requires the current one.
+     */
+    readCreatedRecipientSelectionPolicy(
+      record: ReceivingProvisioningRecord,
+      tx: Transaction,
+      authorization: {
+        actor: FinancialActor;
+        recentAuth: ReceivingAuthenticationEvidence;
+      },
+    ) {
+      return provisioningPolicy(
+        record,
+        tx,
+        authorization,
+        receivingConsentCoversCreatedRecipient,
       );
     },
   });

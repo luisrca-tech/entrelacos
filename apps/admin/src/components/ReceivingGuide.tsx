@@ -40,8 +40,7 @@ export function ReceivingGuide({
       {showSandboxNotice(mode) && (
         <aside className={adminStyles.notice} aria-label="Orientação de teste">
           <strong>Ambiente de teste da Pagar.me, sem dinheiro real.</strong> A
-          verificação de identidade e os saques de teste não movimentam valores
-          nem analisam documentos reais.
+          ativação e os saques de teste não movimentam valores.
         </aside>
       )}
       <section
@@ -57,7 +56,9 @@ export function ReceivingGuide({
             <p className="m-0">
               O titular informa nome, e-mail, CPF, celular, data de nascimento,
               renda mensal, profissão, endereço e uma conta bancária no mesmo
-              CPF. É para essa conta que os saques vão.
+              CPF, para onde vão os saques. Ele declara que o CPF e a conta são
+              dele, que tem 18 anos ou mais e que os dados são verdadeiros; o
+              EntreLaços confere o CPF, a idade e a conta antes de enviar.
             </p>
             <p className="mt-2 mb-0">
               <Link
@@ -70,12 +71,14 @@ export function ReceivingGuide({
             </p>
           </li>
           <li className="pl-1">
-            <h3 className={stepTitleClassName}>Verifique sua identidade</h3>
+            <h3 className={stepTitleClassName}>
+              Acompanhe a ativação da conta
+            </h3>
             <p className="m-0">
-              Em Verificar identidade, o painel gera um link seguro da Pagar.me
-              e um QR Code para continuar pelo celular. A Pagar.me pede a foto
-              de um documento e uma selfie. Cada link vale por 20 minutos; se
-              expirar, gere outro.
+              A Pagar.me ativa a conta sem pedir fotos nem documentos, e a
+              situação se atualiza sozinha. Para consultar na hora, use
+              Verificar agora. Com a conta ativa, os convidados já podem
+              presentear.
             </p>
             <p className="mt-2 mb-0">
               <Link
@@ -83,18 +86,8 @@ export function ReceivingGuide({
                 to="/sites/$siteId/receiving/$page"
                 params={{ siteId, page: "activation" }}
               >
-                Abrir Verificar identidade
+                Abrir Status da conta
               </Link>
-            </p>
-          </li>
-          <li className="pl-1">
-            <h3 className={stepTitleClassName}>
-              Aguarde a análise da Pagar.me
-            </h3>
-            <p className="m-0">
-              A situação do recebedor é atualizada sozinha quando a Pagar.me
-              conclui a análise. Para consultar na hora, use Verificar agora.
-              Com o cadastro aprovado, os convidados já podem presentear.
             </p>
           </li>
           <li className="pl-1">
@@ -158,7 +151,9 @@ export function ReceivingGuide({
           </h2>
           <ul className="m-0 grid list-disc gap-2 pl-5">
             <li>Lista de presentes e histórico de pagamentos.</li>
-            <li>Cadastro do recebedor e link de verificação de identidade.</li>
+            <li>
+              Cadastro do recebedor e conferência do CPF, da idade e da conta.
+            </li>
             <li>Prévia do saque com a tarifa e o valor líquido.</li>
           </ul>
         </section>
@@ -171,7 +166,7 @@ export function ReceivingGuide({
           </h2>
           <ul className="m-0 grid list-disc gap-2 pl-5">
             <li>Processamento do Pix e do cartão.</li>
-            <li>Análise do documento, da selfie e do cadastro.</li>
+            <li>Ativação do recebedor.</li>
             <li>Guarda do saldo e transferência para a sua conta bancária.</li>
           </ul>
         </section>

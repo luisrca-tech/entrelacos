@@ -26,13 +26,13 @@ export const receivingSteps: readonly {
     id: "details",
     title: "Seus dados",
     short: "Seus dados",
-    summary: "CPF, endereço e conta bancária no seu CPF, para a Pagar.me.",
+    summary: "CPF, endereço, conta no seu CPF e a declaração de titularidade.",
   },
   {
     id: "activation",
-    title: "Verifique sua identidade",
-    short: "Verificar identidade",
-    summary: "Documento e selfie pelo link seguro da Pagar.me.",
+    title: "Status da conta",
+    short: "Status da conta",
+    summary: "A Pagar.me ativa a conta que recebe os presentes.",
   },
   {
     id: "fees",
@@ -45,7 +45,7 @@ export const receivingSteps: readonly {
 export const receivingStepStatusLabel: Record<ReceivingStepStatus, string> = {
   done: "Concluída",
   current: "Agora",
-  review: "Em análise pela Pagar.me",
+  review: "Em ativação na Pagar.me",
   attention: "Precisa de ajuste",
   available: "Pode fazer já",
   locked: "Depois",

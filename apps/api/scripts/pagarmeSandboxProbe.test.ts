@@ -36,11 +36,6 @@ function fakePagarme() {
         ...(fixture("recipient-created") as object),
         code: JSON.parse(String(init?.body)).code,
       });
-    if (url.pathname.endsWith("/kyc_link"))
-      return json({
-        ...(fixture("recipient-kyc-link") as object),
-        expires_at: new Date(Date.now() + 20 * 60_000).toISOString(),
-      });
     if (url.pathname.includes("/recipients/"))
       return json(fixture("recipient-active"));
     if (method === "POST" && url.pathname.endsWith("/orders"))
@@ -106,7 +101,11 @@ describe("Pagar.me sandbox probe", () => {
     const output = lines.join("\n");
     expect(output).toMatch(/payables platform rp_platformFixture01/);
     expect(output).toMatch(/payables couple rp_/);
-    expect(output).toMatch(/kyc_link expires in about 20 min/);
+    expect(output).toMatch(/recipient rp_\S+ status=\S+ kyc=\S+/);
+    expect(output).not.toMatch(/kyc_link/);
+    expect(
+      fetch.mock.calls.some(([url]) => String(url).endsWith("/kyc_link")),
+    ).toBe(false);
     for (const secret of [
       env.PAGARME_SECRET_KEY,
       env.PAGARME_PUBLIC_KEY,

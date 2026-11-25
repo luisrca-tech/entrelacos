@@ -99,7 +99,7 @@ export function ProgressBar({ completed }: { completed: number }) {
 }
 
 function pillLabel(step: ReceivingTrackStep, compact: boolean) {
-  if (step.status === "review") return `${step.number} Em análise`;
+  if (step.status === "review") return `${step.number} Em ativação`;
   if (step.status === "done" && compact) return `${step.number}`;
   return `${step.number} ${step.short}`;
 }

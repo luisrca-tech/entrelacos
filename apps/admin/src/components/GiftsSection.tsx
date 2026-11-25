@@ -18,7 +18,7 @@ const pendingReasons: Record<
   PROVIDER_DISABLED:
     "Os recebimentos ainda não estão disponíveis para ativação.",
   ONBOARDING_REQUIRED:
-    "O recebedor precisa concluir seu cadastro e a verificação de identidade.",
+    "O recebedor precisa concluir o cadastro e aguardar a ativação da conta.",
   ACCOUNT_UNDER_REVIEW: "O cadastro do recebedor está em análise.",
   BANK_VERIFICATION_REQUIRED:
     "A conta de destino ainda precisa de verificação.",

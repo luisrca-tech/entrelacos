@@ -353,6 +353,19 @@ describe("Pagar.me receiving verification observer", () => {
         { ...candidate, bankReference: "ba_forgedAccount" } as never,
       ),
     ).toBe(false);
+    // A recipient created under the pre-declaration Pagar.me consent keeps
+    // receiving; only a new registration requires the current version.
+    tx.execute.mockResolvedValueOnce({
+      rows: [{ ...holder, consentVersion: "pagarme-receiving-v1" }],
+    });
+    expect(
+      await v.verification.readCurrentPolicy(
+        "SELECT",
+        v.fence,
+        tx as never,
+        candidate as never,
+      ),
+    ).toBe(true);
     tx.execute.mockResolvedValueOnce({
       rows: [{ ...holder, consentVersion: "legacy-receiving-v1" }],
     });

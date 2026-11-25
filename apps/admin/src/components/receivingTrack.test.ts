@@ -71,7 +71,7 @@ describe("receiving guided track", () => {
     expect(track.completed).toBe(3);
   });
 
-  it("shows the identity step in review while Pagar.me analyses it", () => {
+  it("shows the account step in review while Pagar.me activates it", () => {
     const track = deriveReceivingTrack({
       ...base,
       provider: { ...provider, accountState: "UNDER_REVIEW" },
@@ -82,7 +82,7 @@ describe("receiving guided track", () => {
     expect(track.steps[3].status).toBe("done");
   });
 
-  it("keeps activation in review until Pagar.me asks for the selfie and document", () => {
+  it("keeps activation in review while Pagar.me has not activated the recipient", () => {
     for (const accountState of ["UNVERIFIED", "ONBOARDING"] as const) {
       const track = deriveReceivingTrack({
         ...base,
@@ -104,7 +104,7 @@ describe("receiving guided track", () => {
     expect(pending.steps[2].status).toBe("review");
   });
 
-  it("makes activation current when Pagar.me asks for the selfie and document", () => {
+  it("asks for attention, not an action, when Pagar.me unexpectedly asks for documents", () => {
     const track = deriveReceivingTrack({
       ...base,
       provider: {
@@ -115,7 +115,7 @@ describe("receiving guided track", () => {
         kycStatusReason: "additional_documents_required",
       },
     });
-    expect(track.steps[2].status).toBe("current");
+    expect(track.steps[2].status).toBe("attention");
     expect(track.next?.id).toBe("activation");
   });
 
@@ -156,10 +156,11 @@ describe("receiving guided track", () => {
     }
   });
 
-  it("names the identity step after the Pagar.me verification", () => {
+  it("names the third step after the account status, not an identity check", () => {
     const step = deriveReceivingTrack(base).steps[2];
-    expect(step.title).toBe("Verifique sua identidade");
-    expect(step.short).toBe("Verificar identidade");
+    expect(step.title).toBe("Status da conta");
+    expect(step.short).toBe("Status da conta");
+    expect(step.summary).not.toMatch(/selfie|documento|link/i);
   });
 
   it("finishes when receiving is ready", () => {
@@ -180,7 +181,7 @@ describe("receiving guided track", () => {
     expect(receivingStepStatusLabel).toEqual({
       done: "Concluída",
       current: "Agora",
-      review: "Em análise pela Pagar.me",
+      review: "Em ativação na Pagar.me",
       attention: "Precisa de ajuste",
       available: "Pode fazer já",
       locked: "Depois",

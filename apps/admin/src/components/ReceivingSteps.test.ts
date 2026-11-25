@@ -39,6 +39,8 @@ vi.mock("@tanstack/react-router", () => ({
 }));
 
 beforeEach(() => vi.stubGlobal("__APP_ENV__", "development"));
+const forbidden =
+  /selfie|prova de vida|QR Code|link seguro|Verificar identidade/i;
 afterEach(() => vi.unstubAllGlobals());
 
 const setup: ReceivingSetupContext = {
@@ -50,13 +52,13 @@ const setup: ReceivingSetupContext = {
   consentRecorded: true,
   disclosure: receivingSetupDisclosure,
   accountState: "CREATED",
-  // Pagar.me asked for the selfie and document: the only state with a link.
+  // Created and still being activated by Pagar.me.
   providerStatus: {
     recipientStatus: "affiliation",
     accountState: "UNDER_REVIEW",
     receivingEnabled: false,
-    kycStatus: "partially_denied",
-    kycStatusReason: "additional_documents_required",
+    kycStatus: "pending",
+    kycStatusReason: "in_analysis",
     observedAt: "2026-10-16T12:00:00.000Z",
   },
 };
@@ -87,7 +89,14 @@ const providers = {
     kycStatusReason: "answered_waiting_analysis",
     observedAt,
   },
-  verify: setup.providerStatus as Provider,
+  documents: {
+    recipientStatus: "affiliation",
+    accountState: "UNDER_REVIEW",
+    receivingEnabled: false,
+    kycStatus: "partially_denied",
+    kycStatusReason: "additional_documents_required",
+    observedAt,
+  },
   active: {
     recipientStatus: "active",
     accountState: "APPROVED",
@@ -107,6 +116,22 @@ const providers = {
   refused: {
     recipientStatus: "refused",
     accountState: "BLOCKED",
+    receivingEnabled: false,
+    kycStatus: null,
+    kycStatusReason: null,
+    observedAt,
+  },
+  blocked: {
+    recipientStatus: "blocked",
+    accountState: "BLOCKED",
+    receivingEnabled: false,
+    kycStatus: null,
+    kycStatusReason: null,
+    observedAt,
+  },
+  suspended: {
+    recipientStatus: "suspended",
+    accountState: "SUSPENDED",
     receivingEnabled: false,
     kycStatus: null,
     kycStatusReason: null,
@@ -153,7 +178,8 @@ describe("receiving guided track", () => {
     expect(html).not.toContain(
       'href="/sites/site-one/receiving/activation#duvidas"',
     );
-    for (const label of ["Concluída", "Agora"]) expect(html).toContain(label);
+    for (const label of ["Concluída", "Em ativação na Pagar.me"])
+      expect(html).toContain(label);
     expect(html).toContain('href="/sites/site-one/receiving-guide"');
     expect(html).not.toContain("PENDING");
     expect(html).not.toContain("ONBOARDING");
@@ -162,8 +188,9 @@ describe("receiving guided track", () => {
   it.each([
     ["registration", providers.registration],
     ["affiliation with KYC pending", providers.pending],
+    ["affiliation answered, waiting for analysis", providers.sent],
   ])(
-    "explains the Pagar.me initial analysis on the overview (%s)",
+    "explains the activation on the overview (%s)",
     (_label, providerStatus) => {
       const html = renderToStaticMarkup(
         createElement(ReceivingOverviewTrack, {
@@ -171,168 +198,124 @@ describe("receiving guided track", () => {
         }),
       );
       expect(html).toContain("Próximo passo · Etapa 3 de 4");
-      expect(html).toContain("até 24 horas");
-      expect(html).toContain("selfie");
-      expect(html).toContain("Em análise pela Pagar.me");
-      expect(html).toContain(">Acompanhar análise<");
+      expect(html).toContain("ativando a conta");
+      expect(html).toContain("Em ativação na Pagar.me");
+      expect(html).toContain(">Acompanhar ativação<");
+      expect(html).not.toMatch(forbidden);
     },
   );
 
-  it("offers the identity check on the overview once Pagar.me asks for it", () => {
-    const html = renderToStaticMarkup(
-      createElement(ReceivingOverviewTrack, { context: context() }),
-    );
-    expect(html).toContain("A Pagar.me pediu a foto de um documento");
-    expect(html).not.toContain("24 horas");
-  });
-
-  it("tells the overview the selfie is being analysed", () => {
+  it("sends an unexpected document request to support on the overview", () => {
     const html = renderToStaticMarkup(
       createElement(ReceivingOverviewTrack, {
-        context: context({ providerStatus: providers.sent }),
+        context: context({ providerStatus: providers.documents }),
       }),
     );
-    expect(html).toContain("analisando o documento e a selfie");
-    expect(html).not.toContain("24 horas");
+    expect(html).toContain("A Pagar.me pediu documentos");
+    expect(html).toContain("suporte do EntreLaços");
+    expect(html).toContain("Precisa de ajuste");
+    expect(html).not.toMatch(forbidden);
   });
 
   it.each([
     ["KYC denied", providers.denied],
     ["recipient refused", providers.refused],
   ])(
-    "sends a refused identity check to support on the overview (%s)",
+    "sends a refused recipient to support on the overview (%s)",
     (_label, providerStatus) => {
       const html = renderToStaticMarkup(
         createElement(ReceivingOverviewTrack, {
           context: context({ providerStatus }),
         }),
       );
-      expect(html).toContain("A Pagar.me recusou a verificação de identidade");
+      expect(html).toContain("A Pagar.me recusou o cadastro");
       expect(html).toContain("suporte");
     },
   );
 
-  it("offers the Pagar.me identity check, its status and support", () => {
+  it("follows the activation with its status and support, without an identity action", () => {
     const html = renderToStaticMarkup(
       createElement(ActivationStep, { context: context() }),
     );
     expect(supportMailto).toBe(
       "mailto:luisrcadev@gmail.com?subject=Ajuda%20com%20os%20recebimentos",
     );
-    expect(html).toContain(`href="${supportMailto}"`);
-    for (const task of [
-      "Dados do recebedor",
-      "Verificação de identidade",
-      "Pronto para receber",
-    ])
+    for (const task of ["Dados do casal", "Conta bancária", "Status da conta"])
       expect(html).toContain(task);
     expect(html).toContain("Etapa 3 de 4");
-    expect(html).toContain(">Verificar identidade<");
-    expect(html).toContain("Aguardando documento e selfie");
+    expect(html).toContain("costuma ser rápida");
+    expect(html).toContain("Em ativação");
     expect(html).toContain("Situação na Pagar.me");
     expect(html).toContain("Dúvidas desta etapa");
+    expect(html).not.toMatch(forbidden);
+    expect(html).not.toContain("kyc-link");
+    expect(html).not.toContain("<img");
     expect(html).not.toContain('type="checkbox"');
     expect(html).not.toContain('role="alert"');
   });
 
-  it("derives the identity badge from the Pagar.me account state", () => {
-    const status = (
-      accountState: NonNullable<
-        ReceivingSetupContext["providerStatus"]
-      >["accountState"],
-    ) =>
-      renderToStaticMarkup(
-        createElement(ActivationStep, {
-          context: context({
-            providerStatus: { ...providers.registration, accountState },
-          }),
-        }),
-      );
-    expect(status("UNDER_REVIEW")).toContain("Em análise");
-    expect(status("UNDER_REVIEW")).not.toContain(">Verificar identidade<");
-    expect(status("APPROVED")).toContain("Feito");
-    for (const state of ["BLOCKED", "SUSPENDED"] as const) {
-      const html = status(state);
-      expect(html).toContain("Precisa de ajuste");
-      expect(html).toContain("A Pagar.me bloqueou ou suspendeu o recebedor.");
-    }
-  });
-
   it.each([
-    ["registration", providers.registration, false],
-    ["affiliation with KYC pending", providers.pending, false],
-    ["affiliation after the selfie", providers.sent, false],
-    ["affiliation with KYC partially denied", providers.verify, true],
-    ["active with KYC approved", providers.active, false],
-    ["KYC denied", providers.denied, false],
-    ["recipient refused", providers.refused, false],
+    ["active", providers.active, "Feito", false],
+    ["refused", providers.refused, "Precisa de ajuste", true],
+    ["KYC denied", providers.denied, "Precisa de ajuste", true],
+    ["blocked", providers.blocked, "Precisa de ajuste", true],
+    ["suspended", providers.suspended, "Precisa de ajuste", true],
+    ["documents requested", providers.documents, "Precisa de ajuste", true],
+    ["activating", providers.registration, "Em ativação", false],
   ] as const)(
-    "offers the Verificar identidade button only when Pagar.me asks (%s)",
-    (_label, providerStatus, offered) => {
+    "shows the %s account status on the activation step",
+    (_label, providerStatus, badge, alert) => {
       const html = renderToStaticMarkup(
         createElement(ActivationStep, {
           context: context({ providerStatus }),
         }),
       );
-      expect(html.includes(">Verificar identidade<")).toBe(offered);
+      expect(html).toContain(badge);
+      expect(html.includes('role="alert"')).toBe(alert);
+      if (alert) expect(html).toContain(`href="${supportMailto}"`);
+      expect(html).not.toMatch(forbidden);
+      expect(html).not.toMatch(/href="https?:\/\/[^"]*pagar/i);
     },
   );
-
-  it("explains the initial analysis on the identity step", () => {
-    const html = renderToStaticMarkup(
-      createElement(ActivationStep, {
-        context: context({ providerStatus: providers.registration }),
-      }),
-    );
-    expect(html).toContain("até 24 horas");
-    expect(html).toContain("o botão Verificar identidade aparece aqui");
-    expect(html).toContain("Em análise");
-    expect(html).not.toContain('role="alert"');
-  });
 
   it.each([
-    ["KYC denied", providers.denied],
-    ["recipient refused", providers.refused],
-  ])(
-    "blocks a refused identity check with support guidance (%s)",
-    (_label, providerStatus) => {
-      const html = renderToStaticMarkup(
-        createElement(ActivationStep, {
-          context: context({ providerStatus }),
-        }),
-      );
-      expect(html).toContain("Precisa de ajuste");
-      expect(html).toContain('role="alert"');
-      expect(html).toContain("A Pagar.me recusou a verificação de identidade");
-      expect(html).toContain(`href="${supportMailto}"`);
-    },
-  );
-
-  it("leaves the identity check to the holder", () => {
+    ["blocked", providers.blocked],
+    ["suspended", providers.suspended],
+  ])("explains a %s recipient", (_label, providerStatus) => {
     const html = renderToStaticMarkup(
-      createElement(ActivationStep, {
-        context: context({
-          isHolder: false,
-          holder: { userId: "other", name: "Pedro" },
-        }),
-      }),
+      createElement(ActivationStep, { context: context({ providerStatus }) }),
     );
-    expect(html).toContain("Somente Pedro verifica a identidade na Pagar.me.");
-    expect(html).not.toContain(">Verificar identidade<");
+    expect(html).toContain("A Pagar.me bloqueou ou suspendeu a conta.");
   });
 
-  it("lets the platform owner open the identity check for the holder", () => {
+  it("tells the couple to talk to Entrelaços support about an unexpected document request", () => {
     const html = renderToStaticMarkup(
       createElement(ActivationStep, {
-        context: {
-          ...context({
-            isHolder: false,
-            holder: { userId: "other", name: "Pedro" },
-          }),
-          owner: true,
-        },
+        context: context({ providerStatus: providers.documents }),
       }),
     );
-    expect(html).toContain("Verificar identidade");
+    expect(html).toContain("A Pagar.me pediu documentos");
+    expect(html).toContain("Documentos pedidos, fale com o suporte");
+    expect(html).toContain(`href="${supportMailto}"`);
+    expect(html).toContain("Falar com o suporte do EntreLaços");
+  });
+
+  it("shows no identity action to the holder, another administrator or the owner", () => {
+    for (const overrides of [
+      {},
+      { isHolder: false, holder: { userId: "other", name: "Pedro" } },
+    ])
+      for (const owner of [false, true]) {
+        const html = renderToStaticMarkup(
+          createElement(ActivationStep, {
+            context: {
+              ...context({ ...overrides, providerStatus: providers.documents }),
+              owner,
+            },
+          }),
+        );
+        expect(html).not.toMatch(forbidden);
+        expect(html).not.toContain("verifica a identidade");
+      }
   });
 });

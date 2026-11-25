@@ -91,8 +91,6 @@ function fixture() {
       });
     if (path.endsWith("/recipients/rp_fixtureRecipient01"))
       return json(pagarmeFixture("recipient-active"));
-    if (path.endsWith("/recipients/rp_fixtureRecipient01/kyc_link"))
-      return json(pagarmeFixture("recipient-kyc-link"));
     throw new Error("Unexpected network path");
   });
   const options = {
@@ -315,27 +313,6 @@ describe("receiving setup composition", () => {
     values.drain.resolve();
     await composition.close();
   });
-  it("refuses the identity link without asking Pagar.me for it while the recipient is active", async () => {
-    const values = fixture();
-    vi.spyOn(console, "info").mockImplementation(() => {});
-    const composition = createReceivingSetupComposition(
-      values.config,
-      values.options,
-    );
-    await expect(
-      composition.ports.receivingSetup?.createKycLink(
-        { siteId: "site-one", userId: "owner-one", sessionId: "session-one" },
-        "OWNER",
-      ),
-    ).rejects.toMatchObject({
-      status: 409,
-      code: "RECEIVING_KYC_LINK_UNAVAILABLE",
-    });
-    expect(values.fetch).toHaveBeenCalledOnce();
-    expect(values.fetch.mock.calls[0]?.[1]?.method ?? "GET").toBe("GET");
-    values.drain.resolve();
-    await composition.close();
-  });
   it("keeps the provider status empty when Pagar.me cannot be read", async () => {
     const values = fixture();
     values.fetch.mockRejectedValue(new Error("network down"));
@@ -350,50 +327,6 @@ describe("receiving setup composition", () => {
     });
     expect(result?.accountState).toBe("CREATED");
     expect(result?.providerStatus).toBeNull();
-    values.drain.resolve();
-    await composition.close();
-  });
-  it("creates a fresh identity verification link without touching the database", async () => {
-    const values = fixture();
-    const respond = values.fetch.getMockImplementation();
-    values.fetch.mockImplementation(async (url, init) => {
-      if (new URL(String(url)).pathname.endsWith("/rp_fixtureRecipient01"))
-        return new Response(
-          JSON.stringify({
-            ...JSON.parse(pagarmeFixture("recipient-active")),
-            status: "affiliation",
-            kyc_details: {
-              status: "partially_denied",
-              status_reason: "additional_documents_required",
-            },
-          }),
-          { status: 200, headers: { "content-type": "application/json" } },
-        );
-      return respond?.(url, init) as Promise<Response>;
-    });
-    const composition = createReceivingSetupComposition(
-      values.config,
-      values.options,
-    );
-    const link = await composition.ports.receivingSetup?.createKycLink(
-      { siteId: "site-one", userId: "owner-one", sessionId: "session-one" },
-      "OWNER",
-    );
-    expect(link).toEqual({
-      url: "https://exemplo.com/kyc?token=eyWfwqrnqwrnfoqwntoqwntqw",
-      base64QrCode: "PD94bWwgdmVyc2lvbj0iMS4wIj8+PHN2Zy8+",
-      expiresAt: "2026-11-18T12:20:00.000Z",
-    });
-    expect(values.fetch).toHaveBeenCalledTimes(2);
-    const [url, init] = values.fetch.mock.calls[1];
-    expect(new URL(String(url)).pathname).toMatch(
-      /\/recipients\/rp_fixtureRecipient01\/kyc_link$/,
-    );
-    expect(init?.method).toBe("POST");
-    expect(values.db.execute).not.toHaveBeenCalled();
-    expect(values.db.transaction).not.toHaveBeenCalled();
-    expect(values.repository.consent).not.toHaveBeenCalled();
-    expect(values.repository.designate).not.toHaveBeenCalled();
     values.drain.resolve();
     await composition.close();
   });

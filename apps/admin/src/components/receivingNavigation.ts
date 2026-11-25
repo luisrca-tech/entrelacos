@@ -4,7 +4,7 @@ export const receivingPages = [
   { id: "overview", label: "Visão geral" },
   { id: "holder", label: "Quem recebe" },
   { id: "details", label: "Seus dados" },
-  { id: "activation", label: "Verificar identidade" },
+  { id: "activation", label: "Status da conta" },
   { id: "fees", label: "Taxas e presentes" },
   { id: "payments", label: "Pagamentos" },
   { id: "withdrawals", label: "Saques" },

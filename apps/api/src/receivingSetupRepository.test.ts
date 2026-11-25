@@ -16,7 +16,7 @@ const holder = {
   designatedByUserId: "owner-one",
   designatedAt: at,
   consentId: "consent-one",
-  consentVersion: "pagarme-receiving-v1",
+  consentVersion: "pagarme-receiving-v2",
   consentAt: at,
   consentSessionId: "session-one",
   consentAuthenticatedAt: at,
@@ -151,7 +151,7 @@ describe("receiving holder and consent custody", () => {
       const consent = values.repository.consent(
         actor,
         evidence,
-        "pagarme-receiving-v1",
+        "pagarme-receiving-v2",
       );
       if (scenario === "valid") await expect(consent).resolves.toBeUndefined();
       else await expect(consent).rejects.toMatchObject({ status: 403 });
@@ -187,7 +187,7 @@ describe("receiving holder and consent custody", () => {
   it("renews a stored consent from a previous version", async () => {
     const values = consentFixture({ consentVersion: "asaas-receiving-v1" });
     await expect(
-      values.repository.consent(actor, recentAuth, "pagarme-receiving-v1"),
+      values.repository.consent(actor, recentAuth, "pagarme-receiving-v2"),
     ).resolves.toBeUndefined();
     const [update, ...rest] = updates(values);
     expect(rest).toHaveLength(0);
@@ -197,7 +197,7 @@ describe("receiving holder and consent custody", () => {
     expect(update.sql).toContain("consent_id IS NOT DISTINCT FROM");
     expect(update.params[0]).not.toBe("consent-one");
     expect(update.params.slice(1, 5)).toEqual([
-      "pagarme-receiving-v1",
+      "pagarme-receiving-v2",
       at,
       actor.sessionId,
       at,
@@ -207,7 +207,7 @@ describe("receiving holder and consent custody", () => {
   it("keeps a valid current-version consent unchanged", async () => {
     const values = consentFixture({});
     await expect(
-      values.repository.consent(actor, recentAuth, "pagarme-receiving-v1"),
+      values.repository.consent(actor, recentAuth, "pagarme-receiving-v2"),
     ).resolves.toBeUndefined();
     expect(updates(values)).toHaveLength(0);
   });
@@ -216,7 +216,7 @@ describe("receiving holder and consent custody", () => {
       consentAt: new Date(at.getTime() + 1000),
     });
     await expect(
-      values.repository.consent(actor, recentAuth, "pagarme-receiving-v1"),
+      values.repository.consent(actor, recentAuth, "pagarme-receiving-v2"),
     ).rejects.toMatchObject({ code: "RECEIVING_CONSENT_REQUIRED" });
     expect(updates(values)).toHaveLength(0);
   });
@@ -226,10 +226,33 @@ describe("receiving holder and consent custody", () => {
       values.repository.consent(
         actor,
         { ...recentAuth, authenticatedAt: new Date(at.getTime() - 300001) },
-        "pagarme-receiving-v1",
+        "pagarme-receiving-v2",
       ),
     ).rejects.toMatchObject({ status: 403 });
     expect(updates(values)).toHaveLength(0);
+  });
+  it("renews the pre-declaration Pagar.me consent with the version, time and session of who accepted", async () => {
+    const values = consentFixture({ consentVersion: "pagarme-receiving-v1" });
+    await expect(
+      values.repository.consent(actor, recentAuth, "pagarme-receiving-v2"),
+    ).resolves.toBeUndefined();
+    const [update, ...rest] = updates(values);
+    expect(rest).toHaveLength(0);
+    expect(update.params.slice(1, 5)).toEqual([
+      "pagarme-receiving-v2",
+      at,
+      actor.sessionId,
+      at,
+    ]);
+    // The row is the holder's own: only the designated holder may consent.
+    expect(update.params.slice(-2)).toEqual(["holder-one", "consent-one"]);
+  });
+  it("rejects the pre-declaration Pagar.me consent version on a new acceptance", async () => {
+    const values = consentFixture({ consentVersion: "pagarme-receiving-v1" });
+    await expect(
+      values.repository.consent(actor, recentAuth, "pagarme-receiving-v1"),
+    ).rejects.toMatchObject({ code: "RECEIVING_CONSENT_REQUIRED" });
+    expect(values.transaction).not.toHaveBeenCalled();
   });
   it("rejects a submitted previous consent version", async () => {
     const values = consentFixture({ consentVersion: "asaas-receiving-v1" });
@@ -272,7 +295,7 @@ describe("receiving holder and consent custody", () => {
       values.repository.consent(
         actor,
         { ...recentAuth, userId: "planner-one" },
-        "pagarme-receiving-v1",
+        "pagarme-receiving-v2",
       ),
     ).rejects.toMatchObject({ code: "RECENT_AUTH_REQUIRED" });
     expect(values.transaction).not.toHaveBeenCalled();
@@ -308,7 +331,7 @@ describe("receiving holder and consent custody", () => {
         values.repository.consent(
           actor,
           { ...recentAuth, authenticatedAt },
-          "pagarme-receiving-v1",
+          "pagarme-receiving-v2",
         ),
       ).rejects.toMatchObject({ code: "RECENT_AUTH_REQUIRED" });
       expect(values.transaction).not.toHaveBeenCalled();
@@ -338,6 +361,124 @@ describe("receiving holder and consent custody", () => {
     ).resolves.toEqual(original);
     expect(execute).toHaveBeenCalledOnce();
     expect(values.transaction).not.toHaveBeenCalled();
+  });
+  describe("destination selection versus recipient creation", () => {
+    const record = {
+      nomination: {
+        siteId: "site-one",
+        operatorUserId: "bride-one",
+        environment: "sandbox",
+        policyVersion: "policy-v1",
+      },
+    } as Parameters<
+      ReturnType<
+        typeof createReceivingSetupRepository
+      >["readCurrentProvisioningPolicy"]
+    >[0];
+    const noConsent = {
+      consentId: null,
+      consentVersion: null,
+      consentAt: null,
+      consentSessionId: null,
+      consentAuthenticatedAt: null,
+    };
+    async function decide(
+      stored: Partial<Record<keyof typeof holder, unknown>>,
+    ) {
+      const { repository } = fixture([]);
+      const tx = {
+        execute: vi.fn(async () => ({ rows: [{ ...holder, ...stored }] })),
+      };
+      const authorization = { actor, recentAuth };
+      const outcome = (work: Promise<boolean>) =>
+        work.then(
+          (allowed) => (allowed ? "allowed" : "mismatch"),
+          (error: { code?: string }) => error.code ?? "error",
+        );
+      return {
+        selection: await outcome(
+          repository.readCreatedRecipientSelectionPolicy(
+            record,
+            tx as never,
+            authorization,
+          ),
+        ),
+        creation: await outcome(
+          repository.readCurrentProvisioningPolicy(
+            record,
+            tx as never,
+            authorization,
+          ),
+        ),
+      };
+    }
+    it.each([
+      [
+        "the current consent",
+        { consentVersion: "pagarme-receiving-v2" },
+        "allowed",
+        "allowed",
+      ],
+      [
+        "the pre-declaration Pagar.me consent",
+        { consentVersion: "pagarme-receiving-v1" },
+        "allowed",
+        "RECEIVING_CONSENT_REQUIRED",
+      ],
+      [
+        "the previous provider consent",
+        { consentVersion: "asaas-receiving-v1" },
+        "RECEIVING_CONSENT_REQUIRED",
+        "RECEIVING_CONSENT_REQUIRED",
+      ],
+      [
+        "no consent",
+        noConsent,
+        "RECEIVING_CONSENT_REQUIRED",
+        "RECEIVING_CONSENT_REQUIRED",
+      ],
+    ])(
+      "decides destination selection and recipient creation with %s",
+      async (_label, stored, selection, creation) => {
+        expect(await decide(stored)).toEqual({ selection, creation });
+      },
+    );
+    it.each([
+      ["no consent id", { consentId: null }],
+      ["no consent time", { consentAt: null }],
+      ["no consent session", { consentSessionId: null }],
+      ["no authentication time", { consentAuthenticatedAt: null }],
+      ["a consent from the future", { consentAt: new Date(at.getTime() + 1) }],
+    ])(
+      "refuses a selection under a pre-declaration consent with %s",
+      async (_label, stored) => {
+        expect(
+          (await decide({ consentVersion: "pagarme-receiving-v1", ...stored }))
+            .selection,
+        ).toBe("RECEIVING_CONSENT_REQUIRED");
+      },
+    );
+    it.each([
+      ["another policy", { policyVersion: "policy-v0" }],
+      ["another holder", { operatorUserId: "groom-one" }],
+    ])(
+      "still binds the selection to the recorded nomination (%s)",
+      async (_label, nomination) => {
+        const { repository } = fixture([]);
+        const tx = {
+          execute: vi.fn(async () => ({
+            rows: [{ ...holder, consentVersion: "pagarme-receiving-v1" }],
+          })),
+        };
+        await expect(
+          repository.readCreatedRecipientSelectionPolicy(
+            { nomination: { ...record.nomination, ...nomination } } as never,
+            tx as never,
+            { actor, recentAuth },
+          ),
+        ).resolves.toBe(false);
+      },
+    );
   });
   it("does not accept consent replaced between admission and commit", async () => {
     const values = fixture([[holder]]);

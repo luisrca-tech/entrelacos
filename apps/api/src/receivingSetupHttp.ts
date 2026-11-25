@@ -1,11 +1,10 @@
 import {
+  createReceivingSetupInputSchema,
   type ReceivingReadiness,
   receivingIncomingVerificationInputSchema,
-  receivingKycLinkSchema,
   receivingProviderRejectionSchema,
   receivingReadinessSchema,
   receivingSetupHolderInputSchema,
-  receivingSetupInputSchema,
   receivingSetupReconcileInputSchema,
   receivingSetupReconcileResultSchema,
   receivingSetupResponseSchema,
@@ -35,8 +34,8 @@ export type ReceivingSetupHttpOptions = AuthHttpOptions & {
   receivingSetup?: ReceivingSetupService;
   /** Proves a site administrator's recent password before designating. */
   financialReauthentication?: Pick<FinancialReauthentication, "readProof">;
-  /** A few identity links per site and minute (each one calls Pagar.me). */
-  kycRateLimit?: { consume(siteId: string): Promise<boolean> };
+  /** Reference date for the holder's minimum age; defaults to now. */
+  clock?: () => Date;
   receivingVerification?: {
     verify(
       actor: import("./financialAuthorization").FinancialActor,
@@ -98,6 +97,9 @@ export function createReceivingSetupHttpRouter(
   options: ReceivingSetupHttpOptions,
 ): Hono {
   const router = new Hono();
+  const setupInputSchema = createReceivingSetupInputSchema(
+    options.clock ?? (() => new Date()),
+  );
   router.onError((error) => {
     if (error instanceof AdminSessionRequiredError)
       return problem(401, "UNAUTHORIZED");
@@ -260,9 +262,7 @@ export function createReceivingSetupHttpRouter(
       !access.capabilities.configureReceiving
     )
       return problem(403, "MEMBERSHIP_DENIED");
-    const input = receivingSetupInputSchema.safeParse(
-      await body(context.req.raw),
-    );
+    const input = setupInputSchema.safeParse(await body(context.req.raw));
     if (!input.success) return problem(400, "VALIDATION_ERROR");
     if (!options.receivingSetup)
       return problem(503, "RECEIVING_SETUP_UNAVAILABLE");
@@ -318,44 +318,5 @@ export function createReceivingSetupHttpRouter(
       });
     },
   );
-  // The owner or the recipient operator may open the provider's identity
-  // check; the short-lived link goes to the response only.
-  router.post("/v1/owner/sites/:siteId/receiving/kyc-link", async (context) => {
-    if (!trustedAdminOrigin(context.req.header("origin"), options.adminOrigin))
-      return problem(403, "FORBIDDEN");
-    const siteId = context.req.param("siteId");
-    if (
-      !siteIdSchema.safeParse(siteId).success ||
-      new URL(context.req.url).search
-    )
-      return problem(400, "VALIDATION_ERROR");
-    const current = await requireAdminSession(context.req.raw, options);
-    if (current.user.role !== "OWNER") {
-      const access = await resolveSiteAccess(options.db, {
-        userId: current.user.id,
-        platformRole: current.user.role,
-        siteId,
-      });
-      if (
-        current.user.role !== "SITE_ADMIN" ||
-        !access ||
-        access.siteId !== siteId ||
-        access.userId !== current.user.id ||
-        access.membershipRole !== "SITE_ADMIN"
-      )
-        return problem(403, "MEMBERSHIP_DENIED");
-    }
-    if (!options.receivingSetup)
-      return problem(503, "RECEIVING_SETUP_UNAVAILABLE");
-    if (options.kycRateLimit && !(await options.kycRateLimit.consume(siteId)))
-      return problem(429, "RATE_LIMITED");
-    const link = receivingKycLinkSchema.parse(
-      await options.receivingSetup.createKycLink(
-        { userId: current.user.id, sessionId: current.session.id, siteId },
-        current.user.role,
-      ),
-    );
-    return context.json(link, 200, { "Cache-Control": "no-store" });
-  });
   return router;
 }

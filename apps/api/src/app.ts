@@ -80,7 +80,6 @@ export type ApiOptions = GiftPaymentsHttpOptions &
     receivingNomination?: ReceivingNominationService;
     receivingSetup?: ReceivingSetupService;
     receivingVerification?: ReceivingSetupHttpOptions["receivingVerification"];
-    kycRateLimit?: ReceivingSetupHttpOptions["kycRateLimit"];
     giftMediaAuth?: GiftMediaHttpOptions["auth"];
     giftPaymentHistory?: GiftPaymentHistoryHttpOptions["giftPaymentHistory"];
     previewPricing?: (siteId: string, input: unknown) => Promise<unknown>;
@@ -167,7 +166,6 @@ export function createApp(
       ["POST", "/v1/sites/:siteId/receiving/setup/reconcile"],
       ["POST", "/v1/sites/:siteId/receiving/holder"],
       ["POST", "/v1/sites/:siteId/receiving/incoming-verification"],
-      ["POST", "/v1/owner/sites/:siteId/receiving/kyc-link"],
     ]) {
       app.on(method, path, (context) =>
         receivingSetupRouter.fetch(context.req.raw),

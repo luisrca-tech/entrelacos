@@ -3,7 +3,25 @@ import { describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   begin: vi.fn(),
   close: vi.fn(async () => {}),
+  repositoryOptions: [] as Array<Record<string, unknown>>,
 }));
+vi.mock("./receivingVerificationRepository", async (original) => {
+  const actual =
+    await original<typeof import("./receivingVerificationRepository")>();
+  return {
+    ...actual,
+    createReceivingVerificationRepository: (
+      db: unknown,
+      options: Record<string, unknown>,
+    ) => {
+      mocks.repositoryOptions.push(options);
+      return actual.createReceivingVerificationRepository(
+        db as never,
+        options as never,
+      );
+    },
+  };
+});
 vi.mock("./receivingVerification", async (original) => ({
   ...(await original<typeof import("./receivingVerification")>()),
   createReceivingVerification: () => ({
@@ -33,7 +51,7 @@ function fixture(
   const repository = {
     requireHolder: vi.fn(async () => ({ holderUserId: "holder-one" })),
     readSessionAuthentication: vi.fn(async () => proof),
-    readCurrentProvisioningPolicy: vi.fn(async () => true),
+    readCreatedRecipientSelectionPolicy: vi.fn(async () => true),
   };
   const actor = {
     siteId: "site-one",
@@ -88,6 +106,38 @@ function fixture(
   };
 }
 describe("Pagar.me receiving verification composition", () => {
+  it("authorizes the destination selection of a created recipient with the created-recipient consent check", async () => {
+    mocks.repositoryOptions.length = 0;
+    const v = fixture(false, "sandbox");
+    const options = mocks.repositoryOptions.at(-1);
+    const authorize = options?.authorizeSetupSelectionInTransaction as (
+      ...args: unknown[]
+    ) => Promise<boolean>;
+    expect(typeof authorize).toBe("function");
+    const nomination = {
+      siteId: "site-one",
+      operatorUserId: "holder-one",
+      environment: "sandbox",
+      policyVersion: "policy-v1",
+    };
+    const record = { nomination };
+    const fence = { operation: { request_snapshot: record } };
+    const tx = {};
+    const authorization = { actor: v.actor, recentAuth: v.proof };
+    vi.spyOn(
+      await import("./receivingNomination"),
+      "readReceivingProvisioningRecord",
+    ).mockReturnValue(record as never);
+    expect(
+      await authorize(tx, fence, authorization, {
+        bankReference: "ba_fixtureBankAcct01",
+      }),
+    ).toBe(true);
+    expect(
+      v.repository.readCreatedRecipientSelectionPolicy,
+    ).toHaveBeenCalledExactlyOnceWith(record, tx, authorization);
+    expect(v.repository).not.toHaveProperty("readCurrentProvisioningPolicy");
+  });
   it("shares one in-flight observation between public refresh and holder verification", async () => {
     const v = fixture(true, "live");
     let release = (_value: { state: string }) => {};

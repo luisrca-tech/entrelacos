@@ -189,23 +189,19 @@ describe("API composition", () => {
     });
   });
 
-  it("mounts the owner identity verification link route", async () => {
-    vi.spyOn(authHttp, "requireAdminSession").mockResolvedValue({
-      user: { id: "owner-one", role: "OWNER" },
-      session: { id: "owner-session" },
-    } as never);
-    const link = {
-      url: "https://exemplo.com/kyc?token=eyWfwqrnqwrnfoqwntoqwntqw",
-      base64QrCode: "PD94bWwgdmVyc2lvbj0iMS4wIj8+PHN2Zy8+",
-      expiresAt: "2026-11-18T12:20:00.000Z",
-    };
-    const createKycLink = vi.fn(async () => link);
+  it("answers 404 for the retired identity verification link route", async () => {
+    const requireAdminSession = vi
+      .spyOn(authHttp, "requireAdminSession")
+      .mockResolvedValue({
+        user: { id: "owner-one", role: "OWNER" },
+        session: { id: "owner-session" },
+      } as never);
     const api = createApp(
       {
         auth: {} as never,
         db: {} as never,
         adminOrigin: "http://localhost:3001",
-        receivingSetup: { createKycLink } as never,
+        receivingSetup: {} as never,
       },
       { sink: () => {} },
     );
@@ -213,9 +209,8 @@ describe("API composition", () => {
       "/v1/owner/sites/site-one/receiving/kyc-link",
       { method: "POST", headers: { origin: "http://localhost:3001" } },
     );
-    expect(response.status).toBe(200);
-    expect(response.headers.get("cache-control")).toBe("no-store");
-    expect(await response.json()).toEqual(link);
+    expect(response.status).toBe(404);
+    expect(requireAdminSession).not.toHaveBeenCalled();
     expect(
       (
         await api.request("/v1/sites/site-one/receiving/pix-destination", {

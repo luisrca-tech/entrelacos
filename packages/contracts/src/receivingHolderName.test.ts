@@ -73,6 +73,7 @@ describe("bank account holder name", () => {
         consentVersion: receivingSetupConsentVersion,
         confirmHolder: true,
         consentToProvider: true,
+        declareHolderIdentity: true,
         account: withHolder(thirty),
       }).success,
     ).toBe(false);

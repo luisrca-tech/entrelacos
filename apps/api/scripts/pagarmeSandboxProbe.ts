@@ -187,13 +187,12 @@ export async function runPagarmeSandboxProbe(
       },
     });
     const read = await recipients.getRecipient(created.id);
-    const kyc = await recipients.createKycLink(created.id);
-    const minutes = Math.round(
-      (Date.parse(kyc.expiresAt) - now().getTime()) / 60_000,
-    );
     coupleRecipientId = created.id;
-    log(`recipient ${created.id} status=${read.status}`);
-    log(`kyc_link expires in about ${minutes} min (url and QR not printed)`);
+    // A pass-through account has no Pagar.me identity check to open; the
+    // status and kyc_details still tell whether the recipient is active.
+    log(
+      `recipient ${created.id} status=${read.status} kyc=${read.kyc.status ?? "none"}`,
+    );
   }
 
   if (command === "order" || command === "all") {

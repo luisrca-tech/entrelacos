@@ -39,7 +39,6 @@ export interface ReceivingSetupComposition {
   readonly ports: Partial<ReceivingNominationCompositionPorts> & {
     receivingSetup?: ReceivingSetupService;
     receivingVerification?: ReceivingSetupHttpOptions["receivingVerification"];
-    kycRateLimit?: ReceivingSetupHttpOptions["kycRateLimit"];
   };
   refreshReceiving?(siteId: string): Promise<void>;
   close(): Promise<void>;
@@ -188,7 +187,6 @@ export function createReceivingSetupComposition(
     repository: setupRepository,
     nomination: nomination.receivingNomination,
     provisioning,
-    recipients,
     async observe(_siteId, account) {
       if (stopped || !account.result || account.state !== "SUCCEEDED")
         return unavailable();
@@ -251,17 +249,11 @@ export function createReceivingSetupComposition(
         own(() => nomination.receivingNominationContext.readContext(...args)),
     },
     receivingSetup: {
-      createKycLink: (...args) => own(() => setup.createKycLink(...args)),
       read: (...args) => own(() => setup.read(...args)),
       designate: (...args) => own(() => setup.designate(...args)),
       submit: (...args) => own(() => setup.submit(...args)),
       reconcile: (...args) => own(() => setup.reconcile(...args)),
     },
-    kycRateLimit: createFinancialReauthenticationRateLimit(db, {
-      namespace: "receiving-kyc-link-v1",
-      maxAttempts: 3,
-      windowMs: 60_000,
-    }),
   };
   return Object.freeze({
     ports: Object.freeze(ports),

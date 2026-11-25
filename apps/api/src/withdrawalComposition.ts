@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import {
-  receivingSetupConsentVersion,
+  receivingConsentCoversCreatedRecipient,
   type WithdrawalIntent,
   type WithdrawalPageQuery,
 } from "@entrelacos/contracts";
@@ -297,7 +297,7 @@ export function createWithdrawalComposition(
     );
     if (
       h.holderUserId !== a.operator_user_id ||
-      h.consentVersion !== receivingSetupConsentVersion ||
+      !receivingConsentCoversCreatedRecipient(h.consentVersion) ||
       !h.consentId ||
       !h.consentAt ||
       new Date(h.consentAt).getTime() > now().getTime()

@@ -240,9 +240,7 @@ describe("verifying an uncertain registration", () => {
     await vi.waitFor(() =>
       expect(container.textContent).toContain("Cadastro criado na Pagar.me"),
     );
-    expect(container.textContent).toContain(
-      "Ir para a verificação de identidade",
-    );
+    expect(container.textContent).toContain("Acompanhar o status da conta");
     expect(container.querySelector("form")).toBeNull();
     expect(posts(request, submitPath)).toHaveLength(0);
   });

@@ -123,9 +123,7 @@ describe("receiving status card", () => {
   it("keeps the disabled state pending and explains how to activate receiving", () => {
     const html = render({ readiness: readiness({}) });
     expect(html).toContain("Os recebimentos ainda não foram configurados");
-    expect(html).toContain(
-      "Acompanhe a etapa pendente em Verificar identidade.",
-    );
+    expect(html).toContain("Acompanhe a etapa pendente em Status da conta.");
     expect(html).not.toContain("fluxo aprovado");
     expect(html).not.toContain("este cartão");
     expect(html).not.toContain("Configurar recebimentos");
