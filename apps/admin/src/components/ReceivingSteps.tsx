@@ -74,9 +74,7 @@ import {
   StepHeading,
   StepIndicator,
 } from "./receivingUi";
-
-export const supportMailto =
-  "mailto:luisrcadev@gmail.com?subject=Ajuda%20com%20os%20recebimentos";
+import { SupportLink } from "./SupportLink";
 
 export type ReceivingStepsContext = {
   scope: ReceivingSetupScope;
@@ -1651,9 +1649,7 @@ export function ActivationStep({
             : stage === "blocked"
               ? "A Pagar.me bloqueou ou suspendeu a conta. "
               : "A Pagar.me pediu documentos, o que não faz parte deste cadastro. Não envie nada por links ou mensagens de fora do painel. "}
-          <a href={supportMailto} className={receivingLink}>
-            Falar com o suporte do EntreLaços
-          </a>
+          <SupportLink className={receivingLink} />
         </p>
       )}
     </StepFrame>

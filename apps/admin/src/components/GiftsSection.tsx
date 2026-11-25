@@ -9,10 +9,11 @@ import {
   type GiftCatalogReadiness,
   loadGiftsReadiness,
 } from "./giftsReadiness";
+import { SupportLink } from "./SupportLink";
 
 const pendingReasons: Record<
   NonNullable<ReceivingReadiness["reason"]>,
-  string
+  ReactNode
 > = {
   NOT_CONFIGURED: "Os recebimentos ainda não foram configurados.",
   PROVIDER_DISABLED:
@@ -28,8 +29,12 @@ const pendingReasons: Record<
   ENVIRONMENT_MISMATCH: "A configuração de recebimentos precisa ser revisada.",
   CAPABILITY_UNAVAILABLE:
     "Há uma etapa de habilitação dos recebimentos pendente.",
-  ACCOUNT_BLOCKED:
-    "Os recebimentos estão bloqueados. Entre em contato com o suporte.",
+  ACCOUNT_BLOCKED: (
+    <>
+      Os recebimentos estão bloqueados.{" "}
+      <SupportLink className="text-admin-accent-hover underline underline-offset-4" />
+    </>
+  ),
 };
 
 export function GiftsSection({

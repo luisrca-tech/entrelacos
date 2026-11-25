@@ -9,6 +9,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../lib/apiClient";
+import { supportWhatsAppUrl } from "../lib/supportContact";
 import {
   createReceivingAccountSetupController,
   ReceivingAccountSetupView,
@@ -309,9 +310,7 @@ describe("receiving account setup", () => {
     );
     const visible = html.slice(0, html.indexOf('id="duvidas"'));
     expect(visible).not.toContain("Verificar identidade");
-    expect(visible).toContain(
-      'href="mailto:luisrcadev@gmail.com?subject=Ajuda%20com%20os%20recebimentos"',
-    );
+    expect(visible).toContain(`href="${supportWhatsAppUrl(null)}"`);
     const guidance = visible.slice(
       visible.indexOf('aria-label="Cadastro do recebedor"'),
     );

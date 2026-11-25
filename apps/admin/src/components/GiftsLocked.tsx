@@ -11,7 +11,7 @@ export function GiftsLocked({
   comingSoon = false,
 }: {
   receivingAction?: ReactNode;
-  reason?: string;
+  reason?: ReactNode;
   /** The API reports that payments are not available yet. */
   comingSoon?: boolean;
 }) {
