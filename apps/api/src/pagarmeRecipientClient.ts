@@ -472,6 +472,14 @@ const RECIPIENT_COMPLEMENT_FALLBACK = "Sem complemento";
  */
 const RECIPIENT_REFERENCE_POINT_FALLBACK = "Sem referência";
 
+/**
+ * Automatic anticipation type "1025" with a delay of 1, the setting Pagar.me
+ * accepted in production on 2026-11-25. Its dashboard shows this delay as
+ * "D+1 (2 dias)", so `delay: 1` is the two-day term, not one day.
+ */
+const RECIPIENT_ANTICIPATION_TYPE = "1025";
+const RECIPIENT_ANTICIPATION_DELAY_DAYS = 1;
+
 function recipientBody(recipientCode: string, input: PagarmeRecipientInput) {
   const name = text(input.name, 128);
   const cpf = digits(input.cpf, /^\d{11}$/);
@@ -534,9 +542,8 @@ function recipientBody(recipientCode: string, input: PagarmeRecipientInput) {
     },
     automatic_anticipation_settings: {
       enabled: true,
-      type: "full",
-      volume_percentage: 100,
-      delay: null,
+      type: RECIPIENT_ANTICIPATION_TYPE,
+      delay: RECIPIENT_ANTICIPATION_DELAY_DAYS,
     },
   };
 }

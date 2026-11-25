@@ -24,9 +24,8 @@
     },
     "automatic_anticipation_settings": {
       "enabled": true,
-      "type": "full",
-      "volume_percentage": 100,
-      "delay": null
+      "type": "1025",
+      "delay": 1
     },
     "default_bank_account": {
       "id": "ba_fixtureBankAcct01",
