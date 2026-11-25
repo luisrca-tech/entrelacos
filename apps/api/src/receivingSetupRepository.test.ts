@@ -362,6 +362,124 @@ describe("receiving holder and consent custody", () => {
     expect(execute).toHaveBeenCalledOnce();
     expect(values.transaction).not.toHaveBeenCalled();
   });
+  describe("destination selection versus recipient creation", () => {
+    const record = {
+      nomination: {
+        siteId: "site-one",
+        operatorUserId: "bride-one",
+        environment: "sandbox",
+        policyVersion: "policy-v1",
+      },
+    } as Parameters<
+      ReturnType<
+        typeof createReceivingSetupRepository
+      >["readCurrentProvisioningPolicy"]
+    >[0];
+    const noConsent = {
+      consentId: null,
+      consentVersion: null,
+      consentAt: null,
+      consentSessionId: null,
+      consentAuthenticatedAt: null,
+    };
+    async function decide(
+      stored: Partial<Record<keyof typeof holder, unknown>>,
+    ) {
+      const { repository } = fixture([]);
+      const tx = {
+        execute: vi.fn(async () => ({ rows: [{ ...holder, ...stored }] })),
+      };
+      const authorization = { actor, recentAuth };
+      const outcome = (work: Promise<boolean>) =>
+        work.then(
+          (allowed) => (allowed ? "allowed" : "mismatch"),
+          (error: { code?: string }) => error.code ?? "error",
+        );
+      return {
+        selection: await outcome(
+          repository.readCreatedRecipientSelectionPolicy(
+            record,
+            tx as never,
+            authorization,
+          ),
+        ),
+        creation: await outcome(
+          repository.readCurrentProvisioningPolicy(
+            record,
+            tx as never,
+            authorization,
+          ),
+        ),
+      };
+    }
+    it.each([
+      [
+        "the current consent",
+        { consentVersion: "pagarme-receiving-v2" },
+        "allowed",
+        "allowed",
+      ],
+      [
+        "the pre-declaration Pagar.me consent",
+        { consentVersion: "pagarme-receiving-v1" },
+        "allowed",
+        "RECEIVING_CONSENT_REQUIRED",
+      ],
+      [
+        "the previous provider consent",
+        { consentVersion: "asaas-receiving-v1" },
+        "RECEIVING_CONSENT_REQUIRED",
+        "RECEIVING_CONSENT_REQUIRED",
+      ],
+      [
+        "no consent",
+        noConsent,
+        "RECEIVING_CONSENT_REQUIRED",
+        "RECEIVING_CONSENT_REQUIRED",
+      ],
+    ])(
+      "decides destination selection and recipient creation with %s",
+      async (_label, stored, selection, creation) => {
+        expect(await decide(stored)).toEqual({ selection, creation });
+      },
+    );
+    it.each([
+      ["no consent id", { consentId: null }],
+      ["no consent time", { consentAt: null }],
+      ["no consent session", { consentSessionId: null }],
+      ["no authentication time", { consentAuthenticatedAt: null }],
+      ["a consent from the future", { consentAt: new Date(at.getTime() + 1) }],
+    ])(
+      "refuses a selection under a pre-declaration consent with %s",
+      async (_label, stored) => {
+        expect(
+          (await decide({ consentVersion: "pagarme-receiving-v1", ...stored }))
+            .selection,
+        ).toBe("RECEIVING_CONSENT_REQUIRED");
+      },
+    );
+    it.each([
+      ["another policy", { policyVersion: "policy-v0" }],
+      ["another holder", { operatorUserId: "groom-one" }],
+    ])(
+      "still binds the selection to the recorded nomination (%s)",
+      async (_label, nomination) => {
+        const { repository } = fixture([]);
+        const tx = {
+          execute: vi.fn(async () => ({
+            rows: [{ ...holder, consentVersion: "pagarme-receiving-v1" }],
+          })),
+        };
+        await expect(
+          repository.readCreatedRecipientSelectionPolicy(
+            { nomination: { ...record.nomination, ...nomination } } as never,
+            tx as never,
+            { actor, recentAuth },
+          ),
+        ).resolves.toBe(false);
+      },
+    );
+  });
   it("does not accept consent replaced between admission and commit", async () => {
     const values = fixture([[holder]]);
     const context = {

@@ -35,7 +35,7 @@ export function createReceivingVerificationComposition(options: {
     ReceivingSetupRepository,
     | "requireHolder"
     | "readSessionAuthentication"
-    | "readCurrentProvisioningPolicy"
+    | "readCreatedRecipientSelectionPolicy"
   >;
   now(): Date;
   readReadiness?: (siteId: string) => Promise<ReceivingReadiness>;
@@ -71,7 +71,8 @@ export function createReceivingVerificationComposition(options: {
       ) =>
         supported &&
         (candidate === null || isRecipientBank(candidate.bankReference)) &&
-        options.repository.readCurrentProvisioningPolicy(
+        // The recipient exists: a pre-declaration consent still covers it.
+        options.repository.readCreatedRecipientSelectionPolicy(
           readReceivingProvisioningRecord(fence.operation.request_snapshot),
           tx,
           authorization,

@@ -49,7 +49,9 @@ describe("public FAQ payment content", () => {
   it("explains the holder declaration and the Entrelaços check before receiving", () => {
     expect(text).toMatch(/declara que o CPF e a conta bancária são dele/);
     expect(text).toMatch(/18 anos ou mais/);
-    expect(text).not.toMatch(/selfie|prova de vida|20 minutos|Verificar identidade/i);
+    expect(text).not.toMatch(
+      /selfie|prova de vida|20 minutos|Verificar identidade/i,
+    );
   });
 
   it("states the withdrawal fee from the tariff table", () => {
