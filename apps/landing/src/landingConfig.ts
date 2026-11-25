@@ -3,7 +3,7 @@ type Environment = Record<string, string | undefined>;
 export const contactMessage =
   "Oi! Vi o site do Entrelaços. Gostei do modelo ___ e vamos casar em ___.";
 // encodeURIComponent keeps spaces as %20, which WhatsApp renders reliably.
-export const defaultContactUrl = `https://wa.me/5562981848515?text=${encodeURIComponent(contactMessage)}`;
+export const defaultContactUrl = `https://wa.me/5562991339861?text=${encodeURIComponent(contactMessage)}`;
 
 // Public Instagram profile shown in the footer. Leave empty to hide the link.
 export const INSTAGRAM_URL = "https://www.instagram.com/entrelacos.site/";

@@ -59,7 +59,7 @@ describe("landing public destinations", () => {
       );
       const contact = new URL(contactUrl);
       expect(`${contact.origin}${contact.pathname}`).toBe(
-        "https://wa.me/5562981848515",
+        "https://wa.me/5562991339861",
       );
       expect(contact.searchParams.get("text")).toBe(
         "Oi! Vi o site do Entrelaços. Gostei do modelo ___ e vamos casar em ___.",
