@@ -64,6 +64,7 @@ import {
   SiteSettingsView,
 } from "./SiteSettingsView";
 import { SiteTeamSection } from "./SiteTeamSection";
+import { SupportSiteProvider } from "./SupportLink";
 import { adminAccessLink } from "./siteAdminMenu";
 import {
   type LifecycleAction,
@@ -440,66 +441,19 @@ export function SiteWorkspace({
     : null;
 
   return (
-    <PageHeaderActionsProvider>
-      {heading.ownPageHeader ? (
-        (heading.showBackLink || heading.showLifecycleBadge) && (
-          <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-            {heading.showBackLink && (
-              <Link
-                className="w-fit text-[0.88rem] text-admin-text-secondary no-underline hover:text-admin-text"
-                to="/"
-              >
-                ← Todos os casamentos
-              </Link>
-            )}
-            {heading.showLifecycleBadge && (
-              <Badge
-                variant={site.lifecycle === "ACTIVE" ? "default" : "secondary"}
-              >
-                {labels[site.lifecycle]}
-              </Badge>
-            )}
-          </div>
-        )
-      ) : (
-        <section className="mb-6 grid gap-2.5">
-          {heading.showBackLink && (
-            <Link
-              className="w-fit text-[0.88rem] text-admin-text-secondary no-underline hover:text-admin-text"
-              to="/"
-            >
-              ← Todos os casamentos
-            </Link>
-          )}
-          <div className="flex items-end justify-between gap-8 [@media(max-width:760px)]:flex-col [@media(max-width:760px)]:items-start [@media(max-width:760px)]:gap-4">
-            <div>
-              <h1
-                className={`m-0 max-w-none text-[clamp(1.85rem,3vw,2.6rem)] ${displayHeading}`}
-              >
-                {heading.title}
-              </h1>
-              <p className="mt-2 text-[15px] leading-relaxed text-admin-text-secondary">
-                {area === "home"
-                  ? "Acompanhe a preparação do casamento e retome de onde parou."
-                  : area === "invitations"
-                    ? "Quem vocês convidaram e quem já respondeu, convite por convite."
-                    : area === "messages"
-                      ? "Leia os recados recebidos e cuide do mural do casal."
-                      : area === "team"
-                        ? "Gerencie quem ajuda a cuidar do casamento."
-                        : (heading.subtitle ?? site.displayName)}
-              </p>
-            </div>
-            <div className="flex shrink-0 flex-wrap items-center justify-end gap-3 [&:not(:has(>:not(:empty)))]:hidden [@media(min-width:761px)]:self-center [@media(max-width:760px)]:w-full [@media(max-width:760px)]:justify-start">
-              {site.publicUrl &&
-                !["home", "invitations", "messages", "team"].includes(area) && (
-                  <a
-                    className="inline-flex min-h-[42px] w-fit items-center justify-center rounded-lg border border-admin-accent bg-admin-accent px-[17px] py-2.5 text-[0.88rem] font-bold text-admin-on-accent no-underline hover:border-admin-accent-hover hover:bg-admin-accent-hover [@media(max-width:760px)]:w-full"
-                    href={publicSiteHandoffUrl(site.publicUrl, panelOrigin)}
-                  >
-                    Ir para o site
-                  </a>
-                )}
+    <SupportSiteProvider site={site}>
+      <PageHeaderActionsProvider>
+        {heading.ownPageHeader ? (
+          (heading.showBackLink || heading.showLifecycleBadge) && (
+            <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+              {heading.showBackLink && (
+                <Link
+                  className="w-fit text-[0.88rem] text-admin-text-secondary no-underline hover:text-admin-text"
+                  to="/"
+                >
+                  ← Todos os casamentos
+                </Link>
+              )}
               {heading.showLifecycleBadge && (
                 <Badge
                   variant={
@@ -509,469 +463,223 @@ export function SiteWorkspace({
                   {labels[site.lifecycle]}
                 </Badge>
               )}
-              <PageHeaderActionsSlot className="flex flex-wrap items-center gap-2.5" />
             </div>
-          </div>
-        </section>
-      )}
-      {inactive && (
-        <p className={adminStyles.notice}>
-          Casamento inativo. Os dados estão preservados e a consulta permanece
-          disponível.
-          {owner
-            ? " A publicação da página neutra em todos os endereços é uma etapa manual separada."
-            : " Alterações estão indisponíveis enquanto o site estiver inativo."}
-        </p>
-      )}
-
-      {area === "home" && (
-        <SiteHome
-          site={site}
-          access={access}
-          owner={owner}
-          sessionEpoch={sessionEpoch}
-        />
-      )}
-      {area === "invitations" && (
-        <InvitationsSection
-          siteId={site.id}
-          lifecycle={site.lifecycle}
-          sessionEpoch={sessionEpoch}
-        />
-      )}
-      {area === "messages" && (
-        <MessagesSection
-          siteId={site.id}
-          lifecycle={site.lifecycle}
-          publicUrl={site.publicUrl}
-        />
-      )}
-      {area === "gifts" && (
-        <GiftsSection
-          key={site.id}
-          siteId={site.id}
-          canManage={
-            owner ||
-            (access?.siteId === site.id && access.capabilities.manageCatalog)
-          }
-          receivingAction={
-            paymentsOpen &&
-            access?.siteId === site.id &&
-            access.capabilities.configureReceiving ? (
+          )
+        ) : (
+          <section className="mb-6 grid gap-2.5">
+            {heading.showBackLink && (
               <Link
-                className="text-admin-accent-hover underline underline-offset-4"
-                to="/sites/$siteId/receiving"
-                params={{ siteId: site.id }}
+                className="w-fit text-[0.88rem] text-admin-text-secondary no-underline hover:text-admin-text"
+                to="/"
               >
-                Ver recebimentos
+                ← Todos os casamentos
               </Link>
-            ) : undefined
-          }
-        />
-      )}
-      {(area === "receiving" || area === "receiving-guide") &&
-        (paymentsOpen ? (
-          <ReceivingSection
-            key={`${site.id}:${sessionEpoch}`}
-            siteId={site.id}
+            )}
+            <div className="flex items-end justify-between gap-8 [@media(max-width:760px)]:flex-col [@media(max-width:760px)]:items-start [@media(max-width:760px)]:gap-4">
+              <div>
+                <h1
+                  className={`m-0 max-w-none text-[clamp(1.85rem,3vw,2.6rem)] ${displayHeading}`}
+                >
+                  {heading.title}
+                </h1>
+                <p className="mt-2 text-[15px] leading-relaxed text-admin-text-secondary">
+                  {area === "home"
+                    ? "Acompanhe a preparação do casamento e retome de onde parou."
+                    : area === "invitations"
+                      ? "Quem vocês convidaram e quem já respondeu, convite por convite."
+                      : area === "messages"
+                        ? "Leia os recados recebidos e cuide do mural do casal."
+                        : area === "team"
+                          ? "Gerencie quem ajuda a cuidar do casamento."
+                          : (heading.subtitle ?? site.displayName)}
+                </p>
+              </div>
+              <div className="flex shrink-0 flex-wrap items-center justify-end gap-3 [&:not(:has(>:not(:empty)))]:hidden [@media(min-width:761px)]:self-center [@media(max-width:760px)]:w-full [@media(max-width:760px)]:justify-start">
+                {site.publicUrl &&
+                  !["home", "invitations", "messages", "team"].includes(
+                    area,
+                  ) && (
+                    <a
+                      className="inline-flex min-h-[42px] w-fit items-center justify-center rounded-lg border border-admin-accent bg-admin-accent px-[17px] py-2.5 text-[0.88rem] font-bold text-admin-on-accent no-underline hover:border-admin-accent-hover hover:bg-admin-accent-hover [@media(max-width:760px)]:w-full"
+                      href={publicSiteHandoffUrl(site.publicUrl, panelOrigin)}
+                    >
+                      Ir para o site
+                    </a>
+                  )}
+                {heading.showLifecycleBadge && (
+                  <Badge
+                    variant={
+                      site.lifecycle === "ACTIVE" ? "default" : "secondary"
+                    }
+                  >
+                    {labels[site.lifecycle]}
+                  </Badge>
+                )}
+                <PageHeaderActionsSlot className="flex flex-wrap items-center gap-2.5" />
+              </div>
+            </div>
+          </section>
+        )}
+        {inactive && (
+          <p className={adminStyles.notice}>
+            Casamento inativo. Os dados estão preservados e a consulta permanece
+            disponível.
+            {owner
+              ? " A publicação da página neutra em todos os endereços é uma etapa manual separada."
+              : " Alterações estão indisponíveis enquanto o site estiver inativo."}
+          </p>
+        )}
+
+        {area === "home" && (
+          <SiteHome
+            site={site}
             access={access}
-            platformOwner={owner}
-            guide={area === "receiving-guide"}
+            owner={owner}
             sessionEpoch={sessionEpoch}
           />
-        ) : (
-          paymentsAreaPending(payments) && (
-            <p role="status" className="m-0 text-admin-text-secondary">
-              Verificando os recebimentos…
-            </p>
-          )
-        ))}
-      {area === "team" && (
-        <SiteTeamSection
-          key={site.id}
-          siteId={site.id}
-          canManage={
-            owner ||
-            (access?.siteId === site.id && access.capabilities.manageTeam)
-          }
-        />
-      )}
-      {area === "settings" &&
-        (owner ? (
-          <section className="grid gap-6" data-area="settings">
-            <SiteSettingsView
-              site={site}
-              admins={admins}
-              domains={domains}
-              labels={labels}
-              pending={pending}
-              onEditRecord={(action) => {
-                if (action === "publication") {
-                  setPublicationState(site.publicationState);
-                }
-                setSettingsDialog(action);
-              }}
-              onLifecycleAction={setLifecycleAction}
-              onAddAdmin={() => setSettingsDialog("admin")}
-              onAdminAction={handleAdminMenuAction}
-              onAddDomain={() => setSettingsDialog("domain")}
-              onEditDomain={openDomainEdit}
-              onSaveAddress={(value) => mutate(base, value, "PATCH")}
-              generated={generatedAccess}
-              onDismissGenerated={() => setGeneratedAccess(null)}
+        )}
+        {area === "invitations" && (
+          <InvitationsSection
+            siteId={site.id}
+            lifecycle={site.lifecycle}
+            sessionEpoch={sessionEpoch}
+          />
+        )}
+        {area === "messages" && (
+          <MessagesSection
+            siteId={site.id}
+            lifecycle={site.lifecycle}
+            publicUrl={site.publicUrl}
+          />
+        )}
+        {area === "gifts" && (
+          <GiftsSection
+            key={site.id}
+            siteId={site.id}
+            canManage={
+              owner ||
+              (access?.siteId === site.id && access.capabilities.manageCatalog)
+            }
+            receivingAction={
+              paymentsOpen &&
+              access?.siteId === site.id &&
+              access.capabilities.configureReceiving ? (
+                <Link
+                  className="text-admin-accent-hover underline underline-offset-4"
+                  to="/sites/$siteId/receiving"
+                  params={{ siteId: site.id }}
+                >
+                  Ver recebimentos
+                </Link>
+              ) : undefined
+            }
+          />
+        )}
+        {(area === "receiving" || area === "receiving-guide") &&
+          (paymentsOpen ? (
+            <ReceivingSection
+              key={`${site.id}:${sessionEpoch}`}
+              siteId={site.id}
+              access={access}
+              platformOwner={owner}
+              guide={area === "receiving-guide"}
+              sessionEpoch={sessionEpoch}
             />
+          ) : (
+            paymentsAreaPending(payments) && (
+              <p role="status" className="m-0 text-admin-text-secondary">
+                Verificando os recebimentos…
+              </p>
+            )
+          ))}
+        {area === "team" && (
+          <SiteTeamSection
+            key={site.id}
+            siteId={site.id}
+            canManage={
+              owner ||
+              (access?.siteId === site.id && access.capabilities.manageTeam)
+            }
+          />
+        )}
+        {area === "settings" &&
+          (owner ? (
+            <section className="grid gap-6" data-area="settings">
+              <SiteSettingsView
+                site={site}
+                admins={admins}
+                domains={domains}
+                labels={labels}
+                pending={pending}
+                onEditRecord={(action) => {
+                  if (action === "publication") {
+                    setPublicationState(site.publicationState);
+                  }
+                  setSettingsDialog(action);
+                }}
+                onLifecycleAction={setLifecycleAction}
+                onAddAdmin={() => setSettingsDialog("admin")}
+                onAdminAction={handleAdminMenuAction}
+                onAddDomain={() => setSettingsDialog("domain")}
+                onEditDomain={openDomainEdit}
+                onSaveAddress={(value) => mutate(base, value, "PATCH")}
+                generated={generatedAccess}
+                onDismissGenerated={() => setGeneratedAccess(null)}
+              />
 
-            <Dialog
-              open={settingsDialog === "profile"}
-              onOpenChange={(open) => !open && closeSettingsDialog()}
-            >
-              <AdminDialogContent className="max-w-2xl">
-                <DialogTitle>Editar cadastro</DialogTitle>
-                <DialogDescription>
-                  Atualize o nome do casamento e os nomes do casal.
-                </DialogDescription>
-                <form
-                  className={adminStyles.formGrid}
-                  onSubmit={async (event) => {
-                    const saved = await submit(
-                      event,
-                      base,
-                      (form) => ({
-                        displayName: form.get("name"),
-                        coupleNames: [form.get("first"), form.get("second")],
-                      }),
-                      "PATCH",
-                    );
-                    if (saved) closeSettingsDialog();
-                  }}
-                >
-                  <label htmlFor="site-display-name">
-                    Nome do casamento
-                    <Input
-                      id="site-display-name"
-                      name="name"
-                      required
-                      maxLength={160}
-                      defaultValue={site.displayName}
-                    />
-                  </label>
-                  <label htmlFor="site-couple-first">
-                    Nome da pessoa 1
-                    <Input
-                      id="site-couple-first"
-                      name="first"
-                      required
-                      maxLength={120}
-                      defaultValue={site.coupleNames[0]}
-                    />
-                  </label>
-                  <label htmlFor="site-couple-second">
-                    Nome da pessoa 2
-                    <Input
-                      id="site-couple-second"
-                      name="second"
-                      required
-                      maxLength={120}
-                      defaultValue={site.coupleNames[1]}
-                    />
-                  </label>
-                  <div className={adminStyles.inline}>
-                    <AdminButton
-                      tone="primary"
-                      disabled={pending}
-                      type="submit"
-                    >
-                      Salvar cadastro
-                    </AdminButton>
-                    <DialogClose
-                      render={
-                        <AdminButton
-                          type="button"
-                          tone="secondary"
-                          disabled={pending}
-                        />
-                      }
-                    >
-                      Cancelar
-                    </DialogClose>
-                  </div>
-                </form>
-              </AdminDialogContent>
-            </Dialog>
-
-            <Dialog
-              open={settingsDialog === "dates"}
-              onOpenChange={(open) => !open && closeSettingsDialog()}
-            >
-              <AdminDialogContent>
-                <DialogTitle>Editar datas</DialogTitle>
-                <DialogDescription>
-                  Altere a data do casamento e, quando disponível, a vigência.
-                </DialogDescription>
-                <form className={adminStyles.formGrid} onSubmit={submitDates}>
-                  <label htmlFor="site-event-date">
-                    Data do casamento
-                    <DatePicker
-                      id="site-event-date"
-                      name="date"
-                      defaultValue={site.eventDate}
-                    />
-                  </label>
-                  {site.termStartsOn && (
-                    <>
-                      <label htmlFor="site-term-start">
-                        Início da vigência
-                        <DatePicker
-                          id="site-term-start"
-                          name="start"
-                          defaultValue={site.termStartsOn}
-                        />
-                      </label>
-                      <label htmlFor="site-term-end">
-                        Fim da vigência
-                        <DatePicker
-                          id="site-term-end"
-                          name="end"
-                          defaultValue={site.termEndsOn ?? ""}
-                        />
-                      </label>
-                    </>
-                  )}
-                  <div className={adminStyles.inline}>
-                    <AdminButton
-                      tone="primary"
-                      disabled={pending}
-                      type="submit"
-                    >
-                      Salvar datas
-                    </AdminButton>
-                    <DialogClose
-                      render={
-                        <AdminButton
-                          type="button"
-                          tone="secondary"
-                          disabled={pending}
-                        />
-                      }
-                    >
-                      Cancelar
-                    </DialogClose>
-                  </div>
-                </form>
-              </AdminDialogContent>
-            </Dialog>
-
-            <Dialog
-              open={settingsDialog === "publication"}
-              onOpenChange={(open) => !open && closeSettingsDialog()}
-            >
-              <AdminDialogContent>
-                <DialogTitle>Registrar publicação</DialogTitle>
-                <DialogDescription>
-                  Registre após verificar a publicação. Esta ação não altera a
-                  hospedagem.
-                </DialogDescription>
-                <form
-                  className={adminStyles.form}
-                  onSubmit={async (event) => {
-                    event.preventDefault();
-                    const saved = await mutate(
-                      `${base}/publication`,
-                      { publicationState },
-                      "PATCH",
-                    );
-                    if (saved) closeSettingsDialog();
-                  }}
-                >
-                  <label htmlFor="site-publication-state">
-                    Publicação registrada
-                    <Select
-                      value={publicationState}
-                      onValueChange={(value) =>
-                        setPublicationState(
-                          value as SiteView["publicationState"],
-                        )
-                      }
-                    >
-                      <SelectTrigger id="site-publication-state">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="UNPUBLISHED">
-                          Não publicado
-                        </SelectItem>
-                        <SelectItem value="PUBLISHED">Publicado</SelectItem>
-                        <SelectItem value="PLACEHOLDER">
-                          Página neutra
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </label>
-                  <div className={adminStyles.inline}>
-                    <AdminButton
-                      tone="primary"
-                      disabled={pending}
-                      type="submit"
-                    >
-                      Registrar publicação
-                    </AdminButton>
-                    <DialogClose
-                      render={
-                        <AdminButton
-                          type="button"
-                          tone="secondary"
-                          disabled={pending}
-                        />
-                      }
-                    >
-                      Cancelar
-                    </DialogClose>
-                  </div>
-                </form>
-              </AdminDialogContent>
-            </Dialog>
-
-            <Dialog
-              open={settingsDialog === "admin"}
-              onOpenChange={(open) => !open && closeSettingsDialog()}
-            >
-              <AdminDialogContent>
-                <DialogTitle>Adicionar pessoa do casal</DialogTitle>
-                <DialogDescription>
-                  Após adicionar, gere e copie o link de ativação nas ações
-                  dessa pessoa.
-                </DialogDescription>
-                <form
-                  className={adminStyles.form}
-                  onSubmit={async (event) => {
-                    const saved = await submit(
-                      event,
-                      `${base}/admins`,
-                      (form) => ({
-                        name: form.get("name"),
-                        email: form.get("email"),
-                      }),
-                    );
-                    if (saved) closeSettingsDialog();
-                  }}
-                >
-                  <label htmlFor="new-admin-name">
-                    Nome do administrador
-                    <Input
-                      id="new-admin-name"
-                      name="name"
-                      required
-                      maxLength={160}
-                    />
-                  </label>
-                  <label htmlFor="new-admin-email">
-                    E-mail
-                    <Input
-                      id="new-admin-email"
-                      name="email"
-                      type="email"
-                      required
-                      maxLength={320}
-                    />
-                  </label>
-                  <div className={adminStyles.inline}>
-                    <AdminButton
-                      tone="primary"
-                      disabled={pending}
-                      type="submit"
-                    >
-                      Adicionar administrador
-                    </AdminButton>
-                    <DialogClose
-                      render={
-                        <AdminButton
-                          type="button"
-                          tone="secondary"
-                          disabled={pending}
-                        />
-                      }
-                    >
-                      Cancelar
-                    </DialogClose>
-                  </div>
-                </form>
-              </AdminDialogContent>
-            </Dialog>
-
-            <Dialog
-              open={
-                settingsDialog === "domain" || settingsDialog === "domain-edit"
-              }
-              onOpenChange={(open) => !open && closeSettingsDialog()}
-            >
-              <AdminDialogContent>
-                <DialogTitle>
-                  {domainToEdit ? "Editar domínio" : "Registrar domínio"}
-                </DialogTitle>
-                <DialogDescription>
-                  Registre os endereços do casamento para acompanhar sua
-                  situação. A configuração e a renovação são feitas
-                  separadamente.
-                </DialogDescription>
-                {domainToEdit ? (
-                  <form className={adminStyles.form} onSubmit={saveDomainEdit}>
-                    <p className="leading-[1.6]">
-                      <strong>{domainToEdit.hostname}</strong>
-                    </p>
-                    <label htmlFor="domain-state">
-                      Situação
-                      <Select
-                        value={domainState}
-                        onValueChange={(value) =>
-                          setDomainState(value as Domain["state"])
-                        }
-                      >
-                        <SelectTrigger id="domain-state">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {["NONE", "PENDING", "ACTIVE", "INACTIVE"].map(
-                            (value) => (
-                              <SelectItem key={value} value={value}>
-                                {labels[value]}
-                              </SelectItem>
-                            ),
-                          )}
-                        </SelectContent>
-                      </Select>
-                    </label>
-                    <label htmlFor="domain-expiry">
-                      Renovação
-                      <div className={adminStyles.inline}>
-                        <DatePicker
-                          id="domain-expiry"
-                          value={domainExpiry || undefined}
-                          onValueChange={(value) =>
-                            setDomainExpiry(value ?? "")
-                          }
-                        />
-                        <AdminButton
-                          type="button"
-                          tone="secondary"
-                          disabled={pending || !domainExpiry}
-                          onClick={() => setDomainExpiry("")}
-                        >
-                          Limpar data
-                        </AdminButton>
-                      </div>
-                    </label>
-                    <label
-                      className={adminStyles.checkbox}
-                      htmlFor="domain-primary-edit"
-                    >
-                      <Checkbox
-                        id="domain-primary-edit"
-                        checked={domainPrimary}
-                        onCheckedChange={(checked) =>
-                          setDomainPrimary(checked === true)
-                        }
+              <Dialog
+                open={settingsDialog === "profile"}
+                onOpenChange={(open) => !open && closeSettingsDialog()}
+              >
+                <AdminDialogContent className="max-w-2xl">
+                  <DialogTitle>Editar cadastro</DialogTitle>
+                  <DialogDescription>
+                    Atualize o nome do casamento e os nomes do casal.
+                  </DialogDescription>
+                  <form
+                    className={adminStyles.formGrid}
+                    onSubmit={async (event) => {
+                      const saved = await submit(
+                        event,
+                        base,
+                        (form) => ({
+                          displayName: form.get("name"),
+                          coupleNames: [form.get("first"), form.get("second")],
+                        }),
+                        "PATCH",
+                      );
+                      if (saved) closeSettingsDialog();
+                    }}
+                  >
+                    <label htmlFor="site-display-name">
+                      Nome do casamento
+                      <Input
+                        id="site-display-name"
+                        name="name"
+                        required
+                        maxLength={160}
+                        defaultValue={site.displayName}
                       />
-                      Domínio principal
+                    </label>
+                    <label htmlFor="site-couple-first">
+                      Nome da pessoa 1
+                      <Input
+                        id="site-couple-first"
+                        name="first"
+                        required
+                        maxLength={120}
+                        defaultValue={site.coupleNames[0]}
+                      />
+                    </label>
+                    <label htmlFor="site-couple-second">
+                      Nome da pessoa 2
+                      <Input
+                        id="site-couple-second"
+                        name="second"
+                        required
+                        maxLength={120}
+                        defaultValue={site.coupleNames[1]}
+                      />
                     </label>
                     <div className={adminStyles.inline}>
                       <AdminButton
@@ -979,7 +687,7 @@ export function SiteWorkspace({
                         disabled={pending}
                         type="submit"
                       >
-                        Salvar domínio
+                        Salvar cadastro
                       </AdminButton>
                       <DialogClose
                         render={
@@ -994,44 +702,183 @@ export function SiteWorkspace({
                       </DialogClose>
                     </div>
                   </form>
-                ) : (
+                </AdminDialogContent>
+              </Dialog>
+
+              <Dialog
+                open={settingsDialog === "dates"}
+                onOpenChange={(open) => !open && closeSettingsDialog()}
+              >
+                <AdminDialogContent>
+                  <DialogTitle>Editar datas</DialogTitle>
+                  <DialogDescription>
+                    Altere a data do casamento e, quando disponível, a vigência.
+                  </DialogDescription>
+                  <form className={adminStyles.formGrid} onSubmit={submitDates}>
+                    <label htmlFor="site-event-date">
+                      Data do casamento
+                      <DatePicker
+                        id="site-event-date"
+                        name="date"
+                        defaultValue={site.eventDate}
+                      />
+                    </label>
+                    {site.termStartsOn && (
+                      <>
+                        <label htmlFor="site-term-start">
+                          Início da vigência
+                          <DatePicker
+                            id="site-term-start"
+                            name="start"
+                            defaultValue={site.termStartsOn}
+                          />
+                        </label>
+                        <label htmlFor="site-term-end">
+                          Fim da vigência
+                          <DatePicker
+                            id="site-term-end"
+                            name="end"
+                            defaultValue={site.termEndsOn ?? ""}
+                          />
+                        </label>
+                      </>
+                    )}
+                    <div className={adminStyles.inline}>
+                      <AdminButton
+                        tone="primary"
+                        disabled={pending}
+                        type="submit"
+                      >
+                        Salvar datas
+                      </AdminButton>
+                      <DialogClose
+                        render={
+                          <AdminButton
+                            type="button"
+                            tone="secondary"
+                            disabled={pending}
+                          />
+                        }
+                      >
+                        Cancelar
+                      </DialogClose>
+                    </div>
+                  </form>
+                </AdminDialogContent>
+              </Dialog>
+
+              <Dialog
+                open={settingsDialog === "publication"}
+                onOpenChange={(open) => !open && closeSettingsDialog()}
+              >
+                <AdminDialogContent>
+                  <DialogTitle>Registrar publicação</DialogTitle>
+                  <DialogDescription>
+                    Registre após verificar a publicação. Esta ação não altera a
+                    hospedagem.
+                  </DialogDescription>
+                  <form
+                    className={adminStyles.form}
+                    onSubmit={async (event) => {
+                      event.preventDefault();
+                      const saved = await mutate(
+                        `${base}/publication`,
+                        { publicationState },
+                        "PATCH",
+                      );
+                      if (saved) closeSettingsDialog();
+                    }}
+                  >
+                    <label htmlFor="site-publication-state">
+                      Publicação registrada
+                      <Select
+                        value={publicationState}
+                        onValueChange={(value) =>
+                          setPublicationState(
+                            value as SiteView["publicationState"],
+                          )
+                        }
+                      >
+                        <SelectTrigger id="site-publication-state">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="UNPUBLISHED">
+                            Não publicado
+                          </SelectItem>
+                          <SelectItem value="PUBLISHED">Publicado</SelectItem>
+                          <SelectItem value="PLACEHOLDER">
+                            Página neutra
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </label>
+                    <div className={adminStyles.inline}>
+                      <AdminButton
+                        tone="primary"
+                        disabled={pending}
+                        type="submit"
+                      >
+                        Registrar publicação
+                      </AdminButton>
+                      <DialogClose
+                        render={
+                          <AdminButton
+                            type="button"
+                            tone="secondary"
+                            disabled={pending}
+                          />
+                        }
+                      >
+                        Cancelar
+                      </DialogClose>
+                    </div>
+                  </form>
+                </AdminDialogContent>
+              </Dialog>
+
+              <Dialog
+                open={settingsDialog === "admin"}
+                onOpenChange={(open) => !open && closeSettingsDialog()}
+              >
+                <AdminDialogContent>
+                  <DialogTitle>Adicionar pessoa do casal</DialogTitle>
+                  <DialogDescription>
+                    Após adicionar, gere e copie o link de ativação nas ações
+                    dessa pessoa.
+                  </DialogDescription>
                   <form
                     className={adminStyles.form}
                     onSubmit={async (event) => {
                       const saved = await submit(
                         event,
-                        `${base}/domains`,
+                        `${base}/admins`,
                         (form) => ({
-                          hostname: String(form.get("hostname"))
-                            .trim()
-                            .toLowerCase(),
-                          isPrimary: form.get("primary") === "on",
-                          expiresOn: form.get("expiry") || null,
+                          name: form.get("name"),
+                          email: form.get("email"),
                         }),
                       );
                       if (saved) closeSettingsDialog();
                     }}
                   >
-                    <label htmlFor="new-domain-hostname">
-                      Domínio
+                    <label htmlFor="new-admin-name">
+                      Nome do administrador
                       <Input
-                        id="new-domain-hostname"
-                        name="hostname"
-                        placeholder="casamento.exemplo.com"
+                        id="new-admin-name"
+                        name="name"
                         required
-                        maxLength={253}
+                        maxLength={160}
                       />
                     </label>
-                    <label htmlFor="new-domain-expiry">
-                      Renovação
-                      <DatePicker id="new-domain-expiry" name="expiry" />
-                    </label>
-                    <label
-                      className={adminStyles.checkbox}
-                      htmlFor="new-domain-primary"
-                    >
-                      <Checkbox id="new-domain-primary" name="primary" />
-                      Domínio principal
+                    <label htmlFor="new-admin-email">
+                      E-mail
+                      <Input
+                        id="new-admin-email"
+                        name="email"
+                        type="email"
+                        required
+                        maxLength={320}
+                      />
                     </label>
                     <div className={adminStyles.inline}>
                       <AdminButton
@@ -1039,7 +886,7 @@ export function SiteWorkspace({
                         disabled={pending}
                         type="submit"
                       >
-                        Registrar domínio
+                        Adicionar administrador
                       </AdminButton>
                       <DialogClose
                         render={
@@ -1054,100 +901,264 @@ export function SiteWorkspace({
                       </DialogClose>
                     </div>
                   </form>
-                )}
-              </AdminDialogContent>
-            </Dialog>
+                </AdminDialogContent>
+              </Dialog>
 
-            <AlertDialog
-              open={lifecycleAction !== null}
-              onOpenChange={(open) => !open && setLifecycleAction(null)}
-            >
-              <AdminAlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>{confirmation?.title}</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    {confirmation?.description}
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogClose
-                    render={
-                      <AdminButton tone="secondary" className="sm:min-w-24" />
-                    }
-                    disabled={pending}
-                  >
-                    Cancelar
-                  </AlertDialogClose>
-                  <AdminButton
-                    tone={
-                      lifecycleAction === "deactivate" ? "danger" : "primary"
-                    }
-                    disabled={pending}
-                    onClick={() => {
-                      if (lifecycleAction)
-                        void mutate(`${base}/${lifecycleAction}`, {});
-                      setLifecycleAction(null);
-                    }}
-                  >
-                    {confirmation?.confirmLabel}
-                  </AdminButton>
-                </AlertDialogFooter>
-              </AdminAlertDialogContent>
-            </AlertDialog>
-
-            <AlertDialog
-              open={adminToDisable !== null}
-              onOpenChange={(open) => !open && setAdminToDisable(null)}
-            >
-              <AdminAlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Desativar acesso?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    {adminToDisable
-                      ? `Desativar o acesso de ${adminToDisable.name} e encerrar todas as sessões?`
-                      : ""}
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogClose
-                    render={
-                      <AdminButton tone="secondary" className="sm:min-w-24" />
-                    }
-                    disabled={pending}
-                  >
-                    Cancelar
-                  </AlertDialogClose>
-                  <AdminButton
-                    tone="danger"
-                    disabled={pending}
-                    onClick={() => {
-                      if (adminToDisable) {
-                        void mutate(
-                          `/v1/owner/admins/${adminToDisable.userId}/disable`,
-                          { userId: adminToDisable.userId },
+              <Dialog
+                open={
+                  settingsDialog === "domain" ||
+                  settingsDialog === "domain-edit"
+                }
+                onOpenChange={(open) => !open && closeSettingsDialog()}
+              >
+                <AdminDialogContent>
+                  <DialogTitle>
+                    {domainToEdit ? "Editar domínio" : "Registrar domínio"}
+                  </DialogTitle>
+                  <DialogDescription>
+                    Registre os endereços do casamento para acompanhar sua
+                    situação. A configuração e a renovação são feitas
+                    separadamente.
+                  </DialogDescription>
+                  {domainToEdit ? (
+                    <form
+                      className={adminStyles.form}
+                      onSubmit={saveDomainEdit}
+                    >
+                      <p className="leading-[1.6]">
+                        <strong>{domainToEdit.hostname}</strong>
+                      </p>
+                      <label htmlFor="domain-state">
+                        Situação
+                        <Select
+                          value={domainState}
+                          onValueChange={(value) =>
+                            setDomainState(value as Domain["state"])
+                          }
+                        >
+                          <SelectTrigger id="domain-state">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {["NONE", "PENDING", "ACTIVE", "INACTIVE"].map(
+                              (value) => (
+                                <SelectItem key={value} value={value}>
+                                  {labels[value]}
+                                </SelectItem>
+                              ),
+                            )}
+                          </SelectContent>
+                        </Select>
+                      </label>
+                      <label htmlFor="domain-expiry">
+                        Renovação
+                        <div className={adminStyles.inline}>
+                          <DatePicker
+                            id="domain-expiry"
+                            value={domainExpiry || undefined}
+                            onValueChange={(value) =>
+                              setDomainExpiry(value ?? "")
+                            }
+                          />
+                          <AdminButton
+                            type="button"
+                            tone="secondary"
+                            disabled={pending || !domainExpiry}
+                            onClick={() => setDomainExpiry("")}
+                          >
+                            Limpar data
+                          </AdminButton>
+                        </div>
+                      </label>
+                      <label
+                        className={adminStyles.checkbox}
+                        htmlFor="domain-primary-edit"
+                      >
+                        <Checkbox
+                          id="domain-primary-edit"
+                          checked={domainPrimary}
+                          onCheckedChange={(checked) =>
+                            setDomainPrimary(checked === true)
+                          }
+                        />
+                        Domínio principal
+                      </label>
+                      <div className={adminStyles.inline}>
+                        <AdminButton
+                          tone="primary"
+                          disabled={pending}
+                          type="submit"
+                        >
+                          Salvar domínio
+                        </AdminButton>
+                        <DialogClose
+                          render={
+                            <AdminButton
+                              type="button"
+                              tone="secondary"
+                              disabled={pending}
+                            />
+                          }
+                        >
+                          Cancelar
+                        </DialogClose>
+                      </div>
+                    </form>
+                  ) : (
+                    <form
+                      className={adminStyles.form}
+                      onSubmit={async (event) => {
+                        const saved = await submit(
+                          event,
+                          `${base}/domains`,
+                          (form) => ({
+                            hostname: String(form.get("hostname"))
+                              .trim()
+                              .toLowerCase(),
+                            isPrimary: form.get("primary") === "on",
+                            expiresOn: form.get("expiry") || null,
+                          }),
                         );
+                        if (saved) closeSettingsDialog();
+                      }}
+                    >
+                      <label htmlFor="new-domain-hostname">
+                        Domínio
+                        <Input
+                          id="new-domain-hostname"
+                          name="hostname"
+                          placeholder="casamento.exemplo.com"
+                          required
+                          maxLength={253}
+                        />
+                      </label>
+                      <label htmlFor="new-domain-expiry">
+                        Renovação
+                        <DatePicker id="new-domain-expiry" name="expiry" />
+                      </label>
+                      <label
+                        className={adminStyles.checkbox}
+                        htmlFor="new-domain-primary"
+                      >
+                        <Checkbox id="new-domain-primary" name="primary" />
+                        Domínio principal
+                      </label>
+                      <div className={adminStyles.inline}>
+                        <AdminButton
+                          tone="primary"
+                          disabled={pending}
+                          type="submit"
+                        >
+                          Registrar domínio
+                        </AdminButton>
+                        <DialogClose
+                          render={
+                            <AdminButton
+                              type="button"
+                              tone="secondary"
+                              disabled={pending}
+                            />
+                          }
+                        >
+                          Cancelar
+                        </DialogClose>
+                      </div>
+                    </form>
+                  )}
+                </AdminDialogContent>
+              </Dialog>
+
+              <AlertDialog
+                open={lifecycleAction !== null}
+                onOpenChange={(open) => !open && setLifecycleAction(null)}
+              >
+                <AdminAlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>{confirmation?.title}</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      {confirmation?.description}
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogClose
+                      render={
+                        <AdminButton tone="secondary" className="sm:min-w-24" />
                       }
-                      setAdminToDisable(null);
-                    }}
-                  >
-                    Desativar acesso
-                  </AdminButton>
-                </AlertDialogFooter>
-              </AdminAlertDialogContent>
-            </AlertDialog>
-          </section>
-        ) : (
-          <Card className={adminStyles.surface} data-area="settings">
-            <CardHeader>
-              <CardTitle>Configurações indisponíveis</CardTitle>
-              <CardDescription>
-                Somente o proprietário pode acessar as configurações deste
-                casamento.
-              </CardDescription>
-            </CardHeader>
-          </Card>
-        ))}
-    </PageHeaderActionsProvider>
+                      disabled={pending}
+                    >
+                      Cancelar
+                    </AlertDialogClose>
+                    <AdminButton
+                      tone={
+                        lifecycleAction === "deactivate" ? "danger" : "primary"
+                      }
+                      disabled={pending}
+                      onClick={() => {
+                        if (lifecycleAction)
+                          void mutate(`${base}/${lifecycleAction}`, {});
+                        setLifecycleAction(null);
+                      }}
+                    >
+                      {confirmation?.confirmLabel}
+                    </AdminButton>
+                  </AlertDialogFooter>
+                </AdminAlertDialogContent>
+              </AlertDialog>
+
+              <AlertDialog
+                open={adminToDisable !== null}
+                onOpenChange={(open) => !open && setAdminToDisable(null)}
+              >
+                <AdminAlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Desativar acesso?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      {adminToDisable
+                        ? `Desativar o acesso de ${adminToDisable.name} e encerrar todas as sessões?`
+                        : ""}
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogClose
+                      render={
+                        <AdminButton tone="secondary" className="sm:min-w-24" />
+                      }
+                      disabled={pending}
+                    >
+                      Cancelar
+                    </AlertDialogClose>
+                    <AdminButton
+                      tone="danger"
+                      disabled={pending}
+                      onClick={() => {
+                        if (adminToDisable) {
+                          void mutate(
+                            `/v1/owner/admins/${adminToDisable.userId}/disable`,
+                            { userId: adminToDisable.userId },
+                          );
+                        }
+                        setAdminToDisable(null);
+                      }}
+                    >
+                      Desativar acesso
+                    </AdminButton>
+                  </AlertDialogFooter>
+                </AdminAlertDialogContent>
+              </AlertDialog>
+            </section>
+          ) : (
+            <Card className={adminStyles.surface} data-area="settings">
+              <CardHeader>
+                <CardTitle>Configurações indisponíveis</CardTitle>
+                <CardDescription>
+                  Somente o proprietário pode acessar as configurações deste
+                  casamento.
+                </CardDescription>
+              </CardHeader>
+            </Card>
+          ))}
+      </PageHeaderActionsProvider>
+    </SupportSiteProvider>
   );
 }
 

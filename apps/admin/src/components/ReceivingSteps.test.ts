@@ -5,13 +5,15 @@ import {
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { supportWhatsAppUrl } from "../lib/supportContact";
 import {
   ActivationStep,
   ReceivingOverviewTrack,
   type ReceivingStepsContext,
-  supportMailto,
 } from "./ReceivingSteps";
 import { deriveReceivingTrack } from "./receivingTrack";
+
+const supportUrl = supportWhatsAppUrl(null);
 
 vi.mock("@tanstack/react-router", () => ({
   Link: ({
@@ -237,9 +239,6 @@ describe("receiving guided track", () => {
     const html = renderToStaticMarkup(
       createElement(ActivationStep, { context: context() }),
     );
-    expect(supportMailto).toBe(
-      "mailto:luisrcadev@gmail.com?subject=Ajuda%20com%20os%20recebimentos",
-    );
     for (const task of ["Dados do casal", "Conta bancária", "Status da conta"])
       expect(html).toContain(task);
     expect(html).toContain("Etapa 3 de 4");
@@ -272,7 +271,7 @@ describe("receiving guided track", () => {
       );
       expect(html).toContain(badge);
       expect(html.includes('role="alert"')).toBe(alert);
-      if (alert) expect(html).toContain(`href="${supportMailto}"`);
+      if (alert) expect(html).toContain(`href="${supportUrl}"`);
       expect(html).not.toMatch(forbidden);
       expect(html).not.toMatch(/href="https?:\/\/[^"]*pagar/i);
     },
@@ -296,7 +295,7 @@ describe("receiving guided track", () => {
     );
     expect(html).toContain("A Pagar.me pediu documentos");
     expect(html).toContain("Documentos pedidos, fale com o suporte");
-    expect(html).toContain(`href="${supportMailto}"`);
+    expect(html).toContain(`href="${supportUrl}"`);
     expect(html).toContain("Falar com o suporte do EntreLaços");
   });
 

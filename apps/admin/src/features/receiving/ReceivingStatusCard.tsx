@@ -8,10 +8,11 @@ import { showSandboxNotice } from "@entrelacos/ui";
 import { Check } from "lucide-react";
 import type { ReactNode } from "react";
 import { AdminButton } from "../../components/AdminButton";
+import { SupportLink } from "../../components/SupportLink";
 
 const reasonMessages: Record<
   NonNullable<ReceivingReadiness["reason"]>,
-  string
+  ReactNode
 > = {
   NOT_CONFIGURED: "Os recebimentos ainda não foram configurados.",
   PROVIDER_DISABLED:
@@ -26,8 +27,12 @@ const reasonMessages: Record<
     "A conta de destino mudou e precisa de nova verificação.",
   ENVIRONMENT_MISMATCH: "O ambiente de recebimentos precisa ser revisado.",
   CAPABILITY_UNAVAILABLE: "A ativação dos recebimentos ainda está pendente.",
-  ACCOUNT_BLOCKED:
-    "Os recebimentos estão bloqueados. Entre em contato com o suporte.",
+  ACCOUNT_BLOCKED: (
+    <>
+      Os recebimentos estão bloqueados.{" "}
+      <SupportLink className="text-admin-accent-hover underline underline-offset-4" />
+    </>
+  ),
 };
 
 const cardClassName =
