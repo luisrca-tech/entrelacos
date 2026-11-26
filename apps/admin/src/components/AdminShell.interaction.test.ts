@@ -373,3 +373,49 @@ describe("mobile dock clearance", () => {
     }
   });
 });
+
+describe("support footer", () => {
+  const footerLink = (props: Record<string, unknown>) => {
+    const node = document.createElement("div");
+    node.innerHTML = renderToStaticMarkup(
+      createElement(AdminShell, { actor, onLogout: vi.fn(), ...props }),
+    );
+    return node.querySelector<HTMLAnchorElement>(
+      'footer a[href^="https://wa.me/"]',
+    );
+  };
+
+  it("offers WhatsApp help with the current site in the message", () => {
+    const link = footerLink({
+      siteId: "wedding-a",
+      area: "home",
+      supportSite: {
+        displayName: "Ana e João",
+        publicUrl: "https://ana-e-joao.entrelacosbr.site/",
+        lifecycle: "ACTIVE",
+      },
+    });
+    expect(link?.textContent).toBe(
+      "Dúvidas? Fale com o Entrelaços no WhatsApp",
+    );
+    expect(link?.target).toBe("_blank");
+    expect(new URL(link?.href ?? "").searchParams.get("text")).toBe(
+      "Olá! Sou responsável pelo site Ana e João (ana-e-joao.entrelacosbr.site) no Entrelaços e tenho uma dúvida.",
+    );
+  });
+
+  it("uses a generic message outside a site", () => {
+    const link = footerLink({});
+    expect(new URL(link?.href ?? "").searchParams.get("text")).toBe(
+      "Olá! Tenho uma dúvida sobre o painel do Entrelaços.",
+    );
+  });
+
+  it("is hidden for the Entrelaços owner account", () => {
+    expect(
+      footerLink({
+        actor: { ...actor, user: { ...actor.user, role: "OWNER" } },
+      }),
+    ).toBeNull();
+  });
+});

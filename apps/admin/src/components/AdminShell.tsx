@@ -32,6 +32,7 @@ import {
   paymentsAreaOpen,
   usePaymentsProbe,
 } from "../lib/paymentsAvailability";
+import { type SupportSite, supportWhatsAppUrl } from "../lib/supportContact";
 import { AdminButton } from "./AdminButton";
 import {
   type AdminRole,
@@ -52,6 +53,7 @@ type AdminShellProps = {
   siteId?: string;
   siteAccess?: SiteAccess;
   siteName?: string;
+  supportSite?: SupportSite | null;
   area?: SiteArea;
   onLogout: () => void;
   children?: ReactNode;
@@ -62,6 +64,7 @@ export function AdminShell({
   siteId,
   siteAccess,
   siteName,
+  supportSite,
   area,
   onLogout,
   children,
@@ -76,6 +79,8 @@ export function AdminShell({
     : [];
   const navigationArea = area === "receiving-guide" ? "receiving" : area;
   const initials = getInitials(actor.user.name);
+  // The owner account is Entrelaços itself, so it has no one to ask.
+  const showSupport = role !== "OWNER";
   const expanded = useNavigationExpanded();
   const mobileDock = useRef<HTMLElement>(null);
   const [mobileDockHeight, setMobileDockHeight] = useState<number | null>(null);
@@ -299,8 +304,15 @@ export function AdminShell({
               <PaymentProviderDisclosure />
             </aside>
           )}
-          <footer className="mx-auto flex w-full max-w-[1700px] justify-between gap-6 border-t border-admin-border px-[42px] pt-6 pb-7 text-[0.78rem] text-admin-text-secondary [@media(max-width:760px)]:hidden [@media(min-width:761px)_and_(max-width:1060px)]:px-7">
-            <span className="flex items-center gap-2">
+          <footer
+            className={cn(
+              "mx-auto flex w-full max-w-[1700px] items-center justify-between gap-6 border-t border-admin-border px-[42px] pt-6 pb-7 text-[0.78rem] text-admin-text-secondary [@media(min-width:761px)_and_(max-width:1060px)]:px-7",
+              showSupport
+                ? "[@media(max-width:760px)]:justify-center [@media(max-width:760px)]:px-5 [@media(max-width:760px)]:pt-4 [@media(max-width:760px)]:pb-5"
+                : "[@media(max-width:760px)]:hidden",
+            )}
+          >
+            <span className="flex items-center gap-2 [@media(max-width:760px)]:hidden">
               <img
                 src="/brand/entrelacos-mark.svg"
                 width="24"
@@ -310,7 +322,22 @@ export function AdminShell({
               />
               Entrelaços · Painel administrativo
             </span>
-            <span>Feito para cuidar de cada detalhe.</span>
+            {showSupport ? (
+              <a
+                href={supportWhatsAppUrl(
+                  siteId ? (supportSite ?? null) : null,
+                  "general",
+                )}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex min-h-9 items-center gap-1.5 text-admin-accent-hover no-underline underline-offset-4 hover:underline"
+              >
+                <MessageCircle className="size-4" aria-hidden="true" />
+                Dúvidas? Fale com o Entrelaços no WhatsApp
+              </a>
+            ) : (
+              <span>Feito para cuidar de cada detalhe.</span>
+            )}
           </footer>
         </div>
       </div>

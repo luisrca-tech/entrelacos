@@ -1,7 +1,23 @@
 type Environment = Record<string, string | undefined>;
 
-export const contactMessage =
-  "Oi! Vi o site do Entrelaços. Gostei do modelo ___ e vamos casar em ___.";
+/**
+ * Ready WhatsApp message with no blanks to fill. The ad origin is told in
+ * plain words ("pelo Instagram") so support knows where the lead came from
+ * without showing the visitor a tracking code.
+ */
+export function contactMessageFor(ref: string | null): string {
+  const origin = ref?.split("-")[0];
+  const channel = !ref
+    ? "pelo site"
+    : origin === "ig" || origin === "instagram"
+      ? "pelo Instagram"
+      : origin === "fb" || origin === "facebook"
+        ? "pelo Facebook"
+        : "por um anúncio";
+  return `Olá! Conheci o Entrelaços ${channel} e quero saber mais sobre o site para o nosso casamento.`;
+}
+
+export const contactMessage = contactMessageFor(null);
 // encodeURIComponent keeps spaces as %20, which WhatsApp renders reliably.
 export const defaultContactUrl = `https://wa.me/5562991339861?text=${encodeURIComponent(contactMessage)}`;
 

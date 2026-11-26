@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { contactMessage, defaultContactUrl } from "./landingConfig";
+import { contactMessageFor, defaultContactUrl } from "./landingConfig";
 import {
   type ClickDestinations,
   classifyClick,
@@ -145,15 +145,28 @@ describe("advertising reference for WhatsApp", () => {
   it("leaves the message untouched without a reference", () => {
     expect(withContactRef(contactUrl, null)).toBe(contactUrl);
   });
-  it("appends the reference to the prefilled WhatsApp text", () => {
-    const url = new URL(withContactRef(contactUrl, "ig-verao"));
-    expect(url.searchParams.get("text")).toBe(
-      `${contactMessage} (ref: ig-verao)`,
-    );
-    expect(`${url.origin}${url.pathname}`).toBe("https://wa.me/5562991339861");
-    expect(url.search).not.toContain("+");
-    expect(url.search).toContain("%20%28ref%3A%20ig-verao%29");
-  });
+  it.each([
+    ["ig-verao", "pelo Instagram"],
+    ["ig", "pelo Instagram"],
+    ["fb-verao", "pelo Facebook"],
+    ["meta-verao", "por um anúncio"],
+    ["google-ads", "por um anúncio"],
+    ["ads-verao", "por um anúncio"],
+  ])(
+    "names where the visitor came from for %s, without codes",
+    (ref, channel) => {
+      const url = new URL(withContactRef(contactUrl, ref));
+      const text = url.searchParams.get("text");
+      expect(text).toBe(
+        `Olá! Conheci o Entrelaços ${channel} e quero saber mais sobre o site para o nosso casamento.`,
+      );
+      expect(text).not.toContain("ref");
+      expect(`${url.origin}${url.pathname}`).toBe(
+        "https://wa.me/5562991339861",
+      );
+      expect(url.search).not.toContain("+");
+    },
+  );
   it("only changes wa.me destinations", () => {
     const form = "https://forms.example/contato?text=oi";
     expect(withContactRef(form, "ig-verao")).toBe(form);
@@ -293,8 +306,9 @@ describe("mounting", () => {
     );
     const link = document.querySelector<HTMLAnchorElement>("#contact");
     expect(new URL(link?.href ?? "").searchParams.get("text")).toBe(
-      `${contactMessage} (ref: ig-verao)`,
+      contactMessageFor("ig-verao"),
     );
+    expect(contactMessageFor("ig-verao")).toContain("pelo Instagram");
     expect(document.querySelector<HTMLAnchorElement>("#botanical")?.href).toBe(
       destinations.botanicalUrl,
     );

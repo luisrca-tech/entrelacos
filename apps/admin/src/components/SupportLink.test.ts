@@ -7,6 +7,7 @@ import { SupportLink, SupportSiteProvider } from "./SupportLink";
 const site = {
   displayName: "Marina e Caio",
   publicUrl: "https://marina-e-caio.entrelacosbr.site",
+  lifecycle: "ACTIVE",
 };
 
 describe("SupportLink", () => {
