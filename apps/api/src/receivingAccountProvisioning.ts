@@ -158,8 +158,15 @@ export type ReceivingProvisioningStage =
   | "attach"
   | "consult";
 export interface ReceivingProvisioningFailureEvent {
-  readonly level: "warn";
-  readonly event: "receiving.provisioning.failed";
+  readonly level: "warn" | "error";
+  /**
+   * `pagarme_recipient_platform_permission_denied` follows the failure when
+   * Pagar.me refuses a setting of the Entrelaços account itself (such as the
+   * automatic anticipation parameters): only an operator can fix it.
+   */
+  readonly event:
+    | "receiving.provisioning.failed"
+    | "pagarme_recipient_platform_permission_denied";
   /** The stage that failed. */
   readonly operation: ReceivingProvisioningStage;
   /**
@@ -180,6 +187,8 @@ export interface ReceivingProvisioningFailureEvent {
  * 404, 409 and 429 say nothing about the payload, so they stay uncertain.
  */
 const DEFINITIVE_REJECTIONS = new Set([400, 412, 422]);
+/** A refusal of the platform account's permission, not of the payload. */
+const PLATFORM_PERMISSION = /action_forbidden|anticipation/i;
 /** The contract bound of one field message shown to the holder. */
 const PROVIDER_FIELD_MESSAGE_LIMIT = 240;
 /** The provider reason the holder can act on, free of submitted values. */
@@ -595,14 +604,24 @@ export function createReceivingAccountProvisioning(options?: Options): {
         result: ReceivingProvisioningFailureEvent["result"],
       ) => {
         try {
-          observe({
+          const failure: ReceivingProvisioningFailureEvent = {
             level: "warn",
             event: "receiving.provisioning.failed",
             operation: stage,
             result,
             ...failureDetails(error, recipientInput),
             ...(nomination ? { siteId: nomination.siteId } : {}),
-          });
+          };
+          observe(failure);
+          if (
+            result === "rejected" &&
+            PLATFORM_PERMISSION.test(failure.providerMessage ?? "")
+          )
+            observe({
+              ...failure,
+              level: "error",
+              event: "pagarme_recipient_platform_permission_denied",
+            });
         } catch {
           /* Logging never changes the provisioning outcome. */
         }

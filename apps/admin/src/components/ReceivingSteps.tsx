@@ -1243,8 +1243,9 @@ export function DetailsStep({ context }: { context: ReceivingStepsContext }) {
         {rejection && (
           <div className="grid gap-2 rounded-[14px] bg-admin-danger-subtle p-4 text-admin-danger-text">
             <p role="alert" className="m-0 text-sm font-bold leading-[1.55]">
-              A Pagar.me recusou o cadastro. Corrija os dados indicados e envie
-              novamente.
+              {rejection.contactSupport
+                ? "A Pagar.me recusou o cadastro."
+                : "A Pagar.me recusou o cadastro. Corrija os dados indicados e envie novamente."}
             </p>
             {rejection.fields.length > 0 && (
               <ul className="m-0 grid list-disc gap-1 pl-5 text-sm leading-[1.55]">
@@ -1259,6 +1260,9 @@ export function DetailsStep({ context }: { context: ReceivingStepsContext }) {
             )}
             {rejection.message && (
               <p className="m-0 text-sm leading-[1.55]">{rejection.message}</p>
+            )}
+            {rejection.contactSupport && (
+              <SupportLink className="text-sm font-bold underline underline-offset-4" />
             )}
           </div>
         )}

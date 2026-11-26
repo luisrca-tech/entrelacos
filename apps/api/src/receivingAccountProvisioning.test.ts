@@ -1460,6 +1460,42 @@ describe("provisioning failure observability", () => {
     expectNoPii(observe);
   });
 
+  it("flags Pagar.me's platform anticipation permission 412 for the operator", async () => {
+    const values = fixture();
+    const observe = vi.fn();
+    values.fetchOriginal.mockImplementation(async () =>
+      json(412, {
+        message:
+          "The recipient could not be created : action_forbidden | | this company doesn't have permission to change the anticipation parameters from default values",
+      }),
+    );
+    const service = createReceivingAccountProvisioning({
+      ...values.options,
+      observe,
+    });
+    const owner = service.begin(values.command);
+    expect((await owner.feedback).state).toBe("REJECTED");
+    await owner.completion;
+    await service.close();
+    expect(values.repository.releaseOriginal).toHaveBeenCalledOnce();
+    expect(observe).toHaveBeenCalledTimes(2);
+    const [[failed], [denied]] = observe.mock.calls;
+    expect(failed).toMatchObject({
+      level: "warn",
+      event: "receiving.provisioning.failed",
+      operation: "create_recipient",
+      result: "rejected",
+      status: 412,
+    });
+    expect(denied).toEqual({
+      ...failed,
+      level: "error",
+      event: "pagarme_recipient_platform_permission_denied",
+    });
+    expect(denied.providerMessage).toMatch(/action_forbidden/);
+    expectNoPii(observe);
+  });
+
   it("records a recovered attachment failure before consulting the stored result", async () => {
     const values = fixture();
     const observe = vi.fn();
