@@ -93,23 +93,43 @@ Rows from before the switch are kept: the previous provider's receiving accounts
 
 ## Sandbox
 
-`tsx apps/api/scripts/pagarmeSandboxProbe.ts [recipient|order|all] [--recipient rp_…]`, run with `PAGARME_MODE=test`, `sk_test_` and the platform `rp_`, plus either `PAGARME_PUBLIC_KEY` (`pk_test_`) or `PAGARME_TEST_CARD_TOKEN`:
+`tsx apps/api/scripts/pagarmeSandboxProbe.ts <command> [flags]`, run with `PAGARME_MODE=test`, `sk_test_` and the platform `rp_`, plus either `PAGARME_PUBLIC_KEY` (`pk_test_`) or `PAGARME_TEST_CARD_TOKEN` for card orders:
+
+```
+recipient [--repeat-idempotency]
+order [--recipient rp_...] [--method card|pix] [--installments 1-6] [--gift-cents n] [--no-split] [--repeat-idempotency]
+all [--recipient rp_...] [order flags]
+balance --recipient rp_...
+transfer --recipient rp_... --amount <cents>
+transfers --recipient rp_...
+```
 
 - `recipient` creates an individual recipient (automatic anticipation on, transfers off) and prints its status and `kyc_details` status.
-- `order` places a R$ 100,00 gift in 6x with the split and prints each recipient's payables for the charge. If the couple's total equals `C`, keep `charge_total`; if each installment equals `C`, switch to `per_installment`. Record the result here.
+- `order` places a gift (default R$ 100,00 in 6x by card, Pix in one installment) with the split and prints each recipient's payables for the charge, with amounts, fees and payment dates. `--no-split` is accepted only with `--method pix`.
+- `--repeat-idempotency` re-POSTs the same body with the same `Idempotency-Key` and prints `SAME`, `DIFFERENT` or `ERROR`.
+- `balance`, `transfer` and `transfers` read a recipient's balance, request a transfer and list its transfers.
 
-The script never prints keys, tokens or card data.
+A rejection prints the provider's status and reason. The script never prints keys, tokens or card data.
 
 The browser key `PUBLIC_PAGARME_PUBLIC_KEY` is publishable (`pk_test_…` in development, `pk_…` in production), can only tokenize cards, and is committed in `scripts/showcaseBuildEnvironment.ts` so Cloudflare Builds do not depend on a dashboard variable. Secret keys (`sk_…`), the webhook credentials and recipient ids stay out of source; `PAGARME_SECRET_KEY` is a Worker secret.
 
-Confirm once in the sandbox before go-live (the 2026-11 docs review left these open):
+Confirmed in the sandbox (2026-11-25):
 
-- Recipient `birthdate` is sent as `DD/MM/YYYY`, as in the [create recipient](https://docs.pagar.me/reference/criar-recebedor-1) examples; the format is not stated explicitly.
-- Whether `transfer_settings.transfer_interval` is case-sensitive (`Daily` in examples, `daily` in the update page).
-- Whether a transfer's `fee` is charged on top of `amount` (assumed) or deducted from it.
-- Which recipient id format a transfer's `source_id` echoes. Any of the recipient's own ids (`id`, `payment_profile_id`, `gateway_recipients[].pgid`) is accepted; an id the recipient read does not list is refused and leaves the hold to an operator.
-- The sort order of `GET /transfers` and how `x-cursor-nextpage` is followed; only the first page is read today.
-- Whether `POST /orders` and `POST /recipients` honour `Idempotency-Key`; it is documented only for `POST /transfers`. Orders are recovered with `GET /orders?code=` regardless.
+- Split mode `charge_total` is right. A 6x card charge split 859 (platform) / 11031 (couple) echoed the same split in `last_transaction.split`, and the couple's `waiting_funds` balance was exactly 11031 = `C`, with no cent difference. The couple carries no fee (`liable`, `charge_processing_fee` and `charge_remainder_fee` off for it). Keep `couplesSplitMode: "charge_total"`.
+- Pix without a split is created and paid by the simulator (`paid`). Pix with a split stays covered only by the payload tests.
+- Recipient `birthdate` as `DD/MM/YYYY` is accepted and echoed as sent.
+- `transfer_settings.transfer_interval` is not case-sensitive: `daily`, `weekly`, `Weekly` and `MONTHLY` were accepted and echoed normalized (`Daily`, `Weekly`, `Monthly`).
+- `POST /recipients` honours `Idempotency-Key`: a repeat with the same key and body returned the same recipient (tested with a body without custom anticipation, see the limits below).
+- `POST /orders` did not honour `Idempotency-Key` while the orders service answered 500: two POSTs with the same key each answered 500 and each created a separate paid charge. The app posts an order once per checkout attempt and reconciles an unknown outcome with `GET /orders?code=`; never re-POST an order to resolve an unknown outcome.
+- Real charge bodies (card paid, Pix) match the webhook and worker fixtures under `apps/api/src/__fixtures__/pagarme/` field path for field path.
+
+Still open:
+
+- D+1 payable dates and who carries the anticipation fee. `POST /recipients` with our `automatic_anticipation_settings` (`enabled: true`, `type: "1025"`, `delay: 1`) answers 412 `action_forbidden` ("this company doesn't have permission to change the anticipation parameters from default values") on the sandbox account, so no sandbox recipient has D+1, and `GET /payables` answered 500. In production the dashboard accepted 1025 / delay 1 for an existing recipient; the first recipient created through the API in production is the real check. For this 412 the admin shows a platform-permission message with the support link, and the API logs `pagarme_recipient_platform_permission_denied` at error level.
+- Transfers. `POST /transfers` and `GET /transfers/{id}` answer 401 "IP de origem não autorizado a realizar essa operação." (Pagar.me IP Allow List), so these stay open: whether a transfer's `fee` is charged on top of `amount` (assumed) or deducted from it; which recipient id format `source_id` echoes (any of the recipient's own ids is accepted; an unlisted id leaves the hold to an operator); and the sort order and `x-cursor-nextpage` paging of `GET /transfers` (only the first page is read today). In production the API's egress IP must be on the Pagar.me allow list before couples can withdraw; a 401 keeps the hold and raises the unresolved-withdrawal alert after an hour.
+- `POST /orders` idempotency when the orders service is healthy (only tested during the 500 outage).
+
+Sandbox limits seen on 2026-11-25: for hours `POST /orders`, `GET /orders/{id}`, `GET /orders?code=` and `GET /payables` answered 500 while `POST /orders` still created the charge (visible through `GET /charges?code=`) and `GET /charges/{id}` worked; card transactions ended `with_error` (gateway 500). The webhook → worker → ledger path was therefore checked by `apps/api/src/giftPaymentPagarme.db.test.ts` (10/10 locally, plus the CI database job), not against a real sandbox webhook.
 
 Test cards (Pagar.me v5 simulator):
 
@@ -119,4 +139,4 @@ Test cards (Pagar.me v5 simulator):
 | `4000000000000028` | declined (`order.payment_failed`) |
 | `4000000000000069` | approved, then chargeback |
 
-The simulator does not accept Pix with a split. Test Pix end to end without a split; Pix with a split is covered by the payload tests.
+The simulator does not accept Pix with a split; test Pix end to end with `--no-split`.
