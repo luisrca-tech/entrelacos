@@ -19,7 +19,15 @@ export type LabeledProviderRejection = {
   }[];
   /** Form inputs Pagar.me's refusal points at, to highlight. */
   formFields: ReceivingFormField[];
+  /** Only Entrelaços support can solve it: nothing the couple typed is wrong. */
+  contactSupport?: true;
 };
+
+/**
+ * Pagar.me refusing a platform setting of the Entrelaços account (such as the
+ * automatic anticipation parameters), not data the couple typed.
+ */
+const PLATFORM_PERMISSION = /action_forbidden|anticipation/i;
 
 /** The bound of a provider message the API already applies (#89). */
 const PROVIDER_DETAIL_LIMIT = 240;
@@ -52,6 +60,11 @@ const fieldPaths: [RegExp, ReceivingFormField][] = [
 // Known Pagar.me messages (English, values already redacted by the API),
 // most specific first, with what to fix in pt-BR.
 const knownMessages: [RegExp, ReceivingFormField | null, string][] = [
+  [
+    PLATFORM_PERMISSION,
+    null,
+    "Não conseguimos concluir o cadastro por um ajuste da conta do Entrelaços na Pagar.me, não por um dado seu. Seus dados estão certos: fale com o suporte do Entrelaços pelo WhatsApp e nós resolvemos.",
+  ],
   [/request is invalid/i, null, "A Pagar.me recusou alguns dados do cadastro."],
   [
     /holder.?name/i,
@@ -168,7 +181,13 @@ export function readProviderRejection(
       ),
     ),
   ];
-  return { message, fields, formFields };
+  const contactSupport = PLATFORM_PERMISSION.test(parsed.data.message ?? "");
+  return {
+    message,
+    fields,
+    formFields,
+    ...(contactSupport ? { contactSupport: true as const } : {}),
+  };
 }
 
 /** The pt-BR error to show under each input the refusal points at. */

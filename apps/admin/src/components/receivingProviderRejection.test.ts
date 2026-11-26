@@ -132,6 +132,35 @@ describe("Pagar.me refusal in pt-BR", () => {
     });
   });
 
+  it("tells the couple a platform anticipation permission is not their data", () => {
+    const text =
+      "Não conseguimos concluir o cadastro por um ajuste da conta do Entrelaços na Pagar.me, não por um dado seu. Seus dados estão certos: fale com o suporte do Entrelaços pelo WhatsApp e nós resolvemos.";
+    const sandbox =
+      "The recipient could not be created : action_forbidden | | this company doesn't have permission to change the anticipation parameters from default values";
+    expect(describePagarmeMessage(sandbox)).toEqual({ formField: null, text });
+    for (const message of [
+      sandbox,
+      "The automatic anticipation settings could not be updated.",
+      "ACTION_FORBIDDEN on the bank account",
+    ]) {
+      const rejection = readProviderRejection(problem({ message, fields: [] }));
+      expect(rejection).toEqual({
+        message: text,
+        fields: [],
+        formFields: [],
+        contactSupport: true,
+      });
+      expect(rejection?.message).not.toContain("Detalhe da Pagar.me");
+    }
+  });
+
+  it("does not offer support for a refusal the couple can fix", () => {
+    const rejection = readProviderRejection(
+      problem({ message: "Something odd happened", fields: [] }),
+    );
+    expect(rejection).not.toHaveProperty("contactSupport");
+  });
+
   it("refuses a problem without a valid provider part", () => {
     expect(readProviderRejection({ code: "X" })).toBeNull();
   });
