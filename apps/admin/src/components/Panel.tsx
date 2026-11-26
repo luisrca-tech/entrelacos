@@ -9,6 +9,7 @@ import {
   paymentsAvailabilityStore,
   usePaymentsAvailability,
 } from "../lib/paymentsAvailability";
+import type { SupportSite } from "../lib/supportContact";
 import { AdminButton } from "./AdminButton";
 import { AdminShell, ShellLoading } from "./AdminShell";
 import { resolveSiteArea, type SiteArea } from "./adminNavigation";
@@ -36,6 +37,10 @@ export function Panel({ siteId, area }: { siteId?: string; area?: SiteArea }) {
   );
   const payments = usePaymentsAvailability();
   const [siteName, setSiteName] = useState<string>();
+  const [supportSite, setSupportSite] = useState<SupportSite | null>(null);
+  // A site switch must not reuse the previous couple in the support message.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: reset on site change
+  useEffect(() => setSupportSite(null), [siteId]);
   const authActions = useRef<ReturnType<
     typeof createPanelAuthenticationActions
   > | null>(null);
@@ -92,8 +97,10 @@ export function Panel({ siteId, area }: { siteId?: string; area?: SiteArea }) {
         siteId={siteId}
         area={area}
         siteName={siteName}
+        supportSite={supportSite}
         payments={payments}
         onSiteName={setSiteName}
+        onSupportSite={setSupportSite}
         onVerify={() => {
           void panelActorOwner.load(true).catch(() => {});
         }}
@@ -121,8 +128,10 @@ export function PanelSessionView({
   siteId,
   area,
   siteName,
+  supportSite = null,
   payments = paymentsAvailabilityStore.get(),
   onSiteName,
+  onSupportSite,
   onVerify,
   onLogout,
 }: {
@@ -130,8 +139,10 @@ export function PanelSessionView({
   siteId?: string;
   area?: SiteArea;
   siteName?: string;
+  supportSite?: SupportSite | null;
   payments?: PaymentsAvailability;
   onSiteName?: (name: string) => void;
+  onSupportSite?: (site: SupportSite) => void;
   onVerify: () => void;
   onLogout: () => void;
 }) {
@@ -195,6 +206,7 @@ export function PanelSessionView({
       siteAccess={selectedAccess ?? undefined}
       siteId={siteId}
       siteName={siteName}
+      supportSite={supportSite}
       area={siteId ? resolvedArea : undefined}
       onLogout={onLogout}
     >
@@ -207,6 +219,7 @@ export function PanelSessionView({
           access={selectedAccess}
           area={resolvedArea}
           onSiteName={onSiteName}
+          onSupportSite={onSupportSite}
         />
       ) : landing.kind === "SELECT" ? (
         <AssignedSites key={sessionEpoch} actor={actor} />

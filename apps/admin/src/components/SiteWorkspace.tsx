@@ -46,6 +46,7 @@ import {
   paymentsAreaPending,
   usePaymentsAvailability,
 } from "../lib/paymentsAvailability";
+import type { SupportSite } from "../lib/supportContact";
 import { AdminButton } from "./AdminButton";
 import { AdminAlertDialogContent, AdminDialogContent } from "./AdminDialog";
 import type { SiteArea } from "./adminNavigation";
@@ -174,6 +175,7 @@ export function SiteWorkspace({
   owner,
   area = "home",
   onSiteName,
+  onSupportSite,
   access = null,
   sessionEpoch = null,
 }: {
@@ -181,6 +183,7 @@ export function SiteWorkspace({
   owner: boolean;
   area?: SiteArea;
   onSiteName?: (name: string) => void;
+  onSupportSite?: (site: SupportSite) => void;
   access?: SiteAccess | null;
   sessionEpoch?: number | null;
 }) {
@@ -244,6 +247,7 @@ export function SiteWorkspace({
       if (!isActive() || !isCurrentPanelSessionEpoch(sessionEpoch)) return;
       setSite(result.site);
       onSiteName?.(result.site.displayName);
+      onSupportSite?.(result.site);
       // Settings data is owner-scoped and never requested for SITE_ADMIN.
       if (owner && area === "settings") {
         const [users, names] = await Promise.all([
@@ -255,7 +259,7 @@ export function SiteWorkspace({
         setDomains(names.domains);
       }
     },
-    [area, base, onSiteName, owner, siteId, sessionEpoch],
+    [area, base, onSiteName, onSupportSite, owner, siteId, sessionEpoch],
   );
 
   useEffect(() => {

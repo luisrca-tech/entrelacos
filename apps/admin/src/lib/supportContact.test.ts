@@ -4,6 +4,12 @@ import { supportMessage, supportWhatsAppUrl } from "./supportContact";
 const decodedText = (url: string) =>
   new URL(url).searchParams.get("text") ?? "";
 
+const activeSite = {
+  displayName: "Daphnne e Samuel",
+  publicUrl: "https://daphnne-e-samuel.entrelacosbr.site/",
+  lifecycle: "ACTIVE",
+} as const;
+
 describe("supportWhatsAppUrl", () => {
   it("opens the Entrelaços WhatsApp Business number", () => {
     const url = new URL(supportWhatsAppUrl(null));
@@ -11,28 +17,41 @@ describe("supportWhatsAppUrl", () => {
     expect(url.pathname).toBe("/5562991339861");
   });
 
-  it("names the couple site and its address in the ready message", () => {
-    const url = supportWhatsAppUrl({
-      displayName: "Marina & Caio",
-      publicUrl: "https://marina-e-caio.entrelacosbr.site/",
-    });
+  it("names the active couple site and its address in the ready message", () => {
+    const url = supportWhatsAppUrl(activeSite);
     expect(decodedText(url)).toBe(
-      "Olá! Sou responsável pelo site Marina & Caio (marina-e-caio.entrelacosbr.site) no Entrelaços e preciso de ajuda com os recebimentos.",
+      "Olá! Sou responsável pelo site Daphnne e Samuel (daphnne-e-samuel.entrelacosbr.site) no Entrelaços e preciso de ajuda com os recebimentos.",
     );
     expect(url).not.toContain(" ");
   });
 
+  it("asks a general question when the topic is general", () => {
+    expect(decodedText(supportWhatsAppUrl(activeSite, "general"))).toBe(
+      "Olá! Sou responsável pelo site Daphnne e Samuel (daphnne-e-samuel.entrelacosbr.site) no Entrelaços e tenho uma dúvida.",
+    );
+    expect(supportMessage(null, "general")).toBe(
+      "Olá! Tenho uma dúvida sobre o painel do Entrelaços.",
+    );
+  });
+
+  it.each(["DRAFT", "IN_REVIEW", "INACTIVE", undefined])(
+    "leaves the address out while the site is %s",
+    (lifecycle) => {
+      expect(supportMessage({ ...activeSite, lifecycle })).toBe(
+        "Olá! Sou responsável pelo site Daphnne e Samuel no Entrelaços e preciso de ajuda com os recebimentos.",
+      );
+    },
+  );
+
   it("keeps the site name when the site has no public address yet", () => {
-    expect(supportMessage({ displayName: "Ana e João", publicUrl: null })).toBe(
-      "Olá! Sou responsável pelo site Ana e João no Entrelaços e preciso de ajuda com os recebimentos.",
+    expect(supportMessage({ ...activeSite, publicUrl: null })).toBe(
+      "Olá! Sou responsável pelo site Daphnne e Samuel no Entrelaços e preciso de ajuda com os recebimentos.",
     );
   });
 
   it("ignores an address that is not a valid URL", () => {
-    expect(
-      supportMessage({ displayName: "Ana e João", publicUrl: "not a url" }),
-    ).toBe(
-      "Olá! Sou responsável pelo site Ana e João no Entrelaços e preciso de ajuda com os recebimentos.",
+    expect(supportMessage({ ...activeSite, publicUrl: "not a url" })).toBe(
+      "Olá! Sou responsável pelo site Daphnne e Samuel no Entrelaços e preciso de ajuda com os recebimentos.",
     );
   });
 

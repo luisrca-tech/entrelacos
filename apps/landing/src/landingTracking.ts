@@ -1,6 +1,8 @@
 // Consent-gated Meta Pixel and GA4 for the marketing landing only.
 // Couple sites, demos and the admin must never load these trackers.
 
+import { contactMessageFor } from "./landingConfig";
+
 export const consentStorageKey = "entrelacos-tracking-consent";
 const refStorageKey = "entrelacos-contact-ref";
 
@@ -113,12 +115,12 @@ export function contactRef(search: string): string | null {
   return campaign ? `${origin}-${campaign}` : origin;
 }
 
+/** Rewrites the WhatsApp message to name the ad channel in plain words. */
 export function withContactRef(contactUrl: string, ref: string | null): string {
   if (!ref) return contactUrl;
   const url = new URL(contactUrl);
   if (url.hostname !== "wa.me") return contactUrl;
-  const text = url.searchParams.get("text");
-  url.searchParams.set("text", `${text ? `${text} ` : ""}(ref: ${ref})`);
+  url.searchParams.set("text", contactMessageFor(ref));
   // Keep %20 like the original link; a literal "+" is already encoded as %2B.
   url.search = url.searchParams.toString().replace(/\+/g, "%20");
   return url.href;

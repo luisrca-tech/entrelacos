@@ -62,7 +62,7 @@ describe("landing public destinations", () => {
         "https://wa.me/5562991339861",
       );
       expect(contact.searchParams.get("text")).toBe(
-        "Oi! Vi o site do Entrelaços. Gostei do modelo ___ e vamos casar em ___.",
+        "Olá! Conheci o Entrelaços pelo site e quero saber mais sobre o site para o nosso casamento.",
       );
       expect(contact.search).toContain("%20");
       expect(contact.search).not.toContain("+");

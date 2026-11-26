@@ -133,13 +133,15 @@ evento principal no GA4.
 
 ### Origem do anúncio no WhatsApp
 
-Se a URL de entrada tiver `utm_source`, `utm_campaign` ou `fbclid`, os links
-`wa.me` ganham um código no fim da mensagem pré-preenchida, ex.:
-`(ref: ig-noivas-2027)`. `instagram`/`ig` vira `ig`, `facebook`/`fb` vira `fb`,
-só `fbclid` vira `meta`, e o nome da campanha é normalizado (minúsculas, sem
-acento, até 40 caracteres). O código vale para a aba inteira (`sessionStorage`),
-inclusive em `/duvidas`. Sem esses parâmetros a mensagem fica idêntica. Isso
-independe do consentimento: o texto é visível ao visitante antes de enviar.
+A mensagem pré-preenchida é pronta e sem lacunas: "Olá! Conheci o Entrelaços
+pelo site e quero saber mais sobre o site para o nosso casamento." Se a URL de
+entrada tiver `utm_source`, `utm_campaign` ou `fbclid`, a origem entra na própria
+frase, sem código visível: `instagram`/`ig` vira "pelo Instagram",
+`facebook`/`fb` vira "pelo Facebook" e qualquer outro anúncio vira "por um
+anúncio". A campanha não aparece na mensagem; compare campanhas pelos eventos
+`Contact` e `contact_whatsapp` no Pixel e no GA4. A origem vale para a aba
+inteira (`sessionStorage`), inclusive em `/duvidas`. Isso independe do
+consentimento: o texto é visível ao visitante antes de enviar.
 
 Padrão sugerido para os anúncios:
 
@@ -165,7 +167,7 @@ No Gerenciador de Anúncios também funciona
 4. Recuse o aviso em outra janela anônima e confirme na aba Rede que nenhuma
    requisição a `connect.facebook.net` ou `googletagmanager.com` acontece.
 5. Abra `/?utm_source=instagram&utm_campaign=teste` e passe o mouse no botão de
-   WhatsApp: a mensagem termina com `(ref: ig-teste)`.
+   WhatsApp: a mensagem diz "Conheci o Entrelaços pelo Instagram".
 
 Próximo passo: a API de Conversões (CAPI) da Meta, enviando `Contact` pelo
 servidor para reduzir a perda por bloqueadores. Não faz parte desta entrega.
