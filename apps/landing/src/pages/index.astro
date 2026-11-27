@@ -8,17 +8,30 @@ import "../styles/cinematic.css";
 import "lenis/dist/lenis.css";
 import { landingConfig } from "../landingConfig";
 import { GIFT_PLATFORM_TARIFFS } from "../../../../packages/contracts/src/giftTariffs";
+import { faqPricingExampleNominalCents, faqPricingExamples, formatBrl } from "../faqPricingExample";
+import { exclusiveDeliveryLabel, formatPlanPrice, SITE_PLANS, siteDeliveryLabel, siteOnlineLabel } from "../landingOffer";
 const config = landingConfig(import.meta.env, import.meta.env.PROD);
 const contactLabel = new URL(config.contactUrl).hostname === "wa.me"
   ? "Falar no WhatsApp"
   : "Solicitar proposta";
+const modelPrice = formatPlanPrice(SITE_PLANS.model.priceCents);
+const exclusivePrice = formatPlanPrice(SITE_PLANS.exclusive.fromCents);
+const exampleGift = formatBrl(faqPricingExampleNominalCents);
+const examplePix = formatBrl(faqPricingExamples[0].totalCents);
+const withdrawalFee = formatBrl(GIFT_PLATFORM_TARIFFS.withdrawalFeeCents);
+const steps = [
+  ["Conversa", "Vocês nos chamam no WhatsApp, contam a data e o estilo que imaginam, e fechamos o plano."],
+  ["Material", "Vocês enviam fotos, vídeos, textos e as informações do evento. Se ainda não tiverem tudo, pensamos juntos. O prazo começa a contar quando recebemos todo o material."],
+  ["Montagem e aprovação", `Em ${siteDeliveryLabel}, montamos o site, ajustamos os detalhes com vocês e entregamos a versão aprovada.`],
+  ["Publicação e suporte", `Publicamos o site, entregamos o painel e seguimos disponíveis para suporte. O site fica no ar ${siteOnlineLabel}.`],
+];
 const questions = [
   ["Podemos personalizar o site?", "Sim. Alinhamos cores, tipografia, fotos e textos à identidade visual de vocês. Também podemos adaptar a estrutura de algumas seções, conforme o que for combinado. O Entrelaços cuida da montagem e da publicação."],
   ["O que podemos gerenciar pelo painel?", "Vocês podem cadastrar famílias e convidados, acompanhar confirmações, moderar o mural e gerenciar a lista de presentes. Os recebimentos ficam disponíveis conforme a configuração da conta do casamento."],
-  ["Como funcionam os presentes em dinheiro?", `Os itens da lista representam contribuições para o casal, sem entrega de produtos físicos. O convidado escolhe o presente e paga por Pix ou cartão de crédito, em até ${GIFT_PLATFORM_TARIFFS.maxInstallments}x conforme o valor do presente, com o total e o valor de cada parcela antes de confirmar. A Pagar.me processa o pagamento. Para receber, uma pessoa do casal faz o cadastro pelo painel.`],
+  ["Como funcionam os presentes em dinheiro?", `Os itens da lista representam contribuições para o casal, sem entrega de produtos físicos. O convidado escolhe o presente e paga por Pix ou cartão de crédito, em até ${GIFT_PLATFORM_TARIFFS.maxInstallments}x conforme o valor do presente, com o total e o valor de cada parcela antes de confirmar. A Pagar.me processa o pagamento.`],
   ["Os convidados precisam criar uma conta?", "Não. Para confirmar presença, a família usa o telefone de contato cadastrado e o PIN recebido com o convite. As informações do evento ficam disponíveis no site."],
   ["Podemos usar no celular?", "Sim. Os sites e o painel têm versões que se adaptam ao celular. O convidado pode consultar as informações, confirmar presença e deixar sua mensagem pelo próprio aparelho."],
-  ["Como combinamos valores e prazo de entrega?", "Os sites começam a partir de R$ 300. Depois de escolher o estilo, conversamos pelo WhatsApp sobre a data, o conteúdo e o que vocês precisam. O valor final, o prazo de preparação, o período de publicação e eventuais custos adicionais são combinados antes da contratação."],
+  ["Como vocês usam os nossos dados?", "Só para o site e o painel funcionarem. O CPF, o endereço e os dados bancários do titular servem para criar a conta de recebimentos na Pagar.me e enviar os saques para a conta que vocês escolherem. Não vendemos dados. Os detalhes estão na política de privacidade, no rodapé."],
 ];
 ---
 <!doctype html>
@@ -68,7 +81,8 @@ const questions = [
         <div class="hero-copy">
 
           <h1 id="hero-title" tabindex="-1" class="entrance">O site do seu<br /><em>casamento.</em></h1>
-          <p class="hero-description entrance">Fotos, confirmações de presença e lista de presentes em dinheiro em um só lugar. Nós preparamos o site; vocês acompanham tudo pelo painel.</p>
+          <p class="hero-description entrance">Fotos, confirmações de presença e lista de presentes em dinheiro em um só lugar. Montamos o site com vocês, do jeito que imaginam, e vocês acompanham convidados e presentes pelo painel.</p>
+          <p class="hero-offer entrance">A partir de {modelPrice} · pronto em {siteDeliveryLabel}</p>
           <div class="hero-actions entrance" data-track-position="inicio">
             <a class="button button-wine" href={config.contactUrl}>{contactLabel}<span aria-hidden="true">↗</span></a>
             <a class="button button-outline" href="#modelos">Explorar modelos <span aria-hidden="true">↗</span></a>
@@ -130,10 +144,29 @@ const questions = [
           ["105px", "-105px", "120deg"],
           ["-45px", "-205px", "-110deg"],
         ].map(([x, y, turn]) => <i class="gift-spark" style={`--spark-x: ${x}; --spark-y: ${y}; --spark-turn: ${turn}`}></i>)}<span class="gift-wish wish-affection">com carinho <i>♡</i></span><span class="gift-wish wish-plans">novos planos <i>∞</i></span></div><div class="gift-front"></div><div class="gift-side"></div><span class="gift-tag">para a vida<br /><i>a dois.</i></span></div><span class="gift-shadow"></span></div>
-        <div class="gift-copy reveal"><h2 id="gifts-title">Presentes para<br /><em>os planos do casal.</em></h2><p>Montem uma lista para a lua de mel, a casa ou outros planos de vocês.</p><p>Os convidados escolhem um item e contribuem em dinheiro. Vocês gerenciam a lista e acompanham os recebimentos pelo painel.</p><p class="fine-print">Os presentes são contribuições, sem entrega física. Recebimento sujeito à verificação de identidade; taxas e parcelas aparecem antes do pagamento.</p><PaymentSeal /></div>
+        <div class="gift-copy reveal"><h2 id="gifts-title">Presentes para<br /><em>os planos do casal.</em></h2><p>Montem uma lista para a lua de mel, a casa ou outros planos de vocês. Os convidados escolhem um item e contribuem no Pix ou no cartão em até {GIFT_PLATFORM_TARIFFS.maxInstallments}x.</p><p class="gift-promise"><strong>Vocês recebem 100% do valor de cada presente.</strong> As taxas ficam com o convidado e aparecem antes de ele pagar: num presente de {exampleGift}, o convidado paga {examplePix} no Pix e {exampleGift} entram no saldo de vocês.</p><p>No Pix, o valor fica disponível assim que o pagamento é confirmado; no cartão, em até 2 dias úteis. Vocês sacam para a conta bancária que escolherem, com tarifa de {withdrawalFee} por saque.</p><p class="fine-print">Para receber, um de vocês cadastra CPF e conta bancária no painel. A conferência é automática: não pedimos selfie nem envio de documentos. Os presentes são contribuições, sem entrega física. <a class="inline-link" href="/duvidas#taxas">Ver a simulação de taxas</a></p><PaymentSeal /></div>
       </section>
 
-      <section class="process chapter" aria-labelledby="process-title"><div class="process-intro reveal"><h2 id="process-title">Como preparamos<br /><em>o site de vocês.</em></h2></div><ol class="process-list"><li><div><h3>Escolha do modelo</h3><p>Vocês escolhem um estilo. Os sites começam a partir de R$ 300; o valor final, o conteúdo e o prazo combinamos pelo WhatsApp, conforme o que vocês precisam.</p></div></li><li><div><h3>Montagem e revisão</h3><p>Enviem as fotos, os textos e os dados do casamento. Nós montamos o site e vocês conferem antes da publicação.</p></div></li><li><div><h3>Publicação</h3><p>Publicamos o site e preparamos o painel. Vocês recebem o link para compartilhar e organizam os convidados.</p></div></li></ol></section>
+      <section id="planos" class="plans chapter" aria-labelledby="plans-title">
+        <div class="plans-intro reveal"><h2 id="plans-title">Do primeiro contato<br /><em>à publicação.</em></h2><p>Vocês não montam nada sozinhos. A nossa equipe acompanha o casal do fechamento ao lançamento e segue disponível para suporte enquanto o site estiver no ar.</p></div>
+        <div class="plan-grid">
+          <article class="plan reveal" aria-labelledby="plan-model-title">
+            <h3 id="plan-model-title">Site Modelo</h3>
+            <p class="plan-price">{modelPrice}</p>
+            <p>Um dos nossos estilos, com as fotos, as cores e os textos de vocês.</p>
+            <ul><li>Site completo do casamento</li><li>Painel do casal com login</li><li>Convidados e confirmações por família</li><li>Lista de presentes e recebimentos</li><li>Mural de mensagens</li><li>Site no ar {siteOnlineLabel}</li></ul>
+            <p class="plan-terms">Pronto em {siteDeliveryLabel}, contados a partir do recebimento de todo o material. Pix, boleto ou cartão em até {SITE_PLANS.model.maxInstallments}x.</p>
+          </article>
+          <article class="plan plan-exclusive reveal" aria-labelledby="plan-exclusive-title">
+            <h3 id="plan-exclusive-title">Site Exclusivo</h3>
+            <p class="plan-price"><small>a partir de</small> {exclusivePrice}</p>
+            <p>Seções e estrutura feitas sob medida, para um site só de vocês.</p>
+            <ul><li>Tudo o que o Site Modelo inclui</li><li>Estrutura e seções sob medida</li><li>Valor combinado antes de fechar</li></ul>
+            <p class="plan-terms">Prazo de {exclusiveDeliveryLabel}, contado a partir do recebimento de todo o material.</p>
+          </article>
+        </div>
+        <ol class="process-list reveal">{steps.map(([title, text]) => <li><div><h3>{title}</h3><p>{text}</p></div></li>)}</ol>
+      </section>
 
       <section id="detalhes" class="faq chapter" aria-labelledby="faq-title"><div class="faq-intro"><h2 id="faq-title">Dúvidas frequentes</h2><a class="faq-more" href="/duvidas">Ver todas as dúvidas <span aria-hidden="true">↗</span></a></div><div class="faq-list">{questions.map(([question, answer]) => <details><summary>{question}<span aria-hidden="true">+</span></summary><p>{answer}</p></details>)}</div></section>
 

@@ -1,422 +1,182 @@
 [
- {
-  "id": "r01",
-  "persona": "P09",
-  "segment": "S3",
-  "variant": "A",
-  "ratings": {
-   "comprehension": [
-    0,
-    0.15,
-    0.6,
-    0.25,
-    0
-   ],
-   "relevance": [
-    0,
-    0,
-    0,
-    0.45,
-    0.55
-   ],
-   "trust": [
-    0.05,
-    0.45,
-    0.45,
-    0.05,
-    0
-   ],
-   "intent": [
-    0,
-    0.1,
-    0.45,
-    0.4,
-    0.05
-   ]
+  {
+    "id": "r01",
+    "persona": "P09",
+    "segment": "S3",
+    "variant": "A",
+    "ratings": {
+      "comprehension": [0, 0.15, 0.6, 0.25, 0],
+      "relevance": [0, 0, 0, 0.45, 0.55],
+      "trust": [0.05, 0.45, 0.45, 0.05, 0],
+      "intent": [0, 0.1, 0.45, 0.4, 0.05]
+    },
+    "quotes": {
+      "comprehension": "Não deu pra saber o preço de verdade.",
+      "relevance": "casamento é o meu assunto agora",
+      "trust": "Pedir dinheiro por site que ninguém conhece, com um nome que não conheço, preocupa.",
+      "intent": "Chamaria, sim, talvez, mas com receio."
+    }
   },
-  "quotes": {
-   "comprehension": "Não deu pra saber o preço de verdade.",
-   "relevance": "casamento é o meu assunto agora",
-   "trust": "Pedir dinheiro por site que ninguém conhece, com um nome que não conheço, preocupa.",
-   "intent": "Chamaria, sim, talvez, mas com receio."
-  }
- },
- {
-  "id": "r02",
-  "persona": "P04",
-  "segment": "S4",
-  "variant": "A",
-  "ratings": {
-   "comprehension": [
-    0,
-    0.05,
-    0.5,
-    0.45,
-    0
-   ],
-   "relevance": [
-    0,
-    0.1,
-    0.4,
-    0.45,
-    0.05
-   ],
-   "trust": [
-    0,
-    0.35,
-    0.55,
-    0.1,
-    0
-   ],
-   "intent": [
-    0.05,
-    0.3,
-    0.5,
-    0.15,
-    0
-   ]
+  {
+    "id": "r02",
+    "persona": "P04",
+    "segment": "S4",
+    "variant": "A",
+    "ratings": {
+      "comprehension": [0, 0.05, 0.5, 0.45, 0],
+      "relevance": [0, 0.1, 0.4, 0.45, 0.05],
+      "trust": [0, 0.35, 0.55, 0.1, 0],
+      "intent": [0.05, 0.3, 0.5, 0.15, 0]
+    },
+    "quotes": {
+      "comprehension": "Também não entendi o que é o R$ 300: só o site?",
+      "relevance": "\"confirmação de presença\" é exatamente a minha dor",
+      "trust": "me deixa meio desconfiada de que o valor final sobe",
+      "intent": "chamaria, mas pra perguntar de parceria e pedir pra ver um painel funcionando, não pra fechar"
+    }
   },
-  "quotes": {
-   "comprehension": "Também não entendi o que é o R$ 300: só o site?",
-   "relevance": "\"confirmação de presença\" é exatamente a minha dor",
-   "trust": "me deixa meio desconfiada de que o valor final sobe",
-   "intent": "chamaria, mas pra perguntar de parceria e pedir pra ver um painel funcionando, não pra fechar"
-  }
- },
- {
-  "id": "r03",
-  "persona": "P02",
-  "segment": "S2",
-  "variant": "A",
-  "ratings": {
-   "comprehension": [
-    0,
-    0.1,
-    0.6,
-    0.3,
-    0
-   ],
-   "relevance": [
-    0,
-    0,
-    0.05,
-    0.6,
-    0.35
-   ],
-   "trust": [
-    0.05,
-    0.55,
-    0.35,
-    0.05,
-    0
-   ],
-   "intent": [
-    0,
-    0.05,
-    0.25,
-    0.6,
-    0.1
-   ]
+  {
+    "id": "r03",
+    "persona": "P02",
+    "segment": "S2",
+    "variant": "A",
+    "ratings": {
+      "comprehension": [0, 0.1, 0.6, 0.3, 0],
+      "relevance": [0, 0, 0.05, 0.6, 0.35],
+      "trust": [0.05, 0.55, 0.35, 0.05, 0],
+      "intent": [0, 0.05, 0.25, 0.6, 0.1]
+    },
+    "quotes": {
+      "comprehension": "não sei quem é a empresa nem se é plataforma ou serviço",
+      "relevance": "Gostei de \"Nós preparamos o site\", que é exatamente o que eu quero",
+      "trust": "Tenho medo de empresa pequena sumir depois de eu pagar, e aqui não há nada que me tranquilize.",
+      "intent": "Provavelmente mandaria uma mensagem, sim, mas pra perguntar, não pra fechar."
+    }
   },
-  "quotes": {
-   "comprehension": "não sei quem é a empresa nem se é plataforma ou serviço",
-   "relevance": "Gostei de \"Nós preparamos o site\", que é exatamente o que eu quero",
-   "trust": "Tenho medo de empresa pequena sumir depois de eu pagar, e aqui não há nada que me tranquilize.",
-   "intent": "Provavelmente mandaria uma mensagem, sim, mas pra perguntar, não pra fechar."
-  }
- },
- {
-  "id": "r04",
-  "persona": "P05",
-  "segment": "S5",
-  "variant": "A",
-  "ratings": {
-   "comprehension": [
-    0,
-    0.1,
-    0.6,
-    0.3,
-    0
-   ],
-   "relevance": [
-    0.05,
-    0.25,
-    0.4,
-    0.3,
-    0
-   ],
-   "trust": [
-    0.3,
-    0.55,
-    0.15,
-    0,
-    0
-   ],
-   "intent": [
-    0.1,
-    0.3,
-    0.45,
-    0.15,
-    0
-   ]
+  {
+    "id": "r04",
+    "persona": "P05",
+    "segment": "S5",
+    "variant": "A",
+    "ratings": {
+      "comprehension": [0, 0.1, 0.6, 0.3, 0],
+      "relevance": [0.05, 0.25, 0.4, 0.3, 0],
+      "trust": [0.3, 0.55, 0.15, 0, 0],
+      "intent": [0.1, 0.3, 0.45, 0.15, 0]
+    },
+    "quotes": {
+      "comprehension": "Faltou o principal: quanto é a taxa em cima do presente em dinheiro e quem paga",
+      "relevance": "não sou eu que cuido disso, a minha filha é que está vendo tudo",
+      "trust": "Golpe, né. [...] Pé atrás grande.",
+      "intent": "No máximo eu tiraria um print e mandaria pra ela"
+    }
   },
-  "quotes": {
-   "comprehension": "Faltou o principal: quanto é a taxa em cima do presente em dinheiro e quem paga",
-   "relevance": "não sou eu que cuido disso, a minha filha é que está vendo tudo",
-   "trust": "Golpe, né. [...] Pé atrás grande.",
-   "intent": "No máximo eu tiraria um print e mandaria pra ela"
-  }
- },
- {
-  "id": "r05",
-  "persona": "P08",
-  "segment": "S2",
-  "variant": "A",
-  "ratings": {
-   "comprehension": [
-    0,
-    0.05,
-    0.45,
-    0.45,
-    0.05
-   ],
-   "relevance": [
-    0.05,
-    0.4,
-    0.4,
-    0.15,
-    0
-   ],
-   "trust": [
-    0.1,
-    0.6,
-    0.3,
-    0,
-    0
-   ],
-   "intent": [
-    0.15,
-    0.65,
-    0.2,
-    0,
-    0
-   ]
+  {
+    "id": "r05",
+    "persona": "P08",
+    "segment": "S2",
+    "variant": "A",
+    "ratings": {
+      "comprehension": [0, 0.05, 0.45, 0.45, 0.05],
+      "relevance": [0.05, 0.4, 0.4, 0.15, 0],
+      "trust": [0.1, 0.6, 0.3, 0, 0],
+      "intent": [0.15, 0.65, 0.2, 0, 0]
+    },
+    "quotes": {
+      "comprehension": "não sei o que vem em R$ 300 e o que é extra",
+      "relevance": "só um amigo com orçamento apertado e que quer algo simples, não eu",
+      "trust": "Template com cor trocada é o que parece.",
+      "intent": "Agora, provavelmente não. Eu não chamaria pelo anúncio."
+    }
   },
-  "quotes": {
-   "comprehension": "não sei o que vem em R$ 300 e o que é extra",
-   "relevance": "só um amigo com orçamento apertado e que quer algo simples, não eu",
-   "trust": "Template com cor trocada é o que parece.",
-   "intent": "Agora, provavelmente não. Eu não chamaria pelo anúncio."
-  }
- },
- {
-  "id": "r06",
-  "persona": "P01",
-  "segment": "S1",
-  "variant": "A",
-  "ratings": {
-   "comprehension": [
-    0,
-    0,
-    0.45,
-    0.5,
-    0.05
-   ],
-   "relevance": [
-    0,
-    0,
-    0,
-    0.4,
-    0.6
-   ],
-   "trust": [
-    0.05,
-    0.45,
-    0.45,
-    0.05,
-    0
-   ],
-   "intent": [
-    0,
-    0.2,
-    0.6,
-    0.2,
-    0
-   ]
+  {
+    "id": "r06",
+    "persona": "P01",
+    "segment": "S1",
+    "variant": "A",
+    "ratings": {
+      "comprehension": [0, 0, 0.45, 0.5, 0.05],
+      "relevance": [0, 0, 0, 0.4, 0.6],
+      "trust": [0.05, 0.45, 0.45, 0.05, 0],
+      "intent": [0, 0.2, 0.6, 0.2, 0]
+    },
+    "quotes": {
+      "comprehension": "o que exatamente eu pago pelos R$ 300 e o que é \"custo adicional\"",
+      "relevance": "Tenho que mandar o save the date em 2 meses.",
+      "trust": "A taxa escondida, que é meu maior medo.",
+      "intent": "Talvez. Eu provavelmente salvaria e pensaria"
+    }
   },
-  "quotes": {
-   "comprehension": "o que exatamente eu pago pelos R$ 300 e o que é \"custo adicional\"",
-   "relevance": "Tenho que mandar o save the date em 2 meses.",
-   "trust": "A taxa escondida, que é meu maior medo.",
-   "intent": "Talvez. Eu provavelmente salvaria e pensaria"
-  }
- },
- {
-  "id": "r07",
-  "persona": "P10",
-  "segment": "S5",
-  "variant": "A",
-  "ratings": {
-   "comprehension": [
-    0,
-    0.1,
-    0.6,
-    0.3,
-    0
-   ],
-   "relevance": [
-    0.1,
-    0.45,
-    0.35,
-    0.1,
-    0
-   ],
-   "trust": [
-    0.1,
-    0.55,
-    0.35,
-    0,
-    0
-   ],
-   "intent": [
-    0.05,
-    0.25,
-    0.5,
-    0.2,
-    0
-   ]
+  {
+    "id": "r07",
+    "persona": "P10",
+    "segment": "S5",
+    "variant": "A",
+    "ratings": {
+      "comprehension": [0, 0.1, 0.6, 0.3, 0],
+      "relevance": [0.1, 0.45, 0.35, 0.1, 0],
+      "trust": [0.1, 0.55, 0.35, 0, 0],
+      "intent": [0.05, 0.25, 0.5, 0.2, 0]
+    },
+    "quotes": {
+      "comprehension": "R$ 300 é \"a partir de\", então não sei quanto custa de verdade.",
+      "relevance": "Mas eu nem estou noiva",
+      "trust": "Fiquei com o pé atrás por isso.",
+      "intent": "Pra minha irmã eu mandaria o link, sim, talvez, se for realmente barato."
+    }
   },
-  "quotes": {
-   "comprehension": "R$ 300 é \"a partir de\", então não sei quanto custa de verdade.",
-   "relevance": "Mas eu nem estou noiva",
-   "trust": "Fiquei com o pé atrás por isso.",
-   "intent": "Pra minha irmã eu mandaria o link, sim, talvez, se for realmente barato."
-  }
- },
- {
-  "id": "r08",
-  "persona": "P07",
-  "segment": "S1",
-  "variant": "A",
-  "ratings": {
-   "comprehension": [
-    0,
-    0.1,
-    0.6,
-    0.3,
-    0
-   ],
-   "relevance": [
-    0,
-    0,
-    0.05,
-    0.5,
-    0.45
-   ],
-   "trust": [
-    0.05,
-    0.35,
-    0.55,
-    0.05,
-    0
-   ],
-   "intent": [
-    0,
-    0.05,
-    0.2,
-    0.6,
-    0.15
-   ]
+  {
+    "id": "r08",
+    "persona": "P07",
+    "segment": "S1",
+    "variant": "A",
+    "ratings": {
+      "comprehension": [0, 0.1, 0.6, 0.3, 0],
+      "relevance": [0, 0, 0.05, 0.5, 0.45],
+      "trust": [0.05, 0.35, 0.55, 0.05, 0],
+      "intent": [0, 0.05, 0.2, 0.6, 0.15]
+    },
+    "quotes": {
+      "comprehension": "Ficou confuso o que o site tem de informação de local e horário.",
+      "relevance": "meu casamento é daqui a 4 meses",
+      "trust": "Não vi nenhum casal de verdade falando [...] Não sei quem são eles",
+      "intent": "Provavelmente chamaria sim, mas num momento mais calmo"
+    }
   },
-  "quotes": {
-   "comprehension": "Ficou confuso o que o site tem de informação de local e horário.",
-   "relevance": "meu casamento é daqui a 4 meses",
-   "trust": "Não vi nenhum casal de verdade falando [...] Não sei quem são eles",
-   "intent": "Provavelmente chamaria sim, mas num momento mais calmo"
-  }
- },
- {
-  "id": "r09",
-  "persona": "P03",
-  "segment": "S3",
-  "variant": "A",
-  "ratings": {
-   "comprehension": [
-    0,
-    0.15,
-    0.6,
-    0.25,
-    0
-   ],
-   "relevance": [
-    0.05,
-    0.3,
-    0.4,
-    0.25,
-    0
-   ],
-   "trust": [
-    0.05,
-    0.55,
-    0.4,
-    0,
-    0
-   ],
-   "intent": [
-    0.05,
-    0.45,
-    0.35,
-    0.15,
-    0
-   ]
+  {
+    "id": "r09",
+    "persona": "P03",
+    "segment": "S3",
+    "variant": "A",
+    "ratings": {
+      "comprehension": [0, 0.15, 0.6, 0.25, 0],
+      "relevance": [0.05, 0.3, 0.4, 0.25, 0],
+      "trust": [0.05, 0.55, 0.4, 0, 0],
+      "intent": [0.05, 0.45, 0.35, 0.15, 0]
+    },
+    "quotes": {
+      "comprehension": "Não ficou claro se os R$ 300 são só o site ou se tem mensalidade",
+      "relevance": "Pra 40 pessoas eu mando no grupo da família com a chave Pix e pronto.",
+      "trust": "\"Custos adicionais combinados depois\" também me deixa com o pé atrás.",
+      "intent": "Provavelmente não agora."
+    }
   },
-  "quotes": {
-   "comprehension": "Não ficou claro se os R$ 300 são só o site ou se tem mensalidade",
-   "relevance": "Pra 40 pessoas eu mando no grupo da família com a chave Pix e pronto.",
-   "trust": "\"Custos adicionais combinados depois\" também me deixa com o pé atrás.",
-   "intent": "Provavelmente não agora."
+  {
+    "id": "r10",
+    "persona": "P06",
+    "segment": "S1",
+    "variant": "A",
+    "ratings": {
+      "comprehension": [0, 0.05, 0.45, 0.5, 0],
+      "relevance": [0, 0, 0.1, 0.55, 0.35],
+      "trust": [0.05, 0.35, 0.55, 0.05, 0],
+      "intent": [0, 0.1, 0.4, 0.45, 0.05]
+    },
+    "quotes": {
+      "comprehension": "R$ 300 é do quê? Só do site ou inclui painel, RSVP e lista?",
+      "relevance": "é exatamente o que a noiva pediu",
+      "trust": "me deixa meio na dúvida de quando o dinheiro cai e quanto vem líquido",
+      "intent": "Provavelmente mandaria o link pra noiva primeiro"
+    }
   }
- },
- {
-  "id": "r10",
-  "persona": "P06",
-  "segment": "S1",
-  "variant": "A",
-  "ratings": {
-   "comprehension": [
-    0,
-    0.05,
-    0.45,
-    0.5,
-    0
-   ],
-   "relevance": [
-    0,
-    0,
-    0.1,
-    0.55,
-    0.35
-   ],
-   "trust": [
-    0.05,
-    0.35,
-    0.55,
-    0.05,
-    0
-   ],
-   "intent": [
-    0,
-    0.1,
-    0.4,
-    0.45,
-    0.05
-   ]
-  },
-  "quotes": {
-   "comprehension": "R$ 300 é do quê? Só do site ou inclui painel, RSVP e lista?",
-   "relevance": "é exatamente o que a noiva pediu",
-   "trust": "me deixa meio na dúvida de quando o dinheiro cai e quanto vem líquido",
-   "intent": "Provavelmente mandaria o link pra noiva primeiro"
-  }
- }
 ]

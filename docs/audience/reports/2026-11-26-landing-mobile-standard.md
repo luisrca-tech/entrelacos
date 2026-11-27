@@ -85,3 +85,29 @@ Fixes 1 and 6 are copy changes that use facts already published on `/duvidas`. F
 
 - Implement fixes 1 and 6 (copy only), recapture, and rerun the same tier and personas (P01–P10, audience v1) to measure the trust and comprehension delta. A gain under 0.3 is noise.
 - Validate theme 1 and fix 2 with five real couples (show the page, ask the six questions) and by reading the first WhatsApp conversations: what is the first question people ask?
+
+## Round 2 · 2026-11-27 (after the landing changes)
+
+Same tier, personas (P01–P10), question, rater model and audience version 1. The piece is the local build of branch `docs/audience-panel`: hero with price and delivery window, rewritten gifts section ("100% do valor", Pix/card availability, withdrawal fee, verification reworded), new "Do primeiro contato à publicação" section with Site Modelo (R$ 300) and Site Exclusivo (a partir de R$ 500) and five steps, data question in the FAQ, CNPJ in the footer and a `/privacidade` page. Capture: 14 phone screenshots with a 700 px step (round 1 used 780 px, which hid a few lines under the sticky header; the change only closes gaps). No cookie notice in the local build. Raw material: [`2026-11-27-landing-mobile-standard-r2/`](./2026-11-27-landing-mobile-standard-r2/).
+
+| construct | round 1 | round 2 | delta | top-2 r1 → r2 | S1 | S2 | S3 | S4 | S5 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| comprehension | 3.31 | 3.33 | +0.03 | 38% → 40% | 3.42 → 3.37 | 3.35 → 3.45 | 3.10 → 3.12 | 3.40 → 3.40 | 3.20 → 3.32 |
+| relevance | 3.73 | 3.87 | +0.14 | 65% → 70% | 4.42 → 4.45 | 3.48 → 3.95 | 3.70 → 3.85 | 3.45 → 3.45 | 2.70 → 2.70 |
+| trust | 2.43 | 2.65 | +0.23 | 4% → 8% | 2.57 → 2.78 | 2.30 → 2.38 | 2.42 → 2.80 | 2.75 → 2.55 | 2.05 → 2.60 |
+| **intent** | 3.07 | **3.44** | **+0.38** | 34% → 54% | 3.43 → 3.83 | 2.90 → 2.80 | 3.00 → 3.77 | 2.75 → 3.45 | 2.75 → 2.95 |
+
+Reading: intent moved beyond the 0.3 noise threshold, driven by the core buyers (S1 +0.40, S3 +0.77) and the assessora. Trust improved but stays under the threshold and under 3 everywhere. Premium buyers (S2) did not move. Sentinel: non-buyer intent rose +0.20 (P05 now would forward the link to his daughter; P10 fell), inside the noise band, so the round is kept.
+
+Themes that disappeared: the unquantified gift fee (round 1: 100%), the missing delivery time (75%) and the fear around "verificação de identidade" (63%). Price is now praised by most personas ("o preço aparece de cara").
+
+Themes that remain or appeared:
+
+1. **No real weddings or testimonials**: still everyone. Unchanged by design; it needs the first client.
+2. **"Is it one person?"**: new, most personas. The footer with an individual's name and "desenvolvedor de software" answered "who is behind it" but raised "se ele sumir, quem dá suporte?" (P01, P02, P04, P05, P06, P07, P08, P09, P10).
+3. **What R$ 300 covers over time**: most personas ask whether it is one-time or monthly, how long the site stays online after the wedding, "até o fim do contrato: que contrato?", domain and hosting (P01, P02, P03, P05, P06, P07, P09, P10).
+4. **Fees still felt**: the guest paying R$ 103,69 and the R$ 3,67 withdrawal fee read as "always a fee" for price-sensitive personas (P03, P05, P07, P09, P10), though nobody calls them hidden anymore.
+5. **Too much text on a phone** (P03, P05, P06, P07, P09), mostly in the gifts section.
+6. **Isolated:** who writes the texts and how much work the material is (P02, P07); data export (P06); lodging/map section (P07); assessora terms and automatic reminders (P04); "is the card installment interest-free for the guest?" (P09); why guests would open a site instead of asking on WhatsApp (P10).
+
+Next fixes, by impact: state "pagamento único" and how long the site stays online next to the price (needs the commercial answer); explain support continuity in one sentence (who answers, in what time); shorten the gifts copy; once the first client launches, add the real showcase.

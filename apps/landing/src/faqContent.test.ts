@@ -40,9 +40,10 @@ describe("public FAQ payment content", () => {
   });
 
   it("explains card and Pix release times", () => {
-    expect(text).toMatch(/cerca de 2 dias/);
-    // The Pix settlement time is not in the proposal: no promise of "immediately".
-    expect(text).toMatch(/Pix[^.]*quando a Pagar.me libera/);
+    expect(text).toMatch(/até 2 dias úteis/);
+    // Pix is not anticipated, so it is available once confirmed (decision
+    // register, "Receiving"); the copy ties it to confirmation, not "imediato".
+    expect(text).toMatch(/Pix[^.]*assim que o pagamento é confirmado/);
     expect(text).not.toMatch(/imediat/);
   });
 

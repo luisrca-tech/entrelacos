@@ -1,5 +1,12 @@
 import { GIFT_PLATFORM_TARIFFS } from "../../../packages/contracts/src/giftTariffs";
 import { faqPricingExampleNominalCents, formatBrl } from "./faqPricingExample";
+import {
+  exclusiveDeliveryLabel,
+  formatPlanPrice,
+  SITE_PLANS,
+  siteDeliveryLabel,
+  siteOnlineLabel,
+} from "./landingOffer";
 
 const { maxInstallments } = GIFT_PLATFORM_TARIFFS;
 const minimumInstallment = formatBrl(
@@ -8,6 +15,8 @@ const minimumInstallment = formatBrl(
 const withdrawalFee = formatBrl(GIFT_PLATFORM_TARIFFS.withdrawalFeeCents);
 const exampleGift = formatBrl(faqPricingExampleNominalCents);
 const commission = `${GIFT_PLATFORM_TARIFFS.commissionBasisPoints / 100}%`;
+const modelPrice = formatPlanPrice(SITE_PLANS.model.priceCents);
+const exclusivePrice = formatPlanPrice(SITE_PLANS.exclusive.fromCents);
 
 export type FaqQuestion = {
   question: string;
@@ -32,14 +41,27 @@ export const faqTopics: FaqTopic[] = [
           "A história de vocês, fotos, informações da cerimônia e da recepção, confirmação de presença, mural de mensagens e lista de presentes em dinheiro. O Entrelaços prepara o site com vocês. Pelo painel, vocês acompanham os convidados e gerenciam os recursos disponíveis para o casamento.",
       },
       {
-        question: "Como contratamos e combinamos o prazo?",
+        question: "Quanto custa e em quanto tempo o site fica pronto?",
+        answer: `O Site Modelo custa ${modelPrice} e segue um dos nossos estilos, com as fotos, as cores e os textos de vocês. Ele inclui o site completo e o painel do casal, com convidados, confirmações, lista de presentes, recebimentos e mural. Fica pronto em ${siteDeliveryLabel}, contados a partir do dia em que recebemos todo o material. O Site Exclusivo, com seções e estrutura feitas sob medida, começa em ${exclusivePrice}, com valor combinado antes de fechar e prazo de ${exclusiveDeliveryLabel}. O pagamento do site pode ser feito no Pix, boleto ou cartão em até ${SITE_PLANS.model.maxInstallments}x.`,
+      },
+      {
+        question: "Como é feito o site, do primeiro contato à publicação?",
         answer:
-          "Os sites começam a partir de R$ 300. Conversem com a nossa equipe pelo WhatsApp sobre a data do casamento, o estilo do site e o que precisam. O valor final, o conteúdo, o prazo de preparação, o período de publicação e eventuais serviços adicionais são alinhados antes da contratação.",
+          "Vocês nos chamam no WhatsApp e fechamos o plano. Depois, enviam fotos, vídeos, textos e informações do evento; se ainda não tiverem tudo pronto, pensamos juntos. O prazo começa a contar quando recebemos todo o material. Dentro dele, montamos o site, ajustamos os detalhes com vocês e entregamos a versão aprovada. A nossa equipe acompanha vocês do fechamento ao lançamento e segue disponível para suporte enquanto o site estiver no ar.",
+      },
+      {
+        question: "Por quanto tempo o site fica no ar?",
+        answer: `O site fica no ar ${siteOnlineLabel}. Depois, ele é retirado do ar e apagamos os dados do casamento, como a lista de convidados, as confirmações e os recados. Antes disso, vocês podem baixar a lista de convidados e as confirmações em CSV ou PDF pelo painel.`,
       },
       {
         question: "Os convidados precisam criar uma conta?",
         answer:
           "Não. As informações do casamento ficam no site. Para confirmar presença, a família usa o telefone de contato cadastrado e o PIN recebido com o convite. Ao pagar um presente, o convidado informa os dados solicitados no fluxo de pagamento.",
+      },
+      {
+        question: "Como vocês usam os nossos dados e os dos convidados?",
+        answer:
+          "Só para fazer o site e o painel funcionarem. O CPF, o endereço e os dados bancários do titular servem para criar a conta de recebimentos na Pagar.me e enviar os saques para a conta que vocês escolherem. Os dados dos convidados servem para confirmar presença, publicar recados e processar presentes. Não vendemos dados. Os detalhes estão na política de privacidade, no rodapé do site.",
       },
       {
         question: "Podemos usar o painel pelo celular e compartilhar o acesso?",
@@ -159,7 +181,7 @@ export const faqTopics: FaqTopic[] = [
       {
         question: "Em quanto tempo um presente pago fica disponível?",
         answer:
-          "No Pix, o valor fica disponível quando a Pagar.me libera o pagamento confirmado. No cartão, fica disponível em cerca de 2 dias, inteiro, seja qual for o número de parcelas escolhido pelo convidado.",
+          "No Pix, o valor fica disponível para saque assim que o pagamento é confirmado. No cartão, fica disponível em até 2 dias úteis, inteiro, seja qual for o número de parcelas escolhido pelo convidado.",
       },
     ],
   },

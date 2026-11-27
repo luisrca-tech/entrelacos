@@ -1,0 +1,100 @@
+---
+import PublicHeader from "../components/PublicHeader.astro";
+import PublicFooter from "../components/PublicFooter.astro";
+import LandingTracking from "../components/LandingTracking.astro";
+import { landingConfig } from "../landingConfig";
+import { BUSINESS_IDENTITY, formatCnpj, siteOnlineLabel } from "../landingOffer";
+import "../styles/landing.css";
+const config = landingConfig(import.meta.env, import.meta.env.PROD);
+const canonical = new URL("/privacidade", config.siteUrl).href;
+const description = "Como o Entrelaços trata os dados do casal, dos convidados e dos visitantes dos sites de casamento.";
+const updatedAt = "27 de novembro de 2026";
+const cnpj = formatCnpj(BUSINESS_IDENTITY.cnpj);
+---
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#f5f0e7" />
+    <title>Política de privacidade — Entrelaços</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonical} />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="robots" content="index, follow" />
+  </head>
+  <body>
+    <a href="#conteudo" class="skip-link">Pular para o conteúdo</a>
+    <LandingTracking config={config} />
+    <PublicHeader contactUrl={config.contactUrl} />
+    <main id="conteudo" tabindex="-1" class="legal-page">
+      <header class="legal-heading">
+        <a href="/" class="legal-back"><span aria-hidden="true">←</span> Voltar ao início</a>
+        <h1>Política de <em>privacidade.</em></h1>
+        <p>Atualizada em {updatedAt}. Explicamos quais dados tratamos, para quê e como vocês podem exercer os seus direitos pela Lei Geral de Proteção de Dados (LGPD).</p>
+      </header>
+
+      <section aria-labelledby="quem">
+        <h2 id="quem">Quem é responsável</h2>
+        <p>O Entrelaços é um serviço de sites de casamento prestado por {BUSINESS_IDENTITY.holder}, {BUSINESS_IDENTITY.role}, CNPJ {cnpj}. Para qualquer pedido sobre dados pessoais, fale com a gente pelo <a href={config.contactUrl}>WhatsApp do Entrelaços</a>.</p>
+      </section>
+
+      <section aria-labelledby="casal">
+        <h2 id="casal">Casal e equipe do casamento</h2>
+        <p>Para criar o acesso ao painel, tratamos nome, e-mail e senha de quem administra o site. A senha é guardada de forma protegida e nunca é exibida.</p>
+        <p>Para receber os presentes em dinheiro, uma pessoa do casal cadastra-se como titular dos recebimentos. Pedimos nome, e-mail, CPF, celular, data de nascimento, renda mensal, profissão, endereço e conta bancária no mesmo CPF. Usamos esses dados só para:</p>
+        <ul>
+          <li>conferir o CPF, a idade mínima de 18 anos e se a conta bancária pertence ao titular;</li>
+          <li>criar a conta recebedora na Pagar.me, que exige essas informações para receber e liberar os pagamentos;</li>
+          <li>enviar os saques para a conta bancária escolhida pelo casal.</li>
+        </ul>
+        <p>Não pedimos selfie, foto nem envio de documentos.</p>
+      </section>
+
+      <section aria-labelledby="convidados">
+        <h2 id="convidados">Convidados</h2>
+        <p>O casal cadastra a lista de convidados, e nós tratamos esses dados para prestar o serviço ao casal: nome, telefone de contato, e-mail opcional, o PIN do convite, as confirmações de presença e os recados publicados no mural.</p>
+        <p>Quem dá um presente informa nome, e-mail, CPF e telefone, que a Pagar.me exige para processar o pagamento. No cartão, o número vai direto do navegador para a Pagar.me: o Entrelaços nunca recebe o número nem o código de segurança. O endereço de cobrança é enviado à Pagar.me e não fica guardado conosco. Para preencher o endereço, o CEP digitado é consultado no serviço público ViaCEP.</p>
+      </section>
+
+      <section aria-labelledby="visitantes">
+        <h2 id="visitantes">Visitantes deste site</h2>
+        <p>Esta página pode usar cookies da Meta e do Google para medir anúncios e visitas. Eles só são ativados se você aceitar no aviso de cookies, e a sua escolha fica guardada no seu navegador. Os sites dos casais, as demonstrações e o painel não usam esses cookies.</p>
+      </section>
+
+      <section aria-labelledby="compartilhamento">
+        <h2 id="compartilhamento">Com quem compartilhamos</h2>
+        <p>Não vendemos dados. Compartilhamos apenas o necessário com:</p>
+        <ul>
+          <li>Pagar.me, empresa do grupo Stone, que processa os pagamentos, guarda o saldo e faz os saques;</li>
+          <li>os provedores que hospedam os sites, o painel e o banco de dados;</li>
+          <li>Meta e Google, somente com o seu consentimento no aviso de cookies;</li>
+          <li>autoridades, quando a lei exigir.</li>
+        </ul>
+        <p>Alguns desses provedores podem processar dados fora do Brasil, com as garantias previstas na LGPD.</p>
+      </section>
+
+      <section aria-labelledby="bases">
+        <h2 id="bases">Por que podemos tratar esses dados</h2>
+        <p>Tratamos os dados para cumprir o contrato com o casal, para cumprir obrigações legais e regulatórias (como registros de pagamentos), para proteger o serviço contra fraudes e abusos e, no caso dos cookies de medição, com o seu consentimento.</p>
+      </section>
+
+      <section aria-labelledby="guarda">
+        <h2 id="guarda">Por quanto tempo guardamos</h2>
+        <p>O site do casamento fica no ar {siteOnlineLabel}. Depois, ele é retirado do ar e apagamos os dados pessoais do casal e dos convidados: acessos ao painel, lista de convidados, telefones, confirmações, recados e os dados do titular dos recebimentos. A partir daí, não usamos mais esses dados.</p>
+        <p>A única exceção são os registros de pagamentos e saques que a lei obriga a guardar. Eles ficam pelo prazo legal, só para cumprir essa obrigação. A Pagar.me também mantém os registros das transações que processou, conforme a política dela.</p>
+      </section>
+
+      <section aria-labelledby="direitos">
+        <h2 id="direitos">Seus direitos</h2>
+        <p>Você pode pedir a confirmação de que tratamos seus dados, o acesso, a correção, a exclusão, a portabilidade e informações sobre o compartilhamento, além de revogar um consentimento. Convidados também podem falar com o casal, que administra a lista. Respondemos pelo <a href={config.contactUrl}>WhatsApp do Entrelaços</a>; nunca pedimos senhas nem códigos de segurança por lá.</p>
+      </section>
+
+      <section aria-labelledby="seguranca">
+        <h2 id="seguranca">Segurança e mudanças</h2>
+        <p>O acesso aos dados é restrito a quem precisa deles para operar o serviço, e cada site de casamento só enxerga os próprios dados. Se esta política mudar, atualizamos a data no topo desta página.</p>
+      </section>
+    </main>
+    <PublicFooter config={config} />
+  </body>
+</html>

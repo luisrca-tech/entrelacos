@@ -1,0 +1,182 @@
+[
+  {
+    "id": "r01",
+    "persona": "P09",
+    "segment": "S3",
+    "variant": "B",
+    "ratings": {
+      "comprehension": [0, 0.1, 0.55, 0.35, 0],
+      "relevance": [0, 0, 0.1, 0.6, 0.3],
+      "trust": [0, 0.3, 0.6, 0.1, 0],
+      "intent": [0, 0, 0.2, 0.7, 0.1]
+    },
+    "quotes": {
+      "comprehension": "Não entendi bem o que é \"painel\", \"PIN\" e \"mural\".",
+      "relevance": "ainda ia conversar com meu noivo e minha mãe antes de fechar",
+      "trust": "Tia achar que é golpe, esse é o meu maior medo.",
+      "intent": "Provavelmente chamaria sim, só pra perguntar"
+    }
+  },
+  {
+    "id": "r02",
+    "persona": "P04",
+    "segment": "S4",
+    "variant": "B",
+    "ratings": {
+      "comprehension": [0, 0.05, 0.5, 0.45, 0],
+      "relevance": [0, 0.1, 0.4, 0.45, 0.05],
+      "trust": [0, 0.5, 0.45, 0.05, 0],
+      "intent": [0, 0.1, 0.4, 0.45, 0.05]
+    },
+    "quotes": {
+      "comprehension": "Não ficou claro se manda lembrete automático pro convidado que não respondeu",
+      "relevance": "confirmação de presença é exatamente a minha dor",
+      "trust": "Se ele some ou o site cai, a minha reputação vai junto.",
+      "intent": "Eu chamaria pra perguntar, não pra pedir orçamento do meu casamento"
+    }
+  },
+  {
+    "id": "r03",
+    "persona": "P02",
+    "segment": "S2",
+    "variant": "B",
+    "ratings": {
+      "comprehension": [0, 0.15, 0.6, 0.25, 0],
+      "relevance": [0, 0, 0.05, 0.6, 0.35],
+      "trust": [0, 0.5, 0.45, 0.05, 0],
+      "intent": [0, 0.05, 0.25, 0.65, 0.05]
+    },
+    "quotes": {
+      "comprehension": "não entendi o que é \"Site Exclusivo\"",
+      "relevance": "eu tenho pavor de ficar igual ao de todo mundo",
+      "trust": "A empresa parecer pequena e sumir depois que eu pagar.",
+      "intent": "Provavelmente mandaria mensagem sim, só pra ver"
+    }
+  },
+  {
+    "id": "r04",
+    "persona": "P05",
+    "segment": "S5",
+    "variant": "B",
+    "ratings": {
+      "comprehension": [0, 0.2, 0.6, 0.2, 0],
+      "relevance": [0, 0.3, 0.5, 0.2, 0],
+      "trust": [0, 0.5, 0.45, 0.05, 0],
+      "intent": [0, 0.15, 0.45, 0.35, 0.05]
+    },
+    "quotes": {
+      "comprehension": "\"PIN\", \"painel\", \"mural\", não sou dessa área",
+      "relevance": "Pra mim é supérfluo, mas pra ela pode ser útil",
+      "trust": "O Facebook já me deu medo de golpe, então fico procurando o \"porém\".",
+      "intent": "No máximo eu mando o link pra ela no WhatsApp"
+    }
+  },
+  {
+    "id": "r05",
+    "persona": "P08",
+    "segment": "S2",
+    "variant": "B",
+    "ratings": {
+      "comprehension": [0, 0, 0.3, 0.6, 0.1],
+      "relevance": [0, 0.1, 0.3, 0.5, 0.1],
+      "trust": [0.05, 0.7, 0.25, 0, 0],
+      "intent": [0.25, 0.6, 0.15, 0, 0]
+    },
+    "quotes": {
+      "comprehension": "Preço na cara, passo a passo, taxa de presente explicada com número",
+      "relevance": "não vou arriscar o site pra 250 convidados",
+      "trust": "pra mim R$ 300 não passa seriedade",
+      "intent": "Eu mesmo não chamaria agora."
+    }
+  },
+  {
+    "id": "r06",
+    "persona": "P01",
+    "segment": "S1",
+    "variant": "B",
+    "ratings": {
+      "comprehension": [0, 0.1, 0.6, 0.3, 0],
+      "relevance": [0, 0, 0.05, 0.55, 0.4],
+      "trust": [0, 0.55, 0.4, 0.05, 0],
+      "intent": [0, 0.25, 0.55, 0.2, 0]
+    },
+    "quotes": {
+      "comprehension": "Ficou confuso o preço: R$ 300 é o site e fim?",
+      "relevance": "exatamente a minha dor com os 140 convidados",
+      "trust": "E se ele sumir no meio do casamento?",
+      "intent": "Talvez. ... Mas chamar no WhatsApp agora eu não chamaria"
+    }
+  },
+  {
+    "id": "r07",
+    "persona": "P10",
+    "segment": "S5",
+    "variant": "B",
+    "ratings": {
+      "comprehension": [0, 0, 0.4, 0.55, 0.05],
+      "relevance": [0.05, 0.45, 0.45, 0.05, 0],
+      "trust": [0, 0.4, 0.55, 0.05, 0],
+      "intent": [0.05, 0.4, 0.45, 0.1, 0]
+    },
+    "quotes": {
+      "comprehension": "é um site de casamento sob encomenda",
+      "relevance": "Eu mesma não, não vou casar de novo, rs.",
+      "trust": "zero depoimento de casal de verdade",
+      "intent": "Pra minha irmã eu mandaria talvez, se ela perguntasse de site"
+    }
+  },
+  {
+    "id": "r08",
+    "persona": "P07",
+    "segment": "S1",
+    "variant": "B",
+    "ratings": {
+      "comprehension": [0, 0.05, 0.5, 0.45, 0],
+      "relevance": [0, 0, 0, 0.3, 0.7],
+      "trust": [0, 0.35, 0.55, 0.1, 0],
+      "intent": [0, 0, 0.05, 0.4, 0.55]
+    },
+    "quotes": {
+      "comprehension": "Não vi nada de hospedagem, mapa, endereço ou horário da cerimônia.",
+      "relevance": "meu casamento é em 4 meses e tá tudo atrasado",
+      "trust": "se atrasar ou sumir, quem me socorre?",
+      "intent": "Chamaria sim, pra perguntar prazo"
+    }
+  },
+  {
+    "id": "r09",
+    "persona": "P03",
+    "segment": "S3",
+    "variant": "B",
+    "ratings": {
+      "comprehension": [0, 0.2, 0.6, 0.2, 0],
+      "relevance": [0, 0.05, 0.45, 0.45, 0.05],
+      "trust": [0, 0.3, 0.6, 0.1, 0],
+      "intent": [0, 0.05, 0.3, 0.6, 0.05]
+    },
+    "quotes": {
+      "comprehension": "Fiquei confusa com a conta. R$ 300 é uma vez só ou é mensal?",
+      "relevance": "40 convidados, o grupo da família já resolve, não sei se vale R$ 300",
+      "trust": "não sei se confio em pagar antes e depois não aparecer",
+      "intent": "Chamaria, mas só pra perguntar o preço final e as taxas, sem compromisso."
+    }
+  },
+  {
+    "id": "r10",
+    "persona": "P06",
+    "segment": "S1",
+    "variant": "B",
+    "ratings": {
+      "comprehension": [0, 0, 0.5, 0.5, 0],
+      "relevance": [0, 0, 0.05, 0.6, 0.35],
+      "trust": [0, 0.15, 0.6, 0.25, 0],
+      "intent": [0, 0, 0.15, 0.65, 0.2]
+    },
+    "quotes": {
+      "comprehension": "Confuso: R$ 300 é o quê exatamente? Pago uma vez?",
+      "relevance": "Com casamento em 5 meses, o prazo de 3 a 5 dias me deixa tranquilo.",
+      "trust": "CPF e conta bancária passando por vocês me deixa cismado",
+      "intent": "Provavelmente chamaria, mas pra uma pergunta específica"
+    }
+  }
+]
