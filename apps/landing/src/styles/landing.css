@@ -346,7 +346,7 @@ summary:focus-visible {
 .section-heading h2,
 .people h2,
 .gifts h2,
-.process h2,
+.plans h2,
 .faq h2 {
   font-size: clamp(2.7rem, 4.8vw, 5.5rem);
   line-height: 1.08;
@@ -356,7 +356,7 @@ summary:focus-visible {
 .section-heading h2 em,
 .people h2 em,
 .gifts h2 em,
-.process h2 em,
+.plans h2 em,
 .faq h2 em {
   color: var(--wine);
 }
@@ -944,35 +944,187 @@ summary:focus-visible {
   font-weight: 500;
   color: var(--ink);
 }
-.process {
+.plans {
   background: #e8ddcd;
-  display: grid;
-  grid-template-columns: 1.1fr 1fr;
-  gap: 5rem;
 }
-.process h2 {
-  font-size: clamp(2.5rem, 4.3vw, 5rem);
+.plans-intro {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 3rem;
+  margin-bottom: 3.5rem;
+}
+.plans-intro p {
+  max-width: 27rem;
+  font-size: 0.87rem;
+  color: var(--muted);
+}
+.plan-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+  margin-bottom: 4rem;
+}
+.plan {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 2rem;
+  background: var(--paper);
+  border: 1px solid #c8b8a7;
+}
+.plan-exclusive {
+  background: #f1e8dc;
+}
+.plan h3 {
+  font-size: 1.6rem;
+}
+.plan-price {
+  font-family: var(--serif);
+  font-size: 2.6rem;
+  line-height: 1;
+  color: var(--wine);
+}
+.plan-price small {
+  display: block;
+  margin-bottom: 0.35rem;
+  font-family: var(--sans);
+  font-size: 0.7rem;
+  color: var(--muted);
+}
+.plan > p:not(.plan-price) {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+.plan ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--line);
+}
+.plan li {
+  padding: 0.6rem 0 0.6rem 1.4rem;
+  border-bottom: 1px solid var(--line);
+  font-size: 0.8rem;
+  position: relative;
+}
+.plan li::before {
+  content: "✓";
+  position: absolute;
+  left: 0;
+  color: var(--wine);
+}
+.plan .plan-terms {
+  margin-top: auto;
+  font-size: 0.75rem;
 }
 .process-list {
   list-style: none;
   padding: 0;
   margin: 0;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 1.5rem;
+  counter-reset: step;
 }
 .process-list li {
-  padding: 1.7rem 0;
-  border-bottom: 1px solid #c8b8a7;
+  padding-top: 1.2rem;
+  border-top: 1px solid #c8b8a7;
+  counter-increment: step;
 }
-.process-list li:first-child {
-  padding-top: 0;
+.process-list li::before {
+  content: counter(step, decimal-leading-zero);
+  display: block;
+  margin-bottom: 0.8rem;
+  font-size: 0.65rem;
+  letter-spacing: 0.17em;
+  color: var(--wine);
 }
 .process-list h3 {
-  font-size: 1.5rem;
+  font-size: 1.25rem;
   margin-bottom: 0.6rem;
 }
 .process-list p {
-  font-size: 0.8rem;
-  max-width: 26rem;
+  font-size: 0.78rem;
   color: var(--muted);
+}
+.hero-offer {
+  margin: -0.6rem 0 1.7rem;
+  font-size: 0.8rem;
+  letter-spacing: 0.02em;
+  color: var(--wine);
+}
+.gift-copy > p.gift-promise {
+  color: var(--ink);
+}
+.gift-promise strong {
+  display: block;
+  margin-bottom: 0.4rem;
+  font-family: var(--serif);
+  font-size: 1.35rem;
+  font-weight: 400;
+  line-height: 1.25;
+  color: var(--wine);
+}
+.inline-link {
+  color: var(--wine);
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+  white-space: nowrap;
+}
+.consent-notice a {
+  color: var(--wine);
+  text-decoration: underline;
+}
+.legal-page {
+  max-width: 46rem;
+  margin: 0 auto;
+  padding: calc(var(--masthead-height) + 3rem) var(--inset) 5rem;
+}
+.legal-heading {
+  margin-bottom: 3rem;
+}
+.legal-back {
+  display: inline-block;
+  margin-bottom: 2rem;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+.legal-heading h1 {
+  font-size: clamp(2.6rem, 6vw, 4.5rem);
+  line-height: 1.05;
+  letter-spacing: -0.04em;
+  margin-bottom: 1.2rem;
+}
+.legal-heading h1 em {
+  color: var(--wine);
+}
+.legal-heading p,
+.legal-page section p,
+.legal-page li {
+  font-size: 0.92rem;
+  line-height: 1.65;
+  color: var(--muted);
+}
+.legal-page section {
+  padding: 2rem 0;
+  border-top: 1px solid var(--line);
+}
+.legal-page h2 {
+  font-size: 1.6rem;
+  margin-bottom: 1rem;
+}
+.legal-page section p + p,
+.legal-page section ul + p {
+  margin-top: 0.9rem;
+}
+.legal-page ul {
+  margin: 0.8rem 0 0;
+  padding-left: 1.2rem;
+}
+.legal-page a {
+  color: var(--wine);
+  text-decoration: underline;
 }
 .faq {
   display: grid;
@@ -1268,9 +1420,12 @@ summary:focus-visible {
   .dashboard-feature h3 {
     font-size: 1.8rem;
   }
-  .process,
+  .plans-intro,
   .faq {
     gap: 3rem;
+  }
+  .process-list {
+    grid-template-columns: repeat(3, 1fr);
   }
 }
 @media (max-width: 760px) {
@@ -1566,12 +1721,38 @@ summary:focus-visible {
   .service-note p {
     font-size: 0.65rem;
   }
-  .process,
   .faq {
     grid-template-columns: 1fr;
     gap: 2.5rem;
   }
-  .process h2,
+  .plans-intro {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1.2rem;
+    margin-bottom: 2.5rem;
+  }
+  .plan-grid,
+  .process-list {
+    grid-template-columns: 1fr;
+  }
+  .plan-grid {
+    margin-bottom: 3rem;
+  }
+  .plan {
+    padding: 1.5rem;
+  }
+  .plan-price {
+    font-size: 2.2rem;
+  }
+  .process-list li {
+    display: grid;
+    grid-template-columns: 2.2rem 1fr;
+    padding-top: 1rem;
+  }
+  .process-list li::before {
+    margin: 0.35rem 0 0;
+  }
+  .plans h2,
   .faq h2 {
     font-size: clamp(2.4rem, 7.7vw, 3.5rem);
   }

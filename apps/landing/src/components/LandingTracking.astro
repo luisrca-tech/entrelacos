@@ -17,7 +17,7 @@ const enabled = Boolean(ids.metaPixelId || ids.ga4Id);
 <script type="application/json" id="landing-tracking" set:html={JSON.stringify(settings).replace(/</g, "\\u003c")} />
 {enabled && (
   <aside class="consent-notice" aria-label="Aviso de cookies" hidden>
-    <p>Usamos cookies da Meta e do Google para medir nossos anúncios e visitas. Eles só são ativados se você aceitar.</p>
+    <p>Usamos cookies da Meta e do Google para medir nossos anúncios e visitas. Eles só são ativados se você aceitar. <a href="/privacidade">Política de privacidade</a></p>
     <div class="consent-actions">
       <button type="button" class="consent-button consent-accept" data-consent="granted">Aceitar</button>
       <button type="button" class="consent-button" data-consent="denied">Recusar</button>

@@ -7,6 +7,7 @@ const { contactUrl, home = false } = Astro.props;
 const navigationLinks = [
   [home ? "#modelos" : "/#modelos", "Modelos"],
   [home ? "#convidados" : "/#convidados", "Convidados"],
+  [home ? "#planos" : "/#planos", "Planos"],
   ["/duvidas", "Dúvidas frequentes"],
 ];
 const contactLabel = new URL(contactUrl).hostname === "wa.me"
