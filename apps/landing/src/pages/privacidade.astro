@@ -22,6 +22,15 @@ const cnpj = formatCnpj(BUSINESS_IDENTITY.cnpj);
     <link rel="canonical" href={canonical} />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="robots" content="index, follow" />
+    <meta property="og:type" content="website" />
+    <meta property="og:locale" content="pt_BR" />
+    <meta property="og:title" content="Política de privacidade — Entrelaços" />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:image" content={new URL("/social-card.png", config.siteUrl).href} />
+    <meta property="og:image:alt" content="Duas alianças entrelaçadas, símbolo do Entrelaços." />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:image" content={new URL("/social-card.png", config.siteUrl).href} />
   </head>
   <body>
     <a href="#conteudo" class="skip-link">Pular para o conteúdo</a>
